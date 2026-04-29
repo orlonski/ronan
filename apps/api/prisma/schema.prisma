@@ -1,0 +1,278 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PerfilUsuario {
+  ADMIN
+  OPERADOR
+}
+
+enum PapelEmpresa {
+  RECEBE_PLANILHA
+  MANDA_FECHAMENTO
+  AMBOS
+}
+
+enum TipoLocal {
+  CARGA
+  DESCARGA
+  AMBOS
+}
+
+enum StatusViagem {
+  RASCUNHO_OFFLINE
+  ENVIADA
+  EM_CONFERENCIA
+  DIVERGENTE
+  OK
+}
+
+enum FonteFechamento {
+  UPLOAD
+  MANUAL
+  EMAIL
+}
+
+enum StatusFechamento {
+  AGUARDANDO_REVISAO
+  EM_CONCILIACAO
+  CONCLUIDO
+}
+
+enum StatusLinhaFechamento {
+  MATCH
+  DIVERGENCIA
+  FALTANDO
+  EXTRA
+}
+
+model User {
+  id        String        @id @default(uuid())
+  nome      String
+  email     String        @unique
+  senhaHash String
+  perfil    PerfilUsuario @default(OPERADOR)
+  ativo     Boolean       @default(true)
+  criadoEm  DateTime      @default(now())
+  alteradoEm DateTime     @updatedAt
+
+  @@map("users")
+}
+
+model Motorista {
+  id              String    @id @default(uuid())
+  nome            String
+  usuario         String    @unique
+  senhaHash       String
+  telefone        String?
+  veiculoDefault  Veiculo?  @relation("VeiculoDefaultMotorista", fields: [veiculoDefaultId], references: [id])
+  veiculoDefaultId String?
+  ativo           Boolean   @default(true)
+  ultimoLoginEm   DateTime?
+  tentativasLogin Int       @default(0)
+  bloqueadoAte    DateTime?
+  criadoEm        DateTime  @default(now())
+  alteradoEm      DateTime  @updatedAt
+
+  viagens   Viagem[]
+  pedagios  Pedagio[]
+
+  @@map("motoristas")
+}
+
+model Veiculo {
+  id        String   @id @default(uuid())
+  placa     String   @unique
+  modelo    String?
+  ativo     Boolean  @default(true)
+  criadoEm  DateTime @default(now())
+  alteradoEm DateTime @updatedAt
+
+  motoristasComoDefault Motorista[] @relation("VeiculoDefaultMotorista")
+  viagens               Viagem[]
+  pedagios              Pedagio[]
+
+  @@map("veiculos")
+}
+
+model EmpresaCliente {
+  id              String       @id @default(uuid())
+  nome            String
+  cnpj            String?      @unique
+  contato         String?
+  papel           PapelEmpresa @default(AMBOS)
+  layoutImport    Json?        // mapeamento de colunas do fechamento que ela manda
+  layoutExport    Json?        // colunas/ordem da planilha que ela recebe
+  ativa           Boolean      @default(true)
+  criadoEm        DateTime     @default(now())
+  alteradoEm      DateTime     @updatedAt
+
+  obras        Obra[]
+  fechamentos  Fechamento[]
+
+  @@map("empresas_cliente")
+}
+
+model Obra {
+  id                String   @id @default(uuid())
+  nome              String
+  empresaCliente    EmpresaCliente @relation(fields: [empresaClienteId], references: [id])
+  empresaClienteId  String
+  ativa             Boolean  @default(true)
+  criadoEm          DateTime @default(now())
+  alteradoEm        DateTime @updatedAt
+
+  locais   Local[]
+  viagens  Viagem[]
+
+  @@index([empresaClienteId])
+  @@map("obras")
+}
+
+model Material {
+  id        String   @id @default(uuid())
+  nome      String   @unique
+  ativo     Boolean  @default(true)
+  criadoEm  DateTime @default(now())
+  alteradoEm DateTime @updatedAt
+
+  viagens Viagem[]
+
+  @@map("materiais")
+}
+
+model Local {
+  id              String    @id @default(uuid())
+  nome            String
+  logradouro      String
+  numero          String?
+  bairro          String?
+  cidade          String
+  uf              String    @db.Char(2)
+  cep             String?
+  lat             Float?
+  lng             Float?
+  pontoReferencia String?
+  tipo            TipoLocal
+  obra            Obra?     @relation(fields: [obraId], references: [id])
+  obraId          String?
+  ativo           Boolean   @default(true)
+  criadoEm        DateTime  @default(now())
+  alteradoEm      DateTime  @updatedAt
+
+  viagensCarga    Viagem[] @relation("LocalCarga")
+  viagensDescarga Viagem[] @relation("LocalDescarga")
+
+  @@index([obraId])
+  @@index([cidade, uf])
+  @@map("locais")
+}
+
+model Viagem {
+  id                String       @id @default(uuid())
+  clientId          String       @unique // idempotência (gerado no PWA)
+  motorista         Motorista    @relation(fields: [motoristaId], references: [id])
+  motoristaId       String
+  veiculo           Veiculo      @relation(fields: [veiculoId], references: [id])
+  veiculoId         String
+  obra              Obra         @relation(fields: [obraId], references: [id])
+  obraId            String
+  material          Material     @relation(fields: [materialId], references: [id])
+  materialId        String
+  data              DateTime     @db.Date
+  toneladas         Decimal      @db.Decimal(10, 3)
+  ticket            String
+  km                Decimal      @db.Decimal(10, 2)
+  observacao        String?
+  status            StatusViagem @default(ENVIADA)
+  localCarga        Local        @relation("LocalCarga", fields: [localCargaId], references: [id])
+  localCargaId      String
+  localDescarga     Local        @relation("LocalDescarga", fields: [localDescargaId], references: [id])
+  localDescargaId   String
+  valorPedagioTotal Decimal?     @db.Decimal(10, 2)
+  criadoOfflineEm   DateTime?
+  sincronizadoEm    DateTime     @default(now())
+  alteradoEm        DateTime     @updatedAt
+
+  fotos    TicketFoto[]
+  pedagios Pedagio[]
+  matchesFechamento FechamentoLinha[]
+
+  @@index([motoristaId, data])
+  @@index([veiculoId, data])
+  @@index([obraId, data])
+  @@map("viagens")
+}
+
+model TicketFoto {
+  id          String   @id @default(uuid())
+  viagem      Viagem   @relation(fields: [viagemId], references: [id], onDelete: Cascade)
+  viagemId    String
+  storageKey  String   // chave no MinIO
+  capturadaEm DateTime @default(now())
+
+  @@index([viagemId])
+  @@map("ticket_fotos")
+}
+
+model Pedagio {
+  id            String    @id @default(uuid())
+  clientId      String    @unique
+  veiculo       Veiculo   @relation(fields: [veiculoId], references: [id])
+  veiculoId     String
+  motorista     Motorista @relation(fields: [motoristaId], references: [id])
+  motoristaId   String
+  data          DateTime  @db.Date
+  pracaPedagio  String
+  valor         Decimal   @db.Decimal(10, 2)
+  viagem        Viagem?   @relation(fields: [viagemId], references: [id])
+  viagemId      String?
+  criadoOfflineEm DateTime?
+  sincronizadoEm  DateTime @default(now())
+
+  @@index([veiculoId, data])
+  @@index([viagemId])
+  @@map("pedagios")
+}
+
+model Fechamento {
+  id                  String           @id @default(uuid())
+  empresaCliente      EmpresaCliente   @relation(fields: [empresaClienteId], references: [id])
+  empresaClienteId    String
+  periodoInicio       DateTime         @db.Date
+  periodoFim          DateTime         @db.Date
+  fonte               FonteFechamento
+  arquivoOriginalKey  String?
+  status              StatusFechamento @default(AGUARDANDO_REVISAO)
+  criadoEm            DateTime         @default(now())
+  alteradoEm          DateTime         @updatedAt
+
+  linhas FechamentoLinha[]
+
+  @@index([empresaClienteId, periodoInicio])
+  @@map("fechamentos")
+}
+
+model FechamentoLinha {
+  id            String                @id @default(uuid())
+  fechamento    Fechamento            @relation(fields: [fechamentoId], references: [id], onDelete: Cascade)
+  fechamentoId  String
+  placa         String
+  data          DateTime              @db.Date
+  ticket        String
+  km            Decimal?              @db.Decimal(10, 2)
+  valor         Decimal?              @db.Decimal(10, 2)
+  viagemMatch   Viagem?               @relation(fields: [viagemMatchId], references: [id])
+  viagemMatchId String?
+  status        StatusLinhaFechamento
+  divergencias  Json? // { campo: { motorista, empresa } }
+  resolvidoEm   DateTime?
+
+  @@index([fechamentoId, status])
+  @@map("fechamento_linhas")
+}

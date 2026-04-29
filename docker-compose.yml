@@ -1,0 +1,75 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ronan-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ronan}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ronan_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-ronan}
+    ports:
+      - "${POSTGRES_PORT:-5435}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ronan}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: ronan-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-ronan}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-ronan_dev_secret}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: ronan-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-ronan} ${MINIO_ROOT_PASSWORD:-ronan_dev_secret};
+      mc mb -p local/${MINIO_BUCKET:-ronan-tickets} || true;
+      mc anonymous set download local/${MINIO_BUCKET:-ronan-tickets} || true;
+      exit 0;
+      "
+
+  # Nominatim adiado pra v2: import do Sul ocupa ~30GB e estoura VPS pequena.
+  # MVP usa só ViaCEP (gratuito, sem container) + entrada manual estruturada.
+  # Pra reativar, descomente este bloco e os volumes nominatim_data/flatnode embaixo.
+  # nominatim:
+  #   image: mediagis/nominatim:4.5
+  #   container_name: ronan-nominatim
+  #   restart: unless-stopped
+  #   environment:
+  #     PBF_URL: ${NOMINATIM_PBF_URL:-https://download.geofabrik.de/south-america/brazil/sul-latest.osm.pbf}
+  #     REPLICATION_URL: ${NOMINATIM_REPLICATION_URL:-https://download.geofabrik.de/south-america/brazil/sul-updates/}
+  #     NOMINATIM_PASSWORD: nominatim_dev
+  #     IMPORT_WIKIPEDIA: "false"
+  #     IMPORT_TIGER_ADDRESSES: "false"
+  #   ports:
+  #     - "8080:8080"
+  #   volumes:
+  #     - nominatim_data:/var/lib/postgresql/16/main
+  #     - nominatim_flatnode:/nominatim/flatnode
+  #   shm_size: 1gb
+
+volumes:
+  postgres_data:
+  minio_data:

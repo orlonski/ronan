@@ -1,0 +1,168 @@
+"use client";
+
+import { useState } from "react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useCreateResource, useDeleteResource, useResourceList, useUpdateResource } from "@/lib/client-api";
+
+type Veiculo = { id: string; placa: string; modelo: string | null };
+type Motorista = {
+  id: string; nome: string; usuario: string; telefone: string | null;
+  ativo: boolean; veiculoDefaultId: string | null;
+  veiculoDefault: Veiculo | null;
+};
+const PATH = "/admin/motoristas";
+const VEICULOS_PATH = "/admin/veiculos";
+
+type FormShape = {
+  nome: string; usuario: string; senha: string; telefone: string; veiculoDefaultId: string;
+};
+const empty: FormShape = { nome: "", usuario: "", senha: "", telefone: "", veiculoDefaultId: "" };
+
+export default function MotoristasPage() {
+  const list = useResourceList<Motorista>(PATH);
+  const veiculos = useResourceList<Veiculo>(VEICULOS_PATH);
+  const create = useCreateResource<Record<string, unknown>, Motorista>(PATH, PATH);
+  const update = useUpdateResource<Record<string, unknown>, Motorista>(PATH, PATH);
+  const remove = useDeleteResource(PATH, PATH);
+
+  const [editing, setEditing] = useState<Motorista | "new" | null>(null);
+  const [form, setForm] = useState<FormShape>(empty);
+
+  function openNew() { setEditing("new"); setForm(empty); }
+  function openEdit(m: Motorista) {
+    setEditing(m);
+    setForm({
+      nome: m.nome, usuario: m.usuario, senha: "",
+      telefone: m.telefone ?? "", veiculoDefaultId: m.veiculoDefaultId ?? "",
+    });
+  }
+
+  async function onSave(ev: React.FormEvent) {
+    ev.preventDefault();
+    if (editing === "new") {
+      await create.mutateAsync({
+        nome: form.nome, usuario: form.usuario, senha: form.senha,
+        telefone: form.telefone || undefined,
+        veiculoDefaultId: form.veiculoDefaultId || undefined,
+      });
+    } else if (editing) {
+      const body: Record<string, unknown> = {
+        nome: form.nome,
+        telefone: form.telefone || undefined,
+        veiculoDefaultId: form.veiculoDefaultId || null,
+      };
+      if (form.senha) body.novaSenha = form.senha;
+      await update.mutateAsync({ id: editing.id, body });
+    }
+    setEditing(null);
+  }
+
+  return (
+    <div className="space-y-6">
+      <header className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Motoristas</h1>
+          <p className="text-sm text-muted-foreground">Quem lança viagens no app.</p>
+        </div>
+        <Button onClick={openNew}><Plus className="h-4 w-4" /> Novo motorista</Button>
+      </header>
+
+      <Card>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Nome</TableHead>
+              <TableHead>Usuário</TableHead>
+              <TableHead>Telefone</TableHead>
+              <TableHead>Placa default</TableHead>
+              <TableHead className="w-24">Status</TableHead>
+              <TableHead className="w-32 text-right">Ações</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {list.isLoading && <TableRow><TableCell colSpan={6}>Carregando...</TableCell></TableRow>}
+            {list.data?.map((m) => (
+              <TableRow key={m.id}>
+                <TableCell className="font-medium">{m.nome}</TableCell>
+                <TableCell className="font-mono text-xs">{m.usuario}</TableCell>
+                <TableCell>{m.telefone ?? "—"}</TableCell>
+                <TableCell className="font-mono text-xs">{m.veiculoDefault?.placa ?? "—"}</TableCell>
+                <TableCell>
+                  <span className={m.ativo ? "text-green-700" : "text-muted-foreground"}>
+                    {m.ativo ? "ativo" : "inativo"}
+                  </span>
+                </TableCell>
+                <TableCell className="text-right">
+                  <Button variant="ghost" size="icon" onClick={() => openEdit(m)}><Pencil className="h-4 w-4" /></Button>
+                  {m.ativo && (
+                    <Button variant="ghost" size="icon"
+                      onClick={() => confirm(`Inativar ${m.nome}?`) && remove.mutate(m.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+            {list.data?.length === 0 && (
+              <TableRow><TableCell colSpan={6} className="text-muted-foreground">Nenhum motorista cadastrado.</TableCell></TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </Card>
+
+      <Dialog open={editing !== null} onOpenChange={(v) => !v && setEditing(null)}>
+        <DialogContent>
+          <form onSubmit={onSave} className="space-y-4">
+            <DialogHeader>
+              <DialogTitle>{editing === "new" ? "Novo motorista" : "Editar motorista"}</DialogTitle>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2 col-span-2">
+                <Label>Nome</Label>
+                <Input required value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Usuário (login)</Label>
+                <Input required pattern="[a-z0-9._-]+" disabled={editing !== "new"}
+                  value={form.usuario} onChange={(e) => setForm({ ...form, usuario: e.target.value.toLowerCase() })} />
+              </div>
+              <div className="space-y-2">
+                <Label>{editing === "new" ? "Senha" : "Nova senha (opcional)"}</Label>
+                <Input type="password" minLength={editing === "new" ? 6 : 0}
+                  required={editing === "new"}
+                  value={form.senha} onChange={(e) => setForm({ ...form, senha: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Telefone</Label>
+                <Input value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Placa default</Label>
+                <Select value={form.veiculoDefaultId}
+                  onChange={(e) => setForm({ ...form, veiculoDefaultId: e.target.value })}>
+                  <option value="">— sem placa fixa —</option>
+                  {veiculos.data?.map((v) => (
+                    <option key={v.id} value={v.id}>{v.placa}{v.modelo ? ` · ${v.modelo}` : ""}</option>
+                  ))}
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditing(null)}>Cancelar</Button>
+              <Button type="submit" disabled={create.isPending || update.isPending}>Salvar</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
