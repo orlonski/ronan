@@ -40,4 +40,9 @@ export class ViagensAdminController {
   historico(@Param("id") id: string) {
     return this.service.historico(id);
   }
+
+  @Get(":id/fotos/:fotoId/url")
+  fotoUrl(@Param("id") id: string, @Param("fotoId") fotoId: string) {
+    return this.service.fotoUrl(id, fotoId);
+  }
 }

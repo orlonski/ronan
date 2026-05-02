@@ -2,12 +2,14 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import type { Prisma, StatusViagem } from "@prisma/client";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
 import { PrismaService } from "../../prisma/prisma.service";
+import { UploadsService } from "../../uploads/uploads.service";
 
 @Injectable()
 export class ViagensAdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditoria: AuditoriaService,
+    private readonly uploads: UploadsService,
   ) {}
 
   async list(filtros: {
@@ -82,5 +84,15 @@ export class ViagensAdminService {
     const viagem = await this.prisma.viagem.findUnique({ where: { id: viagemId } });
     if (!viagem) throw new NotFoundException("Viagem não encontrada");
     return this.auditoria.historicoDe("Viagem", viagemId);
+  }
+
+  async fotoUrl(viagemId: string, fotoId: string) {
+    const foto = await this.prisma.ticketFoto.findFirst({
+      where: { id: fotoId, viagemId },
+      select: { storageKey: true },
+    });
+    if (!foto) throw new NotFoundException("Foto não encontrada");
+    const url = await this.uploads.presignedUrl(foto.storageKey, 3600);
+    return { url };
   }
 }

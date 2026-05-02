@@ -6,12 +6,14 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
+  Camera,
   CheckCircle2,
   Clock,
   Edit3,
   History,
   Sparkles,
   User as UserIcon,
+  X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -156,6 +158,15 @@ export default function ViagemDetalhePage({
             </div>
           </Card>
 
+          {v.fotos.length > 0 && (
+            <Card className="p-5 md:col-span-2">
+              <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
+                <Camera className="h-4 w-4" /> Fotos do ticket
+              </h3>
+              <FotosViagem viagemId={v.id} fotos={v.fotos} />
+            </Card>
+          )}
+
           {v.matchesFechamento.length > 0 && (
             <Card className="p-5 md:col-span-2">
               <h3 className="mb-3 text-base font-medium">Aparece em fechamentos</h3>
@@ -292,4 +303,92 @@ function formatVal(v: unknown): string {
   if (v === null || v === undefined) return "—";
   if (typeof v === "string") return v;
   return JSON.stringify(v, null, 2);
+}
+
+function FotosViagem({
+  viagemId,
+  fotos,
+}: {
+  viagemId: string;
+  fotos: { id: string; storageKey: string }[];
+}) {
+  const token = useAuthToken();
+  const [zoom, setZoom] = useState<string | null>(null);
+
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {fotos.map((f) => (
+          <FotoThumb
+            key={f.id}
+            viagemId={viagemId}
+            fotoId={f.id}
+            token={token}
+            onClick={(url) => setZoom(url)}
+          />
+        ))}
+      </div>
+
+      {zoom && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setZoom(null)}
+        >
+          <button
+            type="button"
+            className="absolute right-4 top-4 rounded-full bg-white/20 p-2 text-white hover:bg-white/30"
+            onClick={(e) => { e.stopPropagation(); setZoom(null); }}
+          >
+            <X className="h-5 w-5" />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={zoom}
+            alt="Foto do ticket"
+            className="max-h-full max-w-full object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
+function FotoThumb({
+  viagemId,
+  fotoId,
+  token,
+  onClick,
+}: {
+  viagemId: string;
+  fotoId: string;
+  token: string | undefined;
+  onClick: (url: string) => void;
+}) {
+  const q = useQuery({
+    queryKey: ["viagem-foto-url", viagemId, fotoId],
+    enabled: !!token,
+    staleTime: 30 * 60_000, // URL presigned dura 1h, refresh cedo
+    queryFn: () =>
+      fetchApi<{ url: string }>(`/admin/viagens/${viagemId}/fotos/${fotoId}/url`, { token }),
+  });
+
+  if (q.isLoading || !q.data) {
+    return (
+      <div className="flex aspect-square items-center justify-center rounded-md border bg-muted text-xs text-muted-foreground">
+        carregando...
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => onClick(q.data!.url)}
+      className="aspect-square overflow-hidden rounded-md border bg-muted transition-opacity hover:opacity-80"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={q.data.url} alt="Ticket" className="h-full w-full object-cover" />
+    </button>
+  );
 }
