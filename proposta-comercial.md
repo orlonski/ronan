@@ -320,6 +320,26 @@ _Tela inicial do motorista: últimas viagens lançadas, atalhos para novo lança
 
 _Formulário de lançamento de viagem: placa, data, obra, material, local de carga, local de descarga, toneladas, ticket, km, pedágio, observação e foto do ticket._
 
+### Painel administrativo — viagens e conciliação
+
+![Listagem de viagens com status visual](proposta-imagens/16-dashboard-viagens-lista.png)
+_Listagem de viagens com **badge colorido de status** em cada linha: aguardando conferência (amarelo), conferida (verde), divergente (vermelho), ajustada (azul). Filtros por motorista, veículo, obra, status e período._
+
+![Listagem de fechamentos](proposta-imagens/17-dashboard-fechamentos-lista.png)
+_Listagem de fechamentos por empresa-cliente, com versão (v1, v2...), contagem de linhas conferidas vs pendentes e status do processo._
+
+![Detalhe do fechamento — Resumo com IA](proposta-imagens/19-dashboard-fechamento-resumo.png)
+_Detalhe do fechamento — aba Resumo com estatísticas do processamento: total de linhas extraídas, matches automáticos por placa+data+ticket, matches via IA, pendentes para conferência humana, e identificação completa do arquivo recebido._
+
+![Tela de Conferência](proposta-imagens/21-dashboard-fechamento-conferencia.png)
+_**Tela de Conferência — só o que precisa de revisão humana.** A IA processa as 53 linhas do fechamento da Gamerim, casa as que pode automaticamente e mostra apenas as divergências aqui. Para cada uma: o que o cliente reportou × sugestão da IA, com 4 ações em um clique (aceitar IA, escolher outra viagem, marcar erro do cliente, criar viagem retroativa). Tudo é registrado no histórico._
+
+![Construtor dinâmico de layout de envio](proposta-imagens/25-dashboard-layout-editor.png)
+_**Construtor dinâmico de layout** — para cada empresa-cliente que **recebe** sua planilha, a operadora monta o layout exato que ela quer: arrasta as colunas, define ordem, customiza o texto do cabeçalho, formato de data e separador decimal. Pré-visualização em tempo real ao lado, com dados reais da operação. Você não fica mais preso a um único formato — qualquer empresa nova é configurada em 5 minutos sem mexer no código._
+
+![Histórico de alterações da viagem](proposta-imagens/23-dashboard-viagem-historico.png)
+_**Histórico completo de cada viagem** — timeline mostrando criação pelo motorista, sincronização do app, match com fechamentos, e qualquer ajuste pela operadora (com motivo e antes/depois)._
+
 ---
 
 ## 7. Diferenciais técnicos da solução
