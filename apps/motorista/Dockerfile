@@ -17,6 +17,7 @@ COPY packages/shared-types ./packages/shared-types
 COPY apps/motorista ./apps/motorista
 ARG VITE_API_URL=http://localhost:3000
 ENV VITE_API_URL=$VITE_API_URL
+RUN cd packages/shared-types && pnpm build
 RUN cd apps/motorista && pnpm build
 
 FROM nginx:1.27-alpine AS runtime

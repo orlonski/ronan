@@ -17,6 +17,8 @@ COPY --from=deps /repo/packages/shared-types/node_modules ./packages/shared-type
 COPY tsconfig.base.json ./
 COPY packages/shared-types ./packages/shared-types
 COPY apps/api ./apps/api
+# shared-types precisa ser buildado antes da api (api importa de @ronan/shared-types/dist)
+RUN cd packages/shared-types && pnpm build
 RUN cd apps/api && pnpm prisma generate && pnpm build
 
 # ---- runtime mínimo ----

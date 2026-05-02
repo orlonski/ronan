@@ -16,6 +16,7 @@ COPY tsconfig.base.json ./
 COPY packages/shared-types ./packages/shared-types
 COPY apps/dashboard ./apps/dashboard
 ENV NEXT_TELEMETRY_DISABLED=1
+RUN cd packages/shared-types && pnpm build
 RUN cd apps/dashboard && pnpm build
 
 FROM node:20-alpine AS runtime
