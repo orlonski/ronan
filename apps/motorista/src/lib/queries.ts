@@ -74,8 +74,20 @@ function isOfflineError(err: unknown): boolean {
 export function useMe() {
   return useQuery({
     queryKey: ["me"],
-    queryFn: () => api.get<Me>("/m/me"),
     staleTime: 60_000,
+    queryFn: async () => {
+      try {
+        const fresh = await api.get<Me>("/m/me");
+        await db.meCache.put({ id: "current", data: fresh, cachedAt: Date.now() });
+        return fresh;
+      } catch (err) {
+        if (isOfflineError(err)) {
+          const cached = await db.meCache.get("current");
+          if (cached) return cached.data;
+        }
+        throw err;
+      }
+    },
   });
 }
 

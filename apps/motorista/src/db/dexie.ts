@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from "dexie";
-import type { Catalogos, Viagem, Pedagio } from "@/lib/queries";
+import type { Catalogos, Me, Viagem, Pedagio } from "@/lib/queries";
 
 export type SyncStatus = "pending" | "syncing" | "error";
 
@@ -25,6 +25,12 @@ export type PendingPedagio = {
   lastTriedAt?: number;
 };
 
+export type CachedMe = {
+  id: "current";
+  data: Me;
+  cachedAt: number;
+};
+
 export type CachedCatalogos = {
   id: "current";
   data: Catalogos;
@@ -46,6 +52,7 @@ export type CachedPedagios = {
 class RonanDB extends Dexie {
   pendingViagens!: EntityTable<PendingViagem, "clientId">;
   pendingPedagios!: EntityTable<PendingPedagio, "clientId">;
+  meCache!: EntityTable<CachedMe, "id">;
   catalogos!: EntityTable<CachedCatalogos, "id">;
   viagensCache!: EntityTable<CachedViagens, "id">;
   pedagiosCache!: EntityTable<CachedPedagios, "id">;
@@ -58,6 +65,9 @@ class RonanDB extends Dexie {
       catalogos: "id",
       viagensCache: "id",
       pedagiosCache: "id",
+    });
+    this.version(2).stores({
+      meCache: "id",
     });
   }
 }
