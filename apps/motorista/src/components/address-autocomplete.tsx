@@ -53,7 +53,7 @@ export function AddressAutocomplete({
       } finally {
         setLoading(false);
       }
-    }, 300);
+    }, 600);
   }
 
   async function escolher(s: SugestaoLista) {
