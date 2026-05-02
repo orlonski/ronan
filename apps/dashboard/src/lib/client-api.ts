@@ -17,7 +17,12 @@ export async function fetchApi<T>(
 ): Promise<T> {
   const headers = new Headers(opts.headers);
   if (opts.token) headers.set("authorization", `Bearer ${opts.token}`);
-  if (opts.body && !headers.has("content-type")) headers.set("content-type", "application/json");
+  // Não setar content-type quando body é FormData — o browser preenche
+  // automaticamente com multipart/form-data + boundary correto.
+  const isFormData = typeof FormData !== "undefined" && opts.body instanceof FormData;
+  if (opts.body && !isFormData && !headers.has("content-type")) {
+    headers.set("content-type", "application/json");
+  }
 
   const res = await fetch(`${API_URL}${path}`, { ...opts, headers });
   if (res.status === 401) {

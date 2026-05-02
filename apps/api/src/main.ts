@@ -7,17 +7,19 @@ import { AppModule } from "./app.module";
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
 
+  // CORS antes do body-parser — assim mesmo se body-parser falhar com 413,
+  // a resposta de erro ainda vem com o header Access-Control-Allow-Origin.
+  const rawCors = (process.env.CORS_ORIGINS ?? "").trim();
+  const origin =
+    rawCors === "" || rawCors === "*"
+      ? true
+      : rawCors.split(",").map((s) => s.trim()).filter(Boolean);
+  app.enableCors({ origin, credentials: true });
+
   // aumenta limite do body-parser pra aceitar uploads de planilhas e fotos
   // (default do Express e 100KB e barra antes do Multer pegar)
   app.use(json({ limit: "50mb" }));
   app.use(urlencoded({ extended: true, limit: "50mb" }));
-
-  const rawCors = (process.env.CORS_ORIGINS ?? "").trim();
-  const origin =
-    rawCors === "" || rawCors === "*"
-      ? true // wildcard: aceita qualquer origin
-      : rawCors.split(",").map((s) => s.trim()).filter(Boolean);
-  app.enableCors({ origin, credentials: true });
 
   app.useGlobalPipes(
     new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }),
