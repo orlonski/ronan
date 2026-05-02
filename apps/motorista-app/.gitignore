@@ -1,0 +1,31 @@
+node_modules/
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native projects gerados pelo prebuild
+ios/
+android/
+
+# Build artifacts
+*.aab
+*.apk
+*.ipa
+*.keystore
+*.mobileprovision
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+
+# Logs
+*.log
+yarn-error.log
+npm-debug.log

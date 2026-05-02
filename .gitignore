@@ -19,3 +19,13 @@ coverage
 
 # PWA build
 apps/motorista/dev-dist
+
+# Expo native projects (gerados pelo prebuild)
+apps/motorista-app/.expo
+apps/motorista-app/ios
+apps/motorista-app/android
+apps/motorista-app/expo-env.d.ts
+*.keystore
+*.mobileprovision
+*.p8
+*.p12
