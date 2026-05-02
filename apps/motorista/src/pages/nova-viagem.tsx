@@ -94,7 +94,7 @@ export default function NovaViagemPage() {
         observacao: form.observacao.trim() || undefined,
         criadoOfflineEm: !navigator.onLine ? new Date().toISOString() : undefined,
       };
-      await criar.mutateAsync({
+      await criar({
         payload,
         foto: foto ? { blob: foto, mime: foto.type || "image/jpeg" } : undefined,
       });

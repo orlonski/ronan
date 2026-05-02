@@ -139,35 +139,26 @@ export function usePedagios() {
 
 /**
  * Offline-first: escreve no outbox local e retorna na hora.
- * O drain real (upload de foto + POST pra API) roda em background — o
- * usuário não fica preso no botão "Salvando..." esperando upload de foto.
+ * Sem useMutation no meio — se a chamada pendurar o "Salvando..." trava na UI.
+ * O refetch da lista é disparado em background com refetchQueries (não bloqueia).
  */
 export function useCriarViagem() {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (input: {
-      payload: Record<string, unknown>;
-      foto?: { blob: Blob; mime: string };
-    }) => {
-      await enqueueViagem(input.payload, input.foto);
-      // drain dispara via void dentro do enqueueViagem, não bloqueamos a UI
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["viagens"] });
-    },
-  });
+  return async (input: {
+    payload: Record<string, unknown>;
+    foto?: { blob: Blob; mime: string };
+  }) => {
+    await enqueueViagem(input.payload, input.foto);
+    void qc.refetchQueries({ queryKey: ["viagens"], type: "active" });
+  };
 }
 
 export function useCriarPedagio() {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (payload: Record<string, unknown>) => {
-      await enqueuePedagio(payload);
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["pedagios"] });
-    },
-  });
+  return async (payload: Record<string, unknown>) => {
+    await enqueuePedagio(payload);
+    void qc.refetchQueries({ queryKey: ["pedagios"], type: "active" });
+  };
 }
 
 export type SugestaoLista = {

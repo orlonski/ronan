@@ -33,7 +33,7 @@ export default function NovoPedagioPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await criar.mutateAsync({
+      await criar({
         clientId: crypto.randomUUID(),
         veiculoId,
         data,
