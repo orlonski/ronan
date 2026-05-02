@@ -12,6 +12,7 @@ import {
   LogOut,
   MapPin,
   Package,
+  Send,
   Truck,
   UserCircle,
   Users2,
@@ -24,6 +25,7 @@ type Item = { href: string; label: string; icon: React.ComponentType<{ className
 const ITEMS: Item[] = [
   { href: "/viagens", label: "Viagens", icon: ClipboardCheck },
   { href: "/fechamentos", label: "Fechamentos", icon: FileSpreadsheet },
+  { href: "/envios", label: "Envios", icon: Send },
   { href: "/motoristas", label: "Motoristas", icon: HardHat },
   { href: "/frota", label: "Frota", icon: Truck },
   { href: "/empresas", label: "Empresas-cliente", icon: Building2 },

@@ -306,6 +306,68 @@ export function useRemoverLayout(empresaId: string) {
   });
 }
 
+// Envios standalone (pra empresas que SÓ recebem planilha)
+export type EnvioStandalone = EnvioFechamento & {
+  empresaCliente: { id: string; nome: string } | null;
+  fechamento: {
+    id: string;
+    versao: number;
+    periodoInicio: string;
+    periodoFim: string;
+  } | null;
+  layout: { id: string; nome: string } | null;
+  geradoPor: { id: string; nome: string } | null;
+  empresaClienteId: string | null;
+  periodoInicio: string | null;
+  periodoFim: string | null;
+  totalLinhas: number | null;
+};
+
+export function useEnvios(filtros: { empresaClienteId?: string; status?: "GERADO" | "ENVIADO" }) {
+  const token = useAuthToken();
+  const params = new URLSearchParams();
+  if (filtros.empresaClienteId) params.set("empresaClienteId", filtros.empresaClienteId);
+  if (filtros.status) params.set("status", filtros.status);
+  const qs = params.toString();
+  return useQuery({
+    queryKey: ["envios", filtros],
+    enabled: !!token,
+    queryFn: () => fetchApi<EnvioStandalone[]>(`/admin/envios${qs ? `?${qs}` : ""}`, { token }),
+  });
+}
+
+export function useCriarEnvio() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      empresaClienteId: string;
+      periodoInicio: string;
+      periodoFim: string;
+      layoutEnvioId?: string;
+    }) =>
+      fetchApi<{ envio: EnvioStandalone; arquivoNome: string; totalLinhas: number }>(
+        "/admin/envios",
+        { method: "POST", body: JSON.stringify(input), token },
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["envios"] }),
+  });
+}
+
+export function useMarcarEnvioEnviado() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { envioId: string; canalEnvio: string; observacao?: string }) =>
+      fetchApi<EnvioStandalone>(`/admin/envios/${input.envioId}/marcar-enviado`, {
+        method: "POST",
+        body: JSON.stringify({ canalEnvio: input.canalEnvio, observacao: input.observacao }),
+        token,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["envios"] }),
+  });
+}
+
 // Histórico de viagem
 export function useHistoricoViagem(viagemId: string | undefined) {
   const token = useAuthToken();

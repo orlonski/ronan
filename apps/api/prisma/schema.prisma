@@ -144,6 +144,7 @@ model EmpresaCliente {
   obras         Obra[]
   fechamentos   Fechamento[]
   layoutsEnvio  LayoutEnvio[]
+  enviosDiretos EnvioFechamento[]
 
   @@map("empresas_cliente")
 }
@@ -348,22 +349,32 @@ model LayoutEnvio {
 }
 
 model EnvioFechamento {
-  id                String       @id @default(uuid())
-  fechamento        Fechamento   @relation(fields: [fechamentoId], references: [id], onDelete: Cascade)
-  fechamentoId      String
-  layout            LayoutEnvio? @relation(fields: [layoutId], references: [id])
+  id                String          @id @default(uuid())
+  // Quando o envio for fruto de uma planilha que a empresa nos mandou e
+  // depois exportamos de volta, fica vinculado ao Fechamento. Quando for
+  // um envio standalone (empresa que so RECEBE planilha), fechamentoId
+  // fica null e usamos empresaCliente/periodoInicio/periodoFim direto.
+  fechamento        Fechamento?     @relation(fields: [fechamentoId], references: [id], onDelete: Cascade)
+  fechamentoId      String?
+  empresaCliente    EmpresaCliente? @relation(fields: [empresaClienteId], references: [id])
+  empresaClienteId  String?
+  periodoInicio     DateTime?       @db.Date
+  periodoFim        DateTime?       @db.Date
+  totalLinhas       Int?            // qtde de viagens incluídas no XLSX
+  layout            LayoutEnvio?    @relation(fields: [layoutId], references: [id])
   layoutId          String?
-  arquivoGeradoKey  String       // XLSX no MinIO
-  arquivoNome       String       // nome legível pra download
-  geradoPor         User?        @relation(fields: [geradoPorId], references: [id])
+  arquivoGeradoKey  String          // XLSX no MinIO
+  arquivoNome       String          // nome legível pra download
+  geradoPor         User?           @relation(fields: [geradoPorId], references: [id])
   geradoPorId       String?
-  geradoEm          DateTime     @default(now())
-  status            StatusEnvio  @default(GERADO)
+  geradoEm          DateTime        @default(now())
+  status            StatusEnvio     @default(GERADO)
   marcadoEnviadoEm  DateTime?
-  canalEnvio        String?      // WhatsApp, email, etc
+  canalEnvio        String?         // WhatsApp, email, etc
   observacao        String?
 
   @@index([fechamentoId])
+  @@index([empresaClienteId, periodoInicio])
   @@map("envios_fechamento")
 }
 
