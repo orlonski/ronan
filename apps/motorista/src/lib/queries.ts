@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { db } from "@/db/dexie";
 import { api, ApiError } from "./api";
-import { drain, enqueuePedagio, enqueueViagem } from "./sync";
+import { enqueuePedagio, enqueueViagem } from "./sync";
 
 export type Veiculo = { id: string; placa: string; modelo: string | null };
 export type Material = { id: string; nome: string };
@@ -138,7 +138,9 @@ export function usePedagios() {
 }
 
 /**
- * Offline-first: sempre escreve no outbox primeiro. Drena depois (online).
+ * Offline-first: escreve no outbox local e retorna na hora.
+ * O drain real (upload de foto + POST pra API) roda em background — o
+ * usuário não fica preso no botão "Salvando..." esperando upload de foto.
  */
 export function useCriarViagem() {
   const qc = useQueryClient();
@@ -148,7 +150,7 @@ export function useCriarViagem() {
       foto?: { blob: Blob; mime: string };
     }) => {
       await enqueueViagem(input.payload, input.foto);
-      await drain();
+      // drain dispara via void dentro do enqueueViagem, não bloqueamos a UI
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["viagens"] });
@@ -161,10 +163,10 @@ export function useCriarPedagio() {
   return useMutation({
     mutationFn: async (payload: Record<string, unknown>) => {
       await enqueuePedagio(payload);
-      await drain();
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["pedagios"] });
     },
   });
 }
+

@@ -19,14 +19,23 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN cd apps/dashboard && pnpm build
 
 FROM node:20-alpine AS runtime
+RUN apk add --no-cache curl tini && \
+    addgroup -S app && adduser -S app -G app
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3001
+ENV HOSTNAME=0.0.0.0
 
-COPY --from=build /repo/apps/dashboard/.next/standalone ./
-COPY --from=build /repo/apps/dashboard/.next/static ./apps/dashboard/.next/static
-COPY --from=build /repo/apps/dashboard/public ./apps/dashboard/public
+COPY --from=build --chown=app:app /repo/apps/dashboard/.next/standalone ./
+COPY --from=build --chown=app:app /repo/apps/dashboard/.next/static ./apps/dashboard/.next/static
+COPY --from=build --chown=app:app /repo/apps/dashboard/public ./apps/dashboard/public
 
+USER app
 EXPOSE 3001
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD curl -fs http://localhost:3001/login || exit 1
+
+ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "apps/dashboard/server.js"]

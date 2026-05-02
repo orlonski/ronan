@@ -20,6 +20,11 @@ ENV VITE_API_URL=$VITE_API_URL
 RUN cd apps/motorista && pnpm build
 
 FROM nginx:1.27-alpine AS runtime
+RUN apk add --no-cache curl
 COPY apps/motorista/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /repo/apps/motorista/dist /usr/share/nginx/html
+
 EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -fs http://localhost/ || exit 1
