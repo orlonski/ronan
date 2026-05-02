@@ -132,9 +132,14 @@ Esse é o módulo que elimina o trabalho manual de conferência mensal e que mai
 
 - Operadora vai em `Fechamentos → Novo fechamento`, escolhe a empresa, o período, e anexa o arquivo (Excel, CSV ou PDF).
 - Sistema parseia o arquivo e **grava cada linha numa tabela própria**, mesmo se não entender. Tudo fica registrado.
-- Inteligência artificial (Claude Haiku 4.5) lê os cabeçalhos e identifica automaticamente qual coluna é a placa, qual é a data, qual é o ticket, qual é o km, qual é o pedágio. Funciona com **planilhas reais complexas** que têm múltiplas abas, cabeçalho fora da primeira linha, linhas de subtítulo no meio, layouts diferentes por empresa — inclusive **boletins em PDF** (que algumas empresas mandam como documento consolidado em vez de planilha).
+- Inteligência artificial (Claude Haiku 4.5) lê os cabeçalhos e identifica automaticamente qual coluna é a placa, qual é a data, qual é o ticket, qual é o km, qual é o pedágio. Funciona com **planilhas reais complexas**:
+  - Cabeçalho fora da primeira linha (ex: linha 5 com células mescladas)
+  - Linhas de subtítulo no meio que devem ser ignoradas
+  - **Múltiplas abas com viagens** no mesmo arquivo (ex: 1ª e 2ª medição do mês — sistema processa ambas e junta)
+  - Layouts completamente diferentes entre empresas-cliente
+  - **Boletins em PDF** (que algumas empresas mandam como documento consolidado em vez de planilha)
 - Sistema separa automaticamente **viagens, pedágios e descontos** (que normalmente vêm em abas ou seções diferentes do mesmo arquivo).
-- Na primeira vez de cada empresa, IA aprende; nas próximas, reutiliza o aprendizado.
+- Na primeira vez de cada empresa, IA aprende; nas próximas, reutiliza o aprendizado salvo.
 
 **2. Match automático**
 
@@ -168,25 +173,30 @@ Frequentemente a empresa manda uma planilha, depois manda outra "atualizada" cor
 
 #### Cenário B — Quando ENVIAMOS a planilha pra empresa-cliente
 
-Algumas empresas-cliente preferem receber sua planilha de fechamento (em vez de mandar a delas). Hoje cada empresa pode querer um layout diferente, e você ainda não tem um padrão fixo. Por isso o sistema oferece um **construtor dinâmico de layout**:
+Algumas empresas-cliente só **recebem** sua planilha de fechamento (não mandam a delas). Esse é um fluxo separado e mais simples — você não precisa subir planilha, o sistema gera automaticamente a partir das viagens cadastradas.
 
-**Construtor de layout por empresa**
+**Construtor dinâmico de layout por empresa**
 
-- Em `Empresas → [empresa] → Layout de envio`, a operadora monta o layout que aquela empresa específica quer receber:
-  - **Arrasta as colunas** que devem aparecer (Data, Placa, Ticket, Obra, Material, Toneladas, Km, Valor, Pedágio, Foto do ticket, etc.).
-  - Define a **ordem das colunas**, **nomes dos cabeçalhos** (ex: a empresa X prefere "VEÍCULO" em vez de "PLACA"), **formato de data** (DD/MM/AAAA, DD/MM/YY) e **formato de número** (vírgula ou ponto, casas decimais).
-  - Pode salvar **múltiplos modelos** por empresa (ex: "modelo viagens", "modelo pedágios", "modelo consolidado").
-  - **Pré-visualização em tempo real** com dados de exemplo do mês atual.
-- O layout fica salvo. A próxima exportação pra essa empresa usa o mesmo template direto.
+Cada empresa pode querer um formato diferente. Em `Empresas → [empresa] → Layout de envio`, a operadora monta o template que aquela empresa quer receber:
 
-**Geração e envio**
+- **Arrasta as colunas** que devem aparecer (Data, Placa, Ticket, Obra, Material, Toneladas, Km, Valor, Pedágio, etc.)
+- Define a **ordem**, **nomes dos cabeçalhos** (ex: a empresa X prefere "VEÍCULO" em vez de "PLACA"), **formato de data** e **formato de número**.
+- Pode salvar **múltiplos modelos** por empresa (ex: "viagens", "pedágios", "consolidado").
+- **Pré-visualização em tempo real** com dados de exemplo.
 
-- Operadora vai em `Fechamentos → [período] → Exportar` → escolhe a empresa e o template → sistema gera um XLSX no layout exato, junto com um ZIP opcional das fotos dos tickets.
-- O arquivo gerado fica **arquivado no servidor**.
+**Tela de Envios — geração e controle**
+
+A área `Envios` no painel é uma tela própria pra esse fluxo, separada de Fechamentos. Nela:
+
+- Lista todos os envios já gerados, com **etiqueta indicando origem** ("Direto" pra empresa que só recebe, "Fechamento v1" pra resposta a uma planilha que a empresa mandou).
+- Botão **Novo envio** abre wizard simples: escolhe empresa, período (mês), layout — sistema gera o XLSX na hora com todas as viagens das obras dessa empresa no período, no formato configurado.
+- Cada envio fica **arquivado no servidor** com data de geração e quem gerou.
 - Operadora baixa, manda pra empresa pelo WhatsApp ou e-mail, e clica em **Marcar como enviado** no sistema.
-- Fica registrado: _"Enviado em DD/MM/AAAA às HH:MM por [operadora] via [WhatsApp]"_ — controle do que já saiu pra cada cliente.
+- Fica registrado: _"Enviado em DD/MM/AAAA às HH:MM por [operadora] via [WhatsApp]"_ — você sempre sabe o que já saiu pra cada cliente.
 
-**Vantagem**: você não fica preso a um único formato. Conforme novas empresas-cliente forem chegando, cada uma com sua exigência, você (ou a operadora) configura o layout dela em poucos cliques sem precisar pedir ajustes técnicos no sistema.
+**Sem precisar de fechamento prévio**: empresa que só recebe não precisa mandar nada — o sistema cruza as obras dela com as viagens dos motoristas e gera tudo direto.
+
+**Vantagem**: conforme novas empresas-cliente aparecem, cada uma com sua exigência, você (ou a operadora) configura o layout dela em poucos cliques sem precisar pedir ajustes técnicos no sistema.
 
 #### Por que isso é diferente do que existe no mercado
 
@@ -336,6 +346,12 @@ _**Tela de Conferência — só o que precisa de revisão humana.** A IA process
 
 ![Construtor dinâmico de layout de envio](proposta-imagens/25-dashboard-layout-editor.png)
 _**Construtor dinâmico de layout** — para cada empresa-cliente que **recebe** sua planilha, a operadora monta o layout exato que ela quer: arrasta as colunas, define ordem, customiza o texto do cabeçalho, formato de data e separador decimal. Pré-visualização em tempo real ao lado, com dados reais da operação. Você não fica mais preso a um único formato — qualquer empresa nova é configurada em 5 minutos sem mexer no código._
+
+![Listagem de Envios](proposta-imagens/26-dashboard-envios-lista.png)
+_**Tela de Envios** separada — controle de tudo que já foi gerado e mandado pra cada empresa. Cada linha mostra empresa, período, origem (Direto = empresa que só recebe planilha; Fechamento = resposta a uma planilha que a empresa mandou), quantidade de linhas, layout usado, status (Gerado / Enviado), data e ações (baixar e marcar como enviado)._
+
+![Wizard de Novo Envio](proposta-imagens/27-dashboard-envio-novo.png)
+_**Wizard de novo envio** — empresa que só recebe planilha não precisa subir nada. A operadora seleciona empresa, período e layout — sistema gera o XLSX na hora cruzando obras da empresa com viagens dos motoristas. Pronto pra mandar pelo WhatsApp ou e-mail._
 
 ![Histórico de alterações da viagem](proposta-imagens/23-dashboard-viagem-historico.png)
 _**Histórico completo de cada viagem** — timeline mostrando criação pelo motorista, sincronização do app, match com fechamentos, e qualquer ajuste pela operadora (com motivo e antes/depois)._
