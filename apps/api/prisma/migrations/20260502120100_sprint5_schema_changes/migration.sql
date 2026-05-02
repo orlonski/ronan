@@ -1,37 +1,3 @@
--- CreateEnum
-CREATE TYPE "StatusEnvio" AS ENUM ('GERADO', 'ENVIADO');
-
--- CreateEnum
-CREATE TYPE "AcaoAuditoria" AS ENUM ('UPDATE', 'DELETE', 'RESOLVER', 'SUBSTITUIR', 'EXPORTAR', 'MARCAR_ENVIADO', 'MATCH_AUTOMATICO', 'MATCH_IA');
-
--- AlterEnum
--- This migration adds more than one value to an enum.
--- With PostgreSQL versions 11 and earlier, this is not possible
--- in a single migration. This can be worked around by creating
--- multiple migrations, each migration adding only one value to
--- the enum.
-
-
-ALTER TYPE "StatusFechamento" ADD VALUE 'RECEBIDO';
-ALTER TYPE "StatusFechamento" ADD VALUE 'EM_PROCESSAMENTO';
-ALTER TYPE "StatusFechamento" ADD VALUE 'CONFERIDO';
-ALTER TYPE "StatusFechamento" ADD VALUE 'EXPORTADO';
-ALTER TYPE "StatusFechamento" ADD VALUE 'SUBSTITUIDO';
-
--- AlterEnum
--- This migration adds more than one value to an enum.
--- With PostgreSQL versions 11 and earlier, this is not possible
--- in a single migration. This can be worked around by creating
--- multiple migrations, each migration adding only one value to
--- the enum.
-
-
-ALTER TYPE "StatusLinhaFechamento" ADD VALUE 'MATCH_IA';
-ALTER TYPE "StatusLinhaFechamento" ADD VALUE 'RESOLVIDA_OPERADORA';
-
--- AlterEnum
-ALTER TYPE "StatusViagem" ADD VALUE 'AJUSTADA';
-
 -- AlterTable
 ALTER TABLE "empresas_cliente" DROP COLUMN "layoutExport";
 
@@ -39,8 +5,8 @@ ALTER TABLE "empresas_cliente" DROP COLUMN "layoutExport";
 ALTER TABLE "fechamento_linhas" ADD COLUMN     "materialTexto" TEXT,
 ADD COLUMN     "motivoResolucao" TEXT,
 ADD COLUMN     "obraTexto" TEXT,
-ADD COLUMN     "ordem" INTEGER NOT NULL,
-ADD COLUMN     "rawData" JSONB NOT NULL,
+ADD COLUMN     "ordem" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "rawData" JSONB NOT NULL DEFAULT '{}'::jsonb,
 ADD COLUMN     "resolvidoPorId" TEXT,
 ADD COLUMN     "sugestaoIa" JSONB,
 ADD COLUMN     "toneladas" DECIMAL(10,3),
@@ -150,4 +116,3 @@ ALTER TABLE "envios_fechamento" ADD CONSTRAINT "envios_fechamento_geradoPorId_fk
 
 -- AddForeignKey
 ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_usuarioId_fkey" FOREIGN KEY ("usuarioId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
