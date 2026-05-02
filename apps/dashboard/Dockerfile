@@ -16,6 +16,9 @@ COPY tsconfig.base.json ./
 COPY packages/shared-types ./packages/shared-types
 COPY apps/dashboard ./apps/dashboard
 ENV NEXT_TELEMETRY_DISABLED=1
+# NEXT_PUBLIC_* precisa estar disponivel durante o build (vai bakeado no JS)
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 RUN cd packages/shared-types && pnpm build
 RUN cd apps/dashboard && pnpm build
 
