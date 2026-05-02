@@ -21,22 +21,23 @@ COPY apps/api ./apps/api
 RUN cd packages/shared-types && pnpm build
 RUN cd apps/api && pnpm prisma generate && pnpm build
 
-# ---- runtime mínimo ----
+# ---- runtime ----
 FROM node:20-alpine AS runtime
-# instala prisma global (independente do layout pnpm workspace)
 RUN apk add --no-cache curl tini openssl && \
     npm install -g prisma@6.19.3 && \
     addgroup -S app && adduser -S app -G app
-WORKDIR /app
 ENV NODE_ENV=production
 
-# copia o necessário pro runtime
-COPY --from=build /repo/apps/api/dist             ./dist
-COPY --from=build /repo/apps/api/prisma           ./prisma
-COPY --from=build /repo/apps/api/package.json     ./
-COPY --from=build /repo/apps/api/node_modules     ./node_modules
-COPY --from=build /repo/packages/shared-types     ../packages/shared-types
+# preserva estrutura do monorepo pra symlinks pnpm continuarem válidos
+WORKDIR /repo
+COPY --from=build /repo/node_modules              ./node_modules
+COPY --from=build /repo/packages/shared-types     ./packages/shared-types
+COPY --from=build /repo/apps/api/dist             ./apps/api/dist
+COPY --from=build /repo/apps/api/prisma           ./apps/api/prisma
+COPY --from=build /repo/apps/api/package.json     ./apps/api/
+COPY --from=build /repo/apps/api/node_modules     ./apps/api/node_modules
 
+WORKDIR /repo/apps/api
 USER app
 EXPOSE 3000
 
