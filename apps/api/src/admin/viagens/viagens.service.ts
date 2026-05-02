@@ -86,13 +86,15 @@ export class ViagensAdminService {
     return this.auditoria.historicoDe("Viagem", viagemId);
   }
 
-  async fotoUrl(viagemId: string, fotoId: string) {
+  async fotoBuffer(viagemId: string, fotoId: string) {
     const foto = await this.prisma.ticketFoto.findFirst({
       where: { id: fotoId, viagemId },
       select: { storageKey: true },
     });
     if (!foto) throw new NotFoundException("Foto não encontrada");
-    const url = await this.uploads.presignedUrl(foto.storageKey, 3600);
-    return { url };
+    const buffer = await this.uploads.getObjectBuffer(foto.storageKey);
+    const ext = foto.storageKey.split(".").pop()?.toLowerCase();
+    const contentType = ext === "png" ? "image/png" : "image/jpeg";
+    return { buffer, contentType };
   }
 }

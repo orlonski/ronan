@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import {
   ArrowDown,
   ArrowLeft,
@@ -366,12 +366,26 @@ function FotoThumb({
   onClick: (url: string) => void;
 }) {
   const q = useQuery({
-    queryKey: ["viagem-foto-url", viagemId, fotoId],
+    queryKey: ["viagem-foto-blob", viagemId, fotoId],
     enabled: !!token,
-    staleTime: 30 * 60_000, // URL presigned dura 1h, refresh cedo
-    queryFn: () =>
-      fetchApi<{ url: string }>(`/admin/viagens/${viagemId}/fotos/${fotoId}/url`, { token }),
+    staleTime: 30 * 60_000,
+    gcTime: 10 * 60_000,
+    queryFn: async () => {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+      const res = await fetch(`${apiUrl}/admin/viagens/${viagemId}/fotos/${fotoId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      return URL.createObjectURL(blob);
+    },
   });
+
+  useEffect(() => {
+    return () => {
+      if (q.data) URL.revokeObjectURL(q.data);
+    };
+  }, [q.data]);
 
   if (q.isLoading || !q.data) {
     return (
@@ -384,11 +398,11 @@ function FotoThumb({
   return (
     <button
       type="button"
-      onClick={() => onClick(q.data!.url)}
+      onClick={() => onClick(q.data!)}
       className="aspect-square overflow-hidden rounded-md border bg-muted transition-opacity hover:opacity-80"
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={q.data.url} alt="Ticket" className="h-full w-full object-cover" />
+      <img src={q.data} alt="Ticket" className="h-full w-full object-cover" />
     </button>
   );
 }
