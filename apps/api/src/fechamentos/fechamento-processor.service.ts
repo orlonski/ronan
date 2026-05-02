@@ -253,10 +253,57 @@ export class FechamentoProcessorService {
   }
 
   private extrairLinhas(parsed: ParsedFile, layout: LayoutInferenceResult): LinhaExtraida[] {
-    const aba = parsed.abas.find((a) => a.nome === layout.abaPreferida) ?? parsed.abas[0];
-    if (!aba) return [];
+    // Detecta TODAS as abas com mesmo padrão de cabeçalho (mesma estrutura) e
+    // processa cada uma. Ex: planilhas com "1ª Medição" + "2ª Medição" no mesmo
+    // arquivo vão ter ambas processadas.
+    const abasParaProcessar = this.encontrarAbasComMesmoLayout(parsed, layout);
+    if (abasParaProcessar.length === 0) return [];
 
-    const inicio = (layout.linhaInicioDados ?? 1) - 1; // converter pra 0-based
+    const out: LinhaExtraida[] = [];
+    let ordemGlobal = 0;
+    for (const aba of abasParaProcessar) {
+      const linhasDaAba = this.extrairDeUmaAba(aba, layout, ordemGlobal);
+      out.push(...linhasDaAba);
+      ordemGlobal += aba.linhas.length;
+    }
+    return out;
+  }
+
+  private encontrarAbasComMesmoLayout(
+    parsed: ParsedFile,
+    layout: LayoutInferenceResult,
+  ): { nome: string; linhas: (string | number | null)[][] }[] {
+    const linhaCabecalho = (layout.linhaCabecalho ?? 1) - 1;
+    const headersEsperados = layout.colunas
+      .map((c) => String(c.cabecalho ?? "").toUpperCase().trim())
+      .filter((h) => h.length > 0);
+
+    const abasMatch: typeof parsed.abas = [];
+    for (const aba of parsed.abas) {
+      // se a IA escolheu essa aba, sempre incluir
+      if (aba.nome === layout.abaPreferida) {
+        abasMatch.push(aba);
+        continue;
+      }
+      // verifica se a linha de cabeçalho dessa aba tem >= 50% dos headers esperados
+      const linhaHeader = aba.linhas[linhaCabecalho];
+      if (!linhaHeader) continue;
+      const headersAba = linhaHeader.map((c) => String(c ?? "").toUpperCase().trim());
+      const matches = headersEsperados.filter((h) => headersAba.includes(h)).length;
+      if (matches >= Math.max(3, Math.floor(headersEsperados.length / 2))) {
+        abasMatch.push(aba);
+      }
+    }
+    if (abasMatch.length === 0 && parsed.abas[0]) abasMatch.push(parsed.abas[0]);
+    return abasMatch;
+  }
+
+  private extrairDeUmaAba(
+    aba: { nome: string; linhas: (string | number | null)[][] },
+    layout: LayoutInferenceResult,
+    ordemBase: number,
+  ): LinhaExtraida[] {
+    const inicio = (layout.linhaInicioDados ?? 1) - 1;
     const linhasDados = aba.linhas.slice(inicio);
 
     const colMap = new Map<string, string>(); // letra → campo
@@ -297,8 +344,8 @@ export class FechamentoProcessorService {
       const materialTexto = get("material") as string | null;
 
       out.push({
-        ordem: inicio + i + 1, // 1-based original linha
-        rawData: raw,
+        ordem: ordemBase + inicio + i + 1, // ordem global considerando múltiplas abas
+        rawData: { ...raw, __aba: aba.nome },
         placa,
         data,
         ticket,
