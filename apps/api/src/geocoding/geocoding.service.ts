@@ -61,8 +61,10 @@ type GooglePlaceResponse = {
   types?: string[];
 };
 
-const PROXIMITY_DEFAULT = "-25.43,-49.27"; // Curitiba/PR (lat,lng)
-const PROXIMITY_RADIUS_M = 200_000; // 200km — cobre PR + sul de SP/MS
+// Bias retangular cobrindo PR + buffer (sul de SP, leste de MS, norte de SC).
+// Google rejeita circle com radius > 50km — rectangle não tem esse limite.
+const BIAS_LOW = { latitude: -27.0, longitude: -55.0 }; // SW
+const BIAS_HIGH = { latitude: -22.0, longitude: -47.5 }; // NE
 
 @Injectable()
 export class GeocodingService {
@@ -122,12 +124,6 @@ export class GeocodingService {
       return [];
     }
 
-    const [bLat, bLng] = (
-      this.config.get<string>("GOOGLE_PROXIMITY") ?? PROXIMITY_DEFAULT
-    )
-      .split(",")
-      .map(Number);
-
     let sugestoes: SugestaoLista[] = [];
     try {
       const res = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
@@ -142,10 +138,7 @@ export class GeocodingService {
           regionCode: "BR",
           includedRegionCodes: ["br"],
           locationBias: {
-            circle: {
-              center: { latitude: bLat, longitude: bLng },
-              radius: PROXIMITY_RADIUS_M,
-            },
+            rectangle: { low: BIAS_LOW, high: BIAS_HIGH },
           },
         }),
       });
