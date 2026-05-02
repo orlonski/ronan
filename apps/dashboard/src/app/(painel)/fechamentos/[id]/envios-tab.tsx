@@ -17,15 +17,15 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { fmtDataHoraBR } from "@/lib/fechamento-helpers";
 import {
+  useBaixarArquivo,
   useMarcarEnviado,
   type EnvioFechamento,
   type FechamentoDetalhe,
 } from "@/lib/fechamentos-api";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
-
 export function EnviosTab({ fechamento }: { fechamento: FechamentoDetalhe }) {
   const marcar = useMarcarEnviado(fechamento.id);
+  const baixar = useBaixarArquivo();
   const [editando, setEditando] = useState<EnvioFechamento | null>(null);
   const [canalEnvio, setCanalEnvio] = useState("WhatsApp");
   const [observacao, setObservacao] = useState("");
@@ -72,15 +72,18 @@ export function EnviosTab({ fechamento }: { fechamento: FechamentoDetalhe }) {
               )}
             </div>
             <div className="flex gap-2">
-              <a
-                href={`${API_URL}/admin/fechamentos/${fechamento.id}/envios/${e.id}/download`}
-                target="_blank"
-                rel="noopener"
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  baixar(
+                    `/admin/envios/${e.id}/download`,
+                    e.arquivoNome,
+                  )
+                }
               >
-                <Button variant="outline" size="sm">
-                  <Download className="h-4 w-4" /> Baixar
-                </Button>
-              </a>
+                <Download className="h-4 w-4" /> Baixar
+              </Button>
               {e.status === "GERADO" && (
                 <Button size="sm" onClick={() => setEditando(e)}>
                   <Send className="h-4 w-4" /> Marcar como enviado

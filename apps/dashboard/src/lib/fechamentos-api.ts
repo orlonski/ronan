@@ -368,6 +368,33 @@ export function useMarcarEnvioEnviado() {
   });
 }
 
+// Download autenticado: faz fetch com Bearer token, recebe Blob e
+// dispara download no browser. Necessario pq <a href> nao envia o
+// header Authorization, e endpoints com @Roles dao 401.
+export function useBaixarArquivo() {
+  const token = useAuthToken();
+  const API = process.env.NEXT_PUBLIC_API_URL ?? "";
+  return async (path: string, fallbackName = "arquivo.xlsx") => {
+    if (!token) throw new Error("Sem sessao");
+    const res = await fetch(`${API}${path}`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(`Falha ao baixar: ${res.status}`);
+    const cd = res.headers.get("Content-Disposition") ?? "";
+    const m = /filename="?([^"]+)"?/i.exec(cd);
+    const nome = m?.[1] ?? fallbackName;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = nome;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+}
+
 // Histórico de viagem
 export function useHistoricoViagem(viagemId: string | undefined) {
   const token = useAuthToken();

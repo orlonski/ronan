@@ -10,9 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { useResourceList } from "@/lib/client-api";
-import { useCriarEnvio, useLayoutsEnvio } from "@/lib/fechamentos-api";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
+import {
+  useBaixarArquivo,
+  useCriarEnvio,
+  useLayoutsEnvio,
+} from "@/lib/fechamentos-api";
 
 type Empresa = { id: string; nome: string; ativa: boolean; papel: string };
 
@@ -20,6 +22,7 @@ export default function NovoEnvioPage() {
   const router = useRouter();
   const empresas = useResourceList<Empresa>("/admin/empresas");
   const criar = useCriarEnvio();
+  const baixar = useBaixarArquivo();
 
   const [empresaId, setEmpresaId] = useState("");
   const [periodoInicio, setPeriodoInicio] = useState(thisMonthStart());
@@ -46,8 +49,11 @@ export default function NovoEnvioPage() {
         periodoFim,
         layoutEnvioId: layoutId || undefined,
       });
-      // sucesso — abre download automático e volta pra listagem
-      window.open(`${API_URL}/admin/envios/${result.envio.id}/download`, "_blank");
+      // dispara download autenticado e volta pra listagem
+      await baixar(
+        `/admin/envios/${result.envio.id}/download`,
+        result.arquivoNome,
+      ).catch(() => {/* tab fica em /envios mesmo se falhar */});
       router.push("/envios");
     } catch (err) {
       setError((err as Error).message || "Erro ao gerar envio");

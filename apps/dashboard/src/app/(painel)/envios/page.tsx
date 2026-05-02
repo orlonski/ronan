@@ -26,16 +26,16 @@ import {
 } from "@/components/ui/table";
 import { fmtBR, fmtDataHoraBR } from "@/lib/fechamento-helpers";
 import {
+  useBaixarArquivo,
   useEnvios,
   useMarcarEnvioEnviado,
   type EnvioStandalone,
 } from "@/lib/fechamentos-api";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
-
 export default function EnviosPage() {
   const list = useEnvios({});
   const marcar = useMarcarEnvioEnviado();
+  const baixar = useBaixarArquivo();
   const [editando, setEditando] = useState<EnvioStandalone | null>(null);
   const [canalEnvio, setCanalEnvio] = useState("WhatsApp");
   const [observacao, setObservacao] = useState("");
@@ -118,16 +118,16 @@ export default function EnviosPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
-                      <a
-                        href={`${API_URL}/admin/envios/${e.id}/download`}
-                        target="_blank"
-                        rel="noopener"
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         title="Baixar"
+                        onClick={() =>
+                          baixar(`/admin/envios/${e.id}/download`, e.arquivoNome)
+                        }
                       >
-                        <Button variant="ghost" size="icon">
-                          <Download className="h-4 w-4" />
-                        </Button>
-                      </a>
+                        <Download className="h-4 w-4" />
+                      </Button>
                       {e.status === "GERADO" && (
                         <Button
                           variant="ghost"
