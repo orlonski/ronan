@@ -1,12 +1,18 @@
 # Fixture: Gamerim Transportes — Boletim de Medição
 
-Planilha real recebida da empresa-cliente **GAMERIM TRANSPORTES** (CNPJ 19.215.279/0001-30) referente ao boletim de medição de obras EV (Estaduais Vias).
+Material real recebido da empresa-cliente **GAMERIM TRANSPORTES** (CNPJ 19.215.279/0001-30) referente ao boletim de medição de obras EV (Estaduais Vias).
 
-Este arquivo é usado como referência pra calibrar:
+Arquivos:
+- `recebido-medicao.xlsx` — versão **planilha** com 8 abas separando viagens, pedágios, descontos por medição
+- `recebido-boletim.pdf` — versão **PDF** consolidada (mesma medição apresentada como boletim único de 10 páginas)
+- `recebido-boletim.txt` — texto extraído do PDF (gerado via `pdftotext -layout`) pra inspeção rápida e treino do prompt da IA
+
+Este material é usado como referência pra calibrar:
 - Parser Excel (ExcelJS) — múltiplas abas, cabeçalho não-canônico
+- Parser PDF (pdf-parse / pdfjs) — quando a empresa enviar versão consolidada
 - Inferência de layout via Claude Haiku
 - Algoritmo de match placa+data+ticket
-- Tela de Conferência
+- Tela de Conferência (viagens + pedágios + descontos)
 
 ## Estrutura observada (`recebido-medicao.xlsx`)
 
@@ -67,8 +73,20 @@ Ao processar, vamos enfrentar:
 
 5. **TICKET**: usado como chave dura no match. Formato variável por empresa.
 
+## Estrutura observada (`recebido-boletim.pdf` — 10 páginas)
+
+Mesma medição que o XLSX, organizado em 3 blocos:
+
+1. **Página 1** — capa "BOLETIM DE MEDIÇÃO" com sumário (totais, descontos, créditos, valor líquido a pagar). Aqui aparece também o item "FRESADO HORA FRESA" como linha extra (cobrança por hora-máquina, não por viagem) — algo a considerar no modelo de dados se for recorrente.
+2. **Páginas 2 e seguintes** — "RELAÇÃO PEDÁGIOS" como tabela paginada
+3. **Páginas finais** — "RELAÇÃO DE CAMINHÕES" com cabeçalho `DATA | Nº TICKET | OBRA | PLACA | FORNECEDOR | MATERIAL | UN. | QUANT. | DISTÂNCIA KM | R$ UNIT | R$ TOTAL | TOTAL`, agrupado por seções (`RESUMO EV - C 011/2026 → Equipe EDINALDO`)
+4. Item "CAMINHÃO NA FRESA (DIARIA R$ 1.250,00)" aparece como linha de cobrança extra — sinaliza categoria de cobrança "diária de hora-máquina" diferente de viagem. Talvez precise virar entidade própria ou ficar como `Cobranca` genérica.
+
+PDF é mais difícil de parsear que XLSX (não tem células estruturadas), mas IA + bibliotecas como `pdf-parse` ou `pdfplumber` resolvem; layout é razoavelmente regular.
+
 ## Pontos cegos a investigar
 
-- Empresa fornece amostra do **layout que ela espera receber** (caso ela seja "destino" também)? Pendente.
-- Há outras empresas-cliente além da Gamerim? Provavelmente sim — colher amostras delas.
-- Ticket de pedágio (na aba RELAÇÃO PEDÁGIO) tem ID próprio? Nesse arquivo parece que não — só data+placa+praça é a chave.
+- Empresa fornece amostra do **layout que ela espera receber** (caso ela seja "destino" também)? **Resolvido**: Ronan disse que ele não tem layout padrão pra mandar — vai ser um construtor dinâmico no dashboard, operadora define o layout pra cada empresa-destino.
+- Há outras empresas-cliente além da Gamerim? **Por enquanto só Gamerim manda planilha**. Mas o sistema já é desenhado pra suportar N empresas com layouts diferentes (cache por empresa).
+- Ticket de pedágio (na aba RELAÇÃO PEDÁGIO) tem ID próprio? Nesse arquivo parece que não — só data+placa+praça é a chave. Match feito por essa tripla.
+- Categoria "CAMINHÃO NA FRESA (DIÁRIA)" e "FRESADO HORA FRESA" — não é viagem comum, é hora-máquina. Ver se é caso da Gamerim apenas ou se vai aparecer em outras empresas → talvez virar campo opcional na Viagem ou entidade separada `LancamentoExtra`.

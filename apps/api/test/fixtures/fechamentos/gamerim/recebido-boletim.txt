@@ -1,0 +1,478 @@
+                                                                                                                                            BOLETIM DE MEDIÇÃO
+
+
+    CONTRATADA: GAMERIM TRANSPORTES                                                                                                           OBRA: EV - 011/2026                                                                 PAGAMENTO: DEPÓSITO CONTA CORRENTE
+            TIPO: TRANSPORTE DE CBUQ E AGREGADO                                                                                                                                                                                      PERÍODO: 01/03/2026 A 31/03/2026
+      CPF / CNPJ 19.215.279/0001-30                                                                                                                                                                                                  EMISSÃO: 16/04/2026
+       MEDIÇÃO:               2                                                                                                 MÊS:      mar-26                                                                                  VENCIMENTO: 10/05/2026
+
+                                                                                                                           PREÇO    QUANTIDADE                                         QUANTIDADES                                                 VALORES (R$)
+  ITEM      MATERIAL                                 DISCRIMINAÇÃO                                  UNIDADEDE MEDIDA                             DIST. MÉDIA
+                                                                                                                         UNITÁRIO   CONTRATADA                       MEDIÇÃO            ANTERIOR        ACUMULADA                MEDIÇÃO             ANTERIOR                 ACUMULADO
+   2         C.B.U.Q       TRANSPORTE DE CBUQ EV - C 011/2026                                              KM*TON       R$     0,86     3.701,57    48,72             3701,57             722,11             4.423,68       R$       155.079,85   R$     25.000,91       R$       180.080,75
+   3            -          PEDÁGIO EV - C 011/2026                                                          EIXO        R$      12,10           382                   382,01               113,00            495,01         R$         4.622,30   R$          1.367,35   R$          5.989,65
+   4        FRESADO        HORA FRESA                                                                      HORA         R$   156,25           18,00                    18,00                                  18,00         R$         2.812,50                          R$          2.812,50
+
+
+
+
+                                                                                                                                                                                -
+                                                                                                                                                                                                                                 MEDIÇÃO               ANTERIOR               ACUMULADO
+                                                                                                        TOTAL
+                                                                                                                                                                                                                            R$       162.514,65   R$       42.700,54     R$       205.215,19
+                                                                                                                             DEDUÇÕES
+                                                                                                                                                                                                                              VALORES NESTA          VALORES                  VALORES
+  ITEM                                                                                   DEDUÇÃO DE FORNECIMENTO DE MATERIAIS
+                                                                                                                                                                                                                                 MEDIÇÃO            ANTERIORES              ACUMULADOS
+   1     DESCONTOS - EV - C 011/2026                                                                                                                                                                                        R$        56.321,71   R$     26.072,54       R$       82.394,26
+
+                                                                                                                                                                                                                      TOTAL R$        56.321,71   R$         42.371,79   R$         98.693,51
+
+                                                                                                                                                           VALORES LÍQUIDOS MEDIÇÃO DE PRESTAÇÃO DE SERVIÇO R$                       106.192,93   R$               -     R$        106.521,69
+                                                                                                                             CRÉDITOS
+  ITEM                                                                                                  DISCRIMINAÇÃO                                                                                                                                   VALOR
+
+                                                                                                                                                                                                                      TOTAL R$                                                            -
+OBSERVAÇÕES:
+BANCO: BANCO SICREDI 748                                                                                                                                      TOTAL LÍQUIDO                                                 R$                                                     106.192,93
+AGÊNCIA: 0730                                                                                                                             ISSQN
+CONTA CORRENTE: 24804-8                                                                                                  Retenções         INSS
+CNPJ: 19.215.297/0001-30                                                                                                                CONTRATUAL
+                                                                                                                                                                                                    TOTAL A PAGAR >>>       R$                                                  106.192,93
+                       Data:___/____/_____                                     Data: _____/____/_____                             Data: _____/____/_____                            Data: _____/____/_____                          Data: _____/____/_____
+
+
+
+
+           _________________________________________                 ________________________________________            __________________________________            __________________________________                     ________________________________
+                        ELABORADO POR:                                           PRESTADOR:                                      GERENTE REGIONAL:                          GERENTE RESPONSÁVEL::                                        DIRETORIA
+                       EDUARDO SAMPAIO                                       GAMERIM TRANSPORTES                                                                                                                                   EVENTO CONSTRUTORA
+                                                                    RELAÇÃO PEDÁGIOS
+
+
+                                                                          IDA (QUANTIDADE DE VOLTA(QUANTIDAD           VALOR POR
+   DATA               OBRA          PLACA     PRAÇA DE PEDÁGIO   TRAÇÃO                                        EIXO                       TOTAL
+                                                                                 EIXOS)         E DE EIXOS)              EIXO
+
+EV - C 011/2026
+
+ 03/03/2026       EV - C 11/2026   MDG-7G14      CARAMBEI                                                       6     R$     12,10   R$           72,60
+ 04/03/2026       EV - C 11/2026   AUN-7D32      CARAMBEI                                                       5     R$     12,10   R$           60,50
+ 02/03/2026       EV - C 11/2026   BTO4E72       CARAMBEI                                                       5     R$     12,10   R$           60,50
+ 06/03/2026       EV - C 11/2026   BTO4E72       CARAMBEI                                                       5     R$     12,10   R$           60,50
+ 13/03/2026       EV - C 11/2026   ATZ0091       CARAMBEI                                                       6     R$     12,10   R$           72,60
+ 26/03/2026       EV - C 11/2026   ATZ0091       CARAMBEI                                                       6     R$     12,10   R$           72,60
+ 20/03/2026       EV - C 11/2026   ERD6B73       CARAMBEI                                                       5     R$     12,10   R$           60,50
+ 27/03/2026       EV - C 11/2026   ERD6B73       CARAMBEI                                                       5     R$     12,10   R$           60,50
+ 04/03/2026       EV - C 11/2026   AWSSD97       CARAMBEI                                                       5     R$     12,10   R$           60,50
+ 07/03/2026       EV - C 11/2026   AWSSD97       CARAMBEI                                                       5     R$     12,10   R$           60,50
+ 03/03/2026       EV - C 11/2026   BSF5I16       CARAMBEI                                                       5     R$     12,10   R$           60,50
+ 18/03/2026       EV - C 11/2026   BSF5I16       CARAMBEI                                                       4     R$     12,10   R$           48,40
+ 04/03/2026       EV - C 11/2026   HQG6132       CARAMBEI                                                       5     R$     12,10   R$           60,50
+ 17/03/2026       EV - C 11/2026   HQG6132       CARAMBEI                                                       5     R$     12,10   R$           60,50
+ 19/03/2026       EV - C 11/2026   HQG6132       CARAMBEI                                                       5     R$     12,10   R$           60,50
+ 26/03/2026       EV - C 11/2026   HQG6132       CARAMBEI                                                       4     R$     12,10   R$           48,40
+ 28/03/2026       EV - C 11/2026   HQG6132       CARAMBEI                                                       4     R$     12,10   R$           48,40
+ 30/03/2026       EV - C 11/2026   HQG6132       CARAMBEI                                                       4     R$     12,10   R$           48,40
+ 02/03/2026       EV - C 11/2026   AUJ2962       CARAMBEI                                                       5     R$     12,10   R$           60,50
+ 05/03/2026       EV - C 11/2026   AUJ2962       CARAMBEI                                                       5     R$     12,10   R$           60,50
+ 16/03/2026       EV - C 11/2026   AUJ2962       CARAMBEI                                                       5     R$     12,10   R$           60,50
+ 19/03/2026       EV - C 11/2026   AUJ2962       CARAMBEI                                                       5     R$     12,10   R$           60,50
+ 23/03/2026       EV - C 11/2026   AUJ2962       CARAMBEI                                                       4     R$     12,10   R$           48,40
+ 24/03/2026       EV - C 11/2026   AUJ2962       CARAMBEI                                                       5     R$     12,10   R$           60,50
+ 25/03/2026       EV - C 11/2026   AUJ2962       CARAMBEI                                                       4     R$     12,10   R$           48,40
+ 26/03/2026       EV - C 11/2026   AUJ2962       CARAMBEI                                                       5     R$     12,10   R$           60,50
+ 30/03/2026       EV - C 11/2026   AUJ2962       CARAMBEI                                                       4     R$     12,10   R$           48,40
+ 03/03/2026       EV - C 11/2026   ATN3B14       CARAMBEI                                                       5     R$     12,10   R$           60,50
+ 27/03/2026       EV - C 11/2026   ATN3B14       CARAMBEI                                                       4     R$     12,10   R$           48,40
+ 05/03/2026       EV - C 11/2026   APP8D73       CARAMBEI                                                       5     R$     12,10   R$           60,50
+ 16/03/2026       EV - C 11/2026   APP8D73       CARAMBEI                                                       5     R$     12,10   R$           60,50
+ 19/03/2026       EV - C 11/2026   APP8D73       CARAMBEI                                                       5     R$     12,10   R$           60,50
+ 20/03/2026       EV - C 11/2026   APP8D73       CARAMBEI                                                       5     R$     12,10   R$           60,50
+ 20/03/2026       EV - C 11/2026   APP8D73       CARAMBEI                                                       5     R$     12,10   R$           60,50
+                                                              RELAÇÃO PEDÁGIOS
+
+
+                                                                    IDA (QUANTIDADE DE VOLTA(QUANTIDAD           VALOR POR
+  DATA           OBRA         PLACA     PRAÇA DE PEDÁGIO   TRAÇÃO                                        EIXO                       TOTAL
+                                                                           EIXOS)         E DE EIXOS)              EIXO
+
+21/03/2026   EV - C 11/2026   APP8D73      CARAMBEI                                                       4     R$     12,10   R$           48,40
+30/03/2026   EV - C 11/2026   APP8D73      CARAMBEI                                                       4     R$     12,10   R$           48,40
+02/03/2026   EV - C 11/2026   ASE0E48      CARAMBEI                                                       5     R$     12,10   R$           60,50
+02/03/2026   EV - C 11/2026   ASE0E48      CARAMBEI                                                       4     R$     12,10   R$           48,40
+07/03/2026   EV - C 11/2026   ASE0E48      CARAMBEI                                                       4     R$     12,10   R$           48,40
+11/03/2026   EV - C 11/2026   ASE0E48      CARAMBEI                                                       5     R$     12,10   R$           60,50
+13/03/2026   EV - C 11/2026   ASE0E48      CARAMBEI                                                       5     R$     12,10   R$           60,50
+14/03/2026   EV - C 11/2026   ASE0E48      CARAMBEI                                                       5     R$     12,10   R$           60,50
+18/03/2026   EV - C 11/2026   ASE0E48      CARAMBEI                                                       4     R$     12,10   R$           48,40
+28/03/2026   EV - C 11/2026   ASE0E48      CARAMBEI                                                       4     R$     12,10   R$           48,40
+30/03/2026   EV - C 11/2026   ASE0E48      CARAMBEI                                                       4     R$     12,10   R$           48,40
+07/03/2026   EV - C 11/2026   AMX2A28      CARAMBEI                                                       4     R$     12,10   R$           48,40
+13/03/2026   EV - C 11/2026   AMX2A28      CARAMBEI                                                       5     R$     12,10   R$           60,50
+14/03/2026   EV - C 11/2026   AMX2A28      CARAMBEI                                                       4     R$     12,10   R$           48,40
+20/03/2026   EV - C 11/2026   AMX2A28      CARAMBEI                                                       5     R$     12,10   R$           60,50
+21/03/2026   EV - C 11/2026   AMX2A28      CARAMBEI                                                       4     R$     12,10   R$           48,40
+24/03/2026   EV - C 11/2026   AMX2A28      CARAMBEI                                                       5     R$     12,10   R$           60,50
+25/03/2026   EV - C 11/2026   AMX2A28      CARAMBEI                                                       5     R$     12,10   R$           60,50
+26/03/2026   EV - C 11/2026   AMX2A28      CARAMBEI                                                       4     R$     12,10   R$           48,40
+27/03/2026   EV - C 11/2026   AMX2A28      CARAMBEI                                                       4     R$     12,10   R$           48,40
+28/03/2026   EV - C 11/2026   AMX2A28      CARAMBEI                                                       4     R$     12,10   R$           48,40
+30/03/2026   EV - C 11/2026   AMX2A28      CARAMBEI                                                       4     R$     12,10   R$           48,40
+17/03/2026   EV - C 11/2026   MBU2710      CARAMBEI                                                       5     R$     12,10   R$           60,50
+19/03/2026   EV - C 11/2026   MBU2710      CARAMBEI                                                       5     R$     12,10   R$           60,50
+25/03/2026   EV - C 11/2026   MBU2710      CARAMBEI                                                       5     R$     12,10   R$           60,50
+28/03/2026   EV - C 11/2026   MBU2710      CARAMBEI                                                       4     R$     12,10   R$           48,40
+20/03/2026   EV - C 11/2026   ALC2F96      CARAMBEI                                                       4     R$     12,10   R$           48,40
+21/03/2026   EV - C 11/2026   ALC2F96      CARAMBEI                                                       4     R$     12,10   R$           48,40
+23/03/2026   EV - C 11/2026   ALC2F96      CARAMBEI                                                       5     R$     12,10   R$           60,50
+26/03/2026   EV - C 11/2026   ALC2F96      CARAMBEI                                                       4     R$     12,10   R$           48,40
+27/03/2026   EV - C 11/2026   ALC2F96      CARAMBEI                                                       4     R$     12,10   R$           48,40
+30/03/2026   EV - C 11/2026   ALC2F96      CARAMBEI                                                       4     R$     12,10   R$           48,40
+01/03/2026   EV - C 11/2026   ALC2F96      CARAMBEI                                                       5     R$     12,10   R$           60,50
+02/03/2026   EV - C 11/2026   ALC2F96      CARAMBEI                                                       5     R$     12,10   R$           60,50
+13/03/2026   EV - C 11/2026   ALC2F96      CARAMBEI                                                       5     R$     12,10   R$           60,50
+                                                                      RELAÇÃO PEDÁGIOS
+
+
+                                                                             IDA (QUANTIDADE DE VOLTA(QUANTIDAD             VALOR POR
+  DATA           OBRA              PLACA        PRAÇA DE PEDÁGIO   TRAÇÃO                                         EIXO                                  TOTAL
+                                                                                    EIXOS)         E DE EIXOS)                EIXO
+
+14/03/2026   EV - C 11/2026       ALC2F96          CARAMBEI                                                         5      R$           12,10   R$                 60,50
+24/03/2026   EV - C 11/2026       ALC2F96          CARAMBEI                                                         5      R$           12,10   R$                 60,50
+25/03/2026   EV - C 11/2026       ALC2F96          CARAMBEI                                                         5      R$           12,10   R$                 60,50
+28/03/2026   EV - C 11/2026       ALC2F96          CARAMBEI                                                         5      R$           12,10   R$                 60,50
+19/03/2026   EV - C 11/2026       AUN-7D32         CARAMBEI                                                         5      R$           12,10   R$                 60,50
+16/03/2026   EV - C 11/2026       BUD-7C80         CARAMBEI                                                         5      R$           12,10   R$                 60,50
+19/03/2026   EV - C 11/2026       BUD-7C80         CARAMBEI                                                         4      R$           12,10   R$                 48,40
+20/03/2026   EV - C 11/2026       BUD-7C80         CARAMBEI                                                         5      R$           12,10   R$                 60,50
+21/03/2026   EV - C 11/2026       BUD-7C80         CARAMBEI                                                         4      R$           12,10   R$                 48,50
+23/03/2026   EV - C 11/2026       BUD-7C80         CARAMBEI                                                         5      R$           12,10   R$                 60,50
+24/03/2026   EV - C 11/2026       BUD-7C80         CARAMBEI                                                         5      R$           12,10   R$                 60,50
+25/03/2026   EV - C 11/2026       BUD-7C80         CARAMBEI                                                         5      R$           12,10   R$                 60,50
+27/03/2026   EV - C 11/2026       BUD-7C80         CARAMBEI                                                         4      R$           12,10   R$                 48,40
+
+
+                    DESCONTOS: EV - C 11/2026                                                                     382,01        12,10           R$              4.622,30
+
+
+
+
+                  PEDÁGIOS EV - 011/2026                                                                          382,0    R$      12,10             R$ 4.622,30
+
+                                                                            TOTAL DE DESCONTOS DE PEDÁGIO DESTA MEDIÇÃO =====>>>                     R$ 4.622,30
+                                                                                                   FRETE           TOTAL
+DATA   Nº TICKET   OBRA   PLACA   FORNECEDOR   MATERIAL   UN.   QUANT.   DISTÂNCIA KM
+                                                                                        R$ UNIT.       R$ TOTAL   R$ TOTAL
+                                                                                                                                        FRETE                       TOTAL
+  DATA          Nº TICKET          OBRA          PLACA     FORNECEDOR      MATERIAL          UN.   QUANT.   DISTÂNCIA KM
+                                                                                                                            R$ UNIT.         R$ TOTAL              R$ TOTAL
+
+
+RESUMO EV - C 011/2026
+             Equipe EDINALDO
+02/03/2026      TKB-040704     EV - C 011/2026   BTO4E72     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,10       65,7       R$    0,70   R$          970,39    R$              970,39
+02/03/2026      TKB-040708     EV - C 011/2026   AUJ2962     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,25       65,7       R$    0,70   R$          977,29    R$              977,29
+02/03/2026      TKB-040697     EV - C 011/2026   AUJ2962     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,80       31,5       R$    0,70   R$          480,69    R$              480,69
+02/03/2026      TKB-040712     EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    22,90       31,5       R$    0,70   R$          504,95    R$              504,95
+02/03/2026      TKB-040692     EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    23,10       31,5       R$    0,70   R$          509,36    R$              509,36
+02/03/2026      TKB-040694     EV - C 011/2026   BTO4E72     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    23,36       31,5       R$    0,70   R$          515,09    R$              515,09
+02/03/2026      TKB-040698     EV - C 011/2026   ASE0E48     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    28,92       65,7       R$    0,70   R$         1.330,03   R$          1.330,03
+03/03/2026      TKB-040740     EV - C 011/2026   MDG7G14     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    20,95       65,7       R$    0,70   R$          963,49    R$              963,49
+03/03/2026      TKB-040728     EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    23,00       31,5       R$    0,70   R$          507,15    R$              507,15
+03/03/2026      TKB-040737     EV - C 011/2026   BSF5I16     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    23,09       65,7       R$    0,70   R$         1.061,91   R$          1.061,91
+03/03/2026      TKB-040729     EV - C 011/2026   ATN3B14     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    24,15       31,5       R$    0,70   R$          532,51    R$              532,51
+03/03/2026      TKB-040732     EV - C 011/2026   ERD6B73     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    24,80       31,5       R$    0,70   R$          546,84    R$              546,84
+03/03/2026      TKB-040735     EV - C 011/2026   RXX6A82     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    32,00       65,7       R$    0,70   R$         1.471,68   R$          1.471,68
+04/03/2026      TKB-040783     EV - C 011/2026   HQG6J32     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    20,95       66,3       R$    0,70   R$          972,29    R$              972,29
+04/03/2026      TKB-040796     EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,80       36,4       R$    0,70   R$          555,46    R$              555,46
+04/03/2026      TKB-040766     EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    22,30       36,4       R$    0,70   R$          568,20    R$              568,20
+04/03/2026      TKB-040794     EV - C 011/2026   AWS5D97     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    22,65       66,3       R$    0,70   R$         1.051,19   R$          1.051,19
+04/03/2026      TKB-040770     EV - C 011/2026   AWS5D97     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    23,15       36,4       R$    0,70   R$          589,86    R$              589,86
+04/03/2026      TKB-040784     EV - C 011/2026   AUN7D32     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    25,35       66,3       R$    0,70   R$         1.176,49   R$          1.176,49
+05/03/2026      TKB-040805     EV - C 011/2026   AUJ2962     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,55       36,9       R$    0,70   R$          556,64    R$              556,64
+05/03/2026      TKB-040810     EV - C 011/2026   APP8D73     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,95       67,8       R$    0,70   R$         1.041,75   R$          1.041,75
+05/03/2026      TKB-040809     EV - C 011/2026   ASE0E48     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    27,76       36,9       R$    0,70   R$          717,04    R$              717,04
+05/03/2026      TKB-040826     EV - C 011/2026   APP8D73     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,75       67,8       R$    0,70   R$         1.032,26   R$          1.032,26
+05/03/2026      TKB-040823     EV - C 011/2026   AUJ2962     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    22,10       67,8       R$    0,70   R$         1.048,87   R$          1.048,87
+05/03/2026      TKB-040821     EV - C 011/2026   BSF5E16     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    23,10       67,8       R$    0,70   R$         1.096,33   R$          1.096,33
+05/03/2026      TKB-040825     EV - C 011/2026   ASE0E48     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    26,73       36,9       R$    0,70   R$          690,44    R$              690,44
+06/03/2026      TKB-040834     EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    22,90       40,5       R$    0,70   R$          649,22    R$              649,22
+06/03/2026      TKB-040842     EV - C 011/2026   RXX6A82     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    29,15       68,5       R$    0,70   R$         1.397,74   R$          1.397,74
+06/03/2026      TKB-040844     EV - C 011/2026   BTO4E72     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,30       68,5       R$    0,70   R$         1.021,34   R$          1.021,34
+06/03/2026      TKB-040848     EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,45       40,5       R$    0,70   R$          608,11    R$              608,11
+06/03/2026      TKB-040849     EV - C 011/2026   ERD6B73     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    23,55       68,5       R$    0,70   R$         1.129,22   R$          1.129,22
+06/03/2026      TKB-040838     EV - C 011/2026   ERD6B73     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    23,75       40,5       R$    0,70   R$          673,31    R$              673,31
+07/03/2026      TKB-040866     EV - C 011/2026   ATZ0091     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,10        41        R$    0,70   R$          605,57    R$              605,57
+07/03/2026      TKB-040859     EV - C 011/2026   AMX2A28     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,95        41        R$    0,70   R$          629,97    R$              629,97
+07/03/2026      TKB-040865     EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    22,70        41        R$    0,70   R$          651,49    R$              651,49
+07/03/2026      TKB-040860     EV - C 011/2026   AWS5D97     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    23,62        41        R$    0,70   R$          677,89    R$              677,89
+07/03/2026      TKB-040869     EV - C 011/2026   ALC2F96     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    26,40        41        R$    0,70   R$          757,68    R$              757,68
+07/03/2026      TKB-040858     EV - C 011/2026   ASE0E48     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    29,35        41        R$    0,70   R$          842,35    R$              842,35
+11/03/2026      TKB-040906     EV - C 011/2026   AOJ5E40     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    20,59        41        R$    0,70   R$          590,93    R$              590,93
+11/03/2026      TKB-040910     EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    22,20       41,5       R$    0,70   R$          644,91    R$              644,91
+11/03/2026      TKB-040904     EV - C 011/2026   ASD2F97     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    24,46       41,5       R$    0,70   R$          710,56    R$              710,56
+11/03/2026      TKB-040908     EV - C 011/2026   ASE0E48     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    25,89       41,5       R$    0,70   R$          752,10    R$              752,10
+11/03/2026      TKB-040911     EV - C 011/2026   MCF8A54     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    30,82       41,5       R$    0,70   R$          895,32    R$              895,32
+11/03/2026      TKB-040905     EV - C 011/2026   FDB0C79     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    37,80       41,5       R$    0,70   R$         1.098,09   R$          1.098,09
+13/03/2026      TKB-040957     EV - C 011/2026   AMX2A28     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,25       68,2       R$    0,70   R$         1.014,48   R$          1.014,48
+13/03/2026      TKB-040953     EV - C 011/2026   ATZ0091     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,55       41,7       R$    0,70   R$          629,04    R$              629,04
+                                                                                                                                   FRETE                       TOTAL
+  DATA       Nº TICKET        OBRA          PLACA     FORNECEDOR      MATERIAL          UN.   QUANT.   DISTÂNCIA KM
+                                                                                                                       R$ UNIT.         R$ TOTAL              R$ TOTAL
+13/03/2026   TKB-040952   EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    22,03       41,7       R$    0,70   R$          643,06    R$              643,06
+13/03/2026   TKB-040950   EV - C 011/2026   ASE0E48     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    26,74       41,7       R$    0,70   R$          780,54    R$              780,54
+13/03/2026   TKB-040955   EV - C 011/2026   ALC2F96     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    27,62       68,2       R$    0,70   R$         1.318,58   R$          1.318,58
+13/03/2026   TKB-040962   EV - C 011/2026   ATZ0091     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,90       68,2       R$    0,70   R$         1.045,51   R$          1.045,51
+13/03/2026   TKB-040963   EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    22,20       41,7       R$    0,70   R$          648,02    R$              648,02
+13/03/2026   TKB-040970   EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    23,30       41,7       R$    0,70   R$          680,13    R$              680,13
+13/03/2026   TKB-040961   EV - C 011/2026   ASE0E48     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    27,10       68,2       R$    0,70   R$         1.293,75   R$          1.293,75
+14/03/2026   TKB-040971   EV - C 011/2026   ATZ0091     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,55       41,8       R$    0,70   R$          630,55    R$              630,55
+14/03/2026   TKB-040974   EV - C 011/2026   ALC2F96     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    24,24       68,2       R$    0,70   R$         1.157,22   R$          1.157,22
+14/03/2026   TKB-040976   EV - C 011/2026   AMX2A28     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    20,30       41,8       R$    0,70   R$          593,98    R$              593,98
+14/03/2026   TKB-040977   EV - C 011/2026   ASE0E48     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    26,33       68,2       R$    0,70   R$         1.256,99   R$          1.256,99
+16/03/2026   TKB-040986   EV - C 011/2026   BUD7C80     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,00       42,3       R$    0,70   R$          621,81    R$              621,81
+16/03/2026   TKB-040994   EV - C 011/2026   AUJ2962     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,75       68,2       R$    0,70   R$         1.038,35   R$          1.038,35
+16/03/2026   TKB-040999   EV - C 011/2026   BUD7C80     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    22,80       42,3       R$    0,70   R$          675,11    R$              675,11
+16/03/2026   TKB-040988   EV - C 011/2026   APP8D73     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    22,90       42,3       R$    0,70   R$          678,07    R$              678,07
+16/03/2026   TKB-041005   EV - C 011/2026   APP8D73     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    24,30       42,3       R$    0,70   R$          719,52    R$              719,52
+16/03/2026   TKB-041010   EV - C 011/2026   ERD6B73     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    24,85       42,3       R$    0,70   R$          735,81    R$              735,81
+16/03/2026   TKB-040992   EV - C 011/2026   ERD6B73     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    25,55       68,2       R$    0,70   R$         1.219,76   R$          1.219,76
+16/03/2026   TKB-040983   EV - C 011/2026   RXX6A82     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    30,20       42,3       R$    0,70   R$          894,22    R$              894,22
+16/03/2026   TKB-041007   EV - C 011/2026   RXX6A82     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    31,90        90        R$    0,70   R$         2.009,70   R$          2.009,70
+17/03/2026   TKB-041027   EV - C 011/2026   MBU2710     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    20,90       66,7       R$    0,70   R$          975,82    R$              975,82
+17/03/2026   TKB-041026   EV - C 011/2026   HQG6J32     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,50       66,7       R$    0,70   R$         1.003,84   R$          1.003,84
+17/03/2026   TKB-041036   EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    22,80       66,7       R$    0,70   R$         1.064,53   R$          1.064,53
+17/03/2026   TKB-041022   EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    23,70       42,3       R$    0,70   R$          701,76    R$              701,76
+18/03/2026   TKB-041055   EV - C 011/2026   BSF5I16     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,39       42,3       R$    0,98   R$          886,70    R$              886,70
+18/03/2026   TKB-041051   EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,95       42,3       R$    0,98   R$          909,92    R$              909,92
+18/03/2026   TKB-041064   EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    22,65       42,3       R$    0,98   R$          938,93    R$              938,93
+18/03/2026   TKB-041068   EV - C 011/2026   ASE0E48     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    26,30       42,3       R$    0,98   R$         1.090,24   R$          1.090,24
+18/03/2026   TKB-041053   EV - C 011/2026   ASE0E48     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    26,43       42,3       R$    0,98   R$         1.095,63   R$          1.095,63
+19/03/2026   TKB-041081   EV - C 011/2026   AUJ2962     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    20,62       69,2       R$    0,98   R$         1.398,37   R$          1.398,37
+19/03/2026   TKB-041076   EV - C 011/2026   BUD7C80     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,01       69,2       R$    0,98   R$         1.424,81   R$          1.424,81
+19/03/2026   TKB-041074   EV - C 011/2026   AUJ2962     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,03       42,8       R$    0,98   R$          882,08    R$              882,08
+19/03/2026   TKB-041071   EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    22,50       42,8       R$    0,98   R$          943,74    R$              943,74
+19/03/2026   TKB-041086   EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    22,90       42,8       R$    0,98   R$          960,52    R$              960,52
+19/03/2026   TKB-041073   EV - C 011/2026   APP8D73     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    23,50       69,2       R$    0,98   R$         1.593,68   R$          1.593,68
+20/03/2026   TKB-041096   EV - C 011/2026   AMX2A28     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    20,30       69,2       R$    0,98   R$         1.376,66   R$          1.376,66
+20/03/2026   TKB-041092   EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,70        43        R$    0,98   R$          914,44    R$              914,44
+20/03/2026   TKB-041095   EV - C 011/2026   APP8D73     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    22,00       69,9       R$    0,98   R$         1.507,04   R$          1.507,04
+20/03/2026   TKB-041097   EV - C 011/2026   ALC2F96     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    22,45        43        R$    0,98   R$          946,04    R$              946,04
+20/03/2026   TKB-041088   EV - C 011/2026   RXX6A82     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    30,35       69,9       R$    0,98   R$         2.079,04   R$          2.079,04
+20/03/2026   TKB-041103   EV - C 011/2026   BUD7C80     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,05        43        R$    0,98   R$          887,05    R$              887,05
+20/03/2026   TKB-041098   EV - C 011/2026   ATZ0091     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,30        43        R$    0,98   R$          897,58    R$              897,58
+20/03/2026   TKB-041104   EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    23,30        43        R$    0,98   R$          981,86    R$              981,86
+20/03/2026   TKB-041101   EV - C 011/2026   ERD6B73     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    23,95        43        R$    0,98   R$         1.009,25   R$          1.009,25
+21/03/2026   TKB-041116   EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    22,70        43        R$    0,98   R$          956,58    R$              956,58
+21/03/2026   TKB-041123   EV - C 011/2026   BUD7C80     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    20,10        43        R$    0,98   R$          847,01    R$              847,01
+21/03/2026   TKB-041118   EV - C 011/2026   AMX2A28     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    20,80        43        R$    0,98   R$          876,51    R$              876,51
+21/03/2026   TKB-041121   EV - C 011/2026   ATZ0091     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    20,80        43        R$    0,98   R$          876,51    R$              876,51
+21/03/2026   TKB-041119   EV - C 011/2026   ALC2F96     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,27        43        R$    0,98   R$          896,32    R$              896,32
+                                                                                                                                   FRETE                       TOTAL
+  DATA       Nº TICKET        OBRA          PLACA     FORNECEDOR      MATERIAL          UN.   QUANT.   DISTÂNCIA KM
+                                                                                                                       R$ UNIT.         R$ TOTAL              R$ TOTAL
+21/03/2026   TKB-041117   EV - C 011/2026   APP8D73     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    22,55        43        R$    0,98   R$          950,26    R$              950,26
+23/03/2026   TKB-041134   EV - C 011/2026   BUD7C80     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    20,98        43        R$    0,98   R$          884,10    R$              884,10
+23/03/2026   TKB-041131   EV - C 011/2026   ATZ0091     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,50        43        R$    0,98   R$          906,01    R$              906,01
+23/03/2026   TKB-041155   EV - C 011/2026   ATZ0091     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,53        43        R$    0,98   R$          907,27    R$              907,27
+23/03/2026   TKB-041157   EV - C 011/2026   AUJ2962     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,80        43        R$    0,98   R$          918,65    R$              918,65
+23/03/2026   TKB-041138   EV - C 011/2026   AUJ2962     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    22,60        43        R$    0,98   R$          952,36    R$              952,36
+23/03/2026   TKB-041156   EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    23,12        43        R$    0,98   R$          974,28    R$              974,28
+23/03/2026   TKB-041132   EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    23,52        43        R$    0,98   R$          991,13    R$              991,13
+23/03/2026   TKB-041151   EV - C 011/2026   ALC2F96     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    23,86        43        R$    0,98   R$         1.005,46   R$          1.005,46
+24/03/2026   TKB-041173   EV - C 011/2026   AUJ2962     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    20,60        44        R$    0,98   R$          888,27    R$              888,27
+24/03/2026   TKB-041172   EV - C 011/2026   BUD7C80     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,00        44        R$    0,98   R$          905,52    R$              905,52
+24/03/2026   TKB-041181   EV - C 011/2026   AUJ2962     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,67        66        R$    0,98   R$         1.401,62   R$          1.401,62
+24/03/2026   TKB-041171   EV - C 011/2026   ATZ0091     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,80        44        R$    0,98   R$          940,02    R$              940,02
+24/03/2026   TKB-041170   EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    24,07        44        R$    0,98   R$         1.037,90   R$          1.037,90
+24/03/2026   TKB-041176   EV - C 011/2026   BEA8D25     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    40,45        44        R$    0,98   R$         1.744,20   R$          1.744,20
+24/03/2026   TKB-041177   EV - C 011/2026   AMX2A28     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    20,35        66        R$    0,98   R$         1.316,24   R$          1.316,24
+24/03/2026   TKB-041178   EV - C 011/2026   ALC2F96     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    22,75        66        R$    0,98   R$         1.471,47   R$          1.471,47
+25/03/2026   TKB-041200   EV - C 011/2026   AMX2A28     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    19,50        66        R$    0,98   R$         1.261,26   R$          1.261,26
+25/03/2026   TKB-041202   EV - C 011/2026   MDU2710     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    20,40       65,8       R$    0,98   R$         1.315,47   R$          1.315,47
+25/03/2026   TKB-041192   EV - C 011/2026   ATZ0091     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    20,85       44,2       R$    0,98   R$          903,14    R$              903,14
+25/03/2026   TKB-041187   EV - C 011/2026   AUJ2962     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,70       44,2       R$    0,98   R$          939,96    R$              939,96
+25/03/2026   TKB-041190   EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    23,18       44,2       R$    0,98   R$         1.004,06   R$          1.004,06
+25/03/2026   TKB-041204   EV - C 011/2026   ALC2F96     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    24,11       65,8       R$    0,98   R$         1.554,71   R$          1.554,71
+25/03/2026   TKB-041197   EV - C 011/2026   BEA8D25     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    39,00       44,2       R$    0,98   R$         1.689,32   R$          1.689,32
+26/03/2026   TKB-041229   EV - C 011/2026   AMX2A28     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    20,55       43,4       R$    0,98   R$          874,03    R$              874,03
+26/03/2026   TKB-041224   EV - C 011/2026   HQG6J32     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,85       44,9       R$    0,98   R$          961,44    R$              961,44
+26/03/2026   TKB-041217   EV - C 011/2026   AUJ2962     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,90       64,7       R$    0,98   R$         1.388,59   R$          1.388,59
+26/03/2026   TKB-041221   EV - C 011/2026   ATZ0091     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    22,75       64,7       R$    0,98   R$         1.442,49   R$          1.442,49
+26/03/2026   TKB-041218   EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    23,73       64,7       R$    0,98   R$         1.504,62   R$          1.504,62
+26/03/2026   TKB-041227   EV - C 011/2026   BEA8D25     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    42,00       44,9       R$    0,98   R$         1.848,08   R$          1.848,08
+26/03/2026   TKB-041234   EV - C 011/2026   ALC2F96     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    24,65       44,9       R$    0,98   R$         1.084,65   R$          1.084,65
+27/03/2026   TKB-041247   EV - C 011/2026   AMX2A28     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,20       44,9       R$    0,98   R$          932,84    R$              932,84
+27/03/2026   TKB-041245   EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    23,52       44,9       R$    0,98   R$         1.034,93   R$          1.034,93
+27/03/2026   TKB-041246   EV - C 011/2026   BEA8D25     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    41,63       44,9       R$    0,98   R$         1.831,80   R$          1.831,80
+27/03/2026   TKB-041276   EV - C 011/2026   AMX2A28     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,25       44,9       R$    0,98   R$          935,04    R$              935,04
+27/03/2026   TKB-041257   EV - C 011/2026   BUD7C80     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,40       44,9       R$    0,98   R$          941,64    R$              941,64
+27/03/2026   TKB-041269   EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    23,25       44,9       R$    0,98   R$         1.023,05   R$          1.023,05
+27/03/2026   TKB-041258   EV - C 011/2026   ATN3B14     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    24,25       44,9       R$    0,98   R$         1.067,05   R$          1.067,05
+27/03/2026   TKB-041281   EV - C 011/2026   ALC2F96     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    24,50       44,9       R$    0,98   R$         1.078,05   R$          1.078,05
+27/03/2026   TKB-041260   EV - C 011/2026   ERD6B73     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    25,30       44,9       R$    0,98   R$         1.113,25   R$          1.113,25
+27/03/2026   TKB-041252   EV - C 011/2026   ALC2F96     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    25,52       44,9       R$    0,98   R$         1.122,93   R$          1.122,93
+27/03/2026   TKB-041265   EV - C 011/2026   RXX6A82     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    30,75       44,9       R$    0,98   R$         1.353,06   R$          1.353,06
+27/03/2026   TKB-041273   EV - C 011/2026   BEA8D05     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    39,30       44,9       R$    0,98   R$         1.729,28   R$          1.729,28
+28/03/2026   TKB-041287   EV - C 011/2026   AMX2A28     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,00       46,2       R$    0,98   R$          950,80    R$              950,80
+28/03/2026   TKB-041291   EV - C 011/2026   MBU2710     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    21,57       46,2       R$    0,98   R$          976,60    R$              976,60
+28/03/2026   TKB-041286   EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    23,25       46,2       R$    0,98   R$         1.052,67   R$          1.052,67
+28/03/2026   TKB-041289   EV - C 011/2026   HQG6J32     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    23,76       46,2       R$    0,98   R$         1.075,76   R$          1.075,76
+28/03/2026   TKB-041284   EV - C 011/2026   ASE0E48     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    26,30       46,2       R$    0,98   R$         1.190,76   R$          1.190,76
+28/03/2026   TKB-041295   EV - C 011/2026   BEA8D25     M.A.D.P    C.B.U.Q. FAIXA "C"   TON    40,85       46,2       R$    0,98   R$         1.849,52   R$          1.849,52
+                                                                                                                                              FRETE                        TOTAL
+  DATA          Nº TICKET            OBRA          PLACA     FORNECEDOR      MATERIAL          UN.    QUANT.      DISTÂNCIA KM
+                                                                                                                                  R$ UNIT.          R$ TOTAL              R$ TOTAL
+30/03/2026      TKB-041322       EV - C 011/2026   AMX2A28     M.A.D.P    C.B.U.Q. FAIXA "C"   TON     20,40          46,2       R$    0,98   R$            923,63   R$              923,63
+30/03/2026      TKB-041306       EV - C 011/2026   MBU2710     M.A.D.P    C.B.U.Q. FAIXA "C"   TON     20,58          46,2       R$    0,98   R$            931,78   R$              931,78
+30/03/2026      TKB-041324       EV - C 011/2026   AUJ2962     M.A.D.P    C.B.U.Q. FAIXA "C"   TON     20,95          46,2       R$    0,98   R$            948,53   R$              948,53
+30/03/2026      TKB-041307       EV - C 011/2026   HQG6J32     M.A.D.P    C.B.U.Q. FAIXA "C"   TON     21,50          46,2       R$    0,98   R$            973,43   R$              973,43
+30/03/2026      TKB-041301       EV - C 011/2026   APL6A61     M.A.D.P    C.B.U.Q. FAIXA "C"   TON     21,95          46,2       R$    0,98   R$            993,81   R$              993,81
+30/03/2026      TKB-041303       EV - C 011/2026   ATZ0091     M.A.D.P    C.B.U.Q. FAIXA "C"   TON     22,35          46,2       R$    0,98   R$          1.011,92   R$          1.011,92
+30/03/2026      TKB-041326       EV - C 011/2026   APP8D73     M.A.D.P    C.B.U.Q. FAIXA "C"   TON     22,48          46,2       R$    0,98   R$          1.017,80   R$          1.017,80
+30/03/2026      TKB-041323       EV - C 011/2026   ALC2F96     M.A.D.P    C.B.U.Q. FAIXA "C"   TON     24,35          46,2       R$    0,98   R$          1.102,47   R$          1.102,47
+30/03/2026      TKB-041299       EV - C 011/2026   ASE0E48     M.A.D.P    C.B.U.Q. FAIXA "C"   TON     25,79          46,2       R$    0,98   R$          1.167,67   R$          1.167,67
+30/03/2026      TKB-041314       EV - C 011/2026   BEA8D25     M.A.D.P    C.B.U.Q. FAIXA "C"   TON     39,15          46,2       R$    0,98   R$          1.772,56   R$          1.772,56
+
+
+
+                                                                                                     3.701,570        48,72      R$    0,86        155.079,849       R$      155.079,85
+CAMINHAO NA FRESA ( DIARIA R$ 1.250,00 )
+
+ 05/03/26                        EV - C 011/2026   ASE0E48                   FREESADO                                 2,00       R$ 156,25           312,500         R$          312,50
+ 04/03/26                        EV - C 011/2026   MBU2710                   FREESADO                                 8,00       R$ 156,25          1.250,000        R$        1.250,00
+ 13/03/26                        EV - C 011/2026   APL6A61                   FREESADO                                 8,00       R$ 156,25          1.250,000        R$        1.250,00
+
+
+
+
+                                                                                                      0,000           18,00      R$ 156,25    R$         2.812,50    R$        2.812,50
+
+
+
+                                                                                                                 CAMINHAO NA FRESA ( DIARIA R$ 1.250,00 )            R$       2.812,50
+
+                                                                                                     TOTAL DE TRANSPORTE DE CARGAS EV - ATA 011/2026 R$                     155.079,85
+
+                                                                                                                                         TOTAL DA MEDIÇÃO R$                157.892,35
+                                                                                                          DESCONTOS DE COMBUSTÍVEL
+
+     OBRA             DATA       Nº CUPOM FISCAL   Nº REQ.     EMPRESA     DATA EMISSÃO     NOTA FISCAL     PLACA       FORNECEDOR            COMBUSTÍVEL     UN.       QUANT.     VALOR UNITÁRIO        SUBTOTAL              TOTAL
+
+
+RESUMO - DESCONTOS - EV - C 011/2026
+
+  EV - C 011/2026   03/03/2026       523.098        3067                     18/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      28.738       AUJ- 2962   POSTO POTÊNCIA          DIESEL S10     L          210,00    R$       5,69   R$         1.194,91   R$             1.194,91
+  EV - C 011/2026   03/03/2026       523.207        3069                     18/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      28.738      AUN7 D32     POSTO POTÊNCIA          DIESEL S500    L          545,00    R$       5,59   R$         3.046,56   R$             3.046,56
+  EV - C 011/2026   03/03/2026       523.236        3070                     18/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      28.738        BSF5I 16   POSTO POTÊNCIA          DIESEL S500    L          149,70    R$       5,59   R$           836,80   R$               836,80
+  EV - C 011/2026   03/03/2026       523.602        3074                     18/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      28.738       ATN3 B19    POSTO POTÊNCIA          DIESEL S10     L          189,06    R$       5,69   R$         1.075,73   R$             1.075,73
+  EV - C 011/2026   03/03/2026       523.606        3075                     18/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      28.738       ERD6 B73    POSTO POTÊNCIA          DIESEL S10     L          204,01    R$       5,69   R$         1.160,80   R$             1.160,80
+  EV - C 011/2026   03/03/2026       523.612        3076                     18/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      28.738       RXX6 A82    POSTO POTÊNCIA          DIESEL S10     L          187,68    R$       5,69   R$         1.067,87   R$             1.067,87
+  EV - C 011/2026   03/03/2026       523.612        3077                     18/03/2026
+                                                             EVENTO CONSTRUTORA DE OBRAS       28.738       RXX6 A82    POSTO POTÊNCIA            ARLA 32      L           14,60    R$       3,09   R$            45,11   R$                45,11
+  EV - C 011/2026   03/03/2026       523.663        3078                     18/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      28.738       ASE0E 48    POSTO POTÊNCIA          DIESEL S10     L          185,02    R$       5,69   R$         1.052,74   R$             1.052,74
+  EV - C 011/2026   03/03/2026       524.295        3086                     18/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      28.738      APP- 8073    POSTO POTÊNCIA          DIESEL S500    L          211,32    R$       5,69   R$         1.202,43   R$             1.202,43
+  EV - C 011/2026   03/03/2026       524.295        3087                     18/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      28.738      APP- 8073    POSTO POTÊNCIA          DIESEL S500    L            2,74    R$       5,69   R$            15,61   R$                15,60
+  EV - C 011/2026   03/03/2026       524.481        3088                     18/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      28.738       ASE0E 48    POSTO POTÊNCIA          DIESEL S10     L          116,88    R$       5,79   R$           676,72   R$               676,72
+  EV - C 011/2026   03/03/2026       524.562        3089                     18/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      28.738       RXX6 A82    POSTO POTÊNCIA          DIESEL S10     L          201,00    R$       5,79   R$         1.163,81   R$             1.163,81
+  EV - C 011/2026   03/03/2026       524.571        3091                     18/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      28.738      AWS5 D97     POSTO POTÊNCIA          DIESEL S10     L          158,91    R$       5,79   R$           920,07   R$               920,07
+  EV - C 011/2026   03/03/2026       524.589        3092                     18/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      28.738       ERD6 B73    POSTO POTÊNCIA          DIESEL S10     L          183,01    R$       5,79   R$         1.059,63   R$             1.059,63
+  EV - C 011/2026   05/03/2026       524.719        3093                     18/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      28.738       ATN3 B14    POSTO POTÊNCIA          DIESEL S10     L          153,02    R$       6,24   R$           954,84   R$               954,84
+  EV - C 011/2026   05/03/2026       524.719        3094                     18/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      28.738       ATN3 B14    POSTO POTÊNCIA          DIESEL S10     L           85,02    R$       6,24   R$           530,55   R$               530,55
+  EV - C 011/2026   06/03/2026       525.008        3095                     18/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      28.738       AUJ- 2962   POSTO POTÊNCIA          DIESEL S10     L          240,00    R$       6,24   R$         1.497,62   R$             1.497,62
+  EV - C 011/2026   06/03/2026       525.039        3096                     18/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      28.738       BTO4 E72    POSTO POTÊNCIA          DIESEL S10     L          165,02    R$       6,24   R$         1.029,71   R$             1.029,71
+  EV - C 011/2026   06/03/2026       525.076        3097                     18/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      28.738      APP- 8073    POSTO POTÊNCIA          DIESEL S10     L           27,27    R$       6,24   R$           170,15   R$               170,15
+  EV - C 011/2026   06/03/2026       525.076        3098                     18/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      28.738      APP- 8073    POSTO POTÊNCIA          DIESEL S500    L          105,09    R$       6,04   R$           634,75   R$               634,75
+  EV - C 011/2026   06/03/2026       525.247        3099                     18/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      28.738      AWS5 D97     POSTO POTÊNCIA          DIESEL S10     L           98,07    R$       6,24   R$           611,97   R$               611,97
+  EV - C 011/2026   06/03/2026       525.387        3100                     18/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      28.738       ERD6 B73    POSTO POTÊNCIA          DIESEL S10     L          181,90    R$       6,54   R$         1.189,61   R$             1.189,61
+  EV - C 011/2026   09/03/2026       526.743        3110                     18/03/2026
+                                                             EVENTO CONSTRUTORA DE OBRAS       28.738       ATN3 B14    POSTO POTÊNCIA          DIESEL S10     L           84,01    R$       6,69   R$           562,05   R$               562,05
+  EV - C 011/2026   13/03/2026       528.368        3116                     18/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      28.738       ASE0E48     POSTO POTÊNCIA          DIESEL S10     L          186,00    R$       6,94   R$         1.290,81   R$             1.290,81
+  EV - C 011/2026   19/03/2026       917.309        3121                     23/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS       8.475       RXX-6A82    POSTO POTÊNCIA          DIESEL S10     L          200,00    R$       7,99   R$         1.598,00   R$             1.598,00
+  EV - C 011/2026   23/03/2026       472.766        3128                     30/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      13.651       ATZ-0091    POSTO POTÊNCIA          DIESEL S500    L          180,00    R$       7,49   R$         1.348,20   R$             1.348,20
+  EV - C 011/2026   25/03/2026       473.782        3134                     30/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      13.651       APL-6A61    POSTO POTÊNCIA          DIESEL S500    L          140,01    R$       7,49   R$         1.048,64   R$             1.048,64
+  EV - C 011/2026   27/03/2026       474761         3171                     30/03/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      13651        APL-6A61    POSTO POTÊNCIA          DIESEL S500    L         150,009    R$       7,49   R$         1.123,56   R$             1.123,57
+  EV - C 011/2026   16/03/2026       529570         3205                     02/04/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      29462        APP8D73     POSTO POTÊNCIA          DIESEL S500    L         200,007    R$       7,14   R$         1.428,05   R$             1.428,05
+  EV - C 011/2026   16/03/2026       529.596        3206                     02/04/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      29.462       ERD6B73     POSTO POTÊNCIA          DIESEL S10     L          130,26    R$       7,24   R$           943,07   R$               943,07
+  EV - C 011/2026   16/03/2026       529.631        3207                     02/04/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      29.462      MBU6D28      POSTO POTÊNCIA          DIESEL S500    L          150,00    R$       7,14   R$         1.071,00   R$             1.071,00
+  EV - C 011/2026   16/03/2026       529.654        3208                     02/04/2026
+                                                             EVENTO CONSTRUTORA DE OBRAS       29.462      MBU6D28      POSTO POTÊNCIA          DIESEL S500    L          166,90    R$       7,14   R$         1.191,66   R$             1.191,66
+  EV - C 011/2026   16/03/2026       529.752        3209                     02/04/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      29.462       AUJ-2962    POSTO POTÊNCIA          DIESEL S10     L          146,05    R$       7,24   R$         1.057,41   R$             1.057,41
+  EV - C 011/2026   16/03/2026       529.767        3210                     02/04/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      29.462       APL6A61     POSTO POTÊNCIA          DIESEL S500    L          125,00    R$       7,14   R$           892,50   R$               892,50
+  EV - C 011/2026   17/03/2026       530.106        3211                     02/04/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      29.462       APP8D73     POSTO POTÊNCIA          DIESEL S500    L          203,02    R$       7,44   R$         1.510,46   R$             1.510,46
+  EV - C 011/2026   19/03/2026       530.794        3214                     02/04/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      29.462       ASE0E48     POSTO POTÊNCIA          DIESEL S10     L          119,77    R$       7,44   R$           891,07   R$               891,07
+  EV - C 011/2026   20/03/2026       531.458        3218                     02/04/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      29.462       RXX6A82     POSTO POTÊNCIA          DIESEL S10     L          160,01    R$       7,44   R$         1.190,46   R$             1.190,46
+  EV - C 011/2026   21/03/2026       531.740        3220                     02/04/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      29.462       APP8D73     POSTO POTÊNCIA          DIESEL S500    L          111,52    R$       7,34   R$           818,52   R$               818,52
+  EV - C 011/2026   23/03/2026       532.566        3222                     02/04/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      29.462       ALC2F 96    POSTO POTÊNCIA          DIESEL S10     L          247,93    R$       7,44   R$         1.844,63   R$             1.844,63
+  EV - C 011/2026   23/03/2026       532.667        3224                     02/04/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      29.462       ATN3B14     POSTO POTÊNCIA          DIESEL S10     L          165,02    R$       7,44   R$         1.227,73   R$             1.227,73
+  EV - C 011/2026   23/03/2026       532.674        3225                     02/04/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      29.462       BDU7 C80    POSTO POTÊNCIA          DIESEL S500    L          250,00    R$       7,34   R$         1.835,02   R$             1.835,02
+  EV - C 011/2026   24/03/2026       532.874        3228                     02/04/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      29.462     AUJ- 02962    POSTO POTÊNCIA          DIESEL S10     L          210,01    R$       7,44   R$         1.562,44   R$             1.562,44
+  EV - C 011/2026   24/03/2026       532.874        3229                     02/04/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      29.462     AUJ- 02962    POSTO POTÊNCIA          DIESEL S500    L           17,02    R$       7,34   R$           124,90   R$               124,90
+  EV - C 011/2026   25/03/2026       533.330        3231                     02/04/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      29.462       ALC2F 96    POSTO POTÊNCIA          DIESEL S10     L          187,01    R$       7,44   R$         1.391,32   R$             1.391,32
+  EV - C 011/2026   25/03/2026       533.452        3233                     02/04/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      29.462       RSA4E 48    POSTO POTÊNCIA          DIESEL S10     L          300,00    R$       7,44   R$         2.232,00   R$             2.232,00
+  EV - C 011/2026   30/03/2026       535.253        3242                     02/04/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      29.462       ASE0E 48    POSTO POTÊNCIA          DIESEL S10     L          170,00    R$       7,34   R$         1.247,80   R$             1.247,80
+  EV - C 011/2026   30/03/2026       535.255        3243                     02/04/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      29.462      MBU- 2710    POSTO POTÊNCIA          DIESEL S500    L          110,01    R$       7,24   R$           796,45   R$               796,45
+  EV - C 011/2026   30/03/2026       535.256        3244                     02/04/2026
+                                                             EVENTO CONSTRUTORA DE OBRAS       29.462       HQG6J 32    POSTO POTÊNCIA          DIESEL S500    L          210,01    R$       7,24   R$         1.520,47   R$             1.520,47
+  EV - C 011/2026   30/03/2026       535.277        3245                     02/04/2026
+                                                             EVENTO CONSTRUTORA  DE OBRAS      29.462         BEA82     POSTO POTÊNCIA          DIESEL S10     L          344,00    R$       7,34   R$         2.524,99   R$             2.524,99
+
+
+
+
+                                                                                                                                                                      DESCONTOS - EV - C 011/2026 R$        55.411,25     R$           55.411,25
+
+
+
+
+                                                                                                                                                                    DESCONTOS - EV - C 011/2026 R$                                 55.411,25
+
+
+                                                                                                                                         TOTAL DE DESCONTOS DES MEDIÇÃO =====>>>                    R$                             55.411,25
+

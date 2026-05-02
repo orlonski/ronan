@@ -130,9 +130,10 @@ Esse é o módulo que elimina o trabalho manual de conferência mensal e que mai
 
 **1. Upload e extração de dados**
 
-- Operadora vai em `Fechamentos → Novo fechamento`, escolhe a empresa, o período, e anexa o Excel/CSV.
+- Operadora vai em `Fechamentos → Novo fechamento`, escolhe a empresa, o período, e anexa o arquivo (Excel, CSV ou PDF).
 - Sistema parseia o arquivo e **grava cada linha numa tabela própria**, mesmo se não entender. Tudo fica registrado.
-- Inteligência artificial (Claude Haiku 4.5) lê os cabeçalhos e identifica automaticamente qual coluna é a placa, qual é a data, qual é o ticket, qual é o km. Funciona com **planilhas reais complexas** que têm múltiplas abas, cabeçalho fora da primeira linha, linhas de subtítulo no meio, layouts diferentes por empresa.
+- Inteligência artificial (Claude Haiku 4.5) lê os cabeçalhos e identifica automaticamente qual coluna é a placa, qual é a data, qual é o ticket, qual é o km, qual é o pedágio. Funciona com **planilhas reais complexas** que têm múltiplas abas, cabeçalho fora da primeira linha, linhas de subtítulo no meio, layouts diferentes por empresa — inclusive **boletins em PDF** (que algumas empresas mandam como documento consolidado em vez de planilha).
+- Sistema separa automaticamente **viagens, pedágios e descontos** (que normalmente vêm em abas ou seções diferentes do mesmo arquivo).
 - Na primeira vez de cada empresa, IA aprende; nas próximas, reutiliza o aprendizado.
 
 **2. Match automático**
@@ -167,17 +168,34 @@ Frequentemente a empresa manda uma planilha, depois manda outra "atualizada" cor
 
 #### Cenário B — Quando ENVIAMOS a planilha pra empresa-cliente
 
-Algumas empresas-cliente recebem nossa planilha de fechamento (em vez de mandar a delas). Para isso:
+Algumas empresas-cliente preferem receber sua planilha de fechamento (em vez de mandar a delas). Hoje cada empresa pode querer um layout diferente, e você ainda não tem um padrão fixo. Por isso o sistema oferece um **construtor dinâmico de layout**:
 
-- Cada empresa tem um **layout customizado** salvo (qual ordem de colunas ela quer, qual cabeçalho, formato de data).
-- Operadora vai em `Fechamentos → [período] → Exportar` → sistema gera um XLSX no layout exato que a empresa pediu, junto com um ZIP das fotos dos tickets.
+**Construtor de layout por empresa**
+
+- Em `Empresas → [empresa] → Layout de envio`, a operadora monta o layout que aquela empresa específica quer receber:
+  - **Arrasta as colunas** que devem aparecer (Data, Placa, Ticket, Obra, Material, Toneladas, Km, Valor, Pedágio, Foto do ticket, etc.).
+  - Define a **ordem das colunas**, **nomes dos cabeçalhos** (ex: a empresa X prefere "VEÍCULO" em vez de "PLACA"), **formato de data** (DD/MM/AAAA, DD/MM/YY) e **formato de número** (vírgula ou ponto, casas decimais).
+  - Pode salvar **múltiplos modelos** por empresa (ex: "modelo viagens", "modelo pedágios", "modelo consolidado").
+  - **Pré-visualização em tempo real** com dados de exemplo do mês atual.
+- O layout fica salvo. A próxima exportação pra essa empresa usa o mesmo template direto.
+
+**Geração e envio**
+
+- Operadora vai em `Fechamentos → [período] → Exportar` → escolhe a empresa e o template → sistema gera um XLSX no layout exato, junto com um ZIP opcional das fotos dos tickets.
 - O arquivo gerado fica **arquivado no servidor**.
 - Operadora baixa, manda pra empresa pelo WhatsApp ou e-mail, e clica em **Marcar como enviado** no sistema.
 - Fica registrado: _"Enviado em DD/MM/AAAA às HH:MM por [operadora] via [WhatsApp]"_ — controle do que já saiu pra cada cliente.
 
+**Vantagem**: você não fica preso a um único formato. Conforme novas empresas-cliente forem chegando, cada uma com sua exigência, você (ou a operadora) configura o layout dela em poucos cliques sem precisar pedir ajustes técnicos no sistema.
+
 #### Por que isso é diferente do que existe no mercado
 
-A maioria dos sistemas de transporte exige que o gestor configure manualmente o layout de cada planilha de cada cliente — uma trabalheira que ninguém faz e por isso a conciliação continua manual. Aqui, **a IA faz isso pra você**, mesmo com planilhas complexas (8 abas, múltiplas seções, cabeçalhos não-padrão como vimos em exemplos reais que você nos passou).
+A maioria dos sistemas de transporte ou (a) só aceita um único formato fixo de planilha — então cada cliente novo vira problema —, ou (b) exige que o gestor mande pro suporte técnico mapear cada novo formato de cliente — o que custa caro e demora dias. Aqui:
+
+- **Na entrada (planilhas que recebemos)**, a IA aprende sozinha qualquer formato — mesmo planilhas complexas como o boletim real da Gamerim que você nos passou (8 abas, cabeçalho fora do padrão, múltiplas seções).
+- **Na saída (planilhas que enviamos)**, você tem total liberdade de configurar layouts diferentes por empresa direto na tela, sem programação.
+
+Os dois lados ficam fluidos — operadora trabalha sem trava nenhuma quando aparece um cliente novo.
 
 ### 4.13 Relatórios
 
