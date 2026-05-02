@@ -229,7 +229,38 @@ Este é o ponto mais importante para a operação real.
 
 ---
 
-## 6. Diferenciais técnicos da solução
+## 6. Apresentação visual
+
+A seguir, capturas reais do sistema já em fase avançada de desenvolvimento — não são mockups, é a interface que será entregue.
+
+### Painel administrativo (web)
+
+![Tela de login do painel](proposta-imagens/01-dashboard-login.png)
+_Tela de acesso ao painel administrativo — autenticação por e-mail e senha._
+
+![Listagem de motoristas](proposta-imagens/03-dashboard-motoristas.png)
+_Painel administrativo: cada área (motoristas, frota, empresas, obras, locais, materiais, usuários) tem sua própria tela de listagem com criação, edição e inativação._
+
+![Cadastro de local com CEP](proposta-imagens/10-dashboard-local-form.png)
+_Cadastro de local com preenchimento automático por CEP — operadora digita o CEP e os campos rua, bairro, cidade e UF são preenchidos sozinhos._
+
+### Aplicativo do motorista (celular)
+
+<img src="proposta-imagens/11-pwa-login.png" width="320" />
+
+_Tela de login do aplicativo, otimizada para celular._
+
+<img src="proposta-imagens/12-pwa-home.png" width="320" />
+
+_Tela inicial do motorista: últimas viagens lançadas, atalhos para novo lançamento e indicador de conexão._
+
+<img src="proposta-imagens/13-pwa-nova-viagem.png" width="320" />
+
+_Formulário de lançamento de viagem: placa, data, obra, material, local de carga, local de descarga, toneladas, ticket, km, pedágio, observação e foto do ticket._
+
+---
+
+## 7. Diferenciais técnicos da solução
 
 - **Funciona offline** com sincronização automática quando volta a internet.
 - **Notificações push no celular do motorista**: avisos automáticos quando uma viagem tem divergência, quando há nova mensagem da operadora, ou quando o sistema precisar da atenção dele.
@@ -244,7 +275,7 @@ Este é o ponto mais importante para a operação real.
 
 ---
 
-## 7. Cronograma de desenvolvimento
+## 8. Cronograma de desenvolvimento
 
 A entrega é organizada em 6 etapas, cada uma com uma demonstração ao final pra você acompanhar a evolução.
 
@@ -261,7 +292,7 @@ A entrega é organizada em 6 etapas, cada uma com uma demonstração ao final pr
 
 ---
 
-## 8. Investimento
+## 9. Investimento
 
 **Valor de mercado para um sistema sob medida deste porte: R$ 20.000,00**
 
@@ -318,7 +349,7 @@ Você não fica preso: pode renovar ou não, e tem total liberdade de migrar pra
 
 ---
 
-## 9. O que NÃO está incluído
+## 10. O que NÃO está incluído
 
 Para evitar mal-entendidos:
 
@@ -330,7 +361,7 @@ Para evitar mal-entendidos:
 
 ---
 
-## 10. Garantias e termos
+## 11. Garantias e termos
 
 - **Emissão de nota fiscal**: todo pagamento é acompanhado de nota fiscal emitida pela Turbomind.
 - Código-fonte do sistema é seu — entregue ao final, em repositório Git privado.
@@ -342,7 +373,7 @@ Para evitar mal-entendidos:
 
 ---
 
-## 11. Próximos passos
+## 12. Próximos passos
 
 Para começarmos:
 
@@ -357,7 +388,7 @@ Para começarmos:
 
 ---
 
-## 12. Contato
+## 13. Contato
 
 **Diego Davi Orlonski**
 **Turbomind**
