@@ -170,3 +170,51 @@ export function useCriarPedagio() {
   });
 }
 
+export type SugestaoLista = {
+  fonte: "GOOGLE";
+  placeId: string;
+  nome: string;
+  textoCompleto: string;
+};
+
+export type SugestaoEndereco = {
+  fonte: "VIACEP" | "GOOGLE";
+  placeId?: string;
+  textoCompleto?: string;
+  nome?: string;
+  logradouro?: string;
+  numero?: string;
+  bairro?: string;
+  cidade: string;
+  uf: string;
+  cep?: string;
+  lat?: number;
+  lng?: number;
+};
+
+export function useCriarLocal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      nome: string;
+      logradouro: string;
+      numero?: string;
+      bairro?: string;
+      cidade: string;
+      uf: string;
+      cep?: string;
+      pontoReferencia?: string;
+      tipo: "CARGA" | "DESCARGA" | "AMBOS";
+      obraId?: string;
+      lat?: number;
+      lng?: number;
+    }) => api.post<Local>("/m/locais", input),
+    onSuccess: (novo) => {
+      qc.setQueryData<Catalogos>(["catalogos"], (cur) => {
+        if (!cur) return cur;
+        return { ...cur, locais: [...cur.locais, novo] };
+      });
+    },
+  });
+}
+

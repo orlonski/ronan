@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
+import { AddressAutocomplete, type SugestaoEndereco } from "@/components/ui/address-autocomplete";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -37,6 +38,7 @@ const OBRAS_PATH = "/admin/obras";
 const empty = {
   nome: "", logradouro: "", numero: "", bairro: "", cidade: "", uf: "PR",
   cep: "", pontoReferencia: "", tipo: "AMBOS" as Tipo, obraId: "",
+  lat: null as number | null, lng: null as number | null,
 };
 
 export default function LocaisPage() {
@@ -59,8 +61,24 @@ export default function LocaisPage() {
       nome: l.nome, logradouro: l.logradouro, numero: l.numero ?? "",
       bairro: l.bairro ?? "", cidade: l.cidade, uf: l.uf, cep: l.cep ?? "",
       pontoReferencia: l.pontoReferencia ?? "", tipo: l.tipo, obraId: l.obraId ?? "",
+      lat: null, lng: null,
     });
     setCepNotFound(false);
+  }
+
+  function aplicarSugestao(s: SugestaoEndereco) {
+    setForm((f) => ({
+      ...f,
+      nome: f.nome || s.nome || "",
+      logradouro: s.logradouro ?? s.nome ?? f.logradouro,
+      numero: s.numero ?? f.numero,
+      bairro: s.bairro ?? f.bairro,
+      cidade: s.cidade || f.cidade,
+      uf: s.uf || f.uf,
+      cep: s.cep ?? f.cep,
+      lat: s.lat ?? null,
+      lng: s.lng ?? null,
+    }));
   }
 
   async function consultarCep(cepRaw: string) {
@@ -94,6 +112,8 @@ export default function LocaisPage() {
       cep: form.cep ? form.cep.replace(/\D/g, "") : undefined,
       pontoReferencia: form.pontoReferencia || undefined,
       obraId: form.obraId || undefined,
+      lat: form.lat ?? undefined,
+      lng: form.lng ?? undefined,
     };
     if (editing === "new") await create.mutateAsync(body);
     else if (editing) await update.mutateAsync({ id: editing.id, body });
@@ -106,7 +126,7 @@ export default function LocaisPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Locais</h1>
           <p className="text-sm text-muted-foreground">
-            Locais de carga e descarga. Digite o CEP pra preencher o endereço.
+            Locais de carga e descarga. Busque por nome, endereço ou ponto de interesse.
           </p>
         </div>
         <Button onClick={openNew}><Plus className="h-4 w-4" /> Novo local</Button>
@@ -165,6 +185,18 @@ export default function LocaisPage() {
                 value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} />
               <p className="text-xs text-muted-foreground">
                 Use um nome específico (não só rua) — ajuda na conferência com o motorista.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Buscar endereço</Label>
+              <AddressAutocomplete
+                value={form.logradouro}
+                onChange={(v) => setForm({ ...form, logradouro: v })}
+                onSelect={aplicarSugestao}
+              />
+              <p className="text-xs text-muted-foreground">
+                Busque por nome do lugar, rua ou bairro. Os campos abaixo são preenchidos automaticamente.
               </p>
             </div>
 

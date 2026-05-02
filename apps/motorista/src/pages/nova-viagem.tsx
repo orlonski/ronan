@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Check } from "lucide-react";
+import { ArrowLeft, Check, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { PhotoCapture } from "@/components/photo-capture";
+import { LocalNovoModal } from "@/components/local-novo-modal";
 import { useCatalogos, useCriarViagem, useMe } from "@/lib/queries";
 
 type FormShape = {
@@ -48,6 +49,7 @@ export default function NovaViagemPage() {
   const [foto, setFoto] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [modalLocal, setModalLocal] = useState<null | "carga" | "descarga">(null);
 
   // pré-seleciona placa default e valores iniciais quando dados chegam
   useEffect(() => {
@@ -167,25 +169,57 @@ export default function NovaViagemPage() {
           </div>
 
           <Field label="Local de carga">
-            <Select required value={form.localCargaId} onChange={(e) => update("localCargaId", e.target.value)}>
-              <option value="">— escolha —</option>
-              {locaisFiltrados.carga.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.nome} ({l.cidade}/{l.uf})
-                </option>
-              ))}
-            </Select>
+            <div className="flex gap-2">
+              <Select
+                required
+                value={form.localCargaId}
+                onChange={(e) => update("localCargaId", e.target.value)}
+                className="flex-1"
+              >
+                <option value="">— escolha —</option>
+                {locaisFiltrados.carga.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.nome} ({l.cidade}/{l.uf})
+                  </option>
+                ))}
+              </Select>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setModalLocal("carga")}
+                title="Cadastrar local novo"
+              >
+                <Plus className="h-5 w-5" />
+              </Button>
+            </div>
           </Field>
 
           <Field label="Local de descarga">
-            <Select required value={form.localDescargaId} onChange={(e) => update("localDescargaId", e.target.value)}>
-              <option value="">— escolha —</option>
-              {locaisFiltrados.descarga.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.nome} ({l.cidade}/{l.uf})
-                </option>
-              ))}
-            </Select>
+            <div className="flex gap-2">
+              <Select
+                required
+                value={form.localDescargaId}
+                onChange={(e) => update("localDescargaId", e.target.value)}
+                className="flex-1"
+              >
+                <option value="">— escolha —</option>
+                {locaisFiltrados.descarga.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.nome} ({l.cidade}/{l.uf})
+                  </option>
+                ))}
+              </Select>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setModalLocal("descarga")}
+                title="Cadastrar local novo"
+              >
+                <Plus className="h-5 w-5" />
+              </Button>
+            </div>
           </Field>
 
           <div className="grid grid-cols-2 gap-3">
@@ -219,6 +253,17 @@ export default function NovaViagemPage() {
           </Button>
         </form>
       )}
+
+      <LocalNovoModal
+        open={modalLocal !== null}
+        onClose={() => setModalLocal(null)}
+        obraId={form.obraId || undefined}
+        tipoSugerido={modalLocal === "descarga" ? "DESCARGA" : modalLocal === "carga" ? "CARGA" : "AMBOS"}
+        onCreated={(novo) => {
+          if (modalLocal === "carga") update("localCargaId", novo.id);
+          if (modalLocal === "descarga") update("localDescargaId", novo.id);
+        }}
+      />
     </div>
   );
 }

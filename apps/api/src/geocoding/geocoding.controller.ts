@@ -16,4 +16,14 @@ export class GeocodingController {
   cep(@Query("cep") cep: string) {
     return this.service.buscarPorCep(cep);
   }
+
+  @Get("buscar")
+  buscar(@Query("q") q: string) {
+    return this.service.buscarPorTexto(q ?? "");
+  }
+
+  @Get("place")
+  place(@Query("placeId") placeId: string) {
+    return this.service.resolverPlace(placeId ?? "");
+  }
 }

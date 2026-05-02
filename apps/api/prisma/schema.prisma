@@ -396,3 +396,15 @@ model AuditLog {
   @@index([usuarioId, criadoEm])
   @@map("audit_logs")
 }
+
+model GeocodingCache {
+  id        String   @id @default(uuid())
+  query     String   @unique // texto buscado normalizado (lowercase trim)
+  resposta  Json // array de SugestaoEndereco[]
+  hits      Int      @default(1)
+  criadoEm  DateTime @default(now())
+  ultimoHit DateTime @default(now())
+
+  @@index([query])
+  @@map("geocoding_cache")
+}
