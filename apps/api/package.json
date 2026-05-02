@@ -29,6 +29,7 @@
     "class-validator": "^0.14.1",
     "csv-parse": "^6.2.1",
     "exceljs": "^4.4.0",
+    "express": "^5.2.1",
     "minio": "^8.0.3",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
