@@ -115,8 +115,28 @@ export default function NovaViagemPage() {
         <h1 className="text-xl font-semibold">Nova viagem</h1>
       </header>
 
-      {(cat.isLoading || me.isLoading) && (
+      {(cat.isLoading || me.isLoading) && !cat.data && !me.data && (
         <p className="text-sm text-muted-foreground">Carregando dados...</p>
+      )}
+
+      {!cat.isLoading && !me.isLoading && (!cat.data || !me.data) && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
+          <p className="font-medium text-amber-900">Nao foi possivel carregar os dados.</p>
+          <p className="mt-1 text-amber-800">
+            {!me.data && `Perfil: ${(me.error as Error | null)?.message ?? "indisponivel offline (entre online uma vez)"}.`}
+            {!me.data && !cat.data && " "}
+            {!cat.data && `Catalogos: ${(cat.error as Error | null)?.message ?? "indisponivel offline (entre online uma vez)"}.`}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-2"
+            onClick={() => { void me.refetch(); void cat.refetch(); }}
+          >
+            Tentar de novo
+          </Button>
+        </div>
       )}
 
       {cat.data && me.data && (

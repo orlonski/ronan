@@ -78,12 +78,14 @@ export function useMe() {
     queryFn: async () => {
       try {
         const fresh = await api.get<Me>("/m/me");
-        await db.meCache.put({ id: "current", data: fresh, cachedAt: Date.now() });
+        void db.meCache.put({ id: "current", data: fresh, cachedAt: Date.now() }).catch(() => {});
         return fresh;
       } catch (err) {
         if (isOfflineError(err)) {
-          const cached = await db.meCache.get("current");
-          if (cached) return cached.data;
+          try {
+            const cached = await db.meCache.get("current");
+            if (cached) return cached.data;
+          } catch { /* dexie indisponivel */ }
         }
         throw err;
       }
@@ -98,12 +100,14 @@ export function useCatalogos() {
     queryFn: async () => {
       try {
         const fresh = await api.get<Catalogos>("/m/catalogos");
-        await db.catalogos.put({ id: "current", data: fresh, cachedAt: Date.now() });
+        void db.catalogos.put({ id: "current", data: fresh, cachedAt: Date.now() }).catch(() => {});
         return fresh;
       } catch (err) {
         if (isOfflineError(err)) {
-          const cached = await db.catalogos.get("current");
-          if (cached) return cached.data;
+          try {
+            const cached = await db.catalogos.get("current");
+            if (cached) return cached.data;
+          } catch { /* dexie indisponivel */ }
         }
         throw err;
       }
