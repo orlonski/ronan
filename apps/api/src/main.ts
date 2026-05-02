@@ -6,11 +6,12 @@ import { AppModule } from "./app.module";
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
 
-  const corsOrigins = (process.env.CORS_ORIGINS ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  app.enableCors({ origin: corsOrigins.length ? corsOrigins : true, credentials: true });
+  const rawCors = (process.env.CORS_ORIGINS ?? "").trim();
+  const origin =
+    rawCors === "" || rawCors === "*"
+      ? true // wildcard: aceita qualquer origin
+      : rawCors.split(",").map((s) => s.trim()).filter(Boolean);
+  app.enableCors({ origin, credentials: true });
 
   app.useGlobalPipes(
     new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }),
