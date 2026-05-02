@@ -23,13 +23,14 @@ RUN cd apps/api && pnpm prisma generate && pnpm build
 
 # ---- runtime mínimo ----
 FROM node:20-alpine AS runtime
+# instala prisma global (independente do layout pnpm workspace)
 RUN apk add --no-cache curl tini openssl && \
-    corepack enable && corepack prepare pnpm@9.12.3 --activate && \
+    npm install -g prisma@6.19.3 && \
     addgroup -S app && adduser -S app -G app
 WORKDIR /app
 ENV NODE_ENV=production
 
-# copia tudo necessário do build (inclui Prisma engines e node_modules completo)
+# copia o necessário pro runtime
 COPY --from=build /repo/apps/api/dist             ./dist
 COPY --from=build /repo/apps/api/prisma           ./prisma
 COPY --from=build /repo/apps/api/package.json     ./
@@ -43,4 +44,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD curl -fs http://localhost:3000/health || exit 1
 
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["sh", "-c", "pnpm exec prisma migrate deploy && node dist/main.js"]
+CMD ["sh", "-c", "prisma migrate deploy --schema=./prisma/schema.prisma && node dist/main.js"]
