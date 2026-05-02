@@ -1,6 +1,7 @@
 import { router } from "expo-router";
 import { API_URL } from "./api-url";
 import { clearTokens, loadTokens, saveTokens, type Tokens } from "./auth";
+import { setAuthState } from "./auth-state";
 
 export class ApiError extends Error {
   constructor(public status: number, public body: unknown) {
@@ -67,6 +68,7 @@ export async function request<T>(
       });
     } else {
       await clearTokens();
+      setAuthState(false);
       router.replace("/login");
       throw new ApiError(401, null);
     }

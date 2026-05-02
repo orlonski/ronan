@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api, ApiError } from "@/lib/api";
 import { saveTokens } from "@/lib/auth";
+import { setAuthState } from "@/lib/auth-state";
 
 export default function LoginScreen() {
   const [usuario, setUsuario] = useState("");
@@ -21,7 +22,6 @@ export default function LoginScreen() {
   const [erro, setErro] = useState<string | null>(null);
 
   async function entrar() {
-    console.log("[login] entrar pressed", { usuario: usuario.trim(), senhaLen: senha.length });
     setErro(null);
     if (!usuario.trim() || !senha) {
       setErro("Informe usuário e senha");
@@ -29,14 +29,11 @@ export default function LoginScreen() {
     }
     setSubmitting(true);
     try {
-      console.log("[login] chamando api.loginMotorista");
       const tokens = await api.loginMotorista(usuario.trim(), senha);
-      console.log("[login] login OK, salvando tokens");
       await saveTokens(tokens);
-      console.log("[login] tokens salvos, redirect /");
+      setAuthState(true);
       router.replace("/");
     } catch (err) {
-      console.error("[login] falhou:", err);
       if (err instanceof ApiError && err.status === 401) {
         setErro("Usuário ou senha incorretos.");
       } else {

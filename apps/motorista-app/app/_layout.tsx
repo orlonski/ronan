@@ -8,6 +8,11 @@ import { ActivityIndicator, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { loadTokens } from "@/lib/auth";
+import {
+  getAuthState,
+  setAuthState,
+  subscribeAuth,
+} from "@/lib/auth-state";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -16,17 +21,38 @@ const queryClient = new QueryClient({
 });
 
 function AuthGate({ children }: { children: React.ReactNode }) {
-  const [ready, setReady] = useState(false);
-  const [loggedIn, setLoggedIn] = useState(false);
+  const [ready, setReady] = useState(getAuthState() !== null);
+  const [, setVersion] = useState(0);
   const segments = useSegments();
+  const loggedIn = getAuthState() === true;
 
+  // Boot: lê tokens do SecureStore uma vez e atualiza o store.
   useEffect(() => {
-    loadTokens().then((t) => {
-      setLoggedIn(!!t?.accessToken);
+    if (getAuthState() !== null) {
       setReady(true);
-    });
+      return;
+    }
+    let alive = true;
+    loadTokens()
+      .then((t) => {
+        if (!alive) return;
+        setAuthState(!!t?.accessToken);
+        setReady(true);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setAuthState(false);
+        setReady(true);
+      });
+    return () => {
+      alive = false;
+    };
   }, []);
 
+  // Re-renderiza ao mudar o estado de auth (login/logout disparam setAuthState).
+  useEffect(() => subscribeAuth(() => setVersion((v) => v + 1)), []);
+
+  // Redirect logic baseado no estado atual.
   useEffect(() => {
     if (!ready) return;
     const onLogin = segments[0] === "login";
