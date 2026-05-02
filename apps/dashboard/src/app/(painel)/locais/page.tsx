@@ -192,7 +192,7 @@ export default function LocaisPage() {
               <Label>Buscar endereço</Label>
               <AddressAutocomplete
                 value={form.logradouro}
-                onChange={(v) => setForm({ ...form, logradouro: v })}
+                onChange={(v) => setForm((f) => ({ ...f, logradouro: v }))}
                 onSelect={aplicarSugestao}
               />
               <p className="text-xs text-muted-foreground">
