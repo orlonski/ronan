@@ -99,43 +99,87 @@ Toda a inteligência fica em um servidor próprio configurado durante a entrega.
 - Cada local exige um nome descritivo (ex: "Pedreira Souza Naves — balança 2"), evitando descrições vagas.
 - Tipo: carga, descarga ou ambos.
 
-### 4.9 Listagem de viagens
+### 4.9 Listagem de viagens com status visual
 
 - Ver todas as viagens com filtros por motorista, veículo, obra, material, período.
+- **Status colorido em cada viagem**: aguardando conferência (amarelo), conferida/OK (verde), divergente (vermelho), ajustada (azul).
 - Ver foto do ticket que o motorista anexou.
-- Editar viagens com permissão (audita quem mexeu).
+- Editar viagens (apenas operadora/admin) — toda alteração gera registro de auditoria.
 - Exportar lista filtrada em Excel.
 
-### 4.10 Listagem de pedágios
+### 4.10 Detalhe da viagem com histórico de alterações
+
+Cada viagem tem uma página de detalhe que mostra:
+
+- **Dados completos** da viagem (placa, data, obra, material, locais, toneladas, km, ticket, valor).
+- **Foto do ticket** ampliável.
+- **Aba Histórico**: linha do tempo com tudo que aconteceu — criação pelo motorista, sincronização do app, conferência com o fechamento da empresa, ajustes pela operadora (mostrando valor antes / valor depois / motivo / quem fez / quando).
+- Tudo o que mudou na viagem fica preservado para sempre, sem possibilidade de apagar histórico — auditoria total.
+
+### 4.11 Listagem de pedágios
 
 - Ver todos os pedágios lançados.
 - Filtros por motorista, veículo, praça, período.
 - Total gasto por placa, por motorista, por mês.
 
-### 4.11 Conciliação com empresa-cliente — o coração do sistema
+### 4.12 Conciliação com empresa-cliente — o coração do sistema
 
-Esse é o módulo que elimina o trabalho manual de conferência mensal.
+Esse é o módulo que elimina o trabalho manual de conferência mensal e que mais retorno traz pra operação. Funciona em dois cenários: quando a empresa-cliente **MANDA** uma planilha de fechamento, ou quando precisamos **ENVIAR** uma planilha pra ela conferir.
 
-**Importação inteligente da planilha do cliente**
-- Operadora faz upload do Excel/CSV que a empresa-cliente enviou.
-- O sistema usa **inteligência artificial** para identificar automaticamente as colunas, mesmo que cada empresa mande em formato diferente. Ex: uma empresa chama de "PLACA", outra de "VEÍCULO", outra de "CAVALO" — o sistema entende que é a mesma coisa.
-- Na primeira vez de cada empresa, o sistema aprende e memoriza o layout. Da segunda em diante, importa direto.
+#### Cenário A — Quando a empresa-cliente envia a planilha de fechamento
 
-**Match automático**
-- Para cada linha da planilha do cliente, o sistema procura a viagem correspondente que o motorista lançou (por placa + data + ticket + km).
-- Casos sem ambiguidade: marca como "OK" sozinho.
-- Casos com diferença: vai pra fila de divergências.
+**1. Upload e extração de dados**
 
-**Tela de divergências**
-- Mostra lado a lado o que o cliente diz e o que o motorista lançou.
-- A IA explica o motivo provável da divergência (ex: "km diferente — possível ida e volta não contabilizada").
-- Operadora aprova, corrige ou rejeita cada linha em poucos cliques.
+- Operadora vai em `Fechamentos → Novo fechamento`, escolhe a empresa, o período, e anexa o Excel/CSV.
+- Sistema parseia o arquivo e **grava cada linha numa tabela própria**, mesmo se não entender. Tudo fica registrado.
+- Inteligência artificial (Claude Haiku 4.5) lê os cabeçalhos e identifica automaticamente qual coluna é a placa, qual é a data, qual é o ticket, qual é o km. Funciona com **planilhas reais complexas** que têm múltiplas abas, cabeçalho fora da primeira linha, linhas de subtítulo no meio, layouts diferentes por empresa.
+- Na primeira vez de cada empresa, IA aprende; nas próximas, reutiliza o aprendizado.
 
-**Exportação no formato do cliente**
-- Cada empresa tem um layout próprio de planilha de fechamento.
-- O sistema gera o arquivo final no formato que aquela empresa específica espera receber.
+**2. Match automático**
 
-### 4.12 Relatórios
+- O sistema cruza cada linha da planilha do cliente com as viagens que o motorista lançou no app, usando placa + data + ticket como chave principal.
+- **Match perfeito** (placa + data + ticket batem exatos) → viagem fica marcada como **CONFERIDA / OK** automaticamente, sem intervenção humana.
+- **Match aproximado** (placa + data batem, mas km ou ticket diferem ligeiramente) → IA analisa e propõe correspondência com nível de confiança. Se confiança alta, marca como conferida automaticamente. Se baixa, manda pra revisão.
+- **Linhas órfãs** (cliente diz que houve viagem, motorista não lançou; ou vice-versa) → vão pra revisão.
+
+**3. Tela de Conferência — só o que precisa de humano**
+
+A operadora abre a tela de Conferência e vê **apenas as linhas que a IA não conseguiu fechar sozinha**. Cada linha mostra:
+
+- Lado a lado: o que o cliente reportou × o que o motorista lançou.
+- **Sugestão da IA destacada**: "provavelmente é a viagem X, com confiança 78% — motivo: km de ida e volta não somado".
+- 4 ações em um clique:
+  - **Aceitar sugestão da IA** (marca a viagem como ajustada com a correção sugerida)
+  - **Escolher outra viagem** (das viagens próximas, manualmente)
+  - **Marcar como erro do cliente** (a viagem do motorista está correta; a do cliente está errada)
+  - **Criar viagem retroativa** (motorista esqueceu de lançar; cria registro com aviso)
+
+Cada ação registra **quem fez, quando, com que motivo** — auditoria total.
+
+**4. Versionamento da planilha do cliente**
+
+Frequentemente a empresa manda uma planilha, depois manda outra "atualizada" corrigindo coisas. O sistema lida com isso de forma transparente:
+
+- Operadora sobe a nova planilha → sistema pergunta: _"isso substitui o fechamento anterior do mesmo período?"_
+- Confirmando, a versão antiga é **inativada (marcada como SUBSTITUÍDA)** mas **permanece visível no histórico**.
+- A versão nova começa um novo processo de match.
+- **Nada é apagado** — fica gravado quem, quando e que versão substituiu qual.
+
+#### Cenário B — Quando ENVIAMOS a planilha pra empresa-cliente
+
+Algumas empresas-cliente recebem nossa planilha de fechamento (em vez de mandar a delas). Para isso:
+
+- Cada empresa tem um **layout customizado** salvo (qual ordem de colunas ela quer, qual cabeçalho, formato de data).
+- Operadora vai em `Fechamentos → [período] → Exportar` → sistema gera um XLSX no layout exato que a empresa pediu, junto com um ZIP das fotos dos tickets.
+- O arquivo gerado fica **arquivado no servidor**.
+- Operadora baixa, manda pra empresa pelo WhatsApp ou e-mail, e clica em **Marcar como enviado** no sistema.
+- Fica registrado: _"Enviado em DD/MM/AAAA às HH:MM por [operadora] via [WhatsApp]"_ — controle do que já saiu pra cada cliente.
+
+#### Por que isso é diferente do que existe no mercado
+
+A maioria dos sistemas de transporte exige que o gestor configure manualmente o layout de cada planilha de cada cliente — uma trabalheira que ninguém faz e por isso a conciliação continua manual. Aqui, **a IA faz isso pra você**, mesmo com planilhas complexas (8 abas, múltiplas seções, cabeçalhos não-padrão como vimos em exemplos reais que você nos passou).
+
+### 4.13 Relatórios
 
 - Viagens por motorista, por obra, por empresa, por material.
 - Toneladas e km mensais.
@@ -143,7 +187,7 @@ Esse é o módulo que elimina o trabalho manual de conferência mensal.
 - Comparativo mês a mês.
 - Tudo exportável em Excel ou PDF.
 
-### 4.13 Configurações
+### 4.14 Configurações
 
 - Dados da empresa (nome, logo, CNPJ).
 - Gerenciamento de usuários do sistema.
@@ -285,10 +329,10 @@ A entrega é organizada em 6 etapas, cada uma com uma demonstração ao final pr
 | 2 — Cadastros + login | Painel com login, motoristas, frota, empresas, obras, materiais, locais | Semanas 2–3 |
 | 3 — App do motorista (online) | Login, lançamento de viagem com foto, lançamento de pedágio | Semanas 4–5 |
 | 4 — Funcionamento offline | Sincronização inteligente quando voltar o sinal | Semana 6 |
-| 5 — Conciliação com IA | Importação de planilhas, match automático, divergências, exportação | Semana 7 |
-| 6 — Implantação | Deploy em servidor de produção, treinamento, ajustes finais | Semana 8 |
+| 5 — Conciliação com IA | Importação de planilhas, match automático, **tela de conferência**, **versionamento**, **histórico de alterações**, exportação para empresas-destino, **registro de envio** | Semanas 7–8 |
+| 6 — Implantação | Deploy em servidor de produção, treinamento, ajustes finais | Semana 9 |
 
-**Prazo total: até 8 semanas (aproximadamente 2 meses corridos)** a partir da assinatura.
+**Prazo total: até 9 semanas (aproximadamente 2 meses) a partir da assinatura.**
 
 ---
 
