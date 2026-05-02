@@ -24,6 +24,7 @@ RUN cd apps/api && pnpm prisma generate && pnpm build
 # ---- runtime mínimo ----
 FROM node:20-alpine AS runtime
 RUN apk add --no-cache curl tini openssl && \
+    corepack enable && corepack prepare pnpm@9.12.3 --activate && \
     addgroup -S app && adduser -S app -G app
 WORKDIR /app
 ENV NODE_ENV=production
@@ -42,4 +43,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD curl -fs http://localhost:3000/health || exit 1
 
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node dist/main.js"]
+CMD ["sh", "-c", "pnpm exec prisma migrate deploy && node dist/main.js"]
