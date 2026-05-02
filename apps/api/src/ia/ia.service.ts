@@ -1,0 +1,212 @@
+import Anthropic from "@anthropic-ai/sdk";
+import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+
+const MODEL = "claude-haiku-4-5-20251001";
+
+export type LayoutColumn =
+  | "data"
+  | "ticket"
+  | "obra"
+  | "placa"
+  | "fornecedor"
+  | "material"
+  | "unidade"
+  | "toneladas"
+  | "km"
+  | "valor_unitario"
+  | "valor_total"
+  | "praca_pedagio"
+  | "eixos"
+  | "ignorar";
+
+export type LayoutInferenceResult = {
+  tipoBloco: "viagens" | "pedagios" | "outro";
+  abaPreferida?: string;
+  linhaCabecalho?: number;
+  linhaInicioDados?: number;
+  colunas: { letra: string; cabecalho: string; campo: LayoutColumn }[];
+  observacoes?: string;
+};
+
+export type CandidatoMatch = {
+  viagemId: string;
+  data: string;
+  placa: string;
+  ticket: string;
+  km: number;
+  toneladas: number;
+};
+
+export type SugestaoMatchResult = {
+  viagemId: string | null;
+  confidence: number; // 0..1
+  motivo: string;
+};
+
+@Injectable()
+export class IaService {
+  private readonly log = new Logger(IaService.name);
+  private client?: Anthropic;
+
+  constructor(private readonly config: ConfigService) {
+    const apiKey = this.config.get<string>("ANTHROPIC_API_KEY");
+    if (apiKey) {
+      this.client = new Anthropic({ apiKey });
+    }
+  }
+
+  get habilitada() {
+    return !!this.client;
+  }
+
+  /**
+   * Pede pra IA identificar quais colunas (e em qual aba) representam viagens
+   * de fechamento de uma transportadora. Recebe amostra das primeiras N linhas.
+   */
+  async inferirLayout(amostra: {
+    nomeArquivo: string;
+    abas: { nome: string; primeirasLinhas: (string | number | null)[][] }[];
+  }): Promise<LayoutInferenceResult | null> {
+    if (!this.client) {
+      this.log.warn("Anthropic API key não configurada — pulando inferência de layout");
+      return null;
+    }
+
+    const sysPrompt = `Você ajuda a interpretar planilhas de boletim de medição de transportadoras (fretes de caminhão).
+Empresas-cliente mandam essas planilhas pra conferência. Cada planilha pode ter múltiplas abas com:
+  - viagens (data, ticket, obra, placa, material, toneladas, km, valor)
+  - pedágios (data, placa, praça, eixos, valor)
+  - sumários, descontos, créditos
+
+Sua tarefa: analisar a amostra e devolver QUAL aba contém a relação detalhada de viagens (não o sumário),
+QUAL linha tem os cabeçalhos, QUAL linha começa os dados, e MAPEAR cada coluna pra um campo padrão.
+
+Campos padrão possíveis (use exatamente esses):
+- data, ticket, obra, placa, fornecedor, material, unidade
+- toneladas (também aceita "quant", "quantidade")
+- km (também aceita "distancia", "dist. media")
+- valor_unitario (preço por unidade)
+- valor_total (R$ total da linha)
+- praca_pedagio, eixos
+- ignorar (pra colunas que não interessam: subtotal, contrato, etc)
+
+Responda APENAS um JSON válido sem cercas markdown, no formato:
+{
+  "tipoBloco": "viagens" | "pedagios" | "outro",
+  "abaPreferida": "nome da aba que tem viagens detalhadas",
+  "linhaCabecalho": número 1-based,
+  "linhaInicioDados": número 1-based,
+  "colunas": [{"letra": "A", "cabecalho": "DATA", "campo": "data"}, ...],
+  "observacoes": "texto opcional"
+}`;
+
+    const userMsg = JSON.stringify(amostra, null, 2);
+
+    try {
+      const res = await this.client.messages.create({
+        model: MODEL,
+        max_tokens: 2000,
+        system: sysPrompt,
+        messages: [{ role: "user", content: userMsg }],
+      });
+      const text = res.content
+        .filter((c) => c.type === "text")
+        .map((c) => (c as { text: string }).text)
+        .join("");
+      const parsed = extractJson<LayoutInferenceResult>(text);
+      return parsed;
+    } catch (err) {
+      this.log.error(`Falha na inferência de layout: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Recebe uma linha "órfã" (sem match determinístico) + viagens candidatas
+   * (mesma placa, datas próximas) e pede pra IA propor um match com confidence.
+   */
+  async sugerirMatch(input: {
+    linhaCliente: {
+      data: string;
+      placa: string;
+      ticket: string;
+      km?: number;
+      toneladas?: number;
+      valor?: number;
+    };
+    candidatas: CandidatoMatch[];
+  }): Promise<SugestaoMatchResult | null> {
+    if (!this.client) return null;
+    if (input.candidatas.length === 0) {
+      return { viagemId: null, confidence: 0, motivo: "sem candidatas no banco" };
+    }
+
+    const sysPrompt = `Você decide se uma linha de fechamento (planilha do cliente) corresponde a alguma viagem
+do banco de dados da transportadora. Os dados raramente batem 100%: motorista pode esquecer detalhes,
+empresa pode digitar errado, km pode considerar ou não a volta.
+
+Analise:
+- A linha do cliente
+- As viagens candidatas (mesma placa, datas próximas)
+
+Decida qual viagem é a mais provável correspondência, com confidence 0–1:
+- 0.9+: bate placa+data+ticket exato ou quase exato
+- 0.85–0.9: data e placa batem, ticket parecido (talvez digitação)
+- 0.7–0.85: data/placa batem mas km diferente (provavelmente ida/volta não somada)
+- 0.5–0.7: só placa bate, datas próximas
+- <0.5: incerto, é melhor humano decidir
+
+Se NENHUMA candidata fizer sentido, devolva viagemId=null e confidence baixa.
+
+Responda APENAS um JSON válido:
+{"viagemId": "uuid ou null", "confidence": 0.85, "motivo": "explicação curta em PT-BR"}`;
+
+    try {
+      const res = await this.client.messages.create({
+        model: MODEL,
+        max_tokens: 500,
+        system: sysPrompt,
+        messages: [{ role: "user", content: JSON.stringify(input, null, 2) }],
+      });
+      const text = res.content
+        .filter((c) => c.type === "text")
+        .map((c) => (c as { text: string }).text)
+        .join("");
+      return extractJson<SugestaoMatchResult>(text);
+    } catch (err) {
+      this.log.error(`Falha na sugestão de match: ${(err as Error).message}`);
+      return null;
+    }
+  }
+}
+
+function extractJson<T>(text: string): T | null {
+  // remove cercas markdown se vierem
+  const cleaned = text.replace(/```(?:json)?\s*/g, "").replace(/```\s*$/g, "").trim();
+  // pega o primeiro { ... } ou [ ... ] equilibrado
+  const start = cleaned.search(/[{[]/);
+  if (start < 0) return null;
+  const json = cleaned.slice(start);
+  try {
+    return JSON.parse(json) as T;
+  } catch {
+    // tenta extrair só até o primeiro fechamento balanceado
+    let depth = 0;
+    for (let i = 0; i < json.length; i++) {
+      const c = json[i];
+      if (c === "{" || c === "[") depth++;
+      else if (c === "}" || c === "]") {
+        depth--;
+        if (depth === 0) {
+          try {
+            return JSON.parse(json.slice(0, i + 1)) as T;
+          } catch {
+            return null;
+          }
+        }
+      }
+    }
+    return null;
+  }
+}

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { FileSpreadsheet, Pencil, Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -88,7 +89,12 @@ export default function EmpresasPage() {
                   </span>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button variant="ghost" size="icon" onClick={() => openEdit(e)}><Pencil className="h-4 w-4" /></Button>
+                  <Link href={`/empresas/${e.id}/layout-envio`} title="Layout de envio">
+                    <Button variant="ghost" size="icon">
+                      <FileSpreadsheet className="h-4 w-4" />
+                    </Button>
+                  </Link>
+                  <Button variant="ghost" size="icon" onClick={() => openEdit(e)} title="Editar"><Pencil className="h-4 w-4" /></Button>
                   {e.ativa && (
                     <Button variant="ghost" size="icon"
                       onClick={() => confirm(`Inativar ${e.nome}?`) && remove.mutate(e.id)}>

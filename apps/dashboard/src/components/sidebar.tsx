@@ -6,6 +6,8 @@ import { signOut, useSession } from "next-auth/react";
 import {
   Boxes,
   Building2,
+  ClipboardCheck,
+  FileSpreadsheet,
   HardHat,
   LogOut,
   MapPin,
@@ -20,6 +22,8 @@ import { Button } from "@/components/ui/button";
 type Item = { href: string; label: string; icon: React.ComponentType<{ className?: string }>; admin?: boolean };
 
 const ITEMS: Item[] = [
+  { href: "/viagens", label: "Viagens", icon: ClipboardCheck },
+  { href: "/fechamentos", label: "Fechamentos", icon: FileSpreadsheet },
   { href: "/motoristas", label: "Motoristas", icon: HardHat },
   { href: "/frota", label: "Frota", icon: Truck },
   { href: "/empresas", label: "Empresas-cliente", icon: Building2 },

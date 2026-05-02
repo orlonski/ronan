@@ -40,6 +40,42 @@ export class UploadsService implements OnModuleInit {
     return key;
   }
 
+  async putFechamentoOriginal(
+    buffer: Buffer,
+    nomeArquivo: string,
+    mimetype: string,
+  ): Promise<string> {
+    const ext = nomeArquivo.split(".").pop()?.toLowerCase() ?? "bin";
+    const key = `fechamentos/originais/${new Date().toISOString().slice(0, 10)}/${randomUUID()}.${ext}`;
+    await this.client.putObject(this.bucket, key, buffer, buffer.length, {
+      "Content-Type": mimetype,
+    });
+    return key;
+  }
+
+  async putFechamentoExportado(
+    buffer: Buffer,
+    nomeArquivo: string,
+    fechamentoId: string,
+  ): Promise<string> {
+    const key = `fechamentos/exportados/${fechamentoId}/${Date.now()}-${nomeArquivo}`;
+    await this.client.putObject(this.bucket, key, buffer, buffer.length, {
+      "Content-Type":
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    return key;
+  }
+
+  async getObjectBuffer(key: string): Promise<Buffer> {
+    const stream = await this.client.getObject(this.bucket, key);
+    const chunks: Buffer[] = [];
+    return new Promise((resolve, reject) => {
+      stream.on("data", (c: Buffer) => chunks.push(c));
+      stream.on("end", () => resolve(Buffer.concat(chunks)));
+      stream.on("error", reject);
+    });
+  }
+
   async presignedUrl(key: string, expirySeconds = 3600): Promise<string> {
     return this.client.presignedGetObject(this.bucket, key, expirySeconds);
   }

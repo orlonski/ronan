@@ -29,6 +29,7 @@ enum StatusViagem {
   ENVIADA
   EM_CONFERENCIA
   DIVERGENTE
+  AJUSTADA
   OK
 }
 
@@ -39,16 +40,40 @@ enum FonteFechamento {
 }
 
 enum StatusFechamento {
+  RECEBIDO
+  EM_PROCESSAMENTO
   AGUARDANDO_REVISAO
+  CONFERIDO
+  EXPORTADO
+  SUBSTITUIDO
+  // valores legados (não usar em código novo, mantidos pra compat de migração)
   EM_CONCILIACAO
   CONCLUIDO
 }
 
 enum StatusLinhaFechamento {
   MATCH
+  MATCH_IA
   DIVERGENCIA
   FALTANDO
   EXTRA
+  RESOLVIDA_OPERADORA
+}
+
+enum StatusEnvio {
+  GERADO
+  ENVIADO
+}
+
+enum AcaoAuditoria {
+  UPDATE
+  DELETE
+  RESOLVER
+  SUBSTITUIR
+  EXPORTAR
+  MARCAR_ENVIADO
+  MATCH_AUTOMATICO
+  MATCH_IA
 }
 
 model User {
@@ -60,6 +85,11 @@ model User {
   ativo     Boolean       @default(true)
   criadoEm  DateTime      @default(now())
   alteradoEm DateTime     @updatedAt
+
+  resolucoes        FechamentoLinha[]
+  envios            EnvioFechamento[]
+  auditorias        AuditLog[]
+  layoutsEnvio      LayoutEnvio[]
 
   @@map("users")
 }
@@ -106,14 +136,14 @@ model EmpresaCliente {
   cnpj            String?      @unique
   contato         String?
   papel           PapelEmpresa @default(AMBOS)
-  layoutImport    Json?        // mapeamento de colunas do fechamento que ela manda
-  layoutExport    Json?        // colunas/ordem da planilha que ela recebe
+  layoutImport    Json?        // mapeamento de colunas do fechamento que ela manda (cached IA inference)
   ativa           Boolean      @default(true)
   criadoEm        DateTime     @default(now())
   alteradoEm      DateTime     @updatedAt
 
-  obras        Obra[]
-  fechamentos  Fechamento[]
+  obras         Obra[]
+  fechamentos   Fechamento[]
+  layoutsEnvio  LayoutEnvio[]
 
   @@map("empresas_cliente")
 }
@@ -206,6 +236,7 @@ model Viagem {
   @@index([motoristaId, data])
   @@index([veiculoId, data])
   @@index([obraId, data])
+  @@index([veiculoId, data, ticket])
   @@map("viagens")
 }
 
@@ -248,31 +279,109 @@ model Fechamento {
   periodoFim          DateTime         @db.Date
   fonte               FonteFechamento
   arquivoOriginalKey  String?
-  status              StatusFechamento @default(AGUARDANDO_REVISAO)
+  arquivoOriginalNome String?
+  arquivoMimetype     String?
+  versao              Int              @default(1)
+  substituidoPor      Fechamento?      @relation("FechamentoVersao", fields: [substituidoPorId], references: [id])
+  substituidoPorId    String?
+  substitui           Fechamento[]     @relation("FechamentoVersao")
+  layoutSalvo         Json?            // snapshot do layout usado na inferência (debug/auditoria)
+  status              StatusFechamento @default(RECEBIDO)
+  resumoIa            Json?            // estatísticas da execução: total, match_auto, match_ia, divergencia, falta, extra
   criadoEm            DateTime         @default(now())
   alteradoEm          DateTime         @updatedAt
 
-  linhas FechamentoLinha[]
+  linhas  FechamentoLinha[]
+  envios  EnvioFechamento[]
 
   @@index([empresaClienteId, periodoInicio])
+  @@index([status])
   @@map("fechamentos")
 }
 
 model FechamentoLinha {
-  id            String                @id @default(uuid())
-  fechamento    Fechamento            @relation(fields: [fechamentoId], references: [id], onDelete: Cascade)
-  fechamentoId  String
-  placa         String
-  data          DateTime              @db.Date
-  ticket        String
-  km            Decimal?              @db.Decimal(10, 2)
-  valor         Decimal?              @db.Decimal(10, 2)
-  viagemMatch   Viagem?               @relation(fields: [viagemMatchId], references: [id])
-  viagemMatchId String?
-  status        StatusLinhaFechamento
-  divergencias  Json? // { campo: { motorista, empresa } }
-  resolvidoEm   DateTime?
+  id              String                @id @default(uuid())
+  fechamento      Fechamento            @relation(fields: [fechamentoId], references: [id], onDelete: Cascade)
+  fechamentoId    String
+  ordem           Int                   // posição original na planilha
+  rawData         Json                  // dados brutos extraídos da linha (todas as colunas)
+  placa           String?
+  data            DateTime?             @db.Date
+  ticket          String?
+  km              Decimal?              @db.Decimal(10, 2)
+  toneladas       Decimal?              @db.Decimal(10, 3)
+  valor           Decimal?              @db.Decimal(10, 2)
+  obraTexto       String?               // texto da obra na planilha (pode não bater com nossa Obra)
+  materialTexto   String?               // texto do material na planilha
+  viagemMatch     Viagem?               @relation(fields: [viagemMatchId], references: [id])
+  viagemMatchId   String?
+  status          StatusLinhaFechamento
+  divergencias    Json?                 // { campo: { motorista, empresa } }
+  sugestaoIa      Json?                 // { viagemId, confidence, motivo }
+  resolvidoPor    User?                 @relation(fields: [resolvidoPorId], references: [id])
+  resolvidoPorId  String?
+  resolvidoEm     DateTime?
+  motivoResolucao String?
 
   @@index([fechamentoId, status])
+  @@index([viagemMatchId])
   @@map("fechamento_linhas")
+}
+
+model LayoutEnvio {
+  id          String   @id @default(uuid())
+  empresa     EmpresaCliente @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  empresaId   String
+  nome        String   // ex: "Planilha mensal viagens", "Pedágios"
+  colunas     Json     // [{ campo, header, ordem, formato? }]
+  config      Json?    // { incluiCabecalhoEmpresa, formatoData, separadorDecimal }
+  padrao      Boolean  @default(false)
+  criadoPor   User?    @relation(fields: [criadoPorId], references: [id])
+  criadoPorId String?
+  criadoEm    DateTime @default(now())
+  alteradoEm  DateTime @updatedAt
+
+  envios EnvioFechamento[]
+
+  @@index([empresaId])
+  @@map("layouts_envio")
+}
+
+model EnvioFechamento {
+  id                String       @id @default(uuid())
+  fechamento        Fechamento   @relation(fields: [fechamentoId], references: [id], onDelete: Cascade)
+  fechamentoId      String
+  layout            LayoutEnvio? @relation(fields: [layoutId], references: [id])
+  layoutId          String?
+  arquivoGeradoKey  String       // XLSX no MinIO
+  arquivoNome       String       // nome legível pra download
+  geradoPor         User?        @relation(fields: [geradoPorId], references: [id])
+  geradoPorId       String?
+  geradoEm          DateTime     @default(now())
+  status            StatusEnvio  @default(GERADO)
+  marcadoEnviadoEm  DateTime?
+  canalEnvio        String?      // WhatsApp, email, etc
+  observacao        String?
+
+  @@index([fechamentoId])
+  @@map("envios_fechamento")
+}
+
+model AuditLog {
+  id          String        @id @default(uuid())
+  usuario     User?         @relation(fields: [usuarioId], references: [id])
+  usuarioId   String?
+  entidade    String        // "Viagem", "Pedagio", "FechamentoLinha", etc
+  entidadeId  String        // id do registro afetado
+  acao        AcaoAuditoria
+  campo       String?       // campo alterado (null se for ação ampla)
+  valorAntes  Json?
+  valorDepois Json?
+  motivo      String?       // texto livre quando humano resolve divergência ou justifica
+  metadata    Json?         // dados extras (confidence da IA, sugestão usada, etc)
+  criadoEm    DateTime      @default(now())
+
+  @@index([entidade, entidadeId])
+  @@index([usuarioId, criadoEm])
+  @@map("audit_logs")
 }
