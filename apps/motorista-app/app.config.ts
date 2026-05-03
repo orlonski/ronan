@@ -51,13 +51,24 @@ const config: ExpoConfig = {
       },
     ],
     "./plugins/with-abi-splits",
+    "./plugins/with-gradle-memory",
   ],
   experiments: {
     typedRoutes: false,
   },
+  // OTA updates via EAS Update — quando push novo bundle JS, motorista
+  // baixa silenciosamente na proxima vez que abrir o app.
+  runtimeVersion: { policy: "appVersion" },
+  updates: {
+    fallbackToCacheTimeout: 0,
+    url: "https://u.expo.dev/33e8e936-fbac-4bb3-9f98-5de6dc84da53",
+  },
   extra: {
     apiUrl:
       process.env.EXPO_PUBLIC_API_URL ?? "https://ronan-api.2azr6q.easypanel.host",
+    eas: {
+      projectId: "33e8e936-fbac-4bb3-9f98-5de6dc84da53",
+    },
   },
 };
 
