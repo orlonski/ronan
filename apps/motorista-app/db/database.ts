@@ -1,73 +1,119 @@
-import * as SQLite from "expo-sqlite";
+// Storage simples key-value via AsyncStorage.
+// Volume real é baixo (cache de catálogos + outbox de poucas viagens),
+// AsyncStorage é mais robusto e estável que SQLite no Expo Go.
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-let dbInstance: SQLite.SQLiteDatabase | null = null;
-
-export async function getDb(): Promise<SQLite.SQLiteDatabase> {
-  if (dbInstance) return dbInstance;
-  dbInstance = await SQLite.openDatabaseAsync("ronan-motorista.db");
-  await migrate(dbInstance);
-  return dbInstance;
-}
-
-async function migrate(db: SQLite.SQLiteDatabase) {
-  await db.execAsync(`
-    PRAGMA journal_mode = WAL;
-
-    CREATE TABLE IF NOT EXISTS cache_kv (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL,
-      cached_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS pending_viagens (
-      client_id TEXT PRIMARY KEY,
-      payload TEXT NOT NULL,
-      foto_uri TEXT,
-      foto_mime TEXT,
-      status TEXT NOT NULL DEFAULT 'pending',
-      attempts INTEGER NOT NULL DEFAULT 0,
-      created_at INTEGER NOT NULL,
-      last_tried_at INTEGER,
-      error_msg TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS pending_pedagios (
-      client_id TEXT PRIMARY KEY,
-      payload TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending',
-      attempts INTEGER NOT NULL DEFAULT 0,
-      created_at INTEGER NOT NULL,
-      last_tried_at INTEGER,
-      error_msg TEXT
-    );
-  `);
-}
+const PREFIX = "ronan.";
 
 export async function cacheGet<T>(key: string): Promise<T | null> {
-  const db = await getDb();
-  const row = await db.getFirstAsync<{ value: string }>(
-    "SELECT value FROM cache_kv WHERE key = ?",
-    key,
-  );
-  if (!row) return null;
   try {
-    return JSON.parse(row.value) as T;
+    const raw = await AsyncStorage.getItem(`${PREFIX}cache.${key}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { v: T; t: number };
+    return parsed.v;
   } catch {
     return null;
   }
 }
 
 export async function cachePut<T>(key: string, value: T): Promise<void> {
-  const db = await getDb();
-  await db.runAsync(
-    "INSERT OR REPLACE INTO cache_kv (key, value, cached_at) VALUES (?, ?, ?)",
-    key,
-    JSON.stringify(value),
-    Date.now(),
-  );
+  try {
+    await AsyncStorage.setItem(
+      `${PREFIX}cache.${key}`,
+      JSON.stringify({ v: value, t: Date.now() }),
+    );
+  } catch {
+    /* sem espaco / corrupted — ignora silenciosamente */
+  }
 }
 
 export async function cacheDelete(key: string): Promise<void> {
-  const db = await getDb();
-  await db.runAsync("DELETE FROM cache_kv WHERE key = ?", key);
+  try {
+    await AsyncStorage.removeItem(`${PREFIX}cache.${key}`);
+  } catch {
+    /* nope */
+  }
+}
+
+// Outbox helpers: lista única de pending por tipo, persistida como JSON.
+// Volume baixo (motorista lança poucas viagens por dia), tudo na memória.
+
+export type PendingViagem = {
+  clientId: string;
+  payload: Record<string, unknown>;
+  fotoUri?: string;
+  fotoMime?: string;
+  status: "pending" | "syncing" | "error";
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+};
+
+export type PendingPedagio = {
+  clientId: string;
+  payload: Record<string, unknown>;
+  status: "pending" | "syncing" | "error";
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+};
+
+const VIAGENS_KEY = `${PREFIX}outbox.viagens`;
+const PEDAGIOS_KEY = `${PREFIX}outbox.pedagios`;
+
+async function readList<T>(key: string): Promise<T[]> {
+  try {
+    const raw = await AsyncStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as T[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeList<T>(key: string, list: T[]): Promise<void> {
+  await AsyncStorage.setItem(key, JSON.stringify(list));
+}
+
+export async function listPendingViagens(): Promise<PendingViagem[]> {
+  return readList<PendingViagem>(VIAGENS_KEY);
+}
+
+export async function listPendingPedagios(): Promise<PendingPedagio[]> {
+  return readList<PendingPedagio>(PEDAGIOS_KEY);
+}
+
+export async function upsertPendingViagem(item: PendingViagem): Promise<void> {
+  const list = await listPendingViagens();
+  const idx = list.findIndex((x) => x.clientId === item.clientId);
+  if (idx >= 0) list[idx] = item;
+  else list.unshift(item);
+  await writeList(VIAGENS_KEY, list);
+}
+
+export async function upsertPendingPedagio(item: PendingPedagio): Promise<void> {
+  const list = await listPendingPedagios();
+  const idx = list.findIndex((x) => x.clientId === item.clientId);
+  if (idx >= 0) list[idx] = item;
+  else list.unshift(item);
+  await writeList(PEDAGIOS_KEY, list);
+}
+
+export async function deletePendingViagem(clientId: string): Promise<void> {
+  const list = await listPendingViagens();
+  await writeList(
+    VIAGENS_KEY,
+    list.filter((x) => x.clientId !== clientId),
+  );
+}
+
+export async function deletePendingPedagio(clientId: string): Promise<void> {
+  const list = await listPendingPedagios();
+  await writeList(
+    PEDAGIOS_KEY,
+    list.filter((x) => x.clientId !== clientId),
+  );
 }

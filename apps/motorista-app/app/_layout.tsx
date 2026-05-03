@@ -13,6 +13,7 @@ import {
   setAuthState,
   subscribeAuth,
 } from "@/lib/auth-state";
+import { startAutoSync } from "@/lib/sync";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -51,6 +52,11 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   // Re-renderiza ao mudar o estado de auth (login/logout disparam setAuthState).
   useEffect(() => subscribeAuth(() => setVersion((v) => v + 1)), []);
+
+  // Inicia listeners de sync (online + visibility + intervalo) uma vez.
+  useEffect(() => {
+    if (loggedIn) startAutoSync();
+  }, [loggedIn]);
 
   // Redirect logic baseado no estado atual.
   useEffect(() => {
