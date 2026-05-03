@@ -55,21 +55,21 @@ export function Select({
         disabled={disabled}
         onPress={() => setOpen(true)}
         className={cn(
-          "h-12 flex-row items-center justify-between rounded-lg border border-border bg-background px-3",
+          "h-14 flex-row items-center justify-between rounded-xl border-2 border-border bg-background px-4",
           disabled && "opacity-50",
           className,
         )}
       >
         <Text
           className={cn(
-            "flex-1 text-base",
+            "flex-1 text-[17px] font-medium",
             selected ? "text-foreground" : "text-muted-foreground",
           )}
           numberOfLines={1}
         >
           {selected?.label ?? placeholder}
         </Text>
-        <ChevronDown size={18} color="#64748b" />
+        <ChevronDown size={22} color="#64748b" />
       </Pressable>
 
       <Modal
@@ -113,13 +113,15 @@ export function Select({
                       setOpen(false);
                     }}
                     className={cn(
-                      "border-b border-border px-3 py-3 active:bg-muted",
+                      "border-b border-border px-4 py-4 active:bg-muted",
                       item.value === value && "bg-muted",
                     )}
                   >
-                    <Text className="text-base text-foreground">{item.label}</Text>
+                    <Text className="text-lg font-semibold text-foreground">
+                      {item.label}
+                    </Text>
                     {item.sublabel && (
-                      <Text className="text-xs text-muted-foreground">{item.sublabel}</Text>
+                      <Text className="text-sm text-muted-foreground">{item.sublabel}</Text>
                     )}
                   </Pressable>
                 )}

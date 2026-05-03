@@ -14,13 +14,13 @@ import { useMe, useViagens, type Viagem } from "@/lib/queries";
 
 const statusVariant: Record<
   string,
-  "default" | "secondary" | "outline" | "destructive"
+  "default" | "secondary" | "outline" | "destructive" | "success" | "warning"
 > = {
-  ENVIADA: "secondary",
-  OK: "default",
-  EM_CONFERENCIA: "secondary",
+  ENVIADA: "warning",
+  OK: "success",
+  EM_CONFERENCIA: "warning",
   DIVERGENTE: "destructive",
-  AJUSTADA: "outline",
+  AJUSTADA: "secondary",
 };
 
 const statusLabel: Record<string, string> = {
@@ -36,11 +36,51 @@ export default function Home() {
   const viagens = useViagens();
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
+    <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
+      {/* Header brand: status bar + nome motorista */}
+      <View className="bg-brand">
+        <View className="flex-row items-start justify-between px-5 pb-6 pt-14">
+          <View className="flex-1">
+            <Text className="text-xs font-semibold uppercase tracking-wider text-white/70">
+              Motorista
+            </Text>
+            {me.isLoading && <ActivityIndicator color="white" className="mt-2" />}
+            {me.data && (
+              <>
+                <Text className="mt-0.5 text-2xl font-bold text-white">
+                  {me.data.nome}
+                </Text>
+                {me.data.veiculoDefault && (
+                  <Text
+                    className="mt-0.5 text-base font-medium text-white/80"
+                    style={{ fontVariant: ["tabular-nums"] }}
+                  >
+                    Placa {me.data.veiculoDefault.placa}
+                  </Text>
+                )}
+              </>
+            )}
+            {me.error && (
+              <Text className="mt-1 text-sm text-white/80">
+                Perfil indisponível offline
+              </Text>
+            )}
+          </View>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="bg-white/15 active:bg-white/25"
+            onPress={() => router.push("/perfil")}
+          >
+            <User size={26} color="white" />
+          </Button>
+        </View>
+      </View>
+
       <FlatList<Viagem>
         data={viagens.data ?? []}
         keyExtractor={(v) => v.id}
-        contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 8 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }}
         refreshControl={
           <RefreshControl
             refreshing={viagens.isFetching && !viagens.isLoading}
@@ -51,59 +91,27 @@ export default function Home() {
           />
         }
         ListHeaderComponent={
-          <View className="mb-4 gap-4">
-            <View className="flex-row items-start justify-between">
-              <View className="flex-1">
-                <Text className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Motorista
-                </Text>
-                {me.isLoading && <ActivityIndicator className="mt-1" />}
-                {me.data && (
-                  <>
-                    <Text className="mt-0.5 text-xl font-semibold text-foreground">
-                      {me.data.nome}
-                    </Text>
-                    {me.data.veiculoDefault && (
-                      <Text className="text-sm text-muted-foreground">
-                        Placa padrão {me.data.veiculoDefault.placa}
-                      </Text>
-                    )}
-                  </>
-                )}
-                {me.error && (
-                  <Text className="mt-1 text-sm text-destructive">
-                    Perfil indisponível offline
-                  </Text>
-                )}
-              </View>
-              <Button
-                variant="ghost"
-                size="icon"
-                onPress={() => router.push("/perfil")}
-              >
-                <User size={20} color="#0f172a" />
-              </Button>
-            </View>
-
-            <View className="flex-row gap-2">
-              <Button
-                size="lg"
-                className="flex-1"
-                onPress={() => router.push("/nova-viagem")}
-              >
-                Nova viagem
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className="flex-1"
-                onPress={() => router.push("/novo-pedagio")}
-              >
+          <View className="mb-3 gap-3">
+            <Button
+              size="lg"
+              className="h-20"
+              onPress={() => router.push("/nova-viagem")}
+            >
+              <Text className="text-xl font-bold text-primary-foreground">
+                + Nova viagem
+              </Text>
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              className="h-16"
+              onPress={() => router.push("/novo-pedagio")}
+            >
+              <Text className="text-lg font-bold text-foreground">
                 Pedágio
-              </Button>
-            </View>
-
-            <Text className="mt-2 text-xs uppercase tracking-wide text-muted-foreground">
+              </Text>
+            </Button>
+            <Text className="mt-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
               Últimas viagens
             </Text>
           </View>
@@ -133,46 +141,58 @@ function ViagemCard({ v }: { v: Viagem }) {
   const variant = statusVariant[v.status] ?? "outline";
   const label = statusLabel[v.status] ?? v.status;
   return (
-    <View className="rounded-lg border border-border bg-card p-4">
-      <View className="flex-row items-start justify-between gap-2">
+    <View className="rounded-2xl border-2 border-border bg-card p-4">
+      <View className="flex-row items-start justify-between gap-3">
         <View className="flex-1">
-          <Text className="text-sm font-medium text-foreground">{v.obra.nome}</Text>
-          <Text className="text-xs text-muted-foreground">
-            {v.material.nome} · {fmtData(v.data)} · placa {v.veiculo.placa}
+          <Text className="text-lg font-bold text-foreground" numberOfLines={1}>
+            {v.obra.nome}
+          </Text>
+          <Text
+            className="mt-0.5 text-base font-medium text-muted-foreground"
+            style={{ fontVariant: ["tabular-nums"] }}
+          >
+            {fmtData(v.data)} · {v.veiculo.placa}
           </Text>
         </View>
         <Badge variant={variant}>{label}</Badge>
       </View>
 
-      <View className="mt-3 gap-1">
-        <View className="flex-row items-center gap-1.5">
-          <ArrowUp size={12} color="#64748b" />
-          <Text className="text-xs text-muted-foreground" numberOfLines={1}>
-            {v.localCarga.nome} · {v.localCarga.cidade}/{v.localCarga.uf}
+      <View className="mt-3 gap-1.5">
+        <View className="flex-row items-center gap-2">
+          <ArrowUp size={16} color="#16a34a" />
+          <Text className="flex-1 text-base font-medium text-foreground" numberOfLines={1}>
+            {v.localCarga.nome}
           </Text>
         </View>
-        <View className="flex-row items-center gap-1.5">
-          <ArrowDown size={12} color="#64748b" />
-          <Text className="text-xs text-muted-foreground" numberOfLines={1}>
-            {v.localDescarga.nome} · {v.localDescarga.cidade}/{v.localDescarga.uf}
+        <View className="flex-row items-center gap-2">
+          <ArrowDown size={16} color="#dc2626" />
+          <Text className="flex-1 text-base font-medium text-foreground" numberOfLines={1}>
+            {v.localDescarga.nome}
           </Text>
         </View>
       </View>
 
-      <View className="mt-3 flex-row gap-4">
-        <Text className="text-xs text-muted-foreground">
-          <Text className="font-medium text-foreground">{fmtNum(v.toneladas, 3)}</Text> t
-        </Text>
-        <Text className="text-xs text-muted-foreground">
-          <Text className="font-medium text-foreground">{fmtNum(v.km, 2)}</Text> km
-        </Text>
-        <Text className="text-xs text-muted-foreground">
-          ticket{" "}
-          <Text className="font-medium text-foreground" style={{ fontVariant: ["tabular-nums"] }}>
-            {v.ticket}
-          </Text>
-        </Text>
+      <View className="mt-3 flex-row gap-5 border-t-2 border-border pt-3">
+        <Stat label="t" value={fmtNum(v.toneladas, 3)} />
+        <Stat label="km" value={fmtNum(v.km, 2)} />
+        <Stat label="ticket" value={v.ticket} />
       </View>
+    </View>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <View>
+      <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </Text>
+      <Text
+        className="text-lg font-bold text-foreground"
+        style={{ fontVariant: ["tabular-nums"] }}
+      >
+        {value}
+      </Text>
     </View>
   );
 }

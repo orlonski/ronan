@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { router, Stack } from "expo-router";
-import { ArrowLeft, KeyRound, LogOut } from "lucide-react-native";
+import { KeyRound, LogOut } from "lucide-react-native";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { ScreenHeader } from "@/components/screen-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -62,15 +63,10 @@ export default function Perfil() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
+    <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <View className="flex-row items-center gap-2 border-b border-border px-4 py-3">
-        <Button variant="ghost" size="icon" onPress={() => router.back()}>
-          <ArrowLeft size={20} color="#0f172a" />
-        </Button>
-        <Text className="text-lg font-semibold text-foreground">Perfil</Text>
-      </View>
+      <ScreenHeader title="Perfil" />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}

@@ -45,21 +45,24 @@ export default function LoginScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
+    <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         className="flex-1"
       >
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-          <View className="flex-1 justify-center px-6 py-8">
-            <View className="mb-8">
-              <Text className="text-3xl font-semibold text-foreground">Ronan</Text>
-              <Text className="mt-1 text-base text-muted-foreground">
-                Acesso do motorista
-              </Text>
-            </View>
+          {/* Hero: faixa azul marinho com brand (status bar fica em cima) */}
+          <View className="bg-brand px-6 pb-10 pt-20">
+            <Text className="text-5xl font-extrabold tracking-tight text-white">
+              RONAN
+            </Text>
+            <Text className="mt-2 text-base font-medium text-white/80">
+              Aplicativo do motorista
+            </Text>
+          </View>
 
-            <View className="gap-4">
+          <View className="flex-1 px-6 py-8">
+            <View className="gap-5">
               <View className="gap-2">
                 <Label>Usuário</Label>
                 <Input
@@ -68,7 +71,7 @@ export default function LoginScreen() {
                   autoCapitalize="none"
                   autoCorrect={false}
                   autoComplete="username"
-                  placeholder="seu usuario"
+                  placeholder="seu usuário"
                   editable={!submitting}
                 />
               </View>
@@ -86,16 +89,22 @@ export default function LoginScreen() {
               </View>
 
               {erro && (
-                <Text className="text-sm text-destructive">{erro}</Text>
+                <View className="rounded-xl border-2 border-destructive bg-destructive/10 p-3">
+                  <Text className="text-base font-medium text-destructive">
+                    {erro}
+                  </Text>
+                </View>
               )}
 
               <Button
                 size="lg"
-                className="mt-2"
+                className="mt-3 h-20"
                 loading={submitting}
                 onPress={entrar}
               >
-                {submitting ? "Entrando..." : "Entrar"}
+                <Text className="text-xl font-bold text-primary-foreground">
+                  {submitting ? "Entrando..." : "Entrar"}
+                </Text>
               </Button>
             </View>
           </View>

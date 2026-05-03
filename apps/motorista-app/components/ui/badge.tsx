@@ -2,25 +2,29 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { Text, View } from "react-native";
 import { cn } from "@/lib/utils";
 
-const badgeVariants = cva("self-start rounded-full px-2 py-0.5", {
+const badgeVariants = cva("self-start rounded-md px-2.5 py-1", {
   variants: {
     variant: {
-      default: "bg-primary",
+      default: "bg-brand",
       secondary: "bg-secondary",
-      outline: "border border-border bg-transparent",
+      outline: "border-2 border-border bg-transparent",
       destructive: "bg-destructive",
+      success: "bg-success",
+      warning: "bg-warning",
     },
   },
   defaultVariants: { variant: "default" },
 });
 
-const badgeTextVariants = cva("text-xs font-medium", {
+const badgeTextVariants = cva("text-xs font-bold uppercase tracking-wide", {
   variants: {
     variant: {
-      default: "text-primary-foreground",
+      default: "text-brand-foreground",
       secondary: "text-secondary-foreground",
       outline: "text-foreground",
       destructive: "text-destructive-foreground",
+      success: "text-white",
+      warning: "text-warning-foreground",
     },
   },
   defaultVariants: { variant: "default" },

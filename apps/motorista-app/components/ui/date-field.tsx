@@ -43,13 +43,15 @@ export function DateField({
         onPress={abrir}
         disabled={disabled}
         className={cn(
-          "h-12 flex-row items-center justify-between rounded-lg border border-border bg-background px-3",
+          "h-14 flex-row items-center justify-between rounded-xl border-2 border-border bg-background px-4",
           disabled && "opacity-50",
           className,
         )}
       >
-        <Text className="flex-1 text-base text-foreground">{display}</Text>
-        <Calendar size={18} color="#64748b" />
+        <Text className="flex-1 text-[17px] font-medium text-foreground">
+          {display}
+        </Text>
+        <Calendar size={22} color="#64748b" />
       </Pressable>
 
       {open && (

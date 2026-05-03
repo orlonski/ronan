@@ -4,7 +4,10 @@ import { cn } from "@/lib/utils";
 export function Card({ className, ...props }: ViewProps & { className?: string }) {
   return (
     <View
-      className={cn("rounded-lg border border-border bg-card p-4", className)}
+      className={cn(
+        "rounded-2xl border-2 border-border bg-card p-5",
+        className,
+      )}
       {...props}
     />
   );

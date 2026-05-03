@@ -12,7 +12,7 @@ const config: ExpoConfig = {
   splash: {
     image: "./assets/splash.png",
     resizeMode: "contain",
-    backgroundColor: "#1e40af",
+    backgroundColor: "#13316b",
   },
   assetBundlePatterns: ["**/*"],
   ios: {
@@ -32,7 +32,7 @@ const config: ExpoConfig = {
     versionCode: 1,
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-icon.png",
-      backgroundColor: "#1e40af",
+      backgroundColor: "#13316b",
     },
     permissions: [
       "android.permission.CAMERA",

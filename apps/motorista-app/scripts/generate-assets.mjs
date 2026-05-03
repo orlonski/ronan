@@ -9,7 +9,7 @@ const PROJECT_ROOT = resolve(import.meta.dirname, "..");
 const ASSETS = resolve(PROJECT_ROOT, "assets");
 if (!existsSync(ASSETS)) mkdirSync(ASSETS, { recursive: true });
 
-const BG = "#1e40af";
+const BG = "#13316b"; // brand HSL(220 75% 28%) ~ navy
 const FG = "#ffffff";
 const FAMILY = "system-ui, -apple-system, Helvetica, Arial, sans-serif";
 

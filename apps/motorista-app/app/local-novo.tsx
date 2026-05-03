@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { router, Stack, useLocalSearchParams } from "expo-router";
-import { ArrowLeft, Check } from "lucide-react-native";
+import { Check } from "lucide-react-native";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
+import { ScreenHeader } from "@/components/screen-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -90,17 +91,10 @@ export default function LocalNovo() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
+    <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <View className="flex-row items-center gap-2 border-b border-border px-4 py-3">
-        <Button variant="ghost" size="icon" onPress={() => router.back()}>
-          <ArrowLeft size={20} color="#0f172a" />
-        </Button>
-        <Text className="text-lg font-semibold text-foreground">
-          Cadastrar local
-        </Text>
-      </View>
+      <ScreenHeader title="Cadastrar local" />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -183,9 +177,9 @@ export default function LocalNovo() {
 
           {erro && <Text className="text-sm text-destructive">{erro}</Text>}
 
-          <Button size="lg" onPress={salvar} loading={criar.isPending}>
-            <Check size={20} color="white" />
-            <Text className="text-base font-medium text-primary-foreground">
+          <Button size="lg" className="h-20" onPress={salvar} loading={criar.isPending}>
+            <Check size={24} color="white" />
+            <Text className="text-xl font-bold text-primary-foreground">
               {criar.isPending ? "Salvando..." : "Salvar local"}
             </Text>
           </Button>

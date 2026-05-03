@@ -3,34 +3,40 @@ import { forwardRef } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { cn } from "@/lib/utils";
 
+// Botoes pensados pra dedo grosso de motorista de pedreira:
+// - default 56px (vs ~48px padrao)
+// - lg 64px (botao primario "Salvar viagem", "Nova viagem")
+// - icon 56px (touch alvos generosos)
 const buttonVariants = cva(
-  "flex-row items-center justify-center gap-2 rounded-lg active:opacity-80 disabled:opacity-50",
+  "flex-row items-center justify-center gap-2.5 rounded-xl active:opacity-75 disabled:opacity-50",
   {
     variants: {
       variant: {
         default: "bg-primary",
-        outline: "border border-border bg-background",
+        outline: "border-2 border-border bg-background",
         ghost: "bg-transparent active:bg-muted",
         destructive: "bg-destructive",
+        brand: "bg-brand",
       },
       size: {
-        default: "h-12 px-4",
-        sm: "h-10 px-3",
-        lg: "h-14 px-6",
-        icon: "h-12 w-12",
+        default: "h-14 px-5",
+        sm: "h-11 px-4",
+        lg: "h-16 px-6",
+        icon: "h-14 w-14",
       },
     },
     defaultVariants: { variant: "default", size: "default" },
   },
 );
 
-const buttonTextVariants = cva("text-base font-medium", {
+const buttonTextVariants = cva("font-semibold", {
   variants: {
     variant: {
       default: "text-primary-foreground",
       outline: "text-foreground",
       ghost: "text-foreground",
       destructive: "text-destructive-foreground",
+      brand: "text-brand-foreground",
     },
     size: {
       default: "text-base",
@@ -67,7 +73,11 @@ export const Button = forwardRef<View, ButtonProps>(
         {loading && (
           <ActivityIndicator
             size="small"
-            color={variant === "outline" || variant === "ghost" ? "#0f172a" : "#fff"}
+            color={
+              variant === "outline" || variant === "ghost"
+                ? "#0f172a"
+                : "#fff"
+            }
           />
         )}
         {typeof children === "string" ? (

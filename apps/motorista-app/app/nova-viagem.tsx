@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { router, Stack, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { ArrowLeft, Check, Plus } from "lucide-react-native";
+import { Check, Plus } from "lucide-react-native";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { ScreenHeader } from "@/components/screen-header";
 import { Button } from "@/components/ui/button";
 import { DateField } from "@/components/ui/date-field";
 import { Input } from "@/components/ui/input";
@@ -190,15 +191,10 @@ export default function NovaViagem() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
+    <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <View className="flex-row items-center gap-2 border-b border-border px-4 py-3">
-        <Button variant="ghost" size="icon" onPress={() => router.back()}>
-          <ArrowLeft size={20} color="#0f172a" />
-        </Button>
-        <Text className="text-lg font-semibold text-foreground">Nova viagem</Text>
-      </View>
+      <ScreenHeader title="Nova viagem" />
 
       {(cat.isLoading || me.isLoading) && !cat.data && !me.data && (
         <View className="items-center py-8">
@@ -372,9 +368,9 @@ export default function NovaViagem() {
 
             {erro && <Text className="text-sm text-destructive">{erro}</Text>}
 
-            <Button size="lg" onPress={salvar} loading={submitting}>
-              <Check size={20} color="white" />
-              <Text className="text-base font-medium text-primary-foreground">
+            <Button size="lg" className="h-20" onPress={salvar} loading={submitting}>
+              <Check size={24} color="white" />
+              <Text className="text-xl font-bold text-primary-foreground">
                 {submitting ? "Salvando..." : "Salvar viagem"}
               </Text>
             </Button>
