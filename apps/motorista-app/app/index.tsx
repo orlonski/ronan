@@ -1,16 +1,19 @@
 import { router } from "expo-router";
+import * as Updates from "expo-updates";
 import {
   ArrowDown,
   ArrowUp,
   CloudOff,
   Plus,
   Receipt,
+  RotateCw,
   Truck,
   User,
   WifiOff,
 } from "lucide-react-native";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   RefreshControl,
@@ -50,6 +53,30 @@ export default function Home() {
   const me = useMe();
   const viagens = useViagens();
   const pending = usePending();
+  const updates = Updates.useUpdates();
+  const updateReady = updates.isUpdatePending || updates.isUpdateAvailable;
+
+  async function aplicarUpdate() {
+    try {
+      if (!updates.isUpdatePending) {
+        await Updates.fetchUpdateAsync();
+      }
+      await Updates.reloadAsync();
+    } catch (err) {
+      Alert.alert("Erro", (err as Error).message ?? "Falha ao atualizar.");
+    }
+  }
+
+  async function checarUpdate() {
+    try {
+      const result = await Updates.checkForUpdateAsync();
+      if (result.isAvailable) {
+        await Updates.fetchUpdateAsync();
+      }
+    } catch {
+      /* silencioso — pode estar offline */
+    }
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
@@ -103,11 +130,32 @@ export default function Home() {
             onRefresh={() => {
               void me.refetch();
               void viagens.refetch();
+              void checarUpdate();
             }}
           />
         }
         ListHeaderComponent={
           <View className="mb-3 gap-3">
+            {/* Banner de update OTA disponível */}
+            {updateReady && (
+              <Pressable
+                onPress={aplicarUpdate}
+                className="flex-row items-center gap-3 rounded-2xl border-2 border-primary/40 bg-primary/15 p-4 active:opacity-75"
+              >
+                <View className="h-12 w-12 items-center justify-center rounded-full bg-primary">
+                  <RotateCw size={22} color="white" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-base font-bold text-foreground">
+                    Nova versão disponível
+                  </Text>
+                  <Text className="text-sm text-muted-foreground">
+                    Toque pra atualizar
+                  </Text>
+                </View>
+              </Pressable>
+            )}
+
             {/* Banner pendentes */}
             {(pending.viagens > 0 || pending.pedagios > 0) && (
               <Pressable
