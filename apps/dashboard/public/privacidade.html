@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Política de Privacidade — Ronan Motorista</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; line-height: 1.6; color: #111; }
+  h1 { font-size: 28px; margin-bottom: 4px; }
+  h2 { font-size: 20px; margin-top: 32px; }
+  .meta { color: #666; font-size: 14px; }
+  ul { padding-left: 20px; }
+  li { margin: 4px 0; }
+  a { color: #1e40af; }
+</style>
+</head>
+<body>
+<h1>Política de Privacidade</h1>
+<p class="meta">Aplicativo: <strong>Ronan Motorista</strong> · Última atualização: 02 de maio de 2026</p>
+
+<p>Esta política descreve como o aplicativo Ronan Motorista coleta, usa e protege os dados dos motoristas que utilizam o sistema da transportadora <strong>Ronan</strong>.</p>
+
+<h2>1. Quem somos</h2>
+<p>O Ronan Motorista é um aplicativo de uso interno corporativo, distribuído aos motoristas autorizados da transportadora Ronan para registro de viagens (cargas, descargas, tickets) e pedágios.</p>
+
+<h2>2. Dados que coletamos</h2>
+<ul>
+  <li><strong>Dados de cadastro do motorista</strong>: nome, usuário, telefone, placa do veículo. Cadastrados pelo administrador da transportadora.</li>
+  <li><strong>Dados de viagem</strong>: data, obra, material, toneladas, número de ticket, quilômetros, locais de carga e descarga, valor de pedágio, observações.</li>
+  <li><strong>Foto do ticket</strong>: imagem capturada pela câmera do dispositivo, anexada à viagem para conferência.</li>
+  <li><strong>Localização</strong>: latitude e longitude apenas dos locais cadastrados (carga, descarga, pedágios), não rastreamos a localização do motorista em tempo real.</li>
+</ul>
+
+<h2>3. Como usamos os dados</h2>
+<ul>
+  <li>Para registrar e organizar as viagens da transportadora.</li>
+  <li>Para gerar planilhas de fechamento e conferir com as empresas-cliente.</li>
+  <li>Para padronizar endereços de locais (via Google Places API).</li>
+  <li>Não vendemos, compartilhamos ou comercializamos dados pessoais.</li>
+</ul>
+
+<h2>4. Onde os dados ficam</h2>
+<ul>
+  <li>Servidor próprio da transportadora, em infraestrutura cloud na Alemanha (Contabo).</li>
+  <li>As fotos dos tickets ficam armazenadas em storage privado da transportadora.</li>
+  <li>Endereços buscados são processados pela API do Google Places para padronização.</li>
+</ul>
+
+<h2>5. Permissões usadas no dispositivo</h2>
+<ul>
+  <li><strong>Câmera</strong>: para tirar foto do ticket de carga e descarga.</li>
+  <li><strong>Internet</strong>: para sincronizar viagens e pedágios com o servidor.</li>
+  <li><strong>Armazenamento local</strong>: para guardar viagens em modo offline (quando o motorista está em local sem sinal) e sincronizar quando houver internet.</li>
+  <li><strong>Keychain / EncryptedSharedPreferences</strong>: para armazenar tokens de autenticação de forma segura.</li>
+</ul>
+
+<h2>6. Modo offline</h2>
+<p>O aplicativo funciona sem internet: viagens e pedágios são salvos no armazenamento local do dispositivo e enviados automaticamente para o servidor quando a conexão volta. Os dados ficam armazenados criptografados no dispositivo.</p>
+
+<h2>7. Direitos do motorista</h2>
+<p>Conforme a LGPD (Lei nº 13.709/2018), o motorista tem direito a:</p>
+<ul>
+  <li>Saber quais dados são coletados.</li>
+  <li>Solicitar correção de dados incorretos.</li>
+  <li>Solicitar exclusão dos seus dados pessoais (sujeito a obrigações legais e contratuais com a transportadora).</li>
+</ul>
+<p>Para exercer esses direitos, o motorista deve entrar em contato com o administrador da transportadora.</p>
+
+<h2>8. Segurança</h2>
+<ul>
+  <li>Toda comunicação com o servidor é feita por HTTPS (TLS 1.2+).</li>
+  <li>Senhas são armazenadas no servidor com hash bcrypt.</li>
+  <li>Tokens de acesso são guardados no armazenamento seguro do sistema operacional (Keychain no iOS, EncryptedSharedPreferences no Android).</li>
+</ul>
+
+<h2>9. Crianças</h2>
+<p>O aplicativo não é direcionado a crianças e adolescentes. É de uso exclusivo de motoristas profissionais maiores de 18 anos contratados pela transportadora.</p>
+
+<h2>10. Mudanças nesta política</h2>
+<p>Esta política pode ser atualizada periodicamente. A data da última atualização aparece no topo desta página.</p>
+
+<h2>11. Contato</h2>
+<p>Dúvidas sobre privacidade ou tratamento de dados: <a href="mailto:contato@ronan.com.br">contato@ronan.com.br</a> (substituir pelo e-mail real do amigo do usuário antes de submeter às lojas).</p>
+
+</body>
+</html>

@@ -6,14 +6,19 @@ const config: ExpoConfig = {
   scheme: "ronan",
   version: "1.0.0",
   orientation: "portrait",
-  // icon: "./assets/icon.png",            // TODO: adicionar 1024x1024 do logo
+  icon: "./assets/icon.png",
   userInterfaceStyle: "light",
   newArchEnabled: true,
-  // splash: { image: "./assets/splash.png", resizeMode: "contain", backgroundColor: "#ffffff" },
+  splash: {
+    image: "./assets/splash.png",
+    resizeMode: "contain",
+    backgroundColor: "#1e40af",
+  },
   assetBundlePatterns: ["**/*"],
   ios: {
     supportsTablet: false,
     bundleIdentifier: "br.com.ronan.motorista",
+    buildNumber: "1",
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
       NSCameraUsageDescription:
@@ -24,8 +29,15 @@ const config: ExpoConfig = {
   },
   android: {
     package: "br.com.ronan.motorista",
-    // adaptiveIcon: { foregroundImage: "./assets/adaptive-icon.png", backgroundColor: "#ffffff" },
-    permissions: ["android.permission.CAMERA", "android.permission.INTERNET"],
+    versionCode: 1,
+    adaptiveIcon: {
+      foregroundImage: "./assets/adaptive-icon.png",
+      backgroundColor: "#1e40af",
+    },
+    permissions: [
+      "android.permission.CAMERA",
+      "android.permission.INTERNET",
+    ],
   },
   plugins: [
     "expo-router",
@@ -42,7 +54,8 @@ const config: ExpoConfig = {
     typedRoutes: true,
   },
   extra: {
-    apiUrl: process.env.EXPO_PUBLIC_API_URL ?? "https://ronan-api.2azr6q.easypanel.host",
+    apiUrl:
+      process.env.EXPO_PUBLIC_API_URL ?? "https://ronan-api.2azr6q.easypanel.host",
   },
 };
 

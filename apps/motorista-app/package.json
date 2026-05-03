@@ -8,6 +8,11 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "prebuild": "expo prebuild",
+    "build:android:preview": "eas build --local --platform android --profile preview",
+    "build:android": "eas build --local --platform android --profile production",
+    "build:ios:preview": "eas build --local --platform ios --profile preview",
+    "build:ios": "eas build --local --platform ios --profile production",
+    "assets": "node scripts/generate-assets.mjs",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit"
   },
@@ -52,6 +57,7 @@
     "@babel/core": "^7.25.2",
     "@types/node": "^22.10.0",
     "@types/react": "~19.1.17",
+    "sharp": "^0.34.5",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.6.3"
   },
