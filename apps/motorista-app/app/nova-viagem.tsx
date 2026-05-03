@@ -63,6 +63,19 @@ export default function NovaViagem() {
   // Locais criados nesta sessão — merged no Select pra garantir que aparecem
   // mesmo se o cache do TanStack Query ainda não propagou
   const [extraLocais, setExtraLocais] = useState<Local[]>([]);
+  // GPS pré-aquecido em background — modulo carrega + permissao + fix
+  // enquanto motorista preenche o form. Quando toca Salvar, usa o que ja tem.
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void pegarCoords().then((c) => {
+      if (alive && c) setCoords(c);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Quando volta da tela /local-novo, consome o local pendente
   useFocusEffect(
@@ -159,10 +172,10 @@ export default function NovaViagem() {
     }
     setSubmitting(true);
     try {
-      // Captura GPS silenciosamente (lazy import — modulo so carrega aqui,
-      // nao no boot do app). Se permissao negada ou GPS indisponivel,
-      // viagem salva sem coords.
-      const coords = await pegarCoords();
+      // GPS: usa o que foi pre-aquecido na montagem da tela. Se ainda nao
+      // tem, tenta pegar last-known (instantaneo) com cap de 2s — sem
+      // bloquear o salvar.
+      const c = coords ?? (await pegarCoordsRapido());
 
       const payload = {
         clientId: makeUuid(),
@@ -180,7 +193,7 @@ export default function NovaViagem() {
           : undefined,
         observacao: form.observacao.trim() || undefined,
         criadoOfflineEm: new Date().toISOString(),
-        ...(coords ? { lat: coords.lat, lng: coords.lng } : {}),
+        ...(c ? { lat: c.lat, lng: c.lng } : {}),
       };
       await criar({
         payload,
@@ -416,9 +429,9 @@ function makeUuid(): string {
 }
 
 /**
- * GPS lazy: dynamic import so modulo expo-location nao carrega no boot
- * (top-level import quebrava o expo-router route discovery).
- * Cap em 5s. Permissao negada / GPS off => null (nao bloqueia salvar).
+ * GPS pre-aquecido: roda no background quando tela monta, com timeout
+ * de 15s (suficiente pra fix frio do GPS). Lazy import previne crash
+ * do boot do expo-router. Permissao negada / GPS off => null.
  */
 async function pegarCoords(): Promise<{ lat: number; lng: number } | null> {
   try {
@@ -428,12 +441,41 @@ async function pegarCoords(): Promise<{ lat: number; lng: number } | null> {
       const r = await Location.requestForegroundPermissionsAsync();
       if (r.status !== "granted") return null;
     }
+    // 1) tenta last-known (instantaneo, sem fix novo)
+    const last = await Location.getLastKnownPositionAsync({
+      maxAge: 60_000, // ate 1 min de idade
+      requiredAccuracy: 200, // 200m suficiente pra contexto da viagem
+    });
+    if (last) {
+      return { lat: last.coords.latitude, lng: last.coords.longitude };
+    }
+    // 2) fix novo com cap de 15s (cold lock pode levar ate 30s)
     const result = await Promise.race([
       Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 15_000)),
     ]);
     if (!result || !("coords" in result)) return null;
     return { lat: result.coords.latitude, lng: result.coords.longitude };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Cap rapido (2s, so last-known) — usado no Salvar quando o pre-aquecimento
+ * nao resolveu ainda. Nao trava o motorista esperando GPS frio.
+ */
+async function pegarCoordsRapido(): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const Location = await import("expo-location");
+    const cur = await Location.getForegroundPermissionsAsync();
+    if (cur.status !== "granted") return null;
+    const last = await Promise.race([
+      Location.getLastKnownPositionAsync({ maxAge: 5 * 60_000, requiredAccuracy: 500 }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
+    ]);
+    if (!last || !("coords" in last)) return null;
+    return { lat: last.coords.latitude, lng: last.coords.longitude };
   } catch {
     return null;
   }
