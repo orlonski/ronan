@@ -1,4 +1,8 @@
-import { Injectable } from "@nestjs/common";
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type { CriarViagemInput } from "@ronan/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
@@ -33,6 +37,26 @@ export class ViagensMotoristaService {
         where: { clientId: input.clientId },
         include: VIAGEM_INCLUDE,
       });
+    }
+
+    // Ticket é único por empresa-cliente (regra de negócio).
+    const obra = await this.prisma.obra.findUnique({
+      where: { id: input.obraId },
+      select: { empresaClienteId: true },
+    });
+    if (!obra) throw new NotFoundException("Obra não encontrada");
+
+    const ticketDuplicado = await this.prisma.viagem.findFirst({
+      where: {
+        ticket: input.ticket,
+        obra: { empresaClienteId: obra.empresaClienteId },
+      },
+      select: { id: true },
+    });
+    if (ticketDuplicado) {
+      throw new ConflictException(
+        `Ticket ${input.ticket} já foi lançado para essa empresa.`,
+      );
     }
 
     const { fotoKey, clientId, ...rest } = input;

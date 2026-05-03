@@ -20,10 +20,21 @@ export class MotoristaService {
     });
   }
 
-  async catalogos() {
+  async catalogos(motoristaId: string) {
+    // Motorista vê só a placa que está vinculada como veículo default dele.
+    // Se admin não vinculou nenhuma, mostra a frota inteira como fallback
+    // (motorista escolhe e admin completa o cadastro depois).
+    const motorista = await this.prisma.motorista.findUnique({
+      where: { id: motoristaId },
+      select: { veiculoDefaultId: true },
+    });
+    const veiculosWhere = motorista?.veiculoDefaultId
+      ? { ativo: true, id: motorista.veiculoDefaultId }
+      : { ativo: true };
+
     const [veiculos, materiais, obras, locais] = await Promise.all([
       this.prisma.veiculo.findMany({
-        where: { ativo: true },
+        where: veiculosWhere,
         select: { id: true, placa: true, modelo: true },
         orderBy: { placa: "asc" },
       }),

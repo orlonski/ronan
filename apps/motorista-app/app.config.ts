@@ -42,6 +42,7 @@ const config: ExpoConfig = {
   plugins: [
     "expo-router",
     "expo-secure-store",
+    "@react-native-community/datetimepicker",
     [
       "expo-camera",
       {
@@ -49,9 +50,10 @@ const config: ExpoConfig = {
           "Para tirar foto do ticket de carga e descarga da viagem.",
       },
     ],
+    "./plugins/with-abi-splits",
   ],
   experiments: {
-    typedRoutes: true,
+    typedRoutes: false,
   },
   extra: {
     apiUrl:

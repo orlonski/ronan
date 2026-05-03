@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
+import { DateField } from "@/components/ui/date-field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
@@ -123,12 +124,7 @@ export default function NovoPedagio() {
 
             <View className="gap-2">
               <Label>Data</Label>
-              <Input
-                value={data}
-                onChangeText={setData}
-                placeholder="AAAA-MM-DD"
-                editable={!submitting}
-              />
+              <DateField value={data} onChange={setData} disabled={submitting} />
             </View>
 
             <View className="gap-2">

@@ -20,7 +20,7 @@ export class MotoristaController {
   }
 
   @Get("catalogos")
-  catalogos() {
-    return this.service.catalogos();
+  catalogos(@CurrentUser() user: AuthMotorista) {
+    return this.service.catalogos(user.id);
   }
 }

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { router, Stack } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { router, Stack, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { ArrowLeft, Check, Plus } from "lucide-react-native";
 import {
@@ -11,13 +11,14 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { LocalNovoModal } from "@/components/local-novo-modal";
 import { Button } from "@/components/ui/button";
+import { DateField } from "@/components/ui/date-field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
-import { useCatalogos, useCriarViagem, useMe } from "@/lib/queries";
+import { consumePendingLocal } from "@/lib/local-novo-bridge";
+import { useCatalogos, useCriarViagem, useMe, type Local } from "@/lib/queries";
 
 type FormShape = {
   veiculoId: string;
@@ -58,7 +59,23 @@ export default function NovaViagem() {
   const [foto, setFoto] = useState<CapturedPhoto | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [modalLocal, setModalLocal] = useState<null | "carga" | "descarga">(null);
+  // Locais criados nesta sessão — merged no Select pra garantir que aparecem
+  // mesmo se o cache do TanStack Query ainda não propagou
+  const [extraLocais, setExtraLocais] = useState<Local[]>([]);
+
+  // Quando volta da tela /local-novo, consome o local pendente
+  useFocusEffect(
+    useCallback(() => {
+      const p = consumePendingLocal();
+      if (!p) return;
+      setExtraLocais((cur) =>
+        cur.find((l) => l.id === p.local.id) ? cur : [...cur, p.local],
+      );
+      if (p.side === "carga") setForm((f) => ({ ...f, localCargaId: p.local.id }));
+      if (p.side === "descarga")
+        setForm((f) => ({ ...f, localDescargaId: p.local.id }));
+    }, []),
+  );
 
   // Pré-seleciona placa default
   useEffect(() => {
@@ -96,7 +113,12 @@ export default function NovaViagem() {
   const locaisFiltrados = useMemo(() => {
     if (!cat.data) return { carga: [], descarga: [] };
     const obraId = form.obraId || null;
-    const naObra = cat.data.locais.filter(
+    const todosIds = new Set(cat.data.locais.map((l) => l.id));
+    const merged = [
+      ...cat.data.locais,
+      ...extraLocais.filter((l) => !todosIds.has(l.id)),
+    ];
+    const naObra = merged.filter(
       (l) => !obraId || l.obraId === obraId || l.obraId === null,
     );
     const opt = (l: (typeof naObra)[number]): SelectOption => ({
@@ -108,7 +130,7 @@ export default function NovaViagem() {
       carga: naObra.filter((l) => l.tipo === "CARGA" || l.tipo === "AMBOS").map(opt),
       descarga: naObra.filter((l) => l.tipo === "DESCARGA" || l.tipo === "AMBOS").map(opt),
     };
-  }, [cat.data, form.obraId]);
+  }, [cat.data, form.obraId, extraLocais]);
 
   function update<K extends keyof FormShape>(k: K, v: FormShape[K]) {
     setForm((f) => ({ ...f, [k]: v }));
@@ -214,11 +236,10 @@ export default function NovaViagem() {
             </Field>
 
             <Field label="Data">
-              <Input
+              <DateField
                 value={form.data}
-                onChangeText={(v) => update("data", v)}
-                placeholder="AAAA-MM-DD"
-                editable={!submitting}
+                onChange={(v) => update("data", v)}
+                disabled={submitting}
               />
             </Field>
 
@@ -277,7 +298,12 @@ export default function NovaViagem() {
                 <Button
                   variant="outline"
                   size="icon"
-                  onPress={() => setModalLocal("carga")}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/local-novo",
+                      params: { side: "carga", obraId: form.obraId || "" },
+                    })
+                  }
                 >
                   <Plus size={20} color="#0f172a" />
                 </Button>
@@ -299,7 +325,12 @@ export default function NovaViagem() {
                 <Button
                   variant="outline"
                   size="icon"
-                  onPress={() => setModalLocal("descarga")}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/local-novo",
+                      params: { side: "descarga", obraId: form.obraId || "" },
+                    })
+                  }
                 >
                   <Plus size={20} color="#0f172a" />
                 </Button>
@@ -351,22 +382,6 @@ export default function NovaViagem() {
         </KeyboardAvoidingView>
       )}
 
-      <LocalNovoModal
-        open={modalLocal !== null}
-        onClose={() => setModalLocal(null)}
-        obraId={form.obraId || undefined}
-        tipoSugerido={
-          modalLocal === "descarga"
-            ? "DESCARGA"
-            : modalLocal === "carga"
-              ? "CARGA"
-              : "AMBOS"
-        }
-        onCreated={(novo) => {
-          if (modalLocal === "carga") update("localCargaId", novo.id);
-          if (modalLocal === "descarga") update("localDescargaId", novo.id);
-        }}
-      />
     </SafeAreaView>
   );
 }

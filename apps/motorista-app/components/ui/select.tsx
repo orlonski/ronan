@@ -6,7 +6,6 @@ import {
   Pressable,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -93,13 +92,13 @@ export function Select({
                     placeholder="Buscar..."
                     placeholderTextColor="#94a3b8"
                     className="h-10 flex-1 text-base text-foreground"
-                    autoFocus
                   />
                 </View>
               )}
               <FlatList
                 data={filtered}
                 keyExtractor={(o) => o.value}
+                keyboardShouldPersistTaps="handled"
                 style={{ maxHeight: 400 }}
                 ListEmptyComponent={
                   <Text className="py-8 text-center text-sm text-muted-foreground">
@@ -107,14 +106,14 @@ export function Select({
                   </Text>
                 }
                 renderItem={({ item }) => (
-                  <TouchableOpacity
+                  <Pressable
                     onPress={() => {
                       onChange(item.value);
                       setQuery("");
                       setOpen(false);
                     }}
                     className={cn(
-                      "border-b border-border px-3 py-3",
+                      "border-b border-border px-3 py-3 active:bg-muted",
                       item.value === value && "bg-muted",
                     )}
                   >
@@ -122,7 +121,7 @@ export function Select({
                     {item.sublabel && (
                       <Text className="text-xs text-muted-foreground">{item.sublabel}</Text>
                     )}
-                  </TouchableOpacity>
+                  </Pressable>
                 )}
               />
             </View>
