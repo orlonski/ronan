@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { router, Stack } from "expo-router";
-import { ArrowLeft, Check } from "lucide-react-native";
+import * as Haptics from "expo-haptics";
+import { ArrowLeft, Check, Plus } from "lucide-react-native";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -10,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LocalNovoModal } from "@/components/local-novo-modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -56,6 +58,7 @@ export default function NovaViagem() {
   const [foto, setFoto] = useState<CapturedPhoto | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [modalLocal, setModalLocal] = useState<null | "carga" | "descarga">(null);
 
   // Pré-seleciona placa default
   useEffect(() => {
@@ -128,6 +131,7 @@ export default function NovaViagem() {
     const v = validar();
     if (v) {
       setErro(v);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
     setSubmitting(true);
@@ -153,9 +157,11 @@ export default function NovaViagem() {
         payload,
         foto: foto ?? undefined,
       });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
     } catch (err) {
       setErro((err as Error).message ?? "Erro ao salvar.");
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setSubmitting(false);
     }
@@ -257,25 +263,47 @@ export default function NovaViagem() {
             </View>
 
             <Field label="Local de carga">
-              <Select
-                value={form.localCargaId}
-                onChange={(v) => update("localCargaId", v)}
-                options={locaisFiltrados.carga}
-                placeholder="Escolha o local"
-                searchable
-                emptyMessage="Nenhum local de carga pra essa obra"
-              />
+              <View className="flex-row gap-2">
+                <View className="flex-1">
+                  <Select
+                    value={form.localCargaId}
+                    onChange={(v) => update("localCargaId", v)}
+                    options={locaisFiltrados.carga}
+                    placeholder="Escolha o local"
+                    searchable
+                    emptyMessage="Nenhum local de carga pra essa obra"
+                  />
+                </View>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onPress={() => setModalLocal("carga")}
+                >
+                  <Plus size={20} color="#0f172a" />
+                </Button>
+              </View>
             </Field>
 
             <Field label="Local de descarga">
-              <Select
-                value={form.localDescargaId}
-                onChange={(v) => update("localDescargaId", v)}
-                options={locaisFiltrados.descarga}
-                placeholder="Escolha o local"
-                searchable
-                emptyMessage="Nenhum local de descarga pra essa obra"
-              />
+              <View className="flex-row gap-2">
+                <View className="flex-1">
+                  <Select
+                    value={form.localDescargaId}
+                    onChange={(v) => update("localDescargaId", v)}
+                    options={locaisFiltrados.descarga}
+                    placeholder="Escolha o local"
+                    searchable
+                    emptyMessage="Nenhum local de descarga pra essa obra"
+                  />
+                </View>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onPress={() => setModalLocal("descarga")}
+                >
+                  <Plus size={20} color="#0f172a" />
+                </Button>
+              </View>
             </Field>
 
             <View className="flex-row gap-3">
@@ -322,6 +350,23 @@ export default function NovaViagem() {
           </ScrollView>
         </KeyboardAvoidingView>
       )}
+
+      <LocalNovoModal
+        open={modalLocal !== null}
+        onClose={() => setModalLocal(null)}
+        obraId={form.obraId || undefined}
+        tipoSugerido={
+          modalLocal === "descarga"
+            ? "DESCARGA"
+            : modalLocal === "carga"
+              ? "CARGA"
+              : "AMBOS"
+        }
+        onCreated={(novo) => {
+          if (modalLocal === "carga") update("localCargaId", novo.id);
+          if (modalLocal === "descarga") update("localDescargaId", novo.id);
+        }}
+      />
     </SafeAreaView>
   );
 }

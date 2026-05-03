@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { ArrowDown, ArrowUp, LogOut } from "lucide-react-native";
+import { ArrowDown, ArrowUp, User } from "lucide-react-native";
 import {
   ActivityIndicator,
   FlatList,
@@ -10,8 +10,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { clearTokens } from "@/lib/auth";
-import { setAuthState } from "@/lib/auth-state";
 import { useMe, useViagens, type Viagem } from "@/lib/queries";
 
 const statusVariant: Record<
@@ -36,12 +34,6 @@ const statusLabel: Record<string, string> = {
 export default function Home() {
   const me = useMe();
   const viagens = useViagens();
-
-  async function sair() {
-    await clearTokens();
-    setAuthState(false);
-    router.replace("/login");
-  }
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
@@ -84,8 +76,12 @@ export default function Home() {
                   </Text>
                 )}
               </View>
-              <Button variant="ghost" size="icon" onPress={sair}>
-                <LogOut size={20} color="#0f172a" />
+              <Button
+                variant="ghost"
+                size="icon"
+                onPress={() => router.push("/perfil")}
+              >
+                <User size={20} color="#0f172a" />
               </Button>
             </View>
 
