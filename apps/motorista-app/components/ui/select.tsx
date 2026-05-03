@@ -1,13 +1,6 @@
 import { useState } from "react";
-import { ChevronDown, Search } from "lucide-react-native";
-import {
-  FlatList,
-  Modal,
-  Pressable,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ChevronDown, Search, X } from "lucide-react-native";
+import { FlatList, Modal, Pressable, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +19,7 @@ export function Select({
   disabled,
   className,
   emptyMessage,
+  title,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -35,6 +29,7 @@ export function Select({
   disabled?: boolean;
   className?: string;
   emptyMessage?: string;
+  title?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -48,6 +43,11 @@ export function Select({
           o.sublabel?.toLowerCase().includes(query.toLowerCase()),
       )
     : options;
+
+  function fechar() {
+    setOpen(false);
+    setQuery("");
+  }
 
   return (
     <>
@@ -75,60 +75,85 @@ export function Select({
       <Modal
         visible={open}
         animationType="slide"
-        transparent
-        onRequestClose={() => setOpen(false)}
+        presentationStyle="fullScreen"
+        onRequestClose={fechar}
+        statusBarTranslucent
       >
-        <View className="flex-1 bg-black/50">
-          <Pressable className="flex-1" onPress={() => setOpen(false)} />
-          <SafeAreaView edges={["bottom"]} className="rounded-t-2xl bg-background">
-            <View className="px-4 py-3">
-              <View className="mb-3 h-1 w-12 self-center rounded-full bg-muted" />
-              {searchable && (
-                <View className="mb-3 flex-row items-center gap-2 rounded-lg border border-border bg-background px-3">
-                  <Search size={16} color="#64748b" />
-                  <TextInput
-                    value={query}
-                    onChangeText={setQuery}
-                    placeholder="Buscar..."
-                    placeholderTextColor="#94a3b8"
-                    className="h-10 flex-1 text-base text-foreground"
-                  />
-                </View>
-              )}
-              <FlatList
-                data={filtered}
-                keyExtractor={(o) => o.value}
-                keyboardShouldPersistTaps="handled"
-                style={{ maxHeight: 400 }}
-                ListEmptyComponent={
-                  <Text className="py-8 text-center text-sm text-muted-foreground">
-                    {emptyMessage ?? "Nada encontrado"}
-                  </Text>
-                }
-                renderItem={({ item }) => (
+        {/* Sheet full-screen — search fica fixa no topo, lista scroll abaixo,
+            teclado pode aparecer sem cobrir conteudo importante. */}
+        <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
+          {/* Header brand com search ou só título + X */}
+          <View className="bg-brand px-4 pb-3 pt-14">
+            <View className="mb-3 flex-row items-center gap-3">
+              <Pressable
+                onPress={fechar}
+                className="h-10 w-10 items-center justify-center rounded-full bg-white/15 active:bg-white/25"
+              >
+                <X size={20} color="white" />
+              </Pressable>
+              <Text className="flex-1 text-xl font-bold text-white" numberOfLines={1}>
+                {title ?? placeholder}
+              </Text>
+            </View>
+
+            {searchable && (
+              <View className="flex-row items-center gap-2 rounded-xl bg-white px-3">
+                <Search size={18} color="#64748b" />
+                <TextInput
+                  value={query}
+                  onChangeText={setQuery}
+                  placeholder="Buscar..."
+                  placeholderTextColor="#94a3b8"
+                  className="h-12 flex-1 text-base font-medium text-foreground"
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                />
+                {query.length > 0 && (
                   <Pressable
-                    onPress={() => {
-                      onChange(item.value);
-                      setQuery("");
-                      setOpen(false);
-                    }}
-                    className={cn(
-                      "border-b border-border px-4 py-4 active:bg-muted",
-                      item.value === value && "bg-muted",
-                    )}
+                    onPress={() => setQuery("")}
+                    className="h-8 w-8 items-center justify-center"
                   >
-                    <Text className="text-lg font-semibold text-foreground">
-                      {item.label}
-                    </Text>
-                    {item.sublabel && (
-                      <Text className="text-sm text-muted-foreground">{item.sublabel}</Text>
-                    )}
+                    <X size={18} color="#64748b" />
                   </Pressable>
                 )}
-              />
-            </View>
-          </SafeAreaView>
-        </View>
+              </View>
+            )}
+          </View>
+
+          <FlatList
+            data={filtered}
+            keyExtractor={(o) => o.value}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            contentContainerStyle={{ paddingBottom: 32 }}
+            ListEmptyComponent={
+              <Text className="py-12 text-center text-base text-muted-foreground">
+                {emptyMessage ?? "Nada encontrado"}
+              </Text>
+            }
+            renderItem={({ item }) => (
+              <Pressable
+                onPress={() => {
+                  onChange(item.value);
+                  fechar();
+                }}
+                className={cn(
+                  "border-b border-border px-4 py-4 active:bg-muted",
+                  item.value === value && "bg-muted",
+                )}
+              >
+                <Text className="text-lg font-semibold text-foreground">
+                  {item.label}
+                </Text>
+                {item.sublabel && (
+                  <Text className="mt-0.5 text-sm text-muted-foreground">
+                    {item.sublabel}
+                  </Text>
+                )}
+              </Pressable>
+            )}
+          />
+        </SafeAreaView>
       </Modal>
     </>
   );
