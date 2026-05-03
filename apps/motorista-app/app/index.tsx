@@ -190,7 +190,7 @@ export default function Home() {
                     Nova viagem
                   </Text>
                   <Text className="mt-0.5 text-base font-medium text-primary-foreground/85">
-                    Lançar carga + foto do ticket
+                    Lançar carga, descarga e foto
                   </Text>
                 </View>
                 <Plus size={28} color="white" strokeWidth={2.5} />
@@ -210,13 +210,13 @@ export default function Home() {
                   Pedágio
                 </Text>
                 <Text className="text-sm text-muted-foreground">
-                  Lançar passagem em praça
+                  Registrar passagem em praça
                 </Text>
               </View>
             </Pressable>
 
             <Text className="mt-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
-              Últimas viagens
+              Suas viagens recentes
             </Text>
           </View>
         }

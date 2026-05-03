@@ -226,6 +226,10 @@ model Viagem {
   localDescarga     Local        @relation("LocalDescarga", fields: [localDescargaId], references: [id])
   localDescargaId   String
   valorPedagioTotal Decimal?     @db.Decimal(10, 2)
+  // Coordenadas GPS capturadas pelo motorista no momento do lançamento
+  // (silencioso — null se permissão negada ou GPS indisponível)
+  lat               Float?
+  lng               Float?
   criadoOfflineEm   DateTime?
   sincronizadoEm    DateTime     @default(now())
   alteradoEm        DateTime     @updatedAt

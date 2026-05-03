@@ -75,6 +75,8 @@ export class ViagensMotoristaService {
         localCargaId: rest.localCargaId,
         localDescargaId: rest.localDescargaId,
         valorPedagioTotal: rest.valorPedagioTotal,
+        lat: rest.lat,
+        lng: rest.lng,
         criadoOfflineEm: rest.criadoOfflineEm,
         ...(fotoKey
           ? {

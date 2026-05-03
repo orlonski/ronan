@@ -10,7 +10,9 @@ import {
   CheckCircle2,
   Clock,
   Edit3,
+  ExternalLink,
   History,
+  MapPin,
   Sparkles,
   User as UserIcon,
   X,
@@ -36,6 +38,8 @@ type ViagemDetalhe = {
   status: string;
   observacao: string | null;
   valorPedagioTotal: string | null;
+  lat: number | null;
+  lng: number | null;
   veiculo: { id: string; placa: string; modelo: string | null };
   motorista: { id: string; nome: string; usuario: string };
   obra: { id: string; nome: string; empresaCliente: { nome: string } };
@@ -157,6 +161,15 @@ export default function ViagemDetalhePage({
               </div>
             </div>
           </Card>
+
+          {v.lat != null && v.lng != null && (
+            <Card className="p-5 md:col-span-2">
+              <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
+                <MapPin className="h-4 w-4" /> Onde foi lançada
+              </h3>
+              <MapaViagem lat={v.lat} lng={v.lng} />
+            </Card>
+          )}
 
           {v.fotos.length > 0 && (
             <Card className="p-5 md:col-span-2">
@@ -303,6 +316,36 @@ function formatVal(v: unknown): string {
   if (v === null || v === undefined) return "—";
   if (typeof v === "string") return v;
   return JSON.stringify(v, null, 2);
+}
+
+function MapaViagem({ lat, lng }: { lat: number; lng: number }) {
+  // Mini map estatico via OpenStreetMap (sem API key, free).
+  const bbox = `${lng - 0.01},${lat - 0.01},${lng + 0.01},${lat + 0.01}`;
+  const osmEmbed = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lng}`;
+  const gmaps = `https://www.google.com/maps?q=${lat},${lng}`;
+  return (
+    <div className="space-y-2">
+      <iframe
+        src={osmEmbed}
+        className="h-64 w-full rounded-md border"
+        loading="lazy"
+        title={`Localização ${lat}, ${lng}`}
+      />
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-mono text-muted-foreground">
+          {lat.toFixed(6)}, {lng.toFixed(6)}
+        </span>
+        <a
+          href={gmaps}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-1 text-blue-600 hover:underline"
+        >
+          Abrir no Google Maps <ExternalLink className="h-3 w-3" />
+        </a>
+      </div>
+    </div>
+  );
 }
 
 function FotosViagem({

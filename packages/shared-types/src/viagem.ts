@@ -15,5 +15,7 @@ export const CriarViagemInput = z.object({
   observacao: z.string().max(500).optional(),
   fotoKey: z.string().optional(),
   criadoOfflineEm: z.coerce.date().optional(),
+  lat: z.number().min(-90).max(90).optional(),
+  lng: z.number().min(-180).max(180).optional(),
 });
 export type CriarViagemInput = z.infer<typeof CriarViagemInput>;

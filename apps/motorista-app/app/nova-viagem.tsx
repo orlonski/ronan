@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { router, Stack, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
+import * as Location from "expo-location";
 import { Check, Plus } from "lucide-react-native";
 import {
   ActivityIndicator,
@@ -159,6 +160,10 @@ export default function NovaViagem() {
     }
     setSubmitting(true);
     try {
+      // Captura GPS silenciosamente — se permissao negada ou GPS indisponivel,
+      // viagem salva sem coords (nao bloqueia).
+      const coords = await pegarCoords();
+
       const payload = {
         clientId: makeUuid(),
         veiculoId: form.veiculoId,
@@ -175,6 +180,7 @@ export default function NovaViagem() {
           : undefined,
         observacao: form.observacao.trim() || undefined,
         criadoOfflineEm: new Date().toISOString(),
+        ...(coords ? { lat: coords.lat, lng: coords.lng } : {}),
       };
       await criar({
         payload,
@@ -407,4 +413,27 @@ function makeUuid(): string {
     const v = c === "x" ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
+}
+
+/**
+ * Pega lat/lng do GPS. Pede permissao silenciosamente; se motorista
+ * recusar ou GPS indisponivel, retorna null. Cap em 5s pra nao travar
+ * o salvar viagem se GPS demorar.
+ */
+async function pegarCoords(): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const { status } = await Location.getForegroundPermissionsAsync();
+    if (status !== "granted") {
+      const r = await Location.requestForegroundPermissionsAsync();
+      if (r.status !== "granted") return null;
+    }
+    const result = await Promise.race([
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+    ]);
+    if (!result || !("coords" in result)) return null;
+    return { lat: result.coords.latitude, lng: result.coords.longitude };
+  } catch {
+    return null;
+  }
 }

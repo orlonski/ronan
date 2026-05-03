@@ -51,6 +51,13 @@ const config: ExpoConfig = {
           "Para tirar foto do ticket de carga e descarga da viagem.",
       },
     ],
+    [
+      "expo-location",
+      {
+        locationAlwaysAndWhenInUsePermission:
+          "Para registrar onde a viagem foi lançada.",
+      },
+    ],
     "./plugins/with-abi-splits",
     "./plugins/with-gradle-memory",
   ],
