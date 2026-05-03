@@ -1,15 +1,30 @@
 import { router } from "expo-router";
-import { ArrowDown, ArrowUp, User } from "lucide-react-native";
+import {
+  ArrowDown,
+  ArrowUp,
+  CloudOff,
+  Plus,
+  Receipt,
+  Truck,
+  User,
+  WifiOff,
+} from "lucide-react-native";
 import {
   ActivityIndicator,
   FlatList,
+  Pressable,
   RefreshControl,
   Text,
   View,
 } from "react-native";
+import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { EmptyState } from "@/components/empty-state";
+import { ViagemCardSkeleton } from "@/components/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { usePending } from "@/hooks/use-pending";
+import { drain } from "@/lib/sync";
 import { useMe, useViagens, type Viagem } from "@/lib/queries";
 
 const statusVariant: Record<
@@ -34,6 +49,7 @@ const statusLabel: Record<string, string> = {
 export default function Home() {
   const me = useMe();
   const viagens = useViagens();
+  const pending = usePending();
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
@@ -92,45 +108,96 @@ export default function Home() {
         }
         ListHeaderComponent={
           <View className="mb-3 gap-3">
-            <Button
-              size="lg"
-              className="h-20"
+            {/* Banner pendentes */}
+            {(pending.viagens > 0 || pending.pedagios > 0) && (
+              <Pressable
+                onPress={() => void drain()}
+                className="flex-row items-center gap-3 rounded-2xl border-2 border-warning/30 bg-warning/15 p-4 active:opacity-75"
+              >
+                <View className="h-12 w-12 items-center justify-center rounded-full bg-warning">
+                  <CloudOff size={22} color="#0f172a" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-base font-bold text-foreground">
+                    {pending.viagens + pending.pedagios} aguardando internet
+                  </Text>
+                  <Text className="text-sm text-muted-foreground">
+                    Toque pra tentar sincronizar agora
+                  </Text>
+                </View>
+              </Pressable>
+            )}
+
+            {/* Botão Hero "Nova viagem" */}
+            <Pressable
               onPress={() => router.push("/nova-viagem")}
+              className="overflow-hidden rounded-2xl bg-primary active:opacity-85"
             >
-              <Text className="text-xl font-bold text-primary-foreground">
-                + Nova viagem
-              </Text>
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              className="h-16"
+              <View className="flex-row items-center gap-4 p-5">
+                <View className="h-16 w-16 items-center justify-center rounded-2xl bg-white/20">
+                  <Truck size={32} color="white" strokeWidth={2.5} />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-2xl font-extrabold text-primary-foreground">
+                    Nova viagem
+                  </Text>
+                  <Text className="mt-0.5 text-base font-medium text-primary-foreground/85">
+                    Lançar carga + foto do ticket
+                  </Text>
+                </View>
+                <Plus size={28} color="white" strokeWidth={2.5} />
+              </View>
+            </Pressable>
+
+            {/* Botão Pedágio */}
+            <Pressable
               onPress={() => router.push("/novo-pedagio")}
+              className="flex-row items-center gap-4 rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
             >
-              <Text className="text-lg font-bold text-foreground">
-                Pedágio
-              </Text>
-            </Button>
+              <View className="h-14 w-14 items-center justify-center rounded-2xl bg-secondary">
+                <Receipt size={26} color="#13316b" strokeWidth={2.5} />
+              </View>
+              <View className="flex-1">
+                <Text className="text-lg font-bold text-foreground">
+                  Pedágio
+                </Text>
+                <Text className="text-sm text-muted-foreground">
+                  Lançar passagem em praça
+                </Text>
+              </View>
+            </Pressable>
+
             <Text className="mt-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
               Últimas viagens
             </Text>
           </View>
         }
-        renderItem={({ item }) => <ViagemCard v={item} />}
+        renderItem={({ item, index }) => (
+          <Animated.View entering={FadeInDown.delay(index * 30).duration(220)}>
+            <ViagemCard v={item} />
+          </Animated.View>
+        )}
         ListEmptyComponent={
-          <View className="items-center py-12">
-            {viagens.isLoading ? (
-              <ActivityIndicator />
-            ) : viagens.error ? (
-              <Text className="text-sm text-destructive">
-                Sem internet e sem viagens em cache.
-              </Text>
-            ) : (
-              <Text className="text-sm text-muted-foreground">
-                Nenhuma viagem ainda.
-              </Text>
-            )}
-          </View>
+          viagens.isLoading ? (
+            <View className="gap-3">
+              <ViagemCardSkeleton />
+              <ViagemCardSkeleton />
+              <ViagemCardSkeleton />
+            </View>
+          ) : viagens.error ? (
+            <EmptyState
+              icon={WifiOff}
+              title="Sem viagens disponíveis"
+              description="Sem internet e sem viagens em cache."
+              iconColor="#dc2626"
+            />
+          ) : (
+            <EmptyState
+              icon={Truck}
+              title="Nenhuma viagem ainda"
+              description='Toque em "Nova viagem" pra começar.'
+            />
+          )
         }
       />
     </SafeAreaView>
