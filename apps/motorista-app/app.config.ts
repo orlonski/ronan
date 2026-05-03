@@ -6,6 +6,7 @@ const config: ExpoConfig = {
   scheme: "ronan",
   version: "1.0.0",
   orientation: "portrait",
+  platforms: ["ios", "android"],
   icon: "./assets/icon.png",
   userInterfaceStyle: "light",
   newArchEnabled: true,
@@ -62,6 +63,12 @@ const config: ExpoConfig = {
   updates: {
     fallbackToCacheTimeout: 0,
     url: "https://u.expo.dev/33e8e936-fbac-4bb3-9f98-5de6dc84da53",
+    // Canonical way: requestHeaders sai como meta-data
+    // expo.modules.updates.UPDATES_CONFIGURATION_REQUEST_HEADERS_KEY
+    // (que e o nome que UpdatesConfiguration.kt:253 le).
+    requestHeaders: {
+      "expo-channel-name": "production",
+    },
   },
   extra: {
     apiUrl:
