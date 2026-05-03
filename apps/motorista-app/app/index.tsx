@@ -150,7 +150,7 @@ export default function Home() {
                     Nova versão disponível
                   </Text>
                   <Text className="text-sm text-muted-foreground">
-                    Toque pra atualizar
+                    Toque aqui pra atualizar agora
                   </Text>
                 </View>
               </Pressable>
