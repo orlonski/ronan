@@ -159,6 +159,11 @@ export default function NovaViagem() {
     }
     setSubmitting(true);
     try {
+      // Captura GPS silenciosamente (lazy import — modulo so carrega aqui,
+      // nao no boot do app). Se permissao negada ou GPS indisponivel,
+      // viagem salva sem coords.
+      const coords = await pegarCoords();
+
       const payload = {
         clientId: makeUuid(),
         veiculoId: form.veiculoId,
@@ -175,6 +180,7 @@ export default function NovaViagem() {
           : undefined,
         observacao: form.observacao.trim() || undefined,
         criadoOfflineEm: new Date().toISOString(),
+        ...(coords ? { lat: coords.lat, lng: coords.lng } : {}),
       };
       await criar({
         payload,
@@ -407,4 +413,28 @@ function makeUuid(): string {
     const v = c === "x" ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
+}
+
+/**
+ * GPS lazy: dynamic import so modulo expo-location nao carrega no boot
+ * (top-level import quebrava o expo-router route discovery).
+ * Cap em 5s. Permissao negada / GPS off => null (nao bloqueia salvar).
+ */
+async function pegarCoords(): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const Location = await import("expo-location");
+    const cur = await Location.getForegroundPermissionsAsync();
+    if (cur.status !== "granted") {
+      const r = await Location.requestForegroundPermissionsAsync();
+      if (r.status !== "granted") return null;
+    }
+    const result = await Promise.race([
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+    ]);
+    if (!result || !("coords" in result)) return null;
+    return { lat: result.coords.latitude, lng: result.coords.longitude };
+  } catch {
+    return null;
+  }
 }
