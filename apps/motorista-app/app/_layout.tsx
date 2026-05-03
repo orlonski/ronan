@@ -2,9 +2,9 @@ import "../global.css";
 
 import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack, router, useSegments } from "expo-router";
+import { Redirect, Stack, useSegments } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { ActivityIndicator, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { loadTokens } from "@/lib/auth";
@@ -14,6 +14,10 @@ import {
   subscribeAuth,
 } from "@/lib/auth-state";
 import { startAutoSync } from "@/lib/sync";
+
+// Mantem o splash nativo visivel ate auth resolver. Sem isso, app
+// renderiza brevemente a tela errada antes do redirect.
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -26,6 +30,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const [, setVersion] = useState(0);
   const segments = useSegments();
   const loggedIn = getAuthState() === true;
+  const onLogin = segments[0] === "login";
 
   // Boot: lê tokens do SecureStore uma vez e atualiza o store.
   useEffect(() => {
@@ -58,21 +63,19 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     if (loggedIn) startAutoSync();
   }, [loggedIn]);
 
-  // Redirect logic baseado no estado atual.
+  // Esconde o splash so depois de ready (proxima tela ja decidida).
   useEffect(() => {
     if (!ready) return;
-    const onLogin = segments[0] === "login";
-    if (!loggedIn && !onLogin) router.replace("/login");
-    else if (loggedIn && onLogin) router.replace("/");
-  }, [ready, loggedIn, segments]);
+    SplashScreen.hideAsync().catch(() => {});
+  }, [ready]);
 
-  if (!ready) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator />
-      </View>
-    );
-  }
+  // Splash nativo cobre enquanto !ready
+  if (!ready) return null;
+
+  // Redirect declarativo (preferido vs router.replace imperativo).
+  // Evita double-mount da rota destino.
+  if (!loggedIn && !onLogin) return <Redirect href="/login" />;
+  if (loggedIn && onLogin) return <Redirect href="/" />;
 
   return <>{children}</>;
 }
