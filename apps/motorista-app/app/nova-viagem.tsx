@@ -20,7 +20,13 @@ import { Select, type SelectOption } from "@/components/ui/select";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { humanizeApiError } from "@/lib/api";
 import { consumePendingLocal } from "@/lib/local-novo-bridge";
-import { useCatalogos, useCriarViagem, useMe, type Local } from "@/lib/queries";
+import {
+  useCalcularRota,
+  useCatalogos,
+  useCriarViagem,
+  useMe,
+  type Local,
+} from "@/lib/queries";
 
 type FormShape = {
   veiculoId: string;
@@ -67,6 +73,18 @@ export default function NovaViagem() {
   // GPS pré-aquecido em background — modulo carrega + permissao + fix
   // enquanto motorista preenche o form. Quando toca Salvar, usa o que ja tem.
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  // Rastreia se motorista editou KM manualmente — se sim, parou de auto-preencher
+  const [kmEditadoManual, setKmEditadoManual] = useState(false);
+
+  const rota = useCalcularRota(form.localCargaId, form.localDescargaId);
+
+  // Auto-preenche KM com valor calculado pelo OSRM, se motorista nao editou
+  useEffect(() => {
+    if (kmEditadoManual) return;
+    if (!rota.data || rota.data.km === null) return;
+    const novoKm = rota.data.km;
+    setForm((f) => (f.km === novoKm ? f : { ...f, km: novoKm }));
+  }, [rota.data, kmEditadoManual]);
 
   useEffect(() => {
     let alive = true;
@@ -358,9 +376,17 @@ export default function NovaViagem() {
                 <Label>Km rodados</Label>
                 <Input
                   value={form.km}
-                  onChangeText={(v) => update("km", v)}
+                  onChangeText={(v) => {
+                    setKmEditadoManual(true);
+                    update("km", v);
+                  }}
                   keyboardType="decimal-pad"
                   placeholder="0,00"
+                />
+                <KmHint
+                  rota={rota.data ?? null}
+                  loading={rota.isFetching}
+                  editado={kmEditadoManual}
                 />
               </View>
               <View className="flex-1 gap-2">
@@ -417,6 +443,39 @@ function Field({
       {children}
       {hint && <Text className="text-xs text-muted-foreground">{hint}</Text>}
     </View>
+  );
+}
+
+function KmHint({
+  rota,
+  loading,
+  editado,
+}: {
+  rota: { km: string; duracaoSegundos: number; fonte: string } | { km: null; erro: string } | null;
+  loading: boolean;
+  editado: boolean;
+}) {
+  if (loading) {
+    return (
+      <Text className="text-xs text-muted-foreground">Calculando rota…</Text>
+    );
+  }
+  if (!rota) return null;
+  if (rota.km === null) {
+    return <Text className="text-xs text-muted-foreground">{rota.erro}</Text>;
+  }
+  const minutos = Math.round(rota.duracaoSegundos / 60);
+  if (editado) {
+    return (
+      <Text className="text-xs text-muted-foreground">
+        Editado manualmente — auto-calculado: {rota.km} km
+      </Text>
+    );
+  }
+  return (
+    <Text className="text-xs font-medium text-success">
+      ✓ Calculado automaticamente ({rota.km} km · {minutos} min)
+    </Text>
   );
 }
 

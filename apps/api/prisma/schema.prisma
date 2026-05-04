@@ -198,10 +198,28 @@ model Local {
 
   viagensCarga    Viagem[] @relation("LocalCarga")
   viagensDescarga Viagem[] @relation("LocalDescarga")
+  rotasOrigem     RotaCache[] @relation("RotaOrigem")
+  rotasDestino    RotaCache[] @relation("RotaDestino")
 
   @@index([obraId])
   @@index([cidade, uf])
   @@map("locais")
+}
+
+/// Cache do KM "ideal" da rota carga→descarga calculado pelo OSRM.
+/// Re-calcula se calculadoEm > 90 dias (rotas mudam pouco; obras mais).
+model RotaCache {
+  id              String   @id @default(uuid())
+  localOrigemId   String
+  localOrigem     Local    @relation("RotaOrigem", fields: [localOrigemId], references: [id], onDelete: Cascade)
+  localDestinoId  String
+  localDestino    Local    @relation("RotaDestino", fields: [localDestinoId], references: [id], onDelete: Cascade)
+  km              Decimal  @db.Decimal(10, 2)
+  duracaoSegundos Int
+  calculadoEm     DateTime @default(now())
+
+  @@unique([localOrigemId, localDestinoId])
+  @@map("rota_cache")
 }
 
 model Viagem {

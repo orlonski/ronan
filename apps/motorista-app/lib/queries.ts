@@ -311,6 +311,27 @@ export type SugestaoLista = {
   textoCompleto: string;
 };
 
+export type RotaCalculada =
+  | { km: string; duracaoSegundos: number; fonte: "osrm" | "cache" }
+  | { km: null; erro: string };
+
+/**
+ * Calcula KM "oficial" da rota carga→descarga via OSRM no backend.
+ * Cache server-side (90 dias), entao staleTime infinito no client.
+ */
+export function useCalcularRota(origemId?: string, destinoId?: string) {
+  return useQuery({
+    queryKey: ["rota-calcular", origemId, destinoId],
+    enabled: !!origemId && !!destinoId && origemId !== destinoId,
+    staleTime: Infinity,
+    retry: false,
+    queryFn: () =>
+      api.get<RotaCalculada>(
+        `/m/rotas/calcular?origem=${origemId}&destino=${destinoId}`,
+      ),
+  });
+}
+
 export type SugestaoEndereco = {
   fonte: "VIACEP" | "GOOGLE";
   placeId?: string;
