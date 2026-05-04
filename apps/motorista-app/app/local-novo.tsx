@@ -104,7 +104,8 @@ export default function LocalNovo() {
         cep: cepDigits.length === 8 ? cepDigits : undefined,
         pontoReferencia: pontoReferencia.trim() || undefined,
         tipo,
-        obraId: params.obraId,
+        // String vazia "" falha UUID; manda undefined se nao tem obra selecionada
+        obraId: params.obraId && params.obraId.length > 0 ? params.obraId : undefined,
         lat: lat ?? undefined,
         lng: lng ?? undefined,
       });
