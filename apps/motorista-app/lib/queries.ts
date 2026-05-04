@@ -118,6 +118,24 @@ export function useViagens() {
   return useQuery(offlineCacheQuery<Viagem[]>("viagens", "/m/viagens"));
 }
 
+export type ViagemDetalhe = Viagem & {
+  observacao: string | null;
+  valorPedagioTotal: string | null;
+  lat: number | null;
+  lng: number | null;
+  obra: { id: string; nome: string; empresaCliente?: { id: string; nome: string } };
+  localCarga: Viagem["localCarga"] & { logradouro: string };
+  localDescarga: Viagem["localDescarga"] & { logradouro: string };
+};
+
+export function useViagemDetalhe(id: string) {
+  return useQuery({
+    queryKey: ["viagem-detalhe", id],
+    enabled: !!id,
+    queryFn: () => api.get<ViagemDetalhe>(`/m/viagens/${id}`),
+  });
+}
+
 export function usePedagios() {
   return useQuery(offlineCacheQuery<Pedagio[]>("pedagios", "/m/pedagios"));
 }

@@ -18,6 +18,25 @@ const VIAGEM_INCLUDE = {
   fotos: { select: { id: true, storageKey: true } },
 } satisfies Prisma.ViagemInclude;
 
+const VIAGEM_DETALHE_INCLUDE = {
+  veiculo: { select: { id: true, placa: true, modelo: true } },
+  obra: {
+    select: {
+      id: true,
+      nome: true,
+      empresaCliente: { select: { id: true, nome: true } },
+    },
+  },
+  material: { select: { id: true, nome: true } },
+  localCarga: {
+    select: { id: true, nome: true, logradouro: true, cidade: true, uf: true },
+  },
+  localDescarga: {
+    select: { id: true, nome: true, logradouro: true, cidade: true, uf: true },
+  },
+  fotos: { select: { id: true, storageKey: true } },
+} satisfies Prisma.ViagemInclude;
+
 @Injectable()
 export class ViagensMotoristaService {
   constructor(
@@ -32,6 +51,30 @@ export class ViagensMotoristaService {
       orderBy: { data: "desc" },
       take: 100,
     });
+  }
+
+  async detalhe(motoristaId: string, viagemId: string) {
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { id: viagemId },
+      include: VIAGEM_DETALHE_INCLUDE,
+    });
+    if (!viagem) throw new NotFoundException("Viagem não encontrada.");
+    if (viagem.motoristaId !== motoristaId) {
+      throw new ForbiddenException("Esta viagem não é sua.");
+    }
+    return viagem;
+  }
+
+  async fotoBuffer(motoristaId: string, viagemId: string, fotoId: string) {
+    const foto = await this.prisma.ticketFoto.findFirst({
+      where: { id: fotoId, viagemId, viagem: { motoristaId } },
+      select: { storageKey: true },
+    });
+    if (!foto) throw new NotFoundException("Foto não encontrada.");
+    const buffer = await this.uploads.getObjectBuffer(foto.storageKey);
+    const ext = foto.storageKey.split(".").pop()?.toLowerCase();
+    const contentType = ext === "png" ? "image/png" : "image/jpeg";
+    return { buffer, contentType };
   }
 
   /**

@@ -291,7 +291,10 @@ function ViagemCard({ v, onExcluir }: { v: Viagem; onExcluir: () => void }) {
   const podeExcluir = v.status === "ENVIADA";
 
   const card = (
-    <View className="rounded-2xl border-2 border-border bg-card p-4">
+    <Pressable
+      onPress={() => router.push(`/viagens/${v.id}`)}
+      className="rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
+    >
       <View className="flex-row items-start justify-between gap-3">
         <View className="flex-1">
           <Text className="text-lg font-bold text-foreground" numberOfLines={1}>
@@ -327,7 +330,7 @@ function ViagemCard({ v, onExcluir }: { v: Viagem; onExcluir: () => void }) {
         <Stat label="km" value={fmtNum(v.km, 2)} />
         <Stat label="ticket" value={v.ticket} />
       </View>
-    </View>
+    </Pressable>
   );
 
   if (!podeExcluir) return card;
