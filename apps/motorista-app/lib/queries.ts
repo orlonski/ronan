@@ -130,6 +130,7 @@ export type ResumoMes = {
   totalKm: string;
   totalPedagio: string;
   porStatus: { aguardando: number; conferida: number; divergente: number };
+  pedagios: { count: number; totalValor: string };
 };
 
 /** Home: top 10 mais recentes, sem filtro. */
@@ -222,8 +223,62 @@ export function useViagemDetalhe(id: string) {
   });
 }
 
+export type ListaPedagios = { itens: Pedagio[]; nextCursor: string | null };
+
 export function usePedagios() {
-  return useQuery(offlineCacheQuery<Pedagio[]>("pedagios", "/m/pedagios"));
+  const cacheKey = "q:pedagios";
+  return useQuery({
+    queryKey: ["pedagios"],
+    staleTime: 60_000,
+    queryFn: async (): Promise<Pedagio[]> => {
+      try {
+        const fresh = await api.get<ListaPedagios>("/m/pedagios?limit=10");
+        void cachePut(cacheKey, fresh.itens).catch(() => {});
+        return fresh.itens;
+      } catch (err) {
+        if (isOfflineError(err)) {
+          try {
+            const cached = await cacheGet<Pedagio[]>(cacheKey);
+            if (cached) return cached;
+          } catch {
+            /* */
+          }
+        }
+        throw err;
+      }
+    },
+  });
+}
+
+export function usePedagiosFiltrados(params: { mes?: string }) {
+  return useInfiniteQuery({
+    queryKey: ["pedagios-filtrados", params],
+    initialPageParam: undefined as string | undefined,
+    staleTime: 30_000,
+    queryFn: async ({ pageParam }) => {
+      const qs = new URLSearchParams();
+      if (params.mes) qs.set("mes", params.mes);
+      qs.set("limit", "30");
+      if (pageParam) qs.set("cursor", pageParam);
+      return api.get<ListaPedagios>(`/m/pedagios?${qs.toString()}`);
+    },
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
+}
+
+export function useExcluirPedagio() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (pedagioId: string) => {
+      await api.delete(`/m/pedagios/${pedagioId}`);
+      return pedagioId;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["pedagios"] });
+      void qc.invalidateQueries({ queryKey: ["pedagios-filtrados"] });
+      void qc.invalidateQueries({ queryKey: ["resumo-mes"] });
+    },
+  });
 }
 
 /**

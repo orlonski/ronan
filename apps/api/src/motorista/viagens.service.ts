@@ -74,8 +74,13 @@ export class ViagensMotoristaService {
 
   async resumoMes(motoristaId: string, mes: string) {
     const where = this.buildWhere(motoristaId, { mes });
+    const { inicio, fim } = mesRange(mes);
+    const wherePedagio = {
+      motoristaId,
+      data: { gte: inicio, lt: fim },
+    } satisfies Prisma.PedagioWhereInput;
 
-    const [agg, porStatus] = await this.prisma.$transaction([
+    const [agg, porStatus, pedagiosAgg] = await this.prisma.$transaction([
       this.prisma.viagem.aggregate({
         where,
         _count: { _all: true },
@@ -86,6 +91,11 @@ export class ViagensMotoristaService {
         by: ["status"],
         _count: { _all: true },
         orderBy: { status: "asc" },
+      }),
+      this.prisma.pedagio.aggregate({
+        where: wherePedagio,
+        _count: { _all: true },
+        _sum: { valor: true },
       }),
     ]);
 
@@ -105,6 +115,10 @@ export class ViagensMotoristaService {
       totalKm: (agg._sum.km ?? "0").toString(),
       totalPedagio: (agg._sum.valorPedagioTotal ?? "0").toString(),
       porStatus: contadores,
+      pedagios: {
+        count: pedagiosAgg._count._all,
+        totalValor: (pedagiosAgg._sum.valor ?? "0").toString(),
+      },
     };
   }
 
@@ -263,7 +277,7 @@ function mapStatusToGrupo(
 }
 
 /** mes = "YYYY-MM" → [primeiro dia 00:00, primeiro dia mes seguinte 00:00) */
-function mesRange(mes: string): { inicio: Date; fim: Date } {
+export function mesRange(mes: string): { inicio: Date; fim: Date } {
   const [anoStr, mesStr] = mes.split("-");
   const ano = Number(anoStr);
   const m = Number(mesStr);

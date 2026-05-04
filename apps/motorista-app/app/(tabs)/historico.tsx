@@ -1,13 +1,18 @@
 import { useMemo, useState } from "react";
 import { router } from "expo-router";
+import * as Haptics from "expo-haptics";
 import {
   ArrowDown,
   ArrowUp,
   Calendar,
+  MapPin,
+  Receipt,
+  Trash2,
   WifiOff,
 } from "lucide-react-native";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   RefreshControl,
@@ -15,17 +20,25 @@ import {
   Text,
   View,
 } from "react-native";
+import { Swipeable } from "react-native-gesture-handler";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { EmptyState } from "@/components/empty-state";
 import { ViagemCardSkeleton } from "@/components/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { humanizeApiError } from "@/lib/api";
 import {
+  useExcluirPedagio,
+  usePedagiosFiltrados,
   useResumoMes,
   useViagensFiltradas,
   type GrupoStatus,
+  type Pedagio,
   type Viagem,
 } from "@/lib/queries";
+
+type Aba = "viagens" | "pedagios";
 
 const statusVariant: Record<
   string,
@@ -56,200 +69,358 @@ const FILTROS: { key: "TODAS" | GrupoStatus; label: string }[] = [
 export default function HistoricoScreen() {
   const meses = useMemo(() => ultimosMeses(6), []);
   const [mesSelecionado, setMesSelecionado] = useState(meses[0].chave);
+  const [aba, setAba] = useState<Aba>("viagens");
   const [filtroStatus, setFiltroStatus] = useState<"TODAS" | GrupoStatus>(
     "TODAS",
   );
 
   const resumo = useResumoMes(mesSelecionado);
-  const lista = useViagensFiltradas({
+  const viagens = useViagensFiltradas({
     mes: mesSelecionado,
     status: filtroStatus === "TODAS" ? undefined : filtroStatus,
   });
+  const pedagios = usePedagiosFiltrados({ mes: mesSelecionado });
+  const excluirPedagio = useExcluirPedagio();
 
-  const itens = useMemo(
-    () => lista.data?.pages.flatMap((p) => p.itens) ?? [],
-    [lista.data],
+  const itensViagens = useMemo(
+    () => viagens.data?.pages.flatMap((p) => p.itens) ?? [],
+    [viagens.data],
+  );
+  const itensPedagios = useMemo(
+    () => pedagios.data?.pages.flatMap((p) => p.itens) ?? [],
+    [pedagios.data],
+  );
+
+  function confirmarExcluirPedagio(p: Pedagio) {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert(
+      "Excluir este pedágio?",
+      `Apagar pedágio de ${p.pracaPedagio} (R$ ${fmtNum(p.valor, 2)})?`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Excluir",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await excluirPedagio.mutateAsync(p.id);
+              void Haptics.notificationAsync(
+                Haptics.NotificationFeedbackType.Success,
+              );
+            } catch (err) {
+              Alert.alert("Não foi possível excluir", humanizeApiError(err));
+              void Haptics.notificationAsync(
+                Haptics.NotificationFeedbackType.Error,
+              );
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  const totalViagensMes = resumo.data?.totalViagens ?? 0;
+  const totalPedagiosMes = resumo.data?.pedagios.count ?? 0;
+
+  const headerComponent = (
+    <View className="mb-2 gap-3">
+      {/* Toggle Viagens/Pedagios */}
+      <View className="flex-row gap-2">
+        <AbaButton
+          ativo={aba === "viagens"}
+          onPress={() => setAba("viagens")}
+          label="Viagens"
+          count={totalViagensMes}
+        />
+        <AbaButton
+          ativo={aba === "pedagios"}
+          onPress={() => setAba("pedagios")}
+          label="Pedágios"
+          count={totalPedagiosMes}
+        />
+      </View>
+
+      {/* Chips de mes */}
+      <View>
+        <Text className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+          Mês
+        </Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 8 }}
+        >
+          {meses.map((m) => {
+            const ativo = m.chave === mesSelecionado;
+            return (
+              <Pressable
+                key={m.chave}
+                onPress={() => setMesSelecionado(m.chave)}
+                className={`rounded-full border-2 px-4 py-2 ${
+                  ativo
+                    ? "border-primary bg-primary"
+                    : "border-border bg-card"
+                }`}
+              >
+                <Text
+                  className={`text-base font-bold ${
+                    ativo ? "text-primary-foreground" : "text-foreground"
+                  }`}
+                >
+                  {m.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      {/* Card resumo */}
+      {resumo.data && (
+        <View className="rounded-2xl border-2 border-border bg-card p-4">
+          <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            Resumo de {fmtMesLongo(resumo.data.mes)}
+          </Text>
+          {resumo.data.totalViagens === 0 && resumo.data.pedagios.count === 0 ? (
+            <Text className="mt-2 text-base text-muted-foreground">
+              Nenhuma movimentação nesse mês.
+            </Text>
+          ) : (
+            <>
+              {resumo.data.totalViagens > 0 && (
+                <View className="mt-3 flex-row gap-6">
+                  <ResumoStat
+                    label="viagens"
+                    value={String(resumo.data.totalViagens)}
+                  />
+                  <ResumoStat
+                    label="t"
+                    value={fmtNum(resumo.data.totalToneladas, 1)}
+                  />
+                  <ResumoStat
+                    label="km"
+                    value={fmtNum(resumo.data.totalKm, 0)}
+                  />
+                </View>
+              )}
+              {resumo.data.pedagios.count > 0 && (
+                <View
+                  className={`${resumo.data.totalViagens > 0 ? "mt-3 border-t-2 border-border pt-3" : "mt-3"} flex-row gap-6`}
+                >
+                  <ResumoStat
+                    label="pedágios"
+                    value={String(resumo.data.pedagios.count)}
+                  />
+                  <ResumoStat
+                    label="total"
+                    value={`R$ ${fmtNum(resumo.data.pedagios.totalValor, 2)}`}
+                  />
+                </View>
+              )}
+            </>
+          )}
+        </View>
+      )}
+
+      {/* Chips de status (apenas viagens) */}
+      {aba === "viagens" && (
+        <View>
+          <Text className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            Filtrar
+          </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 8 }}
+          >
+            {FILTROS.map((f) => {
+              const ativo = f.key === filtroStatus;
+              return (
+                <Pressable
+                  key={f.key}
+                  onPress={() => setFiltroStatus(f.key)}
+                  className={`rounded-full border-2 px-4 py-2 ${
+                    ativo
+                      ? "border-foreground bg-foreground"
+                      : "border-border bg-card"
+                  }`}
+                >
+                  <Text
+                    className={`text-sm font-bold ${
+                      ativo ? "text-background" : "text-foreground"
+                    }`}
+                  >
+                    {f.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
+    </View>
   );
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
-      {/* Header brand */}
       <View className="bg-brand px-5 pb-4 pt-14">
         <Text className="text-xs font-semibold uppercase tracking-wider text-white/70">
           Histórico
         </Text>
         <Text className="mt-0.5 text-2xl font-bold text-white">
-          Suas viagens por mês
+          {aba === "viagens" ? "Suas viagens por mês" : "Seus pedágios por mês"}
         </Text>
       </View>
 
-      <FlatList<Viagem>
-        data={itens}
-        keyExtractor={(v) => v.id}
-        contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }}
-        refreshControl={
-          <RefreshControl
-            refreshing={lista.isFetching && !lista.isFetchingNextPage}
-            onRefresh={() => {
-              void lista.refetch();
-              void resumo.refetch();
-            }}
-          />
-        }
-        onEndReached={() => {
-          if (lista.hasNextPage && !lista.isFetchingNextPage) {
-            void lista.fetchNextPage();
+      {aba === "viagens" ? (
+        <FlatList<Viagem>
+          data={itensViagens}
+          keyExtractor={(v) => v.id}
+          contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={viagens.isFetching && !viagens.isFetchingNextPage}
+              onRefresh={() => {
+                void viagens.refetch();
+                void resumo.refetch();
+              }}
+            />
           }
-        }}
-        onEndReachedThreshold={0.6}
-        ListHeaderComponent={
-          <View className="mb-2 gap-3">
-            {/* Chips de mes (horizontal) */}
-            <View>
-              <Text className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Mês
-              </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ gap: 8 }}
-              >
-                {meses.map((m) => {
-                  const ativo = m.chave === mesSelecionado;
-                  return (
-                    <Pressable
-                      key={m.chave}
-                      onPress={() => setMesSelecionado(m.chave)}
-                      className={`rounded-full border-2 px-4 py-2 ${
-                        ativo
-                          ? "border-primary bg-primary"
-                          : "border-border bg-card"
-                      }`}
-                    >
-                      <Text
-                        className={`text-base font-bold ${
-                          ativo ? "text-primary-foreground" : "text-foreground"
-                        }`}
-                      >
-                        {m.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            </View>
-
-            {/* Card resumo do mes selecionado */}
-            {resumo.data && (
-              <View className="rounded-2xl border-2 border-border bg-card p-4">
-                <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Resumo
-                </Text>
-                {resumo.data.totalViagens === 0 ? (
-                  <Text className="mt-2 text-base text-muted-foreground">
-                    Nenhuma viagem em {fmtMesLongo(resumo.data.mes)}.
-                  </Text>
-                ) : (
-                  <>
-                    <View className="mt-3 flex-row gap-6">
-                      <ResumoStat
-                        label="viagens"
-                        value={String(resumo.data.totalViagens)}
-                      />
-                      <ResumoStat
-                        label="t"
-                        value={fmtNum(resumo.data.totalToneladas, 1)}
-                      />
-                      <ResumoStat
-                        label="km"
-                        value={fmtNum(resumo.data.totalKm, 0)}
-                      />
-                    </View>
-                    {parseFloat(resumo.data.totalPedagio) > 0 && (
-                      <View className="mt-3 border-t-2 border-border pt-3">
-                        <ResumoStat
-                          label="pedágio"
-                          value={`R$ ${fmtNum(resumo.data.totalPedagio, 2)}`}
-                        />
-                      </View>
-                    )}
-                  </>
-                )}
+          onEndReached={() => {
+            if (viagens.hasNextPage && !viagens.isFetchingNextPage) {
+              void viagens.fetchNextPage();
+            }
+          }}
+          onEndReachedThreshold={0.6}
+          ListHeaderComponent={headerComponent}
+          renderItem={({ item, index }) => (
+            <Animated.View
+              entering={FadeInDown.delay(index * 20).duration(180)}
+            >
+              <ViagemCard v={item} />
+            </Animated.View>
+          )}
+          ListEmptyComponent={
+            viagens.isLoading ? (
+              <View className="gap-3">
+                <ViagemCardSkeleton />
+                <ViagemCardSkeleton />
+                <ViagemCardSkeleton />
               </View>
-            )}
-
-            {/* Chips de status */}
-            <View>
-              <Text className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Filtrar
-              </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ gap: 8 }}
-              >
-                {FILTROS.map((f) => {
-                  const ativo = f.key === filtroStatus;
-                  return (
-                    <Pressable
-                      key={f.key}
-                      onPress={() => setFiltroStatus(f.key)}
-                      className={`rounded-full border-2 px-4 py-2 ${
-                        ativo
-                          ? "border-foreground bg-foreground"
-                          : "border-border bg-card"
-                      }`}
-                    >
-                      <Text
-                        className={`text-sm font-bold ${
-                          ativo ? "text-background" : "text-foreground"
-                        }`}
-                      >
-                        {f.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            </View>
-          </View>
-        }
-        renderItem={({ item, index }) => (
-          <Animated.View entering={FadeInDown.delay(index * 20).duration(180)}>
-            <ViagemCard v={item} />
-          </Animated.View>
-        )}
-        ListEmptyComponent={
-          lista.isLoading ? (
-            <View className="gap-3">
-              <ViagemCardSkeleton />
-              <ViagemCardSkeleton />
-              <ViagemCardSkeleton />
-            </View>
-          ) : lista.error ? (
-            <EmptyState
-              icon={WifiOff}
-              title="Sem internet"
-              description="Conecte pra ver o histórico."
-              iconColor="#dc2626"
+            ) : viagens.error ? (
+              <EmptyState
+                icon={WifiOff}
+                title="Sem internet"
+                description="Conecte pra ver o histórico."
+                iconColor="#dc2626"
+              />
+            ) : (
+              <EmptyState
+                icon={Calendar}
+                title="Nenhuma viagem"
+                description="Tente outro mês ou troque o filtro."
+              />
+            )
+          }
+          ListFooterComponent={
+            viagens.isFetchingNextPage ? (
+              <View className="items-center py-4">
+                <ActivityIndicator />
+              </View>
+            ) : null
+          }
+        />
+      ) : (
+        <FlatList<Pedagio>
+          data={itensPedagios}
+          keyExtractor={(p) => p.id}
+          contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={pedagios.isFetching && !pedagios.isFetchingNextPage}
+              onRefresh={() => {
+                void pedagios.refetch();
+                void resumo.refetch();
+              }}
             />
-          ) : (
-            <EmptyState
-              icon={Calendar}
-              title="Nenhuma viagem"
-              description="Tente outro mês ou troque o filtro."
-            />
-          )
-        }
-        ListFooterComponent={
-          lista.isFetchingNextPage ? (
-            <View className="items-center py-4">
-              <ActivityIndicator />
-            </View>
-          ) : null
-        }
-      />
+          }
+          onEndReached={() => {
+            if (pedagios.hasNextPage && !pedagios.isFetchingNextPage) {
+              void pedagios.fetchNextPage();
+            }
+          }}
+          onEndReachedThreshold={0.6}
+          ListHeaderComponent={headerComponent}
+          renderItem={({ item, index }) => (
+            <Animated.View
+              entering={FadeInDown.delay(index * 20).duration(180)}
+            >
+              <PedagioCard
+                p={item}
+                onExcluir={() => confirmarExcluirPedagio(item)}
+              />
+            </Animated.View>
+          )}
+          ListEmptyComponent={
+            pedagios.isLoading ? (
+              <View className="gap-3">
+                <ViagemCardSkeleton />
+                <ViagemCardSkeleton />
+              </View>
+            ) : pedagios.error ? (
+              <EmptyState
+                icon={WifiOff}
+                title="Sem internet"
+                description="Conecte pra ver os pedágios."
+                iconColor="#dc2626"
+              />
+            ) : (
+              <EmptyState
+                icon={Receipt}
+                title="Nenhum pedágio"
+                description='Cadastre tocando em "Pedágio" na tela inicial.'
+              />
+            )
+          }
+          ListFooterComponent={
+            pedagios.isFetchingNextPage ? (
+              <View className="items-center py-4">
+                <ActivityIndicator />
+              </View>
+            ) : null
+          }
+        />
+      )}
     </SafeAreaView>
+  );
+}
+
+function AbaButton({
+  ativo,
+  onPress,
+  label,
+  count,
+}: {
+  ativo: boolean;
+  onPress: () => void;
+  label: string;
+  count: number;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      className={`flex-1 items-center rounded-2xl border-2 py-3 ${
+        ativo ? "border-primary bg-primary" : "border-border bg-card"
+      }`}
+    >
+      <Text
+        className={`text-base font-bold ${
+          ativo ? "text-primary-foreground" : "text-foreground"
+        }`}
+      >
+        {label} {count > 0 ? `(${count})` : ""}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -304,6 +475,71 @@ function ViagemCard({ v }: { v: Viagem }) {
         <Stat label="ticket" value={v.ticket} />
       </View>
     </Pressable>
+  );
+}
+
+function PedagioCard({
+  p,
+  onExcluir,
+}: {
+  p: Pedagio;
+  onExcluir: () => void;
+}) {
+  const card = (
+    <View className="rounded-2xl border-2 border-border bg-card p-4">
+      <View className="flex-row items-start justify-between gap-3">
+        <Text
+          className="text-sm font-medium text-muted-foreground"
+          style={{ fontVariant: ["tabular-nums"] }}
+        >
+          {fmtData(p.data)} · {p.veiculo.placa}
+        </Text>
+        {p.viagem && (
+          <Badge variant="outline">Ticket {p.viagem.ticket}</Badge>
+        )}
+      </View>
+
+      <View className="mt-2 flex-row items-center gap-2">
+        <MapPin size={18} color="#13316b" />
+        <Text
+          className="flex-1 text-lg font-bold text-foreground"
+          numberOfLines={2}
+        >
+          {p.pracaPedagio}
+        </Text>
+      </View>
+
+      <View className="mt-3 border-t-2 border-border pt-3">
+        <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+          valor pago
+        </Text>
+        <Text
+          className="text-2xl font-extrabold text-foreground"
+          style={{ fontVariant: ["tabular-nums"] }}
+        >
+          R$ {fmtNum(p.valor, 2)}
+        </Text>
+      </View>
+    </View>
+  );
+
+  return (
+    <Swipeable
+      renderRightActions={() => (
+        <View className="ml-2 flex-row items-stretch">
+          <Button
+            variant="destructive"
+            className="h-full w-24 rounded-2xl"
+            onPress={onExcluir}
+          >
+            <Trash2 size={22} color="white" />
+          </Button>
+        </View>
+      )}
+      overshootRight={false}
+    >
+      {card}
+    </Swipeable>
   );
 }
 

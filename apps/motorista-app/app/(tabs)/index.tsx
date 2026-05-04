@@ -252,11 +252,15 @@ export default function Home() {
                   <ResumoStat label="t" value={fmtNum(resumo.data.totalToneladas, 1)} />
                   <ResumoStat label="km" value={fmtNum(resumo.data.totalKm, 0)} />
                 </View>
-                {parseFloat(resumo.data.totalPedagio) > 0 && (
-                  <View className="mt-3 border-t-2 border-border pt-3">
+                {resumo.data.pedagios.count > 0 && (
+                  <View className="mt-3 flex-row gap-6 border-t-2 border-border pt-3">
                     <ResumoStat
-                      label="pedágio"
-                      value={`R$ ${fmtNum(resumo.data.totalPedagio, 2)}`}
+                      label="pedágios"
+                      value={String(resumo.data.pedagios.count)}
+                    />
+                    <ResumoStat
+                      label="total"
+                      value={`R$ ${fmtNum(resumo.data.pedagios.totalValor, 2)}`}
                     />
                   </View>
                 )}
