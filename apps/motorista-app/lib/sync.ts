@@ -28,6 +28,15 @@ function notify(): void {
   for (const l of listeners) l();
 }
 
+/**
+ * Apaga uma viagem pendente do outbox (motorista pode descartar antes
+ * de sincronizar). Dispara notify pra UI re-renderizar.
+ */
+export async function descartarViagemPendente(clientId: string): Promise<void> {
+  await deletePendingViagem(clientId);
+  notify();
+}
+
 export async function enqueueViagem(
   payload: Record<string, unknown>,
   foto?: { uri: string; mime: string },

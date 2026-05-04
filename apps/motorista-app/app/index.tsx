@@ -27,7 +27,6 @@ import { ViagemCardSkeleton } from "@/components/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { usePending } from "@/hooks/use-pending";
-import { drain } from "@/lib/sync";
 import { useMe, useViagens, type Viagem } from "@/lib/queries";
 
 const statusVariant: Record<
@@ -156,10 +155,10 @@ export default function Home() {
               </Pressable>
             )}
 
-            {/* Banner pendentes */}
+            {/* Banner pendentes — toca pra ver lista + excluir/sincronizar */}
             {(pending.viagens > 0 || pending.pedagios > 0) && (
               <Pressable
-                onPress={() => void drain()}
+                onPress={() => router.push("/pendentes")}
                 className="flex-row items-center gap-3 rounded-2xl border-2 border-warning/30 bg-warning/15 p-4 active:opacity-75"
               >
                 <View className="h-12 w-12 items-center justify-center rounded-full bg-warning">
@@ -170,7 +169,7 @@ export default function Home() {
                     {pending.viagens + pending.pedagios} aguardando internet
                   </Text>
                   <Text className="text-sm text-muted-foreground">
-                    Toque pra tentar sincronizar agora
+                    Toque pra ver e gerenciar
                   </Text>
                 </View>
               </Pressable>
