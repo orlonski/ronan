@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import * as Haptics from "expo-haptics";
 import * as Updates from "expo-updates";
 import {
   ArrowDown,
@@ -7,6 +8,7 @@ import {
   Plus,
   Receipt,
   RotateCw,
+  Trash2,
   Truck,
   User,
   WifiOff,
@@ -20,6 +22,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { Swipeable } from "react-native-gesture-handler";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { EmptyState } from "@/components/empty-state";
@@ -27,7 +30,13 @@ import { ViagemCardSkeleton } from "@/components/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { usePending } from "@/hooks/use-pending";
-import { useMe, useViagens, type Viagem } from "@/lib/queries";
+import { humanizeApiError } from "@/lib/api";
+import {
+  useExcluirViagem,
+  useMe,
+  useViagens,
+  type Viagem,
+} from "@/lib/queries";
 
 const statusVariant: Record<
   string,
@@ -52,8 +61,33 @@ export default function Home() {
   const me = useMe();
   const viagens = useViagens();
   const pending = usePending();
+  const excluir = useExcluirViagem();
   const updates = Updates.useUpdates();
   const updateReady = updates.isUpdatePending || updates.isUpdateAvailable;
+
+  function confirmarExcluir(v: Viagem) {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert(
+      "Excluir esta viagem?",
+      `Apagar viagem ticket ${v.ticket}?\nIsso só pode ser feito enquanto a operadora não conferiu.`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Excluir",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await excluir.mutateAsync(v.id);
+              void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch (err) {
+              Alert.alert("Não foi possível excluir", humanizeApiError(err));
+              void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            }
+          },
+        },
+      ],
+    );
+  }
 
   async function aplicarUpdate() {
     try {
@@ -221,7 +255,7 @@ export default function Home() {
         }
         renderItem={({ item, index }) => (
           <Animated.View entering={FadeInDown.delay(index * 30).duration(220)}>
-            <ViagemCard v={item} />
+            <ViagemCard v={item} onExcluir={() => confirmarExcluir(item)} />
           </Animated.View>
         )}
         ListEmptyComponent={
@@ -251,10 +285,12 @@ export default function Home() {
   );
 }
 
-function ViagemCard({ v }: { v: Viagem }) {
+function ViagemCard({ v, onExcluir }: { v: Viagem; onExcluir: () => void }) {
   const variant = statusVariant[v.status] ?? "outline";
   const label = statusLabel[v.status] ?? v.status;
-  return (
+  const podeExcluir = v.status === "ENVIADA";
+
+  const card = (
     <View className="rounded-2xl border-2 border-border bg-card p-4">
       <View className="flex-row items-start justify-between gap-3">
         <View className="flex-1">
@@ -292,6 +328,27 @@ function ViagemCard({ v }: { v: Viagem }) {
         <Stat label="ticket" value={v.ticket} />
       </View>
     </View>
+  );
+
+  if (!podeExcluir) return card;
+
+  return (
+    <Swipeable
+      renderRightActions={() => (
+        <View className="ml-2 flex-row items-stretch">
+          <Button
+            variant="destructive"
+            className="h-full w-24 rounded-2xl"
+            onPress={onExcluir}
+          >
+            <Trash2 size={22} color="white" />
+          </Button>
+        </View>
+      )}
+      overshootRight={false}
+    >
+      {card}
+    </Swipeable>
   );
 }
 

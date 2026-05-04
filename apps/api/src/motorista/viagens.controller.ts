@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Post, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  UseGuards,
+} from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
 import { CriarViagemInput } from "@ronan/shared-types";
@@ -32,5 +41,11 @@ export class ViagensMotoristaController {
     @Body(new ZodValidationPipe(CriarViagemPayload)) body: z.infer<typeof CriarViagemPayload>,
   ) {
     return this.service.create(user.id, body);
+  }
+
+  @Delete(":id")
+  @HttpCode(204)
+  delete(@CurrentUser() user: AuthMotorista, @Param("id") id: string) {
+    return this.service.delete(user.id, id);
   }
 }

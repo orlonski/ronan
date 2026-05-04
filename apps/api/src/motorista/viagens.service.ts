@@ -1,11 +1,13 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type { CriarViagemInput } from "@ronan/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
+import { UploadsService } from "../uploads/uploads.service";
 
 const VIAGEM_INCLUDE = {
   veiculo: { select: { id: true, placa: true, modelo: true } },
@@ -18,7 +20,10 @@ const VIAGEM_INCLUDE = {
 
 @Injectable()
 export class ViagensMotoristaService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly uploads: UploadsService,
+  ) {}
 
   async list(motoristaId: string) {
     return this.prisma.viagem.findMany({
@@ -27,6 +32,39 @@ export class ViagensMotoristaService {
       orderBy: { data: "desc" },
       take: 100,
     });
+  }
+
+  /**
+   * Motorista pode apagar a propria viagem APENAS enquanto status=ENVIADA
+   * (ainda nao foi conferida pela operadora). Apaga fotos no MinIO + DB.
+   */
+  async delete(motoristaId: string, viagemId: string): Promise<void> {
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { id: viagemId },
+      select: {
+        id: true,
+        motoristaId: true,
+        status: true,
+        fotos: { select: { storageKey: true } },
+      },
+    });
+    if (!viagem) throw new NotFoundException("Viagem não encontrada.");
+    if (viagem.motoristaId !== motoristaId) {
+      throw new ForbiddenException("Você não pode apagar esta viagem.");
+    }
+    if (viagem.status !== "ENVIADA") {
+      throw new ForbiddenException(
+        "Esta viagem já foi conferida pela operadora e não pode mais ser apagada.",
+      );
+    }
+
+    // Apaga fotos do MinIO em paralelo (best-effort, se falhar nao bloqueia)
+    await Promise.all(
+      viagem.fotos.map((f) => this.uploads.removeObject(f.storageKey)),
+    );
+
+    // Cascade no schema apaga TicketFoto/Pedagio relacionados
+    await this.prisma.viagem.delete({ where: { id: viagemId } });
   }
 
   async create(motoristaId: string, input: CriarViagemInput & { fotoKey?: string }) {

@@ -167,6 +167,25 @@ export type SugestaoEndereco = {
   lng?: number;
 };
 
+/**
+ * Apaga viagem propria do motorista. Backend valida status=ENVIADA.
+ * Se sucesso, remove do cache local.
+ */
+export function useExcluirViagem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (viagemId: string) => {
+      await api.delete(`/m/viagens/${viagemId}`);
+      return viagemId;
+    },
+    onSuccess: (viagemId) => {
+      qc.setQueryData<Viagem[]>(["viagens"], (cur) =>
+        cur ? cur.filter((v) => v.id !== viagemId) : cur,
+      );
+    },
+  });
+}
+
 export function useCriarLocal() {
   const qc = useQueryClient();
   return useMutation({

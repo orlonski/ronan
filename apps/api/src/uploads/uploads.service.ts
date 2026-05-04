@@ -79,4 +79,12 @@ export class UploadsService implements OnModuleInit {
   async presignedUrl(key: string, expirySeconds = 3600): Promise<string> {
     return this.client.presignedGetObject(this.bucket, key, expirySeconds);
   }
+
+  async removeObject(key: string): Promise<void> {
+    try {
+      await this.client.removeObject(this.bucket, key);
+    } catch (err) {
+      this.log.warn(`Falha ao apagar ${key}: ${(err as Error).message}`);
+    }
+  }
 }
