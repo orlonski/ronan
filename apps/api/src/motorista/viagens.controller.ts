@@ -6,6 +6,7 @@ import {
   HttpCode,
   Param,
   Post,
+  Query,
   Res,
   UseGuards,
 } from "@nestjs/common";
@@ -24,6 +25,28 @@ const CriarViagemPayload = CriarViagemInput.extend({
   fotoKey: z.string().optional(),
 });
 
+const MesSchema = z
+  .string()
+  .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "mes deve estar no formato YYYY-MM");
+
+const ListarViagensQuery = z.object({
+  mes: MesSchema.optional(),
+  status: z.enum(["AGUARDANDO", "CONFERIDA", "DIVERGENTE"]).optional(),
+  cursor: z.string().uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(30),
+});
+
+const ResumoMesQuery = z.object({
+  mes: MesSchema.optional(),
+});
+
+function mesAtual(): string {
+  const now = new Date();
+  const ano = now.getUTCFullYear();
+  const mes = String(now.getUTCMonth() + 1).padStart(2, "0");
+  return `${ano}-${mes}`;
+}
+
 @ApiTags("motorista/viagens")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
@@ -33,8 +56,26 @@ export class ViagensMotoristaController {
   constructor(private readonly service: ViagensMotoristaService) {}
 
   @Get()
-  list(@CurrentUser() user: AuthMotorista) {
-    return this.service.list(user.id);
+  list(
+    @CurrentUser() user: AuthMotorista,
+    @Query(new ZodValidationPipe(ListarViagensQuery))
+    query: z.infer<typeof ListarViagensQuery>,
+  ) {
+    return this.service.list(user.id, {
+      mes: query.mes,
+      grupoStatus: query.status,
+      cursor: query.cursor,
+      limit: query.limit,
+    });
+  }
+
+  @Get("resumo")
+  resumo(
+    @CurrentUser() user: AuthMotorista,
+    @Query(new ZodValidationPipe(ResumoMesQuery))
+    query: z.infer<typeof ResumoMesQuery>,
+  ) {
+    return this.service.resumoMes(user.id, query.mes ?? mesAtual());
   }
 
   @Post()

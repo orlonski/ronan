@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { cacheGet, cachePut } from "@/db/database";
 import { api, ApiError } from "./api";
 import { enqueuePedagio, enqueueViagem } from "./sync";
@@ -114,8 +119,89 @@ export function useCatalogos() {
   );
 }
 
+export type ListaViagens = { itens: Viagem[]; nextCursor: string | null };
+
+export type GrupoStatus = "AGUARDANDO" | "CONFERIDA" | "DIVERGENTE";
+
+export type ResumoMes = {
+  mes: string;
+  totalViagens: number;
+  totalToneladas: string;
+  totalKm: string;
+  totalPedagio: string;
+  porStatus: { aguardando: number; conferida: number; divergente: number };
+};
+
+/** Home: top 10 mais recentes, sem filtro. */
 export function useViagens() {
-  return useQuery(offlineCacheQuery<Viagem[]>("viagens", "/m/viagens"));
+  const cacheKey = "q:viagens";
+  return useQuery({
+    queryKey: ["viagens"],
+    staleTime: 60_000,
+    queryFn: async (): Promise<Viagem[]> => {
+      try {
+        const fresh = await api.get<ListaViagens>("/m/viagens?limit=10");
+        void cachePut(cacheKey, fresh.itens).catch(() => {});
+        return fresh.itens;
+      } catch (err) {
+        if (isOfflineError(err)) {
+          try {
+            const cached = await cacheGet<Viagem[]>(cacheKey);
+            if (cached) return cached;
+          } catch {
+            /* sqlite indisponivel */
+          }
+        }
+        throw err;
+      }
+    },
+  });
+}
+
+export function useResumoMes(mes?: string) {
+  const path = mes ? `/m/viagens/resumo?mes=${mes}` : "/m/viagens/resumo";
+  const cacheKey = `q:resumo:${mes ?? "atual"}`;
+  return useQuery({
+    queryKey: ["resumo-mes", mes ?? "atual"],
+    staleTime: 60_000,
+    queryFn: async (): Promise<ResumoMes> => {
+      try {
+        const fresh = await api.get<ResumoMes>(path);
+        void cachePut(cacheKey, fresh).catch(() => {});
+        return fresh;
+      } catch (err) {
+        if (isOfflineError(err)) {
+          try {
+            const cached = await cacheGet<ResumoMes>(cacheKey);
+            if (cached) return cached;
+          } catch {
+            /* */
+          }
+        }
+        throw err;
+      }
+    },
+  });
+}
+
+export function useViagensFiltradas(params: {
+  mes?: string;
+  status?: GrupoStatus;
+}) {
+  return useInfiniteQuery({
+    queryKey: ["viagens-filtradas", params],
+    initialPageParam: undefined as string | undefined,
+    staleTime: 30_000,
+    queryFn: async ({ pageParam }) => {
+      const qs = new URLSearchParams();
+      if (params.mes) qs.set("mes", params.mes);
+      if (params.status) qs.set("status", params.status);
+      qs.set("limit", "30");
+      if (pageParam) qs.set("cursor", pageParam);
+      return api.get<ListaViagens>(`/m/viagens?${qs.toString()}`);
+    },
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
 }
 
 export type ViagemDetalhe = Viagem & {
@@ -200,6 +286,8 @@ export function useExcluirViagem() {
       qc.setQueryData<Viagem[]>(["viagens"], (cur) =>
         cur ? cur.filter((v) => v.id !== viagemId) : cur,
       );
+      void qc.invalidateQueries({ queryKey: ["viagens-filtradas"] });
+      void qc.invalidateQueries({ queryKey: ["resumo-mes"] });
     },
   });
 }

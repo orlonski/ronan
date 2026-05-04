@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, StatusViagem } from "@prisma/client";
 import type { CriarViagemInput } from "@ronan/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
@@ -44,13 +44,86 @@ export class ViagensMotoristaService {
     private readonly uploads: UploadsService,
   ) {}
 
-  async list(motoristaId: string) {
-    return this.prisma.viagem.findMany({
-      where: { motoristaId },
+  async list(
+    motoristaId: string,
+    filtros: {
+      mes?: string;
+      grupoStatus?: "AGUARDANDO" | "CONFERIDA" | "DIVERGENTE";
+      cursor?: string;
+      limit: number;
+    },
+  ) {
+    const where = this.buildWhere(motoristaId, filtros);
+
+    const itens = await this.prisma.viagem.findMany({
+      where,
       include: VIAGEM_INCLUDE,
-      orderBy: { data: "desc" },
-      take: 100,
+      orderBy: [{ data: "desc" }, { id: "desc" }],
+      take: filtros.limit + 1,
+      ...(filtros.cursor
+        ? { cursor: { id: filtros.cursor }, skip: 1 }
+        : {}),
     });
+
+    const hasMore = itens.length > filtros.limit;
+    const pageItens = hasMore ? itens.slice(0, filtros.limit) : itens;
+    const nextCursor = hasMore ? pageItens[pageItens.length - 1].id : null;
+
+    return { itens: pageItens, nextCursor };
+  }
+
+  async resumoMes(motoristaId: string, mes: string) {
+    const where = this.buildWhere(motoristaId, { mes });
+
+    const [agg, porStatus] = await this.prisma.$transaction([
+      this.prisma.viagem.aggregate({
+        where,
+        _count: { _all: true },
+        _sum: { toneladas: true, km: true, valorPedagioTotal: true },
+      }),
+      this.prisma.viagem.groupBy({
+        where,
+        by: ["status"],
+        _count: { _all: true },
+        orderBy: { status: "asc" },
+      }),
+    ]);
+
+    const contadores = { aguardando: 0, conferida: 0, divergente: 0 };
+    for (const linha of porStatus) {
+      const grupo = mapStatusToGrupo(linha.status);
+      const total = (linha._count as { _all: number })._all;
+      if (grupo === "AGUARDANDO") contadores.aguardando += total;
+      else if (grupo === "CONFERIDA") contadores.conferida += total;
+      else if (grupo === "DIVERGENTE") contadores.divergente += total;
+    }
+
+    return {
+      mes,
+      totalViagens: agg._count._all,
+      totalToneladas: (agg._sum.toneladas ?? "0").toString(),
+      totalKm: (agg._sum.km ?? "0").toString(),
+      totalPedagio: (agg._sum.valorPedagioTotal ?? "0").toString(),
+      porStatus: contadores,
+    };
+  }
+
+  private buildWhere(
+    motoristaId: string,
+    filtros: {
+      mes?: string;
+      grupoStatus?: "AGUARDANDO" | "CONFERIDA" | "DIVERGENTE";
+    },
+  ): Prisma.ViagemWhereInput {
+    const where: Prisma.ViagemWhereInput = { motoristaId };
+    if (filtros.mes) {
+      const { inicio, fim } = mesRange(filtros.mes);
+      where.data = { gte: inicio, lt: fim };
+    }
+    if (filtros.grupoStatus) {
+      where.status = { in: grupoToStatus(filtros.grupoStatus) };
+    }
+    return where;
   }
 
   async detalhe(motoristaId: string, viagemId: string) {
@@ -170,4 +243,31 @@ export class ViagensMotoristaService {
       include: VIAGEM_INCLUDE,
     });
   }
+}
+
+function grupoToStatus(
+  grupo: "AGUARDANDO" | "CONFERIDA" | "DIVERGENTE",
+): StatusViagem[] {
+  if (grupo === "AGUARDANDO") return ["ENVIADA", "EM_CONFERENCIA"];
+  if (grupo === "CONFERIDA") return ["OK", "AJUSTADA"];
+  return ["DIVERGENTE"];
+}
+
+function mapStatusToGrupo(
+  status: StatusViagem,
+): "AGUARDANDO" | "CONFERIDA" | "DIVERGENTE" | null {
+  if (status === "ENVIADA" || status === "EM_CONFERENCIA") return "AGUARDANDO";
+  if (status === "OK" || status === "AJUSTADA") return "CONFERIDA";
+  if (status === "DIVERGENTE") return "DIVERGENTE";
+  return null;
+}
+
+/** mes = "YYYY-MM" → [primeiro dia 00:00, primeiro dia mes seguinte 00:00) */
+function mesRange(mes: string): { inicio: Date; fim: Date } {
+  const [anoStr, mesStr] = mes.split("-");
+  const ano = Number(anoStr);
+  const m = Number(mesStr);
+  const inicio = new Date(Date.UTC(ano, m - 1, 1));
+  const fim = new Date(Date.UTC(ano, m, 1));
+  return { inicio, fim };
 }

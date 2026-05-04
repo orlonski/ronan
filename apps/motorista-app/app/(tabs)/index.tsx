@@ -3,6 +3,7 @@ import * as Haptics from "expo-haptics";
 import * as Updates from "expo-updates";
 import {
   ArrowDown,
+  ArrowRight,
   ArrowUp,
   CloudOff,
   Plus,
@@ -10,7 +11,6 @@ import {
   RotateCw,
   Trash2,
   Truck,
-  User,
   WifiOff,
 } from "lucide-react-native";
 import {
@@ -34,6 +34,7 @@ import { humanizeApiError } from "@/lib/api";
 import {
   useExcluirViagem,
   useMe,
+  useResumoMes,
   useViagens,
   type Viagem,
 } from "@/lib/queries";
@@ -60,6 +61,7 @@ const statusLabel: Record<string, string> = {
 export default function Home() {
   const me = useMe();
   const viagens = useViagens();
+  const resumo = useResumoMes();
   const pending = usePending();
   const excluir = useExcluirViagem();
   const updates = Updates.useUpdates();
@@ -115,41 +117,31 @@ export default function Home() {
     <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       {/* Header brand: status bar + nome motorista */}
       <View className="bg-brand">
-        <View className="flex-row items-start justify-between px-5 pb-6 pt-14">
-          <View className="flex-1">
-            <Text className="text-xs font-semibold uppercase tracking-wider text-white/70">
-              Motorista
-            </Text>
-            {me.isLoading && <ActivityIndicator color="white" className="mt-2" />}
-            {me.data && (
-              <>
-                <Text className="mt-0.5 text-2xl font-bold text-white">
-                  {me.data.nome}
-                </Text>
-                {me.data.veiculoDefault && (
-                  <Text
-                    className="mt-0.5 text-base font-medium text-white/80"
-                    style={{ fontVariant: ["tabular-nums"] }}
-                  >
-                    Placa {me.data.veiculoDefault.placa}
-                  </Text>
-                )}
-              </>
-            )}
-            {me.error && (
-              <Text className="mt-1 text-sm text-white/80">
-                Perfil indisponível offline
+        <View className="px-5 pb-6 pt-14">
+          <Text className="text-xs font-semibold uppercase tracking-wider text-white/70">
+            Motorista
+          </Text>
+          {me.isLoading && <ActivityIndicator color="white" className="mt-2" />}
+          {me.data && (
+            <>
+              <Text className="mt-0.5 text-2xl font-bold text-white">
+                {me.data.nome}
               </Text>
-            )}
-          </View>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="bg-white/15 active:bg-white/25"
-            onPress={() => router.push("/perfil")}
-          >
-            <User size={26} color="white" />
-          </Button>
+              {me.data.veiculoDefault && (
+                <Text
+                  className="mt-0.5 text-base font-medium text-white/80"
+                  style={{ fontVariant: ["tabular-nums"] }}
+                >
+                  Placa {me.data.veiculoDefault.placa}
+                </Text>
+              )}
+            </>
+          )}
+          {me.error && (
+            <Text className="mt-1 text-sm text-white/80">
+              Perfil indisponível offline
+            </Text>
+          )}
         </View>
       </View>
 
@@ -163,6 +155,7 @@ export default function Home() {
             onRefresh={() => {
               void me.refetch();
               void viagens.refetch();
+              void resumo.refetch();
               void checarUpdate();
             }}
           />
@@ -248,10 +241,45 @@ export default function Home() {
               </View>
             </Pressable>
 
+            {/* Resumo do mes corrente — bate com pagamento */}
+            {resumo.data && resumo.data.totalViagens > 0 && (
+              <View className="mt-3 rounded-2xl border-2 border-border bg-card p-4">
+                <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Resumo de {fmtMesLongo(resumo.data.mes)}
+                </Text>
+                <View className="mt-3 flex-row gap-6">
+                  <ResumoStat label="viagens" value={String(resumo.data.totalViagens)} />
+                  <ResumoStat label="t" value={fmtNum(resumo.data.totalToneladas, 1)} />
+                  <ResumoStat label="km" value={fmtNum(resumo.data.totalKm, 0)} />
+                </View>
+                {parseFloat(resumo.data.totalPedagio) > 0 && (
+                  <View className="mt-3 border-t-2 border-border pt-3">
+                    <ResumoStat
+                      label="pedágio"
+                      value={`R$ ${fmtNum(resumo.data.totalPedagio, 2)}`}
+                    />
+                  </View>
+                )}
+              </View>
+            )}
+
             <Text className="mt-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
               Suas viagens recentes
             </Text>
           </View>
+        }
+        ListFooterComponent={
+          (viagens.data?.length ?? 0) > 0 ? (
+            <Pressable
+              onPress={() => router.push("/historico")}
+              className="mt-2 flex-row items-center justify-center gap-2 rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
+            >
+              <Text className="text-base font-bold text-foreground">
+                Ver tudo
+              </Text>
+              <ArrowRight size={18} color="#0f172a" />
+            </Pressable>
+          ) : null
         }
         renderItem={({ item, index }) => (
           <Animated.View entering={FadeInDown.delay(index * 30).duration(220)}>
@@ -369,6 +397,44 @@ function Stat({ label, value }: { label: string; value: string }) {
       </Text>
     </View>
   );
+}
+
+function ResumoStat({ label, value }: { label: string; value: string }) {
+  return (
+    <View>
+      <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </Text>
+      <Text
+        className="text-2xl font-extrabold text-foreground"
+        style={{ fontVariant: ["tabular-nums"] }}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+const MESES_LONGO = [
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
+];
+
+function fmtMesLongo(mes: string): string {
+  const [ano, m] = mes.split("-");
+  const idx = Number(m) - 1;
+  if (idx < 0 || idx > 11) return mes;
+  return `${MESES_LONGO[idx]}/${ano.slice(2)}`;
 }
 
 function fmtData(iso: string): string {
