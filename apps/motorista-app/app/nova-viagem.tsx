@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
+import { humanizeApiError } from "@/lib/api";
 import { consumePendingLocal } from "@/lib/local-novo-bridge";
 import { useCatalogos, useCriarViagem, useMe, type Local } from "@/lib/queries";
 
@@ -202,7 +203,7 @@ export default function NovaViagem() {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
     } catch (err) {
-      setErro((err as Error).message ?? "Erro ao salvar.");
+      setErro(humanizeApiError(err));
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setSubmitting(false);

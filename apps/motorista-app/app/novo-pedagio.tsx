@@ -17,6 +17,7 @@ import { DateField } from "@/components/ui/date-field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
+import { humanizeApiError } from "@/lib/api";
 import { useCatalogos, useCriarPedagio, useMe } from "@/lib/queries";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -78,7 +79,7 @@ export default function NovoPedagio() {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
     } catch (err) {
-      setErro((err as Error).message ?? "Erro ao salvar.");
+      setErro(humanizeApiError(err));
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setSubmitting(false);

@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { humanizeApiError } from "@/lib/api";
 import { setPendingLocal } from "@/lib/local-novo-bridge";
 import { useCriarLocal, type SugestaoEndereco } from "@/lib/queries";
 
@@ -63,19 +64,44 @@ export default function LocalNovo() {
 
   async function salvar() {
     setErro(null);
-    if (!nome.trim() || !logradouro.trim() || !cidade.trim() || !uf.trim()) {
-      setErro("Preencha nome, endereço e cidade.");
+
+    const nomeT = nome.trim();
+    const logT = logradouro.trim();
+    const cidT = cidade.trim();
+    const ufT = uf.trim().toUpperCase();
+    const cepDigits = cep ? cep.replace(/\D/g, "") : "";
+
+    // Validacao client-side com mensagens claras
+    if (nomeT.length < 2) {
+      setErro("Nome do local: digite pelo menos 2 letras.");
       return;
     }
+    if (logT.length < 2) {
+      setErro("Endereço: busque ou digite o endereço.");
+      return;
+    }
+    if (cidT.length < 2) {
+      setErro("Cidade: digite o nome da cidade.");
+      return;
+    }
+    if (ufT.length !== 2) {
+      setErro("Estado: precisa ter 2 letras (ex: PR, SP, SC).");
+      return;
+    }
+    if (cep && cepDigits.length !== 8) {
+      setErro("CEP: precisa ter 8 dígitos. Apague se não souber.");
+      return;
+    }
+
     try {
       const novo = await criar.mutateAsync({
-        nome: nome.trim(),
-        logradouro: logradouro.trim(),
+        nome: nomeT,
+        logradouro: logT,
         numero: numero.trim() || undefined,
         bairro: bairro.trim() || undefined,
-        cidade: cidade.trim(),
-        uf: uf.trim().toUpperCase(),
-        cep: cep ? cep.replace(/\D/g, "") : undefined,
+        cidade: cidT,
+        uf: ufT,
+        cep: cepDigits.length === 8 ? cepDigits : undefined,
         pontoReferencia: pontoReferencia.trim() || undefined,
         tipo,
         obraId: params.obraId,
@@ -86,7 +112,7 @@ export default function LocalNovo() {
       setPendingLocal({ side, local: novo });
       router.back();
     } catch (err) {
-      setErro((err as Error).message ?? "Erro ao salvar local");
+      setErro(humanizeApiError(err));
     }
   }
 
