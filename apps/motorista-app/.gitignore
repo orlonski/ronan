@@ -29,3 +29,4 @@ android/
 *.log
 yarn-error.log
 npm-debug.log
+build-*.tar.gz
