@@ -2,10 +2,12 @@ import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import * as Updates from "expo-updates";
 import {
+  Activity,
   ArrowDown,
   ArrowRight,
   ArrowUp,
   CloudOff,
+  Play,
   Plus,
   Receipt,
   RotateCw,
@@ -38,6 +40,7 @@ import {
   useViagens,
   type Viagem,
 } from "@/lib/queries";
+import { iniciarTracking, useViagemAndamento } from "@/lib/tracking";
 
 const statusVariant: Record<
   string,
@@ -66,6 +69,24 @@ export default function Home() {
   const excluir = useExcluirViagem();
   const updates = Updates.useUpdates();
   const updateReady = updates.isUpdatePending || updates.isUpdateAvailable;
+  const tracking = useViagemAndamento(true);
+
+  async function iniciarViagem() {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      const ok = await iniciarTracking();
+      if (!ok) {
+        Alert.alert(
+          "Permissão negada",
+          "Pra rastrear o trajeto, precisamos da sua localização o tempo todo.",
+        );
+        return;
+      }
+      router.push("/viagem-andamento");
+    } catch (err) {
+      Alert.alert("Erro", (err as Error).message ?? "Falha ao iniciar.");
+    }
+  }
 
   function confirmarExcluir(v: Viagem) {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -162,6 +183,29 @@ export default function Home() {
         }
         ListHeaderComponent={
           <View className="mb-3 gap-3">
+            {/* Banner viagem em andamento (tracking ativo) */}
+            {tracking.data && (
+              <Pressable
+                onPress={() => router.push("/viagem-andamento")}
+                className="flex-row items-center gap-3 rounded-2xl border-2 border-primary bg-primary/15 p-4 active:opacity-75"
+              >
+                <View className="h-12 w-12 items-center justify-center rounded-full bg-primary">
+                  <Activity size={22} color="white" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-base font-bold text-foreground">
+                    Viagem em andamento
+                  </Text>
+                  <Text
+                    className="text-sm text-muted-foreground"
+                    style={{ fontVariant: ["tabular-nums"] }}
+                  >
+                    {tracking.resumo?.kmReal.toFixed(1) ?? "0,0"} km · toque pra ver
+                  </Text>
+                </View>
+              </Pressable>
+            )}
+
             {/* Banner de update OTA disponível */}
             {updateReady && (
               <Pressable
@@ -222,6 +266,26 @@ export default function Home() {
                 <Plus size={28} color="white" strokeWidth={2.5} />
               </View>
             </Pressable>
+
+            {/* Botão Iniciar viagem (tracking GPS) — só se nao tem tracking ativo */}
+            {!tracking.data && (
+              <Pressable
+                onPress={iniciarViagem}
+                className="flex-row items-center gap-4 rounded-2xl border-2 border-primary bg-card p-4 active:opacity-75"
+              >
+                <View className="h-14 w-14 items-center justify-center rounded-2xl bg-primary">
+                  <Play size={26} color="white" strokeWidth={2.5} />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-lg font-bold text-foreground">
+                    Iniciar viagem com GPS
+                  </Text>
+                  <Text className="text-sm text-muted-foreground">
+                    Rastreia o trajeto e calcula KM real
+                  </Text>
+                </View>
+              </Pressable>
+            )}
 
             {/* Botão Pedágio */}
             <Pressable

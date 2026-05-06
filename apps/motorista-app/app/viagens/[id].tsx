@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import {
   ArrowDown,
   ArrowUp,
@@ -8,6 +9,7 @@ import {
   Camera,
   ExternalLink,
   MapPin,
+  Route,
   Trash2,
 } from "lucide-react-native";
 import {
@@ -205,6 +207,76 @@ export default function ViagemDetalheScreen() {
             )}
           </Card>
 
+          {/* Mapa do trajeto (so se foi capturado por GPS) */}
+          {detalhe.data.pontos.length >= 2 && (
+            <Card>
+              <View className="mb-2 flex-row items-center gap-2">
+                <Route size={16} color="#0f172a" />
+                <Text className="text-base font-bold text-foreground">
+                  Trajeto capturado
+                </Text>
+              </View>
+              {detalhe.data.kmReal && (
+                <View className="mb-3 flex-row gap-6">
+                  <Stat label="km ideal" value={fmtNum(detalhe.data.km, 1)} />
+                  <Stat label="km real" value={fmtNum(detalhe.data.kmReal, 1)} />
+                  {(() => {
+                    const ideal = parseFloat(detalhe.data.km);
+                    const real = parseFloat(detalhe.data.kmReal);
+                    const dif = real - ideal;
+                    if (Math.abs(dif) < 0.5) return null;
+                    const sinal = dif > 0 ? "+" : "";
+                    return (
+                      <Stat
+                        label="desvio"
+                        value={`${sinal}${dif.toFixed(1)} km`}
+                      />
+                    );
+                  })()}
+                </View>
+              )}
+              <View
+                className="overflow-hidden rounded-xl"
+                style={{ height: 240 }}
+              >
+                <MapView
+                  provider={PROVIDER_GOOGLE}
+                  style={{ flex: 1 }}
+                  initialRegion={regionPara(detalhe.data.pontos)}
+                  scrollEnabled
+                  zoomEnabled
+                >
+                  <Polyline
+                    coordinates={detalhe.data.pontos.map((p) => ({
+                      latitude: p.lat,
+                      longitude: p.lng,
+                    }))}
+                    strokeColor="#ea580c"
+                    strokeWidth={4}
+                  />
+                  <Marker
+                    coordinate={{
+                      latitude: detalhe.data.pontos[0].lat,
+                      longitude: detalhe.data.pontos[0].lng,
+                    }}
+                    pinColor="green"
+                    title="Início"
+                  />
+                  <Marker
+                    coordinate={{
+                      latitude:
+                        detalhe.data.pontos[detalhe.data.pontos.length - 1].lat,
+                      longitude:
+                        detalhe.data.pontos[detalhe.data.pontos.length - 1].lng,
+                    }}
+                    pinColor="red"
+                    title="Fim"
+                  />
+                </MapView>
+              </View>
+            </Card>
+          )}
+
           {/* Foto */}
           {detalhe.data.fotos.length > 0 && token && (
             <Card>
@@ -316,6 +388,23 @@ function Stat({
       </Text>
     </View>
   );
+}
+
+function regionPara(pontos: { lat: number; lng: number }[]) {
+  const lats = pontos.map((p) => p.lat);
+  const lngs = pontos.map((p) => p.lng);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+  const latitudeDelta = Math.max(0.02, (maxLat - minLat) * 1.4);
+  const longitudeDelta = Math.max(0.02, (maxLng - minLng) * 1.4);
+  return {
+    latitude: (minLat + maxLat) / 2,
+    longitude: (minLng + maxLng) / 2,
+    latitudeDelta,
+    longitudeDelta,
+  };
 }
 
 function fmtDataBR(iso: string): string {

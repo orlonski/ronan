@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { router, Stack, useFocusEffect } from "expo-router";
+import { router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { Check, Plus } from "lucide-react-native";
 import {
@@ -58,12 +58,32 @@ const empty: FormShape = {
   observacao: "",
 };
 
+type TrackingPayload = {
+  id: string;
+  iniciadoEm: string;
+  kmReal: string;
+  pontos: { lat: number; lng: number; capturadoEm: string; velocidade?: number; precisao?: number }[];
+};
+
 export default function NovaViagem() {
   const me = useMe();
   const cat = useCatalogos();
   const criar = useCriarViagem();
+  const params = useLocalSearchParams<{ fromTracking?: string; trackingData?: string }>();
 
-  const [form, setForm] = useState<FormShape>(empty);
+  // Dados do tracking GPS, se motorista veio da tela "Viagem em andamento"
+  const tracking = useMemo<TrackingPayload | null>(() => {
+    if (params.fromTracking !== "1" || !params.trackingData) return null;
+    try {
+      return JSON.parse(params.trackingData) as TrackingPayload;
+    } catch {
+      return null;
+    }
+  }, [params.fromTracking, params.trackingData]);
+
+  const [form, setForm] = useState<FormShape>(() =>
+    tracking ? { ...empty, km: tracking.kmReal } : empty,
+  );
   const [foto, setFoto] = useState<CapturedPhoto | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -213,11 +233,23 @@ export default function NovaViagem() {
         observacao: form.observacao.trim() || undefined,
         criadoOfflineEm: new Date().toISOString(),
         ...(c ? { lat: c.lat, lng: c.lng } : {}),
+        ...(tracking
+          ? {
+              iniciadoEm: tracking.iniciadoEm,
+              kmReal: parseFloat(tracking.kmReal),
+              pontos: tracking.pontos,
+            }
+          : {}),
       };
       await criar({
         payload,
         foto: foto ?? undefined,
       });
+      // Limpa o tracking armazenado localmente — viagem ja salva
+      if (tracking) {
+        const { clearViagemAndamento } = await import("@/lib/tracking-storage");
+        await clearViagemAndamento();
+      }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
     } catch (err) {
@@ -259,6 +291,25 @@ export default function NovaViagem() {
             contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 16 }}
             keyboardShouldPersistTaps="handled"
           >
+            {tracking && (
+              <View className="flex-row items-center gap-3 rounded-2xl border-2 border-success/40 bg-success/15 p-4">
+                <View className="h-10 w-10 items-center justify-center rounded-full bg-success">
+                  <Check size={20} color="white" strokeWidth={3} />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-sm font-bold text-foreground">
+                    Trajeto capturado por GPS
+                  </Text>
+                  <Text
+                    className="text-sm text-muted-foreground"
+                    style={{ fontVariant: ["tabular-nums"] }}
+                  >
+                    {tracking.kmReal} km · {tracking.pontos.length} pontos
+                  </Text>
+                </View>
+              </View>
+            )}
+
             <Field label="Placa">
               <Select
                 value={form.veiculoId}

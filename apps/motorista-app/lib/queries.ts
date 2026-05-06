@@ -210,9 +210,12 @@ export type ViagemDetalhe = Viagem & {
   valorPedagioTotal: string | null;
   lat: number | null;
   lng: number | null;
+  iniciadoEm: string | null;
+  kmReal: string | null;
+  pontos: { lat: number; lng: number; capturadoEm: string }[];
   obra: { id: string; nome: string; empresaCliente?: { id: string; nome: string } };
-  localCarga: Viagem["localCarga"] & { logradouro: string };
-  localDescarga: Viagem["localDescarga"] & { logradouro: string };
+  localCarga: Viagem["localCarga"] & { logradouro: string; lat: number | null; lng: number | null };
+  localDescarga: Viagem["localDescarga"] & { logradouro: string; lat: number | null; lng: number | null };
 };
 
 export function useViagemDetalhe(id: string) {

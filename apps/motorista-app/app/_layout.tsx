@@ -1,4 +1,6 @@
 import "../global.css";
+// Registra o TaskManager top-level (Expo exige fora de componentes)
+import "@/lib/tracking-task";
 
 import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";

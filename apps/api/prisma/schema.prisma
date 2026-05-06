@@ -248,12 +248,16 @@ model Viagem {
   // (silencioso — null se permissão negada ou GPS indisponível)
   lat               Float?
   lng               Float?
+  // Tracking GPS do trajeto (opcional — só preenchido se motorista usou "Iniciar viagem")
+  iniciadoEm        DateTime?    // quando tocou Iniciar
+  kmReal            Decimal?     @db.Decimal(10, 2) // somatório das distâncias entre pontos consecutivos
   criadoOfflineEm   DateTime?
   sincronizadoEm    DateTime     @default(now())
   alteradoEm        DateTime     @updatedAt
 
   fotos    TicketFoto[]
   pedagios Pedagio[]
+  pontos   ViagemPonto[]
   matchesFechamento FechamentoLinha[]
 
   @@index([motoristaId, data])
@@ -272,6 +276,23 @@ model TicketFoto {
 
   @@index([viagemId])
   @@map("ticket_fotos")
+}
+
+/// Ponto GPS capturado durante o tracking de uma viagem.
+/// Polyline reconstruída ordenando por capturadoEm. Pontos com precisao>100m
+/// ou velocidade>200km/h são filtrados no app antes de enviar.
+model ViagemPonto {
+  id          String   @id @default(uuid())
+  viagem      Viagem   @relation(fields: [viagemId], references: [id], onDelete: Cascade)
+  viagemId    String
+  lat         Float
+  lng         Float
+  capturadoEm DateTime
+  velocidade  Float?   // m/s (vinda do GPS)
+  precisao    Float?   // accuracy em metros
+
+  @@index([viagemId, capturadoEm])
+  @@map("viagem_pontos")
 }
 
 model Pedagio {

@@ -29,12 +29,16 @@ const VIAGEM_DETALHE_INCLUDE = {
   },
   material: { select: { id: true, nome: true } },
   localCarga: {
-    select: { id: true, nome: true, logradouro: true, cidade: true, uf: true },
+    select: { id: true, nome: true, logradouro: true, cidade: true, uf: true, lat: true, lng: true },
   },
   localDescarga: {
-    select: { id: true, nome: true, logradouro: true, cidade: true, uf: true },
+    select: { id: true, nome: true, logradouro: true, cidade: true, uf: true, lat: true, lng: true },
   },
   fotos: { select: { id: true, storageKey: true } },
+  pontos: {
+    select: { lat: true, lng: true, capturadoEm: true },
+    orderBy: { capturadoEm: "asc" },
+  },
 } satisfies Prisma.ViagemInclude;
 
 @Injectable()
@@ -227,7 +231,7 @@ export class ViagensMotoristaService {
       );
     }
 
-    const { fotoKey, clientId, ...rest } = input;
+    const { fotoKey, clientId, pontos, ...rest } = input;
     return this.prisma.viagem.create({
       data: {
         clientId,
@@ -245,11 +249,28 @@ export class ViagensMotoristaService {
         valorPedagioTotal: rest.valorPedagioTotal,
         lat: rest.lat,
         lng: rest.lng,
+        iniciadoEm: rest.iniciadoEm,
+        kmReal: rest.kmReal,
         criadoOfflineEm: rest.criadoOfflineEm,
         ...(fotoKey
           ? {
               fotos: {
                 create: { storageKey: fotoKey, capturadaEm: new Date() },
+              },
+            }
+          : {}),
+        ...(pontos && pontos.length > 0
+          ? {
+              pontos: {
+                createMany: {
+                  data: pontos.map((p) => ({
+                    lat: p.lat,
+                    lng: p.lng,
+                    capturadoEm: p.capturadoEm,
+                    velocidade: p.velocidade,
+                    precisao: p.precisao,
+                  })),
+                },
               },
             }
           : {}),
