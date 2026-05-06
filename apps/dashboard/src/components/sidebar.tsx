@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
@@ -44,9 +45,18 @@ export function Sidebar() {
 
   return (
     <aside className="flex w-64 flex-col border-r bg-muted/30 px-4 py-6">
-      <div className="mb-8 px-2">
-        <h1 className="text-xl font-semibold tracking-tight">Schaba</h1>
-        <p className="text-xs text-muted-foreground">Painel</p>
+      <div className="mb-8 flex items-center gap-3 px-2">
+        <Image
+          src="/schaba-icon.png"
+          alt="Schaba"
+          width={40}
+          height={40}
+          className="shrink-0"
+        />
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Schaba</h1>
+          <p className="text-xs text-muted-foreground">Painel</p>
+        </div>
       </div>
 
       <nav className="flex-1 space-y-1">

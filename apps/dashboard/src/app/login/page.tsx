@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
@@ -73,7 +74,15 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-muted/30 px-4">
+    <main className="flex min-h-screen flex-col items-center justify-center bg-muted/30 px-4 py-8">
+      <Image
+        src="/schaba-logo.png"
+        alt="Schaba"
+        width={320}
+        height={175}
+        priority
+        className="mb-8 h-auto w-72 max-w-full"
+      />
       <Suspense fallback={<Card className="w-full max-w-sm p-6">Carregando...</Card>}>
         <LoginForm />
       </Suspense>
