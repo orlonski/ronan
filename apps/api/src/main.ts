@@ -1,6 +1,7 @@
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe, Logger } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import compression from "compression";
 import { json, urlencoded } from "express";
 import { AppModule } from "./app.module";
 
@@ -15,6 +16,11 @@ async function bootstrap() {
       ? true
       : rawCors.split(",").map((s) => s.trim()).filter(Boolean);
   app.enableCors({ origin, credentials: true });
+
+  // Gzip nas respostas. Crítico pro app móvel em rede 3G/4G —
+  // reduz /catalogos de ~300KB pra ~40KB. Threshold default ignora
+  // payloads pequenos (<1KB), então rotas leves não pagam custo de CPU.
+  app.use(compression());
 
   // aumenta limite do body-parser pra aceitar uploads de planilhas e fotos
   // (default do Express e 100KB e barra antes do Multer pegar)

@@ -118,6 +118,27 @@ async function refresh(): Promise<Tokens | null> {
   return refreshing;
 }
 
+// Timeout default pra rede 3G/4G ruim. Sem isso, fetch fica pendurado
+// pra sempre se servidor n\xc3\xa3o responder. 20s cobre payloads grandes
+// (catalogos, foto upload) sem ser frustante.
+const REQUEST_TIMEOUT_MS = 20_000;
+// Uploads de foto podem demorar mais — 60s.
+const UPLOAD_TIMEOUT_MS = 60_000;
+
+async function fetchComTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function request<T>(
   method: string,
   path: string,
@@ -126,25 +147,41 @@ export async function request<T>(
   const { body, isFormData = false, auth = true } = init;
   const headers: Record<string, string> = {};
   if (body !== undefined && !isFormData) headers["content-type"] = "application/json";
+  // Aceita gzip — backend agora tem compression() middleware
+  headers["accept-encoding"] = "gzip, deflate";
   let tokens = auth ? await loadTokens() : null;
   if (tokens) headers["authorization"] = `Bearer ${tokens.accessToken}`;
 
   const url = `${API_URL}${path}`;
-  let res = await fetch(url, {
+  const timeoutMs = isFormData ? UPLOAD_TIMEOUT_MS : REQUEST_TIMEOUT_MS;
+  const fetchInit: RequestInit = {
     method,
     headers,
     body: body === undefined ? undefined : isFormData ? (body as FormData) : JSON.stringify(body),
-  });
+  };
+
+  let res: Response;
+  try {
+    res = await fetchComTimeout(url, fetchInit, timeoutMs);
+  } catch (err) {
+    if ((err as Error).name === "AbortError") {
+      throw new TypeError("Tempo esgotado. Verifique sua conexão.");
+    }
+    throw err;
+  }
 
   if (res.status === 401 && auth) {
     const fresh = await refresh();
     if (fresh) {
       headers["authorization"] = `Bearer ${fresh.accessToken}`;
-      res = await fetch(url, {
-        method,
-        headers,
-        body: body === undefined ? undefined : isFormData ? (body as FormData) : JSON.stringify(body),
-      });
+      try {
+        res = await fetchComTimeout(url, { ...fetchInit, headers }, timeoutMs);
+      } catch (err) {
+        if ((err as Error).name === "AbortError") {
+          throw new TypeError("Tempo esgotado. Verifique sua conexão.");
+        }
+        throw err;
+      }
     } else {
       await clearTokens();
       setAuthState(false);

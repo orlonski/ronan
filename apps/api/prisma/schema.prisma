@@ -128,6 +128,7 @@ model Veiculo {
   viagens               Viagem[]
   pedagios              Pedagio[]
 
+  @@index([ativo])
   @@map("veiculos")
 }
 
@@ -163,6 +164,7 @@ model Obra {
   viagens  Viagem[]
 
   @@index([empresaClienteId])
+  @@index([ativa])
   @@map("obras")
 }
 
@@ -175,6 +177,7 @@ model Material {
 
   viagens Viagem[]
 
+  @@index([ativo])
   @@map("materiais")
 }
 
@@ -204,6 +207,7 @@ model Local {
 
   @@index([obraId])
   @@index([cidade, uf])
+  @@index([ativo])
   @@map("locais")
 }
 
