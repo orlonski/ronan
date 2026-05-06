@@ -3,8 +3,8 @@ import { Providers } from "@/components/providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Ronan — Painel",
-  description: "Painel de gestão de viagens",
+  title: "Schaba — Painel",
+  description: "Painel de gestão de viagens e logística",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

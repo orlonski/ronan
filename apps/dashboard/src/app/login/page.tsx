@@ -34,7 +34,7 @@ function LoginForm() {
   return (
     <Card className="w-full max-w-sm">
       <CardHeader>
-        <CardTitle>Entrar no Ronan</CardTitle>
+        <CardTitle>Entrar no Schaba</CardTitle>
         <CardDescription>Use seu email e senha de operação.</CardDescription>
       </CardHeader>
       <CardContent>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Alert } from "react-native";
 import * as Haptics from "expo-haptics";
 import {
   clearViagemAndamento,
@@ -17,6 +18,26 @@ const NOTIFICATION_BODY_INICIAL =
 export async function isTrackingAtivo(): Promise<boolean> {
   const Location = await import("expo-location");
   return Location.hasStartedLocationUpdatesAsync(TRACKING_TASK);
+}
+
+/**
+ * Pre-prompt explicativo antes do popup nativo de "Permitir o tempo todo".
+ * Apple exige isso na review da App Store; também melhora a taxa de aceitação
+ * no Android. Retorna true se motorista aceitou continuar (vai disparar o
+ * popup nativo logo em seguida), false se cancelou.
+ */
+function prePromptBackgroundLocation(): Promise<boolean> {
+  return new Promise((resolve) => {
+    Alert.alert(
+      "Permitir localização o tempo todo?",
+      "Pra rastrear o trajeto da sua viagem mesmo com o app fechado ou celular bloqueado, precisamos da sua localização em segundo plano.\n\nSeus dados vão SOMENTE pro servidor da empresa — não compartilhamos com terceiros. A captura para automaticamente quando você finaliza a viagem.\n\nNa próxima tela, escolha \"Permitir o tempo todo\".",
+      [
+        { text: "Cancelar", style: "cancel", onPress: () => resolve(false) },
+        { text: "Continuar", style: "default", onPress: () => resolve(true) },
+      ],
+      { cancelable: false },
+    );
+  });
 }
 
 export type TrackingResumo = {
@@ -53,9 +74,13 @@ export async function iniciarTracking(opts: IniciarOpts = {}): Promise<boolean> 
     if (r.status !== "granted") return false;
   }
 
-  // 2) background — Android pede tela "Permitir o tempo todo"
+  // 2) background — Android pede tela "Permitir o tempo todo".
+  // Antes de mostrar o popup do sistema, explica POR QUÊ — Apple exige
+  // pre-prompt explicativo, e melhora taxa de aceitação no Android também.
   const bg = await Location.getBackgroundPermissionsAsync();
   if (bg.status !== "granted") {
+    const aceitou = await prePromptBackgroundLocation();
+    if (!aceitou) return false;
     const r = await Location.requestBackgroundPermissionsAsync();
     if (r.status !== "granted") return false;
   }

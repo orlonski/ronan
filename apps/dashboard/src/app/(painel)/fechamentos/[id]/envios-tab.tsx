@@ -114,7 +114,7 @@ export function EnviosTab({ fechamento }: { fechamento: FechamentoDetalhe }) {
               <Input
                 value={observacao}
                 onChange={(e) => setObservacao(e.target.value)}
-                placeholder='ex: "enviado pra o Ronan no grupo da Gamerim"'
+                placeholder='ex: "enviado no grupo da Construtora X"'
               />
             </div>
           </div>

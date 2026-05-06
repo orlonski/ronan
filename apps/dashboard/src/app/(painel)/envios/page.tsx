@@ -175,7 +175,7 @@ export default function EnviosPage() {
               <Input
                 value={observacao}
                 onChange={(e) => setObservacao(e.target.value)}
-                placeholder='ex: "enviado pro Ronan no grupo da Construtora X"'
+                placeholder='ex: "enviado no grupo da Construtora X"'
               />
             </div>
           </div>

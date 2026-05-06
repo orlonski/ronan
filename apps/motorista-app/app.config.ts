@@ -1,7 +1,9 @@
 import type { ExpoConfig } from "expo/config";
 
 const config: ExpoConfig = {
-  name: "Ronan Motorista",
+  // Nome de exibicao (aparece no celular). Mantemos slug/scheme/package
+  // antigos pra nao quebrar OTA / atualizacao dos APKs ja instalados.
+  name: "Schaba",
   slug: "ronan-motorista",
   scheme: "ronan",
   version: "1.0.0",
