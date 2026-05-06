@@ -292,12 +292,8 @@ model TicketFoto {
 /// Polyline reconstruída ordenando por capturadoEm. Pontos com precisao>100m
 /// ou velocidade>200km/h são filtrados no app antes de enviar; depois passam
 /// por Douglas-Peucker (tolerancia 3m) pra remover redundancia.
-///
-/// Tabela é PARTICIONADA por mês via PostgreSQL (PARTITION BY RANGE).
-/// PK composta (id, capturadoEm) é exigência do Postgres pra particionamento.
-/// Particionamento é gerenciado pela migration manual — Prisma ignora.
 model ViagemPonto {
-  id          String   @default(uuid())
+  id          String   @id @default(uuid())
   viagem      Viagem   @relation(fields: [viagemId], references: [id], onDelete: Cascade)
   viagemId    String
   lat         Float
@@ -306,7 +302,6 @@ model ViagemPonto {
   velocidade  Float?   // m/s (vinda do GPS)
   precisao    Float?   // accuracy em metros
 
-  @@id([id, capturadoEm])
   @@index([viagemId, capturadoEm])
   @@index([capturadoEm])
   @@map("viagem_pontos")
