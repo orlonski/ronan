@@ -493,3 +493,36 @@ model ConfiguracaoTracking {
 
   @@map("configuracao_tracking")
 }
+
+/// Log centralizado de erros do app móvel, dashboard e backend.
+/// Cada ocorrência é uma row. Agrupamento por hash do stack trace
+/// é feito em query (GROUP BY hash). Sem expurgo automático.
+model ErrorLog {
+  id          String   @id @default(uuid())
+  /// Hash sha256(message + stack normalizado) — agrupa erros idênticos
+  hash        String
+  /// Origem: 'motorista-app' | 'dashboard' | 'api'
+  origem      String
+  /// Mensagem curta do erro
+  message     String   @db.Text
+  /// Stack trace completo (pode ser ofuscado em prod)
+  stack       String?  @db.Text
+  /// Versão do app/release (commit SHA ou app version)
+  versao      String?
+  /// Quem estava logado (motorista, user admin)
+  userId      String?
+  userType    String?
+  /// Rota / URL onde ocorreu
+  url         String?
+  /// User agent (web) ou device info (mobile)
+  userAgent   String?
+  /// Contexto extra: device specs, network, breadcrumbs, etc
+  extra       Json?
+  capturadoEm DateTime @default(now())
+
+  @@index([hash])
+  @@index([origem, capturadoEm])
+  @@index([capturadoEm])
+  @@index([userId])
+  @@map("error_logs")
+}

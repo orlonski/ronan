@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
+import { APP_FILTER } from "@nestjs/core";
 import { PrismaModule } from "./prisma/prisma.module";
 import { HealthModule } from "./health/health.module";
 import { AuthModule } from "./auth/auth.module";
@@ -10,6 +11,8 @@ import { UploadsModule } from "./uploads/uploads.module";
 import { AuditoriaModule } from "./auditoria/auditoria.module";
 import { IaModule } from "./ia/ia.module";
 import { FechamentosModule } from "./fechamentos/fechamentos.module";
+import { ErrorsModule } from "./errors/errors.module";
+import { ErrorsExceptionFilter } from "./errors/errors.filter";
 
 @Module({
   imports: [
@@ -24,6 +27,8 @@ import { FechamentosModule } from "./fechamentos/fechamentos.module";
     FechamentosModule,
     GeocodingModule,
     HealthModule,
+    ErrorsModule,
   ],
+  providers: [{ provide: APP_FILTER, useClass: ErrorsExceptionFilter }],
 })
 export class AppModule {}

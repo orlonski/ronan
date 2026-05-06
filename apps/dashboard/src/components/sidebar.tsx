@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { useEffect } from "react";
 import {
+  AlertCircle,
   Boxes,
   Building2,
   ClipboardCheck,
@@ -42,6 +43,7 @@ const ITEMS: Item[] = [
   { href: "/locais", label: "Locais", icon: MapPin },
   { href: "/materiais", label: "Materiais", icon: Package },
   { href: "/usuarios", label: "Usuários", icon: Users2, admin: true },
+  { href: "/erros", label: "Erros", icon: AlertCircle, admin: true },
   { href: "/configuracoes/tracking", label: "Tracking GPS", icon: Settings, admin: true },
 ];
 

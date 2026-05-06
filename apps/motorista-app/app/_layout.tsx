@@ -7,7 +7,12 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { loadTokens } from "@/lib/auth";
+import {
+  enviarPendentes,
+  instalarHandlersGlobais,
+} from "@/lib/error-reporter";
 import {
   getAuthState,
   setAuthState,
@@ -18,6 +23,10 @@ import { onSyncChange, startAutoSync } from "@/lib/sync";
 // Mantem o splash nativo visivel ate auth resolver. Sem isso, app
 // renderiza brevemente a tela errada antes do redirect.
 SplashScreen.preventAutoHideAsync().catch(() => {});
+
+// Instala handler global que captura crashes nao tratados (ErrorUtils).
+// Salva em AsyncStorage e tenta enviar quando user logar.
+instalarHandlersGlobais();
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -61,6 +70,12 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // Inicia listeners de sync (online + visibility + intervalo) uma vez.
   useEffect(() => {
     if (loggedIn) startAutoSync();
+  }, [loggedIn]);
+
+  // Quando logar, tenta enviar erros que ficaram pendentes localmente
+  // (capturados antes do login ou quando estava offline).
+  useEffect(() => {
+    if (loggedIn) void enviarPendentes();
   }, [loggedIn]);
 
   // Quando o sync completa um item (viagem ou pedágio), invalida as queries
@@ -136,14 +151,16 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <StatusBar style="light" />
-          <AuthGate>
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: "white" },
-              }}
-            />
-          </AuthGate>
+          <ErrorBoundary>
+            <AuthGate>
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: "white" },
+                }}
+              />
+            </AuthGate>
+          </ErrorBoundary>
         </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
