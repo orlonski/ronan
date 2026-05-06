@@ -18,8 +18,21 @@ export class GeocodingController {
   }
 
   @Get("buscar")
-  buscar(@Query("q") q: string) {
-    return this.service.buscarPorTexto(q ?? "");
+  buscar(
+    @Query("q") q: string,
+    @Query("lat") lat?: string,
+    @Query("lng") lng?: string,
+  ) {
+    const latN = lat ? Number(lat) : undefined;
+    const lngN = lng ? Number(lng) : undefined;
+    const bias =
+      latN != null &&
+      lngN != null &&
+      Number.isFinite(latN) &&
+      Number.isFinite(lngN)
+        ? { lat: latN, lng: lngN }
+        : undefined;
+    return this.service.buscarPorTexto(q ?? "", bias);
   }
 
   @Get("place")

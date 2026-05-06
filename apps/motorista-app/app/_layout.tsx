@@ -13,7 +13,7 @@ import {
   setAuthState,
   subscribeAuth,
 } from "@/lib/auth-state";
-import { startAutoSync } from "@/lib/sync";
+import { onSyncChange, startAutoSync } from "@/lib/sync";
 
 // Mantem o splash nativo visivel ate auth resolver. Sem isso, app
 // renderiza brevemente a tela errada antes do redirect.
@@ -62,6 +62,19 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loggedIn) startAutoSync();
   }, [loggedIn]);
+
+  // Quando o sync completa um item (viagem ou pedágio), invalida as queries
+  // do TanStack Query pra UI puxar os dados atualizados do servidor sem
+  // motorista precisar de pull-to-refresh.
+  useEffect(() => {
+    return onSyncChange(() => {
+      void queryClient.invalidateQueries({ queryKey: ["viagens"] });
+      void queryClient.invalidateQueries({ queryKey: ["viagens-filtradas"] });
+      void queryClient.invalidateQueries({ queryKey: ["pedagios"] });
+      void queryClient.invalidateQueries({ queryKey: ["pedagios-filtrados"] });
+      void queryClient.invalidateQueries({ queryKey: ["resumo-mes"] });
+    });
+  }, []);
 
   // Registra o tracking task + watchdog + handler de toque em notificação.
   // TUDO via lazy imports — top-level import de native libs aqui quebra

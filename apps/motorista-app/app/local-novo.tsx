@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Check } from "lucide-react-native";
 import {
@@ -49,6 +49,35 @@ export default function LocalNovo() {
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  // GPS atual do motorista — passa pro autocomplete pra priorizar
+  // endereços próximos.
+  const [coordsAtual, setCoordsAtual] = useState<{ lat: number; lng: number } | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const Location = await import("expo-location");
+        const cur = await Location.getForegroundPermissionsAsync();
+        if (cur.status !== "granted") return;
+        const last = await Location.getLastKnownPositionAsync({
+          maxAge: 5 * 60_000,
+          requiredAccuracy: 500,
+        });
+        if (last && alive) {
+          setCoordsAtual({
+            lat: last.coords.latitude,
+            lng: last.coords.longitude,
+          });
+        }
+      } catch {
+        /* sem GPS — autocomplete usa bias regional fallback */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   function aplicarSugestao(s: SugestaoEndereco) {
     if (!nome && s.nome) setNome(s.nome);
@@ -150,6 +179,7 @@ export default function LocalNovo() {
               value={logradouro}
               onChange={setLogradouro}
               onSelect={aplicarSugestao}
+              coords={coordsAtual}
             />
           </View>
 

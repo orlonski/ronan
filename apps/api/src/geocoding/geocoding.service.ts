@@ -102,10 +102,18 @@ export class GeocodingService {
    * Autocomplete via Google Places API (New). Cacheia por query normalizada.
    * Retorna apenas placeId + textos — o detalhe (lat/lng, componentes) sai do `resolverPlace`.
    */
-  async buscarPorTexto(query: string): Promise<SugestaoLista[]> {
+  async buscarPorTexto(
+    query: string,
+    bias?: { lat: number; lng: number },
+  ): Promise<SugestaoLista[]> {
     const q = query.trim().toLowerCase();
     if (q.length < 3) return [];
-    const cacheKey = `q:${q}`;
+    // Cache inclui rounded lat/lng (4 casas = ~10m) pra distinguir buscas de
+    // regiões diferentes mas não estourar o cache com qualquer micro-deslocamento.
+    const biasKey = bias
+      ? `@${bias.lat.toFixed(2)},${bias.lng.toFixed(2)}`
+      : "";
+    const cacheKey = `q:${q}${biasKey}`;
 
     const hit = await this.prisma.geocodingCache.findUnique({ where: { query: cacheKey } });
     if (hit) {
@@ -124,6 +132,16 @@ export class GeocodingService {
       return [];
     }
 
+    // Bias dinamico (motorista) com raio 50km, ou fallback regional.
+    const locationBias = bias
+      ? {
+          circle: {
+            center: { latitude: bias.lat, longitude: bias.lng },
+            radius: 50000,
+          },
+        }
+      : { rectangle: { low: BIAS_LOW, high: BIAS_HIGH } };
+
     let sugestoes: SugestaoLista[] = [];
     try {
       const res = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
@@ -137,9 +155,7 @@ export class GeocodingService {
           languageCode: "pt-BR",
           regionCode: "BR",
           includedRegionCodes: ["br"],
-          locationBias: {
-            rectangle: { low: BIAS_LOW, high: BIAS_HIGH },
-          },
+          locationBias,
         }),
       });
       if (!res.ok) {

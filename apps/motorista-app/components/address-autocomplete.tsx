@@ -10,11 +10,14 @@ export function AddressAutocomplete({
   onChange,
   onSelect,
   placeholder = "Buscar endereço ou local...",
+  coords,
 }: {
   value: string;
   onChange: (v: string) => void;
   onSelect: (s: SugestaoEndereco) => void;
   placeholder?: string;
+  /** Posição atual do motorista. Quando passada, prioriza endereços próximos. */
+  coords?: { lat: number; lng: number } | null;
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -38,8 +41,13 @@ export function AddressAutocomplete({
       }
       setLoading(true);
       try {
+        const params = new URLSearchParams({ q });
+        if (coords) {
+          params.set("lat", coords.lat.toString());
+          params.set("lng", coords.lng.toString());
+        }
         const data = await api.get<SugestaoLista[]>(
-          `/geocoding/buscar?q=${encodeURIComponent(q)}`,
+          `/geocoding/buscar?${params.toString()}`,
         );
         setSugs(data);
         setOpen(data.length > 0);
