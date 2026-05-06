@@ -59,6 +59,7 @@ export type Viagem = {
   km: string;
   observacao: string | null;
   status: string;
+  sincronizadoEm: string;
   veiculo: Veiculo;
   obra: { id: string; nome: string };
   material: Material;
@@ -297,7 +298,11 @@ export function useCriarViagem() {
     foto?: { uri: string; mime: string };
   }) => {
     await enqueueViagem(input.payload, input.foto);
-    void qc.refetchQueries({ queryKey: ["viagens"], type: "active" });
+    // Invalida tudo que pode mostrar viagens recém criadas: home, histórico,
+    // resumo do mês. Refetch ativo + cache fica stale pra refetch on-mount.
+    void qc.invalidateQueries({ queryKey: ["viagens"] });
+    void qc.invalidateQueries({ queryKey: ["viagens-filtradas"] });
+    void qc.invalidateQueries({ queryKey: ["resumo-mes"] });
   };
 }
 
@@ -305,7 +310,9 @@ export function useCriarPedagio() {
   const qc = useQueryClient();
   return async (payload: Record<string, unknown>) => {
     await enqueuePedagio(payload);
-    void qc.refetchQueries({ queryKey: ["pedagios"], type: "active" });
+    void qc.invalidateQueries({ queryKey: ["pedagios"] });
+    void qc.invalidateQueries({ queryKey: ["pedagios-filtrados"] });
+    void qc.invalidateQueries({ queryKey: ["resumo-mes"] });
   };
 }
 

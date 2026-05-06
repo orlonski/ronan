@@ -412,6 +412,12 @@ function ViagemCard({ v, onExcluir }: { v: Viagem; onExcluir: () => void }) {
           >
             {fmtData(v.data)} · {v.veiculo.placa}
           </Text>
+          <Text
+            className="mt-0.5 text-xs text-muted-foreground/80"
+            style={{ fontVariant: ["tabular-nums"] }}
+          >
+            Cadastrada {fmtDataHoraCurta(v.sincronizadoEm)}
+          </Text>
         </View>
         <Badge variant={variant}>{label}</Badge>
       </View>
@@ -516,11 +522,24 @@ function fmtMesLongo(mes: string): string {
 }
 
 function fmtData(iso: string): string {
+  // Parse manual pra evitar timezone shift (UTC-3 retorna dia anterior).
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (m) return `${m[3]}/${m[2]}`;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   const dia = String(d.getDate()).padStart(2, "0");
   const mes = String(d.getMonth() + 1).padStart(2, "0");
   return `${dia}/${mes}`;
+}
+
+function fmtDataHoraCurta(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const dia = String(d.getDate()).padStart(2, "0");
+  const mes = String(d.getMonth() + 1).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${dia}/${mes} ${hh}:${mm}`;
 }
 
 function fmtNum(v: string, casas: number): string {

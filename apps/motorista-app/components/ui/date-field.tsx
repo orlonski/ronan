@@ -80,6 +80,12 @@ export function DateField({
 }
 
 function parseDate(iso: string): Date {
+  // Parse manual: "YYYY-MM-DD" no horario LOCAL, nao UTC. Senao em UTC-3
+  // o getDate() retorna o dia anterior.
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (m) {
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  }
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? new Date() : d;
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { use, useEffect, useState } from "react";
+import { use, useState } from "react";
 
 // Leaflet quebra com SSR; carrega só no cliente.
 const TrajetoMap = dynamic(
@@ -347,7 +347,9 @@ function formatVal(v: unknown): string {
 
 function MapaViagem({ lat, lng }: { lat: number; lng: number }) {
   // Mini map estatico via OpenStreetMap (sem API key, free).
-  const bbox = `${lng - 0.01},${lat - 0.01},${lng + 0.01},${lat + 0.01}`;
+  // bbox menor = zoom maior. ~0.0025 dá ~250m de raio (escala de quadra).
+  const delta = 0.0025;
+  const bbox = `${lng - delta},${lat - delta},${lng + delta},${lat + delta}`;
   const osmEmbed = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lng}`;
   const gmaps = `https://www.google.com/maps?q=${lat},${lng}`;
   return (
@@ -451,11 +453,10 @@ function FotoThumb({
     },
   });
 
-  useEffect(() => {
-    return () => {
-      if (q.data) URL.revokeObjectURL(q.data);
-    };
-  }, [q.data]);
+  // Não revoga o blob URL no unmount: TanStack Query cacheia o valor (staleTime 30min)
+  // e ao voltar pra esta tab depois de mudar pra outra, o componente remonta usando o
+  // mesmo URL do cache. Revogar quebra a imagem ao retornar. Browser limpa ao fechar
+  // a página (overhead desprezível).
 
   if (q.isLoading || !q.data) {
     return (

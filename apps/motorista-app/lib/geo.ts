@@ -24,6 +24,14 @@ function toRad(deg: number): number {
   return (deg * Math.PI) / 180;
 }
 
+/** "120 m" / "1,2 km" / "23 km" pra exibir distância amigável. */
+export function formatarDistancia(metros: number): string {
+  if (metros < 1000) return `${Math.round(metros)} m`;
+  const km = metros / 1000;
+  if (km < 10) return `${km.toFixed(1).replace(".", ",")} km`;
+  return `${Math.round(km)} km`;
+}
+
 export type LocalComCoords = {
   id: string;
   nome: string;

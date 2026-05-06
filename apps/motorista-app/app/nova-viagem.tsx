@@ -19,7 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { humanizeApiError } from "@/lib/api";
-import { localMaisProximo } from "@/lib/geo";
+import { formatarDistancia, haversineMetros, localMaisProximo } from "@/lib/geo";
 import { consumePendingLocal } from "@/lib/local-novo-bridge";
 import {
   useCalcularRota,
@@ -212,16 +212,35 @@ export default function NovaViagem() {
     const naObra = merged.filter(
       (l) => !obraId || l.obraId === obraId || l.obraId === null,
     );
-    const opt = (l: (typeof naObra)[number]): SelectOption => ({
-      value: l.id,
-      label: l.nome,
-      sublabel: `${l.cidade}/${l.uf}`,
-    });
-    return {
-      carga: naObra.filter((l) => l.tipo === "CARGA" || l.tipo === "AMBOS").map(opt),
-      descarga: naObra.filter((l) => l.tipo === "DESCARGA" || l.tipo === "AMBOS").map(opt),
+
+    // Calcula distância de cada local até a posição atual do motorista (se temos GPS).
+    // Pra ordenar pelos mais próximos. Locais sem lat/lng vão pro fim.
+    const distanciaDe = (l: (typeof naObra)[number]): number => {
+      if (!coords || l.lat == null || l.lng == null) return Infinity;
+      return haversineMetros(coords.lat, coords.lng, l.lat, l.lng);
     };
-  }, [cat.data, form.obraId, extraLocais]);
+
+    const opt = (l: (typeof naObra)[number]): SelectOption => {
+      const dist = distanciaDe(l);
+      const sublabelBase = `${l.cidade}/${l.uf}`;
+      const sublabel = Number.isFinite(dist)
+        ? `${sublabelBase} · ${formatarDistancia(dist)}`
+        : sublabelBase;
+      return { value: l.id, label: l.nome, sublabel };
+    };
+
+    const ordenar = (arr: typeof naObra) =>
+      [...arr].sort((a, b) => distanciaDe(a) - distanciaDe(b));
+
+    return {
+      carga: ordenar(
+        naObra.filter((l) => l.tipo === "CARGA" || l.tipo === "AMBOS"),
+      ).map(opt),
+      descarga: ordenar(
+        naObra.filter((l) => l.tipo === "DESCARGA" || l.tipo === "AMBOS"),
+      ).map(opt),
+    };
+  }, [cat.data, form.obraId, extraLocais, coords]);
 
   function update<K extends keyof FormShape>(k: K, v: FormShape[K]) {
     setForm((f) => ({ ...f, [k]: v }));
