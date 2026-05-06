@@ -1,7 +1,4 @@
 import "../global.css";
-// Registra o TaskManager top-level (Expo exige fora de componentes)
-import "@/lib/tracking-task";
-import "@/lib/tracking-watchdog";
 
 import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -66,7 +63,9 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     if (loggedIn) startAutoSync();
   }, [loggedIn]);
 
-  // Registra o watchdog de tracking + handler de toque em notificação.
+  // Registra o tracking task + watchdog + handler de toque em notificação.
+  // TUDO via lazy imports — top-level import de native libs aqui quebra
+  // o boot do expo-router ("Objects are not valid as a React child").
   useEffect(() => {
     if (!loggedIn) return;
     let alive = true;
@@ -74,6 +73,9 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
     void (async () => {
       try {
+        const { registerTrackingTask } = await import("@/lib/tracking-task");
+        await registerTrackingTask();
+
         const { registrarWatchdog } = await import("@/lib/tracking-watchdog");
         await registrarWatchdog();
 
@@ -88,7 +90,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
           }
         });
       } catch {
-        /* expo-notifications/background-fetch indisponivel — ok em dev */
+        /* expo-notifications/task-manager indisponivel — ok em dev */
       }
     })();
 

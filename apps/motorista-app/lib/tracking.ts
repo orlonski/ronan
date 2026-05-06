@@ -7,7 +7,7 @@ import {
   type Ponto,
   type ViagemEmAndamento,
 } from "./tracking-storage";
-import { TRACKING_TASK } from "./tracking-task";
+import { registerTrackingTask, TRACKING_TASK } from "./tracking-task";
 
 const REFRESH_MS = 5_000;
 const NOTIFICATION_BODY_INICIAL =
@@ -34,6 +34,8 @@ export type TrackingResumo = {
  * se motorista negou permissão.
  */
 export async function iniciarTracking(): Promise<boolean> {
+  // Garante que a task está registrada (idempotente)
+  await registerTrackingTask();
   const Location = await import("expo-location");
 
   // 1) foreground primeiro (precondição pra background)
