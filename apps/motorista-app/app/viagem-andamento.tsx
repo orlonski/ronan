@@ -3,11 +3,10 @@ import { router, Stack } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { Activity, AlertTriangle, Save, Square, Trash2 } from "lucide-react-native";
 import { ActivityIndicator, Alert, ScrollView, Text, View } from "react-native";
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { MapTrajeto } from "@/components/map-trajeto";
 import { ScreenHeader } from "@/components/screen-header";
 import { Button } from "@/components/ui/button";
-import { clearViagemAndamento } from "@/lib/tracking-storage";
 import {
   cancelarTracking,
   isTrackingAtivo,
@@ -88,16 +87,6 @@ export default function ViagemAndamentoScreen() {
       </SafeAreaView>
     );
   }
-
-  const region =
-    data.pontos.length > 0
-      ? {
-          latitude: data.pontos[data.pontos.length - 1].lat,
-          longitude: data.pontos[data.pontos.length - 1].lng,
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
-        }
-      : undefined;
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
@@ -180,36 +169,12 @@ export default function ViagemAndamentoScreen() {
         </View>
 
         {/* Mini-mapa do trajeto */}
-        {region && data.pontos.length >= 2 && (
-          <View
-            className="overflow-hidden rounded-2xl border-2 border-border"
-            style={{ height: 280 }}
-          >
-            <MapView
-              provider={PROVIDER_GOOGLE}
-              style={{ flex: 1 }}
-              initialRegion={region}
-              showsUserLocation
-              followsUserLocation
-            >
-              <Polyline
-                coordinates={data.pontos.map((p) => ({
-                  latitude: p.lat,
-                  longitude: p.lng,
-                }))}
-                strokeColor="#ea580c"
-                strokeWidth={4}
-              />
-              <Marker
-                coordinate={{
-                  latitude: data.pontos[0].lat,
-                  longitude: data.pontos[0].lng,
-                }}
-                pinColor="green"
-                title="Início"
-              />
-            </MapView>
-          </View>
+        {data.pontos.length >= 2 && (
+          <MapTrajeto
+            pontos={data.pontos.map((p) => ({ lat: p.lat, lng: p.lng }))}
+            height={280}
+            follow
+          />
         )}
 
         {data.pontos.length < 2 && (

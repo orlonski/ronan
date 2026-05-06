@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import {
   ArrowDown,
   ArrowUp,
@@ -12,6 +11,7 @@ import {
   Route,
   Trash2,
 } from "lucide-react-native";
+import { MapTrajeto } from "@/components/map-trajeto";
 import {
   ActivityIndicator,
   Alert,
@@ -235,45 +235,13 @@ export default function ViagemDetalheScreen() {
                   })()}
                 </View>
               )}
-              <View
-                className="overflow-hidden rounded-xl"
-                style={{ height: 240 }}
-              >
-                <MapView
-                  provider={PROVIDER_GOOGLE}
-                  style={{ flex: 1 }}
-                  initialRegion={regionPara(detalhe.data.pontos)}
-                  scrollEnabled
-                  zoomEnabled
-                >
-                  <Polyline
-                    coordinates={detalhe.data.pontos.map((p) => ({
-                      latitude: p.lat,
-                      longitude: p.lng,
-                    }))}
-                    strokeColor="#ea580c"
-                    strokeWidth={4}
-                  />
-                  <Marker
-                    coordinate={{
-                      latitude: detalhe.data.pontos[0].lat,
-                      longitude: detalhe.data.pontos[0].lng,
-                    }}
-                    pinColor="green"
-                    title="Início"
-                  />
-                  <Marker
-                    coordinate={{
-                      latitude:
-                        detalhe.data.pontos[detalhe.data.pontos.length - 1].lat,
-                      longitude:
-                        detalhe.data.pontos[detalhe.data.pontos.length - 1].lng,
-                    }}
-                    pinColor="red"
-                    title="Fim"
-                  />
-                </MapView>
-              </View>
+              <MapTrajeto
+                pontos={detalhe.data.pontos.map((p) => ({
+                  lat: p.lat,
+                  lng: p.lng,
+                }))}
+                height={240}
+              />
             </Card>
           )}
 
@@ -388,23 +356,6 @@ function Stat({
       </Text>
     </View>
   );
-}
-
-function regionPara(pontos: { lat: number; lng: number }[]) {
-  const lats = pontos.map((p) => p.lat);
-  const lngs = pontos.map((p) => p.lng);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
-  const latitudeDelta = Math.max(0.02, (maxLat - minLat) * 1.4);
-  const longitudeDelta = Math.max(0.02, (maxLng - minLng) * 1.4);
-  return {
-    latitude: (minLat + maxLat) / 2,
-    longitude: (minLng + maxLng) / 2,
-    latitudeDelta,
-    longitudeDelta,
-  };
 }
 
 function fmtDataBR(iso: string): string {
