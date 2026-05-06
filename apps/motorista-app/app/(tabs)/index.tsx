@@ -267,25 +267,25 @@ export default function Home() {
               </View>
             </Pressable>
 
-            {/* Botão Iniciar viagem (tracking GPS) — só se nao tem tracking ativo */}
-            {!tracking.data && (
-              <Pressable
-                onPress={iniciarViagem}
-                className="flex-row items-center gap-4 rounded-2xl border-2 border-primary bg-card p-4 active:opacity-75"
-              >
-                <View className="h-14 w-14 items-center justify-center rounded-2xl bg-primary">
-                  <Play size={26} color="white" strokeWidth={2.5} />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-lg font-bold text-foreground">
-                    Iniciar viagem com GPS
-                  </Text>
-                  <Text className="text-sm text-muted-foreground">
-                    Rastreia o trajeto e calcula KM real
-                  </Text>
-                </View>
-              </Pressable>
-            )}
+            {/* Botão Iniciar viagem (tracking GPS) */}
+            <Pressable
+              onPress={iniciarViagem}
+              className="flex-row items-center gap-4 rounded-2xl border-2 border-primary bg-card p-4 active:opacity-75"
+            >
+              <View className="h-14 w-14 items-center justify-center rounded-2xl bg-primary">
+                <Play size={26} color="white" strokeWidth={2.5} />
+              </View>
+              <View className="flex-1">
+                <Text className="text-lg font-bold text-foreground">
+                  Iniciar viagem com GPS
+                </Text>
+                <Text className="text-sm text-muted-foreground">
+                  {tracking.data
+                    ? `Em andamento · ${tracking.resumo?.kmReal.toFixed(1) ?? "0"} km`
+                    : "Rastreia o trajeto e calcula KM real"}
+                </Text>
+              </View>
+            </Pressable>
 
             {/* Botão Pedágio */}
             <Pressable
