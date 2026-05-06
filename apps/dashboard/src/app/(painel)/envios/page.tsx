@@ -42,7 +42,7 @@ export default function EnviosPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Envios</h1>
           <p className="text-sm text-muted-foreground">
@@ -50,13 +50,69 @@ export default function EnviosPage() {
           </p>
         </div>
         <Link href="/envios/novo">
-          <Button>
+          <Button className="w-full md:w-auto">
             <Plus className="h-4 w-4" /> Novo envio
           </Button>
         </Link>
       </header>
 
-      <Card>
+      <div className="space-y-3 md:hidden">
+        {list.isLoading && (
+          <Card className="p-4 text-sm text-muted-foreground">Carregando...</Card>
+        )}
+        {list.data?.length === 0 && (
+          <Card className="p-6 text-center text-sm text-muted-foreground">
+            Nenhum envio gerado ainda.
+          </Card>
+        )}
+        {list.data?.map((e) => {
+          const periodoInicio = e.periodoInicio ?? e.fechamento?.periodoInicio;
+          const periodoFim = e.periodoFim ?? e.fechamento?.periodoFim;
+          return (
+            <Card key={e.id} className="space-y-2 p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">
+                    {e.empresaCliente?.nome ?? "—"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {fmtBR(periodoInicio)} → {fmtBR(periodoFim)}
+                  </p>
+                </div>
+                {e.status === "ENVIADO" ? (
+                  <Badge className="shrink-0 border-green-200 bg-green-50 text-green-800">
+                    <CheckCircle2 className="mr-1 h-3 w-3" /> Enviado
+                  </Badge>
+                ) : (
+                  <Badge className="shrink-0 border-blue-200 bg-blue-50 text-blue-800">
+                    Gerado
+                  </Badge>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                {e.fechamentoId ? (
+                  <span className="text-purple-700">
+                    Fechamento v{e.fechamento?.versao}
+                  </span>
+                ) : (
+                  <span className="text-blue-700">Direto</span>
+                )}
+                {e.totalLinhas != null && (
+                  <span>
+                    <span className="text-muted-foreground">Linhas: </span>
+                    {e.totalLinhas}
+                  </span>
+                )}
+                {e.layout?.nome && (
+                  <span className="text-muted-foreground">{e.layout.nome}</span>
+                )}
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+
+      <Card className="hidden md:block">
         <Table>
           <TableHeader>
             <TableRow>

@@ -57,15 +57,68 @@ export default function EmpresasPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Empresas-cliente</h1>
           <p className="text-sm text-muted-foreground">Empresas pra quem prestamos serviço.</p>
         </div>
-        <Button onClick={openNew}><Plus className="h-4 w-4" /> Nova empresa</Button>
+        <Button onClick={openNew} className="w-full md:w-auto">
+          <Plus className="h-4 w-4" /> Nova empresa
+        </Button>
       </header>
 
-      <Card>
+      <div className="space-y-3 md:hidden">
+        {list.isLoading && (
+          <Card className="p-4 text-sm text-muted-foreground">Carregando...</Card>
+        )}
+        {list.data?.length === 0 && (
+          <Card className="p-6 text-center text-sm text-muted-foreground">
+            Nenhuma empresa cadastrada.
+          </Card>
+        )}
+        {list.data?.map((e) => (
+          <Card key={e.id} className="space-y-2 p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium">{e.nome}</p>
+                <p className="text-xs text-muted-foreground">{PAPEL_LABEL[e.papel]}</p>
+              </div>
+              <div className="flex shrink-0 gap-1">
+                <Link href={`/empresas/${e.id}/layout-envio`}>
+                  <Button variant="ghost" size="icon" title="Layout">
+                    <FileSpreadsheet className="h-4 w-4" />
+                  </Button>
+                </Link>
+                <Button variant="ghost" size="icon" onClick={() => openEdit(e)}>
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                {e.ativa && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => confirm(`Inativar ${e.nome}?`) && remove.mutate(e.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+              {e.cnpj && (
+                <span>
+                  <span className="text-muted-foreground">CNPJ: </span>
+                  <span className="font-mono">{e.cnpj}</span>
+                </span>
+              )}
+              <span className={e.ativa ? "text-green-700" : "text-muted-foreground"}>
+                {e.ativa ? "ativa" : "inativa"}
+              </span>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      <Card className="hidden md:block">
         <Table>
           <TableHeader>
             <TableRow>

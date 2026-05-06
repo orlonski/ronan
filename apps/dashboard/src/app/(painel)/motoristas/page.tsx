@@ -68,15 +68,70 @@ export default function MotoristasPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Motoristas</h1>
           <p className="text-sm text-muted-foreground">Quem lança viagens no app.</p>
         </div>
-        <Button onClick={openNew}><Plus className="h-4 w-4" /> Novo motorista</Button>
+        <Button onClick={openNew} className="w-full md:w-auto">
+          <Plus className="h-4 w-4" /> Novo motorista
+        </Button>
       </header>
 
-      <Card>
+      {/* Mobile: cards */}
+      <div className="space-y-3 md:hidden">
+        {list.isLoading && (
+          <Card className="p-4 text-sm text-muted-foreground">Carregando...</Card>
+        )}
+        {list.data?.length === 0 && (
+          <Card className="p-6 text-center text-sm text-muted-foreground">
+            Nenhum motorista cadastrado.
+          </Card>
+        )}
+        {list.data?.map((m) => (
+          <Card key={m.id} className="space-y-2 p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium">{m.nome}</p>
+                <p className="font-mono text-xs text-muted-foreground">{m.usuario}</p>
+              </div>
+              <div className="flex shrink-0 gap-1">
+                <Button variant="ghost" size="icon" onClick={() => openEdit(m)}>
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                {m.ativo && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => confirm(`Inativar ${m.nome}?`) && remove.mutate(m.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+              {m.telefone && (
+                <span>
+                  <span className="text-muted-foreground">Tel: </span>
+                  {m.telefone}
+                </span>
+              )}
+              {m.veiculoDefault && (
+                <span>
+                  <span className="text-muted-foreground">Placa: </span>
+                  <span className="font-mono">{m.veiculoDefault.placa}</span>
+                </span>
+              )}
+              <span className={m.ativo ? "text-green-700" : "text-muted-foreground"}>
+                {m.ativo ? "ativo" : "inativo"}
+              </span>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      <Card className="hidden md:block">
         <Table>
           <TableHeader>
             <TableRow>

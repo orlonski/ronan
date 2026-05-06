@@ -74,11 +74,14 @@ export function Sidebar({
 
       <aside
         className={cn(
-          // Desktop: fixa visível
-          "z-50 flex w-64 flex-col border-r bg-muted/30 px-4 py-6",
-          // Mobile: gaveta com slide
-          "fixed inset-y-0 left-0 transform transition-transform md:relative md:translate-x-0",
-          mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+          // Desktop: fixa, fundo cinza-claro
+          "z-50 flex w-64 flex-col border-r px-4 py-6",
+          "md:bg-muted/30",
+          // Mobile: gaveta com slide. Fundo SÓLIDO branco pra não vazar
+          // o conteúdo de trás.
+          "fixed inset-y-0 left-0 bg-background transform transition-transform",
+          "md:relative md:translate-x-0",
+          mobileOpen ? "translate-x-0 shadow-xl" : "-translate-x-full md:translate-x-0",
         )}
       >
         <div className="mb-8 flex items-center gap-3 px-2">

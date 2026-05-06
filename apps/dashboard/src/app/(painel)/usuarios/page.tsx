@@ -54,15 +54,61 @@ export default function UsuariosPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Usuários</h1>
           <p className="text-sm text-muted-foreground">Quem acessa o painel admin.</p>
         </div>
-        <Button onClick={openNew}><Plus className="h-4 w-4" /> Novo usuário</Button>
+        <Button onClick={openNew} className="w-full md:w-auto">
+          <Plus className="h-4 w-4" /> Novo usuário
+        </Button>
       </header>
 
-      <Card>
+      <div className="space-y-3 md:hidden">
+        {list.isLoading && (
+          <Card className="p-4 text-sm text-muted-foreground">Carregando...</Card>
+        )}
+        {list.data?.length === 0 && (
+          <Card className="p-6 text-center text-sm text-muted-foreground">
+            Nenhum usuário cadastrado.
+          </Card>
+        )}
+        {list.data?.map((u) => (
+          <Card key={u.id} className="space-y-2 p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium">{u.nome}</p>
+                <p className="truncate text-xs text-muted-foreground">{u.email}</p>
+              </div>
+              <div className="flex shrink-0 gap-1">
+                <Button variant="ghost" size="icon" onClick={() => openEdit(u)}>
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                {u.ativo && u.email !== session.user?.email && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => confirm(`Inativar ${u.nome}?`) && remove.mutate(u.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+              <span>
+                <span className="text-muted-foreground">Perfil: </span>
+                {u.perfil}
+              </span>
+              <span className={u.ativo ? "text-green-700" : "text-muted-foreground"}>
+                {u.ativo ? "ativo" : "inativo"}
+              </span>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      <Card className="hidden md:block">
         <Table>
           <TableHeader>
             <TableRow>

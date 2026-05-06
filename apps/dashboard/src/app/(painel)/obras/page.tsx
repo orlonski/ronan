@@ -43,12 +43,12 @@ export default function ObrasPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Obras</h1>
           <p className="text-sm text-muted-foreground">Locais de obra por empresa-cliente.</p>
         </div>
-        <Button onClick={openNew} disabled={!empresas.data?.length}>
+        <Button onClick={openNew} disabled={!empresas.data?.length} className="w-full md:w-auto">
           <Plus className="h-4 w-4" /> Nova obra
         </Button>
       </header>
@@ -59,7 +59,45 @@ export default function ObrasPage() {
         </p>
       )}
 
-      <Card>
+      <div className="space-y-3 md:hidden">
+        {list.isLoading && (
+          <Card className="p-4 text-sm text-muted-foreground">Carregando...</Card>
+        )}
+        {list.data?.length === 0 && (
+          <Card className="p-6 text-center text-sm text-muted-foreground">
+            Nenhuma obra cadastrada.
+          </Card>
+        )}
+        {list.data?.map((o) => (
+          <Card key={o.id} className="space-y-2 p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium">{o.nome}</p>
+                <p className="truncate text-xs text-muted-foreground">{o.empresaCliente.nome}</p>
+              </div>
+              <div className="flex shrink-0 gap-1">
+                <Button variant="ghost" size="icon" onClick={() => openEdit(o)}>
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                {o.ativa && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => confirm(`Inativar ${o.nome}?`) && remove.mutate(o.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+            <span className={`text-xs ${o.ativa ? "text-green-700" : "text-muted-foreground"}`}>
+              {o.ativa ? "ativa" : "inativa"}
+            </span>
+          </Card>
+        ))}
+      </div>
+
+      <Card className="hidden md:block">
         <Table>
           <TableHeader>
             <TableRow>
