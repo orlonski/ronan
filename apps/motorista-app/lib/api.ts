@@ -139,6 +139,33 @@ async function fetchComTimeout(
   }
 }
 
+/**
+ * Critério: relata erros que indicam BUG (não comportamento esperado).
+ * Skipa 4xx esperados (validação, auth, conflito) e o endpoint do
+ * próprio reporter (evita loop).
+ */
+function deveReportarErro(status: number | null, path: string): boolean {
+  if (path.startsWith("/errors/")) return false; // não reportar erro do próprio reporter
+  if (status === null) return true; // network error / timeout / parse fail
+  if (status >= 500) return true; // bug servidor
+  return false; // 4xx esperado
+}
+
+async function reportarSilencioso(
+  err: unknown,
+  ctx: { method: string; path: string; status?: number | null },
+): Promise<void> {
+  try {
+    const { reportarErro } = await import("./error-reporter");
+    void reportarErro(err, {
+      url: `${ctx.method} ${ctx.path}`,
+      extra: { status: ctx.status ?? null },
+    });
+  } catch {
+    /* nunca propaga erro do reporter */
+  }
+}
+
 export async function request<T>(
   method: string,
   path: string,
@@ -164,10 +191,14 @@ export async function request<T>(
   try {
     res = await fetchComTimeout(url, fetchInit, timeoutMs);
   } catch (err) {
-    if ((err as Error).name === "AbortError") {
-      throw new TypeError("Tempo esgotado. Verifique sua conexão.");
+    const isTimeout = (err as Error).name === "AbortError";
+    const wrapped = isTimeout
+      ? new TypeError("Tempo esgotado. Verifique sua conexão.")
+      : (err as Error);
+    if (deveReportarErro(null, path)) {
+      void reportarSilencioso(wrapped, { method, path, status: null });
     }
-    throw err;
+    throw wrapped;
   }
 
   if (res.status === 401 && auth) {
@@ -177,10 +208,14 @@ export async function request<T>(
       try {
         res = await fetchComTimeout(url, { ...fetchInit, headers }, timeoutMs);
       } catch (err) {
-        if ((err as Error).name === "AbortError") {
-          throw new TypeError("Tempo esgotado. Verifique sua conexão.");
+        const isTimeout = (err as Error).name === "AbortError";
+        const wrapped = isTimeout
+          ? new TypeError("Tempo esgotado. Verifique sua conexão.")
+          : (err as Error);
+        if (deveReportarErro(null, path)) {
+          void reportarSilencioso(wrapped, { method, path, status: null });
         }
-        throw err;
+        throw wrapped;
       }
     } else {
       await clearTokens();
@@ -197,10 +232,21 @@ export async function request<T>(
     } catch {
       parsed = null;
     }
-    throw new ApiError(res.status, parsed);
+    const apiErr = new ApiError(res.status, parsed);
+    if (deveReportarErro(res.status, path)) {
+      void reportarSilencioso(apiErr, { method, path, status: res.status });
+    }
+    throw apiErr;
   }
   if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  try {
+    return (await res.json()) as T;
+  } catch (err) {
+    if (deveReportarErro(null, path)) {
+      void reportarSilencioso(err, { method, path, status: res.status });
+    }
+    throw err;
+  }
 }
 
 export const api = {
