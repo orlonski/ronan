@@ -65,7 +65,7 @@ export default function ViagensPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Viagens</h1>
           <p className="text-sm text-muted-foreground">
@@ -73,8 +73,12 @@ export default function ViagensPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-muted-foreground" />
-          <Select value={status} onChange={(e) => setStatus(e.target.value)} className="w-48">
+          <Filter className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <Select
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            className="w-full md:w-48"
+          >
             <option value="">Todos os status</option>
             <option value="ENVIADA">Aguardando</option>
             <option value="EM_CONFERENCIA">Em conferência</option>
@@ -85,7 +89,73 @@ export default function ViagensPage() {
         </div>
       </header>
 
-      <Card>
+      {/* Mobile: cards verticais */}
+      <div className="space-y-3 md:hidden">
+        {list.isLoading && (
+          <Card className="p-4 text-sm text-muted-foreground">Carregando...</Card>
+        )}
+        {list.data?.length === 0 && (
+          <Card className="p-6 text-center text-sm text-muted-foreground">
+            Nenhuma viagem nesse filtro.
+          </Card>
+        )}
+        {list.data?.map((v) => (
+          <Link key={v.id} href={`/viagens/${v.id}`} className="block">
+            <Card className="space-y-3 p-4 hover:bg-muted/40">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{v.obra.nome}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {fmtBR(v.data)} · {v.veiculo.placa} · {v.motorista.nome}
+                  </p>
+                </div>
+                <Badge className={STATUS_VIAGEM_COLOR[v.status] ?? ""}>
+                  {STATUS_VIAGEM_LABEL[v.status] ?? v.status}
+                </Badge>
+              </div>
+
+              <div className="space-y-1 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <ArrowUp className="h-3 w-3 text-muted-foreground" />
+                  <span className="truncate">{v.localCarga.nome}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <ArrowDown className="h-3 w-3 text-muted-foreground" />
+                  <span className="truncate">{v.localDescarga.nome}</span>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-x-4 gap-y-1 border-t pt-2 text-xs">
+                <span>
+                  <span className="text-muted-foreground">Material: </span>
+                  {v.material.nome}
+                </span>
+                <span>
+                  <span className="text-muted-foreground">T: </span>
+                  <span className="font-medium">{fmtNum(v.toneladas, 3)}</span>
+                </span>
+                <span>
+                  <span className="text-muted-foreground">km: </span>
+                  <span className="font-medium">{fmtNum(v.km, 2)}</span>
+                </span>
+                <span>
+                  <span className="text-muted-foreground">Ticket: </span>
+                  <span className="font-mono">{v.ticket}</span>
+                </span>
+                {v.fotos.length > 0 && (
+                  <span className="flex items-center gap-1">
+                    <Camera className="h-3 w-3" />
+                    {v.fotos.length}
+                  </span>
+                )}
+              </div>
+            </Card>
+          </Link>
+        ))}
+      </div>
+
+      {/* Desktop: tabela */}
+      <Card className="hidden md:block">
         <Table>
           <TableHeader>
             <TableRow>
