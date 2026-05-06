@@ -15,7 +15,8 @@ const config: ExpoConfig = {
   splash: {
     image: "./assets/splash.png",
     resizeMode: "contain",
-    backgroundColor: "#13316b",
+    // Fundo branco fica melhor pq o S \xc3\xa9 azul escuro - precisa contraste
+    backgroundColor: "#ffffff",
   },
   assetBundlePatterns: ["**/*"],
   ios: {

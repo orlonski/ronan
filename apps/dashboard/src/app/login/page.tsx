@@ -75,14 +75,22 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-muted/30 px-4 py-8">
-      <Image
-        src="/schaba-logo.png"
-        alt="Schaba"
-        width={320}
-        height={175}
-        priority
-        className="mb-8 h-auto w-72 max-w-full"
-      />
+      <div className="mb-8 flex flex-col items-center">
+        <Image
+          src="/schaba-icon.png"
+          alt="Schaba"
+          width={96}
+          height={96}
+          priority
+          className="h-24 w-24"
+        />
+        <h1 className="mt-3 text-3xl font-bold tracking-tight text-[#13316b]">
+          SCHABA
+        </h1>
+        <p className="text-xs uppercase tracking-widest text-muted-foreground">
+          Logistics &amp; Tracking
+        </p>
+      </div>
       <Suspense fallback={<Card className="w-full max-w-sm p-6">Carregando...</Card>}>
         <LoginForm />
       </Suspense>
