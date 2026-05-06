@@ -5,22 +5,32 @@
 #
 # Pra trocar pra Brasil inteiro, mude REGION pra "brazil" (cuidado: ~3GB RAM em runtime).
 
-FROM osrm/osrm-backend:latest AS build
+# Stage 1: baixa o .osm.pbf usando Debian 12 (a imagem osrm-backend e' Debian Stretch EOL).
+FROM debian:12-slim AS downloader
 
 ARG REGION=sul
 ARG OSM_URL=https://download.geofabrik.de/south-america/brazil/${REGION}-latest.osm.pbf
 
-WORKDIR /data
-
-RUN apt-get update && apt-get install -y --no-install-recommends wget ca-certificates \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends wget ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-RUN wget --progress=dot:giga -O /data/${REGION}.osm.pbf "${OSM_URL}" \
-    && osrm-extract -p /opt/car.lua /data/${REGION}.osm.pbf \
+RUN wget --progress=dot:giga -O /tmp/region.osm.pbf "${OSM_URL}"
+
+# Stage 2: pre-processamento com osrm-extract / partition / customize.
+FROM osrm/osrm-backend:latest AS build
+
+ARG REGION=sul
+
+WORKDIR /data
+COPY --from=downloader /tmp/region.osm.pbf /data/${REGION}.osm.pbf
+
+RUN osrm-extract -p /opt/car.lua /data/${REGION}.osm.pbf \
     && osrm-partition /data/${REGION}.osrm \
     && osrm-customize /data/${REGION}.osrm \
     && rm /data/${REGION}.osm.pbf
 
+# Stage 3: imagem final, so com os arquivos .osrm.* + binario.
 FROM osrm/osrm-backend:latest
 
 ARG REGION=sul
