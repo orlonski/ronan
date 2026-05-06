@@ -20,6 +20,7 @@ import { Select, type SelectOption } from "@/components/ui/select";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { humanizeApiError } from "@/lib/api";
 import { formatarDistancia, haversineMetros, localMaisProximo } from "@/lib/geo";
+import { simplificarPontos } from "@/lib/polyline";
 import { consumePendingLocal } from "@/lib/local-novo-bridge";
 import {
   useCalcularRota,
@@ -294,7 +295,10 @@ export default function NovaViagem() {
           ? {
               iniciadoEm: tracking.iniciadoEm,
               kmReal: parseFloat(tracking.kmReal),
-              pontos: tracking.pontos,
+              // Aplica Douglas-Peucker (toler\xc3\xa2ncia 3m) — remove pontos
+              // redundantes (motorista parado em sem\xc3\xa1foro etc) sem afetar a
+              // forma da rota. Reduz storage em ~5-10x sem perda perceptivel.
+              pontos: simplificarPontos(tracking.pontos),
             }
           : {}),
       };
