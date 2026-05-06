@@ -50,7 +50,7 @@ type GoogleAutocompleteResponse = {
 type GoogleAddressComponent = {
   longText?: string;
   shortText?: string;
-  types: string[];
+  types?: string[];
 };
 
 type GooglePlaceResponse = {
@@ -236,7 +236,7 @@ function pegarComponente(
   preferShort = false,
 ): string | undefined {
   if (!comps) return undefined;
-  const c = comps.find((x) => x.types.includes(tipo));
+  const c = comps.find((x) => x.types?.includes(tipo));
   if (!c) return undefined;
   return preferShort ? c.shortText ?? c.longText : c.longText ?? c.shortText;
 }
