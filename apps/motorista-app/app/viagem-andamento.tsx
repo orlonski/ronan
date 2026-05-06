@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { router, Stack } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { Activity, Square, Trash2 } from "lucide-react-native";
+import { Activity, AlertTriangle, Save, Square, Trash2 } from "lucide-react-native";
 import { ActivityIndicator, Alert, ScrollView, Text, View } from "react-native";
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { clearViagemAndamento } from "@/lib/tracking-storage";
 import {
   cancelarTracking,
+  isTrackingAtivo,
   pararTracking,
   useViagemAndamento,
 } from "@/lib/tracking";
@@ -17,6 +18,18 @@ import {
 export default function ViagemAndamentoScreen() {
   const { data, resumo } = useViagemAndamento(true);
   const [parando, setParando] = useState(false);
+  // null = ainda checando; false = órfão (storage tem mas task parou)
+  const [taskAtiva, setTaskAtiva] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void isTrackingAtivo().then((ok) => {
+      if (alive) setTaskAtiva(ok);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [data?.id]);
 
   async function finalizar() {
     if (!resumo) return;
@@ -92,12 +105,56 @@ export default function ViagemAndamentoScreen() {
       <ScreenHeader title="Viagem em andamento" />
 
       <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
+        {/* Banner: 6h+ sem novo ponto (provavelmente parou mas esqueceu) */}
+        {taskAtiva && horasSemPonto(data) >= 6 && (
+          <View className="rounded-2xl border-2 border-warning bg-warning/15 p-4">
+            <View className="flex-row items-center gap-2">
+              <AlertTriangle size={18} color="#b45309" />
+              <Text className="text-xs font-bold uppercase tracking-wider text-warning-foreground">
+                Sem GPS há {horasSemPonto(data).toFixed(0)}h
+              </Text>
+            </View>
+            <Text className="mt-2 text-base text-foreground">
+              Provavelmente você esqueceu de finalizar. Toque em "Finalizar
+              viagem" pra salvar agora.
+            </Text>
+          </View>
+        )}
+
+        {/* Banner de tracking órfão — task parou mas storage tem dados */}
+        {taskAtiva === false && (
+          <View className="rounded-2xl border-2 border-warning/40 bg-warning/15 p-4">
+            <View className="flex-row items-center gap-2">
+              <AlertTriangle size={18} color="#b45309" />
+              <Text className="text-xs font-bold uppercase tracking-wider text-warning-foreground">
+                Tracking parado
+              </Text>
+            </View>
+            <Text className="mt-2 text-base text-foreground">
+              A captura GPS foi interrompida (sistema ou voce). Voce tem{" "}
+              {data.pontos.length} pontos não salvos. O que fazer?
+            </Text>
+          </View>
+        )}
+
         {/* Card principal: KM + tempo + velocidade */}
-        <View className="rounded-2xl border-2 border-primary/30 bg-primary/10 p-5">
+        <View
+          className={
+            taskAtiva === false
+              ? "rounded-2xl border-2 border-border bg-card p-5"
+              : "rounded-2xl border-2 border-primary/30 bg-primary/10 p-5"
+          }
+        >
           <View className="flex-row items-center gap-2">
-            <Activity size={18} color="#ea580c" />
-            <Text className="text-xs font-bold uppercase tracking-wider text-primary">
-              Capturando GPS
+            <Activity size={18} color={taskAtiva === false ? "#64748b" : "#ea580c"} />
+            <Text
+              className={
+                taskAtiva === false
+                  ? "text-xs font-bold uppercase tracking-wider text-muted-foreground"
+                  : "text-xs font-bold uppercase tracking-wider text-primary"
+              }
+            >
+              {taskAtiva === false ? "Capturado" : "Capturando GPS"}
             </Text>
           </View>
           <Text
@@ -172,9 +229,13 @@ export default function ViagemAndamentoScreen() {
           loading={parando}
           disabled={parando}
         >
-          <Square size={20} color="white" />
+          {taskAtiva === false ? (
+            <Save size={20} color="white" />
+          ) : (
+            <Square size={20} color="white" />
+          )}
           <Text className="text-base font-bold text-primary-foreground">
-            Finalizar viagem
+            {taskAtiva === false ? "Salvar agora" : "Finalizar viagem"}
           </Text>
         </Button>
         <Button variant="ghost" onPress={confirmarCancelar} disabled={parando}>
@@ -202,6 +263,14 @@ function Stat({ label, value }: { label: string; value: string }) {
       </Text>
     </View>
   );
+}
+
+function horasSemPonto(data: { pontos: { capturadoEm: string }[]; iniciadoEm: string }): number {
+  const ultimoTs =
+    data.pontos.length > 0
+      ? new Date(data.pontos[data.pontos.length - 1]!.capturadoEm).getTime()
+      : new Date(data.iniciadoEm).getTime();
+  return (Date.now() - ultimoTs) / (1000 * 60 * 60);
 }
 
 function fmtDuracao(min: number): string {

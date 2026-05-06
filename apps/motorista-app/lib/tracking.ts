@@ -13,6 +13,12 @@ const REFRESH_MS = 5_000;
 const NOTIFICATION_BODY_INICIAL =
   "Tocando KM real percorrido. Toque pra finalizar.";
 
+/** True se o foreground service de tracking está ativo. */
+export async function isTrackingAtivo(): Promise<boolean> {
+  const Location = await import("expo-location");
+  return Location.hasStartedLocationUpdatesAsync(TRACKING_TASK);
+}
+
 export type TrackingResumo = {
   kmReal: number;
   duracaoMin: number;

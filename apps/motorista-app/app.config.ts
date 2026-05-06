@@ -77,6 +77,13 @@ const config: ExpoConfig = {
         isIosBackgroundLocationEnabled: true,
       },
     ],
+    [
+      "expo-notifications",
+      {
+        icon: "./assets/icon.png",
+        color: "#ea580c",
+      },
+    ],
     "./plugins/with-abi-splits",
     "./plugins/with-gradle-memory",
   ],

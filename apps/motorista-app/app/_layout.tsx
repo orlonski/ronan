@@ -1,10 +1,11 @@
 import "../global.css";
 // Registra o TaskManager top-level (Expo exige fora de componentes)
 import "@/lib/tracking-task";
+import "@/lib/tracking-watchdog";
 
 import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Redirect, Stack, useSegments } from "expo-router";
+import { Redirect, router, Stack, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -63,6 +64,38 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // Inicia listeners de sync (online + visibility + intervalo) uma vez.
   useEffect(() => {
     if (loggedIn) startAutoSync();
+  }, [loggedIn]);
+
+  // Registra o watchdog de tracking + handler de toque em notificação.
+  useEffect(() => {
+    if (!loggedIn) return;
+    let alive = true;
+    let sub: { remove: () => void } | null = null;
+
+    void (async () => {
+      try {
+        const { registrarWatchdog } = await import("@/lib/tracking-watchdog");
+        await registrarWatchdog();
+
+        const Notifications = await import("expo-notifications");
+        if (!alive) return;
+        sub = Notifications.addNotificationResponseReceivedListener((resp) => {
+          const kind = resp.notification.request.content.data?.kind;
+          if (kind === "auto-finalizar") {
+            router.push("/viagem-andamento");
+          } else if (kind === "iniciar-tracking") {
+            router.push("/");
+          }
+        });
+      } catch {
+        /* expo-notifications/background-fetch indisponivel — ok em dev */
+      }
+    })();
+
+    return () => {
+      alive = false;
+      sub?.remove();
+    };
   }, [loggedIn]);
 
   // Esconde o splash so depois de ready (proxima tela ja decidida).
