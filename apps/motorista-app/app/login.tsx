@@ -54,7 +54,7 @@ export default function LoginScreen() {
           {/* Hero: faixa azul marinho com brand (status bar fica em cima) */}
           <View className="bg-brand px-6 pb-10 pt-20">
             <Text className="text-5xl font-extrabold tracking-tight text-white">
-              RONAN
+              SCHABA
             </Text>
             <Text className="mt-2 text-base font-medium text-white/80">
               Aplicativo do motorista
