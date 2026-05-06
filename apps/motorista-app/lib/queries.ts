@@ -29,6 +29,8 @@ export type Local = {
   pontoReferencia: string | null;
   tipo: "CARGA" | "DESCARGA" | "AMBOS";
   obraId: string | null;
+  lat: number | null;
+  lng: number | null;
 };
 
 export type Catalogos = {

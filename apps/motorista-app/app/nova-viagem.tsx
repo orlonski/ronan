@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { humanizeApiError } from "@/lib/api";
+import { localMaisProximo } from "@/lib/geo";
 import { consumePendingLocal } from "@/lib/local-novo-bridge";
 import {
   useCalcularRota,
@@ -105,6 +106,43 @@ export default function NovaViagem() {
     const novoKm = rota.data.km;
     setForm((f) => (f.km === novoKm ? f : { ...f, km: novoKm }));
   }, [rota.data, kmEditadoManual]);
+
+  // Auto-detecta local de carga/descarga a partir dos pontos GPS do tracking.
+  // Procura local cadastrado dentro de 200m do primeiro/último ponto.
+  const matchesGps = useMemo(() => {
+    if (!tracking || !cat.data || tracking.pontos.length < 2) return null;
+    const primeiro = tracking.pontos[0];
+    const ultimo = tracking.pontos[tracking.pontos.length - 1];
+    if (!primeiro || !ultimo) return null;
+
+    const candidatosCarga = cat.data.locais.filter(
+      (l) => l.tipo === "CARGA" || l.tipo === "AMBOS",
+    );
+    const candidatosDescarga = cat.data.locais.filter(
+      (l) => l.tipo === "DESCARGA" || l.tipo === "AMBOS",
+    );
+
+    return {
+      carga: localMaisProximo(primeiro.lat, primeiro.lng, candidatosCarga, 200),
+      descarga: localMaisProximo(ultimo.lat, ultimo.lng, candidatosDescarga, 200),
+    };
+  }, [tracking, cat.data]);
+
+  // Aplica os matches no form (uma vez, depois deixa motorista editar)
+  const [autoAplicado, setAutoAplicado] = useState(false);
+  useEffect(() => {
+    if (!matchesGps || autoAplicado) return;
+    setAutoAplicado(true);
+    setForm((f) => ({
+      ...f,
+      ...(matchesGps.carga && !f.localCargaId
+        ? { localCargaId: matchesGps.carga.local.id }
+        : {}),
+      ...(matchesGps.descarga && !f.localDescargaId
+        ? { localDescargaId: matchesGps.descarga.local.id }
+        : {}),
+    }));
+  }, [matchesGps, autoAplicado]);
 
   useEffect(() => {
     let alive = true;
@@ -393,6 +431,12 @@ export default function NovaViagem() {
                   <Plus size={20} color="#0f172a" />
                 </Button>
               </View>
+              {tracking && (
+                <GpsHint
+                  match={matchesGps?.carga ?? null}
+                  selecionadoId={form.localCargaId}
+                />
+              )}
             </Field>
 
             <Field label="Local de descarga">
@@ -420,6 +464,12 @@ export default function NovaViagem() {
                   <Plus size={20} color="#0f172a" />
                 </Button>
               </View>
+              {tracking && (
+                <GpsHint
+                  match={matchesGps?.descarga ?? null}
+                  selecionadoId={form.localDescargaId}
+                />
+              )}
             </Field>
 
             <View className="flex-row gap-3">
@@ -494,6 +544,36 @@ function Field({
       {children}
       {hint && <Text className="text-xs text-muted-foreground">{hint}</Text>}
     </View>
+  );
+}
+
+function GpsHint({
+  match,
+  selecionadoId,
+}: {
+  match: { local: { id: string; nome: string }; distanciaMetros: number } | null;
+  selecionadoId: string;
+}) {
+  if (!match) {
+    return (
+      <Text className="text-xs text-muted-foreground">
+        Nenhum local cadastrado num raio de 200 m do ponto GPS. Selecione
+        manualmente.
+      </Text>
+    );
+  }
+  if (selecionadoId === match.local.id) {
+    return (
+      <Text className="text-xs font-medium text-success">
+        ✓ Detectado por GPS · {match.distanciaMetros} m de "{match.local.nome}"
+      </Text>
+    );
+  }
+  // Motorista trocou: mostra qual seria a sugestão original
+  return (
+    <Text className="text-xs text-muted-foreground">
+      Sugestão GPS era "{match.local.nome}" ({match.distanciaMetros} m).
+    </Text>
   );
 }
 

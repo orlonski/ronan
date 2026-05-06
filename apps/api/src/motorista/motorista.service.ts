@@ -65,6 +65,8 @@ export class MotoristaService {
           pontoReferencia: true,
           tipo: true,
           obraId: true,
+          lat: true,
+          lng: true,
         },
         orderBy: { nome: "asc" },
       }),
