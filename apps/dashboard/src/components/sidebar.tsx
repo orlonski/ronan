@@ -13,6 +13,7 @@ import {
   MapPin,
   Package,
   Send,
+  Settings,
   Truck,
   UserCircle,
   Users2,
@@ -33,6 +34,7 @@ const ITEMS: Item[] = [
   { href: "/locais", label: "Locais", icon: MapPin },
   { href: "/materiais", label: "Materiais", icon: Package },
   { href: "/usuarios", label: "Usuários", icon: Users2, admin: true },
+  { href: "/configuracoes/tracking", label: "Tracking GPS", icon: Settings, admin: true },
 ];
 
 export function Sidebar() {

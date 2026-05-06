@@ -33,7 +33,15 @@ export type TrackingResumo = {
  * Pede permissão de background location se necessário. Retorna false
  * se motorista negou permissão.
  */
-export async function iniciarTracking(): Promise<boolean> {
+type IniciarOpts = {
+  distanciaMinMetros?: number;
+  intervaloMaxSegundos?: number;
+  precisaoAlta?: boolean;
+  accuracyMaxMetros?: number;
+  velocidadeMaxKmh?: number;
+};
+
+export async function iniciarTracking(opts: IniciarOpts = {}): Promise<boolean> {
   // Garante que a task está registrada (idempotente)
   await registerTrackingTask();
   const Location = await import("expo-location");
@@ -52,11 +60,17 @@ export async function iniciarTracking(): Promise<boolean> {
     if (r.status !== "granted") return false;
   }
 
-  // 3) cria registro local da viagem em andamento
+  // 3) cria registro local da viagem em andamento (com config snapshot
+  //    pra task de background filtrar consistente, mesmo se config mudar
+  //    durante a viagem).
   const novo: ViagemEmAndamento = {
     id: makeUuid(),
     iniciadoEm: new Date().toISOString(),
     pontos: [],
+    config: {
+      accuracyMaxMetros: opts.accuracyMaxMetros ?? 100,
+      velocidadeMaxKmh: opts.velocidadeMaxKmh ?? 200,
+    },
   };
   await setViagemAndamento(novo);
 
@@ -66,11 +80,17 @@ export async function iniciarTracking(): Promise<boolean> {
     await Location.stopLocationUpdatesAsync(TRACKING_TASK);
   }
 
+  const distancia = opts.distanciaMinMetros ?? 50;
+  const intervaloMs = (opts.intervaloMaxSegundos ?? 30) * 1000;
+  const accuracy = opts.precisaoAlta
+    ? Location.Accuracy.High
+    : Location.Accuracy.Balanced;
+
   await Location.startLocationUpdatesAsync(TRACKING_TASK, {
-    accuracy: Location.Accuracy.Balanced,
-    distanceInterval: 50, // captura a cada 50m
-    timeInterval: 30_000, // ou 30s, o que ocorrer antes
-    deferredUpdatesInterval: 30_000,
+    accuracy,
+    distanceInterval: distancia,
+    timeInterval: intervaloMs,
+    deferredUpdatesInterval: intervaloMs,
     pausesUpdatesAutomatically: false,
     showsBackgroundLocationIndicator: true,
     foregroundService: {

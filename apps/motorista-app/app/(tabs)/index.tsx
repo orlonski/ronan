@@ -34,9 +34,11 @@ import { Button } from "@/components/ui/button";
 import { usePending } from "@/hooks/use-pending";
 import { humanizeApiError } from "@/lib/api";
 import {
+  TRACKING_CONFIG_DEFAULTS,
   useExcluirViagem,
   useMe,
   useResumoMes,
+  useTrackingConfig,
   useViagens,
   type Viagem,
 } from "@/lib/queries";
@@ -70,11 +72,19 @@ export default function Home() {
   const updates = Updates.useUpdates();
   const updateReady = updates.isUpdatePending || updates.isUpdateAvailable;
   const tracking = useViagemAndamento(true);
+  const trackingCfg = useTrackingConfig();
 
   async function iniciarViagem() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      const ok = await iniciarTracking();
+      const cfg = trackingCfg.data ?? TRACKING_CONFIG_DEFAULTS;
+      const ok = await iniciarTracking({
+        distanciaMinMetros: cfg.distanciaMinMetros,
+        intervaloMaxSegundos: cfg.intervaloMaxSegundos,
+        precisaoAlta: cfg.precisaoAlta,
+        accuracyMaxMetros: cfg.accuracyMaxMetros,
+        velocidadeMaxKmh: cfg.velocidadeMaxKmh,
+      });
       if (!ok) {
         Alert.alert(
           "Permissão negada",

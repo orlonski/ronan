@@ -5,7 +5,7 @@
  * que é cedo o suficiente pro sistema achar a task quando precisar.
  */
 import type { LocationObject } from "expo-location";
-import { appendPontos } from "./tracking-storage";
+import { appendPontos, getViagemAndamento } from "./tracking-storage";
 
 export const TRACKING_TASK = "ronan-viagem-tracking";
 
@@ -25,13 +25,18 @@ export async function registerTrackingTask(): Promise<void> {
     const locations = (data as { locations?: LocationObject[] }).locations ?? [];
     if (locations.length === 0) return;
 
+    // Lê config snapshot da viagem (defaults se não veio)
+    const cur = await getViagemAndamento();
+    const accuracyMax = cur?.config?.accuracyMaxMetros ?? 100;
+    const velocidadeMaxMs = (cur?.config?.velocidadeMaxKmh ?? 200) / 3.6;
+
     // Filtra pontos ruins (precisao baixa, velocidade absurda).
     const filtrados = locations
       .filter((l) => {
         const acc = l.coords.accuracy;
         const speed = l.coords.speed;
-        if (acc != null && acc > 100) return false;
-        if (speed != null && speed > 56) return false; // 56 m/s ~ 200 km/h
+        if (acc != null && acc > accuracyMax) return false;
+        if (speed != null && speed > velocidadeMaxMs) return false;
         return true;
       })
       .map((l) => ({

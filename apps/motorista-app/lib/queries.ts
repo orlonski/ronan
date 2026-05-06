@@ -314,6 +314,42 @@ export type SugestaoLista = {
   textoCompleto: string;
 };
 
+export type TrackingConfig = {
+  distanciaMinMetros: number;
+  intervaloMaxSegundos: number;
+  precisaoAlta: boolean;
+  accuracyMaxMetros: number;
+  velocidadeMaxKmh: number;
+  autoFinalizarHoras: number;
+  detectorAtivado: boolean;
+  detectorVelocidadeKmh: number;
+  detectorLeituras: number;
+};
+
+export const TRACKING_CONFIG_DEFAULTS: TrackingConfig = {
+  distanciaMinMetros: 50,
+  intervaloMaxSegundos: 30,
+  precisaoAlta: false,
+  accuracyMaxMetros: 100,
+  velocidadeMaxKmh: 200,
+  autoFinalizarHoras: 6,
+  detectorAtivado: true,
+  detectorVelocidadeKmh: 30,
+  detectorLeituras: 3,
+};
+
+/**
+ * Config global de tracking. Cacheia agressivamente no servidor + offline.
+ * Se app falhar em buscar, usa defaults — tracking ainda funciona.
+ */
+export function useTrackingConfig() {
+  return useQuery(
+    offlineCacheQuery<TrackingConfig>("tracking-config", "/m/tracking-config", {
+      staleTime: 5 * 60_000,
+    }),
+  );
+}
+
 export type RotaCalculada =
   | { km: string; duracaoSegundos: number; fonte: "osrm" | "cache" }
   | { km: null; erro: string };

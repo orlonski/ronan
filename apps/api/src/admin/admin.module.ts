@@ -7,6 +7,7 @@ import { MotoristasModule } from "./motoristas/motoristas.module";
 import { UsersModule } from "./users/users.module";
 import { LocaisModule } from "./locais/locais.module";
 import { ViagensAdminModule } from "./viagens/viagens.module";
+import { TrackingConfigModule } from "./tracking-config/tracking-config.module";
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { ViagensAdminModule } from "./viagens/viagens.module";
     UsersModule,
     LocaisModule,
     ViagensAdminModule,
+    TrackingConfigModule,
   ],
 })
 export class AdminModule {}

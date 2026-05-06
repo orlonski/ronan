@@ -17,6 +17,11 @@ export type ViagemEmAndamento = {
   id: string; // uuid local
   iniciadoEm: string; // ISO
   pontos: Ponto[];
+  /** Snapshot de config aplicada nessa viagem — task de background usa pra filtrar */
+  config?: {
+    accuracyMaxMetros: number;
+    velocidadeMaxKmh: number;
+  };
 };
 
 const KEY = "ronan.viagem-em-andamento";

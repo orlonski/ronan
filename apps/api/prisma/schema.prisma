@@ -90,6 +90,7 @@ model User {
   envios            EnvioFechamento[]
   auditorias        AuditLog[]
   layoutsEnvio      LayoutEnvio[]
+  configsTracking   ConfiguracaoTracking[]
 
   @@map("users")
 }
@@ -450,4 +451,29 @@ model GeocodingCache {
 
   @@index([query])
   @@map("geocoding_cache")
+}
+
+
+/// Configuração global do tracking GPS aplicado a todos os motoristas.
+/// Singleton: só existe uma linha (id="default"). Operadora ajusta pelo dashboard.
+model ConfiguracaoTracking {
+  id                    String   @id @default("default")
+  // Captura GPS
+  distanciaMinMetros    Int      @default(50)   // captura a cada N metros andados
+  intervaloMaxSegundos  Int      @default(30)   // ou a cada N segundos (o que ocorrer 1º)
+  precisaoAlta          Boolean  @default(false) // true = High accuracy (mais bateria)
+  // Filtros — descarta pontos ruins antes de salvar
+  accuracyMaxMetros     Int      @default(100)  // descarta se accuracy > N
+  velocidadeMaxKmh      Int      @default(200)  // descarta se velocidade > N km/h
+  // Auto-finalização e detector híbrido
+  autoFinalizarHoras    Int      @default(6)    // notifica se viagem ativa > N horas sem ponto
+  detectorAtivado       Boolean  @default(true) // detecta movimento sem tracking ativo
+  detectorVelocidadeKmh Int      @default(30)   // velocidade pra disparar detector
+  detectorLeituras      Int      @default(3)    // leituras consecutivas pra notificar
+  // Audit
+  alteradoEm            DateTime @updatedAt
+  alteradoPor           User?    @relation(fields: [alteradoPorId], references: [id])
+  alteradoPorId         String?
+
+  @@map("configuracao_tracking")
 }

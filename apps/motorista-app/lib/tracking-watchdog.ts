@@ -23,9 +23,30 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export const WATCHDOG_TASK = "ronan-tracking-watchdog";
 const HISTORICO_KEY = "ronan.detector-historico";
-const AUTO_FINALIZAR_HORAS = 6;
-const VELOCIDADE_LIMITE_KMH = 30;
-const LEITURAS_PRA_DISPARAR = 3;
+const CONFIG_CACHE_KEY = "q:tracking-config";
+
+// Defaults caso a config server-side esteja indisponível
+const DEFAULT_AUTO_FINALIZAR_HORAS = 6;
+const DEFAULT_VELOCIDADE_LIMITE_KMH = 30;
+const DEFAULT_LEITURAS_PRA_DISPARAR = 3;
+const DEFAULT_DETECTOR_ATIVADO = true;
+
+type TrackingCfg = {
+  autoFinalizarHoras?: number;
+  detectorAtivado?: boolean;
+  detectorVelocidadeKmh?: number;
+  detectorLeituras?: number;
+};
+
+async function getCachedConfig(): Promise<TrackingCfg> {
+  try {
+    const raw = await AsyncStorage.getItem(CONFIG_CACHE_KEY);
+    if (raw) return JSON.parse(raw) as TrackingCfg;
+  } catch {
+    /* ignora */
+  }
+  return {};
+}
 
 type DetectorEstado = {
   ultimaLeitura: { lat: number; lng: number; ts: number } | null;
@@ -58,15 +79,24 @@ async function defineWatchdogTask(): Promise<void> {
   TaskManager.defineTask(WATCHDOG_TASK, async () => {
     try {
       const viagem = await getViagemAndamento();
+      const cfg = await getCachedConfig();
+      const autoFinalizarHoras =
+        cfg.autoFinalizarHoras ?? DEFAULT_AUTO_FINALIZAR_HORAS;
+      const detectorAtivado =
+        cfg.detectorAtivado ?? DEFAULT_DETECTOR_ATIVADO;
+      const velocidadeLimiteKmh =
+        cfg.detectorVelocidadeKmh ?? DEFAULT_VELOCIDADE_LIMITE_KMH;
+      const leiturasPraDisparar =
+        cfg.detectorLeituras ?? DEFAULT_LEITURAS_PRA_DISPARAR;
 
-      // ----- 1. Auto-finalização: lembrete se 6h+ sem novo ponto -----
+      // ----- 1. Auto-finalização: lembrete se Nh+ sem novo ponto -----
       if (viagem && viagem.pontos.length > 0) {
         const ultimoPonto = viagem.pontos[viagem.pontos.length - 1];
         if (ultimoPonto) {
           const horasSemPonto =
             (Date.now() - new Date(ultimoPonto.capturadoEm).getTime()) /
             (1000 * 60 * 60);
-          if (horasSemPonto >= AUTO_FINALIZAR_HORAS) {
+          if (horasSemPonto >= autoFinalizarHoras) {
             await notificarLocal(
               "Viagem ainda em andamento?",
               `Faz ${horasSemPonto.toFixed(0)}h que não capturamos GPS. Toque pra finalizar.`,
@@ -78,7 +108,7 @@ async function defineWatchdogTask(): Promise<void> {
       }
 
       // ----- 2. Detector híbrido: lembrete se em movimento sem tracking -----
-      if (!viagem) {
+      if (!viagem && detectorAtivado) {
         const Location = await import("expo-location");
         const fg = await Location.getForegroundPermissionsAsync();
         if (fg.status !== "granted")
@@ -94,7 +124,7 @@ async function defineWatchdogTask(): Promise<void> {
         const speedKmh = speedMs * 3.6;
         const estado = await getEstado();
 
-        if (speedKmh > VELOCIDADE_LIMITE_KMH) {
+        if (speedKmh > velocidadeLimiteKmh) {
           const novo: DetectorEstado = {
             ...estado,
             contadorMovimento: estado.contadorMovimento + 1,
@@ -107,7 +137,7 @@ async function defineWatchdogTask(): Promise<void> {
           const minutosDesdeUltimoLembrete =
             (Date.now() - estado.ultimoLembreteEm) / (1000 * 60);
           if (
-            novo.contadorMovimento >= LEITURAS_PRA_DISPARAR &&
+            novo.contadorMovimento >= leiturasPraDisparar &&
             minutosDesdeUltimoLembrete > 30
           ) {
             await notificarLocal(
