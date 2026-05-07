@@ -10,9 +10,24 @@ import {
   type PendingPedagio,
   type PendingViagem,
 } from "@/db/database";
-import { api } from "./api";
+import { api, ApiError } from "./api";
 
 const MAX_ATTEMPTS = 8;
+
+/**
+ * Erros 4xx do servidor são "permanentes" — não vão dar certo no retry.
+ * Pra evitar 8 tentativas inúteis, marca como permanente (attempts =
+ * MAX_ATTEMPTS) e o motorista resolve no app (editando ou descartando).
+ *
+ * Critério: ApiError com status 4xx, exceto 408/429 (timeout/rate limit
+ * que podem se resolver com retry).
+ */
+function isErroPermanente(err: unknown): boolean {
+  if (!(err instanceof ApiError)) return false;
+  if (err.status >= 500) return false;
+  if (err.status === 408 || err.status === 429) return false;
+  return err.status >= 400 && err.status < 500;
+}
 
 let draining = false;
 const listeners = new Set<() => void>();
@@ -68,9 +83,17 @@ export async function enqueuePedagio(payload: Record<string, unknown>): Promise<
   void drain();
 }
 
-export async function pendingCounts(): Promise<{ viagens: number; pedagios: number }> {
+export async function pendingCounts(): Promise<{
+  viagens: number;
+  pedagios: number;
+  /** Itens com erro permanente (4xx) que precisam de ação do motorista. */
+  comErro: number;
+}> {
   const [v, p] = await Promise.all([listPendingViagens(), listPendingPedagios()]);
-  return { viagens: v.length, pedagios: p.length };
+  const comErro =
+    v.filter((i) => i.attempts >= MAX_ATTEMPTS).length +
+    p.filter((i) => i.attempts >= MAX_ATTEMPTS).length;
+  return { viagens: v.length, pedagios: p.length, comErro };
 }
 
 export async function drain(): Promise<void> {
@@ -127,11 +150,13 @@ async function processViagem(item: PendingViagem): Promise<void> {
     await api.post("/m/viagens", payload);
     await deletePendingViagem(item.clientId);
   } catch (err) {
+    const permanente = isErroPermanente(err);
     await upsertPendingViagem({
       ...item,
       status: "error",
       errorMsg: (err as Error).message ?? String(err),
-      attempts: item.attempts + 1,
+      // Erro permanente (4xx) marca como max attempts pra parar de tentar.
+      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
     });
   }
   notify();
@@ -155,11 +180,12 @@ async function processPedagio(item: PendingPedagio): Promise<void> {
     await api.post("/m/pedagios", item.payload);
     await deletePendingPedagio(item.clientId);
   } catch (err) {
+    const permanente = isErroPermanente(err);
     await upsertPendingPedagio({
       ...item,
       status: "error",
       errorMsg: (err as Error).message ?? String(err),
-      attempts: item.attempts + 1,
+      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
     });
   }
   notify();
