@@ -1,8 +1,8 @@
 import type { ExpoConfig } from "expo/config";
 
 const config: ExpoConfig = {
-  // Nome de exibicao (aparece no celular). Mantemos slug/scheme/package
-  // antigos pra nao quebrar OTA / atualizacao dos APKs ja instalados.
+  // Nome de exibicao (aparece no celular). Slug/scheme antigos mantidos
+  // pra preservar projectId no EAS (nao quebrar canal de OTA Update).
   name: "Schaba",
   slug: "ronan-motorista",
   scheme: "ronan",
@@ -21,7 +21,7 @@ const config: ExpoConfig = {
   assetBundlePatterns: ["**/*"],
   ios: {
     supportsTablet: false,
-    bundleIdentifier: "br.com.ronan.motorista",
+    bundleIdentifier: "br.com.schaba.motorista",
     buildNumber: "1",
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
@@ -34,8 +34,8 @@ const config: ExpoConfig = {
     },
   },
   android: {
-    package: "br.com.ronan.motorista",
-    versionCode: 2,
+    package: "br.com.schaba.motorista",
+    versionCode: 3,
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-icon.png",
       backgroundColor: "#13316b",
