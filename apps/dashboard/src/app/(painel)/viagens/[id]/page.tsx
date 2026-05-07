@@ -5,8 +5,9 @@ import dynamic from "next/dynamic";
 import { use, useState } from "react";
 
 // Leaflet quebra com SSR; carrega só no cliente.
-const TrajetoMap = dynamic(
-  () => import("@/components/trajeto-map").then((m) => m.TrajetoMap),
+const TrajetoMapPlayer = dynamic(
+  () =>
+    import("@/components/trajeto-map-player").then((m) => m.TrajetoMapPlayer),
   { ssr: false, loading: () => <div className="h-80 rounded-lg border bg-muted/30" /> },
 );
 import {
@@ -44,7 +45,13 @@ type ViagemDetalhe = {
   km: string;
   kmReal: string | null;
   iniciadoEm: string | null;
-  pontos: { lat: number; lng: number; capturadoEm: string }[];
+  pontos: {
+    lat: number;
+    lng: number;
+    capturadoEm: string;
+    velocidade?: number | null;
+    precisao?: number | null;
+  }[];
   status: string;
   observacao: string | null;
   valorPedagioTotal: string | null;
@@ -180,7 +187,7 @@ export default function ViagemDetalhePage({
               <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
                 <MapPin className="h-4 w-4" /> Trajeto capturado por GPS
               </h3>
-              <TrajetoMap pontos={v.pontos.map((p) => ({ lat: p.lat, lng: p.lng }))} />
+              <TrajetoMapPlayer pontos={v.pontos} />
               <p className="mt-2 text-xs text-muted-foreground">
                 {v.pontos.length} pontos · capturado entre{" "}
                 {v.iniciadoEm ? fmtDataHoraBR(v.iniciadoEm) : "?"} e{" "}

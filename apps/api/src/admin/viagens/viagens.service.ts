@@ -61,7 +61,13 @@ export class ViagensAdminService {
         localDescarga: true,
         fotos: true,
         pontos: {
-          select: { lat: true, lng: true, capturadoEm: true },
+          select: {
+            lat: true,
+            lng: true,
+            capturadoEm: true,
+            velocidade: true,
+            precisao: true,
+          },
           orderBy: { capturadoEm: "asc" },
         },
         pedagios: { include: { veiculo: { select: { placa: true } } } },
