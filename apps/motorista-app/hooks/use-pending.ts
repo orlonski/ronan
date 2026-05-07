@@ -2,7 +2,12 @@ import { useEffect, useState } from "react";
 import { onSyncChange, pendingCounts } from "@/lib/sync";
 
 export function usePending() {
-  const [counts, setCounts] = useState({ viagens: 0, pedagios: 0, comErro: 0 });
+  const [counts, setCounts] = useState({
+    viagens: 0,
+    pedagios: 0,
+    abastecimentos: 0,
+    comErro: 0,
+  });
 
   useEffect(() => {
     let alive = true;

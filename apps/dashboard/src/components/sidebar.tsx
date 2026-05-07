@@ -11,6 +11,7 @@ import {
   Building2,
   ClipboardCheck,
   FileSpreadsheet,
+  Fuel,
   HardHat,
   LogOut,
   MapPin,
@@ -34,6 +35,7 @@ type Item = {
 
 const ITEMS: Item[] = [
   { href: "/viagens", label: "Viagens", icon: ClipboardCheck },
+  { href: "/abastecimentos", label: "Abastecimentos", icon: Fuel },
   { href: "/fechamentos", label: "Fechamentos", icon: FileSpreadsheet },
   { href: "/envios", label: "Envios", icon: Send },
   { href: "/motoristas", label: "Motoristas", icon: HardHat },

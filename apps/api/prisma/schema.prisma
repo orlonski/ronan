@@ -76,73 +76,83 @@ enum AcaoAuditoria {
   MATCH_IA
 }
 
-model User {
-  id        String        @id @default(uuid())
-  nome      String
-  email     String        @unique
-  senhaHash String
-  perfil    PerfilUsuario @default(OPERADOR)
-  ativo     Boolean       @default(true)
-  criadoEm  DateTime      @default(now())
-  alteradoEm DateTime     @updatedAt
+enum TipoCombustivel {
+  DIESEL_S10
+  DIESEL_S500
+  ARLA_32
+  GASOLINA
+  ETANOL
+}
 
-  resolucoes        FechamentoLinha[]
-  envios            EnvioFechamento[]
-  auditorias        AuditLog[]
-  layoutsEnvio      LayoutEnvio[]
-  configsTracking   ConfiguracaoTracking[]
+model User {
+  id         String        @id @default(uuid())
+  nome       String
+  email      String        @unique
+  senhaHash  String
+  perfil     PerfilUsuario @default(OPERADOR)
+  ativo      Boolean       @default(true)
+  criadoEm   DateTime      @default(now())
+  alteradoEm DateTime      @updatedAt
+
+  resolucoes      FechamentoLinha[]
+  envios          EnvioFechamento[]
+  auditorias      AuditLog[]
+  layoutsEnvio    LayoutEnvio[]
+  configsTracking ConfiguracaoTracking[]
 
   @@map("users")
 }
 
 model Motorista {
-  id              String    @id @default(uuid())
-  nome            String
-  usuario         String    @unique
-  senhaHash       String
-  telefone        String?
-  veiculoDefault  Veiculo?  @relation("VeiculoDefaultMotorista", fields: [veiculoDefaultId], references: [id])
+  id               String    @id @default(uuid())
+  nome             String
+  usuario          String    @unique
+  senhaHash        String
+  telefone         String?
+  veiculoDefault   Veiculo?  @relation("VeiculoDefaultMotorista", fields: [veiculoDefaultId], references: [id])
   veiculoDefaultId String?
-  ativo           Boolean   @default(true)
-  ultimoLoginEm   DateTime?
-  tentativasLogin Int       @default(0)
-  bloqueadoAte    DateTime?
-  criadoEm        DateTime  @default(now())
-  alteradoEm      DateTime  @updatedAt
+  ativo            Boolean   @default(true)
+  ultimoLoginEm    DateTime?
+  tentativasLogin  Int       @default(0)
+  bloqueadoAte     DateTime?
+  criadoEm         DateTime  @default(now())
+  alteradoEm       DateTime  @updatedAt
 
-  viagens   Viagem[]
-  pedagios  Pedagio[]
+  viagens        Viagem[]
+  pedagios       Pedagio[]
+  abastecimentos Abastecimento[]
 
   @@index([ativo])
   @@map("motoristas")
 }
 
 model Veiculo {
-  id        String   @id @default(uuid())
-  placa     String   @unique
-  modelo    String?
-  ativo     Boolean  @default(true)
-  criadoEm  DateTime @default(now())
+  id         String   @id @default(uuid())
+  placa      String   @unique
+  modelo     String?
+  ativo      Boolean  @default(true)
+  criadoEm   DateTime @default(now())
   alteradoEm DateTime @updatedAt
 
-  motoristasComoDefault Motorista[] @relation("VeiculoDefaultMotorista")
+  motoristasComoDefault Motorista[]     @relation("VeiculoDefaultMotorista")
   viagens               Viagem[]
   pedagios              Pedagio[]
+  abastecimentos        Abastecimento[]
 
   @@index([ativo])
   @@map("veiculos")
 }
 
 model EmpresaCliente {
-  id              String       @id @default(uuid())
-  nome            String
-  cnpj            String?      @unique
-  contato         String?
-  papel           PapelEmpresa @default(AMBOS)
-  layoutImport    Json?        // mapeamento de colunas do fechamento que ela manda (cached IA inference)
-  ativa           Boolean      @default(true)
-  criadoEm        DateTime     @default(now())
-  alteradoEm      DateTime     @updatedAt
+  id           String       @id @default(uuid())
+  nome         String
+  cnpj         String?      @unique
+  contato      String?
+  papel        PapelEmpresa @default(AMBOS)
+  layoutImport Json? // mapeamento de colunas do fechamento que ela manda (cached IA inference)
+  ativa        Boolean      @default(true)
+  criadoEm     DateTime     @default(now())
+  alteradoEm   DateTime     @updatedAt
 
   obras         Obra[]
   fechamentos   Fechamento[]
@@ -154,16 +164,16 @@ model EmpresaCliente {
 }
 
 model Obra {
-  id                String   @id @default(uuid())
-  nome              String
-  empresaCliente    EmpresaCliente @relation(fields: [empresaClienteId], references: [id])
-  empresaClienteId  String
-  ativa             Boolean  @default(true)
-  criadoEm          DateTime @default(now())
-  alteradoEm        DateTime @updatedAt
+  id               String         @id @default(uuid())
+  nome             String
+  empresaCliente   EmpresaCliente @relation(fields: [empresaClienteId], references: [id])
+  empresaClienteId String
+  ativa            Boolean        @default(true)
+  criadoEm         DateTime       @default(now())
+  alteradoEm       DateTime       @updatedAt
 
-  locais   Local[]
-  viagens  Viagem[]
+  locais  Local[]
+  viagens Viagem[]
 
   @@index([empresaClienteId])
   @@index([ativa])
@@ -171,10 +181,10 @@ model Obra {
 }
 
 model Material {
-  id        String   @id @default(uuid())
-  nome      String   @unique
-  ativo     Boolean  @default(true)
-  criadoEm  DateTime @default(now())
+  id         String   @id @default(uuid())
+  nome       String   @unique
+  ativo      Boolean  @default(true)
+  criadoEm   DateTime @default(now())
   alteradoEm DateTime @updatedAt
 
   viagens Viagem[]
@@ -202,8 +212,8 @@ model Local {
   criadoEm        DateTime  @default(now())
   alteradoEm      DateTime  @updatedAt
 
-  viagensCarga    Viagem[] @relation("LocalCarga")
-  viagensDescarga Viagem[] @relation("LocalDescarga")
+  viagensCarga    Viagem[]    @relation("LocalCarga")
+  viagensDescarga Viagem[]    @relation("LocalDescarga")
   rotasOrigem     RotaCache[] @relation("RotaOrigem")
   rotasDestino    RotaCache[] @relation("RotaDestino")
 
@@ -256,15 +266,15 @@ model Viagem {
   lat               Float?
   lng               Float?
   // Tracking GPS do trajeto (opcional — só preenchido se motorista usou "Iniciar viagem")
-  iniciadoEm        DateTime?    // quando tocou Iniciar
+  iniciadoEm        DateTime? // quando tocou Iniciar
   kmReal            Decimal?     @db.Decimal(10, 2) // somatório das distâncias entre pontos consecutivos
   criadoOfflineEm   DateTime?
   sincronizadoEm    DateTime     @default(now())
   alteradoEm        DateTime     @updatedAt
 
-  fotos    TicketFoto[]
-  pedagios Pedagio[]
-  pontos   ViagemPonto[]
+  fotos             TicketFoto[]
+  pedagios          Pedagio[]
+  pontos            ViagemPonto[]
   matchesFechamento FechamentoLinha[]
 
   @@index([motoristaId, data])
@@ -281,7 +291,7 @@ model TicketFoto {
   id          String   @id @default(uuid())
   viagem      Viagem   @relation(fields: [viagemId], references: [id], onDelete: Cascade)
   viagemId    String
-  storageKey  String   // chave no MinIO
+  storageKey  String // chave no MinIO
   capturadaEm DateTime @default(now())
 
   @@index([viagemId])
@@ -299,8 +309,8 @@ model ViagemPonto {
   lat         Float
   lng         Float
   capturadoEm DateTime
-  velocidade  Float?   // m/s (vinda do GPS)
-  precisao    Float?   // accuracy em metros
+  velocidade  Float? // m/s (vinda do GPS)
+  precisao    Float? // accuracy em metros
 
   @@index([viagemId, capturadoEm])
   @@index([capturadoEm])
@@ -308,19 +318,19 @@ model ViagemPonto {
 }
 
 model Pedagio {
-  id            String    @id @default(uuid())
-  clientId      String    @unique
-  veiculo       Veiculo   @relation(fields: [veiculoId], references: [id])
-  veiculoId     String
-  motorista     Motorista @relation(fields: [motoristaId], references: [id])
-  motoristaId   String
-  data          DateTime  @db.Date
-  pracaPedagio  String
-  valor         Decimal   @db.Decimal(10, 2)
-  viagem        Viagem?   @relation(fields: [viagemId], references: [id])
-  viagemId      String?
+  id              String    @id @default(uuid())
+  clientId        String    @unique
+  veiculo         Veiculo   @relation(fields: [veiculoId], references: [id])
+  veiculoId       String
+  motorista       Motorista @relation(fields: [motoristaId], references: [id])
+  motoristaId     String
+  data            DateTime  @db.Date
+  pracaPedagio    String
+  valor           Decimal   @db.Decimal(10, 2)
+  viagem          Viagem?   @relation(fields: [viagemId], references: [id])
+  viagemId        String?
   criadoOfflineEm DateTime?
-  sincronizadoEm  DateTime @default(now())
+  sincronizadoEm  DateTime  @default(now())
 
   @@index([veiculoId, data])
   @@index([viagemId])
@@ -341,14 +351,14 @@ model Fechamento {
   substituidoPor      Fechamento?      @relation("FechamentoVersao", fields: [substituidoPorId], references: [id])
   substituidoPorId    String?
   substitui           Fechamento[]     @relation("FechamentoVersao")
-  layoutSalvo         Json?            // snapshot do layout usado na inferência (debug/auditoria)
+  layoutSalvo         Json? // snapshot do layout usado na inferência (debug/auditoria)
   status              StatusFechamento @default(RECEBIDO)
-  resumoIa            Json?            // estatísticas da execução: total, match_auto, match_ia, divergencia, falta, extra
+  resumoIa            Json? // estatísticas da execução: total, match_auto, match_ia, divergencia, falta, extra
   criadoEm            DateTime         @default(now())
   alteradoEm          DateTime         @updatedAt
 
-  linhas  FechamentoLinha[]
-  envios  EnvioFechamento[]
+  linhas FechamentoLinha[]
+  envios EnvioFechamento[]
 
   @@index([empresaClienteId, periodoInicio])
   @@index([status])
@@ -359,21 +369,21 @@ model FechamentoLinha {
   id              String                @id @default(uuid())
   fechamento      Fechamento            @relation(fields: [fechamentoId], references: [id], onDelete: Cascade)
   fechamentoId    String
-  ordem           Int                   // posição original na planilha
-  rawData         Json                  // dados brutos extraídos da linha (todas as colunas)
+  ordem           Int // posição original na planilha
+  rawData         Json // dados brutos extraídos da linha (todas as colunas)
   placa           String?
   data            DateTime?             @db.Date
   ticket          String?
   km              Decimal?              @db.Decimal(10, 2)
   toneladas       Decimal?              @db.Decimal(10, 3)
   valor           Decimal?              @db.Decimal(10, 2)
-  obraTexto       String?               // texto da obra na planilha (pode não bater com nossa Obra)
-  materialTexto   String?               // texto do material na planilha
+  obraTexto       String? // texto da obra na planilha (pode não bater com nossa Obra)
+  materialTexto   String? // texto do material na planilha
   viagemMatch     Viagem?               @relation(fields: [viagemMatchId], references: [id])
   viagemMatchId   String?
   status          StatusLinhaFechamento
-  divergencias    Json?                 // { campo: { motorista, empresa } }
-  sugestaoIa      Json?                 // { viagemId, confidence, motivo }
+  divergencias    Json? // { campo: { motorista, empresa } }
+  sugestaoIa      Json? // { viagemId, confidence, motivo }
   resolvidoPor    User?                 @relation(fields: [resolvidoPorId], references: [id])
   resolvidoPorId  String?
   resolvidoEm     DateTime?
@@ -385,17 +395,17 @@ model FechamentoLinha {
 }
 
 model LayoutEnvio {
-  id          String   @id @default(uuid())
+  id          String         @id @default(uuid())
   empresa     EmpresaCliente @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   empresaId   String
-  nome        String   // ex: "Planilha mensal viagens", "Pedágios"
-  colunas     Json     // [{ campo, header, ordem, formato? }]
-  config      Json?    // { incluiCabecalhoEmpresa, formatoData, separadorDecimal }
-  padrao      Boolean  @default(false)
-  criadoPor   User?    @relation(fields: [criadoPorId], references: [id])
+  nome        String // ex: "Planilha mensal viagens", "Pedágios"
+  colunas     Json // [{ campo, header, ordem, formato? }]
+  config      Json? // { incluiCabecalhoEmpresa, formatoData, separadorDecimal }
+  padrao      Boolean        @default(false)
+  criadoPor   User?          @relation(fields: [criadoPorId], references: [id])
   criadoPorId String?
-  criadoEm    DateTime @default(now())
-  alteradoEm  DateTime @updatedAt
+  criadoEm    DateTime       @default(now())
+  alteradoEm  DateTime       @updatedAt
 
   envios EnvioFechamento[]
 
@@ -404,29 +414,29 @@ model LayoutEnvio {
 }
 
 model EnvioFechamento {
-  id                String          @id @default(uuid())
+  id               String          @id @default(uuid())
   // Quando o envio for fruto de uma planilha que a empresa nos mandou e
   // depois exportamos de volta, fica vinculado ao Fechamento. Quando for
   // um envio standalone (empresa que so RECEBE planilha), fechamentoId
   // fica null e usamos empresaCliente/periodoInicio/periodoFim direto.
-  fechamento        Fechamento?     @relation(fields: [fechamentoId], references: [id], onDelete: Cascade)
-  fechamentoId      String?
-  empresaCliente    EmpresaCliente? @relation(fields: [empresaClienteId], references: [id])
-  empresaClienteId  String?
-  periodoInicio     DateTime?       @db.Date
-  periodoFim        DateTime?       @db.Date
-  totalLinhas       Int?            // qtde de viagens incluídas no XLSX
-  layout            LayoutEnvio?    @relation(fields: [layoutId], references: [id])
-  layoutId          String?
-  arquivoGeradoKey  String          // XLSX no MinIO
-  arquivoNome       String          // nome legível pra download
-  geradoPor         User?           @relation(fields: [geradoPorId], references: [id])
-  geradoPorId       String?
-  geradoEm          DateTime        @default(now())
-  status            StatusEnvio     @default(GERADO)
-  marcadoEnviadoEm  DateTime?
-  canalEnvio        String?         // WhatsApp, email, etc
-  observacao        String?
+  fechamento       Fechamento?     @relation(fields: [fechamentoId], references: [id], onDelete: Cascade)
+  fechamentoId     String?
+  empresaCliente   EmpresaCliente? @relation(fields: [empresaClienteId], references: [id])
+  empresaClienteId String?
+  periodoInicio    DateTime?       @db.Date
+  periodoFim       DateTime?       @db.Date
+  totalLinhas      Int? // qtde de viagens incluídas no XLSX
+  layout           LayoutEnvio?    @relation(fields: [layoutId], references: [id])
+  layoutId         String?
+  arquivoGeradoKey String // XLSX no MinIO
+  arquivoNome      String // nome legível pra download
+  geradoPor        User?           @relation(fields: [geradoPorId], references: [id])
+  geradoPorId      String?
+  geradoEm         DateTime        @default(now())
+  status           StatusEnvio     @default(GERADO)
+  marcadoEnviadoEm DateTime?
+  canalEnvio       String? // WhatsApp, email, etc
+  observacao       String?
 
   @@index([fechamentoId])
   @@index([empresaClienteId, periodoInicio])
@@ -437,14 +447,14 @@ model AuditLog {
   id          String        @id @default(uuid())
   usuario     User?         @relation(fields: [usuarioId], references: [id])
   usuarioId   String?
-  entidade    String        // "Viagem", "Pedagio", "FechamentoLinha", etc
-  entidadeId  String        // id do registro afetado
+  entidade    String // "Viagem", "Pedagio", "FechamentoLinha", etc
+  entidadeId  String // id do registro afetado
   acao        AcaoAuditoria
-  campo       String?       // campo alterado (null se for ação ampla)
+  campo       String? // campo alterado (null se for ação ampla)
   valorAntes  Json?
   valorDepois Json?
-  motivo      String?       // texto livre quando humano resolve divergência ou justifica
-  metadata    Json?         // dados extras (confidence da IA, sugestão usada, etc)
+  motivo      String? // texto livre quando humano resolve divergência ou justifica
+  metadata    Json? // dados extras (confidence da IA, sugestão usada, etc)
   criadoEm    DateTime      @default(now())
 
   @@index([entidade, entidadeId])
@@ -464,23 +474,22 @@ model GeocodingCache {
   @@map("geocoding_cache")
 }
 
-
 /// Configuração global do tracking GPS aplicado a todos os motoristas.
 /// Singleton: só existe uma linha (id="default"). Operadora ajusta pelo dashboard.
 model ConfiguracaoTracking {
   id                    String   @id @default("default")
   // Captura GPS
-  distanciaMinMetros    Int      @default(50)   // captura a cada N metros andados
-  intervaloMaxSegundos  Int      @default(30)   // ou a cada N segundos (o que ocorrer 1º)
+  distanciaMinMetros    Int      @default(50) // captura a cada N metros andados
+  intervaloMaxSegundos  Int      @default(30) // ou a cada N segundos (o que ocorrer 1º)
   precisaoAlta          Boolean  @default(false) // true = High accuracy (mais bateria)
   // Filtros — descarta pontos ruins antes de salvar
-  accuracyMaxMetros     Int      @default(100)  // descarta se accuracy > N
-  velocidadeMaxKmh      Int      @default(200)  // descarta se velocidade > N km/h
+  accuracyMaxMetros     Int      @default(100) // descarta se accuracy > N
+  velocidadeMaxKmh      Int      @default(200) // descarta se velocidade > N km/h
   // Auto-finalização e detector híbrido
-  autoFinalizarHoras    Int      @default(6)    // notifica se viagem ativa > N horas sem ponto
+  autoFinalizarHoras    Int      @default(6) // notifica se viagem ativa > N horas sem ponto
   detectorAtivado       Boolean  @default(true) // detecta movimento sem tracking ativo
-  detectorVelocidadeKmh Int      @default(30)   // velocidade pra disparar detector
-  detectorLeituras      Int      @default(3)    // leituras consecutivas pra notificar
+  detectorVelocidadeKmh Int      @default(30) // velocidade pra disparar detector
+  detectorLeituras      Int      @default(3) // leituras consecutivas pra notificar
   // Audit
   alteradoEm            DateTime @updatedAt
   alteradoPor           User?    @relation(fields: [alteradoPorId], references: [id])
@@ -520,4 +529,47 @@ model ErrorLog {
   @@index([capturadoEm])
   @@index([userId])
   @@map("error_logs")
+}
+
+model Abastecimento {
+  id              String          @id @default(uuid())
+  clientId        String          @unique // idempotência (gerado no app)
+  motorista       Motorista       @relation(fields: [motoristaId], references: [id])
+  motoristaId     String
+  veiculo         Veiculo         @relation(fields: [veiculoId], references: [id])
+  veiculoId       String
+  data            DateTime // timestamp completo (hora importa)
+  tipo            TipoCombustivel @default(DIESEL_S10)
+  litros          Decimal         @db.Decimal(8, 3)
+  valorTotal      Decimal         @db.Decimal(10, 2)
+  precoLitro      Decimal?        @db.Decimal(6, 3) // calculado server-side
+  odometro        Int // km do hodômetro
+  postoNome       String?
+  tanqueCheio     Boolean         @default(true)
+  observacao      String?
+  // GPS capturado no momento do registro (silencioso — null se permissão negada)
+  lat             Float?
+  lng             Float?
+  precisao        Float?
+  criadoOfflineEm DateTime?
+  sincronizadoEm  DateTime        @default(now())
+  alteradoEm      DateTime        @updatedAt
+
+  fotos AbastecimentoFoto[]
+
+  @@index([veiculoId, data])
+  @@index([motoristaId, data])
+  @@index([data])
+  @@map("abastecimentos")
+}
+
+model AbastecimentoFoto {
+  id              String        @id @default(uuid())
+  abastecimento   Abastecimento @relation(fields: [abastecimentoId], references: [id], onDelete: Cascade)
+  abastecimentoId String
+  storageKey      String // chave no MinIO
+  capturadaEm     DateTime      @default(now())
+
+  @@index([abastecimentoId])
+  @@map("abastecimento_fotos")
 }

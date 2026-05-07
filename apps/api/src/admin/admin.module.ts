@@ -7,6 +7,7 @@ import { MotoristasModule } from "./motoristas/motoristas.module";
 import { UsersModule } from "./users/users.module";
 import { LocaisModule } from "./locais/locais.module";
 import { ViagensAdminModule } from "./viagens/viagens.module";
+import { AbastecimentosAdminModule } from "./abastecimentos/abastecimentos.module";
 import { TrackingConfigModule } from "./tracking-config/tracking-config.module";
 
 @Module({
@@ -19,6 +20,7 @@ import { TrackingConfigModule } from "./tracking-config/tracking-config.module";
     UsersModule,
     LocaisModule,
     ViagensAdminModule,
+    AbastecimentosAdminModule,
     TrackingConfigModule,
   ],
 })

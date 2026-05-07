@@ -5,6 +5,7 @@ import {
   ArrowDown,
   ArrowUp,
   Calendar,
+  Fuel,
   MapPin,
   Receipt,
   Trash2,
@@ -29,16 +30,26 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { humanizeApiError } from "@/lib/api";
 import {
+  useAbastecimentos,
   useExcluirPedagio,
   usePedagiosFiltrados,
   useResumoMes,
   useViagensFiltradas,
+  type Abastecimento,
   type GrupoStatus,
   type Pedagio,
   type Viagem,
 } from "@/lib/queries";
 
-type Aba = "viagens" | "pedagios";
+type Aba = "viagens" | "pedagios" | "abastecimentos";
+
+const TIPO_LABEL: Record<string, string> = {
+  DIESEL_S10: "Diesel S10",
+  DIESEL_S500: "Diesel S500",
+  ARLA_32: "ARLA 32",
+  GASOLINA: "Gasolina",
+  ETANOL: "Etanol",
+};
 
 const statusVariant: Record<
   string,
@@ -80,7 +91,11 @@ export default function HistoricoScreen() {
     status: filtroStatus === "TODAS" ? undefined : filtroStatus,
   });
   const pedagios = usePedagiosFiltrados({ mes: mesSelecionado });
+  const abastecimentos = useAbastecimentos(mesSelecionado);
   const excluirPedagio = useExcluirPedagio();
+
+  const itensAbastecimentos = abastecimentos.data ?? [];
+  const totalAbastMes = itensAbastecimentos.length;
 
   const itensViagens = useMemo(
     () => viagens.data?.pages.flatMap((p) => p.itens) ?? [],
@@ -124,7 +139,7 @@ export default function HistoricoScreen() {
 
   const headerComponent = (
     <View className="mb-2 gap-3">
-      {/* Toggle Viagens/Pedagios */}
+      {/* Toggle Viagens/Pedagios/Abastecimentos */}
       <View className="flex-row gap-2">
         <AbaButton
           ativo={aba === "viagens"}
@@ -137,6 +152,12 @@ export default function HistoricoScreen() {
           onPress={() => setAba("pedagios")}
           label="Pedágios"
           count={totalPedagiosMes}
+        />
+        <AbaButton
+          ativo={aba === "abastecimentos"}
+          onPress={() => setAba("abastecimentos")}
+          label="Abast."
+          count={totalAbastMes}
         />
       </View>
 
@@ -268,11 +289,15 @@ export default function HistoricoScreen() {
           Histórico
         </Text>
         <Text className="mt-0.5 text-2xl font-bold text-white">
-          {aba === "viagens" ? "Suas viagens por mês" : "Seus pedágios por mês"}
+          {aba === "viagens"
+            ? "Suas viagens por mês"
+            : aba === "pedagios"
+              ? "Seus pedágios por mês"
+              : "Seus abastecimentos por mês"}
         </Text>
       </View>
 
-      {aba === "viagens" ? (
+      {aba === "viagens" && (
         <FlatList<Viagem>
           data={itensViagens}
           keyExtractor={(v) => v.id}
@@ -330,7 +355,9 @@ export default function HistoricoScreen() {
             ) : null
           }
         />
-      ) : (
+      )}
+
+      {aba === "pedagios" && (
         <FlatList<Pedagio>
           data={itensPedagios}
           keyExtractor={(p) => p.id}
@@ -388,6 +415,51 @@ export default function HistoricoScreen() {
                 <ActivityIndicator />
               </View>
             ) : null
+          }
+        />
+      )}
+
+      {aba === "abastecimentos" && (
+        <FlatList<Abastecimento>
+          data={itensAbastecimentos}
+          keyExtractor={(a) => a.id}
+          contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={abastecimentos.isFetching}
+              onRefresh={() => {
+                void abastecimentos.refetch();
+              }}
+            />
+          }
+          ListHeaderComponent={headerComponent}
+          renderItem={({ item, index }) => (
+            <Animated.View
+              entering={FadeInDown.delay(index * 20).duration(180)}
+            >
+              <AbastecimentoCard a={item} />
+            </Animated.View>
+          )}
+          ListEmptyComponent={
+            abastecimentos.isLoading ? (
+              <View className="gap-3">
+                <ViagemCardSkeleton />
+                <ViagemCardSkeleton />
+              </View>
+            ) : abastecimentos.error ? (
+              <EmptyState
+                icon={WifiOff}
+                title="Sem internet"
+                description="Conecte pra ver os abastecimentos."
+                iconColor="#dc2626"
+              />
+            ) : (
+              <EmptyState
+                icon={Fuel}
+                title="Nenhum abastecimento"
+                description='Cadastre tocando em "Abastecimento" na tela inicial.'
+              />
+            )
           }
         />
       )}
@@ -546,6 +618,69 @@ function PedagioCard({
     >
       {card}
     </Swipeable>
+  );
+}
+
+function AbastecimentoCard({ a }: { a: Abastecimento }) {
+  const litros = parseFloat(a.litros);
+  const valor = parseFloat(a.valorTotal);
+  const preco = a.precoLitro ? parseFloat(a.precoLitro) : null;
+
+  return (
+    <View className="rounded-2xl border-2 border-border bg-card p-4">
+      <View className="flex-row items-start justify-between gap-3">
+        <View className="flex-1">
+          <Text
+            className="text-sm font-medium text-muted-foreground"
+            style={{ fontVariant: ["tabular-nums"] }}
+          >
+            {fmtDataHoraCurta(a.data)} · {a.veiculo.placa}
+          </Text>
+          {a.postoNome && (
+            <Text
+              className="mt-0.5 text-base font-bold text-foreground"
+              numberOfLines={2}
+            >
+              {a.postoNome}
+            </Text>
+          )}
+        </View>
+        <Badge variant="outline">{TIPO_LABEL[a.tipo] ?? a.tipo}</Badge>
+      </View>
+
+      <View className="mt-3 flex-row gap-5 border-t-2 border-border pt-3">
+        <Stat
+          label="L"
+          value={litros.toLocaleString("pt-BR", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}
+        />
+        <Stat
+          label="R$"
+          value={valor.toLocaleString("pt-BR", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}
+        />
+        {preco !== null && (
+          <Stat
+            label="R$/L"
+            value={preco.toLocaleString("pt-BR", {
+              minimumFractionDigits: 3,
+              maximumFractionDigits: 3,
+            })}
+          />
+        )}
+        <Stat label="km" value={a.odometro.toLocaleString("pt-BR")} />
+      </View>
+
+      {a.fotos.length > 0 && (
+        <Text className="mt-2 text-xs text-muted-foreground">
+          📷 {a.fotos.length} {a.fotos.length === 1 ? "foto" : "fotos"}
+        </Text>
+      )}
+    </View>
   );
 }
 

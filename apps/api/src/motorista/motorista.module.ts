@@ -8,6 +8,8 @@ import { ViagensMotoristaController } from "./viagens.controller";
 import { ViagensMotoristaService } from "./viagens.service";
 import { PedagiosMotoristaController } from "./pedagios.controller";
 import { PedagiosMotoristaService } from "./pedagios.service";
+import { AbastecimentosMotoristaController } from "./abastecimentos.controller";
+import { AbastecimentosMotoristaService } from "./abastecimentos.service";
 import { LocaisMotoristaController } from "./locais.controller";
 import { LocaisMotoristaService } from "./locais.service";
 import { RotasMotoristaController } from "./rotas.controller";
@@ -19,6 +21,7 @@ import { TrackingConfigMotoristaController } from "./tracking-config.controller"
     MotoristaController,
     ViagensMotoristaController,
     PedagiosMotoristaController,
+    AbastecimentosMotoristaController,
     LocaisMotoristaController,
     RotasMotoristaController,
     TrackingConfigMotoristaController,
@@ -27,6 +30,7 @@ import { TrackingConfigMotoristaController } from "./tracking-config.controller"
     MotoristaService,
     ViagensMotoristaService,
     PedagiosMotoristaService,
+    AbastecimentosMotoristaService,
     LocaisMotoristaService,
   ],
 })

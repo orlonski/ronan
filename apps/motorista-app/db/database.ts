@@ -60,8 +60,21 @@ export type PendingPedagio = {
   errorMsg?: string;
 };
 
+export type PendingAbastecimento = {
+  clientId: string;
+  payload: Record<string, unknown>;
+  fotoUri?: string;
+  fotoMime?: string;
+  status: "pending" | "syncing" | "error";
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+};
+
 const VIAGENS_KEY = `${PREFIX}outbox.viagens`;
 const PEDAGIOS_KEY = `${PREFIX}outbox.pedagios`;
+const ABASTECIMENTOS_KEY = `${PREFIX}outbox.abastecimentos`;
 
 async function readList<T>(key: string): Promise<T[]> {
   try {
@@ -114,6 +127,28 @@ export async function deletePendingPedagio(clientId: string): Promise<void> {
   const list = await listPendingPedagios();
   await writeList(
     PEDAGIOS_KEY,
+    list.filter((x) => x.clientId !== clientId),
+  );
+}
+
+export async function listPendingAbastecimentos(): Promise<PendingAbastecimento[]> {
+  return readList<PendingAbastecimento>(ABASTECIMENTOS_KEY);
+}
+
+export async function upsertPendingAbastecimento(
+  item: PendingAbastecimento,
+): Promise<void> {
+  const list = await listPendingAbastecimentos();
+  const idx = list.findIndex((x) => x.clientId === item.clientId);
+  if (idx >= 0) list[idx] = item;
+  else list.unshift(item);
+  await writeList(ABASTECIMENTOS_KEY, list);
+}
+
+export async function deletePendingAbastecimento(clientId: string): Promise<void> {
+  const list = await listPendingAbastecimentos();
+  await writeList(
+    ABASTECIMENTOS_KEY,
     list.filter((x) => x.clientId !== clientId),
   );
 }

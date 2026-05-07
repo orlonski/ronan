@@ -40,6 +40,19 @@ export class UploadsService implements OnModuleInit {
     return key;
   }
 
+  async putAbastecimentoFoto(
+    buffer: Buffer,
+    mimetype: string,
+    motoristaId: string,
+  ): Promise<string> {
+    const ext = mimetype.includes("png") ? "png" : "jpg";
+    const key = `abastecimentos/${new Date().toISOString().slice(0, 10)}/${motoristaId}/${randomUUID()}.${ext}`;
+    await this.client.putObject(this.bucket, key, buffer, buffer.length, {
+      "Content-Type": mimetype,
+    });
+    return key;
+  }
+
   async putFechamentoOriginal(
     buffer: Buffer,
     nomeArquivo: string,

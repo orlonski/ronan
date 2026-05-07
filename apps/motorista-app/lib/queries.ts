@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-query";
 import { cacheGet, cachePut } from "@/db/database";
 import { api, ApiError } from "./api";
-import { enqueuePedagio, enqueueViagem } from "./sync";
+import { enqueueAbastecimento, enqueuePedagio, enqueueViagem } from "./sync";
 
 export type Veiculo = { id: string; placa: string; modelo: string | null };
 
@@ -313,6 +313,83 @@ export function useCriarPedagio() {
     void qc.invalidateQueries({ queryKey: ["pedagios"] });
     void qc.invalidateQueries({ queryKey: ["pedagios-filtrados"] });
     void qc.invalidateQueries({ queryKey: ["resumo-mes"] });
+  };
+}
+
+export type Abastecimento = {
+  id: string;
+  clientId: string;
+  data: string;
+  tipo: "DIESEL_S10" | "DIESEL_S500" | "ARLA_32" | "GASOLINA" | "ETANOL";
+  litros: string;
+  valorTotal: string;
+  precoLitro: string | null;
+  odometro: number;
+  postoNome: string | null;
+  tanqueCheio: boolean;
+  observacao: string | null;
+  lat: number | null;
+  lng: number | null;
+  veiculo: { id: string; placa: string; modelo: string | null };
+  fotos: { id: string; storageKey: string }[];
+};
+
+export type ListaAbastecimentos = {
+  itens: Abastecimento[];
+  nextCursor: string | null;
+};
+
+export function useAbastecimentos(mes?: string) {
+  const qs = mes ? `?mes=${mes}` : "";
+  const cacheKey = `q:abastecimentos:${mes ?? "todos"}`;
+  return useQuery({
+    queryKey: ["abastecimentos", mes ?? "todos"],
+    staleTime: 60_000,
+    queryFn: async (): Promise<Abastecimento[]> => {
+      try {
+        const fresh = await api.get<ListaAbastecimentos>(
+          `/m/abastecimentos${qs}`,
+        );
+        void cachePut(cacheKey, fresh.itens).catch(() => {});
+        return fresh.itens;
+      } catch (err) {
+        if (isOfflineError(err)) {
+          try {
+            const cached = await cacheGet<Abastecimento[]>(cacheKey);
+            if (cached) return cached;
+          } catch {
+            /* nope */
+          }
+        }
+        throw err;
+      }
+    },
+  });
+}
+
+export function usePostosRecentes() {
+  return useQuery({
+    queryKey: ["postos-recentes"],
+    staleTime: 5 * 60_000,
+    queryFn: async (): Promise<string[]> => {
+      try {
+        return await api.get<string[]>("/m/abastecimentos/postos-recentes");
+      } catch {
+        return [];
+      }
+    },
+  });
+}
+
+export function useCriarAbastecimento() {
+  const qc = useQueryClient();
+  return async (input: {
+    payload: Record<string, unknown>;
+    foto?: { uri: string; mime: string };
+  }) => {
+    await enqueueAbastecimento(input.payload, input.foto);
+    void qc.invalidateQueries({ queryKey: ["abastecimentos"] });
+    void qc.invalidateQueries({ queryKey: ["postos-recentes"] });
   };
 }
 

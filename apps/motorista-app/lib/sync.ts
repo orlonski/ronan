@@ -1,12 +1,16 @@
 import { AppState } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
 import {
+  deletePendingAbastecimento,
   deletePendingPedagio,
   deletePendingViagem,
+  listPendingAbastecimentos,
   listPendingPedagios,
   listPendingViagens,
+  upsertPendingAbastecimento,
   upsertPendingPedagio,
   upsertPendingViagem,
+  type PendingAbastecimento,
   type PendingPedagio,
   type PendingViagem,
 } from "@/db/database";
@@ -83,17 +87,51 @@ export async function enqueuePedagio(payload: Record<string, unknown>): Promise<
   void drain();
 }
 
+export async function enqueueAbastecimento(
+  payload: Record<string, unknown>,
+  foto?: { uri: string; mime: string },
+): Promise<void> {
+  const clientId = payload.clientId as string;
+  await upsertPendingAbastecimento({
+    clientId,
+    payload,
+    fotoUri: foto?.uri,
+    fotoMime: foto?.mime,
+    status: "pending",
+    attempts: 0,
+    createdAt: Date.now(),
+  });
+  notify();
+  void drain();
+}
+
+export async function descartarAbastecimentoPendente(clientId: string): Promise<void> {
+  await deletePendingAbastecimento(clientId);
+  notify();
+}
+
 export async function pendingCounts(): Promise<{
   viagens: number;
   pedagios: number;
+  abastecimentos: number;
   /** Itens com erro permanente (4xx) que precisam de ação do motorista. */
   comErro: number;
 }> {
-  const [v, p] = await Promise.all([listPendingViagens(), listPendingPedagios()]);
+  const [v, p, a] = await Promise.all([
+    listPendingViagens(),
+    listPendingPedagios(),
+    listPendingAbastecimentos(),
+  ]);
   const comErro =
     v.filter((i) => i.attempts >= MAX_ATTEMPTS).length +
-    p.filter((i) => i.attempts >= MAX_ATTEMPTS).length;
-  return { viagens: v.length, pedagios: p.length, comErro };
+    p.filter((i) => i.attempts >= MAX_ATTEMPTS).length +
+    a.filter((i) => i.attempts >= MAX_ATTEMPTS).length;
+  return {
+    viagens: v.length,
+    pedagios: p.length,
+    abastecimentos: a.length,
+    comErro,
+  };
 }
 
 export async function drain(): Promise<void> {
@@ -104,6 +142,7 @@ export async function drain(): Promise<void> {
   try {
     await drainViagens();
     await drainPedagios();
+    await drainAbastecimentos();
   } finally {
     draining = false;
     notify();
@@ -182,6 +221,64 @@ async function processPedagio(item: PendingPedagio): Promise<void> {
   } catch (err) {
     const permanente = isErroPermanente(err);
     await upsertPendingPedagio({
+      ...item,
+      status: "error",
+      errorMsg: (err as Error).message ?? String(err),
+      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
+    });
+  }
+  notify();
+}
+
+async function drainAbastecimentos(): Promise<void> {
+  const list = await listPendingAbastecimentos();
+  for (const item of list) {
+    if (item.status === "syncing") continue;
+    if (item.attempts >= MAX_ATTEMPTS) continue;
+    const net = await NetInfo.fetch();
+    if (!net.isConnected) return;
+    await processAbastecimento(item);
+  }
+}
+
+async function processAbastecimento(item: PendingAbastecimento): Promise<void> {
+  await upsertPendingAbastecimento({
+    ...item,
+    status: "syncing",
+    lastTriedAt: Date.now(),
+  });
+  notify();
+  try {
+    let payload = { ...item.payload };
+    if (item.fotoUri && !payload.fotoKey) {
+      const fd = new FormData();
+      const filename = `abast-${item.clientId}.${
+        item.fotoMime?.includes("png") ? "png" : "jpg"
+      }`;
+      fd.append("foto", {
+        uri: item.fotoUri,
+        type: item.fotoMime ?? "image/jpeg",
+        name: filename,
+      } as unknown as Blob);
+      const up = await api.postForm<{ storageKey: string }>(
+        "/m/uploads/abastecimento",
+        fd,
+      );
+      payload = { ...payload, fotoKey: up.storageKey };
+      // Marca foto como já subida pra não tentar de novo se abast falhar depois
+      await upsertPendingAbastecimento({
+        ...item,
+        payload,
+        fotoUri: undefined,
+        fotoMime: undefined,
+        status: "syncing",
+      });
+    }
+    await api.post("/m/abastecimentos", payload);
+    await deletePendingAbastecimento(item.clientId);
+  } catch (err) {
+    const permanente = isErroPermanente(err);
+    await upsertPendingAbastecimento({
       ...item,
       status: "error",
       errorMsg: (err as Error).message ?? String(err),

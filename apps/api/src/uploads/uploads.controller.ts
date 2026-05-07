@@ -41,4 +41,26 @@ export class UploadsController {
     const key = await this.uploads.putTicketFoto(file.buffer, file.mimetype, user.id);
     return { storageKey: key };
   }
+
+  @Roles("MOTORISTA")
+  @Post("m/uploads/abastecimento")
+  @UseInterceptors(FileInterceptor("foto"))
+  async uploadAbastecimento(
+    @CurrentUser() user: AuthMotorista,
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ) {
+    if (!file) throw new BadRequestException("Foto não enviada");
+    if (!ALLOWED.includes(file.mimetype)) {
+      throw new BadRequestException(`Tipo não permitido: ${file.mimetype}`);
+    }
+    if (file.size > MAX_BYTES) {
+      throw new BadRequestException("Foto maior que 10MB");
+    }
+    const key = await this.uploads.putAbastecimentoFoto(
+      file.buffer,
+      file.mimetype,
+      user.id,
+    );
+    return { storageKey: key };
+  }
 }

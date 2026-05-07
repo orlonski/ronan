@@ -8,6 +8,7 @@ import {
   ArrowRight,
   ArrowUp,
   CloudOff,
+  Fuel,
   Play,
   Plus,
   Receipt,
@@ -333,6 +334,24 @@ export default function Home() {
                 </Text>
                 <Text className="text-sm text-muted-foreground">
                   Registrar passagem em praça
+                </Text>
+              </View>
+            </Pressable>
+
+            {/* Botão Abastecimento */}
+            <Pressable
+              onPress={() => router.push("/novo-abastecimento")}
+              className="flex-row items-center gap-4 rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
+            >
+              <View className="h-14 w-14 items-center justify-center rounded-2xl bg-secondary">
+                <Fuel size={26} color="#13316b" strokeWidth={2.5} />
+              </View>
+              <View className="flex-1">
+                <Text className="text-lg font-bold text-foreground">
+                  Abastecimento
+                </Text>
+                <Text className="text-sm text-muted-foreground">
+                  Registrar combustível e odômetro
                 </Text>
               </View>
             </Pressable>
