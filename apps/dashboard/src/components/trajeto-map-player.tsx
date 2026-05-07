@@ -80,7 +80,7 @@ function PanToCurrent({
 export function TrajetoMapPlayer({ pontos }: { pontos: PontoPlayer[] }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [speed, setSpeed] = useState<Speed>(60);
+  const [speed, setSpeed] = useState<Speed>(1);
   const [panTrigger, setPanTrigger] = useState(0);
 
   if (pontos.length < 2) return null;
