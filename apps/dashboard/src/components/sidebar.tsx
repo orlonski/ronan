@@ -17,6 +17,7 @@ import {
   HardHat,
   LogOut,
   MapPin,
+  MessageCircle,
   Package,
   Send,
   Settings,
@@ -69,6 +70,7 @@ const GRUPOS: Grupo[] = [
     admin: true,
     itens: [
       { href: "/usuarios", label: "Usuários", icon: Users2 },
+      { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle },
       { href: "/erros", label: "Erros", icon: AlertCircle },
       { href: "/configuracoes/tracking", label: "Tracking GPS", icon: Settings },
       { href: "/configuracoes/ia", label: "Inteligência Artificial", icon: Sparkles },

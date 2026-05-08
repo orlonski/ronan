@@ -5,6 +5,7 @@ import { Pencil, Plus } from "lucide-react";
 import { cpfDigits, formatCpf, isCpfValid } from "@ronan/shared-types";
 import { StatusToggle } from "@/components/status-toggle";
 import { ExcluirButton } from "@/components/excluir-button";
+import { ConviteWhatsappButton } from "@/components/convite-whatsapp-button";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -124,6 +125,7 @@ export default function MotoristasPage() {
                 <Button variant="ghost" size="icon" onClick={() => openEdit(m)}>
                   <Pencil className="h-4 w-4" />
                 </Button>
+                <ConviteWhatsappButton tipo="motorista" id={m.id} nome={m.nome} />
                 <ExcluirButton
                   path="/admin/motoristas"
                   id={m.id}
@@ -179,6 +181,7 @@ export default function MotoristasPage() {
                 </TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="icon" onClick={() => openEdit(m)}><Pencil className="h-4 w-4" /></Button>
+                  <ConviteWhatsappButton tipo="motorista" id={m.id} nome={m.nome} />
                   <ExcluirButton
                     path="/admin/motoristas"
                     id={m.id}

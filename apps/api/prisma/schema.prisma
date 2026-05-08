@@ -110,6 +110,8 @@ model User {
   layoutsEnvio    LayoutEnvio[]
   configsTracking ConfiguracaoTracking[]
   configsIa       ConfiguracaoIa[]
+  whatsappSessao  WhatsappSessao?
+  whatsappConvites WhatsappConvite[]
 
   @@map("users")
 }
@@ -132,9 +134,63 @@ model Motorista {
   viagens        Viagem[]
   pedagios       Pedagio[]
   abastecimentos Abastecimento[]
+  whatsappSessao   WhatsappSessao?
+  whatsappConvites WhatsappConvite[]
 
   @@index([ativo])
   @@map("motoristas")
+}
+
+/// Vincula 1 telefone WhatsApp a 1 motorista OU 1 admin user (mutuamente exclusivo).
+/// Sessão por telefone — quem mandar mensagem desse número é identificado e roteado
+/// pro toolset adequado (motorista lança viagem; admin consulta dashboard).
+model WhatsappSessao {
+  id             String     @id @default(uuid())
+  telefone       String     @unique // formato "5541999999999" (só dígitos, com DDI 55)
+  motorista      Motorista? @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  motoristaId    String?    @unique
+  user           User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String?    @unique
+  vinculadoEm    DateTime   @default(now())
+  ultimaMensagem DateTime?
+  mensagens      WhatsappMensagem[]
+
+  @@map("whatsapp_sessoes")
+}
+
+/// Código curto (6 chars alfanuméricos) gerado pelo admin no painel pra autorizar
+/// vinculação. Motorista cola no chat, sistema valida + cria sessão. Expira em 24h.
+model WhatsappConvite {
+  id          String     @id @default(uuid())
+  codigo      String     @unique // ex: "A3F7K9" (uppercase, sem 0/O/1/I)
+  motorista   Motorista? @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  motoristaId String?
+  user        User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String?
+  expiraEm    DateTime
+  usadoEm     DateTime?
+  criadoEm    DateTime   @default(now())
+
+  @@index([codigo])
+  @@map("whatsapp_convites")
+}
+
+/// Histórico de mensagens recebidas/enviadas pelo bot. Usado pra auditoria E pra
+/// montar contexto curto (últimas N) que vai pro Claude na próxima rodada.
+model WhatsappMensagem {
+  id        String          @id @default(uuid())
+  sessao    WhatsappSessao? @relation(fields: [sessaoId], references: [id], onDelete: Cascade)
+  sessaoId  String?
+  telefone  String // sempre presente, mesmo sem sessão (fluxo inicial)
+  direcao   String // "ENTRADA" | "SAIDA"
+  conteudo  String  @db.Text
+  tipo      String // "TEXTO" | "IMAGEM" | "AUDIO"
+  metadata  Json?  // { fotoStorageKey, viagemCriadaId, toolsChamadas, evolutionMsgId, ... }
+  criadoEm  DateTime @default(now())
+
+  @@index([telefone, criadoEm])
+  @@index([sessaoId, criadoEm])
+  @@map("whatsapp_mensagens")
 }
 
 model Veiculo {

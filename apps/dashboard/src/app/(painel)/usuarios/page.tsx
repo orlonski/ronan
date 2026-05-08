@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { Pencil, Plus } from "lucide-react";
 import { StatusToggle } from "@/components/status-toggle";
+import { ConviteWhatsappButton } from "@/components/convite-whatsapp-button";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -111,6 +112,7 @@ export default function UsuariosPage() {
                 <Button variant="ghost" size="icon" onClick={() => openEdit(u)}>
                   <Pencil className="h-4 w-4" />
                 </Button>
+                <ConviteWhatsappButton tipo="user" id={u.id} nome={u.nome} />
               </div>
             </div>
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
@@ -160,6 +162,7 @@ export default function UsuariosPage() {
                 </TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="icon" onClick={() => openEdit(u)}><Pencil className="h-4 w-4" /></Button>
+                  <ConviteWhatsappButton tipo="user" id={u.id} nome={u.nome} />
                 </TableCell>
               </TableRow>
             ))}

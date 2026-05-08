@@ -13,6 +13,7 @@ import { IaModule } from "./ia/ia.module";
 import { FechamentosModule } from "./fechamentos/fechamentos.module";
 import { ErrorsModule } from "./errors/errors.module";
 import { ErrorsExceptionFilter } from "./errors/errors.filter";
+import { WhatsappModule } from "./whatsapp/whatsapp.module";
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { ErrorsExceptionFilter } from "./errors/errors.filter";
     GeocodingModule,
     HealthModule,
     ErrorsModule,
+    WhatsappModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: ErrorsExceptionFilter }],
 })
