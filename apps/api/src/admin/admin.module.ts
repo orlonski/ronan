@@ -12,6 +12,7 @@ import { TrackingConfigModule } from "./tracking-config/tracking-config.module";
 import { IaConfigModule } from "./ia-config/ia-config.module";
 import { LayoutImportModule } from "./layout-import/layout-import.module";
 import { CamposLayoutModule } from "./campos-layout/campos-layout.module";
+import { DashboardModule } from "./dashboard/dashboard.module";
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { CamposLayoutModule } from "./campos-layout/campos-layout.module";
     IaConfigModule,
     LayoutImportModule,
     CamposLayoutModule,
+    DashboardModule,
   ],
 })
 export class AdminModule {}
