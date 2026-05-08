@@ -34,22 +34,45 @@ type Item = {
   admin?: boolean;
 };
 
-const ITEMS: Item[] = [
-  { href: "/viagens", label: "Viagens", icon: ClipboardCheck },
-  { href: "/abastecimentos", label: "Abastecimentos", icon: Fuel },
-  { href: "/fechamentos", label: "Fechamentos", icon: FileSpreadsheet },
-  { href: "/envios", label: "Envios", icon: Send },
-  { href: "/motoristas", label: "Motoristas", icon: HardHat },
-  { href: "/frota", label: "Frota", icon: Truck },
-  { href: "/empresas", label: "Empresas-cliente", icon: Building2 },
-  { href: "/obras", label: "Obras", icon: Boxes },
-  { href: "/locais", label: "Locais", icon: MapPin },
-  { href: "/materiais", label: "Materiais", icon: Package },
-  { href: "/usuarios", label: "Usuários", icon: Users2, admin: true },
-  { href: "/erros", label: "Erros", icon: AlertCircle, admin: true },
-  { href: "/configuracoes/tracking", label: "Tracking GPS", icon: Settings, admin: true },
-  { href: "/configuracoes/ia", label: "Inteligência Artificial", icon: Sparkles, admin: true },
-  { href: "/configuracoes/campos-layout", label: "Campos do layout", icon: Sparkles, admin: true },
+type Grupo = {
+  titulo: string;
+  itens: Item[];
+  // Se admin = true, grupo inteiro só aparece pra admin
+  admin?: boolean;
+};
+
+const GRUPOS: Grupo[] = [
+  {
+    titulo: "Operação",
+    itens: [
+      { href: "/viagens", label: "Viagens", icon: ClipboardCheck },
+      { href: "/abastecimentos", label: "Abastecimentos", icon: Fuel },
+      { href: "/fechamentos", label: "Fechamentos", icon: FileSpreadsheet },
+      { href: "/envios", label: "Envios", icon: Send },
+    ],
+  },
+  {
+    titulo: "Cadastros",
+    itens: [
+      { href: "/motoristas", label: "Motoristas", icon: HardHat },
+      { href: "/frota", label: "Frota", icon: Truck },
+      { href: "/empresas", label: "Empresas-cliente", icon: Building2 },
+      { href: "/obras", label: "Obras", icon: Boxes },
+      { href: "/locais", label: "Locais", icon: MapPin },
+      { href: "/materiais", label: "Materiais", icon: Package },
+    ],
+  },
+  {
+    titulo: "Sistema",
+    admin: true,
+    itens: [
+      { href: "/usuarios", label: "Usuários", icon: Users2 },
+      { href: "/erros", label: "Erros", icon: AlertCircle },
+      { href: "/configuracoes/tracking", label: "Tracking GPS", icon: Settings },
+      { href: "/configuracoes/ia", label: "Inteligência Artificial", icon: Sparkles },
+      { href: "/configuracoes/campos-layout", label: "Campos do layout", icon: Sparkles },
+    ],
+  },
 ];
 
 export function Sidebar({
@@ -116,25 +139,32 @@ export function Sidebar({
           )}
         </div>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto">
-          {ITEMS.filter((i) => !i.admin || isAdmin).map(({ href, label, icon: Icon }) => {
-            const active = pathname.startsWith(href);
-            return (
-              <Link
-                key={href}
-                href={href as any}
-                className={cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
-                  active
-                    ? "bg-background font-medium shadow-sm"
-                    : "text-muted-foreground hover:bg-background hover:text-foreground",
-                )}
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-              </Link>
-            );
-          })}
+        <nav className="flex-1 space-y-4 overflow-y-auto">
+          {GRUPOS.filter((g) => !g.admin || isAdmin).map((grupo) => (
+            <div key={grupo.titulo} className="space-y-1">
+              <p className="px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
+                {grupo.titulo}
+              </p>
+              {grupo.itens.map(({ href, label, icon: Icon }) => {
+                const active = pathname.startsWith(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href as any}
+                    className={cn(
+                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                      active
+                        ? "bg-background font-medium shadow-sm"
+                        : "text-muted-foreground hover:bg-background hover:text-foreground",
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {label}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         <div className="space-y-2 border-t pt-4">
