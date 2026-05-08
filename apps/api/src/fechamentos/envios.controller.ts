@@ -23,6 +23,8 @@ const CriarEnvioInput = z.object({
   periodoInicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   periodoFim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   layoutEnvioId: z.string().uuid().optional(),
+  // Filtra obras específicas dentro da empresa. Vazio/ausente = todas as obras.
+  obraIds: z.array(z.string().uuid()).optional(),
 });
 
 const MarcarEnviadoInput = z.object({
@@ -60,6 +62,7 @@ export class EnviosController {
       periodoInicio: body.periodoInicio,
       periodoFim: body.periodoFim,
       layoutEnvioId: body.layoutEnvioId,
+      obraIds: body.obraIds,
     });
   }
 

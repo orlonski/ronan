@@ -17,6 +17,12 @@ import {
 } from "@/lib/fechamentos-api";
 
 type Empresa = { id: string; nome: string; ativa: boolean; papel: string };
+type Obra = {
+  id: string;
+  nome: string;
+  ativa: boolean;
+  empresaClienteId: string;
+};
 
 export default function NovoEnvioPage() {
   const router = useRouter();
@@ -28,16 +34,41 @@ export default function NovoEnvioPage() {
   const [periodoInicio, setPeriodoInicio] = useState(thisMonthStart());
   const [periodoFim, setPeriodoFim] = useState(thisMonthEnd());
   const [layoutId, setLayoutId] = useState<string>("");
+  const [obraIds, setObraIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const layouts = useLayoutsEnvio(empresaId || undefined);
+  // Quando sem empresa selecionada, useResourceList ainda dispara mas vazia.
+  // Só renderizamos o select de obras quando empresaId existe.
+  const obras = useResourceList<Obra>(
+    `/admin/obras${empresaId ? `?empresaClienteId=${empresaId}` : ""}`,
+  );
 
   // ao trocar de empresa, seleciona automaticamente o layout padrão
+  // e zera as obras selecionadas (= todas, default)
   useEffect(() => {
     if (!layouts.data) return;
     const padrao = layouts.data.find((l) => l.padrao);
     setLayoutId(padrao?.id ?? layouts.data[0]?.id ?? "");
   }, [layouts.data]);
+
+  useEffect(() => {
+    setObraIds([]);
+  }, [empresaId]);
+
+  function toggleObra(id: string) {
+    setObraIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
+  function selecionarTodas() {
+    setObraIds([]);
+  }
+
+  function selecionarTodasExplicito() {
+    if (obras.data) setObraIds(obras.data.map((o) => o.id));
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -48,6 +79,7 @@ export default function NovoEnvioPage() {
         periodoInicio,
         periodoFim,
         layoutEnvioId: layoutId || undefined,
+        obraIds: obraIds.length > 0 ? obraIds : undefined,
       });
       // dispara download autenticado e volta pra listagem
       await baixar(
@@ -62,6 +94,8 @@ export default function NovoEnvioPage() {
 
   const empresaSelecionada = empresas.data?.find((e) => e.id === empresaId);
   const semLayout = layouts.data && layouts.data.length === 0 && !!empresaId;
+  const obrasAtivas = obras.data?.filter((o) => o.ativa) ?? [];
+  const todasSelecionadas = obraIds.length === 0;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -95,6 +129,61 @@ export default function NovoEnvioPage() {
                 ))}
             </Select>
           </div>
+
+          {empresaId && obrasAtivas.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Obras</Label>
+                <div className="flex gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={selecionarTodas}
+                    className="text-blue-600 hover:underline"
+                  >
+                    Todas
+                  </button>
+                  <span className="text-muted-foreground">·</span>
+                  <button
+                    type="button"
+                    onClick={selecionarTodasExplicito}
+                    className="text-blue-600 hover:underline"
+                  >
+                    Marcar todas
+                  </button>
+                  <span className="text-muted-foreground">·</span>
+                  <button
+                    type="button"
+                    onClick={() => setObraIds([])}
+                    className="text-blue-600 hover:underline"
+                    disabled={todasSelecionadas}
+                  >
+                    Limpar
+                  </button>
+                </div>
+              </div>
+              <div className="max-h-48 overflow-y-auto rounded-md border bg-muted/20 p-2">
+                {obrasAtivas.map((o) => (
+                  <label
+                    key={o.id}
+                    className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted/60"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={obraIds.includes(o.id)}
+                      onChange={() => toggleObra(o.id)}
+                      className="h-4 w-4"
+                    />
+                    <span>{o.nome}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {todasSelecionadas
+                  ? `Todas as ${obrasAtivas.length} obra(s) ativa(s) serão incluídas.`
+                  : `${obraIds.length} obra(s) selecionada(s).`}
+              </p>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">

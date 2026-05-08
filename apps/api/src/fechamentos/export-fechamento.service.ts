@@ -128,6 +128,7 @@ export class ExportFechamentoService {
     periodoInicio: string;
     periodoFim: string;
     layoutEnvioId?: string;
+    obraIds?: string[];
   }) {
     const empresa = await this.prisma.empresaCliente.findUnique({
       where: { id: input.empresaClienteId },
@@ -144,9 +145,13 @@ export class ExportFechamentoService {
     const layoutId = input.layoutEnvioId ?? empresa.layoutsEnvio[0]?.id;
     const layout = await this.carregarLayout(layoutId, empresa.id);
 
+    const filtroObra =
+      input.obraIds && input.obraIds.length > 0
+        ? { empresaClienteId: empresa.id, id: { in: input.obraIds } }
+        : { empresaClienteId: empresa.id };
     const viagens = await this.prisma.viagem.findMany({
       where: {
-        obra: { empresaClienteId: empresa.id },
+        obra: filtroObra,
         data: { gte: periodoInicio, lte: periodoFim },
         status: { in: ["ENVIADA", "OK", "AJUSTADA"] },
       },
@@ -162,8 +167,12 @@ export class ExportFechamentoService {
     });
 
     if (viagens.length === 0) {
+      const sufixo =
+        input.obraIds && input.obraIds.length > 0
+          ? ` nas ${input.obraIds.length} obra(s) selecionada(s)`
+          : "";
       throw new BadRequestException(
-        `Nenhuma viagem encontrada pra ${empresa.nome} entre ${input.periodoInicio} e ${input.periodoFim}.`,
+        `Nenhuma viagem encontrada pra ${empresa.nome}${sufixo} entre ${input.periodoInicio} e ${input.periodoFim}.`,
       );
     }
 

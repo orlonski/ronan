@@ -345,6 +345,7 @@ export function useCriarEnvio() {
       periodoInicio: string;
       periodoFim: string;
       layoutEnvioId?: string;
+      obraIds?: string[];
     }) =>
       fetchApi<{ envio: EnvioStandalone; arquivoNome: string; totalLinhas: number }>(
         "/admin/envios",
