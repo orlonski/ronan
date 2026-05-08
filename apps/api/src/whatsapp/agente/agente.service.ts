@@ -13,7 +13,10 @@ import { construirTools, executarTool } from "./tools";
 import type { ToolContext } from "./tools";
 import { systemPromptMotorista, systemPromptAdmin } from "./prompts";
 
-const MODELO_DEFAULT = "claude-sonnet-4-6";
+// Sonnet hardcoded — Haiku alucinava tool calls (dizia "viagem criada" sem
+// chamar a tool). Sonnet 4.6 é confiável em seguir o fluxo de tools. Vale o
+// custo extra (~R$0,10/conversa vs R$0,02 do Haiku).
+const MODELO_AGENTE = "claude-sonnet-4-6";
 const MAX_HISTORICO_MENSAGENS = 12;
 const MAX_TOOL_LOOPS = 6;
 
@@ -68,7 +71,7 @@ export class AgenteService {
 
     const system = identidade.tipo === "MOTORISTA" ? systemPromptMotorista(identidade) : systemPromptAdmin(identidade);
     const tools = construirTools(identidade.tipo);
-    const modelo = await this.modeloAtual();
+    const modelo = MODELO_AGENTE;
 
     // Carrega histórico recente da sessão
     const historico = await this.prisma.whatsappMensagem.findMany({
@@ -100,6 +103,7 @@ export class AgenteService {
         tools,
         messages,
       });
+      this.log.log(`[loop ${i}] stop_reason=${resp.stop_reason} tool_uses=${resp.content.filter((b) => b.type === "tool_use").length}`);
 
       // Se IA terminou (não pediu tool), retorna texto
       if (resp.stop_reason !== "tool_use") {
@@ -154,20 +158,5 @@ export class AgenteService {
     }
 
     return "Processei várias coisas mas não consegui chegar numa resposta final. Tenta perguntar de outro jeito.";
-  }
-
-  private modeloCache: { value: string; until: number } | null = null;
-  private async modeloAtual(): Promise<string> {
-    if (this.modeloCache && this.modeloCache.until > Date.now()) {
-      return this.modeloCache.value;
-    }
-    try {
-      const cfg = await this.prisma.configuracaoIa.findUnique({ where: { id: "default" } });
-      const value = cfg?.modelo || MODELO_DEFAULT;
-      this.modeloCache = { value, until: Date.now() + 30_000 };
-      return value;
-    } catch {
-      return MODELO_DEFAULT;
-    }
   }
 }
