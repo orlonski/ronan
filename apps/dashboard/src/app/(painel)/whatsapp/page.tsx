@@ -359,11 +359,20 @@ function QRDialog({
     queryKey: ["whatsapp-qr", open, token],
     enabled: open && !!token,
     refetchInterval: open ? 5_000 : false,
-    queryFn: () =>
-      fetchApi<{ base64: string | null; pairingCode: string | null }>(
+    queryFn: async () => {
+      // Tenta primeiro o endpoint direto (que pega do Evolution na hora)
+      const direto = await fetchApi<{ base64: string | null; pairingCode: string | null }>(
         "/admin/whatsapp/qrcode",
         { token },
-      ),
+      );
+      if (direto.base64) return direto;
+      // Fallback: lê do cache (preenchido pelo webhook QRCODE_UPDATED)
+      const cache = await fetchApi<{ base64: string | null; capturadoEm: string | null }>(
+        "/admin/whatsapp/qrcode-cache",
+        { token },
+      );
+      return { base64: cache.base64, pairingCode: null };
+    },
   });
 
   return (

@@ -19,6 +19,14 @@ import { EvolutionClientService } from "./evolution-client.service";
 import { SessaoService } from "./sessao.service";
 import { WhatsappService } from "./whatsapp.service";
 
+/**
+ * Cache em memória do último QR recebido pelo webhook QRCODE_UPDATED.
+ * Workaround pro Evolution v2 às vezes retornar vazio em /instance/connect
+ * mas mandar o QR por webhook. Não persiste em DB — efêmero por design
+ * (QR vence em ~20s e é regenerado automaticamente pelo Baileys).
+ */
+let ultimoQrCode: { base64: string | null; capturadoEm: Date } | null = null;
+
 @ApiTags("whatsapp")
 @Controller()
 export class WhatsappController {
@@ -39,18 +47,38 @@ export class WhatsappController {
   @Post("whatsapp/webhook")
   @HttpCode(200)
   async webhook(@Body() body: any) {
-    // Validação leve da assinatura (Evolution não assina, só repassa apikey no header — mas
-    // com webhook URL não óbvia + HTTPS o risco é baixo. Pra hardening real, comparar IPs
-    // do servidor Evolution).
     const event = body?.event;
+    // Loga TUDO que chega — útil pra debug enquanto a integração está sendo
+    // pareada. Removível depois.
+    console.log(`[whatsapp] webhook event=${event}`, JSON.stringify(body).slice(0, 500));
+
     if (event === "messages.upsert") {
-      // Fire and forget — webhook não pode demorar.
       this.service.processarMensagemRecebida(body).catch((e) => {
-        // log silencioso; service já loga erros internos
         console.error("processarMensagemRecebida falhou:", e);
       });
+    } else if (event === "qrcode.updated" || event === "QRCODE_UPDATED") {
+      // Captura QR pra exibir no painel. Salva em memória global (simples) —
+      // depois polled pelo endpoint /admin/whatsapp/qrcode-cache.
+      const data = body?.data;
+      const base64 = data?.qrcode?.base64 ?? data?.qrcode ?? null;
+      if (base64) {
+        ultimoQrCode = { base64: typeof base64 === "string" ? base64 : null, capturadoEm: new Date() };
+        console.log("[whatsapp] QR capturado via webhook, tamanho:", String(base64).length);
+      }
+    } else if (event === "connection.update" || event === "CONNECTION_UPDATE") {
+      console.log("[whatsapp] connection state:", body?.data?.state);
     }
     return { ok: true };
+  }
+
+  /** Endpoint extra pra ler o último QR recebido por webhook (workaround quando
+   *  /instance/connect retorna vazio mas o QR foi enviado por webhook). */
+  @ApiBearerAuth()
+  @UseGuards(RolesGuard)
+  @Roles("ADMIN")
+  @Get("admin/whatsapp/qrcode-cache")
+  qrcodeCache() {
+    return ultimoQrCode ?? { base64: null, capturadoEm: null };
   }
 
   // ================== Endpoints admin ==================
