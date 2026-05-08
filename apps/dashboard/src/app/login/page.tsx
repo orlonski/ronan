@@ -79,15 +79,12 @@ export default function LoginPage() {
         <Image
           src="/schaba-icon.png"
           alt="Schaba"
-          width={96}
-          height={96}
+          width={240}
+          height={240}
           priority
-          className="h-24 w-24"
+          className="h-auto w-60"
         />
-        <h1 className="mt-3 text-3xl font-bold tracking-tight text-[#13316b]">
-          SCHABA
-        </h1>
-        <p className="text-xs uppercase tracking-widest text-muted-foreground">
+        <p className="mt-2 text-xs uppercase tracking-widest text-muted-foreground">
           Logistics &amp; Tracking
         </p>
       </div>

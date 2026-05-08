@@ -160,20 +160,16 @@ export function Sidebar({
           <Image
             src="/schaba-icon.png"
             alt="Schaba"
-            width={40}
-            height={40}
-            className="shrink-0"
+            width={200}
+            height={200}
+            className="h-auto w-44 shrink-0"
           />
-          <div className="flex-1">
-            <h1 className="text-xl font-semibold tracking-tight">Schaba</h1>
-            <p className="text-xs text-muted-foreground">Painel</p>
-          </div>
           {/* Botão fechar (só mobile) */}
           {onMobileClose && (
             <button
               type="button"
               onClick={onMobileClose}
-              className="rounded-md p-1 text-muted-foreground hover:bg-background md:hidden"
+              className="ml-auto rounded-md p-1 text-muted-foreground hover:bg-background md:hidden"
               aria-label="Fechar menu"
             >
               <X className="h-5 w-5" />

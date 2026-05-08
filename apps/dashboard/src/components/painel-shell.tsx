@@ -30,14 +30,14 @@ export function PainelShell({ children }: { children: React.ReactNode }) {
           >
             <Menu className="h-6 w-6" />
           </button>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center">
             <Image
               src="/schaba-icon.png"
               alt="Schaba"
-              width={28}
-              height={28}
+              width={120}
+              height={120}
+              className="h-auto w-28"
             />
-            <span className="text-base font-semibold">Schaba</span>
           </div>
           <div className="w-10" />
         </header>
