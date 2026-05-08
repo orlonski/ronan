@@ -4,11 +4,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertCircle,
   Boxes,
   Building2,
+  ChevronDown,
+  ChevronRight,
   ClipboardCheck,
   FileSpreadsheet,
   Fuel,
@@ -86,6 +88,46 @@ export function Sidebar({
   const { data: session } = useSession();
   const isAdmin = session?.user?.perfil === "ADMIN";
 
+  // Estado dos grupos (colapsado/aberto). Persistido em localStorage pra
+  // lembrar a preferência. Default: Operação e Cadastros abertos, Sistema
+  // fechado (admin acessa raramente).
+  const [grupoAberto, setGrupoAberto] = useState<Record<string, boolean>>(() => {
+    if (typeof window === "undefined") {
+      return { Operação: true, Cadastros: true, Sistema: false };
+    }
+    try {
+      const raw = localStorage.getItem("sidebar.grupos");
+      if (raw) return JSON.parse(raw) as Record<string, boolean>;
+    } catch {
+      /* ignora */
+    }
+    return { Operação: true, Cadastros: true, Sistema: false };
+  });
+
+  function toggleGrupo(titulo: string) {
+    setGrupoAberto((prev) => {
+      const next = { ...prev, [titulo]: !prev[titulo] };
+      try {
+        localStorage.setItem("sidebar.grupos", JSON.stringify(next));
+      } catch {
+        /* ignora */
+      }
+      return next;
+    });
+  }
+
+  // Se a rota atual está num grupo fechado, abre o grupo automaticamente
+  useEffect(() => {
+    for (const grupo of GRUPOS) {
+      if (grupo.itens.some((i) => pathname.startsWith(i.href))) {
+        if (!grupoAberto[grupo.titulo]) {
+          setGrupoAberto((prev) => ({ ...prev, [grupo.titulo]: true }));
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
   // Fecha gaveta automaticamente quando muda de rota no mobile
   useEffect(() => {
     onMobileClose?.();
@@ -139,32 +181,45 @@ export function Sidebar({
           )}
         </div>
 
-        <nav className="flex-1 space-y-4 overflow-y-auto">
-          {GRUPOS.filter((g) => !g.admin || isAdmin).map((grupo) => (
-            <div key={grupo.titulo} className="space-y-1">
-              <p className="px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
-                {grupo.titulo}
-              </p>
-              {grupo.itens.map(({ href, label, icon: Icon }) => {
-                const active = pathname.startsWith(href);
-                return (
-                  <Link
-                    key={href}
-                    href={href as any}
-                    className={cn(
-                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
-                      active
-                        ? "bg-background font-medium shadow-sm"
-                        : "text-muted-foreground hover:bg-background hover:text-foreground",
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                    {label}
-                  </Link>
-                );
-              })}
-            </div>
-          ))}
+        <nav className="flex-1 space-y-2 overflow-y-auto">
+          {GRUPOS.filter((g) => !g.admin || isAdmin).map((grupo) => {
+            const aberto = grupoAberto[grupo.titulo] ?? true;
+            return (
+              <div key={grupo.titulo} className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => toggleGrupo(grupo.titulo)}
+                  className="flex w-full items-center justify-between rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 transition-colors hover:bg-background hover:text-muted-foreground"
+                >
+                  <span>{grupo.titulo}</span>
+                  {aberto ? (
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  ) : (
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  )}
+                </button>
+                {aberto &&
+                  grupo.itens.map(({ href, label, icon: Icon }) => {
+                    const active = pathname.startsWith(href);
+                    return (
+                      <Link
+                        key={href}
+                        href={href as any}
+                        className={cn(
+                          "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                          active
+                            ? "bg-background font-medium shadow-sm"
+                            : "text-muted-foreground hover:bg-background hover:text-foreground",
+                        )}
+                      >
+                        <Icon className="h-4 w-4" />
+                        {label}
+                      </Link>
+                    );
+                  })}
+              </div>
+            );
+          })}
         </nav>
 
         <div className="space-y-2 border-t pt-4">
