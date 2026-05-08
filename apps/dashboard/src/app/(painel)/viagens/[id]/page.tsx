@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { use, useState } from "react";
+import { ExcluirButton } from "@/components/excluir-button";
 
 // Leaflet quebra com SSR; carrega só no cliente.
 const TrajetoMapPlayer = dynamic(
@@ -85,6 +87,7 @@ export default function ViagemDetalhePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const router = useRouter();
   const token = useAuthToken();
   const viagem = useQuery({
     queryKey: ["viagem-admin", id],
@@ -106,7 +109,7 @@ export default function ViagemDetalhePage({
             <ArrowLeft className="h-5 w-5" />
           </span>
         </Link>
-        <div>
+        <div className="flex-1">
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight">
               Viagem {v.ticket}
@@ -118,6 +121,16 @@ export default function ViagemDetalhePage({
             {fmtBR(v.data)}
           </p>
         </div>
+        <ExcluirButton
+          path="/admin/viagens"
+          id={v.id}
+          nomeRecurso={`a viagem ${v.ticket}`}
+          size="sm"
+          variant="outline"
+          label="Excluir"
+          invalidateKeys={[["viagem-admin", v.id], "/admin/viagens"]}
+          onSuccess={() => router.push("/viagens")}
+        />
       </header>
 
       <div className="flex gap-1 border-b">

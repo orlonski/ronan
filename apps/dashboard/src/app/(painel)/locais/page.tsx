@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Pencil, Plus } from "lucide-react";
 import { StatusToggle } from "@/components/status-toggle";
+import { ExcluirButton } from "@/components/excluir-button";
 import { AddressAutocomplete, type SugestaoEndereco } from "@/components/ui/address-autocomplete";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -163,6 +164,11 @@ export default function LocaisPage() {
                 <Button variant="ghost" size="icon" onClick={() => openEdit(l)}>
                   <Pencil className="h-4 w-4" />
                 </Button>
+                <ExcluirButton
+                  path="/admin/locais"
+                  id={l.id}
+                  nomeRecurso={`o local "${l.nome}"`}
+                />
               </div>
             </div>
             <div className="text-xs text-muted-foreground">
@@ -218,6 +224,11 @@ export default function LocaisPage() {
                       size="sm"
                     />
                     <Button variant="ghost" size="icon" onClick={() => openEdit(l)}><Pencil className="h-4 w-4" /></Button>
+                    <ExcluirButton
+                      path="/admin/locais"
+                      id={l.id}
+                      nomeRecurso={`o local "${l.nome}"`}
+                    />
                   </div>
                 </TableCell>
               </TableRow>

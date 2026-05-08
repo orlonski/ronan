@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { CheckCircle2, Download, FileSpreadsheet, Plus, Send } from "lucide-react";
+import { ExcluirButton } from "@/components/excluir-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -107,6 +108,16 @@ export default function EnviosPage() {
                   <span className="text-muted-foreground">{e.layout.nome}</span>
                 )}
               </div>
+              {e.status === "GERADO" && (
+                <div className="flex justify-end">
+                  <ExcluirButton
+                    path="/admin/envios"
+                    id={e.id}
+                    nomeRecurso={`o envio de ${e.empresaCliente?.nome ?? "—"}`}
+                    invalidateKeys={[["envios"]]}
+                  />
+                </div>
+              )}
             </Card>
           );
         })}
@@ -185,14 +196,22 @@ export default function EnviosPage() {
                         <Download className="h-4 w-4" />
                       </Button>
                       {e.status === "GERADO" && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setEditando(e)}
-                          title="Marcar como enviado"
-                        >
-                          <Send className="h-4 w-4" />
-                        </Button>
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setEditando(e)}
+                            title="Marcar como enviado"
+                          >
+                            <Send className="h-4 w-4" />
+                          </Button>
+                          <ExcluirButton
+                            path="/admin/envios"
+                            id={e.id}
+                            nomeRecurso={`o envio de ${e.empresaCliente?.nome ?? "—"}`}
+                            invalidateKeys={[["envios"]]}
+                          />
+                        </>
                       )}
                     </div>
                   </TableCell>

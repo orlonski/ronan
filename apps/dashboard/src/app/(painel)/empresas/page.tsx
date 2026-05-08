@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { FileSpreadsheet, FileInput, Pencil, Plus } from "lucide-react";
 import { StatusToggle } from "@/components/status-toggle";
+import { ExcluirButton } from "@/components/excluir-button";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -107,6 +108,11 @@ export default function EmpresasPage() {
                   onChange={(next) => update.mutate({ id: e.id, body: { ativa: next } })}
                   size="sm"
                 />
+                <ExcluirButton
+                  path="/admin/empresas"
+                  id={e.id}
+                  nomeRecurso={`a empresa "${e.nome}"`}
+                />
               </div>
             </div>
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
@@ -166,6 +172,11 @@ export default function EmpresasPage() {
                     </Link>
                   )}
                   <Button variant="ghost" size="icon" onClick={() => openEdit(e)} title="Editar"><Pencil className="h-4 w-4" /></Button>
+                  <ExcluirButton
+                    path="/admin/empresas"
+                    id={e.id}
+                    nomeRecurso={`a empresa "${e.nome}"`}
+                  />
                 </TableCell>
               </TableRow>
             ))}

@@ -51,11 +51,23 @@ export class MotoristasService {
 
   async remove(id: string) {
     await this.ensureExists(id);
-    return this.prisma.motorista.update({
-      where: { id },
-      data: { ativo: false },
-      select: SAFE_SELECT,
-    });
+    const [viagens, pedagios, abastecimentos] = await Promise.all([
+      this.prisma.viagem.count({ where: { motoristaId: id } }),
+      this.prisma.pedagio.count({ where: { motoristaId: id } }),
+      this.prisma.abastecimento.count({ where: { motoristaId: id } }),
+    ]);
+    const partes: string[] = [];
+    if (viagens > 0) partes.push(`${viagens} viagem${viagens === 1 ? "" : "s"}`);
+    if (pedagios > 0) partes.push(`${pedagios} pedágio${pedagios === 1 ? "" : "s"}`);
+    if (abastecimentos > 0)
+      partes.push(`${abastecimentos} abastecimento${abastecimentos === 1 ? "" : "s"}`);
+    if (partes.length > 0) {
+      throw new ConflictException(
+        `Não é possível excluir: vinculado a ${partes.join(", ")}. Use o toggle de ativar/inativar pra esconder sem perder o histórico.`,
+      );
+    }
+    await this.prisma.motorista.delete({ where: { id } });
+    return { ok: true };
   }
 
   private async ensureExists(id: string) {

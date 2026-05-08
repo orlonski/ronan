@@ -23,7 +23,26 @@ export class VeiculosService {
 
   async remove(id: string) {
     await this.ensureExists(id);
-    return this.prisma.veiculo.update({ where: { id }, data: { ativo: false } });
+    const [viagens, pedagios, abastecimentos, motoristas] = await Promise.all([
+      this.prisma.viagem.count({ where: { veiculoId: id } }),
+      this.prisma.pedagio.count({ where: { veiculoId: id } }),
+      this.prisma.abastecimento.count({ where: { veiculoId: id } }),
+      this.prisma.motorista.count({ where: { veiculoDefaultId: id } }),
+    ]);
+    const partes: string[] = [];
+    if (viagens > 0) partes.push(`${viagens} viagem${viagens === 1 ? "" : "s"}`);
+    if (pedagios > 0) partes.push(`${pedagios} pedágio${pedagios === 1 ? "" : "s"}`);
+    if (abastecimentos > 0)
+      partes.push(`${abastecimentos} abastecimento${abastecimentos === 1 ? "" : "s"}`);
+    if (motoristas > 0)
+      partes.push(`${motoristas} motorista${motoristas === 1 ? "" : "s"} com este como veículo padrão`);
+    if (partes.length > 0) {
+      throw new ConflictException(
+        `Não é possível excluir: vinculado a ${partes.join(", ")}. Use o toggle de ativar/inativar pra esconder sem perder o histórico.`,
+      );
+    }
+    await this.prisma.veiculo.delete({ where: { id } });
+    return { ok: true };
   }
 
   private async ensureExists(id: string) {

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import type { Prisma, StatusViagem } from "@prisma/client";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -94,6 +94,43 @@ export class ViagensAdminService {
     const viagem = await this.prisma.viagem.findUnique({ where: { id: viagemId } });
     if (!viagem) throw new NotFoundException("Viagem não encontrada");
     return this.auditoria.historicoDe("Viagem", viagemId);
+  }
+
+  /**
+   * Hard delete da viagem. Bloqueado se há pedágios vinculados ou linha de
+   * fechamento usando viagemMatchId. TicketFoto e ViagemPonto saem cascade.
+   * Apaga fotos do MinIO antes de deletar a viagem.
+   */
+  async excluir(id: string) {
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        fotos: { select: { storageKey: true } },
+      },
+    });
+    if (!viagem) throw new NotFoundException("Viagem não encontrada");
+
+    const [pedagios, linhasMatch] = await Promise.all([
+      this.prisma.pedagio.count({ where: { viagemId: id } }),
+      this.prisma.fechamentoLinha.count({ where: { viagemMatchId: id } }),
+    ]);
+    const partes: string[] = [];
+    if (pedagios > 0)
+      partes.push(`${pedagios} pedágio${pedagios === 1 ? "" : "s"}`);
+    if (linhasMatch > 0)
+      partes.push(`${linhasMatch} linha${linhasMatch === 1 ? "" : "s"} de fechamento`);
+    if (partes.length > 0) {
+      throw new ConflictException(
+        `Não é possível excluir: vinculado a ${partes.join(", ")}.`,
+      );
+    }
+
+    await Promise.all(
+      viagem.fotos.map((f) => this.uploads.removeObject(f.storageKey)),
+    );
+    await this.prisma.viagem.delete({ where: { id } });
+    return { ok: true };
   }
 
   async fotoBuffer(viagemId: string, fotoId: string) {

@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, Res, UseGuards } from "@nestjs/common";
+import { Controller, Delete, Get, HttpCode, Param, Query, Res, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { Roles } from "../../auth/decorators/roles.decorator";
@@ -40,6 +40,13 @@ export class ViagensAdminController {
   @Get(":id/historico")
   historico(@Param("id") id: string) {
     return this.service.historico(id);
+  }
+
+  @Roles("ADMIN")
+  @Delete(":id")
+  @HttpCode(204)
+  async excluir(@Param("id") id: string) {
+    await this.service.excluir(id);
   }
 
   @Get(":id/fotos/:fotoId")

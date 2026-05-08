@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { use } from "react";
+import { ExcluirButton } from "@/components/excluir-button";
 import {
   ArrowLeft,
   Camera,
@@ -58,6 +60,7 @@ export default function AbastecimentoDetalhePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const router = useRouter();
   const token = useAuthToken();
   const a = useQuery({
     queryKey: ["abastecimento-admin", id],
@@ -92,6 +95,16 @@ export default function AbastecimentoDetalhePage({
           </p>
         </div>
         <Badge>{TIPO_LABEL[x.tipo] ?? x.tipo}</Badge>
+        <ExcluirButton
+          path="/admin/abastecimentos"
+          id={x.id}
+          nomeRecurso={`o abastecimento de ${fmtNum(x.litros, 3)}L`}
+          size="sm"
+          variant="outline"
+          label="Excluir"
+          invalidateKeys={[["abastecimento-admin", x.id], "/admin/abastecimentos"]}
+          onSuccess={() => router.push("/abastecimentos")}
+        />
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">

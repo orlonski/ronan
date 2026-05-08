@@ -1,7 +1,9 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
   Post,
   Query,
@@ -89,5 +91,12 @@ export class EnviosController {
       canalEnvio: body.canalEnvio,
       observacao: body.observacao,
     });
+  }
+
+  @Roles("ADMIN")
+  @Delete(":envioId")
+  @HttpCode(204)
+  async excluir(@Param("envioId") envioId: string) {
+    await this.exporter.excluir(envioId);
   }
 }

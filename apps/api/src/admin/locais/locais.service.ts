@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type { CriarLocalInput } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -29,7 +29,19 @@ export class LocaisService {
 
   async remove(id: string) {
     await this.ensureExists(id);
-    return this.prisma.local.update({ where: { id }, data: { ativo: false } });
+    const [carga, descarga] = await Promise.all([
+      this.prisma.viagem.count({ where: { localCargaId: id } }),
+      this.prisma.viagem.count({ where: { localDescargaId: id } }),
+    ]);
+    const total = carga + descarga;
+    if (total > 0) {
+      throw new ConflictException(
+        `Não é possível excluir: vinculado a ${total} viagem${total === 1 ? "" : "s"} (${carga} de carga, ${descarga} de descarga). Use o toggle de ativar/inativar pra esconder sem perder o histórico.`,
+      );
+    }
+    // RotaCache sai cascade via schema
+    await this.prisma.local.delete({ where: { id } });
+    return { ok: true };
   }
 
   private async ensureExists(id: string) {

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Pencil, Plus } from "lucide-react";
 import { cpfDigits, formatCpf, isCpfValid } from "@ronan/shared-types";
 import { StatusToggle } from "@/components/status-toggle";
+import { ExcluirButton } from "@/components/excluir-button";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -122,6 +123,11 @@ export default function MotoristasPage() {
                 <Button variant="ghost" size="icon" onClick={() => openEdit(m)}>
                   <Pencil className="h-4 w-4" />
                 </Button>
+                <ExcluirButton
+                  path="/admin/motoristas"
+                  id={m.id}
+                  nomeRecurso={`o motorista "${m.nome}"`}
+                />
               </div>
             </div>
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
@@ -172,6 +178,11 @@ export default function MotoristasPage() {
                 </TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="icon" onClick={() => openEdit(m)}><Pencil className="h-4 w-4" /></Button>
+                  <ExcluirButton
+                    path="/admin/motoristas"
+                    id={m.id}
+                    nomeRecurso={`o motorista "${m.nome}"`}
+                  />
                 </TableCell>
               </TableRow>
             ))}

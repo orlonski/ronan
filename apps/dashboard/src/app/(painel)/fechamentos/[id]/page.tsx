@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { use, useState } from "react";
+import { ExcluirButton } from "@/components/excluir-button";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -44,6 +46,7 @@ export default function FechamentoDetalhePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const router = useRouter();
   const fechamento = useFechamento(id);
   const reprocessar = useReprocessar(id);
   const exportar = useExportarFechamento(id);
@@ -137,6 +140,16 @@ export default function FechamentoDetalhePage({
             <Download className="h-4 w-4" />
             {exportar.isPending ? "Gerando..." : "Exportar planilha"}
           </Button>
+          <ExcluirButton
+            path="/admin/fechamentos"
+            id={f.id}
+            nomeRecurso={`o fechamento de ${f.empresaCliente.nome} (${fmtBR(f.periodoInicio)} → ${fmtBR(f.periodoFim)})`}
+            size="sm"
+            variant="outline"
+            label="Excluir"
+            invalidateKeys={[["fechamento", f.id], ["fechamentos"]]}
+            onSuccess={() => router.push("/fechamentos")}
+          />
         </div>
       </header>
 

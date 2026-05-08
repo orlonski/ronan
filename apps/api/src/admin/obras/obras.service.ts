@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import type { CriarObraInput, AtualizarObraInput } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 
@@ -27,7 +27,20 @@ export class ObrasService {
 
   async remove(id: string) {
     await this.ensureExists(id);
-    return this.prisma.obra.update({ where: { id }, data: { ativa: false } });
+    const [locais, viagens] = await Promise.all([
+      this.prisma.local.count({ where: { obraId: id } }),
+      this.prisma.viagem.count({ where: { obraId: id } }),
+    ]);
+    const partes: string[] = [];
+    if (locais > 0) partes.push(`${locais} local${locais === 1 ? "" : "is"}`);
+    if (viagens > 0) partes.push(`${viagens} viagem${viagens === 1 ? "" : "s"}`);
+    if (partes.length > 0) {
+      throw new ConflictException(
+        `Não é possível excluir: vinculado a ${partes.join(", ")}. Use o toggle de ativar/inativar pra esconder sem perder o histórico.`,
+      );
+    }
+    await this.prisma.obra.delete({ where: { id } });
+    return { ok: true };
   }
 
   private async ensureExists(id: string) {

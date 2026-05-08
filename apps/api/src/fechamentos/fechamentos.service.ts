@@ -331,4 +331,34 @@ export class FechamentosService {
     void this.processor.processar(fechamentoId, usuarioId, tipos).catch(() => {});
     return { ok: true, tipos: tipos ?? "todos" };
   }
+
+  /**
+   * Hard delete. Bloqueado se há envio com status ENVIADO. Envios em GERADO
+   * são apagados junto (com seus arquivos do MinIO). FechamentoLinha sai
+   * cascade. O arquivo original também é apagado do MinIO.
+   */
+  async excluir(fechamentoId: string) {
+    const f = await this.prisma.fechamento.findUnique({
+      where: { id: fechamentoId },
+      include: { envios: { select: { id: true, status: true, arquivoGeradoKey: true } } },
+    });
+    if (!f) throw new NotFoundException("Fechamento não encontrado");
+    const enviados = f.envios.filter((e) => e.status === "ENVIADO");
+    if (enviados.length > 0) {
+      throw new ConflictException(
+        `Não é possível excluir: tem ${enviados.length} envio${enviados.length === 1 ? "" : "s"} já marcado${enviados.length === 1 ? "" : "s"} como ENVIADO. Desfaça o envio primeiro.`,
+      );
+    }
+    // Apaga arquivos dos envios em GERADO
+    await Promise.all(
+      f.envios.map((e) => this.uploads.removeObject(e.arquivoGeradoKey)),
+    );
+    // Apaga arquivo original do fechamento
+    if (f.arquivoOriginalKey) {
+      await this.uploads.removeObject(f.arquivoOriginalKey);
+    }
+    // FechamentoLinha + EnvioFechamento saem cascade
+    await this.prisma.fechamento.delete({ where: { id: fechamentoId } });
+    return { ok: true };
+  }
 }

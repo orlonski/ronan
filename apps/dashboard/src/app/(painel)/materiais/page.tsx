@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Pencil, Plus } from "lucide-react";
 import { StatusToggle } from "@/components/status-toggle";
+import { ExcluirButton } from "@/components/excluir-button";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -87,6 +88,11 @@ export default function MateriaisPage() {
                 <Button variant="ghost" size="icon" onClick={() => openEdit(m)}>
                   <Pencil className="h-4 w-4" />
                 </Button>
+                <ExcluirButton
+                  path="/admin/materiais"
+                  id={m.id}
+                  nomeRecurso={`o material "${m.nome}"`}
+                />
               </div>
             </div>
           </Card>
@@ -124,6 +130,11 @@ export default function MateriaisPage() {
                   <Button variant="ghost" size="icon" onClick={() => openEdit(m)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
+                  <ExcluirButton
+                    path="/admin/materiais"
+                    id={m.id}
+                    nomeRecurso={`o material "${m.nome}"`}
+                  />
                 </TableCell>
               </TableRow>
             ))}

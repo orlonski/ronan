@@ -35,7 +35,26 @@ export class EmpresasService {
 
   async remove(id: string) {
     await this.ensureExists(id);
-    return this.prisma.empresaCliente.update({ where: { id }, data: { ativa: false } });
+    const [obras, fechamentos, layouts, envios] = await Promise.all([
+      this.prisma.obra.count({ where: { empresaClienteId: id } }),
+      this.prisma.fechamento.count({ where: { empresaClienteId: id } }),
+      this.prisma.layoutEnvio.count({ where: { empresaId: id } }),
+      this.prisma.envioFechamento.count({ where: { empresaClienteId: id } }),
+    ]);
+    const partes: string[] = [];
+    if (obras > 0) partes.push(`${obras} obra${obras === 1 ? "" : "s"}`);
+    if (fechamentos > 0)
+      partes.push(`${fechamentos} fechamento${fechamentos === 1 ? "" : "s"}`);
+    if (layouts > 0) partes.push(`${layouts} layout${layouts === 1 ? "" : "s"} de envio`);
+    if (envios > 0) partes.push(`${envios} envio${envios === 1 ? "" : "s"}`);
+    if (partes.length > 0) {
+      throw new ConflictException(
+        `Não é possível excluir: vinculado a ${partes.join(", ")}. Use o toggle de ativar/inativar pra esconder sem perder o histórico.`,
+      );
+    }
+    // LayoutImportBloco sai cascade via schema
+    await this.prisma.empresaCliente.delete({ where: { id } });
+    return { ok: true };
   }
 
   private async ensureExists(id: string) {

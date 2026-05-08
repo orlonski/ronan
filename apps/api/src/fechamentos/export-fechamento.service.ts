@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -253,6 +254,22 @@ export class ExportFechamentoService {
     if (!envio) throw new NotFoundException("Envio não encontrado");
     const buffer = await this.uploads.getObjectBuffer(envio.arquivoGeradoKey);
     return { buffer, nome: envio.arquivoNome };
+  }
+
+  /**
+   * Hard delete do envio. Bloqueado se status = ENVIADO. Apaga arquivo do MinIO.
+   */
+  async excluir(envioId: string) {
+    const envio = await this.prisma.envioFechamento.findUnique({ where: { id: envioId } });
+    if (!envio) throw new NotFoundException("Envio não encontrado");
+    if (envio.status === "ENVIADO") {
+      throw new ConflictException(
+        "Não é possível excluir: envio já foi marcado como ENVIADO. Desfaça o envio antes de deletar.",
+      );
+    }
+    await this.uploads.removeObject(envio.arquivoGeradoKey);
+    await this.prisma.envioFechamento.delete({ where: { id: envioId } });
+    return { ok: true };
   }
 
   async marcarEnviado(input: {

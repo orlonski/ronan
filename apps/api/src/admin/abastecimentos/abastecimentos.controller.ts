@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, Res, UseGuards } from "@nestjs/common";
+import { Controller, Delete, Get, HttpCode, Param, Query, Res, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import type { TipoCombustivel } from "@prisma/client";
@@ -34,6 +34,13 @@ export class AbastecimentosAdminController {
   @Get(":id")
   detalhe(@Param("id") id: string) {
     return this.service.detalhe(id);
+  }
+
+  @Roles("ADMIN")
+  @Delete(":id")
+  @HttpCode(204)
+  async excluir(@Param("id") id: string) {
+    await this.service.excluir(id);
   }
 
   @Get(":id/fotos/:fotoId")

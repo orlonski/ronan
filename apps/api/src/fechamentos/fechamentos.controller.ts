@@ -2,7 +2,9 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
   Post,
   Query,
@@ -126,6 +128,13 @@ export class FechamentosController {
       ? [tipoStr as "VIAGEM" | "PEDAGIO" | "COMBUSTIVEL"]
       : undefined;
     return this.service.reprocessar(id, user.id, tipos);
+  }
+
+  @Roles("ADMIN")
+  @Delete(":id")
+  @HttpCode(204)
+  async excluir(@Param("id") id: string) {
+    await this.service.excluir(id);
   }
 
   @Post(":id/linhas/:linhaId/resolver")

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import type { Prisma, TipoCombustivel } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { UploadsService } from "../../uploads/uploads.service";
@@ -67,6 +67,33 @@ export class AbastecimentosAdminService {
     });
     if (!a) throw new NotFoundException("Abastecimento não encontrado");
     return a;
+  }
+
+  /**
+   * Hard delete do abastecimento. Bloqueado se há linha de fechamento usando
+   * abastecimentoMatchId. AbastecimentoFoto sai cascade.
+   */
+  async excluir(id: string) {
+    const a = await this.prisma.abastecimento.findUnique({
+      where: { id },
+      select: { id: true, fotos: { select: { storageKey: true } } },
+    });
+    if (!a) throw new NotFoundException("Abastecimento não encontrado");
+
+    const linhasMatch = await this.prisma.fechamentoLinha.count({
+      where: { abastecimentoMatchId: id },
+    });
+    if (linhasMatch > 0) {
+      throw new ConflictException(
+        `Não é possível excluir: vinculado a ${linhasMatch} linha${linhasMatch === 1 ? "" : "s"} de fechamento.`,
+      );
+    }
+
+    await Promise.all(
+      a.fotos.map((f) => this.uploads.removeObject(f.storageKey)),
+    );
+    await this.prisma.abastecimento.delete({ where: { id } });
+    return { ok: true };
   }
 
   async fotoBuffer(abastecimentoId: string, fotoId: string) {

@@ -23,7 +23,13 @@ export class MateriaisService {
 
   async remove(id: string) {
     await this.ensureExists(id);
-    return this.prisma.material.update({ where: { id }, data: { ativo: false } });
+    const viagens = await this.prisma.viagem.count({ where: { materialId: id } });
+    if (viagens > 0) {
+      throw new ConflictException(
+        `Não é possível excluir: vinculado a ${viagens} viagem${viagens === 1 ? "" : "s"}. Use o toggle de ativar/inativar pra esconder sem perder o histórico.`,
+      );
+    }
+    return this.prisma.material.delete({ where: { id } });
   }
 
   private async ensureExists(id: string) {

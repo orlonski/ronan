@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Pencil, Plus } from "lucide-react";
 import { StatusToggle } from "@/components/status-toggle";
+import { ExcluirButton } from "@/components/excluir-button";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -85,6 +86,11 @@ export default function FrotaPage() {
                 <Button variant="ghost" size="icon" onClick={() => openEdit(v)}>
                   <Pencil className="h-4 w-4" />
                 </Button>
+                <ExcluirButton
+                  path="/admin/veiculos"
+                  id={v.id}
+                  nomeRecurso={`o veículo "${v.placa}"`}
+                />
               </div>
             </div>
           </Card>
@@ -119,6 +125,11 @@ export default function FrotaPage() {
                   <Button variant="ghost" size="icon" onClick={() => openEdit(v)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
+                  <ExcluirButton
+                    path="/admin/veiculos"
+                    id={v.id}
+                    nomeRecurso={`o veículo "${v.placa}"`}
+                  />
                 </TableCell>
               </TableRow>
             ))}
