@@ -148,6 +148,36 @@ export default function LayoutImportPage({
   const [erro, setErro] = useState<string | null>(null);
   const [salvouAgora, setSalvouAgora] = useState(false);
 
+  /**
+   * Recalcula as colunas (`letra`, `cabecalho`) da aba/linha-cabeçalho
+   * passadas, preservando mapeamentos `campo` quando o cabeçalho bate (case
+   * insensitive). Colunas novas que não tinham equivalente viram "ignorar".
+   */
+  function recalcularColunas(
+    abaNome: string,
+    linhaCabecalho: number,
+    mapeamentoAntigo: LayoutColuna[],
+  ): LayoutColuna[] {
+    const aba = estrutura?.abas.find((a) => a.nome === abaNome);
+    if (!aba) return mapeamentoAntigo;
+    const idxCab = Math.max(0, linhaCabecalho - 1);
+    const headers = aba.primeirasLinhas[idxCab] ?? [];
+    const memo = new Map<string, CampoLayout>();
+    for (const c of mapeamentoAntigo) {
+      const k = c.cabecalho.toUpperCase().trim();
+      if (k && c.campo !== "ignorar") memo.set(k, c.campo);
+    }
+    return headers.map((h, i) => {
+      const cabecalho = String(h ?? "").trim();
+      const k = cabecalho.toUpperCase();
+      return {
+        letra: indiceParaLetra(i),
+        cabecalho,
+        campo: memo.get(k) ?? "ignorar",
+      };
+    });
+  }
+
   useEffect(() => {
     if (layoutAtual.data && !layout) {
       setLayout(layoutAtual.data);
@@ -425,11 +455,18 @@ export default function LayoutImportPage({
                 <Label>Aba escolhida</Label>
                 <Select
                   value={layout.abaPreferida ?? estrutura.abas[0]?.nome ?? ""}
-                  onChange={(e) =>
-                    setLayout((l) =>
-                      l ? { ...l, abaPreferida: e.target.value } : l,
-                    )
-                  }
+                  onChange={(e) => {
+                    const novaAba = e.target.value;
+                    setLayout((l) => {
+                      if (!l) return l;
+                      const colunas = recalcularColunas(
+                        novaAba,
+                        l.linhaCabecalho ?? 1,
+                        l.colunas,
+                      );
+                      return { ...l, abaPreferida: novaAba, colunas };
+                    });
+                  }}
                 >
                   {estrutura.abas.map((a) => (
                     <option key={a.nome} value={a.nome}>
@@ -437,6 +474,10 @@ export default function LayoutImportPage({
                     </option>
                   ))}
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  Mapeamentos com cabeçalho idêntico são preservados ao trocar
+                  de aba.
+                </p>
               </div>
             )}
             <div className="grid gap-3 sm:grid-cols-2">
@@ -446,13 +487,18 @@ export default function LayoutImportPage({
                   type="number"
                   min={1}
                   value={layout.linhaCabecalho ?? 1}
-                  onChange={(e) =>
-                    setLayout((l) =>
-                      l
-                        ? { ...l, linhaCabecalho: Number(e.target.value) || 1 }
-                        : l,
-                    )
-                  }
+                  onChange={(e) => {
+                    const novaLinha = Number(e.target.value) || 1;
+                    setLayout((l) => {
+                      if (!l) return l;
+                      const colunas = recalcularColunas(
+                        l.abaPreferida ?? estrutura.abas[0]?.nome ?? "",
+                        novaLinha,
+                        l.colunas,
+                      );
+                      return { ...l, linhaCabecalho: novaLinha, colunas };
+                    });
+                  }}
                 />
               </div>
               <div className="space-y-1">
