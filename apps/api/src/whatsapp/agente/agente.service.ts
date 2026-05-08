@@ -63,7 +63,11 @@ export class AgenteService {
   async processar(
     identidade: Identidade,
     mensagemUsuario: string,
-    metadata?: { evolutionMessageId?: string; tipoMidia?: "imagem" | "audio" },
+    metadata?: {
+      evolutionMessageId?: string;
+      tipoMidia?: "imagem" | "audio";
+      evolutionPayload?: { key: unknown; message: unknown };
+    },
   ): Promise<string> {
     if (!this.client) {
       return "Desculpa, a IA está fora do ar agora. Manda 'ajuda' pra ver os comandos manuais.";

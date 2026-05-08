@@ -23,7 +23,11 @@ export type ToolContext = {
   errors: ErrorsService;
   uploads: UploadsService;
   evolution: EvolutionClientService;
-  metadata?: { evolutionMessageId?: string; tipoMidia?: "imagem" | "audio" };
+  metadata?: {
+    evolutionMessageId?: string;
+    tipoMidia?: "imagem" | "audio";
+    evolutionPayload?: { key: unknown; message: unknown };
+  };
 };
 
 // ===== TOOL DEFINITIONS (schemas Anthropic) =====
@@ -258,8 +262,13 @@ export async function executarTool(
 
     case "anexar_foto_ultima_viagem": {
       if (ctx.identidade.tipo !== "MOTORISTA") throw new Error("tool não disponível pra esse perfil");
-      const messageId = ctx.metadata?.evolutionMessageId;
-      if (!messageId) throw new Error("Nenhuma imagem na mensagem atual.");
+      // Só prosseguir se a mensagem ATUAL é uma imagem — IA às vezes chama essa tool
+      // após confirmação de viagem ("sim") mesmo sem foto.
+      if (ctx.metadata?.tipoMidia !== "imagem") {
+        throw new Error("A mensagem atual não contém imagem. Peça ao motorista pra mandar a foto e tente de novo.");
+      }
+      const payload = ctx.metadata?.evolutionPayload;
+      if (!payload) throw new Error("Payload da mensagem indisponível — não dá pra baixar a mídia.");
 
       const seisHorasAtras = new Date(Date.now() - 6 * 60 * 60 * 1000);
       const ultimaViagem = await ctx.prisma.viagem.findFirst({
@@ -274,7 +283,7 @@ export async function executarTool(
         throw new Error("Não achei viagem recente sua nas últimas 6h pra anexar foto.");
       }
 
-      const midia = await ctx.evolution.baixarMidia(messageId);
+      const midia = await ctx.evolution.baixarMidia(payload);
       if (!midia) throw new Error("Não consegui baixar a foto do WhatsApp.");
 
       const storageKey = await ctx.uploads.putTicketFoto(

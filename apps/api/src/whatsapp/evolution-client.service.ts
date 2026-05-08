@@ -78,13 +78,16 @@ export class EvolutionClientService {
 
   /**
    * Baixa o conteúdo de uma mensagem com mídia (imagem/áudio/etc) que chegou
-   * pelo webhook. Evolution armazena temporariamente; chama esse endpoint
-   * passando o `messageId` do evento e devolve buffer + mimetype.
+   * pelo webhook. Aceita o payload completo da mensagem (key + message) — assim
+   * funciona mesmo com DATABASE_SAVE_DATA_NEW_MESSAGE=false, pois o Evolution
+   * descriptografa direto do payload sem precisar buscar no banco.
    */
-  async baixarMidia(messageId: string): Promise<{ buffer: Buffer; mimetype: string } | null> {
+  async baixarMidia(
+    payload: { key: unknown; message: unknown },
+  ): Promise<{ buffer: Buffer; mimetype: string } | null> {
     try {
       const data = await this.req(`/chat/getBase64FromMediaMessage/${this.instance}`, {
-        message: { key: { id: messageId } },
+        message: payload,
         convertToMp4: false,
       });
       const d = data as { base64?: string; mimetype?: string };
@@ -94,7 +97,7 @@ export class EvolutionClientService {
         mimetype: d.mimetype ?? "application/octet-stream",
       };
     } catch (e) {
-      this.log.warn(`Falha ao baixar mídia ${messageId}: ${(e as Error).message}`);
+      this.log.warn(`Falha ao baixar mídia: ${(e as Error).message}`);
       return null;
     }
   }

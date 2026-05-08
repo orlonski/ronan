@@ -94,6 +94,11 @@ export class WhatsappService {
       const resposta = await this.agente.processar(identidade, texto ?? "", {
         evolutionMessageId: evolutionMessageId ?? undefined,
         tipoMidia: tipo === "IMAGEM" ? "imagem" : tipo === "AUDIO" ? "audio" : undefined,
+        // Payload bruto da mensagem (key + message) — necessário pra baixar mídia
+        // sem depender de DATABASE_SAVE_DATA_NEW_MESSAGE no Evolution
+        evolutionPayload: tipo === "IMAGEM" || tipo === "AUDIO"
+          ? { key: data.key, message: data.message }
+          : undefined,
       });
       await this.enviarTexto(telefone, resposta, identidade.sessaoId);
     } catch (e) {
