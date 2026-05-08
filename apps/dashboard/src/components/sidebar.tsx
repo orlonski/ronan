@@ -156,13 +156,13 @@ export function Sidebar({
           mobileOpen ? "translate-x-0 shadow-xl" : "-translate-x-full md:translate-x-0",
         )}
       >
-        <div className="mb-8 flex items-center gap-3 px-2">
+        <div className="mb-4 flex items-center px-2">
           <Image
-            src="/schaba-icon.png"
+            src="/schaba-logo.png"
             alt="Schaba"
-            width={200}
-            height={200}
-            className="h-auto w-44 shrink-0"
+            width={1642}
+            height={614}
+            className="h-auto w-40 shrink-0"
           />
           {/* Botão fechar (só mobile) */}
           {onMobileClose && (

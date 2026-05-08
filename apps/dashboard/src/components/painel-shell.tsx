@@ -32,10 +32,10 @@ export function PainelShell({ children }: { children: React.ReactNode }) {
           </button>
           <div className="flex items-center">
             <Image
-              src="/schaba-icon.png"
+              src="/schaba-logo.png"
               alt="Schaba"
-              width={120}
-              height={120}
+              width={1642}
+              height={614}
               className="h-auto w-28"
             />
           </div>

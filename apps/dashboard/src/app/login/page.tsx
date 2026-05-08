@@ -75,14 +75,14 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-muted/30 px-4 py-8">
-      <div className="mb-8 flex flex-col items-center">
+      <div className="mb-6 flex flex-col items-center">
         <Image
-          src="/schaba-icon.png"
+          src="/schaba-logo.png"
           alt="Schaba"
-          width={240}
-          height={240}
+          width={1642}
+          height={614}
           priority
-          className="h-auto w-60"
+          className="h-auto w-56"
         />
         <p className="mt-2 text-xs uppercase tracking-widest text-muted-foreground">
           Logistics &amp; Tracking
