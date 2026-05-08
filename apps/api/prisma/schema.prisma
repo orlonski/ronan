@@ -525,6 +525,27 @@ model ConfiguracaoIa {
   @@map("configuracao_ia")
 }
 
+/// Campos disponíveis pra mapear no layout de importação de fechamento.
+/// Substitui o enum hardcoded — admin pode cadastrar campos novos sem dev.
+/// Campos `sistema=true` são embarcados no boot e não podem ser deletados.
+model CampoLayout {
+  id         String   @id @default(uuid())
+  slug       String   @unique // identificador estável (lowercase, sem espaço)
+  label      String // label amigável no dropdown
+  ordem      Int      @default(100)
+  ativo      Boolean  @default(true)
+  // Sistema: embarcado no boot, slug e tipo travados, não pode deletar.
+  sistema    Boolean  @default(false)
+  // TEXTO | NUMERO | DATA — decorativo agora, pra futuro com comparação dinâmica
+  tipo       String   @default("TEXTO")
+  descricao  String?
+  criadoEm   DateTime @default(now())
+  alteradoEm DateTime @updatedAt
+
+  @@index([ativo, ordem])
+  @@map("campos_layout")
+}
+
 /// Log centralizado de erros do app móvel, dashboard e backend.
 /// Cada ocorrência é uma row. Agrupamento por hash do stack trace
 /// é feito em query (GROUP BY hash). Sem expurgo automático.

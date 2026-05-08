@@ -49,6 +49,7 @@ const ITEMS: Item[] = [
   { href: "/erros", label: "Erros", icon: AlertCircle, admin: true },
   { href: "/configuracoes/tracking", label: "Tracking GPS", icon: Settings, admin: true },
   { href: "/configuracoes/ia", label: "Inteligência Artificial", icon: Sparkles, admin: true },
+  { href: "/configuracoes/campos-layout", label: "Campos do layout", icon: Sparkles, admin: true },
 ];
 
 export function Sidebar({

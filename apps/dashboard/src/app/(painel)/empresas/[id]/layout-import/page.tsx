@@ -27,37 +27,18 @@ import {
 } from "@/components/ui/table";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 
-type CampoLayout =
-  | "data"
-  | "ticket"
-  | "obra"
-  | "placa"
-  | "fornecedor"
-  | "material"
-  | "unidade"
-  | "toneladas"
-  | "km"
-  | "valor_unitario"
-  | "valor_total"
-  | "praca_pedagio"
-  | "eixos"
-  | "ignorar";
+// Slug é dinâmico — vem da tabela CampoLayout via API. Aceita qualquer string.
+type CampoLayout = string;
 
-const CAMPOS_LABELS: Record<CampoLayout, string> = {
-  data: "Data",
-  ticket: "Ticket",
-  obra: "Obra",
-  placa: "Placa",
-  fornecedor: "Fornecedor",
-  material: "Material",
-  unidade: "Unidade",
-  toneladas: "Toneladas",
-  km: "Km",
-  valor_unitario: "Valor unitário",
-  valor_total: "Valor total",
-  praca_pedagio: "Praça de pedágio",
-  eixos: "Eixos",
-  ignorar: "— Ignorar —",
+type CampoLayoutDef = {
+  id: string;
+  slug: string;
+  label: string;
+  ordem: number;
+  ativo: boolean;
+  sistema: boolean;
+  tipo: string;
+  descricao: string | null;
 };
 
 type LayoutColuna = { letra: string; cabecalho: string; campo: CampoLayout };
@@ -120,6 +101,15 @@ export default function LayoutImportPage({
     enabled: !!token,
     queryFn: () => fetchApi<Empresa>(`/admin/empresas/${empresaId}`, { token }),
   });
+
+  // Lista de campos vem do banco — admin pode adicionar campos novos sem dev.
+  const camposLayout = useQuery({
+    queryKey: ["campos-layout", token],
+    enabled: !!token,
+    queryFn: () =>
+      fetchApi<CampoLayoutDef[]>(`/admin/campos-layout`, { token }),
+  });
+  const camposAtivos = (camposLayout.data ?? []).filter((c) => c.ativo);
 
   const layoutAtual = useQuery({
     queryKey: ["layout-import", empresaId, token],
@@ -386,15 +376,19 @@ export default function LayoutImportPage({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {layout.colunas.map((c, i) => (
-                    <TableRow key={i}>
-                      <TableCell className="font-mono">{c.letra}</TableCell>
-                      <TableCell className="text-sm">{c.cabecalho}</TableCell>
-                      <TableCell className="text-sm">
-                        {CAMPOS_LABELS[c.campo]}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {layout.colunas.map((c, i) => {
+                    const def = camposAtivos.find((cl) => cl.slug === c.campo);
+                    return (
+                      <TableRow key={i}>
+                        <TableCell className="font-mono">{c.letra}</TableCell>
+                        <TableCell className="text-sm">{c.cabecalho}</TableCell>
+                        <TableCell className="text-sm">
+                          {def?.sistema && "🔒 "}
+                          {def?.label ?? c.campo}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -528,6 +522,13 @@ export default function LayoutImportPage({
               representa. Marque como "Ignorar" se for coluna de subtotal,
               contrato, ou qualquer coisa que não usamos.
             </p>
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium">🔒</span> = campos do sistema, usados
+              em match e comparação. Outros campos são extraídos e ficam
+              disponíveis no detalhe da linha do fechamento. Pra cadastrar um
+              campo novo, vá em <span className="font-medium">Configurações
+              → Campos do layout</span>.
+            </p>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -553,13 +554,12 @@ export default function LayoutImportPage({
                           setLayout({ ...layout, colunas: novo });
                         }}
                       >
-                        {(Object.entries(CAMPOS_LABELS) as [CampoLayout, string][]).map(
-                          ([v, label]) => (
-                            <option key={v} value={v}>
-                              {label}
-                            </option>
-                          ),
-                        )}
+                        {camposAtivos.map((cl) => (
+                          <option key={cl.slug} value={cl.slug}>
+                            {cl.sistema ? "🔒 " : ""}
+                            {cl.label}
+                          </option>
+                        ))}
                       </Select>
                     </TableCell>
                   </TableRow>

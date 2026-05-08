@@ -12,6 +12,7 @@ import {
   parseArquivo,
   type ParsedFile,
 } from "../../fechamentos/parsers";
+import { CamposLayoutService } from "../campos-layout/campos-layout.service";
 
 export type EstruturaPlanilha = {
   formato: "xlsx" | "csv" | "pdf";
@@ -33,6 +34,7 @@ export class LayoutImportService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ia: IaService,
+    private readonly camposLayout: CamposLayoutService,
   ) {}
 
   /**
@@ -91,6 +93,17 @@ export class LayoutImportService {
     if (!Array.isArray(layout.colunas) || layout.colunas.length === 0) {
       throw new BadRequestException(
         "Layout inválido — precisa ter ao menos uma coluna mapeada.",
+      );
+    }
+    // Valida slugs dinamicamente contra a tabela CampoLayout
+    const slugsAtivos = await this.camposLayout.listarSlugsAtivos();
+    const slugsValidos = new Set(slugsAtivos.map((c) => c.slug));
+    const slugsInvalidos = layout.colunas
+      .map((c) => c.campo)
+      .filter((s) => !slugsValidos.has(s));
+    if (slugsInvalidos.length > 0) {
+      throw new BadRequestException(
+        `Campo(s) desconhecido(s): ${[...new Set(slugsInvalidos)].join(", ")}. Cadastre em /configuracoes/campos-layout antes.`,
       );
     }
     await this.prisma.empresaCliente.update({

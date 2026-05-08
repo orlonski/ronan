@@ -6,21 +6,10 @@ import { PrismaService } from "../prisma/prisma.service";
 // Default usado caso ConfiguracaoIa.modelo não esteja setada (raro).
 const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
 
-export type LayoutColumn =
-  | "data"
-  | "ticket"
-  | "obra"
-  | "placa"
-  | "fornecedor"
-  | "material"
-  | "unidade"
-  | "toneladas"
-  | "km"
-  | "valor_unitario"
-  | "valor_total"
-  | "praca_pedagio"
-  | "eixos"
-  | "ignorar";
+// Slug do campo é resolvido dinamicamente pela tabela CampoLayout (ver
+// CamposLayoutService). Se um slug aqui não existe na tabela, é tratado como
+// "ignorar" no processor. Validação na entrada é feita no controller.
+export type LayoutColumn = string;
 
 export type LayoutInferenceResult = {
   tipoBloco: "viagens" | "pedagios" | "outro";
@@ -98,6 +87,24 @@ export class IaService {
       return null;
     }
 
+    // Lista de campos vem do banco (CampoLayout). Admin pode adicionar campos
+    // novos sem mudar código — IA é instruída dinamicamente.
+    const camposAtivos = await this.prisma.campoLayout.findMany({
+      where: { ativo: true },
+      orderBy: { ordem: "asc" },
+      select: { slug: true, label: true, descricao: true },
+    });
+
+    const listaCampos =
+      camposAtivos.length > 0
+        ? camposAtivos
+            .map(
+              (c) =>
+                `- ${c.slug}${c.descricao ? ` (${c.descricao})` : c.label ? ` — ${c.label}` : ""}`,
+            )
+            .join("\n")
+        : "- ignorar";
+
     const sysPrompt = `Você ajuda a interpretar planilhas de boletim de medição de transportadoras (fretes de caminhão).
 Empresas-cliente mandam essas planilhas pra conferência. Cada planilha pode ter múltiplas abas com:
   - viagens (data, ticket, obra, placa, material, toneladas, km, valor)
@@ -107,14 +114,10 @@ Empresas-cliente mandam essas planilhas pra conferência. Cada planilha pode ter
 Sua tarefa: analisar a amostra e devolver QUAL aba contém a relação detalhada de viagens (não o sumário),
 QUAL linha tem os cabeçalhos, QUAL linha começa os dados, e MAPEAR cada coluna pra um campo padrão.
 
-Campos padrão possíveis (use exatamente esses):
-- data, ticket, obra, placa, fornecedor, material, unidade
-- toneladas (também aceita "quant", "quantidade")
-- km (também aceita "distancia", "dist. media")
-- valor_unitario (preço por unidade)
-- valor_total (R$ total da linha)
-- praca_pedagio, eixos
-- ignorar (pra colunas que não interessam: subtotal, contrato, etc)
+Campos padrão possíveis (use EXATAMENTE o slug, à esquerda do "—"):
+${listaCampos}
+
+Use "ignorar" pra colunas que não correspondem a nenhum campo da lista (subtotal, contrato, etc).
 
 Responda APENAS um JSON válido sem cercas markdown, no formato:
 {

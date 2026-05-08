@@ -28,23 +28,8 @@ const ALLOWED_MIMES_AMOSTRA = [
   "application/pdf",
 ];
 
-const LayoutColumnEnum = z.enum([
-  "data",
-  "ticket",
-  "obra",
-  "placa",
-  "fornecedor",
-  "material",
-  "unidade",
-  "toneladas",
-  "km",
-  "valor_unitario",
-  "valor_total",
-  "praca_pedagio",
-  "eixos",
-  "ignorar",
-]);
-
+// Slug do campo é validado dinamicamente no service contra a tabela
+// CampoLayout (admin pode cadastrar novos sem mudar código).
 const SalvarLayoutSchema = z.object({
   tipoBloco: z.enum(["viagens", "pedagios", "outro"]).default("viagens"),
   abaPreferida: z.string().optional(),
@@ -55,7 +40,7 @@ const SalvarLayoutSchema = z.object({
       z.object({
         letra: z.string().min(1).max(4),
         cabecalho: z.string().max(120),
-        campo: LayoutColumnEnum,
+        campo: z.string().min(1).max(40),
       }),
     )
     .min(1, "Mapeie ao menos uma coluna."),

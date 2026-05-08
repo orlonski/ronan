@@ -33,7 +33,32 @@ type LinhaExtraida = {
   valor: number | null;
   obraTexto: string | null;
   materialTexto: string | null;
+  /**
+   * Valores de campos custom (não-sistema) extraídos pela tabela CampoLayout.
+   * Ex: { nf_e: "12345", centro_custo: "ABC" }. Vão pro rawData._custom da
+   * FechamentoLinha pra exibição na UI sem afetar match/comparação.
+   */
+  extras: Record<string, unknown>;
 };
+
+// Slugs tratados explicitamente nesta lógica (campos "sistema"). Demais slugs
+// vindos do banco viram `extras` e seguem pro rawData da linha.
+const SLUGS_SISTEMA_PROCESSADOS = new Set([
+  "placa",
+  "data",
+  "ticket",
+  "km",
+  "toneladas",
+  "valor_total",
+  "valor_unitario",
+  "obra",
+  "material",
+  "fornecedor",
+  "unidade",
+  "praca_pedagio",
+  "eixos",
+  "ignorar",
+]);
 
 @Injectable()
 export class FechamentoProcessorService {
@@ -383,9 +408,23 @@ export class FechamentoProcessorService {
       const obraTexto = get("obra") as string | null;
       const materialTexto = get("material") as string | null;
 
+      // Campos custom (não-sistema): extrai o valor cru e guarda em extras
+      const extras: Record<string, unknown> = {};
+      for (const c of layout.colunas) {
+        if (SLUGS_SISTEMA_PROCESSADOS.has(c.campo)) continue;
+        const valor = row[letraParaIndiceCol(c.letra)];
+        if (valor !== null && valor !== "" && valor !== undefined) {
+          extras[c.campo] = valor;
+        }
+      }
+
       out.push({
         ordem: ordemBase + inicio + i + 1, // ordem global considerando múltiplas abas
-        rawData: { ...raw, __aba: aba.nome },
+        rawData: {
+          ...raw,
+          __aba: aba.nome,
+          ...(Object.keys(extras).length > 0 ? { _custom: extras } : {}),
+        },
         placa,
         data,
         ticket,
@@ -394,6 +433,7 @@ export class FechamentoProcessorService {
         valor,
         obraTexto: obraTexto ? String(obraTexto) : null,
         materialTexto: materialTexto ? String(materialTexto) : null,
+        extras,
       });
     }
     return out;
@@ -636,6 +676,11 @@ function letraParaIndice(letra: string): number {
     n = n * 26 + (c.charCodeAt(0) - 64);
   }
   return n - 1;
+}
+
+/** Versão simples só pra letras de A a Z (suficiente pra colunas do extras). */
+function letraParaIndiceCol(letra: string): number {
+  return letra.charCodeAt(0) - 65;
 }
 
 function matchHeader(h: string): LayoutInferenceResult["colunas"][number]["campo"] {
