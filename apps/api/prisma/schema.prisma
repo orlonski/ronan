@@ -145,15 +145,22 @@ model Veiculo {
 }
 
 model EmpresaCliente {
-  id           String       @id @default(uuid())
-  nome         String
-  cnpj         String?      @unique
-  contato      String?
-  papel        PapelEmpresa @default(AMBOS)
-  layoutImport Json? // mapeamento de colunas do fechamento que ela manda (cached IA inference)
-  ativa        Boolean      @default(true)
-  criadoEm     DateTime     @default(now())
-  alteradoEm   DateTime     @updatedAt
+  id               String       @id @default(uuid())
+  nome             String
+  cnpj             String?      @unique
+  contato          String?
+  papel            PapelEmpresa @default(AMBOS)
+  layoutImport     Json? // mapeamento de colunas do fechamento que ela manda (cached IA inference)
+  // Lista de campos que compõem a chave única de match. Default null = ["placa","data","ticket"].
+  // Cliente que usa NF como chave seria ["placa","data","nf"] (requer Viagem.nf, V3.1).
+  chaveMatch       Json?
+  // 0–20 — divergência aceita em km antes de virar DIVERGENCIA. 5 = ±5%.
+  toleranciaKmPct  Int          @default(0)
+  // 0–10 — idem pra toneladas
+  toleranciaTonPct Int          @default(0)
+  ativa            Boolean      @default(true)
+  criadoEm         DateTime     @default(now())
+  alteradoEm       DateTime     @updatedAt
 
   obras         Obra[]
   fechamentos   Fechamento[]

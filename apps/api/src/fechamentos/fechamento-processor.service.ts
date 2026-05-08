@@ -69,9 +69,27 @@ export class FechamentoProcessorService {
       );
 
       // 2. obtém ou infere layout
-      const layout = await this.obterLayout(fechamento.empresaCliente.id, parsed);
+      const { layout, desatualizado } = await this.obterLayoutComStatus(
+        fechamento.empresaCliente.id,
+        parsed,
+      );
       if (!layout) {
         throw new Error("Não foi possível inferir layout");
+      }
+      if (desatualizado) {
+        this.log.warn(
+          `Fechamento ${fechamentoId}: layout cacheado parece desatualizado (cliente mudou formato)`,
+        );
+        // Marca no fechamento pra UI exibir banner
+        await this.prisma.fechamento.update({
+          where: { id: fechamentoId },
+          data: {
+            layoutSalvo: {
+              ...(layout as unknown as Prisma.InputJsonObject),
+              _desatualizado: true,
+            },
+          },
+        });
       }
 
       // 3. extrai linhas estruturadas
@@ -105,17 +123,32 @@ export class FechamentoProcessorService {
         include: { veiculo: { select: { id: true, placa: true } } },
       });
 
+      // Config de match per-empresa (V3): chave + tolerâncias
+      const empresaConfig = await this.prisma.empresaCliente.findUnique({
+        where: { id: fechamento.empresaCliente.id },
+        select: { chaveMatch: true, toleranciaKmPct: true, toleranciaTonPct: true },
+      });
+      const camposChave = parseChaveMatch(empresaConfig?.chaveMatch);
+      const tolKmPct = empresaConfig?.toleranciaKmPct ?? 0;
+      const tolTonPct = empresaConfig?.toleranciaTonPct ?? 0;
+
       const viagensIndex = new Map<string, (typeof viagensPeriodo)[number]>();
       for (const v of viagensPeriodo) {
-        const k = matchKey(v.veiculo.placa, v.data, v.ticket);
-        viagensIndex.set(k, v);
+        const k = matchKey(camposChave, {
+          placa: v.veiculo.placa,
+          data: v.data,
+          ticket: v.ticket,
+        });
+        if (k) viagensIndex.set(k, v);
       }
       const viagensUsadas = new Set<string>();
 
       for (const linha of linhas) {
-        const k = linha.placa && linha.data && linha.ticket
-          ? matchKey(linha.placa, linha.data, linha.ticket)
-          : null;
+        const k = matchKey(camposChave, {
+          placa: linha.placa,
+          data: linha.data,
+          ticket: linha.ticket,
+        });
         const viagemMatch = k ? viagensIndex.get(k) : null;
 
         let status: StatusLinhaFechamento = StatusLinhaFechamento.DIVERGENCIA;
@@ -123,8 +156,8 @@ export class FechamentoProcessorService {
         let divergencias: Record<string, { motorista: unknown; empresa: unknown }> | null = null;
 
         if (viagemMatch) {
-          // confere divergências em km/toneladas
-          divergencias = compararCampos(linha, viagemMatch);
+          // confere divergências em km/toneladas (com tolerância configurável)
+          divergencias = compararCampos(linha, viagemMatch, tolKmPct, tolTonPct);
           if (!divergencias) {
             status = StatusLinhaFechamento.MATCH;
             stats.matchAuto++;
@@ -233,17 +266,18 @@ export class FechamentoProcessorService {
     }
   }
 
-  private async obterLayout(
+  private async obterLayoutComStatus(
     empresaId: string,
     parsed: ParsedFile,
-  ): Promise<LayoutInferenceResult | null> {
+  ): Promise<{ layout: LayoutInferenceResult | null; desatualizado: boolean }> {
     const empresa = await this.prisma.empresaCliente.findUnique({ where: { id: empresaId } });
     if (empresa?.layoutImport) {
-      return empresa.layoutImport as unknown as LayoutInferenceResult;
+      const cached = empresa.layoutImport as unknown as LayoutInferenceResult;
+      const desatualizado = !layoutBateNaPlanilha(cached, parsed);
+      return { layout: cached, desatualizado };
     }
     if (!this.ia.habilitada) {
-      // fallback heurístico simples: pega primeira aba que tem >5 colunas e cabeçalho com "PLACA"
-      return inferirLayoutHeuristico(parsed);
+      return { layout: inferirLayoutHeuristico(parsed), desatualizado: false };
     }
     const inferred = await this.ia.inferirLayout(amostraParaIa(parsed));
     if (inferred) {
@@ -252,7 +286,10 @@ export class FechamentoProcessorService {
         data: { layoutImport: inferred as unknown as Prisma.InputJsonValue },
       });
     }
-    return inferred ?? inferirLayoutHeuristico(parsed);
+    return {
+      layout: inferred ?? inferirLayoutHeuristico(parsed),
+      desatualizado: false,
+    };
   }
 
   private extrairLinhas(parsed: ParsedFile, layout: LayoutInferenceResult): LinhaExtraida[] {
@@ -460,21 +497,72 @@ export class FechamentoProcessorService {
   }
 }
 
-function matchKey(placa: string, data: Date | string, ticket: string): string {
-  const d = typeof data === "string" ? data.slice(0, 10) : data.toISOString().slice(0, 10);
-  return `${placa.toUpperCase()}|${d}|${ticket.toUpperCase().trim()}`;
+type CampoChave = "placa" | "data" | "ticket";
+const CAMPOS_CHAVE_VALIDOS: CampoChave[] = ["placa", "data", "ticket"];
+const CHAVE_DEFAULT: CampoChave[] = ["placa", "data", "ticket"];
+
+/**
+ * Parse seguro do `chaveMatch: Json?` da empresa. Filtra valores inválidos
+ * e cai no default se vier vazio/inválido.
+ */
+function parseChaveMatch(raw: unknown): CampoChave[] {
+  if (!Array.isArray(raw)) return CHAVE_DEFAULT;
+  const out = raw.filter((x): x is CampoChave =>
+    typeof x === "string" && (CAMPOS_CHAVE_VALIDOS as string[]).includes(x),
+  );
+  return out.length > 0 ? out : CHAVE_DEFAULT;
 }
 
+/**
+ * Monta a chave de match concatenando os campos selecionados. Retorna null
+ * se algum campo necessário está faltando — assim o caller marca como sem match.
+ */
+function matchKey(
+  campos: CampoChave[],
+  source: { placa?: string | null; data?: Date | string | null; ticket?: string | null },
+): string | null {
+  const partes: string[] = [];
+  for (const c of campos) {
+    if (c === "placa") {
+      if (!source.placa) return null;
+      partes.push(source.placa.toUpperCase());
+    } else if (c === "data") {
+      if (!source.data) return null;
+      const d =
+        typeof source.data === "string"
+          ? source.data.slice(0, 10)
+          : source.data.toISOString().slice(0, 10);
+      partes.push(d);
+    } else if (c === "ticket") {
+      if (!source.ticket) return null;
+      partes.push(source.ticket.toUpperCase().trim());
+    }
+  }
+  return partes.join("|");
+}
+
+/**
+ * Compara km e toneladas com tolerâncias percentuais por empresa.
+ * - tolKmPct/tolTonPct = 0 (default): mantém comportamento antigo (mínimos absolutos).
+ * - >0: aceita diferença até X% do valor da viagem.
+ */
 function compararCampos(
   linha: LinhaExtraida,
   viagem: { km: Prisma.Decimal; toneladas: Prisma.Decimal },
+  tolKmPct: number,
+  tolTonPct: number,
 ): Record<string, { motorista: unknown; empresa: unknown }> | null {
   const divergencias: Record<string, { motorista: unknown; empresa: unknown }> = {};
-  if (linha.km !== null && Math.abs(linha.km - Number(viagem.km)) > 0.5) {
-    divergencias.km = { motorista: Number(viagem.km), empresa: linha.km };
+  const km = Number(viagem.km);
+  const ton = Number(viagem.toneladas);
+  // Mantém mínimo absoluto pra não pegar arredondamento (0.5 km, 0.05 ton)
+  const tolKm = Math.max(0.5, km * (tolKmPct / 100));
+  const tolTon = Math.max(0.05, ton * (tolTonPct / 100));
+  if (linha.km !== null && Math.abs(linha.km - km) > tolKm) {
+    divergencias.km = { motorista: km, empresa: linha.km };
   }
-  if (linha.toneladas !== null && Math.abs(linha.toneladas - Number(viagem.toneladas)) > 0.05) {
-    divergencias.toneladas = { motorista: Number(viagem.toneladas), empresa: linha.toneladas };
+  if (linha.toneladas !== null && Math.abs(linha.toneladas - ton) > tolTon) {
+    divergencias.toneladas = { motorista: ton, empresa: linha.toneladas };
   }
   return Object.keys(divergencias).length > 0 ? divergencias : null;
 }
@@ -507,6 +595,47 @@ function inferirLayoutHeuristico(parsed: ParsedFile): LayoutInferenceResult | nu
     }
   }
   return null;
+}
+
+/**
+ * Verifica se o layout cacheado ainda bate com a planilha atual.
+ * Pega a aba+linha de cabeçalho do cache e confere se os cabeçalhos
+ * declarados continuam batendo. Se >30% das colunas têm cabeçalho
+ * diferente, considera "formato mudou".
+ */
+function layoutBateNaPlanilha(
+  layout: LayoutInferenceResult,
+  parsed: ParsedFile,
+): boolean {
+  const aba = parsed.abas.find((a) => a.nome === layout.abaPreferida);
+  if (!aba) return false;
+  const idxCabecalho = (layout.linhaCabecalho ?? 1) - 1;
+  const linhaCabecalho = aba.linhas[idxCabecalho];
+  if (!linhaCabecalho) return false;
+
+  const colunasComCabecalho = layout.colunas.filter((c) => c.cabecalho);
+  if (colunasComCabecalho.length === 0) return true; // não temos como validar
+
+  let bate = 0;
+  for (const col of colunasComCabecalho) {
+    const idx = letraParaIndice(col.letra);
+    const valor = String(linhaCabecalho[idx] ?? "").toUpperCase().trim();
+    const esperado = col.cabecalho.toUpperCase().trim();
+    // Match aceitando variações pequenas (ex: "DATA" vs "Data " vs "DATA ")
+    if (valor === esperado || valor.includes(esperado) || esperado.includes(valor)) {
+      bate++;
+    }
+  }
+  const ratio = bate / colunasComCabecalho.length;
+  return ratio >= 0.7;
+}
+
+function letraParaIndice(letra: string): number {
+  let n = 0;
+  for (const c of letra.toUpperCase()) {
+    n = n * 26 + (c.charCodeAt(0) - 64);
+  }
+  return n - 1;
 }
 
 function matchHeader(h: string): LayoutInferenceResult["colunas"][number]["campo"] {

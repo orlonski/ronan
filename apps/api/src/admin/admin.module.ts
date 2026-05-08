@@ -10,6 +10,7 @@ import { ViagensAdminModule } from "./viagens/viagens.module";
 import { AbastecimentosAdminModule } from "./abastecimentos/abastecimentos.module";
 import { TrackingConfigModule } from "./tracking-config/tracking-config.module";
 import { IaConfigModule } from "./ia-config/ia-config.module";
+import { LayoutImportModule } from "./layout-import/layout-import.module";
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { IaConfigModule } from "./ia-config/ia-config.module";
     AbastecimentosAdminModule,
     TrackingConfigModule,
     IaConfigModule,
+    LayoutImportModule,
   ],
 })
 export class AdminModule {}

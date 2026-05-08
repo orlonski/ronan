@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileSpreadsheet, Pencil, Plus } from "lucide-react";
+import { FileSpreadsheet, FileInput, Pencil, Plus } from "lucide-react";
 import { StatusToggle } from "@/components/status-toggle";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -85,11 +85,20 @@ export default function EmpresasPage() {
                 <p className="text-xs text-muted-foreground">{PAPEL_LABEL[e.papel]}</p>
               </div>
               <div className="flex shrink-0 gap-1">
-                <Link href={`/empresas/${e.id}/layout-envio`}>
-                  <Button variant="ghost" size="icon" title="Layout">
-                    <FileSpreadsheet className="h-4 w-4" />
-                  </Button>
-                </Link>
+                {(e.papel === "RECEBE_PLANILHA" || e.papel === "AMBOS") && (
+                  <Link href={`/empresas/${e.id}/layout-envio`}>
+                    <Button variant="ghost" size="icon" title="Layout de envio">
+                      <FileSpreadsheet className="h-4 w-4" />
+                    </Button>
+                  </Link>
+                )}
+                {(e.papel === "MANDA_FECHAMENTO" || e.papel === "AMBOS") && (
+                  <Link href={`/empresas/${e.id}/layout-import`}>
+                    <Button variant="ghost" size="icon" title="Layout de importação">
+                      <FileInput className="h-4 w-4" />
+                    </Button>
+                  </Link>
+                )}
                 <Button variant="ghost" size="icon" onClick={() => openEdit(e)}>
                   <Pencil className="h-4 w-4" />
                 </Button>
@@ -142,11 +151,20 @@ export default function EmpresasPage() {
                   />
                 </TableCell>
                 <TableCell className="text-right">
-                  <Link href={`/empresas/${e.id}/layout-envio`} title="Layout de envio">
-                    <Button variant="ghost" size="icon">
-                      <FileSpreadsheet className="h-4 w-4" />
-                    </Button>
-                  </Link>
+                  {(e.papel === "RECEBE_PLANILHA" || e.papel === "AMBOS") && (
+                    <Link href={`/empresas/${e.id}/layout-envio`} title="Layout de envio">
+                      <Button variant="ghost" size="icon">
+                        <FileSpreadsheet className="h-4 w-4" />
+                      </Button>
+                    </Link>
+                  )}
+                  {(e.papel === "MANDA_FECHAMENTO" || e.papel === "AMBOS") && (
+                    <Link href={`/empresas/${e.id}/layout-import`} title="Layout de importação">
+                      <Button variant="ghost" size="icon">
+                        <FileInput className="h-4 w-4" />
+                      </Button>
+                    </Link>
+                  )}
                   <Button variant="ghost" size="icon" onClick={() => openEdit(e)} title="Editar"><Pencil className="h-4 w-4" /></Button>
                 </TableCell>
               </TableRow>

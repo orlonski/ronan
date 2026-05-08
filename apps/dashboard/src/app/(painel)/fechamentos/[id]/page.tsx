@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { use, useState } from "react";
 import {
+  AlertTriangle,
   ArrowLeft,
   CheckCircle2,
   ClipboardCheck,
@@ -57,6 +58,10 @@ export default function FechamentoDetalhePage({
   const f = fechamento.data;
   const resumo = f.resumoIa;
   const pendentes = resumo?.divergencia ?? 0;
+  const layoutDesatualizado: boolean =
+    !!f.layoutSalvo &&
+    typeof f.layoutSalvo === "object" &&
+    (f.layoutSalvo as { _desatualizado?: boolean })._desatualizado === true;
 
   return (
     <div className="space-y-6">
@@ -106,6 +111,42 @@ export default function FechamentoDetalhePage({
           </Button>
         </div>
       </header>
+
+      {layoutDesatualizado && (
+        <div className="rounded-md border-2 border-amber-300 bg-amber-50 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+            <div className="flex-1 space-y-2">
+              <p className="font-medium text-amber-900">
+                O cliente parece ter mudado o formato da planilha
+              </p>
+              <p className="text-sm text-amber-800">
+                Os cabeçalhos das colunas no arquivo enviado não batem com o
+                layout que você tem salvo pra esta empresa. O processamento
+                continuou com o layout antigo, mas pode ter perdido dados ou
+                gerado divergências.
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Link href={`/empresas/${f.empresaCliente.id}/layout-import`}>
+                  <Button size="sm" variant="outline" className="border-amber-400">
+                    Atualizar layout de importação
+                  </Button>
+                </Link>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-amber-400"
+                  onClick={() => reprocessar.mutate()}
+                  disabled={reprocessar.isPending}
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  Reprocessar este fechamento
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats cards */}
       {resumo && (
