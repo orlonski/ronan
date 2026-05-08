@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useSession } from "next-auth/react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
+import { StatusToggle } from "@/components/status-toggle";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -80,28 +81,23 @@ export default function UsuariosPage() {
                 <p className="truncate font-medium">{u.nome}</p>
                 <p className="truncate text-xs text-muted-foreground">{u.email}</p>
               </div>
-              <div className="flex shrink-0 gap-1">
+              <div className="flex shrink-0 items-center gap-2">
+                <StatusToggle
+                  active={u.ativo}
+                  onChange={(next) => update.mutate({ id: u.id, body: { ativo: next } })}
+                  disabled={u.email === session.user?.email}
+                  size="sm"
+                  label
+                />
                 <Button variant="ghost" size="icon" onClick={() => openEdit(u)}>
                   <Pencil className="h-4 w-4" />
                 </Button>
-                {u.ativo && u.email !== session.user?.email && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => confirm(`Inativar ${u.nome}?`) && remove.mutate(u.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                )}
               </div>
             </div>
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
               <span>
                 <span className="text-muted-foreground">Perfil: </span>
                 {u.perfil}
-              </span>
-              <span className={u.ativo ? "text-green-700" : "text-muted-foreground"}>
-                {u.ativo ? "ativo" : "inativo"}
               </span>
             </div>
           </Card>
@@ -127,18 +123,16 @@ export default function UsuariosPage() {
                 <TableCell>{u.email}</TableCell>
                 <TableCell>{u.perfil}</TableCell>
                 <TableCell>
-                  <span className={u.ativo ? "text-green-700" : "text-muted-foreground"}>
-                    {u.ativo ? "ativo" : "inativo"}
-                  </span>
+                  <StatusToggle
+                    active={u.ativo}
+                    onChange={(next) => update.mutate({ id: u.id, body: { ativo: next } })}
+                    disabled={u.email === session.user?.email}
+                    size="sm"
+                    label
+                  />
                 </TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="icon" onClick={() => openEdit(u)}><Pencil className="h-4 w-4" /></Button>
-                  {u.ativo && u.email !== session.user?.email && (
-                    <Button variant="ghost" size="icon"
-                      onClick={() => confirm(`Inativar ${u.nome}?`) && remove.mutate(u.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
                 </TableCell>
               </TableRow>
             ))}

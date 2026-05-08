@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
+import { StatusToggle } from "@/components/status-toggle";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -74,26 +75,18 @@ export default function FrotaPage() {
                 <p className="font-mono text-base font-medium">{v.placa}</p>
                 <p className="text-xs text-muted-foreground">{v.modelo ?? "Sem modelo"}</p>
               </div>
-              <div className="flex shrink-0 gap-1">
+              <div className="flex shrink-0 items-center gap-2">
+                <StatusToggle
+                  active={v.ativo}
+                  onChange={(next) => update.mutate({ id: v.id, body: { ativo: next } })}
+                  size="sm"
+                  label
+                />
                 <Button variant="ghost" size="icon" onClick={() => openEdit(v)}>
                   <Pencil className="h-4 w-4" />
                 </Button>
-                {v.ativo && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => confirm(`Inativar ${v.placa}?`) && remove.mutate(v.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                )}
               </div>
             </div>
-            <span
-              className={`text-xs ${v.ativo ? "text-green-700" : "text-muted-foreground"}`}
-            >
-              {v.ativo ? "ativo" : "inativo"}
-            </span>
           </Card>
         ))}
       </div>
@@ -115,20 +108,17 @@ export default function FrotaPage() {
                 <TableCell className="font-mono font-medium">{v.placa}</TableCell>
                 <TableCell>{v.modelo ?? "—"}</TableCell>
                 <TableCell>
-                  <span className={v.ativo ? "text-green-700" : "text-muted-foreground"}>
-                    {v.ativo ? "ativo" : "inativo"}
-                  </span>
+                  <StatusToggle
+                    active={v.ativo}
+                    onChange={(next) => update.mutate({ id: v.id, body: { ativo: next } })}
+                    size="sm"
+                    label
+                  />
                 </TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="icon" onClick={() => openEdit(v)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
-                  {v.ativo && (
-                    <Button variant="ghost" size="icon"
-                      onClick={() => confirm(`Inativar ${v.placa}?`) && remove.mutate(v.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
                 </TableCell>
               </TableRow>
             ))}

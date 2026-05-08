@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
+import { StatusToggle } from "@/components/status-toggle";
 import { AddressAutocomplete, type SugestaoEndereco } from "@/components/ui/address-autocomplete";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -152,16 +153,15 @@ export default function LocaisPage() {
                   {l.cidade}/{l.uf}
                 </p>
               </div>
-              <div className="flex shrink-0 gap-1">
+              <div className="flex shrink-0 items-center gap-2">
+                <StatusToggle
+                  active={l.ativo}
+                  onChange={(next) => update.mutate({ id: l.id, body: { ativo: next } })}
+                  size="sm"
+                  label
+                />
                 <Button variant="ghost" size="icon" onClick={() => openEdit(l)}>
                   <Pencil className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => confirm(`Inativar ${l.nome}?`) && remove.mutate(l.id)}
-                >
-                  <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
             </div>
@@ -211,11 +211,14 @@ export default function LocaisPage() {
                 <TableCell>{l.obra?.nome ?? "—"}</TableCell>
                 <TableCell>{l.tipo}</TableCell>
                 <TableCell className="text-right">
-                  <Button variant="ghost" size="icon" onClick={() => openEdit(l)}><Pencil className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon"
-                    onClick={() => confirm(`Inativar ${l.nome}?`) && remove.mutate(l.id)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center justify-end gap-2">
+                    <StatusToggle
+                      active={l.ativo}
+                      onChange={(next) => update.mutate({ id: l.id, body: { ativo: next } })}
+                      size="sm"
+                    />
+                    <Button variant="ghost" size="icon" onClick={() => openEdit(l)}><Pencil className="h-4 w-4" /></Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { FileSpreadsheet, Pencil, Plus, Trash2 } from "lucide-react";
+import { FileSpreadsheet, Pencil, Plus } from "lucide-react";
+import { StatusToggle } from "@/components/status-toggle";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -92,15 +93,11 @@ export default function EmpresasPage() {
                 <Button variant="ghost" size="icon" onClick={() => openEdit(e)}>
                   <Pencil className="h-4 w-4" />
                 </Button>
-                {e.ativa && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => confirm(`Inativar ${e.nome}?`) && remove.mutate(e.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                )}
+                <StatusToggle
+                  active={e.ativa}
+                  onChange={(next) => update.mutate({ id: e.id, body: { ativa: next } })}
+                  size="sm"
+                />
               </div>
             </div>
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
@@ -137,9 +134,12 @@ export default function EmpresasPage() {
                 <TableCell className="font-mono text-xs">{e.cnpj ?? "—"}</TableCell>
                 <TableCell>{PAPEL_LABEL[e.papel]}</TableCell>
                 <TableCell>
-                  <span className={e.ativa ? "text-green-700" : "text-muted-foreground"}>
-                    {e.ativa ? "ativa" : "inativa"}
-                  </span>
+                  <StatusToggle
+                    active={e.ativa}
+                    onChange={(next) => update.mutate({ id: e.id, body: { ativa: next } })}
+                    size="sm"
+                    label
+                  />
                 </TableCell>
                 <TableCell className="text-right">
                   <Link href={`/empresas/${e.id}/layout-envio`} title="Layout de envio">
@@ -148,12 +148,6 @@ export default function EmpresasPage() {
                     </Button>
                   </Link>
                   <Button variant="ghost" size="icon" onClick={() => openEdit(e)} title="Editar"><Pencil className="h-4 w-4" /></Button>
-                  {e.ativa && (
-                    <Button variant="ghost" size="icon"
-                      onClick={() => confirm(`Inativar ${e.nome}?`) && remove.mutate(e.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
                 </TableCell>
               </TableRow>
             ))}

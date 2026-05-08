@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
+import { StatusToggle } from "@/components/status-toggle";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -75,24 +76,18 @@ export default function ObrasPage() {
                 <p className="truncate font-medium">{o.nome}</p>
                 <p className="truncate text-xs text-muted-foreground">{o.empresaCliente.nome}</p>
               </div>
-              <div className="flex shrink-0 gap-1">
+              <div className="flex shrink-0 items-center gap-2">
+                <StatusToggle
+                  active={o.ativa}
+                  onChange={(next) => update.mutate({ id: o.id, body: { ativa: next } })}
+                  size="sm"
+                  label
+                />
                 <Button variant="ghost" size="icon" onClick={() => openEdit(o)}>
                   <Pencil className="h-4 w-4" />
                 </Button>
-                {o.ativa && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => confirm(`Inativar ${o.nome}?`) && remove.mutate(o.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                )}
               </div>
             </div>
-            <span className={`text-xs ${o.ativa ? "text-green-700" : "text-muted-foreground"}`}>
-              {o.ativa ? "ativa" : "inativa"}
-            </span>
           </Card>
         ))}
       </div>
@@ -114,18 +109,15 @@ export default function ObrasPage() {
                 <TableCell className="font-medium">{o.nome}</TableCell>
                 <TableCell>{o.empresaCliente.nome}</TableCell>
                 <TableCell>
-                  <span className={o.ativa ? "text-green-700" : "text-muted-foreground"}>
-                    {o.ativa ? "ativa" : "inativa"}
-                  </span>
+                  <StatusToggle
+                    active={o.ativa}
+                    onChange={(next) => update.mutate({ id: o.id, body: { ativa: next } })}
+                    size="sm"
+                    label
+                  />
                 </TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="icon" onClick={() => openEdit(o)}><Pencil className="h-4 w-4" /></Button>
-                  {o.ativa && (
-                    <Button variant="ghost" size="icon"
-                      onClick={() => confirm(`Inativar ${o.nome}?`) && remove.mutate(o.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
                 </TableCell>
               </TableRow>
             ))}
