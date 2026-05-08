@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { AgenteService } from "./agente/agente.service";
 import { EvolutionClientService } from "./evolution-client.service";
 import { SessaoService } from "./sessao.service";
 import { ConviteService } from "./convite.service";
@@ -21,6 +22,7 @@ export class WhatsappService {
     private readonly evolution: EvolutionClientService,
     private readonly sessao: SessaoService,
     private readonly convite: ConviteService,
+    private readonly agente: AgenteService,
   ) {}
 
   /**
@@ -49,6 +51,8 @@ export class WhatsappService {
     // Resolve identidade
     const identidade = await this.sessao.resolverPorTelefone(telefone);
 
+    const evolutionMessageId = data.key?.id ?? null;
+
     // Loga entrada
     await this.prisma.whatsappMensagem.create({
       data: {
@@ -57,7 +61,7 @@ export class WhatsappService {
         direcao: "ENTRADA",
         conteudo: texto ?? "",
         tipo,
-        metadata: { evolutionMsgId: data.key?.id ?? null, pushName: data.pushName ?? null },
+        metadata: { evolutionMsgId: evolutionMessageId, pushName: data.pushName ?? null },
       },
     });
 
@@ -70,8 +74,36 @@ export class WhatsappService {
     // Telefone vinculado → marca atividade
     await this.sessao.marcarMensagemRecebida(identidade.sessaoId);
 
-    // Fase 1: ping/pong simples + comandos básicos. Fase 2 conecta o agente IA.
-    await this.tratarVinculado(telefone, texto ?? "", tipo, identidade);
+    // Atalhos rápidos (não gasta token IA)
+    const txt = (texto ?? "").trim().toLowerCase();
+    if (txt === "ping") {
+      await this.enviarTexto(telefone, "pong 🏓", identidade.sessaoId);
+      return;
+    }
+    if (txt === "sair" || txt === "desvincular") {
+      await this.sessao.desvincular(identidade.sessaoId);
+      await this.enviarTexto(
+        telefone,
+        "Pronto, você foi desvinculado(a). Pra voltar, peça outro código de convite ao admin.",
+      );
+      return;
+    }
+
+    // Tudo o resto vai pro agente IA
+    try {
+      const resposta = await this.agente.processar(identidade, texto ?? "", {
+        evolutionMessageId: evolutionMessageId ?? undefined,
+        tipoMidia: tipo === "IMAGEM" ? "imagem" : tipo === "AUDIO" ? "audio" : undefined,
+      });
+      await this.enviarTexto(telefone, resposta, identidade.sessaoId);
+    } catch (e) {
+      this.log.error(`Agente falhou: ${(e as Error).message}`);
+      await this.enviarTexto(
+        telefone,
+        "Tive um problema processando sua mensagem. Tenta de novo, ou manda 'ajuda'.",
+        identidade.sessaoId,
+      );
+    }
   }
 
   async enviarTexto(telefone: string, texto: string, sessaoId: string | null = null) {
@@ -130,53 +162,6 @@ export class WhatsappService {
     );
   }
 
-  private async tratarVinculado(
-    telefone: string,
-    texto: string,
-    tipo: MensagemTipo,
-    identidade: Exclude<Awaited<ReturnType<SessaoService["resolverPorTelefone"]>>, { tipo: "DESCONHECIDO" }>,
-  ) {
-    const txt = texto.trim().toLowerCase();
-
-    if (tipo !== "TEXTO") {
-      await this.enviarTexto(
-        telefone,
-        "Por enquanto só processo mensagens de texto. Mídia/áudio em breve!",
-        identidade.sessaoId,
-      );
-      return;
-    }
-
-    if (txt === "ping") {
-      await this.enviarTexto(telefone, "pong 🏓", identidade.sessaoId);
-      return;
-    }
-
-    if (txt === "ajuda" || txt === "help" || txt === "?") {
-      const texto =
-        identidade.tipo === "MOTORISTA"
-          ? `Olá ${identidade.nome}! Em breve você vai poder lançar viagens por aqui. Por enquanto:\n• "ping" — testa conexão\n• "sair" — desvincula esse número`
-          : `Olá ${identidade.nome}! Em breve você vai poder consultar o dashboard por aqui. Por enquanto:\n• "ping" — testa conexão\n• "sair" — desvincula esse número`;
-      await this.enviarTexto(telefone, texto, identidade.sessaoId);
-      return;
-    }
-
-    if (txt === "sair" || txt === "desvincular") {
-      await this.sessao.desvincular(identidade.sessaoId);
-      await this.enviarTexto(
-        telefone,
-        "Pronto, você foi desvinculado(a). Pra voltar, peça outro código de convite ao admin.",
-      );
-      return;
-    }
-
-    // Default Fase 1 — Fase 2 substitui isso por chamada ao AgenteService
-    await this.enviarTexto(
-      telefone,
-      `Recebi: "${texto.slice(0, 100)}". Em breve eu vou entender mensagens livres com IA. Por enquanto manda "ajuda".`,
-      identidade.sessaoId,
-    );
-  }
 
   async historicoRecente(sessaoId: string, limit = 50) {
     return this.prisma.whatsappMensagem.findMany({

@@ -33,5 +33,10 @@ import { TrackingConfigMotoristaController } from "./tracking-config.controller"
     AbastecimentosMotoristaService,
     LocaisMotoristaService,
   ],
+  exports: [
+    MotoristaService,
+    ViagensMotoristaService,
+    AbastecimentosMotoristaService,
+  ],
 })
 export class MotoristaModule {}

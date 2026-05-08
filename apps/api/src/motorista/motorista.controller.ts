@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from "@nestjs/common";
+import { BadRequestException, Controller, Get, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
@@ -22,5 +22,21 @@ export class MotoristaController {
   @Get("catalogos")
   catalogos(@CurrentUser() user: AuthMotorista) {
     return this.service.catalogos(user.id);
+  }
+
+  @Get("catalogos/buscar")
+  buscarCatalogo(
+    @CurrentUser() user: AuthMotorista,
+    @Query("tipo") tipo: string,
+    @Query("q") q: string,
+  ) {
+    if (!["material", "obra", "local", "veiculo"].includes(tipo)) {
+      throw new BadRequestException("tipo inválido");
+    }
+    return this.service.buscarCatalogo(
+      user.id,
+      tipo as "material" | "obra" | "local" | "veiculo",
+      q ?? "",
+    );
   }
 }
