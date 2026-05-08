@@ -31,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { humanizeApiError } from "@/lib/api";
 import {
   useAbastecimentos,
+  useExcluirAbastecimento,
   useExcluirPedagio,
   usePedagiosFiltrados,
   useResumoMes,
@@ -93,6 +94,7 @@ export default function HistoricoScreen() {
   const pedagios = usePedagiosFiltrados({ mes: mesSelecionado });
   const abastecimentos = useAbastecimentos(mesSelecionado);
   const excluirPedagio = useExcluirPedagio();
+  const excluirAbastecimento = useExcluirAbastecimento();
 
   const itensAbastecimentos = abastecimentos.data ?? [];
   const totalAbastMes = itensAbastecimentos.length;
@@ -119,6 +121,36 @@ export default function HistoricoScreen() {
           onPress: async () => {
             try {
               await excluirPedagio.mutateAsync(p.id);
+              void Haptics.notificationAsync(
+                Haptics.NotificationFeedbackType.Success,
+              );
+            } catch (err) {
+              Alert.alert("Não foi possível excluir", humanizeApiError(err));
+              void Haptics.notificationAsync(
+                Haptics.NotificationFeedbackType.Error,
+              );
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  function confirmarExcluirAbastecimento(a: Abastecimento) {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const litros = parseFloat(a.litros);
+    const valor = parseFloat(a.valorTotal);
+    Alert.alert(
+      "Excluir este abastecimento?",
+      `Apagar abastecimento de ${litros.toFixed(2)} L (R$ ${valor.toFixed(2)})${a.postoNome ? ` em ${a.postoNome}` : ""}?`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Excluir",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await excluirAbastecimento.mutateAsync(a.id);
               void Haptics.notificationAsync(
                 Haptics.NotificationFeedbackType.Success,
               );
@@ -437,7 +469,10 @@ export default function HistoricoScreen() {
             <Animated.View
               entering={FadeInDown.delay(index * 20).duration(180)}
             >
-              <AbastecimentoCard a={item} />
+              <AbastecimentoCard
+                a={item}
+                onExcluir={() => confirmarExcluirAbastecimento(item)}
+              />
             </Animated.View>
           )}
           ListEmptyComponent={
@@ -621,12 +656,18 @@ function PedagioCard({
   );
 }
 
-function AbastecimentoCard({ a }: { a: Abastecimento }) {
+function AbastecimentoCard({
+  a,
+  onExcluir,
+}: {
+  a: Abastecimento;
+  onExcluir: () => void;
+}) {
   const litros = parseFloat(a.litros);
   const valor = parseFloat(a.valorTotal);
   const preco = a.precoLitro ? parseFloat(a.precoLitro) : null;
 
-  return (
+  const card = (
     <View className="rounded-2xl border-2 border-border bg-card p-4">
       <View className="flex-row items-start justify-between gap-3">
         <View className="flex-1">
@@ -681,6 +722,25 @@ function AbastecimentoCard({ a }: { a: Abastecimento }) {
         </Text>
       )}
     </View>
+  );
+
+  return (
+    <Swipeable
+      renderRightActions={() => (
+        <View className="ml-2 flex-row items-stretch">
+          <Button
+            variant="destructive"
+            className="h-full w-24 rounded-2xl"
+            onPress={onExcluir}
+          >
+            <Trash2 size={22} color="white" />
+          </Button>
+        </View>
+      )}
+      overshootRight={false}
+    >
+      {card}
+    </Swipeable>
   );
 }
 

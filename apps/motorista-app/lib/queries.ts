@@ -287,6 +287,19 @@ export function useExcluirPedagio() {
   });
 }
 
+export function useExcluirAbastecimento() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (abastecimentoId: string) => {
+      await api.delete(`/m/abastecimentos/${abastecimentoId}`);
+      return abastecimentoId;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["abastecimentos"] });
+    },
+  });
+}
+
 /**
  * Offline-first: escreve no outbox local e retorna na hora.
  * Sync real (upload de foto + POST) acontece em background quando online.
