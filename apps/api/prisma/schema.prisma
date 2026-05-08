@@ -94,14 +94,15 @@ enum TipoBlocoFechamento {
 }
 
 model User {
-  id         String        @id @default(uuid())
-  nome       String
-  email      String        @unique
-  senhaHash  String
-  perfil     PerfilUsuario @default(OPERADOR)
-  ativo      Boolean       @default(true)
-  criadoEm   DateTime      @default(now())
-  alteradoEm DateTime      @updatedAt
+  id            String        @id @default(uuid())
+  nome          String
+  email         String        @unique
+  senhaHash     String
+  perfil        PerfilUsuario @default(OPERADOR)
+  ativo         Boolean       @default(true)
+  ultimoLoginEm DateTime?
+  criadoEm      DateTime      @default(now())
+  alteradoEm    DateTime      @updatedAt
 
   resolucoes      FechamentoLinha[]
   envios          EnvioFechamento[]
@@ -617,12 +618,17 @@ model ErrorLog {
   userAgent   String?
   /// Contexto extra: device specs, network, breadcrumbs, etc
   extra       Json?
+  /// Marcado como corrigido por um admin — não bloqueia novos eventos do mesmo hash
+  resolvido       Boolean   @default(false)
+  resolvidoEm     DateTime?
+  resolvidoPorId  String?
   capturadoEm DateTime @default(now())
 
   @@index([hash])
   @@index([origem, capturadoEm])
   @@index([capturadoEm])
   @@index([userId])
+  @@index([resolvido, capturadoEm])
   @@map("error_logs")
 }
 

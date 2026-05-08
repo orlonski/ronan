@@ -13,11 +13,32 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { LoadingCard, LoadingInline } from "@/components/loading";
 import { useCreateResource, useDeleteResource, useResourceList, useUpdateResource } from "@/lib/client-api";
 
 type Perfil = "ADMIN" | "OPERADOR";
-type User = { id: string; nome: string; email: string; perfil: Perfil; ativo: boolean };
+type User = {
+  id: string;
+  nome: string;
+  email: string;
+  perfil: Perfil;
+  ativo: boolean;
+  ultimoLoginEm: string | null;
+};
 const PATH = "/admin/users";
+
+function fmtUltimoLogin(iso: string | null): string {
+  if (!iso) return "nunca";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 const empty = { nome: "", email: "", senha: "", perfil: "OPERADOR" as Perfil };
 
@@ -66,9 +87,7 @@ export default function UsuariosPage() {
       </header>
 
       <div className="space-y-3 md:hidden">
-        {list.isLoading && (
-          <Card className="p-4 text-sm text-muted-foreground">Carregando...</Card>
-        )}
+        {list.isLoading && <LoadingCard />}
         {list.data?.length === 0 && (
           <Card className="p-6 text-center text-sm text-muted-foreground">
             Nenhum usuário cadastrado.
@@ -99,6 +118,10 @@ export default function UsuariosPage() {
                 <span className="text-muted-foreground">Perfil: </span>
                 {u.perfil}
               </span>
+              <span>
+                <span className="text-muted-foreground">Último login: </span>
+                {fmtUltimoLogin(u.ultimoLoginEm)}
+              </span>
             </div>
           </Card>
         ))}
@@ -111,17 +134,21 @@ export default function UsuariosPage() {
               <TableHead>Nome</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Perfil</TableHead>
+              <TableHead>Último login</TableHead>
               <TableHead className="w-24">Status</TableHead>
               <TableHead className="w-32 text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {list.isLoading && <TableRow><TableCell colSpan={5}>Carregando...</TableCell></TableRow>}
+            {list.isLoading && <TableRow><TableCell colSpan={6}><LoadingInline /></TableCell></TableRow>}
             {list.data?.map((u) => (
               <TableRow key={u.id}>
                 <TableCell className="font-medium">{u.nome}</TableCell>
                 <TableCell>{u.email}</TableCell>
                 <TableCell>{u.perfil}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {fmtUltimoLogin(u.ultimoLoginEm)}
+                </TableCell>
                 <TableCell>
                   <StatusToggle
                     active={u.ativo}

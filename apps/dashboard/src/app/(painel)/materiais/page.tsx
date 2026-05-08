@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { LoadingCard, LoadingInline } from "@/components/loading";
 import {
   useCreateResource,
   useDeleteResource,
@@ -65,7 +66,7 @@ export default function MateriaisPage() {
 
       <div className="space-y-3 md:hidden">
         {list.isLoading && (
-          <Card className="p-4 text-sm text-muted-foreground">Carregando...</Card>
+          <LoadingCard />
         )}
         {list.data?.length === 0 && (
           <Card className="p-6 text-center text-sm text-muted-foreground">
@@ -110,7 +111,7 @@ export default function MateriaisPage() {
           </TableHeader>
           <TableBody>
             {list.isLoading && (
-              <TableRow><TableCell colSpan={3}>Carregando...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={3}><LoadingInline /></TableCell></TableRow>
             )}
             {list.isError && (
               <TableRow><TableCell colSpan={3} className="text-red-600">Erro ao carregar.</TableCell></TableRow>

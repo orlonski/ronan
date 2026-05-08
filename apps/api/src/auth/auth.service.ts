@@ -26,6 +26,10 @@ export class AuthService {
     if (!user || !user.ativo) throw new UnauthorizedException("Credenciais inválidas");
     const ok = await bcrypt.compare(senha, user.senhaHash);
     if (!ok) throw new UnauthorizedException("Credenciais inválidas");
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { ultimoLoginEm: new Date() },
+    });
     return this.issueTokens({ sub: user.id, kind: "ADMIN_USER" });
   }
 

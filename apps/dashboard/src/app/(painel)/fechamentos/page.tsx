@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { LoadingCard, LoadingInline } from "@/components/loading";
 import { useFechamentos } from "@/lib/fechamentos-api";
 import {
   STATUS_FECHAMENTO_COLOR,
@@ -36,7 +37,7 @@ export default function FechamentosPage() {
       {/* Mobile: cards verticais */}
       <div className="space-y-3 md:hidden">
         {list.isLoading && (
-          <Card className="p-4 text-sm text-muted-foreground">Carregando...</Card>
+          <LoadingCard />
         )}
         {list.data?.length === 0 && (
           <Card className="p-6 text-center text-sm text-muted-foreground">
@@ -103,7 +104,7 @@ export default function FechamentosPage() {
           <TableBody>
             {list.isLoading && (
               <TableRow>
-                <TableCell colSpan={7}>Carregando...</TableCell>
+                <TableCell colSpan={7}><LoadingInline /></TableCell>
               </TableRow>
             )}
             {list.data?.map((f) => (

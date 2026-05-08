@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { LoadingCard, LoadingInline } from "@/components/loading";
 import {
   useCreateResource,
   useDeleteResource,
@@ -62,7 +63,7 @@ export default function FrotaPage() {
 
       <div className="space-y-3 md:hidden">
         {list.isLoading && (
-          <Card className="p-4 text-sm text-muted-foreground">Carregando...</Card>
+          <LoadingCard />
         )}
         {list.data?.length === 0 && (
           <Card className="p-6 text-center text-sm text-muted-foreground">
@@ -108,7 +109,7 @@ export default function FrotaPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {list.isLoading && <TableRow><TableCell colSpan={4}>Carregando...</TableCell></TableRow>}
+            {list.isLoading && <TableRow><TableCell colSpan={4}><LoadingInline /></TableCell></TableRow>}
             {list.data?.map((v) => (
               <TableRow key={v.id}>
                 <TableCell className="font-mono font-medium">{v.placa}</TableCell>

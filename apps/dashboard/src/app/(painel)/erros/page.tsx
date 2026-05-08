@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Filter } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CheckCircle2, ChevronRight, Filter, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import {
@@ -14,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { LoadingCard, LoadingInline, Spinner } from "@/components/loading";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 
 type ErroAgrupado = {
@@ -23,7 +25,11 @@ type ErroAgrupado = {
   ocorrencias: number;
   primeiraOcorrencia: string;
   ultimaOcorrencia: string;
+  resolvido: boolean;
+  resolvidoEm: string | null;
 };
+
+type StatusFiltro = "pendentes" | "resolvidos" | "todos";
 
 type ErroDetalhe = {
   id: string;
@@ -54,15 +60,18 @@ const ORIGEM_COLOR: Record<string, string> = {
 
 export default function ErrosPage() {
   const token = useAuthToken();
+  const qc = useQueryClient();
   const [origem, setOrigem] = useState<string>("");
+  const [status, setStatus] = useState<StatusFiltro>("pendentes");
   const [hashSelecionado, setHashSelecionado] = useState<string | null>(null);
 
   const grupos = useQuery({
-    queryKey: ["errors-agrupados", origem, token],
+    queryKey: ["errors-agrupados", origem, status, token],
     enabled: !!token,
     queryFn: () => {
       const qs = new URLSearchParams();
       if (origem) qs.set("origem", origem);
+      qs.set("status", status);
       qs.set("limit", "100");
       return fetchApi<ErroAgrupado[]>(
         `/errors/agrupados?${qs.toString()}`,
@@ -81,12 +90,35 @@ export default function ErrosPage() {
       ),
   });
 
+  const resolver = useMutation({
+    mutationFn: (hash: string) =>
+      fetchApi<{ count: number }>(`/errors/grupo/${hash}/resolver`, {
+        method: "PATCH",
+        token,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["errors-agrupados"] }),
+  });
+
+  const reabrir = useMutation({
+    mutationFn: (hash: string) =>
+      fetchApi<{ count: number }>(`/errors/grupo/${hash}/reabrir`, {
+        method: "PATCH",
+        token,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["errors-agrupados"] }),
+  });
+
   if (hashSelecionado) {
+    const grupoSelecionado = grupos.data?.find((g) => g.hash === hashSelecionado);
     return (
       <DetalheErro
         hash={hashSelecionado}
         ocorrencias={ocorrencias.data ?? []}
         loading={ocorrencias.isLoading}
+        resolvido={grupoSelecionado?.resolvido ?? false}
+        onResolver={() => resolver.mutate(hashSelecionado)}
+        onReabrir={() => reabrir.mutate(hashSelecionado)}
+        resolvendo={resolver.isPending || reabrir.isPending}
         onVoltar={() => setHashSelecionado(null)}
       />
     );
@@ -102,27 +134,40 @@ export default function ErrosPage() {
             ver ocorrências e stack trace.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <div className="flex flex-col gap-2 md:flex-row md:items-center">
           <Select
-            value={origem}
-            onChange={(e) => setOrigem(e.target.value)}
-            className="w-full md:w-48"
+            value={status}
+            onChange={(e) => setStatus(e.target.value as StatusFiltro)}
+            className="w-full md:w-44"
           >
-            <option value="">Todas origens</option>
-            <option value="motorista-app">App motorista</option>
-            <option value="dashboard">Dashboard</option>
-            <option value="api">API (backend)</option>
+            <option value="pendentes">Pendentes</option>
+            <option value="resolvidos">Resolvidos</option>
+            <option value="todos">Todos</option>
           </Select>
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <Select
+              value={origem}
+              onChange={(e) => setOrigem(e.target.value)}
+              className="w-full md:w-48"
+            >
+              <option value="">Todas origens</option>
+              <option value="motorista-app">App motorista</option>
+              <option value="dashboard">Dashboard</option>
+              <option value="api">API (backend)</option>
+            </Select>
+          </div>
         </div>
       </header>
 
-      {grupos.isLoading && (
-        <Card className="p-6 text-sm text-muted-foreground">Carregando...</Card>
-      )}
+      {grupos.isLoading && <LoadingCard />}
       {grupos.data?.length === 0 && (
         <Card className="p-6 text-center text-sm text-muted-foreground">
-          Nenhum erro registrado. ✓
+          {status === "pendentes"
+            ? "Nenhum erro pendente. ✓"
+            : status === "resolvidos"
+            ? "Nenhum erro resolvido ainda."
+            : "Nenhum erro registrado. ✓"}
         </Card>
       )}
 
@@ -135,9 +180,16 @@ export default function ErrosPage() {
             onClick={() => setHashSelecionado(g.hash)}
           >
             <div className="flex items-start justify-between gap-2">
-              <Badge className={ORIGEM_COLOR[g.origem] ?? ""}>
-                {ORIGEM_LABEL[g.origem] ?? g.origem}
-              </Badge>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Badge className={ORIGEM_COLOR[g.origem] ?? ""}>
+                  {ORIGEM_LABEL[g.origem] ?? g.origem}
+                </Badge>
+                {g.resolvido && (
+                  <Badge className="border-green-200 bg-green-50 text-green-800">
+                    <CheckCircle2 className="mr-1 h-3 w-3" /> Corrigido
+                  </Badge>
+                )}
+              </div>
               <span className="text-xs text-muted-foreground">
                 {g.ocorrencias}×
               </span>
@@ -145,6 +197,29 @@ export default function ErrosPage() {
             <p className="break-words text-sm font-medium">{g.message}</p>
             <div className="text-xs text-muted-foreground">
               Última: {fmtDataHora(g.ultimaOcorrencia)}
+            </div>
+            <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
+              {g.resolvido ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={reabrir.isPending}
+                  onClick={() => reabrir.mutate(g.hash)}
+                >
+                  {reabrir.isPending ? <Spinner /> : <RotateCcw className="h-4 w-4" />}
+                  Reabrir
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={resolver.isPending}
+                  onClick={() => resolver.mutate(g.hash)}
+                >
+                  {resolver.isPending ? <Spinner /> : <CheckCircle2 className="h-4 w-4" />}
+                  Marcar como corrigido
+                </Button>
+              )}
             </div>
           </Card>
         ))}
@@ -160,7 +235,8 @@ export default function ErrosPage() {
               <TableHead className="text-right">Ocorrências</TableHead>
               <TableHead>Primeira</TableHead>
               <TableHead>Última</TableHead>
-              <TableHead></TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -187,8 +263,39 @@ export default function ErrosPage() {
                 <TableCell className="text-xs text-muted-foreground">
                   {fmtDataHora(g.ultimaOcorrencia)}
                 </TableCell>
-                <TableCell className="text-right">
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                <TableCell>
+                  {g.resolvido ? (
+                    <Badge className="border-green-200 bg-green-50 text-green-800">
+                      <CheckCircle2 className="mr-1 h-3 w-3" /> Corrigido
+                    </Badge>
+                  ) : (
+                    <Badge className="border-amber-200 bg-amber-50 text-amber-800">
+                      Pendente
+                    </Badge>
+                  )}
+                </TableCell>
+                <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                  {g.resolvido ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={reabrir.isPending}
+                      onClick={() => reabrir.mutate(g.hash)}
+                      title="Reabrir"
+                    >
+                      {reabrir.isPending ? <Spinner /> : <RotateCcw className="h-4 w-4" />}
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={resolver.isPending}
+                      onClick={() => resolver.mutate(g.hash)}
+                      title="Marcar como corrigido"
+                    >
+                      {resolver.isPending ? <Spinner /> : <CheckCircle2 className="h-4 w-4" />}
+                    </Button>
+                  )}
                 </TableCell>
               </TableRow>
             ))}
@@ -203,34 +310,60 @@ function DetalheErro({
   hash,
   ocorrencias,
   loading,
+  resolvido,
+  onResolver,
+  onReabrir,
+  resolvendo,
   onVoltar,
 }: {
   hash: string;
   ocorrencias: ErroDetalhe[];
   loading: boolean;
+  resolvido: boolean;
+  onResolver: () => void;
+  onReabrir: () => void;
+  resolvendo: boolean;
   onVoltar: () => void;
 }) {
   const primeira = ocorrencias[0];
   return (
     <div className="space-y-6">
-      <header>
-        <button
-          onClick={onVoltar}
-          className="mb-2 text-sm text-muted-foreground hover:text-foreground"
-        >
-          ← Voltar pra lista
-        </button>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Detalhe do erro
-        </h1>
-        <p className="font-mono text-xs text-muted-foreground">
-          hash: {hash} · {ocorrencias.length} ocorrências
-        </p>
+      <header className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <button
+            onClick={onVoltar}
+            className="mb-2 text-sm text-muted-foreground hover:text-foreground"
+          >
+            ← Voltar pra lista
+          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Detalhe do erro
+            </h1>
+            {resolvido && (
+              <Badge className="border-green-200 bg-green-50 text-green-800">
+                <CheckCircle2 className="mr-1 h-3 w-3" /> Corrigido
+              </Badge>
+            )}
+          </div>
+          <p className="font-mono text-xs text-muted-foreground">
+            hash: {hash} · {ocorrencias.length} ocorrências
+          </p>
+        </div>
+        {resolvido ? (
+          <Button variant="outline" size="sm" disabled={resolvendo} onClick={onReabrir}>
+            {resolvendo ? <Spinner /> : <RotateCcw className="h-4 w-4" />}
+            Reabrir
+          </Button>
+        ) : (
+          <Button size="sm" disabled={resolvendo} onClick={onResolver}>
+            {resolvendo ? <Spinner /> : <CheckCircle2 className="h-4 w-4" />}
+            Marcar como corrigido
+          </Button>
+        )}
       </header>
 
-      {loading && (
-        <Card className="p-6 text-sm text-muted-foreground">Carregando...</Card>
-      )}
+      {loading && <LoadingCard />}
 
       {primeira && (
         <Card className="space-y-3 p-5">

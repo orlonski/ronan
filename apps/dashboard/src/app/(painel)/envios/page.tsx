@@ -25,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { LoadingCard, LoadingInline } from "@/components/loading";
 import { fmtBR, fmtDataHoraBR } from "@/lib/fechamento-helpers";
 import {
   useBaixarArquivo,
@@ -59,7 +60,7 @@ export default function EnviosPage() {
 
       <div className="space-y-3 md:hidden">
         {list.isLoading && (
-          <Card className="p-4 text-sm text-muted-foreground">Carregando...</Card>
+          <LoadingCard />
         )}
         {list.data?.length === 0 && (
           <Card className="p-6 text-center text-sm text-muted-foreground">
@@ -140,7 +141,7 @@ export default function EnviosPage() {
           <TableBody>
             {list.isLoading && (
               <TableRow>
-                <TableCell colSpan={8}>Carregando...</TableCell>
+                <TableCell colSpan={8}><LoadingInline /></TableCell>
               </TableRow>
             )}
             {list.data?.map((e) => {

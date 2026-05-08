@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { LoadingCard, LoadingInline } from "@/components/loading";
 import { useCreateResource, useDeleteResource, useResourceList, useUpdateResource } from "@/lib/client-api";
 
 type Papel = "RECEBE_PLANILHA" | "MANDA_FECHAMENTO" | "AMBOS";
@@ -71,7 +72,7 @@ export default function EmpresasPage() {
 
       <div className="space-y-3 md:hidden">
         {list.isLoading && (
-          <Card className="p-4 text-sm text-muted-foreground">Carregando...</Card>
+          <LoadingCard />
         )}
         {list.data?.length === 0 && (
           <Card className="p-6 text-center text-sm text-muted-foreground">
@@ -142,7 +143,7 @@ export default function EmpresasPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {list.isLoading && <TableRow><TableCell colSpan={5}>Carregando...</TableCell></TableRow>}
+            {list.isLoading && <TableRow><TableCell colSpan={5}><LoadingInline /></TableCell></TableRow>}
             {list.data?.map((e) => (
               <TableRow key={e.id}>
                 <TableCell className="font-medium">{e.nome}</TableCell>

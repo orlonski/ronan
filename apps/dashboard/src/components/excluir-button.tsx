@@ -4,8 +4,10 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
 import { Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/confirm-dialog";
 
 /**
  * Botão de exclusão definitiva (hard delete) com:
@@ -43,6 +45,7 @@ export function ExcluirButton({
   const { data: session } = useSession();
   const token = useAuthToken();
   const qc = useQueryClient();
+  const { confirmar, ConfirmDialog } = useConfirm();
   const [working, setWorking] = useState(false);
 
   const isAdmin = session?.user?.perfil === "ADMIN";
@@ -63,32 +66,48 @@ export function ExcluirButton({
 
   async function onClick() {
     if (working) return;
-    if (!window.confirm(`Excluir definitivamente ${nomeRecurso}?\n\nEssa ação NÃO pode ser desfeita.`)) return;
+    const ok = await confirmar({
+      title: `Excluir ${nomeRecurso}?`,
+      description: "Essa ação não pode ser desfeita.",
+      confirmLabel: "Excluir",
+      variant: "destructive",
+    });
+    if (!ok) return;
     setWorking(true);
     try {
       await mutation.mutateAsync();
+      toast.success(`${capitalize(nomeRecurso)} excluído com sucesso.`);
     } catch (err) {
-      window.alert((err as Error).message ?? "Erro ao excluir");
+      toast.error("Não foi possível excluir", {
+        description: (err as Error).message ?? "Erro ao excluir",
+      });
     } finally {
       setWorking(false);
     }
   }
 
   return (
-    <Button
-      variant={variant === "ghost" ? "ghost" : variant}
-      size={size}
-      onClick={onClick}
-      disabled={disabled || working}
-      title="Excluir definitivamente"
-      className={
-        variant === "ghost"
-          ? "text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-          : undefined
-      }
-    >
-      <Trash2 className="h-4 w-4" />
-      {label && size !== "icon" ? <span>{label}</span> : null}
-    </Button>
+    <>
+      <Button
+        variant={variant === "ghost" ? "ghost" : variant}
+        size={size}
+        onClick={onClick}
+        disabled={disabled || working}
+        title="Excluir definitivamente"
+        className={
+          variant === "ghost"
+            ? "text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+            : undefined
+        }
+      >
+        <Trash2 className="h-4 w-4" />
+        {label && size !== "icon" ? <span>{label}</span> : null}
+      </Button>
+      <ConfirmDialog />
+    </>
   );
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }

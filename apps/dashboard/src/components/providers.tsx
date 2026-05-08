@@ -2,6 +2,7 @@
 import { SessionProvider } from "next-auth/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
+import { Toaster } from "sonner";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [qc] = useState(
@@ -12,7 +13,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
   );
   return (
     <SessionProvider>
-      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+      <QueryClientProvider client={qc}>
+        {children}
+        <Toaster position="top-right" richColors closeButton />
+      </QueryClientProvider>
     </SessionProvider>
   );
 }

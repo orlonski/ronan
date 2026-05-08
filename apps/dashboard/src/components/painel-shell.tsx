@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { Menu } from "lucide-react";
 import { Sidebar } from "@/components/sidebar";
+import { GlobalLoadingBar } from "@/components/loading";
 
 /**
  * Shell do painel: cuida da gaveta lateral no mobile + header com
@@ -14,6 +15,7 @@ export function PainelShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
+      <GlobalLoadingBar />
       <Sidebar
         mobileOpen={mobileOpen}
         onMobileClose={() => setMobileOpen(false)}

@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -33,6 +34,7 @@ const ListarQuery = z.object({
   desde: z.coerce.date().optional(),
   ate: z.coerce.date().optional(),
   limit: z.coerce.number().int().min(1).max(500).default(100),
+  status: z.enum(["pendentes", "resolvidos", "todos"]).optional(),
 });
 
 @ApiTags("errors")
@@ -110,5 +112,26 @@ export class ErrorsController {
   @Get(":id")
   detalhe(@Param("id") id: string) {
     return this.service.detalhe(id);
+  }
+
+  /**
+   * Marca todas as ocorrências de um hash como resolvidas. Se o erro voltar
+   * a aparecer (novo evento), entra como pendente de novo — não silencia.
+   */
+  @UseGuards(RolesGuard)
+  @Roles("ADMIN", "OPERADOR")
+  @Patch("grupo/:hash/resolver")
+  async resolverGrupo(
+    @Param("hash") hash: string,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.resolverGrupo(hash, user.id);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles("ADMIN", "OPERADOR")
+  @Patch("grupo/:hash/reabrir")
+  async reabrirGrupo(@Param("hash") hash: string) {
+    return this.service.reabrirGrupo(hash);
   }
 }

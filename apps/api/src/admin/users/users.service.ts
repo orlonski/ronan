@@ -9,6 +9,7 @@ const SAFE_SELECT = {
   email: true,
   perfil: true,
   ativo: true,
+  ultimoLoginEm: true,
   criadoEm: true,
 } as const;
 

@@ -21,6 +21,16 @@ export default {
         },
       },
       borderRadius: { lg: "var(--radius)", md: "calc(var(--radius) - 2px)" },
+      keyframes: {
+        "loading-bar": {
+          "0%": { transform: "translateX(-100%) scaleX(0.4)" },
+          "50%": { transform: "translateX(0%) scaleX(0.6)" },
+          "100%": { transform: "translateX(100%) scaleX(0.4)" },
+        },
+      },
+      animation: {
+        "loading-bar": "loading-bar 1.4s ease-in-out infinite",
+      },
     },
   },
   plugins: [animate],

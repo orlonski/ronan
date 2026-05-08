@@ -14,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { LoadingCard, LoadingInline } from "@/components/loading";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { fmtNum } from "@/lib/fechamento-helpers";
 import { useQuery } from "@tanstack/react-query";
@@ -111,7 +112,7 @@ export default function AbastecimentosPage() {
       {/* Mobile: cards */}
       <div className="space-y-3 md:hidden">
         {list.isLoading && (
-          <Card className="p-4 text-sm text-muted-foreground">Carregando...</Card>
+          <LoadingCard />
         )}
         {list.data?.itens.length === 0 && (
           <Card className="p-6 text-center text-sm text-muted-foreground">
@@ -188,7 +189,7 @@ export default function AbastecimentosPage() {
           <TableBody>
             {list.isLoading && (
               <TableRow>
-                <TableCell colSpan={10}>Carregando...</TableCell>
+                <TableCell colSpan={10}><LoadingInline /></TableCell>
               </TableRow>
             )}
             {list.data?.itens.map((a) => (

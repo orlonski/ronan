@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { LoadingCard, LoadingInline } from "@/components/loading";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { fmtBR, fmtNum } from "@/lib/fechamento-helpers";
 import { useQuery } from "@tanstack/react-query";
@@ -92,7 +93,7 @@ export default function ViagensPage() {
       {/* Mobile: cards verticais */}
       <div className="space-y-3 md:hidden">
         {list.isLoading && (
-          <Card className="p-4 text-sm text-muted-foreground">Carregando...</Card>
+          <LoadingCard />
         )}
         {list.data?.length === 0 && (
           <Card className="p-6 text-center text-sm text-muted-foreground">
@@ -174,7 +175,7 @@ export default function ViagensPage() {
           <TableBody>
             {list.isLoading && (
               <TableRow>
-                <TableCell colSpan={10}>Carregando...</TableCell>
+                <TableCell colSpan={10}><LoadingInline /></TableCell>
               </TableRow>
             )}
             {list.data?.map((v) => (

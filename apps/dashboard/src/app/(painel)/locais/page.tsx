@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { LoadingCard, LoadingInline } from "@/components/loading";
 import {
   fetchApi,
   useAuthToken,
@@ -138,7 +139,7 @@ export default function LocaisPage() {
 
       <div className="space-y-3 md:hidden">
         {list.isLoading && (
-          <Card className="p-4 text-sm text-muted-foreground">Carregando...</Card>
+          <LoadingCard />
         )}
         {list.data?.length === 0 && (
           <Card className="p-6 text-center text-sm text-muted-foreground">
@@ -205,7 +206,7 @@ export default function LocaisPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {list.isLoading && <TableRow><TableCell colSpan={6}>Carregando...</TableCell></TableRow>}
+            {list.isLoading && <TableRow><TableCell colSpan={6}><LoadingInline /></TableCell></TableRow>}
             {list.data?.map((l) => (
               <TableRow key={l.id}>
                 <TableCell className="font-medium">{l.nome}</TableCell>
