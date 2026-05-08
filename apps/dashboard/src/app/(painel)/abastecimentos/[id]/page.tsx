@@ -8,6 +8,7 @@ import {
   Camera,
   Fuel,
   Gauge,
+  ImageOff,
   MapPin,
   User as UserIcon,
 } from "lucide-react";
@@ -240,6 +241,7 @@ function FotoThumb({
     enabled: !!token,
     staleTime: 30 * 60_000,
     gcTime: 10 * 60_000,
+    retry: false,
     queryFn: async () => {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
       const res = await fetch(
@@ -251,6 +253,15 @@ function FotoThumb({
       return URL.createObjectURL(blob);
     },
   });
+
+  if (q.error instanceof Error && q.error.message.includes("404")) {
+    return (
+      <div className="flex aspect-square flex-col items-center justify-center gap-1 rounded-md border border-dashed bg-muted/30 text-xs text-muted-foreground">
+        <ImageOff className="h-7 w-7 opacity-40" />
+        <span>Foto indisponível</span>
+      </div>
+    );
+  }
 
   if (q.isLoading || !q.data) {
     return (

@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Client as MinioClient } from "minio";
 import { randomUUID } from "node:crypto";
@@ -80,13 +80,24 @@ export class UploadsService implements OnModuleInit {
   }
 
   async getObjectBuffer(key: string): Promise<Buffer> {
-    const stream = await this.client.getObject(this.bucket, key);
-    const chunks: Buffer[] = [];
-    return new Promise((resolve, reject) => {
-      stream.on("data", (c: Buffer) => chunks.push(c));
-      stream.on("end", () => resolve(Buffer.concat(chunks)));
-      stream.on("error", reject);
-    });
+    try {
+      const stream = await this.client.getObject(this.bucket, key);
+      const chunks: Buffer[] = [];
+      return await new Promise((resolve, reject) => {
+        stream.on("data", (c: Buffer) => chunks.push(c));
+        stream.on("end", () => resolve(Buffer.concat(chunks)));
+        stream.on("error", reject);
+      });
+    } catch (err) {
+      // Foto perdida no storage (volume não persistente, key inválida, etc).
+      // Sobe 404 — controllers propagam, dashboard mostra placeholder. Evita
+      // poluir o ErrorLog com 5xx pra um caso conhecido (foto faltando).
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.toLowerCase().includes("does not exist") || msg.includes("NoSuchKey")) {
+        throw new NotFoundException("Foto não disponível no storage");
+      }
+      throw err;
+    }
   }
 
   async presignedUrl(key: string, expirySeconds = 3600): Promise<string> {
