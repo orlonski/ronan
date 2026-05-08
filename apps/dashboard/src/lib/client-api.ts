@@ -7,7 +7,16 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
 export class ApiError extends Error {
   constructor(public status: number, public body: unknown) {
-    super(`API ${status}`);
+    // Tenta extrair mensagem útil do body do Nest
+    // (formato { message, error, statusCode } ou { message: string[] })
+    let msg = `API ${status}`;
+    if (body && typeof body === "object" && "message" in body) {
+      const m = (body as { message: unknown }).message;
+      if (typeof m === "string" && m.length > 0) msg = m;
+      else if (Array.isArray(m) && m.length > 0)
+        msg = m.map((x) => String(x)).join("; ");
+    }
+    super(msg);
   }
 }
 
