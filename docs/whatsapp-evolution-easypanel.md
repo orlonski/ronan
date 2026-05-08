@@ -1,30 +1,30 @@
 # Subir Evolution API no Easypanel
 
-Guia rápido pra subir o Evolution API v2 self-hosted no Easypanel pra integração WhatsApp do Ronan. **Você executa**, eu não tenho credencial Easypanel.
+Guia pra subir Evolution API self-hosted no Easypanel pra integração WhatsApp do Ronan. Reflete o setup que funcionou na produção (2026-05-08) — siga com atenção, em particular nos pontos marcados ⚠️.
 
-## 1. Criar serviço
+## 1. Service `evolution`
 
-No Easypanel, dentro do projeto Ronan, clica em **"+ Service" → "Docker Image"**.
+No Easypanel → projeto Ronan → **+ Service → Docker Image**:
 
 | Campo | Valor |
 |---|---|
 | Name | `evolution` |
-| Image | `atendai/evolution-api:v2.2.3` (versão fixa pra evitar surpresas em update) |
+| Image | `evoapicloud/evolution-api:v2.3.7` ⚠️ **NÃO use `atendai/evolution-api`** — está abandonada e tem bug que trava QR em loop infinito |
 
-## 2. Variáveis de ambiente
+> ℹ️ Pode usar `evoapicloud/evolution-api:latest` se preferir update automático, mas pin numa tag fixa é mais seguro.
 
-Cole no **Environment** do serviço:
+### Environment
 
 ```env
-# Auth — TROCA pra um valor secreto teu (gera com `openssl rand -hex 32`)
-AUTHENTICATION_API_KEY=COLE_UM_TOKEN_LONGO_E_SECRETO_AQUI
+# Auth
+AUTHENTICATION_API_KEY=<gere com `openssl rand -hex 32` — NÃO deixe placeholder>
 
 # Servidor
 SERVER_TYPE=http
 SERVER_PORT=8080
-SERVER_URL=https://evolution.SEU-DOMINIO.com
+SERVER_URL=https://evolution.SEU-DOMINIO.com  # troca pelo domínio real do Easypanel
 
-# CORS — libera só a API do Ronan e localhost
+# CORS
 CORS_ORIGIN=*
 CORS_METHODS=POST,GET,PUT,DELETE
 CORS_CREDENTIALS=true
@@ -33,11 +33,11 @@ CORS_CREDENTIALS=true
 LOG_LEVEL=ERROR,WARN,INFO,LOG
 LOG_COLOR=false
 
-# Banco — Evolution v2 precisa de Postgres
+# Banco — Postgres
 DATABASE_ENABLED=true
 DATABASE_PROVIDER=postgresql
-DATABASE_CONNECTION_URI=postgresql://postgres:SENHA@evolution-postgres:5432/evolution?schema=public
-DATABASE_CONNECTION_CLIENT_NAME=evolution_ronan
+DATABASE_CONNECTION_URI=postgresql://postgres:SENHA_FORTE@PROJETO_evolution-postgres:5432/evolution?schema=public
+DATABASE_CONNECTION_CLIENT_NAME=evolution_<projeto>
 DATABASE_SAVE_DATA_INSTANCE=true
 DATABASE_SAVE_DATA_NEW_MESSAGE=false
 DATABASE_SAVE_MESSAGE_UPDATE=false
@@ -46,15 +46,13 @@ DATABASE_SAVE_DATA_CHATS=false
 DATABASE_SAVE_DATA_LABELS=false
 DATABASE_SAVE_DATA_HISTORIC=false
 
-# Cache (Redis opcional, mas recomendado — sem ele, sessão WhatsApp se perde no restart)
-CACHE_REDIS_ENABLED=true
-CACHE_REDIS_URI=redis://evolution-redis:6379/6
-CACHE_REDIS_PREFIX_KEY=evolution_ronan
-CACHE_REDIS_SAVE_INSTANCES=true
-CACHE_LOCAL_ENABLED=false
+# Cache — RECOMENDADO desligar Redis e usar local. Redis self-hosted no Easypanel
+# desconectava aleatoriamente e quebrava sessão WhatsApp.
+CACHE_REDIS_ENABLED=false
+CACHE_LOCAL_ENABLED=true
 
 # Webhook GLOBAL — toda mensagem recebida vai pra nossa API
-WEBHOOK_GLOBAL_URL=https://api.SEU-DOMINIO.com/whatsapp/webhook
+WEBHOOK_GLOBAL_URL=https://api.SEU-DOMINIO.com/whatsapp/webhook  # troca pelo domínio real
 WEBHOOK_GLOBAL_ENABLED=true
 WEBHOOK_GLOBAL_WEBHOOK_BY_EVENTS=false
 WEBHOOK_EVENTS_MESSAGES_UPSERT=true
@@ -67,67 +65,100 @@ LANGUAGE=pt-BR
 
 # Telemetria off
 TELEMETRY=false
-TELEMETRY_URL=
 ```
 
-## 3. Postgres + Redis (sidecars)
+⚠️ **Detalhes que vão te derrubar se errar:**
 
-Evolution v2 precisa de Postgres. **Cria 2 services adicionais no mesmo projeto:**
+1. **Hostname do Postgres** no Easypanel é `<projeto>_<service>` (com underscore, prefix do projeto). Ex: se o projeto é `ronan` e o service é `evolution-postgres`, o hostname interno é `ronan_evolution-postgres` — não é `evolution-postgres` puro.
+2. **`SERVER_URL`** precisa ser o domínio público REAL — usado pra montar links internos do Evolution. Placeholder não substituído trava o Baileys.
+3. **`WEBHOOK_GLOBAL_URL`** idem — aponta pra API do Ronan.
+4. **`AUTHENTICATION_API_KEY`** com placeholder permite qualquer um acessar tua instância → mandar/ler mensagens em nome da empresa. **Sempre gere valor seguro.**
 
-### `evolution-postgres`
+### Mounts ⚠️ obrigatório
 
+Adiciona **Montagem de volume** (não bind mount, não montagem de arquivo):
+
+| Campo | Valor |
+|---|---|
+| Nome | `evolution-instances` |
+| Caminho | `/evolution/instances` |
+
+> Sem esse volume, Baileys não persiste credenciais da sessão WhatsApp e **fica em loop** tentando autenticar.
+
+### Domains
+
+Aba **Domains** → adiciona domínio (ou usa o gerado pelo Easypanel) **na porta 8080**.
+
+## 2. Service `<projeto>_evolution-postgres`
+
+`+ Service → Docker Image`:
 - Image: `postgres:16-alpine`
 - Environment:
   ```
   POSTGRES_DB=evolution
   POSTGRES_USER=postgres
-  POSTGRES_PASSWORD=COLOCA_UMA_SENHA_FORTE
+  POSTGRES_PASSWORD=<gere senha forte só com letras+números>
   ```
-- Volume: `/var/lib/postgresql/data` → `evolution-postgres-data`
-- **Não precisa expor porta** — só comunica internamente com o evolution
+- Mounts: volume `evolution-postgres-data` em `/var/lib/postgresql/data`
 
-### `evolution-redis`
+⚠️ **Use senha sem caracteres especiais** (`@:/#?&+%`) — se precisar usar, faça URL-encode na `DATABASE_CONNECTION_URI`. É mais simples só usar alfanumérico.
 
-- Image: `redis:7-alpine`
-- **Sem env vars necessárias**
-- Volume: `/data` → `evolution-redis-data`
-- **Não precisa expor porta**
+⚠️ **Volume é obrigatório** — sem ele, todo restart o Postgres começa do zero.
 
-## 4. Volume e domínio do `evolution`
+## 3. Pareamento
 
-- Volume: `/evolution/instances` → `evolution-instances` (persistência das sessões/QR)
-- Domain: cria subdomínio `evolution.SEU-DOMINIO.com` apontando pro service `evolution` na porta `8080`
-- **HTTPS obrigatório** — WhatsApp não conecta em HTTP
+Não use o Manager web do Evolution v2.x — bugado. Usa a API direto:
 
-## 5. Subir e testar
+```bash
+# Cria instância
+curl -X POST \
+  -H "apikey: SUA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"instanceName":"ronan","integration":"WHATSAPP-BAILEYS","qrcode":true}' \
+  https://evolution.SEU-DOMINIO.com/instance/create
 
-1. Deploy. Aguarda os 3 services ficarem verde.
-2. Acessa `https://evolution.SEU-DOMINIO.com/manager` no navegador.
-3. Login: cola o valor de `AUTHENTICATION_API_KEY`.
-4. Cria instância nova: nome `ronan` (ou outro que lembre).
-5. Clica **"Connect"** → mostra QR code.
-6. Abre WhatsApp no celular do número da empresa → **Configurações → Aparelhos conectados → Conectar um aparelho** → escaneia o QR.
-7. Status da instância vira "open" (conectado).
-
-## 6. Me passa pra eu plugar no backend
-
-Depois que tiver tudo no ar, me manda:
-
+# Pega QR (espera ~10s depois do create)
+curl -H "apikey: SUA_API_KEY" \
+  https://evolution.SEU-DOMINIO.com/instance/connect/ronan
 ```
-EVOLUTION_API_URL=https://evolution.SEU-DOMINIO.com
+
+A resposta vem com `base64` (imagem do QR) ou `pairingCode` (8 chars pra colar no celular sem QR).
+
+**No celular:** WhatsApp → Aparelhos conectados → Conectar um aparelho → escaneia QR ou clica "Conectar com número de telefone" pra usar pairing code.
+
+## 4. Configuração na API do Ronan
+
+No service da **API do Ronan** (não do Evolution), adiciona:
+
+```env
+EVOLUTION_API_URL=https://evolution.SEU-DOMINIO.com  # mesmo domínio do passo 1
 EVOLUTION_API_KEY=<o mesmo AUTHENTICATION_API_KEY>
 EVOLUTION_INSTANCE=ronan
 ```
 
-Eu adiciono no `.env` do backend e configura o webhook automático apontando pra nossa API. Aí teste manda "oi" pro número conectado e o webhook chega.
+Reinicia API. Painel `/whatsapp` no dashboard mostra status verde com número conectado.
 
-## Troubleshooting
+## 5. Validação end-to-end
 
-- **QR não aparece**: container deve ter Redis rodando, senão sessão não persiste. Olha logs do `evolution-redis`.
-- **Webhook não chega**: confirma que `https://api.SEU-DOMINIO.com/whatsapp/webhook` é acessível externamente (sem firewall) e que o Evolution consegue resolver o DNS.
-- **WhatsApp deslogou sozinho**: Baileys reconecta automático na maioria dos casos. Se não, escaneia o QR de novo.
-- **Atualizar versão**: troca a tag da image (`v2.2.3` → `v2.2.x`) e redeploya. Sessão persiste no volume.
+1. De um celular **diferente** do pareado, manda "oi" pro número da empresa
+2. Bot responde pedindo código de convite
+3. No dashboard, vai em Motoristas → ícone WhatsApp num motorista → copia código
+4. No celular de teste, manda só o código
+5. Bot responde "Beleza, [Nome]! Você foi vinculado(a)..."
+6. Manda "ping" → "pong 🏓"
+7. Painel `/whatsapp` mostra a sessão vinculada e histórico das mensagens
+
+## Troubleshooting (vivido)
+
+| Sintoma | Causa | Fix |
+|---|---|---|
+| Tudo retorna `{"count": 0}` no `/instance/connect`, logs do Evolution só mostram "Group Ignore: false" em loop | Versão `atendai/evolution-api:v2.2.3` tem bug do QR | Trocar pra `evoapicloud/evolution-api:v2.3.7+` |
+| `redis disconnected` nos logs do Evolution | Hostname do Redis errado ou Redis instável | Desabilitar Redis: `CACHE_REDIS_ENABLED=false`, `CACHE_LOCAL_ENABLED=true` |
+| `getaddrinfo ENOTFOUND api.seu-dominio.com` no webhook | Placeholder não substituído em `WEBHOOK_GLOBAL_URL` | Trocar pelo domínio real |
+| `401 Unauthorized` ao webhook | API tem JWT global e webhook precisa ser público | Decorator `@Public()` no endpoint do webhook |
+| Domínio retorna 404 do Easypanel mas service tá verde | Aba Domains não mapeada pra porta 8080 | Configurar domínio do service na porta 8080 |
+| `Authentication failed against database server` | Volume do Postgres tem senha antiga (gravada na primeira inicialização) | Apagar volume `evolution-postgres-data` e deixar Postgres recriar |
 
 ## Custo
 
-Aproximadamente **0** — Evolution é open source, tudo roda no teu Easypanel/Contabo. Único custo é a memória/CPU do container (~256MB RAM/0.1 CPU pro Evolution + Postgres + Redis).
+~0 — só consumo de RAM/CPU do Easypanel/VPS. Evolution + Postgres juntos rodam confortavelmente em 512MB/0.2 CPU.
