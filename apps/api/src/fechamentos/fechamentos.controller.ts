@@ -76,8 +76,12 @@ export class FechamentosController {
   }
 
   @Get(":id/linhas")
-  linhas(@Param("id") id: string, @Query("status") status?: string) {
-    return this.service.linhas(id, status);
+  linhas(
+    @Param("id") id: string,
+    @Query("status") status?: string,
+    @Query("tipo") tipo?: string,
+  ) {
+    return this.service.linhas(id, status, tipo);
   }
 
   @Post()
@@ -112,8 +116,16 @@ export class FechamentosController {
   }
 
   @Post(":id/reprocessar")
-  reprocessar(@CurrentUser() user: AuthAdminUser, @Param("id") id: string) {
-    return this.service.reprocessar(id, user.id);
+  reprocessar(
+    @CurrentUser() user: AuthAdminUser,
+    @Param("id") id: string,
+    @Query("tipo") tipoStr?: string,
+  ) {
+    // Se ?tipo=VIAGEM|PEDAGIO|COMBUSTIVEL, reprocessa só esse tipo.
+    const tipos = tipoStr && ["VIAGEM", "PEDAGIO", "COMBUSTIVEL"].includes(tipoStr)
+      ? [tipoStr as "VIAGEM" | "PEDAGIO" | "COMBUSTIVEL"]
+      : undefined;
+    return this.service.reprocessar(id, user.id, tipos);
   }
 
   @Post(":id/linhas/:linhaId/resolver")

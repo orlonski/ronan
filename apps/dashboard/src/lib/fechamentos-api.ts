@@ -154,11 +154,18 @@ export function useFechamento(id: string | undefined) {
   });
 }
 
-export function useLinhasFechamento(fechamentoId: string | undefined, status?: string) {
+export function useLinhasFechamento(
+  fechamentoId: string | undefined,
+  status?: string,
+  tipo?: "VIAGEM" | "PEDAGIO" | "COMBUSTIVEL",
+) {
   const token = useAuthToken();
-  const qs = status ? `?status=${status}` : "";
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (tipo) params.set("tipo", tipo);
+  const qs = params.toString() ? `?${params.toString()}` : "";
   return useQuery({
-    queryKey: ["fechamento-linhas", fechamentoId, status],
+    queryKey: ["fechamento-linhas", fechamentoId, status, tipo],
     enabled: !!token && !!fechamentoId,
     queryFn: () => fetchApi<LinhaFechamento[]>(`${PATH}/${fechamentoId}/linhas${qs}`, { token }),
   });
@@ -246,8 +253,13 @@ export function useReprocessar(fechamentoId: string) {
   const token = useAuthToken();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () =>
-      fetchApi<{ ok: true }>(`${PATH}/${fechamentoId}/reprocessar`, { method: "POST", token }),
+    mutationFn: (tipo?: "VIAGEM" | "PEDAGIO" | "COMBUSTIVEL") => {
+      const qs = tipo ? `?tipo=${tipo}` : "";
+      return fetchApi<{ ok: true }>(
+        `${PATH}/${fechamentoId}/reprocessar${qs}`,
+        { method: "POST", token },
+      );
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["fechamento", fechamentoId] });
       qc.invalidateQueries({ queryKey: ["fechamento-linhas", fechamentoId] });

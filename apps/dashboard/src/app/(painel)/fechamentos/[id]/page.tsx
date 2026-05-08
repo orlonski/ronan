@@ -96,10 +96,38 @@ export default function FechamentoDetalhePage({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => reprocessar.mutate()}
+            onClick={() => reprocessar.mutate(undefined)}
             disabled={reprocessar.isPending}
+            title="Reprocessa todos os tipos (viagens, pedágios, combustível)"
           >
-            <RefreshCw className="h-4 w-4" /> Reprocessar
+            <RefreshCw className="h-4 w-4" /> Reprocessar tudo
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => reprocessar.mutate("VIAGEM")}
+            disabled={reprocessar.isPending}
+            title="Reprocessa só linhas de viagem"
+          >
+            🚛 Viagens
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => reprocessar.mutate("PEDAGIO")}
+            disabled={reprocessar.isPending}
+            title="Reprocessa só linhas de pedágio"
+          >
+            🛣️ Pedágios
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => reprocessar.mutate("COMBUSTIVEL")}
+            disabled={reprocessar.isPending}
+            title="Reprocessa só linhas de combustível"
+          >
+            ⛽ Combustível
           </Button>
           <Button
             size="sm"
@@ -136,7 +164,7 @@ export default function FechamentoDetalhePage({
                   size="sm"
                   variant="outline"
                   className="border-amber-400"
-                  onClick={() => reprocessar.mutate()}
+                  onClick={() => reprocessar.mutate(undefined)}
                   disabled={reprocessar.isPending}
                 >
                   <RefreshCw className="h-3 w-3" />

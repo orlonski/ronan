@@ -6,10 +6,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowLeft,
+  CheckCircle2,
+  Circle,
   Eye,
+  Fuel,
+  Pencil,
   RefreshCw,
   Save,
+  Settings,
   Trash2,
+  Truck,
   Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -115,6 +121,40 @@ type Empresa = {
   toleranciaTonPct: number;
 };
 
+type TipoBloco = "VIAGEM" | "PEDAGIO" | "COMBUSTIVEL";
+
+type BlocoSalvo = {
+  id: string;
+  empresaClienteId: string;
+  tipo: TipoBloco;
+  abaPreferida: string | null;
+  linhaCabecalho: number | null;
+  linhaInicioDados: number | null;
+  colunas: LayoutColuna[];
+  ativo: boolean;
+};
+
+const TIPOS_INFO: Record<TipoBloco, { titulo: string; icone: typeof Truck; cor: string; descricao: string }> = {
+  VIAGEM: {
+    titulo: "Viagens",
+    icone: Truck,
+    cor: "text-blue-700",
+    descricao: "Lista de viagens com placa, ticket, km, toneladas, valor.",
+  },
+  PEDAGIO: {
+    titulo: "Pedágios",
+    icone: AlertTriangle,
+    cor: "text-amber-700",
+    descricao: "Praças/postos de pedágio, valor pago, eixos.",
+  },
+  COMBUSTIVEL: {
+    titulo: "Combustível",
+    icone: Fuel,
+    cor: "text-green-700",
+    descricao: "Abastecimentos: posto, litros, valor, odômetro.",
+  },
+};
+
 export default function LayoutImportPage({
   params,
 }: {
@@ -145,14 +185,14 @@ export default function LayoutImportPage({
       ? camposLayout.data.filter((c) => c.ativo)
       : CAMPOS_FALLBACK;
 
-  const layoutAtual = useQuery({
-    queryKey: ["layout-import", empresaId, token],
+  // Lista de blocos cadastrados pra empresa (até 3: VIAGEM/PEDAGIO/COMBUSTIVEL)
+  const blocos = useQuery({
+    queryKey: ["layout-import-blocos", empresaId, token],
     enabled: !!token,
     queryFn: () =>
-      fetchApi<LayoutSalvo | null>(
-        `/admin/empresas/${empresaId}/layout-import`,
-        { token },
-      ),
+      fetchApi<BlocoSalvo[]>(`/admin/empresas/${empresaId}/layout-import`, {
+        token,
+      }),
   });
 
   const fechamentos = useQuery({
@@ -165,7 +205,8 @@ export default function LayoutImportPage({
       ),
   });
 
-  // Estado da edição (vazio até carregar layout salvo OU fazer inferência)
+  // Bloco em edição (null = mostra cards de visão geral dos 3 tipos)
+  const [tipoSelecionado, setTipoSelecionado] = useState<TipoBloco | null>(null);
   const [layout, setLayout] = useState<LayoutSalvo | null>(null);
   const [estrutura, setEstrutura] = useState<EstruturaPlanilha | null>(null);
   const [arquivoSel, setArquivoSel] = useState<File | null>(null);
@@ -202,18 +243,39 @@ export default function LayoutImportPage({
     });
   }
 
+  // Quando seleciona um tipo, carrega o layout salvo daquele tipo (se existe)
   useEffect(() => {
-    if (layoutAtual.data && !layout) {
-      setLayout(layoutAtual.data);
+    setEstrutura(null);
+    setArquivoSel(null);
+    setErro(null);
+    setSalvouAgora(false);
+    if (!tipoSelecionado) {
+      setLayout(null);
+      return;
     }
-  }, [layoutAtual.data, layout]);
+    const blocoExistente = (blocos.data ?? []).find(
+      (b) => b.tipo === tipoSelecionado,
+    );
+    if (blocoExistente) {
+      setLayout({
+        tipoBloco: "viagens",
+        abaPreferida: blocoExistente.abaPreferida ?? undefined,
+        linhaCabecalho: blocoExistente.linhaCabecalho ?? undefined,
+        linhaInicioDados: blocoExistente.linhaInicioDados ?? undefined,
+        colunas: blocoExistente.colunas,
+      });
+    } else {
+      setLayout(null);
+    }
+  }, [tipoSelecionado, blocos.data]);
 
   const inferir = useMutation({
     mutationFn: async (file: File): Promise<InferirResult> => {
       const fd = new FormData();
       fd.append("arquivo", file);
+      const qs = tipoSelecionado ? `?tipo=${tipoSelecionado}` : "";
       return fetchApi<InferirResult>(
-        `/admin/empresas/${empresaId}/layout-import/inferir`,
+        `/admin/empresas/${empresaId}/layout-import/inferir${qs}`,
         { method: "POST", body: fd, token },
       );
     },
@@ -246,30 +308,33 @@ export default function LayoutImportPage({
   });
 
   const salvar = useMutation({
-    mutationFn: (body: LayoutSalvo) =>
-      fetchApi<LayoutSalvo>(`/admin/empresas/${empresaId}/layout-import`, {
-        method: "PUT",
-        body: JSON.stringify(body),
-        token,
-      }),
+    mutationFn: (body: LayoutSalvo) => {
+      if (!tipoSelecionado) throw new Error("Tipo do bloco não selecionado");
+      return fetchApi<unknown>(
+        `/admin/empresas/${empresaId}/layout-import/${tipoSelecionado}`,
+        { method: "PUT", body: JSON.stringify(body), token },
+      );
+    },
     onSuccess: () => {
       setSalvouAgora(true);
-      void qc.invalidateQueries({ queryKey: ["layout-import", empresaId] });
+      void qc.invalidateQueries({ queryKey: ["layout-import-blocos", empresaId] });
     },
     onError: (err) => setErro((err as Error).message),
   });
 
   const limpar = useMutation({
-    mutationFn: () =>
-      fetchApi<void>(`/admin/empresas/${empresaId}/layout-import`, {
-        method: "DELETE",
-        token,
-      }),
+    mutationFn: () => {
+      if (!tipoSelecionado) throw new Error("Tipo do bloco não selecionado");
+      return fetchApi<void>(
+        `/admin/empresas/${empresaId}/layout-import/${tipoSelecionado}`,
+        { method: "DELETE", token },
+      );
+    },
     onSuccess: () => {
       setLayout(null);
       setEstrutura(null);
       setSalvouAgora(false);
-      void qc.invalidateQueries({ queryKey: ["layout-import", empresaId] });
+      void qc.invalidateQueries({ queryKey: ["layout-import-blocos", empresaId] });
     },
   });
 
@@ -337,27 +402,54 @@ export default function LayoutImportPage({
   return (
     <div className="space-y-6">
       <header className="flex items-center gap-3">
-        <Link href="/empresas">
-          <Button variant="ghost" size="icon">
+        {tipoSelecionado ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setTipoSelecionado(null)}
+            title="Voltar à visão geral"
+          >
             <ArrowLeft className="h-5 w-5" />
           </Button>
-        </Link>
+        ) : (
+          <Link href="/empresas">
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </Link>
+        )}
         <div className="flex-1">
           <h1 className="text-2xl font-semibold tracking-tight">
             Layout de importação
+            {tipoSelecionado && (
+              <span className="ml-2 text-base font-normal text-muted-foreground">
+                — {TIPOS_INFO[tipoSelecionado].titulo}
+              </span>
+            )}
           </h1>
           <p className="text-sm text-muted-foreground">
-            {empresa.data?.nome ?? "..."} — como ler a planilha que esta empresa
-            envia pra fazer o match com as viagens dos motoristas.
+            {empresa.data?.nome ?? "..."}
+            {!tipoSelecionado &&
+              " — configure como ler cada tipo de bloco da planilha."}
           </p>
         </div>
       </header>
 
-      {/* Card avançado: chave de match e tolerâncias (V3) */}
-      {empresa.data && <MatchConfigCard empresa={empresa.data} token={token} qc={qc} />}
+      {/* Visão geral: 3 cards de tipos */}
+      {!tipoSelecionado && (
+        <>
+          <BlocosOverview
+            blocos={blocos.data ?? []}
+            onSelect={setTipoSelecionado}
+          />
+          {empresa.data && (
+            <MatchConfigCard empresa={empresa.data} token={token} qc={qc} />
+          )}
+        </>
+      )}
 
-      {/* Estado A: sem layout cached e sem inferência */}
-      {!layout && !estrutura && (
+      {/* Estado A: sem layout cached e sem inferência (DENTRO de um tipo selecionado) */}
+      {tipoSelecionado && !layout && !estrutura && (
         <Card className="space-y-4 p-6">
           <div className="flex items-start gap-3">
             <Upload className="mt-1 h-5 w-5 text-blue-600" />
@@ -380,7 +472,7 @@ export default function LayoutImportPage({
       )}
 
       {/* Estado B: tem layout cacheado, mas ainda não fez nova inferência */}
-      {layout && !estrutura && (
+      {tipoSelecionado && layout && !estrutura && (
         <>
           <Card className="space-y-3 p-5">
             <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
@@ -464,7 +556,7 @@ export default function LayoutImportPage({
       )}
 
       {/* Estado C: depois de inferir/parsear */}
-      {estrutura && layout && (
+      {tipoSelecionado && estrutura && layout && (
         <>
           <Card className="space-y-3 p-5">
             <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
@@ -654,9 +746,8 @@ export default function LayoutImportPage({
             <Button
               variant="outline"
               onClick={() => {
-                setLayout(layoutAtual.data ?? null);
-                setEstrutura(null);
-                setArquivoSel(null);
+                // volta pra visão geral (sai do tipo selecionado)
+                setTipoSelecionado(null);
               }}
             >
               Cancelar
@@ -800,6 +891,80 @@ const CAMPOS_CHAVE_LABELS: Record<CampoChave, string> = {
   data: "Data",
   ticket: "Ticket",
 };
+
+/**
+ * Visão geral dos 3 blocos: Viagens, Pedágios, Combustível.
+ * Cada card mostra status + botão Configurar/Editar.
+ */
+function BlocosOverview({
+  blocos,
+  onSelect,
+}: {
+  blocos: BlocoSalvo[];
+  onSelect: (tipo: TipoBloco) => void;
+}) {
+  const tipos: TipoBloco[] = ["VIAGEM", "PEDAGIO", "COMBUSTIVEL"];
+  return (
+    <div className="grid gap-3 md:grid-cols-3">
+      {tipos.map((tipo) => {
+        const bloco = blocos.find((b) => b.tipo === tipo);
+        const info = TIPOS_INFO[tipo];
+        const Icon = info.icone;
+        const configurado = !!bloco;
+        return (
+          <Card key={tipo} className="space-y-3 p-5">
+            <div className="flex items-start gap-3">
+              <Icon className={`h-6 w-6 ${info.cor} shrink-0`} />
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold">{info.titulo}</h3>
+                  {configurado ? (
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <Circle className="h-4 w-4 text-muted-foreground/40" />
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {info.descricao}
+                </p>
+              </div>
+            </div>
+            {configurado && bloco && (
+              <div className="rounded-md bg-muted/30 p-2 text-xs">
+                <div>
+                  <span className="text-muted-foreground">Aba: </span>
+                  <span className="font-mono">{bloco.abaPreferida ?? "—"}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Colunas mapeadas: </span>
+                  <span className="font-medium">
+                    {bloco.colunas.filter((c) => c.campo !== "ignorar").length}{" "}
+                    de {bloco.colunas.length}
+                  </span>
+                </div>
+              </div>
+            )}
+            <Button
+              variant={configurado ? "outline" : "default"}
+              className="w-full"
+              onClick={() => onSelect(tipo)}
+            >
+              {configurado ? (
+                <>
+                  <Pencil className="h-4 w-4" /> Editar
+                </>
+              ) : (
+                <>
+                  <Settings className="h-4 w-4" /> Configurar
+                </>
+              )}
+            </Button>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
 
 function MatchConfigCard({
   empresa,

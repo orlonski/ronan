@@ -84,6 +84,15 @@ enum TipoCombustivel {
   ETANOL
 }
 
+/// Tipo de bloco de uma planilha de fechamento. Cada empresa pode ter
+/// blocos de múltiplos tipos configurados (LayoutImportBloco) e cada
+/// FechamentoLinha gerada herda o tipo do bloco que a originou.
+enum TipoBlocoFechamento {
+  VIAGEM
+  PEDAGIO
+  COMBUSTIVEL
+}
+
 model User {
   id         String        @id @default(uuid())
   nome       String
@@ -165,10 +174,34 @@ model EmpresaCliente {
   obras         Obra[]
   fechamentos   Fechamento[]
   layoutsEnvio  LayoutEnvio[]
+  layoutsImport LayoutImportBloco[]
   enviosDiretos EnvioFechamento[]
 
   @@index([ativa])
   @@map("empresas_cliente")
+}
+
+/// Bloco de layout de importação por tipo (viagem, pedágio, combustível).
+/// Substitui o EmpresaCliente.layoutImport: cada empresa pode ter múltiplos
+/// blocos cadastrados (1 por tipo). Cada bloco aponta pra uma aba específica
+/// da planilha do cliente e mapeia colunas pros campos do nosso sistema.
+model LayoutImportBloco {
+  id               String              @id @default(uuid())
+  empresa          EmpresaCliente      @relation(fields: [empresaClienteId], references: [id], onDelete: Cascade)
+  empresaClienteId String
+  tipo             TipoBlocoFechamento
+  abaPreferida     String?
+  linhaCabecalho   Int?
+  linhaInicioDados Int?
+  // [{letra, cabecalho, campo}] — mesma estrutura do antigo layoutImport
+  colunas          Json
+  ativo            Boolean             @default(true)
+  alteradoEm       DateTime            @updatedAt
+  criadoEm         DateTime            @default(now())
+
+  @@unique([empresaClienteId, tipo])
+  @@index([empresaClienteId])
+  @@map("layout_import_blocos")
 }
 
 model Obra {
@@ -340,6 +373,8 @@ model Pedagio {
   criadoOfflineEm DateTime?
   sincronizadoEm  DateTime  @default(now())
 
+  fechamentoLinhas FechamentoLinha[]
+
   @@index([veiculoId, data])
   @@index([viagemId])
   @@map("pedagios")
@@ -374,31 +409,43 @@ model Fechamento {
 }
 
 model FechamentoLinha {
-  id              String                @id @default(uuid())
-  fechamento      Fechamento            @relation(fields: [fechamentoId], references: [id], onDelete: Cascade)
-  fechamentoId    String
-  ordem           Int // posição original na planilha
-  rawData         Json // dados brutos extraídos da linha (todas as colunas)
-  placa           String?
-  data            DateTime?             @db.Date
-  ticket          String?
-  km              Decimal?              @db.Decimal(10, 2)
-  toneladas       Decimal?              @db.Decimal(10, 3)
-  valor           Decimal?              @db.Decimal(10, 2)
-  obraTexto       String? // texto da obra na planilha (pode não bater com nossa Obra)
-  materialTexto   String? // texto do material na planilha
-  viagemMatch     Viagem?               @relation(fields: [viagemMatchId], references: [id])
-  viagemMatchId   String?
-  status          StatusLinhaFechamento
-  divergencias    Json? // { campo: { motorista, empresa } }
-  sugestaoIa      Json? // { viagemId, confidence, motivo }
-  resolvidoPor    User?                 @relation(fields: [resolvidoPorId], references: [id])
-  resolvidoPorId  String?
-  resolvidoEm     DateTime?
-  motivoResolucao String?
+  id                   String                @id @default(uuid())
+  fechamento           Fechamento            @relation(fields: [fechamentoId], references: [id], onDelete: Cascade)
+  fechamentoId         String
+  ordem                Int // posição original na planilha
+  // Tipo do bloco que originou esta linha (vem do LayoutImportBloco usado).
+  // Default VIAGEM pra compatibilidade com linhas antigas.
+  tipo                 TipoBlocoFechamento   @default(VIAGEM)
+  rawData              Json // dados brutos extraídos da linha (todas as colunas)
+  placa                String?
+  data                 DateTime?             @db.Date
+  ticket               String?
+  km                   Decimal?              @db.Decimal(10, 2)
+  toneladas            Decimal?              @db.Decimal(10, 3)
+  valor                Decimal?              @db.Decimal(10, 2)
+  obraTexto            String? // texto da obra na planilha (pode não bater com nossa Obra)
+  materialTexto        String? // texto do material na planilha
+  // Apenas UM dos 3 matchIds é preenchido por linha, conforme `tipo`:
+  // VIAGEM → viagemMatchId, PEDAGIO → pedagioMatchId, COMBUSTIVEL → abastecimentoMatchId
+  viagemMatch          Viagem?               @relation(fields: [viagemMatchId], references: [id])
+  viagemMatchId        String?
+  pedagioMatch         Pedagio?              @relation(fields: [pedagioMatchId], references: [id])
+  pedagioMatchId       String?
+  abastecimentoMatch   Abastecimento?        @relation(fields: [abastecimentoMatchId], references: [id])
+  abastecimentoMatchId String?
+  status               StatusLinhaFechamento
+  divergencias         Json? // { campo: { motorista, empresa } }
+  sugestaoIa           Json? // { viagemId, confidence, motivo }
+  resolvidoPor         User?                 @relation(fields: [resolvidoPorId], references: [id])
+  resolvidoPorId       String?
+  resolvidoEm          DateTime?
+  motivoResolucao      String?
 
   @@index([fechamentoId, status])
+  @@index([fechamentoId, tipo])
   @@index([viagemMatchId])
+  @@index([pedagioMatchId])
+  @@index([abastecimentoMatchId])
   @@map("fechamento_linhas")
 }
 
@@ -603,7 +650,8 @@ model Abastecimento {
   sincronizadoEm  DateTime        @default(now())
   alteradoEm      DateTime        @updatedAt
 
-  fotos AbastecimentoFoto[]
+  fotos            AbastecimentoFoto[]
+  fechamentoLinhas FechamentoLinha[]
 
   @@index([veiculoId, data])
   @@index([motoristaId, data])

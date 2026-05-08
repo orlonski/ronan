@@ -8,6 +8,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -28,8 +29,9 @@ const ALLOWED_MIMES_AMOSTRA = [
   "application/pdf",
 ];
 
-// Slug do campo é validado dinamicamente no service contra a tabela
-// CampoLayout (admin pode cadastrar novos sem mudar código).
+const TIPO_VALUES = ["VIAGEM", "PEDAGIO", "COMBUSTIVEL"] as const;
+const TipoSchema = z.enum(TIPO_VALUES);
+
 const SalvarLayoutSchema = z.object({
   tipoBloco: z.enum(["viagens", "pedagios", "outro"]).default("viagens"),
   abaPreferida: z.string().optional(),
@@ -55,9 +57,10 @@ const SalvarLayoutSchema = z.object({
 export class LayoutImportController {
   constructor(private readonly service: LayoutImportService) {}
 
+  /** Lista TODOS os blocos cadastrados pra empresa (até 3: VIAGEM/PEDAGIO/COMBUSTIVEL). */
   @Get()
-  get(@Param("empresaId") empresaId: string) {
-    return this.service.get(empresaId);
+  list(@Param("empresaId") empresaId: string) {
+    return this.service.listarBlocos(empresaId);
   }
 
   @Get("fechamentos-recentes")
@@ -65,11 +68,16 @@ export class LayoutImportController {
     return this.service.fechamentosRecentes(empresaId);
   }
 
+  /**
+   * Sobe planilha amostral e roda IA pra sugerir mapeamento.
+   * Aceita ?tipo= pra direcionar a IA pro bloco específico.
+   */
   @Post("inferir")
   @UseInterceptors(FileInterceptor("arquivo"))
   async inferir(
     @Param("empresaId") empresaId: string,
     @UploadedFile() arquivo: Express.Multer.File | undefined,
+    @Query("tipo") tipoQuery?: string,
   ) {
     if (!arquivo) throw new BadRequestException("Arquivo amostral não enviado");
     const ok =
@@ -83,25 +91,40 @@ export class LayoutImportController {
     if (arquivo.size > MAX_AMOSTRA_BYTES) {
       throw new BadRequestException("Arquivo maior que 10 MB.");
     }
-    return this.service.inferir(empresaId, {
-      buffer: arquivo.buffer,
-      nomeOriginal: arquivo.originalname,
-      mimetype: arquivo.mimetype,
-    });
+    const tipo = tipoQuery && (TIPO_VALUES as readonly string[]).includes(tipoQuery)
+      ? (tipoQuery as (typeof TIPO_VALUES)[number])
+      : undefined;
+    return this.service.inferir(
+      empresaId,
+      {
+        buffer: arquivo.buffer,
+        nomeOriginal: arquivo.originalname,
+        mimetype: arquivo.mimetype,
+      },
+      tipo,
+    );
   }
 
-  @Put()
+  /** Salva 1 bloco específico. */
+  @Put(":tipo")
   salvar(
     @Param("empresaId") empresaId: string,
+    @Param("tipo") tipoStr: string,
     @Body(new ZodValidationPipe(SalvarLayoutSchema))
     body: z.infer<typeof SalvarLayoutSchema>,
   ) {
-    return this.service.salvar(empresaId, body);
+    const tipo = TipoSchema.parse(tipoStr);
+    return this.service.salvarBloco(empresaId, tipo, body);
   }
 
-  @Delete()
+  /** Apaga 1 bloco específico. */
+  @Delete(":tipo")
   @HttpCode(204)
-  async limpar(@Param("empresaId") empresaId: string) {
-    await this.service.limpar(empresaId);
+  async limpar(
+    @Param("empresaId") empresaId: string,
+    @Param("tipo") tipoStr: string,
+  ) {
+    const tipo = TipoSchema.parse(tipoStr);
+    await this.service.limparBloco(empresaId, tipo);
   }
 }

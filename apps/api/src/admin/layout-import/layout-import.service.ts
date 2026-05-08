@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { Prisma, type TipoBlocoFechamento } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { IaService, type LayoutInferenceResult } from "../../ia/ia.service";
 import {
@@ -29,6 +29,17 @@ export type InferirResult = {
   sugestao: LayoutInferenceResult | null;
 };
 
+export type BlocoSalvo = {
+  id: string;
+  empresaClienteId: string;
+  tipo: TipoBlocoFechamento;
+  abaPreferida: string | null;
+  linhaCabecalho: number | null;
+  linhaInicioDados: number | null;
+  colunas: { letra: string; cabecalho: string; campo: string }[];
+  ativo: boolean;
+};
+
 @Injectable()
 export class LayoutImportService {
   constructor(
@@ -40,10 +51,13 @@ export class LayoutImportService {
   /**
    * Recebe arquivo amostral, parseia e roda IA pra sugerir mapeamento.
    * NÃO persiste — admin vê o resultado, edita se quiser e chama PUT.
+   * Aceita `tipo` opcional pra direcionar a IA pro bloco específico
+   * (ex: pedágios, combustível). Sem tipo = comportamento atual (viagens).
    */
   async inferir(
     empresaId: string,
     arquivo: { buffer: Buffer; nomeOriginal: string; mimetype: string },
+    tipo?: TipoBlocoFechamento,
   ): Promise<InferirResult> {
     await this.ensureEmpresaImporta(empresaId);
 
@@ -60,7 +74,7 @@ export class LayoutImportService {
       );
     }
 
-    const sugestao = await this.ia.inferirLayout(amostraParaIa(parsed));
+    const sugestao = await this.ia.inferirLayout(amostraParaIa(parsed), tipo);
 
     return {
       estrutura: {
@@ -76,26 +90,61 @@ export class LayoutImportService {
     };
   }
 
-  async get(empresaId: string): Promise<LayoutInferenceResult | null> {
+  /** Lista todos os blocos cadastrados pra empresa. */
+  async listarBlocos(empresaId: string): Promise<BlocoSalvo[]> {
     await this.ensureEmpresaImporta(empresaId);
-    const empresa = await this.prisma.empresaCliente.findUnique({
-      where: { id: empresaId },
-      select: { layoutImport: true },
+    const blocos = await this.prisma.layoutImportBloco.findMany({
+      where: { empresaClienteId: empresaId },
+      orderBy: { tipo: "asc" },
     });
-    return (empresa?.layoutImport as LayoutInferenceResult | null) ?? null;
+    return blocos.map((b) => ({
+      id: b.id,
+      empresaClienteId: b.empresaClienteId,
+      tipo: b.tipo,
+      abaPreferida: b.abaPreferida,
+      linhaCabecalho: b.linhaCabecalho,
+      linhaInicioDados: b.linhaInicioDados,
+      colunas: (b.colunas as unknown as BlocoSalvo["colunas"]) ?? [],
+      ativo: b.ativo,
+    }));
   }
 
-  async salvar(
+  /** Retorna 1 bloco específico (ou null). */
+  async getBloco(
     empresaId: string,
+    tipo: TipoBlocoFechamento,
+  ): Promise<BlocoSalvo | null> {
+    await this.ensureEmpresaImporta(empresaId);
+    const b = await this.prisma.layoutImportBloco.findUnique({
+      where: { empresaClienteId_tipo: { empresaClienteId: empresaId, tipo } },
+    });
+    if (!b) return null;
+    return {
+      id: b.id,
+      empresaClienteId: b.empresaClienteId,
+      tipo: b.tipo,
+      abaPreferida: b.abaPreferida,
+      linhaCabecalho: b.linhaCabecalho,
+      linhaInicioDados: b.linhaInicioDados,
+      colunas: (b.colunas as unknown as BlocoSalvo["colunas"]) ?? [],
+      ativo: b.ativo,
+    };
+  }
+
+  /**
+   * Persiste 1 bloco (cria ou atualiza). Valida slugs contra CampoLayout.
+   */
+  async salvarBloco(
+    empresaId: string,
+    tipo: TipoBlocoFechamento,
     layout: LayoutInferenceResult,
-  ): Promise<LayoutInferenceResult> {
+  ) {
     await this.ensureEmpresaImporta(empresaId);
     if (!Array.isArray(layout.colunas) || layout.colunas.length === 0) {
       throw new BadRequestException(
         "Layout inválido — precisa ter ao menos uma coluna mapeada.",
       );
     }
-    // Valida slugs dinamicamente contra a tabela CampoLayout
     const slugsAtivos = await this.camposLayout.listarSlugsAtivos();
     const slugsValidos = new Set(slugsAtivos.map((c) => c.slug));
     const slugsInvalidos = layout.colunas
@@ -103,22 +152,34 @@ export class LayoutImportService {
       .filter((s) => !slugsValidos.has(s));
     if (slugsInvalidos.length > 0) {
       throw new BadRequestException(
-        `Campo(s) desconhecido(s): ${[...new Set(slugsInvalidos)].join(", ")}. Cadastre em /configuracoes/campos-layout antes.`,
+        `Campo(s) desconhecido(s): ${[...new Set(slugsInvalidos)].join(", ")}.`,
       );
     }
-    await this.prisma.empresaCliente.update({
-      where: { id: empresaId },
-      data: { layoutImport: layout as unknown as Prisma.InputJsonValue },
+
+    const data = {
+      abaPreferida: layout.abaPreferida ?? null,
+      linhaCabecalho: layout.linhaCabecalho ?? null,
+      linhaInicioDados: layout.linhaInicioDados ?? null,
+      colunas: layout.colunas as unknown as Prisma.InputJsonValue,
+      ativo: true,
+    };
+    return this.prisma.layoutImportBloco.upsert({
+      where: { empresaClienteId_tipo: { empresaClienteId: empresaId, tipo } },
+      create: { empresaClienteId: empresaId, tipo, ...data },
+      update: data,
     });
-    return layout;
   }
 
-  async limpar(empresaId: string): Promise<void> {
+  /** Apaga 1 bloco específico. */
+  async limparBloco(empresaId: string, tipo: TipoBlocoFechamento): Promise<void> {
     await this.ensureEmpresaImporta(empresaId);
-    await this.prisma.empresaCliente.update({
-      where: { id: empresaId },
-      data: { layoutImport: Prisma.DbNull },
-    });
+    await this.prisma.layoutImportBloco
+      .delete({
+        where: { empresaClienteId_tipo: { empresaClienteId: empresaId, tipo } },
+      })
+      .catch(() => {
+        /* ignora se não existe */
+      });
   }
 
   /**

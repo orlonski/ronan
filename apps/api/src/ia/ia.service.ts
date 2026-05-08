@@ -75,13 +75,17 @@ export class IaService {
   }
 
   /**
-   * Pede pra IA identificar quais colunas (e em qual aba) representam viagens
+   * Pede pra IA identificar quais colunas (e em qual aba) representam um bloco
    * de fechamento de uma transportadora. Recebe amostra das primeiras N linhas.
+   * `tipoBloco` direciona a busca: VIAGEM (default), PEDAGIO, COMBUSTIVEL.
    */
-  async inferirLayout(amostra: {
-    nomeArquivo: string;
-    abas: { nome: string; primeirasLinhas: (string | number | null)[][] }[];
-  }): Promise<LayoutInferenceResult | null> {
+  async inferirLayout(
+    amostra: {
+      nomeArquivo: string;
+      abas: { nome: string; primeirasLinhas: (string | number | null)[][] }[];
+    },
+    tipoBloco?: "VIAGEM" | "PEDAGIO" | "COMBUSTIVEL",
+  ): Promise<LayoutInferenceResult | null> {
     if (!this.client) {
       this.log.warn("Anthropic API key não configurada — pulando inferência de layout");
       return null;
@@ -132,13 +136,29 @@ export class IaService {
       )
       .join("\n");
 
+    const tipoDescricao = (() => {
+      if (tipoBloco === "PEDAGIO")
+        return "pedágios (data, placa, praça/posto de pedágio, eixos, valor pago)";
+      if (tipoBloco === "COMBUSTIVEL")
+        return "abastecimentos de combustível (data, placa, posto, litros, valor, odômetro)";
+      return "viagens detalhadas de carga (data, ticket, obra, placa, material, toneladas, km, valor)";
+    })();
+    const tipoNome = (() => {
+      if (tipoBloco === "PEDAGIO") return "pedágios";
+      if (tipoBloco === "COMBUSTIVEL") return "abastecimentos";
+      return "viagens";
+    })();
+
     const sysPrompt = `Você ajuda a interpretar planilhas de boletim de medição de transportadoras (fretes de caminhão).
 Empresas-cliente mandam essas planilhas pra conferência. Cada planilha pode ter múltiplas abas com:
   - viagens (data, ticket, obra, placa, material, toneladas, km, valor)
   - pedágios (data, placa, praça, eixos, valor)
+  - abastecimentos de combustível (data, placa, posto, litros, valor)
   - sumários, descontos, créditos
 
-Sua tarefa: analisar a amostra e devolver QUAL aba contém a relação detalhada de viagens (não o sumário),
+NESTA INFERÊNCIA, foque em encontrar a aba de **${tipoNome}** especificamente: ${tipoDescricao}. Ignore as outras abas (vão ser configuradas separadamente em outro momento).
+
+Sua tarefa: analisar a amostra e devolver QUAL aba contém a relação detalhada de **${tipoNome}** (não o sumário),
 QUAL linha tem os cabeçalhos, QUAL linha começa os dados, e MAPEAR cada coluna pra um campo padrão.
 
 Campos padrão possíveis (use EXATAMENTE o slug, à esquerda do "—"):

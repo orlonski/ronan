@@ -89,10 +89,13 @@ export class FechamentosService {
     return fechamento;
   }
 
-  async linhas(fechamentoId: string, status?: string) {
+  async linhas(fechamentoId: string, status?: string, tipo?: string) {
     const where: Prisma.FechamentoLinhaWhereInput = { fechamentoId };
     if (status) {
       where.status = status as Prisma.EnumStatusLinhaFechamentoFilter["equals"];
+    }
+    if (tipo && ["VIAGEM", "PEDAGIO", "COMBUSTIVEL"].includes(tipo)) {
+      where.tipo = tipo as Prisma.EnumTipoBlocoFechamentoFilter["equals"];
     }
     return this.prisma.fechamentoLinha.findMany({
       where,
@@ -318,10 +321,14 @@ export class FechamentosService {
     });
   }
 
-  async reprocessar(fechamentoId: string, usuarioId: string) {
+  async reprocessar(
+    fechamentoId: string,
+    usuarioId: string,
+    tipos?: ("VIAGEM" | "PEDAGIO" | "COMBUSTIVEL")[],
+  ) {
     const f = await this.prisma.fechamento.findUnique({ where: { id: fechamentoId } });
     if (!f) throw new NotFoundException("Fechamento não encontrado");
-    void this.processor.processar(fechamentoId, usuarioId).catch(() => {});
-    return { ok: true };
+    void this.processor.processar(fechamentoId, usuarioId, tipos).catch(() => {});
+    return { ok: true, tipos: tipos ?? "todos" };
   }
 }

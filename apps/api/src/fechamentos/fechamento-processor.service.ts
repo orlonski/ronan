@@ -4,6 +4,7 @@ import {
   Prisma,
   StatusFechamento,
   StatusLinhaFechamento,
+  type TipoBlocoFechamento,
 } from "@prisma/client";
 import { AuditoriaService } from "../auditoria/auditoria.service";
 import { IaService, type LayoutInferenceResult } from "../ia/ia.service";
@@ -71,7 +72,11 @@ export class FechamentoProcessorService {
     private readonly auditoria: AuditoriaService,
   ) {}
 
-  async processar(fechamentoId: string, usuarioId: string) {
+  async processar(
+    fechamentoId: string,
+    usuarioId: string,
+    tiposFiltro?: TipoBlocoFechamento[],
+  ) {
     const fechamento = await this.prisma.fechamento.findUnique({
       where: { id: fechamentoId },
       include: { empresaCliente: true },
@@ -117,14 +122,23 @@ export class FechamentoProcessorService {
         });
       }
 
-      // 3. extrai linhas estruturadas
-      const linhas = this.extrairLinhas(parsed, layout);
-      if (linhas.length === 0) {
-        this.log.warn(`Fechamento ${fechamentoId}: nenhuma linha extraída`);
+      // 3. extrai linhas estruturadas (apenas pra blocos VIAGEM via layout legado)
+      const linhas =
+        !tiposFiltro || tiposFiltro.includes("VIAGEM")
+          ? this.extrairLinhas(parsed, layout)
+          : [];
+      if (linhas.length === 0 && (!tiposFiltro || tiposFiltro.includes("VIAGEM"))) {
+        this.log.warn(`Fechamento ${fechamentoId}: nenhuma linha de viagem extraída`);
       }
 
-      // 4. limpa linhas anteriores (caso seja reprocessamento)
-      await this.prisma.fechamentoLinha.deleteMany({ where: { fechamentoId } });
+      // 4. limpa linhas anteriores. Se filtro de tipos, apaga só esses.
+      if (tiposFiltro && tiposFiltro.length > 0) {
+        await this.prisma.fechamentoLinha.deleteMany({
+          where: { fechamentoId, tipo: { in: tiposFiltro } },
+        });
+      } else {
+        await this.prisma.fechamentoLinha.deleteMany({ where: { fechamentoId } });
+      }
 
       // 5. cria todas as linhas com status MATCH/DIVERGENCIA/FALTANDO
       const stats = {
@@ -134,9 +148,12 @@ export class FechamentoProcessorService {
         divergencia: 0,
         faltando: 0,
         extra: 0,
+        pedagios: { total: 0, match: 0, divergencia: 0 },
+        combustivel: { total: 0, match: 0, divergencia: 0 },
       };
 
       // pre-fetch viagens da empresa do período pra match local
+      // (declarado fora do if pra reusar nas órfãs IA)
       const viagensPeriodo = await this.prisma.viagem.findMany({
         where: {
           obra: { empresaClienteId: fechamento.empresaCliente.id },
@@ -147,6 +164,9 @@ export class FechamentoProcessorService {
         },
         include: { veiculo: { select: { id: true, placa: true } } },
       });
+
+      // === BLOCO VIAGENS ===
+      if (!tiposFiltro || tiposFiltro.includes("VIAGEM")) {
 
       // Config de match per-empresa (V3): chave + tolerâncias
       const empresaConfig = await this.prisma.empresaCliente.findUnique({
@@ -251,6 +271,17 @@ export class FechamentoProcessorService {
       if (this.ia.habilitada) {
         await this.executarIaEmOrfas(fechamentoId, usuarioId, viagensPeriodo, stats);
       }
+      } // fim do bloco VIAGEM
+
+      // === BLOCO PEDÁGIOS ===
+      if (!tiposFiltro || tiposFiltro.includes("PEDAGIO")) {
+        await this.processarBlocoPedagios(fechamento, parsed, stats, usuarioId);
+      }
+
+      // === BLOCO COMBUSTÍVEL ===
+      if (!tiposFiltro || tiposFiltro.includes("COMBUSTIVEL")) {
+        await this.processarBlocoCombustivel(fechamento, parsed, stats, usuarioId);
+      }
 
       // 8. status final
       const aindaPendente = await this.prisma.fechamentoLinha.count({
@@ -291,10 +322,262 @@ export class FechamentoProcessorService {
     }
   }
 
+  /**
+   * Processa o bloco de pedágios: lê a aba do bloco, extrai linhas, faz match
+   * com Pedagio (lançado pelo motorista no app) por placa+data+pracaPedagio.
+   */
+  private async processarBlocoPedagios(
+    fechamento: { id: string; periodoInicio: Date; periodoFim: Date; empresaCliente: { id: string } },
+    parsed: ParsedFile,
+    stats: {
+      pedagios: { total: number; match: number; divergencia: number };
+    },
+    usuarioId: string,
+  ) {
+    const bloco = await this.prisma.layoutImportBloco.findUnique({
+      where: {
+        empresaClienteId_tipo: {
+          empresaClienteId: fechamento.empresaCliente.id,
+          tipo: "PEDAGIO",
+        },
+      },
+    });
+    if (!bloco || !bloco.ativo) return;
+
+    const layout = blocoToLayout(bloco);
+    const linhas = this.extrairLinhas(parsed, layout);
+    if (linhas.length === 0) {
+      this.log.warn(
+        `Fechamento ${fechamento.id}: bloco PEDAGIO ativo mas nenhuma linha extraída`,
+      );
+      return;
+    }
+
+    // Pré-fetch pedágios da empresa no período (via veiculo→viagem→obra)
+    const pedagiosPeriodo = await this.prisma.pedagio.findMany({
+      where: {
+        data: {
+          gte: new Date(fechamento.periodoInicio.getTime() - 7 * 24 * 3600 * 1000),
+          lte: new Date(fechamento.periodoFim.getTime() + 7 * 24 * 3600 * 1000),
+        },
+      },
+      include: { veiculo: { select: { id: true, placa: true } } },
+    });
+
+    // Index: placa+data+pracaNorm → pedagio
+    const pedagioKey = (p: { placa: string; data: Date | string; pracaPedagio: string }) => {
+      const d = typeof p.data === "string" ? p.data.slice(0, 10) : p.data.toISOString().slice(0, 10);
+      const praca = p.pracaPedagio.toUpperCase().replace(/\s+/g, " ").trim();
+      return `${p.placa.toUpperCase()}|${d}|${praca}`;
+    };
+
+    const pedagioIndex = new Map<string, (typeof pedagiosPeriodo)[number]>();
+    for (const p of pedagiosPeriodo) {
+      const k = pedagioKey({
+        placa: p.veiculo.placa,
+        data: p.data,
+        pracaPedagio: p.pracaPedagio,
+      });
+      pedagioIndex.set(k, p);
+    }
+
+    for (const linha of linhas) {
+      stats.pedagios.total++;
+      // pra pedágio, "ticket" não existe — usamos rawData/extras pra pegar a praça
+      const pracaTexto =
+        (linha.extras["praca_pedagio"] as string | undefined) ??
+        (linha.rawData?.praca_pedagio as string | undefined) ??
+        null;
+      if (!linha.placa || !linha.data || !pracaTexto) {
+        stats.pedagios.divergencia++;
+        await this.prisma.fechamentoLinha.create({
+          data: {
+            fechamentoId: fechamento.id,
+            ordem: linha.ordem,
+            tipo: "PEDAGIO",
+            rawData: linha.rawData as Prisma.InputJsonValue,
+            placa: linha.placa,
+            data: linha.data ?? undefined,
+            valor: linha.valor !== null ? new Prisma.Decimal(linha.valor) : null,
+            status: StatusLinhaFechamento.DIVERGENCIA,
+          },
+        });
+        continue;
+      }
+      const k = pedagioKey({ placa: linha.placa, data: linha.data, pracaPedagio: pracaTexto });
+      const match = pedagioIndex.get(k);
+      let status: StatusLinhaFechamento = StatusLinhaFechamento.DIVERGENCIA;
+      let divergencias: Record<string, { motorista: unknown; empresa: unknown }> | null = null;
+      if (match) {
+        // compara valor (tolerância R$ 0,50 absoluta)
+        const valorMot = Number(match.valor);
+        if (linha.valor !== null && Math.abs(linha.valor - valorMot) > 0.5) {
+          divergencias = {
+            valor: { motorista: valorMot, empresa: linha.valor },
+          };
+          status = StatusLinhaFechamento.DIVERGENCIA;
+          stats.pedagios.divergencia++;
+        } else {
+          status = StatusLinhaFechamento.MATCH;
+          stats.pedagios.match++;
+        }
+      } else {
+        stats.pedagios.divergencia++;
+      }
+      await this.prisma.fechamentoLinha.create({
+        data: {
+          fechamentoId: fechamento.id,
+          ordem: linha.ordem,
+          tipo: "PEDAGIO",
+          rawData: linha.rawData as Prisma.InputJsonValue,
+          placa: linha.placa,
+          data: linha.data ?? undefined,
+          valor: linha.valor !== null ? new Prisma.Decimal(linha.valor) : null,
+          status,
+          pedagioMatchId: match?.id ?? null,
+          divergencias: divergencias
+            ? (divergencias as unknown as Prisma.InputJsonValue)
+            : Prisma.DbNull,
+        },
+      });
+    }
+    void usuarioId; // reservado pra auditoria futura
+  }
+
+  /**
+   * Processa o bloco de combustível: lê a aba do bloco, extrai linhas, faz
+   * match com Abastecimento por placa+data (mesmo dia).
+   */
+  private async processarBlocoCombustivel(
+    fechamento: { id: string; periodoInicio: Date; periodoFim: Date; empresaCliente: { id: string } },
+    parsed: ParsedFile,
+    stats: {
+      combustivel: { total: number; match: number; divergencia: number };
+    },
+    usuarioId: string,
+  ) {
+    const bloco = await this.prisma.layoutImportBloco.findUnique({
+      where: {
+        empresaClienteId_tipo: {
+          empresaClienteId: fechamento.empresaCliente.id,
+          tipo: "COMBUSTIVEL",
+        },
+      },
+    });
+    if (!bloco || !bloco.ativo) return;
+
+    const layout = blocoToLayout(bloco);
+    const linhas = this.extrairLinhas(parsed, layout);
+    if (linhas.length === 0) {
+      this.log.warn(
+        `Fechamento ${fechamento.id}: bloco COMBUSTIVEL ativo mas nenhuma linha extraída`,
+      );
+      return;
+    }
+
+    const abastecimentos = await this.prisma.abastecimento.findMany({
+      where: {
+        data: {
+          gte: new Date(fechamento.periodoInicio.getTime() - 7 * 24 * 3600 * 1000),
+          lte: new Date(fechamento.periodoFim.getTime() + 7 * 24 * 3600 * 1000),
+        },
+      },
+      include: { veiculo: { select: { id: true, placa: true } } },
+    });
+
+    // Index: placa+data → abastecimento (primeiro encontrado)
+    const abastKey = (placa: string, data: Date | string) => {
+      const d = typeof data === "string" ? data.slice(0, 10) : data.toISOString().slice(0, 10);
+      return `${placa.toUpperCase()}|${d}`;
+    };
+    const abastIndex = new Map<string, (typeof abastecimentos)[number]>();
+    for (const a of abastecimentos) {
+      const k = abastKey(a.veiculo.placa, a.data);
+      if (!abastIndex.has(k)) abastIndex.set(k, a);
+    }
+
+    for (const linha of linhas) {
+      stats.combustivel.total++;
+      if (!linha.placa || !linha.data) {
+        stats.combustivel.divergencia++;
+        await this.prisma.fechamentoLinha.create({
+          data: {
+            fechamentoId: fechamento.id,
+            ordem: linha.ordem,
+            tipo: "COMBUSTIVEL",
+            rawData: linha.rawData as Prisma.InputJsonValue,
+            placa: linha.placa,
+            data: linha.data ?? undefined,
+            valor: linha.valor !== null ? new Prisma.Decimal(linha.valor) : null,
+            status: StatusLinhaFechamento.DIVERGENCIA,
+          },
+        });
+        continue;
+      }
+      const k = abastKey(linha.placa, linha.data);
+      const match = abastIndex.get(k);
+      let status: StatusLinhaFechamento = StatusLinhaFechamento.DIVERGENCIA;
+      let divergencias: Record<string, { motorista: unknown; empresa: unknown }> | null = null;
+      if (match) {
+        // Compara litros (extras) e valor (tolerância R$ 1,00 e 0.5L)
+        const litrosCliente =
+          typeof linha.extras["litros"] === "number"
+            ? (linha.extras["litros"] as number)
+            : null;
+        const litrosMot = Number(match.litros);
+        const valorMot = Number(match.valorTotal);
+        const divs: Record<string, { motorista: unknown; empresa: unknown }> = {};
+        if (linha.valor !== null && Math.abs(linha.valor - valorMot) > 1) {
+          divs.valor = { motorista: valorMot, empresa: linha.valor };
+        }
+        if (litrosCliente !== null && Math.abs(litrosCliente - litrosMot) > 0.5) {
+          divs.litros = { motorista: litrosMot, empresa: litrosCliente };
+        }
+        if (Object.keys(divs).length > 0) {
+          divergencias = divs;
+          status = StatusLinhaFechamento.DIVERGENCIA;
+          stats.combustivel.divergencia++;
+        } else {
+          status = StatusLinhaFechamento.MATCH;
+          stats.combustivel.match++;
+        }
+      } else {
+        stats.combustivel.divergencia++;
+      }
+      await this.prisma.fechamentoLinha.create({
+        data: {
+          fechamentoId: fechamento.id,
+          ordem: linha.ordem,
+          tipo: "COMBUSTIVEL",
+          rawData: linha.rawData as Prisma.InputJsonValue,
+          placa: linha.placa,
+          data: linha.data ?? undefined,
+          valor: linha.valor !== null ? new Prisma.Decimal(linha.valor) : null,
+          status,
+          abastecimentoMatchId: match?.id ?? null,
+          divergencias: divergencias
+            ? (divergencias as unknown as Prisma.InputJsonValue)
+            : Prisma.DbNull,
+        },
+      });
+    }
+    void usuarioId;
+  }
+
   private async obterLayoutComStatus(
     empresaId: string,
     parsed: ParsedFile,
   ): Promise<{ layout: LayoutInferenceResult | null; desatualizado: boolean }> {
+    // Prioridade 1: bloco VIAGEM cadastrado na nova arquitetura
+    const blocoViagem = await this.prisma.layoutImportBloco.findUnique({
+      where: { empresaClienteId_tipo: { empresaClienteId: empresaId, tipo: "VIAGEM" } },
+    });
+    if (blocoViagem && blocoViagem.ativo) {
+      const cached = blocoToLayout(blocoViagem);
+      const desatualizado = !layoutBateNaPlanilha(cached, parsed);
+      return { layout: cached, desatualizado };
+    }
+    // Fallback: layoutImport legado (compat com empresas antes da migração)
     const empresa = await this.prisma.empresaCliente.findUnique({ where: { id: empresaId } });
     if (empresa?.layoutImport) {
       const cached = empresa.layoutImport as unknown as LayoutInferenceResult;
@@ -699,4 +982,23 @@ function matchHeader(h: string): LayoutInferenceResult["colunas"][number]["campo
   if (/UNID|UN\./.test(norm)) return "unidade";
   if (/FORNEC/.test(norm)) return "fornecedor";
   return "ignorar";
+}
+
+/**
+ * Converte o registro LayoutImportBloco (banco) em LayoutInferenceResult
+ * (forma usada pelo extrairLinhas e pela IA).
+ */
+function blocoToLayout(bloco: {
+  abaPreferida: string | null;
+  linhaCabecalho: number | null;
+  linhaInicioDados: number | null;
+  colunas: unknown;
+}): LayoutInferenceResult {
+  return {
+    tipoBloco: "viagens", // não importa pra extrairLinhas
+    abaPreferida: bloco.abaPreferida ?? undefined,
+    linhaCabecalho: bloco.linhaCabecalho ?? undefined,
+    linhaInicioDados: bloco.linhaInicioDados ?? undefined,
+    colunas: (bloco.colunas as LayoutInferenceResult["colunas"]) ?? [],
+  };
 }
