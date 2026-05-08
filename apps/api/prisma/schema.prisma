@@ -99,6 +99,7 @@ model User {
   auditorias      AuditLog[]
   layoutsEnvio    LayoutEnvio[]
   configsTracking ConfiguracaoTracking[]
+  configsIa       ConfiguracaoIa[]
 
   @@map("users")
 }
@@ -496,6 +497,21 @@ model ConfiguracaoTracking {
   alteradoPorId         String?
 
   @@map("configuracao_tracking")
+}
+
+/// Singleton (id="default"): parâmetros do match por IA do fechamento.
+/// Lazy-create no primeiro acesso. Atualizada via /admin/ia-config.
+model ConfiguracaoIa {
+  id               String   @id @default("default")
+  // 0.50–0.99 — quanto maior, mais conservador (menos auto-resolução)
+  confidenceMinimo Float    @default(0.85)
+  // 1–14 — janela de datas pra filtrar viagens candidatas (mesma placa, ±N dias)
+  janelaDias       Int      @default(3)
+  alteradoEm       DateTime @updatedAt
+  alteradoPor      User?    @relation(fields: [alteradoPorId], references: [id])
+  alteradoPorId    String?
+
+  @@map("configuracao_ia")
 }
 
 /// Log centralizado de erros do app móvel, dashboard e backend.

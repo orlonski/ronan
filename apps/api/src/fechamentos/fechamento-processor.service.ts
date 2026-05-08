@@ -17,7 +17,10 @@ import {
   normalizarTicket,
 } from "./utils/normalizers";
 
-const CONFIDENCE_AUTORESOLVER = 0.85;
+// Defaults — usados quando ConfiguracaoIa.id="default" ainda não existe
+// (primeiro fechamento processado num ambiente novo).
+const DEFAULT_CONFIDENCE_AUTORESOLVER = 0.85;
+const DEFAULT_JANELA_DIAS = 3;
 
 type LinhaExtraida = {
   ordem: number;
@@ -365,6 +368,17 @@ export class FechamentoProcessorService {
     viagensPeriodo: { id: string; data: Date; ticket: string; km: Prisma.Decimal; toneladas: Prisma.Decimal; veiculo: { placa: string } }[],
     stats: { matchIa: number; divergencia: number },
   ) {
+    // Lê config dinâmica (atualizável via /configuracoes/ia no dashboard).
+    const cfg = await this.prisma.configuracaoIa
+      .upsert({
+        where: { id: "default" },
+        update: {},
+        create: { id: "default" },
+      })
+      .catch(() => null);
+    const thresholdAuto = cfg?.confidenceMinimo ?? DEFAULT_CONFIDENCE_AUTORESOLVER;
+    const janelaDias = cfg?.janelaDias ?? DEFAULT_JANELA_DIAS;
+
     const orfas = await this.prisma.fechamentoLinha.findMany({
       where: {
         fechamentoId,
@@ -377,12 +391,12 @@ export class FechamentoProcessorService {
     for (const linha of orfas) {
       if (!linha.placa || !linha.data) continue;
 
-      // candidatas: mesma placa, datas em ±3 dias, ainda não matchadas
+      // candidatas: mesma placa, datas em ±N dias (config), ainda não matchadas
       const candidatas = viagensPeriodo
         .filter((v) => {
           if (v.veiculo.placa.toUpperCase() !== linha.placa) return false;
           const diff = Math.abs(v.data.getTime() - linha.data!.getTime()) / (24 * 3600 * 1000);
-          return diff <= 3;
+          return diff <= janelaDias;
         })
         .map((v) => ({
           viagemId: v.id,
@@ -413,10 +427,7 @@ export class FechamentoProcessorService {
         sugestaoIa: sugestao as unknown as Prisma.InputJsonValue,
       };
 
-      if (
-        sugestao.viagemId &&
-        sugestao.confidence >= CONFIDENCE_AUTORESOLVER
-      ) {
+      if (sugestao.viagemId && sugestao.confidence >= thresholdAuto) {
         update.status = StatusLinhaFechamento.MATCH_IA;
         update.viagemMatch = { connect: { id: sugestao.viagemId } };
         stats.matchIa++;
@@ -428,7 +439,7 @@ export class FechamentoProcessorService {
         data: update,
       });
 
-      if (sugestao.viagemId && sugestao.confidence >= CONFIDENCE_AUTORESOLVER) {
+      if (sugestao.viagemId && sugestao.confidence >= thresholdAuto) {
         await this.prisma.viagem.update({
           where: { id: sugestao.viagemId },
           data: { status: "AJUSTADA" },

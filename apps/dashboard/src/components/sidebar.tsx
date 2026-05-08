@@ -18,6 +18,7 @@ import {
   Package,
   Send,
   Settings,
+  Sparkles,
   Truck,
   UserCircle,
   Users2,
@@ -47,6 +48,7 @@ const ITEMS: Item[] = [
   { href: "/usuarios", label: "Usuários", icon: Users2, admin: true },
   { href: "/erros", label: "Erros", icon: AlertCircle, admin: true },
   { href: "/configuracoes/tracking", label: "Tracking GPS", icon: Settings, admin: true },
+  { href: "/configuracoes/ia", label: "Inteligência Artificial", icon: Sparkles, admin: true },
 ];
 
 export function Sidebar({
