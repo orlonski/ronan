@@ -12,7 +12,7 @@ export type AuthMotorista = {
   kind: "MOTORISTA";
   id: string;
   nome: string;
-  usuario: string;
+  cpf: string;
 };
 
 export type AuthUser = AuthAdminUser | AuthMotorista;

@@ -43,7 +43,7 @@ export type Catalogos = {
 export type Me = {
   id: string;
   nome: string;
-  usuario: string;
+  cpf: string;
   telefone: string | null;
   veiculoDefaultId: string | null;
   veiculoDefault: Veiculo | null;

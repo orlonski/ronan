@@ -29,8 +29,8 @@ export class AuthService {
     return this.issueTokens({ sub: user.id, kind: "ADMIN_USER" });
   }
 
-  async loginMotorista(usuario: string, senha: string) {
-    const motorista = await this.prisma.motorista.findUnique({ where: { usuario } });
+  async loginMotorista(cpf: string, senha: string) {
+    const motorista = await this.prisma.motorista.findUnique({ where: { cpf } });
     if (!motorista || !motorista.ativo) throw new UnauthorizedException("Credenciais inválidas");
 
     if (motorista.bloqueadoAte && motorista.bloqueadoAte > new Date()) {

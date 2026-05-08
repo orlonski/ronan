@@ -3,6 +3,7 @@ export * from "./auth";
 export * from "./viagem";
 export * from "./pedagio";
 export * from "./abastecimento";
+export * from "./cpf";
 export * from "./local";
 export * from "./obra";
 export * from "./empresa";

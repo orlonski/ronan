@@ -59,7 +59,7 @@ type ViagemDetalhe = {
   lat: number | null;
   lng: number | null;
   veiculo: { id: string; placa: string; modelo: string | null };
-  motorista: { id: string; nome: string; usuario: string };
+  motorista: { id: string; nome: string; cpf: string };
   obra: { id: string; nome: string; empresaCliente: { nome: string } };
   material: { id: string; nome: string };
   localCarga: { nome: string; cidade: string; uf: string; logradouro: string };

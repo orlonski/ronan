@@ -48,7 +48,7 @@ export default function PerfilPage() {
       <section className="rounded-lg border bg-background p-4">
         <dl className="space-y-2 text-sm">
           <Row dt="Nome" dd={me.data?.nome ?? "—"} />
-          <Row dt="Usuário" dd={me.data?.usuario ?? "—"} mono />
+          <Row dt="CPF" dd={me.data?.cpf ?? "—"} mono />
           <Row dt="Telefone" dd={me.data?.telefone ?? "—"} />
           <Row dt="Placa padrão" dd={me.data?.veiculoDefault?.placa ?? "—"} mono />
         </dl>

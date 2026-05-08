@@ -12,6 +12,7 @@ import {
   MapPin,
   User as UserIcon,
 } from "lucide-react";
+import { formatCpf } from "@ronan/shared-types";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
@@ -38,7 +39,7 @@ type AbastecimentoDetalhe = {
   lng: number | null;
   precisao: number | null;
   veiculo: { id: string; placa: string; modelo: string | null };
-  motorista: { id: string; nome: string; usuario: string };
+  motorista: { id: string; nome: string; cpf: string };
   fotos: { id: string; storageKey: string; capturadaEm: string }[];
   sincronizadoEm: string;
 };
@@ -144,7 +145,7 @@ export default function AbastecimentoDetalhePage({
             <Info
               icon={UserIcon}
               label="Motorista"
-              value={`${x.motorista.nome} (${x.motorista.usuario})`}
+              value={`${x.motorista.nome} (${formatCpf(x.motorista.cpf)})`}
             />
             <p className="mt-2 text-xs text-muted-foreground">
               Veículo: {x.veiculo.placa}

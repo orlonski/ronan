@@ -6,7 +6,7 @@ import { AuthService } from "../../auth/auth.service";
 const SAFE_SELECT = {
   id: true,
   nome: true,
-  usuario: true,
+  cpf: true,
   telefone: true,
   veiculoDefaultId: true,
   veiculoDefault: { select: { id: true, placa: true, modelo: true } },
@@ -24,14 +24,14 @@ export class MotoristasService {
   }
 
   async create(data: CriarMotoristaInput) {
-    const exists = await this.prisma.motorista.findUnique({ where: { usuario: data.usuario } });
-    if (exists) throw new ConflictException("Usuário já cadastrado");
+    const exists = await this.prisma.motorista.findUnique({ where: { cpf: data.cpf } });
+    if (exists) throw new ConflictException("CPF já cadastrado");
     if (data.veiculoDefaultId) await this.ensureVeiculo(data.veiculoDefaultId);
     const senhaHash = await AuthService.hashPassword(data.senha);
     return this.prisma.motorista.create({
       data: {
         nome: data.nome,
-        usuario: data.usuario,
+        cpf: data.cpf,
         senhaHash,
         telefone: data.telefone,
         veiculoDefaultId: data.veiculoDefaultId,

@@ -11,31 +11,42 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cpfDigits } from "@ronan/shared-types";
 import { api, ApiError } from "@/lib/api";
 import { saveTokens } from "@/lib/auth";
 import { setAuthState } from "@/lib/auth-state";
 
+// Aplica máscara CPF enquanto digita.
+function maskCpf(input: string): string {
+  const d = cpfDigits(input).slice(0, 11);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
+  if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+}
+
 export default function LoginScreen() {
-  const [usuario, setUsuario] = useState("");
+  const [cpf, setCpf] = useState("");
   const [senha, setSenha] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
   async function entrar() {
     setErro(null);
-    if (!usuario.trim() || !senha) {
-      setErro("Informe usuário e senha");
+    const cpfDigitos = cpfDigits(cpf);
+    if (cpfDigitos.length !== 11 || !senha) {
+      setErro("Informe o CPF (11 dígitos) e a senha");
       return;
     }
     setSubmitting(true);
     try {
-      const tokens = await api.loginMotorista(usuario.trim(), senha);
+      const tokens = await api.loginMotorista(cpfDigitos, senha);
       await saveTokens(tokens);
       setAuthState(true);
       router.replace("/");
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        setErro("Usuário ou senha incorretos.");
+        setErro("CPF ou senha incorretos.");
       } else {
         setErro((err as Error).message ?? "Falha ao entrar.");
       }
@@ -64,14 +75,14 @@ export default function LoginScreen() {
           <View className="flex-1 px-6 py-8">
             <View className="gap-5">
               <View className="gap-2">
-                <Label>Usuário</Label>
+                <Label>CPF</Label>
                 <Input
-                  value={usuario}
-                  onChangeText={setUsuario}
-                  autoCapitalize="none"
+                  value={cpf}
+                  onChangeText={(v) => setCpf(maskCpf(v))}
+                  keyboardType="numeric"
                   autoCorrect={false}
                   autoComplete="username"
-                  placeholder="seu usuário"
+                  placeholder="000.000.000-00"
                   editable={!submitting}
                 />
               </View>

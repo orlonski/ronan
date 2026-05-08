@@ -54,7 +54,7 @@ export class ViagensAdminService {
       where: { id },
       include: {
         veiculo: true,
-        motorista: { select: { id: true, nome: true, usuario: true } },
+        motorista: { select: { id: true, nome: true, cpf: true } },
         obra: { select: { id: true, nome: true, empresaCliente: { select: { id: true, nome: true } } } },
         material: true,
         localCarga: true,

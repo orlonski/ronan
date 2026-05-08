@@ -11,7 +11,7 @@ export class MotoristaService {
       select: {
         id: true,
         nome: true,
-        usuario: true,
+        cpf: true,
         telefone: true,
         veiculoDefaultId: true,
         veiculoDefault: { select: { id: true, placa: true, modelo: true } },

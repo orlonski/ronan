@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
+import { cpfDigits, formatCpf, isCpfValid } from "@ronan/shared-types";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -15,7 +16,7 @@ import { useCreateResource, useDeleteResource, useResourceList, useUpdateResourc
 
 type Veiculo = { id: string; placa: string; modelo: string | null };
 type Motorista = {
-  id: string; nome: string; usuario: string; telefone: string | null;
+  id: string; nome: string; cpf: string; telefone: string | null;
   ativo: boolean; veiculoDefaultId: string | null;
   veiculoDefault: Veiculo | null;
 };
@@ -23,9 +24,18 @@ const PATH = "/admin/motoristas";
 const VEICULOS_PATH = "/admin/veiculos";
 
 type FormShape = {
-  nome: string; usuario: string; senha: string; telefone: string; veiculoDefaultId: string;
+  nome: string; cpf: string; senha: string; telefone: string; veiculoDefaultId: string;
 };
-const empty: FormShape = { nome: "", usuario: "", senha: "", telefone: "", veiculoDefaultId: "" };
+const empty: FormShape = { nome: "", cpf: "", senha: "", telefone: "", veiculoDefaultId: "" };
+
+// Aplica máscara 000.000.000-00 enquanto o usuário digita.
+function maskCpf(input: string): string {
+  const d = cpfDigits(input).slice(0, 11);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
+  if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+}
 
 export default function MotoristasPage() {
   const list = useResourceList<Motorista>(PATH);
@@ -41,22 +51,28 @@ export default function MotoristasPage() {
   function openEdit(m: Motorista) {
     setEditing(m);
     setForm({
-      nome: m.nome, usuario: m.usuario, senha: "",
+      nome: m.nome, cpf: maskCpf(m.cpf), senha: "",
       telefone: m.telefone ?? "", veiculoDefaultId: m.veiculoDefaultId ?? "",
     });
   }
 
   async function onSave(ev: React.FormEvent) {
     ev.preventDefault();
+    const cpfDigitos = cpfDigits(form.cpf);
+    if (!isCpfValid(cpfDigitos)) {
+      alert("CPF inválido. Confira os dígitos.");
+      return;
+    }
     if (editing === "new") {
       await create.mutateAsync({
-        nome: form.nome, usuario: form.usuario, senha: form.senha,
+        nome: form.nome, cpf: cpfDigitos, senha: form.senha,
         telefone: form.telefone || undefined,
         veiculoDefaultId: form.veiculoDefaultId || undefined,
       });
     } else if (editing) {
       const body: Record<string, unknown> = {
         nome: form.nome,
+        cpf: cpfDigitos,
         telefone: form.telefone || undefined,
         veiculoDefaultId: form.veiculoDefaultId || null,
       };
@@ -93,7 +109,7 @@ export default function MotoristasPage() {
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{m.nome}</p>
-                <p className="font-mono text-xs text-muted-foreground">{m.usuario}</p>
+                <p className="font-mono text-xs text-muted-foreground">{formatCpf(m.cpf)}</p>
               </div>
               <div className="flex shrink-0 gap-1">
                 <Button variant="ghost" size="icon" onClick={() => openEdit(m)}>
@@ -136,7 +152,7 @@ export default function MotoristasPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Nome</TableHead>
-              <TableHead>Usuário</TableHead>
+              <TableHead>CPF</TableHead>
               <TableHead>Telefone</TableHead>
               <TableHead>Placa default</TableHead>
               <TableHead className="w-24">Status</TableHead>
@@ -148,7 +164,7 @@ export default function MotoristasPage() {
             {list.data?.map((m) => (
               <TableRow key={m.id}>
                 <TableCell className="font-medium">{m.nome}</TableCell>
-                <TableCell className="font-mono text-xs">{m.usuario}</TableCell>
+                <TableCell className="font-mono text-xs">{formatCpf(m.cpf)}</TableCell>
                 <TableCell>{m.telefone ?? "—"}</TableCell>
                 <TableCell className="font-mono text-xs">{m.veiculoDefault?.placa ?? "—"}</TableCell>
                 <TableCell>
@@ -186,9 +202,9 @@ export default function MotoristasPage() {
                 <Input required value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} />
               </div>
               <div className="space-y-2">
-                <Label>Usuário (login)</Label>
-                <Input required pattern="[a-z0-9._-]+" disabled={editing !== "new"}
-                  value={form.usuario} onChange={(e) => setForm({ ...form, usuario: e.target.value.toLowerCase() })} />
+                <Label>CPF (login)</Label>
+                <Input required inputMode="numeric" placeholder="000.000.000-00"
+                  value={form.cpf} onChange={(e) => setForm({ ...form, cpf: maskCpf(e.target.value) })} />
               </div>
               <div className="space-y-2">
                 <Label>{editing === "new" ? "Senha" : "Nova senha (opcional)"}</Label>

@@ -256,9 +256,9 @@ export const api = {
   delete: <T>(path: string) => request<T>("DELETE", path),
   postForm: <T>(path: string, body: FormData) =>
     request<T>("POST", path, { body, isFormData: true }),
-  loginMotorista: (usuario: string, senha: string) =>
+  loginMotorista: (cpf: string, senha: string) =>
     request<Tokens>("POST", "/m/auth/login", {
-      body: { usuario, senha },
+      body: { cpf, senha },
       auth: false,
     }),
 };

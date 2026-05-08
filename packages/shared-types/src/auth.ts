@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { cpfDigits } from "./cpf";
 import { PerfilUsuario } from "./enums";
 
 export const LoginInput = z.object({
@@ -7,8 +8,14 @@ export const LoginInput = z.object({
 });
 export type LoginInput = z.infer<typeof LoginInput>;
 
+// Login do motorista: aceita CPF com ou sem máscara, normaliza pra dígitos.
+// Aqui não validamos os dígitos verificadores pra não vazar info no erro
+// (login com CPF inválido devolve "Credenciais inválidas" igual a senha errada).
 export const LoginMotoristaInput = z.object({
-  usuario: z.string().min(2).max(60),
+  cpf: z
+    .string()
+    .transform(cpfDigits)
+    .refine((v) => v.length === 11, "CPF deve ter 11 dígitos"),
   senha: z.string().min(6),
 });
 export type LoginMotoristaInput = z.infer<typeof LoginMotoristaInput>;
@@ -32,4 +39,4 @@ export type TrocarSenhaInput = z.infer<typeof TrocarSenhaInput>;
 
 export type AuthUser =
   | { kind: "ADMIN_USER"; id: string; nome: string; email: string; perfil: PerfilUsuario }
-  | { kind: "MOTORISTA"; id: string; nome: string; usuario: string };
+  | { kind: "MOTORISTA"; id: string; nome: string; cpf: string };

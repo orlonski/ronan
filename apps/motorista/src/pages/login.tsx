@@ -9,7 +9,7 @@ import { isLoggedIn, saveTokens } from "@/lib/auth";
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const [usuario, setUsuario] = useState("");
+  const [cpf, setCpf] = useState("");
   const [senha, setSenha] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -22,12 +22,13 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    const cpfDigitos = cpf.replace(/\D/g, "");
     try {
-      const tokens = await api.loginMotorista(usuario.toLowerCase().trim(), senha);
+      const tokens = await api.loginMotorista(cpfDigitos, senha);
       saveTokens(tokens);
       navigate("/", { replace: true });
     } catch {
-      setError("Usuário ou senha inválidos");
+      setError("CPF ou senha inválidos");
     } finally {
       setLoading(false);
     }
@@ -46,14 +47,15 @@ export default function LoginPage() {
 
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="usuario">Usuário</Label>
+            <Label htmlFor="cpf">CPF</Label>
             <Input
-              id="usuario"
+              id="cpf"
+              inputMode="numeric"
               autoComplete="username"
-              autoCapitalize="none"
+              placeholder="000.000.000-00"
               required
-              value={usuario}
-              onChange={(e) => setUsuario(e.target.value)}
+              value={cpf}
+              onChange={(e) => setCpf(e.target.value)}
             />
           </div>
           <div className="space-y-2">

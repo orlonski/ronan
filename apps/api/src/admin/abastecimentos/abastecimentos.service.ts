@@ -61,7 +61,7 @@ export class AbastecimentosAdminService {
       where: { id },
       include: {
         veiculo: true,
-        motorista: { select: { id: true, nome: true, usuario: true } },
+        motorista: { select: { id: true, nome: true, cpf: true } },
         fotos: true,
       },
     });

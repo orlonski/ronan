@@ -12,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "@/components/screen-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { formatCpf } from "@ronan/shared-types";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
@@ -78,7 +79,7 @@ export default function Perfil() {
         >
           <Card>
             <Row dt="Nome" dd={me.data?.nome ?? "—"} />
-            <Row dt="Usuário" dd={me.data?.usuario ?? "—"} mono />
+            <Row dt="CPF" dd={me.data?.cpf ? formatCpf(me.data.cpf) : "—"} mono />
             <Row dt="Telefone" dd={me.data?.telefone ?? "—"} />
             <Row
               dt="Placa padrão"

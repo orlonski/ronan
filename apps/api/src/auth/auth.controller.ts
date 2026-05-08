@@ -39,7 +39,7 @@ export class AuthController {
   async loginMotorista(
     @Body(new ZodValidationPipe(LoginMotoristaInput)) body: LoginMotoristaInput,
   ) {
-    return this.auth.loginMotorista(body.usuario, body.senha);
+    return this.auth.loginMotorista(body.cpf, body.senha);
   }
 
   @Public()

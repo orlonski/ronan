@@ -106,7 +106,7 @@ model User {
 model Motorista {
   id               String    @id @default(uuid())
   nome             String
-  usuario          String    @unique
+  cpf              String    @unique // 11 dígitos (sem máscara) — também é o login
   senhaHash        String
   telefone         String?
   veiculoDefault   Veiculo?  @relation("VeiculoDefaultMotorista", fields: [veiculoDefaultId], references: [id])
