@@ -12,8 +12,44 @@ type ConfigIa = {
   id: string;
   confidenceMinimo: number;
   janelaDias: number;
+  modelo: string;
   alteradoEm: string;
 };
+
+type ModeloId =
+  | "claude-haiku-4-5-20251001"
+  | "claude-sonnet-4-6"
+  | "claude-opus-4-7";
+
+const MODELOS: {
+  id: ModeloId;
+  nome: string;
+  icone: string;
+  custoLabel: string;
+  descricao: string;
+}[] = [
+  {
+    id: "claude-haiku-4-5-20251001",
+    nome: "Econômico",
+    icone: "💰",
+    custoLabel: "~R$ 0,01 por match",
+    descricao: "Claude Haiku — rápido e baratíssimo. Bom pra maioria dos fechamentos.",
+  },
+  {
+    id: "claude-sonnet-4-6",
+    nome: "Equilibrado",
+    icone: "⭐",
+    custoLabel: "~R$ 0,05 por match",
+    descricao: "Claude Sonnet — 5x mais caro, mas decide melhor casos ambíguos (formato confuso, dados parciais).",
+  },
+  {
+    id: "claude-opus-4-7",
+    nome: "Premium",
+    icone: "🚀",
+    custoLabel: "~R$ 0,30 por match",
+    descricao: "Claude Opus — top de linha. Vale só pra fechamentos complexos onde o custo da revisão manual é maior que o custo da chamada.",
+  },
+];
 
 const PATH = "/admin/ia-config";
 const HISTORICO_PATH = "/admin/ia-config/historico-sugestoes";
@@ -76,16 +112,22 @@ export default function IaConfigPage() {
 
   const [confidence, setConfidence] = useState(0.85);
   const [dias, setDias] = useState(3);
+  const [modelo, setModelo] = useState<ModeloId>("claude-haiku-4-5-20251001");
 
   useEffect(() => {
     if (cfg.data) {
       setConfidence(cfg.data.confidenceMinimo);
       setDias(cfg.data.janelaDias);
+      setModelo(cfg.data.modelo as ModeloId);
     }
   }, [cfg.data]);
 
   const update = useMutation({
-    mutationFn: (body: { confidenceMinimo: number; janelaDias: number }) =>
+    mutationFn: (body: {
+      confidenceMinimo: number;
+      janelaDias: number;
+      modelo: ModeloId;
+    }) =>
       fetchApi<ConfigIa>(PATH, {
         method: "PUT",
         body: JSON.stringify(body),
@@ -134,6 +176,7 @@ export default function IaConfigPage() {
     await update.mutateAsync({
       confidenceMinimo: confidence,
       janelaDias: dias,
+      modelo,
     });
   }
 
@@ -151,6 +194,45 @@ export default function IaConfigPage() {
           como divergência — você sempre pode corrigir.
         </p>
       </header>
+
+      {/* Modelo */}
+      <Card className="space-y-3 p-5">
+        <div>
+          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+            Qual modelo de IA usar?
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            O custo é por chamada — mais rápido = mais barato. Comece pelo Econômico; se notar erros frequentes em casos difíceis, sobe pra Equilibrado.
+          </p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          {MODELOS.map((m) => {
+            const ativo = modelo === m.id;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setModelo(m.id)}
+                className={`rounded-lg border-2 p-4 text-left transition-colors ${
+                  ativo
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:border-primary/40"
+                }`}
+              >
+                <div className="mb-1 text-2xl">{m.icone}</div>
+                <div className="font-bold">{m.nome}</div>
+                <div className="text-xs text-muted-foreground">{m.custoLabel}</div>
+                <p className="mt-2 text-xs text-muted-foreground">{m.descricao}</p>
+                {ativo && (
+                  <div className="mt-2 text-xs font-medium text-primary">
+                    ✓ atual
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </Card>
 
       {/* Presets */}
       <Card className="space-y-3 p-5">

@@ -7,6 +7,7 @@ const HISTORICO_LIMIT = 100;
 export type AtualizarIaConfigInput = {
   confidenceMinimo?: number;
   janelaDias?: number;
+  modelo?: string;
 };
 
 @Injectable()

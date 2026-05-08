@@ -1,8 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { PrismaService } from "../prisma/prisma.service";
 
-const MODEL = "claude-haiku-4-5-20251001";
+// Default usado caso ConfiguracaoIa.modelo não esteja setada (raro).
+const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
 
 export type LayoutColumn =
   | "data"
@@ -49,10 +51,33 @@ export class IaService {
   private readonly log = new Logger(IaService.name);
   private client?: Anthropic;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    private readonly prisma: PrismaService,
+  ) {
     const apiKey = this.config.get<string>("ANTHROPIC_API_KEY");
     if (apiKey) {
       this.client = new Anthropic({ apiKey });
+    }
+  }
+
+  /** Lê modelo da config singleton; cache simples por 30s pra evitar query a cada call. */
+  private modeloCache: { value: string; until: number } | null = null;
+  private async modeloAtual(): Promise<string> {
+    if (this.modeloCache && this.modeloCache.until > Date.now()) {
+      return this.modeloCache.value;
+    }
+    try {
+      const cfg = await this.prisma.configuracaoIa.upsert({
+        where: { id: "default" },
+        update: {},
+        create: { id: "default" },
+      });
+      const value = cfg.modelo || DEFAULT_MODEL;
+      this.modeloCache = { value, until: Date.now() + 30_000 };
+      return value;
+    } catch {
+      return DEFAULT_MODEL;
     }
   }
 
@@ -102,10 +127,11 @@ Responda APENAS um JSON válido sem cercas markdown, no formato:
 }`;
 
     const userMsg = JSON.stringify(amostra, null, 2);
+    const modelo = await this.modeloAtual();
 
     try {
       const res = await this.client.messages.create({
-        model: MODEL,
+        model: modelo,
         max_tokens: 2000,
         system: sysPrompt,
         messages: [{ role: "user", content: userMsg }],
@@ -162,9 +188,11 @@ Se NENHUMA candidata fizer sentido, devolva viagemId=null e confidence baixa.
 Responda APENAS um JSON válido:
 {"viagemId": "uuid ou null", "confidence": 0.85, "motivo": "explicação curta em PT-BR"}`;
 
+    const modelo = await this.modeloAtual();
+
     try {
       const res = await this.client.messages.create({
-        model: MODEL,
+        model: modelo,
         max_tokens: 500,
         system: sysPrompt,
         messages: [{ role: "user", content: JSON.stringify(input, null, 2) }],

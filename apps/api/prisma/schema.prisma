@@ -507,6 +507,10 @@ model ConfiguracaoIa {
   confidenceMinimo Float    @default(0.85)
   // 1–14 — janela de datas pra filtrar viagens candidatas (mesma placa, ±N dias)
   janelaDias       Int      @default(3)
+  // Modelo Claude usado nas chamadas (match + inferência de layout).
+  // Trade-off custo vs qualidade. Valores: claude-haiku-4-5-20251001 (default),
+  // claude-sonnet-4-6, claude-opus-4-7.
+  modelo           String   @default("claude-haiku-4-5-20251001")
   alteradoEm       DateTime @updatedAt
   alteradoPor      User?    @relation(fields: [alteradoPorId], references: [id])
   alteradoPorId    String?

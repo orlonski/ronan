@@ -8,9 +8,16 @@ import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import type { AuthAdminUser } from "../../auth/types";
 import { IaConfigService } from "./ia-config.service";
 
+const MODELOS_PERMITIDOS = [
+  "claude-haiku-4-5-20251001",
+  "claude-sonnet-4-6",
+  "claude-opus-4-7",
+] as const;
+
 const AtualizarIaConfigSchema = z.object({
   confidenceMinimo: z.number().min(0.5).max(0.99).optional(),
   janelaDias: z.number().int().min(1).max(14).optional(),
+  modelo: z.enum(MODELOS_PERMITIDOS).optional(),
 });
 
 @ApiTags("admin/ia-config")
