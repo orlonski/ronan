@@ -11,6 +11,7 @@ import {
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { ConfigService } from "@nestjs/config";
+import { Public } from "../auth/decorators/public.decorator";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { ConviteService } from "./convite.service";
@@ -34,6 +35,7 @@ export class WhatsappController {
    * que validamos contra `EVOLUTION_API_KEY`. Resposta 200 imediata pra não
    * bloquear o Evolution; processamento é fire-and-forget.
    */
+  @Public()
   @Post("whatsapp/webhook")
   @HttpCode(200)
   async webhook(@Body() body: any) {
