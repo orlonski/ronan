@@ -89,21 +89,48 @@ export class IaService {
 
     // Lista de campos vem do banco (CampoLayout). Admin pode adicionar campos
     // novos sem mudar código — IA é instruída dinamicamente.
-    const camposAtivos = await this.prisma.campoLayout.findMany({
-      where: { ativo: true },
-      orderBy: { ordem: "asc" },
-      select: { slug: true, label: true, descricao: true },
-    });
+    let camposAtivos: { slug: string; label: string; descricao: string | null }[] = [];
+    try {
+      camposAtivos = await this.prisma.campoLayout.findMany({
+        where: { ativo: true },
+        orderBy: { ordem: "asc" },
+        select: { slug: true, label: true, descricao: true },
+      });
+    } catch (err) {
+      this.log.warn(`Falha ao ler campos_layout: ${(err as Error).message}`);
+    }
 
-    const listaCampos =
-      camposAtivos.length > 0
-        ? camposAtivos
-            .map(
-              (c) =>
-                `- ${c.slug}${c.descricao ? ` (${c.descricao})` : c.label ? ` — ${c.label}` : ""}`,
-            )
-            .join("\n")
-        : "- ignorar";
+    // Fallback de segurança: se a tabela estiver vazia (seed não rodou ou
+    // banco zerado), usa a lista clássica pra IA não retornar tudo como
+    // "ignorar". Este fallback existe pra evitar regressão em ambiente novo.
+    if (camposAtivos.length < 5) {
+      this.log.warn(
+        `Tabela campos_layout vazia ou incompleta (${camposAtivos.length}). Usando fallback hardcoded.`,
+      );
+      camposAtivos = [
+        { slug: "data", label: "Data", descricao: "Data da viagem" },
+        { slug: "placa", label: "Placa", descricao: "Placa do veículo" },
+        { slug: "ticket", label: "Ticket", descricao: "Número do ticket" },
+        { slug: "obra", label: "Obra", descricao: "Nome da obra" },
+        { slug: "material", label: "Material", descricao: "Material transportado" },
+        { slug: "fornecedor", label: "Fornecedor", descricao: null },
+        { slug: "unidade", label: "Unidade", descricao: "TON, M3, etc" },
+        { slug: "toneladas", label: "Toneladas", descricao: "Quantidade transportada" },
+        { slug: "km", label: "Km", descricao: "Quilômetros rodados" },
+        { slug: "valor_unitario", label: "Valor unitário", descricao: null },
+        { slug: "valor_total", label: "Valor total", descricao: "R$ total da linha" },
+        { slug: "praca_pedagio", label: "Praça de pedágio", descricao: null },
+        { slug: "eixos", label: "Eixos", descricao: null },
+        { slug: "ignorar", label: "Ignorar", descricao: "Coluna que não interessa" },
+      ];
+    }
+
+    const listaCampos = camposAtivos
+      .map(
+        (c) =>
+          `- ${c.slug}${c.descricao ? ` (${c.descricao})` : c.label ? ` — ${c.label}` : ""}`,
+      )
+      .join("\n");
 
     const sysPrompt = `Você ajuda a interpretar planilhas de boletim de medição de transportadoras (fretes de caminhão).
 Empresas-cliente mandam essas planilhas pra conferência. Cada planilha pode ter múltiplas abas com:

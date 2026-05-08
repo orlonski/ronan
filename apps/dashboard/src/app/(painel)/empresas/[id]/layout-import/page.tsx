@@ -41,6 +41,34 @@ type CampoLayoutDef = {
   descricao: string | null;
 };
 
+// Fallback usado quando o backend ainda não tem a tabela campos_layout
+// populada (deploy fresh, seed pendente). UI continua funcional.
+const CAMPOS_FALLBACK: CampoLayoutDef[] = [
+  ["data", "Data", 10],
+  ["placa", "Placa", 20],
+  ["ticket", "Ticket", 30],
+  ["toneladas", "Toneladas", 40],
+  ["km", "Km", 50],
+  ["obra", "Obra", 60],
+  ["material", "Material", 70],
+  ["fornecedor", "Fornecedor", 80],
+  ["unidade", "Unidade", 90],
+  ["valor_unitario", "Valor unitário", 100],
+  ["valor_total", "Valor total", 110],
+  ["praca_pedagio", "Praça de pedágio", 120],
+  ["eixos", "Eixos", 130],
+  ["ignorar", "— Ignorar —", 999],
+].map(([slug, label, ordem], idx) => ({
+  id: `fallback-${idx}`,
+  slug: slug as string,
+  label: label as string,
+  ordem: ordem as number,
+  ativo: true,
+  sistema: true,
+  tipo: "TEXTO",
+  descricao: null,
+}));
+
 type LayoutColuna = { letra: string; cabecalho: string; campo: CampoLayout };
 
 type LayoutSalvo = {
@@ -109,7 +137,13 @@ export default function LayoutImportPage({
     queryFn: () =>
       fetchApi<CampoLayoutDef[]>(`/admin/campos-layout`, { token }),
   });
-  const camposAtivos = (camposLayout.data ?? []).filter((c) => c.ativo);
+
+  // Fallback: se ainda não carregou ou veio vazio (banco zerado), usa lista
+  // padrão pra UI não quebrar.
+  const camposAtivos: CampoLayoutDef[] =
+    camposLayout.data && camposLayout.data.length > 0
+      ? camposLayout.data.filter((c) => c.ativo)
+      : CAMPOS_FALLBACK;
 
   const layoutAtual = useQuery({
     queryKey: ["layout-import", empresaId, token],
