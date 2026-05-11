@@ -14,7 +14,8 @@
     "build:ios": "eas build --local --platform ios --profile production",
     "assets": "node scripts/generate-assets.mjs",
     "lint": "expo lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "eas-build-pre-install": "cd ../../packages/shared-types && pnpm build"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
