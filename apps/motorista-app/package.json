@@ -15,7 +15,7 @@
     "assets": "node scripts/generate-assets.mjs",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "eas-build-pre-install": "cd ../../packages/shared-types && pnpm build"
+    "eas-build-post-install": "cd ../../packages/shared-types && pnpm build"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
