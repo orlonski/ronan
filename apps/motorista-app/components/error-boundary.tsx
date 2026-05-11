@@ -43,11 +43,10 @@ export class ErrorBoundary extends Component<Props, State> {
               Tentar novamente
             </Text>
           </Pressable>
-          {__DEV__ && (
-            <Text className="mt-6 text-xs text-muted-foreground">
-              {this.state.error.message}
-            </Text>
-          )}
+          {/* Temporário: mostra mensagem em prod também enquanto estabilizamos */}
+          <Text className="mt-6 px-4 text-center text-xs text-muted-foreground">
+            {this.state.error.message}
+          </Text>
         </View>
       );
     }
