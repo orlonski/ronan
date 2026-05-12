@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { useResourceList } from "@/lib/client-api";
+import { useResourceOptions } from "@/lib/client-api";
 import {
   useBaixarArquivo,
   useCriarEnvio,
@@ -26,7 +26,7 @@ type Obra = {
 
 export default function NovoEnvioPage() {
   const router = useRouter();
-  const empresas = useResourceList<Empresa>("/admin/empresas");
+  const empresas = useResourceOptions<Empresa>("/admin/empresas");
   const criar = useCriarEnvio();
   const baixar = useBaixarArquivo();
 
@@ -40,9 +40,10 @@ export default function NovoEnvioPage() {
   const layouts = useLayoutsEnvio(empresaId || undefined);
   // Quando sem empresa selecionada, useResourceList ainda dispara mas vazia.
   // Só renderizamos o select de obras quando empresaId existe.
-  const obras = useResourceList<Obra>(
-    `/admin/obras${empresaId ? `?empresaClienteId=${empresaId}` : ""}`,
-  );
+  const obras = useResourceOptions<Obra>("/admin/obras", {
+    enabled: !!empresaId,
+    extraParams: empresaId ? { empresaClienteId: empresaId } : undefined,
+  });
 
   // ao trocar de empresa, seleciona automaticamente o layout padrão
   // e zera as obras selecionadas (= todas, default)

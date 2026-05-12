@@ -1,13 +1,26 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import type { Prisma } from "@prisma/client";
 import type { CriarVeiculoInput, AtualizarVeiculoInput } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
+import { paginate, type PaginationQuery } from "../../common/pagination";
+
+type ListVeiculosParams = PaginationQuery & { ativo?: "true" | "false" };
 
 @Injectable()
 export class VeiculosService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list() {
-    return this.prisma.veiculo.findMany({ orderBy: { placa: "asc" } });
+  list(params: ListVeiculosParams) {
+    const where: Prisma.VeiculoWhereInput = {};
+    if (params.ativo === "true") where.ativo = true;
+    if (params.ativo === "false") where.ativo = false;
+    return paginate(this.prisma.veiculo, {
+      params,
+      where: where as Record<string, unknown>,
+      searchFields: ["placa", "modelo"],
+      sortable: { placa: "placa", modelo: "modelo", criadoEm: "criadoEm", ativo: "ativo" },
+      defaultSort: { field: "placa", order: "asc" },
+    });
   }
 
   async create(data: CriarVeiculoInput) {

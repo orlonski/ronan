@@ -18,7 +18,14 @@ import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import type { AuthAdminUser } from "../auth/types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
+import { paginationQuerySchema } from "../common/pagination";
 import { ExportFechamentoService } from "./export-fechamento.service";
+
+const ListEnviosQuery = paginationQuerySchema.extend({
+  empresaClienteId: z.string().uuid().optional(),
+  status: z.enum(["GERADO", "ENVIADO"]).optional(),
+});
+type ListEnviosQuery = z.infer<typeof ListEnviosQuery>;
 
 const CriarEnvioInput = z.object({
   empresaClienteId: z.string().uuid(),
@@ -43,14 +50,8 @@ export class EnviosController {
   constructor(private readonly exporter: ExportFechamentoService) {}
 
   @Get()
-  list(
-    @Query("empresaClienteId") empresaClienteId?: string,
-    @Query("status") status?: string,
-  ) {
-    return this.exporter.listar({
-      empresaClienteId,
-      status: status as never,
-    });
+  list(@Query(new ZodValidationPipe(ListEnviosQuery)) query: ListEnviosQuery) {
+    return this.exporter.listar(query);
   }
 
   @Post()

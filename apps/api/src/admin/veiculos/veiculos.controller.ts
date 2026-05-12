@@ -1,10 +1,17 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { z } from "zod";
 import { AtualizarVeiculoInput, CriarVeiculoInput } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
+import { paginationQuerySchema } from "../../common/pagination";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { VeiculosService } from "./veiculos.service";
+
+const ListVeiculosQuery = paginationQuerySchema.extend({
+  ativo: z.enum(["true", "false"]).optional(),
+});
+type ListVeiculosQuery = z.infer<typeof ListVeiculosQuery>;
 
 @ApiTags("admin/veiculos")
 @ApiBearerAuth()
@@ -15,8 +22,8 @@ export class VeiculosController {
   constructor(private readonly service: VeiculosService) {}
 
   @Get()
-  list() {
-    return this.service.list();
+  list(@Query(new ZodValidationPipe(ListVeiculosQuery)) query: ListVeiculosQuery) {
+    return this.service.list(query);
   }
 
   @Post()

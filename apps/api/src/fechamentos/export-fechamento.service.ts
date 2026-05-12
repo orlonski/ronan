@@ -14,7 +14,13 @@ import ExcelJS from "exceljs";
 import { AuditoriaService } from "../auditoria/auditoria.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
+import { paginate, type PaginationQuery } from "../common/pagination";
 import type { ColunaLayout, ConfigLayout } from "./layout-envio.service";
+
+type ListEnviosParams = PaginationQuery & {
+  empresaClienteId?: string;
+  status?: StatusEnvio;
+};
 
 type ViagemFull = Prisma.ViagemGetPayload<{
   include: {
@@ -231,21 +237,31 @@ export class ExportFechamentoService {
     return { envio, arquivoNome: nomeArquivo, totalLinhas: linhasParaExport.length };
   }
 
-  async listar(filtros: { empresaClienteId?: string; status?: StatusEnvio }) {
+  listar(params: ListEnviosParams) {
     const where: Prisma.EnvioFechamentoWhereInput = {};
-    if (filtros.empresaClienteId) where.empresaClienteId = filtros.empresaClienteId;
-    if (filtros.status) where.status = filtros.status;
+    if (params.empresaClienteId) where.empresaClienteId = params.empresaClienteId;
+    if (params.status) where.status = params.status;
 
-    return this.prisma.envioFechamento.findMany({
-      where,
+    return paginate(this.prisma.envioFechamento, {
+      params,
+      where: where as Record<string, unknown>,
+      searchFields: ["arquivoNome", "canalEnvio", "empresaCliente.nome"],
+      sortable: {
+        geradoEm: "geradoEm",
+        marcadoEnviadoEm: "marcadoEnviadoEm",
+        status: "status",
+        empresa: "empresaCliente.nome",
+        arquivoNome: "arquivoNome",
+      },
+      defaultSort: { field: "geradoEm", order: "desc" },
       include: {
         empresaCliente: { select: { id: true, nome: true } },
-        fechamento: { select: { id: true, versao: true, periodoInicio: true, periodoFim: true } },
+        fechamento: {
+          select: { id: true, versao: true, periodoInicio: true, periodoFim: true },
+        },
         layout: { select: { id: true, nome: true } },
         geradoPor: { select: { id: true, nome: true } },
       },
-      orderBy: { geradoEm: "desc" },
-      take: 200,
     });
   }
 

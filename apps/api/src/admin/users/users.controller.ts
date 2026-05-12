@@ -1,12 +1,20 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { z } from "zod";
 import { AtualizarUserInput, CriarUserInput } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
+import { paginationQuerySchema } from "../../common/pagination";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import type { AuthAdminUser } from "../../auth/types";
 import { UsersService } from "./users.service";
+
+const ListUsersQuery = paginationQuerySchema.extend({
+  perfil: z.enum(["ADMIN", "OPERADOR"]).optional(),
+  ativo: z.enum(["true", "false"]).optional(),
+});
+type ListUsersQuery = z.infer<typeof ListUsersQuery>;
 
 @ApiTags("admin/users")
 @ApiBearerAuth()
@@ -23,8 +31,8 @@ export class UsersController {
 
   @Roles("ADMIN")
   @Get()
-  list() {
-    return this.service.list();
+  list(@Query(new ZodValidationPipe(ListUsersQuery)) query: ListUsersQuery) {
+    return this.service.list(query);
   }
 
   @Roles("ADMIN")

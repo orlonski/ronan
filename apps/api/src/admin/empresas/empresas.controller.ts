@@ -1,10 +1,18 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { z } from "zod";
 import { AtualizarEmpresaInput, CriarEmpresaInput } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
+import { paginationQuerySchema } from "../../common/pagination";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { EmpresasService } from "./empresas.service";
+
+const ListEmpresasQuery = paginationQuerySchema.extend({
+  ativa: z.enum(["true", "false"]).optional(),
+  papel: z.enum(["RECEBE_PLANILHA", "MANDA_FECHAMENTO", "AMBOS"]).optional(),
+});
+type ListEmpresasQuery = z.infer<typeof ListEmpresasQuery>;
 
 @ApiTags("admin/empresas")
 @ApiBearerAuth()
@@ -15,8 +23,8 @@ export class EmpresasController {
   constructor(private readonly service: EmpresasService) {}
 
   @Get()
-  list() {
-    return this.service.list();
+  list(@Query(new ZodValidationPipe(ListEmpresasQuery)) query: ListEmpresasQuery) {
+    return this.service.list(query);
   }
 
   @Get(":id")

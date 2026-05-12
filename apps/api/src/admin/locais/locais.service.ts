@@ -1,17 +1,40 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, TipoLocal } from "@prisma/client";
 import type { CriarLocalInput } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
+import { paginate, type PaginationQuery } from "../../common/pagination";
+
+type ListLocaisParams = PaginationQuery & {
+  obraId?: string;
+  tipo?: TipoLocal;
+  ativo?: "true" | "false";
+};
 
 @Injectable()
 export class LocaisService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list(obraId?: string) {
-    return this.prisma.local.findMany({
-      where: { ativo: true, ...(obraId ? { obraId } : {}) },
+  list(params: ListLocaisParams) {
+    const where: Prisma.LocalWhereInput = {};
+    if (params.obraId) where.obraId = params.obraId;
+    if (params.tipo) where.tipo = params.tipo;
+    if (params.ativo === "true") where.ativo = true;
+    else if (params.ativo === "false") where.ativo = false;
+    else where.ativo = true; // default: só ativos (mantém comportamento anterior)
+    return paginate(this.prisma.local, {
+      params,
+      where: where as Record<string, unknown>,
+      searchFields: ["nome", "logradouro", "bairro", "cidade", "pontoReferencia"],
+      sortable: {
+        nome: "nome",
+        cidade: "cidade",
+        uf: "uf",
+        tipo: "tipo",
+        ativo: "ativo",
+        criadoEm: "criadoEm",
+      },
+      defaultSort: { field: "nome", order: "asc" },
       include: { obra: { select: { id: true, nome: true } } },
-      orderBy: { nome: "asc" },
     });
   }
 

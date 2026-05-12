@@ -10,11 +10,20 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { z } from "zod";
 import { CriarLocalInput } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
+import { paginationQuerySchema } from "../../common/pagination";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { LocaisService } from "./locais.service";
+
+const ListLocaisQuery = paginationQuerySchema.extend({
+  obraId: z.string().uuid().optional(),
+  tipo: z.enum(["CARGA", "DESCARGA", "AMBOS"]).optional(),
+  ativo: z.enum(["true", "false"]).optional(),
+});
+type ListLocaisQuery = z.infer<typeof ListLocaisQuery>;
 
 @ApiTags("admin/locais")
 @ApiBearerAuth()
@@ -25,8 +34,8 @@ export class LocaisController {
   constructor(private readonly service: LocaisService) {}
 
   @Get()
-  list(@Query("obraId") obraId?: string) {
-    return this.service.list(obraId);
+  list(@Query(new ZodValidationPipe(ListLocaisQuery)) query: ListLocaisQuery) {
+    return this.service.list(query);
   }
 
   @Post()

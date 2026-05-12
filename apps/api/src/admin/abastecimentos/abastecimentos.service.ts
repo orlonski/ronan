@@ -2,6 +2,15 @@ import { ConflictException, Injectable, NotFoundException } from "@nestjs/common
 import type { Prisma, TipoCombustivel } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { UploadsService } from "../../uploads/uploads.service";
+import { paginate, type PaginationQuery } from "../../common/pagination";
+
+type ListAbastecimentosParams = PaginationQuery & {
+  motoristaId?: string;
+  veiculoId?: string;
+  tipo?: TipoCombustivel;
+  de?: string;
+  ate?: string;
+};
 
 @Injectable()
 export class AbastecimentosAdminService {
@@ -10,34 +19,37 @@ export class AbastecimentosAdminService {
     private readonly uploads: UploadsService,
   ) {}
 
-  async list(filtros: {
-    motoristaId?: string;
-    veiculoId?: string;
-    tipo?: TipoCombustivel;
-    de?: string;
-    ate?: string;
-    take?: number;
-  }) {
+  async list(params: ListAbastecimentosParams) {
     const where: Prisma.AbastecimentoWhereInput = {};
-    if (filtros.motoristaId) where.motoristaId = filtros.motoristaId;
-    if (filtros.veiculoId) where.veiculoId = filtros.veiculoId;
-    if (filtros.tipo) where.tipo = filtros.tipo;
-    if (filtros.de || filtros.ate) {
+    if (params.motoristaId) where.motoristaId = params.motoristaId;
+    if (params.veiculoId) where.veiculoId = params.veiculoId;
+    if (params.tipo) where.tipo = params.tipo;
+    if (params.de || params.ate) {
       where.data = {};
-      if (filtros.de) where.data.gte = new Date(filtros.de);
-      if (filtros.ate) where.data.lte = new Date(filtros.ate);
+      if (params.de) where.data.gte = new Date(params.de);
+      if (params.ate) where.data.lte = new Date(params.ate);
     }
 
-    const [itens, totais] = await Promise.all([
-      this.prisma.abastecimento.findMany({
-        where,
+    const [paged, totais] = await Promise.all([
+      paginate(this.prisma.abastecimento, {
+        params,
+        where: where as Record<string, unknown>,
+        searchFields: ["postoNome", "observacao", "motorista.nome", "veiculo.placa"],
+        sortable: {
+          data: "data",
+          tipo: "tipo",
+          litros: "litros",
+          valorTotal: "valorTotal",
+          odometro: "odometro",
+          motorista: "motorista.nome",
+          placa: "veiculo.placa",
+        },
+        defaultSort: { field: "data", order: "desc" },
         include: {
           veiculo: { select: { id: true, placa: true, modelo: true } },
           motorista: { select: { id: true, nome: true } },
           _count: { select: { fotos: true } },
         },
-        orderBy: { data: "desc" },
-        take: filtros.take ?? 200,
       }),
       this.prisma.abastecimento.aggregate({
         where,
@@ -47,7 +59,7 @@ export class AbastecimentosAdminService {
     ]);
 
     return {
-      itens,
+      ...paged,
       totais: {
         count: totais._count._all,
         litros: (totais._sum.litros ?? "0").toString(),

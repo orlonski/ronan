@@ -14,6 +14,13 @@ import { AuditoriaService } from "../auditoria/auditoria.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
 import { FechamentoProcessorService } from "./fechamento-processor.service";
+import { paginate, type PaginationQuery } from "../common/pagination";
+
+type ListFechamentosParams = PaginationQuery & {
+  empresaClienteId?: string;
+  status?: StatusFechamento;
+  incluirSubstituidos?: "true" | "false";
+};
 
 const FECHAMENTO_INCLUDE = {
   empresaCliente: { select: { id: true, nome: true } },
@@ -54,26 +61,33 @@ export class FechamentosService {
     private readonly auditoria: AuditoriaService,
   ) {}
 
-  async list(filtros: {
-    empresaClienteId?: string;
-    status?: StatusFechamento;
-    incluirSubstituidos?: boolean;
-  }) {
+  list(params: ListFechamentosParams) {
     const where: Prisma.FechamentoWhereInput = {};
-    if (filtros.empresaClienteId) where.empresaClienteId = filtros.empresaClienteId;
-    if (filtros.status) where.status = filtros.status;
-    if (!filtros.incluirSubstituidos) {
-      where.status = { not: StatusFechamento.SUBSTITUIDO };
+    if (params.empresaClienteId) where.empresaClienteId = params.empresaClienteId;
+    if (params.status) where.status = params.status;
+    if (params.incluirSubstituidos !== "true") {
+      where.status = params.status
+        ? params.status
+        : { not: StatusFechamento.SUBSTITUIDO };
     }
 
-    return this.prisma.fechamento.findMany({
-      where,
+    return paginate(this.prisma.fechamento, {
+      params,
+      where: where as Record<string, unknown>,
+      searchFields: ["arquivoOriginalNome", "empresaCliente.nome"],
+      sortable: {
+        criadoEm: "criadoEm",
+        periodoInicio: "periodoInicio",
+        periodoFim: "periodoFim",
+        status: "status",
+        empresa: "empresaCliente.nome",
+        versao: "versao",
+      },
+      defaultSort: { field: "criadoEm", order: "desc" },
       include: {
         empresaCliente: { select: { id: true, nome: true } },
         _count: { select: { linhas: true, envios: true } },
       },
-      orderBy: { criadoEm: "desc" },
-      take: 100,
     });
   }
 

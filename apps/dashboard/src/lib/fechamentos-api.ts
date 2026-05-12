@@ -1,7 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchApi, useAuthToken } from "./client-api";
+import { fetchApi, useAuthToken, usePaginatedList } from "./client-api";
+import type { DataTableParams } from "@/hooks/use-data-table-state";
 
 export type StatusFechamento =
   | "RECEBIDO"
@@ -132,17 +133,8 @@ export type AuditEntry = {
 
 const PATH = "/admin/fechamentos";
 
-export function useFechamentos(filtros: { empresaClienteId?: string; status?: StatusFechamento }) {
-  const token = useAuthToken();
-  const params = new URLSearchParams();
-  if (filtros.empresaClienteId) params.set("empresaClienteId", filtros.empresaClienteId);
-  if (filtros.status) params.set("status", filtros.status);
-  const qs = params.toString();
-  return useQuery({
-    queryKey: ["fechamentos", filtros],
-    enabled: !!token,
-    queryFn: () => fetchApi<FechamentoLista[]>(`${PATH}${qs ? `?${qs}` : ""}`, { token }),
-  });
+export function useFechamentos(params: Partial<DataTableParams>) {
+  return usePaginatedList<FechamentoLista>(PATH, params);
 }
 
 export function useFechamento(id: string | undefined) {
@@ -191,7 +183,7 @@ export function useUploadFechamento() {
       fd.append("arquivo", input.arquivo);
       return fetchApi<FechamentoDetalhe>(PATH, { method: "POST", body: fd, token });
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["fechamentos"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/admin/fechamentos"] }),
   });
 }
 
@@ -213,7 +205,7 @@ export function useResolverLinha(fechamentoId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["fechamento-linhas", fechamentoId] });
       qc.invalidateQueries({ queryKey: ["fechamento", fechamentoId] });
-      qc.invalidateQueries({ queryKey: ["fechamentos"] });
+      qc.invalidateQueries({ queryKey: ["/admin/fechamentos"] });
     },
   });
 }
@@ -335,17 +327,8 @@ export type EnvioStandalone = EnvioFechamento & {
   totalLinhas: number | null;
 };
 
-export function useEnvios(filtros: { empresaClienteId?: string; status?: "GERADO" | "ENVIADO" }) {
-  const token = useAuthToken();
-  const params = new URLSearchParams();
-  if (filtros.empresaClienteId) params.set("empresaClienteId", filtros.empresaClienteId);
-  if (filtros.status) params.set("status", filtros.status);
-  const qs = params.toString();
-  return useQuery({
-    queryKey: ["envios", filtros],
-    enabled: !!token,
-    queryFn: () => fetchApi<EnvioStandalone[]>(`/admin/envios${qs ? `?${qs}` : ""}`, { token }),
-  });
+export function useEnvios(params: Partial<DataTableParams>) {
+  return usePaginatedList<EnvioStandalone>("/admin/envios", params);
 }
 
 export function useCriarEnvio() {
@@ -363,7 +346,7 @@ export function useCriarEnvio() {
         "/admin/envios",
         { method: "POST", body: JSON.stringify(input), token },
       ),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["envios"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/admin/envios"] }),
   });
 }
 
@@ -377,7 +360,7 @@ export function useMarcarEnvioEnviado() {
         body: JSON.stringify({ canalEnvio: input.canalEnvio, observacao: input.observacao }),
         token,
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["envios"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/admin/envios"] }),
   });
 }
 
@@ -428,18 +411,3 @@ export function useViagem(viagemId: string | undefined) {
   });
 }
 
-export function useViagensFiltradas(filtros: {
-  motoristaId?: string;
-  veiculoId?: string;
-  obraId?: string;
-}) {
-  const token = useAuthToken();
-  const params = new URLSearchParams();
-  Object.entries(filtros).forEach(([k, v]) => v && params.set(k, v));
-  const qs = params.toString();
-  return useQuery({
-    queryKey: ["viagens-filtradas", filtros],
-    enabled: !!token,
-    queryFn: () => fetchApi<unknown[]>(`/admin/viagens${qs ? `?${qs}` : ""}`, { token }),
-  });
-}

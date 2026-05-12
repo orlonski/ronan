@@ -1,9 +1,24 @@
 import { Controller, Delete, Get, HttpCode, Param, Query, Res, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
+import { z } from "zod";
+import { ZodValidationPipe } from "../../common/zod-validation.pipe";
+import { paginationQuerySchema } from "../../common/pagination";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { ViagensAdminService } from "./viagens.service";
+
+const ListViagensQuery = paginationQuerySchema.extend({
+  motoristaId: z.string().uuid().optional(),
+  veiculoId: z.string().uuid().optional(),
+  obraId: z.string().uuid().optional(),
+  status: z
+    .enum(["RASCUNHO_OFFLINE", "ENVIADA", "EM_CONFERENCIA", "DIVERGENTE", "AJUSTADA", "OK"])
+    .optional(),
+  de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+type ListViagensQuery = z.infer<typeof ListViagensQuery>;
 
 @ApiTags("admin/viagens")
 @ApiBearerAuth()
@@ -14,22 +29,8 @@ export class ViagensAdminController {
   constructor(private readonly service: ViagensAdminService) {}
 
   @Get()
-  list(
-    @Query("motoristaId") motoristaId?: string,
-    @Query("veiculoId") veiculoId?: string,
-    @Query("obraId") obraId?: string,
-    @Query("status") status?: string,
-    @Query("de") de?: string,
-    @Query("ate") ate?: string,
-  ) {
-    return this.service.list({
-      motoristaId,
-      veiculoId,
-      obraId,
-      status: status as never,
-      de,
-      ate,
-    });
+  list(@Query(new ZodValidationPipe(ListViagensQuery)) query: ListViagensQuery) {
+    return this.service.list(query);
   }
 
   @Get(":id")

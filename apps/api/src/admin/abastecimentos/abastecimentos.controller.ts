@@ -1,10 +1,21 @@
 import { Controller, Delete, Get, HttpCode, Param, Query, Res, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
-import type { TipoCombustivel } from "@prisma/client";
+import { z } from "zod";
+import { ZodValidationPipe } from "../../common/zod-validation.pipe";
+import { paginationQuerySchema } from "../../common/pagination";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { AbastecimentosAdminService } from "./abastecimentos.service";
+
+const ListAbastecimentosQuery = paginationQuerySchema.extend({
+  motoristaId: z.string().uuid().optional(),
+  veiculoId: z.string().uuid().optional(),
+  tipo: z.enum(["DIESEL_S10", "DIESEL_S500", "ARLA_32", "GASOLINA", "ETANOL"]).optional(),
+  de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+type ListAbastecimentosQuery = z.infer<typeof ListAbastecimentosQuery>;
 
 @ApiTags("admin/abastecimentos")
 @ApiBearerAuth()
@@ -15,20 +26,8 @@ export class AbastecimentosAdminController {
   constructor(private readonly service: AbastecimentosAdminService) {}
 
   @Get()
-  list(
-    @Query("motoristaId") motoristaId?: string,
-    @Query("veiculoId") veiculoId?: string,
-    @Query("tipo") tipo?: string,
-    @Query("de") de?: string,
-    @Query("ate") ate?: string,
-  ) {
-    return this.service.list({
-      motoristaId,
-      veiculoId,
-      tipo: tipo as TipoCombustivel | undefined,
-      de,
-      ate,
-    });
+  list(@Query(new ZodValidationPipe(ListAbastecimentosQuery)) query: ListAbastecimentosQuery) {
+    return this.service.list(query);
   }
 
   @Get(":id")

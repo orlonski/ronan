@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Pencil, Plus } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
 import {
   cpfDigits,
   formatCpf,
@@ -25,9 +26,15 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LoadingCard, LoadingInline } from "@/components/loading";
-import { useCreateResource, useResourceList, useUpdateResource } from "@/lib/client-api";
+import { Trash2 } from "lucide-react";
+import {
+  DataTable,
+  DataTableColumnHeader,
+  DataTableToolbar,
+  ToolbarFilterSelect,
+} from "@/components/data-table";
+import { useDataTableState } from "@/hooks/use-data-table-state";
+import { useCreateResource, usePaginatedList, useUpdateResource } from "@/lib/client-api";
 
 type Veiculo = { id: string; placa: string; modelo: string | null };
 type Motorista = {
@@ -75,7 +82,8 @@ function maskCpf(input: string): string {
 }
 
 export default function MotoristasPage() {
-  const list = useResourceList<Motorista>(PATH);
+  const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
+  const list = usePaginatedList<Motorista>(PATH, tableState);
   const create = useCreateResource<Record<string, unknown>, Motorista>(PATH, PATH);
   const update = useUpdateResource<Record<string, unknown>, Motorista>(PATH, PATH);
 
@@ -192,6 +200,103 @@ export default function MotoristasPage() {
     setEditing(null);
   }
 
+  const columns = useMemo<ColumnDef<Motorista>[]>(
+    () => [
+      {
+        id: "nome",
+        accessorKey: "nome",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Nome" />,
+        cell: ({ row }) => <span className="font-medium">{row.original.nome}</span>,
+      },
+      {
+        id: "cpf",
+        accessorKey: "cpf",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="CPF" />,
+        cell: ({ row }) => (
+          <span className="font-mono text-xs">{formatCpf(row.original.cpf)}</span>
+        ),
+      },
+      {
+        id: "telefone",
+        accessorKey: "telefone",
+        enableSorting: false,
+        header: "Telefone",
+        cell: ({ row }) =>
+          row.original.telefone ? formatTelefone(row.original.telefone) : "—",
+      },
+      {
+        id: "email",
+        accessorKey: "email",
+        enableSorting: false,
+        header: "Email",
+        cell: ({ row }) => (
+          <span className="text-xs">{row.original.email ?? "—"}</span>
+        ),
+      },
+      {
+        id: "placas",
+        enableSorting: false,
+        header: "Placas",
+        cell: ({ row }) =>
+          row.original.veiculos.length === 0 ? (
+            <span className="text-muted-foreground">—</span>
+          ) : (
+            <div className="flex flex-wrap gap-1">
+              {row.original.veiculos.map((v) => (
+                <span
+                  key={v.id}
+                  className={`rounded px-1.5 py-0.5 font-mono text-xs ${
+                    v.id === row.original.veiculoDefaultId
+                      ? "bg-blue-100 text-blue-700"
+                      : "bg-muted text-muted-foreground"
+                  }`}
+                  title={v.id === row.original.veiculoDefaultId ? "Padrão" : undefined}
+                >
+                  {v.placa}
+                </span>
+              ))}
+            </div>
+          ),
+      },
+      {
+        id: "ativo",
+        accessorKey: "ativo",
+        size: 96,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+        cell: ({ row }) => (
+          <StatusToggle
+            active={row.original.ativo}
+            onChange={(next) =>
+              update.mutate({ id: row.original.id, body: { ativo: next } })
+            }
+            size="sm"
+            label
+          />
+        ),
+      },
+      {
+        id: "acoes",
+        size: 128,
+        enableSorting: false,
+        header: () => <span className="text-right">Ações</span>,
+        cell: ({ row }) => (
+          <div className="flex justify-end">
+            <Button variant="ghost" size="icon" onClick={() => openEdit(row.original)}>
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <ConviteWhatsappButton tipo="motorista" id={row.original.id} nome={row.original.nome} />
+            <ExcluirButton
+              path="/admin/motoristas"
+              id={row.original.id}
+              nomeRecurso={`o motorista "${row.original.nome}"`}
+            />
+          </div>
+        ),
+      },
+    ],
+    [update],
+  );
+
   return (
     <div className="space-y-6">
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -206,16 +311,33 @@ export default function MotoristasPage() {
         </Button>
       </header>
 
-      {/* Mobile: cards */}
-      <div className="space-y-3 md:hidden">
-        {list.isLoading && <LoadingCard />}
-        {list.data?.length === 0 && (
-          <Card className="p-6 text-center text-sm text-muted-foreground">
-            Nenhum motorista cadastrado.
-          </Card>
-        )}
-        {list.data?.map((m) => (
-          <Card key={m.id} className="space-y-2 p-4">
+      <DataTable
+        columns={columns}
+        data={list.data?.data ?? []}
+        pagination={list.data?.pagination}
+        state={tableState}
+        isLoading={list.isLoading}
+        isFetching={list.isFetching}
+        toolbar={
+          <DataTableToolbar
+            state={tableState}
+            searchPlaceholder="Buscar por nome, CPF, telefone, email…"
+            filters={
+              <ToolbarFilterSelect
+                label="Status"
+                value={tableState.filters.ativo}
+                onChange={(v) => tableState.setFilter("ativo", v)}
+                options={[
+                  { value: "true", label: "Ativos" },
+                  { value: "false", label: "Inativos" },
+                ]}
+              />
+            }
+          />
+        }
+        emptyMessage="Nenhum motorista encontrado."
+        renderMobileCard={(m) => (
+          <Card className="space-y-2 p-4">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{m.nome}</p>
@@ -271,88 +393,8 @@ export default function MotoristasPage() {
               </div>
             )}
           </Card>
-        ))}
-      </div>
-
-      <Card className="hidden md:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead>CPF</TableHead>
-              <TableHead>Telefone</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Placas</TableHead>
-              <TableHead className="w-24">Status</TableHead>
-              <TableHead className="w-32 text-right">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {list.isLoading && (
-              <TableRow>
-                <TableCell colSpan={7}>
-                  <LoadingInline />
-                </TableCell>
-              </TableRow>
-            )}
-            {list.data?.map((m) => (
-              <TableRow key={m.id}>
-                <TableCell className="font-medium">{m.nome}</TableCell>
-                <TableCell className="font-mono text-xs">{formatCpf(m.cpf)}</TableCell>
-                <TableCell>{m.telefone ? formatTelefone(m.telefone) : "—"}</TableCell>
-                <TableCell className="text-xs">{m.email ?? "—"}</TableCell>
-                <TableCell>
-                  {m.veiculos.length === 0 ? (
-                    <span className="text-muted-foreground">—</span>
-                  ) : (
-                    <div className="flex flex-wrap gap-1">
-                      {m.veiculos.map((v) => (
-                        <span
-                          key={v.id}
-                          className={`rounded px-1.5 py-0.5 font-mono text-xs ${
-                            v.id === m.veiculoDefaultId
-                              ? "bg-blue-100 text-blue-700"
-                              : "bg-muted text-muted-foreground"
-                          }`}
-                          title={v.id === m.veiculoDefaultId ? "Padrão" : undefined}
-                        >
-                          {v.placa}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <StatusToggle
-                    active={m.ativo}
-                    onChange={(next) => update.mutate({ id: m.id, body: { ativo: next } })}
-                    size="sm"
-                    label
-                  />
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="icon" onClick={() => openEdit(m)}>
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <ConviteWhatsappButton tipo="motorista" id={m.id} nome={m.nome} />
-                  <ExcluirButton
-                    path="/admin/motoristas"
-                    id={m.id}
-                    nomeRecurso={`o motorista "${m.nome}"`}
-                  />
-                </TableCell>
-              </TableRow>
-            ))}
-            {list.data?.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={7} className="text-muted-foreground">
-                  Nenhum motorista cadastrado.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+        )}
+      />
 
       <Dialog open={editing !== null} onOpenChange={(v) => !v && setEditing(null)}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">

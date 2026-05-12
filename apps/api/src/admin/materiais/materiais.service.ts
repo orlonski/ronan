@@ -1,13 +1,26 @@
 import { Injectable, NotFoundException, ConflictException } from "@nestjs/common";
+import type { Prisma } from "@prisma/client";
 import type { CriarMaterialInput, AtualizarMaterialInput } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
+import { paginate, type PaginationQuery } from "../../common/pagination";
+
+type ListMateriaisParams = PaginationQuery & { ativo?: "true" | "false" };
 
 @Injectable()
 export class MateriaisService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list() {
-    return this.prisma.material.findMany({ orderBy: { nome: "asc" } });
+  list(params: ListMateriaisParams) {
+    const where: Prisma.MaterialWhereInput = {};
+    if (params.ativo === "true") where.ativo = true;
+    if (params.ativo === "false") where.ativo = false;
+    return paginate(this.prisma.material, {
+      params,
+      where: where as Record<string, unknown>,
+      searchFields: ["nome"],
+      sortable: { nome: "nome", criadoEm: "criadoEm", ativo: "ativo" },
+      defaultSort: { field: "nome", order: "asc" },
+    });
   }
 
   async create(data: CriarMaterialInput) {

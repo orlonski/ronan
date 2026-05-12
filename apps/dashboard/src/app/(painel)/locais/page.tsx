@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Pencil, Plus } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
 import { StatusToggle } from "@/components/status-toggle";
 import { ExcluirButton } from "@/components/excluir-button";
 import { AddressAutocomplete, type SugestaoEndereco } from "@/components/ui/address-autocomplete";
@@ -13,14 +14,19 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LoadingCard, LoadingInline } from "@/components/loading";
+import {
+  DataTable,
+  DataTableColumnHeader,
+  DataTableToolbar,
+  ToolbarFilterSelect,
+} from "@/components/data-table";
+import { useDataTableState } from "@/hooks/use-data-table-state";
 import {
   fetchApi,
   useAuthToken,
   useCreateResource,
-  useDeleteResource,
-  useResourceList,
+  usePaginatedList,
+  useResourceOptions,
   useUpdateResource,
 } from "@/lib/client-api";
 
@@ -45,11 +51,11 @@ const empty = {
 };
 
 export default function LocaisPage() {
-  const list = useResourceList<Local>(PATH);
-  const obras = useResourceList<Obra>(OBRAS_PATH);
+  const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
+  const list = usePaginatedList<Local>(PATH, tableState);
+  const obras = useResourceOptions<Obra>(OBRAS_PATH);
   const create = useCreateResource<Record<string, unknown>, Local>(PATH, PATH);
   const update = useUpdateResource<Record<string, unknown>, Local>(PATH, PATH);
-  const remove = useDeleteResource(PATH, PATH);
   const token = useAuthToken();
 
   const [editing, setEditing] = useState<Local | "new" | null>(null);
@@ -123,6 +129,81 @@ export default function LocaisPage() {
     setEditing(null);
   }
 
+  const obraOptions = useMemo(
+    () => (obras.data ?? []).map((o) => ({ value: o.id, label: o.nome })),
+    [obras.data],
+  );
+
+  const columns = useMemo<ColumnDef<Local>[]>(
+    () => [
+      {
+        id: "nome",
+        accessorKey: "nome",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Nome" />,
+        cell: ({ row }) => <span className="font-medium">{row.original.nome}</span>,
+      },
+      {
+        id: "endereco",
+        enableSorting: false,
+        header: "Endereço",
+        cell: ({ row }) => (
+          <span className="text-sm">
+            {row.original.logradouro}
+            {row.original.numero ? `, ${row.original.numero}` : ""}
+            {row.original.bairro ? ` — ${row.original.bairro}` : ""}
+          </span>
+        ),
+      },
+      {
+        id: "cidade",
+        accessorKey: "cidade",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Cidade/UF" />,
+        cell: ({ row }) => (
+          <span className="text-sm">
+            {row.original.cidade}/{row.original.uf}
+          </span>
+        ),
+      },
+      {
+        id: "obra",
+        enableSorting: false,
+        header: "Obra",
+        cell: ({ row }) => row.original.obra?.nome ?? "—",
+      },
+      {
+        id: "tipo",
+        accessorKey: "tipo",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Tipo" />,
+      },
+      {
+        id: "acoes",
+        size: 160,
+        enableSorting: false,
+        header: () => <span className="text-right">Ações</span>,
+        cell: ({ row }) => (
+          <div className="flex items-center justify-end gap-2">
+            <StatusToggle
+              active={row.original.ativo}
+              onChange={(next) =>
+                update.mutate({ id: row.original.id, body: { ativo: next } })
+              }
+              size="sm"
+            />
+            <Button variant="ghost" size="icon" onClick={() => openEdit(row.original)}>
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <ExcluirButton
+              path="/admin/locais"
+              id={row.original.id}
+              nomeRecurso={`o local "${row.original.nome}"`}
+            />
+          </div>
+        ),
+      },
+    ],
+    [update],
+  );
+
   return (
     <div className="space-y-6">
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -137,17 +218,51 @@ export default function LocaisPage() {
         </Button>
       </header>
 
-      <div className="space-y-3 md:hidden">
-        {list.isLoading && (
-          <LoadingCard />
-        )}
-        {list.data?.length === 0 && (
-          <Card className="p-6 text-center text-sm text-muted-foreground">
-            Nenhum local cadastrado.
-          </Card>
-        )}
-        {list.data?.map((l) => (
-          <Card key={l.id} className="space-y-2 p-4">
+      <DataTable
+        columns={columns}
+        data={list.data?.data ?? []}
+        pagination={list.data?.pagination}
+        state={tableState}
+        isLoading={list.isLoading}
+        isFetching={list.isFetching}
+        toolbar={
+          <DataTableToolbar
+            state={tableState}
+            searchPlaceholder="Buscar por nome, endereço, bairro, cidade…"
+            filters={
+              <>
+                <ToolbarFilterSelect
+                  label="Tipo"
+                  value={tableState.filters.tipo}
+                  onChange={(v) => tableState.setFilter("tipo", v)}
+                  options={[
+                    { value: "AMBOS", label: "Ambos" },
+                    { value: "CARGA", label: "Carga" },
+                    { value: "DESCARGA", label: "Descarga" },
+                  ]}
+                />
+                <ToolbarFilterSelect
+                  label="Obra"
+                  value={tableState.filters.obraId}
+                  onChange={(v) => tableState.setFilter("obraId", v)}
+                  options={obraOptions}
+                />
+                <ToolbarFilterSelect
+                  label="Status"
+                  value={tableState.filters.ativo}
+                  onChange={(v) => tableState.setFilter("ativo", v)}
+                  options={[
+                    { value: "true", label: "Ativos" },
+                    { value: "false", label: "Inativos" },
+                  ]}
+                />
+              </>
+            }
+          />
+        }
+        emptyMessage="Nenhum local cadastrado."
+        renderMobileCard={(l) => (
+          <Card className="space-y-2 p-4">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{l.nome}</p>
@@ -190,56 +305,8 @@ export default function LocaisPage() {
               )}
             </div>
           </Card>
-        ))}
-      </div>
-
-      <Card className="hidden md:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead>Endereço</TableHead>
-              <TableHead>Cidade/UF</TableHead>
-              <TableHead>Obra</TableHead>
-              <TableHead>Tipo</TableHead>
-              <TableHead className="w-32 text-right">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {list.isLoading && <TableRow><TableCell colSpan={6}><LoadingInline /></TableCell></TableRow>}
-            {list.data?.map((l) => (
-              <TableRow key={l.id}>
-                <TableCell className="font-medium">{l.nome}</TableCell>
-                <TableCell className="text-sm">
-                  {l.logradouro}{l.numero ? `, ${l.numero}` : ""}
-                  {l.bairro ? ` — ${l.bairro}` : ""}
-                </TableCell>
-                <TableCell className="text-sm">{l.cidade}/{l.uf}</TableCell>
-                <TableCell>{l.obra?.nome ?? "—"}</TableCell>
-                <TableCell>{l.tipo}</TableCell>
-                <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <StatusToggle
-                      active={l.ativo}
-                      onChange={(next) => update.mutate({ id: l.id, body: { ativo: next } })}
-                      size="sm"
-                    />
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(l)}><Pencil className="h-4 w-4" /></Button>
-                    <ExcluirButton
-                      path="/admin/locais"
-                      id={l.id}
-                      nomeRecurso={`o local "${l.nome}"`}
-                    />
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-            {list.data?.length === 0 && (
-              <TableRow><TableCell colSpan={6} className="text-muted-foreground">Nenhum local cadastrado.</TableCell></TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+        )}
+      />
 
       <Dialog open={editing !== null} onOpenChange={(v) => !v && setEditing(null)}>
         <DialogContent className="max-w-2xl">

@@ -1,13 +1,20 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { z } from "zod";
 import {
   AtualizarMaterialInput,
   CriarMaterialInput,
 } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
+import { paginationQuerySchema } from "../../common/pagination";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { MateriaisService } from "./materiais.service";
+
+const ListMateriaisQuery = paginationQuerySchema.extend({
+  ativo: z.enum(["true", "false"]).optional(),
+});
+type ListMateriaisQuery = z.infer<typeof ListMateriaisQuery>;
 
 @ApiTags("admin/materiais")
 @ApiBearerAuth()
@@ -18,8 +25,8 @@ export class MateriaisController {
   constructor(private readonly service: MateriaisService) {}
 
   @Get()
-  list() {
-    return this.service.list();
+  list(@Query(new ZodValidationPipe(ListMateriaisQuery)) query: ListMateriaisQuery) {
+    return this.service.list(query);
   }
 
   @Post()

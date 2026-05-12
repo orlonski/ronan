@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Pencil, Plus } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
 import { StatusToggle } from "@/components/status-toggle";
 import { ExcluirButton } from "@/components/excluir-button";
 import { Button } from "@/components/ui/button";
@@ -15,24 +16,24 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LoadingCard, LoadingInline } from "@/components/loading";
 import {
-  useCreateResource,
-  useDeleteResource,
-  useResourceList,
-  useUpdateResource,
-} from "@/lib/client-api";
+  DataTable,
+  DataTableColumnHeader,
+  DataTableToolbar,
+  ToolbarFilterSelect,
+} from "@/components/data-table";
+import { useDataTableState } from "@/hooks/use-data-table-state";
+import { useCreateResource, usePaginatedList, useUpdateResource } from "@/lib/client-api";
 
 type Material = { id: string; nome: string; ativo: boolean };
 
 const PATH = "/admin/materiais";
 
 export default function MateriaisPage() {
-  const list = useResourceList<Material>(PATH);
+  const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
+  const list = usePaginatedList<Material>(PATH, tableState);
   const create = useCreateResource<{ nome: string }, Material>(PATH, PATH);
   const update = useUpdateResource<{ nome?: string; ativo?: boolean }, Material>(PATH, PATH);
-  const remove = useDeleteResource(PATH, PATH);
 
   const [editing, setEditing] = useState<Material | "new" | null>(null);
   const [nome, setNome] = useState("");
@@ -52,6 +53,50 @@ export default function MateriaisPage() {
     setEditing(null);
   }
 
+  const columns = useMemo<ColumnDef<Material>[]>(
+    () => [
+      {
+        id: "nome",
+        accessorKey: "nome",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Nome" />,
+        cell: ({ row }) => <span className="font-medium">{row.original.nome}</span>,
+      },
+      {
+        id: "ativo",
+        accessorKey: "ativo",
+        size: 128,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+        cell: ({ row }) => (
+          <StatusToggle
+            active={row.original.ativo}
+            onChange={(next) => update.mutate({ id: row.original.id, body: { ativo: next } })}
+            size="sm"
+            label
+          />
+        ),
+      },
+      {
+        id: "acoes",
+        size: 128,
+        enableSorting: false,
+        header: () => <span className="text-right">Ações</span>,
+        cell: ({ row }) => (
+          <div className="flex justify-end">
+            <Button variant="ghost" size="icon" onClick={() => openEdit(row.original)}>
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <ExcluirButton
+              path="/admin/materiais"
+              id={row.original.id}
+              nomeRecurso={`o material "${row.original.nome}"`}
+            />
+          </div>
+        ),
+      },
+    ],
+    [update],
+  );
+
   return (
     <div className="space-y-6">
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -64,17 +109,33 @@ export default function MateriaisPage() {
         </Button>
       </header>
 
-      <div className="space-y-3 md:hidden">
-        {list.isLoading && (
-          <LoadingCard />
-        )}
-        {list.data?.length === 0 && (
-          <Card className="p-6 text-center text-sm text-muted-foreground">
-            Nenhum material cadastrado.
-          </Card>
-        )}
-        {list.data?.map((m) => (
-          <Card key={m.id} className="space-y-2 p-4">
+      <DataTable
+        columns={columns}
+        data={list.data?.data ?? []}
+        pagination={list.data?.pagination}
+        state={tableState}
+        isLoading={list.isLoading}
+        isFetching={list.isFetching}
+        toolbar={
+          <DataTableToolbar
+            state={tableState}
+            searchPlaceholder="Buscar material…"
+            filters={
+              <ToolbarFilterSelect
+                label="Status"
+                value={tableState.filters.ativo}
+                onChange={(v) => tableState.setFilter("ativo", v)}
+                options={[
+                  { value: "true", label: "Ativos" },
+                  { value: "false", label: "Inativos" },
+                ]}
+              />
+            }
+          />
+        }
+        emptyMessage="Nenhum material cadastrado."
+        renderMobileCard={(m) => (
+          <Card className="space-y-2 p-4">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{m.nome}</p>
@@ -97,54 +158,8 @@ export default function MateriaisPage() {
               </div>
             </div>
           </Card>
-        ))}
-      </div>
-
-      <Card className="hidden md:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead className="w-32">Status</TableHead>
-              <TableHead className="w-32 text-right">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {list.isLoading && (
-              <TableRow><TableCell colSpan={3}><LoadingInline /></TableCell></TableRow>
-            )}
-            {list.isError && (
-              <TableRow><TableCell colSpan={3} className="text-red-600">Erro ao carregar.</TableCell></TableRow>
-            )}
-            {list.data?.map((m) => (
-              <TableRow key={m.id}>
-                <TableCell className="font-medium">{m.nome}</TableCell>
-                <TableCell>
-                  <StatusToggle
-                    active={m.ativo}
-                    onChange={(next) => update.mutate({ id: m.id, body: { ativo: next } })}
-                    size="sm"
-                    label
-                  />
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="icon" onClick={() => openEdit(m)}>
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <ExcluirButton
-                    path="/admin/materiais"
-                    id={m.id}
-                    nomeRecurso={`o material "${m.nome}"`}
-                  />
-                </TableCell>
-              </TableRow>
-            ))}
-            {list.data?.length === 0 && (
-              <TableRow><TableCell colSpan={3} className="text-muted-foreground">Nenhum material cadastrado.</TableCell></TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+        )}
+      />
 
       <Dialog open={editing !== null} onOpenChange={(v) => !v && setEditing(null)}>
         <DialogContent>

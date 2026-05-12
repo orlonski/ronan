@@ -2,6 +2,7 @@
 
 import { signOut, useSession } from "next-auth/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import type { DataTableParams } from "@/hooks/use-data-table-state";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
@@ -52,12 +53,64 @@ export function useAuthToken(): string | undefined {
   return data?.accessToken;
 }
 
-export function useResourceList<T>(path: string) {
+export type Pagination = {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
+
+export type Paginated<T> = {
+  data: T[];
+  pagination: Pagination;
+};
+
+/**
+ * Lista paginada padrão: monta query string a partir dos params (page/pageSize/sort/order/q + filtros)
+ * e bate em `GET <path>?<qs>`. Retorna `{ data, pagination }`.
+ *
+ * Aceita `params` parciais (sem `useDataTableState`) para casos simples.
+ */
+export function usePaginatedList<T>(
+  path: string,
+  params: Partial<DataTableParams>,
+  options?: { enabled?: boolean; placeholderData?: Paginated<T> },
+) {
   const token = useAuthToken();
+  const qs = buildQueryString(params);
+  const url = qs ? `${path}?${qs}` : path;
   return useQuery({
-    queryKey: [path, token],
-    enabled: !!token,
-    queryFn: () => fetchApi<T[]>(path, { token }),
+    queryKey: [path, "list", qs, token],
+    enabled: !!token && options?.enabled !== false,
+    queryFn: () => fetchApi<Paginated<T>>(url, { token }),
+    placeholderData: (prev) => prev ?? options?.placeholderData,
+  });
+}
+
+/**
+ * Carrega TODAS as opções de um recurso paginado (pra usar em selects de FK).
+ * Bate em GET <path>?pageSize=200 e retorna `T[]`. Para listas maiores que 200,
+ * considere refatorar pra autocomplete server-side.
+ */
+export function useResourceOptions<T>(
+  path: string,
+  options?: { enabled?: boolean; pageSize?: number; extraParams?: Record<string, string> },
+) {
+  const token = useAuthToken();
+  const params = new URLSearchParams({ pageSize: String(options?.pageSize ?? 200) });
+  if (options?.extraParams) {
+    for (const [k, v] of Object.entries(options.extraParams)) {
+      if (v) params.set(k, v);
+    }
+  }
+  const url = `${path}?${params.toString()}`;
+  return useQuery({
+    queryKey: [path, "options", url, token],
+    enabled: !!token && options?.enabled !== false,
+    queryFn: async () => {
+      const res = await fetchApi<Paginated<T>>(url, { token });
+      return res.data;
+    },
   });
 }
 
@@ -93,4 +146,19 @@ export function useDeleteResource(basePath: string, listPath: string) {
       fetchApi<void>(`${basePath}/${id}`, { method: "DELETE", token }),
     onSuccess: () => qc.invalidateQueries({ queryKey: [listPath] }),
   });
+}
+
+function buildQueryString(params: Partial<DataTableParams>): string {
+  const usp = new URLSearchParams();
+  if (params.page && params.page > 1) usp.set("page", String(params.page));
+  if (params.pageSize) usp.set("pageSize", String(params.pageSize));
+  if (params.sort) usp.set("sort", params.sort);
+  if (params.order && params.order !== "asc") usp.set("order", params.order);
+  if (params.q) usp.set("q", params.q);
+  if (params.filters) {
+    for (const [k, v] of Object.entries(params.filters)) {
+      if (v != null && v !== "") usp.set(k, v);
+    }
+  }
+  return usp.toString();
 }

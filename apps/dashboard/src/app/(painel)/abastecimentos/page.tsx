@@ -1,21 +1,22 @@
 "use client";
 
+import { useMemo } from "react";
 import Link from "next/link";
-import { useState } from "react";
-import { Camera, ExternalLink, Filter, Fuel } from "lucide-react";
+import { Camera, ExternalLink } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Select } from "@/components/ui/select";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { LoadingCard, LoadingInline } from "@/components/loading";
-import { fetchApi, useAuthToken } from "@/lib/client-api";
+  DataTable,
+  DataTableColumnHeader,
+  DataTableToolbar,
+  ToolbarFilterDateRange,
+  ToolbarFilterSelect,
+} from "@/components/data-table";
+import { useDataTableState } from "@/hooks/use-data-table-state";
+import { useAuthToken, fetchApi, useResourceOptions } from "@/lib/client-api";
+import type { Pagination } from "@/lib/client-api";
+import type { DataTableParams } from "@/hooks/use-data-table-state";
 import { fmtNum } from "@/lib/fechamento-helpers";
 import { useQuery } from "@tanstack/react-query";
 
@@ -34,8 +35,11 @@ type Abastecimento = {
   _count: { fotos: number };
 };
 
+type Motorista = { id: string; nome: string };
+
 type ListaAbastecimentos = {
-  itens: Abastecimento[];
+  data: Abastecimento[];
+  pagination: Pagination;
   totais: { count: number; litros: string; valor: string };
 };
 
@@ -57,16 +61,113 @@ const TIPO_COLOR: Record<string, string> = {
 
 export default function AbastecimentosPage() {
   const token = useAuthToken();
-  const [tipo, setTipo] = useState<string>("");
+  const tableState = useDataTableState({ defaultSort: { field: "data", order: "desc" } });
+  const motoristas = useResourceOptions<Motorista>("/admin/motoristas");
+
+  const url = buildUrl("/admin/abastecimentos", tableState);
   const list = useQuery({
-    queryKey: ["abastecimentos-admin", tipo],
+    queryKey: ["abastecimentos-admin", url, token],
     enabled: !!token,
-    queryFn: () =>
-      fetchApi<ListaAbastecimentos>(
-        `/admin/abastecimentos${tipo ? `?tipo=${tipo}` : ""}`,
-        { token },
-      ),
+    queryFn: () => fetchApi<ListaAbastecimentos>(url, { token }),
+    placeholderData: (prev) => prev,
   });
+
+  const motoristaOptions = useMemo(
+    () => (motoristas.data ?? []).map((m) => ({ value: m.id, label: m.nome })),
+    [motoristas.data],
+  );
+
+  const columns = useMemo<ColumnDef<Abastecimento>[]>(
+    () => [
+      {
+        id: "tipo",
+        accessorKey: "tipo",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Tipo" />,
+        cell: ({ row }) => (
+          <Badge className={TIPO_COLOR[row.original.tipo] ?? ""}>
+            {TIPO_LABEL[row.original.tipo] ?? row.original.tipo}
+          </Badge>
+        ),
+      },
+      {
+        id: "data",
+        accessorKey: "data",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Data" />,
+        cell: ({ row }) => <span className="text-sm">{fmtData(row.original.data)}</span>,
+      },
+      {
+        id: "placa",
+        accessorKey: "veiculo.placa",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Placa" />,
+        cell: ({ row }) => (
+          <span className="font-mono text-sm">{row.original.veiculo.placa}</span>
+        ),
+      },
+      {
+        id: "motorista",
+        accessorKey: "motorista.nome",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Motorista" />,
+        cell: ({ row }) => <span className="text-sm">{row.original.motorista.nome}</span>,
+      },
+      {
+        id: "posto",
+        enableSorting: false,
+        header: "Posto",
+        cell: ({ row }) =>
+          row.original.postoNome ?? <span className="text-muted-foreground">—</span>,
+      },
+      {
+        id: "litros",
+        accessorKey: "litros",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Litros" />,
+        cell: ({ row }) => <span className="text-sm">{fmtNum(row.original.litros, 2)}</span>,
+      },
+      {
+        id: "valorTotal",
+        accessorKey: "valorTotal",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="R$ total" />,
+        cell: ({ row }) => (
+          <span className="text-sm">R$ {fmtNum(row.original.valorTotal, 2)}</span>
+        ),
+      },
+      {
+        id: "precoLitro",
+        enableSorting: false,
+        header: "R$/L",
+        cell: ({ row }) =>
+          row.original.precoLitro ? `R$ ${fmtNum(row.original.precoLitro, 3)}` : "—",
+      },
+      {
+        id: "odometro",
+        accessorKey: "odometro",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Odômetro" />,
+        cell: ({ row }) => (
+          <span className="font-mono text-sm">
+            {row.original.odometro.toLocaleString("pt-BR")}
+          </span>
+        ),
+      },
+      {
+        id: "acoes",
+        size: 100,
+        enableSorting: false,
+        header: () => <span className="text-right">Ações</span>,
+        cell: ({ row }) => (
+          <div className="flex items-center justify-end gap-1">
+            {row.original._count.fotos > 0 && (
+              <Camera className="h-4 w-4 text-muted-foreground" />
+            )}
+            <Link href={`/abastecimentos/${row.original.id}`}>
+              <span className="rounded p-1 hover:bg-muted">
+                <ExternalLink className="h-4 w-4" />
+              </span>
+            </Link>
+          </div>
+        ),
+      },
+    ],
+    [],
+  );
 
   return (
     <div className="space-y-6">
@@ -77,50 +178,55 @@ export default function AbastecimentosPage() {
             Combustível registrado pelos motoristas, com odômetro e foto.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <Select
-            value={tipo}
-            onChange={(e) => setTipo(e.target.value)}
-            className="w-full md:w-48"
-          >
-            <option value="">Todos os tipos</option>
-            <option value="DIESEL_S10">Diesel S10</option>
-            <option value="DIESEL_S500">Diesel S500</option>
-            <option value="ARLA_32">ARLA 32</option>
-            <option value="GASOLINA">Gasolina</option>
-            <option value="ETANOL">Etanol</option>
-          </Select>
-        </div>
       </header>
 
-      {/* Card resumo */}
       {list.data && list.data.totais.count > 0 && (
         <Card className="grid grid-cols-3 gap-4 p-4">
           <Resumo label="Abastecimentos" value={list.data.totais.count.toLocaleString("pt-BR")} />
-          <Resumo
-            label="Litros"
-            value={`${fmtNum(list.data.totais.litros, 2)} L`}
-          />
-          <Resumo
-            label="Valor total"
-            value={`R$ ${fmtNum(list.data.totais.valor, 2)}`}
-          />
+          <Resumo label="Litros" value={`${fmtNum(list.data.totais.litros, 2)} L`} />
+          <Resumo label="Valor total" value={`R$ ${fmtNum(list.data.totais.valor, 2)}`} />
         </Card>
       )}
 
-      {/* Mobile: cards */}
-      <div className="space-y-3 md:hidden">
-        {list.isLoading && (
-          <LoadingCard />
-        )}
-        {list.data?.itens.length === 0 && (
-          <Card className="p-6 text-center text-sm text-muted-foreground">
-            Nenhum abastecimento nesse filtro.
-          </Card>
-        )}
-        {list.data?.itens.map((a) => (
-          <Link key={a.id} href={`/abastecimentos/${a.id}`} className="block">
+      <DataTable
+        columns={columns}
+        data={list.data?.data ?? []}
+        pagination={list.data?.pagination}
+        state={tableState}
+        isLoading={list.isLoading}
+        isFetching={list.isFetching}
+        toolbar={
+          <DataTableToolbar
+            state={tableState}
+            searchPlaceholder="Buscar por posto, motorista, placa, obs…"
+            filters={
+              <>
+                <ToolbarFilterSelect
+                  label="Tipo"
+                  value={tableState.filters.tipo}
+                  onChange={(v) => tableState.setFilter("tipo", v)}
+                  options={[
+                    { value: "DIESEL_S10", label: "Diesel S10" },
+                    { value: "DIESEL_S500", label: "Diesel S500" },
+                    { value: "ARLA_32", label: "ARLA 32" },
+                    { value: "GASOLINA", label: "Gasolina" },
+                    { value: "ETANOL", label: "Etanol" },
+                  ]}
+                />
+                <ToolbarFilterSelect
+                  label="Motorista"
+                  value={tableState.filters.motoristaId}
+                  onChange={(v) => tableState.setFilter("motoristaId", v)}
+                  options={motoristaOptions}
+                />
+                <ToolbarFilterDateRange state={tableState} label="Período" />
+              </>
+            }
+          />
+        }
+        emptyMessage="Nenhum abastecimento nesse filtro."
+        renderMobileCard={(a) => (
+          <Link href={`/abastecimentos/${a.id}`} className="block">
             <Card className="space-y-3 p-4 hover:bg-muted/40">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
@@ -166,95 +272,32 @@ export default function AbastecimentosPage() {
               </div>
             </Card>
           </Link>
-        ))}
-      </div>
-
-      {/* Desktop: tabela */}
-      <Card className="hidden md:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Tipo</TableHead>
-              <TableHead>Data</TableHead>
-              <TableHead>Placa</TableHead>
-              <TableHead>Motorista</TableHead>
-              <TableHead>Posto</TableHead>
-              <TableHead>Litros</TableHead>
-              <TableHead>R$ total</TableHead>
-              <TableHead>R$/L</TableHead>
-              <TableHead>Odômetro</TableHead>
-              <TableHead></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {list.isLoading && (
-              <TableRow>
-                <TableCell colSpan={10}><LoadingInline /></TableCell>
-              </TableRow>
-            )}
-            {list.data?.itens.map((a) => (
-              <TableRow key={a.id}>
-                <TableCell>
-                  <Badge className={TIPO_COLOR[a.tipo] ?? ""}>
-                    {TIPO_LABEL[a.tipo] ?? a.tipo}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-sm">{fmtData(a.data)}</TableCell>
-                <TableCell className="font-mono text-sm">
-                  {a.veiculo.placa}
-                </TableCell>
-                <TableCell className="text-sm">{a.motorista.nome}</TableCell>
-                <TableCell className="text-sm">
-                  {a.postoNome ?? <span className="text-muted-foreground">—</span>}
-                </TableCell>
-                <TableCell className="text-sm">{fmtNum(a.litros, 2)}</TableCell>
-                <TableCell className="text-sm">
-                  R$ {fmtNum(a.valorTotal, 2)}
-                </TableCell>
-                <TableCell className="text-sm">
-                  {a.precoLitro ? `R$ ${fmtNum(a.precoLitro, 3)}` : "—"}
-                </TableCell>
-                <TableCell className="font-mono text-sm">
-                  {a.odometro.toLocaleString("pt-BR")}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    {a._count.fotos > 0 && (
-                      <Camera className="h-4 w-4 text-muted-foreground" />
-                    )}
-                    <Link href={`/abastecimentos/${a.id}`}>
-                      <span className="rounded p-1 hover:bg-muted">
-                        <ExternalLink className="h-4 w-4" />
-                      </span>
-                    </Link>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-            {list.data?.itens.length === 0 && (
-              <TableRow>
-                <TableCell
-                  colSpan={10}
-                  className="py-8 text-center text-muted-foreground"
-                >
-                  <Fuel className="mx-auto mb-2 h-8 w-8 opacity-40" />
-                  Nenhum abastecimento nesse filtro.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+        )}
+      />
     </div>
   );
+}
+
+function buildUrl(path: string, params: Partial<DataTableParams>): string {
+  const usp = new URLSearchParams();
+  if (params.page && params.page > 1) usp.set("page", String(params.page));
+  if (params.pageSize) usp.set("pageSize", String(params.pageSize));
+  if (params.sort) usp.set("sort", params.sort);
+  if (params.order && params.order !== "asc") usp.set("order", params.order);
+  if (params.q) usp.set("q", params.q);
+  if (params.filters) {
+    for (const [k, v] of Object.entries(params.filters)) {
+      if (v != null && v !== "") usp.set(k, v);
+    }
+  }
+  const qs = usp.toString();
+  return qs ? `${path}?${qs}` : path;
 }
 
 function Resumo({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">
-        {label}
-      </p>
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="text-xl font-bold">{value}</p>
     </div>
   );
@@ -271,4 +314,3 @@ function fmtData(iso: string): string {
     minute: "2-digit",
   });
 }
-

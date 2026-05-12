@@ -1,24 +1,21 @@
 "use client";
 
+import { useMemo } from "react";
 import Link from "next/link";
-import { useState } from "react";
-import { ArrowDown, ArrowUp, Camera, ExternalLink, Filter } from "lucide-react";
+import { ArrowDown, ArrowUp, Camera, ExternalLink } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { LoadingCard, LoadingInline } from "@/components/loading";
-import { fetchApi, useAuthToken } from "@/lib/client-api";
+  DataTable,
+  DataTableColumnHeader,
+  DataTableToolbar,
+  ToolbarFilterDateRange,
+  ToolbarFilterSelect,
+} from "@/components/data-table";
+import { useDataTableState } from "@/hooks/use-data-table-state";
+import { usePaginatedList, useResourceOptions } from "@/lib/client-api";
 import { fmtBR, fmtNum } from "@/lib/fechamento-helpers";
-import { useQuery } from "@tanstack/react-query";
 
 type Viagem = {
   id: string;
@@ -35,6 +32,9 @@ type Viagem = {
   localDescarga: { id: string; nome: string; cidade: string; uf: string };
   fotos: { id: string; storageKey: string }[];
 };
+
+type Motorista = { id: string; nome: string };
+type Obra = { id: string; nome: string };
 
 const STATUS_VIAGEM_LABEL: Record<string, string> = {
   ENVIADA: "Aguardando",
@@ -55,14 +55,124 @@ const STATUS_VIAGEM_COLOR: Record<string, string> = {
 };
 
 export default function ViagensPage() {
-  const token = useAuthToken();
-  const [status, setStatus] = useState<string>("");
-  const list = useQuery({
-    queryKey: ["viagens-admin", status],
-    enabled: !!token,
-    queryFn: () =>
-      fetchApi<Viagem[]>(`/admin/viagens${status ? `?status=${status}` : ""}`, { token }),
-  });
+  const tableState = useDataTableState({ defaultSort: { field: "data", order: "desc" } });
+  const list = usePaginatedList<Viagem>("/admin/viagens", tableState);
+  const motoristas = useResourceOptions<Motorista>("/admin/motoristas");
+  const obras = useResourceOptions<Obra>("/admin/obras");
+
+  const motoristaOptions = useMemo(
+    () => (motoristas.data ?? []).map((m) => ({ value: m.id, label: m.nome })),
+    [motoristas.data],
+  );
+  const obraOptions = useMemo(
+    () => (obras.data ?? []).map((o) => ({ value: o.id, label: o.nome })),
+    [obras.data],
+  );
+
+  const columns = useMemo<ColumnDef<Viagem>[]>(
+    () => [
+      {
+        id: "status",
+        accessorKey: "status",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+        cell: ({ row }) => (
+          <Badge className={STATUS_VIAGEM_COLOR[row.original.status] ?? ""}>
+            {STATUS_VIAGEM_LABEL[row.original.status] ?? row.original.status}
+          </Badge>
+        ),
+      },
+      {
+        id: "data",
+        accessorKey: "data",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Data" />,
+        cell: ({ row }) => <span className="text-sm">{fmtBR(row.original.data)}</span>,
+      },
+      {
+        id: "placa",
+        accessorKey: "veiculo.placa",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Placa" />,
+        cell: ({ row }) => (
+          <span className="font-mono text-sm">{row.original.veiculo.placa}</span>
+        ),
+      },
+      {
+        id: "motorista",
+        accessorKey: "motorista.nome",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Motorista" />,
+        cell: ({ row }) => <span className="text-sm">{row.original.motorista.nome}</span>,
+      },
+      {
+        id: "obra",
+        accessorKey: "obra.nome",
+        enableSorting: false,
+        header: "Material / Obra",
+        cell: ({ row }) => (
+          <div className="text-sm">
+            <div className="font-medium">{row.original.material.nome}</div>
+            <div className="text-xs text-muted-foreground">{row.original.obra.nome}</div>
+          </div>
+        ),
+      },
+      {
+        id: "trajeto",
+        enableSorting: false,
+        header: "Trajeto",
+        cell: ({ row }) => (
+          <div className="text-xs">
+            <div className="flex items-center gap-1">
+              <ArrowUp className="h-3 w-3 text-muted-foreground" />
+              {row.original.localCarga.nome.length > 28
+                ? row.original.localCarga.nome.slice(0, 25) + "..."
+                : row.original.localCarga.nome}
+            </div>
+            <div className="flex items-center gap-1">
+              <ArrowDown className="h-3 w-3 text-muted-foreground" />
+              {row.original.localDescarga.nome.length > 28
+                ? row.original.localDescarga.nome.slice(0, 25) + "..."
+                : row.original.localDescarga.nome}
+            </div>
+          </div>
+        ),
+      },
+      {
+        id: "toneladas",
+        accessorKey: "toneladas",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Toneladas" />,
+        cell: ({ row }) => <span className="text-sm">{fmtNum(row.original.toneladas, 3)}</span>,
+      },
+      {
+        id: "ticket",
+        accessorKey: "ticket",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Ticket" />,
+        cell: ({ row }) => <span className="font-mono text-sm">{row.original.ticket}</span>,
+      },
+      {
+        id: "km",
+        accessorKey: "km",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Km" />,
+        cell: ({ row }) => <span className="text-sm">{fmtNum(row.original.km, 2)}</span>,
+      },
+      {
+        id: "acoes",
+        size: 100,
+        enableSorting: false,
+        header: () => <span className="text-right">Ações</span>,
+        cell: ({ row }) => (
+          <div className="flex items-center justify-end gap-1">
+            {row.original.fotos.length > 0 && (
+              <Camera className="h-4 w-4 text-muted-foreground" />
+            )}
+            <Link href={`/viagens/${row.original.id}`}>
+              <span className="rounded p-1 hover:bg-muted">
+                <ExternalLink className="h-4 w-4" />
+              </span>
+            </Link>
+          </div>
+        ),
+      },
+    ],
+    [],
+  );
 
   return (
     <div className="space-y-6">
@@ -73,35 +183,53 @@ export default function ViagensPage() {
             Lançamentos dos motoristas, com status visual de conferência.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <Select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className="w-full md:w-48"
-          >
-            <option value="">Todos os status</option>
-            <option value="ENVIADA">Aguardando</option>
-            <option value="EM_CONFERENCIA">Em conferência</option>
-            <option value="OK">OK</option>
-            <option value="DIVERGENTE">Divergente</option>
-            <option value="AJUSTADA">Ajustada</option>
-          </Select>
-        </div>
       </header>
 
-      {/* Mobile: cards verticais */}
-      <div className="space-y-3 md:hidden">
-        {list.isLoading && (
-          <LoadingCard />
-        )}
-        {list.data?.length === 0 && (
-          <Card className="p-6 text-center text-sm text-muted-foreground">
-            Nenhuma viagem nesse filtro.
-          </Card>
-        )}
-        {list.data?.map((v) => (
-          <Link key={v.id} href={`/viagens/${v.id}`} className="block">
+      <DataTable
+        columns={columns}
+        data={list.data?.data ?? []}
+        pagination={list.data?.pagination}
+        state={tableState}
+        isLoading={list.isLoading}
+        isFetching={list.isFetching}
+        toolbar={
+          <DataTableToolbar
+            state={tableState}
+            searchPlaceholder="Buscar por ticket, motorista, placa, obra…"
+            filters={
+              <>
+                <ToolbarFilterSelect
+                  label="Status"
+                  value={tableState.filters.status}
+                  onChange={(v) => tableState.setFilter("status", v)}
+                  options={[
+                    { value: "ENVIADA", label: "Aguardando" },
+                    { value: "EM_CONFERENCIA", label: "Em conferência" },
+                    { value: "OK", label: "OK" },
+                    { value: "DIVERGENTE", label: "Divergente" },
+                    { value: "AJUSTADA", label: "Ajustada" },
+                  ]}
+                />
+                <ToolbarFilterSelect
+                  label="Motorista"
+                  value={tableState.filters.motoristaId}
+                  onChange={(v) => tableState.setFilter("motoristaId", v)}
+                  options={motoristaOptions}
+                />
+                <ToolbarFilterSelect
+                  label="Obra"
+                  value={tableState.filters.obraId}
+                  onChange={(v) => tableState.setFilter("obraId", v)}
+                  options={obraOptions}
+                />
+                <ToolbarFilterDateRange state={tableState} label="Período" />
+              </>
+            }
+          />
+        }
+        emptyMessage="Nenhuma viagem nesse filtro."
+        renderMobileCard={(v) => (
+          <Link href={`/viagens/${v.id}`} className="block">
             <Card className="space-y-3 p-4 hover:bg-muted/40">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
@@ -152,87 +280,8 @@ export default function ViagensPage() {
               </div>
             </Card>
           </Link>
-        ))}
-      </div>
-
-      {/* Desktop: tabela */}
-      <Card className="hidden md:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Status</TableHead>
-              <TableHead>Data</TableHead>
-              <TableHead>Placa</TableHead>
-              <TableHead>Motorista</TableHead>
-              <TableHead>Material / Obra</TableHead>
-              <TableHead>Trajeto</TableHead>
-              <TableHead>Toneladas</TableHead>
-              <TableHead>Ticket</TableHead>
-              <TableHead>Km</TableHead>
-              <TableHead></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {list.isLoading && (
-              <TableRow>
-                <TableCell colSpan={10}><LoadingInline /></TableCell>
-              </TableRow>
-            )}
-            {list.data?.map((v) => (
-              <TableRow key={v.id}>
-                <TableCell>
-                  <Badge className={STATUS_VIAGEM_COLOR[v.status] ?? ""}>
-                    {STATUS_VIAGEM_LABEL[v.status] ?? v.status}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-sm">{fmtBR(v.data)}</TableCell>
-                <TableCell className="font-mono text-sm">{v.veiculo.placa}</TableCell>
-                <TableCell className="text-sm">{v.motorista.nome}</TableCell>
-                <TableCell className="text-sm">
-                  <div className="font-medium">{v.material.nome}</div>
-                  <div className="text-xs text-muted-foreground">{v.obra.nome}</div>
-                </TableCell>
-                <TableCell className="text-xs">
-                  <div className="flex items-center gap-1">
-                    <ArrowUp className="h-3 w-3 text-muted-foreground" />
-                    {v.localCarga.nome.length > 28
-                      ? v.localCarga.nome.slice(0, 25) + "..."
-                      : v.localCarga.nome}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <ArrowDown className="h-3 w-3 text-muted-foreground" />
-                    {v.localDescarga.nome.length > 28
-                      ? v.localDescarga.nome.slice(0, 25) + "..."
-                      : v.localDescarga.nome}
-                  </div>
-                </TableCell>
-                <TableCell className="text-sm">{fmtNum(v.toneladas, 3)}</TableCell>
-                <TableCell className="font-mono text-sm">{v.ticket}</TableCell>
-                <TableCell className="text-sm">{fmtNum(v.km, 2)}</TableCell>
-                <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    {v.fotos.length > 0 && (
-                      <Camera className="h-4 w-4 text-muted-foreground" />
-                    )}
-                    <Link href={`/viagens/${v.id}`}>
-                      <span className="rounded p-1 hover:bg-muted">
-                        <ExternalLink className="h-4 w-4" />
-                      </span>
-                    </Link>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-            {list.data?.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
-                  Nenhuma viagem nesse filtro.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+        )}
+      />
     </div>
   );
 }

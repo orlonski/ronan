@@ -1,16 +1,35 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import type { Prisma } from "@prisma/client";
 import type { CriarObraInput, AtualizarObraInput } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
+import { paginate, type PaginationQuery } from "../../common/pagination";
+
+type ListObrasParams = PaginationQuery & {
+  empresaClienteId?: string;
+  ativa?: "true" | "false";
+};
 
 @Injectable()
 export class ObrasService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list(empresaClienteId?: string) {
-    return this.prisma.obra.findMany({
-      where: empresaClienteId ? { empresaClienteId } : undefined,
+  list(params: ListObrasParams) {
+    const where: Prisma.ObraWhereInput = {};
+    if (params.empresaClienteId) where.empresaClienteId = params.empresaClienteId;
+    if (params.ativa === "true") where.ativa = true;
+    if (params.ativa === "false") where.ativa = false;
+    return paginate(this.prisma.obra, {
+      params,
+      where: where as Record<string, unknown>,
+      searchFields: ["nome", "empresaCliente.nome"],
+      sortable: {
+        nome: "nome",
+        empresa: "empresaCliente.nome",
+        ativa: "ativa",
+        criadoEm: "criadoEm",
+      },
+      defaultSort: { field: "nome", order: "asc" },
       include: { empresaCliente: { select: { id: true, nome: true } } },
-      orderBy: { nome: "asc" },
     });
   }
 

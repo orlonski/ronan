@@ -10,11 +10,19 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { z } from "zod";
 import { AtualizarObraInput, CriarObraInput } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
+import { paginationQuerySchema } from "../../common/pagination";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { ObrasService } from "./obras.service";
+
+const ListObrasQuery = paginationQuerySchema.extend({
+  empresaClienteId: z.string().uuid().optional(),
+  ativa: z.enum(["true", "false"]).optional(),
+});
+type ListObrasQuery = z.infer<typeof ListObrasQuery>;
 
 @ApiTags("admin/obras")
 @ApiBearerAuth()
@@ -25,8 +33,8 @@ export class ObrasController {
   constructor(private readonly service: ObrasService) {}
 
   @Get()
-  list(@Query("empresaClienteId") empresaClienteId?: string) {
-    return this.service.list(empresaClienteId);
+  list(@Query(new ZodValidationPipe(ListObrasQuery)) query: ListObrasQuery) {
+    return this.service.list(query);
   }
 
   @Post()

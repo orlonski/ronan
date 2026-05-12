@@ -1,14 +1,30 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import type { Prisma } from "@prisma/client";
+import type { PapelEmpresa, Prisma } from "@prisma/client";
 import type { CriarEmpresaInput, AtualizarEmpresaInput } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
+import { paginate, type PaginationQuery } from "../../common/pagination";
+
+type ListEmpresasParams = PaginationQuery & {
+  ativa?: "true" | "false";
+  papel?: PapelEmpresa;
+};
 
 @Injectable()
 export class EmpresasService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list() {
-    return this.prisma.empresaCliente.findMany({ orderBy: { nome: "asc" } });
+  list(params: ListEmpresasParams) {
+    const where: Prisma.EmpresaClienteWhereInput = {};
+    if (params.ativa === "true") where.ativa = true;
+    if (params.ativa === "false") where.ativa = false;
+    if (params.papel) where.papel = params.papel;
+    return paginate(this.prisma.empresaCliente, {
+      params,
+      where: where as Record<string, unknown>,
+      searchFields: ["nome", "cnpj", "contato"],
+      sortable: { nome: "nome", cnpj: "cnpj", papel: "papel", ativa: "ativa", criadoEm: "criadoEm" },
+      defaultSort: { field: "nome", order: "asc" },
+    });
   }
 
   findOne(id: string) {

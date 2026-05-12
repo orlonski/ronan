@@ -1,7 +1,14 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import type { PerfilUsuario, Prisma } from "@prisma/client";
 import type { CriarUserInput, AtualizarUserInput } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuthService } from "../../auth/auth.service";
+import { paginate, type PaginationQuery } from "../../common/pagination";
+
+type ListUsersParams = PaginationQuery & {
+  perfil?: PerfilUsuario;
+  ativo?: "true" | "false";
+};
 
 const SAFE_SELECT = {
   id: true,
@@ -17,8 +24,26 @@ const SAFE_SELECT = {
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list() {
-    return this.prisma.user.findMany({ select: SAFE_SELECT, orderBy: { nome: "asc" } });
+  list(params: ListUsersParams) {
+    const where: Prisma.UserWhereInput = {};
+    if (params.perfil) where.perfil = params.perfil;
+    if (params.ativo === "true") where.ativo = true;
+    if (params.ativo === "false") where.ativo = false;
+    return paginate(this.prisma.user, {
+      params,
+      where: where as Record<string, unknown>,
+      searchFields: ["nome", "email"],
+      sortable: {
+        nome: "nome",
+        email: "email",
+        perfil: "perfil",
+        ativo: "ativo",
+        ultimoLoginEm: "ultimoLoginEm",
+        criadoEm: "criadoEm",
+      },
+      defaultSort: { field: "nome", order: "asc" },
+      select: SAFE_SELECT as unknown as Record<string, unknown>,
+    });
   }
 
   async create(data: CriarUserInput) {

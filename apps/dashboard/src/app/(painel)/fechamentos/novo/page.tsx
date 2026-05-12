@@ -9,14 +9,14 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { useResourceList } from "@/lib/client-api";
+import { useResourceOptions } from "@/lib/client-api";
 import { useUploadFechamento } from "@/lib/fechamentos-api";
 
 type Empresa = { id: string; nome: string; ativa: boolean };
 
 export default function NovoFechamentoPage() {
   const router = useRouter();
-  const empresas = useResourceList<Empresa>("/admin/empresas");
+  const empresas = useResourceOptions<Empresa>("/admin/empresas");
   const upload = useUploadFechamento();
 
   const [empresaId, setEmpresaId] = useState("");

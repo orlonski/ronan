@@ -1,13 +1,21 @@
 "use client";
 
+import { useMemo } from "react";
 import Link from "next/link";
 import { FileSpreadsheet, Plus } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LoadingCard, LoadingInline } from "@/components/loading";
-import { useFechamentos } from "@/lib/fechamentos-api";
+import {
+  DataTable,
+  DataTableColumnHeader,
+  DataTableToolbar,
+  ToolbarFilterSelect,
+} from "@/components/data-table";
+import { useDataTableState } from "@/hooks/use-data-table-state";
+import { useResourceOptions } from "@/lib/client-api";
+import { useFechamentos, type FechamentoLista } from "@/lib/fechamentos-api";
 import {
   STATUS_FECHAMENTO_COLOR,
   STATUS_FECHAMENTO_LABEL,
@@ -15,8 +23,100 @@ import {
   fmtDataHoraBR,
 } from "@/lib/fechamento-helpers";
 
+type Empresa = { id: string; nome: string };
+
 export default function FechamentosPage() {
-  const list = useFechamentos({});
+  const tableState = useDataTableState({
+    defaultSort: { field: "criadoEm", order: "desc" },
+  });
+  const list = useFechamentos(tableState);
+  const empresas = useResourceOptions<Empresa>("/admin/empresas");
+
+  const empresaOptions = useMemo(
+    () => (empresas.data ?? []).map((e) => ({ value: e.id, label: e.nome })),
+    [empresas.data],
+  );
+
+  const columns = useMemo<ColumnDef<FechamentoLista>[]>(
+    () => [
+      {
+        id: "empresa",
+        accessorKey: "empresaCliente.nome",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Empresa" />,
+        cell: ({ row }) => (
+          <span className="font-medium">{row.original.empresaCliente.nome}</span>
+        ),
+      },
+      {
+        id: "periodoInicio",
+        accessorKey: "periodoInicio",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Período" />,
+        cell: ({ row }) => (
+          <span className="text-sm">
+            {fmtBR(row.original.periodoInicio)} → {fmtBR(row.original.periodoFim)}
+          </span>
+        ),
+      },
+      {
+        id: "versao",
+        accessorKey: "versao",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Versão" />,
+        cell: ({ row }) => <span className="text-sm">v{row.original.versao}</span>,
+      },
+      {
+        id: "linhas",
+        enableSorting: false,
+        header: "Linhas",
+        cell: ({ row }) => (
+          <span className="text-sm">
+            {row.original._count.linhas}
+            {row.original.resumoIa && (
+              <span className="ml-2 text-xs text-muted-foreground">
+                ({row.original.resumoIa.matchAuto + row.original.resumoIa.matchIa} OK ·{" "}
+                {row.original.resumoIa.divergencia} pendentes)
+              </span>
+            )}
+          </span>
+        ),
+      },
+      {
+        id: "status",
+        accessorKey: "status",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+        cell: ({ row }) => (
+          <Badge className={STATUS_FECHAMENTO_COLOR[row.original.status]}>
+            {STATUS_FECHAMENTO_LABEL[row.original.status]}
+          </Badge>
+        ),
+      },
+      {
+        id: "criadoEm",
+        accessorKey: "criadoEm",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Recebido" />,
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground">
+            {fmtDataHoraBR(row.original.criadoEm)}
+          </span>
+        ),
+      },
+      {
+        id: "acoes",
+        size: 100,
+        enableSorting: false,
+        header: () => <span className="text-right">Ações</span>,
+        cell: ({ row }) => (
+          <div className="flex justify-end">
+            <Link href={`/fechamentos/${row.original.id}`}>
+              <Button variant="ghost" size="sm">
+                <FileSpreadsheet className="h-4 w-4" /> Abrir
+              </Button>
+            </Link>
+          </div>
+        ),
+      },
+    ],
+    [],
+  );
 
   return (
     <div className="space-y-6">
@@ -34,25 +134,55 @@ export default function FechamentosPage() {
         </Link>
       </header>
 
-      {/* Mobile: cards verticais */}
-      <div className="space-y-3 md:hidden">
-        {list.isLoading && (
-          <LoadingCard />
-        )}
-        {list.data?.length === 0 && (
-          <Card className="p-6 text-center text-sm text-muted-foreground">
-            Nenhum fechamento ainda. Clique em &quot;Novo fechamento&quot; pra subir
-            a primeira planilha.
-          </Card>
-        )}
-        {list.data?.map((f) => (
-          <Link key={f.id} href={`/fechamentos/${f.id}`} className="block">
+      <DataTable
+        columns={columns}
+        data={list.data?.data ?? []}
+        pagination={list.data?.pagination}
+        state={tableState}
+        isLoading={list.isLoading}
+        isFetching={list.isFetching}
+        toolbar={
+          <DataTableToolbar
+            state={tableState}
+            searchPlaceholder="Buscar por nome do arquivo ou empresa…"
+            filters={
+              <>
+                <ToolbarFilterSelect
+                  label="Empresa"
+                  value={tableState.filters.empresaClienteId}
+                  onChange={(v) => tableState.setFilter("empresaClienteId", v)}
+                  options={empresaOptions}
+                />
+                <ToolbarFilterSelect
+                  label="Status"
+                  value={tableState.filters.status}
+                  onChange={(v) => tableState.setFilter("status", v)}
+                  options={[
+                    { value: "RECEBIDO", label: "Recebido" },
+                    { value: "EM_PROCESSAMENTO", label: "Em processamento" },
+                    { value: "AGUARDANDO_REVISAO", label: "Aguardando revisão" },
+                    { value: "CONFERIDO", label: "Conferido" },
+                    { value: "EXPORTADO", label: "Exportado" },
+                  ]}
+                />
+                <ToolbarFilterSelect
+                  label="Substituídos"
+                  value={tableState.filters.incluirSubstituidos}
+                  onChange={(v) => tableState.setFilter("incluirSubstituidos", v)}
+                  options={[{ value: "true", label: "Incluir" }]}
+                  placeholder="Esconder"
+                />
+              </>
+            }
+          />
+        }
+        emptyMessage='Nenhum fechamento ainda. Clique em "Novo fechamento" pra subir a primeira planilha.'
+        renderMobileCard={(f) => (
+          <Link href={`/fechamentos/${f.id}`} className="block">
             <Card className="space-y-3 p-4 hover:bg-muted/40">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">
-                    {f.empresaCliente.nome}
-                  </p>
+                  <p className="truncate text-sm font-medium">{f.empresaCliente.nome}</p>
                   <p className="text-xs text-muted-foreground">
                     {fmtBR(f.periodoInicio)} → {fmtBR(f.periodoFim)} · v{f.versao}
                   </p>
@@ -84,71 +214,8 @@ export default function FechamentosPage() {
               </div>
             </Card>
           </Link>
-        ))}
-      </div>
-
-      {/* Desktop: tabela */}
-      <Card className="hidden md:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Empresa</TableHead>
-              <TableHead>Período</TableHead>
-              <TableHead>Versão</TableHead>
-              <TableHead>Linhas</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Recebido</TableHead>
-              <TableHead></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {list.isLoading && (
-              <TableRow>
-                <TableCell colSpan={7}><LoadingInline /></TableCell>
-              </TableRow>
-            )}
-            {list.data?.map((f) => (
-              <TableRow key={f.id}>
-                <TableCell className="font-medium">{f.empresaCliente.nome}</TableCell>
-                <TableCell className="text-sm">
-                  {fmtBR(f.periodoInicio)} → {fmtBR(f.periodoFim)}
-                </TableCell>
-                <TableCell className="text-sm">v{f.versao}</TableCell>
-                <TableCell className="text-sm">
-                  {f._count.linhas} linhas
-                  {f.resumoIa && (
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      ({f.resumoIa.matchAuto + f.resumoIa.matchIa} OK · {f.resumoIa.divergencia} pendentes)
-                    </span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <Badge className={STATUS_FECHAMENTO_COLOR[f.status]}>
-                    {STATUS_FECHAMENTO_LABEL[f.status]}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {fmtDataHoraBR(f.criadoEm)}
-                </TableCell>
-                <TableCell className="text-right">
-                  <Link href={`/fechamentos/${f.id}`}>
-                    <Button variant="ghost" size="sm">
-                      <FileSpreadsheet className="h-4 w-4" /> Abrir
-                    </Button>
-                  </Link>
-                </TableCell>
-              </TableRow>
-            ))}
-            {list.data?.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                  Nenhum fechamento ainda. Clique em "Novo fechamento" pra subir a primeira planilha.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+        )}
+      />
     </div>
   );
 }

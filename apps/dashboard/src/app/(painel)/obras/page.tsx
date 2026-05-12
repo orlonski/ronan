@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Pencil, Plus } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
 import { StatusToggle } from "@/components/status-toggle";
 import { ExcluirButton } from "@/components/excluir-button";
 import { Button } from "@/components/ui/button";
@@ -12,9 +13,19 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LoadingCard, LoadingInline } from "@/components/loading";
-import { useCreateResource, useDeleteResource, useResourceList, useUpdateResource } from "@/lib/client-api";
+import {
+  DataTable,
+  DataTableColumnHeader,
+  DataTableToolbar,
+  ToolbarFilterSelect,
+} from "@/components/data-table";
+import { useDataTableState } from "@/hooks/use-data-table-state";
+import {
+  useCreateResource,
+  usePaginatedList,
+  useResourceOptions,
+  useUpdateResource,
+} from "@/lib/client-api";
 
 type Empresa = { id: string; nome: string };
 type Obra = {
@@ -25,11 +36,11 @@ const PATH = "/admin/obras";
 const EMPRESAS_PATH = "/admin/empresas";
 
 export default function ObrasPage() {
-  const list = useResourceList<Obra>(PATH);
-  const empresas = useResourceList<Empresa>(EMPRESAS_PATH);
+  const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
+  const list = usePaginatedList<Obra>(PATH, tableState);
+  const empresas = useResourceOptions<Empresa>(EMPRESAS_PATH);
   const create = useCreateResource<{ nome: string; empresaClienteId: string }, Obra>(PATH, PATH);
   const update = useUpdateResource<Partial<Obra>, Obra>(PATH, PATH);
-  const remove = useDeleteResource(PATH, PATH);
 
   const [editing, setEditing] = useState<Obra | "new" | null>(null);
   const [form, setForm] = useState({ nome: "", empresaClienteId: "" });
@@ -43,6 +54,61 @@ export default function ObrasPage() {
     else if (editing) await update.mutateAsync({ id: editing.id, body: form });
     setEditing(null);
   }
+
+  const empresaOptions = useMemo(
+    () => (empresas.data ?? []).map((e) => ({ value: e.id, label: e.nome })),
+    [empresas.data],
+  );
+
+  const columns = useMemo<ColumnDef<Obra>[]>(
+    () => [
+      {
+        id: "nome",
+        accessorKey: "nome",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Nome" />,
+        cell: ({ row }) => <span className="font-medium">{row.original.nome}</span>,
+      },
+      {
+        id: "empresa",
+        accessorKey: "empresaCliente.nome",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Empresa" />,
+        cell: ({ row }) => row.original.empresaCliente.nome,
+      },
+      {
+        id: "ativa",
+        accessorKey: "ativa",
+        size: 96,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+        cell: ({ row }) => (
+          <StatusToggle
+            active={row.original.ativa}
+            onChange={(next) => update.mutate({ id: row.original.id, body: { ativa: next } })}
+            size="sm"
+            label
+          />
+        ),
+      },
+      {
+        id: "acoes",
+        size: 128,
+        enableSorting: false,
+        header: () => <span className="text-right">Ações</span>,
+        cell: ({ row }) => (
+          <div className="flex justify-end">
+            <Button variant="ghost" size="icon" onClick={() => openEdit(row.original)}>
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <ExcluirButton
+              path="/admin/obras"
+              id={row.original.id}
+              nomeRecurso={`a obra "${row.original.nome}"`}
+            />
+          </div>
+        ),
+      },
+    ],
+    [update],
+  );
 
   return (
     <div className="space-y-6">
@@ -62,17 +128,41 @@ export default function ObrasPage() {
         </p>
       )}
 
-      <div className="space-y-3 md:hidden">
-        {list.isLoading && (
-          <LoadingCard />
-        )}
-        {list.data?.length === 0 && (
-          <Card className="p-6 text-center text-sm text-muted-foreground">
-            Nenhuma obra cadastrada.
-          </Card>
-        )}
-        {list.data?.map((o) => (
-          <Card key={o.id} className="space-y-2 p-4">
+      <DataTable
+        columns={columns}
+        data={list.data?.data ?? []}
+        pagination={list.data?.pagination}
+        state={tableState}
+        isLoading={list.isLoading}
+        isFetching={list.isFetching}
+        toolbar={
+          <DataTableToolbar
+            state={tableState}
+            searchPlaceholder="Buscar por nome ou empresa…"
+            filters={
+              <>
+                <ToolbarFilterSelect
+                  label="Empresa"
+                  value={tableState.filters.empresaClienteId}
+                  onChange={(v) => tableState.setFilter("empresaClienteId", v)}
+                  options={empresaOptions}
+                />
+                <ToolbarFilterSelect
+                  label="Status"
+                  value={tableState.filters.ativa}
+                  onChange={(v) => tableState.setFilter("ativa", v)}
+                  options={[
+                    { value: "true", label: "Ativas" },
+                    { value: "false", label: "Inativas" },
+                  ]}
+                />
+              </>
+            }
+          />
+        }
+        emptyMessage="Nenhuma obra cadastrada."
+        renderMobileCard={(o) => (
+          <Card className="space-y-2 p-4">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{o.nome}</p>
@@ -96,49 +186,8 @@ export default function ObrasPage() {
               </div>
             </div>
           </Card>
-        ))}
-      </div>
-
-      <Card className="hidden md:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead>Empresa</TableHead>
-              <TableHead className="w-24">Status</TableHead>
-              <TableHead className="w-32 text-right">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {list.isLoading && <TableRow><TableCell colSpan={4}><LoadingInline /></TableCell></TableRow>}
-            {list.data?.map((o) => (
-              <TableRow key={o.id}>
-                <TableCell className="font-medium">{o.nome}</TableCell>
-                <TableCell>{o.empresaCliente.nome}</TableCell>
-                <TableCell>
-                  <StatusToggle
-                    active={o.ativa}
-                    onChange={(next) => update.mutate({ id: o.id, body: { ativa: next } })}
-                    size="sm"
-                    label
-                  />
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="icon" onClick={() => openEdit(o)}><Pencil className="h-4 w-4" /></Button>
-                  <ExcluirButton
-                    path="/admin/obras"
-                    id={o.id}
-                    nomeRecurso={`a obra "${o.nome}"`}
-                  />
-                </TableCell>
-              </TableRow>
-            ))}
-            {list.data?.length === 0 && (
-              <TableRow><TableCell colSpan={4} className="text-muted-foreground">Nenhuma obra cadastrada.</TableCell></TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+        )}
+      />
 
       <Dialog open={editing !== null} onOpenChange={(v) => !v && setEditing(null)}>
         <DialogContent>

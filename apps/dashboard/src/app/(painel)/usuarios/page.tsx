@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { Pencil, Plus } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
 import { StatusToggle } from "@/components/status-toggle";
 import { ConviteWhatsappButton } from "@/components/convite-whatsapp-button";
 import { Button } from "@/components/ui/button";
@@ -13,9 +14,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LoadingCard, LoadingInline } from "@/components/loading";
-import { useCreateResource, useDeleteResource, useResourceList, useUpdateResource } from "@/lib/client-api";
+import {
+  DataTable,
+  DataTableColumnHeader,
+  DataTableToolbar,
+  ToolbarFilterSelect,
+} from "@/components/data-table";
+import { useDataTableState } from "@/hooks/use-data-table-state";
+import { useCreateResource, usePaginatedList, useUpdateResource } from "@/lib/client-api";
 
 type Perfil = "ADMIN" | "OPERADOR";
 type User = {
@@ -45,15 +51,85 @@ const empty = { nome: "", email: "", senha: "", perfil: "OPERADOR" as Perfil };
 
 export default function UsuariosPage() {
   const { data: session } = useSession();
-  const list = useResourceList<User>(PATH);
+  const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
+  const isAdmin = session?.user?.perfil === "ADMIN";
+  const list = usePaginatedList<User>(PATH, tableState, { enabled: isAdmin });
   const create = useCreateResource<typeof empty, User>(PATH, PATH);
   const update = useUpdateResource<Partial<typeof empty> & { ativo?: boolean }, User>(PATH, PATH);
-  const remove = useDeleteResource(PATH, PATH);
 
   const [editing, setEditing] = useState<User | "new" | null>(null);
   const [form, setForm] = useState({ ...empty });
 
-  if (session?.user?.perfil !== "ADMIN") {
+  const currentEmail = session?.user?.email ?? "";
+
+  const columns = useMemo<ColumnDef<User>[]>(
+    () => [
+      {
+        id: "nome",
+        accessorKey: "nome",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Nome" />,
+        cell: ({ row }) => <span className="font-medium">{row.original.nome}</span>,
+      },
+      {
+        id: "email",
+        accessorKey: "email",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Email" />,
+      },
+      {
+        id: "perfil",
+        accessorKey: "perfil",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Perfil" />,
+      },
+      {
+        id: "ultimoLoginEm",
+        accessorKey: "ultimoLoginEm",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Último login" />,
+        cell: ({ row }) => (
+          <span className="text-xs text-muted-foreground">
+            {fmtUltimoLogin(row.original.ultimoLoginEm)}
+          </span>
+        ),
+      },
+      {
+        id: "ativo",
+        accessorKey: "ativo",
+        size: 96,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+        cell: ({ row }) => (
+          <StatusToggle
+            active={row.original.ativo}
+            onChange={(next) =>
+              update.mutate({ id: row.original.id, body: { ativo: next } })
+            }
+            disabled={row.original.email === currentEmail}
+            size="sm"
+            label
+          />
+        ),
+      },
+      {
+        id: "acoes",
+        size: 128,
+        enableSorting: false,
+        header: () => <span className="text-right">Ações</span>,
+        cell: ({ row }) => (
+          <div className="flex justify-end">
+            <Button variant="ghost" size="icon" onClick={() => openEdit(row.original)}>
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <ConviteWhatsappButton
+              tipo="user"
+              id={row.original.id}
+              nome={row.original.nome}
+            />
+          </div>
+        ),
+      },
+    ],
+    [update, currentEmail],
+  );
+
+  if (!isAdmin) {
     return (
       <div className="rounded-md border bg-muted/30 p-6">
         <p className="text-sm text-muted-foreground">Acesso restrito a administradores.</p>
@@ -87,15 +163,44 @@ export default function UsuariosPage() {
         </Button>
       </header>
 
-      <div className="space-y-3 md:hidden">
-        {list.isLoading && <LoadingCard />}
-        {list.data?.length === 0 && (
-          <Card className="p-6 text-center text-sm text-muted-foreground">
-            Nenhum usuário cadastrado.
-          </Card>
-        )}
-        {list.data?.map((u) => (
-          <Card key={u.id} className="space-y-2 p-4">
+      <DataTable
+        columns={columns}
+        data={list.data?.data ?? []}
+        pagination={list.data?.pagination}
+        state={tableState}
+        isLoading={list.isLoading}
+        isFetching={list.isFetching}
+        toolbar={
+          <DataTableToolbar
+            state={tableState}
+            searchPlaceholder="Buscar por nome ou email…"
+            filters={
+              <>
+                <ToolbarFilterSelect
+                  label="Perfil"
+                  value={tableState.filters.perfil}
+                  onChange={(v) => tableState.setFilter("perfil", v)}
+                  options={[
+                    { value: "ADMIN", label: "Admin" },
+                    { value: "OPERADOR", label: "Operador" },
+                  ]}
+                />
+                <ToolbarFilterSelect
+                  label="Status"
+                  value={tableState.filters.ativo}
+                  onChange={(v) => tableState.setFilter("ativo", v)}
+                  options={[
+                    { value: "true", label: "Ativos" },
+                    { value: "false", label: "Inativos" },
+                  ]}
+                />
+              </>
+            }
+          />
+        }
+        emptyMessage="Nenhum usuário cadastrado."
+        renderMobileCard={(u) => (
+          <Card className="space-y-2 p-4">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{u.nome}</p>
@@ -105,7 +210,7 @@ export default function UsuariosPage() {
                 <StatusToggle
                   active={u.ativo}
                   onChange={(next) => update.mutate({ id: u.id, body: { ativo: next } })}
-                  disabled={u.email === session.user?.email}
+                  disabled={u.email === currentEmail}
                   size="sm"
                   label
                 />
@@ -126,49 +231,8 @@ export default function UsuariosPage() {
               </span>
             </div>
           </Card>
-        ))}
-      </div>
-
-      <Card className="hidden md:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Perfil</TableHead>
-              <TableHead>Último login</TableHead>
-              <TableHead className="w-24">Status</TableHead>
-              <TableHead className="w-32 text-right">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {list.isLoading && <TableRow><TableCell colSpan={6}><LoadingInline /></TableCell></TableRow>}
-            {list.data?.map((u) => (
-              <TableRow key={u.id}>
-                <TableCell className="font-medium">{u.nome}</TableCell>
-                <TableCell>{u.email}</TableCell>
-                <TableCell>{u.perfil}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">
-                  {fmtUltimoLogin(u.ultimoLoginEm)}
-                </TableCell>
-                <TableCell>
-                  <StatusToggle
-                    active={u.ativo}
-                    onChange={(next) => update.mutate({ id: u.id, body: { ativo: next } })}
-                    disabled={u.email === session.user?.email}
-                    size="sm"
-                    label
-                  />
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="icon" onClick={() => openEdit(u)}><Pencil className="h-4 w-4" /></Button>
-                  <ConviteWhatsappButton tipo="user" id={u.id} nome={u.nome} />
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Card>
+        )}
+      />
 
       <Dialog open={editing !== null} onOpenChange={(v) => !v && setEditing(null)}>
         <DialogContent>

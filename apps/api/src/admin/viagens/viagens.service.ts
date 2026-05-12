@@ -3,6 +3,16 @@ import type { Prisma, StatusViagem } from "@prisma/client";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { UploadsService } from "../../uploads/uploads.service";
+import { paginate, type PaginationQuery } from "../../common/pagination";
+
+type ListViagensParams = PaginationQuery & {
+  motoristaId?: string;
+  veiculoId?: string;
+  obraId?: string;
+  status?: StatusViagem;
+  de?: string;
+  ate?: string;
+};
 
 @Injectable()
 export class ViagensAdminService {
@@ -12,28 +22,40 @@ export class ViagensAdminService {
     private readonly uploads: UploadsService,
   ) {}
 
-  async list(filtros: {
-    motoristaId?: string;
-    veiculoId?: string;
-    obraId?: string;
-    status?: StatusViagem;
-    de?: string;
-    ate?: string;
-    take?: number;
-  }) {
+  list(params: ListViagensParams) {
     const where: Prisma.ViagemWhereInput = {};
-    if (filtros.motoristaId) where.motoristaId = filtros.motoristaId;
-    if (filtros.veiculoId) where.veiculoId = filtros.veiculoId;
-    if (filtros.obraId) where.obraId = filtros.obraId;
-    if (filtros.status) where.status = filtros.status;
-    if (filtros.de || filtros.ate) {
+    if (params.motoristaId) where.motoristaId = params.motoristaId;
+    if (params.veiculoId) where.veiculoId = params.veiculoId;
+    if (params.obraId) where.obraId = params.obraId;
+    if (params.status) where.status = params.status;
+    if (params.de || params.ate) {
       where.data = {};
-      if (filtros.de) where.data.gte = new Date(filtros.de);
-      if (filtros.ate) where.data.lte = new Date(filtros.ate);
+      if (params.de) where.data.gte = new Date(params.de);
+      if (params.ate) where.data.lte = new Date(params.ate);
     }
 
-    return this.prisma.viagem.findMany({
-      where,
+    return paginate(this.prisma.viagem, {
+      params,
+      where: where as Record<string, unknown>,
+      searchFields: [
+        "ticket",
+        "observacao",
+        "motorista.nome",
+        "veiculo.placa",
+        "obra.nome",
+        "material.nome",
+      ],
+      sortable: {
+        data: "data",
+        status: "status",
+        ticket: "ticket",
+        toneladas: "toneladas",
+        km: "km",
+        motorista: "motorista.nome",
+        placa: "veiculo.placa",
+        obra: "obra.nome",
+      },
+      defaultSort: { field: "data", order: "desc" },
       include: {
         veiculo: { select: { id: true, placa: true } },
         motorista: { select: { id: true, nome: true } },
@@ -44,8 +66,6 @@ export class ViagensAdminService {
         fotos: { select: { id: true, storageKey: true } },
         _count: { select: { matchesFechamento: true } },
       },
-      orderBy: { data: "desc" },
-      take: filtros.take ?? 200,
     });
   }
 

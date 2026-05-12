@@ -22,8 +22,25 @@ import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import type { AuthAdminUser } from "../auth/types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
+import { paginationQuerySchema } from "../common/pagination";
 import { ExportFechamentoService } from "./export-fechamento.service";
 import { FechamentosService } from "./fechamentos.service";
+
+const ListFechamentosQuery = paginationQuerySchema.extend({
+  empresaClienteId: z.string().uuid().optional(),
+  status: z
+    .enum([
+      "RECEBIDO",
+      "EM_PROCESSAMENTO",
+      "AGUARDANDO_REVISAO",
+      "CONFERIDO",
+      "EXPORTADO",
+      "SUBSTITUIDO",
+    ])
+    .optional(),
+  incluirSubstituidos: z.enum(["true", "false"]).optional(),
+});
+type ListFechamentosQuery = z.infer<typeof ListFechamentosQuery>;
 
 const ResolverLinhaInput = z.object({
   acao: z.enum(["aceitar_sugestao", "escolher_viagem", "erro_cliente", "criar_retroativa"]),
@@ -60,16 +77,8 @@ export class FechamentosController {
   ) {}
 
   @Get()
-  list(
-    @Query("empresaClienteId") empresaClienteId?: string,
-    @Query("status") status?: string,
-    @Query("incluirSubstituidos") incluirSubstituidos?: string,
-  ) {
-    return this.service.list({
-      empresaClienteId,
-      status: status as never,
-      incluirSubstituidos: incluirSubstituidos === "true",
-    });
+  list(@Query(new ZodValidationPipe(ListFechamentosQuery)) query: ListFechamentosQuery) {
+    return this.service.list(query);
   }
 
   @Get(":id")

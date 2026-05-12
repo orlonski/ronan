@@ -1,7 +1,11 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import type { Prisma } from "@prisma/client";
 import type { CriarMotoristaInput, AtualizarMotoristaInput, PlacaInput } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuthService } from "../../auth/auth.service";
+import { paginate, type Paginated, type PaginationQuery } from "../../common/pagination";
+
+type ListMotoristasParams = PaginationQuery & { ativo?: "true" | "false" };
 
 const SAFE_SELECT = {
   id: true,
@@ -26,12 +30,34 @@ type PrismaTx = Parameters<Parameters<PrismaService["$transaction"]>[0]>[0];
 export class MotoristasService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list() {
-    const rows = await this.prisma.motorista.findMany({
-      select: SAFE_SELECT,
-      orderBy: { nome: "asc" },
-    });
-    return rows.map((m) => this.flatten(m));
+  async list(params: ListMotoristasParams): Promise<Paginated<ReturnType<typeof this.flatten>>> {
+    const where: Prisma.MotoristaWhereInput = {};
+    if (params.ativo === "true") where.ativo = true;
+    if (params.ativo === "false") where.ativo = false;
+
+    const result = await paginate<Record<string, unknown>, ListMotoristasParams>(
+      this.prisma.motorista,
+      {
+        params,
+        where: where as Record<string, unknown>,
+        searchFields: ["nome", "cpf", "telefone", "email"],
+        sortable: {
+          nome: "nome",
+          cpf: "cpf",
+          criadoEm: "criadoEm",
+          ultimoLoginEm: "ultimoLoginEm",
+          ativo: "ativo",
+        },
+        defaultSort: { field: "nome", order: "asc" },
+        select: SAFE_SELECT as unknown as Record<string, unknown>,
+      },
+    );
+    return {
+      data: result.data.map((m) =>
+        this.flatten(m as Parameters<typeof this.flatten>[0]),
+      ),
+      pagination: result.pagination,
+    };
   }
 
   async create(data: CriarMotoristaInput) {
