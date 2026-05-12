@@ -110,6 +110,7 @@ model User {
   layoutsEnvio    LayoutEnvio[]
   configsTracking ConfiguracaoTracking[]
   configsIa       ConfiguracaoIa[]
+  configsAgente   ConfiguracaoAgente[]
   whatsappSessao  WhatsappSessao?
   whatsappConvites WhatsappConvite[]
 
@@ -627,6 +628,25 @@ model ConfiguracaoIa {
   alteradoPorId    String?
 
   @@map("configuracao_ia")
+}
+
+/// Singleton (id="default"): config do agente IA do WhatsApp (motorista/admin).
+/// Separada da ConfiguracaoIa porque o trade-off é diferente: conciliação roda
+/// em background (tolera latência), agente chat é em tempo real (latência conta).
+/// API keys ficam em env var — aqui só seleciona provider e modelo.
+model ConfiguracaoAgente {
+  id              String   @id @default("default")
+  // "anthropic" | "gemini"
+  provider        String   @default("anthropic")
+  // Modelo usado quando provider=anthropic
+  modeloAnthropic String   @default("claude-sonnet-4-6")
+  // Modelo usado quando provider=gemini
+  modeloGemini    String   @default("gemini-2.5-flash")
+  alteradoEm      DateTime @updatedAt
+  alteradoPor     User?    @relation(fields: [alteradoPorId], references: [id])
+  alteradoPorId   String?
+
+  @@map("configuracao_agente")
 }
 
 /// Campos disponíveis pra mapear no layout de importação de fechamento.

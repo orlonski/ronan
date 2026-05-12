@@ -1,4 +1,3 @@
-import type Anthropic from "@anthropic-ai/sdk";
 import { Logger } from "@nestjs/common";
 import { createHash, randomUUID } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -9,6 +8,7 @@ import { ErrorsService } from "../../errors/errors.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { EvolutionClientService } from "../evolution-client.service";
 import type { SessaoResolvida } from "../sessao.service";
+import type { AgentToolDefinition } from "./providers/agent.provider";
 
 const log = new Logger("AgenteTools");
 
@@ -30,9 +30,9 @@ export type ToolContext = {
   };
 };
 
-// ===== TOOL DEFINITIONS (schemas Anthropic) =====
+// ===== TOOL DEFINITIONS (formato neutro — JSON Schema, portável entre providers) =====
 
-const TOOLS_COMUNS: Anthropic.Tool[] = [
+const TOOLS_COMUNS: AgentToolDefinition[] = [
   {
     name: "quem_sou_eu",
     description:
@@ -41,7 +41,7 @@ const TOOLS_COMUNS: Anthropic.Tool[] = [
   },
 ];
 
-const TOOLS_MOTORISTA: Anthropic.Tool[] = [
+const TOOLS_MOTORISTA: AgentToolDefinition[] = [
   {
     name: "buscar_catalogo",
     description:
@@ -128,7 +128,7 @@ const TOOLS_MOTORISTA: Anthropic.Tool[] = [
   },
 ];
 
-const TOOLS_ADMIN: Anthropic.Tool[] = [
+const TOOLS_ADMIN: AgentToolDefinition[] = [
   {
     name: "dashboard_snapshot",
     description:
@@ -155,9 +155,10 @@ const TOOLS_ADMIN: Anthropic.Tool[] = [
   },
 ];
 
-export function construirTools(perfil: "MOTORISTA" | "ADMIN"): Anthropic.Tool[] {
-  if (perfil === "MOTORISTA") return [...TOOLS_COMUNS, ...TOOLS_MOTORISTA];
-  return [...TOOLS_COMUNS, ...TOOLS_ADMIN];
+export function construirTools(perfil: "MOTORISTA" | "ADMIN"): AgentToolDefinition[] {
+  return perfil === "MOTORISTA"
+    ? [...TOOLS_COMUNS, ...TOOLS_MOTORISTA]
+    : [...TOOLS_COMUNS, ...TOOLS_ADMIN];
 }
 
 // ===== TOOL EXECUTION =====

@@ -74,6 +74,7 @@ const GRUPOS: Grupo[] = [
       { href: "/erros", label: "Erros", icon: AlertCircle },
       { href: "/configuracoes/tracking", label: "Tracking GPS", icon: Settings },
       { href: "/configuracoes/ia", label: "Inteligência Artificial", icon: Sparkles },
+      { href: "/configuracoes/agente-whatsapp", label: "Agente WhatsApp", icon: MessageCircle },
       { href: "/configuracoes/campos-layout", label: "Campos do layout", icon: Sparkles },
     ],
   },

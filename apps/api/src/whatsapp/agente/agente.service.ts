@@ -1,4 +1,3 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -10,28 +9,28 @@ import { UploadsService } from "../../uploads/uploads.service";
 import { EvolutionClientService } from "../evolution-client.service";
 import type { SessaoResolvida } from "../sessao.service";
 import { construirTools, executarTool } from "./tools";
-import type { ToolContext } from "./tools";
 import { systemPromptMotorista, systemPromptAdmin } from "./prompts";
+import type { AgentMessage, AgentProvider } from "./providers/agent.provider";
+import { AnthropicProvider } from "./providers/anthropic.provider";
+import { GeminiProvider } from "./providers/gemini.provider";
 
-// Sonnet hardcoded — Haiku alucinava tool calls (dizia "viagem criada" sem
-// chamar a tool). Sonnet 4.6 é confiável em seguir o fluxo de tools. Vale o
-// custo extra (~R$0,10/conversa vs R$0,02 do Haiku).
-const MODELO_AGENTE = "claude-sonnet-4-6";
 const MAX_HISTORICO_MENSAGENS = 12;
-const MAX_TOOL_LOOPS = 6;
+const CONFIG_ID = "default";
 
 type Identidade = Exclude<SessaoResolvida, { tipo: "DESCONHECIDO" }>;
 
+type ProviderId = "anthropic" | "gemini";
+
 /**
- * Orquestrador do agente IA do WhatsApp. Recebe a mensagem do motorista/admin,
- * monta o histórico (últimas N mensagens), passa pro Claude com as tools do
- * perfil correspondente, executa o loop de tool use até o Claude responder
- * com texto final. Retorna o texto pra mandar pro WhatsApp.
+ * Fachada do agente IA do WhatsApp. Mantém instâncias dos providers
+ * disponíveis (Anthropic, Gemini) e, a cada mensagem, lê a config do banco
+ * (ConfiguracaoAgente) pra decidir provider/modelo. Trocar via UI vale na
+ * próxima mensagem — sem restart.
  */
 @Injectable()
 export class AgenteService {
   private readonly log = new Logger("AgenteService");
-  private client?: Anthropic;
+  private readonly providers: Record<ProviderId, AgentProvider>;
 
   constructor(
     private readonly config: ConfigService,
@@ -43,23 +42,21 @@ export class AgenteService {
     private readonly uploads: UploadsService,
     private readonly evolution: EvolutionClientService,
   ) {
-    const apiKey = this.config.get<string>("ANTHROPIC_API_KEY");
-    if (apiKey) {
-      this.client = new Anthropic({ apiKey });
-    } else {
-      this.log.warn("ANTHROPIC_API_KEY não configurada — agente vai responder placeholder");
-    }
+    this.providers = {
+      anthropic: new AnthropicProvider(this.config.get<string>("ANTHROPIC_API_KEY")),
+      gemini: new GeminiProvider(this.config.get<string>("GEMINI_API_KEY")),
+    };
+    this.log.log(
+      `Providers prontos: anthropic=${this.providers.anthropic.habilitado} ` +
+        `gemini=${this.providers.gemini.habilitado}`,
+    );
   }
 
+  /** Algum provider está disponível? Usado pra placeholder quando ambos falham. */
   get habilitado() {
-    return !!this.client;
+    return this.providers.anthropic.habilitado || this.providers.gemini.habilitado;
   }
 
-  /**
-   * Processa uma mensagem do usuário vinculado.
-   * `mensagemUsuario` pode estar vazia se for foto/áudio puro — nesse caso passa
-   * o tipo via `metadata` pra IA decidir.
-   */
   async processar(
     identidade: Identidade,
     mensagemUsuario: string,
@@ -69,22 +66,45 @@ export class AgenteService {
       evolutionPayload?: { key: unknown; message: unknown };
     },
   ): Promise<string> {
-    if (!this.client) {
+    if (!this.habilitado) {
       return "Desculpa, a IA está fora do ar agora. Manda 'ajuda' pra ver os comandos manuais.";
     }
 
-    const system = identidade.tipo === "MOTORISTA" ? systemPromptMotorista(identidade) : systemPromptAdmin(identidade);
-    const tools = construirTools(identidade.tipo);
-    const modelo = MODELO_AGENTE;
+    const cfg = await this.prisma.configuracaoAgente.upsert({
+      where: { id: CONFIG_ID },
+      update: {},
+      create: { id: CONFIG_ID },
+    });
 
-    // Carrega histórico recente da sessão
-    const historico = await this.prisma.whatsappMensagem.findMany({
+    const providerId: ProviderId = cfg.provider === "gemini" ? "gemini" : "anthropic";
+    const provider = this.providers[providerId];
+
+    if (!provider.habilitado) {
+      this.log.warn(
+        `Provider '${providerId}' selecionado na config mas sem API key — caindo no placeholder`,
+      );
+      const sugestao =
+        providerId === "gemini"
+          ? "Configure GEMINI_API_KEY no servidor ou troque o provider em Configurações → Agente WhatsApp."
+          : "Configure ANTHROPIC_API_KEY no servidor ou troque o provider em Configurações → Agente WhatsApp.";
+      return `Desculpa, a IA está fora do ar agora. ${sugestao}`;
+    }
+
+    const modelo = providerId === "gemini" ? cfg.modeloGemini : cfg.modeloAnthropic;
+
+    const systemText =
+      identidade.tipo === "MOTORISTA"
+        ? systemPromptMotorista(identidade)
+        : systemPromptAdmin(identidade);
+    const tools = construirTools(identidade.tipo);
+
+    const historicoRaw = await this.prisma.whatsappMensagem.findMany({
       where: { sessaoId: identidade.sessaoId },
       orderBy: { criadoEm: "desc" },
       take: MAX_HISTORICO_MENSAGENS,
     });
 
-    const messages: Anthropic.MessageParam[] = historico
+    const historico: AgentMessage[] = historicoRaw
       .reverse()
       .filter((m) => m.conteudo)
       .map((m) => ({
@@ -92,75 +112,26 @@ export class AgenteService {
         content: m.conteudo,
       }));
 
-    // Mensagem atual (caso ainda não tenha sido salva no histórico)
-    const conteudoAtual = mensagemUsuario || (metadata?.tipoMidia ? `[${metadata.tipoMidia}]` : "");
-    if (messages[messages.length - 1]?.role !== "user" || messages[messages.length - 1]?.content !== conteudoAtual) {
-      messages.push({ role: "user", content: conteudoAtual });
-    }
+    const mensagemAtual = mensagemUsuario || (metadata?.tipoMidia ? `[${metadata.tipoMidia}]` : "");
 
-    // Loop de tool use — máximo MAX_TOOL_LOOPS rodadas
-    for (let i = 0; i < MAX_TOOL_LOOPS; i++) {
-      const resp = await this.client.messages.create({
-        model: modelo,
-        max_tokens: 1500,
-        system,
-        tools,
-        messages,
-      });
-      this.log.log(`[loop ${i}] stop_reason=${resp.stop_reason} tool_uses=${resp.content.filter((b) => b.type === "tool_use").length}`);
-
-      // Se IA terminou (não pediu tool), retorna texto
-      if (resp.stop_reason !== "tool_use") {
-        const textoFinal = resp.content
-          .filter((b): b is Anthropic.TextBlock => b.type === "text")
-          .map((b) => b.text)
-          .join("\n")
-          .trim();
-        return textoFinal || "Não consegui formular uma resposta. Tenta de novo?";
-      }
-
-      // Processa cada tool_use bloco
-      const toolUses = resp.content.filter(
-        (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
-      );
-
-      const toolResults: Anthropic.ToolResultBlockParam[] = [];
-      for (const tu of toolUses) {
-        try {
-          const resultado = await executarTool(
-            tu.name,
-            (tu.input as Record<string, unknown>) ?? {},
-            {
-              identidade,
-              prisma: this.prisma,
-              motorista: this.motorista,
-              viagens: this.viagens,
-              dashboard: this.dashboard,
-              errors: this.errors,
-              uploads: this.uploads,
-              evolution: this.evolution,
-              metadata,
-            },
-          );
-          toolResults.push({
-            type: "tool_result",
-            tool_use_id: tu.id,
-            content: JSON.stringify(resultado),
-          });
-        } catch (e) {
-          toolResults.push({
-            type: "tool_result",
-            tool_use_id: tu.id,
-            is_error: true,
-            content: (e as Error).message ?? "Erro desconhecido",
-          });
-        }
-      }
-
-      messages.push({ role: "assistant", content: resp.content });
-      messages.push({ role: "user", content: toolResults });
-    }
-
-    return "Processei várias coisas mas não consegui chegar numa resposta final. Tenta perguntar de outro jeito.";
+    return provider.processar({
+      systemText,
+      tools,
+      historico,
+      mensagemAtual,
+      modelo,
+      executarTool: (nome, input) =>
+        executarTool(nome, input, {
+          identidade,
+          prisma: this.prisma,
+          motorista: this.motorista,
+          viagens: this.viagens,
+          dashboard: this.dashboard,
+          errors: this.errors,
+          uploads: this.uploads,
+          evolution: this.evolution,
+          metadata,
+        }),
+    });
   }
 }
