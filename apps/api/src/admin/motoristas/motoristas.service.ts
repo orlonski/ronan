@@ -1,5 +1,5 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import type { CriarMotoristaInput, AtualizarMotoristaInput } from "@ronan/shared-types";
+import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import type { CriarMotoristaInput, AtualizarMotoristaInput, PlacaInput } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuthService } from "../../auth/auth.service";
 
@@ -20,6 +20,8 @@ const SAFE_SELECT = {
   criadoEm: true,
 } as const;
 
+type PrismaTx = Parameters<Parameters<PrismaService["$transaction"]>[0]>[0];
+
 @Injectable()
 export class MotoristasService {
   constructor(private readonly prisma: PrismaService) {}
@@ -35,25 +37,33 @@ export class MotoristasService {
   async create(data: CriarMotoristaInput) {
     const exists = await this.prisma.motorista.findUnique({ where: { cpf: data.cpf } });
     if (exists) throw new ConflictException("CPF já cadastrado");
-    const veiculoIds = data.veiculoIds ?? [];
-    await this.ensureVeiculosExistem(veiculoIds);
-    if (data.veiculoDefaultId && !veiculoIds.includes(data.veiculoDefaultId)) {
-      throw new BadRequestException("Veículo padrão precisa estar na lista de placas vinculadas");
-    }
     const senhaHash = await AuthService.hashPassword(data.senha);
-    const created = await this.prisma.motorista.create({
-      data: {
-        nome: data.nome,
-        cpf: data.cpf,
-        senhaHash,
-        telefone: data.telefone,
-        email: data.email,
-        veiculoDefaultId: data.veiculoDefaultId ?? null,
-        veiculos: {
-          create: veiculoIds.map((veiculoId) => ({ veiculoId })),
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      const motorista = await tx.motorista.create({
+        data: {
+          nome: data.nome,
+          cpf: data.cpf,
+          senhaHash,
+          telefone: data.telefone,
+          email: data.email,
         },
-      },
-      select: SAFE_SELECT,
+      });
+      const resolvidos = await this.upsertPlacas(tx, data.placas);
+      if (resolvidos.length > 0) {
+        await tx.motoristaVeiculo.createMany({
+          data: resolvidos.map((v) => ({ motoristaId: motorista.id, veiculoId: v.id })),
+          skipDuplicates: true,
+        });
+      }
+      const veiculoDefaultId = this.resolverDefault(data.placaDefault, resolvidos);
+      if (veiculoDefaultId) {
+        await tx.motorista.update({
+          where: { id: motorista.id },
+          data: { veiculoDefaultId },
+        });
+      }
+      return tx.motorista.findUniqueOrThrow({ where: { id: motorista.id }, select: SAFE_SELECT });
     });
     return this.flatten(created);
   }
@@ -65,50 +75,52 @@ export class MotoristasService {
     });
     if (!atual) throw new NotFoundException("Motorista não encontrado");
 
-    const veiculoIdsAtuais = atual.veiculos.map((v) => v.veiculoId);
-    const veiculoIdsNovos = data.veiculoIds ?? veiculoIdsAtuais;
-    const removidos = veiculoIdsAtuais.filter((vid) => !veiculoIdsNovos.includes(vid));
-    const adicionados = veiculoIdsNovos.filter((vid) => !veiculoIdsAtuais.includes(vid));
-
-    if (adicionados.length > 0) await this.ensureVeiculosExistem(adicionados);
-
-    // Determina o veiculoDefaultId final (depois das mudanças)
-    let veiculoDefaultIdFinal: string | null | undefined = data.veiculoDefaultId;
-    if (veiculoDefaultIdFinal === undefined) {
-      veiculoDefaultIdFinal = atual.veiculoDefaultId; // sem mudança
-    }
-    if (veiculoDefaultIdFinal && !veiculoIdsNovos.includes(veiculoDefaultIdFinal)) {
-      throw new BadRequestException("Veículo padrão precisa estar na lista de placas vinculadas");
-    }
-
-    // Invariante: cada veículo precisa ter ≥ 1 motorista. Antes de remover vínculos,
-    // checar se algum desses veículos ficaria órfão.
-    if (removidos.length > 0) {
-      const orfaos = await this.verificaUltimoMotorista(id, removidos);
-      if (orfaos.length > 0) {
-        throw new ConflictException(
-          `Não dá pra remover ${orfaos.join(", ")}: você é o único motorista vinculado. Atribua outro motorista antes ou exclua a placa.`,
-        );
-      }
-    }
-
-    const { novaSenha, veiculoIds: _vIds, veiculoDefaultId: _vd, ...rest } = data;
+    const { novaSenha, placas: placasInput, placaDefault, ...rest } = data;
     const updateData: Record<string, unknown> = { ...rest };
     if (novaSenha) updateData.senhaHash = await AuthService.hashPassword(novaSenha);
-    if (data.veiculoDefaultId !== undefined) updateData.veiculoDefaultId = data.veiculoDefaultId;
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      if (removidos.length > 0) {
-        await tx.motoristaVeiculo.deleteMany({
-          where: { motoristaId: id, veiculoId: { in: removidos } },
+      if (placasInput) {
+        const resolvidos = await this.upsertPlacas(tx, placasInput);
+        const novosIds = new Set(resolvidos.map((v) => v.id));
+        const atuaisIds = atual.veiculos.map((v) => v.veiculoId);
+        const removidos = atuaisIds.filter((vid) => !novosIds.has(vid));
+        const adicionados = resolvidos
+          .filter((v) => !atuaisIds.includes(v.id))
+          .map((v) => v.id);
+
+        if (removidos.length > 0) {
+          if (atual.veiculoDefaultId && removidos.includes(atual.veiculoDefaultId)) {
+            updateData.veiculoDefaultId = null;
+          }
+          await tx.motoristaVeiculo.deleteMany({
+            where: { motoristaId: id, veiculoId: { in: removidos } },
+          });
+          await this.limparOrfaosSemHistorico(tx, removidos);
+        }
+        if (adicionados.length > 0) {
+          await tx.motoristaVeiculo.createMany({
+            data: adicionados.map((veiculoId) => ({ motoristaId: id, veiculoId })),
+            skipDuplicates: true,
+          });
+        }
+        if (placaDefault !== undefined) {
+          updateData.veiculoDefaultId = this.resolverDefault(placaDefault, resolvidos);
+        } else if (resolvidos.length === 1 && !atual.veiculoDefaultId) {
+          updateData.veiculoDefaultId = resolvidos[0]!.id;
+        }
+      } else if (placaDefault !== undefined) {
+        // Placas não mudaram mas default sim — resolve contra os vínculos atuais
+        const atuais = await tx.motoristaVeiculo.findMany({
+          where: { motoristaId: id },
+          select: { veiculo: { select: { id: true, placa: true } } },
         });
+        updateData.veiculoDefaultId = this.resolverDefault(
+          placaDefault,
+          atuais.map((a) => a.veiculo),
+        );
       }
-      if (adicionados.length > 0) {
-        await tx.motoristaVeiculo.createMany({
-          data: adicionados.map((veiculoId) => ({ motoristaId: id, veiculoId })),
-          skipDuplicates: true,
-        });
-      }
+
       return tx.motorista.update({ where: { id }, data: updateData, select: SAFE_SELECT });
     });
     return this.flatten(updated);
@@ -138,54 +150,72 @@ export class MotoristasService {
     }
 
     const veiculoIds = atual.veiculos.map((v) => v.veiculoId);
-    if (veiculoIds.length > 0) {
-      const orfaos = await this.verificaUltimoMotorista(id, veiculoIds);
-      if (orfaos.length > 0) {
-        throw new ConflictException(
-          `Não dá pra excluir: você é o único motorista das placas ${orfaos.join(", ")}. Atribua outro motorista antes.`,
-        );
-      }
-    }
-
-    await this.prisma.motorista.delete({ where: { id } });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.motorista.delete({ where: { id } });
+      await this.limparOrfaosSemHistorico(tx, veiculoIds);
+    });
     return { ok: true };
   }
 
   /**
-   * Pra cada veiculoId, verifica se o motorista `motoristaId` é o único vinculado.
-   * Retorna as PLACAS dos veículos que ficariam órfãos.
+   * Pra cada placa do input, faz upsert: se placa existe, retorna o veículo
+   * (atualiza modelo se vier diferente). Se não existe, cria veículo novo.
    */
-  private async verificaUltimoMotorista(
-    motoristaId: string,
-    veiculoIds: string[],
-  ): Promise<string[]> {
-    if (veiculoIds.length === 0) return [];
-    const vinculos = await this.prisma.motoristaVeiculo.groupBy({
-      by: ["veiculoId"],
-      where: { veiculoId: { in: veiculoIds } },
-      _count: { motoristaId: true },
-    });
-    const veiculosOrfaosIds = vinculos
-      .filter((v) => v._count.motoristaId === 1)
-      .map((v) => v.veiculoId);
-    if (veiculosOrfaosIds.length === 0) return [];
-    // Pega só os que tem só esse motorista como vínculo
-    const veiculos = await this.prisma.veiculo.findMany({
-      where: {
-        id: { in: veiculosOrfaosIds },
-        motoristas: { every: { motoristaId } },
-      },
-      select: { placa: true },
-    });
-    return veiculos.map((v) => v.placa);
+  private async upsertPlacas(
+    tx: PrismaTx,
+    placas: PlacaInput[],
+  ): Promise<{ id: string; placa: string }[]> {
+    if (placas.length === 0) return [];
+    const resolvidos: { id: string; placa: string }[] = [];
+    for (const p of placas) {
+      const existente = await tx.veiculo.findUnique({ where: { placa: p.placa } });
+      if (existente) {
+        if (p.modelo && existente.modelo !== p.modelo) {
+          await tx.veiculo.update({
+            where: { id: existente.id },
+            data: { modelo: p.modelo },
+          });
+        }
+        resolvidos.push({ id: existente.id, placa: existente.placa });
+      } else {
+        const novo = await tx.veiculo.create({
+          data: { placa: p.placa, modelo: p.modelo },
+        });
+        resolvidos.push({ id: novo.id, placa: novo.placa });
+      }
+    }
+    return resolvidos;
   }
 
-  private async ensureVeiculosExistem(ids: string[]) {
-    if (ids.length === 0) return;
-    const count = await this.prisma.veiculo.count({ where: { id: { in: ids } } });
-    if (count !== ids.length) {
-      throw new NotFoundException("Um ou mais veículos não foram encontrados");
+  /**
+   * Pra cada veiculoId, se não tem mais nenhum motorista vinculado E não tem
+   * histórico (viagens, pedágios, abastecimentos), deleta. Veículos com
+   * histórico ficam órfãos preservados.
+   */
+  private async limparOrfaosSemHistorico(tx: PrismaTx, veiculoIds: string[]) {
+    for (const vid of veiculoIds) {
+      const vinculos = await tx.motoristaVeiculo.count({ where: { veiculoId: vid } });
+      if (vinculos > 0) continue;
+      const [v, p, a] = await Promise.all([
+        tx.viagem.count({ where: { veiculoId: vid } }),
+        tx.pedagio.count({ where: { veiculoId: vid } }),
+        tx.abastecimento.count({ where: { veiculoId: vid } }),
+      ]);
+      if (v === 0 && p === 0 && a === 0) {
+        await tx.veiculo.delete({ where: { id: vid } });
+      }
     }
+  }
+
+  private resolverDefault(
+    placaDefault: string | null | undefined,
+    veiculos: { id: string; placa: string }[],
+  ): string | null {
+    if (placaDefault == null) {
+      return veiculos.length === 1 ? veiculos[0]!.id : null;
+    }
+    const match = veiculos.find((v) => v.placa === placaDefault);
+    return match?.id ?? null;
   }
 
   private flatten<V>(m: { veiculos: { veiculo: V }[] } & Record<string, unknown>) {

@@ -14,6 +14,7 @@ import {
   ClipboardCheck,
   FileSpreadsheet,
   Fuel,
+  HardHat,
   LogOut,
   MapPin,
   MessageCircle,
@@ -21,7 +22,6 @@ import {
   Send,
   Settings,
   Sparkles,
-  Truck,
   UserCircle,
   Users2,
   X,
@@ -56,7 +56,7 @@ const GRUPOS: Grupo[] = [
   {
     titulo: "Cadastros",
     itens: [
-      { href: "/motoristas", label: "Frota & Motoristas", icon: Truck },
+      { href: "/motoristas", label: "Motoristas", icon: HardHat },
       { href: "/empresas", label: "Empresas-cliente", icon: Building2 },
       { href: "/obras", label: "Obras", icon: Boxes },
       { href: "/locais", label: "Locais", icon: MapPin },

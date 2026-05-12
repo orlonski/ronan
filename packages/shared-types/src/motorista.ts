@@ -38,6 +38,41 @@ const EmailOpcionalSchema = z.preprocess(
   z.string().email("Email inválido").optional(),
 );
 
+const placaRegex = /^[A-Z]{3}-?\d[A-Z\d]\d{2}$/i;
+
+/**
+ * Placa vinculada ao motorista. Backend faz upsert: se placa existe, vincula
+ * (e atualiza modelo se vier); se não existe, cria veículo novo e vincula.
+ * Placa é única por veículo (mas pode estar em vários motoristas via N:N).
+ */
+const PlacaInput = z.object({
+  placa: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(placaRegex, "Placa inválida (formato Mercosul: ABC1D23 ou antigo: ABC1234)"),
+  modelo: z.string().max(80).optional(),
+});
+export type PlacaInput = z.infer<typeof PlacaInput>;
+
+/**
+ * Garante que não tem placas duplicadas no array (mesma placa repetida no form).
+ */
+function placasSemDuplicatas(placas: PlacaInput[], ctx: z.RefinementCtx) {
+  const seen = new Set<string>();
+  for (let i = 0; i < placas.length; i++) {
+    const p = placas[i]!.placa;
+    if (seen.has(p)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["placas", i, "placa"],
+        message: "Placa repetida",
+      });
+    }
+    seen.add(p);
+  }
+}
+
 export const CriarMotoristaInput = z
   .object({
     nome: z.string().min(2).max(120),
@@ -45,15 +80,23 @@ export const CriarMotoristaInput = z
     senha: z.string().min(6).max(80),
     telefone: TelefoneOpcionalSchema,
     email: EmailOpcionalSchema,
-    veiculoIds: z.array(z.string().uuid()).default([]),
-    veiculoDefaultId: z.string().uuid().nullable().optional(),
+    placas: z.array(PlacaInput).default([]),
+    /** Placa default — string (não id). Backend resolve pro id após upsert. */
+    placaDefault: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(placaRegex)
+      .nullable()
+      .optional(),
   })
   .superRefine((v, ctx) => {
-    if (v.veiculoDefaultId && !v.veiculoIds.includes(v.veiculoDefaultId)) {
+    placasSemDuplicatas(v.placas, ctx);
+    if (v.placaDefault && !v.placas.some((p) => p.placa === v.placaDefault)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ["veiculoDefaultId"],
-        message: "Veículo padrão precisa estar na lista de placas vinculadas",
+        path: ["placaDefault"],
+        message: "Placa padrão precisa estar na lista de placas",
       });
     }
   });
@@ -65,17 +108,24 @@ export const AtualizarMotoristaInput = z
     cpf: CpfSchema.optional(),
     telefone: TelefoneOpcionalSchema,
     email: EmailOpcionalSchema,
-    veiculoIds: z.array(z.string().uuid()).optional(),
-    veiculoDefaultId: z.string().uuid().nullable().optional(),
+    placas: z.array(PlacaInput).optional(),
+    placaDefault: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(placaRegex)
+      .nullable()
+      .optional(),
     ativo: z.boolean().optional(),
     novaSenha: z.string().min(6).max(80).optional(),
   })
   .superRefine((v, ctx) => {
-    if (v.veiculoDefaultId && v.veiculoIds && !v.veiculoIds.includes(v.veiculoDefaultId)) {
+    if (v.placas) placasSemDuplicatas(v.placas, ctx);
+    if (v.placaDefault && v.placas && !v.placas.some((p) => p.placa === v.placaDefault)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ["veiculoDefaultId"],
-        message: "Veículo padrão precisa estar na lista de placas vinculadas",
+        path: ["placaDefault"],
+        message: "Placa padrão precisa estar na lista de placas",
       });
     }
   });
