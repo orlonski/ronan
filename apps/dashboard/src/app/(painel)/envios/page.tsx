@@ -131,11 +131,11 @@ export default function EnviosPage() {
         id: "acoes",
         size: 140,
         enableSorting: false,
-        header: () => <span className="text-right">Ações</span>,
+        header: () => <span className="block text-center">Ações</span>,
         cell: ({ row }) => {
           const e = row.original;
           return (
-            <div className="flex justify-end gap-1">
+            <div className="flex justify-center gap-1">
               <Button
                 variant="ghost"
                 size="icon"

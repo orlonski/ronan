@@ -149,11 +149,11 @@ export default function AbastecimentosPage() {
       },
       {
         id: "acoes",
-        size: 100,
+        size: 90,
         enableSorting: false,
-        header: () => <span className="text-right">Ações</span>,
+        header: () => <span className="block text-center">Ações</span>,
         cell: ({ row }) => (
-          <div className="flex items-center justify-end gap-1">
+          <div className="flex items-center justify-center gap-1">
             {row.original._count.fotos > 0 && (
               <Camera className="h-4 w-4 text-muted-foreground" />
             )}

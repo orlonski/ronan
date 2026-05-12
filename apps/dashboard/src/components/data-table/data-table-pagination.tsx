@@ -2,7 +2,6 @@
 
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/select";
 import type { DataTableState } from "@/hooks/use-data-table-state";
 import type { Pagination } from "@/lib/client-api";
 
@@ -36,20 +35,20 @@ export function DataTablePagination({
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">Por página</span>
-          <Select
+        <label className="flex items-center gap-2 text-muted-foreground">
+          <span>Por página</span>
+          <select
             value={pageSize}
             onChange={(e) => state.setPageSize(Number(e.target.value))}
-            className="h-8 w-[78px]"
+            className="h-8 rounded-md border border-border bg-background pl-2 pr-7 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {PAGE_SIZE_OPTIONS.map((n) => (
               <option key={n} value={n}>
                 {n}
               </option>
             ))}
-          </Select>
-        </div>
+          </select>
+        </label>
 
         <div className="flex items-center gap-1">
           <Button

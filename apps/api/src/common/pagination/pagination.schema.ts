@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const PAGE_SIZE_DEFAULT = 25;
+export const PAGE_SIZE_DEFAULT = 10;
 export const PAGE_SIZE_MAX = 100;
 
 /**

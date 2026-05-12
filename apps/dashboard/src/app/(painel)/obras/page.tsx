@@ -90,11 +90,11 @@ export default function ObrasPage() {
       },
       {
         id: "acoes",
-        size: 128,
+        size: 110,
         enableSorting: false,
-        header: () => <span className="text-right">Ações</span>,
+        header: () => <span className="block text-center">Ações</span>,
         cell: ({ row }) => (
-          <div className="flex justify-end">
+          <div className="flex justify-center">
             <Button variant="ghost" size="icon" onClick={() => openEdit(row.original)}>
               <Pencil className="h-4 w-4" />
             </Button>

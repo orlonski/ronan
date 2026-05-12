@@ -102,13 +102,13 @@ export default function EmpresasPage() {
       },
       {
         id: "acoes",
-        size: 168,
+        size: 180,
         enableSorting: false,
-        header: () => <span className="text-right">Ações</span>,
+        header: () => <span className="block text-center">Ações</span>,
         cell: ({ row }) => {
           const e = row.original;
           return (
-            <div className="flex justify-end">
+            <div className="flex justify-center">
               {(e.papel === "RECEBE_PLANILHA" || e.papel === "AMBOS") && (
                 <Link href={`/empresas/${e.id}/layout-envio`} title="Layout de envio">
                   <Button variant="ghost" size="icon">

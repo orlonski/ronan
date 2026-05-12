@@ -276,11 +276,11 @@ export default function MotoristasPage() {
       },
       {
         id: "acoes",
-        size: 128,
+        size: 140,
         enableSorting: false,
-        header: () => <span className="text-right">Ações</span>,
+        header: () => <span className="block text-center">Ações</span>,
         cell: ({ row }) => (
-          <div className="flex justify-end">
+          <div className="flex justify-center">
             <Button variant="ghost" size="icon" onClick={() => openEdit(row.original)}>
               <Pencil className="h-4 w-4" />
             </Button>

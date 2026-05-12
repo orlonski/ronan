@@ -101,11 +101,11 @@ export default function FechamentosPage() {
       },
       {
         id: "acoes",
-        size: 100,
+        size: 110,
         enableSorting: false,
-        header: () => <span className="text-right">Ações</span>,
+        header: () => <span className="block text-center">Ações</span>,
         cell: ({ row }) => (
-          <div className="flex justify-end">
+          <div className="flex justify-center">
             <Link href={`/fechamentos/${row.original.id}`}>
               <Button variant="ghost" size="sm">
                 <FileSpreadsheet className="h-4 w-4" /> Abrir

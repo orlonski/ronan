@@ -52,7 +52,7 @@ export function useDataTableState(
 ): DataTableState {
   const {
     defaultSort,
-    defaultPageSize = 25,
+    defaultPageSize = 10,
     syncUrl = true,
     debounceMs = 300,
   } = options;

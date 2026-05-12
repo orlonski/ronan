@@ -177,11 +177,11 @@ export default function LocaisPage() {
       },
       {
         id: "acoes",
-        size: 160,
+        size: 180,
         enableSorting: false,
-        header: () => <span className="text-right">Ações</span>,
+        header: () => <span className="block text-center">Ações</span>,
         cell: ({ row }) => (
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex items-center justify-center gap-2">
             <StatusToggle
               active={row.original.ativo}
               onChange={(next) =>
