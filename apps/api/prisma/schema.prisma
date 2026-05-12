@@ -123,6 +123,7 @@ model Motorista {
   cpf              String    @unique // 11 dígitos (sem máscara) — também é o login
   senhaHash        String
   telefone         String?
+  email            String?
   veiculoDefault   Veiculo?  @relation("VeiculoDefaultMotorista", fields: [veiculoDefaultId], references: [id])
   veiculoDefaultId String?
   ativo            Boolean   @default(true)

@@ -2,7 +2,15 @@
 
 import { useState } from "react";
 import { Pencil, Plus } from "lucide-react";
-import { cpfDigits, formatCpf, isCpfValid } from "@ronan/shared-types";
+import {
+  cpfDigits,
+  formatCpf,
+  formatTelefone,
+  isCpfValid,
+  isTelefoneValid,
+  maskTelefone,
+  telefoneDigits,
+} from "@ronan/shared-types";
 import { StatusToggle } from "@/components/status-toggle";
 import { ExcluirButton } from "@/components/excluir-button";
 import { ConviteWhatsappButton } from "@/components/convite-whatsapp-button";
@@ -20,7 +28,7 @@ import { useCreateResource, useDeleteResource, useResourceList, useUpdateResourc
 
 type Veiculo = { id: string; placa: string; modelo: string | null };
 type Motorista = {
-  id: string; nome: string; cpf: string; telefone: string | null;
+  id: string; nome: string; cpf: string; telefone: string | null; email: string | null;
   ativo: boolean; veiculoDefaultId: string | null;
   veiculoDefault: Veiculo | null;
 };
@@ -28,9 +36,9 @@ const PATH = "/admin/motoristas";
 const VEICULOS_PATH = "/admin/veiculos";
 
 type FormShape = {
-  nome: string; cpf: string; senha: string; telefone: string; veiculoDefaultId: string;
+  nome: string; cpf: string; senha: string; telefone: string; email: string; veiculoDefaultId: string;
 };
-const empty: FormShape = { nome: "", cpf: "", senha: "", telefone: "", veiculoDefaultId: "" };
+const empty: FormShape = { nome: "", cpf: "", senha: "", telefone: "", email: "", veiculoDefaultId: "" };
 
 // Aplica máscara 000.000.000-00 enquanto o usuário digita.
 function maskCpf(input: string): string {
@@ -56,7 +64,9 @@ export default function MotoristasPage() {
     setEditing(m);
     setForm({
       nome: m.nome, cpf: maskCpf(m.cpf), senha: "",
-      telefone: m.telefone ?? "", veiculoDefaultId: m.veiculoDefaultId ?? "",
+      telefone: maskTelefone(m.telefone ?? ""),
+      email: m.email ?? "",
+      veiculoDefaultId: m.veiculoDefaultId ?? "",
     });
   }
 
@@ -67,17 +77,29 @@ export default function MotoristasPage() {
       alert("CPF inválido. Confira os dígitos.");
       return;
     }
+    const telDigitos = telefoneDigits(form.telefone);
+    if (telDigitos && !isTelefoneValid(telDigitos)) {
+      alert("Telefone deve ter 10 ou 11 dígitos (com DDD).");
+      return;
+    }
+    const emailTrim = form.email.trim();
+    if (emailTrim && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
+      alert("Email inválido.");
+      return;
+    }
     if (editing === "new") {
       await create.mutateAsync({
         nome: form.nome, cpf: cpfDigitos, senha: form.senha,
-        telefone: form.telefone || undefined,
+        telefone: telDigitos || undefined,
+        email: emailTrim || undefined,
         veiculoDefaultId: form.veiculoDefaultId || undefined,
       });
     } else if (editing) {
       const body: Record<string, unknown> = {
         nome: form.nome,
         cpf: cpfDigitos,
-        telefone: form.telefone || undefined,
+        telefone: telDigitos || undefined,
+        email: emailTrim || undefined,
         veiculoDefaultId: form.veiculoDefaultId || null,
       };
       if (form.senha) body.novaSenha = form.senha;
@@ -137,7 +159,13 @@ export default function MotoristasPage() {
               {m.telefone && (
                 <span>
                   <span className="text-muted-foreground">Tel: </span>
-                  {m.telefone}
+                  {formatTelefone(m.telefone)}
+                </span>
+              )}
+              {m.email && (
+                <span>
+                  <span className="text-muted-foreground">Email: </span>
+                  {m.email}
                 </span>
               )}
               {m.veiculoDefault && (
@@ -158,18 +186,20 @@ export default function MotoristasPage() {
               <TableHead>Nome</TableHead>
               <TableHead>CPF</TableHead>
               <TableHead>Telefone</TableHead>
+              <TableHead>Email</TableHead>
               <TableHead>Placa default</TableHead>
               <TableHead className="w-24">Status</TableHead>
               <TableHead className="w-32 text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {list.isLoading && <TableRow><TableCell colSpan={6}><LoadingInline /></TableCell></TableRow>}
+            {list.isLoading && <TableRow><TableCell colSpan={7}><LoadingInline /></TableCell></TableRow>}
             {list.data?.map((m) => (
               <TableRow key={m.id}>
                 <TableCell className="font-medium">{m.nome}</TableCell>
                 <TableCell className="font-mono text-xs">{formatCpf(m.cpf)}</TableCell>
-                <TableCell>{m.telefone ?? "—"}</TableCell>
+                <TableCell>{m.telefone ? formatTelefone(m.telefone) : "—"}</TableCell>
+                <TableCell className="text-xs">{m.email ?? "—"}</TableCell>
                 <TableCell className="font-mono text-xs">{m.veiculoDefault?.placa ?? "—"}</TableCell>
                 <TableCell>
                   <StatusToggle
@@ -191,7 +221,7 @@ export default function MotoristasPage() {
               </TableRow>
             ))}
             {list.data?.length === 0 && (
-              <TableRow><TableCell colSpan={6} className="text-muted-foreground">Nenhum motorista cadastrado.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-muted-foreground">Nenhum motorista cadastrado.</TableCell></TableRow>
             )}
           </TableBody>
         </Table>
@@ -221,9 +251,23 @@ export default function MotoristasPage() {
               </div>
               <div className="space-y-2">
                 <Label>Telefone</Label>
-                <Input value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} />
+                <Input
+                  inputMode="tel"
+                  placeholder="(00) 00000-0000"
+                  value={form.telefone}
+                  onChange={(e) => setForm({ ...form, telefone: maskTelefone(e.target.value) })}
+                />
               </div>
               <div className="space-y-2">
+                <Label>Email</Label>
+                <Input
+                  type="email"
+                  placeholder="motorista@email.com"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2 col-span-2">
                 <Label>Placa default</Label>
                 <Select value={form.veiculoDefaultId}
                   onChange={(e) => setForm({ ...form, veiculoDefaultId: e.target.value })}>
