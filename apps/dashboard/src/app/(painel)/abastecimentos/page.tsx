@@ -13,7 +13,7 @@ import {
   ToolbarFilterDateRange,
   ToolbarFilterSelect,
 } from "@/components/data-table";
-import { useDataTableState } from "@/hooks/use-data-table-state";
+import { firstDayOfMonth, useDataTableState } from "@/hooks/use-data-table-state";
 import { useAuthToken, fetchApi, useResourceOptions } from "@/lib/client-api";
 import type { Pagination } from "@/lib/client-api";
 import type { DataTableParams } from "@/hooks/use-data-table-state";
@@ -61,7 +61,10 @@ const TIPO_COLOR: Record<string, string> = {
 
 export default function AbastecimentosPage() {
   const token = useAuthToken();
-  const tableState = useDataTableState({ defaultSort: { field: "data", order: "desc" } });
+  const tableState = useDataTableState({
+    defaultSort: { field: "data", order: "desc" },
+    defaultFilters: { de: firstDayOfMonth() },
+  });
   const motoristas = useResourceOptions<Motorista>("/admin/motoristas");
 
   const url = buildUrl("/admin/abastecimentos", tableState);

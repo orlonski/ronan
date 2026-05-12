@@ -108,7 +108,7 @@ const config: ExpoConfig = {
   },
   extra: {
     apiUrl:
-      process.env.EXPO_PUBLIC_API_URL ?? "https://ronan-api.2azr6q.easypanel.host",
+      process.env.EXPO_PUBLIC_API_URL ?? "https://api.schaba.com.br",
     eas: {
       projectId: "33e8e936-fbac-4bb3-9f98-5de6dc84da53",
     },

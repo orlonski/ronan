@@ -1,7 +1,11 @@
 import { z } from "zod";
 
 export const PAGE_SIZE_DEFAULT = 10;
-export const PAGE_SIZE_MAX = 100;
+/**
+ * 500 acomoda tanto admins que abrem pageSize=100 quanto `useResourceOptions`
+ * carregando opções de FK (motoristas/empresas/obras) num único request.
+ */
+export const PAGE_SIZE_MAX = 500;
 
 /**
  * Schema base de paginação aplicado a listagens administrativas.

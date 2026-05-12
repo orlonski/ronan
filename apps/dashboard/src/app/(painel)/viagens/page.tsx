@@ -13,7 +13,7 @@ import {
   ToolbarFilterDateRange,
   ToolbarFilterSelect,
 } from "@/components/data-table";
-import { useDataTableState } from "@/hooks/use-data-table-state";
+import { firstDayOfMonth, useDataTableState } from "@/hooks/use-data-table-state";
 import { usePaginatedList, useResourceOptions } from "@/lib/client-api";
 import { fmtBR, fmtNum } from "@/lib/fechamento-helpers";
 
@@ -55,7 +55,10 @@ const STATUS_VIAGEM_COLOR: Record<string, string> = {
 };
 
 export default function ViagensPage() {
-  const tableState = useDataTableState({ defaultSort: { field: "data", order: "desc" } });
+  const tableState = useDataTableState({
+    defaultSort: { field: "data", order: "desc" },
+    defaultFilters: { de: firstDayOfMonth() },
+  });
   const list = usePaginatedList<Viagem>("/admin/viagens", tableState);
   const motoristas = useResourceOptions<Motorista>("/admin/motoristas");
   const obras = useResourceOptions<Obra>("/admin/obras");

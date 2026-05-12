@@ -15,6 +15,7 @@ import {
   FileSpreadsheet,
   Fuel,
   HardHat,
+  LayoutDashboard,
   LogOut,
   MapPin,
   MessageCircle,
@@ -42,6 +43,8 @@ type Grupo = {
   // Se admin = true, grupo inteiro só aparece pra admin
   admin?: boolean;
 };
+
+const DASHBOARD_ITEM: Item = { href: "/", label: "Dashboard", icon: LayoutDashboard };
 
 const GRUPOS: Grupo[] = [
   {
@@ -89,41 +92,20 @@ export function Sidebar({
   const { data: session } = useSession();
   const isAdmin = session?.user?.perfil === "ADMIN";
 
-  // Estado dos grupos (colapsado/aberto). Persistido em localStorage pra
-  // lembrar a preferência. Default: Operação e Cadastros abertos, Sistema
-  // fechado (admin acessa raramente).
-  const [grupoAberto, setGrupoAberto] = useState<Record<string, boolean>>(() => {
-    if (typeof window === "undefined") {
-      return { Operação: true, Cadastros: true, Sistema: false };
-    }
-    try {
-      const raw = localStorage.getItem("sidebar.grupos");
-      if (raw) return JSON.parse(raw) as Record<string, boolean>;
-    } catch {
-      /* ignora */
-    }
-    return { Operação: true, Cadastros: true, Sistema: false };
-  });
+  // Accordion: só um grupo aberto por vez. Operação é o default ao abrir
+  // a plataforma. Ao mudar de rota, abre o grupo correspondente.
+  const [grupoAberto, setGrupoAberto] = useState<string>("Operação");
 
   function toggleGrupo(titulo: string) {
-    setGrupoAberto((prev) => {
-      const next = { ...prev, [titulo]: !prev[titulo] };
-      try {
-        localStorage.setItem("sidebar.grupos", JSON.stringify(next));
-      } catch {
-        /* ignora */
-      }
-      return next;
-    });
+    setGrupoAberto((prev) => (prev === titulo ? "" : titulo));
   }
 
-  // Se a rota atual está num grupo fechado, abre o grupo automaticamente
+  // Se a rota atual pertence a outro grupo, abre esse grupo
   useEffect(() => {
     for (const grupo of GRUPOS) {
       if (grupo.itens.some((i) => pathname.startsWith(i.href))) {
-        if (!grupoAberto[grupo.titulo]) {
-          setGrupoAberto((prev) => ({ ...prev, [grupo.titulo]: true }));
-        }
+        if (grupoAberto !== grupo.titulo) setGrupoAberto(grupo.titulo);
+        return;
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -179,8 +161,28 @@ export function Sidebar({
         </div>
 
         <nav className="flex-1 space-y-2 overflow-y-auto">
+          {/* Dashboard fora dos grupos — sempre visível */}
+          {(() => {
+            const Icon = DASHBOARD_ITEM.icon;
+            const active = pathname === DASHBOARD_ITEM.href;
+            return (
+              <Link
+                href={DASHBOARD_ITEM.href as any}
+                className={cn(
+                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                  active
+                    ? "bg-background font-medium shadow-sm"
+                    : "text-muted-foreground hover:bg-background hover:text-foreground",
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                {DASHBOARD_ITEM.label}
+              </Link>
+            );
+          })()}
+
           {GRUPOS.filter((g) => !g.admin || isAdmin).map((grupo) => {
-            const aberto = grupoAberto[grupo.titulo] ?? true;
+            const aberto = grupoAberto === grupo.titulo;
             return (
               <div key={grupo.titulo} className="space-y-1">
                 <button

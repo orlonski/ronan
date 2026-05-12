@@ -33,11 +33,19 @@ export type UseDataTableStateOptions = {
   /** Ordenação padrão quando nada está aplicado. */
   defaultSort?: { field: string; order?: SortOrder };
   defaultPageSize?: number;
+  /** Filtros padrão aplicados quando a URL não tem nenhum filtro. */
+  defaultFilters?: FilterValues;
   /** Sincroniza estado com URL (default: true). */
   syncUrl?: boolean;
   /** Debounce do `q` em ms. Default 300. */
   debounceMs?: number;
 };
+
+/** Primeiro dia do mês atual em formato YYYY-MM-DD (pra usar em filtros de data). */
+export function firstDayOfMonth(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
 
 /**
  * Hook que controla page/pageSize/sort/order/q/filters de uma listagem,
@@ -53,6 +61,7 @@ export function useDataTableState(
   const {
     defaultSort,
     defaultPageSize = 10,
+    defaultFilters,
     syncUrl = true,
     debounceMs = 300,
   } = options;
@@ -69,7 +78,7 @@ export function useDataTableState(
         sort: defaultSort?.field,
         order: (defaultSort?.order ?? "asc") as SortOrder,
         q: undefined as string | undefined,
-        filters: {} as FilterValues,
+        filters: (defaultFilters ?? {}) as FilterValues,
       };
     }
     const params = searchParams;
@@ -77,6 +86,13 @@ export function useDataTableState(
     const filters: FilterValues = {};
     for (const [k, v] of params.entries()) {
       if (!known.has(k) && v) filters[k] = v;
+    }
+    // Se a URL não trouxe nenhum filtro, aplica os defaults
+    const hasUrlFilters = Object.keys(filters).length > 0;
+    if (!hasUrlFilters && defaultFilters) {
+      for (const [k, v] of Object.entries(defaultFilters)) {
+        if (v) filters[k] = v;
+      }
     }
     return {
       page: Number(params.get("page")) || 1,
@@ -149,10 +165,11 @@ export function useDataTableState(
   const reset = React.useCallback(() => {
     setQInput("");
     setQDebounced(undefined);
-    setFiltersState({});
+    setFiltersState(defaultFilters ?? {});
     setSortField(defaultSort?.field);
     setOrderState(defaultSort?.order ?? "asc");
     setPageState(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultSort?.field, defaultSort?.order]);
 
   return {
