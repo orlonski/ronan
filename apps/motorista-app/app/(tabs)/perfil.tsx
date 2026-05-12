@@ -81,11 +81,36 @@ export default function Perfil() {
             <Row dt="Nome" dd={me.data?.nome ?? "—"} />
             <Row dt="CPF" dd={me.data?.cpf ? formatCpf(me.data.cpf) : "—"} mono />
             <Row dt="Telefone" dd={me.data?.telefone ? formatTelefone(me.data.telefone) : "—"} />
-            <Row
-              dt="Placa padrão"
-              dd={me.data?.veiculoDefault?.placa ?? "—"}
-              mono
-            />
+            {me.data?.veiculos && me.data.veiculos.length > 0 ? (
+              <View className="py-1.5">
+                <Text className="text-sm text-muted-foreground">Placas</Text>
+                <View className="mt-1 flex-row flex-wrap gap-1.5">
+                  {me.data.veiculos.map((v) => {
+                    const ehPadrao = v.id === me.data?.veiculoDefaultId;
+                    return (
+                      <View
+                        key={v.id}
+                        className={`rounded px-2 py-0.5 ${
+                          ehPadrao ? "bg-blue-100" : "bg-muted"
+                        }`}
+                      >
+                        <Text
+                          className={`text-sm ${
+                            ehPadrao ? "font-medium text-blue-700" : "text-foreground"
+                          }`}
+                          style={{ fontVariant: ["tabular-nums"] }}
+                        >
+                          {v.placa}
+                          {ehPadrao ? " · padrão" : ""}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : (
+              <Row dt="Placas" dd="—" />
+            )}
           </Card>
 
           {!showChange && (

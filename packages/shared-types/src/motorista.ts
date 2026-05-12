@@ -38,23 +38,45 @@ const EmailOpcionalSchema = z.preprocess(
   z.string().email("Email inválido").optional(),
 );
 
-export const CriarMotoristaInput = z.object({
-  nome: z.string().min(2).max(120),
-  cpf: CpfSchema,
-  senha: z.string().min(6).max(80),
-  telefone: TelefoneOpcionalSchema,
-  email: EmailOpcionalSchema,
-  veiculoDefaultId: z.string().uuid().optional(),
-});
+export const CriarMotoristaInput = z
+  .object({
+    nome: z.string().min(2).max(120),
+    cpf: CpfSchema,
+    senha: z.string().min(6).max(80),
+    telefone: TelefoneOpcionalSchema,
+    email: EmailOpcionalSchema,
+    veiculoIds: z.array(z.string().uuid()).default([]),
+    veiculoDefaultId: z.string().uuid().nullable().optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.veiculoDefaultId && !v.veiculoIds.includes(v.veiculoDefaultId)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["veiculoDefaultId"],
+        message: "Veículo padrão precisa estar na lista de placas vinculadas",
+      });
+    }
+  });
 export type CriarMotoristaInput = z.infer<typeof CriarMotoristaInput>;
 
-export const AtualizarMotoristaInput = z.object({
-  nome: z.string().min(2).max(120).optional(),
-  cpf: CpfSchema.optional(),
-  telefone: TelefoneOpcionalSchema,
-  email: EmailOpcionalSchema,
-  veiculoDefaultId: z.string().uuid().nullable().optional(),
-  ativo: z.boolean().optional(),
-  novaSenha: z.string().min(6).max(80).optional(),
-});
+export const AtualizarMotoristaInput = z
+  .object({
+    nome: z.string().min(2).max(120).optional(),
+    cpf: CpfSchema.optional(),
+    telefone: TelefoneOpcionalSchema,
+    email: EmailOpcionalSchema,
+    veiculoIds: z.array(z.string().uuid()).optional(),
+    veiculoDefaultId: z.string().uuid().nullable().optional(),
+    ativo: z.boolean().optional(),
+    novaSenha: z.string().min(6).max(80).optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.veiculoDefaultId && v.veiculoIds && !v.veiculoIds.includes(v.veiculoDefaultId)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["veiculoDefaultId"],
+        message: "Veículo padrão precisa estar na lista de placas vinculadas",
+      });
+    }
+  });
 export type AtualizarMotoristaInput = z.infer<typeof AtualizarMotoristaInput>;

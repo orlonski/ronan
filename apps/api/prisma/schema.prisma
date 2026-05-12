@@ -136,11 +136,29 @@ model Motorista {
   viagens        Viagem[]
   pedagios       Pedagio[]
   abastecimentos Abastecimento[]
+  veiculos         MotoristaVeiculo[]
   whatsappSessao   WhatsappSessao?
   whatsappConvites WhatsappConvite[]
 
   @@index([ativo])
   @@map("motoristas")
+}
+
+/// Vínculo N:N entre motorista e veículo. Placa é da empresa, pode ser
+/// dirigida por vários motoristas (revezamento) e cada motorista pode
+/// estar atrelado a múltiplas placas. Invariante: todo veículo precisa
+/// de ≥ 1 motorista (aplicada no service, não em SQL).
+model MotoristaVeiculo {
+  motoristaId String
+  veiculoId   String
+  criadoEm    DateTime @default(now())
+
+  motorista Motorista @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  veiculo   Veiculo   @relation(fields: [veiculoId], references: [id], onDelete: Cascade)
+
+  @@id([motoristaId, veiculoId])
+  @@index([veiculoId])
+  @@map("motorista_veiculo")
 }
 
 /// Vincula 1 telefone WhatsApp a 1 motorista OU 1 admin user (mutuamente exclusivo).
@@ -204,6 +222,7 @@ model Veiculo {
   alteradoEm DateTime @updatedAt
 
   motoristasComoDefault Motorista[]     @relation("VeiculoDefaultMotorista")
+  motoristas            MotoristaVeiculo[]
   viagens               Viagem[]
   pedagios              Pedagio[]
   abastecimentos        Abastecimento[]

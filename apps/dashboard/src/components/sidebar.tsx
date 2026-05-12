@@ -14,7 +14,6 @@ import {
   ClipboardCheck,
   FileSpreadsheet,
   Fuel,
-  HardHat,
   LogOut,
   MapPin,
   MessageCircle,
@@ -57,8 +56,7 @@ const GRUPOS: Grupo[] = [
   {
     titulo: "Cadastros",
     itens: [
-      { href: "/motoristas", label: "Motoristas", icon: HardHat },
-      { href: "/frota", label: "Frota", icon: Truck },
+      { href: "/motoristas", label: "Frota & Motoristas", icon: Truck },
       { href: "/empresas", label: "Empresas-cliente", icon: Building2 },
       { href: "/obras", label: "Obras", icon: Boxes },
       { href: "/locais", label: "Locais", icon: MapPin },

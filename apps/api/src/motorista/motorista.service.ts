@@ -5,8 +5,8 @@ import { PrismaService } from "../prisma/prisma.service";
 export class MotoristaService {
   constructor(private readonly prisma: PrismaService) {}
 
-  me(id: string) {
-    return this.prisma.motorista.findUniqueOrThrow({
+  async me(id: string) {
+    const m = await this.prisma.motorista.findUniqueOrThrow({
       where: { id },
       select: {
         id: true,
@@ -15,22 +15,30 @@ export class MotoristaService {
         telefone: true,
         veiculoDefaultId: true,
         veiculoDefault: { select: { id: true, placa: true, modelo: true } },
+        veiculos: {
+          select: { veiculo: { select: { id: true, placa: true, modelo: true } } },
+          orderBy: { veiculo: { placa: "asc" } },
+        },
         ultimoLoginEm: true,
       },
     });
+    const { veiculos, ...rest } = m;
+    return { ...rest, veiculos: veiculos.map((v) => v.veiculo) };
   }
 
   async catalogos(motoristaId: string) {
-    // Motorista vê só a placa que está vinculada como veículo default dele.
-    // Se admin não vinculou nenhuma, mostra a frota inteira como fallback
-    // (motorista escolhe e admin completa o cadastro depois).
-    const motorista = await this.prisma.motorista.findUnique({
-      where: { id: motoristaId },
-      select: { veiculoDefaultId: true },
+    // Motorista vê só as placas vinculadas a ele (relação N:N).
+    // Se não tem nenhuma vinculada, mostra a frota inteira como fallback
+    // (motorista escolhe e admin completa o vínculo depois).
+    const vinculos = await this.prisma.motoristaVeiculo.findMany({
+      where: { motoristaId },
+      select: { veiculoId: true },
     });
-    const veiculosWhere = motorista?.veiculoDefaultId
-      ? { ativo: true, id: motorista.veiculoDefaultId }
-      : { ativo: true };
+    const vinculadosIds = vinculos.map((v) => v.veiculoId);
+    const veiculosWhere =
+      vinculadosIds.length > 0
+        ? { ativo: true, id: { in: vinculadosIds } }
+        : { ativo: true };
 
     const [veiculos, materiais, obras, locais] = await Promise.all([
       this.prisma.veiculo.findMany({
@@ -127,21 +135,18 @@ export class MotoristaService {
       });
     }
     if (tipo === "veiculo") {
-      // Motorista vê só a frota que ele pode usar (default + outros ativos)
-      const motorista = await this.prisma.motorista.findUnique({
-        where: { id: motoristaId },
-        select: { veiculoDefaultId: true },
+      // Motorista vê só a frota vinculada a ele (relação N:N).
+      // Sem vínculo nenhum → fallback pra frota inteira.
+      const vinculos = await this.prisma.motoristaVeiculo.findMany({
+        where: { motoristaId },
+        select: { veiculoId: true },
       });
+      const vinculadosIds = vinculos.map((v) => v.veiculoId);
       const where: Record<string, unknown> = {
         ativo: true,
-        OR: [
-          { placa: like },
-          { modelo: like },
-        ],
+        OR: [{ placa: like }, { modelo: like }],
       };
-      if (motorista?.veiculoDefaultId) {
-        where.id = motorista.veiculoDefaultId;
-      }
+      if (vinculadosIds.length > 0) where.id = { in: vinculadosIds };
       return this.prisma.veiculo.findMany({
         where,
         select: { id: true, placa: true, modelo: true },

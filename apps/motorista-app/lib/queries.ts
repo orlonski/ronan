@@ -47,6 +47,7 @@ export type Me = {
   telefone: string | null;
   veiculoDefaultId: string | null;
   veiculoDefault: Veiculo | null;
+  veiculos: Veiculo[];
   ultimoLoginEm: string | null;
 };
 
