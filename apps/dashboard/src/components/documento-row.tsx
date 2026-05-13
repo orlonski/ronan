@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertCircle, AlertTriangle, CheckCircle2, Circle, Download, Loader2, Trash2, Upload } from "lucide-react";
 import {
   ROTULO_DOCUMENTO_MOTORISTA,
@@ -32,6 +32,13 @@ export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
   const remover = useRemoverDocumento(motoristaId);
   const token = useAuthToken();
 
+  // Buffer local pra evitar mandar PATCH a cada keystroke do <input type="date">.
+  // Só commita no blur, e ressincroniza quando o servidor atualiza doc.validade.
+  const [validadeLocal, setValidadeLocal] = useState(doc?.validade ?? "");
+  useEffect(() => {
+    setValidadeLocal(doc?.validade ?? "");
+  }, [doc?.validade]);
+
   const status = statusDocumento(doc);
 
   async function onPick(ev: React.ChangeEvent<HTMLInputElement>) {
@@ -48,11 +55,12 @@ export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
     }
   }
 
-  async function onValidadeChange(ev: React.ChangeEvent<HTMLInputElement>) {
+  async function onValidadeBlur() {
     if (!doc) return;
-    const v = ev.target.value || null;
+    const atual = doc.validade ?? "";
+    if (validadeLocal === atual) return;
     try {
-      await atualizarValidade.mutateAsync({ tipo, validade: v });
+      await atualizarValidade.mutateAsync({ tipo, validade: validadeLocal || null });
     } catch (err) {
       alert(err instanceof Error ? err.message : "Falha ao atualizar validade");
     }
@@ -101,9 +109,9 @@ export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
                 </span>
                 <Input
                   type="date"
-                  value={doc.validade ?? ""}
-                  onChange={onValidadeChange}
-                  disabled={atualizarValidade.isPending}
+                  value={validadeLocal}
+                  onChange={(e) => setValidadeLocal(e.target.value)}
+                  onBlur={onValidadeBlur}
                   className="h-8 w-[150px] text-xs"
                 />
               </label>
