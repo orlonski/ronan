@@ -16,7 +16,12 @@ import {
   useRemoverDocumento,
   useUploadDocumento,
 } from "@/lib/motorista-documentos-api";
-import { diasParaVencer, statusDocumento, type DocumentoStatus } from "@/lib/documento-status";
+import {
+  diasParaVencer,
+  formatValidadeBR,
+  statusDocumento,
+  type DocumentoStatus,
+} from "@/lib/documento-status";
 
 type Props = {
   motoristaId: string;
@@ -34,9 +39,11 @@ export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
 
   // Buffer local pra evitar mandar PATCH a cada keystroke do <input type="date">.
   // Só commita no blur, e ressincroniza quando o servidor atualiza doc.validade.
-  const [validadeLocal, setValidadeLocal] = useState(doc?.validade ?? "");
+  // slice(0,10) defende contra eventual ISO completo vindo do backend (input
+  // type="date" só aceita YYYY-MM-DD).
+  const [validadeLocal, setValidadeLocal] = useState((doc?.validade ?? "").slice(0, 10));
   useEffect(() => {
-    setValidadeLocal(doc?.validade ?? "");
+    setValidadeLocal((doc?.validade ?? "").slice(0, 10));
   }, [doc?.validade]);
 
   const status = statusDocumento(doc);
@@ -57,7 +64,7 @@ export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
 
   async function onValidadeBlur() {
     if (!doc) return;
-    const atual = doc.validade ?? "";
+    const atual = (doc.validade ?? "").slice(0, 10);
     if (validadeLocal === atual) return;
     try {
       await atualizarValidade.mutateAsync({ tipo, validade: validadeLocal || null });
@@ -177,7 +184,7 @@ function StatusBadge({ status, validade }: { status: DocumentoStatus; validade: 
   }
   if (status === "OK") {
     if (!validade) return <span className="text-xs text-emerald-700">OK</span>;
-    return <span className="text-xs text-emerald-700">Vence {formatBR(validade)}</span>;
+    return <span className="text-xs text-emerald-700">Vence {formatValidadeBR(validade)}</span>;
   }
   if (status === "A_VENCER") {
     const dias = diasParaVencer(validade);
@@ -199,10 +206,4 @@ function formatTamanho(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function formatBR(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  if (!y || !m || !d) return iso;
-  return `${d}/${m}/${y}`;
 }

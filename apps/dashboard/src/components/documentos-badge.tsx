@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAuthToken } from "@/lib/client-api";
 import { baixarZipDocumentos } from "@/lib/motorista-documentos-api";
-import { statusDocumento, type DocumentoStatus } from "@/lib/documento-status";
+import { formatValidadeBR, statusDocumento, type DocumentoStatus } from "@/lib/documento-status";
 
 export type DocumentoResumo = {
   tipo: TipoDocumentoMotorista;
@@ -119,14 +119,8 @@ function StatusLabel({ status, validade }: { status: DocumentoStatus; validade: 
   if (status === "FALTANDO") return <span className="text-muted-foreground">—</span>;
   if (status === "OK") {
     if (!validade) return <span className="text-emerald-700">OK</span>;
-    return <span className="text-emerald-700">{formatBR(validade)}</span>;
+    return <span className="text-emerald-700">{formatValidadeBR(validade)}</span>;
   }
-  if (status === "A_VENCER") return <span className="text-amber-700">{formatBR(validade!)}</span>;
-  return <span className="text-red-700">{formatBR(validade!)}</span>;
-}
-
-function formatBR(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  if (!y || !m || !d) return iso;
-  return `${d}/${m}/${y}`;
+  if (status === "A_VENCER") return <span className="text-amber-700">{formatValidadeBR(validade)}</span>;
+  return <span className="text-red-700">{formatValidadeBR(validade)}</span>;
 }
