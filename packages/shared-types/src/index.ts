@@ -9,6 +9,7 @@ export * from "./local";
 export * from "./obra";
 export * from "./empresa";
 export * from "./motorista";
+export * from "./motorista-documento";
 export * from "./veiculo";
 export * from "./material";
 export * from "./user";

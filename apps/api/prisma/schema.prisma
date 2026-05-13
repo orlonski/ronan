@@ -84,6 +84,21 @@ enum TipoCombustivel {
   ETANOL
 }
 
+/// Tipos fixos de anexo que admin guarda por motorista (CNH, CRLV, seguro,
+/// ASO, EPIs, eSocial, NR, OS, registro do motorista). 1 arquivo por tipo
+/// — reupload substitui o anterior.
+enum TipoDocumentoMotorista {
+  CNH
+  CRLV
+  SEGURO_VEICULO
+  REGISTRO_MOTORISTA
+  ASO
+  EPI
+  ESOCIAL
+  NR
+  OS
+}
+
 /// Tipo de bloco de uma planilha de fechamento. Cada empresa pode ter
 /// blocos de múltiplos tipos configurados (LayoutImportBloco) e cada
 /// FechamentoLinha gerada herda o tipo do bloco que a originou.
@@ -137,11 +152,34 @@ model Motorista {
   pedagios       Pedagio[]
   abastecimentos Abastecimento[]
   veiculos         MotoristaVeiculo[]
+  documentos       MotoristaDocumento[]
   whatsappSessao   WhatsappSessao?
   whatsappConvites WhatsappConvite[]
 
   @@index([ativo])
   @@map("motoristas")
+}
+
+/// Anexo de documento por motorista (CNH, CRLV, seguro, ASO, etc).
+/// 1 registro por (motoristaId, tipo) — substituição apaga o anterior.
+/// `validade` é opcional (alguns docs não têm); status (válido/vencendo/vencido)
+/// é derivado em runtime, não persistido. Arquivos ficam no MinIO sob a key.
+model MotoristaDocumento {
+  id           String                 @id @default(uuid())
+  motoristaId  String
+  motorista    Motorista              @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  tipo         TipoDocumentoMotorista
+  nomeArquivo  String
+  storageKey   String
+  mimetype     String
+  tamanho      Int
+  validade     DateTime?              @db.Date
+  criadoEm     DateTime               @default(now())
+  alteradoEm   DateTime               @updatedAt
+
+  @@unique([motoristaId, tipo])
+  @@index([motoristaId])
+  @@map("motorista_documento")
 }
 
 /// Vínculo N:N entre motorista e veículo. Placa é da empresa, pode ser

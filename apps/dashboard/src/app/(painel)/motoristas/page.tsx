@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Pencil, Plus } from "lucide-react";
+import { Download, Pencil, Plus, Loader2 } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
+  TIPOS_DOCUMENTO_MOTORISTA,
   cpfDigits,
   formatCpf,
   formatTelefone,
@@ -11,10 +12,14 @@ import {
   isTelefoneValid,
   maskTelefone,
   telefoneDigits,
+  type MotoristaDocumentoOutput,
+  type TipoDocumentoMotorista,
 } from "@ronan/shared-types";
 import { StatusToggle } from "@/components/status-toggle";
 import { ExcluirButton } from "@/components/excluir-button";
 import { ConviteWhatsappButton } from "@/components/convite-whatsapp-button";
+import { DocumentoRow } from "@/components/documento-row";
+import { DocumentosBadge } from "@/components/documentos-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -34,9 +39,14 @@ import {
   ToolbarFilterSelect,
 } from "@/components/data-table";
 import { useDataTableState } from "@/hooks/use-data-table-state";
-import { useCreateResource, usePaginatedList, useUpdateResource } from "@/lib/client-api";
+import { useAuthToken, useCreateResource, usePaginatedList, useUpdateResource } from "@/lib/client-api";
+import {
+  baixarZipDocumentos,
+  useDocumentosMotorista,
+} from "@/lib/motorista-documentos-api";
 
 type Veiculo = { id: string; placa: string; modelo: string | null };
+type DocumentoResumo = { tipo: TipoDocumentoMotorista; validade: string | null };
 type Motorista = {
   id: string;
   nome: string;
@@ -47,6 +57,7 @@ type Motorista = {
   veiculoDefaultId: string | null;
   veiculoDefault: Veiculo | null;
   veiculos: Veiculo[];
+  documentos: DocumentoResumo[];
 };
 const PATH = "/admin/motoristas";
 
@@ -257,6 +268,21 @@ export default function MotoristasPage() {
               ))}
             </div>
           ),
+      },
+      {
+        id: "documentos",
+        enableSorting: false,
+        size: 64,
+        header: () => <span className="block text-center">Docs</span>,
+        cell: ({ row }) => (
+          <div className="flex justify-center">
+            <DocumentosBadge
+              motoristaId={row.original.id}
+              motoristaNome={row.original.nome}
+              documentos={row.original.documentos ?? []}
+            />
+          </div>
+        ),
       },
       {
         id: "ativo",
@@ -522,6 +548,14 @@ export default function MotoristasPage() {
               )}
             </div>
 
+            {editing && editing !== "new" ? (
+              <DocumentosSection motoristaId={editing.id} motoristaNome={editing.nome} />
+            ) : (
+              <div className="rounded-md border border-dashed bg-muted/30 px-3 py-3 text-center text-xs text-muted-foreground">
+                Salve o motorista primeiro pra anexar documentos.
+              </div>
+            )}
+
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditing(null)}>
                 Cancelar
@@ -533,6 +567,77 @@ export default function MotoristasPage() {
           </form>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function DocumentosSection({
+  motoristaId,
+  motoristaNome,
+}: {
+  motoristaId: string;
+  motoristaNome: string;
+}) {
+  const { data: docs, isLoading } = useDocumentosMotorista(motoristaId);
+  const token = useAuthToken();
+  const [baixandoZip, setBaixandoZip] = useState(false);
+
+  const porTipo = useMemo(() => {
+    const map = new Map<TipoDocumentoMotorista, MotoristaDocumentoOutput>();
+    for (const d of docs ?? []) map.set(d.tipo, d);
+    return map;
+  }, [docs]);
+
+  const temAlgum = (docs?.length ?? 0) > 0;
+
+  async function onBaixarZip() {
+    if (!token) return;
+    setBaixandoZip(true);
+    try {
+      await baixarZipDocumentos(motoristaId, token, `documentos-${motoristaNome}.zip`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Falha ao baixar zip");
+    } finally {
+      setBaixandoZip(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label>Documentos</Label>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onBaixarZip}
+          disabled={!temAlgum || baixandoZip}
+          title={temAlgum ? "Baixar todos os documentos em zip" : "Nenhum documento anexado"}
+        >
+          {baixandoZip ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Download className="h-3.5 w-3.5" />
+          )}
+          <span className="ml-1">Baixar zip</span>
+        </Button>
+      </div>
+      {isLoading ? (
+        <p className="rounded-md border border-dashed bg-muted/30 px-3 py-4 text-center text-xs text-muted-foreground">
+          Carregando documentos…
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {TIPOS_DOCUMENTO_MOTORISTA.map((tipo) => (
+            <DocumentoRow
+              key={tipo}
+              motoristaId={motoristaId}
+              tipo={tipo}
+              doc={porTipo.get(tipo)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

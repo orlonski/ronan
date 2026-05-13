@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/com
 import { ConfigService } from "@nestjs/config";
 import { Client as MinioClient } from "minio";
 import { randomUUID } from "node:crypto";
+import type { Readable } from "node:stream";
 
 @Injectable()
 export class UploadsService implements OnModuleInit {
@@ -77,6 +78,33 @@ export class UploadsService implements OnModuleInit {
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     });
     return key;
+  }
+
+  async putMotoristaDocumento(
+    buffer: Buffer,
+    mimetype: string,
+    motoristaId: string,
+    tipo: string,
+    nomeOriginal: string,
+  ): Promise<string> {
+    const ext = (nomeOriginal.split(".").pop() ?? "bin").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const key = `documentos/${motoristaId}/${tipo}.${ext || "bin"}`;
+    await this.client.putObject(this.bucket, key, buffer, buffer.length, {
+      "Content-Type": mimetype,
+    });
+    return key;
+  }
+
+  async getObjectStream(key: string): Promise<Readable> {
+    try {
+      return (await this.client.getObject(this.bucket, key)) as Readable;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.toLowerCase().includes("does not exist") || msg.includes("NoSuchKey")) {
+        throw new NotFoundException("Arquivo não disponível no storage");
+      }
+      throw err;
+    }
   }
 
   async getObjectBuffer(key: string): Promise<Buffer> {

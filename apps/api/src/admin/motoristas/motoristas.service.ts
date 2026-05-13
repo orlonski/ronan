@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import type { CriarMotoristaInput, AtualizarMotoristaInput, PlacaInput } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuthService } from "../../auth/auth.service";
+import { UploadsService } from "../../uploads/uploads.service";
 import { paginate, type Paginated, type PaginationQuery } from "../../common/pagination";
 
 type ListMotoristasParams = PaginationQuery & { ativo?: "true" | "false" };
@@ -19,6 +20,19 @@ const SAFE_SELECT = {
     select: { veiculo: { select: { id: true, placa: true, modelo: true, ativo: true } } },
     orderBy: { veiculo: { placa: "asc" } },
   },
+  documentos: {
+    select: {
+      id: true,
+      tipo: true,
+      nomeArquivo: true,
+      mimetype: true,
+      tamanho: true,
+      validade: true,
+      criadoEm: true,
+      alteradoEm: true,
+    },
+    orderBy: { tipo: "asc" },
+  },
   ativo: true,
   ultimoLoginEm: true,
   criadoEm: true,
@@ -28,7 +42,10 @@ type PrismaTx = Parameters<Parameters<PrismaService["$transaction"]>[0]>[0];
 
 @Injectable()
 export class MotoristasService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly uploads: UploadsService,
+  ) {}
 
   async list(params: ListMotoristasParams): Promise<Paginated<ReturnType<typeof this.flatten>>> {
     const where: Prisma.MotoristaWhereInput = {};
@@ -155,7 +172,10 @@ export class MotoristasService {
   async remove(id: string) {
     const atual = await this.prisma.motorista.findUnique({
       where: { id },
-      include: { veiculos: { select: { veiculoId: true } } },
+      include: {
+        veiculos: { select: { veiculoId: true } },
+        documentos: { select: { storageKey: true } },
+      },
     });
     if (!atual) throw new NotFoundException("Motorista não encontrado");
 
@@ -176,10 +196,16 @@ export class MotoristasService {
     }
 
     const veiculoIds = atual.veiculos.map((v) => v.veiculoId);
+    const docKeys = atual.documentos.map((d) => d.storageKey);
     await this.prisma.$transaction(async (tx) => {
       await tx.motorista.delete({ where: { id } });
       await this.limparOrfaosSemHistorico(tx, veiculoIds);
     });
+    // Cascade já apagou os rows de motorista_documento — só sobrou limpar
+    // os objetos no MinIO. Off-transaction: se falhar fica lixo, não bloqueia.
+    for (const key of docKeys) {
+      await this.uploads.removeObject(key);
+    }
     return { ok: true };
   }
 
