@@ -55,7 +55,7 @@ export function EmpresaForm({ initial }: Props) {
   const saving = create.isPending || update.isPending;
 
   return (
-    <Card className="max-w-2xl p-6">
+    <Card className="p-6">
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="space-y-2">
           <Label>Nome</Label>

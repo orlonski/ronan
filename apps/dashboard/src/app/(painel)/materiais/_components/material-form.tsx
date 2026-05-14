@@ -34,7 +34,7 @@ export function MaterialForm({ initial }: Props) {
   const saving = create.isPending || update.isPending;
 
   return (
-    <Card className="max-w-xl p-6">
+    <Card className="p-6">
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="nome">Nome</Label>
