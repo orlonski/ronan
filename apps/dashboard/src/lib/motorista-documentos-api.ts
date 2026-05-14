@@ -82,6 +82,24 @@ export function useRemoverDocumento(motoristaId: string) {
 }
 
 /**
+ * Busca o arquivo autenticado e devolve um object URL pronto pra usar em
+ * <img>/<iframe>. Caller é responsável por chamar URL.revokeObjectURL quando
+ * fechar o preview pra evitar vazar memória.
+ */
+export async function carregarPreviewDocumento(
+  motoristaId: string,
+  tipo: TipoDocumentoMotorista,
+  token: string,
+): Promise<{ url: string; mimetype: string }> {
+  const res = await fetch(`${API_URL}${basePath(motoristaId)}/${tipo}/download`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Falha ao carregar arquivo (${res.status})`);
+  const blob = await res.blob();
+  return { url: URL.createObjectURL(blob), mimetype: blob.type };
+}
+
+/**
  * Download autenticado (fetch + Bearer → Blob → <a download>). Endpoint protegido
  * por @Roles não aceita <a href> direto pq não envia o header Authorization.
  */

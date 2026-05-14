@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, AlertTriangle, CheckCircle2, Circle, Download, Loader2, Trash2, Upload } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, Circle, Download, Eye, Loader2, Trash2, Upload } from "lucide-react";
 import {
   ROTULO_DOCUMENTO_MOTORISTA,
   type MotoristaDocumentoOutput,
@@ -9,6 +9,7 @@ import {
 } from "@ronan/shared-types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PreviewDocumentoModal } from "@/components/preview-documento-modal";
 import { useAuthToken } from "@/lib/client-api";
 import {
   baixarDocumento,
@@ -32,6 +33,7 @@ type Props = {
 export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState(false);
   const upload = useUploadDocumento(motoristaId);
   const atualizarValidade = useAtualizarValidadeDocumento(motoristaId);
   const remover = useRemoverDocumento(motoristaId);
@@ -125,6 +127,12 @@ export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
             )}
             <div className="ml-auto flex gap-1">
               {doc && (
+                <Button type="button" variant="ghost" size="sm" onClick={() => setPreview(true)}>
+                  <Eye className="h-3.5 w-3.5" />
+                  <span className="ml-1">Visualizar</span>
+                </Button>
+              )}
+              {doc && (
                 <Button type="button" variant="ghost" size="sm" onClick={onBaixar}>
                   <Download className="h-3.5 w-3.5" />
                   <span className="ml-1">Baixar</span>
@@ -167,6 +175,15 @@ export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
           </div>
         </div>
       </div>
+      {doc && preview && (
+        <PreviewDocumentoModal
+          open={preview}
+          onClose={() => setPreview(false)}
+          motoristaId={motoristaId}
+          tipo={tipo}
+          doc={doc}
+        />
+      )}
     </div>
   );
 }

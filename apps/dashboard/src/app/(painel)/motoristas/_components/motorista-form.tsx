@@ -1,29 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Download, Loader2, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import {
-  TIPOS_DOCUMENTO_MOTORISTA,
   cpfDigits,
   isCpfValid,
   isTelefoneValid,
   maskTelefone,
   telefoneDigits,
-  type MotoristaDocumentoOutput,
   type TipoDocumentoMotorista,
 } from "@ronan/shared-types";
-import { DocumentoRow } from "@/components/documento-row";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuthToken, useCreateResource, useUpdateResource } from "@/lib/client-api";
-import {
-  baixarZipDocumentos,
-  useDocumentosMotorista,
-} from "@/lib/motorista-documentos-api";
+import { useCreateResource, useUpdateResource } from "@/lib/client-api";
 
 type Veiculo = { id: string; placa: string; modelo: string | null };
 type DocumentoResumo = { tipo: TipoDocumentoMotorista; validade: string | null };
@@ -192,133 +185,125 @@ export function MotoristaForm({ initial }: Props) {
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
-      <div className={initial ? "grid grid-cols-1 gap-6 lg:grid-cols-2" : ""}>
-        <Card className="space-y-4 p-6">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div className="space-y-2 md:col-span-2">
-              <Label>Nome</Label>
-              <Input
-                required
-                autoFocus
-                value={form.nome}
-                onChange={(e) => setForm({ ...form, nome: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>CPF (login)</Label>
-              <Input
-                required
-                inputMode="numeric"
-                placeholder="000.000.000-00"
-                value={form.cpf}
-                onChange={(e) => setForm({ ...form, cpf: maskCpf(e.target.value) })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>{initial ? "Nova senha (opcional)" : "Senha"}</Label>
-              <Input
-                type="password"
-                minLength={initial ? 0 : 6}
-                required={!initial}
-                value={form.senha}
-                onChange={(e) => setForm({ ...form, senha: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Telefone</Label>
-              <Input
-                inputMode="tel"
-                placeholder="(00) 00000-0000"
-                value={form.telefone}
-                onChange={(e) => setForm({ ...form, telefone: maskTelefone(e.target.value) })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input
-                type="email"
-                placeholder="motorista@email.com"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-              />
-            </div>
+      <Card className="space-y-4 p-6">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="space-y-2 md:col-span-2">
+            <Label>Nome</Label>
+            <Input
+              required
+              autoFocus
+              value={form.nome}
+              onChange={(e) => setForm({ ...form, nome: e.target.value })}
+            />
           </div>
-
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>Placas</Label>
-              <Button type="button" variant="outline" size="sm" onClick={addPlaca}>
-                <Plus className="h-3.5 w-3.5" /> Adicionar placa
-              </Button>
-            </div>
-            {form.placas.length === 0 ? (
-              <p className="rounded-md border border-dashed bg-muted/30 px-3 py-4 text-center text-xs text-muted-foreground">
-                Nenhuma placa cadastrada. Clique em &quot;Adicionar placa&quot; pra incluir.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {form.placas.map((p, idx) => {
-                  const placaUpper = p.placa.toUpperCase();
-                  const ehPadrao = placaUpper !== "" && form.placaDefault === placaUpper;
-                  return (
-                    <div
-                      key={idx}
-                      className="flex items-start gap-2 rounded-md border bg-background p-2"
-                    >
-                      <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-2">
-                        <Input
-                          placeholder="ABC1D23"
-                          value={p.placa}
-                          maxLength={8}
-                          onChange={(e) =>
-                            updatePlaca(idx, "placa", e.target.value.toUpperCase())
-                          }
-                          className="font-mono"
-                        />
-                        <Input
-                          placeholder="Modelo (opcional)"
-                          value={p.modelo}
-                          maxLength={80}
-                          onChange={(e) => updatePlaca(idx, "modelo", e.target.value)}
-                        />
-                      </div>
-                      <div className="flex shrink-0 flex-col items-end gap-1">
-                        {form.placas.length > 1 && placaUpper && (
-                          <label className="flex cursor-pointer items-center gap-1 text-xs text-muted-foreground">
-                            <input
-                              type="radio"
-                              name="placa-default"
-                              checked={ehPadrao}
-                              onChange={() => setDefault(placaUpper)}
-                              className="h-3 w-3 accent-blue-600"
-                            />
-                            padrão
-                          </label>
-                        )}
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removePlaca(idx)}
-                          title="Remover placa"
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <Label>CPF (login)</Label>
+            <Input
+              required
+              inputMode="numeric"
+              placeholder="000.000.000-00"
+              value={form.cpf}
+              onChange={(e) => setForm({ ...form, cpf: maskCpf(e.target.value) })}
+            />
           </div>
-        </Card>
+          <div className="space-y-2">
+            <Label>{initial ? "Nova senha (opcional)" : "Senha"}</Label>
+            <Input
+              type="password"
+              minLength={initial ? 0 : 6}
+              required={!initial}
+              value={form.senha}
+              onChange={(e) => setForm({ ...form, senha: e.target.value })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Telefone</Label>
+            <Input
+              inputMode="tel"
+              placeholder="(00) 00000-0000"
+              value={form.telefone}
+              onChange={(e) => setForm({ ...form, telefone: maskTelefone(e.target.value) })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Email</Label>
+            <Input
+              type="email"
+              placeholder="motorista@email.com"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+            />
+          </div>
+        </div>
 
-        {initial && (
-          <Card className="p-6">
-            <DocumentosSection motoristaId={initial.id} motoristaNome={initial.nome} />
-          </Card>
-        )}
-      </div>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label>Placas</Label>
+            <Button type="button" variant="outline" size="sm" onClick={addPlaca}>
+              <Plus className="h-3.5 w-3.5" /> Adicionar placa
+            </Button>
+          </div>
+          {form.placas.length === 0 ? (
+            <p className="rounded-md border border-dashed bg-muted/30 px-3 py-4 text-center text-xs text-muted-foreground">
+              Nenhuma placa cadastrada. Clique em &quot;Adicionar placa&quot; pra incluir.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {form.placas.map((p, idx) => {
+                const placaUpper = p.placa.toUpperCase();
+                const ehPadrao = placaUpper !== "" && form.placaDefault === placaUpper;
+                return (
+                  <div
+                    key={idx}
+                    className="flex items-start gap-2 rounded-md border bg-background p-2"
+                  >
+                    <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-2">
+                      <Input
+                        placeholder="ABC1D23"
+                        value={p.placa}
+                        maxLength={8}
+                        onChange={(e) =>
+                          updatePlaca(idx, "placa", e.target.value.toUpperCase())
+                        }
+                        className="font-mono"
+                      />
+                      <Input
+                        placeholder="Modelo (opcional)"
+                        value={p.modelo}
+                        maxLength={80}
+                        onChange={(e) => updatePlaca(idx, "modelo", e.target.value)}
+                      />
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      {form.placas.length > 1 && placaUpper && (
+                        <label className="flex cursor-pointer items-center gap-1 text-xs text-muted-foreground">
+                          <input
+                            type="radio"
+                            name="placa-default"
+                            checked={ehPadrao}
+                            onChange={() => setDefault(placaUpper)}
+                            className="h-3 w-3 accent-blue-600"
+                          />
+                          padrão
+                        </label>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removePlaca(idx)}
+                        title="Remover placa"
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </Card>
 
       <div className="flex justify-end gap-2">
         <Link href="/motoristas">
@@ -334,73 +319,3 @@ export function MotoristaForm({ initial }: Props) {
   );
 }
 
-function DocumentosSection({
-  motoristaId,
-  motoristaNome,
-}: {
-  motoristaId: string;
-  motoristaNome: string;
-}) {
-  const { data: docs, isLoading } = useDocumentosMotorista(motoristaId);
-  const token = useAuthToken();
-  const [baixandoZip, setBaixandoZip] = useState(false);
-
-  const porTipo = useMemo(() => {
-    const map = new Map<TipoDocumentoMotorista, MotoristaDocumentoOutput>();
-    for (const d of docs ?? []) map.set(d.tipo, d);
-    return map;
-  }, [docs]);
-
-  const temAlgum = (docs?.length ?? 0) > 0;
-
-  async function onBaixarZip() {
-    if (!token) return;
-    setBaixandoZip(true);
-    try {
-      await baixarZipDocumentos(motoristaId, token, `documentos-${motoristaNome}.zip`);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Falha ao baixar zip");
-    } finally {
-      setBaixandoZip(false);
-    }
-  }
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <Label>Documentos</Label>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={onBaixarZip}
-          disabled={!temAlgum || baixandoZip}
-          title={temAlgum ? "Baixar todos os documentos em zip" : "Nenhum documento anexado"}
-        >
-          {baixandoZip ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Download className="h-3.5 w-3.5" />
-          )}
-          <span className="ml-1">Baixar zip</span>
-        </Button>
-      </div>
-      {isLoading ? (
-        <p className="rounded-md border border-dashed bg-muted/30 px-3 py-4 text-center text-xs text-muted-foreground">
-          Carregando documentos…
-        </p>
-      ) : (
-        <div className="space-y-2">
-          {TIPOS_DOCUMENTO_MOTORISTA.map((tipo) => (
-            <DocumentoRow
-              key={tipo}
-              motoristaId={motoristaId}
-              tipo={tipo}
-              doc={porTipo.get(tipo)}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}

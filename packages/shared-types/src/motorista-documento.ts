@@ -1,15 +1,21 @@
 import { z } from "zod";
 
+// Ordem dos tipos = ordem alfabética pelo rótulo em PT-BR. A UI itera essa
+// lista pra montar a tela de documentos, então mudar ordem aqui já reordena
+// no dashboard sem precisar de sort em cada lugar.
 export const TIPOS_DOCUMENTO_MOTORISTA = [
-  "CNH",
-  "CRLV",
-  "SEGURO_VEICULO",
-  "REGISTRO_MOTORISTA",
   "ASO",
+  "CNH",
+  "COMODATO",
+  "CRLV",
   "EPI",
   "ESOCIAL",
+  "LAUDO_TECNICO",
   "NR",
   "OS",
+  "PLANO_MANUTENCAO",
+  "REGISTRO_MOTORISTA",
+  "SEGURO_VEICULO",
 ] as const;
 
 export type TipoDocumentoMotorista = (typeof TIPOS_DOCUMENTO_MOTORISTA)[number];
@@ -17,15 +23,18 @@ export type TipoDocumentoMotorista = (typeof TIPOS_DOCUMENTO_MOTORISTA)[number];
 export const TipoDocumentoMotoristaSchema = z.enum(TIPOS_DOCUMENTO_MOTORISTA);
 
 export const ROTULO_DOCUMENTO_MOTORISTA: Record<TipoDocumentoMotorista, string> = {
-  CNH: "CNH",
-  CRLV: "Documento do veículo",
-  SEGURO_VEICULO: "Seguro do veículo",
-  REGISTRO_MOTORISTA: "Registro do motorista",
   ASO: "ASO",
+  CNH: "CNH",
+  COMODATO: "Comodato",
+  CRLV: "Documento do veículo",
   EPI: "EPI's",
   ESOCIAL: "eSocial",
+  LAUDO_TECNICO: "Laudo técnico",
   NR: "NR",
   OS: "OS",
+  PLANO_MANUTENCAO: "Plano de manutenção",
+  REGISTRO_MOTORISTA: "Registro do motorista",
+  SEGURO_VEICULO: "Seguro do veículo",
 };
 
 export const MotoristaDocumentoOutput = z.object({

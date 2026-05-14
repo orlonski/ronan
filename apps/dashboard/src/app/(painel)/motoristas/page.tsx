@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { Pencil, Plus } from "lucide-react";
+import { FileText, Pencil, Plus } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   formatCpf,
@@ -13,6 +13,7 @@ import { StatusToggle } from "@/components/status-toggle";
 import { ExcluirButton } from "@/components/excluir-button";
 import { ConviteWhatsappButton } from "@/components/convite-whatsapp-button";
 import { DocumentosBadge } from "@/components/documentos-badge";
+import { DocumentosDrawerButton } from "@/components/documentos-drawer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -136,11 +137,21 @@ export default function MotoristasPage() {
       },
       {
         id: "acoes",
-        size: 140,
+        size: 180,
         enableSorting: false,
         header: () => <span className="block text-center">Ações</span>,
         cell: ({ row }) => (
           <div className="flex justify-center">
+            <DocumentosDrawerButton
+              motoristaId={row.original.id}
+              motoristaNome={row.original.nome}
+            >
+              {(open) => (
+                <Button variant="ghost" size="icon" title="Documentos" onClick={open}>
+                  <FileText className="h-4 w-4" />
+                </Button>
+              )}
+            </DocumentosDrawerButton>
             <Link href={`/motoristas/${row.original.id}`}>
               <Button variant="ghost" size="icon" title="Editar">
                 <Pencil className="h-4 w-4" />
@@ -214,6 +225,13 @@ export default function MotoristasPage() {
                   size="sm"
                   label
                 />
+                <DocumentosDrawerButton motoristaId={m.id} motoristaNome={m.nome}>
+                  {(open) => (
+                    <Button variant="ghost" size="icon" title="Documentos" onClick={open}>
+                      <FileText className="h-4 w-4" />
+                    </Button>
+                  )}
+                </DocumentosDrawerButton>
                 <Link href={`/motoristas/${m.id}`}>
                   <Button variant="ghost" size="icon" title="Editar">
                     <Pencil className="h-4 w-4" />

@@ -105,8 +105,8 @@ enum FonteEvidencia {
 }
 
 /// Tipos fixos de anexo que admin guarda por motorista (CNH, CRLV, seguro,
-/// ASO, EPIs, eSocial, NR, OS, registro do motorista). 1 arquivo por tipo
-/// — reupload substitui o anterior.
+/// ASO, EPIs, eSocial, NR, OS, registro, comodato, laudo, plano de
+/// manutenção). 1 arquivo por tipo — reupload substitui o anterior.
 enum TipoDocumentoMotorista {
   CNH
   CRLV
@@ -117,6 +117,9 @@ enum TipoDocumentoMotorista {
   ESOCIAL
   NR
   OS
+  COMODATO
+  LAUDO_TECNICO
+  PLANO_MANUTENCAO
 }
 
 /// Tipo de bloco de uma planilha de fechamento. Cada empresa pode ter
