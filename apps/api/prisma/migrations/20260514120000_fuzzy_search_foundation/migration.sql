@@ -1,29 +1,33 @@
--- Fundação pra fuzzy search: trigram + unaccent + distância geo.
+-- Fundação pra fuzzy search: trigram + distância geo.
 -- Habilita similaridade textual tolerante a typo/acento e distância em km
 -- pra usar no ranking da tool buscar_catalogo (agente WhatsApp).
 --
--- IMPORTANTE: extensions (unaccent, pg_trgm, cube, earthdistance) precisam
--- ser criadas previamente como superuser do banco — em Postgres 17 do
--- Easypanel o user `ronan` da app não tem privilégio pra `CREATE EXTENSION`
--- mesmo com IF NOT EXISTS. Rodar via psql como `postgres`:
+-- IMPORTANTE: extensions (pg_trgm, cube, earthdistance) precisam ser criadas
+-- previamente como superuser do banco — em Postgres 17 do Easypanel o user
+-- `ronan` da app não tem privilégio pra `CREATE EXTENSION` mesmo com
+-- IF NOT EXISTS. Rodar via psql como `postgres`:
 --
 --   \c ronan
---   CREATE EXTENSION IF NOT EXISTS unaccent;
 --   CREATE EXTENSION IF NOT EXISTS pg_trgm;
 --   CREATE EXTENSION IF NOT EXISTS cube;
 --   CREATE EXTENSION IF NOT EXISTS earthdistance;
---   -- PG 15+: funções de extension não dão EXECUTE pra outros users por default.
---   -- f_normalizar abaixo é IMMUTABLE e o Postgres INLINEIA unaccent — o user da
---   -- app precisa EXECUTE pra o parse passar. Sem isso quebra com 42883
---   -- "function unaccent(text) does not exist" durante inlining.
---   GRANT EXECUTE ON FUNCTION public.unaccent(text) TO ronan;
---   GRANT EXECUTE ON FUNCTION public.unaccent(regdictionary, text) TO ronan;
+--
+-- A normalização de acentos NÃO usa a extension `unaccent` — em PG 15+ as
+-- funções de extension não recebem EXECUTE pra outros users por default,
+-- e a inline da `unaccent` durante o parse de `f_normalizar` IMMUTABLE
+-- quebra com 42883 "function unaccent(text) does not exist". Em vez disso
+-- usa `translate()` builtin com mapping ASCII dos acentos PT-BR — funciona
+-- em qualquer Postgres, IMMUTABLE de verdade, sem extension, sem privilege.
 
 -- Normaliza texto pra comparação fuzzy: minúsculas + sem acento + sem nulls.
 -- IMMUTABLE é obrigatório pra usar em índice expression.
 CREATE OR REPLACE FUNCTION f_normalizar(t text) RETURNS text
 LANGUAGE sql IMMUTABLE PARALLEL SAFE STRICT AS $$
-  SELECT lower(unaccent(coalesce(t, '')))
+  SELECT lower(translate(
+    coalesce(t, ''),
+    'ÁÀÂÃÄÅáàâãäåÉÈÊËéèêëÍÌÎÏíìîïÓÒÔÕÖóòôõöÚÙÛÜúùûüÇçÑñÝý',
+    'AAAAAAaaaaaaEEEEeeeeIIIIiiiiOOOOOoooooUUUUuuuuCcNnYy'
+  ))
 $$;
 
 CREATE INDEX IF NOT EXISTS locais_nome_trgm_idx       ON locais    USING gin (f_normalizar(nome) gin_trgm_ops);
