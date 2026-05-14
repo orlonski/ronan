@@ -204,7 +204,24 @@ export async function executarTool(
   ctx: ToolContext,
 ): Promise<unknown> {
   log.log(`tool=${nome} input=${JSON.stringify(input).slice(0, 200)}`);
+  try {
+    return await executarToolInterno(nome, input, ctx);
+  } catch (e) {
+    // Anexa o nome da tool no erro pra subir até o catch do WhatsappService
+    // e cair no error_logs com origem ("agente:tool:nome_da_tool").
+    const err = e instanceof Error ? e : new Error(String(e));
+    (err as { toolName?: string }).toolName = nome;
+    log.error(`tool=${nome} falhou: ${err.message}`);
+    if (err.stack) log.error(err.stack);
+    throw err;
+  }
+}
 
+async function executarToolInterno(
+  nome: string,
+  input: Record<string, unknown>,
+  ctx: ToolContext,
+): Promise<unknown> {
   switch (nome) {
     case "quem_sou_eu":
       return ctx.identidade.tipo === "MOTORISTA"

@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { ErrorsService } from "../errors/errors.service";
 import { AgenteService } from "./agente/agente.service";
 import { EvolutionClientService } from "./evolution-client.service";
 import { SessaoService } from "./sessao.service";
@@ -25,7 +26,51 @@ export class WhatsappService {
     private readonly convite: ConviteService,
     private readonly agente: AgenteService,
     private readonly transcricao: TranscricaoService,
+    private readonly errors: ErrorsService,
   ) {}
+
+  /**
+   * Reporta erro de fluxo WhatsApp pro error_logs (aparece em /admin/errors) +
+   * stack barulhento no console (Easypanel logs). Nunca lança — falha do
+   * reportar é só warn no logger.
+   */
+  private async reportarErro(
+    e: unknown,
+    contexto: {
+      fase: string;
+      telefone?: string;
+      identidadeNome?: string | null;
+      conteudoEntrada?: string;
+      tipoMidia?: string;
+      toolName?: string;
+    },
+  ): Promise<void> {
+    const err = e instanceof Error ? e : new Error(String(e));
+    const msg = err.message || "erro sem mensagem";
+    // STDOUT barulhento — facilita grep no Easypanel
+    this.log.error(
+      `[whatsapp:erro] fase=${contexto.fase} ${contexto.toolName ? `tool=${contexto.toolName} ` : ""}telefone=${contexto.telefone ?? "?"} msg=${msg}`,
+    );
+    if (err.stack) this.log.error(err.stack);
+    try {
+      await this.errors.reportar({
+        origem: "api",
+        message: `[whatsapp:${contexto.fase}] ${msg}`,
+        stack: err.stack,
+        extra: {
+          canal: "whatsapp",
+          fase: contexto.fase,
+          telefone: contexto.telefone ?? null,
+          identidadeNome: contexto.identidadeNome ?? null,
+          conteudoEntrada: contexto.conteudoEntrada?.slice(0, 500) ?? null,
+          tipoMidia: contexto.tipoMidia ?? null,
+          toolName: contexto.toolName ?? null,
+        },
+      });
+    } catch (logErr) {
+      this.log.warn(`Falhou ao registrar erro no error_logs: ${(logErr as Error).message}`);
+    }
+  }
 
   /**
    * Processa um evento de mensagem recebida do Evolution.
@@ -50,96 +95,143 @@ export class WhatsappService {
 
     if (!texto && tipo === "TEXTO") return; // mensagem vazia/desconhecida
 
-    // Resolve identidade
-    const identidade = await this.sessao.resolverPorTelefone(telefone);
-
+    // Estado capturado pra contexto de erro — preenchido conforme avança no fluxo
     const evolutionMessageId = data.key?.id ?? null;
-
-    // Áudio: transcreve via Whisper antes de logar — assim conteudo persiste
-    // já com o texto entendido, sem retranscrever pra montar histórico depois.
-    // Só transcreve pra telefone vinculado (poupa custo de DESCONHECIDO).
+    let identidade: Awaited<ReturnType<SessaoService["resolverPorTelefone"]>> | null = null;
     let textoEntrada = texto ?? "";
-    let metadataTranscricao: Record<string, unknown> | null = null;
-    if (tipo === "AUDIO" && identidade.tipo !== "DESCONHECIDO") {
-      const r = await this.transcricao.transcrever({ key: data.key, message: data.message });
-      textoEntrada = r.texto;
-      metadataTranscricao = {
-        origem: "audio_transcrito",
-        modelo: r.modelo,
-        erro: r.erro ?? null,
-      };
-    }
+    let faseAtual = "extracao";
 
-    // Loga entrada
-    await this.prisma.whatsappMensagem.create({
-      data: {
-        sessaoId: identidade.sessaoId,
-        telefone,
-        direcao: "ENTRADA",
-        conteudo: textoEntrada,
-        tipo,
-        metadata: {
-          evolutionMsgId: evolutionMessageId,
-          pushName: data.pushName ?? null,
-          ...(metadataTranscricao ?? {}),
-        },
-      },
-    });
-
-    // Telefone desconhecido → fluxo de vinculação
-    if (identidade.tipo === "DESCONHECIDO") {
-      await this.tratarDesconhecido(telefone, textoEntrada, tipo);
-      return;
-    }
-
-    // Telefone vinculado → marca atividade
-    await this.sessao.marcarMensagemRecebida(identidade.sessaoId);
-
-    // Áudio sem transcrição (chave faltando, falha, alucinação) → avisa o
-    // motorista em vez de mandar string vazia pro agente.
-    if (tipo === "AUDIO" && !textoEntrada.trim()) {
-      await this.enviarTexto(
-        telefone,
-        "Não consegui entender o áudio. Tenta mandar de novo (falando mais perto) ou escreve por favor.",
-        identidade.sessaoId,
-      );
-      return;
-    }
-
-    // Atalhos rápidos (não gasta token IA)
-    const txt = textoEntrada.trim().toLowerCase();
-    if (txt === "ping") {
-      await this.enviarTexto(telefone, "pong 🏓", identidade.sessaoId);
-      return;
-    }
-    if (txt === "sair" || txt === "desvincular") {
-      await this.sessao.desvincular(identidade.sessaoId);
-      await this.enviarTexto(
-        telefone,
-        "Pronto, você foi desvinculado(a). Pra voltar, peça outro código de convite ao admin.",
-      );
-      return;
-    }
-
-    // Tudo o resto vai pro agente IA
     try {
-      const resposta = await this.agente.processar(identidade, textoEntrada, {
-        evolutionMessageId: evolutionMessageId ?? undefined,
-        tipoMidia: tipo === "IMAGEM" ? "imagem" : tipo === "AUDIO" ? "audio" : undefined,
-        // Payload bruto da mensagem (key + message) — necessário pra baixar mídia
-        // sem depender de DATABASE_SAVE_DATA_NEW_MESSAGE no Evolution
-        evolutionPayload: tipo === "IMAGEM" || tipo === "AUDIO"
-          ? { key: data.key, message: data.message }
-          : undefined,
+      faseAtual = "sessao";
+      identidade = await this.sessao.resolverPorTelefone(telefone);
+
+      // Áudio: transcreve via Whisper antes de logar — assim conteudo persiste
+      // já com o texto entendido, sem retranscrever pra montar histórico depois.
+      // Só transcreve pra telefone vinculado (poupa custo de DESCONHECIDO).
+      let metadataTranscricao: Record<string, unknown> | null = null;
+      if (tipo === "AUDIO" && identidade.tipo !== "DESCONHECIDO") {
+        faseAtual = "transcricao";
+        const r = await this.transcricao.transcrever({ key: data.key, message: data.message });
+        textoEntrada = r.texto;
+        metadataTranscricao = {
+          origem: "audio_transcrito",
+          modelo: r.modelo,
+          erro: r.erro ?? null,
+        };
+        // Se Whisper falhou (HTTP, key ausente, etc), reporta — mas NÃO crash:
+        // ainda mandamos resposta amigável abaixo.
+        if (r.erro && r.erro !== "Áudio sem fala (silêncio/ruído)") {
+          await this.reportarErro(new Error(`Transcrição falhou: ${r.erro}`), {
+            fase: "transcricao",
+            telefone,
+            identidadeNome: nomeDeIdentidade(identidade),
+            tipoMidia: "audio",
+          });
+        }
+      }
+
+      faseAtual = "log_entrada";
+      await this.prisma.whatsappMensagem.create({
+        data: {
+          sessaoId: identidade.sessaoId,
+          telefone,
+          direcao: "ENTRADA",
+          conteudo: textoEntrada,
+          tipo,
+          metadata: {
+            evolutionMsgId: evolutionMessageId,
+            pushName: data.pushName ?? null,
+            ...(metadataTranscricao ?? {}),
+          },
+        },
       });
-      await this.enviarTexto(telefone, resposta, identidade.sessaoId);
+
+      // Telefone desconhecido → fluxo de vinculação
+      if (identidade.tipo === "DESCONHECIDO") {
+        faseAtual = "vinculacao";
+        await this.tratarDesconhecido(telefone, textoEntrada, tipo);
+        return;
+      }
+
+      // Telefone vinculado → marca atividade
+      await this.sessao.marcarMensagemRecebida(identidade.sessaoId);
+
+      // Áudio sem transcrição (chave faltando, falha, alucinação) → avisa o
+      // motorista em vez de mandar string vazia pro agente.
+      if (tipo === "AUDIO" && !textoEntrada.trim()) {
+        await this.enviarTexto(
+          telefone,
+          "Não consegui entender o áudio. Tenta mandar de novo (falando mais perto) ou escreve por favor.",
+          identidade.sessaoId,
+        );
+        return;
+      }
+
+      // Atalhos rápidos (não gasta token IA)
+      const txt = textoEntrada.trim().toLowerCase();
+      if (txt === "ping") {
+        await this.enviarTexto(telefone, "pong 🏓", identidade.sessaoId);
+        return;
+      }
+      if (txt === "sair" || txt === "desvincular") {
+        await this.sessao.desvincular(identidade.sessaoId);
+        await this.enviarTexto(
+          telefone,
+          "Pronto, você foi desvinculado(a). Pra voltar, peça outro código de convite ao admin.",
+        );
+        return;
+      }
+
+      // Tudo o resto vai pro agente IA
+      faseAtual = "agente";
+      const sessaoId = identidade.sessaoId;
+      try {
+        const resposta = await this.agente.processar(identidade, textoEntrada, {
+          evolutionMessageId: evolutionMessageId ?? undefined,
+          tipoMidia: tipo === "IMAGEM" ? "imagem" : tipo === "AUDIO" ? "audio" : undefined,
+          // Payload bruto da mensagem (key + message) — necessário pra baixar mídia
+          // sem depender de DATABASE_SAVE_DATA_NEW_MESSAGE no Evolution
+          evolutionPayload: tipo === "IMAGEM" || tipo === "AUDIO"
+            ? { key: data.key, message: data.message }
+            : undefined,
+        });
+        await this.enviarTexto(telefone, resposta, sessaoId);
+      } catch (e) {
+        const toolName = (e as { toolName?: string }).toolName;
+        await this.reportarErro(e, {
+          fase: toolName ? `agente:tool:${toolName}` : "agente",
+          telefone,
+          identidadeNome: nomeDeIdentidade(identidade),
+          conteudoEntrada: textoEntrada,
+          tipoMidia: tipo === "IMAGEM" ? "imagem" : tipo === "AUDIO" ? "audio" : undefined,
+          toolName,
+        });
+        await this.enviarTexto(
+          telefone,
+          "Tive um problema processando sua mensagem. Tenta de novo, ou manda 'ajuda'.",
+          sessaoId,
+        );
+      }
     } catch (e) {
-      this.log.error(`Agente falhou: ${(e as Error).message}`);
-      await this.enviarTexto(
+      // Catch-all: erros fora do bloco do agente (extração, sessão,
+      // transcrição, log_entrada, vinculação). Tudo registra em error_logs.
+      await this.reportarErro(e, {
+        fase: faseAtual,
         telefone,
-        "Tive um problema processando sua mensagem. Tenta de novo, ou manda 'ajuda'.",
-        identidade.sessaoId,
-      );
+        identidadeNome: identidade ? nomeDeIdentidade(identidade) : null,
+        conteudoEntrada: textoEntrada,
+        tipoMidia: tipo === "IMAGEM" ? "imagem" : tipo === "AUDIO" ? "audio" : undefined,
+      });
+      // Tenta mandar fallback amigável se sabemos o telefone — não bloqueia se falhar.
+      try {
+        await this.enviarTexto(
+          telefone,
+          "Tive um problema interno aqui. O admin já foi avisado — tenta de novo em alguns minutos.",
+          identidade?.sessaoId ?? null,
+        );
+      } catch {
+        /* swallow — não dá pra fazer mais nada */
+      }
     }
   }
 
@@ -207,6 +299,17 @@ export class WhatsappService {
       take: limit,
     });
   }
+}
+
+function nomeDeIdentidade(
+  identidade: { tipo: "MOTORISTA"; nome: string }
+    | { tipo: "ADMIN"; nome: string }
+    | { tipo: "DESCONHECIDO" }
+    | null,
+): string | null {
+  if (!identidade) return null;
+  if (identidade.tipo === "DESCONHECIDO") return null;
+  return identidade.nome;
 }
 
 function extrairConteudo(data: any): { texto: string | null; tipo: MensagemTipo } {
