@@ -12,6 +12,12 @@
 --   CREATE EXTENSION IF NOT EXISTS pg_trgm;
 --   CREATE EXTENSION IF NOT EXISTS cube;
 --   CREATE EXTENSION IF NOT EXISTS earthdistance;
+--   -- PG 15+: funções de extension não dão EXECUTE pra outros users por default.
+--   -- f_normalizar abaixo é IMMUTABLE e o Postgres INLINEIA unaccent — o user da
+--   -- app precisa EXECUTE pra o parse passar. Sem isso quebra com 42883
+--   -- "function unaccent(text) does not exist" durante inlining.
+--   GRANT EXECUTE ON FUNCTION public.unaccent(text) TO ronan;
+--   GRANT EXECUTE ON FUNCTION public.unaccent(regdictionary, text) TO ronan;
 
 -- Normaliza texto pra comparação fuzzy: minúsculas + sem acento + sem nulls.
 -- IMMUTABLE é obrigatório pra usar em índice expression.
