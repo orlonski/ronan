@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import { API_URL } from "./api-url";
 import { clearTokens, loadTokens, saveTokens, type Tokens } from "./auth";
 import { setAuthState } from "./auth-state";
+import { humanizeZodIssues, type ZodIssueLite } from "./validation";
 
 export class ApiError extends Error {
   constructor(public status: number, public body: unknown) {
@@ -10,59 +11,6 @@ export class ApiError extends Error {
         ? String((body as { message: unknown }).message)
         : `API ${status}`,
     );
-  }
-}
-
-type ZodIssue = { path: string; code: string; message: string };
-
-const FIELD_LABELS: Record<string, string> = {
-  nome: "Nome",
-  logradouro: "Endereço",
-  numero: "Número",
-  bairro: "Bairro",
-  cidade: "Cidade",
-  uf: "Estado",
-  cep: "CEP",
-  pontoReferencia: "Ponto de referência",
-  tipo: "Tipo",
-  obraId: "Obra",
-  veiculoId: "Placa",
-  obraId_viagem: "Obra",
-  materialId: "Material",
-  data: "Data",
-  toneladas: "Toneladas",
-  ticket: "Ticket",
-  km: "Km",
-  localCargaId: "Local de carga",
-  localDescargaId: "Local de descarga",
-  valorPedagioTotal: "Pedágio",
-  pracaPedagio: "Praça de pedágio",
-  valor: "Valor",
-  lat: "Latitude",
-  lng: "Longitude",
-  observacao: "Observação",
-};
-
-function labelDoCampo(path: string): string {
-  return FIELD_LABELS[path] ?? path;
-}
-
-function frasePorCodigo(code: string, message: string): string {
-  switch (code) {
-    case "too_small":
-      return "muito curto";
-    case "too_big":
-      return "muito longo";
-    case "invalid_string":
-    case "invalid_format":
-      return "formato inválido";
-    case "invalid_type":
-      return "obrigatório";
-    case "invalid_enum_value":
-      return "valor inválido";
-    default:
-      // Fallback: usa a message do Zod se for curta, senao genérico
-      return message.length < 60 ? message : "inválido";
   }
 }
 
@@ -76,14 +24,9 @@ export function humanizeApiError(err: unknown): string {
     return (err as Error)?.message ?? "Erro inesperado.";
   }
   if (err.status === 400 && err.body && typeof err.body === "object") {
-    const body = err.body as { issues?: ZodIssue[] };
+    const body = err.body as { issues?: ZodIssueLite[] };
     if (Array.isArray(body.issues) && body.issues.length > 0) {
-      const linhas = body.issues.map((i) => {
-        const label = labelDoCampo(i.path);
-        const frase = frasePorCodigo(i.code, i.message);
-        return `${label}: ${frase}`;
-      });
-      return linhas.join("\n");
+      return humanizeZodIssues(body.issues);
     }
   }
   if (err.status === 401) return "Sessão expirou. Entre de novo.";

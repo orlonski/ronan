@@ -13,8 +13,25 @@ import {
   type PendingAbastecimento,
   type PendingPedagio,
   type PendingViagem,
+  type ZodIssueSaved,
 } from "@/db/database";
-import { api, ApiError } from "./api";
+import { api, ApiError, humanizeApiError } from "./api";
+
+type ApiErrorBody = { issues?: ZodIssueSaved[] };
+
+function extractErrorDetails(err: unknown): {
+  msg: string;
+  status?: number;
+  issues?: ZodIssueSaved[];
+} {
+  const msg = humanizeApiError(err);
+  if (err instanceof ApiError) {
+    const body = err.body as ApiErrorBody | null;
+    const issues = Array.isArray(body?.issues) ? body!.issues : undefined;
+    return { msg, status: err.status, issues };
+  }
+  return { msg };
+}
 
 const MAX_ATTEMPTS = 8;
 
@@ -54,6 +71,104 @@ function notify(): void {
 export async function descartarViagemPendente(clientId: string): Promise<void> {
   await deletePendingViagem(clientId);
   notify();
+}
+
+/**
+ * Substitui payload/foto de uma viagem pendente existente (mesma clientId).
+ * Usado quando o motorista edita uma viagem que ficou travada com erro.
+ * Reseta attempts e status pra disparar nova tentativa imediata.
+ *
+ * Se a viagem sumiu (drain bem-sucedido entre abrir o form e salvar),
+ * retorna { removed: true } pra UI poder avisar o motorista.
+ */
+export async function atualizarViagemPendente(input: {
+  clientId: string;
+  payload: Record<string, unknown>;
+  foto?: { uri: string; mime: string };
+}): Promise<{ removed: boolean }> {
+  const list = await listPendingViagens();
+  const existing = list.find((x) => x.clientId === input.clientId);
+  if (!existing) return { removed: true };
+
+  // Foto: se motorista mandou nova, usa nova; se não mandou, mantém o que tinha.
+  const fotoUri = input.foto?.uri ?? existing.fotoUri;
+  const fotoMime = input.foto?.mime ?? existing.fotoMime;
+
+  await upsertPendingViagem({
+    clientId: existing.clientId,
+    payload: input.payload,
+    fotoUri,
+    fotoMime,
+    status: "pending",
+    attempts: 0,
+    createdAt: existing.createdAt,
+    lastTriedAt: undefined,
+    errorMsg: undefined,
+    errorStatus: undefined,
+    errorIssues: undefined,
+  });
+  notify();
+  void drain();
+  return { removed: false };
+}
+
+/**
+ * Reseta o estado de erro de uma viagem pendente e dispara nova
+ * tentativa de sync. Usa quando o motorista quer tentar de novo
+ * após erro 4xx permanente (que parou os retries automáticos).
+ */
+export async function tentarNovamenteViagemPendente(
+  clientId: string,
+): Promise<void> {
+  const list = await listPendingViagens();
+  const item = list.find((x) => x.clientId === clientId);
+  if (!item) return;
+  await upsertPendingViagem({
+    ...item,
+    status: "pending",
+    attempts: 0,
+    errorMsg: undefined,
+    errorStatus: undefined,
+    errorIssues: undefined,
+  });
+  notify();
+  void drain();
+}
+
+export async function tentarNovamentePedagioPendente(
+  clientId: string,
+): Promise<void> {
+  const list = await listPendingPedagios();
+  const item = list.find((x) => x.clientId === clientId);
+  if (!item) return;
+  await upsertPendingPedagio({
+    ...item,
+    status: "pending",
+    attempts: 0,
+    errorMsg: undefined,
+    errorStatus: undefined,
+    errorIssues: undefined,
+  });
+  notify();
+  void drain();
+}
+
+export async function tentarNovamenteAbastecimentoPendente(
+  clientId: string,
+): Promise<void> {
+  const list = await listPendingAbastecimentos();
+  const item = list.find((x) => x.clientId === clientId);
+  if (!item) return;
+  await upsertPendingAbastecimento({
+    ...item,
+    status: "pending",
+    attempts: 0,
+    errorMsg: undefined,
+    errorStatus: undefined,
+    errorIssues: undefined,
+  });
+  notify();
+  void drain();
 }
 
 export async function enqueueViagem(
@@ -190,10 +305,13 @@ async function processViagem(item: PendingViagem): Promise<void> {
     await deletePendingViagem(item.clientId);
   } catch (err) {
     const permanente = isErroPermanente(err);
+    const { msg, status, issues } = extractErrorDetails(err);
     await upsertPendingViagem({
       ...item,
       status: "error",
-      errorMsg: (err as Error).message ?? String(err),
+      errorMsg: msg,
+      errorStatus: status,
+      errorIssues: issues,
       // Erro permanente (4xx) marca como max attempts pra parar de tentar.
       attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
     });
@@ -220,10 +338,13 @@ async function processPedagio(item: PendingPedagio): Promise<void> {
     await deletePendingPedagio(item.clientId);
   } catch (err) {
     const permanente = isErroPermanente(err);
+    const { msg, status, issues } = extractErrorDetails(err);
     await upsertPendingPedagio({
       ...item,
       status: "error",
-      errorMsg: (err as Error).message ?? String(err),
+      errorMsg: msg,
+      errorStatus: status,
+      errorIssues: issues,
       attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
     });
   }
@@ -278,10 +399,13 @@ async function processAbastecimento(item: PendingAbastecimento): Promise<void> {
     await deletePendingAbastecimento(item.clientId);
   } catch (err) {
     const permanente = isErroPermanente(err);
+    const { msg, status, issues } = extractErrorDetails(err);
     await upsertPendingAbastecimento({
       ...item,
       status: "error",
-      errorMsg: (err as Error).message ?? String(err),
+      errorMsg: msg,
+      errorStatus: status,
+      errorIssues: issues,
       attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
     });
   }

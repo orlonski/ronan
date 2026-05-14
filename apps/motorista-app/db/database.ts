@@ -38,6 +38,12 @@ export async function cacheDelete(key: string): Promise<void> {
 // Outbox helpers: lista única de pending por tipo, persistida como JSON.
 // Volume baixo (motorista lança poucas viagens por dia), tudo na memória.
 
+export type ZodIssueSaved = {
+  path: string;
+  code: string;
+  message: string;
+};
+
 export type PendingViagem = {
   clientId: string;
   payload: Record<string, unknown>;
@@ -48,6 +54,8 @@ export type PendingViagem = {
   createdAt: number;
   lastTriedAt?: number;
   errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
 };
 
 export type PendingPedagio = {
@@ -58,6 +66,8 @@ export type PendingPedagio = {
   createdAt: number;
   lastTriedAt?: number;
   errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
 };
 
 export type PendingAbastecimento = {
@@ -70,6 +80,8 @@ export type PendingAbastecimento = {
   createdAt: number;
   lastTriedAt?: number;
   errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
 };
 
 const VIAGENS_KEY = `${PREFIX}outbox.viagens`;

@@ -104,8 +104,8 @@ export default function ViagemAndamentoScreen() {
               </Text>
             </View>
             <Text className="mt-2 text-base text-foreground">
-              Provavelmente você esqueceu de finalizar. Toque em "Finalizar
-              viagem" pra salvar agora.
+              Provavelmente você esqueceu de finalizar. Toque em
+              &quot;Finalizar viagem&quot; pra salvar agora.
             </Text>
           </View>
         )}

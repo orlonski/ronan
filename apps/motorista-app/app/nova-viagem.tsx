@@ -4,6 +4,7 @@ import * as Haptics from "expo-haptics";
 import { Check, Plus } from "lucide-react-native";
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -19,9 +20,13 @@ import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { humanizeApiError } from "@/lib/api";
+import { humanizeZodError } from "@/lib/validation";
+import { CriarViagemInput } from "@ronan/shared-types";
 import { formatarDistancia, haversineMetros, localMaisProximo } from "@/lib/geo";
 import { simplificarPontos } from "@/lib/polyline";
 import { consumePendingLocal } from "@/lib/local-novo-bridge";
+import { listPendingViagens, type PendingViagem } from "@/db/database";
+import { atualizarViagemPendente } from "@/lib/sync";
 import {
   useCalcularRota,
   useCatalogos,
@@ -45,6 +50,11 @@ type FormShape = {
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
+
+function numToStr(n: unknown): string {
+  if (typeof n !== "number" || !Number.isFinite(n)) return "";
+  return String(n).replace(".", ",");
+}
 
 const empty: FormShape = {
   veiculoId: "",
@@ -71,7 +81,12 @@ export default function NovaViagem() {
   const me = useMe();
   const cat = useCatalogos();
   const criar = useCriarViagem();
-  const params = useLocalSearchParams<{ fromTracking?: string; trackingData?: string }>();
+  const params = useLocalSearchParams<{
+    fromTracking?: string;
+    trackingData?: string;
+    editarClientId?: string;
+  }>();
+  const modoEdit = !!params.editarClientId;
 
   // Dados do tracking GPS, se motorista veio da tela "Viagem em andamento"
   const tracking = useMemo<TrackingPayload | null>(() => {
@@ -97,6 +112,56 @@ export default function NovaViagem() {
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   // Rastreia se motorista editou KM manualmente — se sim, parou de auto-preencher
   const [kmEditadoManual, setKmEditadoManual] = useState(false);
+
+  // Modo edit: hidrata form com viagem pendente que falhou na sync
+  const [hidratando, setHidratando] = useState<boolean>(modoEdit);
+  const [pendingOriginal, setPendingOriginal] = useState<PendingViagem | null>(null);
+
+  useEffect(() => {
+    if (!modoEdit) return;
+    let alive = true;
+    void (async () => {
+      const list = await listPendingViagens();
+      const item = list.find((x) => x.clientId === params.editarClientId);
+      if (!alive) return;
+      if (!item) {
+        Alert.alert(
+          "Viagem não encontrada",
+          "Essa viagem pode ter sido sincronizada ou excluída.",
+          [{ text: "OK", onPress: () => router.back() }],
+        );
+        return;
+      }
+      setPendingOriginal(item);
+      const p = item.payload as Record<string, unknown>;
+      setForm({
+        veiculoId: String(p.veiculoId ?? ""),
+        obraId: String(p.obraId ?? ""),
+        materialId: String(p.materialId ?? ""),
+        data: typeof p.data === "string" ? p.data.slice(0, 10) : today(),
+        toneladas: numToStr(p.toneladas),
+        ticket: String(p.ticket ?? ""),
+        km: numToStr(p.km),
+        localCargaId: String(p.localCargaId ?? ""),
+        localDescargaId: String(p.localDescargaId ?? ""),
+        valorPedagio: p.valorPedagioTotal != null ? numToStr(p.valorPedagioTotal) : "",
+        observacao: String(p.observacao ?? ""),
+      });
+      // Preview da foto se motorista tinha capturado uma e ela ainda nao subiu.
+      // Se ja tem fotoKey, a foto ja foi pro servidor — nao mostra preview local
+      // (motorista pode trocar tirando foto nova se quiser).
+      if (item.fotoUri && item.fotoMime) {
+        setFoto({ uri: item.fotoUri, mime: item.fotoMime });
+      }
+      // Modo edit nao deve disparar autopreencher KM via rota (motorista ja
+      // tinha um valor explícito) — bloqueia o auto-fill marcando como manual.
+      setKmEditadoManual(true);
+      setHidratando(false);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [modoEdit, params.editarClientId]);
 
   const rota = useCalcularRota(form.localCargaId, form.localDescargaId);
 
@@ -274,8 +339,36 @@ export default function NovaViagem() {
       // bloquear o salvar.
       const c = coords ?? (await pegarCoordsRapido());
 
+      // Em modo edit, preserva os dados imutáveis (clientId, tracking GPS,
+      // fotoKey se foto não mudou) do payload original — só sobreescreve o
+      // que o motorista pode editar manualmente.
+      const orig = pendingOriginal?.payload as Record<string, unknown> | undefined;
+      const fotoMudou =
+        modoEdit && !!foto && foto.uri !== pendingOriginal?.fotoUri;
+      const preservaFotoKey =
+        modoEdit && !fotoMudou && typeof orig?.fotoKey === "string"
+          ? { fotoKey: orig.fotoKey as string }
+          : {};
+      const preservaTracking =
+        modoEdit && orig?.iniciadoEm
+          ? {
+              iniciadoEm: orig.iniciadoEm,
+              kmReal: orig.kmReal,
+              pontos: orig.pontos,
+            }
+          : tracking
+          ? {
+              iniciadoEm: tracking.iniciadoEm,
+              kmReal: parseFloat(tracking.kmReal),
+              // Aplica Douglas-Peucker (tolerância 3m) — remove pontos
+              // redundantes (motorista parado em semáforo etc) sem afetar a
+              // forma da rota. Reduz storage em ~5-10x sem perda perceptível.
+              pontos: simplificarPontos(tracking.pontos),
+            }
+          : {};
+
       const payload = {
-        clientId: makeUuid(),
+        clientId: modoEdit ? params.editarClientId! : makeUuid(),
         veiculoId: form.veiculoId,
         obraId: form.obraId,
         materialId: form.materialId,
@@ -289,25 +382,49 @@ export default function NovaViagem() {
           ? parseFloat(form.valorPedagio.replace(",", "."))
           : undefined,
         observacao: form.observacao.trim() || undefined,
-        criadoOfflineEm: new Date().toISOString(),
+        criadoOfflineEm:
+          (modoEdit && typeof orig?.criadoOfflineEm === "string"
+            ? orig.criadoOfflineEm
+            : new Date().toISOString()),
         ...(c ? { lat: c.lat, lng: c.lng } : {}),
-        ...(tracking
-          ? {
-              iniciadoEm: tracking.iniciadoEm,
-              kmReal: parseFloat(tracking.kmReal),
-              // Aplica Douglas-Peucker (toler\xc3\xa2ncia 3m) — remove pontos
-              // redundantes (motorista parado em sem\xc3\xa1foro etc) sem afetar a
-              // forma da rota. Reduz storage em ~5-10x sem perda perceptivel.
-              pontos: simplificarPontos(tracking.pontos),
-            }
-          : {}),
+        ...preservaFotoKey,
+        ...preservaTracking,
       };
-      await criar({
-        payload,
-        foto: foto ?? undefined,
-      });
+
+      // Validação local: roda o mesmo schema do servidor antes de enfileirar
+      // pra evitar pendentes inválidos (ex: toneladas > 9999).
+      const parsed = CriarViagemInput.safeParse(payload);
+      if (!parsed.success) {
+        setErro(humanizeZodError(parsed.error));
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        setSubmitting(false);
+        return;
+      }
+
+      if (modoEdit) {
+        const novaFoto = fotoMudou && foto ? { uri: foto.uri, mime: foto.mime } : undefined;
+        const res = await atualizarViagemPendente({
+          clientId: params.editarClientId!,
+          payload,
+          foto: novaFoto,
+        });
+        if (res.removed) {
+          Alert.alert(
+            "Viagem já sincronizada",
+            "Essa viagem foi enviada com sucesso enquanto você editava. Não precisa salvar de novo.",
+            [{ text: "OK", onPress: () => router.back() }],
+          );
+          setSubmitting(false);
+          return;
+        }
+      } else {
+        await criar({
+          payload,
+          foto: foto ?? undefined,
+        });
+      }
       // Limpa o tracking armazenado localmente — viagem ja salva
-      if (tracking) {
+      if (tracking && !modoEdit) {
         const { clearViagemAndamento } = await import("@/lib/tracking-storage");
         await clearViagemAndamento();
       }
@@ -325,12 +442,14 @@ export default function NovaViagem() {
     <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <ScreenHeader title="Nova viagem" />
+      <ScreenHeader title={modoEdit ? "Editar viagem pendente" : "Nova viagem"} />
 
-      {(cat.isLoading || me.isLoading) && !cat.data && !me.data && (
+      {(hidratando || ((cat.isLoading || me.isLoading) && !cat.data && !me.data)) && (
         <View className="items-center py-8">
           <ActivityIndicator />
-          <Text className="mt-2 text-sm text-muted-foreground">Carregando dados...</Text>
+          <Text className="mt-2 text-sm text-muted-foreground">
+            {hidratando ? "Carregando viagem..." : "Carregando dados..."}
+          </Text>
         </View>
       )}
 
@@ -343,7 +462,7 @@ export default function NovaViagem() {
         </View>
       )}
 
-      {cat.data && (
+      {cat.data && !hidratando && (
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           className="flex-1"
@@ -417,7 +536,11 @@ export default function NovaViagem() {
                   onChangeText={(v) => update("toneladas", v)}
                   keyboardType="decimal-pad"
                   placeholder="0,000"
+                  maxLength={8}
                 />
+                <Text className="text-xs text-muted-foreground">
+                  Em toneladas (máx 9999)
+                </Text>
               </View>
               <View className="flex-1 gap-2">
                 <Label>Ticket</Label>
@@ -425,6 +548,7 @@ export default function NovaViagem() {
                   value={form.ticket}
                   onChangeText={(v) => update("ticket", v)}
                   placeholder="número"
+                  maxLength={50}
                 />
               </View>
             </View>
@@ -506,6 +630,7 @@ export default function NovaViagem() {
                   }}
                   keyboardType="decimal-pad"
                   placeholder="0,00"
+                  maxLength={8}
                 />
                 <KmHint
                   rota={rota.data ?? null}
@@ -520,6 +645,7 @@ export default function NovaViagem() {
                   onChangeText={(v) => update("valorPedagio", v)}
                   keyboardType="decimal-pad"
                   placeholder="opcional"
+                  maxLength={10}
                 />
               </View>
             </View>
@@ -529,6 +655,7 @@ export default function NovaViagem() {
                 value={form.observacao}
                 onChangeText={(v) => update("observacao", v)}
                 placeholder="..."
+                maxLength={500}
               />
             </Field>
 
@@ -541,7 +668,11 @@ export default function NovaViagem() {
             <Button size="lg" className="h-20" onPress={salvar} loading={submitting}>
               <Check size={24} color="white" />
               <Text className="text-xl font-bold text-primary-foreground">
-                {submitting ? "Salvando..." : "Salvar viagem"}
+                {submitting
+                  ? "Salvando..."
+                  : modoEdit
+                  ? "Salvar alterações"
+                  : "Salvar viagem"}
               </Text>
             </Button>
           </ScrollView>
@@ -588,14 +719,14 @@ function GpsHint({
   if (selecionadoId === match.local.id) {
     return (
       <Text className="text-xs font-medium text-success">
-        ✓ Detectado por GPS · {match.distanciaMetros} m de "{match.local.nome}"
+        ✓ Detectado por GPS · {match.distanciaMetros} m de &quot;{match.local.nome}&quot;
       </Text>
     );
   }
   // Motorista trocou: mostra qual seria a sugestão original
   return (
     <Text className="text-xs text-muted-foreground">
-      Sugestão GPS era "{match.local.nome}" ({match.distanciaMetros} m).
+      Sugestão GPS era &quot;{match.local.nome}&quot; ({match.distanciaMetros} m).
     </Text>
   );
 }

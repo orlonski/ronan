@@ -18,6 +18,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { humanizeApiError } from "@/lib/api";
+import { humanizeZodError } from "@/lib/validation";
+import { CriarPedagioInput } from "@ronan/shared-types";
 import { useCatalogos, useCriarPedagio, useMe } from "@/lib/queries";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -69,13 +71,23 @@ export default function NovoPedagio() {
 
     setSubmitting(true);
     try {
-      await criar({
+      const payload = {
         clientId: makeUuid(),
         veiculoId,
         data,
         pracaPedagio: pracaPedagio.trim(),
         valor: valorNum,
-      });
+      };
+
+      const parsed = CriarPedagioInput.safeParse(payload);
+      if (!parsed.success) {
+        setErro(humanizeZodError(parsed.error));
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        setSubmitting(false);
+        return;
+      }
+
+      await criar(payload);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
     } catch (err) {
@@ -132,6 +144,7 @@ export default function NovoPedagio() {
                 placeholder='ex: "Praça Reg. Norte BR-376"'
                 autoCapitalize="words"
                 editable={!submitting}
+                maxLength={120}
               />
             </View>
 
@@ -143,7 +156,9 @@ export default function NovoPedagio() {
                 keyboardType="decimal-pad"
                 placeholder="0,00"
                 editable={!submitting}
+                maxLength={10}
               />
+              <Text className="text-xs text-muted-foreground">Em R$</Text>
             </View>
 
             {erro && <Text className="text-sm text-destructive">{erro}</Text>}

@@ -21,6 +21,8 @@ import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { humanizeApiError } from "@/lib/api";
+import { humanizeZodError } from "@/lib/validation";
+import { CriarAbastecimentoInput } from "@ronan/shared-types";
 import {
   useAbastecimentos,
   useCatalogos,
@@ -172,6 +174,14 @@ export default function NovoAbastecimento() {
           ? { lat: c.lat, lng: c.lng, ...(c.precisao ? { precisao: c.precisao } : {}) }
           : {}),
       };
+      const parsed = CriarAbastecimentoInput.safeParse(payload);
+      if (!parsed.success) {
+        setErro(humanizeZodError(parsed.error));
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        setSubmitting(false);
+        return;
+      }
+
       await criar({ payload, foto: foto ?? undefined });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
@@ -242,7 +252,11 @@ export default function NovoAbastecimento() {
                   keyboardType="decimal-pad"
                   placeholder="0,000"
                   editable={!submitting}
+                  maxLength={8}
                 />
+                <Text className="text-xs text-muted-foreground">
+                  Em litros (máx 2000)
+                </Text>
               </View>
               <View className="flex-1 gap-2">
                 <Label>Valor (R$)</Label>
@@ -252,7 +266,11 @@ export default function NovoAbastecimento() {
                   keyboardType="decimal-pad"
                   placeholder="0,00"
                   editable={!submitting}
+                  maxLength={8}
                 />
+                <Text className="text-xs text-muted-foreground">
+                  Em R$ (máx 50000)
+                </Text>
               </View>
             </View>
 
@@ -275,6 +293,7 @@ export default function NovoAbastecimento() {
                 keyboardType="number-pad"
                 placeholder="123456"
                 editable={!submitting}
+                maxLength={8}
               />
               {ultimoOdometroDoVeiculo !== null && (
                 <Text className="text-xs text-muted-foreground">
@@ -291,6 +310,7 @@ export default function NovoAbastecimento() {
                 placeholder='ex: "Posto Trevo BR-376"'
                 autoCapitalize="words"
                 editable={!submitting}
+                maxLength={120}
               />
               {postos.data && postos.data.length > 0 && (
                 <View className="flex-row flex-wrap gap-1">
@@ -328,6 +348,7 @@ export default function NovoAbastecimento() {
                 onChangeText={setObservacao}
                 placeholder="opcional"
                 editable={!submitting}
+                maxLength={500}
               />
             </View>
 
