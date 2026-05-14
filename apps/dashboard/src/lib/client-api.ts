@@ -114,6 +114,19 @@ export function useResourceOptions<T>(
   });
 }
 
+/**
+ * Carrega um item por id (GET <basePath>/<id>). Usado pelas páginas de edição
+ * que rodam em rota própria (/<entidade>/[id]).
+ */
+export function useResourceItem<T>(basePath: string, id: string | undefined) {
+  const token = useAuthToken();
+  return useQuery({
+    queryKey: [basePath, "item", id, token],
+    enabled: !!token && !!id,
+    queryFn: () => fetchApi<T>(`${basePath}/${id}`, { token }),
+  });
+}
+
 export function useCreateResource<TInput, TOutput>(path: string, listPath: string) {
   const token = useAuthToken();
   const qc = useQueryClient();

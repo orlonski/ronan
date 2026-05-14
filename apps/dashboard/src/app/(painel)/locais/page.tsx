@@ -1,20 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import { AlertCircle, Pencil, Plus } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { StatusToggle } from "@/components/status-toggle";
 import { ExcluirButton } from "@/components/excluir-button";
-import { AddressAutocomplete, type SugestaoEndereco } from "@/components/ui/address-autocomplete";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
 import {
   DataTable,
   DataTableColumnHeader,
@@ -23,9 +16,6 @@ import {
 } from "@/components/data-table";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import {
-  fetchApi,
-  useAuthToken,
-  useCreateResource,
   usePaginatedList,
   useResourceOptions,
   useUpdateResource,
@@ -38,97 +28,15 @@ type Local = {
   cidade: string; uf: string; cep: string | null; pontoReferencia: string | null;
   tipo: Tipo; obraId: string | null; ativo: boolean; obra: Obra | null;
 };
-type ViaCepRes = {
-  fonte: "VIACEP"; logradouro?: string; bairro?: string; cidade: string; uf: string; cep?: string;
-};
 
 const PATH = "/admin/locais";
 const OBRAS_PATH = "/admin/obras";
-
-const empty = {
-  nome: "", logradouro: "", numero: "", bairro: "", cidade: "", uf: "PR",
-  cep: "", pontoReferencia: "", tipo: "AMBOS" as Tipo, obraId: "",
-  lat: null as number | null, lng: null as number | null,
-};
 
 export default function LocaisPage() {
   const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
   const list = usePaginatedList<Local>(PATH, tableState);
   const obras = useResourceOptions<Obra>(OBRAS_PATH);
-  const create = useCreateResource<Record<string, unknown>, Local>(PATH, PATH);
   const update = useUpdateResource<Record<string, unknown>, Local>(PATH, PATH);
-  const token = useAuthToken();
-
-  const [editing, setEditing] = useState<Local | "new" | null>(null);
-  const [form, setForm] = useState({ ...empty });
-  const [cepLoading, setCepLoading] = useState(false);
-  const [cepNotFound, setCepNotFound] = useState(false);
-
-  function openNew() { setEditing("new"); setForm({ ...empty }); setCepNotFound(false); }
-  function openEdit(l: Local) {
-    setEditing(l);
-    setForm({
-      nome: l.nome, logradouro: l.logradouro, numero: l.numero ?? "",
-      bairro: l.bairro ?? "", cidade: l.cidade, uf: l.uf, cep: l.cep ?? "",
-      pontoReferencia: l.pontoReferencia ?? "", tipo: l.tipo, obraId: l.obraId ?? "",
-      lat: null, lng: null,
-    });
-    setCepNotFound(false);
-  }
-
-  function aplicarSugestao(s: SugestaoEndereco) {
-    setForm((f) => ({
-      ...f,
-      nome: f.nome || s.nome || "",
-      logradouro: s.logradouro ?? s.nome ?? f.logradouro,
-      numero: s.numero ?? f.numero,
-      bairro: s.bairro ?? f.bairro,
-      cidade: s.cidade || f.cidade,
-      uf: s.uf || f.uf,
-      cep: s.cep ?? f.cep,
-      lat: s.lat ?? null,
-      lng: s.lng ?? null,
-    }));
-  }
-
-  async function consultarCep(cepRaw: string) {
-    const cep = cepRaw.replace(/\D/g, "");
-    if (cep.length !== 8 || !token) return;
-    setCepLoading(true); setCepNotFound(false);
-    try {
-      const res = await fetchApi<ViaCepRes | null>(`/geocoding/cep?cep=${cep}`, { token });
-      if (res) {
-        setForm((f) => ({
-          ...f,
-          logradouro: res.logradouro ?? f.logradouro,
-          bairro: res.bairro ?? f.bairro,
-          cidade: res.cidade,
-          uf: res.uf,
-          cep: res.cep ?? cep,
-        }));
-      } else {
-        setCepNotFound(true);
-      }
-    } finally {
-      setCepLoading(false);
-    }
-  }
-
-  async function onSave(ev: React.FormEvent) {
-    ev.preventDefault();
-    const body: Record<string, unknown> = {
-      nome: form.nome, logradouro: form.logradouro, cidade: form.cidade, uf: form.uf, tipo: form.tipo,
-      numero: form.numero || undefined, bairro: form.bairro || undefined,
-      cep: form.cep ? form.cep.replace(/\D/g, "") : undefined,
-      pontoReferencia: form.pontoReferencia || undefined,
-      obraId: form.obraId || undefined,
-      lat: form.lat ?? undefined,
-      lng: form.lng ?? undefined,
-    };
-    if (editing === "new") await create.mutateAsync(body);
-    else if (editing) await update.mutateAsync({ id: editing.id, body });
-    setEditing(null);
-  }
 
   const obraOptions = useMemo(
     () => (obras.data ?? []).map((o) => ({ value: o.id, label: o.nome })),
@@ -190,9 +98,11 @@ export default function LocaisPage() {
               }
               size="sm"
             />
-            <Button variant="ghost" size="icon" onClick={() => openEdit(row.original)}>
-              <Pencil className="h-4 w-4" />
-            </Button>
+            <Link href={`/locais/${row.original.id}`}>
+              <Button variant="ghost" size="icon" title="Editar">
+                <Pencil className="h-4 w-4" />
+              </Button>
+            </Link>
             <ExcluirButton
               path="/admin/locais"
               id={row.original.id}
@@ -220,9 +130,11 @@ export default function LocaisPage() {
               <AlertCircle className="h-4 w-4" /> Em validação
             </Button>
           </Link>
-          <Button onClick={openNew} className="w-full md:w-auto">
-            <Plus className="h-4 w-4" /> Novo local
-          </Button>
+          <Link href="/locais/novo">
+            <Button className="w-full md:w-auto">
+              <Plus className="h-4 w-4" /> Novo local
+            </Button>
+          </Link>
         </div>
       </header>
 
@@ -285,9 +197,11 @@ export default function LocaisPage() {
                   size="sm"
                   label
                 />
-                <Button variant="ghost" size="icon" onClick={() => openEdit(l)}>
-                  <Pencil className="h-4 w-4" />
-                </Button>
+                <Link href={`/locais/${l.id}`}>
+                  <Button variant="ghost" size="icon" title="Editar">
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </Link>
                 <ExcluirButton
                   path="/admin/locais"
                   id={l.id}
@@ -315,109 +229,6 @@ export default function LocaisPage() {
           </Card>
         )}
       />
-
-      <Dialog open={editing !== null} onOpenChange={(v) => !v && setEditing(null)}>
-        <DialogContent className="max-w-2xl">
-          <form onSubmit={onSave} className="space-y-4">
-            <DialogHeader>
-              <DialogTitle>{editing === "new" ? "Novo local" : "Editar local"}</DialogTitle>
-            </DialogHeader>
-
-            <div className="space-y-2">
-              <Label>Nome do local *</Label>
-              <Input required placeholder='ex: "Pedreira Souza Naves — balança 2"'
-                value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} />
-              <p className="text-xs text-muted-foreground">
-                Use um nome específico (não só rua) — ajuda na conferência com o motorista.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Buscar endereço</Label>
-              <AddressAutocomplete
-                value={form.logradouro}
-                onChange={(v) => setForm((f) => ({ ...f, logradouro: v }))}
-                onSelect={aplicarSugestao}
-              />
-              <p className="text-xs text-muted-foreground">
-                Busque por nome do lugar, rua ou bairro. Os campos abaixo são preenchidos automaticamente.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-2">
-                <Label>CEP</Label>
-                <Input value={form.cep} maxLength={9} placeholder="00000-000"
-                  onChange={(e) => setForm({ ...form, cep: e.target.value })}
-                  onBlur={(e) => consultarCep(e.target.value)} />
-                {cepLoading && <p className="text-xs text-muted-foreground">Consultando...</p>}
-                {cepNotFound && <p className="text-xs text-amber-600">CEP não encontrado, preencha manual.</p>}
-              </div>
-              <div className="col-span-2 space-y-2">
-                <Label>Logradouro *</Label>
-                <Input required value={form.logradouro}
-                  onChange={(e) => setForm({ ...form, logradouro: e.target.value })} />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-2">
-                <Label>Número</Label>
-                <Input value={form.numero} onChange={(e) => setForm({ ...form, numero: e.target.value })} />
-              </div>
-              <div className="col-span-2 space-y-2">
-                <Label>Bairro</Label>
-                <Input value={form.bairro} onChange={(e) => setForm({ ...form, bairro: e.target.value })} />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              <div className="col-span-2 space-y-2">
-                <Label>Cidade *</Label>
-                <Input required value={form.cidade}
-                  onChange={(e) => setForm({ ...form, cidade: e.target.value })} />
-              </div>
-              <div className="space-y-2">
-                <Label>UF *</Label>
-                <Input required maxLength={2} value={form.uf}
-                  onChange={(e) => setForm({ ...form, uf: e.target.value.toUpperCase() })} />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Ponto de referência</Label>
-              <Input value={form.pontoReferencia}
-                onChange={(e) => setForm({ ...form, pontoReferencia: e.target.value })}
-                placeholder='ex: "portaria fundos", "balança 2"' />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>Tipo</Label>
-                <Select value={form.tipo}
-                  onChange={(e) => setForm({ ...form, tipo: e.target.value as Tipo })}>
-                  <option value="AMBOS">Carga e descarga</option>
-                  <option value="CARGA">Apenas carga</option>
-                  <option value="DESCARGA">Apenas descarga</option>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Obra (opcional)</Label>
-                <Select value={form.obraId}
-                  onChange={(e) => setForm({ ...form, obraId: e.target.value })}>
-                  <option value="">— sem obra —</option>
-                  {obras.data?.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}
-                </Select>
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setEditing(null)}>Cancelar</Button>
-              <Button type="submit" disabled={create.isPending || update.isPending}>Salvar</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

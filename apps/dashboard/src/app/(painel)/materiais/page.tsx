@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import Link from "next/link";
 import { Pencil, Plus } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { StatusToggle } from "@/components/status-toggle";
@@ -8,22 +9,13 @@ import { ExcluirButton } from "@/components/excluir-button";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
   DataTable,
   DataTableColumnHeader,
   DataTableToolbar,
   ToolbarFilterSelect,
 } from "@/components/data-table";
 import { useDataTableState } from "@/hooks/use-data-table-state";
-import { useCreateResource, usePaginatedList, useUpdateResource } from "@/lib/client-api";
+import { usePaginatedList, useUpdateResource } from "@/lib/client-api";
 
 type Material = { id: string; nome: string; ativo: boolean };
 
@@ -32,26 +24,7 @@ const PATH = "/admin/materiais";
 export default function MateriaisPage() {
   const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
   const list = usePaginatedList<Material>(PATH, tableState);
-  const create = useCreateResource<{ nome: string }, Material>(PATH, PATH);
-  const update = useUpdateResource<{ nome?: string; ativo?: boolean }, Material>(PATH, PATH);
-
-  const [editing, setEditing] = useState<Material | "new" | null>(null);
-  const [nome, setNome] = useState("");
-
-  function openNew() {
-    setEditing("new");
-    setNome("");
-  }
-  function openEdit(m: Material) {
-    setEditing(m);
-    setNome(m.nome);
-  }
-  async function onSave(e: React.FormEvent) {
-    e.preventDefault();
-    if (editing === "new") await create.mutateAsync({ nome });
-    else if (editing) await update.mutateAsync({ id: editing.id, body: { nome } });
-    setEditing(null);
-  }
+  const update = useUpdateResource<{ ativo?: boolean }, Material>(PATH, PATH);
 
   const columns = useMemo<ColumnDef<Material>[]>(
     () => [
@@ -82,9 +55,11 @@ export default function MateriaisPage() {
         header: () => <span className="block text-center">Ações</span>,
         cell: ({ row }) => (
           <div className="flex justify-center">
-            <Button variant="ghost" size="icon" onClick={() => openEdit(row.original)}>
-              <Pencil className="h-4 w-4" />
-            </Button>
+            <Link href={`/materiais/${row.original.id}`}>
+              <Button variant="ghost" size="icon" title="Editar">
+                <Pencil className="h-4 w-4" />
+              </Button>
+            </Link>
             <ExcluirButton
               path="/admin/materiais"
               id={row.original.id}
@@ -104,9 +79,11 @@ export default function MateriaisPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Materiais</h1>
           <p className="text-sm text-muted-foreground">Tipos de material transportado.</p>
         </div>
-        <Button onClick={openNew} className="w-full md:w-auto">
-          <Plus className="h-4 w-4" /> Novo material
-        </Button>
+        <Link href="/materiais/novo">
+          <Button className="w-full md:w-auto">
+            <Plus className="h-4 w-4" /> Novo material
+          </Button>
+        </Link>
       </header>
 
       <DataTable
@@ -147,9 +124,11 @@ export default function MateriaisPage() {
                   size="sm"
                   label
                 />
-                <Button variant="ghost" size="icon" onClick={() => openEdit(m)}>
-                  <Pencil className="h-4 w-4" />
-                </Button>
+                <Link href={`/materiais/${m.id}`}>
+                  <Button variant="ghost" size="icon" title="Editar">
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </Link>
                 <ExcluirButton
                   path="/admin/materiais"
                   id={m.id}
@@ -160,28 +139,6 @@ export default function MateriaisPage() {
           </Card>
         )}
       />
-
-      <Dialog open={editing !== null} onOpenChange={(v) => !v && setEditing(null)}>
-        <DialogContent>
-          <form onSubmit={onSave} className="space-y-4">
-            <DialogHeader>
-              <DialogTitle>{editing === "new" ? "Novo material" : "Editar material"}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-2">
-              <Label htmlFor="nome">Nome</Label>
-              <Input id="nome" required value={nome} onChange={(e) => setNome(e.target.value)} />
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setEditing(null)}>
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={create.isPending || update.isPending}>
-                Salvar
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -1,18 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import Link from "next/link";
 import { Pencil, Plus } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { StatusToggle } from "@/components/status-toggle";
 import { ExcluirButton } from "@/components/excluir-button";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
 import {
   DataTable,
   DataTableColumnHeader,
@@ -21,7 +16,6 @@ import {
 } from "@/components/data-table";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import {
-  useCreateResource,
   usePaginatedList,
   useResourceOptions,
   useUpdateResource,
@@ -39,21 +33,7 @@ export default function ObrasPage() {
   const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
   const list = usePaginatedList<Obra>(PATH, tableState);
   const empresas = useResourceOptions<Empresa>(EMPRESAS_PATH);
-  const create = useCreateResource<{ nome: string; empresaClienteId: string }, Obra>(PATH, PATH);
   const update = useUpdateResource<Partial<Obra>, Obra>(PATH, PATH);
-
-  const [editing, setEditing] = useState<Obra | "new" | null>(null);
-  const [form, setForm] = useState({ nome: "", empresaClienteId: "" });
-
-  function openNew() { setEditing("new"); setForm({ nome: "", empresaClienteId: empresas.data?.[0]?.id ?? "" }); }
-  function openEdit(o: Obra) { setEditing(o); setForm({ nome: o.nome, empresaClienteId: o.empresaClienteId }); }
-
-  async function onSave(ev: React.FormEvent) {
-    ev.preventDefault();
-    if (editing === "new") await create.mutateAsync(form);
-    else if (editing) await update.mutateAsync({ id: editing.id, body: form });
-    setEditing(null);
-  }
 
   const empresaOptions = useMemo(
     () => (empresas.data ?? []).map((e) => ({ value: e.id, label: e.nome })),
@@ -95,9 +75,11 @@ export default function ObrasPage() {
         header: () => <span className="block text-center">Ações</span>,
         cell: ({ row }) => (
           <div className="flex justify-center">
-            <Button variant="ghost" size="icon" onClick={() => openEdit(row.original)}>
-              <Pencil className="h-4 w-4" />
-            </Button>
+            <Link href={`/obras/${row.original.id}`}>
+              <Button variant="ghost" size="icon" title="Editar">
+                <Pencil className="h-4 w-4" />
+              </Button>
+            </Link>
             <ExcluirButton
               path="/admin/obras"
               id={row.original.id}
@@ -117,9 +99,11 @@ export default function ObrasPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Obras</h1>
           <p className="text-sm text-muted-foreground">Locais de obra por empresa-cliente.</p>
         </div>
-        <Button onClick={openNew} disabled={!empresas.data?.length} className="w-full md:w-auto">
-          <Plus className="h-4 w-4" /> Nova obra
-        </Button>
+        <Link href="/obras/novo">
+          <Button disabled={!empresas.data?.length} className="w-full md:w-auto">
+            <Plus className="h-4 w-4" /> Nova obra
+          </Button>
+        </Link>
       </header>
 
       {empresas.data?.length === 0 && (
@@ -175,9 +159,11 @@ export default function ObrasPage() {
                   size="sm"
                   label
                 />
-                <Button variant="ghost" size="icon" onClick={() => openEdit(o)}>
-                  <Pencil className="h-4 w-4" />
-                </Button>
+                <Link href={`/obras/${o.id}`}>
+                  <Button variant="ghost" size="icon" title="Editar">
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </Link>
                 <ExcluirButton
                   path="/admin/obras"
                   id={o.id}
@@ -188,31 +174,6 @@ export default function ObrasPage() {
           </Card>
         )}
       />
-
-      <Dialog open={editing !== null} onOpenChange={(v) => !v && setEditing(null)}>
-        <DialogContent>
-          <form onSubmit={onSave} className="space-y-4">
-            <DialogHeader>
-              <DialogTitle>{editing === "new" ? "Nova obra" : "Editar obra"}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-2">
-              <Label>Nome</Label>
-              <Input required value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} />
-            </div>
-            <div className="space-y-2">
-              <Label>Empresa-cliente</Label>
-              <Select required value={form.empresaClienteId}
-                onChange={(e) => setForm({ ...form, empresaClienteId: e.target.value })}>
-                {empresas.data?.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}
-              </Select>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setEditing(null)}>Cancelar</Button>
-              <Button type="submit" disabled={create.isPending || update.isPending}>Salvar</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

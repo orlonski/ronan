@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { FileSpreadsheet, FileInput, Pencil, Plus } from "lucide-react";
 import Link from "next/link";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -9,19 +9,13 @@ import { ExcluirButton } from "@/components/excluir-button";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
-import {
   DataTable,
   DataTableColumnHeader,
   DataTableToolbar,
   ToolbarFilterSelect,
 } from "@/components/data-table";
 import { useDataTableState } from "@/hooks/use-data-table-state";
-import { useCreateResource, usePaginatedList, useUpdateResource } from "@/lib/client-api";
+import { usePaginatedList, useUpdateResource } from "@/lib/client-api";
 
 type Papel = "RECEBE_PLANILHA" | "MANDA_FECHAMENTO" | "AMBOS";
 type Empresa = {
@@ -39,30 +33,7 @@ const PAPEL_LABEL: Record<Papel, string> = {
 export default function EmpresasPage() {
   const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
   const list = usePaginatedList<Empresa>(PATH, tableState);
-  const create = useCreateResource<Partial<Empresa>, Empresa>(PATH, PATH);
   const update = useUpdateResource<Partial<Empresa>, Empresa>(PATH, PATH);
-
-  const [editing, setEditing] = useState<Empresa | "new" | null>(null);
-  const [form, setForm] = useState({ nome: "", cnpj: "", contato: "", papel: "AMBOS" as Papel });
-
-  function openNew() { setEditing("new"); setForm({ nome: "", cnpj: "", contato: "", papel: "AMBOS" }); }
-  function openEdit(e: Empresa) {
-    setEditing(e);
-    setForm({ nome: e.nome, cnpj: e.cnpj ?? "", contato: e.contato ?? "", papel: e.papel });
-  }
-
-  async function onSave(ev: React.FormEvent) {
-    ev.preventDefault();
-    const body: Partial<Empresa> = {
-      nome: form.nome,
-      cnpj: form.cnpj.replace(/\D/g, "") || undefined,
-      contato: form.contato || undefined,
-      papel: form.papel,
-    };
-    if (editing === "new") await create.mutateAsync(body);
-    else if (editing) await update.mutateAsync({ id: editing.id, body });
-    setEditing(null);
-  }
 
   const columns = useMemo<ColumnDef<Empresa>[]>(
     () => [
@@ -123,9 +94,11 @@ export default function EmpresasPage() {
                   </Button>
                 </Link>
               )}
-              <Button variant="ghost" size="icon" onClick={() => openEdit(e)} title="Editar">
-                <Pencil className="h-4 w-4" />
-              </Button>
+              <Link href={`/empresas/${e.id}`} title="Editar">
+                <Button variant="ghost" size="icon">
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              </Link>
               <ExcluirButton
                 path="/admin/empresas"
                 id={e.id}
@@ -146,9 +119,11 @@ export default function EmpresasPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Empresas-cliente</h1>
           <p className="text-sm text-muted-foreground">Empresas pra quem prestamos serviço.</p>
         </div>
-        <Button onClick={openNew} className="w-full md:w-auto">
-          <Plus className="h-4 w-4" /> Nova empresa
-        </Button>
+        <Link href="/empresas/novo">
+          <Button className="w-full md:w-auto">
+            <Plus className="h-4 w-4" /> Nova empresa
+          </Button>
+        </Link>
       </header>
 
       <DataTable
@@ -210,9 +185,11 @@ export default function EmpresasPage() {
                     </Button>
                   </Link>
                 )}
-                <Button variant="ghost" size="icon" onClick={() => openEdit(e)}>
-                  <Pencil className="h-4 w-4" />
-                </Button>
+                <Link href={`/empresas/${e.id}`}>
+                  <Button variant="ghost" size="icon" title="Editar">
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </Link>
                 <StatusToggle
                   active={e.ativa}
                   onChange={(next) => update.mutate({ id: e.id, body: { ativa: next } })}
@@ -239,44 +216,6 @@ export default function EmpresasPage() {
           </Card>
         )}
       />
-
-      <Dialog open={editing !== null} onOpenChange={(v) => !v && setEditing(null)}>
-        <DialogContent>
-          <form onSubmit={onSave} className="space-y-4">
-            <DialogHeader>
-              <DialogTitle>{editing === "new" ? "Nova empresa" : "Editar empresa"}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-2">
-              <Label>Nome</Label>
-              <Input required value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>CNPJ</Label>
-                <Input value={form.cnpj} maxLength={18}
-                  onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
-                  placeholder="apenas números" />
-              </div>
-              <div className="space-y-2">
-                <Label>Papel</Label>
-                <Select value={form.papel} onChange={(e) => setForm({ ...form, papel: e.target.value as Papel })}>
-                  <option value="AMBOS">Ambos</option>
-                  <option value="RECEBE_PLANILHA">Recebe planilha</option>
-                  <option value="MANDA_FECHAMENTO">Manda fechamento</option>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Contato</Label>
-              <Input value={form.contato} onChange={(e) => setForm({ ...form, contato: e.target.value })} />
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setEditing(null)}>Cancelar</Button>
-              <Button type="submit" disabled={create.isPending || update.isPending}>Salvar</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
