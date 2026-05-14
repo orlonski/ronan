@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { AddressAutocomplete, type SugestaoEndereco } from "@/components/ui/address-autocomplete";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,11 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+
+const PontoMap = dynamic(
+  () => import("@/components/ponto-map").then((m) => m.PontoMap),
+  { ssr: false, loading: () => <div className="h-64 rounded-lg border bg-muted/30" /> },
+);
 import {
   fetchApi,
   useAuthToken,
@@ -34,6 +40,8 @@ export type Local = {
   obraId: string | null;
   ativo: boolean;
   obra: Obra | null;
+  lat: number | null;
+  lng: number | null;
 };
 
 type ViaCepRes = {
@@ -68,8 +76,8 @@ export function LocalForm({ initial }: Props) {
     pontoReferencia: initial?.pontoReferencia ?? "",
     tipo: (initial?.tipo ?? "AMBOS") as Tipo,
     obraId: initial?.obraId ?? "",
-    lat: null as number | null,
-    lng: null as number | null,
+    lat: initial?.lat ?? (null as number | null),
+    lng: initial?.lng ?? (null as number | null),
   });
   const [cepLoading, setCepLoading] = useState(false);
   const [cepNotFound, setCepNotFound] = useState(false);
@@ -138,12 +146,14 @@ export function LocalForm({ initial }: Props) {
   }
 
   const saving = create.isPending || update.isPending;
+  const temCoord = form.lat != null && form.lng != null;
 
   return (
-    <Card className="p-6">
-      <form onSubmit={onSubmit} className="space-y-4">
-        <div className="space-y-2">
-          <Label>Nome do local *</Label>
+    <form onSubmit={onSubmit} className="space-y-6">
+      <div className={temCoord ? "grid grid-cols-1 gap-6 lg:grid-cols-2" : ""}>
+        <Card className="space-y-4 p-6">
+          <div className="space-y-2">
+            <Label>Nome do local *</Label>
           <Input
             required
             autoFocus
@@ -267,17 +277,30 @@ export function LocalForm({ initial }: Props) {
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 pt-2">
-          <Link href="/locais">
-            <Button type="button" variant="outline">
-              Cancelar
-            </Button>
-          </Link>
-          <Button type="submit" disabled={saving}>
-            Salvar
+        </Card>
+
+        {temCoord && (
+          <Card className="space-y-3 p-6">
+            <Label>Localização no mapa</Label>
+            <PontoMap lat={form.lat!} lng={form.lng!} label={form.nome || undefined} />
+            <p className="text-xs text-muted-foreground">
+              Coordenadas: {form.lat!.toFixed(6)}, {form.lng!.toFixed(6)}.
+              Pra atualizar, busque o endereço de novo no autocomplete.
+            </p>
+          </Card>
+        )}
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <Link href="/locais">
+          <Button type="button" variant="outline">
+            Cancelar
           </Button>
-        </div>
-      </form>
-    </Card>
+        </Link>
+        <Button type="submit" disabled={saving}>
+          Salvar
+        </Button>
+      </div>
+    </form>
   );
 }

@@ -191,146 +191,146 @@ export function MotoristaForm({ initial }: Props) {
   const saving = create.isPending || update.isPending;
 
   return (
-    <Card className="p-6">
-      <form onSubmit={onSubmit} className="space-y-4">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div className="space-y-2 md:col-span-2">
-            <Label>Nome</Label>
-            <Input
-              required
-              autoFocus
-              value={form.nome}
-              onChange={(e) => setForm({ ...form, nome: e.target.value })}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>CPF (login)</Label>
-            <Input
-              required
-              inputMode="numeric"
-              placeholder="000.000.000-00"
-              value={form.cpf}
-              onChange={(e) => setForm({ ...form, cpf: maskCpf(e.target.value) })}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>{initial ? "Nova senha (opcional)" : "Senha"}</Label>
-            <Input
-              type="password"
-              minLength={initial ? 0 : 6}
-              required={!initial}
-              value={form.senha}
-              onChange={(e) => setForm({ ...form, senha: e.target.value })}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Telefone</Label>
-            <Input
-              inputMode="tel"
-              placeholder="(00) 00000-0000"
-              value={form.telefone}
-              onChange={(e) => setForm({ ...form, telefone: maskTelefone(e.target.value) })}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Email</Label>
-            <Input
-              type="email"
-              placeholder="motorista@email.com"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-            />
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label>Placas</Label>
-            <Button type="button" variant="outline" size="sm" onClick={addPlaca}>
-              <Plus className="h-3.5 w-3.5" /> Adicionar placa
-            </Button>
-          </div>
-          {form.placas.length === 0 ? (
-            <p className="rounded-md border border-dashed bg-muted/30 px-3 py-4 text-center text-xs text-muted-foreground">
-              Nenhuma placa cadastrada. Clique em &quot;Adicionar placa&quot; pra incluir.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {form.placas.map((p, idx) => {
-                const placaUpper = p.placa.toUpperCase();
-                const ehPadrao = placaUpper !== "" && form.placaDefault === placaUpper;
-                return (
-                  <div
-                    key={idx}
-                    className="flex items-start gap-2 rounded-md border bg-background p-2"
-                  >
-                    <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-2">
-                      <Input
-                        placeholder="ABC1D23"
-                        value={p.placa}
-                        maxLength={8}
-                        onChange={(e) =>
-                          updatePlaca(idx, "placa", e.target.value.toUpperCase())
-                        }
-                        className="font-mono"
-                      />
-                      <Input
-                        placeholder="Modelo (opcional)"
-                        value={p.modelo}
-                        maxLength={80}
-                        onChange={(e) => updatePlaca(idx, "modelo", e.target.value)}
-                      />
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1">
-                      {form.placas.length > 1 && placaUpper && (
-                        <label className="flex cursor-pointer items-center gap-1 text-xs text-muted-foreground">
-                          <input
-                            type="radio"
-                            name="placa-default"
-                            checked={ehPadrao}
-                            onChange={() => setDefault(placaUpper)}
-                            className="h-3 w-3 accent-blue-600"
-                          />
-                          padrão
-                        </label>
-                      )}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removePlaca(idx)}
-                        title="Remover placa"
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
+    <form onSubmit={onSubmit} className="space-y-6">
+      <div className={initial ? "grid grid-cols-1 gap-6 lg:grid-cols-2" : ""}>
+        <Card className="space-y-4 p-6">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="space-y-2 md:col-span-2">
+              <Label>Nome</Label>
+              <Input
+                required
+                autoFocus
+                value={form.nome}
+                onChange={(e) => setForm({ ...form, nome: e.target.value })}
+              />
             </div>
-          )}
-        </div>
-
-        {initial ? (
-          <DocumentosSection motoristaId={initial.id} motoristaNome={initial.nome} />
-        ) : (
-          <div className="rounded-md border border-dashed bg-muted/30 px-3 py-3 text-center text-xs text-muted-foreground">
-            Salve o motorista primeiro pra anexar documentos.
+            <div className="space-y-2">
+              <Label>CPF (login)</Label>
+              <Input
+                required
+                inputMode="numeric"
+                placeholder="000.000.000-00"
+                value={form.cpf}
+                onChange={(e) => setForm({ ...form, cpf: maskCpf(e.target.value) })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{initial ? "Nova senha (opcional)" : "Senha"}</Label>
+              <Input
+                type="password"
+                minLength={initial ? 0 : 6}
+                required={!initial}
+                value={form.senha}
+                onChange={(e) => setForm({ ...form, senha: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Telefone</Label>
+              <Input
+                inputMode="tel"
+                placeholder="(00) 00000-0000"
+                value={form.telefone}
+                onChange={(e) => setForm({ ...form, telefone: maskTelefone(e.target.value) })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input
+                type="email"
+                placeholder="motorista@email.com"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+              />
+            </div>
           </div>
-        )}
 
-        <div className="flex justify-end gap-2 pt-2">
-          <Link href="/motoristas">
-            <Button type="button" variant="outline">
-              Cancelar
-            </Button>
-          </Link>
-          <Button type="submit" disabled={saving}>
-            Salvar
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Placas</Label>
+              <Button type="button" variant="outline" size="sm" onClick={addPlaca}>
+                <Plus className="h-3.5 w-3.5" /> Adicionar placa
+              </Button>
+            </div>
+            {form.placas.length === 0 ? (
+              <p className="rounded-md border border-dashed bg-muted/30 px-3 py-4 text-center text-xs text-muted-foreground">
+                Nenhuma placa cadastrada. Clique em &quot;Adicionar placa&quot; pra incluir.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {form.placas.map((p, idx) => {
+                  const placaUpper = p.placa.toUpperCase();
+                  const ehPadrao = placaUpper !== "" && form.placaDefault === placaUpper;
+                  return (
+                    <div
+                      key={idx}
+                      className="flex items-start gap-2 rounded-md border bg-background p-2"
+                    >
+                      <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-2">
+                        <Input
+                          placeholder="ABC1D23"
+                          value={p.placa}
+                          maxLength={8}
+                          onChange={(e) =>
+                            updatePlaca(idx, "placa", e.target.value.toUpperCase())
+                          }
+                          className="font-mono"
+                        />
+                        <Input
+                          placeholder="Modelo (opcional)"
+                          value={p.modelo}
+                          maxLength={80}
+                          onChange={(e) => updatePlaca(idx, "modelo", e.target.value)}
+                        />
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        {form.placas.length > 1 && placaUpper && (
+                          <label className="flex cursor-pointer items-center gap-1 text-xs text-muted-foreground">
+                            <input
+                              type="radio"
+                              name="placa-default"
+                              checked={ehPadrao}
+                              onChange={() => setDefault(placaUpper)}
+                              className="h-3 w-3 accent-blue-600"
+                            />
+                            padrão
+                          </label>
+                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removePlaca(idx)}
+                          title="Remover placa"
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </Card>
+
+        {initial && (
+          <Card className="p-6">
+            <DocumentosSection motoristaId={initial.id} motoristaNome={initial.nome} />
+          </Card>
+        )}
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <Link href="/motoristas">
+          <Button type="button" variant="outline">
+            Cancelar
           </Button>
-        </div>
-      </form>
-    </Card>
+        </Link>
+        <Button type="submit" disabled={saving}>
+          Salvar
+        </Button>
+      </div>
+    </form>
   );
 }
 
