@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { TagInput } from "@/components/ui/tag-input";
 import {
   useCreateResource,
   useResourceOptions,
@@ -21,6 +22,7 @@ export type Obra = {
   ativa: boolean;
   empresaCliente: Empresa;
   empresaClienteId: string;
+  apelidos: string[];
 };
 
 const PATH = "/admin/obras";
@@ -28,18 +30,18 @@ const EMPRESAS_PATH = "/admin/empresas";
 
 type Props = { initial?: Obra };
 
+type ObraBody = { nome: string; empresaClienteId: string; apelidos: string[] };
+
 export function ObraForm({ initial }: Props) {
   const router = useRouter();
   const empresas = useResourceOptions<Empresa>(EMPRESAS_PATH);
-  const create = useCreateResource<{ nome: string; empresaClienteId: string }, Obra>(
-    PATH,
-    PATH,
-  );
-  const update = useUpdateResource<Partial<Obra>, Obra>(PATH, PATH);
+  const create = useCreateResource<ObraBody, Obra>(PATH, PATH);
+  const update = useUpdateResource<Partial<ObraBody>, Obra>(PATH, PATH);
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<ObraBody>({
     nome: initial?.nome ?? "",
     empresaClienteId: initial?.empresaClienteId ?? "",
+    apelidos: initial?.apelidos ?? [],
   });
 
   useEffect(() => {
@@ -84,6 +86,18 @@ export function ObraForm({ initial }: Props) {
               </option>
             ))}
           </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Apelidos do motorista</Label>
+          <TagInput
+            value={form.apelidos}
+            onChange={(arr) => setForm({ ...form, apelidos: arr })}
+            placeholder='ex: "obra do beto", "shopping novo"'
+          />
+          <p className="text-xs text-muted-foreground">
+            Como o motorista chama no WhatsApp/áudio. O agente IA usa pra
+            achar a obra quando ele escreve diferente do cadastro.
+          </p>
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <Link href="/obras">

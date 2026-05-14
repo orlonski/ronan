@@ -29,6 +29,7 @@ export class MotoristaController {
     @CurrentUser() user: AuthMotorista,
     @Query("tipo") tipo: string,
     @Query("q") q: string,
+    @Query("ancora_local_id") ancoraLocalId?: string,
   ) {
     if (!["material", "obra", "local", "veiculo"].includes(tipo)) {
       throw new BadRequestException("tipo inválido");
@@ -37,6 +38,18 @@ export class MotoristaController {
       user.id,
       tipo as "material" | "obra" | "local" | "veiculo",
       q ?? "",
+      ancoraLocalId,
     );
+  }
+
+  @Get("catalogos/locais-recentes")
+  locaisRecentes(
+    @CurrentUser() user: AuthMotorista,
+    @Query("tipo") tipoUso?: string,
+    @Query("dias") dias?: string,
+  ) {
+    const t = tipoUso === "carga" || tipoUso === "descarga" ? tipoUso : "ambos";
+    const d = dias ? Math.max(1, Math.min(180, Number(dias))) : 30;
+    return this.service.locaisRecentes(user.id, t, d);
   }
 }

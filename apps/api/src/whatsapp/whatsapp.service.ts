@@ -4,6 +4,7 @@ import { AgenteService } from "./agente/agente.service";
 import { EvolutionClientService } from "./evolution-client.service";
 import { SessaoService } from "./sessao.service";
 import { ConviteService } from "./convite.service";
+import { TranscricaoService } from "./transcricao.service";
 
 type MensagemTipo = "TEXTO" | "IMAGEM" | "AUDIO";
 
@@ -23,6 +24,7 @@ export class WhatsappService {
     private readonly sessao: SessaoService,
     private readonly convite: ConviteService,
     private readonly agente: AgenteService,
+    private readonly transcricao: TranscricaoService,
   ) {}
 
   /**
@@ -53,29 +55,59 @@ export class WhatsappService {
 
     const evolutionMessageId = data.key?.id ?? null;
 
+    // Áudio: transcreve via Whisper antes de logar — assim conteudo persiste
+    // já com o texto entendido, sem retranscrever pra montar histórico depois.
+    // Só transcreve pra telefone vinculado (poupa custo de DESCONHECIDO).
+    let textoEntrada = texto ?? "";
+    let metadataTranscricao: Record<string, unknown> | null = null;
+    if (tipo === "AUDIO" && identidade.tipo !== "DESCONHECIDO") {
+      const r = await this.transcricao.transcrever({ key: data.key, message: data.message });
+      textoEntrada = r.texto;
+      metadataTranscricao = {
+        origem: "audio_transcrito",
+        modelo: r.modelo,
+        erro: r.erro ?? null,
+      };
+    }
+
     // Loga entrada
     await this.prisma.whatsappMensagem.create({
       data: {
         sessaoId: identidade.sessaoId,
         telefone,
         direcao: "ENTRADA",
-        conteudo: texto ?? "",
+        conteudo: textoEntrada,
         tipo,
-        metadata: { evolutionMsgId: evolutionMessageId, pushName: data.pushName ?? null },
+        metadata: {
+          evolutionMsgId: evolutionMessageId,
+          pushName: data.pushName ?? null,
+          ...(metadataTranscricao ?? {}),
+        },
       },
     });
 
     // Telefone desconhecido → fluxo de vinculação
     if (identidade.tipo === "DESCONHECIDO") {
-      await this.tratarDesconhecido(telefone, texto ?? "", tipo);
+      await this.tratarDesconhecido(telefone, textoEntrada, tipo);
       return;
     }
 
     // Telefone vinculado → marca atividade
     await this.sessao.marcarMensagemRecebida(identidade.sessaoId);
 
+    // Áudio sem transcrição (chave faltando, falha, alucinação) → avisa o
+    // motorista em vez de mandar string vazia pro agente.
+    if (tipo === "AUDIO" && !textoEntrada.trim()) {
+      await this.enviarTexto(
+        telefone,
+        "Não consegui entender o áudio. Tenta mandar de novo (falando mais perto) ou escreve por favor.",
+        identidade.sessaoId,
+      );
+      return;
+    }
+
     // Atalhos rápidos (não gasta token IA)
-    const txt = (texto ?? "").trim().toLowerCase();
+    const txt = textoEntrada.trim().toLowerCase();
     if (txt === "ping") {
       await this.enviarTexto(telefone, "pong 🏓", identidade.sessaoId);
       return;
@@ -91,7 +123,7 @@ export class WhatsappService {
 
     // Tudo o resto vai pro agente IA
     try {
-      const resposta = await this.agente.processar(identidade, texto ?? "", {
+      const resposta = await this.agente.processar(identidade, textoEntrada, {
         evolutionMessageId: evolutionMessageId ?? undefined,
         tipoMidia: tipo === "IMAGEM" ? "imagem" : tipo === "AUDIO" ? "audio" : undefined,
         // Payload bruto da mensagem (key + message) — necessário pra baixar mídia

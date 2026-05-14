@@ -45,7 +45,14 @@ const TOOLS_MOTORISTA: AgentToolDefinition[] = [
   {
     name: "buscar_catalogo",
     description:
-      "Busca por nome em catálogos do sistema. Use sempre que o usuário citar nome de material, obra, local de carga/descarga ou placa. Retorna até 5 resultados (id + nome). Se vier 0 ou >1, peça esclarecimento ao usuário antes de continuar.",
+      "Busca fuzzy por nome em catálogos (material, obra, local, veiculo). " +
+      "Tolera typo, abreviação, acento e apelidos (admin cadastra apelidos no painel). " +
+      "Retorna até 8 candidatos com `score` (0..2) e `motivo[]` (justificativa legível) " +
+      "pra você escolher e justificar a escolha pro motorista. " +
+      "Score alto + 'usado Nx' = quase certeza, mas SEMPRE confirme citando o nome exato. " +
+      "Score baixo (<0.5) OU múltiplos candidatos próximos (diferença <0.15) → liste opções. " +
+      "Ao buscar `local` de DESCARGA E já ter o de CARGA resolvido, passe `ancora_local_id` " +
+      "pra priorizar locais próximos no ranking.",
     input_schema: {
       type: "object",
       properties: {
@@ -56,10 +63,38 @@ const TOOLS_MOTORISTA: AgentToolDefinition[] = [
         },
         q: {
           type: "string",
-          description: "Texto livre pra buscar (substring case-insensitive)",
+          description: "Texto livre pra buscar (fuzzy: typo/acento/apelido tolerados)",
+        },
+        ancora_local_id: {
+          type: "string",
+          description:
+            "Opcional (só pra tipo=local). UUID de um local já resolvido — o ranking " +
+            "vai priorizar locais próximos geograficamente. Útil pra desambiguar descarga.",
         },
       },
       required: ["tipo", "q"],
+    },
+  },
+  {
+    name: "locais_recentes_do_motorista",
+    description:
+      "Lista os locais que ESTE motorista mais usou recentemente (default 30d). " +
+      "Use ANTES de `buscar_catalogo` quando o motorista for vago: 'igual ontem', " +
+      "'mesma de sempre', 'volta pra base'. Retorna top 10 com contagem por papel " +
+      "(carga/descarga) e última data — assim você pode sugerir um atalho.",
+    input_schema: {
+      type: "object",
+      properties: {
+        tipo: {
+          type: "string",
+          enum: ["carga", "descarga", "ambos"],
+          description: "Filtra por papel do local na viagem (default: ambos)",
+        },
+        dias: {
+          type: "number",
+          description: "Janela em dias (default: 30, max: 180)",
+        },
+      },
     },
   },
   {
@@ -185,7 +220,15 @@ export async function executarTool(
       if (ctx.identidade.tipo !== "MOTORISTA") throw new Error("tool não disponível pra esse perfil");
       const tipo = input.tipo as "material" | "obra" | "local" | "veiculo";
       const q = String(input.q ?? "");
-      return ctx.motorista.buscarCatalogo(ctx.identidade.motoristaId, tipo, q);
+      const ancora = input.ancora_local_id ? String(input.ancora_local_id) : undefined;
+      return ctx.motorista.buscarCatalogo(ctx.identidade.motoristaId, tipo, q, ancora);
+    }
+
+    case "locais_recentes_do_motorista": {
+      if (ctx.identidade.tipo !== "MOTORISTA") throw new Error("tool não disponível pra esse perfil");
+      const tipoUso = (input.tipo as "carga" | "descarga" | "ambos") ?? "ambos";
+      const dias = typeof input.dias === "number" ? Math.max(1, Math.min(180, input.dias)) : 30;
+      return ctx.motorista.locaisRecentes(ctx.identidade.motoristaId, tipoUso, dias);
     }
 
     case "criar_viagem": {

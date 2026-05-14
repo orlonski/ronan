@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { TagInput } from "@/components/ui/tag-input";
 
 const PontoMap = dynamic(
   () => import("@/components/ponto-map").then((m) => m.PontoMap),
@@ -42,6 +43,7 @@ export type Local = {
   obra: Obra | null;
   lat: number | null;
   lng: number | null;
+  apelidos: string[];
 };
 
 type ViaCepRes = {
@@ -78,6 +80,7 @@ export function LocalForm({ initial }: Props) {
     obraId: initial?.obraId ?? "",
     lat: initial?.lat ?? (null as number | null),
     lng: initial?.lng ?? (null as number | null),
+    apelidos: initial?.apelidos ?? [],
   });
   const [cepLoading, setCepLoading] = useState(false);
   const [cepNotFound, setCepNotFound] = useState(false);
@@ -136,6 +139,7 @@ export function LocalForm({ initial }: Props) {
       obraId: form.obraId || undefined,
       lat: form.lat ?? undefined,
       lng: form.lng ?? undefined,
+      apelidos: form.apelidos,
     };
     if (initial) {
       await update.mutateAsync({ id: initial.id, body });
@@ -247,6 +251,19 @@ export function LocalForm({ initial }: Props) {
             onChange={(e) => setForm({ ...form, pontoReferencia: e.target.value })}
             placeholder='ex: "portaria fundos", "balança 2"'
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Apelidos do motorista</Label>
+          <TagInput
+            value={form.apelidos}
+            onChange={(arr) => setForm({ ...form, apelidos: arr })}
+            placeholder='ex: "pedreira nova", "do souza"'
+          />
+          <p className="text-xs text-muted-foreground">
+            Como o motorista chama no WhatsApp/áudio. O agente IA usa pra
+            achar o local quando ele escreve diferente do cadastro.
+          </p>
         </div>
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">

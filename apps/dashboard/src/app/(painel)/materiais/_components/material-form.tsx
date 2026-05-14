@@ -7,26 +7,32 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { TagInput } from "@/components/ui/tag-input";
 import { useCreateResource, useUpdateResource } from "@/lib/client-api";
 
-export type Material = { id: string; nome: string; ativo: boolean };
+export type Material = { id: string; nome: string; ativo: boolean; apelidos: string[] };
 
 const PATH = "/admin/materiais";
 
 type Props = { initial?: Material };
 
+type MaterialBody = { nome: string; apelidos: string[] };
+
 export function MaterialForm({ initial }: Props) {
   const router = useRouter();
-  const create = useCreateResource<{ nome: string }, Material>(PATH, PATH);
-  const update = useUpdateResource<{ nome?: string }, Material>(PATH, PATH);
-  const [nome, setNome] = useState(initial?.nome ?? "");
+  const create = useCreateResource<MaterialBody, Material>(PATH, PATH);
+  const update = useUpdateResource<Partial<MaterialBody>, Material>(PATH, PATH);
+  const [form, setForm] = useState<MaterialBody>({
+    nome: initial?.nome ?? "",
+    apelidos: initial?.apelidos ?? [],
+  });
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (initial) {
-      await update.mutateAsync({ id: initial.id, body: { nome } });
+      await update.mutateAsync({ id: initial.id, body: form });
     } else {
-      await create.mutateAsync({ nome });
+      await create.mutateAsync(form);
     }
     router.push("/materiais");
   }
@@ -41,10 +47,22 @@ export function MaterialForm({ initial }: Props) {
           <Input
             id="nome"
             required
-            value={nome}
-            onChange={(e) => setNome(e.target.value)}
+            value={form.nome}
+            onChange={(e) => setForm({ ...form, nome: e.target.value })}
             autoFocus
           />
+        </div>
+        <div className="space-y-2">
+          <Label>Apelidos do motorista</Label>
+          <TagInput
+            value={form.apelidos}
+            onChange={(arr) => setForm({ ...form, apelidos: arr })}
+            placeholder='ex: "brita", "pedrisco"'
+          />
+          <p className="text-xs text-muted-foreground">
+            Como o motorista chama no WhatsApp/áudio. O agente IA usa pra
+            achar o material quando ele escreve diferente do cadastro.
+          </p>
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <Link href="/materiais">

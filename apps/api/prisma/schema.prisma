@@ -348,6 +348,9 @@ model LayoutImportBloco {
 model Obra {
   id               String         @id @default(uuid())
   nome             String
+  /// Apelidos/sinônimos pra busca fuzzy do agente WhatsApp. Como o motorista
+  /// chama no dia a dia (ex: "obra do beto", "shopping novo").
+  apelidos         String[]       @default([])
   empresaCliente   EmpresaCliente @relation(fields: [empresaClienteId], references: [id])
   empresaClienteId String
   ativa            Boolean        @default(true)
@@ -365,6 +368,8 @@ model Obra {
 model Material {
   id         String   @id @default(uuid())
   nome       String   @unique
+  /// Apelidos/sinônimos pra busca fuzzy do agente WhatsApp.
+  apelidos   String[] @default([])
   ativo      Boolean  @default(true)
   criadoEm   DateTime @default(now())
   alteradoEm DateTime @updatedAt
@@ -387,6 +392,9 @@ model Local {
   lat                  Float?
   lng                  Float?
   pontoReferencia      String?
+  /// Apelidos/sinônimos pra busca fuzzy do agente WhatsApp. Como o motorista
+  /// chama no dia a dia (ex: "pedreira nova", "do souza", "balança 2").
+  apelidos             String[]            @default([])
   tipo                 TipoLocal
   obra                 Obra?               @relation(fields: [obraId], references: [id])
   obraId               String?
