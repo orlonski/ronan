@@ -2,12 +2,9 @@
 
 import { use } from "react";
 import { useSession } from "next-auth/react";
-import { useQuery } from "@tanstack/react-query";
 import { FormPageHeader } from "@/components/form-page-header";
-import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { useResourceItem } from "@/lib/client-api";
 import { CampoLayoutForm, type Campo } from "../_components/campo-layout-form";
-
-const PATH = "/admin/campos-layout";
 
 export default function EditarCampoLayoutPage({
   params,
@@ -16,13 +13,7 @@ export default function EditarCampoLayoutPage({
 }) {
   const { id } = use(params);
   const { data: session } = useSession();
-  const token = useAuthToken();
-
-  const list = useQuery({
-    queryKey: [PATH, token],
-    enabled: !!token,
-    queryFn: () => fetchApi<Campo[]>(PATH, { token }),
-  });
+  const item = useResourceItem<Campo>("/admin/campos-layout", id);
 
   if (session?.user?.perfil !== "ADMIN") {
     return (
@@ -32,21 +23,16 @@ export default function EditarCampoLayoutPage({
     );
   }
 
-  const campo = list.data?.find((c) => c.id === id);
-
   return (
     <div className="space-y-6">
       <FormPageHeader
-        title={campo ? `Editar "${campo.label}"` : "Editar campo de layout"}
+        title={item.data ? `Editar "${item.data.label}"` : "Editar campo de layout"}
         backHref="/configuracoes/campos-layout"
       />
-      {list.isLoading && (
+      {item.isLoading && (
         <p className="text-sm text-muted-foreground">Carregando…</p>
       )}
-      {!list.isLoading && !campo && (
-        <p className="text-sm text-destructive">Campo não encontrado.</p>
-      )}
-      {campo && <CampoLayoutForm initial={campo} />}
+      {item.data && <CampoLayoutForm initial={item.data} />}
     </div>
   );
 }

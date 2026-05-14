@@ -83,6 +83,12 @@ export class CamposLayoutService implements OnModuleInit {
     });
   }
 
+  async findOne(id: string) {
+    const campo = await this.prisma.campoLayout.findUnique({ where: { id } });
+    if (!campo) throw new NotFoundException("Campo não encontrado");
+    return campo;
+  }
+
   /** Lista apenas slugs ativos — usado pelo IaService pra montar o prompt. */
   async listarSlugsAtivos() {
     return this.prisma.campoLayout.findMany({

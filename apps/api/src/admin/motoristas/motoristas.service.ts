@@ -77,6 +77,12 @@ export class MotoristasService {
     };
   }
 
+  async findOne(id: string) {
+    const m = await this.prisma.motorista.findUnique({ where: { id }, select: SAFE_SELECT });
+    if (!m) throw new NotFoundException("Motorista não encontrado");
+    return this.flatten(m);
+  }
+
   async create(data: CriarMotoristaInput) {
     const exists = await this.prisma.motorista.findUnique({ where: { cpf: data.cpf } });
     if (exists) throw new ConflictException("CPF já cadastrado");

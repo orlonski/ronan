@@ -44,6 +44,12 @@ export class CamposLayoutController {
   }
 
   @Roles("ADMIN")
+  @Get(":id")
+  findOne(@Param("id") id: string) {
+    return this.service.findOne(id);
+  }
+
+  @Roles("ADMIN")
   @Post()
   create(
     @Body(new ZodValidationPipe(CriarCampoSchema))

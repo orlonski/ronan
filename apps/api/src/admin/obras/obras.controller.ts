@@ -37,6 +37,11 @@ export class ObrasController {
     return this.service.list(query);
   }
 
+  @Get(":id")
+  findOne(@Param("id") id: string) {
+    return this.service.findOne(id);
+  }
+
   @Post()
   create(@Body(new ZodValidationPipe(CriarObraInput)) body: CriarObraInput) {
     return this.service.create(body);

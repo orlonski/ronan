@@ -57,6 +57,13 @@ export class LocaisService {
     });
   }
 
+  findOne(id: string) {
+    return this.prisma.local.findUniqueOrThrow({
+      where: { id },
+      include: { obra: { select: { id: true, nome: true } } },
+    });
+  }
+
   /**
    * Admin homologa manualmente — sobe pra HUMANO (top da hierarquia).
    */

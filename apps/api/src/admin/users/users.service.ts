@@ -46,6 +46,10 @@ export class UsersService {
     });
   }
 
+  findOne(id: string) {
+    return this.prisma.user.findUniqueOrThrow({ where: { id }, select: SAFE_SELECT });
+  }
+
   async create(data: CriarUserInput) {
     const exists = await this.prisma.user.findUnique({ where: { email: data.email } });
     if (exists) throw new ConflictException("Email já cadastrado");

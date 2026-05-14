@@ -36,6 +36,12 @@ export class UsersController {
   }
 
   @Roles("ADMIN")
+  @Get(":id")
+  findOne(@Param("id") id: string) {
+    return this.service.findOne(id);
+  }
+
+  @Roles("ADMIN")
   @Post()
   create(@Body(new ZodValidationPipe(CriarUserInput)) body: CriarUserInput) {
     return this.service.create(body);

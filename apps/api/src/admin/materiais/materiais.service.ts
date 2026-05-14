@@ -23,6 +23,10 @@ export class MateriaisService {
     });
   }
 
+  findOne(id: string) {
+    return this.prisma.material.findUniqueOrThrow({ where: { id } });
+  }
+
   async create(data: CriarMaterialInput) {
     const exists = await this.prisma.material.findUnique({ where: { nome: data.nome } });
     if (exists) throw new ConflictException("Material já cadastrado");

@@ -33,6 +33,13 @@ export class ObrasService {
     });
   }
 
+  findOne(id: string) {
+    return this.prisma.obra.findUniqueOrThrow({
+      where: { id },
+      include: { empresaCliente: { select: { id: true, nome: true } } },
+    });
+  }
+
   async create(data: CriarObraInput) {
     await this.ensureEmpresa(data.empresaClienteId);
     return this.prisma.obra.create({ data });

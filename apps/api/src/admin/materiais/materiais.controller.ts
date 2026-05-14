@@ -29,6 +29,11 @@ export class MateriaisController {
     return this.service.list(query);
   }
 
+  @Get(":id")
+  findOne(@Param("id") id: string) {
+    return this.service.findOne(id);
+  }
+
   @Post()
   create(@Body(new ZodValidationPipe(CriarMaterialInput)) body: CriarMaterialInput) {
     return this.service.create(body);
