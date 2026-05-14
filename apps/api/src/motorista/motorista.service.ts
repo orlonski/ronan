@@ -38,6 +38,437 @@ export class MotoristaService {
     return { ...rest, veiculos: veiculos.map((v) => v.veiculo) };
   }
 
+  /**
+   * Perfil rico pro agente IA do WhatsApp ter contexto sem precisar buscar
+   * tudo a cada turno. Devolve só nomes/placas (zero UUIDs) — o objetivo é
+   * que o modelo "saiba o universo provável" desse motorista de cara.
+   */
+  async perfilParaAgente(motoristaId: string) {
+    const m = await this.me(motoristaId);
+
+    type LinhaTop = { nome: string; vezes: bigint; ultima: Date };
+    type LinhaTrajeto = {
+      carga: string;
+      cargaCidade: string;
+      descarga: string;
+      descargaCidade: string;
+      obra: string;
+      vezes: bigint;
+      ultima: Date;
+    };
+
+    const [topMateriais, topObras, topLocais, topTrajetos] = await Promise.all([
+      this.prisma.$queryRaw<LinhaTop[]>`
+        SELECT mat.nome AS nome, COUNT(*)::bigint AS vezes, MAX(v.data) AS ultima
+        FROM viagens v
+        JOIN materiais mat ON mat.id = v."materialId"
+        WHERE v."motoristaId" = ${motoristaId}
+          AND v.data >= now() - interval '90 days'
+          AND mat.ativo = true
+        GROUP BY mat.nome
+        ORDER BY vezes DESC, ultima DESC
+        LIMIT 5
+      `,
+      this.prisma.$queryRaw<LinhaTop[]>`
+        SELECT o.nome AS nome, COUNT(*)::bigint AS vezes, MAX(v.data) AS ultima
+        FROM viagens v
+        JOIN obras o ON o.id = v."obraId"
+        WHERE v."motoristaId" = ${motoristaId}
+          AND v.data >= now() - interval '90 days'
+          AND o.ativa = true
+        GROUP BY o.nome
+        ORDER BY vezes DESC, ultima DESC
+        LIMIT 10
+      `,
+      this.prisma.$queryRaw<(LinhaTop & { cidade: string; uf: string })[]>`
+        WITH usos AS (
+          SELECT "localCargaId" AS id FROM viagens
+            WHERE "motoristaId" = ${motoristaId} AND data >= now() - interval '90 days'
+          UNION ALL
+          SELECT "localDescargaId" AS id FROM viagens
+            WHERE "motoristaId" = ${motoristaId} AND data >= now() - interval '90 days'
+        ),
+        agg AS (
+          SELECT id, COUNT(*)::bigint AS vezes
+          FROM usos GROUP BY id
+        )
+        SELECT l.nome AS nome, l.cidade AS cidade, l.uf AS uf,
+               a.vezes AS vezes, MAX(v.data) AS ultima
+        FROM agg a
+        JOIN locais l ON l.id = a.id AND l.ativo = true
+        JOIN viagens v ON (v."localCargaId" = a.id OR v."localDescargaId" = a.id)
+                       AND v."motoristaId" = ${motoristaId}
+        GROUP BY l.nome, l.cidade, l.uf, a.vezes
+        ORDER BY vezes DESC, ultima DESC
+        LIMIT 20
+      `,
+      this.prisma.$queryRaw<LinhaTrajeto[]>`
+        SELECT lc.nome AS carga, lc.cidade AS "cargaCidade",
+               ld.nome AS descarga, ld.cidade AS "descargaCidade",
+               o.nome AS obra,
+               COUNT(*)::bigint AS vezes, MAX(v.data) AS ultima
+        FROM viagens v
+        JOIN locais lc ON lc.id = v."localCargaId"
+        JOIN locais ld ON ld.id = v."localDescargaId"
+        JOIN obras o ON o.id = v."obraId" AND o.ativa = true
+        WHERE v."motoristaId" = ${motoristaId}
+          AND v.data >= now() - interval '90 days'
+        GROUP BY lc.nome, lc.cidade, ld.nome, ld.cidade, o.nome
+        ORDER BY vezes DESC, ultima DESC
+        LIMIT 10
+      `,
+    ]);
+
+    const formatTop = (arr: LinhaTop[]) =>
+      arr.map((r) => ({
+        nome: r.nome,
+        vezes: Number(r.vezes),
+        ultimaData: r.ultima.toISOString().slice(0, 10),
+      }));
+
+    return {
+      motorista: {
+        nome: m.nome,
+        cpf: m.cpf,
+        veiculoDefault: m.veiculoDefault
+          ? { placa: m.veiculoDefault.placa, modelo: m.veiculoDefault.modelo }
+          : null,
+        outrosVeiculos: m.veiculos
+          .filter((v) => v.id !== m.veiculoDefaultId)
+          .map((v) => ({ placa: v.placa, modelo: v.modelo })),
+      },
+      janela_dias: 90,
+      topMateriais: formatTop(topMateriais),
+      topObras: formatTop(topObras),
+      topLocais: topLocais.map((r) => ({
+        nome: r.nome,
+        cidade: r.cidade,
+        uf: r.uf,
+        vezes: Number(r.vezes),
+        ultimaData: r.ultima.toISOString().slice(0, 10),
+      })),
+      topTrajetos: topTrajetos.map((r) => ({
+        de: `${r.carga} (${r.cargaCidade})`,
+        para: `${r.descarga} (${r.descargaCidade})`,
+        obra: r.obra,
+        vezes: Number(r.vezes),
+        ultimaData: r.ultima.toISOString().slice(0, 10),
+      })),
+    };
+  }
+
+  /**
+   * Resolve nomes/placas humanos pra UUIDs antes de criar a viagem.
+   * Tira o UUID do contrato com o modelo IA — ele só fala em texto livre.
+   *
+   * Detecção: string com 36 chars no formato UUID = ID direto; senao busca
+   * fuzzy. Auto-aceita top candidato se score >= 0.6 E diferenca pra top2
+   * >= 0.2 OU se top2 nem existe. Senao marca como ambiguidade.
+   *
+   * Veículo: se nao passar, usa veiculoDefault. Data: se nao passar ou for
+   * "hoje"/"ontem", interpreta. Obra: se nao passar mas carga+descarga
+   * resolverem, tenta inferir pelo trajeto.
+   *
+   * Retorna {resolvido: true, ids, nomesCanonicos} OU
+   * {resolvido: false, ambiguidades: [{campo, candidatos, mensagem}], faltando: [...]}.
+   */
+  async resolverViagemPorNomes(
+    motoristaId: string,
+    input: {
+      veiculo?: string;
+      obra?: string;
+      material?: string;
+      carga?: string;
+      descarga?: string;
+      data?: string;
+    },
+  ): Promise<
+    | {
+        resolvido: true;
+        ids: {
+          veiculoId: string;
+          obraId: string;
+          materialId: string;
+          localCargaId: string;
+          localDescargaId: string;
+          data: Date;
+        };
+        nomesCanonicos: {
+          veiculo: string;
+          obra: string;
+          material: string;
+          carga: string;
+          descarga: string;
+          dataLegivel: string;
+        };
+        notas: string[];
+      }
+    | {
+        resolvido: false;
+        ambiguidades: Array<{
+          campo: string;
+          mensagem: string;
+          candidatos: Array<{ nome: string; motivo: string[] }>;
+        }>;
+        faltando: string[];
+      }
+  > {
+    const ambiguidades: Array<{
+      campo: string;
+      mensagem: string;
+      candidatos: Array<{ nome: string; motivo: string[] }>;
+    }> = [];
+    const faltando: string[] = [];
+    const notas: string[] = [];
+    const ids: Partial<{
+      veiculoId: string;
+      obraId: string;
+      materialId: string;
+      localCargaId: string;
+      localDescargaId: string;
+    }> = {};
+    const nomes: Partial<{
+      veiculo: string;
+      obra: string;
+      material: string;
+      carga: string;
+      descarga: string;
+    }> = {};
+
+    // VEÍCULO
+    if (input.veiculo) {
+      const r = await this.resolverCampo("veiculo", input.veiculo, motoristaId);
+      if (r.tipo === "ok") {
+        ids.veiculoId = r.id;
+        nomes.veiculo = r.nome;
+      } else if (r.tipo === "ambiguo") {
+        ambiguidades.push({
+          campo: "veiculo",
+          mensagem: `Tem mais de uma placa parecida com "${input.veiculo}".`,
+          candidatos: r.candidatos,
+        });
+      } else {
+        faltando.push("veiculo");
+      }
+    } else {
+      const me = await this.me(motoristaId);
+      if (me.veiculoDefault) {
+        ids.veiculoId = me.veiculoDefault.id;
+        nomes.veiculo = me.veiculoDefault.placa;
+        notas.push(`veículo: usei seu padrão ${me.veiculoDefault.placa}`);
+      } else {
+        faltando.push("veiculo");
+      }
+    }
+
+    // MATERIAL
+    if (input.material) {
+      const r = await this.resolverCampo("material", input.material, motoristaId);
+      if (r.tipo === "ok") {
+        ids.materialId = r.id;
+        nomes.material = r.nome;
+      } else if (r.tipo === "ambiguo") {
+        ambiguidades.push({
+          campo: "material",
+          mensagem: `Achei mais de um material que casa com "${input.material}".`,
+          candidatos: r.candidatos,
+        });
+      } else {
+        faltando.push("material");
+      }
+    } else {
+      faltando.push("material");
+    }
+
+    // CARGA
+    if (input.carga) {
+      const r = await this.resolverCampo("local", input.carga, motoristaId);
+      if (r.tipo === "ok") {
+        ids.localCargaId = r.id;
+        nomes.carga = r.nome;
+      } else if (r.tipo === "ambiguo") {
+        ambiguidades.push({
+          campo: "carga",
+          mensagem: `Tem mais de um local de carga parecido com "${input.carga}".`,
+          candidatos: r.candidatos,
+        });
+      } else {
+        faltando.push("carga");
+      }
+    } else {
+      faltando.push("carga");
+    }
+
+    // DESCARGA (com âncora na carga, se resolvida)
+    if (input.descarga) {
+      const r = await this.resolverCampo(
+        "local",
+        input.descarga,
+        motoristaId,
+        ids.localCargaId,
+      );
+      if (r.tipo === "ok") {
+        ids.localDescargaId = r.id;
+        nomes.descarga = r.nome;
+      } else if (r.tipo === "ambiguo") {
+        ambiguidades.push({
+          campo: "descarga",
+          mensagem: `Tem mais de um local de descarga parecido com "${input.descarga}".`,
+          candidatos: r.candidatos,
+        });
+      } else {
+        faltando.push("descarga");
+      }
+    } else {
+      faltando.push("descarga");
+    }
+
+    // OBRA — se nao veio mas carga+descarga resolveram, tenta inferir trajeto
+    if (input.obra) {
+      const r = await this.resolverCampo("obra", input.obra, motoristaId);
+      if (r.tipo === "ok") {
+        ids.obraId = r.id;
+        nomes.obra = r.nome;
+      } else if (r.tipo === "ambiguo") {
+        ambiguidades.push({
+          campo: "obra",
+          mensagem: `Achei mais de uma obra parecida com "${input.obra}".`,
+          candidatos: r.candidatos,
+        });
+      } else {
+        faltando.push("obra");
+      }
+    } else if (ids.localCargaId && ids.localDescargaId) {
+      const inf = await this.inferirObraPorTrajeto(
+        motoristaId,
+        ids.localCargaId,
+        ids.localDescargaId,
+        ids.materialId,
+      );
+      if (inf.auto_selecionavel && inf.candidatos[0]) {
+        ids.obraId = inf.candidatos[0].obraId;
+        nomes.obra = inf.candidatos[0].nome;
+        notas.push(`obra: deduzi pelo trajeto (${inf.candidatos[0].motivo.join(", ")})`);
+      } else if (inf.candidatos.length > 0) {
+        ambiguidades.push({
+          campo: "obra",
+          mensagem: "Esse trajeto já rodou pra mais de uma obra. Qual é?",
+          candidatos: inf.candidatos.slice(0, 3).map((c) => ({
+            nome: c.nome,
+            motivo: c.motivo,
+          })),
+        });
+      } else {
+        faltando.push("obra");
+      }
+    } else {
+      faltando.push("obra");
+    }
+
+    // DATA
+    let data = new Date();
+    if (input.data) {
+      const lower = input.data.toLowerCase().trim();
+      if (lower === "hoje" || lower === "agora") {
+        // já é now
+      } else if (lower === "ontem") {
+        data.setDate(data.getDate() - 1);
+      } else {
+        const parsed = new Date(input.data);
+        if (!isNaN(parsed.getTime())) data = parsed;
+      }
+    }
+
+    if (ambiguidades.length > 0 || faltando.length > 0) {
+      return { resolvido: false, ambiguidades, faltando };
+    }
+
+    return {
+      resolvido: true,
+      ids: {
+        veiculoId: ids.veiculoId!,
+        obraId: ids.obraId!,
+        materialId: ids.materialId!,
+        localCargaId: ids.localCargaId!,
+        localDescargaId: ids.localDescargaId!,
+        data,
+      },
+      nomesCanonicos: {
+        veiculo: nomes.veiculo!,
+        obra: nomes.obra!,
+        material: nomes.material!,
+        carga: nomes.carga!,
+        descarga: nomes.descarga!,
+        dataLegivel: data.toISOString().slice(0, 10),
+      },
+      notas,
+    };
+  }
+
+  private async resolverCampo(
+    tipo: CatalogoTipo,
+    valor: string,
+    motoristaId: string,
+    ancora?: string,
+  ): Promise<
+    | { tipo: "ok"; id: string; nome: string }
+    | { tipo: "ambiguo"; candidatos: Array<{ nome: string; motivo: string[] }> }
+    | { tipo: "vazio" }
+  > {
+    // UUID direto (string com 36 chars formato UUID): aceita sem buscar.
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(valor.trim())) {
+      const id = valor.trim();
+      const nome = await this.lookupNomeById(tipo, id);
+      if (nome) return { tipo: "ok", id, nome };
+      // UUID válido mas não existe — trata como vazio pra fluxo de "nao achei"
+      return { tipo: "vazio" };
+    }
+
+    const matches = await this.buscarCatalogo(motoristaId, tipo, valor, ancora);
+    if (matches.length === 0) return { tipo: "vazio" };
+
+    const top = matches[0];
+    const segundo = matches[1];
+    const margem = segundo ? top.score - segundo.score : Infinity;
+
+    // Auto-aceita se top é forte E significativamente melhor que segundo
+    if (top.score >= 0.6 && margem >= 0.2) {
+      return { tipo: "ok", id: top.id, nome: top.nome };
+    }
+    // Top único forte
+    if (matches.length === 1 && top.score >= 0.5) {
+      return { tipo: "ok", id: top.id, nome: top.nome };
+    }
+    // Senão, ambíguo — devolve top 3
+    return {
+      tipo: "ambiguo",
+      candidatos: matches.slice(0, 3).map((m) => ({
+        nome: m.nome,
+        motivo: m.motivo,
+      })),
+    };
+  }
+
+  private async lookupNomeById(tipo: CatalogoTipo, id: string): Promise<string | null> {
+    if (tipo === "obra") {
+      const r = await this.prisma.obra.findUnique({ where: { id }, select: { nome: true } });
+      return r?.nome ?? null;
+    }
+    if (tipo === "material") {
+      const r = await this.prisma.material.findUnique({ where: { id }, select: { nome: true } });
+      return r?.nome ?? null;
+    }
+    if (tipo === "local") {
+      const r = await this.prisma.local.findUnique({ where: { id }, select: { nome: true } });
+      return r?.nome ?? null;
+    }
+    if (tipo === "veiculo") {
+      const r = await this.prisma.veiculo.findUnique({ where: { id }, select: { placa: true } });
+      return r?.placa ?? null;
+    }
+    return null;
+  }
+
   async catalogos(motoristaId: string) {
     // Motorista vê só as placas vinculadas a ele (relação N:N).
     // Se não tem nenhuma vinculada, mostra a frota inteira como fallback

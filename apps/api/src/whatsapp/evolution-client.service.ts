@@ -44,6 +44,35 @@ export class EvolutionClientService {
   }
 
   /**
+   * Envia até 3 botões clicáveis pro motorista escolher entre opções.
+   * Quando ele clica, vem de volta no webhook como buttonsResponseMessage
+   * e é convertido pra "[OPÇÃO] <texto>" pra continuar o fluxo natural.
+   *
+   * Formato Evolution API v2.x. Aceita até 3 botões (limite WhatsApp).
+   */
+  async enviarBotoes(
+    telefone: string,
+    titulo: string,
+    descricao: string,
+    opcoes: Array<{ id: string; texto: string }>,
+  ): Promise<void> {
+    if (opcoes.length === 0 || opcoes.length > 3) {
+      throw new Error("enviarBotoes aceita 1 a 3 opções");
+    }
+    await this.req(`/message/sendButtons/${this.instance}`, {
+      number: telefone,
+      title: titulo,
+      description: descricao,
+      footer: "Ronan",
+      buttons: opcoes.map((o) => ({
+        type: "reply",
+        displayText: o.texto.slice(0, 20), // WhatsApp corta acima de 20
+        id: o.id,
+      })),
+    });
+  }
+
+  /**
    * Verifica se a instância está conectada (Baileys "open").
    * Retorna estado bruto pra UI mostrar status.
    */

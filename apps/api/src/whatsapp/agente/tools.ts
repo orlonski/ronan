@@ -27,6 +27,7 @@ export type ToolContext = {
     evolutionMessageId?: string;
     tipoMidia?: "imagem" | "audio";
     evolutionPayload?: { key: unknown; message: unknown };
+    telefoneRemetente?: string;
   };
 };
 
@@ -122,46 +123,104 @@ const TOOLS_MOTORISTA: AgentToolDefinition[] = [
     },
   },
   {
-    name: "info_motorista",
+    name: "perfil_motorista",
     description:
-      "Retorna info do motorista logado: nome, CPF, placa default, veículo associado.",
+      "Retorna perfil rico do motorista pra você ter contexto sem buscar tudo: " +
+      "nome, placa default, top 5 materiais, top 10 obras, top 20 locais e top 10 trajetos " +
+      "(par carga→descarga→obra mais frequentes) dos últimos 90 dias. " +
+      "Chame UMA VEZ no início se ainda não tiver chamado nesta conversa — assim " +
+      "você já 'conhece o universo' desse motorista e raramente precisa buscar. " +
+      "Tudo em texto humano (placas, nomes), zero IDs.",
     input_schema: { type: "object", properties: {} },
   },
   {
-    name: "criar_viagem",
+    name: "lancar_viagem",
     description:
-      "Cria uma nova viagem (lançamento de transporte). NUNCA chame sem confirmação explícita do usuário ('sim', 'confirma', 'ok'). Idempotente via clientId.",
+      "Cria uma viagem usando NOMES HUMANOS (placas, nomes de obra/material/locais), " +
+      "não UUIDs. Você passa o que o motorista falou, o backend resolve fuzzy. " +
+      "Veículo é opcional (usa o default do motorista). Obra é opcional (se carga e " +
+      "descarga forem comuns, o backend infere). Data aceita 'hoje', 'ontem' ou ISO. " +
+      "\n\nRetorno: " +
+      "\n- `{ok: true, ticket, viagem: {...}}` — viagem criada, conte ao motorista. " +
+      "\n- `{ok: false, ambiguidades: [...]}` — algum campo tem mais de uma opção, " +
+      "  apresente as opções pro motorista escolher (use a tool oferecer_opcoes). " +
+      "\n- `{ok: false, faltando: [...]}` — algum dado essencial não veio, pergunte naturalmente. " +
+      "\n- `{ok: false, erro: '...'}` — erro real (ticket duplicado, etc), explique " +
+      "  pro motorista em PT-BR claro. " +
+      "\n\nNUNCA chame sem confirmação explícita do motorista (ele disse 'sim', 'confirma', 'pode'). " +
+      "Idempotente via motorista+ticket+data.",
     input_schema: {
       type: "object",
       properties: {
-        veiculoId: { type: "string", description: "UUID do veículo" },
-        obraId: { type: "string", description: "UUID da obra" },
-        materialId: { type: "string", description: "UUID do material" },
-        localCargaId: { type: "string", description: "UUID do local de carga" },
-        localDescargaId: { type: "string", description: "UUID do local de descarga" },
-        toneladas: { type: "number", description: "Toneladas, positivo" },
-        ticket: { type: "string", description: "Número/código do ticket" },
-        km: { type: "number", description: "Quilometragem rodada" },
+        material: {
+          type: "string",
+          description: "Nome do material como o motorista falou (ex: 'CBUQ', 'areia média', 'brita 1').",
+        },
+        carga: {
+          type: "string",
+          description: "Local de carga (nome/rua/bairro como o motorista falou).",
+        },
+        descarga: {
+          type: "string",
+          description: "Local de descarga (nome/cidade/obra como o motorista falou).",
+        },
+        obra: {
+          type: "string",
+          description:
+            "Nome/código da obra (opcional — se você omitir e o trajeto for comum, " +
+            "backend infere; se houver dúvida, retorna ambiguidade pra você perguntar).",
+        },
+        veiculo: {
+          type: "string",
+          description: "Placa (opcional — sem isso usa o veículo padrão do motorista).",
+        },
+        toneladas: { type: "number", description: "Peso em toneladas." },
+        ticket: { type: "string", description: "Número/código do ticket." },
+        km: { type: "number", description: "Quilometragem rodada (somente a viagem)." },
         data: {
           type: "string",
-          description: "Data em ISO (ex: 2026-05-08). Se vazio, usa hoje.",
+          description: "'hoje', 'ontem' ou ISO (ex: 2026-05-08). Default: hoje.",
         },
-        valorPedagioTotal: {
-          type: "number",
-          description: "Valor total em R$ pedágio (opcional)",
-        },
-        observacao: { type: "string", description: "Observação livre (opcional)" },
+        valorPedagioTotal: { type: "number", description: "R$ pedágio total (opcional)." },
+        observacao: { type: "string", description: "Observação livre (opcional)." },
       },
-      required: [
-        "veiculoId",
-        "obraId",
-        "materialId",
-        "localCargaId",
-        "localDescargaId",
-        "toneladas",
-        "ticket",
-        "km",
-      ],
+      required: ["material", "carga", "descarga", "toneladas", "ticket", "km"],
+    },
+  },
+  {
+    name: "oferecer_opcoes",
+    description:
+      "Envia 1 a 3 BOTÕES CLICÁVEIS pro motorista escolher entre opções, em vez de " +
+      "listar opções em texto. Use quando lancar_viagem retornar `ambiguidades` ou " +
+      "quando você precisa que o motorista escolha entre alternativas claras. " +
+      "DEPOIS de chamar essa tool, NÃO responda texto adicional — os botões já " +
+      "comunicam a pergunta. Aguarde o motorista clicar; a resposta vem como " +
+      "uma mensagem normal contendo o texto do botão escolhido.",
+    input_schema: {
+      type: "object",
+      properties: {
+        pergunta: {
+          type: "string",
+          description: "Texto curto explicando o que escolher (ex: 'Qual destas?')",
+        },
+        opcoes: {
+          type: "array",
+          description: "1 a 3 opções clicáveis. Cada label tem até 20 chars (corta se passar).",
+          items: {
+            type: "object",
+            properties: {
+              texto: {
+                type: "string",
+                description: "Label do botão — nome humano curto da opção (max 20 chars)",
+              },
+            },
+            required: ["texto"],
+          },
+          minItems: 1,
+          maxItems: 3,
+        },
+      },
+      required: ["pergunta", "opcoes"],
     },
   },
   {
@@ -252,9 +311,9 @@ async function executarToolInterno(
         ? { tipo: "MOTORISTA", nome: ctx.identidade.nome, motoristaId: ctx.identidade.motoristaId }
         : { tipo: "ADMIN", nome: ctx.identidade.nome, perfil: ctx.identidade.perfil };
 
-    case "info_motorista": {
+    case "perfil_motorista": {
       if (ctx.identidade.tipo !== "MOTORISTA") throw new Error("tool não disponível pra esse perfil");
-      return ctx.motorista.me(ctx.identidade.motoristaId);
+      return ctx.motorista.perfilParaAgente(ctx.identidade.motoristaId);
     }
 
     case "buscar_catalogo": {
@@ -291,30 +350,93 @@ async function executarToolInterno(
       );
     }
 
-    case "criar_viagem": {
-      if (ctx.identidade.tipo !== "MOTORISTA") throw new Error("tool não disponível pra esse perfil");
-      const clientId = derivarClientId(ctx.identidade.motoristaId, input);
-      const data = input.data ? new Date(String(input.data)) : new Date();
-      const v = await ctx.viagens.create(ctx.identidade.motoristaId, {
-        clientId,
-        veiculoId: String(input.veiculoId),
-        obraId: String(input.obraId),
-        materialId: String(input.materialId),
-        localCargaId: String(input.localCargaId),
-        localDescargaId: String(input.localDescargaId),
-        data,
-        toneladas: Number(input.toneladas),
-        ticket: String(input.ticket),
-        km: Number(input.km),
-        valorPedagioTotal:
-          input.valorPedagioTotal != null ? Number(input.valorPedagioTotal) : undefined,
-        observacao: input.observacao ? String(input.observacao) : undefined,
-      } as never);
+    case "lancar_viagem": {
+      if (ctx.identidade.tipo !== "MOTORISTA")
+        throw new Error("tool não disponível pra esse perfil");
+
+      // 1. Resolve nomes humanos → UUIDs no backend (modelo nunca toca em UUID)
+      const resolucao = await ctx.motorista.resolverViagemPorNomes(
+        ctx.identidade.motoristaId,
+        {
+          veiculo: input.veiculo ? String(input.veiculo) : undefined,
+          obra: input.obra ? String(input.obra) : undefined,
+          material: input.material ? String(input.material) : undefined,
+          carga: input.carga ? String(input.carga) : undefined,
+          descarga: input.descarga ? String(input.descarga) : undefined,
+          data: input.data ? String(input.data) : undefined,
+        },
+      );
+
+      if (!resolucao.resolvido) {
+        return {
+          ok: false,
+          ambiguidades: resolucao.ambiguidades,
+          faltando: resolucao.faltando,
+        };
+      }
+
+      // 2. Cria a viagem com os IDs resolvidos
+      const clientIdInput = {
+        ticket: input.ticket,
+        obraId: resolucao.ids.obraId,
+        data: resolucao.ids.data.toISOString(),
+      };
+      const clientId = derivarClientId(ctx.identidade.motoristaId, clientIdInput);
+
+      try {
+        const v = await ctx.viagens.create(ctx.identidade.motoristaId, {
+          clientId,
+          veiculoId: resolucao.ids.veiculoId,
+          obraId: resolucao.ids.obraId,
+          materialId: resolucao.ids.materialId,
+          localCargaId: resolucao.ids.localCargaId,
+          localDescargaId: resolucao.ids.localDescargaId,
+          data: resolucao.ids.data,
+          toneladas: Number(input.toneladas),
+          ticket: String(input.ticket),
+          km: Number(input.km),
+          valorPedagioTotal:
+            input.valorPedagioTotal != null ? Number(input.valorPedagioTotal) : undefined,
+          observacao: input.observacao ? String(input.observacao) : undefined,
+        } as never);
+        return {
+          ok: true,
+          ticket: v?.ticket,
+          viagem: {
+            ...resolucao.nomesCanonicos,
+            toneladas: Number(input.toneladas),
+            km: Number(input.km),
+          },
+          notas: resolucao.notas,
+        };
+      } catch (e) {
+        const err = e instanceof Error ? e : new Error(String(e));
+        return {
+          ok: false,
+          erro: err.message,
+        };
+      }
+    }
+
+    case "oferecer_opcoes": {
+      if (ctx.identidade.tipo !== "MOTORISTA")
+        throw new Error("tool não disponível pra esse perfil");
+      const telefone = ctx.metadata?.telefoneRemetente;
+      if (!telefone) throw new Error("Telefone do destinatário ausente no contexto.");
+      const pergunta = String(input.pergunta ?? "").trim();
+      const opcoesRaw = (input.opcoes as Array<{ texto?: unknown }> | undefined) ?? [];
+      const opcoes = opcoesRaw
+        .map((o, i) => ({ id: `opt_${i}`, texto: String(o?.texto ?? "").trim() }))
+        .filter((o) => o.texto.length > 0)
+        .slice(0, 3);
+      if (opcoes.length === 0) {
+        throw new Error("oferecer_opcoes precisa de pelo menos 1 opção válida.");
+      }
+      await ctx.evolution.enviarBotoes(telefone, "Selecione", pergunta || "Qual destas?", opcoes);
       return {
-        ok: true,
-        viagemId: v?.id,
-        ticket: v?.ticket,
-        criadaEm: v?.sincronizadoEm,
+        enviado: true,
+        instrucao:
+          "Botões enviados ao motorista. NÃO responda texto adicional nesse turno — termine sem texto e aguarde o clique dele (vai chegar como mensagem com o texto do botão).",
       };
     }
 

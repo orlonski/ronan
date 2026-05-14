@@ -189,13 +189,18 @@ export class WhatsappService {
         const resposta = await this.agente.processar(identidade, textoEntrada, {
           evolutionMessageId: evolutionMessageId ?? undefined,
           tipoMidia: tipo === "IMAGEM" ? "imagem" : tipo === "AUDIO" ? "audio" : undefined,
+          telefoneRemetente: telefone,
           // Payload bruto da mensagem (key + message) — necessário pra baixar mídia
           // sem depender de DATABASE_SAVE_DATA_NEW_MESSAGE no Evolution
           evolutionPayload: tipo === "IMAGEM" || tipo === "AUDIO"
             ? { key: data.key, message: data.message }
             : undefined,
         });
-        await this.enviarTexto(telefone, resposta, sessaoId);
+        // Modelo pode terminar sem texto (ex: depois de oferecer_opcoes, a tool
+        // já mandou os botões — texto adicional só duplicaria).
+        if (resposta && resposta.trim()) {
+          await this.enviarTexto(telefone, resposta, sessaoId);
+        }
       } catch (e) {
         const toolName = (e as { toolName?: string }).toolName;
         await this.reportarErro(e, {
@@ -321,5 +326,15 @@ function extrairConteudo(data: any): { texto: string | null; tipo: MensagemTipo 
   }
   if (m.imageMessage) return { texto: m.imageMessage.caption ?? "", tipo: "IMAGEM" };
   if (m.audioMessage) return { texto: "", tipo: "AUDIO" };
+  // Botão clicado (resposta de oferecer_opcoes): vira "[OPÇÃO] <texto>"
+  // pra fluir pro agente como se fosse mensagem de texto.
+  const botao =
+    m.buttonsResponseMessage?.selectedDisplayText ??
+    m.templateButtonReplyMessage?.selectedDisplayText ??
+    m.interactiveResponseMessage?.body?.text ??
+    null;
+  if (typeof botao === "string" && botao.trim()) {
+    return { texto: botao.trim(), tipo: "TEXTO" };
+  }
   return { texto: null, tipo: "TEXTO" };
 }

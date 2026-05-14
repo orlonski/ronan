@@ -76,6 +76,7 @@ export class AgenteService {
       evolutionMessageId?: string;
       tipoMidia?: "imagem" | "audio";
       evolutionPayload?: { key: unknown; message: unknown };
+      telefoneRemetente?: string;
     },
   ): Promise<string> {
     if (!this.habilitado) {

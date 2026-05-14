@@ -19,6 +19,10 @@ export type AgentSchemaProperty = {
   description?: string;
   enum?: string[];
   items?: AgentSchemaProperty;
+  properties?: Record<string, AgentSchemaProperty>;
+  required?: string[];
+  minItems?: number;
+  maxItems?: number;
 };
 
 export type AgentMessage = {
