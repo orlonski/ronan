@@ -11,7 +11,7 @@ CREATE EXTENSION IF NOT EXISTS earthdistance;
 -- IMMUTABLE é obrigatório pra usar em índice expression.
 CREATE OR REPLACE FUNCTION f_normalizar(t text) RETURNS text
 LANGUAGE sql IMMUTABLE PARALLEL SAFE STRICT AS $$
-  SELECT lower(unaccent('unaccent', coalesce(t, '')))
+  SELECT lower(unaccent(coalesce(t, '')))
 $$;
 
 CREATE INDEX IF NOT EXISTS locais_nome_trgm_idx       ON locais    USING gin (f_normalizar(nome) gin_trgm_ops);
