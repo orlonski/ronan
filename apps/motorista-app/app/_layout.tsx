@@ -107,6 +107,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         const { registrarWatchdog } = await import("@/lib/tracking-watchdog");
         await registrarWatchdog();
 
+        // Geofence passivo: registra task + sincroniza locais em validação.
+        // Roda em background sem precisar de "Iniciar viagem".
+        const geofence = await import("@/lib/geofence-locais");
+        await geofence.registerGeofenceTask();
+        void geofence.sincronizarGeofences();
+        void geofence.drenarFila();
+
         const Notifications = await import("expo-notifications");
         if (!alive) return;
         sub = Notifications.addNotificationResponseReceivedListener((resp) => {

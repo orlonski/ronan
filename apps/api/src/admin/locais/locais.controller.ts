@@ -22,8 +22,14 @@ const ListLocaisQuery = paginationQuerySchema.extend({
   obraId: z.string().uuid().optional(),
   tipo: z.enum(["CARGA", "DESCARGA", "AMBOS"]).optional(),
   ativo: z.enum(["true", "false"]).optional(),
+  nivelConfianca: z
+    .enum(["RASCUNHO", "PRESENCA_PONTUAL", "DWELL_CONFIRMADO", "RECORRENTE", "HUMANO"])
+    .optional(),
+  emValidacao: z.enum(["true", "false"]).optional(),
 });
 type ListLocaisQuery = z.infer<typeof ListLocaisQuery>;
+
+const MesclarInput = z.object({ destinoId: z.string().uuid() });
 
 @ApiTags("admin/locais")
 @ApiBearerAuth()
@@ -54,5 +60,26 @@ export class LocaisController {
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.service.remove(id);
+  }
+
+  /**
+   * Admin homologa o local — sobe pra HUMANO. Usado pela aba "Em validação"
+   * pra confirmar locais que vieram com evidência boa.
+   */
+  @Post(":id/homologar")
+  homologar(@Param("id") id: string) {
+    return this.service.homologar(id);
+  }
+
+  /**
+   * Mescla duplicata: move viagens do local atual pra destinoId e apaga o
+   * atual. Pra quando o pre-check de 200m não pegou duplicata.
+   */
+  @Post(":id/mesclar")
+  mesclar(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(MesclarInput)) body: z.infer<typeof MesclarInput>,
+  ) {
+    return this.service.mesclar(id, body.destinoId);
   }
 }

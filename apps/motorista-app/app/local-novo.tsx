@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Check } from "lucide-react-native";
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -15,9 +16,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { humanizeApiError } from "@/lib/api";
+import { ApiError, humanizeApiError } from "@/lib/api";
 import { setPendingLocal } from "@/lib/local-novo-bridge";
-import { useCriarLocal, type SugestaoEndereco } from "@/lib/queries";
+import {
+  useCriarLocal,
+  type CriarLocalInput,
+  type Local,
+  type LocalSugestao,
+  type SugestaoEndereco,
+} from "@/lib/queries";
 
 type Tipo = "CARGA" | "DESCARGA" | "AMBOS";
 
@@ -122,28 +129,97 @@ export default function LocalNovo() {
       return;
     }
 
+    const payload: CriarLocalInput = {
+      nome: nomeT,
+      logradouro: logT,
+      numero: numero.trim() || undefined,
+      bairro: bairro.trim() || undefined,
+      cidade: cidT,
+      uf: ufT,
+      cep: cepDigits.length === 8 ? cepDigits : undefined,
+      pontoReferencia: pontoReferencia.trim() || undefined,
+      tipo,
+      obraId: params.obraId && params.obraId.length > 0 ? params.obraId : undefined,
+      lat: lat ?? undefined,
+      lng: lng ?? undefined,
+    };
+
     try {
-      const novo = await criar.mutateAsync({
-        nome: nomeT,
-        logradouro: logT,
-        numero: numero.trim() || undefined,
-        bairro: bairro.trim() || undefined,
-        cidade: cidT,
-        uf: ufT,
-        cep: cepDigits.length === 8 ? cepDigits : undefined,
-        pontoReferencia: pontoReferencia.trim() || undefined,
-        tipo,
-        // String vazia "" falha UUID; manda undefined se nao tem obra selecionada
-        obraId: params.obraId && params.obraId.length > 0 ? params.obraId : undefined,
-        lat: lat ?? undefined,
-        lng: lng ?? undefined,
-      });
-      // Deixa o local "pendente" pra Nova Viagem consumir on focus
-      setPendingLocal({ side, local: novo });
-      router.back();
+      await criarELevar(payload);
     } catch (err) {
+      // 409 → backend achou locais próximos. Pergunta antes de criar duplicado.
+      if (
+        err instanceof ApiError &&
+        err.status === 409 &&
+        err.body &&
+        typeof err.body === "object" &&
+        Array.isArray((err.body as { sugestoes?: LocalSugestao[] }).sugestoes)
+      ) {
+        const sugestoes = (err.body as { sugestoes: LocalSugestao[] }).sugestoes;
+        mostrarSugestoes(sugestoes, payload);
+        return;
+      }
       setErro(humanizeApiError(err));
     }
+  }
+
+  async function criarELevar(payload: CriarLocalInput) {
+    const novo = await criar.mutateAsync(payload);
+    setPendingLocal({ side, local: novo });
+    // Geofence ganha um alvo novo — registra agora pra capturar dwell mesmo
+    // que motorista não inicie tracking. Best-effort, não bloqueia o fluxo.
+    try {
+      const geofence = await import("@/lib/geofence-locais");
+      void geofence.sincronizarGeofences();
+    } catch {
+      /* ok em dev */
+    }
+    router.back();
+  }
+
+  function mostrarSugestoes(sugestoes: LocalSugestao[], payload: CriarLocalInput) {
+    // Mostra até 3 sugestões. Cada uma vira um botão "É este!".
+    const top = sugestoes.slice(0, 3);
+    const botoes = top.map((s) => ({
+      text: `É ${s.nome || s.logradouro}`,
+      onPress: () => usarSugestao(s),
+    }));
+    botoes.push({
+      text: "Criar novo mesmo assim",
+      onPress: () => {
+        void criarELevar({ ...payload, forcarCriacao: true }).catch((err) =>
+          setErro(humanizeApiError(err)),
+        );
+      },
+    });
+    botoes.push({ text: "Cancelar", onPress: () => {} });
+
+    Alert.alert(
+      "Já tem locais próximos",
+      `Encontrei ${sugestoes.length} local${sugestoes.length === 1 ? "" : "is"} cadastrado${
+        sugestoes.length === 1 ? "" : "s"
+      } perto daqui. É algum desses?`,
+      botoes,
+    );
+  }
+
+  function usarSugestao(s: LocalSugestao) {
+    const local: Local = {
+      id: s.id,
+      nome: s.nome,
+      logradouro: s.logradouro,
+      numero: s.numero,
+      bairro: s.bairro,
+      cidade: s.cidade,
+      uf: s.uf,
+      pontoReferencia: null,
+      tipo: s.tipo,
+      obraId: null,
+      lat: s.lat,
+      lng: s.lng,
+    };
+    setPendingLocal({ side, local });
+    router.back();
   }
 
   return (

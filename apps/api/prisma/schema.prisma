@@ -84,6 +84,26 @@ enum TipoCombustivel {
   ETANOL
 }
 
+/// Nível de confiança de um Local cadastrado. Sobe sozinho conforme evidências
+/// (GPS pontual, dwell por tracking ativo, dwell por geofence passivo,
+/// recorrência) ou aprovação manual do admin.
+enum NivelConfiancaLocal {
+  RASCUNHO
+  PRESENCA_PONTUAL
+  DWELL_CONFIRMADO
+  RECORRENTE
+  HUMANO
+}
+
+/// Origem de cada evidência registrada em LocalEvidencia.
+enum FonteEvidencia {
+  GPS_REGISTRO
+  TRACKING_DWELL
+  GEOFENCE_PASSIVO
+  RECORRENCIA
+  ADMIN
+}
+
 /// Tipos fixos de anexo que admin guarda por motorista (CNH, CRLV, seguro,
 /// ASO, EPIs, eSocial, NR, OS, registro do motorista). 1 arquivo por tipo
 /// — reupload substitui o anterior.
@@ -153,6 +173,8 @@ model Motorista {
   abastecimentos Abastecimento[]
   veiculos         MotoristaVeiculo[]
   documentos       MotoristaDocumento[]
+  locaisCriados    Local[]               @relation("LocalCriadoPor")
+  evidenciasLocal  LocalEvidencia[]
   whatsappSessao   WhatsappSessao?
   whatsappConvites WhatsappConvite[]
 
@@ -351,33 +373,64 @@ model Material {
 }
 
 model Local {
-  id              String    @id @default(uuid())
-  nome            String
-  logradouro      String
-  numero          String?
-  bairro          String?
-  cidade          String
-  uf              String    @db.Char(2)
-  cep             String?
-  lat             Float?
-  lng             Float?
-  pontoReferencia String?
-  tipo            TipoLocal
-  obra            Obra?     @relation(fields: [obraId], references: [id])
-  obraId          String?
-  ativo           Boolean   @default(true)
-  criadoEm        DateTime  @default(now())
-  alteradoEm      DateTime  @updatedAt
+  id                   String              @id @default(uuid())
+  nome                 String
+  logradouro           String
+  numero               String?
+  bairro               String?
+  cidade               String
+  uf                   String              @db.Char(2)
+  cep                  String?
+  lat                  Float?
+  lng                  Float?
+  pontoReferencia      String?
+  tipo                 TipoLocal
+  obra                 Obra?               @relation(fields: [obraId], references: [id])
+  obraId               String?
+  ativo                Boolean             @default(true)
+  /// Confiança no local. Começa RASCUNHO quando motorista cadastra; sobe
+  /// sozinho conforme evidências (LocalEvidencia) chegam. RECORRENTE/HUMANO
+  /// = limpo, sem destaque no app.
+  nivelConfianca       NivelConfiancaLocal @default(RASCUNHO)
+  /// Quem cadastrou. null quando criado pelo admin.
+  criadoPorMotoristaId String?
+  criadoPorMotorista   Motorista?          @relation("LocalCriadoPor", fields: [criadoPorMotoristaId], references: [id])
+  ultimaValidacaoEm    DateTime?
+  contadorValidacoes   Int                 @default(0)
+  criadoEm             DateTime            @default(now())
+  alteradoEm           DateTime            @updatedAt
 
-  viagensCarga    Viagem[]    @relation("LocalCarga")
-  viagensDescarga Viagem[]    @relation("LocalDescarga")
-  rotasOrigem     RotaCache[] @relation("RotaOrigem")
-  rotasDestino    RotaCache[] @relation("RotaDestino")
+  viagensCarga    Viagem[]          @relation("LocalCarga")
+  viagensDescarga Viagem[]          @relation("LocalDescarga")
+  rotasOrigem     RotaCache[]       @relation("RotaOrigem")
+  rotasDestino    RotaCache[]       @relation("RotaDestino")
+  evidencias      LocalEvidencia[]
 
   @@index([obraId])
   @@index([cidade, uf])
   @@index([ativo])
+  @@index([nivelConfianca])
   @@map("locais")
+}
+
+/// Histórico de evidências que promoveram um Local. Audit trail pra debug e
+/// pra recalcular RECORRENTE contando motoristas distintos.
+model LocalEvidencia {
+  id          String         @id @default(uuid())
+  local       Local          @relation(fields: [localId], references: [id], onDelete: Cascade)
+  localId     String
+  motorista   Motorista      @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  motoristaId String
+  fonte       FonteEvidencia
+  viagemId    String?
+  /// Dwell em segundos (entre ENTER e EXIT do geofence, ou janela de cluster
+  /// do tracking). Null pra GPS_REGISTRO / RECORRENCIA / ADMIN.
+  duracaoSeg  Int?
+  detectadoEm DateTime       @default(now())
+
+  @@index([localId])
+  @@index([motoristaId, localId])
+  @@map("local_evidencia")
 }
 
 /// Cache do KM "ideal" da rota carga→descarga calculado pelo OSRM.

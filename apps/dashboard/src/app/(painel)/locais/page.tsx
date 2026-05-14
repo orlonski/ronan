@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Pencil, Plus } from "lucide-react";
+import Link from "next/link";
+import { AlertCircle, Pencil, Plus } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { StatusToggle } from "@/components/status-toggle";
 import { ExcluirButton } from "@/components/excluir-button";
@@ -213,9 +214,16 @@ export default function LocaisPage() {
             Locais de carga e descarga. Busque por nome, endereço ou ponto de interesse.
           </p>
         </div>
-        <Button onClick={openNew} className="w-full md:w-auto">
-          <Plus className="h-4 w-4" /> Novo local
-        </Button>
+        <div className="flex gap-2">
+          <Link href="/locais/em-validacao">
+            <Button variant="outline" className="w-full md:w-auto">
+              <AlertCircle className="h-4 w-4" /> Em validação
+            </Button>
+          </Link>
+          <Button onClick={openNew} className="w-full md:w-auto">
+            <Plus className="h-4 w-4" /> Novo local
+          </Button>
+        </div>
       </header>
 
       <DataTable

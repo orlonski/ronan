@@ -507,23 +507,63 @@ export function useExcluirViagem() {
   });
 }
 
+/**
+ * Local "leve" retornado pelo 409 (sugestões) e pelo GET em-validacao.
+ * Tem lat/lng pra geofence + nivelConfianca pra UI.
+ */
+export type LocalEmValidacao = {
+  id: string;
+  nome: string;
+  lat: number;
+  lng: number;
+  nivelConfianca: "RASCUNHO" | "PRESENCA_PONTUAL" | "DWELL_CONFIRMADO";
+  criadoEm: string;
+};
+
+export type LocalSugestao = {
+  id: string;
+  nome: string;
+  logradouro: string;
+  numero: string | null;
+  bairro: string | null;
+  cidade: string;
+  uf: string;
+  tipo: "CARGA" | "DESCARGA" | "AMBOS";
+  lat: number | null;
+  lng: number | null;
+  nivelConfianca:
+    | "RASCUNHO"
+    | "PRESENCA_PONTUAL"
+    | "DWELL_CONFIRMADO"
+    | "RECORRENTE"
+    | "HUMANO";
+};
+
+export type CriarLocalInput = {
+  nome: string;
+  logradouro: string;
+  numero?: string;
+  bairro?: string;
+  cidade: string;
+  uf: string;
+  cep?: string;
+  pontoReferencia?: string;
+  tipo: "CARGA" | "DESCARGA" | "AMBOS";
+  obraId?: string;
+  lat?: number;
+  lng?: number;
+  /**
+   * Quando true, ignora o pré-check de 200m do backend e cria mesmo havendo
+   * locais próximos. App passa true depois que motorista vê as sugestões e
+   * insiste em criar novo.
+   */
+  forcarCriacao?: boolean;
+};
+
 export function useCriarLocal() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: {
-      nome: string;
-      logradouro: string;
-      numero?: string;
-      bairro?: string;
-      cidade: string;
-      uf: string;
-      cep?: string;
-      pontoReferencia?: string;
-      tipo: "CARGA" | "DESCARGA" | "AMBOS";
-      obraId?: string;
-      lat?: number;
-      lng?: number;
-    }) => api.post<Local>("/m/locais", input),
+    mutationFn: async (input: CriarLocalInput) => api.post<Local>("/m/locais", input),
     onSuccess: (novo) => {
       qc.setQueryData<Catalogos>(["catalogos"], (cur) => {
         if (!cur) return cur;
@@ -531,4 +571,30 @@ export function useCriarLocal() {
       });
     },
   });
+}
+
+/**
+ * Locais que o motorista cadastrou e ainda não foram validados por
+ * recorrência/admin. App usa pra registrar geofences passivos.
+ */
+export function useLocaisEmValidacao() {
+  return useQuery({
+    queryKey: ["locais-em-validacao"],
+    staleTime: 5 * 60_000,
+    queryFn: () => api.get<LocalEmValidacao[]>("/m/locais/em-validacao"),
+  });
+}
+
+/**
+ * App chama quando OS dispara ENTER→EXIT do geofence. Se a duração for
+ * suficiente, backend promove o Local pra DWELL_CONFIRMADO.
+ */
+export async function enviarEventoPresenca(
+  localId: string,
+  body: { duracaoSeg: number; detectadoEm: string },
+) {
+  return api.post<{ ok: true; ignorado?: boolean }>(
+    `/m/locais/${localId}/eventos-presenca`,
+    body,
+  );
 }

@@ -14,6 +14,7 @@ import { LocaisMotoristaController } from "./locais.controller";
 import { LocaisMotoristaService } from "./locais.service";
 import { RotasMotoristaController } from "./rotas.controller";
 import { TrackingConfigMotoristaController } from "./tracking-config.controller";
+import { ValidacaoLocalService } from "./validacao-local.service";
 
 @Module({
   imports: [UploadsModule, RoteamentoModule, TrackingConfigModule],
@@ -32,11 +33,13 @@ import { TrackingConfigMotoristaController } from "./tracking-config.controller"
     PedagiosMotoristaService,
     AbastecimentosMotoristaService,
     LocaisMotoristaService,
+    ValidacaoLocalService,
   ],
   exports: [
     MotoristaService,
     ViagensMotoristaService,
     AbastecimentosMotoristaService,
+    ValidacaoLocalService,
   ],
 })
 export class MotoristaModule {}

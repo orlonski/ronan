@@ -8,6 +8,7 @@ import type { Prisma, StatusViagem } from "@prisma/client";
 import type { CriarViagemInput } from "@ronan/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
+import { ValidacaoLocalService } from "./validacao-local.service";
 
 const VIAGEM_INCLUDE = {
   veiculo: { select: { id: true, placa: true, modelo: true } },
@@ -46,6 +47,7 @@ export class ViagensMotoristaService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly uploads: UploadsService,
+    private readonly validacao: ValidacaoLocalService,
   ) {}
 
   async list(
@@ -232,7 +234,7 @@ export class ViagensMotoristaService {
     }
 
     const { fotoKey, clientId, pontos, ...rest } = input;
-    return this.prisma.viagem.create({
+    const viagem = await this.prisma.viagem.create({
       data: {
         clientId,
         motoristaId,
@@ -277,6 +279,20 @@ export class ViagensMotoristaService {
       },
       include: VIAGEM_INCLUDE,
     });
+
+    // Valida locais cadastrados em rascunho. Camada 1 (GPS do registro) sempre
+    // roda; camada 2 (dwell por tracking) só faz diferença se a viagem trouxe
+    // pontos. Falhas aqui não derrubam a criação da viagem.
+    try {
+      await this.validacao.revalidarApos(viagem.id);
+      if (pontos && pontos.length > 0) {
+        await this.validacao.revalidarComDwell(viagem.id);
+      }
+    } catch (err) {
+      // best-effort; logado pelo próprio service.
+    }
+
+    return viagem;
   }
 }
 
