@@ -1,11 +1,17 @@
 -- Fundação pra fuzzy search: trigram + unaccent + distância geo.
 -- Habilita similaridade textual tolerante a typo/acento e distância em km
 -- pra usar no ranking da tool buscar_catalogo (agente WhatsApp).
-
-CREATE EXTENSION IF NOT EXISTS unaccent;
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-CREATE EXTENSION IF NOT EXISTS cube;
-CREATE EXTENSION IF NOT EXISTS earthdistance;
+--
+-- IMPORTANTE: extensions (unaccent, pg_trgm, cube, earthdistance) precisam
+-- ser criadas previamente como superuser do banco — em Postgres 17 do
+-- Easypanel o user `ronan` da app não tem privilégio pra `CREATE EXTENSION`
+-- mesmo com IF NOT EXISTS. Rodar via psql como `postgres`:
+--
+--   \c ronan
+--   CREATE EXTENSION IF NOT EXISTS unaccent;
+--   CREATE EXTENSION IF NOT EXISTS pg_trgm;
+--   CREATE EXTENSION IF NOT EXISTS cube;
+--   CREATE EXTENSION IF NOT EXISTS earthdistance;
 
 -- Normaliza texto pra comparação fuzzy: minúsculas + sem acento + sem nulls.
 -- IMMUTABLE é obrigatório pra usar em índice expression.
