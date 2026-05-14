@@ -14,8 +14,20 @@ import type { AgentMessage, AgentProvider } from "./providers/agent.provider";
 import { AnthropicProvider } from "./providers/anthropic.provider";
 import { GeminiProvider } from "./providers/gemini.provider";
 
-const MAX_HISTORICO_MENSAGENS = 12;
+const MAX_HISTORICO_MENSAGENS = 30;
+const HISTORICO_JANELA_HORAS = 24;
+const GAP_NOVA_CONVERSA_MIN = 30;
 const CONFIG_ID = "default";
+
+function formatarGap(minutos: number): string {
+  if (minutos < 60) return `${Math.floor(minutos)}min`;
+  const horas = Math.floor(minutos / 60);
+  const mins = Math.floor(minutos % 60);
+  if (horas < 24) return mins > 0 ? `${horas}h${mins}min` : `${horas}h`;
+  const dias = Math.floor(horas / 24);
+  const horasRest = horas % 24;
+  return horasRest > 0 ? `${dias}d${horasRest}h` : `${dias}d`;
+}
 
 type Identidade = Exclude<SessaoResolvida, { tipo: "DESCONHECIDO" }>;
 
@@ -98,21 +110,45 @@ export class AgenteService {
         : systemPromptAdmin(identidade);
     const tools = construirTools(identidade.tipo);
 
+    const desdeJanela = new Date(Date.now() - HISTORICO_JANELA_HORAS * 60 * 60 * 1000);
     const historicoRaw = await this.prisma.whatsappMensagem.findMany({
-      where: { sessaoId: identidade.sessaoId },
+      where: {
+        sessaoId: identidade.sessaoId,
+        criadoEm: { gte: desdeJanela },
+      },
       orderBy: { criadoEm: "desc" },
       take: MAX_HISTORICO_MENSAGENS,
     });
 
-    const historico: AgentMessage[] = historicoRaw
-      .reverse()
-      .filter((m) => m.conteudo)
-      .map((m) => ({
+    // Ordem cronológica + anota gaps >= 30min como marcador inline na próxima
+    // mensagem do motorista, pra IA reconhecer retomadas e não assumir
+    // continuação de uma conversa que ficou no limbo.
+    const ordenado = historicoRaw.reverse().filter((m) => m.conteudo);
+    const historico: AgentMessage[] = [];
+    let anterior: (typeof ordenado)[number] | null = null;
+    for (const m of ordenado) {
+      let content = m.conteudo;
+      if (anterior) {
+        const gapMin =
+          (m.criadoEm.getTime() - anterior.criadoEm.getTime()) / 60000;
+        if (gapMin >= GAP_NOVA_CONVERSA_MIN) {
+          content = `[depois de ${formatarGap(gapMin)} sem mensagem]\n${content}`;
+        }
+      }
+      historico.push({
         role: m.direcao === "ENTRADA" ? ("user" as const) : ("assistant" as const),
-        content: m.conteudo,
-      }));
+        content,
+      });
+      anterior = m;
+    }
 
-    const mensagemAtual = mensagemUsuario || (metadata?.tipoMidia ? `[${metadata.tipoMidia}]` : "");
+    let mensagemAtual = mensagemUsuario || (metadata?.tipoMidia ? `[${metadata.tipoMidia}]` : "");
+    if (anterior) {
+      const gapAtual = (Date.now() - anterior.criadoEm.getTime()) / 60000;
+      if (gapAtual >= GAP_NOVA_CONVERSA_MIN) {
+        mensagemAtual = `[depois de ${formatarGap(gapAtual)} sem mensagem]\n${mensagemAtual}`;
+      }
+    }
 
     return provider.processar({
       systemText,
