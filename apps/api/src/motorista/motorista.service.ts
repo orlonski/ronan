@@ -195,6 +195,124 @@ export class MotoristaService {
     }));
   }
 
+  /**
+   * Infere candidatos a obra a partir do par (localCargaId, localDescargaId)
+   * olhando o histórico de viagens da empresa toda nos últimos 180d. Usado
+   * pelo agente do WhatsApp pra economizar uma pergunta quando o motorista
+   * descreve uma viagem sem citar a obra.
+   *
+   * Escopo: empresa inteira (mais sinal); bonus pra viagens do próprio
+   * motorista no score.
+   *
+   * `auto_selecionavel = true` ⇒ 1 obra única + ≥2 viagens + última ≤90d.
+   * Threshold médio: erra menos do que "1 viagem é suficiente", mas ainda
+   * dispensa pergunta nas rotas com qualquer recorrência.
+   */
+  async inferirObraPorTrajeto(
+    motoristaId: string,
+    localCargaId: string,
+    localDescargaId: string,
+    materialId?: string,
+  ): Promise<{
+    total: number;
+    auto_selecionavel: boolean;
+    janela_dias: number;
+    candidatos: Array<{
+      obraId: string;
+      nome: string;
+      empresa: string | null;
+      vezesUsado: number;
+      vezesPorEsteMotorista: number;
+      ultimaData: string;
+      diasAtras: number;
+      score: number;
+      motivo: string[];
+    }>;
+  }> {
+    const JANELA_DIAS = 180;
+    const desde = new Date();
+    desde.setDate(desde.getDate() - JANELA_DIAS);
+
+    type Row = {
+      obraId: string;
+      nome: string;
+      empresaNome: string | null;
+      vezes: bigint;
+      vezesMotorista: bigint;
+      vezesMaterial: bigint;
+      ultima: Date;
+    };
+
+    const matId = materialId ?? null;
+
+    const rows = await this.prisma.$queryRaw<Row[]>`
+      WITH viagens_trajeto AS (
+        SELECT v."obraId", v."motoristaId", v."materialId", v.data
+        FROM viagens v
+        WHERE v."localCargaId"    = ${localCargaId}
+          AND v."localDescargaId" = ${localDescargaId}
+          AND v.data >= ${desde}
+      ),
+      agg AS (
+        SELECT
+          "obraId",
+          COUNT(*)                                              AS vezes,
+          COUNT(*) FILTER (WHERE "motoristaId" = ${motoristaId}) AS vezes_motorista,
+          COUNT(*) FILTER (WHERE ${matId}::text IS NOT NULL
+                             AND "materialId" = ${matId})        AS vezes_material,
+          MAX(data)                                             AS ultima
+        FROM viagens_trajeto
+        GROUP BY "obraId"
+      )
+      SELECT
+        o.id            AS "obraId",
+        o.nome          AS nome,
+        ec.nome         AS "empresaNome",
+        a.vezes         AS vezes,
+        a.vezes_motorista AS "vezesMotorista",
+        a.vezes_material  AS "vezesMaterial",
+        a.ultima        AS ultima
+      FROM agg a
+      JOIN obras o            ON o.id = a."obraId"
+      LEFT JOIN empresas_cliente ec ON ec.id = o."empresaClienteId"
+      WHERE o.ativa = true
+      ORDER BY a.vezes DESC, a.ultima DESC
+      LIMIT 5
+    `;
+
+    const candidatos = rows.map((r) => {
+      const vezes = Number(r.vezes);
+      const vezesMot = Number(r.vezesMotorista);
+      const vezesMat = Number(r.vezesMaterial);
+      const diasAtras = Math.floor(
+        (Date.now() - r.ultima.getTime()) / (1000 * 60 * 60 * 24),
+      );
+      return {
+        obraId: r.obraId,
+        nome: r.nome,
+        empresa: r.empresaNome,
+        vezesUsado: vezes,
+        vezesPorEsteMotorista: vezesMot,
+        ultimaData: r.ultima.toISOString().slice(0, 10),
+        diasAtras,
+        score: scoreInferenciaObra(vezes, vezesMot, vezesMat, diasAtras),
+        motivo: motivoInferenciaObra(vezes, vezesMot, vezesMat, diasAtras),
+      };
+    });
+
+    const autoSelecionavel =
+      candidatos.length === 1 &&
+      candidatos[0].vezesUsado >= 2 &&
+      candidatos[0].diasAtras <= 90;
+
+    return {
+      total: candidatos.length,
+      auto_selecionavel: autoSelecionavel,
+      janela_dias: JANELA_DIAS,
+      candidatos,
+    };
+  }
+
   // ===== Implementação por tipo =====
 
   private async buscarLocal(
@@ -501,5 +619,31 @@ function motivoSimples(sim: number, nUso: number, ultima: Date | null): string[]
     const dias = Math.floor((Date.now() - ultima.getTime()) / (1000 * 60 * 60 * 24));
     out.push(dias === 0 ? "usado hoje" : `última uso há ${dias}d`);
   }
+  return out;
+}
+
+function scoreInferenciaObra(
+  vezes: number,
+  vezesMotorista: number,
+  vezesMaterial: number,
+  diasAtras: number,
+): number {
+  const baseFreq = Math.min(vezes, 20) / 20;
+  const bonusMotorista = Math.min(vezesMotorista, 5) * 0.05;
+  const bonusMaterial = vezesMaterial > 0 ? 0.1 : 0;
+  const bonusRecencia = Math.max(0, 0.3 - (diasAtras / 90) * 0.3);
+  return baseFreq + bonusMotorista + bonusMaterial + bonusRecencia;
+}
+
+function motivoInferenciaObra(
+  vezes: number,
+  vezesMotorista: number,
+  vezesMaterial: number,
+  diasAtras: number,
+): string[] {
+  const out: string[] = [`trajeto: ${vezes}x últimos 180d`];
+  if (vezesMotorista > 0) out.push(`você rodou ${vezesMotorista}x`);
+  if (vezesMaterial > 0) out.push(`mesmo material ${vezesMaterial}x`);
+  out.push(diasAtras === 0 ? "última hoje" : `última há ${diasAtras}d`);
   return out;
 }

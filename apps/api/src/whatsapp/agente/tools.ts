@@ -76,6 +76,30 @@ const TOOLS_MOTORISTA: AgentToolDefinition[] = [
     },
   },
   {
+    name: "inferir_obra_por_trajeto",
+    description:
+      "Quando carga e descarga JÁ estão resolvidos (você tem localCargaId E localDescargaId) " +
+      "e o motorista NÃO citou a obra, chame esta tool ANTES de perguntar. Olha no histórico " +
+      "de viagens da empresa quais obras já foram atendidas por esse mesmo par origem→destino. " +
+      "Se `auto_selecionavel: true` E `candidatos[0]` for único, USE direto a obra no resumo " +
+      "mencionando 'presumi pelo trajeto' (motorista valida no confirma). " +
+      "Se vier 2-3 candidatos com `auto_selecionavel: false`, mostra opções numeradas. " +
+      "Se vier lista vazia, cai no fluxo normal (perguntar o nome).",
+    input_schema: {
+      type: "object",
+      properties: {
+        localCargaId: { type: "string", description: "UUID do local de carga já resolvido" },
+        localDescargaId: { type: "string", description: "UUID do local de descarga já resolvido" },
+        materialId: {
+          type: "string",
+          description:
+            "Opcional. Boost pequeno se obra historicamente recebeu esse material no mesmo trajeto.",
+        },
+      },
+      required: ["localCargaId", "localDescargaId"],
+    },
+  },
+  {
     name: "locais_recentes_do_motorista",
     description:
       "Lista os locais que ESTE motorista mais usou recentemente (default 30d). " +
@@ -246,6 +270,25 @@ async function executarToolInterno(
       const tipoUso = (input.tipo as "carga" | "descarga" | "ambos") ?? "ambos";
       const dias = typeof input.dias === "number" ? Math.max(1, Math.min(180, input.dias)) : 30;
       return ctx.motorista.locaisRecentes(ctx.identidade.motoristaId, tipoUso, dias);
+    }
+
+    case "inferir_obra_por_trajeto": {
+      if (ctx.identidade.tipo !== "MOTORISTA")
+        throw new Error("tool não disponível pra esse perfil");
+      const localCargaId = String(input.localCargaId ?? "");
+      const localDescargaId = String(input.localDescargaId ?? "");
+      if (!localCargaId || !localDescargaId) {
+        throw new Error(
+          "localCargaId e localDescargaId são obrigatórios — chame buscar_catalogo antes pra resolver os locais.",
+        );
+      }
+      const materialId = input.materialId ? String(input.materialId) : undefined;
+      return ctx.motorista.inferirObraPorTrajeto(
+        ctx.identidade.motoristaId,
+        localCargaId,
+        localDescargaId,
+        materialId,
+      );
     }
 
     case "criar_viagem": {
