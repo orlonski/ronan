@@ -300,9 +300,11 @@ export async function executarTool(
   input: Record<string, unknown>,
   ctx: ToolContext,
 ): Promise<unknown> {
-  log.log(`tool=${nome} input=${JSON.stringify(input).slice(0, 200)}`);
+  log.log(`tool=${nome} input=${JSON.stringify(input).slice(0, 300)}`);
   try {
-    return await executarToolInterno(nome, input, ctx);
+    const out = await executarToolInterno(nome, input, ctx);
+    log.log(`tool=${nome} output=${JSON.stringify(out).slice(0, 500)}`);
+    return out;
   } catch (e) {
     // Anexa o nome da tool no erro pra subir até o catch do WhatsappService
     // e cair no error_logs com origem ("agente:tool:nome_da_tool").
