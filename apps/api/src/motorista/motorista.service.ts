@@ -274,7 +274,20 @@ export class MotoristaService {
           candidatos: r.candidatos,
         });
       } else {
-        faltando.push("material");
+        // Sem match fuzzy — sugere top usados pelo motorista como ambiguidade
+        const top = await this.topUsadosRecentes(motoristaId, "material");
+        if (top.length > 0) {
+          ambiguidades.push({
+            campo: "material",
+            mensagem: `Não conheço "${input.material}" como material. Talvez seja um destes que você costuma rodar?`,
+            candidatos: top.map((t) => ({
+              nome: t.nome,
+              motivo: [`usado ${t.vezes}x últimos 90d`],
+            })),
+          });
+        } else {
+          faltando.push("material");
+        }
       }
     } else {
       faltando.push("material");
@@ -293,7 +306,19 @@ export class MotoristaService {
           candidatos: r.candidatos,
         });
       } else {
-        faltando.push("carga");
+        const top = await this.topUsadosRecentes(motoristaId, "carga");
+        if (top.length > 0) {
+          ambiguidades.push({
+            campo: "carga",
+            mensagem: `Não conheço "${input.carga}" como local de carga. Talvez seja um destes que você costuma usar?`,
+            candidatos: top.map((t) => ({
+              nome: t.nome,
+              motivo: [`usado ${t.vezes}x últimos 90d`],
+            })),
+          });
+        } else {
+          faltando.push("carga");
+        }
       }
     } else {
       faltando.push("carga");
@@ -317,7 +342,19 @@ export class MotoristaService {
           candidatos: r.candidatos,
         });
       } else {
-        faltando.push("descarga");
+        const top = await this.topUsadosRecentes(motoristaId, "descarga");
+        if (top.length > 0) {
+          ambiguidades.push({
+            campo: "descarga",
+            mensagem: `Não conheço "${input.descarga}" como local de descarga. Talvez seja um destes?`,
+            candidatos: top.map((t) => ({
+              nome: t.nome,
+              motivo: [`usado ${t.vezes}x últimos 90d`],
+            })),
+          });
+        } else {
+          faltando.push("descarga");
+        }
       }
     } else {
       faltando.push("descarga");
@@ -336,7 +373,19 @@ export class MotoristaService {
           candidatos: r.candidatos,
         });
       } else {
-        faltando.push("obra");
+        const top = await this.topUsadosRecentes(motoristaId, "obra");
+        if (top.length > 0) {
+          ambiguidades.push({
+            campo: "obra",
+            mensagem: `Não conheço "${input.obra}" como obra. Talvez seja uma destas que você costuma rodar?`,
+            candidatos: top.map((t) => ({
+              nome: t.nome,
+              motivo: [`usada ${t.vezes}x últimos 90d`],
+            })),
+          });
+        } else {
+          faltando.push("obra");
+        }
       }
     } else if (ids.localCargaId && ids.localDescargaId) {
       const inf = await this.inferirObraPorTrajeto(
@@ -447,6 +496,67 @@ export class MotoristaService {
         motivo: m.motivo,
       })),
     };
+  }
+
+  /**
+   * Top N nomes usados pelo motorista nos últimos 90d, por tipo.
+   * Usado como sugestão quando o fuzzy não acha match nenhum (ex: motorista
+   * digitou "CHAUD" mas no banco é "CBUQ" — sem similaridade textual basta).
+   * Retornar histórico do próprio motorista é mais relevante que top global.
+   */
+  private async topUsadosRecentes(
+    motoristaId: string,
+    tipo: "material" | "obra" | "carga" | "descarga",
+    limit = 3,
+  ): Promise<Array<{ id: string; nome: string; vezes: number }>> {
+    type Row = { id: string; nome: string; vezes: bigint };
+    let rows: Row[] = [];
+    if (tipo === "material") {
+      rows = await this.prisma.$queryRaw<Row[]>`
+        SELECT mat.id, mat.nome, COUNT(*)::bigint AS vezes
+        FROM viagens v JOIN materiais mat ON mat.id = v."materialId"
+        WHERE v."motoristaId" = ${motoristaId}
+          AND v.data >= now() - interval '90 days'
+          AND mat.ativo = true
+        GROUP BY mat.id, mat.nome
+        ORDER BY COUNT(*) DESC, MAX(v.data) DESC
+        LIMIT ${limit}
+      `;
+    } else if (tipo === "obra") {
+      rows = await this.prisma.$queryRaw<Row[]>`
+        SELECT o.id, o.nome, COUNT(*)::bigint AS vezes
+        FROM viagens v JOIN obras o ON o.id = v."obraId"
+        WHERE v."motoristaId" = ${motoristaId}
+          AND v.data >= now() - interval '90 days'
+          AND o.ativa = true
+        GROUP BY o.id, o.nome
+        ORDER BY COUNT(*) DESC, MAX(v.data) DESC
+        LIMIT ${limit}
+      `;
+    } else if (tipo === "carga") {
+      rows = await this.prisma.$queryRaw<Row[]>`
+        SELECT l.id, l.nome, COUNT(*)::bigint AS vezes
+        FROM viagens v JOIN locais l ON l.id = v."localCargaId"
+        WHERE v."motoristaId" = ${motoristaId}
+          AND v.data >= now() - interval '90 days'
+          AND l.ativo = true
+        GROUP BY l.id, l.nome
+        ORDER BY COUNT(*) DESC, MAX(v.data) DESC
+        LIMIT ${limit}
+      `;
+    } else {
+      rows = await this.prisma.$queryRaw<Row[]>`
+        SELECT l.id, l.nome, COUNT(*)::bigint AS vezes
+        FROM viagens v JOIN locais l ON l.id = v."localDescargaId"
+        WHERE v."motoristaId" = ${motoristaId}
+          AND v.data >= now() - interval '90 days'
+          AND l.ativo = true
+        GROUP BY l.id, l.nome
+        ORDER BY COUNT(*) DESC, MAX(v.data) DESC
+        LIMIT ${limit}
+      `;
+    }
+    return rows.map((r) => ({ id: r.id, nome: r.nome, vezes: Number(r.vezes) }));
   }
 
   private async lookupNomeById(tipo: CatalogoTipo, id: string): Promise<string | null> {

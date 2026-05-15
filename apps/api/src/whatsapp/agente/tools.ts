@@ -394,14 +394,29 @@ async function executarToolInterno(
         faltandoBasicos.push("km");
 
       if (!resolucao.resolvido || faltandoBasicos.length > 0) {
+        const ambig = resolucao.resolvido ? [] : resolucao.ambiguidades;
+        const falt = [
+          ...(resolucao.resolvido ? [] : resolucao.faltando),
+          ...faltandoBasicos,
+        ];
+        const instrucoes: string[] = [];
+        if (ambig.length > 0) {
+          instrucoes.push(
+            "AÇÃO OBRIGATÓRIA: chame `oferecer_opcoes` AGORA pra cada ambiguidade, " +
+              "passando os `candidatos` como botões. NÃO responda em texto listando opções.",
+          );
+        }
+        if (falt.length > 0) {
+          instrucoes.push(
+            `Pergunte ao motorista, em UMA mensagem só, o que falta: ${falt.join(", ")}.`,
+          );
+        }
         return {
           ok: false,
           dry_run: dryRun,
-          ambiguidades: resolucao.resolvido ? [] : resolucao.ambiguidades,
-          faltando: [
-            ...(resolucao.resolvido ? [] : resolucao.faltando),
-            ...faltandoBasicos,
-          ],
+          ambiguidades: ambig,
+          faltando: falt,
+          instrucao: instrucoes.join(" "),
         };
       }
 
