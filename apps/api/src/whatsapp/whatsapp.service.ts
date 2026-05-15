@@ -336,5 +336,18 @@ function extrairConteudo(data: any): { texto: string | null; tipo: MensagemTipo 
   if (typeof botao === "string" && botao.trim()) {
     return { texto: botao.trim(), tipo: "TEXTO" };
   }
+  // Localização (clipe → Localização → "Enviar localização atual"
+  // ou "Compartilhar localização em tempo real"). Vira marcador no texto pra
+  // o agente reconhecer e chamar `local_mais_proximo`.
+  const loc = m.locationMessage ?? m.liveLocationMessage;
+  if (loc && typeof loc.degreesLatitude === "number" && typeof loc.degreesLongitude === "number") {
+    const lat = loc.degreesLatitude.toFixed(6);
+    const lng = loc.degreesLongitude.toFixed(6);
+    const captionExtra = typeof loc.name === "string" && loc.name.trim() ? ` (${loc.name.trim()})` : "";
+    return {
+      texto: `[localização: ${lat}, ${lng}]${captionExtra}`,
+      tipo: "TEXTO",
+    };
+  }
   return { texto: null, tipo: "TEXTO" };
 }

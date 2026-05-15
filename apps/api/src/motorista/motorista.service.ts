@@ -499,6 +499,85 @@ export class MotoristaService {
   }
 
   /**
+   * Locais cadastrados perto de uma coordenada GPS, ordenados por distância.
+   * Usado quando o motorista compartilha localização pelo WhatsApp — agente
+   * acha o local mais próximo (carga/descarga/qualquer) sem precisar adivinhar.
+   *
+   * Bonus: marca quantas vezes o próprio motorista já usou cada local nos
+   * últimos 90d (pra agente priorizar familiares).
+   */
+  async locaisMaisProximos(
+    motoristaId: string,
+    lat: number,
+    lng: number,
+    tipoUso: "carga" | "descarga" | "ambos" = "ambos",
+    raioMetros = 500,
+    limit = 5,
+  ): Promise<Array<{
+    id: string;
+    nome: string;
+    cidade: string;
+    uf: string;
+    distanciaMetros: number;
+    tipoLocal: string;
+    vezesUsadoMotorista: number;
+  }>> {
+    type Row = {
+      id: string;
+      nome: string;
+      cidade: string;
+      uf: string;
+      distanciaMetros: number;
+      tipoLocal: string;
+      vezesUsadoMotorista: bigint;
+    };
+    const raioKm = raioMetros / 1000;
+    // Filtro de tipo: "ambos" pega CARGA, DESCARGA e AMBOS; "carga" pega CARGA+AMBOS; etc
+    const tiposPermitidos =
+      tipoUso === "carga"
+        ? Prisma.sql`('CARGA','AMBOS')`
+        : tipoUso === "descarga"
+          ? Prisma.sql`('DESCARGA','AMBOS')`
+          : Prisma.sql`('CARGA','DESCARGA','AMBOS')`;
+
+    const rows = await this.prisma.$queryRaw<Row[]>`
+      WITH hist AS (
+        SELECT local_id, COUNT(*)::bigint AS n FROM (
+          SELECT "localCargaId" AS local_id FROM viagens
+            WHERE "motoristaId" = ${motoristaId} AND data >= now() - interval '90 days'
+          UNION ALL
+          SELECT "localDescargaId" AS local_id FROM viagens
+            WHERE "motoristaId" = ${motoristaId} AND data >= now() - interval '90 days'
+        ) t GROUP BY local_id
+      )
+      SELECT
+        l.id, l.nome, l.cidade, l.uf,
+        l.tipo::text AS "tipoLocal",
+        ROUND(earth_distance(ll_to_earth(${lat}, ${lng}), ll_to_earth(l.lat, l.lng))) AS "distanciaMetros",
+        COALESCE(h.n, 0) AS "vezesUsadoMotorista"
+      FROM locais l
+      LEFT JOIN hist h ON h.local_id = l.id
+      WHERE l.ativo = true
+        AND l.lat IS NOT NULL AND l.lng IS NOT NULL
+        AND l.tipo::text IN ${tiposPermitidos}
+        AND earth_distance(ll_to_earth(${lat}, ${lng}), ll_to_earth(l.lat, l.lng)) <= ${raioKm * 1000}
+      ORDER BY
+        earth_distance(ll_to_earth(${lat}, ${lng}), ll_to_earth(l.lat, l.lng)) ASC,
+        COALESCE(h.n, 0) DESC
+      LIMIT ${limit}
+    `;
+    return rows.map((r) => ({
+      id: r.id,
+      nome: r.nome,
+      cidade: r.cidade,
+      uf: r.uf,
+      distanciaMetros: Number(r.distanciaMetros),
+      tipoLocal: r.tipoLocal,
+      vezesUsadoMotorista: Number(r.vezesUsadoMotorista),
+    }));
+  }
+
+  /**
    * Top N nomes mais usados como sugestão quando o fuzzy não acha match.
    * Tenta primeiro do próprio motorista (90d). Se ele não tem histórico,
    * cai pro top global da empresa (180d). Se a empresa também não tem,

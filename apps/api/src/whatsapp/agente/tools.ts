@@ -202,6 +202,36 @@ const TOOLS_MOTORISTA: AgentToolDefinition[] = [
     },
   },
   {
+    name: "local_mais_proximo",
+    description:
+      "Quando o motorista compartilhar localização pelo WhatsApp (mensagem com " +
+      "marcador `[localização: lat, lng]`), use ESTA tool pra achar locais cadastrados " +
+      "próximos da coordenada (raio padrão 500m, expandível). Devolve até 5 candidatos " +
+      "ordenados por distância. Use o retorno pra:" +
+      "\n- Se 1 candidato perto (<100m), confirma direto: \"Você tá na *Pedreira X*?\"" +
+      "\n- Se 2-5 candidatos, chame `oferecer_opcoes` com os nomes pra ele escolher." +
+      "\n- Se nenhum candidato próximo, ofereça cadastrar como local novo (passa a " +
+      "  coordenada pra `lancar_viagem` no campo carga ou descarga e o backend vai " +
+      "  marcar como rascunho).",
+    input_schema: {
+      type: "object",
+      properties: {
+        lat: { type: "number", description: "Latitude (decimal, ex: -25.0945)" },
+        lng: { type: "number", description: "Longitude (decimal, ex: -50.1583)" },
+        tipo: {
+          type: "string",
+          enum: ["carga", "descarga", "ambos"],
+          description: "Filtra por papel do local (default: ambos)",
+        },
+        raio_metros: {
+          type: "number",
+          description: "Raio de busca em metros (default 500, max 5000)",
+        },
+      },
+      required: ["lat", "lng"],
+    },
+  },
+  {
     name: "oferecer_opcoes",
     description:
       "Envia uma MENSAGEM DE TEXTO NUMERADA (1️⃣ 2️⃣ 3️⃣) com 1 a 5 opções pro " +
@@ -481,6 +511,45 @@ async function executarToolInterno(
           erro: err.message,
         };
       }
+    }
+
+    case "local_mais_proximo": {
+      if (ctx.identidade.tipo !== "MOTORISTA")
+        throw new Error("tool não disponível pra esse perfil");
+      const lat = Number(input.lat);
+      const lng = Number(input.lng);
+      if (Number.isNaN(lat) || Number.isNaN(lng)) {
+        throw new Error("lat e lng obrigatórios e numéricos.");
+      }
+      const tipo = (input.tipo as "carga" | "descarga" | "ambos") ?? "ambos";
+      const raio = typeof input.raio_metros === "number"
+        ? Math.max(50, Math.min(5000, input.raio_metros))
+        : 500;
+      const candidatos = await ctx.motorista.locaisMaisProximos(
+        ctx.identidade.motoristaId,
+        lat,
+        lng,
+        tipo,
+        raio,
+      );
+      return {
+        total: candidatos.length,
+        raio_metros: raio,
+        candidatos: candidatos.map((c) => ({
+          nome: c.nome,
+          cidade: c.cidade,
+          uf: c.uf,
+          distanciaMetros: c.distanciaMetros,
+          tipo: c.tipoLocal,
+          vezesUsado: c.vezesUsadoMotorista,
+        })),
+        instrucao:
+          candidatos.length === 0
+            ? "Nenhum local cadastrado nesse raio. Pergunte ao motorista o nome desse local — você pode passar a coordenada na próxima `lancar_viagem` (campo carga ou descarga) e o backend cria como rascunho."
+            : candidatos.length === 1 && candidatos[0].distanciaMetros < 100
+              ? `Há 1 candidato muito próximo (${candidatos[0].distanciaMetros}m). Confirme citando o nome: 'Você tá na *${candidatos[0].nome}*?'`
+              : `Há ${candidatos.length} candidatos. Chame \`oferecer_opcoes\` passando os nomes pro motorista escolher.`,
+      };
     }
 
     case "oferecer_opcoes": {
