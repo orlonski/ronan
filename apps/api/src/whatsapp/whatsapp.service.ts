@@ -203,6 +203,7 @@ export class WhatsappService {
         }
       } catch (e) {
         const toolName = (e as { toolName?: string }).toolName;
+        const transitorio = (e as { transitorio?: boolean }).transitorio === true;
         await this.reportarErro(e, {
           fase: toolName ? `agente:tool:${toolName}` : "agente",
           telefone,
@@ -211,11 +212,12 @@ export class WhatsappService {
           tipoMidia: tipo === "IMAGEM" ? "imagem" : tipo === "AUDIO" ? "audio" : undefined,
           toolName,
         });
-        await this.enviarTexto(
-          telefone,
-          "Tive um problema processando sua mensagem. Tenta de novo, ou manda 'ajuda'.",
-          sessaoId,
-        );
+        // Erros transitórios (Gemini sobrecarregado, rate limit) merecem
+        // mensagem amigável diferente do erro genérico de "deu pau".
+        const msgPraMotorista = transitorio
+          ? "Tô sobrecarregado agora 😴 (servidor da IA com fila). Tenta de novo daqui 1 minuto."
+          : "Tive um problema processando sua mensagem. Tenta de novo, ou manda 'ajuda'.";
+        await this.enviarTexto(telefone, msgPraMotorista, sessaoId);
       }
     } catch (e) {
       // Catch-all: erros fora do bloco do agente (extração, sessão,
