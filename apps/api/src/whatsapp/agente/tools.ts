@@ -204,34 +204,37 @@ const TOOLS_MOTORISTA: AgentToolDefinition[] = [
   {
     name: "oferecer_opcoes",
     description:
-      "Envia 1 a 3 BOTÕES CLICÁVEIS pro motorista escolher entre opções, em vez de " +
-      "listar opções em texto. Use quando lancar_viagem retornar `ambiguidades` ou " +
-      "quando você precisa que o motorista escolha entre alternativas claras. " +
-      "DEPOIS de chamar essa tool, NÃO responda texto adicional — os botões já " +
-      "comunicam a pergunta. Aguarde o motorista clicar; a resposta vem como " +
-      "uma mensagem normal contendo o texto do botão escolhido.",
+      "Envia uma MENSAGEM DE TEXTO NUMERADA (1️⃣ 2️⃣ 3️⃣) com 1 a 5 opções pro " +
+      "motorista escolher. Use SEMPRE que `lancar_viagem` retornar `ambiguidades`. " +
+      "O motorista responde com o número ('1') ou com o nome — você interpreta " +
+      "na próxima mensagem dele e refaz `lancar_viagem` com o nome canônico escolhido. " +
+      "\n\nDEPOIS de chamar essa tool, TERMINE O TURNO IMEDIATAMENTE — não escreva " +
+      "nenhum texto adicional. A própria tool já enviou a mensagem; texto extra vira " +
+      "duplicação chata.",
     input_schema: {
       type: "object",
       properties: {
         pergunta: {
           type: "string",
-          description: "Texto curto explicando o que escolher (ex: 'Qual destas?')",
+          description:
+            "Texto curto explicando o que escolher (ex: 'Não conheço \"Chumbo\". Qual destas é?'). " +
+            "Vai aparecer ANTES da lista numerada.",
         },
         opcoes: {
           type: "array",
-          description: "1 a 3 opções clicáveis. Cada label tem até 20 chars (corta se passar).",
+          description: "1 a 5 nomes de opções, na ordem de relevância (mais provável primeiro).",
           items: {
             type: "object",
             properties: {
               texto: {
                 type: "string",
-                description: "Label do botão — nome humano curto da opção (max 20 chars)",
+                description: "Nome humano da opção (sem prefixo numérico — a tool numera).",
               },
             },
             required: ["texto"],
           },
           minItems: 1,
-          maxItems: 3,
+          maxItems: 5,
         },
       },
       required: ["pergunta", "opcoes"],
@@ -485,20 +488,42 @@ async function executarToolInterno(
         throw new Error("tool não disponível pra esse perfil");
       const telefone = ctx.metadata?.telefoneRemetente;
       if (!telefone) throw new Error("Telefone do destinatário ausente no contexto.");
-      const pergunta = String(input.pergunta ?? "").trim();
+      const pergunta = String(input.pergunta ?? "").trim() || "Qual destas?";
       const opcoesRaw = (input.opcoes as Array<{ texto?: unknown }> | undefined) ?? [];
       const opcoes = opcoesRaw
-        .map((o, i) => ({ id: `opt_${i}`, texto: String(o?.texto ?? "").trim() }))
-        .filter((o) => o.texto.length > 0)
-        .slice(0, 3);
+        .map((o) => String(o?.texto ?? "").trim())
+        .filter((t) => t.length > 0)
+        .slice(0, 5);
       if (opcoes.length === 0) {
         throw new Error("oferecer_opcoes precisa de pelo menos 1 opção válida.");
       }
-      await ctx.evolution.enviarBotoes(telefone, "Selecione", pergunta || "Qual destas?", opcoes);
+
+      // Texto numerado formatado pro WhatsApp. Botões interativos via Baileys
+      // não renderizam em clientes WhatsApp normais (só Cloud API oficial),
+      // então usamos texto formatado bonito que funciona em qualquer cliente.
+      const numeros = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"];
+      const linhas = opcoes.map((t, i) => `${numeros[i] ?? `${i + 1}.`}  *${t}*`);
+      const mensagem =
+        `${pergunta}\n\n${linhas.join("\n")}\n\n_Responde com o número ou o nome._`;
+
+      await ctx.evolution.enviarTexto(telefone, mensagem);
+
+      // Persiste a mensagem enviada como SAIDA (assim o histórico do agente
+      // já vê isso na próxima mensagem do motorista).
+      await ctx.prisma.whatsappMensagem.create({
+        data: {
+          sessaoId: ctx.identidade.sessaoId,
+          telefone,
+          direcao: "SAIDA",
+          conteudo: mensagem,
+          tipo: "TEXTO",
+        },
+      });
+
       return {
         enviado: true,
         instrucao:
-          "Botões enviados ao motorista. NÃO responda texto adicional nesse turno — termine sem texto e aguarde o clique dele (vai chegar como mensagem com o texto do botão).",
+          "Mensagem com opções enviada. TERMINE O TURNO AGORA SEM RESPONDER TEXTO. Aguarde o motorista mandar o número ou o nome.",
       };
     }
 

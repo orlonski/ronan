@@ -99,10 +99,14 @@ a) **\`{ok: true, dry_run: true, viagem: {...}}\`** — TUDO RESOLVEU.
    menciona casual: "Lancei pra obra X (deduzi pelo trajeto), ok?".
 
 b) **\`{ok: false, ambiguidades: [{campo, mensagem, candidatos}]}\`** —
-   pra CADA ambiguidade, chame \`oferecer_opcoes\` com até 3 candidatos
-   como botões. Use \`mensagem\` como pergunta. Após o motorista clicar,
-   chame \`lancar_viagem\` com \`dry_run: true\` de novo, trocando o campo
-   ambíguo pelo texto exato escolhido.
+   pra CADA ambiguidade, chame \`oferecer_opcoes\` passando os \`candidatos\`
+   como opções (até 5). A tool envia uma mensagem numerada bonita (1️⃣ 2️⃣ 3️⃣).
+   Use \`mensagem\` como pergunta. Após o motorista responder com o número
+   ou o nome, chame \`lancar_viagem\` com \`dry_run: true\` de novo, trocando
+   o campo ambíguo pelo texto canônico escolhido (ex: se ele responder "1"
+   e a opção 1 era "CBUQ", você passa material:"CBUQ").
+   IMPORTANTE: depois de chamar \`oferecer_opcoes\`, TERMINE O TURNO sem
+   responder texto. A tool já enviou a mensagem.
 
 c) **\`{ok: false, faltando: [campo1, campo2, ...]}\`** — pergunta
    naturalmente, juntando tudo em UMA mensagem só (nunca pinga campo por

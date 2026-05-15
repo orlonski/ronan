@@ -151,14 +151,19 @@ export class AgenteService {
       }
     }
 
-    return provider.processar({
+    // Tool tracker: se `oferecer_opcoes` foi chamada, descarta texto subsequente
+    // do modelo (Gemini insiste em mandar texto duplicado mesmo instruído a parar).
+    let oferecerChamado = false;
+
+    const resposta = await provider.processar({
       systemText,
       tools,
       historico,
       mensagemAtual,
       modelo,
-      executarTool: (nome, input) =>
-        executarTool(nome, input, {
+      executarTool: (nome, input) => {
+        if (nome === "oferecer_opcoes") oferecerChamado = true;
+        return executarTool(nome, input, {
           identidade,
           prisma: this.prisma,
           motorista: this.motorista,
@@ -168,7 +173,17 @@ export class AgenteService {
           uploads: this.uploads,
           evolution: this.evolution,
           metadata,
-        }),
+        });
+      },
     });
+
+    if (oferecerChamado) {
+      this.log.log(
+        "oferecer_opcoes foi chamada — descartando texto subsequente do modelo pra evitar duplicação",
+      );
+      return "";
+    }
+
+    return resposta;
   }
 }
