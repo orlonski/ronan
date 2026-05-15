@@ -136,19 +136,27 @@ const TOOLS_MOTORISTA: AgentToolDefinition[] = [
   {
     name: "lancar_viagem",
     description:
-      "Cria uma viagem usando NOMES HUMANOS (placas, nomes de obra/material/locais), " +
+      "Cria/valida uma viagem usando NOMES HUMANOS (placas, nomes de obra/material/locais), " +
       "não UUIDs. Você passa o que o motorista falou, o backend resolve fuzzy. " +
-      "Veículo é opcional (usa o default do motorista). Obra é opcional (se carga e " +
+      "\n\n**USE EM 2 ETAPAS:**" +
+      "\n1. **PRIMEIRO** chame com `dry_run: true` assim que tiver os primeiros dados (mesmo " +
+      "   incompletos). O backend valida fuzzy SEM CRIAR e devolve ambiguidades/faltando. " +
+      "   Use o retorno pra conversar: oferecer opções, pedir o que falta, confirmar nomes. " +
+      "\n2. **SÓ DEPOIS** do motorista confirmar (\"sim/ok/pode\") chame de novo com " +
+      "   `dry_run: false` (ou omitido) pra criar de verdade." +
+      "\n\nVeículo é opcional (usa o default do motorista). Obra é opcional (se carga e " +
       "descarga forem comuns, o backend infere). Data aceita 'hoje', 'ontem' ou ISO. " +
       "\n\nRetorno: " +
-      "\n- `{ok: true, ticket, viagem: {...}}` — viagem criada, conte ao motorista. " +
+      "\n- `{ok: true, dry_run: true, viagem: {...}}` — tudo resolvido na simulação, monte " +
+      "  resumo com os nomes canônicos da viagem e peça \"Confirma?\". " +
+      "\n- `{ok: true, ticket, viagem: {...}}` — viagem criada de verdade, anuncie ao motorista. " +
       "\n- `{ok: false, ambiguidades: [...]}` — algum campo tem mais de uma opção, " +
-      "  apresente as opções pro motorista escolher (use a tool oferecer_opcoes). " +
-      "\n- `{ok: false, faltando: [...]}` — algum dado essencial não veio, pergunte naturalmente. " +
+      "  apresente as opções via `oferecer_opcoes` (botões clicáveis). " +
+      "\n- `{ok: false, faltando: [...]}` — algum dado essencial não veio, pergunte uma vez " +
+      "  só juntando o que falta. " +
       "\n- `{ok: false, erro: '...'}` — erro real (ticket duplicado, etc), explique " +
-      "  pro motorista em PT-BR claro. " +
-      "\n\nNUNCA chame sem confirmação explícita do motorista (ele disse 'sim', 'confirma', 'pode'). " +
-      "Idempotente via motorista+ticket+data.",
+      "  pro motorista em PT-BR claro, sem dramatização. " +
+      "\n\nIdempotente via motorista+ticket+data.",
     input_schema: {
       type: "object",
       properties: {
@@ -183,8 +191,14 @@ const TOOLS_MOTORISTA: AgentToolDefinition[] = [
         },
         valorPedagioTotal: { type: "number", description: "R$ pedágio total (opcional)." },
         observacao: { type: "string", description: "Observação livre (opcional)." },
+        dry_run: {
+          type: "boolean",
+          description:
+            "true = só valida (não cria, não duplica). USE primeiro pra checar nomes/ambiguidades " +
+            "antes do motorista confirmar. false/omitido = cria a viagem de verdade.",
+        },
       },
-      required: ["material", "carga", "descarga", "toneladas", "ticket", "km"],
+      required: ["material", "carga", "descarga"],
     },
   },
   {
@@ -354,6 +368,8 @@ async function executarToolInterno(
       if (ctx.identidade.tipo !== "MOTORISTA")
         throw new Error("tool não disponível pra esse perfil");
 
+      const dryRun = input.dry_run === true;
+
       // 1. Resolve nomes humanos → UUIDs no backend (modelo nunca toca em UUID)
       const resolucao = await ctx.motorista.resolverViagemPorNomes(
         ctx.identidade.motoristaId,
@@ -367,15 +383,44 @@ async function executarToolInterno(
         },
       );
 
-      if (!resolucao.resolvido) {
+      // Valida campos numericos/ticket SOMENTE pra criar de verdade — em dry_run
+      // a gente quer ajudar o modelo a ver o que ainda falta.
+      const faltandoBasicos: string[] = [];
+      if (input.toneladas == null || Number.isNaN(Number(input.toneladas)))
+        faltandoBasicos.push("toneladas");
+      if (!input.ticket || String(input.ticket).trim() === "")
+        faltandoBasicos.push("ticket");
+      if (input.km == null || Number.isNaN(Number(input.km)))
+        faltandoBasicos.push("km");
+
+      if (!resolucao.resolvido || faltandoBasicos.length > 0) {
         return {
           ok: false,
-          ambiguidades: resolucao.ambiguidades,
-          faltando: resolucao.faltando,
+          dry_run: dryRun,
+          ambiguidades: resolucao.resolvido ? [] : resolucao.ambiguidades,
+          faltando: [
+            ...(resolucao.resolvido ? [] : resolucao.faltando),
+            ...faltandoBasicos,
+          ],
         };
       }
 
-      // 2. Cria a viagem com os IDs resolvidos
+      // Em dry_run, devolve resumo dos nomes canônicos (sem criar)
+      if (dryRun) {
+        return {
+          ok: true,
+          dry_run: true,
+          viagem: {
+            ...resolucao.nomesCanonicos,
+            toneladas: Number(input.toneladas),
+            km: Number(input.km),
+            ticket: String(input.ticket),
+          },
+          notas: resolucao.notas,
+        };
+      }
+
+      // Cria a viagem com os IDs resolvidos
       const clientIdInput = {
         ticket: input.ticket,
         obraId: resolucao.ids.obraId,
