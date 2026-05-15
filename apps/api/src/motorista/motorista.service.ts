@@ -7,15 +7,87 @@ export type CatalogoTipo = "material" | "obra" | "local" | "veiculo";
 export type CatalogoMatch = {
   id: string;
   nome: string;
-  score: number;
+  score: number;       // ranking combinado (sim + uso + recência + proximidade)
+  simTextual: number;  // 0..1+ — só similaridade de texto (sem boosts)
   motivo: string[];
   // campos extras por tipo (cidade/uf/tipo pra local, placa/modelo pra veiculo, etc)
   extras?: Record<string, unknown>;
 };
 
+type CampoViagem = "veiculo" | "obra" | "material" | "carga" | "descarga";
+
+type EscolhaPendente = {
+  campo: CampoViagem;
+  candidatos: Array<{ id: string; nome: string; nomeNormalizado: string }>;
+  criadoEm: number;
+};
+
+const ESCOLHA_TTL_MS = 30 * 60 * 1000; // 30 min
+
 @Injectable()
 export class MotoristaService {
+  /**
+   * Cache de pendências por sessão WhatsApp. Quando lancar_viagem retorna
+   * ambiguidade, guardamos os candidatos COM IDs aqui. Se o motorista
+   * escolher e o agente refizer lancar_viagem com o nome canônico, o
+   * resolverCampo usa direto sem refazer fuzzy (que poderia voltar a errar).
+   */
+  private escolhasPendentes = new Map<string, EscolhaPendente[]>();
+
   constructor(private readonly prisma: PrismaService) {}
+
+  private normalizar(s: string): string {
+    return s
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "") // remove acentos
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  private salvarPendencia(
+    sessaoId: string,
+    campo: CampoViagem,
+    candidatos: Array<{ id: string; nome: string }>,
+  ): void {
+    const lista = this.escolhasPendentes.get(sessaoId) ?? [];
+    // Remove pendência antiga do mesmo campo (substituição)
+    const filtrada = lista.filter((p) => p.campo !== campo);
+    filtrada.push({
+      campo,
+      candidatos: candidatos.map((c) => ({
+        ...c,
+        nomeNormalizado: this.normalizar(c.nome),
+      })),
+      criadoEm: Date.now(),
+    });
+    this.escolhasPendentes.set(sessaoId, filtrada);
+  }
+
+  private buscarPendencia(
+    sessaoId: string,
+    campo: CampoViagem,
+    valorBuscado: string,
+  ): { id: string; nome: string } | null {
+    const lista = this.escolhasPendentes.get(sessaoId);
+    if (!lista) return null;
+    const agora = Date.now();
+    // Limpa pendências expiradas
+    const validas = lista.filter((p) => agora - p.criadoEm < ESCOLHA_TTL_MS);
+    if (validas.length !== lista.length) {
+      this.escolhasPendentes.set(sessaoId, validas);
+    }
+    const pend = validas.find((p) => p.campo === campo);
+    if (!pend) return null;
+    const alvo = this.normalizar(valorBuscado);
+    const match = pend.candidatos.find((c) => c.nomeNormalizado === alvo);
+    return match ? { id: match.id, nome: match.nome } : null;
+  }
+
+  /** Limpa cache de pendências da sessão (chamado após viagem criada). */
+  limparPendenciasSessao(sessaoId: string): void {
+    this.escolhasPendentes.delete(sessaoId);
+  }
 
   async me(id: string) {
     const m = await this.prisma.motorista.findUniqueOrThrow({
@@ -182,6 +254,7 @@ export class MotoristaService {
       descarga?: string;
       data?: string;
     },
+    sessaoId?: string,
   ): Promise<
     | {
         resolvido: true;
@@ -237,15 +310,16 @@ export class MotoristaService {
 
     // VEÍCULO
     if (input.veiculo) {
-      const r = await this.resolverCampo("veiculo", input.veiculo, motoristaId);
+      const r = await this.resolverCampo("veiculo", input.veiculo, motoristaId, undefined, sessaoId, "veiculo");
       if (r.tipo === "ok") {
         ids.veiculoId = r.id;
         nomes.veiculo = r.nome;
       } else if (r.tipo === "ambiguo") {
+        if (sessaoId) this.salvarPendencia(sessaoId, "veiculo", r.candidatos);
         ambiguidades.push({
           campo: "veiculo",
           mensagem: `Tem mais de uma placa parecida com "${input.veiculo}".`,
-          candidatos: r.candidatos,
+          candidatos: r.candidatos.map((c) => ({ nome: c.nome, motivo: c.motivo })),
         });
       } else {
         faltando.push("veiculo");
@@ -263,20 +337,22 @@ export class MotoristaService {
 
     // MATERIAL
     if (input.material) {
-      const r = await this.resolverCampo("material", input.material, motoristaId);
+      const r = await this.resolverCampo("material", input.material, motoristaId, undefined, sessaoId, "material");
       if (r.tipo === "ok") {
         ids.materialId = r.id;
         nomes.material = r.nome;
       } else if (r.tipo === "ambiguo") {
+        if (sessaoId) this.salvarPendencia(sessaoId, "material", r.candidatos);
         ambiguidades.push({
           campo: "material",
           mensagem: `Achei mais de um material que casa com "${input.material}".`,
-          candidatos: r.candidatos,
+          candidatos: r.candidatos.map((c) => ({ nome: c.nome, motivo: c.motivo })),
         });
       } else {
         // Sem match fuzzy — sugere top usados (motorista→empresa→catálogo)
         const top = await this.topUsadosRecentes(motoristaId, "material");
         if (top.length > 0) {
+          if (sessaoId) this.salvarPendencia(sessaoId, "material", top.map((t) => ({ id: t.id, nome: t.nome })));
           ambiguidades.push({
             campo: "material",
             mensagem: motivoSugestao(input.material, "material", top[0].fonte),
@@ -295,19 +371,21 @@ export class MotoristaService {
 
     // CARGA
     if (input.carga) {
-      const r = await this.resolverCampo("local", input.carga, motoristaId);
+      const r = await this.resolverCampo("local", input.carga, motoristaId, undefined, sessaoId, "carga");
       if (r.tipo === "ok") {
         ids.localCargaId = r.id;
         nomes.carga = r.nome;
       } else if (r.tipo === "ambiguo") {
+        if (sessaoId) this.salvarPendencia(sessaoId, "carga", r.candidatos);
         ambiguidades.push({
           campo: "carga",
           mensagem: `Tem mais de um local de carga parecido com "${input.carga}".`,
-          candidatos: r.candidatos,
+          candidatos: r.candidatos.map((c) => ({ nome: c.nome, motivo: c.motivo })),
         });
       } else {
         const top = await this.topUsadosRecentes(motoristaId, "carga");
         if (top.length > 0) {
+          if (sessaoId) this.salvarPendencia(sessaoId, "carga", top.map((t) => ({ id: t.id, nome: t.nome })));
           ambiguidades.push({
             campo: "carga",
             mensagem: motivoSugestao(input.carga, "local de carga", top[0].fonte),
@@ -331,19 +409,23 @@ export class MotoristaService {
         input.descarga,
         motoristaId,
         ids.localCargaId,
+        sessaoId,
+        "descarga",
       );
       if (r.tipo === "ok") {
         ids.localDescargaId = r.id;
         nomes.descarga = r.nome;
       } else if (r.tipo === "ambiguo") {
+        if (sessaoId) this.salvarPendencia(sessaoId, "descarga", r.candidatos);
         ambiguidades.push({
           campo: "descarga",
           mensagem: `Tem mais de um local de descarga parecido com "${input.descarga}".`,
-          candidatos: r.candidatos,
+          candidatos: r.candidatos.map((c) => ({ nome: c.nome, motivo: c.motivo })),
         });
       } else {
         const top = await this.topUsadosRecentes(motoristaId, "descarga");
         if (top.length > 0) {
+          if (sessaoId) this.salvarPendencia(sessaoId, "descarga", top.map((t) => ({ id: t.id, nome: t.nome })));
           ambiguidades.push({
             campo: "descarga",
             mensagem: motivoSugestao(input.descarga, "local de descarga", top[0].fonte),
@@ -362,19 +444,21 @@ export class MotoristaService {
 
     // OBRA — se nao veio mas carga+descarga resolveram, tenta inferir trajeto
     if (input.obra) {
-      const r = await this.resolverCampo("obra", input.obra, motoristaId);
+      const r = await this.resolverCampo("obra", input.obra, motoristaId, undefined, sessaoId, "obra");
       if (r.tipo === "ok") {
         ids.obraId = r.id;
         nomes.obra = r.nome;
       } else if (r.tipo === "ambiguo") {
+        if (sessaoId) this.salvarPendencia(sessaoId, "obra", r.candidatos);
         ambiguidades.push({
           campo: "obra",
           mensagem: `Achei mais de uma obra parecida com "${input.obra}".`,
-          candidatos: r.candidatos,
+          candidatos: r.candidatos.map((c) => ({ nome: c.nome, motivo: c.motivo })),
         });
       } else {
         const top = await this.topUsadosRecentes(motoristaId, "obra");
         if (top.length > 0) {
+          if (sessaoId) this.salvarPendencia(sessaoId, "obra", top.map((t) => ({ id: t.id, nome: t.nome })));
           ambiguidades.push({
             campo: "obra",
             mensagem: motivoSugestao(input.obra, "obra", top[0].fonte),
@@ -399,6 +483,13 @@ export class MotoristaService {
         nomes.obra = inf.candidatos[0].nome;
         notas.push(`obra: deduzi pelo trajeto (${inf.candidatos[0].motivo.join(", ")})`);
       } else if (inf.candidatos.length > 0) {
+        if (sessaoId) {
+          this.salvarPendencia(
+            sessaoId,
+            "obra",
+            inf.candidatos.slice(0, 3).map((c) => ({ id: c.obraId, nome: c.nome })),
+          );
+        }
         ambiguidades.push({
           campo: "obra",
           mensagem: "Esse trajeto já rodou pra mais de uma obra. Qual é?",
@@ -459,9 +550,11 @@ export class MotoristaService {
     valor: string,
     motoristaId: string,
     ancora?: string,
+    sessaoId?: string,
+    campoLogico?: CampoViagem,
   ): Promise<
     | { tipo: "ok"; id: string; nome: string }
-    | { tipo: "ambiguo"; candidatos: Array<{ nome: string; motivo: string[] }> }
+    | { tipo: "ambiguo"; candidatos: Array<{ id: string; nome: string; motivo: string[] }> }
     | { tipo: "vazio" }
   > {
     // UUID direto (string com 36 chars formato UUID): aceita sem buscar.
@@ -469,29 +562,64 @@ export class MotoristaService {
       const id = valor.trim();
       const nome = await this.lookupNomeById(tipo, id);
       if (nome) return { tipo: "ok", id, nome };
-      // UUID válido mas não existe — trata como vazio pra fluxo de "nao achei"
       return { tipo: "vazio" };
     }
 
-    const matches = await this.buscarCatalogo(motoristaId, tipo, valor, ancora);
-    if (matches.length === 0) return { tipo: "vazio" };
+    // Cache de pendências: se a sessão já viu esse nome ser oferecido como
+    // opção pra esse campo, usa direto. Mata o loop "perguntou-respondeu-
+    // ressurgiu". Vide salvarPendencia em resolverViagemPorNomes.
+    if (sessaoId && campoLogico) {
+      const cached = this.buscarPendencia(sessaoId, campoLogico, valor);
+      if (cached) {
+        return { tipo: "ok", id: cached.id, nome: cached.nome };
+      }
+    }
+
+    const matchesRaw = await this.buscarCatalogo(motoristaId, tipo, valor, ancora);
+    if (matchesRaw.length === 0) return { tipo: "vazio" };
+
+    // Reordena: match textual quase-exato (>=0.95) sobe pra topo absoluto
+    // mesmo que outros tenham score combinado maior por uso/recência.
+    // Caso real: motorista digita "Casa" (existe local "Casa" — texto 1.0)
+    // mas o backend tinha "Castro" com texto 0.33 + uso alto vencendo.
+    const matches = [...matchesRaw].sort((a, b) => {
+      const aExato = a.simTextual >= 0.95 ? 1 : 0;
+      const bExato = b.simTextual >= 0.95 ? 1 : 0;
+      if (aExato !== bExato) return bExato - aExato;
+      return b.score - a.score;
+    });
 
     const top = matches[0];
     const segundo = matches[1];
-    const margem = segundo ? top.score - segundo.score : Infinity;
 
-    // Auto-aceita se top é forte E significativamente melhor que segundo
-    if (top.score >= 0.6 && margem >= 0.2) {
+    // Match textual quase-exato: vence sempre, sem ambiguidade.
+    if (top.simTextual >= 0.95) {
       return { tipo: "ok", id: top.id, nome: top.nome };
     }
-    // Top único forte
+
+    // Top forte textualmente E sem competidor textual decente: ok direto.
+    if (top.simTextual >= 0.7 && (!segundo || segundo.simTextual < 0.5)) {
+      return { tipo: "ok", id: top.id, nome: top.nome };
+    }
+
+    // Auto-aceita se top combinado é forte E significativamente melhor.
+    const margem = segundo ? top.score - segundo.score : Infinity;
+    if (top.score >= 0.6 && margem >= 0.3) {
+      return { tipo: "ok", id: top.id, nome: top.nome };
+    }
     if (matches.length === 1 && top.score >= 0.5) {
       return { tipo: "ok", id: top.id, nome: top.nome };
     }
-    // Senão, ambíguo — devolve top 3
+
+    // Ambíguo — devolve até 3, FILTRANDO candidatos com sim textual fraco
+    // (< 0.4) que aparecem só por uso. Castro (sim 0.33) pra "Casa" não
+    // deveria virar opção que confunde o motorista.
+    const candidatosFiltrados = matches.filter((m) => m.simTextual >= 0.4);
+    const finais = candidatosFiltrados.length > 0 ? candidatosFiltrados : matches;
     return {
       tipo: "ambiguo",
-      candidatos: matches.slice(0, 3).map((m) => ({
+      candidatos: finais.slice(0, 3).map((m) => ({
+        id: m.id,
         nome: m.nome,
         motivo: m.motivo,
       })),
@@ -1059,6 +1187,7 @@ export class MotoristaService {
         id: r.id,
         nome: r.nome,
         score: scoreFinal,
+        simTextual: r.simScore,
         motivo: motivoLocal(r.simScore, nUso, r.ultimaUso, r.distanciaKm),
         extras: {
           tipo: r.tipo,
@@ -1118,6 +1247,7 @@ export class MotoristaService {
         id: r.id,
         nome: r.nome,
         score: scoreSimples(r.simScore, nUso, r.ultimaUso),
+        simTextual: r.simScore,
         motivo: motivoSimples(r.simScore, nUso, r.ultimaUso),
       };
     });
@@ -1174,6 +1304,7 @@ export class MotoristaService {
         id: r.id,
         nome: r.nome,
         score: scoreSimples(r.simScore, nUso, r.ultimaUso),
+        simTextual: r.simScore,
         motivo: motivoSimples(r.simScore, nUso, r.ultimaUso),
         extras: { empresa: r.empresaNome },
       };
@@ -1217,6 +1348,7 @@ export class MotoristaService {
       id: r.id,
       nome: r.placa,
       score: r.simScore,
+      simTextual: r.simScore,
       motivo: [`texto≈${Math.round(r.simScore * 100)}%`],
       extras: { placa: r.placa, modelo: r.modelo },
     }));

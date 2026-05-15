@@ -405,7 +405,9 @@ async function executarToolInterno(
 
       const dryRun = input.dry_run === true;
 
-      // 1. Resolve nomes humanos → UUIDs no backend (modelo nunca toca em UUID)
+      // 1. Resolve nomes humanos → UUIDs no backend (modelo nunca toca em UUID).
+      //    Passa sessaoId pro backend usar/popular cache de escolhas pendentes —
+      //    mata o loop "perguntou-respondeu-perguntou de novo".
       const resolucao = await ctx.motorista.resolverViagemPorNomes(
         ctx.identidade.motoristaId,
         {
@@ -416,6 +418,7 @@ async function executarToolInterno(
           descarga: input.descarga ? String(input.descarga) : undefined,
           data: input.data ? String(input.data) : undefined,
         },
+        ctx.identidade.sessaoId,
       );
 
       // Valida campos numericos/ticket SOMENTE pra criar de verdade — em dry_run
@@ -494,6 +497,8 @@ async function executarToolInterno(
             input.valorPedagioTotal != null ? Number(input.valorPedagioTotal) : undefined,
           observacao: input.observacao ? String(input.observacao) : undefined,
         } as never);
+        // Viagem criada — limpa cache de escolhas pra próxima viagem começar limpa.
+        ctx.motorista.limparPendenciasSessao(ctx.identidade.sessaoId);
         return {
           ok: true,
           ticket: v?.ticket,
