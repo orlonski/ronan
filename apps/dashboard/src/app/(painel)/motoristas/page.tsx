@@ -12,6 +12,7 @@ import {
 import { StatusToggle } from "@/components/status-toggle";
 import { ExcluirButton } from "@/components/excluir-button";
 import { ConviteWhatsappButton } from "@/components/convite-whatsapp-button";
+import { EnviarPushButton } from "@/components/enviar-push-button";
 import { DocumentosBadge } from "@/components/documentos-badge";
 import { DocumentosDrawerButton } from "@/components/documentos-drawer";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,7 @@ type Motorista = {
   veiculoDefault: Veiculo | null;
   veiculos: Veiculo[];
   documentos: DocumentoResumo[];
+  temPushToken: boolean;
 };
 const PATH = "/admin/motoristas";
 
@@ -137,7 +139,7 @@ export default function MotoristasPage() {
       },
       {
         id: "acoes",
-        size: 180,
+        size: 220,
         enableSorting: false,
         header: () => <span className="block text-center">Ações</span>,
         cell: ({ row }) => (
@@ -157,6 +159,11 @@ export default function MotoristasPage() {
                 <Pencil className="h-4 w-4" />
               </Button>
             </Link>
+            <EnviarPushButton
+              motoristaId={row.original.id}
+              motoristaNome={row.original.nome}
+              temPushToken={row.original.temPushToken}
+            />
             <ConviteWhatsappButton tipo="motorista" id={row.original.id} nome={row.original.nome} />
             <ExcluirButton
               path="/admin/motoristas"
@@ -237,6 +244,11 @@ export default function MotoristasPage() {
                     <Pencil className="h-4 w-4" />
                   </Button>
                 </Link>
+                <EnviarPushButton
+                  motoristaId={m.id}
+                  motoristaNome={m.nome}
+                  temPushToken={m.temPushToken}
+                />
                 <ConviteWhatsappButton tipo="motorista" id={m.id} nome={m.nome} />
                 <ExcluirButton
                   path="/admin/motoristas"

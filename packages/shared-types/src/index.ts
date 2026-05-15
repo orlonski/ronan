@@ -13,3 +13,4 @@ export * from "./motorista-documento";
 export * from "./veiculo";
 export * from "./material";
 export * from "./user";
+export * from "./push";

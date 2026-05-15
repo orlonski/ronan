@@ -168,6 +168,8 @@ model Motorista {
   ultimoLoginEm    DateTime?
   tentativasLogin  Int       @default(0)
   bloqueadoAte     DateTime?
+  expoPushToken         String?
+  pushTokenAtualizadoEm DateTime?
   criadoEm         DateTime  @default(now())
   alteradoEm       DateTime  @updatedAt
 

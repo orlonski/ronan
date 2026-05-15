@@ -114,6 +114,11 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         void geofence.sincronizarGeofences();
         void geofence.drenarFila();
 
+        // Push remoto: pede permissão, pega o ExpoPushToken e manda pro backend.
+        // Fire-and-forget — falha silenciosa (não pode bloquear o app).
+        const { obterEEnviarPushToken } = await import("@/lib/notifications");
+        void obterEEnviarPushToken();
+
         const Notifications = await import("expo-notifications");
         if (!alive) return;
         sub = Notifications.addNotificationResponseReceivedListener((resp) => {
@@ -121,6 +126,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
           if (kind === "auto-finalizar") {
             router.push("/viagem-andamento");
           } else if (kind === "iniciar-tracking") {
+            router.push("/");
+          } else if (kind === "mensagem-admin") {
             router.push("/");
           }
         });

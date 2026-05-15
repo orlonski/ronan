@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
-import { AtualizarMotoristaInput, CriarMotoristaInput } from "@ronan/shared-types";
+import { AtualizarMotoristaInput, CriarMotoristaInput, EnviarPushInput } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { paginationQuerySchema } from "../../common/pagination";
 import { Roles } from "../../auth/decorators/roles.decorator";
@@ -47,5 +47,13 @@ export class MotoristasController {
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.service.remove(id);
+  }
+
+  @Post(":id/push")
+  enviarPush(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(EnviarPushInput)) body: EnviarPushInput,
+  ) {
+    return this.service.enviarPush(id, body);
   }
 }

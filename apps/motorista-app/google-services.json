@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "927404702190",
+    "project_id": "schaba-motorista",
+    "storage_bucket": "schaba-motorista.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:927404702190:android:4b51f37b51db5456e936ff",
+        "android_client_info": {
+          "package_name": "br.com.schaba.motorista"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC9OlhQxIleTdGxkDgivGUudCGvNlfrZoc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -35,7 +35,12 @@ const config: ExpoConfig = {
   },
   android: {
     package: "br.com.schaba.motorista",
-    versionCode: 4,
+    versionCode: 5,
+    // FCM v1 (push notifications): exige google-services.json do projeto Firebase
+    // vinculado a este package. EAS Secret GOOGLE_SERVICES_JSON aponta pro arquivo
+    // subido via `eas secret:create`; em dev local cai pro arquivo na raiz do app.
+    googleServicesFile:
+      process.env.GOOGLE_SERVICES_JSON ?? "./google-services.json",
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-icon.png",
       backgroundColor: "#13316b",

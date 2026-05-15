@@ -1,9 +1,16 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
-import type { CriarMotoristaInput, AtualizarMotoristaInput, PlacaInput } from "@ronan/shared-types";
+import type {
+  CriarMotoristaInput,
+  AtualizarMotoristaInput,
+  PlacaInput,
+  EnviarPushInput,
+  EnviarPushResultado,
+} from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuthService } from "../../auth/auth.service";
 import { UploadsService } from "../../uploads/uploads.service";
+import { PushService } from "../../push/push.service";
 import { paginate, type Paginated, type PaginationQuery } from "../../common/pagination";
 
 type ListMotoristasParams = PaginationQuery & { ativo?: "true" | "false" };
@@ -35,6 +42,7 @@ const SAFE_SELECT = {
   },
   ativo: true,
   ultimoLoginEm: true,
+  expoPushToken: true,
   criadoEm: true,
 } as const;
 
@@ -45,6 +53,7 @@ export class MotoristasService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly uploads: UploadsService,
+    private readonly push: PushService,
   ) {}
 
   async list(params: ListMotoristasParams): Promise<Paginated<ReturnType<typeof this.flatten>>> {
@@ -276,8 +285,34 @@ export class MotoristasService {
     return match?.id ?? null;
   }
 
-  private flatten<V>(m: { veiculos: { veiculo: V }[] } & Record<string, unknown>) {
-    const { veiculos, ...rest } = m;
-    return { ...rest, veiculos: veiculos.map((v) => v.veiculo) };
+  private flatten<V>(
+    m: { veiculos: { veiculo: V }[]; expoPushToken?: string | null } & Record<string, unknown>,
+  ) {
+    // Token raw nunca é exposto pro frontend — só o booleano deriva dele.
+    const { veiculos, expoPushToken, ...rest } = m;
+    return {
+      ...rest,
+      veiculos: veiculos.map((v) => v.veiculo),
+      temPushToken: !!expoPushToken,
+    };
+  }
+
+  async enviarPush(motoristaId: string, body: EnviarPushInput): Promise<EnviarPushResultado> {
+    const m = await this.prisma.motorista.findUnique({
+      where: { id: motoristaId },
+      select: { id: true, ativo: true, expoPushToken: true },
+    });
+    if (!m) throw new NotFoundException("Motorista não encontrado");
+    if (!m.ativo) return { enviado: false, motivo: "Motorista inativo" };
+    if (!m.expoPushToken) {
+      return { enviado: false, motivo: "Motorista ainda não abriu o app (sem token)" };
+    }
+    return this.push.enviar({
+      motoristaId: m.id,
+      token: m.expoPushToken,
+      titulo: body.titulo,
+      corpo: body.corpo,
+      dados: body.dados,
+    });
   }
 }

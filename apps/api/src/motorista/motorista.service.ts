@@ -89,6 +89,13 @@ export class MotoristaService {
     this.escolhasPendentes.delete(sessaoId);
   }
 
+  async registrarPushToken(motoristaId: string, token: string): Promise<void> {
+    await this.prisma.motorista.update({
+      where: { id: motoristaId },
+      data: { expoPushToken: token, pushTokenAtualizadoEm: new Date() },
+    });
+  }
+
   async me(id: string) {
     const m = await this.prisma.motorista.findUniqueOrThrow({
       where: { id },

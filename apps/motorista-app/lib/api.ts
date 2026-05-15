@@ -204,4 +204,6 @@ export const api = {
       body: { cpf, senha },
       auth: false,
     }),
+  atualizarPushToken: (token: string) =>
+    request<{ ok: true }>("POST", "/m/push-token", { body: { token } }),
 };
