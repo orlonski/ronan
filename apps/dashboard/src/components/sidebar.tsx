@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 
 type Item = {
   href: string;
@@ -129,12 +130,8 @@ export function Sidebar({
 
       <aside
         className={cn(
-          // Desktop: fixa, fundo cinza-claro
-          "z-50 flex w-64 flex-col border-r px-4 py-6",
-          "md:bg-muted/30",
-          // Mobile: gaveta com slide. Fundo SÓLIDO branco pra não vazar
-          // o conteúdo de trás.
-          "fixed inset-y-0 left-0 bg-background transform transition-transform",
+          "z-50 flex w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground px-4 py-6",
+          "fixed inset-y-0 left-0 transform transition-transform",
           "md:relative md:translate-x-0",
           mobileOpen ? "translate-x-0 shadow-xl" : "-translate-x-full md:translate-x-0",
         )}
@@ -152,7 +149,7 @@ export function Sidebar({
             <button
               type="button"
               onClick={onMobileClose}
-              className="ml-auto rounded-md p-1 text-muted-foreground hover:bg-background md:hidden"
+              className="ml-auto rounded-md p-1 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground md:hidden"
               aria-label="Fechar menu"
             >
               <X className="h-5 w-5" />
@@ -171,8 +168,8 @@ export function Sidebar({
                 className={cn(
                   "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
                   active
-                    ? "bg-background font-medium shadow-sm"
-                    : "text-muted-foreground hover:bg-background hover:text-foreground",
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm"
+                    : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                 )}
               >
                 <Icon className="h-4 w-4" />
@@ -188,7 +185,7 @@ export function Sidebar({
                 <button
                   type="button"
                   onClick={() => toggleGrupo(grupo.titulo)}
-                  className="flex w-full items-center justify-between rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 transition-colors hover:bg-background hover:text-muted-foreground"
+                  className="flex w-full items-center justify-between rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-muted-foreground"
                 >
                   <span>{grupo.titulo}</span>
                   {aberto ? (
@@ -207,8 +204,8 @@ export function Sidebar({
                         className={cn(
                           "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
                           active
-                            ? "bg-background font-medium shadow-sm"
-                            : "text-muted-foreground hover:bg-background hover:text-foreground",
+                            ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm"
+                            : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                         )}
                       >
                         <Icon className="h-4 w-4" />
@@ -221,7 +218,8 @@ export function Sidebar({
           })}
         </nav>
 
-        <div className="space-y-2 border-t pt-4">
+        <div className="space-y-2 border-t border-sidebar-border pt-4">
+          <ThemeSwitcher />
           <div className="flex items-center gap-2 px-2 text-sm">
             <UserCircle className="h-5 w-5 text-muted-foreground" />
             <div className="min-w-0">

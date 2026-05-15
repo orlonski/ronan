@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Menu } from "lucide-react";
 import { Sidebar } from "@/components/sidebar";
 import { GlobalLoadingBar } from "@/components/loading";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 
 /**
  * Shell do painel: cuida da gaveta lateral no mobile + header com
@@ -41,7 +42,7 @@ export function PainelShell({ children }: { children: React.ReactNode }) {
               className="h-auto w-28"
             />
           </div>
-          <div className="w-10" />
+          <ThemeSwitcher compact />
         </header>
 
         <main className="flex-1 overflow-auto bg-background p-4 md:p-8">
