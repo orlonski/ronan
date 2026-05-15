@@ -4,9 +4,10 @@
 
 @layer base {
   /* ============================================================
-   * LIGHT — Modern Minimal (tweakcn)
+   * LIGHT — Modern Minimal (tweakcn) — default + classe explícita
    * ============================================================ */
-  :root {
+  :root,
+  .theme-modern-minimal {
     --background: #ffffff;
     --foreground: #333333;
     --card: #ffffff;

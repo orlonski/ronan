@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import { Menu } from "lucide-react";
 import { Sidebar } from "@/components/sidebar";
 import { GlobalLoadingBar } from "@/components/loading";
+import { SchabaLogo } from "@/components/schaba-logo";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 
 /**
@@ -34,13 +34,7 @@ export function PainelShell({ children }: { children: React.ReactNode }) {
             <Menu className="h-6 w-6" />
           </button>
           <div className="flex items-center">
-            <Image
-              src="/schaba-logo.png"
-              alt="Schaba"
-              width={1642}
-              height={614}
-              className="h-auto w-28"
-            />
+            <SchabaLogo width={112} className="text-foreground" />
           </div>
           <ThemeSwitcher compact />
         </header>

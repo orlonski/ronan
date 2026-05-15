@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
@@ -29,6 +28,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { SchabaLogo } from "@/components/schaba-logo";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 
 type Item = {
@@ -137,13 +137,7 @@ export function Sidebar({
         )}
       >
         <div className="mb-4 flex items-center px-2">
-          <Image
-            src="/schaba-logo.png"
-            alt="Schaba"
-            width={1642}
-            height={614}
-            className="h-auto w-40 shrink-0"
-          />
+          <SchabaLogo width={160} className="shrink-0 text-sidebar-foreground" />
           {/* Botão fechar (só mobile) */}
           {onMobileClose && (
             <button

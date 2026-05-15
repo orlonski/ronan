@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
@@ -15,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SchabaLogo } from "@/components/schaba-logo";
 
 function LoginForm() {
   const router = useRouter();
@@ -114,7 +114,7 @@ const FEATURES = [
 
 export default function LoginPage() {
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-950 to-black px-4 py-8">
+    <main className="theme-modern-minimal relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-950 to-black px-4 py-8">
       {/* Vídeo de fundo */}
       <video
         autoPlay
@@ -138,14 +138,7 @@ export default function LoginPage() {
       <div className="relative z-10 flex w-full max-w-md flex-col items-center">
         {/* Logo + tagline acima do card */}
         <div className="mb-6 flex flex-col items-center">
-          <Image
-            src="/schaba-logo.png"
-            alt="Schaba"
-            width={1642}
-            height={614}
-            priority
-            className="h-auto w-48 drop-shadow-2xl"
-          />
+          <SchabaLogo width={192} className="text-white drop-shadow-2xl" />
           <p className="mt-2 text-xs uppercase tracking-[0.3em] text-zinc-300">
             Logistics &amp; Tracking
           </p>
