@@ -93,6 +93,44 @@ export class PushService {
       return { enviado: false, motivo: ticket.message ?? "Erro do Expo" };
     }
 
-    return { enviado: true };
+    // Ticket "ok" só significa que o Expo aceitou. A entrega real (Expo → FCM →
+    // device) é assíncrona — só confirmamos consultando o receipt. Sem isso,
+    // erros como MismatchSenderId/InvalidCredentials passam silenciosos.
+    const ticketId = ticket.id;
+    this.log.log(`Push aceita pelo Expo, ticket=${ticketId} motoristaId=${motoristaId}`);
+
+    await delay(3000);
+    try {
+      const receipts = await this.expo.getPushNotificationReceiptsAsync([ticketId]);
+      const receipt = receipts[ticketId];
+      if (!receipt) {
+        // Receipt ainda não disponível — considera enviado e segue.
+        // (Expo às vezes leva > 5s; não bloqueia o admin esperando)
+        return { enviado: true };
+      }
+      if (receipt.status === "ok") {
+        return { enviado: true };
+      }
+      // receipt.status === "error" — esse é o caso que estávamos perdendo
+      const detalhe = receipt.details?.error;
+      this.log.warn(
+        `Push receipt ERRO motoristaId=${motoristaId} ticket=${ticketId} error=${detalhe} message=${receipt.message}`,
+      );
+      if (detalhe === "DeviceNotRegistered") {
+        await this.prisma.motorista.update({
+          where: { id: motoristaId },
+          data: { expoPushToken: null, pushTokenAtualizadoEm: null },
+        });
+        return { enviado: false, motivo: "Token expirado — motorista precisa abrir o app de novo." };
+      }
+      return {
+        enviado: false,
+        motivo: `${detalhe ?? "Erro Expo"}: ${receipt.message ?? "sem detalhe"}`,
+      };
+    } catch (e) {
+      // Falha ao consultar receipt — não bloqueia (Expo já aceitou, provavelmente entregou)
+      this.log.warn(`Push receipt consulta falhou motoristaId=${motoristaId}: ${e}`);
+      return { enviado: true };
+    }
   }
 }
