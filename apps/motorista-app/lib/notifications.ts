@@ -34,7 +34,7 @@ export async function notificarLocal(
   if (!ok) return;
   const Notifications = await import("expo-notifications");
   await Notifications.scheduleNotificationAsync({
-    content: { title, body, data: data ?? {}, sound: "default" },
+    content: { title, body, data: data ?? {}, sound: "ding" },
     trigger: null, // imediato
   });
 }

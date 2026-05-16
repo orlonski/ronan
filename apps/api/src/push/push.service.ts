@@ -51,7 +51,9 @@ export class PushService {
       title: titulo,
       body: corpo,
       data: dados ?? {},
-      sound: "default",
+      // "ding" = asset embutido no app (apps/motorista-app/assets/sounds/ding.wav)
+      // registrado via plugin expo-notifications no app.config.ts.
+      sound: "ding",
       priority: "high",
       channelId: "default",
     };

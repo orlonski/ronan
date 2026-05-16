@@ -35,7 +35,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: "br.com.schaba.motorista",
-    versionCode: 5,
+    versionCode: 6,
     // FCM v1 (push notifications): exige google-services.json do projeto Firebase
     // vinculado a este package. EAS Secret GOOGLE_SERVICES_JSON aponta pro arquivo
     // subido via `eas secret:create`; em dev local cai pro arquivo na raiz do app.
@@ -90,6 +90,9 @@ const config: ExpoConfig = {
       {
         icon: "./assets/icon.png",
         color: "#ea580c",
+        // Som customizado embarcado (E6→B5 chime, ~0.6s). Nome referenciado
+        // pelo backend como `sound: "ding"` (sem extensão).
+        sounds: ["./assets/sounds/ding.wav"],
       },
     ],
     "./plugins/with-abi-splits",
