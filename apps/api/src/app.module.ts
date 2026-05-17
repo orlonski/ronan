@@ -14,6 +14,7 @@ import { FechamentosModule } from "./fechamentos/fechamentos.module";
 import { ErrorsModule } from "./errors/errors.module";
 import { ErrorsExceptionFilter } from "./errors/errors.filter";
 import { WhatsappModule } from "./whatsapp/whatsapp.module";
+import { NotificacoesModule } from "./notificacoes/notificacoes.module";
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { WhatsappModule } from "./whatsapp/whatsapp.module";
     HealthModule,
     ErrorsModule,
     WhatsappModule,
+    NotificacoesModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: ErrorsExceptionFilter }],
 })

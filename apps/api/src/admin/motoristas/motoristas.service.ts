@@ -313,6 +313,7 @@ export class MotoristasService {
       titulo: body.titulo,
       corpo: body.corpo,
       dados: body.dados,
+      tipo: "mensagem-admin",
     });
   }
 }

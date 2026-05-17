@@ -182,6 +182,7 @@ model Motorista {
   evidenciasLocal  LocalEvidencia[]
   whatsappSessao   WhatsappSessao?
   whatsappConvites WhatsappConvite[]
+  notificacoes     Notificacao[]
 
   @@index([ativo])
   @@map("motoristas")
@@ -874,4 +875,34 @@ model AbastecimentoFoto {
 
   @@index([abastecimentoId])
   @@map("abastecimento_fotos")
+}
+
+enum NotificacaoEntregaStatus {
+  PENDENTE
+  ENTREGUE
+  ERRO
+}
+
+/// Notificação enviada pelo admin (ou eventos futuros do sistema) pro motorista.
+/// Persistida ANTES do envio pro Expo pra sobreviver a qualquer falha. App
+/// busca via GET /m/notificacoes; push notification carrega o id no payload
+/// pra fechar o loop "tap → marcar lida".
+model Notificacao {
+  id            String                   @id @default(uuid())
+  motorista     Motorista                @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  motoristaId   String
+  tipo          String // "mensagem-admin" hoje; outros tipos no futuro
+  titulo        String
+  corpo         String                   @db.Text
+  dados         Json?
+  lida          Boolean                  @default(false)
+  lidaEm        DateTime?
+  entregaStatus NotificacaoEntregaStatus @default(PENDENTE)
+  entregaErro   String?
+  expoTicketId  String?
+  criadoEm      DateTime                 @default(now())
+
+  @@index([motoristaId, criadoEm(sort: Desc)])
+  @@index([motoristaId, lida])
+  @@map("notificacoes")
 }
