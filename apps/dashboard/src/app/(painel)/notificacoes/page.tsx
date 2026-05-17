@@ -13,6 +13,7 @@ import { formatCpf } from "@ronan/shared-types";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Spinner } from "@/components/loading";
+import { MotoristaCombobox } from "@/components/motorista-combobox";
 import {
   Table,
   TableBody,
@@ -21,9 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { fetchApi, useAuthToken, useResourceOptions } from "@/lib/client-api";
-
-type MotoristaOpt = { id: string; nome: string; cpf: string };
+import { fetchApi, useAuthToken } from "@/lib/client-api";
 
 const statusClasses: Record<string, string> = {
   PENDENTE: "bg-amber-50 text-amber-700 border-amber-200",
@@ -58,10 +57,6 @@ export default function NotificacoesAdminPage() {
   );
   const [entregaStatus, setEntregaStatus] = useState<string | undefined>();
   const [lida, setLida] = useState<string | undefined>();
-
-  const motoristasOpts = useResourceOptions<MotoristaOpt>("/admin/motoristas", {
-    pageSize: 500,
-  });
 
   const q = useInfiniteQuery({
     queryKey: ["admin-notificacoes", { motoristaId, entregaStatus, lida, token }],
@@ -101,48 +96,42 @@ export default function NotificacoesAdminPage() {
         </p>
       </header>
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
-        <FiltroSelect
-          label="Motorista"
-          value={motoristaId}
-          onChange={setMotoristaId}
-          options={
-            motoristasOpts.data
-              ? [
-                  ...motoristasOpts.data.map((m) => ({
-                    value: m.id,
-                    label: `${m.nome} · ${formatCpf(m.cpf)}`,
-                  })),
-                ]
-              : []
-          }
-        />
-        <FiltroSelect
-          label="Entrega"
-          value={entregaStatus}
-          onChange={setEntregaStatus}
-          options={[
-            { value: "PENDENTE", label: "Pendente" },
-            { value: "ENTREGUE", label: "Entregue" },
-            { value: "ERRO", label: "Erro" },
-          ]}
-        />
-        <FiltroSelect
-          label="Lida"
-          value={lida}
-          onChange={setLida}
-          options={[
-            { value: "true", label: "Lidas" },
-            { value: "false", label: "Não lidas" },
-          ]}
-        />
+      <div className="flex flex-wrap items-end gap-3">
+        <FiltroCampo label="Motorista">
+          <MotoristaCombobox value={motoristaId} onChange={setMotoristaId} />
+        </FiltroCampo>
+        <FiltroCampo label="Entrega">
+          <Select
+            value={entregaStatus ?? ""}
+            onChange={(e) =>
+              setEntregaStatus(e.target.value === "" ? undefined : e.target.value)
+            }
+            className="h-10 min-w-[140px]"
+          >
+            <option value="">Todos</option>
+            <option value="PENDENTE">Pendente</option>
+            <option value="ENTREGUE">Entregue</option>
+            <option value="ERRO">Erro</option>
+          </Select>
+        </FiltroCampo>
+        <FiltroCampo label="Lida">
+          <Select
+            value={lida ?? ""}
+            onChange={(e) => setLida(e.target.value === "" ? undefined : e.target.value)}
+            className="h-10 min-w-[120px]"
+          >
+            <option value="">Todas</option>
+            <option value="true">Lidas</option>
+            <option value="false">Não lidas</option>
+          </Select>
+        </FiltroCampo>
         {hasFilters && (
           <Button
             type="button"
             variant="ghost"
             size="sm"
             onClick={limparFiltros}
-            className="h-9 text-muted-foreground"
+            className="h-10 text-muted-foreground"
           >
             Limpar
             <X className="ml-1 h-3.5 w-3.5" />
@@ -254,34 +243,11 @@ function NotificacaoRow({ n }: { n: NotificacaoAdminItem }) {
   );
 }
 
-function FiltroSelect({
-  label,
-  value,
-  options,
-  onChange,
-  placeholder = "Todos",
-}: {
-  label: string;
-  value: string | undefined;
-  options: { value: string; label: string }[];
-  onChange: (value: string | undefined) => void;
-  placeholder?: string;
-}) {
+function FiltroCampo({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="flex h-9 items-center gap-1.5 rounded-md border bg-background px-2 text-sm">
-      <span className="text-xs text-muted-foreground">{label}:</span>
-      <Select
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)}
-        className="h-7 border-0 bg-transparent text-sm focus:ring-0"
-      >
-        <option value="">{placeholder}</option>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </Select>
+    <label className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      {children}
     </label>
   );
 }
