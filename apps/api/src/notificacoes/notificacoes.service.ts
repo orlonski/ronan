@@ -1,8 +1,11 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import type {
+  ListarNotificacoesAdminQuery,
+  ListarNotificacoesAdminResponse,
   ListarNotificacoesQuery,
   ListarNotificacoesResponse,
+  NotificacaoAdminItem,
   NotificacaoItem,
 } from "@ronan/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
@@ -93,6 +96,50 @@ export class NotificacoesService {
       select: { id: true },
     });
     return n;
+  }
+
+  /**
+   * Listagem admin: vê notificações de QUALQUER motorista, com filtros.
+   * Inclui motorista (id, nome, cpf), entregaStatus, entregaErro, expoTicketId
+   * — campos que o motorista não recebe, mas admin precisa pra auditoria.
+   */
+  async listarAdmin(q: ListarNotificacoesAdminQuery): Promise<ListarNotificacoesAdminResponse> {
+    const where: Prisma.NotificacaoWhereInput = {};
+    if (q.motoristaId) where.motoristaId = q.motoristaId;
+    if (q.entregaStatus) where.entregaStatus = q.entregaStatus;
+    if (q.lida !== undefined) where.lida = q.lida;
+    if (q.cursor) where.criadoEm = { lt: new Date(q.cursor) };
+
+    const rows = await this.prisma.notificacao.findMany({
+      where,
+      orderBy: { criadoEm: "desc" },
+      take: q.limit + 1,
+      include: {
+        motorista: { select: { id: true, nome: true, cpf: true } },
+      },
+    });
+
+    const hasMore = rows.length > q.limit;
+    const page = hasMore ? rows.slice(0, q.limit) : rows;
+    const itens: NotificacaoAdminItem[] = page.map((n) => ({
+      id: n.id,
+      motorista: n.motorista,
+      tipo: n.tipo,
+      titulo: n.titulo,
+      corpo: n.corpo,
+      dados: (n.dados as Record<string, unknown> | null) ?? null,
+      lida: n.lida,
+      lidaEm: n.lidaEm ? n.lidaEm.toISOString() : null,
+      entregaStatus: n.entregaStatus,
+      entregaErro: n.entregaErro,
+      expoTicketId: n.expoTicketId,
+      criadoEm: n.criadoEm.toISOString(),
+    }));
+
+    return {
+      itens,
+      nextCursor: hasMore ? page[page.length - 1]!.criadoEm.toISOString() : null,
+    };
   }
 
   async atualizarEntrega(
