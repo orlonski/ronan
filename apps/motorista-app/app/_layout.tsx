@@ -1,7 +1,8 @@
 import "../global.css";
 
 import { useEffect, useState } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AppState } from "react-native";
+import { focusManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Redirect, router, Stack, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
@@ -23,6 +24,15 @@ import { onSyncChange, startAutoSync } from "@/lib/sync";
 // Mantem o splash nativo visivel ate auth resolver. Sem isso, app
 // renderiza brevemente a tela errada antes do redirect.
 SplashScreen.preventAutoHideAsync().catch(() => {});
+
+// AppState → focusManager: quando o app volta pra foreground, TanStack Query
+// trata como "window focus" e refetcha queries stale automaticamente. Cobre o
+// caso "user abre app depois de push" mesmo se addNotificationReceivedListener
+// não disparou. Module-level — registra uma vez no JS bundle, vive enquanto
+// o processo existe.
+AppState.addEventListener("change", (status) => {
+  focusManager.setFocused(status === "active");
+});
 
 // Instala handler global que captura crashes nao tratados (ErrorUtils).
 // Salva em AsyncStorage e tenta enviar quando user logar.

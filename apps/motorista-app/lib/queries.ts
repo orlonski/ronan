@@ -622,13 +622,19 @@ export type NotificacoesPagina = {
  * Infinite query do histórico de notificações. Cacheia a 1ª página em
  * AsyncStorage pra disponibilidade offline. Páginas seguintes não cacheiam —
  * histórico antigo offline é caso raro, complexidade não compensa.
+ *
+ * Polling a cada 20s em foreground (`refetchIntervalInBackground: false`):
+ * backstop pro `addNotificationReceivedListener` que tem entrega instável em
+ * Android. Custo de uma chamada GET leve, vale a UX de badge fresh.
  */
 export function useNotificacoes() {
   const cacheKey = "notificacoes:p1";
   return useInfiniteQuery({
     queryKey: ["notificacoes"],
     initialPageParam: undefined as string | undefined,
-    staleTime: 30_000,
+    staleTime: 15_000,
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: false,
     queryFn: async ({ pageParam }): Promise<NotificacoesPagina> => {
       try {
         const fresh = await api.listarNotificacoes({ cursor: pageParam, limit: 30 });
