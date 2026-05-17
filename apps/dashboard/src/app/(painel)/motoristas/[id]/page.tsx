@@ -4,6 +4,7 @@ import { use } from "react";
 import { FormPageHeader } from "@/components/form-page-header";
 import { useResourceItem } from "@/lib/client-api";
 import { MotoristaForm, type Motorista } from "../_components/motorista-form";
+import { HistoricoNotificacoes } from "./historico-notificacoes";
 
 export default function EditarMotoristaPage({
   params,
@@ -22,7 +23,12 @@ export default function EditarMotoristaPage({
       {item.isLoading && (
         <p className="text-sm text-muted-foreground">Carregando…</p>
       )}
-      {item.data && <MotoristaForm initial={item.data} />}
+      {item.data && (
+        <>
+          <MotoristaForm initial={item.data} />
+          <HistoricoNotificacoes motoristaId={id} />
+        </>
+      )}
     </div>
   );
 }

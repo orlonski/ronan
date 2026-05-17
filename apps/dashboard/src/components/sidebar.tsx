@@ -6,6 +6,7 @@ import { signOut, useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import {
   AlertCircle,
+  Bell,
   Boxes,
   Building2,
   ChevronDown,
@@ -55,6 +56,7 @@ const GRUPOS: Grupo[] = [
       { href: "/abastecimentos", label: "Abastecimentos", icon: Fuel },
       { href: "/fechamentos", label: "Fechamentos", icon: FileSpreadsheet },
       { href: "/envios", label: "Envios", icon: Send },
+      { href: "/notificacoes", label: "Notificações", icon: Bell },
     ],
   },
   {
