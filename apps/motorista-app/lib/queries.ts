@@ -598,3 +598,111 @@ export async function enviarEventoPresenca(
     body,
   );
 }
+
+// ===== Notificações (central in-app) =====
+
+export type Notificacao = {
+  id: string;
+  tipo: string;
+  titulo: string;
+  corpo: string;
+  dados: Record<string, unknown> | null;
+  lida: boolean;
+  lidaEm: string | null;
+  criadoEm: string;
+};
+
+export type NotificacoesPagina = {
+  itens: Notificacao[];
+  nextCursor: string | null;
+  naoLidas: number;
+};
+
+/**
+ * Infinite query do histórico de notificações. Cacheia a 1ª página em
+ * AsyncStorage pra disponibilidade offline. Páginas seguintes não cacheiam —
+ * histórico antigo offline é caso raro, complexidade não compensa.
+ */
+export function useNotificacoes() {
+  const cacheKey = "notificacoes:p1";
+  return useInfiniteQuery({
+    queryKey: ["notificacoes"],
+    initialPageParam: undefined as string | undefined,
+    staleTime: 30_000,
+    queryFn: async ({ pageParam }): Promise<NotificacoesPagina> => {
+      try {
+        const fresh = await api.listarNotificacoes({ cursor: pageParam, limit: 30 });
+        if (!pageParam) void cachePut(cacheKey, fresh).catch(() => {});
+        return fresh;
+      } catch (err) {
+        if (!pageParam && isOfflineError(err)) {
+          try {
+            const cached = await cacheGet<NotificacoesPagina>(cacheKey);
+            if (cached) return cached;
+          } catch {
+            /* */
+          }
+        }
+        throw err;
+      }
+    },
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
+}
+
+/**
+ * Selector pra badge — sempre lê o `naoLidas` da 1ª página (única coluna que
+ * o backend sempre devolve fresh em cada request).
+ */
+export function useNaoLidas(): number {
+  const q = useNotificacoes();
+  return q.data?.pages[0]?.naoLidas ?? 0;
+}
+
+export function useMarcarNotificacaoLida() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.marcarNotificacaoLida(id),
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: ["notificacoes"] });
+      const prev = qc.getQueryData(["notificacoes"]);
+      qc.setQueryData<{ pages: NotificacoesPagina[]; pageParams: unknown[] } | undefined>(
+        ["notificacoes"],
+        (cur) => {
+          if (!cur) return cur;
+          let decremento = 0;
+          const pages = cur.pages.map((p, pageIdx) => {
+            const itens = p.itens.map((n) => {
+              if (n.id === id && !n.lida) {
+                if (pageIdx === 0) decremento = 1;
+                return { ...n, lida: true, lidaEm: new Date().toISOString() };
+              }
+              return n;
+            });
+            // Decrementa naoLidas só na 1ª página (é o valor fresh do backend)
+            const naoLidas = pageIdx === 0 ? Math.max(0, p.naoLidas - decremento) : p.naoLidas;
+            return { ...p, itens, naoLidas };
+          });
+          return { ...cur, pages };
+        },
+      );
+      return { prev };
+    },
+    onError: (_err, _id, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["notificacoes"], ctx.prev);
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ["notificacoes"] });
+    },
+  });
+}
+
+export function useMarcarTodasNotificacoesLidas() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.marcarTodasNotificacoesLidas(),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["notificacoes"] });
+    },
+  });
+}

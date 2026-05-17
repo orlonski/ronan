@@ -30,6 +30,7 @@ import { Swipeable } from "react-native-gesture-handler";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { EmptyState } from "@/components/empty-state";
+import { NotificationBell } from "@/components/notification-bell";
 import { ViagemCardSkeleton } from "@/components/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -148,33 +149,36 @@ export default function Home() {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
-      {/* Header brand: status bar + nome motorista */}
+      {/* Header brand: status bar + nome motorista + sino de notificações */}
       <View className="bg-brand">
-        <View className="px-5 pb-6 pt-14">
-          <Text className="text-xs font-semibold uppercase tracking-wider text-white/70">
-            Motorista
-          </Text>
-          {me.isLoading && <ActivityIndicator color="white" className="mt-2" />}
-          {me.data && (
-            <>
-              <Text className="mt-0.5 text-2xl font-bold text-white">
-                {me.data.nome}
-              </Text>
-              {me.data.veiculoDefault && (
-                <Text
-                  className="mt-0.5 text-base font-medium text-white/80"
-                  style={{ fontVariant: ["tabular-nums"] }}
-                >
-                  Placa {me.data.veiculoDefault.placa}
-                </Text>
-              )}
-            </>
-          )}
-          {me.error && (
-            <Text className="mt-1 text-sm text-white/80">
-              Perfil indisponível offline
+        <View className="flex-row items-start justify-between gap-3 px-5 pb-6 pt-14">
+          <View className="flex-1">
+            <Text className="text-xs font-semibold uppercase tracking-wider text-white/70">
+              Motorista
             </Text>
-          )}
+            {me.isLoading && <ActivityIndicator color="white" className="mt-2" />}
+            {me.data && (
+              <>
+                <Text className="mt-0.5 text-2xl font-bold text-white">
+                  {me.data.nome}
+                </Text>
+                {me.data.veiculoDefault && (
+                  <Text
+                    className="mt-0.5 text-base font-medium text-white/80"
+                    style={{ fontVariant: ["tabular-nums"] }}
+                  >
+                    Placa {me.data.veiculoDefault.placa}
+                  </Text>
+                )}
+              </>
+            )}
+            {me.error && (
+              <Text className="mt-1 text-sm text-white/80">
+                Perfil indisponível offline
+              </Text>
+            )}
+          </View>
+          <NotificationBell />
         </View>
       </View>
 

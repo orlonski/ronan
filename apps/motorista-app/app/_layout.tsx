@@ -98,6 +98,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     if (!loggedIn) return;
     let alive = true;
     let sub: { remove: () => void } | null = null;
+    let subRecv: { remove: () => void } | null = null;
 
     void (async () => {
       try {
@@ -121,14 +122,37 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
         const Notifications = await import("expo-notifications");
         if (!alive) return;
+
+        // Listener foreground: push chegou com app aberto. Invalida a query
+        // da central pra o sino atualizar o badge na hora.
+        subRecv = Notifications.addNotificationReceivedListener(() => {
+          void queryClient.invalidateQueries({ queryKey: ["notificacoes"] });
+        });
+
         sub = Notifications.addNotificationResponseReceivedListener((resp) => {
-          const kind = resp.notification.request.content.data?.kind;
+          const data = resp.notification.request.content.data ?? {};
+          const kind = data.kind;
+          const notificacaoId = typeof data.notificacaoId === "string" ? data.notificacaoId : null;
+
+          // Fire-and-forget: marca lida quando user toca na push do sistema.
+          if (notificacaoId) {
+            void (async () => {
+              try {
+                const { api } = await import("@/lib/api");
+                await api.marcarNotificacaoLida(notificacaoId);
+                void queryClient.invalidateQueries({ queryKey: ["notificacoes"] });
+              } catch {
+                /* offline / já lida — ignora */
+              }
+            })();
+          }
+
           if (kind === "auto-finalizar") {
             router.push("/viagem-andamento");
           } else if (kind === "iniciar-tracking") {
             router.push("/");
           } else if (kind === "mensagem-admin") {
-            router.push("/");
+            router.push("/notificacoes");
           }
         });
       } catch {
@@ -139,6 +163,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     return () => {
       alive = false;
       sub?.remove();
+      subRecv?.remove();
     };
   }, [loggedIn]);
 

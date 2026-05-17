@@ -206,4 +206,28 @@ export const api = {
     }),
   atualizarPushToken: (token: string) =>
     request<{ ok: true }>("POST", "/m/push-token", { body: { token } }),
+  listarNotificacoes: (opts: { cursor?: string; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.cursor) qs.set("cursor", opts.cursor);
+    if (opts.limit) qs.set("limit", String(opts.limit));
+    const sep = qs.toString() ? `?${qs.toString()}` : "";
+    return request<{
+      itens: Array<{
+        id: string;
+        tipo: string;
+        titulo: string;
+        corpo: string;
+        dados: Record<string, unknown> | null;
+        lida: boolean;
+        lidaEm: string | null;
+        criadoEm: string;
+      }>;
+      nextCursor: string | null;
+      naoLidas: number;
+    }>("GET", `/m/notificacoes${sep}`);
+  },
+  marcarNotificacaoLida: (id: string) =>
+    request<{ ok: true }>("PATCH", `/m/notificacoes/${id}/lida`),
+  marcarTodasNotificacoesLidas: () =>
+    request<{ count: number }>("PATCH", `/m/notificacoes/lidas-todas`),
 };
