@@ -5,9 +5,11 @@
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
+import { Platform } from "react-native";
 
 let pediuPermissaoUmaVez = false;
 let handlerForegroundInstalado = false;
+let canalAndroidInstalado = false;
 
 const KEY_ULTIMO_TOKEN = "push:ultimo-token-enviado";
 const EXPO_PROJECT_ID_FALLBACK = "33e8e936-fbac-4bb3-9f98-5de6dc84da53";
@@ -58,6 +60,31 @@ async function instalarHandlerForeground(): Promise<void> {
 }
 
 /**
+ * Cria o canal Android "default" explícito com som customizado + HIGH importance.
+ * Sem isso, o canal default auto-criado pelo sistema fica IMPORTANCE_DEFAULT
+ * sem som, e push intermitente (vezes sim, vezes não, depende do fabricante).
+ * No-op em iOS. Idempotente.
+ */
+async function instalarCanalAndroid(): Promise<void> {
+  if (canalAndroidInstalado) return;
+  if (Platform.OS !== "android") {
+    canalAndroidInstalado = true;
+    return;
+  }
+  const Notifications = await import("expo-notifications");
+  await Notifications.setNotificationChannelAsync("default", {
+    name: "Notificações",
+    importance: Notifications.AndroidImportance.HIGH,
+    sound: "ding", // arquivo em assets/sounds/ding.wav registrado pelo plugin
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: "#ea580c",
+    enableVibrate: true,
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+  });
+  canalAndroidInstalado = true;
+}
+
+/**
  * Pede permissão, busca o ExpoPushToken e envia ao backend.
  * Cache em AsyncStorage pra não enviar a cada boot — só quando muda.
  * Erros são silenciosos: push é "nice to have" no boot, não pode bloquear.
@@ -65,6 +92,7 @@ async function instalarHandlerForeground(): Promise<void> {
 export async function obterEEnviarPushToken(): Promise<void> {
   try {
     await instalarHandlerForeground();
+    await instalarCanalAndroid();
     const ok = await pedirPermissaoNotificacao();
     if (!ok) return;
 
