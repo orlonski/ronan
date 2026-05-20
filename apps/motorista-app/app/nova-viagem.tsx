@@ -490,6 +490,10 @@ export default function NovaViagem() {
               </View>
             )}
 
+            <Field label="Foto do ticket" hint="opcional, mas ajuda na conferência">
+              <PhotoCapture value={foto} onChange={setFoto} />
+            </Field>
+
             <Field label="Placa">
               <Select
                 value={form.veiculoId}
@@ -657,10 +661,6 @@ export default function NovaViagem() {
                 placeholder="..."
                 maxLength={500}
               />
-            </Field>
-
-            <Field label="Foto do ticket" hint="opcional, mas ajuda na conferência">
-              <PhotoCapture value={foto} onChange={setFoto} />
             </Field>
 
             {erro && <Text className="text-sm text-destructive">{erro}</Text>}
