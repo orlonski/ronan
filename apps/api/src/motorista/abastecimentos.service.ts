@@ -12,6 +12,7 @@ import { mesRange } from "./viagens.service";
 
 const ABAST_INCLUDE = {
   veiculo: { select: { id: true, placa: true, modelo: true } },
+  empresa: { select: { id: true, nome: true } },
   fotos: { select: { id: true, storageKey: true } },
 } satisfies Prisma.AbastecimentoInclude;
 
@@ -109,6 +110,7 @@ export class AbastecimentosMotoristaService {
         clientId,
         motoristaId,
         veiculoId: rest.veiculoId,
+        empresaId: rest.empresaId,
         data: rest.data,
         tipo: rest.tipo,
         litros: rest.litros,

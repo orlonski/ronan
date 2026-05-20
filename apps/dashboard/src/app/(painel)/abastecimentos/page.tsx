@@ -32,10 +32,12 @@ type Abastecimento = {
   tanqueCheio: boolean;
   veiculo: { id: string; placa: string; modelo: string | null };
   motorista: { id: string; nome: string };
+  empresa: { id: string; nome: string } | null;
   _count: { fotos: number };
 };
 
 type Motorista = { id: string; nome: string };
+type Empresa = { id: string; nome: string };
 
 type ListaAbastecimentos = {
   data: Abastecimento[];
@@ -66,6 +68,7 @@ export default function AbastecimentosPage() {
     defaultFilters: { de: firstDayOfMonth() },
   });
   const motoristas = useResourceOptions<Motorista>("/admin/motoristas");
+  const empresas = useResourceOptions<Empresa>("/admin/empresas");
 
   const url = buildUrl("/admin/abastecimentos", tableState);
   const list = useQuery({
@@ -78,6 +81,14 @@ export default function AbastecimentosPage() {
   const motoristaOptions = useMemo(
     () => (motoristas.data ?? []).map((m) => ({ value: m.id, label: m.nome })),
     [motoristas.data],
+  );
+
+  const empresaOptions = useMemo(
+    () => [
+      ...(empresas.data ?? []).map((e) => ({ value: e.id, label: e.nome })),
+      { value: "__sem__", label: "— sem empresa —" },
+    ],
+    [empresas.data],
   );
 
   const columns = useMemo<ColumnDef<Abastecimento>[]>(
@@ -111,6 +122,17 @@ export default function AbastecimentosPage() {
         accessorKey: "motorista.nome",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Motorista" />,
         cell: ({ row }) => <span className="text-sm">{row.original.motorista.nome}</span>,
+      },
+      {
+        id: "empresa",
+        accessorKey: "empresa.nome",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Empresa" />,
+        cell: ({ row }) =>
+          row.original.empresa ? (
+            <span className="text-sm">{row.original.empresa.nome}</span>
+          ) : (
+            <span className="text-sm text-muted-foreground">—</span>
+          ),
       },
       {
         id: "posto",
@@ -201,7 +223,7 @@ export default function AbastecimentosPage() {
         toolbar={
           <DataTableToolbar
             state={tableState}
-            searchPlaceholder="Buscar por posto, motorista, placa, obs…"
+            searchPlaceholder="Buscar por posto, motorista, placa, empresa, obs…"
             filters={
               <>
                 <ToolbarFilterSelect
@@ -222,6 +244,20 @@ export default function AbastecimentosPage() {
                   onChange={(v) => tableState.setFilter("motoristaId", v)}
                   options={motoristaOptions}
                 />
+                <ToolbarFilterSelect
+                  label="Empresa"
+                  value={tableState.filters.empresaId ?? (tableState.filters.semEmpresa === "true" ? "__sem__" : undefined)}
+                  onChange={(v) => {
+                    if (v === "__sem__") {
+                      tableState.setFilter("semEmpresa", "true");
+                      tableState.setFilter("empresaId", undefined);
+                    } else {
+                      tableState.setFilter("empresaId", v);
+                      tableState.setFilter("semEmpresa", undefined);
+                    }
+                  }}
+                  options={empresaOptions}
+                />
                 <ToolbarFilterDateRange state={tableState} label="Período" />
               </>
             }
@@ -239,6 +275,9 @@ export default function AbastecimentosPage() {
                   <p className="text-xs text-muted-foreground">
                     {fmtData(a.data)} · {a.veiculo.placa} · {a.motorista.nome}
                   </p>
+                  {a.empresa && (
+                    <p className="truncate text-xs text-muted-foreground">{a.empresa.nome}</p>
+                  )}
                 </div>
                 <Badge className={TIPO_COLOR[a.tipo] ?? ""}>
                   {TIPO_LABEL[a.tipo] ?? a.tipo}

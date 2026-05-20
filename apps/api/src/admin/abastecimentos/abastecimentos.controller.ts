@@ -11,6 +11,8 @@ import { AbastecimentosAdminService } from "./abastecimentos.service";
 const ListAbastecimentosQuery = paginationQuerySchema.extend({
   motoristaId: z.string().uuid().optional(),
   veiculoId: z.string().uuid().optional(),
+  empresaId: z.string().uuid().optional(),
+  semEmpresa: z.enum(["true", "false"]).optional(),
   tipo: z.enum(["DIESEL_S10", "DIESEL_S500", "ARLA_32", "GASOLINA", "ETANOL"]).optional(),
   de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),

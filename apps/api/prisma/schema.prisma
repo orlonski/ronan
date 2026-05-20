@@ -315,11 +315,12 @@ model Empresa {
   criadoEm         DateTime     @default(now())
   alteradoEm       DateTime     @updatedAt
 
-  clientes      Cliente[]
-  fechamentos   Fechamento[]
-  layoutsEnvio  LayoutEnvio[]
-  layoutsImport LayoutImportBloco[]
-  enviosDiretos EnvioFechamento[]
+  clientes       Cliente[]
+  fechamentos    Fechamento[]
+  layoutsEnvio   LayoutEnvio[]
+  layoutsImport  LayoutImportBloco[]
+  enviosDiretos  EnvioFechamento[]
+  abastecimentos Abastecimento[]
 
   @@index([ativa])
   @@map("empresas")
@@ -840,6 +841,8 @@ model Abastecimento {
   motoristaId     String
   veiculo         Veiculo         @relation(fields: [veiculoId], references: [id])
   veiculoId       String
+  empresa         Empresa?        @relation(fields: [empresaId], references: [id])
+  empresaId       String?
   data            DateTime // timestamp completo (hora importa)
   tipo            TipoCombustivel @default(DIESEL_S10)
   litros          Decimal         @db.Decimal(8, 3)
@@ -862,6 +865,7 @@ model Abastecimento {
 
   @@index([veiculoId, data])
   @@index([motoristaId, data])
+  @@index([empresaId, data])
   @@index([data])
   @@map("abastecimentos")
 }

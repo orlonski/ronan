@@ -33,11 +33,14 @@ export type Local = {
   lng: number | null;
 };
 
+export type Empresa = { id: string; nome: string };
+
 export type Catalogos = {
   veiculos: Veiculo[];
   materiais: Material[];
   clientes: Cliente[];
   locais: Local[];
+  empresas: Empresa[];
 };
 
 export type Me = {
@@ -109,7 +112,18 @@ function normalizarCatalogos<T extends { clientes?: unknown; obras?: unknown }>(
       return o;
     });
   }
+  // Cache pré-empresas: garante o array, evita undefined no select de Empresa.
+  if (!Array.isArray(anyC.empresas)) anyC.empresas = [];
   return c;
+}
+
+// Cache pré-rename (Abastecimento ganhou campo empresa). Garante null em vez
+// de undefined pra não quebrar exibição on-read do SQLite.
+function normalizarAbastecimento<T extends { empresa?: unknown }>(a: T): T {
+  if (!a) return a;
+  const anyA = a as Record<string, unknown>;
+  if (!("empresa" in anyA)) anyA.empresa = null;
+  return a;
 }
 
 /**
@@ -376,6 +390,7 @@ export type Abastecimento = {
   lat: number | null;
   lng: number | null;
   veiculo: { id: string; placa: string; modelo: string | null };
+  empresa: { id: string; nome: string } | null;
   fotos: { id: string; storageKey: string }[];
 };
 
@@ -396,12 +411,12 @@ export function useAbastecimentos(mes?: string) {
           `/m/abastecimentos${qs}`,
         );
         void cachePut(cacheKey, fresh.itens).catch(() => {});
-        return fresh.itens;
+        return fresh.itens.map(normalizarAbastecimento);
       } catch (err) {
         if (isOfflineError(err)) {
           try {
             const cached = await cacheGet<Abastecimento[]>(cacheKey);
-            if (cached) return cached;
+            if (cached) return cached.map(normalizarAbastecimento);
           } catch {
             /* nope */
           }

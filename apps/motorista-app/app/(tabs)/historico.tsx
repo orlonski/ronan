@@ -685,6 +685,11 @@ function AbastecimentoCard({
               {a.postoNome}
             </Text>
           )}
+          {a.empresa && (
+            <Text className="mt-0.5 text-xs text-muted-foreground" numberOfLines={1}>
+              {a.empresa.nome}
+            </Text>
+          )}
         </View>
         <Badge variant="outline">{TIPO_LABEL[a.tipo] ?? a.tipo}</Badge>
       </View>

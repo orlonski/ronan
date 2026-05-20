@@ -59,6 +59,7 @@ export default function NovoAbastecimento() {
   const recentes = useAbastecimentos();
 
   const [veiculoId, setVeiculoId] = useState("");
+  const [empresaId, setEmpresaId] = useState("");
   const [data, setData] = useState(today());
   const [tipo, setTipo] = useState<TipoCombustivel>("DIESEL_S10");
   const [litros, setLitros] = useState("");
@@ -103,6 +104,15 @@ export default function NovoAbastecimento() {
     [cat.data?.veiculos],
   );
 
+  const empresaOptions: SelectOption[] = useMemo(
+    () =>
+      (cat.data?.empresas ?? []).map((e) => ({
+        value: e.id,
+        label: e.nome,
+      })),
+    [cat.data?.empresas],
+  );
+
   const tipoOptions: SelectOption[] = useMemo(
     () => TIPOS.map((t) => ({ value: t.value, label: t.label })),
     [],
@@ -132,6 +142,7 @@ export default function NovoAbastecimento() {
     }
 
     if (!veiculoId) return falhar("Escolha a placa.");
+    if (!empresaId) return falhar("Escolha a empresa.");
     const litrosNum = parseFloat(litros.replace(",", "."));
     if (!Number.isFinite(litrosNum) || litrosNum <= 0) {
       return falhar("Informe os litros.");
@@ -160,6 +171,7 @@ export default function NovoAbastecimento() {
       const payload = {
         clientId: makeUuid(),
         veiculoId,
+        empresaId,
         // Combina data (YYYY-MM-DD) com hora atual pra timestamp completo
         data: combinarDataComHoraAtual(data),
         tipo,
@@ -225,6 +237,18 @@ export default function NovoAbastecimento() {
                 options={veiculoOptions}
                 placeholder="Escolha a placa"
                 searchable
+              />
+            </View>
+
+            <View className="gap-2">
+              <Label>Empresa</Label>
+              <Select
+                value={empresaId}
+                onChange={setEmpresaId}
+                options={empresaOptions}
+                placeholder="Escolha a empresa"
+                searchable
+                emptyMessage="Nenhuma empresa cadastrada"
               />
             </View>
 

@@ -848,7 +848,7 @@ export class MotoristaService {
         ? { ativo: true, id: { in: vinculadosIds } }
         : { ativo: true };
 
-    const [veiculos, materiais, clientes, locais] = await Promise.all([
+    const [veiculos, materiais, clientes, locais, empresas] = await Promise.all([
       this.prisma.veiculo.findMany({
         where: veiculosWhere,
         select: { id: true, placa: true, modelo: true },
@@ -886,8 +886,13 @@ export class MotoristaService {
         },
         orderBy: { nome: "asc" },
       }),
+      this.prisma.empresa.findMany({
+        where: { ativa: true },
+        select: { id: true, nome: true },
+        orderBy: { nome: "asc" },
+      }),
     ]);
-    return { veiculos, materiais, clientes, locais };
+    return { veiculos, materiais, clientes, locais, empresas };
   }
 
   /**

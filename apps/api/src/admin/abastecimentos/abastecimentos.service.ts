@@ -7,6 +7,8 @@ import { paginate, type PaginationQuery } from "../../common/pagination";
 type ListAbastecimentosParams = PaginationQuery & {
   motoristaId?: string;
   veiculoId?: string;
+  empresaId?: string;
+  semEmpresa?: "true" | "false";
   tipo?: TipoCombustivel;
   de?: string;
   ate?: string;
@@ -23,6 +25,8 @@ export class AbastecimentosAdminService {
     const where: Prisma.AbastecimentoWhereInput = {};
     if (params.motoristaId) where.motoristaId = params.motoristaId;
     if (params.veiculoId) where.veiculoId = params.veiculoId;
+    if (params.empresaId) where.empresaId = params.empresaId;
+    if (params.semEmpresa === "true") where.empresaId = null;
     if (params.tipo) where.tipo = params.tipo;
     if (params.de || params.ate) {
       where.data = {};
@@ -34,7 +38,7 @@ export class AbastecimentosAdminService {
       paginate(this.prisma.abastecimento, {
         params,
         where: where as Record<string, unknown>,
-        searchFields: ["postoNome", "observacao", "motorista.nome", "veiculo.placa"],
+        searchFields: ["postoNome", "observacao", "motorista.nome", "veiculo.placa", "empresa.nome"],
         sortable: {
           data: "data",
           tipo: "tipo",
@@ -43,11 +47,13 @@ export class AbastecimentosAdminService {
           odometro: "odometro",
           motorista: "motorista.nome",
           placa: "veiculo.placa",
+          empresa: "empresa.nome",
         },
         defaultSort: { field: "data", order: "desc" },
         include: {
           veiculo: { select: { id: true, placa: true, modelo: true } },
           motorista: { select: { id: true, nome: true } },
+          empresa: { select: { id: true, nome: true } },
           _count: { select: { fotos: true } },
         },
       }),
@@ -74,6 +80,7 @@ export class AbastecimentosAdminService {
       include: {
         veiculo: true,
         motorista: { select: { id: true, nome: true, cpf: true } },
+        empresa: { select: { id: true, nome: true } },
         fotos: true,
       },
     });

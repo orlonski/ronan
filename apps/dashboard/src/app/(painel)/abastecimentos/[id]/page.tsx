@@ -42,6 +42,7 @@ type AbastecimentoDetalhe = {
   precisao: number | null;
   veiculo: { id: string; placa: string; modelo: string | null };
   motorista: { id: string; nome: string; cpf: string };
+  empresa: { id: string; nome: string } | null;
   fotos: { id: string; storageKey: string; capturadaEm: string }[];
   sincronizadoEm: string;
 };
@@ -163,6 +164,9 @@ export default function AbastecimentoDetalhePage({
             <p className="mt-2 text-xs text-muted-foreground">
               Veículo: {x.veiculo.placa}
               {x.veiculo.modelo ? ` · ${x.veiculo.modelo}` : ""}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Empresa: {x.empresa?.nome ?? "—"}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
               Sincronizado em {fmtDataHora(x.sincronizadoEm)}

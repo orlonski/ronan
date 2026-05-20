@@ -19,6 +19,7 @@ const MAX_ODOMETRO = 99_999_999;
 export const CriarAbastecimentoInput = z.object({
   clientId: z.string().uuid(),
   veiculoId: z.string().uuid(),
+  empresaId: z.string().uuid(),
   data: z.coerce.date(),
   tipo: TipoCombustivelEnum.default("DIESEL_S10"),
   litros: z
