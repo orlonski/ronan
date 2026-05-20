@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from "@nestjs/common";
+import { Controller, Delete, Get, HttpCode, Param, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { ListarNotificacoesAdminQuery } from "@ronan/shared-types";
 import { Roles } from "../auth/decorators/roles.decorator";
@@ -19,5 +19,12 @@ export class NotificacoesAdminController {
     @Query(new ZodValidationPipe(ListarNotificacoesAdminQuery)) q: ListarNotificacoesAdminQuery,
   ) {
     return this.service.listarAdmin(q);
+  }
+
+  @Roles("ADMIN")
+  @Delete(":id")
+  @HttpCode(204)
+  async excluir(@Param("id") id: string) {
+    await this.service.excluirAdmin(id);
   }
 }

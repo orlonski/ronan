@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Spinner } from "@/components/loading";
 import { MotoristaCombobox } from "@/components/motorista-combobox";
+import { ExcluirButton } from "@/components/excluir-button";
 import {
   Table,
   TableBody,
@@ -149,19 +150,20 @@ export default function NotificacoesAdminPage() {
               <TableHead>Mensagem</TableHead>
               <TableHead className="w-[110px]">Entrega</TableHead>
               <TableHead className="w-[80px]">Lida</TableHead>
+              <TableHead className="w-[60px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {q.isLoading && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center">
+                <TableCell colSpan={7} className="text-center">
                   <Spinner />
                 </TableCell>
               </TableRow>
             )}
             {!q.isLoading && itens.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="py-12 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="py-12 text-center text-muted-foreground">
                   <Bell className="mx-auto mb-2 h-6 w-6 opacity-50" />
                   Nenhuma notificação encontrada.
                 </TableCell>
@@ -238,6 +240,14 @@ function NotificacaoRow({ n }: { n: NotificacaoAdminItem }) {
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         )}
+      </TableCell>
+      <TableCell>
+        <ExcluirButton
+          path="/admin/notificacoes"
+          id={n.id}
+          nomeRecurso="esta notificação"
+          invalidateKeys={[["admin-notificacoes"]]}
+        />
       </TableCell>
     </TableRow>
   );

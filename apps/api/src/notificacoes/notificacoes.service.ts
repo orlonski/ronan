@@ -142,6 +142,15 @@ export class NotificacoesService {
     };
   }
 
+  /**
+   * Hard delete pelo admin. Remove o registro da Notificacao — independente
+   * do entregaStatus (admin pode querer limpar histórico antigo ou erros).
+   * Sem efeito colateral além da remoção do row.
+   */
+  async excluirAdmin(id: string): Promise<void> {
+    await this.prisma.notificacao.delete({ where: { id } });
+  }
+
   async atualizarEntrega(
     id: string,
     patch: { entregaStatus?: EntregaStatus; entregaErro?: string | null; expoTicketId?: string | null },

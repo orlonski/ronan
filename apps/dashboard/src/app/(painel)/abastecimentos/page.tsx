@@ -72,7 +72,7 @@ export default function AbastecimentosPage() {
 
   const url = buildUrl("/admin/abastecimentos", tableState);
   const list = useQuery({
-    queryKey: ["abastecimentos-admin", url, token],
+    queryKey: ["/admin/abastecimentos", "list", url, token],
     enabled: !!token,
     queryFn: () => fetchApi<ListaAbastecimentos>(url, { token }),
     placeholderData: (prev) => prev,

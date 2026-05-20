@@ -147,7 +147,7 @@ export default function FechamentoDetalhePage({
             size="sm"
             variant="outline"
             label="Excluir"
-            invalidateKeys={[["fechamento", f.id], ["fechamentos"]]}
+            invalidateKeys={[["fechamento", f.id], "/admin/fechamentos"]}
             onSuccess={() => router.push("/fechamentos")}
           />
         </div>

@@ -273,16 +273,13 @@ export class ExportFechamentoService {
   }
 
   /**
-   * Hard delete do envio. Bloqueado se status = ENVIADO. Apaga arquivo do MinIO.
+   * Hard delete do envio. Apaga arquivo do MinIO. Permitido em qualquer status —
+   * envios marcados como ENVIADO continuam excluíveis (admin pode querer
+   * limpar histórico antigo).
    */
   async excluir(envioId: string) {
     const envio = await this.prisma.envioFechamento.findUnique({ where: { id: envioId } });
     if (!envio) throw new NotFoundException("Envio não encontrado");
-    if (envio.status === "ENVIADO") {
-      throw new ConflictException(
-        "Não é possível excluir: envio já foi marcado como ENVIADO. Desfaça o envio antes de deletar.",
-      );
-    }
     await this.uploads.removeObject(envio.arquivoGeradoKey);
     await this.prisma.envioFechamento.delete({ where: { id: envioId } });
     return { ok: true };
