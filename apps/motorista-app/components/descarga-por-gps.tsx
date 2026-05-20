@@ -252,35 +252,40 @@ export function DescargaPorGps({
 
       {erro && <Text className="text-sm text-destructive">{erro}</Text>}
 
-      {/* Modal: pedir nome quando sem match */}
+      {/* Modal full-screen: pedir nome quando sem match.
+          Full-screen (não bottom-sheet transparent) pra Android adjustResize
+          funcionar e o teclado não sobrepor o input. */}
       <Modal
         visible={estado.tipo === "sem_match"}
         animationType="slide"
-        transparent
         onRequestClose={() => {
           if (estado.tipo === "sem_match") setEstado({ tipo: "vazio" });
         }}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          className="flex-1 justify-end bg-black/50"
-        >
-          <SafeAreaView edges={["bottom"]} className="rounded-t-2xl bg-background">
-            <View className="gap-4 p-5">
-              <View className="flex-row items-center justify-between">
-                <Text className="text-lg font-bold text-foreground">
-                  Não conheço esse lugar aqui
-                </Text>
-                <Pressable
-                  onPress={() => setEstado({ tipo: "vazio" })}
-                  className="h-9 w-9 items-center justify-center rounded-full bg-muted"
-                >
-                  <X size={18} color="#0f172a" />
-                </Pressable>
-              </View>
+        <SafeAreaView edges={["top", "bottom"]} className="flex-1 bg-background">
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            className="flex-1"
+          >
+            <View className="flex-row items-center justify-between border-b border-border p-4">
+              <Text className="text-lg font-bold text-foreground">
+                Como chama esse lugar?
+              </Text>
+              <Pressable
+                onPress={() => setEstado({ tipo: "vazio" })}
+                className="h-10 w-10 items-center justify-center rounded-full bg-muted"
+              >
+                <X size={20} color="#0f172a" />
+              </Pressable>
+            </View>
+
+            <View className="flex-1 gap-4 p-5">
+              <Text className="text-sm text-muted-foreground">
+                Não conheço esse lugar aqui — me ajuda dando um nome rápido.
+              </Text>
 
               <View className="gap-2">
-                <Label>Como chama?</Label>
+                <Label>Nome do local</Label>
                 <TextInput
                   value={nomeNovo}
                   onChangeText={setNomeNovo}
@@ -288,7 +293,9 @@ export function DescargaPorGps({
                   placeholderTextColor="#94a3b8"
                   autoFocus
                   maxLength={120}
-                  className="rounded-xl border border-border bg-background px-3 py-3 text-base text-foreground"
+                  returnKeyType="done"
+                  onSubmitEditing={salvarNomeNovo}
+                  className="rounded-xl border border-border bg-background px-3 py-4 text-base text-foreground"
                 />
                 <Text className="text-xs text-muted-foreground">
                   Gravamos o GPS aqui. Endereço completo o escritório completa depois.
@@ -296,28 +303,28 @@ export function DescargaPorGps({
               </View>
 
               {erro && <Text className="text-sm text-destructive">{erro}</Text>}
-
-              <View className="flex-row gap-3">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onPress={() => setEstado({ tipo: "vazio" })}
-                >
-                  <Text className="text-base font-medium text-foreground">Cancelar</Text>
-                </Button>
-                <Button
-                  className="flex-1"
-                  onPress={salvarNomeNovo}
-                  loading={criar.isPending}
-                >
-                  <Text className="text-base font-bold text-primary-foreground">
-                    Salvar local
-                  </Text>
-                </Button>
-              </View>
             </View>
-          </SafeAreaView>
-        </KeyboardAvoidingView>
+
+            <View className="flex-row gap-3 border-t border-border p-4">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onPress={() => setEstado({ tipo: "vazio" })}
+              >
+                <Text className="text-base font-medium text-foreground">Cancelar</Text>
+              </Button>
+              <Button
+                className="flex-1"
+                onPress={salvarNomeNovo}
+                loading={criar.isPending}
+              >
+                <Text className="text-base font-bold text-primary-foreground">
+                  Salvar local
+                </Text>
+              </Button>
+            </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
       </Modal>
     </View>
   );
