@@ -145,23 +145,21 @@ export default function EnviosPage() {
                 <Download className="h-4 w-4" />
               </Button>
               {e.status === "GERADO" && (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setEditando(e)}
-                    title="Marcar como enviado"
-                  >
-                    <Send className="h-4 w-4" />
-                  </Button>
-                  <ExcluirButton
-                    path="/admin/envios"
-                    id={e.id}
-                    nomeRecurso={`o envio de ${e.empresa?.nome ?? "—"}`}
-                    invalidateKeys={[["/admin/envios"]]}
-                  />
-                </>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setEditando(e)}
+                  title="Marcar como enviado"
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
               )}
+              <ExcluirButton
+                path="/admin/envios"
+                id={e.id}
+                nomeRecurso={`o envio de ${e.empresa?.nome ?? "—"}`}
+                invalidateKeys={[["/admin/envios"]]}
+              />
             </div>
           );
         },
@@ -267,23 +265,21 @@ export default function EnviosPage() {
                   <Download className="h-4 w-4" />
                 </Button>
                 {e.status === "GERADO" && (
-                  <>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setEditando(e)}
-                      title="Marcar como enviado"
-                    >
-                      <Send className="h-4 w-4" />
-                    </Button>
-                    <ExcluirButton
-                      path="/admin/envios"
-                      id={e.id}
-                      nomeRecurso={`o envio de ${e.empresa?.nome ?? "—"}`}
-                      invalidateKeys={[["/admin/envios"]]}
-                    />
-                  </>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setEditando(e)}
+                    title="Marcar como enviado"
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
                 )}
+                <ExcluirButton
+                  path="/admin/envios"
+                  id={e.id}
+                  nomeRecurso={`o envio de ${e.empresa?.nome ?? "—"}`}
+                  invalidateKeys={[["/admin/envios"]]}
+                />
               </div>
             </Card>
           );
