@@ -12,7 +12,12 @@ import { Select } from "@/components/ui/select";
 import { useResourceOptions } from "@/lib/client-api";
 import { useUploadFechamento } from "@/lib/fechamentos-api";
 
-type Empresa = { id: string; nome: string; ativa: boolean };
+type Empresa = {
+  id: string;
+  nome: string;
+  ativa: boolean;
+  papel: "RECEBE_PLANILHA" | "MANDA_FECHAMENTO" | "AMBOS";
+};
 
 export default function NovoFechamentoPage() {
   const router = useRouter();
@@ -68,12 +73,21 @@ export default function NovoFechamentoPage() {
             <Label>Empresa *</Label>
             <Select required value={empresaId} onChange={(e) => setEmpresaId(e.target.value)}>
               <option value="">— escolha —</option>
-              {empresas.data?.filter((e) => e.ativa).map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.nome}
-                </option>
-              ))}
+              {empresas.data
+                ?.filter(
+                  (e) =>
+                    e.ativa &&
+                    (e.papel === "MANDA_FECHAMENTO" || e.papel === "AMBOS"),
+                )
+                .map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.nome}
+                  </option>
+                ))}
             </Select>
+            <p className="text-xs text-muted-foreground">
+              Só lista empresas que enviam fechamento pra gente.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

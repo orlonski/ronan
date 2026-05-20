@@ -16,7 +16,12 @@ import {
   useLayoutsEnvio,
 } from "@/lib/fechamentos-api";
 
-type Empresa = { id: string; nome: string; ativa: boolean; papel: string };
+type Empresa = {
+  id: string;
+  nome: string;
+  ativa: boolean;
+  papel: "RECEBE_PLANILHA" | "MANDA_FECHAMENTO" | "AMBOS";
+};
 type Cliente = {
   id: string;
   nome: string;
@@ -122,13 +127,20 @@ export default function NovoEnvioPage() {
             <Select required value={empresaId} onChange={(e) => setEmpresaId(e.target.value)}>
               <option value="">— escolha —</option>
               {empresas.data
-                ?.filter((e) => e.ativa)
+                ?.filter(
+                  (e) =>
+                    e.ativa &&
+                    (e.papel === "RECEBE_PLANILHA" || e.papel === "AMBOS"),
+                )
                 .map((e) => (
                   <option key={e.id} value={e.id}>
                     {e.nome}
                   </option>
                 ))}
             </Select>
+            <p className="text-xs text-muted-foreground">
+              Só lista empresas que recebem planilha da gente.
+            </p>
           </div>
 
           {empresaId && clientesAtivas.length > 0 && (
