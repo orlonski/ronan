@@ -84,6 +84,34 @@ function isOfflineError(err: unknown): boolean {
   return false;
 }
 
+// Compat com cache local antigo (pré-rename Obra→Cliente 2026-05-20).
+// Cache cru gravado antes do OTA novo tem `obra`/`obras`/`empresaCliente`;
+// converte pro shape novo on-read pra não quebrar a UI.
+function normalizarViagem<T extends { cliente?: unknown; obra?: unknown }>(v: T): T {
+  if (!v) return v;
+  const anyV = v as Record<string, unknown>;
+  if (!anyV.cliente && anyV.obra) {
+    const obra = anyV.obra as Record<string, unknown>;
+    if (obra && obra.empresaCliente && !obra.empresa) {
+      obra.empresa = obra.empresaCliente;
+    }
+    anyV.cliente = obra;
+  }
+  return v;
+}
+
+function normalizarCatalogos<T extends { clientes?: unknown; obras?: unknown }>(c: T): T {
+  if (!c) return c;
+  const anyC = c as Record<string, unknown>;
+  if (!anyC.clientes && Array.isArray(anyC.obras)) {
+    anyC.clientes = (anyC.obras as Array<Record<string, unknown>>).map((o) => {
+      if (o && o.empresaCliente && !o.empresa) o.empresa = o.empresaCliente;
+      return o;
+    });
+  }
+  return c;
+}
+
 /**
  * useQuery com fallback offline: tenta API, se falhar por rede tenta o cache local.
  * Cache writes em void/catch pra erro de IndexedDB nao quebrar a query.
@@ -118,9 +146,11 @@ export function useMe() {
 }
 
 export function useCatalogos() {
-  return useQuery(
-    offlineCacheQuery<Catalogos>("catalogos", "/m/catalogos", { staleTime: 5 * 60_000 }),
-  );
+  const base = offlineCacheQuery<Catalogos>("catalogos", "/m/catalogos", { staleTime: 5 * 60_000 });
+  return useQuery({
+    ...base,
+    queryFn: async () => normalizarCatalogos(await base.queryFn()),
+  });
 }
 
 export type ListaViagens = { itens: Viagem[]; nextCursor: string | null };
@@ -147,12 +177,12 @@ export function useViagens() {
       try {
         const fresh = await api.get<ListaViagens>("/m/viagens?limit=10");
         void cachePut(cacheKey, fresh.itens).catch(() => {});
-        return fresh.itens;
+        return fresh.itens.map(normalizarViagem);
       } catch (err) {
         if (isOfflineError(err)) {
           try {
             const cached = await cacheGet<Viagem[]>(cacheKey);
-            if (cached) return cached;
+            if (cached) return cached.map(normalizarViagem);
           } catch {
             /* sqlite indisponivel */
           }
@@ -203,7 +233,8 @@ export function useViagensFiltradas(params: {
       if (params.status) qs.set("status", params.status);
       qs.set("limit", "30");
       if (pageParam) qs.set("cursor", pageParam);
-      return api.get<ListaViagens>(`/m/viagens?${qs.toString()}`);
+      const res = await api.get<ListaViagens>(`/m/viagens?${qs.toString()}`);
+      return { ...res, itens: res.itens.map(normalizarViagem) };
     },
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
@@ -226,7 +257,7 @@ export function useViagemDetalhe(id: string) {
   return useQuery({
     queryKey: ["viagem-detalhe", id],
     enabled: !!id,
-    queryFn: () => api.get<ViagemDetalhe>(`/m/viagens/${id}`),
+    queryFn: async () => normalizarViagem(await api.get<ViagemDetalhe>(`/m/viagens/${id}`)),
   });
 }
 
