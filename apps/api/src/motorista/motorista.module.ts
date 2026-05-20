@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { GeocodingModule } from "../geocoding/geocoding.module";
 import { RoteamentoModule } from "../roteamento/roteamento.module";
 import { TrackingConfigModule } from "../admin/tracking-config/tracking-config.module";
 import { UploadsModule } from "../uploads/uploads.module";
@@ -17,7 +18,7 @@ import { TrackingConfigMotoristaController } from "./tracking-config.controller"
 import { ValidacaoLocalService } from "./validacao-local.service";
 
 @Module({
-  imports: [UploadsModule, RoteamentoModule, TrackingConfigModule],
+  imports: [UploadsModule, RoteamentoModule, TrackingConfigModule, GeocodingModule],
   controllers: [
     MotoristaController,
     ViagensMotoristaController,

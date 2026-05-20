@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable } from "@nestjs/common";
-import { NivelConfiancaLocal } from "@prisma/client";
+import { NivelConfiancaLocal, type TipoLocal } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { GeocodingService } from "../geocoding/geocoding.service";
 import { ValidacaoLocalService } from "./validacao-local.service";
 
 const RAIO_SUGESTAO_M = 200;
@@ -11,6 +12,7 @@ export class LocaisMotoristaService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly validacao: ValidacaoLocalService,
+    private readonly geocoding: GeocodingService,
   ) {}
 
   /**
@@ -150,6 +152,141 @@ export class LocaisMotoristaService {
       detectadoEm,
     });
     return { ok: true };
+  }
+
+  /**
+   * Busca locais existentes dentro de raio (default 200m) ordenados por distância,
+   * com contagem de uso pelo motorista nos últimos 90d. Usado pelo fluxo
+   * "Estou no local de descarga" do app — motorista aperta o botão, app pega GPS,
+   * e isso devolve as opções de match.
+   */
+  async proximosPorGps(input: {
+    motoristaId: string;
+    lat: number;
+    lng: number;
+    tipoUso?: "carga" | "descarga" | "ambos";
+    raioM?: number;
+    limit?: number;
+  }) {
+    const raio = input.raioM ?? RAIO_SUGESTAO_M;
+    const limit = input.limit ?? 5;
+    const tiposPermitidos: TipoLocal[] =
+      input.tipoUso === "carga"
+        ? ["CARGA", "AMBOS"]
+        : input.tipoUso === "descarga"
+          ? ["DESCARGA", "AMBOS"]
+          : ["CARGA", "DESCARGA", "AMBOS"];
+
+    const candidatos = await this.prisma.local.findMany({
+      where: {
+        ativo: true,
+        tipo: { in: tiposPermitidos },
+        lat: { gte: input.lat - RAIO_GRAUS_APROX, lte: input.lat + RAIO_GRAUS_APROX },
+        lng: { gte: input.lng - RAIO_GRAUS_APROX, lte: input.lng + RAIO_GRAUS_APROX },
+      },
+      select: {
+        id: true,
+        nome: true,
+        cidade: true,
+        uf: true,
+        tipo: true,
+        lat: true,
+        lng: true,
+        nivelConfianca: true,
+        clienteId: true,
+      },
+    });
+
+    const filtrados = candidatos
+      .map((c) => ({
+        ...c,
+        distanciaMetros:
+          c.lat != null && c.lng != null
+            ? haversine(input.lat, input.lng, c.lat, c.lng)
+            : Number.POSITIVE_INFINITY,
+      }))
+      .filter((c) => c.distanciaMetros <= raio)
+      .sort((a, b) => a.distanciaMetros - b.distanciaMetros)
+      .slice(0, limit);
+
+    if (filtrados.length === 0) return [];
+
+    // Conta uso pelo motorista nos últimos 90d (carga + descarga)
+    const desde = new Date();
+    desde.setDate(desde.getDate() - 90);
+    const ids = filtrados.map((f) => f.id);
+    const usos = await this.prisma.viagem.findMany({
+      where: {
+        motoristaId: input.motoristaId,
+        data: { gte: desde },
+        OR: [{ localCargaId: { in: ids } }, { localDescargaId: { in: ids } }],
+      },
+      select: { localCargaId: true, localDescargaId: true },
+    });
+    const contador = new Map<string, number>();
+    for (const v of usos) {
+      if (ids.includes(v.localCargaId)) {
+        contador.set(v.localCargaId, (contador.get(v.localCargaId) ?? 0) + 1);
+      }
+      if (ids.includes(v.localDescargaId)) {
+        contador.set(v.localDescargaId, (contador.get(v.localDescargaId) ?? 0) + 1);
+      }
+    }
+
+    return filtrados.map((f) => ({
+      id: f.id,
+      nome: f.nome,
+      cidade: f.cidade,
+      uf: f.uf,
+      tipo: f.tipo,
+      lat: f.lat,
+      lng: f.lng,
+      nivelConfianca: f.nivelConfianca,
+      clienteId: f.clienteId,
+      distanciaMetros: Math.round(f.distanciaMetros),
+      vezesUsadoMotorista: contador.get(f.id) ?? 0,
+    }));
+  }
+
+  /**
+   * Fluxo rápido: motorista digitou só o nome no app (após não achar match
+   * por GPS no `proximosPorGps`). Backend resolve logradouro/cidade/uf via
+   * reverse geocoding (Nominatim) e cria o Local em RASCUNHO. Vai pra fila
+   * "Em validação" do dashboard pra admin completar/homologar.
+   */
+  async criarRapido(
+    motoristaId: string,
+    input: { nome: string; lat: number; lng: number; tipo: TipoLocal; clienteId?: string },
+  ) {
+    const reverse = await this.geocoding.reverseGeocoding(input.lat, input.lng);
+    return this.prisma.local.create({
+      data: {
+        nome: input.nome,
+        logradouro: reverse.logradouro ?? "(sem endereço)",
+        numero: reverse.numero,
+        bairro: reverse.bairro,
+        cidade: reverse.cidade,
+        uf: reverse.uf.toUpperCase().slice(0, 2),
+        cep: reverse.cep,
+        tipo: input.tipo,
+        clienteId: input.clienteId,
+        lat: input.lat,
+        lng: input.lng,
+        criadoPorMotoristaId: motoristaId,
+        nivelConfianca: NivelConfiancaLocal.RASCUNHO,
+      },
+      select: {
+        id: true,
+        nome: true,
+        cidade: true,
+        uf: true,
+        tipo: true,
+        clienteId: true,
+        lat: true,
+        lng: true,
+        nivelConfianca: true,
+      },
+    });
   }
 
   /**

@@ -604,6 +604,64 @@ export function useCriarLocal() {
   });
 }
 
+export type LocalProximo = {
+  id: string;
+  nome: string;
+  cidade: string;
+  uf: string;
+  tipo: "CARGA" | "DESCARGA" | "AMBOS";
+  lat: number | null;
+  lng: number | null;
+  nivelConfianca: string;
+  clienteId: string | null;
+  distanciaMetros: number;
+  vezesUsadoMotorista: number;
+};
+
+/**
+ * Busca locais existentes perto do GPS dado. Usado pelo fluxo
+ * "Estou no local de descarga" pra match automático.
+ */
+export async function buscarLocaisProximos(input: {
+  lat: number;
+  lng: number;
+  tipoUso?: "carga" | "descarga" | "ambos";
+  raioM?: number;
+  limit?: number;
+}): Promise<LocalProximo[]> {
+  const qs = new URLSearchParams({
+    lat: String(input.lat),
+    lng: String(input.lng),
+  });
+  if (input.tipoUso) qs.set("tipoUso", input.tipoUso);
+  if (input.raioM != null) qs.set("raioM", String(input.raioM));
+  if (input.limit != null) qs.set("limit", String(input.limit));
+  return api.get<LocalProximo[]>(`/m/locais/proximos?${qs.toString()}`);
+}
+
+/**
+ * Cria local rápido (só nome + GPS). Backend resolve endereço via reverse
+ * geocoding. Local entra como RASCUNHO e vai pra fila Em Validação do dashboard.
+ */
+export function useCriarLocalRapido() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      nome: string;
+      lat: number;
+      lng: number;
+      tipo: "CARGA" | "DESCARGA" | "AMBOS";
+      clienteId?: string;
+    }) => api.post<Local>("/m/locais/rapido", input),
+    onSuccess: (novo) => {
+      qc.setQueryData<Catalogos>(["catalogos"], (cur) => {
+        if (!cur) return cur;
+        return { ...cur, locais: [...cur.locais, novo] };
+      });
+    },
+  });
+}
+
 /**
  * Locais que o motorista cadastrou e ainda não foram validados por
  * recorrência/admin. App usa pra registrar geofences passivos.

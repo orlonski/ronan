@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
@@ -36,6 +36,22 @@ const EventoPresencaInput = z.object({
   detectadoEm: z.string(),
 });
 
+const ProximosQuery = z.object({
+  lat: z.coerce.number().min(-90).max(90),
+  lng: z.coerce.number().min(-180).max(180),
+  tipoUso: z.enum(["carga", "descarga", "ambos"]).optional(),
+  raioM: z.coerce.number().int().min(50).max(2000).optional(),
+  limit: z.coerce.number().int().min(1).max(20).optional(),
+});
+
+const CriarRapidoInput = z.object({
+  nome: z.string().min(2).max(120),
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  tipo: z.enum(["CARGA", "DESCARGA", "AMBOS"]),
+  clienteId: z.string().uuid().optional(),
+});
+
 @ApiTags("motorista/locais")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
@@ -59,6 +75,37 @@ export class LocaisMotoristaController {
   @Get("em-validacao")
   emValidacao(@CurrentUser() user: AuthMotorista) {
     return this.service.emValidacao(user.id);
+  }
+
+  /**
+   * Busca locais existentes perto do GPS dado. Usado pelo fluxo
+   * "Estou no local de descarga" pra match automático.
+   */
+  @Get("proximos")
+  proximos(
+    @CurrentUser() user: AuthMotorista,
+    @Query(new ZodValidationPipe(ProximosQuery)) query: z.infer<typeof ProximosQuery>,
+  ) {
+    return this.service.proximosPorGps({
+      motoristaId: user.id,
+      lat: query.lat,
+      lng: query.lng,
+      tipoUso: query.tipoUso,
+      raioM: query.raioM,
+      limit: query.limit,
+    });
+  }
+
+  /**
+   * Cria local rápido: motorista digitou só o nome (após não achar match
+   * no /proximos). Backend resolve endereço via reverse geocoding.
+   */
+  @Post("rapido")
+  criarRapido(
+    @CurrentUser() user: AuthMotorista,
+    @Body(new ZodValidationPipe(CriarRapidoInput)) body: z.infer<typeof CriarRapidoInput>,
+  ) {
+    return this.service.criarRapido(user.id, body);
   }
 
   /**

@@ -191,6 +191,100 @@ export class GeocodingService {
   }
 
   /**
+   * Reverse geocoding via Nominatim (OpenStreetMap) — grátis, sem API key.
+   * Cacheia por lat/lng arredondado a 4 casas (~10m).
+   * Usado pelo fluxo "criar local rápido" do app motorista (motorista informa
+   * só o nome; backend preenche logradouro/cidade/uf via reverse).
+   * Se Nominatim falhar, retorna placeholders genéricos pra não bloquear o cadastro.
+   */
+  async reverseGeocoding(
+    lat: number,
+    lng: number,
+  ): Promise<{ logradouro?: string; numero?: string; bairro?: string; cidade: string; uf: string; cep?: string }> {
+    const latR = Math.round(lat * 10000) / 10000;
+    const lngR = Math.round(lng * 10000) / 10000;
+    const cacheKey = `r:${latR.toFixed(4)},${lngR.toFixed(4)}`;
+
+    const hit = await this.prisma.geocodingCache.findUnique({ where: { query: cacheKey } });
+    if (hit) {
+      void this.prisma.geocodingCache
+        .update({
+          where: { query: cacheKey },
+          data: { hits: { increment: 1 }, ultimoHit: new Date() },
+        })
+        .catch(() => {});
+      return hit.resposta as unknown as {
+        logradouro?: string;
+        numero?: string;
+        bairro?: string;
+        cidade: string;
+        uf: string;
+        cep?: string;
+      };
+    }
+
+    const placeholder = {
+      logradouro: "(sem endereço)",
+      cidade: "?",
+      uf: "??",
+    };
+
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?lat=${latR}&lon=${lngR}&format=json&accept-language=pt-BR&zoom=18`;
+      const res = await fetch(url, {
+        headers: {
+          "User-Agent": "Ronan/1.0 (transportadora; contato@ronan.local)",
+        },
+      });
+      if (!res.ok) {
+        this.log.warn(`Nominatim reverse respondeu ${res.status}`);
+        return placeholder;
+      }
+      const data = (await res.json()) as {
+        address?: {
+          road?: string;
+          house_number?: string;
+          suburb?: string;
+          neighbourhood?: string;
+          city?: string;
+          town?: string;
+          village?: string;
+          municipality?: string;
+          state?: string;
+          state_code?: string;
+          postcode?: string;
+          country_code?: string;
+        };
+      };
+      const addr = data.address ?? {};
+      const cidade = addr.city ?? addr.town ?? addr.village ?? addr.municipality ?? "?";
+      const uf = (addr.state_code ?? siglaEstado(addr.state) ?? "??").toUpperCase().slice(0, 2);
+      const resultado = {
+        logradouro: addr.road ?? "(sem endereço)",
+        numero: addr.house_number,
+        bairro: addr.suburb ?? addr.neighbourhood,
+        cidade,
+        uf,
+        cep: addr.postcode?.replace(/\D/g, ""),
+      };
+
+      await this.prisma.geocodingCache
+        .create({
+          data: {
+            query: cacheKey,
+            resposta: resultado as unknown as Prisma.InputJsonValue,
+          },
+        })
+        .catch(() => {});
+
+      return resultado;
+    } catch (err) {
+      this.log.warn(`Nominatim reverse falhou: ${(err as Error).message}`);
+      return placeholder;
+    }
+  }
+
+  /**
    * Resolve um placeId em endereço estruturado via Place Details. Cacheia por placeId.
    */
   async resolverPlace(placeId: string): Promise<SugestaoEndereco | null> {
@@ -244,6 +338,23 @@ export class GeocodingService {
     }
     return sug;
   }
+}
+
+// Fallback: mapeia nome do estado BR pra sigla (Nominatim às vezes não retorna state_code).
+const SIGLAS_ESTADO: Record<string, string> = {
+  acre: "AC", alagoas: "AL", amapá: "AP", amapa: "AP", amazonas: "AM",
+  bahia: "BA", ceará: "CE", ceara: "CE", "distrito federal": "DF",
+  "espírito santo": "ES", "espirito santo": "ES", goiás: "GO", goias: "GO",
+  maranhão: "MA", maranhao: "MA", "mato grosso": "MT", "mato grosso do sul": "MS",
+  "minas gerais": "MG", pará: "PA", para: "PA", paraíba: "PB", paraiba: "PB",
+  paraná: "PR", parana: "PR", pernambuco: "PE", piauí: "PI", piaui: "PI",
+  "rio de janeiro": "RJ", "rio grande do norte": "RN", "rio grande do sul": "RS",
+  rondônia: "RO", rondonia: "RO", roraima: "RR", "santa catarina": "SC",
+  "são paulo": "SP", "sao paulo": "SP", sergipe: "SE", tocantins: "TO",
+};
+function siglaEstado(nome?: string): string | undefined {
+  if (!nome) return undefined;
+  return SIGLAS_ESTADO[nome.toLowerCase().trim()];
 }
 
 function pegarComponente(

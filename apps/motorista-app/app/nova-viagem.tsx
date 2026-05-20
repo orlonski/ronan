@@ -19,10 +19,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
+import { DescargaPorGps } from "@/components/descarga-por-gps";
 import { humanizeApiError } from "@/lib/api";
 import { humanizeZodError } from "@/lib/validation";
 import { CriarViagemInput } from "@ronan/shared-types";
-import { formatarDistancia, haversineMetros, localMaisProximo } from "@/lib/geo";
+import { formatarDistancia, haversineMetros, localMaisProximo, pegarCoords, pegarCoordsRapido } from "@/lib/geo";
 import { simplificarPontos } from "@/lib/polyline";
 import { consumePendingLocal } from "@/lib/local-novo-bridge";
 import { listPendingViagens, type PendingViagem } from "@/db/database";
@@ -267,6 +268,12 @@ export default function NovaViagem() {
     [cat.data?.materiais],
   );
 
+  const nomeDescargaSelecionado = useMemo(() => {
+    if (!form.localDescargaId) return undefined;
+    const all = [...(cat.data?.locais ?? []), ...extraLocais];
+    return all.find((l) => l.id === form.localDescargaId)?.nome;
+  }, [form.localDescargaId, cat.data?.locais, extraLocais]);
+
   const locaisFiltrados = useMemo(() => {
     if (!cat.data) return { carga: [], descarga: [] };
     const clienteId = form.clienteId || null;
@@ -317,7 +324,7 @@ export default function NovaViagem() {
     if (!form.clienteId) return "Escolha o cliente.";
     if (!form.materialId) return "Escolha o material.";
     if (!form.localCargaId) return "Escolha o local de carga.";
-    if (!form.localDescargaId) return "Escolha o local de descarga.";
+    if (!form.localDescargaId) return "Aperte 'Estou no local de descarga' ou escolha da lista.";
     if (!form.toneladas.trim()) return "Informe as toneladas.";
     if (!form.ticket.trim()) return "Informe o ticket.";
     if (!form.km.trim()) return "Informe os km rodados.";
@@ -590,38 +597,19 @@ export default function NovaViagem() {
               )}
             </Field>
 
-            <Field label="Local de descarga">
-              <View className="flex-row gap-2">
-                <View className="flex-1">
-                  <Select
-                    value={form.localDescargaId}
-                    onChange={(v) => update("localDescargaId", v)}
-                    options={locaisFiltrados.descarga}
-                    placeholder="Escolha o local"
-                    searchable
-                    emptyMessage="Nenhum local de descarga pra esse cliente"
-                  />
-                </View>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onPress={() =>
-                    router.push({
-                      pathname: "/local-novo",
-                      params: { side: "descarga", clienteId: form.clienteId || "" },
-                    })
-                  }
-                >
-                  <Plus size={20} color="#0f172a" />
-                </Button>
-              </View>
-              {tracking && (
-                <GpsHint
-                  match={matchesGps?.descarga ?? null}
-                  selecionadoId={form.localDescargaId}
-                />
-              )}
-            </Field>
+            <DescargaPorGps
+              clienteId={form.clienteId || null}
+              value={form.localDescargaId}
+              onChange={(v) => update("localDescargaId", v)}
+              locaisDoCliente={locaisFiltrados.descarga}
+              nomeSelecionadoFallback={nomeDescargaSelecionado}
+            />
+            {tracking && (
+              <GpsHint
+                match={matchesGps?.descarga ?? null}
+                selecionadoId={form.localDescargaId}
+              />
+            )}
 
             <View className="flex-row gap-3">
               <View className="flex-1 gap-2">
@@ -773,55 +761,3 @@ function makeUuid(): string {
   });
 }
 
-/**
- * GPS pre-aquecido: roda no background quando tela monta, com timeout
- * de 15s (suficiente pra fix frio do GPS). Lazy import previne crash
- * do boot do expo-router. Permissao negada / GPS off => null.
- */
-async function pegarCoords(): Promise<{ lat: number; lng: number } | null> {
-  try {
-    const Location = await import("expo-location");
-    const cur = await Location.getForegroundPermissionsAsync();
-    if (cur.status !== "granted") {
-      const r = await Location.requestForegroundPermissionsAsync();
-      if (r.status !== "granted") return null;
-    }
-    // 1) tenta last-known (instantaneo, sem fix novo)
-    const last = await Location.getLastKnownPositionAsync({
-      maxAge: 60_000, // ate 1 min de idade
-      requiredAccuracy: 200, // 200m suficiente pra contexto da viagem
-    });
-    if (last) {
-      return { lat: last.coords.latitude, lng: last.coords.longitude };
-    }
-    // 2) fix novo com cap de 15s (cold lock pode levar ate 30s)
-    const result = await Promise.race([
-      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 15_000)),
-    ]);
-    if (!result || !("coords" in result)) return null;
-    return { lat: result.coords.latitude, lng: result.coords.longitude };
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Cap rapido (2s, so last-known) — usado no Salvar quando o pre-aquecimento
- * nao resolveu ainda. Nao trava o motorista esperando GPS frio.
- */
-async function pegarCoordsRapido(): Promise<{ lat: number; lng: number } | null> {
-  try {
-    const Location = await import("expo-location");
-    const cur = await Location.getForegroundPermissionsAsync();
-    if (cur.status !== "granted") return null;
-    const last = await Promise.race([
-      Location.getLastKnownPositionAsync({ maxAge: 5 * 60_000, requiredAccuracy: 500 }),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
-    ]);
-    if (!last || !("coords" in last)) return null;
-    return { lat: last.coords.latitude, lng: last.coords.longitude };
-  } catch {
-    return null;
-  }
-}
