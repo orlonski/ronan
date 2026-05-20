@@ -117,21 +117,21 @@ export default function ViagemDetalheScreen() {
         <ScrollView
           contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 16 }}
         >
-          {/* Header card: obra + status */}
+          {/* Header card: cliente + status */}
           <Card>
             <View className="flex-row items-start justify-between gap-3">
               <View className="flex-1">
                 <Text className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Obra
+                  Cliente
                 </Text>
                 <Text className="mt-0.5 text-xl font-bold text-foreground">
-                  {detalhe.data.obra.nome}
+                  {detalhe.data.cliente.nome}
                 </Text>
-                {detalhe.data.obra.empresaCliente && (
+                {detalhe.data.cliente.empresa && (
                   <View className="mt-1 flex-row items-center gap-1.5">
                     <Building2 size={14} color="#64748b" />
                     <Text className="text-sm text-muted-foreground">
-                      {detalhe.data.obra.empresaCliente.nome}
+                      {detalhe.data.cliente.empresa.nome}
                     </Text>
                   </View>
                 )}

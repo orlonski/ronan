@@ -26,7 +26,7 @@ type Viagem = {
   status: string;
   veiculo: { id: string; placa: string };
   motorista: { id: string; nome: string };
-  obra: { id: string; nome: string };
+  cliente: { id: string; nome: string };
   material: { id: string; nome: string };
   localCarga: { id: string; nome: string; cidade: string; uf: string };
   localDescarga: { id: string; nome: string; cidade: string; uf: string };
@@ -34,7 +34,7 @@ type Viagem = {
 };
 
 type Motorista = { id: string; nome: string };
-type Obra = { id: string; nome: string };
+type Cliente = { id: string; nome: string };
 
 const STATUS_VIAGEM_LABEL: Record<string, string> = {
   ENVIADA: "Aguardando",
@@ -61,15 +61,15 @@ export default function ViagensPage() {
   });
   const list = usePaginatedList<Viagem>("/admin/viagens", tableState);
   const motoristas = useResourceOptions<Motorista>("/admin/motoristas");
-  const obras = useResourceOptions<Obra>("/admin/obras");
+  const clientes = useResourceOptions<Cliente>("/admin/clientes");
 
   const motoristaOptions = useMemo(
     () => (motoristas.data ?? []).map((m) => ({ value: m.id, label: m.nome })),
     [motoristas.data],
   );
-  const obraOptions = useMemo(
-    () => (obras.data ?? []).map((o) => ({ value: o.id, label: o.nome })),
-    [obras.data],
+  const clienteOptions = useMemo(
+    () => (clientes.data ?? []).map((c) => ({ value: c.id, label: c.nome })),
+    [clientes.data],
   );
 
   const columns = useMemo<ColumnDef<Viagem>[]>(
@@ -105,14 +105,14 @@ export default function ViagensPage() {
         cell: ({ row }) => <span className="text-sm">{row.original.motorista.nome}</span>,
       },
       {
-        id: "obra",
-        accessorKey: "obra.nome",
+        id: "cliente",
+        accessorKey: "cliente.nome",
         enableSorting: false,
-        header: "Material / Obra",
+        header: "Material / Cliente",
         cell: ({ row }) => (
           <div className="text-sm">
             <div className="font-medium">{row.original.material.nome}</div>
-            <div className="text-xs text-muted-foreground">{row.original.obra.nome}</div>
+            <div className="text-xs text-muted-foreground">{row.original.cliente.nome}</div>
           </div>
         ),
       },
@@ -198,7 +198,7 @@ export default function ViagensPage() {
         toolbar={
           <DataTableToolbar
             state={tableState}
-            searchPlaceholder="Buscar por ticket, motorista, placa, obra…"
+            searchPlaceholder="Buscar por ticket, motorista, placa, cliente…"
             filters={
               <>
                 <ToolbarFilterSelect
@@ -220,10 +220,10 @@ export default function ViagensPage() {
                   options={motoristaOptions}
                 />
                 <ToolbarFilterSelect
-                  label="Obra"
-                  value={tableState.filters.obraId}
-                  onChange={(v) => tableState.setFilter("obraId", v)}
-                  options={obraOptions}
+                  label="Cliente"
+                  value={tableState.filters.clienteId}
+                  onChange={(v) => tableState.setFilter("clienteId", v)}
+                  options={clienteOptions}
                 />
                 <ToolbarFilterDateRange state={tableState} label="Período" />
               </>
@@ -236,7 +236,7 @@ export default function ViagensPage() {
             <Card className="space-y-3 p-4 hover:bg-muted/40">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{v.obra.nome}</p>
+                  <p className="truncate text-sm font-medium">{v.cliente.nome}</p>
                   <p className="text-xs text-muted-foreground">
                     {fmtBR(v.data)} · {v.veiculo.placa} · {v.motorista.nome}
                   </p>

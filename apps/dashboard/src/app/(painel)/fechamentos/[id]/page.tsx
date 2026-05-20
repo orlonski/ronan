@@ -78,7 +78,7 @@ export default function FechamentoDetalhePage({
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-semibold tracking-tight">
-                {f.empresaCliente.nome}
+                {f.empresa.nome}
               </h1>
               <Badge className={STATUS_FECHAMENTO_COLOR[f.status]}>
                 {STATUS_FECHAMENTO_LABEL[f.status]}
@@ -143,7 +143,7 @@ export default function FechamentoDetalhePage({
           <ExcluirButton
             path="/admin/fechamentos"
             id={f.id}
-            nomeRecurso={`o fechamento de ${f.empresaCliente.nome} (${fmtBR(f.periodoInicio)} → ${fmtBR(f.periodoFim)})`}
+            nomeRecurso={`o fechamento de ${f.empresa.nome} (${fmtBR(f.periodoInicio)} → ${fmtBR(f.periodoFim)})`}
             size="sm"
             variant="outline"
             label="Excluir"
@@ -168,7 +168,7 @@ export default function FechamentoDetalhePage({
                 gerado divergências.
               </p>
               <div className="flex flex-wrap gap-2 pt-1">
-                <Link href={`/empresas/${f.empresaCliente.id}/layout-import`}>
+                <Link href={`/empresas/${f.empresa.id}/layout-import`}>
                   <Button size="sm" variant="outline" className="border-amber-400">
                     Atualizar layout de importação
                   </Button>

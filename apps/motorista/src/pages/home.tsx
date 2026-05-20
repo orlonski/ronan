@@ -63,7 +63,6 @@ export default function HomePage() {
         <h2 className="text-sm font-medium text-muted-foreground">Últimas viagens</h2>
         <div className="space-y-2">
           {pendingViagens.map((p) => {
-            const obra = p.payload.obraId as string;
             return (
               <article
                 key={p.clientId}

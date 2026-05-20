@@ -11,29 +11,29 @@ import {
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
-import { AtualizarObraInput, CriarObraInput } from "@ronan/shared-types";
+import { AtualizarClienteInput, CriarClienteInput } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { paginationQuerySchema } from "../../common/pagination";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
-import { ObrasService } from "./obras.service";
+import { ClientesService } from "./clientes.service";
 
-const ListObrasQuery = paginationQuerySchema.extend({
-  empresaClienteId: z.string().uuid().optional(),
+const ListClientesQuery = paginationQuerySchema.extend({
+  empresaId: z.string().uuid().optional(),
   ativa: z.enum(["true", "false"]).optional(),
 });
-type ListObrasQuery = z.infer<typeof ListObrasQuery>;
+type ListClientesQuery = z.infer<typeof ListClientesQuery>;
 
-@ApiTags("admin/obras")
+@ApiTags("admin/clientes")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
 @Roles("ADMIN", "OPERADOR")
-@Controller("admin/obras")
-export class ObrasController {
-  constructor(private readonly service: ObrasService) {}
+@Controller("admin/clientes")
+export class ClientesController {
+  constructor(private readonly service: ClientesService) {}
 
   @Get()
-  list(@Query(new ZodValidationPipe(ListObrasQuery)) query: ListObrasQuery) {
+  list(@Query(new ZodValidationPipe(ListClientesQuery)) query: ListClientesQuery) {
     return this.service.list(query);
   }
 
@@ -43,14 +43,14 @@ export class ObrasController {
   }
 
   @Post()
-  create(@Body(new ZodValidationPipe(CriarObraInput)) body: CriarObraInput) {
+  create(@Body(new ZodValidationPipe(CriarClienteInput)) body: CriarClienteInput) {
     return this.service.create(body);
   }
 
   @Patch(":id")
   update(
     @Param("id") id: string,
-    @Body(new ZodValidationPipe(AtualizarObraInput)) body: AtualizarObraInput,
+    @Body(new ZodValidationPipe(AtualizarClienteInput)) body: AtualizarClienteInput,
   ) {
     return this.service.update(id, body);
   }

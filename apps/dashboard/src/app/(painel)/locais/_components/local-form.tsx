@@ -25,7 +25,7 @@ import {
 } from "@/lib/client-api";
 
 type Tipo = "CARGA" | "DESCARGA" | "AMBOS";
-type Obra = { id: string; nome: string };
+type Cliente = { id: string; nome: string };
 
 export type Local = {
   id: string;
@@ -38,9 +38,9 @@ export type Local = {
   cep: string | null;
   pontoReferencia: string | null;
   tipo: Tipo;
-  obraId: string | null;
+  clienteId: string | null;
   ativo: boolean;
-  obra: Obra | null;
+  cliente: Cliente | null;
   lat: number | null;
   lng: number | null;
   apelidos: string[];
@@ -56,13 +56,13 @@ type ViaCepRes = {
 };
 
 const PATH = "/admin/locais";
-const OBRAS_PATH = "/admin/obras";
+const CLIENTES_PATH = "/admin/clientes";
 
 type Props = { initial?: Local };
 
 export function LocalForm({ initial }: Props) {
   const router = useRouter();
-  const obras = useResourceOptions<Obra>(OBRAS_PATH);
+  const clientes = useResourceOptions<Cliente>(CLIENTES_PATH);
   const create = useCreateResource<Record<string, unknown>, Local>(PATH, PATH);
   const update = useUpdateResource<Record<string, unknown>, Local>(PATH, PATH);
   const token = useAuthToken();
@@ -77,7 +77,7 @@ export function LocalForm({ initial }: Props) {
     cep: initial?.cep ?? "",
     pontoReferencia: initial?.pontoReferencia ?? "",
     tipo: (initial?.tipo ?? "AMBOS") as Tipo,
-    obraId: initial?.obraId ?? "",
+    clienteId: initial?.clienteId ?? "",
     lat: initial?.lat ?? (null as number | null),
     lng: initial?.lng ?? (null as number | null),
     apelidos: initial?.apelidos ?? [],
@@ -136,7 +136,7 @@ export function LocalForm({ initial }: Props) {
       bairro: form.bairro || undefined,
       cep: form.cep ? form.cep.replace(/\D/g, "") : undefined,
       pontoReferencia: form.pontoReferencia || undefined,
-      obraId: form.obraId || undefined,
+      clienteId: form.clienteId || undefined,
       lat: form.lat ?? undefined,
       lng: form.lng ?? undefined,
       apelidos: form.apelidos,
@@ -279,15 +279,15 @@ export function LocalForm({ initial }: Props) {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Obra (opcional)</Label>
+            <Label>Cliente (opcional)</Label>
             <Select
-              value={form.obraId}
-              onChange={(e) => setForm({ ...form, obraId: e.target.value })}
+              value={form.clienteId}
+              onChange={(e) => setForm({ ...form, clienteId: e.target.value })}
             >
-              <option value="">— sem obra —</option>
-              {obras.data?.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.nome}
+              <option value="">— sem cliente —</option>
+              {clientes.data?.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nome}
                 </option>
               ))}
             </Select>

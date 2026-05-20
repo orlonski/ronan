@@ -13,7 +13,7 @@ export const CriarLocalInput = z.object({
   lng: z.number().optional(),
   pontoReferencia: z.string().max(200).optional(),
   tipo: z.nativeEnum(TipoLocal),
-  obraId: z.string().uuid().optional(),
+  clienteId: z.string().uuid().optional(),
   apelidos: z.array(z.string().min(1).max(60)).max(20).default([]),
 });
 export type CriarLocalInput = z.infer<typeof CriarLocalInput>;

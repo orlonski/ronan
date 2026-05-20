@@ -22,7 +22,7 @@ export type StatusLinhaFechamento =
 
 export type FechamentoLista = {
   id: string;
-  empresaCliente: { id: string; nome: string };
+  empresa: { id: string; nome: string };
   periodoInicio: string;
   periodoFim: string;
   versao: number;
@@ -74,7 +74,7 @@ export type LinhaFechamento = {
   km: string | null;
   toneladas: string | null;
   valor: string | null;
-  obraTexto: string | null;
+  clienteTexto: string | null;
   materialTexto: string | null;
   status: StatusLinhaFechamento;
   divergencias: Record<string, { motorista: unknown; empresa: unknown }> | null;
@@ -89,7 +89,7 @@ export type LinhaFechamento = {
     toneladas: string;
     veiculo: { placa: string };
     motorista: { nome: string };
-    obra: { nome: string };
+    cliente: { nome: string };
     material: { nome: string };
   } | null;
   resolvidoPor: { id: string; nome: string } | null;
@@ -168,14 +168,14 @@ export function useUploadFechamento() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: {
-      empresaClienteId: string;
+      empresaId: string;
       periodoInicio: string;
       periodoFim: string;
       substituirFechamentoId?: string;
       arquivo: File;
     }) => {
       const fd = new FormData();
-      fd.append("empresaClienteId", input.empresaClienteId);
+      fd.append("empresaId", input.empresaId);
       fd.append("periodoInicio", input.periodoInicio);
       fd.append("periodoFim", input.periodoFim);
       if (input.substituirFechamentoId)
@@ -312,7 +312,7 @@ export function useRemoverLayout(empresaId: string) {
 
 // Envios standalone (pra empresas que SÓ recebem planilha)
 export type EnvioStandalone = EnvioFechamento & {
-  empresaCliente: { id: string; nome: string } | null;
+  empresa: { id: string; nome: string } | null;
   fechamento: {
     id: string;
     versao: number;
@@ -321,7 +321,7 @@ export type EnvioStandalone = EnvioFechamento & {
   } | null;
   layout: { id: string; nome: string } | null;
   geradoPor: { id: string; nome: string } | null;
-  empresaClienteId: string | null;
+  empresaId: string | null;
   periodoInicio: string | null;
   periodoFim: string | null;
   totalLinhas: number | null;
@@ -336,11 +336,11 @@ export function useCriarEnvio() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: {
-      empresaClienteId: string;
+      empresaId: string;
       periodoInicio: string;
       periodoFim: string;
       layoutEnvioId?: string;
-      obraIds?: string[];
+      clienteIds?: string[];
     }) =>
       fetchApi<{ envio: EnvioStandalone; arquivoNome: string; totalLinhas: number }>(
         "/admin/envios",

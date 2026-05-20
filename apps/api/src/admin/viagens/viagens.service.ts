@@ -8,7 +8,7 @@ import { paginate, type PaginationQuery } from "../../common/pagination";
 type ListViagensParams = PaginationQuery & {
   motoristaId?: string;
   veiculoId?: string;
-  obraId?: string;
+  clienteId?: string;
   status?: StatusViagem;
   de?: string;
   ate?: string;
@@ -26,7 +26,7 @@ export class ViagensAdminService {
     const where: Prisma.ViagemWhereInput = {};
     if (params.motoristaId) where.motoristaId = params.motoristaId;
     if (params.veiculoId) where.veiculoId = params.veiculoId;
-    if (params.obraId) where.obraId = params.obraId;
+    if (params.clienteId) where.clienteId = params.clienteId;
     if (params.status) where.status = params.status;
     if (params.de || params.ate) {
       where.data = {};
@@ -42,7 +42,7 @@ export class ViagensAdminService {
         "observacao",
         "motorista.nome",
         "veiculo.placa",
-        "obra.nome",
+        "cliente.nome",
         "material.nome",
       ],
       sortable: {
@@ -53,13 +53,13 @@ export class ViagensAdminService {
         km: "km",
         motorista: "motorista.nome",
         placa: "veiculo.placa",
-        obra: "obra.nome",
+        cliente: "cliente.nome",
       },
       defaultSort: { field: "data", order: "desc" },
       include: {
         veiculo: { select: { id: true, placa: true } },
         motorista: { select: { id: true, nome: true } },
-        obra: { select: { id: true, nome: true } },
+        cliente: { select: { id: true, nome: true } },
         material: { select: { id: true, nome: true } },
         localCarga: { select: { id: true, nome: true, cidade: true, uf: true } },
         localDescarga: { select: { id: true, nome: true, cidade: true, uf: true } },
@@ -75,7 +75,7 @@ export class ViagensAdminService {
       include: {
         veiculo: true,
         motorista: { select: { id: true, nome: true, cpf: true } },
-        obra: { select: { id: true, nome: true, empresaCliente: { select: { id: true, nome: true } } } },
+        cliente: { select: { id: true, nome: true, empresa: { select: { id: true, nome: true } } } },
         material: true,
         localCarga: true,
         localDescarga: true,
@@ -99,7 +99,7 @@ export class ViagensAdminService {
                 periodoInicio: true,
                 periodoFim: true,
                 versao: true,
-                empresaCliente: { select: { nome: true } },
+                empresa: { select: { nome: true } },
               },
             },
           },

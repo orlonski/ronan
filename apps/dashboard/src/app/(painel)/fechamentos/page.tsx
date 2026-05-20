@@ -41,10 +41,10 @@ export default function FechamentosPage() {
     () => [
       {
         id: "empresa",
-        accessorKey: "empresaCliente.nome",
+        accessorKey: "empresa.nome",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Empresa" />,
         cell: ({ row }) => (
-          <span className="font-medium">{row.original.empresaCliente.nome}</span>
+          <span className="font-medium">{row.original.empresa.nome}</span>
         ),
       },
       {
@@ -124,7 +124,7 @@ export default function FechamentosPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Fechamentos</h1>
           <p className="text-sm text-muted-foreground">
-            Conferências de planilhas que as empresas-cliente enviam — extração + match automático com IA.
+            Conferências de planilhas que as empresas enviam — extração + match automático com IA.
           </p>
         </div>
         <Link href="/fechamentos/novo">
@@ -149,8 +149,8 @@ export default function FechamentosPage() {
               <>
                 <ToolbarFilterSelect
                   label="Empresa"
-                  value={tableState.filters.empresaClienteId}
-                  onChange={(v) => tableState.setFilter("empresaClienteId", v)}
+                  value={tableState.filters.empresaId}
+                  onChange={(v) => tableState.setFilter("empresaId", v)}
                   options={empresaOptions}
                 />
                 <ToolbarFilterSelect
@@ -182,7 +182,7 @@ export default function FechamentosPage() {
             <Card className="space-y-3 p-4 hover:bg-muted/40">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{f.empresaCliente.nome}</p>
+                  <p className="truncate text-sm font-medium">{f.empresa.nome}</p>
                   <p className="text-xs text-muted-foreground">
                     {fmtBR(f.periodoInicio)} → {fmtBR(f.periodoFim)} · v{f.versao}
                   </p>

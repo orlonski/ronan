@@ -18,7 +18,7 @@ const CriarLocalInput = z.object({
   cep: z.string().max(15).optional(),
   pontoReferencia: z.string().max(200).optional(),
   tipo: z.enum(["CARGA", "DESCARGA", "AMBOS"]),
-  obraId: z.string().uuid().optional(),
+  clienteId: z.string().uuid().optional(),
   lat: z.number().optional(),
   lng: z.number().optional(),
   /**

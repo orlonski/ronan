@@ -38,7 +38,7 @@ export class DashboardService {
       tendenciaRows,
       // Rankings
       rankingMotoristasRaw,
-      rankingObrasRaw,
+      rankingClientesRaw,
       rankingMateriaisRaw,
       // Última atividade
       ultimaViagem,
@@ -90,10 +90,10 @@ export class DashboardService {
         take: 5,
       }),
       this.prisma.viagem.groupBy({
-        by: ["obraId"],
+        by: ["clienteId"],
         where: { data: { gte: inicioMes, lt: inicioMesQueVem } },
         _count: { _all: true },
-        orderBy: { _count: { obraId: "desc" } },
+        orderBy: { _count: { clienteId: "desc" } },
         take: 5,
       }),
       this.prisma.viagem.groupBy({
@@ -119,19 +119,19 @@ export class DashboardService {
 
     // Resolve nomes dos rankings em um round adicional (ids únicos, ~15 registros)
     const motoristaIds = rankingMotoristasRaw.map((r) => r.motoristaId);
-    const obraIds = rankingObrasRaw.map((r) => r.obraId);
+    const clienteIds = rankingClientesRaw.map((r) => r.clienteId);
     const materialIds = rankingMateriaisRaw.map((r) => r.materialId);
 
-    const [motoristasNomes, obrasNomes, materiaisNomes] = await Promise.all([
+    const [motoristasNomes, clientesNomes, materiaisNomes] = await Promise.all([
       motoristaIds.length
         ? this.prisma.motorista.findMany({
             where: { id: { in: motoristaIds } },
             select: { id: true, nome: true },
           })
         : Promise.resolve([]),
-      obraIds.length
-        ? this.prisma.obra.findMany({
-            where: { id: { in: obraIds } },
+      clienteIds.length
+        ? this.prisma.cliente.findMany({
+            where: { id: { in: clienteIds } },
             select: { id: true, nome: true },
           })
         : Promise.resolve([]),
@@ -144,7 +144,7 @@ export class DashboardService {
     ]);
 
     const nomeMotorista = new Map(motoristasNomes.map((m) => [m.id, m.nome]));
-    const nomeObra = new Map(obrasNomes.map((o) => [o.id, o.nome]));
+    const nomeCliente = new Map(clientesNomes.map((c) => [c.id, c.nome]));
     const nomeMaterial = new Map(materiaisNomes.map((m) => [m.id, m.nome]));
 
     return {
@@ -173,9 +173,9 @@ export class DashboardService {
           nome: nomeMotorista.get(r.motoristaId) ?? "—",
           toneladas: (r._sum.toneladas ?? 0).toString(),
         })),
-        obras: rankingObrasRaw.map((r) => ({
-          id: r.obraId,
-          nome: nomeObra.get(r.obraId) ?? "—",
+        clientes: rankingClientesRaw.map((r) => ({
+          id: r.clienteId,
+          nome: nomeCliente.get(r.clienteId) ?? "—",
           viagens: r._count._all,
         })),
         materiais: rankingMateriaisRaw.map((r) => ({

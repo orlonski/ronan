@@ -115,7 +115,7 @@ export class IaService {
         { slug: "data", label: "Data", descricao: "Data da viagem" },
         { slug: "placa", label: "Placa", descricao: "Placa do veículo" },
         { slug: "ticket", label: "Ticket", descricao: "Número do ticket" },
-        { slug: "obra", label: "Obra", descricao: "Nome da obra" },
+        { slug: "cliente", label: "Cliente", descricao: "Nome do cliente" },
         { slug: "material", label: "Material", descricao: "Material transportado" },
         { slug: "fornecedor", label: "Fornecedor", descricao: null },
         { slug: "unidade", label: "Unidade", descricao: "TON, M3, etc" },

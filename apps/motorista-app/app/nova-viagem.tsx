@@ -37,7 +37,7 @@ import {
 
 type FormShape = {
   veiculoId: string;
-  obraId: string;
+  clienteId: string;
   materialId: string;
   data: string;
   toneladas: string;
@@ -58,7 +58,7 @@ function numToStr(n: unknown): string {
 
 const empty: FormShape = {
   veiculoId: "",
-  obraId: "",
+  clienteId: "",
   materialId: "",
   data: today(),
   toneladas: "",
@@ -136,7 +136,7 @@ export default function NovaViagem() {
       const p = item.payload as Record<string, unknown>;
       setForm({
         veiculoId: String(p.veiculoId ?? ""),
-        obraId: String(p.obraId ?? ""),
+        clienteId: String(p.clienteId ?? ""),
         materialId: String(p.materialId ?? ""),
         data: typeof p.data === "string" ? p.data.slice(0, 10) : today(),
         toneladas: numToStr(p.toneladas),
@@ -251,14 +251,14 @@ export default function NovaViagem() {
     [cat.data?.veiculos],
   );
 
-  const obraOptions: SelectOption[] = useMemo(
+  const clienteOptions: SelectOption[] = useMemo(
     () =>
-      (cat.data?.obras ?? []).map((o) => ({
+      (cat.data?.clientes ?? []).map((o) => ({
         value: o.id,
         label: o.nome,
-        sublabel: o.empresaCliente.nome,
+        sublabel: o.empresa.nome,
       })),
-    [cat.data?.obras],
+    [cat.data?.clientes],
   );
 
   const materialOptions: SelectOption[] = useMemo(
@@ -269,24 +269,24 @@ export default function NovaViagem() {
 
   const locaisFiltrados = useMemo(() => {
     if (!cat.data) return { carga: [], descarga: [] };
-    const obraId = form.obraId || null;
+    const clienteId = form.clienteId || null;
     const todosIds = new Set(cat.data.locais.map((l) => l.id));
     const merged = [
       ...cat.data.locais,
       ...extraLocais.filter((l) => !todosIds.has(l.id)),
     ];
-    const naObra = merged.filter(
-      (l) => !obraId || l.obraId === obraId || l.obraId === null,
+    const noCliente = merged.filter(
+      (l) => !clienteId || l.clienteId === clienteId || l.clienteId === null,
     );
 
     // Calcula distância de cada local até a posição atual do motorista (se temos GPS).
     // Pra ordenar pelos mais próximos. Locais sem lat/lng vão pro fim.
-    const distanciaDe = (l: (typeof naObra)[number]): number => {
+    const distanciaDe = (l: (typeof noCliente)[number]): number => {
       if (!coords || l.lat == null || l.lng == null) return Infinity;
       return haversineMetros(coords.lat, coords.lng, l.lat, l.lng);
     };
 
-    const opt = (l: (typeof naObra)[number]): SelectOption => {
+    const opt = (l: (typeof noCliente)[number]): SelectOption => {
       const dist = distanciaDe(l);
       const sublabelBase = `${l.cidade}/${l.uf}`;
       const sublabel = Number.isFinite(dist)
@@ -295,18 +295,18 @@ export default function NovaViagem() {
       return { value: l.id, label: l.nome, sublabel };
     };
 
-    const ordenar = (arr: typeof naObra) =>
+    const ordenar = (arr: typeof noCliente) =>
       [...arr].sort((a, b) => distanciaDe(a) - distanciaDe(b));
 
     return {
       carga: ordenar(
-        naObra.filter((l) => l.tipo === "CARGA" || l.tipo === "AMBOS"),
+        noCliente.filter((l) => l.tipo === "CARGA" || l.tipo === "AMBOS"),
       ).map(opt),
       descarga: ordenar(
-        naObra.filter((l) => l.tipo === "DESCARGA" || l.tipo === "AMBOS"),
+        noCliente.filter((l) => l.tipo === "DESCARGA" || l.tipo === "AMBOS"),
       ).map(opt),
     };
-  }, [cat.data, form.obraId, extraLocais, coords]);
+  }, [cat.data, form.clienteId, extraLocais, coords]);
 
   function update<K extends keyof FormShape>(k: K, v: FormShape[K]) {
     setForm((f) => ({ ...f, [k]: v }));
@@ -314,7 +314,7 @@ export default function NovaViagem() {
 
   function validar(): string | null {
     if (!form.veiculoId) return "Escolha a placa.";
-    if (!form.obraId) return "Escolha a obra.";
+    if (!form.clienteId) return "Escolha o cliente.";
     if (!form.materialId) return "Escolha o material.";
     if (!form.localCargaId) return "Escolha o local de carga.";
     if (!form.localDescargaId) return "Escolha o local de descarga.";
@@ -370,7 +370,7 @@ export default function NovaViagem() {
       const payload = {
         clientId: modoEdit ? params.editarClientId! : makeUuid(),
         veiculoId: form.veiculoId,
-        obraId: form.obraId,
+        clienteId: form.clienteId,
         materialId: form.materialId,
         data: form.data,
         toneladas: parseFloat(form.toneladas.replace(",", ".")),
@@ -457,7 +457,7 @@ export default function NovaViagem() {
         <View className="m-4 rounded-lg border border-amber-300 bg-amber-50 p-4">
           <Text className="font-medium text-amber-900">Sem dados de catálogo</Text>
           <Text className="mt-1 text-sm text-amber-800">
-            Conecte na internet uma vez pra carregar veículos, obras, materiais e locais.
+            Conecte na internet uma vez pra carregar veículos, clientes, materiais e locais.
           </Text>
         </View>
       )}
@@ -508,12 +508,12 @@ export default function NovaViagem() {
               />
             </Field>
 
-            <Field label="Obra">
+            <Field label="Cliente">
               <Select
-                value={form.obraId}
-                onChange={(v) => update("obraId", v)}
-                options={obraOptions}
-                placeholder="Escolha a obra"
+                value={form.clienteId}
+                onChange={(v) => update("clienteId", v)}
+                options={clienteOptions}
+                placeholder="Escolha o cliente"
                 searchable
               />
             </Field>
@@ -562,7 +562,7 @@ export default function NovaViagem() {
                     options={locaisFiltrados.carga}
                     placeholder="Escolha o local"
                     searchable
-                    emptyMessage="Nenhum local de carga pra essa obra"
+                    emptyMessage="Nenhum local de carga pra esse cliente"
                   />
                 </View>
                 <Button
@@ -571,7 +571,7 @@ export default function NovaViagem() {
                   onPress={() =>
                     router.push({
                       pathname: "/local-novo",
-                      params: { side: "carga", obraId: form.obraId || "" },
+                      params: { side: "carga", clienteId: form.clienteId || "" },
                     })
                   }
                 >
@@ -595,7 +595,7 @@ export default function NovaViagem() {
                     options={locaisFiltrados.descarga}
                     placeholder="Escolha o local"
                     searchable
-                    emptyMessage="Nenhum local de descarga pra essa obra"
+                    emptyMessage="Nenhum local de descarga pra esse cliente"
                   />
                 </View>
                 <Button
@@ -604,7 +604,7 @@ export default function NovaViagem() {
                   onPress={() =>
                     router.push({
                       pathname: "/local-novo",
-                      params: { side: "descarga", obraId: form.obraId || "" },
+                      params: { side: "descarga", clienteId: form.clienteId || "" },
                     })
                   }
                 >

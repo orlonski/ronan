@@ -17,13 +17,13 @@ import { FechamentoProcessorService } from "./fechamento-processor.service";
 import { paginate, type PaginationQuery } from "../common/pagination";
 
 type ListFechamentosParams = PaginationQuery & {
-  empresaClienteId?: string;
+  empresaId?: string;
   status?: StatusFechamento;
   incluirSubstituidos?: "true" | "false";
 };
 
 const FECHAMENTO_INCLUDE = {
-  empresaCliente: { select: { id: true, nome: true } },
+  empresa: { select: { id: true, nome: true } },
   substituidoPor: { select: { id: true, versao: true, criadoEm: true } },
   substitui: { select: { id: true, versao: true, criadoEm: true } },
   envios: {
@@ -45,7 +45,7 @@ const LINHA_INCLUDE = {
       toneladas: true,
       veiculo: { select: { placa: true } },
       motorista: { select: { nome: true } },
-      obra: { select: { nome: true } },
+      cliente: { select: { nome: true } },
       material: { select: { nome: true } },
     },
   },
@@ -63,7 +63,7 @@ export class FechamentosService {
 
   list(params: ListFechamentosParams) {
     const where: Prisma.FechamentoWhereInput = {};
-    if (params.empresaClienteId) where.empresaClienteId = params.empresaClienteId;
+    if (params.empresaId) where.empresaId = params.empresaId;
     if (params.status) where.status = params.status;
     if (params.incluirSubstituidos !== "true") {
       where.status = params.status
@@ -74,18 +74,18 @@ export class FechamentosService {
     return paginate(this.prisma.fechamento, {
       params,
       where: where as Record<string, unknown>,
-      searchFields: ["arquivoOriginalNome", "empresaCliente.nome"],
+      searchFields: ["arquivoOriginalNome", "empresa.nome"],
       sortable: {
         criadoEm: "criadoEm",
         periodoInicio: "periodoInicio",
         periodoFim: "periodoFim",
         status: "status",
-        empresa: "empresaCliente.nome",
+        empresa: "empresa.nome",
         versao: "versao",
       },
       defaultSort: { field: "criadoEm", order: "desc" },
       include: {
-        empresaCliente: { select: { id: true, nome: true } },
+        empresa: { select: { id: true, nome: true } },
         _count: { select: { linhas: true, envios: true } },
       },
     });
@@ -123,14 +123,14 @@ export class FechamentosService {
    */
   async upload(input: {
     usuarioId: string;
-    empresaClienteId: string;
+    empresaId: string;
     periodoInicio: string;
     periodoFim: string;
     substituirFechamentoId?: string;
     arquivo: { buffer: Buffer; nome: string; mimetype: string };
   }) {
-    const empresa = await this.prisma.empresaCliente.findUnique({
-      where: { id: input.empresaClienteId },
+    const empresa = await this.prisma.empresa.findUnique({
+      where: { id: input.empresaId },
     });
     if (!empresa) throw new NotFoundException("Empresa não encontrada");
     if (!empresa.ativa) throw new BadRequestException("Empresa inativa");
@@ -146,10 +146,10 @@ export class FechamentosService {
     if (input.substituirFechamentoId) {
       const anterior = await this.prisma.fechamento.findUnique({
         where: { id: input.substituirFechamentoId },
-        select: { id: true, versao: true, empresaClienteId: true, status: true },
+        select: { id: true, versao: true, empresaId: true, status: true },
       });
       if (!anterior) throw new NotFoundException("Fechamento anterior não encontrado");
-      if (anterior.empresaClienteId !== input.empresaClienteId) {
+      if (anterior.empresaId !== input.empresaId) {
         throw new BadRequestException("Fechamento anterior é de outra empresa");
       }
       if (anterior.status === StatusFechamento.SUBSTITUIDO) {
@@ -167,7 +167,7 @@ export class FechamentosService {
 
     const novo = await this.prisma.fechamento.create({
       data: {
-        empresaClienteId: input.empresaClienteId,
+        empresaId: input.empresaId,
         periodoInicio,
         periodoFim,
         fonte: FonteFechamento.UPLOAD,

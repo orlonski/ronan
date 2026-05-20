@@ -16,38 +16,38 @@ import {
 } from "@/lib/client-api";
 
 type Empresa = { id: string; nome: string };
-export type Obra = {
+export type Cliente = {
   id: string;
   nome: string;
   ativa: boolean;
-  empresaCliente: Empresa;
-  empresaClienteId: string;
+  empresa: Empresa;
+  empresaId: string;
   apelidos: string[];
 };
 
-const PATH = "/admin/obras";
+const PATH = "/admin/clientes";
 const EMPRESAS_PATH = "/admin/empresas";
 
-type Props = { initial?: Obra };
+type Props = { initial?: Cliente };
 
-type ObraBody = { nome: string; empresaClienteId: string; apelidos: string[] };
+type ClienteBody = { nome: string; empresaId: string; apelidos: string[] };
 
-export function ObraForm({ initial }: Props) {
+export function ClienteForm({ initial }: Props) {
   const router = useRouter();
   const empresas = useResourceOptions<Empresa>(EMPRESAS_PATH);
-  const create = useCreateResource<ObraBody, Obra>(PATH, PATH);
-  const update = useUpdateResource<Partial<ObraBody>, Obra>(PATH, PATH);
+  const create = useCreateResource<ClienteBody, Cliente>(PATH, PATH);
+  const update = useUpdateResource<Partial<ClienteBody>, Cliente>(PATH, PATH);
 
-  const [form, setForm] = useState<ObraBody>({
+  const [form, setForm] = useState<ClienteBody>({
     nome: initial?.nome ?? "",
-    empresaClienteId: initial?.empresaClienteId ?? "",
+    empresaId: initial?.empresaId ?? "",
     apelidos: initial?.apelidos ?? [],
   });
 
   useEffect(() => {
-    if (initial || form.empresaClienteId || !empresas.data?.[0]?.id) return;
-    setForm((f) => ({ ...f, empresaClienteId: empresas.data![0]!.id }));
-  }, [initial, form.empresaClienteId, empresas.data]);
+    if (initial || form.empresaId || !empresas.data?.[0]?.id) return;
+    setForm((f) => ({ ...f, empresaId: empresas.data![0]!.id }));
+  }, [initial, form.empresaId, empresas.data]);
 
   async function onSubmit(ev: React.FormEvent) {
     ev.preventDefault();
@@ -56,7 +56,7 @@ export function ObraForm({ initial }: Props) {
     } else {
       await create.mutateAsync(form);
     }
-    router.push("/obras");
+    router.push("/clientes");
   }
 
   const saving = create.isPending || update.isPending;
@@ -74,11 +74,11 @@ export function ObraForm({ initial }: Props) {
           />
         </div>
         <div className="space-y-2">
-          <Label>Empresa-cliente</Label>
+          <Label>Empresa</Label>
           <Select
             required
-            value={form.empresaClienteId}
-            onChange={(e) => setForm({ ...form, empresaClienteId: e.target.value })}
+            value={form.empresaId}
+            onChange={(e) => setForm({ ...form, empresaId: e.target.value })}
           >
             {empresas.data?.map((e) => (
               <option key={e.id} value={e.id}>
@@ -92,15 +92,15 @@ export function ObraForm({ initial }: Props) {
           <TagInput
             value={form.apelidos}
             onChange={(arr) => setForm({ ...form, apelidos: arr })}
-            placeholder='ex: "obra do beto", "shopping novo"'
+            placeholder='ex: "cliente do beto", "shopping novo"'
           />
           <p className="text-xs text-muted-foreground">
             Como o motorista chama no WhatsApp/áudio. O agente IA usa pra
-            achar a obra quando ele escreve diferente do cadastro.
+            achar o cliente quando ele escreve diferente do cadastro.
           </p>
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <Link href="/obras">
+          <Link href="/clientes">
             <Button type="button" variant="outline">
               Cancelar
             </Button>

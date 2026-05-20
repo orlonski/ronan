@@ -13,7 +13,7 @@ export function VersoesTab({ fechamento }: { fechamento: FechamentoDetalhe }) {
     return (
       <Card className="p-8 text-center">
         <p className="text-sm text-muted-foreground">
-          Esse fechamento ainda é a única versão. Quando a empresa-cliente mandar uma versão
+          Esse fechamento ainda é a única versão. Quando a empresa mandar uma versão
           atualizada da planilha, o histórico aparecerá aqui.
         </p>
       </Card>

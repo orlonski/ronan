@@ -27,7 +27,7 @@ import { ExportFechamentoService } from "./export-fechamento.service";
 import { FechamentosService } from "./fechamentos.service";
 
 const ListFechamentosQuery = paginationQuerySchema.extend({
-  empresaClienteId: z.string().uuid().optional(),
+  empresaId: z.string().uuid().optional(),
   status: z
     .enum([
       "RECEBIDO",
@@ -100,7 +100,7 @@ export class FechamentosController {
   async upload(
     @CurrentUser() user: AuthAdminUser,
     @UploadedFile() arquivo: Express.Multer.File | undefined,
-    @Body("empresaClienteId") empresaClienteId: string,
+    @Body("empresaId") empresaId: string,
     @Body("periodoInicio") periodoInicio: string,
     @Body("periodoFim") periodoFim: string,
     @Body("substituirFechamentoId") substituirFechamentoId?: string,
@@ -109,12 +109,12 @@ export class FechamentosController {
     if (!ALLOWED_MIMES.includes(arquivo.mimetype) && !/\.(xlsx|csv|pdf)$/i.test(arquivo.originalname)) {
       throw new BadRequestException(`Formato não suportado: ${arquivo.mimetype}`);
     }
-    if (!empresaClienteId || !periodoInicio || !periodoFim) {
-      throw new BadRequestException("empresaClienteId, periodoInicio, periodoFim são obrigatórios");
+    if (!empresaId || !periodoInicio || !periodoFim) {
+      throw new BadRequestException("empresaId, periodoInicio, periodoFim são obrigatórios");
     }
     return this.service.upload({
       usuarioId: user.id,
-      empresaClienteId,
+      empresaId,
       periodoInicio,
       periodoFim,
       substituirFechamentoId,

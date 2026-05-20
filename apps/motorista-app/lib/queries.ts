@@ -12,10 +12,10 @@ export type Veiculo = { id: string; placa: string; modelo: string | null };
 
 export type Material = { id: string; nome: string };
 
-export type Obra = {
+export type Cliente = {
   id: string;
   nome: string;
-  empresaCliente: { id: string; nome: string };
+  empresa: { id: string; nome: string };
 };
 
 export type Local = {
@@ -28,7 +28,7 @@ export type Local = {
   uf: string;
   pontoReferencia: string | null;
   tipo: "CARGA" | "DESCARGA" | "AMBOS";
-  obraId: string | null;
+  clienteId: string | null;
   lat: number | null;
   lng: number | null;
 };
@@ -36,7 +36,7 @@ export type Local = {
 export type Catalogos = {
   veiculos: Veiculo[];
   materiais: Material[];
-  obras: Obra[];
+  clientes: Cliente[];
   locais: Local[];
 };
 
@@ -62,7 +62,7 @@ export type Viagem = {
   status: string;
   sincronizadoEm: string;
   veiculo: Veiculo;
-  obra: { id: string; nome: string };
+  cliente: { id: string; nome: string };
   material: Material;
   localCarga: { id: string; nome: string; cidade: string; uf: string };
   localDescarga: { id: string; nome: string; cidade: string; uf: string };
@@ -217,7 +217,7 @@ export type ViagemDetalhe = Viagem & {
   iniciadoEm: string | null;
   kmReal: string | null;
   pontos: { lat: number; lng: number; capturadoEm: string }[];
-  obra: { id: string; nome: string; empresaCliente?: { id: string; nome: string } };
+  cliente: { id: string; nome: string; empresa?: { id: string; nome: string } };
   localCarga: Viagem["localCarga"] & { logradouro: string; lat: number | null; lng: number | null };
   localDescarga: Viagem["localDescarga"] & { logradouro: string; lat: number | null; lng: number | null };
 };
@@ -549,7 +549,7 @@ export type CriarLocalInput = {
   cep?: string;
   pontoReferencia?: string;
   tipo: "CARGA" | "DESCARGA" | "AMBOS";
-  obraId?: string;
+  clienteId?: string;
   lat?: number;
   lng?: number;
   /**

@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 
-export type CatalogoTipo = "material" | "obra" | "local" | "veiculo";
+export type CatalogoTipo = "material" | "cliente" | "local" | "veiculo";
 
 export type CatalogoMatch = {
   id: string;
@@ -14,7 +14,7 @@ export type CatalogoMatch = {
   extras?: Record<string, unknown>;
 };
 
-type CampoViagem = "veiculo" | "obra" | "material" | "carga" | "descarga";
+type CampoViagem = "veiculo" | "cliente" | "material" | "carga" | "descarga";
 
 type EscolhaPendente = {
   campo: CampoViagem;
@@ -131,12 +131,12 @@ export class MotoristaService {
       cargaCidade: string;
       descarga: string;
       descargaCidade: string;
-      obra: string;
+      cliente: string;
       vezes: bigint;
       ultima: Date;
     };
 
-    const [topMateriais, topObras, topLocais, topTrajetos] = await Promise.all([
+    const [topMateriais, topClientes, topLocais, topTrajetos] = await Promise.all([
       this.prisma.$queryRaw<LinhaTop[]>`
         SELECT mat.nome AS nome, COUNT(*)::bigint AS vezes, MAX(v.data) AS ultima
         FROM viagens v
@@ -149,13 +149,13 @@ export class MotoristaService {
         LIMIT 5
       `,
       this.prisma.$queryRaw<LinhaTop[]>`
-        SELECT o.nome AS nome, COUNT(*)::bigint AS vezes, MAX(v.data) AS ultima
+        SELECT c.nome AS nome, COUNT(*)::bigint AS vezes, MAX(v.data) AS ultima
         FROM viagens v
-        JOIN obras o ON o.id = v."obraId"
+        JOIN clientes c ON c.id = v."clienteId"
         WHERE v."motoristaId" = ${motoristaId}
           AND v.data >= now() - interval '90 days'
-          AND o.ativa = true
-        GROUP BY o.nome
+          AND c.ativa = true
+        GROUP BY c.nome
         ORDER BY vezes DESC, ultima DESC
         LIMIT 10
       `,
@@ -184,15 +184,15 @@ export class MotoristaService {
       this.prisma.$queryRaw<LinhaTrajeto[]>`
         SELECT lc.nome AS carga, lc.cidade AS "cargaCidade",
                ld.nome AS descarga, ld.cidade AS "descargaCidade",
-               o.nome AS obra,
+               c.nome AS cliente,
                COUNT(*)::bigint AS vezes, MAX(v.data) AS ultima
         FROM viagens v
         JOIN locais lc ON lc.id = v."localCargaId"
         JOIN locais ld ON ld.id = v."localDescargaId"
-        JOIN obras o ON o.id = v."obraId" AND o.ativa = true
+        JOIN clientes c ON c.id = v."clienteId" AND c.ativa = true
         WHERE v."motoristaId" = ${motoristaId}
           AND v.data >= now() - interval '90 days'
-        GROUP BY lc.nome, lc.cidade, ld.nome, ld.cidade, o.nome
+        GROUP BY lc.nome, lc.cidade, ld.nome, ld.cidade, c.nome
         ORDER BY vezes DESC, ultima DESC
         LIMIT 10
       `,
@@ -218,7 +218,7 @@ export class MotoristaService {
       },
       janela_dias: 90,
       topMateriais: formatTop(topMateriais),
-      topObras: formatTop(topObras),
+      topClientes: formatTop(topClientes),
       topLocais: topLocais.map((r) => ({
         nome: r.nome,
         cidade: r.cidade,
@@ -229,7 +229,7 @@ export class MotoristaService {
       topTrajetos: topTrajetos.map((r) => ({
         de: `${r.carga} (${r.cargaCidade})`,
         para: `${r.descarga} (${r.descargaCidade})`,
-        obra: r.obra,
+        cliente: r.cliente,
         vezes: Number(r.vezes),
         ultimaData: r.ultima.toISOString().slice(0, 10),
       })),
@@ -245,7 +245,7 @@ export class MotoristaService {
    * >= 0.2 OU se top2 nem existe. Senao marca como ambiguidade.
    *
    * Veículo: se nao passar, usa veiculoDefault. Data: se nao passar ou for
-   * "hoje"/"ontem", interpreta. Obra: se nao passar mas carga+descarga
+   * "hoje"/"ontem", interpreta. Cliente: se nao passar mas carga+descarga
    * resolverem, tenta inferir pelo trajeto.
    *
    * Retorna {resolvido: true, ids, nomesCanonicos} OU
@@ -255,7 +255,7 @@ export class MotoristaService {
     motoristaId: string,
     input: {
       veiculo?: string;
-      obra?: string;
+      cliente?: string;
       material?: string;
       carga?: string;
       descarga?: string;
@@ -267,7 +267,7 @@ export class MotoristaService {
         resolvido: true;
         ids: {
           veiculoId: string;
-          obraId: string;
+          clienteId: string;
           materialId: string;
           localCargaId: string;
           localDescargaId: string;
@@ -275,7 +275,7 @@ export class MotoristaService {
         };
         nomesCanonicos: {
           veiculo: string;
-          obra: string;
+          cliente: string;
           material: string;
           carga: string;
           descarga: string;
@@ -302,14 +302,14 @@ export class MotoristaService {
     const notas: string[] = [];
     const ids: Partial<{
       veiculoId: string;
-      obraId: string;
+      clienteId: string;
       materialId: string;
       localCargaId: string;
       localDescargaId: string;
     }> = {};
     const nomes: Partial<{
       veiculo: string;
-      obra: string;
+      cliente: string;
       material: string;
       carga: string;
       descarga: string;
@@ -449,67 +449,67 @@ export class MotoristaService {
       faltando.push("descarga");
     }
 
-    // OBRA — se nao veio mas carga+descarga resolveram, tenta inferir trajeto
-    if (input.obra) {
-      const r = await this.resolverCampo("obra", input.obra, motoristaId, undefined, sessaoId, "obra");
+    // CLIENTE — se nao veio mas carga+descarga resolveram, tenta inferir trajeto
+    if (input.cliente) {
+      const r = await this.resolverCampo("cliente", input.cliente, motoristaId, undefined, sessaoId, "cliente");
       if (r.tipo === "ok") {
-        ids.obraId = r.id;
-        nomes.obra = r.nome;
+        ids.clienteId = r.id;
+        nomes.cliente = r.nome;
       } else if (r.tipo === "ambiguo") {
-        if (sessaoId) this.salvarPendencia(sessaoId, "obra", r.candidatos);
+        if (sessaoId) this.salvarPendencia(sessaoId, "cliente", r.candidatos);
         ambiguidades.push({
-          campo: "obra",
-          mensagem: `Achei mais de uma obra parecida com "${input.obra}".`,
+          campo: "cliente",
+          mensagem: `Achei mais de um cliente parecido com "${input.cliente}".`,
           candidatos: r.candidatos.map((c) => ({ nome: c.nome, motivo: c.motivo })),
         });
       } else {
-        const top = await this.topUsadosRecentes(motoristaId, "obra");
+        const top = await this.topUsadosRecentes(motoristaId, "cliente");
         if (top.length > 0) {
-          if (sessaoId) this.salvarPendencia(sessaoId, "obra", top.map((t) => ({ id: t.id, nome: t.nome })));
+          if (sessaoId) this.salvarPendencia(sessaoId, "cliente", top.map((t) => ({ id: t.id, nome: t.nome })));
           ambiguidades.push({
-            campo: "obra",
-            mensagem: motivoSugestao(input.obra, "obra", top[0].fonte),
+            campo: "cliente",
+            mensagem: motivoSugestao(input.cliente, "cliente", top[0].fonte),
             candidatos: top.map((t) => ({
               nome: t.nome,
               motivo: motivoCandidato(t.vezes, t.fonte),
             })),
           });
         } else {
-          faltando.push("obra");
+          faltando.push("cliente");
         }
       }
     } else if (ids.localCargaId && ids.localDescargaId) {
-      const inf = await this.inferirObraPorTrajeto(
+      const inf = await this.inferirClientePorTrajeto(
         motoristaId,
         ids.localCargaId,
         ids.localDescargaId,
         ids.materialId,
       );
       if (inf.auto_selecionavel && inf.candidatos[0]) {
-        ids.obraId = inf.candidatos[0].obraId;
-        nomes.obra = inf.candidatos[0].nome;
-        notas.push(`obra: deduzi pelo trajeto (${inf.candidatos[0].motivo.join(", ")})`);
+        ids.clienteId = inf.candidatos[0].clienteId;
+        nomes.cliente = inf.candidatos[0].nome;
+        notas.push(`cliente: deduzi pelo trajeto (${inf.candidatos[0].motivo.join(", ")})`);
       } else if (inf.candidatos.length > 0) {
         if (sessaoId) {
           this.salvarPendencia(
             sessaoId,
-            "obra",
-            inf.candidatos.slice(0, 3).map((c) => ({ id: c.obraId, nome: c.nome })),
+            "cliente",
+            inf.candidatos.slice(0, 3).map((c) => ({ id: c.clienteId, nome: c.nome })),
           );
         }
         ambiguidades.push({
-          campo: "obra",
-          mensagem: "Esse trajeto já rodou pra mais de uma obra. Qual é?",
+          campo: "cliente",
+          mensagem: "Esse trajeto já rodou pra mais de um cliente. Qual é?",
           candidatos: inf.candidatos.slice(0, 3).map((c) => ({
             nome: c.nome,
             motivo: c.motivo,
           })),
         });
       } else {
-        faltando.push("obra");
+        faltando.push("cliente");
       }
     } else {
-      faltando.push("obra");
+      faltando.push("cliente");
     }
 
     // DATA
@@ -534,7 +534,7 @@ export class MotoristaService {
       resolvido: true,
       ids: {
         veiculoId: ids.veiculoId!,
-        obraId: ids.obraId!,
+        clienteId: ids.clienteId!,
         materialId: ids.materialId!,
         localCargaId: ids.localCargaId!,
         localDescargaId: ids.localDescargaId!,
@@ -542,7 +542,7 @@ export class MotoristaService {
       },
       nomesCanonicos: {
         veiculo: nomes.veiculo!,
-        obra: nomes.obra!,
+        cliente: nomes.cliente!,
         material: nomes.material!,
         carga: nomes.carga!,
         descarga: nomes.descarga!,
@@ -721,7 +721,7 @@ export class MotoristaService {
    */
   private async topUsadosRecentes(
     motoristaId: string,
-    tipo: "material" | "obra" | "carga" | "descarga",
+    tipo: "material" | "cliente" | "carga" | "descarga",
     limit = 3,
   ): Promise<Array<{ id: string; nome: string; vezes: number; fonte: "motorista" | "empresa" | "catalogo" }>> {
     type Row = { id: string; nome: string; vezes: bigint };
@@ -745,14 +745,14 @@ export class MotoristaService {
           LIMIT ${limit}
         `;
       }
-      if (tipo === "obra") {
+      if (tipo === "cliente") {
         return this.prisma.$queryRaw<Row[]>`
-          SELECT o.id, o.nome, COUNT(*)::bigint AS vezes
-          FROM viagens v JOIN obras o ON o.id = v."obraId"
+          SELECT c.id, c.nome, COUNT(*)::bigint AS vezes
+          FROM viagens v JOIN clientes c ON c.id = v."clienteId"
           WHERE (${motoristaFilter}::text IS NULL OR v."motoristaId" = ${motoristaFilter})
             AND v.data >= ${desde}
-            AND o.ativa = true
-          GROUP BY o.id, o.nome
+            AND c.ativa = true
+          GROUP BY c.id, c.nome
           ORDER BY COUNT(*) DESC, MAX(v.data) DESC
           LIMIT ${limit}
         `;
@@ -782,10 +782,10 @@ export class MotoristaService {
       fonte = "empresa";
     }
 
-    // 3. último recurso: top do catálogo (alfabético) — só pra material/obra
+    // 3. último recurso: top do catálogo (alfabético) — só pra material/cliente
     //    onde o universo é fechado. Locais cadastrados podem ser dezenas de
     //    milhares — não vale a pena listar aleatoriamente.
-    if (rows.length === 0 && (tipo === "material" || tipo === "obra")) {
+    if (rows.length === 0 && (tipo === "material" || tipo === "cliente")) {
       if (tipo === "material") {
         const cat = await this.prisma.material.findMany({
           where: { ativo: true },
@@ -795,7 +795,7 @@ export class MotoristaService {
         });
         rows = cat.map((c) => ({ id: c.id, nome: c.nome, vezes: BigInt(0) }));
       } else {
-        const cat = await this.prisma.obra.findMany({
+        const cat = await this.prisma.cliente.findMany({
           where: { ativa: true },
           select: { id: true, nome: true },
           orderBy: { nome: "asc" },
@@ -815,8 +815,8 @@ export class MotoristaService {
   }
 
   private async lookupNomeById(tipo: CatalogoTipo, id: string): Promise<string | null> {
-    if (tipo === "obra") {
-      const r = await this.prisma.obra.findUnique({ where: { id }, select: { nome: true } });
+    if (tipo === "cliente") {
+      const r = await this.prisma.cliente.findUnique({ where: { id }, select: { nome: true } });
       return r?.nome ?? null;
     }
     if (tipo === "material") {
@@ -848,7 +848,7 @@ export class MotoristaService {
         ? { ativo: true, id: { in: vinculadosIds } }
         : { ativo: true };
 
-    const [veiculos, materiais, obras, locais] = await Promise.all([
+    const [veiculos, materiais, clientes, locais] = await Promise.all([
       this.prisma.veiculo.findMany({
         where: veiculosWhere,
         select: { id: true, placa: true, modelo: true },
@@ -859,12 +859,12 @@ export class MotoristaService {
         select: { id: true, nome: true },
         orderBy: { nome: "asc" },
       }),
-      this.prisma.obra.findMany({
+      this.prisma.cliente.findMany({
         where: { ativa: true },
         select: {
           id: true,
           nome: true,
-          empresaCliente: { select: { id: true, nome: true } },
+          empresa: { select: { id: true, nome: true } },
         },
         orderBy: { nome: "asc" },
       }),
@@ -880,14 +880,14 @@ export class MotoristaService {
           uf: true,
           pontoReferencia: true,
           tipo: true,
-          obraId: true,
+          clienteId: true,
           lat: true,
           lng: true,
         },
         orderBy: { nome: "asc" },
       }),
     ]);
-    return { veiculos, materiais, obras, locais };
+    return { veiculos, materiais, clientes, locais };
   }
 
   /**
@@ -914,7 +914,7 @@ export class MotoristaService {
     if (!termo) return [];
     if (tipo === "local") return this.buscarLocal(motoristaId, termo, ancoraLocalId);
     if (tipo === "material") return this.buscarMaterial(motoristaId, termo);
-    if (tipo === "obra") return this.buscarObra(motoristaId, termo);
+    if (tipo === "cliente") return this.buscarCliente(motoristaId, termo);
     if (tipo === "veiculo") return this.buscarVeiculo(motoristaId, termo);
     return [];
   }
@@ -992,19 +992,19 @@ export class MotoristaService {
   }
 
   /**
-   * Infere candidatos a obra a partir do par (localCargaId, localDescargaId)
+   * Infere candidatos a cliente a partir do par (localCargaId, localDescargaId)
    * olhando o histórico de viagens da empresa toda nos últimos 180d. Usado
    * pelo agente do WhatsApp pra economizar uma pergunta quando o motorista
-   * descreve uma viagem sem citar a obra.
+   * descreve uma viagem sem citar o cliente.
    *
    * Escopo: empresa inteira (mais sinal); bonus pra viagens do próprio
    * motorista no score.
    *
-   * `auto_selecionavel = true` ⇒ 1 obra única + ≥2 viagens + última ≤90d.
+   * `auto_selecionavel = true` ⇒ 1 cliente único + ≥2 viagens + última ≤90d.
    * Threshold médio: erra menos do que "1 viagem é suficiente", mas ainda
    * dispensa pergunta nas rotas com qualquer recorrência.
    */
-  async inferirObraPorTrajeto(
+  async inferirClientePorTrajeto(
     motoristaId: string,
     localCargaId: string,
     localDescargaId: string,
@@ -1014,7 +1014,7 @@ export class MotoristaService {
     auto_selecionavel: boolean;
     janela_dias: number;
     candidatos: Array<{
-      obraId: string;
+      clienteId: string;
       nome: string;
       empresa: string | null;
       vezesUsado: number;
@@ -1030,7 +1030,7 @@ export class MotoristaService {
     desde.setDate(desde.getDate() - JANELA_DIAS);
 
     type Row = {
-      obraId: string;
+      clienteId: string;
       nome: string;
       empresaNome: string | null;
       vezes: bigint;
@@ -1043,7 +1043,7 @@ export class MotoristaService {
 
     const rows = await this.prisma.$queryRaw<Row[]>`
       WITH viagens_trajeto AS (
-        SELECT v."obraId", v."motoristaId", v."materialId", v.data
+        SELECT v."clienteId", v."motoristaId", v."materialId", v.data
         FROM viagens v
         WHERE v."localCargaId"    = ${localCargaId}
           AND v."localDescargaId" = ${localDescargaId}
@@ -1051,27 +1051,27 @@ export class MotoristaService {
       ),
       agg AS (
         SELECT
-          "obraId",
+          "clienteId",
           COUNT(*)                                              AS vezes,
           COUNT(*) FILTER (WHERE "motoristaId" = ${motoristaId}) AS vezes_motorista,
           COUNT(*) FILTER (WHERE ${matId}::text IS NOT NULL
                              AND "materialId" = ${matId})        AS vezes_material,
           MAX(data)                                             AS ultima
         FROM viagens_trajeto
-        GROUP BY "obraId"
+        GROUP BY "clienteId"
       )
       SELECT
-        o.id            AS "obraId",
-        o.nome          AS nome,
-        ec.nome         AS "empresaNome",
+        c.id            AS "clienteId",
+        c.nome          AS nome,
+        e.nome          AS "empresaNome",
         a.vezes         AS vezes,
         a.vezes_motorista AS "vezesMotorista",
         a.vezes_material  AS "vezesMaterial",
         a.ultima        AS ultima
       FROM agg a
-      JOIN obras o            ON o.id = a."obraId"
-      LEFT JOIN empresas_cliente ec ON ec.id = o."empresaClienteId"
-      WHERE o.ativa = true
+      JOIN clientes c       ON c.id = a."clienteId"
+      LEFT JOIN empresas e  ON e.id = c."empresaId"
+      WHERE c.ativa = true
       ORDER BY a.vezes DESC, a.ultima DESC
       LIMIT 5
     `;
@@ -1084,15 +1084,15 @@ export class MotoristaService {
         (Date.now() - r.ultima.getTime()) / (1000 * 60 * 60 * 24),
       );
       return {
-        obraId: r.obraId,
+        clienteId: r.clienteId,
         nome: r.nome,
         empresa: r.empresaNome,
         vezesUsado: vezes,
         vezesPorEsteMotorista: vezesMot,
         ultimaData: r.ultima.toISOString().slice(0, 10),
         diasAtras,
-        score: scoreInferenciaObra(vezes, vezesMot, vezesMat, diasAtras),
-        motivo: motivoInferenciaObra(vezes, vezesMot, vezesMat, diasAtras),
+        score: scoreInferenciaCliente(vezes, vezesMot, vezesMat, diasAtras),
+        motivo: motivoInferenciaCliente(vezes, vezesMot, vezesMat, diasAtras),
       };
     });
 
@@ -1260,7 +1260,7 @@ export class MotoristaService {
     });
   }
 
-  private async buscarObra(motoristaId: string, termo: string): Promise<CatalogoMatch[]> {
+  private async buscarCliente(motoristaId: string, termo: string): Promise<CatalogoMatch[]> {
     type Row = {
       id: string;
       nome: string;
@@ -1271,30 +1271,30 @@ export class MotoristaService {
     };
     const rows = await this.prisma.$queryRaw<Row[]>`
       WITH sim AS (
-        SELECT o.id, GREATEST(
-          similarity(f_normalizar(o.nome),               f_normalizar(${termo})),
-          similarity(f_normalizar_array(o.apelidos),     f_normalizar(${termo})) * 1.1
+        SELECT c.id, GREATEST(
+          similarity(f_normalizar(c.nome),               f_normalizar(${termo})),
+          similarity(f_normalizar_array(c.apelidos),     f_normalizar(${termo})) * 1.1
         ) AS sim_score
-        FROM obras o
-        WHERE o.ativa = true
-          AND ( f_normalizar(o.nome) % f_normalizar(${termo})
-             OR f_normalizar_array(o.apelidos) % f_normalizar(${termo}) )
+        FROM clientes c
+        WHERE c.ativa = true
+          AND ( f_normalizar(c.nome) % f_normalizar(${termo})
+             OR f_normalizar_array(c.apelidos) % f_normalizar(${termo}) )
       ),
       hist AS (
-        SELECT "obraId" AS obra_id, COUNT(*) AS n_uso, MAX(data) AS ultima
+        SELECT "clienteId" AS cliente_id, COUNT(*) AS n_uso, MAX(data) AS ultima
         FROM viagens
         WHERE "motoristaId" = ${motoristaId} AND data >= now() - interval '60 days'
-        GROUP BY "obraId"
+        GROUP BY "clienteId"
       )
-      SELECT o.id, o.nome,
-        ec.nome              AS "empresaNome",
+      SELECT c.id, c.nome,
+        e.nome               AS "empresaNome",
         s.sim_score          AS "simScore",
         coalesce(h.n_uso, 0) AS "nUso",
         h.ultima             AS "ultimaUso"
       FROM sim s
-      JOIN obras o ON o.id = s.id
-      LEFT JOIN empresas_cliente ec ON ec.id = o."empresaClienteId"
-      LEFT JOIN hist h ON h.obra_id = o.id
+      JOIN clientes c ON c.id = s.id
+      LEFT JOIN empresas e ON e.id = c."empresaId"
+      LEFT JOIN hist h ON h.cliente_id = c.id
       ORDER BY (
         s.sim_score * 1.00
         + LEAST(coalesce(h.n_uso,0), 20) * 0.04
@@ -1422,7 +1422,7 @@ function motivoSimples(sim: number, nUso: number, ultima: Date | null): string[]
   return out;
 }
 
-function scoreInferenciaObra(
+function scoreInferenciaCliente(
   vezes: number,
   vezesMotorista: number,
   vezesMaterial: number,
@@ -1435,7 +1435,7 @@ function scoreInferenciaObra(
   return baseFreq + bonusMotorista + bonusMaterial + bonusRecencia;
 }
 
-function motivoInferenciaObra(
+function motivoInferenciaCliente(
   vezes: number,
   vezesMotorista: number,
   vezesMaterial: number,

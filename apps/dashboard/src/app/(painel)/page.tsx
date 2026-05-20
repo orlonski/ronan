@@ -46,7 +46,7 @@ type Snapshot = {
   tendenciaViagens: Array<{ dia: string; total: number }>;
   rankings: {
     motoristas: Array<{ id: string; nome: string; toneladas: string }>;
-    obras: Array<{ id: string; nome: string; viagens: number }>;
+    clientes: Array<{ id: string; nome: string; viagens: number }>;
     materiais: Array<{ id: string; nome: string; toneladas: string }>;
   };
   ultimaAtividade: {
@@ -257,11 +257,11 @@ function BlocoRankings({ d }: { d: Snapshot }) {
         />
         <RankingCard
           icon={Building2}
-          titulo="Obras"
+          titulo="Clientes"
           subtitulo="por viagens"
-          itens={d.rankings.obras.map((o) => ({
-            nome: o.nome,
-            valor: `${o.viagens} viagens`,
+          itens={d.rankings.clientes.map((c) => ({
+            nome: c.nome,
+            valor: `${c.viagens} viagens`,
           }))}
         />
         <RankingCard

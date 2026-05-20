@@ -22,18 +22,18 @@ import { paginationQuerySchema } from "../common/pagination";
 import { ExportFechamentoService } from "./export-fechamento.service";
 
 const ListEnviosQuery = paginationQuerySchema.extend({
-  empresaClienteId: z.string().uuid().optional(),
+  empresaId: z.string().uuid().optional(),
   status: z.enum(["GERADO", "ENVIADO"]).optional(),
 });
 type ListEnviosQuery = z.infer<typeof ListEnviosQuery>;
 
 const CriarEnvioInput = z.object({
-  empresaClienteId: z.string().uuid(),
+  empresaId: z.string().uuid(),
   periodoInicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   periodoFim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   layoutEnvioId: z.string().uuid().optional(),
-  // Filtra obras específicas dentro da empresa. Vazio/ausente = todas as obras.
-  obraIds: z.array(z.string().uuid()).optional(),
+  // Filtra clientes específicos dentro da empresa. Vazio/ausente = todos.
+  clienteIds: z.array(z.string().uuid()).optional(),
 });
 
 const MarcarEnviadoInput = z.object({
@@ -61,11 +61,11 @@ export class EnviosController {
   ) {
     return this.exporter.gerarStandalone({
       usuarioId: user.id,
-      empresaClienteId: body.empresaClienteId,
+      empresaId: body.empresaId,
       periodoInicio: body.periodoInicio,
       periodoFim: body.periodoFim,
       layoutEnvioId: body.layoutEnvioId,
-      obraIds: body.obraIds,
+      clienteIds: body.clienteIds,
     });
   }
 

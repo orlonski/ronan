@@ -36,7 +36,7 @@ export default function Pendentes() {
   const lookups = useMemo(() => {
     if (!cat.data) return null;
     const v = new Map(cat.data.veiculos.map((x) => [x.id, x]));
-    const o = new Map(cat.data.obras.map((x) => [x.id, x]));
+    const o = new Map(cat.data.clientes.map((x) => [x.id, x]));
     const m = new Map(cat.data.materiais.map((x) => [x.id, x]));
     const l = new Map(cat.data.locais.map((x) => [x.id, x]));
     return { v, o, m, l };
@@ -137,7 +137,7 @@ function PendingCard({
 }) {
   const p = item.payload as Record<string, string | number | undefined>;
   const placa = lookups?.v.get(String(p.veiculoId))?.placa;
-  const obra = lookups?.o.get(String(p.obraId))?.nome;
+  const cliente = lookups?.o.get(String(p.clienteId))?.nome;
   const material = lookups?.m.get(String(p.materialId))?.nome;
   const carga = lookups?.l.get(String(p.localCargaId))?.nome;
   const descarga = lookups?.l.get(String(p.localDescargaId))?.nome;
@@ -165,7 +165,7 @@ function PendingCard({
         <View className="flex-row items-start justify-between gap-3">
           <View className="flex-1">
             <Text className="text-lg font-bold text-foreground" numberOfLines={1}>
-              {obra ?? "Obra ?"}
+              {cliente ?? "Cliente ?"}
             </Text>
             <Text
               className="mt-0.5 text-base font-medium text-muted-foreground"

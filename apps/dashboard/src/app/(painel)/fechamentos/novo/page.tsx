@@ -34,7 +34,7 @@ export default function NovoFechamentoPage() {
     }
     try {
       const result = await upload.mutateAsync({
-        empresaClienteId: empresaId,
+        empresaId: empresaId,
         periodoInicio,
         periodoFim,
         arquivo,
@@ -56,7 +56,7 @@ export default function NovoFechamentoPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Novo fechamento</h1>
           <p className="text-sm text-muted-foreground">
-            Suba a planilha (Excel, CSV ou PDF) que a empresa-cliente enviou. A IA vai inferir
+            Suba a planilha (Excel, CSV ou PDF) que a empresa enviou. A IA vai inferir
             o layout, extrair as viagens e fazer o match automático.
           </p>
         </div>
@@ -65,7 +65,7 @@ export default function NovoFechamentoPage() {
       <form onSubmit={onSubmit}>
         <Card className="space-y-5 p-6">
           <div className="space-y-2">
-            <Label>Empresa-cliente *</Label>
+            <Label>Empresa *</Label>
             <Select required value={empresaId} onChange={(e) => setEmpresaId(e.target.value)}>
               <option value="">— escolha —</option>
               {empresas.data?.filter((e) => e.ativa).map((e) => (

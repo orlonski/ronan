@@ -31,7 +31,7 @@ export type InferirResult = {
 
 export type BlocoSalvo = {
   id: string;
-  empresaClienteId: string;
+  empresaId: string;
   tipo: TipoBlocoFechamento;
   abaPreferida: string | null;
   linhaCabecalho: number | null;
@@ -94,12 +94,12 @@ export class LayoutImportService {
   async listarBlocos(empresaId: string): Promise<BlocoSalvo[]> {
     await this.ensureEmpresaImporta(empresaId);
     const blocos = await this.prisma.layoutImportBloco.findMany({
-      where: { empresaClienteId: empresaId },
+      where: { empresaId: empresaId },
       orderBy: { tipo: "asc" },
     });
     return blocos.map((b) => ({
       id: b.id,
-      empresaClienteId: b.empresaClienteId,
+      empresaId: b.empresaId,
       tipo: b.tipo,
       abaPreferida: b.abaPreferida,
       linhaCabecalho: b.linhaCabecalho,
@@ -116,12 +116,12 @@ export class LayoutImportService {
   ): Promise<BlocoSalvo | null> {
     await this.ensureEmpresaImporta(empresaId);
     const b = await this.prisma.layoutImportBloco.findUnique({
-      where: { empresaClienteId_tipo: { empresaClienteId: empresaId, tipo } },
+      where: { empresaId_tipo: { empresaId: empresaId, tipo } },
     });
     if (!b) return null;
     return {
       id: b.id,
-      empresaClienteId: b.empresaClienteId,
+      empresaId: b.empresaId,
       tipo: b.tipo,
       abaPreferida: b.abaPreferida,
       linhaCabecalho: b.linhaCabecalho,
@@ -164,8 +164,8 @@ export class LayoutImportService {
       ativo: true,
     };
     return this.prisma.layoutImportBloco.upsert({
-      where: { empresaClienteId_tipo: { empresaClienteId: empresaId, tipo } },
-      create: { empresaClienteId: empresaId, tipo, ...data },
+      where: { empresaId_tipo: { empresaId: empresaId, tipo } },
+      create: { empresaId: empresaId, tipo, ...data },
       update: data,
     });
   }
@@ -175,7 +175,7 @@ export class LayoutImportService {
     await this.ensureEmpresaImporta(empresaId);
     await this.prisma.layoutImportBloco
       .delete({
-        where: { empresaClienteId_tipo: { empresaClienteId: empresaId, tipo } },
+        where: { empresaId_tipo: { empresaId: empresaId, tipo } },
       })
       .catch(() => {
         /* ignora se não existe */
@@ -189,7 +189,7 @@ export class LayoutImportService {
   async fechamentosRecentes(empresaId: string, take = 10) {
     await this.ensureEmpresaImporta(empresaId);
     return this.prisma.fechamento.findMany({
-      where: { empresaClienteId: empresaId },
+      where: { empresaId: empresaId },
       select: {
         id: true,
         periodoInicio: true,
@@ -209,7 +209,7 @@ export class LayoutImportService {
    * configurar layout de import não faz sentido.
    */
   private async ensureEmpresaImporta(id: string) {
-    const e = await this.prisma.empresaCliente.findUnique({
+    const e = await this.prisma.empresa.findUnique({
       where: { id },
       select: { id: true, papel: true, ativa: true },
     });

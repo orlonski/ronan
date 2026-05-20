@@ -6,7 +6,7 @@ export * from "./abastecimento";
 export * from "./cpf";
 export * from "./telefone";
 export * from "./local";
-export * from "./obra";
+export * from "./cliente";
 export * from "./empresa";
 export * from "./motorista";
 export * from "./motorista-documento";

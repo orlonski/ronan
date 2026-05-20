@@ -30,7 +30,7 @@ export class LocaisMotoristaService {
       cep?: string;
       pontoReferencia?: string;
       tipo: "CARGA" | "DESCARGA" | "AMBOS";
-      obraId?: string;
+      clienteId?: string;
       lat?: number;
       lng?: number;
       forcarCriacao?: boolean;
@@ -57,7 +57,7 @@ export class LocaisMotoristaService {
         cep: input.cep,
         pontoReferencia: input.pontoReferencia,
         tipo: input.tipo,
-        obraId: input.obraId,
+        clienteId: input.clienteId,
         lat: input.lat,
         lng: input.lng,
         criadoPorMotoristaId: motoristaId,
@@ -73,7 +73,7 @@ export class LocaisMotoristaService {
         uf: true,
         pontoReferencia: true,
         tipo: true,
-        obraId: true,
+        clienteId: true,
         lat: true,
         lng: true,
         nivelConfianca: true,

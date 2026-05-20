@@ -20,7 +20,7 @@ const ConfigSchema = z
     incluiCabecalhoEmpresa: z.boolean().optional(),
     formatoData: z.enum(["DD/MM/YYYY", "YYYY-MM-DD", "DD/MM/YY"]).optional(),
     separadorDecimal: z.enum(["vírgula", "ponto"]).optional(),
-    agruparPor: z.enum(["data", "obra", "placa", "nenhum"]).optional(),
+    agruparPor: z.enum(["data", "cliente", "placa", "nenhum"]).optional(),
     totaisRodape: z.boolean().optional(),
   })
   .optional();

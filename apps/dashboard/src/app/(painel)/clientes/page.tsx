@@ -22,25 +22,25 @@ import {
 } from "@/lib/client-api";
 
 type Empresa = { id: string; nome: string };
-type Obra = {
+type Cliente = {
   id: string; nome: string; ativa: boolean;
-  empresaCliente: Empresa; empresaClienteId: string;
+  empresa: Empresa; empresaId: string;
 };
-const PATH = "/admin/obras";
+const PATH = "/admin/clientes";
 const EMPRESAS_PATH = "/admin/empresas";
 
-export default function ObrasPage() {
+export default function ClientesPage() {
   const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
-  const list = usePaginatedList<Obra>(PATH, tableState);
+  const list = usePaginatedList<Cliente>(PATH, tableState);
   const empresas = useResourceOptions<Empresa>(EMPRESAS_PATH);
-  const update = useUpdateResource<Partial<Obra>, Obra>(PATH, PATH);
+  const update = useUpdateResource<Partial<Cliente>, Cliente>(PATH, PATH);
 
   const empresaOptions = useMemo(
     () => (empresas.data ?? []).map((e) => ({ value: e.id, label: e.nome })),
     [empresas.data],
   );
 
-  const columns = useMemo<ColumnDef<Obra>[]>(
+  const columns = useMemo<ColumnDef<Cliente>[]>(
     () => [
       {
         id: "nome",
@@ -50,9 +50,9 @@ export default function ObrasPage() {
       },
       {
         id: "empresa",
-        accessorKey: "empresaCliente.nome",
+        accessorKey: "empresa.nome",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Empresa" />,
-        cell: ({ row }) => row.original.empresaCliente.nome,
+        cell: ({ row }) => row.original.empresa.nome,
       },
       {
         id: "ativa",
@@ -75,15 +75,15 @@ export default function ObrasPage() {
         header: () => <span className="block text-center">Ações</span>,
         cell: ({ row }) => (
           <div className="flex justify-center">
-            <Link href={`/obras/${row.original.id}`}>
+            <Link href={`/clientes/${row.original.id}`}>
               <Button variant="ghost" size="icon" title="Editar">
                 <Pencil className="h-4 w-4" />
               </Button>
             </Link>
             <ExcluirButton
-              path="/admin/obras"
+              path="/admin/clientes"
               id={row.original.id}
-              nomeRecurso={`a obra "${row.original.nome}"`}
+              nomeRecurso={`o cliente "${row.original.nome}"`}
             />
           </div>
         ),
@@ -96,19 +96,19 @@ export default function ObrasPage() {
     <div className="space-y-6">
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Obras</h1>
-          <p className="text-sm text-muted-foreground">Locais de obra por empresa-cliente.</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Clientes</h1>
+          <p className="text-sm text-muted-foreground">Clientes por empresa.</p>
         </div>
-        <Link href="/obras/novo">
+        <Link href="/clientes/novo">
           <Button disabled={!empresas.data?.length} className="w-full md:w-auto">
-            <Plus className="h-4 w-4" /> Nova obra
+            <Plus className="h-4 w-4" /> Novo cliente
           </Button>
         </Link>
       </header>
 
       {empresas.data?.length === 0 && (
         <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-          Cadastre uma empresa-cliente antes de criar obras.
+          Cadastre uma empresa antes de criar clientes.
         </p>
       )}
 
@@ -127,8 +127,8 @@ export default function ObrasPage() {
               <>
                 <ToolbarFilterSelect
                   label="Empresa"
-                  value={tableState.filters.empresaClienteId}
-                  onChange={(v) => tableState.setFilter("empresaClienteId", v)}
+                  value={tableState.filters.empresaId}
+                  onChange={(v) => tableState.setFilter("empresaId", v)}
                   options={empresaOptions}
                 />
                 <ToolbarFilterSelect
@@ -136,38 +136,38 @@ export default function ObrasPage() {
                   value={tableState.filters.ativa}
                   onChange={(v) => tableState.setFilter("ativa", v)}
                   options={[
-                    { value: "true", label: "Ativas" },
-                    { value: "false", label: "Inativas" },
+                    { value: "true", label: "Ativos" },
+                    { value: "false", label: "Inativos" },
                   ]}
                 />
               </>
             }
           />
         }
-        emptyMessage="Nenhuma obra cadastrada."
-        renderMobileCard={(o) => (
+        emptyMessage="Nenhum cliente cadastrado."
+        renderMobileCard={(c) => (
           <Card className="space-y-2 p-4">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{o.nome}</p>
-                <p className="truncate text-xs text-muted-foreground">{o.empresaCliente.nome}</p>
+                <p className="truncate font-medium">{c.nome}</p>
+                <p className="truncate text-xs text-muted-foreground">{c.empresa.nome}</p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <StatusToggle
-                  active={o.ativa}
-                  onChange={(next) => update.mutate({ id: o.id, body: { ativa: next } })}
+                  active={c.ativa}
+                  onChange={(next) => update.mutate({ id: c.id, body: { ativa: next } })}
                   size="sm"
                   label
                 />
-                <Link href={`/obras/${o.id}`}>
+                <Link href={`/clientes/${c.id}`}>
                   <Button variant="ghost" size="icon" title="Editar">
                     <Pencil className="h-4 w-4" />
                   </Button>
                 </Link>
                 <ExcluirButton
-                  path="/admin/obras"
-                  id={o.id}
-                  nomeRecurso={`a obra "${o.nome}"`}
+                  path="/admin/clientes"
+                  id={c.id}
+                  nomeRecurso={`o cliente "${c.nome}"`}
                 />
               </div>
             </div>

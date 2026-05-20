@@ -20,7 +20,7 @@ const FIELD_LABELS: Record<string, string> = {
   // viagem / pedágio / abast
   clientId: "ID do app",
   veiculoId: "Placa",
-  obraId: "Obra",
+  clienteId: "Cliente",
   materialId: "Material",
   data: "Data",
   toneladas: "Toneladas",

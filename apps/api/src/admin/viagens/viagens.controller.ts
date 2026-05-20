@@ -11,7 +11,7 @@ import { ViagensAdminService } from "./viagens.service";
 const ListViagensQuery = paginationQuerySchema.extend({
   motoristaId: z.string().uuid().optional(),
   veiculoId: z.string().uuid().optional(),
-  obraId: z.string().uuid().optional(),
+  clienteId: z.string().uuid().optional(),
   status: z
     .enum(["RASCUNHO_OFFLINE", "ENVIADA", "EM_CONFERENCIA", "DIVERGENTE", "AJUSTADA", "OK"])
     .optional(),

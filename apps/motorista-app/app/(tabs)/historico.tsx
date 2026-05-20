@@ -543,7 +543,7 @@ function ViagemCard({ v }: { v: Viagem }) {
       <View className="flex-row items-start justify-between gap-3">
         <View className="flex-1">
           <Text className="text-lg font-bold text-foreground" numberOfLines={1}>
-            {v.obra.nome}
+            {v.cliente.nome}
           </Text>
           <Text
             className="mt-0.5 text-base font-medium text-muted-foreground"

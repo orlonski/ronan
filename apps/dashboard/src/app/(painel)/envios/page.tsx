@@ -57,10 +57,10 @@ export default function EnviosPage() {
     () => [
       {
         id: "empresa",
-        accessorKey: "empresaCliente.nome",
+        accessorKey: "empresa.nome",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Empresa" />,
         cell: ({ row }) => (
-          <span className="font-medium">{row.original.empresaCliente?.nome ?? "—"}</span>
+          <span className="font-medium">{row.original.empresa?.nome ?? "—"}</span>
         ),
       },
       {
@@ -157,7 +157,7 @@ export default function EnviosPage() {
                   <ExcluirButton
                     path="/admin/envios"
                     id={e.id}
-                    nomeRecurso={`o envio de ${e.empresaCliente?.nome ?? "—"}`}
+                    nomeRecurso={`o envio de ${e.empresa?.nome ?? "—"}`}
                     invalidateKeys={[["/admin/envios"]]}
                   />
                 </>
@@ -176,7 +176,7 @@ export default function EnviosPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Envios</h1>
           <p className="text-sm text-muted-foreground">
-            Planilhas geradas pra mandar pras empresas-cliente que recebem o fechamento.
+            Planilhas geradas pra mandar pras empresas que recebem o fechamento.
           </p>
         </div>
         <Link href="/envios/novo">
@@ -201,8 +201,8 @@ export default function EnviosPage() {
               <>
                 <ToolbarFilterSelect
                   label="Empresa"
-                  value={tableState.filters.empresaClienteId}
-                  onChange={(v) => tableState.setFilter("empresaClienteId", v)}
+                  value={tableState.filters.empresaId}
+                  onChange={(v) => tableState.setFilter("empresaId", v)}
                   options={empresaOptions}
                 />
                 <ToolbarFilterSelect
@@ -226,7 +226,7 @@ export default function EnviosPage() {
             <Card className="space-y-2 p-4">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{e.empresaCliente?.nome ?? "—"}</p>
+                  <p className="truncate font-medium">{e.empresa?.nome ?? "—"}</p>
                   <p className="text-xs text-muted-foreground">
                     {fmtBR(periodoInicio)} → {fmtBR(periodoFim)}
                   </p>
@@ -279,7 +279,7 @@ export default function EnviosPage() {
                     <ExcluirButton
                       path="/admin/envios"
                       id={e.id}
-                      nomeRecurso={`o envio de ${e.empresaCliente?.nome ?? "—"}`}
+                      nomeRecurso={`o envio de ${e.empresa?.nome ?? "—"}`}
                       invalidateKeys={[["/admin/envios"]]}
                     />
                   </>

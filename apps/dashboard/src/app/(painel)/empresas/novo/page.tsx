@@ -8,7 +8,7 @@ export default function NovaEmpresaPage() {
     <div className="space-y-6">
       <FormPageHeader
         title="Nova empresa"
-        description="Empresa-cliente pra quem prestamos serviço."
+        description="Empresa pra quem prestamos serviço."
         backHref="/empresas"
       />
       <EmpresaForm />

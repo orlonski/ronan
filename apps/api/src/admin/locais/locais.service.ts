@@ -5,7 +5,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 
 type ListLocaisParams = PaginationQuery & {
-  obraId?: string;
+  clienteId?: string;
   tipo?: TipoLocal;
   ativo?: "true" | "false";
   nivelConfianca?: NivelConfiancaLocal;
@@ -21,7 +21,7 @@ export class LocaisService {
 
   list(params: ListLocaisParams) {
     const where: Prisma.LocalWhereInput = {};
-    if (params.obraId) where.obraId = params.obraId;
+    if (params.clienteId) where.clienteId = params.clienteId;
     if (params.tipo) where.tipo = params.tipo;
     if (params.ativo === "true") where.ativo = true;
     else if (params.ativo === "false") where.ativo = false;
@@ -51,7 +51,7 @@ export class LocaisService {
       },
       defaultSort: { field: "nome", order: "asc" },
       include: {
-        obra: { select: { id: true, nome: true } },
+        cliente: { select: { id: true, nome: true } },
         criadoPorMotorista: { select: { id: true, nome: true } },
       },
     });
@@ -60,7 +60,7 @@ export class LocaisService {
   findOne(id: string) {
     return this.prisma.local.findUniqueOrThrow({
       where: { id },
-      include: { obra: { select: { id: true, nome: true } } },
+      include: { cliente: { select: { id: true, nome: true } } },
     });
   }
 

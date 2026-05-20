@@ -13,7 +13,7 @@ export type ConfigLayout = {
   incluiCabecalhoEmpresa?: boolean;
   formatoData?: "DD/MM/YYYY" | "YYYY-MM-DD" | "DD/MM/YY";
   separadorDecimal?: "vírgula" | "ponto";
-  agruparPor?: "data" | "obra" | "placa" | "nenhum";
+  agruparPor?: "data" | "cliente" | "placa" | "nenhum";
   totaisRodape?: boolean;
 };
 
@@ -42,7 +42,7 @@ export class LayoutEnvioService {
     config?: ConfigLayout;
     padrao?: boolean;
   }) {
-    const empresa = await this.prisma.empresaCliente.findUnique({
+    const empresa = await this.prisma.empresa.findUnique({
       where: { id: input.empresaId },
     });
     if (!empresa) throw new NotFoundException("Empresa não encontrada");

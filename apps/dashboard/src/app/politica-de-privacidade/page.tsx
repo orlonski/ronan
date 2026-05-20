@@ -91,7 +91,7 @@ export default function PoliticaPrivacidadePage() {
             apenas às próprias viagens e pedágios.
           </li>
           <li>
-            <strong>Empresa-cliente contratante:</strong> acesso indireto, apenas
+            <strong>Empresa contratante:</strong> acesso indireto, apenas
             aos dados consolidados em planilha mensal exportada pela
             transportadora (toneladas, datas, tickets, quilometragem).
           </li>

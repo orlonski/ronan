@@ -37,7 +37,7 @@ const tipoOptions = [
 export default function LocalNovo() {
   const params = useLocalSearchParams<{
     side?: "carga" | "descarga";
-    obraId?: string;
+    clienteId?: string;
   }>();
   const side = params.side === "descarga" ? "descarga" : "carga";
   const tipoSugerido: Tipo =
@@ -139,7 +139,7 @@ export default function LocalNovo() {
       cep: cepDigits.length === 8 ? cepDigits : undefined,
       pontoReferencia: pontoReferencia.trim() || undefined,
       tipo,
-      obraId: params.obraId && params.obraId.length > 0 ? params.obraId : undefined,
+      clienteId: params.clienteId && params.clienteId.length > 0 ? params.clienteId : undefined,
       lat: lat ?? undefined,
       lng: lng ?? undefined,
     };
@@ -214,7 +214,7 @@ export default function LocalNovo() {
       uf: s.uf,
       pontoReferencia: null,
       tipo: s.tipo,
-      obraId: null,
+      clienteId: null,
       lat: s.lat,
       lng: s.lng,
     };

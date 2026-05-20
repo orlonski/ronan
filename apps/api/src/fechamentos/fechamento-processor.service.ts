@@ -32,7 +32,7 @@ type LinhaExtraida = {
   km: number | null;
   toneladas: number | null;
   valor: number | null;
-  obraTexto: string | null;
+  clienteTexto: string | null;
   materialTexto: string | null;
   /**
    * Valores de campos custom (não-sistema) extraídos pela tabela CampoLayout.
@@ -52,7 +52,7 @@ const SLUGS_SISTEMA_PROCESSADOS = new Set([
   "toneladas",
   "valor_total",
   "valor_unitario",
-  "obra",
+  "cliente",
   "material",
   "fornecedor",
   "unidade",
@@ -79,7 +79,7 @@ export class FechamentoProcessorService {
   ) {
     const fechamento = await this.prisma.fechamento.findUnique({
       where: { id: fechamentoId },
-      include: { empresaCliente: true },
+      include: { empresa: true },
     });
     if (!fechamento) throw new Error("Fechamento não encontrado");
     if (!fechamento.arquivoOriginalKey) throw new Error("Sem arquivo original");
@@ -100,7 +100,7 @@ export class FechamentoProcessorService {
 
       // 2. obtém ou infere layout
       const { layout, desatualizado } = await this.obterLayoutComStatus(
-        fechamento.empresaCliente.id,
+        fechamento.empresa.id,
         parsed,
       );
       if (!layout) {
@@ -156,7 +156,7 @@ export class FechamentoProcessorService {
       // (declarado fora do if pra reusar nas órfãs IA)
       const viagensPeriodo = await this.prisma.viagem.findMany({
         where: {
-          obra: { empresaClienteId: fechamento.empresaCliente.id },
+          cliente: { empresaId: fechamento.empresa.id },
           data: {
             gte: new Date(fechamento.periodoInicio.getTime() - 7 * 24 * 3600 * 1000),
             lte: new Date(fechamento.periodoFim.getTime() + 7 * 24 * 3600 * 1000),
@@ -169,8 +169,8 @@ export class FechamentoProcessorService {
       if (!tiposFiltro || tiposFiltro.includes("VIAGEM")) {
 
       // Config de match per-empresa (V3): chave + tolerâncias
-      const empresaConfig = await this.prisma.empresaCliente.findUnique({
-        where: { id: fechamento.empresaCliente.id },
+      const empresaConfig = await this.prisma.empresa.findUnique({
+        where: { id: fechamento.empresa.id },
         select: { chaveMatch: true, toleranciaKmPct: true, toleranciaTonPct: true },
       });
       const camposChave = parseChaveMatch(empresaConfig?.chaveMatch);
@@ -232,7 +232,7 @@ export class FechamentoProcessorService {
             km: linha.km !== null ? new Prisma.Decimal(linha.km) : null,
             toneladas: linha.toneladas !== null ? new Prisma.Decimal(linha.toneladas) : null,
             valor: linha.valor !== null ? new Prisma.Decimal(linha.valor) : null,
-            obraTexto: linha.obraTexto,
+            clienteTexto: linha.clienteTexto,
             materialTexto: linha.materialTexto,
             status,
             viagemMatchId,
@@ -327,7 +327,7 @@ export class FechamentoProcessorService {
    * com Pedagio (lançado pelo motorista no app) por placa+data+pracaPedagio.
    */
   private async processarBlocoPedagios(
-    fechamento: { id: string; periodoInicio: Date; periodoFim: Date; empresaCliente: { id: string } },
+    fechamento: { id: string; periodoInicio: Date; periodoFim: Date; empresa: { id: string } },
     parsed: ParsedFile,
     stats: {
       pedagios: { total: number; match: number; divergencia: number };
@@ -336,8 +336,8 @@ export class FechamentoProcessorService {
   ) {
     const bloco = await this.prisma.layoutImportBloco.findUnique({
       where: {
-        empresaClienteId_tipo: {
-          empresaClienteId: fechamento.empresaCliente.id,
+        empresaId_tipo: {
+          empresaId: fechamento.empresa.id,
           tipo: "PEDAGIO",
         },
       },
@@ -353,7 +353,7 @@ export class FechamentoProcessorService {
       return;
     }
 
-    // Pré-fetch pedágios da empresa no período (via veiculo→viagem→obra)
+    // Pré-fetch pedágios da empresa no período (via veiculo→viagem→cliente)
     const pedagiosPeriodo = await this.prisma.pedagio.findMany({
       where: {
         data: {
@@ -449,7 +449,7 @@ export class FechamentoProcessorService {
    * match com Abastecimento por placa+data (mesmo dia).
    */
   private async processarBlocoCombustivel(
-    fechamento: { id: string; periodoInicio: Date; periodoFim: Date; empresaCliente: { id: string } },
+    fechamento: { id: string; periodoInicio: Date; periodoFim: Date; empresa: { id: string } },
     parsed: ParsedFile,
     stats: {
       combustivel: { total: number; match: number; divergencia: number };
@@ -458,8 +458,8 @@ export class FechamentoProcessorService {
   ) {
     const bloco = await this.prisma.layoutImportBloco.findUnique({
       where: {
-        empresaClienteId_tipo: {
-          empresaClienteId: fechamento.empresaCliente.id,
+        empresaId_tipo: {
+          empresaId: fechamento.empresa.id,
           tipo: "COMBUSTIVEL",
         },
       },
@@ -570,7 +570,7 @@ export class FechamentoProcessorService {
   ): Promise<{ layout: LayoutInferenceResult | null; desatualizado: boolean }> {
     // Prioridade 1: bloco VIAGEM cadastrado na nova arquitetura
     const blocoViagem = await this.prisma.layoutImportBloco.findUnique({
-      where: { empresaClienteId_tipo: { empresaClienteId: empresaId, tipo: "VIAGEM" } },
+      where: { empresaId_tipo: { empresaId: empresaId, tipo: "VIAGEM" } },
     });
     if (blocoViagem && blocoViagem.ativo) {
       const cached = blocoToLayout(blocoViagem);
@@ -578,7 +578,7 @@ export class FechamentoProcessorService {
       return { layout: cached, desatualizado };
     }
     // Fallback: layoutImport legado (compat com empresas antes da migração)
-    const empresa = await this.prisma.empresaCliente.findUnique({ where: { id: empresaId } });
+    const empresa = await this.prisma.empresa.findUnique({ where: { id: empresaId } });
     if (empresa?.layoutImport) {
       const cached = empresa.layoutImport as unknown as LayoutInferenceResult;
       const desatualizado = !layoutBateNaPlanilha(cached, parsed);
@@ -589,7 +589,7 @@ export class FechamentoProcessorService {
     }
     const inferred = await this.ia.inferirLayout(amostraParaIa(parsed));
     if (inferred) {
-      await this.prisma.empresaCliente.update({
+      await this.prisma.empresa.update({
         where: { id: empresaId },
         data: { layoutImport: inferred as unknown as Prisma.InputJsonValue },
       });
@@ -688,7 +688,7 @@ export class FechamentoProcessorService {
       const km = normalizarNumeroBR(get("km"));
       const toneladas = normalizarNumeroBR(get("toneladas"));
       const valor = normalizarNumeroBR(get("valor_total"));
-      const obraTexto = get("obra") as string | null;
+      const clienteTexto = get("cliente") as string | null;
       const materialTexto = get("material") as string | null;
 
       // Campos custom (não-sistema): extrai o valor cru e guarda em extras
@@ -714,7 +714,7 @@ export class FechamentoProcessorService {
         km,
         toneladas,
         valor,
-        obraTexto: obraTexto ? String(obraTexto) : null,
+        clienteTexto: clienteTexto ? String(clienteTexto) : null,
         materialTexto: materialTexto ? String(materialTexto) : null,
         extras,
       });

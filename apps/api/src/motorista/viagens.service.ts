@@ -12,7 +12,7 @@ import { ValidacaoLocalService } from "./validacao-local.service";
 
 const VIAGEM_INCLUDE = {
   veiculo: { select: { id: true, placa: true, modelo: true } },
-  obra: { select: { id: true, nome: true } },
+  cliente: { select: { id: true, nome: true } },
   material: { select: { id: true, nome: true } },
   localCarga: { select: { id: true, nome: true, cidade: true, uf: true } },
   localDescarga: { select: { id: true, nome: true, cidade: true, uf: true } },
@@ -21,11 +21,11 @@ const VIAGEM_INCLUDE = {
 
 const VIAGEM_DETALHE_INCLUDE = {
   veiculo: { select: { id: true, placa: true, modelo: true } },
-  obra: {
+  cliente: {
     select: {
       id: true,
       nome: true,
-      empresaCliente: { select: { id: true, nome: true } },
+      empresa: { select: { id: true, nome: true } },
     },
   },
   material: { select: { id: true, nome: true } },
@@ -213,17 +213,17 @@ export class ViagensMotoristaService {
       });
     }
 
-    // Ticket é único por empresa-cliente (regra de negócio).
-    const obra = await this.prisma.obra.findUnique({
-      where: { id: input.obraId },
-      select: { empresaClienteId: true },
+    // Ticket é único por empresa (regra de negócio).
+    const cliente = await this.prisma.cliente.findUnique({
+      where: { id: input.clienteId },
+      select: { empresaId: true },
     });
-    if (!obra) throw new NotFoundException("Obra não encontrada");
+    if (!cliente) throw new NotFoundException("Cliente não encontrado");
 
     const ticketDuplicado = await this.prisma.viagem.findFirst({
       where: {
         ticket: input.ticket,
-        obra: { empresaClienteId: obra.empresaClienteId },
+        cliente: { empresaId: cliente.empresaId },
       },
       select: { id: true },
     });
@@ -239,7 +239,7 @@ export class ViagensMotoristaService {
         clientId,
         motoristaId,
         veiculoId: rest.veiculoId,
-        obraId: rest.obraId,
+        clienteId: rest.clienteId,
         materialId: rest.materialId,
         data: rest.data,
         toneladas: rest.toneladas,

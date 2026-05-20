@@ -19,7 +19,7 @@ const MAX_VALOR = 999999.99;
 export const CriarViagemInput = z.object({
   clientId: z.string().uuid(),
   veiculoId: z.string().uuid(),
-  obraId: z.string().uuid(),
+  clienteId: z.string().uuid(),
   materialId: z.string().uuid(),
   data: z.coerce.date(),
   toneladas: z.number().positive().max(MAX_TONELADAS, `Toneladas acima do limite (${MAX_TONELADAS}).`),

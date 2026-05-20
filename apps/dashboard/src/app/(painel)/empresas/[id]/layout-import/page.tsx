@@ -55,7 +55,7 @@ const CAMPOS_FALLBACK: CampoLayoutDef[] = [
   ["ticket", "Ticket", 30],
   ["toneladas", "Toneladas", 40],
   ["km", "Km", 50],
-  ["obra", "Obra", 60],
+  ["cliente", "Cliente", 60],
   ["material", "Material", 70],
   ["fornecedor", "Fornecedor", 80],
   ["unidade", "Unidade", 90],
@@ -125,7 +125,7 @@ type TipoBloco = "VIAGEM" | "PEDAGIO" | "COMBUSTIVEL";
 
 type BlocoSalvo = {
   id: string;
-  empresaClienteId: string;
+  empresaId: string;
   tipo: TipoBloco;
   abaPreferida: string | null;
   linhaCabecalho: number | null;

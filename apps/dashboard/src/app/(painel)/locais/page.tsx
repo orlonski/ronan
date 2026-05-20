@@ -22,25 +22,25 @@ import {
 } from "@/lib/client-api";
 
 type Tipo = "CARGA" | "DESCARGA" | "AMBOS";
-type Obra = { id: string; nome: string };
+type Cliente = { id: string; nome: string };
 type Local = {
   id: string; nome: string; logradouro: string; numero: string | null; bairro: string | null;
   cidade: string; uf: string; cep: string | null; pontoReferencia: string | null;
-  tipo: Tipo; obraId: string | null; ativo: boolean; obra: Obra | null;
+  tipo: Tipo; clienteId: string | null; ativo: boolean; cliente: Cliente | null;
 };
 
 const PATH = "/admin/locais";
-const OBRAS_PATH = "/admin/obras";
+const CLIENTES_PATH = "/admin/clientes";
 
 export default function LocaisPage() {
   const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
   const list = usePaginatedList<Local>(PATH, tableState);
-  const obras = useResourceOptions<Obra>(OBRAS_PATH);
+  const clientes = useResourceOptions<Cliente>(CLIENTES_PATH);
   const update = useUpdateResource<Record<string, unknown>, Local>(PATH, PATH);
 
-  const obraOptions = useMemo(
-    () => (obras.data ?? []).map((o) => ({ value: o.id, label: o.nome })),
-    [obras.data],
+  const clienteOptions = useMemo(
+    () => (clientes.data ?? []).map((o) => ({ value: o.id, label: o.nome })),
+    [clientes.data],
   );
 
   const columns = useMemo<ColumnDef<Local>[]>(
@@ -74,10 +74,10 @@ export default function LocaisPage() {
         ),
       },
       {
-        id: "obra",
+        id: "cliente",
         enableSorting: false,
-        header: "Obra",
-        cell: ({ row }) => row.original.obra?.nome ?? "—",
+        header: "Cliente",
+        cell: ({ row }) => row.original.cliente?.nome ?? "—",
       },
       {
         id: "tipo",
@@ -162,10 +162,10 @@ export default function LocaisPage() {
                   ]}
                 />
                 <ToolbarFilterSelect
-                  label="Obra"
-                  value={tableState.filters.obraId}
-                  onChange={(v) => tableState.setFilter("obraId", v)}
-                  options={obraOptions}
+                  label="Cliente"
+                  value={tableState.filters.clienteId}
+                  onChange={(v) => tableState.setFilter("clienteId", v)}
+                  options={clienteOptions}
                 />
                 <ToolbarFilterSelect
                   label="Status"
@@ -219,10 +219,10 @@ export default function LocaisPage() {
                 <span className="text-muted-foreground">Tipo: </span>
                 {l.tipo}
               </span>
-              {l.obra && (
+              {l.cliente && (
                 <span>
-                  <span className="text-muted-foreground">Obra: </span>
-                  {l.obra.nome}
+                  <span className="text-muted-foreground">Cliente: </span>
+                  {l.cliente.nome}
                 </span>
               )}
             </div>

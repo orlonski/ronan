@@ -14,11 +14,11 @@ export class EmpresasService {
   constructor(private readonly prisma: PrismaService) {}
 
   list(params: ListEmpresasParams) {
-    const where: Prisma.EmpresaClienteWhereInput = {};
+    const where: Prisma.EmpresaWhereInput = {};
     if (params.ativa === "true") where.ativa = true;
     if (params.ativa === "false") where.ativa = false;
     if (params.papel) where.papel = params.papel;
-    return paginate(this.prisma.empresaCliente, {
+    return paginate(this.prisma.empresa, {
       params,
       where: where as Record<string, unknown>,
       searchFields: ["nome", "cnpj", "contato"],
@@ -28,37 +28,37 @@ export class EmpresasService {
   }
 
   findOne(id: string) {
-    return this.prisma.empresaCliente.findUniqueOrThrow({ where: { id } });
+    return this.prisma.empresa.findUniqueOrThrow({ where: { id } });
   }
 
   async create(data: CriarEmpresaInput) {
     if (data.cnpj) {
-      const exists = await this.prisma.empresaCliente.findUnique({ where: { cnpj: data.cnpj } });
+      const exists = await this.prisma.empresa.findUnique({ where: { cnpj: data.cnpj } });
       if (exists) throw new ConflictException("CNPJ já cadastrado");
     }
-    return this.prisma.empresaCliente.create({
-      data: data as Prisma.EmpresaClienteUncheckedCreateInput,
+    return this.prisma.empresa.create({
+      data: data as Prisma.EmpresaUncheckedCreateInput,
     });
   }
 
   async update(id: string, data: AtualizarEmpresaInput) {
     await this.ensureExists(id);
-    return this.prisma.empresaCliente.update({
+    return this.prisma.empresa.update({
       where: { id },
-      data: data as Prisma.EmpresaClienteUncheckedUpdateInput,
+      data: data as Prisma.EmpresaUncheckedUpdateInput,
     });
   }
 
   async remove(id: string) {
     await this.ensureExists(id);
-    const [obras, fechamentos, layouts, envios] = await Promise.all([
-      this.prisma.obra.count({ where: { empresaClienteId: id } }),
-      this.prisma.fechamento.count({ where: { empresaClienteId: id } }),
+    const [clientes, fechamentos, layouts, envios] = await Promise.all([
+      this.prisma.cliente.count({ where: { empresaId: id } }),
+      this.prisma.fechamento.count({ where: { empresaId: id } }),
       this.prisma.layoutEnvio.count({ where: { empresaId: id } }),
-      this.prisma.envioFechamento.count({ where: { empresaClienteId: id } }),
+      this.prisma.envioFechamento.count({ where: { empresaId: id } }),
     ]);
     const partes: string[] = [];
-    if (obras > 0) partes.push(`${obras} obra${obras === 1 ? "" : "s"}`);
+    if (clientes > 0) partes.push(`${clientes} cliente${clientes === 1 ? "" : "s"}`);
     if (fechamentos > 0)
       partes.push(`${fechamentos} fechamento${fechamentos === 1 ? "" : "s"}`);
     if (layouts > 0) partes.push(`${layouts} layout${layouts === 1 ? "" : "s"} de envio`);
@@ -69,12 +69,12 @@ export class EmpresasService {
       );
     }
     // LayoutImportBloco sai cascade via schema
-    await this.prisma.empresaCliente.delete({ where: { id } });
+    await this.prisma.empresa.delete({ where: { id } });
     return { ok: true };
   }
 
   private async ensureExists(id: string) {
-    const e = await this.prisma.empresaCliente.findUnique({ where: { id } });
+    const e = await this.prisma.empresa.findUnique({ where: { id } });
     if (!e) throw new NotFoundException("Empresa não encontrada");
     return e;
   }

@@ -19,7 +19,7 @@ import { RolesGuard } from "../../auth/guards/roles.guard";
 import { LocaisService } from "./locais.service";
 
 const ListLocaisQuery = paginationQuerySchema.extend({
-  obraId: z.string().uuid().optional(),
+  clienteId: z.string().uuid().optional(),
   tipo: z.enum(["CARGA", "DESCARGA", "AMBOS"]).optional(),
   ativo: z.enum(["true", "false"]).optional(),
   nivelConfianca: z

@@ -13,13 +13,13 @@ export function LocalNovoModal({
   open,
   onClose,
   onCreated,
-  obraId,
+  clienteId,
   tipoSugerido = "AMBOS",
 }: {
   open: boolean;
   onClose: () => void;
   onCreated: (l: Local) => void;
-  obraId?: string;
+  clienteId?: string;
   tipoSugerido?: Tipo;
 }) {
   const criar = useCriarLocal();
@@ -74,7 +74,7 @@ export function LocalNovoModal({
         cep: cep ? cep.replace(/\D/g, "") : undefined,
         pontoReferencia: pontoReferencia.trim() || undefined,
         tipo,
-        obraId,
+        clienteId,
         lat: lat ?? undefined,
         lng: lng ?? undefined,
       });

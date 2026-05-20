@@ -14,7 +14,7 @@ export function ResumoTab({ fechamento }: { fechamento: FechamentoDetalhe }) {
       <Card className="p-5">
         <h3 className="mb-3 text-base font-medium">Identificação</h3>
         <dl className="space-y-2 text-sm">
-          <Row label="Empresa" value={fechamento.empresaCliente.nome} />
+          <Row label="Empresa" value={fechamento.empresa.nome} />
           <Row
             label="Período"
             value={`${fmtBR(fechamento.periodoInicio)} → ${fmtBR(fechamento.periodoFim)}`}

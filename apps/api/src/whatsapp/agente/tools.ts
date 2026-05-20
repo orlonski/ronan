@@ -46,7 +46,7 @@ const TOOLS_MOTORISTA: AgentToolDefinition[] = [
   {
     name: "buscar_catalogo",
     description:
-      "Busca fuzzy por nome em catálogos (material, obra, local, veiculo). " +
+      "Busca fuzzy por nome em catálogos (material, cliente, local, veiculo). " +
       "Tolera typo, abreviação, acento e apelidos (admin cadastra apelidos no painel). " +
       "Retorna até 8 candidatos com `score` (0..2) e `motivo[]` (justificativa legível) " +
       "pra você escolher e justificar a escolha pro motorista. " +
@@ -59,7 +59,7 @@ const TOOLS_MOTORISTA: AgentToolDefinition[] = [
       properties: {
         tipo: {
           type: "string",
-          enum: ["material", "obra", "local", "veiculo"],
+          enum: ["material", "cliente", "local", "veiculo"],
           description: "Tipo do catálogo a buscar",
         },
         q: {
@@ -77,12 +77,12 @@ const TOOLS_MOTORISTA: AgentToolDefinition[] = [
     },
   },
   {
-    name: "inferir_obra_por_trajeto",
+    name: "inferir_cliente_por_trajeto",
     description:
       "Quando carga e descarga JÁ estão resolvidos (você tem localCargaId E localDescargaId) " +
-      "e o motorista NÃO citou a obra, chame esta tool ANTES de perguntar. Olha no histórico " +
-      "de viagens da empresa quais obras já foram atendidas por esse mesmo par origem→destino. " +
-      "Se `auto_selecionavel: true` E `candidatos[0]` for único, USE direto a obra no resumo " +
+      "e o motorista NÃO citou o cliente, chame esta tool ANTES de perguntar. Olha no histórico " +
+      "de viagens da empresa quais clientes já foram atendidos por esse mesmo par origem→destino. " +
+      "Se `auto_selecionavel: true` E `candidatos[0]` for único, USE direto o cliente no resumo " +
       "mencionando 'presumi pelo trajeto' (motorista valida no confirma). " +
       "Se vier 2-3 candidatos com `auto_selecionavel: false`, mostra opções numeradas. " +
       "Se vier lista vazia, cai no fluxo normal (perguntar o nome).",
@@ -94,7 +94,7 @@ const TOOLS_MOTORISTA: AgentToolDefinition[] = [
         materialId: {
           type: "string",
           description:
-            "Opcional. Boost pequeno se obra historicamente recebeu esse material no mesmo trajeto.",
+            "Opcional. Boost pequeno se cliente historicamente recebeu esse material no mesmo trajeto.",
         },
       },
       required: ["localCargaId", "localDescargaId"],
@@ -126,8 +126,8 @@ const TOOLS_MOTORISTA: AgentToolDefinition[] = [
     name: "perfil_motorista",
     description:
       "Retorna perfil rico do motorista pra você ter contexto sem buscar tudo: " +
-      "nome, placa default, top 5 materiais, top 10 obras, top 20 locais e top 10 trajetos " +
-      "(par carga→descarga→obra mais frequentes) dos últimos 90 dias. " +
+      "nome, placa default, top 5 materiais, top 10 clientes, top 20 locais e top 10 trajetos " +
+      "(par carga→descarga→cliente mais frequentes) dos últimos 90 dias. " +
       "Chame UMA VEZ no início se ainda não tiver chamado nesta conversa — assim " +
       "você já 'conhece o universo' desse motorista e raramente precisa buscar. " +
       "Tudo em texto humano (placas, nomes), zero IDs.",
@@ -136,7 +136,7 @@ const TOOLS_MOTORISTA: AgentToolDefinition[] = [
   {
     name: "lancar_viagem",
     description:
-      "Cria/valida uma viagem usando NOMES HUMANOS (placas, nomes de obra/material/locais), " +
+      "Cria/valida uma viagem usando NOMES HUMANOS (placas, nomes de cliente/material/locais), " +
       "não UUIDs. Você passa o que o motorista falou, o backend resolve fuzzy. " +
       "\n\n**USE EM 2 ETAPAS:**" +
       "\n1. **PRIMEIRO** chame com `dry_run: true` assim que tiver os primeiros dados (mesmo " +
@@ -144,7 +144,7 @@ const TOOLS_MOTORISTA: AgentToolDefinition[] = [
       "   Use o retorno pra conversar: oferecer opções, pedir o que falta, confirmar nomes. " +
       "\n2. **SÓ DEPOIS** do motorista confirmar (\"sim/ok/pode\") chame de novo com " +
       "   `dry_run: false` (ou omitido) pra criar de verdade." +
-      "\n\nVeículo é opcional (usa o default do motorista). Obra é opcional (se carga e " +
+      "\n\nVeículo é opcional (usa o default do motorista). Cliente é opcional (se carga e " +
       "descarga forem comuns, o backend infere). Data aceita 'hoje', 'ontem' ou ISO. " +
       "\n\nRetorno: " +
       "\n- `{ok: true, dry_run: true, viagem: {...}}` — tudo resolvido na simulação, monte " +
@@ -170,12 +170,12 @@ const TOOLS_MOTORISTA: AgentToolDefinition[] = [
         },
         descarga: {
           type: "string",
-          description: "Local de descarga (nome/cidade/obra como o motorista falou).",
+          description: "Local de descarga (nome/cidade/cliente como o motorista falou).",
         },
-        obra: {
+        cliente: {
           type: "string",
           description:
-            "Nome/código da obra (opcional — se você omitir e o trajeto for comum, " +
+            "Nome/código do cliente (opcional — se você omitir e o trajeto for comum, " +
             "backend infere; se houver dúvida, retorna ambiguidade pra você perguntar).",
         },
         veiculo: {
@@ -297,7 +297,7 @@ const TOOLS_ADMIN: AgentToolDefinition[] = [
   {
     name: "dashboard_snapshot",
     description:
-      "Retorna o snapshot atual do dashboard executivo: hoje, mês, pendências, última atividade, top motoristas/obras/materiais.",
+      "Retorna o snapshot atual do dashboard executivo: hoje, mês, pendências, última atividade, top motoristas/clientes/materiais.",
     input_schema: { type: "object", properties: {} },
   },
   {
@@ -367,7 +367,7 @@ async function executarToolInterno(
 
     case "buscar_catalogo": {
       if (ctx.identidade.tipo !== "MOTORISTA") throw new Error("tool não disponível pra esse perfil");
-      const tipo = input.tipo as "material" | "obra" | "local" | "veiculo";
+      const tipo = input.tipo as "material" | "cliente" | "local" | "veiculo";
       const q = String(input.q ?? "");
       const ancora = input.ancora_local_id ? String(input.ancora_local_id) : undefined;
       return ctx.motorista.buscarCatalogo(ctx.identidade.motoristaId, tipo, q, ancora);
@@ -380,7 +380,7 @@ async function executarToolInterno(
       return ctx.motorista.locaisRecentes(ctx.identidade.motoristaId, tipoUso, dias);
     }
 
-    case "inferir_obra_por_trajeto": {
+    case "inferir_cliente_por_trajeto": {
       if (ctx.identidade.tipo !== "MOTORISTA")
         throw new Error("tool não disponível pra esse perfil");
       const localCargaId = String(input.localCargaId ?? "");
@@ -391,7 +391,7 @@ async function executarToolInterno(
         );
       }
       const materialId = input.materialId ? String(input.materialId) : undefined;
-      return ctx.motorista.inferirObraPorTrajeto(
+      return ctx.motorista.inferirClientePorTrajeto(
         ctx.identidade.motoristaId,
         localCargaId,
         localDescargaId,
@@ -412,7 +412,7 @@ async function executarToolInterno(
         ctx.identidade.motoristaId,
         {
           veiculo: input.veiculo ? String(input.veiculo) : undefined,
-          obra: input.obra ? String(input.obra) : undefined,
+          cliente: input.cliente ? String(input.cliente) : undefined,
           material: input.material ? String(input.material) : undefined,
           carga: input.carga ? String(input.carga) : undefined,
           descarga: input.descarga ? String(input.descarga) : undefined,
@@ -476,7 +476,7 @@ async function executarToolInterno(
       // Cria a viagem com os IDs resolvidos
       const clientIdInput = {
         ticket: input.ticket,
-        obraId: resolucao.ids.obraId,
+        clienteId: resolucao.ids.clienteId,
         data: resolucao.ids.data.toISOString(),
       };
       const clientId = derivarClientId(ctx.identidade.motoristaId, clientIdInput);
@@ -485,7 +485,7 @@ async function executarToolInterno(
         const v = await ctx.viagens.create(ctx.identidade.motoristaId, {
           clientId,
           veiculoId: resolucao.ids.veiculoId,
-          obraId: resolucao.ids.obraId,
+          clienteId: resolucao.ids.clienteId,
           materialId: resolucao.ids.materialId,
           localCargaId: resolucao.ids.localCargaId,
           localDescargaId: resolucao.ids.localDescargaId,
@@ -618,7 +618,7 @@ async function executarToolInterno(
           km: true,
           status: true,
           material: { select: { nome: true } },
-          obra: { select: { nome: true } },
+          cliente: { select: { nome: true } },
           localCarga: { select: { nome: true } },
           localDescarga: { select: { nome: true } },
           veiculo: { select: { placa: true } },
@@ -638,7 +638,7 @@ async function executarToolInterno(
           toneladas: Number(v.toneladas),
           km: Number(v.km),
           material: v.material.nome,
-          obra: v.obra.nome,
+          cliente: v.cliente.nome,
           de: v.localCarga.nome,
           para: v.localDescarga.nome,
           placa: v.veiculo.placa,
@@ -735,8 +735,8 @@ async function executarToolInterno(
  * o backend reconhece e não duplica. UUID aleatório só como fallback.
  */
 function derivarClientId(motoristaId: string, input: Record<string, unknown>): string {
-  const chave = `${motoristaId}|${input.ticket ?? ""}|${input.obraId ?? ""}|${input.data ?? ""}`;
-  if (input.ticket && input.obraId) {
+  const chave = `${motoristaId}|${input.ticket ?? ""}|${input.clienteId ?? ""}|${input.data ?? ""}`;
+  if (input.ticket && input.clienteId) {
     const hex = createHash("sha256").update(chave).digest("hex");
     // Formato UUID v4-ish (não é v4 real, mas é único e estável)
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;

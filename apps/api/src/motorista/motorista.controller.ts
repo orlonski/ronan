@@ -33,12 +33,12 @@ export class MotoristaController {
     @Query("q") q: string,
     @Query("ancora_local_id") ancoraLocalId?: string,
   ) {
-    if (!["material", "obra", "local", "veiculo"].includes(tipo)) {
+    if (!["material", "cliente", "local", "veiculo"].includes(tipo)) {
       throw new BadRequestException("tipo inválido");
     }
     return this.service.buscarCatalogo(
       user.id,
-      tipo as "material" | "obra" | "local" | "veiculo",
+      tipo as "material" | "cliente" | "local" | "veiculo",
       q ?? "",
       ancoraLocalId,
     );

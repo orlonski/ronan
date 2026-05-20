@@ -5,10 +5,10 @@ import { enqueuePedagio, enqueueViagem } from "./sync";
 
 export type Veiculo = { id: string; placa: string; modelo: string | null };
 export type Material = { id: string; nome: string };
-export type Obra = {
+export type Cliente = {
   id: string;
   nome: string;
-  empresaCliente: { id: string; nome: string };
+  empresa: { id: string; nome: string };
 };
 export type Local = {
   id: string;
@@ -20,12 +20,12 @@ export type Local = {
   uf: string;
   pontoReferencia: string | null;
   tipo: "CARGA" | "DESCARGA" | "AMBOS";
-  obraId: string | null;
+  clienteId: string | null;
 };
 export type Catalogos = {
   veiculos: Veiculo[];
   materiais: Material[];
-  obras: Obra[];
+  clientes: Cliente[];
   locais: Local[];
 };
 
@@ -49,7 +49,7 @@ export type Viagem = {
   observacao: string | null;
   status: string;
   veiculo: Veiculo;
-  obra: { id: string; nome: string };
+  cliente: { id: string; nome: string };
   material: Material;
   localCarga: { id: string; nome: string; cidade: string; uf: string };
   localDescarga: { id: string; nome: string; cidade: string; uf: string };
@@ -212,7 +212,7 @@ export function useCriarLocal() {
       cep?: string;
       pontoReferencia?: string;
       tipo: "CARGA" | "DESCARGA" | "AMBOS";
-      obraId?: string;
+      clienteId?: string;
       lat?: number;
       lng?: number;
     }) => api.post<Local>("/m/locais", input),

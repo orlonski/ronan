@@ -62,7 +62,7 @@ type ViagemDetalhe = {
   lng: number | null;
   veiculo: { id: string; placa: string; modelo: string | null };
   motorista: { id: string; nome: string; cpf: string };
-  obra: { id: string; nome: string; empresaCliente: { nome: string } };
+  cliente: { id: string; nome: string; empresa: { nome: string } };
   material: { id: string; nome: string };
   localCarga: { nome: string; cidade: string; uf: string; logradouro: string };
   localDescarga: { nome: string; cidade: string; uf: string; logradouro: string };
@@ -74,7 +74,7 @@ type ViagemDetalhe = {
       versao: number;
       periodoInicio: string;
       periodoFim: string;
-      empresaCliente: { nome: string };
+      empresa: { nome: string };
     };
   }>;
 };
@@ -160,8 +160,8 @@ export default function ViagemDetalhePage({
             <h3 className="mb-3 text-base font-medium">Dados do lançamento</h3>
             <dl className="space-y-2 text-sm">
               <Row label="Material" value={v.material.nome} />
-              <Row label="Obra" value={v.obra.nome} />
-              <Row label="Empresa-cliente" value={v.obra.empresaCliente.nome} />
+              <Row label="Cliente" value={v.cliente.nome} />
+              <Row label="Empresa" value={v.cliente.empresa.nome} />
               <Row label="Toneladas" value={fmtNum(v.toneladas, 3)} />
               <Row label="Km rodados" value={fmtNum(v.km, 2)} />
               {v.kmReal && (
@@ -239,7 +239,7 @@ export default function ViagemDetalhePage({
                       href={`/fechamentos/${m.fechamento.id}`}
                       className="text-blue-600 hover:underline"
                     >
-                      {m.fechamento.empresaCliente.nome} — {fmtBR(m.fechamento.periodoInicio)} a{" "}
+                      {m.fechamento.empresa.nome} — {fmtBR(m.fechamento.periodoInicio)} a{" "}
                       {fmtBR(m.fechamento.periodoFim)} (v{m.fechamento.versao})
                     </Link>
                   </li>

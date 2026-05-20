@@ -11,7 +11,7 @@ import { useCatalogos, useCriarViagem, useMe } from "@/lib/queries";
 
 type FormShape = {
   veiculoId: string;
-  obraId: string;
+  clienteId: string;
   materialId: string;
   data: string;
   toneladas: string;
@@ -27,7 +27,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 const empty: FormShape = {
   veiculoId: "",
-  obraId: "",
+  clienteId: "",
   materialId: "",
   data: today(),
   toneladas: "",
@@ -60,13 +60,13 @@ export default function NovaViagemPage() {
 
   const locaisFiltrados = useMemo(() => {
     if (!cat.data) return { carga: [], descarga: [] };
-    const obraId = form.obraId || null;
-    const naObra = cat.data.locais.filter((l) => !obraId || l.obraId === obraId || l.obraId === null);
+    const clienteId = form.clienteId || null;
+    const noCliente = cat.data.locais.filter((l) => !clienteId || l.clienteId === clienteId || l.clienteId === null);
     return {
-      carga: naObra.filter((l) => l.tipo === "CARGA" || l.tipo === "AMBOS"),
-      descarga: naObra.filter((l) => l.tipo === "DESCARGA" || l.tipo === "AMBOS"),
+      carga: noCliente.filter((l) => l.tipo === "CARGA" || l.tipo === "AMBOS"),
+      descarga: noCliente.filter((l) => l.tipo === "DESCARGA" || l.tipo === "AMBOS"),
     };
-  }, [cat.data, form.obraId]);
+  }, [cat.data, form.clienteId]);
 
   function update<K extends keyof FormShape>(k: K, v: FormShape[K]) {
     setForm((f) => ({ ...f, [k]: v }));
@@ -80,7 +80,7 @@ export default function NovaViagemPage() {
       const payload = {
         clientId: crypto.randomUUID(),
         veiculoId: form.veiculoId,
-        obraId: form.obraId,
+        clienteId: form.clienteId,
         materialId: form.materialId,
         data: form.data,
         toneladas: parseFloat(form.toneladas.replace(",", ".")),
@@ -156,12 +156,12 @@ export default function NovaViagemPage() {
             <Input type="date" required value={form.data} onChange={(e) => update("data", e.target.value)} />
           </Field>
 
-          <Field label="Obra">
-            <Select required value={form.obraId} onChange={(e) => update("obraId", e.target.value)}>
+          <Field label="Cliente">
+            <Select required value={form.clienteId} onChange={(e) => update("clienteId", e.target.value)}>
               <option value="">— escolha —</option>
-              {cat.data.obras.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.nome} · {o.empresaCliente.nome}
+              {cat.data.clientes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nome} · {c.empresa.nome}
                 </option>
               ))}
             </Select>
@@ -277,7 +277,7 @@ export default function NovaViagemPage() {
       <LocalNovoModal
         open={modalLocal !== null}
         onClose={() => setModalLocal(null)}
-        obraId={form.obraId || undefined}
+        clienteId={form.clienteId || undefined}
         tipoSugerido={modalLocal === "descarga" ? "DESCARGA" : modalLocal === "carga" ? "CARGA" : "AMBOS"}
         onCreated={(novo) => {
           if (modalLocal === "carga") update("localCargaId", novo.id);

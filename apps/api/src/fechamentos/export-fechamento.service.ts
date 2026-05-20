@@ -18,14 +18,14 @@ import { paginate, type PaginationQuery } from "../common/pagination";
 import type { ColunaLayout, ConfigLayout } from "./layout-envio.service";
 
 type ListEnviosParams = PaginationQuery & {
-  empresaClienteId?: string;
+  empresaId?: string;
   status?: StatusEnvio;
 };
 
 type ViagemFull = Prisma.ViagemGetPayload<{
   include: {
     veiculo: true;
-    obra: true;
+    cliente: true;
     material: true;
     motorista: { select: { id: true; nome: true } };
     localCarga: { select: { nome: true; cidade: true; uf: true } };
@@ -53,13 +53,13 @@ export class ExportFechamentoService {
     const fechamento = await this.prisma.fechamento.findUnique({
       where: { id: input.fechamentoId },
       include: {
-        empresaCliente: { include: { layoutsEnvio: { where: { padrao: true } } } },
+        empresa: { include: { layoutsEnvio: { where: { padrao: true } } } },
         linhas: {
           include: {
             viagemMatch: {
               include: {
                 veiculo: true,
-                obra: true,
+                cliente: true,
                 material: true,
                 motorista: { select: { id: true, nome: true } },
                 localCarga: { select: { nome: true, cidade: true, uf: true } },
@@ -73,8 +73,8 @@ export class ExportFechamentoService {
     });
     if (!fechamento) throw new NotFoundException("Fechamento não encontrado");
 
-    const layoutId = input.layoutEnvioId ?? fechamento.empresaCliente.layoutsEnvio[0]?.id;
-    const layout = await this.carregarLayout(layoutId, fechamento.empresaClienteId);
+    const layoutId = input.layoutEnvioId ?? fechamento.empresa.layoutsEnvio[0]?.id;
+    const layout = await this.carregarLayout(layoutId, fechamento.empresaId);
 
     const linhasParaExport = fechamento.linhas
       .filter((l) => l.viagemMatch !== null)
@@ -84,20 +84,20 @@ export class ExportFechamentoService {
       }));
 
     const buffer = await montarXlsx({
-      empresaNome: fechamento.empresaCliente.nome,
+      empresaNome: fechamento.empresa.nome,
       periodoInicio: fechamento.periodoInicio,
       periodoFim: fechamento.periodoFim,
       linhas: linhasParaExport,
       layout,
     });
-    const nomeArquivo = `${fechamento.empresaCliente.nome.replace(/\s+/g, "_")}_${fmtDataISO(fechamento.periodoInicio)}_v${fechamento.versao}.xlsx`;
+    const nomeArquivo = `${fechamento.empresa.nome.replace(/\s+/g, "_")}_${fmtDataISO(fechamento.periodoInicio)}_v${fechamento.versao}.xlsx`;
 
     const key = await this.uploads.putFechamentoExportado(buffer, nomeArquivo, fechamento.id);
 
     const envio = await this.prisma.envioFechamento.create({
       data: {
         fechamentoId: fechamento.id,
-        empresaClienteId: fechamento.empresaClienteId,
+        empresaId: fechamento.empresaId,
         periodoInicio: fechamento.periodoInicio,
         periodoFim: fechamento.periodoFim,
         totalLinhas: linhasParaExport.length,
@@ -131,14 +131,14 @@ export class ExportFechamentoService {
    */
   async gerarStandalone(input: {
     usuarioId: string;
-    empresaClienteId: string;
+    empresaId: string;
     periodoInicio: string;
     periodoFim: string;
     layoutEnvioId?: string;
-    obraIds?: string[];
+    clienteIds?: string[];
   }) {
-    const empresa = await this.prisma.empresaCliente.findUnique({
-      where: { id: input.empresaClienteId },
+    const empresa = await this.prisma.empresa.findUnique({
+      where: { id: input.empresaId },
       include: { layoutsEnvio: { where: { padrao: true } } },
     });
     if (!empresa) throw new NotFoundException("Empresa não encontrada");
@@ -152,19 +152,19 @@ export class ExportFechamentoService {
     const layoutId = input.layoutEnvioId ?? empresa.layoutsEnvio[0]?.id;
     const layout = await this.carregarLayout(layoutId, empresa.id);
 
-    const filtroObra =
-      input.obraIds && input.obraIds.length > 0
-        ? { empresaClienteId: empresa.id, id: { in: input.obraIds } }
-        : { empresaClienteId: empresa.id };
+    const filtroCliente =
+      input.clienteIds && input.clienteIds.length > 0
+        ? { empresaId: empresa.id, id: { in: input.clienteIds } }
+        : { empresaId: empresa.id };
     const viagens = await this.prisma.viagem.findMany({
       where: {
-        obra: filtroObra,
+        cliente: filtroCliente,
         data: { gte: periodoInicio, lte: periodoFim },
         status: { in: ["ENVIADA", "OK", "AJUSTADA"] },
       },
       include: {
         veiculo: true,
-        obra: true,
+        cliente: true,
         material: true,
         motorista: { select: { id: true, nome: true } },
         localCarga: { select: { nome: true, cidade: true, uf: true } },
@@ -175,8 +175,8 @@ export class ExportFechamentoService {
 
     if (viagens.length === 0) {
       const sufixo =
-        input.obraIds && input.obraIds.length > 0
-          ? ` nas ${input.obraIds.length} obra(s) selecionada(s)`
+        input.clienteIds && input.clienteIds.length > 0
+          ? ` nos ${input.clienteIds.length} cliente(s) selecionado(s)`
           : "";
       throw new BadRequestException(
         `Nenhuma viagem encontrada pra ${empresa.nome}${sufixo} entre ${input.periodoInicio} e ${input.periodoFim}.`,
@@ -209,7 +209,7 @@ export class ExportFechamentoService {
     const envio = await this.prisma.envioFechamento.create({
       data: {
         fechamentoId: null,
-        empresaClienteId: empresa.id,
+        empresaId: empresa.id,
         periodoInicio,
         periodoFim,
         totalLinhas: linhasParaExport.length,
@@ -227,7 +227,7 @@ export class ExportFechamentoService {
       entidadeId: envio.id,
       acao: AcaoAuditoria.EXPORTAR,
       metadata: {
-        empresaCliente: empresa.nome,
+        empresa: empresa.nome,
         periodo: `${input.periodoInicio} a ${input.periodoFim}`,
         totalLinhas: linhasParaExport.length,
         layout: layout.nome,
@@ -239,23 +239,23 @@ export class ExportFechamentoService {
 
   listar(params: ListEnviosParams) {
     const where: Prisma.EnvioFechamentoWhereInput = {};
-    if (params.empresaClienteId) where.empresaClienteId = params.empresaClienteId;
+    if (params.empresaId) where.empresaId = params.empresaId;
     if (params.status) where.status = params.status;
 
     return paginate(this.prisma.envioFechamento, {
       params,
       where: where as Record<string, unknown>,
-      searchFields: ["arquivoNome", "canalEnvio", "empresaCliente.nome"],
+      searchFields: ["arquivoNome", "canalEnvio", "empresa.nome"],
       sortable: {
         geradoEm: "geradoEm",
         marcadoEnviadoEm: "marcadoEnviadoEm",
         status: "status",
-        empresa: "empresaCliente.nome",
+        empresa: "empresa.nome",
         arquivoNome: "arquivoNome",
       },
       defaultSort: { field: "geradoEm", order: "desc" },
       include: {
-        empresaCliente: { select: { id: true, nome: true } },
+        empresa: { select: { id: true, nome: true } },
         fechamento: {
           select: { id: true, versao: true, periodoInicio: true, periodoFim: true },
         },
@@ -447,8 +447,8 @@ function valorParaColuna(
       return viagem.motorista.nome;
     case "ticket":
       return viagem.ticket;
-    case "obra":
-      return viagem.obra.nome;
+    case "cliente":
+      return viagem.cliente.nome;
     case "material":
       return viagem.material.nome;
     case "toneladas":
@@ -483,7 +483,7 @@ function sugerirLargura(c: ColunaLayout): number {
   if (c.campo === "data") return 12;
   if (c.campo === "placa") return 12;
   if (c.campo === "ticket") return 14;
-  if (c.campo === "obra" || c.campo === "local_carga" || c.campo === "local_descarga") return 30;
+  if (c.campo === "cliente" || c.campo === "local_carga" || c.campo === "local_descarga") return 30;
   if (c.campo === "motorista") return 20;
   if (c.campo === "material") return 24;
   if (c.campo === "toneladas" || c.campo === "km") return 11;
