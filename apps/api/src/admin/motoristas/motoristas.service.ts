@@ -43,6 +43,10 @@ const SAFE_SELECT = {
   ativo: true,
   ultimoLoginEm: true,
   expoPushToken: true,
+  podeLancarViagem: true,
+  podeIniciarViagem: true,
+  podeLancarPedagio: true,
+  podeLancarAbastecimento: true,
   criadoEm: true,
 } as const;
 
@@ -182,6 +186,30 @@ export class MotoristasService {
       return tx.motorista.update({ where: { id }, data: updateData, select: SAFE_SELECT });
     });
     return this.flatten(updated);
+  }
+
+  async atualizarAcessos(
+    id: string,
+    input: {
+      podeLancarViagem?: boolean;
+      podeIniciarViagem?: boolean;
+      podeLancarPedagio?: boolean;
+      podeLancarAbastecimento?: boolean;
+    },
+  ) {
+    const exists = await this.prisma.motorista.findUnique({ where: { id }, select: { id: true } });
+    if (!exists) throw new NotFoundException("Motorista não encontrado");
+    return this.prisma.motorista.update({
+      where: { id },
+      data: input,
+      select: {
+        id: true,
+        podeLancarViagem: true,
+        podeIniciarViagem: true,
+        podeLancarPedagio: true,
+        podeLancarAbastecimento: true,
+      },
+    });
   }
 
   async remove(id: string) {

@@ -284,81 +284,105 @@ export default function Home() {
             )}
 
             {/* Botão Hero "Nova viagem" */}
-            <Pressable
-              onPress={() => router.push("/nova-viagem")}
-              className="overflow-hidden rounded-2xl bg-primary active:opacity-85"
-            >
-              <View className="flex-row items-center gap-4 p-5">
-                <View className="h-16 w-16 items-center justify-center rounded-2xl bg-white/20">
-                  <Truck size={32} color="white" strokeWidth={2.5} />
+            {me.data?.podeLancarViagem && (
+              <Pressable
+                onPress={() => router.push("/nova-viagem")}
+                className="overflow-hidden rounded-2xl bg-primary active:opacity-85"
+              >
+                <View className="flex-row items-center gap-4 p-5">
+                  <View className="h-16 w-16 items-center justify-center rounded-2xl bg-white/20">
+                    <Truck size={32} color="white" strokeWidth={2.5} />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-2xl font-extrabold text-primary-foreground">
+                      Nova viagem
+                    </Text>
+                    <Text className="mt-0.5 text-base font-medium text-primary-foreground/85">
+                      Lançar carga, descarga e foto
+                    </Text>
+                  </View>
+                  <Plus size={28} color="white" strokeWidth={2.5} />
                 </View>
-                <View className="flex-1">
-                  <Text className="text-2xl font-extrabold text-primary-foreground">
-                    Nova viagem
-                  </Text>
-                  <Text className="mt-0.5 text-base font-medium text-primary-foreground/85">
-                    Lançar carga, descarga e foto
-                  </Text>
-                </View>
-                <Plus size={28} color="white" strokeWidth={2.5} />
-              </View>
-            </Pressable>
+              </Pressable>
+            )}
 
             {/* Botão Iniciar viagem (tracking GPS) */}
-            <Pressable
-              onPress={iniciarViagem}
-              className="flex-row items-center gap-4 rounded-2xl border-2 border-primary bg-card p-4 active:opacity-75"
-            >
-              <View className="h-14 w-14 items-center justify-center rounded-2xl bg-primary">
-                <Play size={26} color="white" strokeWidth={2.5} />
-              </View>
-              <View className="flex-1">
-                <Text className="text-lg font-bold text-foreground">
-                  Iniciar viagem com GPS
-                </Text>
-                <Text className="text-sm text-muted-foreground">
-                  {tracking.data
-                    ? `Em andamento · ${tracking.resumo?.kmReal.toFixed(1) ?? "0"} km`
-                    : "Rastreia o trajeto e calcula KM real"}
-                </Text>
-              </View>
-            </Pressable>
+            {me.data?.podeIniciarViagem && (
+              <Pressable
+                onPress={iniciarViagem}
+                className="flex-row items-center gap-4 rounded-2xl border-2 border-primary bg-card p-4 active:opacity-75"
+              >
+                <View className="h-14 w-14 items-center justify-center rounded-2xl bg-primary">
+                  <Play size={26} color="white" strokeWidth={2.5} />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-lg font-bold text-foreground">
+                    Iniciar viagem com GPS
+                  </Text>
+                  <Text className="text-sm text-muted-foreground">
+                    {tracking.data
+                      ? `Em andamento · ${tracking.resumo?.kmReal.toFixed(1) ?? "0"} km`
+                      : "Rastreia o trajeto e calcula KM real"}
+                  </Text>
+                </View>
+              </Pressable>
+            )}
 
             {/* Botão Pedágio */}
-            <Pressable
-              onPress={() => router.push("/novo-pedagio")}
-              className="flex-row items-center gap-4 rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
-            >
-              <View className="h-14 w-14 items-center justify-center rounded-2xl bg-secondary">
-                <Receipt size={26} color="#13316b" strokeWidth={2.5} />
-              </View>
-              <View className="flex-1">
-                <Text className="text-lg font-bold text-foreground">
-                  Pedágio
-                </Text>
-                <Text className="text-sm text-muted-foreground">
-                  Registrar passagem em praça
-                </Text>
-              </View>
-            </Pressable>
+            {me.data?.podeLancarPedagio && (
+              <Pressable
+                onPress={() => router.push("/novo-pedagio")}
+                className="flex-row items-center gap-4 rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
+              >
+                <View className="h-14 w-14 items-center justify-center rounded-2xl bg-secondary">
+                  <Receipt size={26} color="#13316b" strokeWidth={2.5} />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-lg font-bold text-foreground">
+                    Pedágio
+                  </Text>
+                  <Text className="text-sm text-muted-foreground">
+                    Registrar passagem em praça
+                  </Text>
+                </View>
+              </Pressable>
+            )}
 
             {/* Botão Abastecimento */}
-            <Pressable
-              onPress={() => router.push("/novo-abastecimento")}
-              className="flex-row items-center gap-4 rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
-            >
-              <View className="h-14 w-14 items-center justify-center rounded-2xl bg-secondary">
-                <Fuel size={26} color="#13316b" strokeWidth={2.5} />
-              </View>
-              <View className="flex-1">
-                <Text className="text-lg font-bold text-foreground">
-                  Abastecimento
-                </Text>
-                <Text className="text-sm text-muted-foreground">
-                  Registrar combustível e odômetro
-                </Text>
-              </View>
-            </Pressable>
+            {me.data?.podeLancarAbastecimento && (
+              <Pressable
+                onPress={() => router.push("/novo-abastecimento")}
+                className="flex-row items-center gap-4 rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
+              >
+                <View className="h-14 w-14 items-center justify-center rounded-2xl bg-secondary">
+                  <Fuel size={26} color="#13316b" strokeWidth={2.5} />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-lg font-bold text-foreground">
+                    Abastecimento
+                  </Text>
+                  <Text className="text-sm text-muted-foreground">
+                    Registrar combustível e odômetro
+                  </Text>
+                </View>
+              </Pressable>
+            )}
+
+            {/* Empty state se todas as 4 funcionalidades estão desabilitadas */}
+            {me.data &&
+              !me.data.podeLancarViagem &&
+              !me.data.podeIniciarViagem &&
+              !me.data.podeLancarPedagio &&
+              !me.data.podeLancarAbastecimento && (
+                <View className="items-center gap-2 rounded-2xl border-2 border-dashed border-border bg-card p-6">
+                  <Text className="text-center text-base font-semibold text-foreground">
+                    Nenhuma funcionalidade liberada agora
+                  </Text>
+                  <Text className="text-center text-sm text-muted-foreground">
+                    Fale com o escritório pra liberar lançamentos no app.
+                  </Text>
+                </View>
+              )}
 
             {/* Resumo do mes corrente — bate com pagamento */}
             {resumo.data && resumo.data.totalViagens > 0 && (

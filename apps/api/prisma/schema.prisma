@@ -170,6 +170,12 @@ model Motorista {
   bloqueadoAte     DateTime?
   expoPushToken         String?
   pushTokenAtualizadoEm DateTime?
+  // Acessos por funcionalidade (controle de feature flag por motorista).
+  // Default true = não quebra fluxo existente; admin desativa pelo dashboard.
+  podeLancarViagem        Boolean @default(true)
+  podeIniciarViagem       Boolean @default(true)
+  podeLancarPedagio       Boolean @default(true)
+  podeLancarAbastecimento Boolean @default(true)
   criadoEm         DateTime  @default(now())
   alteradoEm       DateTime  @updatedAt
 

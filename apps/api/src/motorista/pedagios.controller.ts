@@ -15,6 +15,8 @@ import { CriarPedagioInput } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
+import { AcessoMotorista } from "../auth/decorators/acesso-motorista.decorator";
+import { AcessoMotoristaGuard } from "../auth/guards/acesso-motorista.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { AuthMotorista } from "../auth/types";
 import { PedagiosMotoristaService } from "./pedagios.service";
@@ -31,7 +33,7 @@ const ListarPedagiosQuery = z.object({
 
 @ApiTags("motorista/pedagios")
 @ApiBearerAuth()
-@UseGuards(RolesGuard)
+@UseGuards(RolesGuard, AcessoMotoristaGuard)
 @Roles("MOTORISTA")
 @Controller("m/pedagios")
 export class PedagiosMotoristaController {
@@ -47,6 +49,7 @@ export class PedagiosMotoristaController {
   }
 
   @Post()
+  @AcessoMotorista("podeLancarPedagio")
   create(
     @CurrentUser() user: AuthMotorista,
     @Body(new ZodValidationPipe(CriarPedagioInput)) body: CriarPedagioInput,

@@ -13,6 +13,14 @@ const ListMotoristasQuery = paginationQuerySchema.extend({
 });
 type ListMotoristasQuery = z.infer<typeof ListMotoristasQuery>;
 
+const AcessosInput = z.object({
+  podeLancarViagem: z.boolean().optional(),
+  podeIniciarViagem: z.boolean().optional(),
+  podeLancarPedagio: z.boolean().optional(),
+  podeLancarAbastecimento: z.boolean().optional(),
+});
+type AcessosInput = z.infer<typeof AcessosInput>;
+
 @ApiTags("admin/motoristas")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
@@ -42,6 +50,14 @@ export class MotoristasController {
     @Body(new ZodValidationPipe(AtualizarMotoristaInput)) body: AtualizarMotoristaInput,
   ) {
     return this.service.update(id, body);
+  }
+
+  @Patch(":id/acessos")
+  atualizarAcessos(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(AcessosInput)) body: AcessosInput,
+  ) {
+    return this.service.atualizarAcessos(id, body);
   }
 
   @Delete(":id")

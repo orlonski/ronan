@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   cpfDigits,
   isCpfValid,
@@ -16,7 +17,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useCreateResource, useUpdateResource } from "@/lib/client-api";
+import { useCreateResource, useUpdateResource, useAuthToken, fetchApi } from "@/lib/client-api";
+import { StatusToggle } from "@/components/status-toggle";
 
 type Veiculo = { id: string; placa: string; modelo: string | null };
 type DocumentoResumo = { tipo: TipoDocumentoMotorista; validade: string | null };
@@ -31,6 +33,10 @@ export type Motorista = {
   veiculoDefault: Veiculo | null;
   veiculos: Veiculo[];
   documentos: DocumentoResumo[];
+  podeLancarViagem: boolean;
+  podeIniciarViagem: boolean;
+  podeLancarPedagio: boolean;
+  podeLancarAbastecimento: boolean;
 };
 
 const PATH = "/admin/motoristas";
@@ -69,10 +75,41 @@ function maskCpf(input: string): string {
 
 type Props = { initial?: Motorista };
 
+type AcessosState = {
+  podeLancarViagem: boolean;
+  podeIniciarViagem: boolean;
+  podeLancarPedagio: boolean;
+  podeLancarAbastecimento: boolean;
+};
+
 export function MotoristaForm({ initial }: Props) {
   const router = useRouter();
   const create = useCreateResource<Record<string, unknown>, Motorista>(PATH, PATH);
   const update = useUpdateResource<Record<string, unknown>, Motorista>(PATH, PATH);
+
+  const [acessos, setAcessos] = useState<AcessosState>({
+    podeLancarViagem: initial?.podeLancarViagem ?? true,
+    podeIniciarViagem: initial?.podeIniciarViagem ?? true,
+    podeLancarPedagio: initial?.podeLancarPedagio ?? true,
+    podeLancarAbastecimento: initial?.podeLancarAbastecimento ?? true,
+  });
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  const acessosMutation = useMutation({
+    mutationFn: (body: Partial<AcessosState>) =>
+      fetchApi<AcessosState>(`${PATH}/${initial?.id}/acessos`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+        token,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: [PATH] });
+    },
+  });
+  function alterarAcesso(flag: keyof AcessosState, value: boolean) {
+    setAcessos((a) => ({ ...a, [flag]: value }));
+    if (initial) acessosMutation.mutate({ [flag]: value });
+  }
 
   const [form, setForm] = useState<FormShape>(
     initial
@@ -303,6 +340,41 @@ export function MotoristaForm({ initial }: Props) {
             </div>
           )}
         </div>
+
+        {initial && (
+          <div className="space-y-3 border-t pt-4">
+            <div>
+              <Label className="text-base">Acessos do app</Label>
+              <p className="text-xs text-muted-foreground">
+                Cada toggle controla se o motorista vê o botão correspondente
+                no app. Desligar não afeta histórico — ele continua vendo o
+                que já lançou.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+              <AcessoRow
+                label="Nova viagem"
+                active={acessos.podeLancarViagem}
+                onChange={(v) => alterarAcesso("podeLancarViagem", v)}
+              />
+              <AcessoRow
+                label="Iniciar viagem com GPS"
+                active={acessos.podeIniciarViagem}
+                onChange={(v) => alterarAcesso("podeIniciarViagem", v)}
+              />
+              <AcessoRow
+                label="Lançar pedágio"
+                active={acessos.podeLancarPedagio}
+                onChange={(v) => alterarAcesso("podeLancarPedagio", v)}
+              />
+              <AcessoRow
+                label="Lançar abastecimento"
+                active={acessos.podeLancarAbastecimento}
+                onChange={(v) => alterarAcesso("podeLancarAbastecimento", v)}
+              />
+            </div>
+          </div>
+        )}
       </Card>
 
       <div className="flex justify-end gap-2">
@@ -316,6 +388,23 @@ export function MotoristaForm({ initial }: Props) {
         </Button>
       </div>
     </form>
+  );
+}
+
+function AcessoRow({
+  label,
+  active,
+  onChange,
+}: {
+  label: string;
+  active: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
+      <span className="text-sm font-medium text-foreground">{label}</span>
+      <StatusToggle active={active} onChange={onChange} size="sm" label />
+    </div>
   );
 }
 

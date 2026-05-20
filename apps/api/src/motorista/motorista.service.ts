@@ -111,6 +111,10 @@ export class MotoristaService {
           orderBy: { veiculo: { placa: "asc" } },
         },
         ultimoLoginEm: true,
+        podeLancarViagem: true,
+        podeIniciarViagem: true,
+        podeLancarPedagio: true,
+        podeLancarAbastecimento: true,
       },
     });
     const { veiculos, ...rest } = m;

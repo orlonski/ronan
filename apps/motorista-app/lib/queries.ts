@@ -52,6 +52,10 @@ export type Me = {
   veiculoDefault: Veiculo | null;
   veiculos: Veiculo[];
   ultimoLoginEm: string | null;
+  podeLancarViagem: boolean;
+  podeIniciarViagem: boolean;
+  podeLancarPedagio: boolean;
+  podeLancarAbastecimento: boolean;
 };
 
 export type Viagem = {
@@ -126,6 +130,19 @@ function normalizarAbastecimento<T extends { empresa?: unknown }>(a: T): T {
   return a;
 }
 
+// Compat pra Me pré-rollout das feature flags. Backend antigo / cache local
+// SQLite anterior à mudança não traz os campos `pode*`. Default true mantém
+// compatibilidade: motorista sem essas chaves vê tudo (não quebra a UX).
+function normalizarMe<T extends Record<string, unknown>>(m: T): T {
+  if (!m) return m;
+  const anyM = m as Record<string, unknown>;
+  if (typeof anyM.podeLancarViagem !== "boolean") anyM.podeLancarViagem = true;
+  if (typeof anyM.podeIniciarViagem !== "boolean") anyM.podeIniciarViagem = true;
+  if (typeof anyM.podeLancarPedagio !== "boolean") anyM.podeLancarPedagio = true;
+  if (typeof anyM.podeLancarAbastecimento !== "boolean") anyM.podeLancarAbastecimento = true;
+  return m;
+}
+
 /**
  * useQuery com fallback offline: tenta API, se falhar por rede tenta o cache local.
  * Cache writes em void/catch pra erro de IndexedDB nao quebrar a query.
@@ -156,7 +173,11 @@ function offlineCacheQuery<T>(key: string, path: string, opts: { staleTime?: num
 }
 
 export function useMe() {
-  return useQuery(offlineCacheQuery<Me>("me", "/m/me"));
+  const base = offlineCacheQuery<Me>("me", "/m/me");
+  return useQuery({
+    ...base,
+    queryFn: async () => normalizarMe(await base.queryFn()),
+  });
 }
 
 export function useCatalogos() {
