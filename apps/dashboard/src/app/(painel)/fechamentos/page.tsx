@@ -11,8 +11,8 @@ import {
   DataTable,
   DataTableColumnHeader,
   DataTableToolbar,
-  ToolbarFilterSelect,
 } from "@/components/data-table";
+import { Combobox } from "@/components/ui/combobox";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import { useResourceOptions } from "@/lib/client-api";
 import { useFechamentos, type FechamentoLista } from "@/lib/fechamentos-api";
@@ -147,16 +147,17 @@ export default function FechamentosPage() {
             searchPlaceholder="Buscar por nome do arquivo ou empresa…"
             filters={
               <>
-                <ToolbarFilterSelect
-                  label="Empresa"
+                <Combobox
                   value={tableState.filters.empresaId}
                   onChange={(v) => tableState.setFilter("empresaId", v)}
+                  placeholder="Empresa"
                   options={empresaOptions}
                 />
-                <ToolbarFilterSelect
-                  label="Status"
+                <Combobox
                   value={tableState.filters.status}
                   onChange={(v) => tableState.setFilter("status", v)}
+                  placeholder="Status"
+                  showSearch={false}
                   options={[
                     { value: "RECEBIDO", label: "Recebido" },
                     { value: "EM_PROCESSAMENTO", label: "Em processamento" },
@@ -165,12 +166,12 @@ export default function FechamentosPage() {
                     { value: "EXPORTADO", label: "Exportado" },
                   ]}
                 />
-                <ToolbarFilterSelect
-                  label="Substituídos"
+                <Combobox
                   value={tableState.filters.incluirSubstituidos}
                   onChange={(v) => tableState.setFilter("incluirSubstituidos", v)}
-                  options={[{ value: "true", label: "Incluir" }]}
-                  placeholder="Esconder"
+                  placeholder="Substituídos: esconder"
+                  showSearch={false}
+                  options={[{ value: "true", label: "Incluir substituídos" }]}
                 />
               </>
             }

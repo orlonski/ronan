@@ -4,7 +4,6 @@ import * as React from "react";
 import { Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import type { DataTableState } from "@/hooks/use-data-table-state";
 
 export function DataTableToolbar({
@@ -54,42 +53,6 @@ export function DataTableToolbar({
         )}
       </div>
     </div>
-  );
-}
-
-/**
- * Filtro inline tipo Select pra uma coluna (status, ativo, role, etc).
- * Renderiza um select compacto com label.
- */
-export function ToolbarFilterSelect({
-  label,
-  value,
-  options,
-  onChange,
-  placeholder = "Todos",
-}: {
-  label: string;
-  value: string | undefined;
-  options: { value: string; label: string }[];
-  onChange: (value: string | undefined) => void;
-  placeholder?: string;
-}) {
-  return (
-    <label className="flex h-9 items-center gap-1.5 rounded-md border bg-background px-2 text-sm">
-      <span className="text-xs text-muted-foreground">{label}:</span>
-      <Select
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value || undefined)}
-        className="h-7 min-w-[120px] border-0 bg-transparent px-1 py-0 focus-visible:ring-0"
-      >
-        <option value="">{placeholder}</option>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </Select>
-    </label>
   );
 }
 

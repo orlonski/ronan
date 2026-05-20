@@ -17,8 +17,8 @@ import {
   DataTable,
   DataTableColumnHeader,
   DataTableToolbar,
-  ToolbarFilterSelect,
 } from "@/components/data-table";
+import { Combobox } from "@/components/ui/combobox";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import {
   fetchApi,
@@ -213,10 +213,11 @@ export default function LocaisEmValidacaoPage() {
             state={tableState}
             searchPlaceholder="Buscar por nome, endereço, cidade…"
             filters={
-              <ToolbarFilterSelect
-                label="Evidência"
+              <Combobox
                 value={tableState.filters.nivelConfianca}
                 onChange={(v) => tableState.setFilter("nivelConfianca", v)}
+                placeholder="Evidência"
+                showSearch={false}
                 options={[
                   { value: "RASCUNHO", label: "Rascunho (sem GPS)" },
                   { value: "PRESENCA_PONTUAL", label: "Presença GPS" },

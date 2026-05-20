@@ -11,8 +11,8 @@ import {
   DataTableColumnHeader,
   DataTableToolbar,
   ToolbarFilterDateRange,
-  ToolbarFilterSelect,
 } from "@/components/data-table";
+import { Combobox } from "@/components/ui/combobox";
 import { firstDayOfMonth, useDataTableState } from "@/hooks/use-data-table-state";
 import { usePaginatedList, useResourceOptions } from "@/lib/client-api";
 import { fmtBR, fmtNum } from "@/lib/fechamento-helpers";
@@ -201,10 +201,11 @@ export default function ViagensPage() {
             searchPlaceholder="Buscar por ticket, motorista, placa, cliente…"
             filters={
               <>
-                <ToolbarFilterSelect
-                  label="Status"
+                <Combobox
                   value={tableState.filters.status}
                   onChange={(v) => tableState.setFilter("status", v)}
+                  placeholder="Status"
+                  showSearch={false}
                   options={[
                     { value: "ENVIADA", label: "Aguardando" },
                     { value: "EM_CONFERENCIA", label: "Em conferência" },
@@ -213,16 +214,16 @@ export default function ViagensPage() {
                     { value: "AJUSTADA", label: "Ajustada" },
                   ]}
                 />
-                <ToolbarFilterSelect
-                  label="Motorista"
+                <Combobox
                   value={tableState.filters.motoristaId}
                   onChange={(v) => tableState.setFilter("motoristaId", v)}
+                  placeholder="Motorista"
                   options={motoristaOptions}
                 />
-                <ToolbarFilterSelect
-                  label="Cliente"
+                <Combobox
                   value={tableState.filters.clienteId}
                   onChange={(v) => tableState.setFilter("clienteId", v)}
+                  placeholder="Cliente"
                   options={clienteOptions}
                 />
                 <ToolbarFilterDateRange state={tableState} label="Período" />

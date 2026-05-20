@@ -11,8 +11,8 @@ import {
   DataTableColumnHeader,
   DataTableToolbar,
   ToolbarFilterDateRange,
-  ToolbarFilterSelect,
 } from "@/components/data-table";
+import { Combobox } from "@/components/ui/combobox";
 import { firstDayOfMonth, useDataTableState } from "@/hooks/use-data-table-state";
 import { useAuthToken, fetchApi, useResourceOptions } from "@/lib/client-api";
 import type { Pagination } from "@/lib/client-api";
@@ -226,10 +226,11 @@ export default function AbastecimentosPage() {
             searchPlaceholder="Buscar por posto, motorista, placa, empresa, obs…"
             filters={
               <>
-                <ToolbarFilterSelect
-                  label="Tipo"
+                <Combobox
                   value={tableState.filters.tipo}
                   onChange={(v) => tableState.setFilter("tipo", v)}
+                  placeholder="Tipo"
+                  showSearch={false}
                   options={[
                     { value: "DIESEL_S10", label: "Diesel S10" },
                     { value: "DIESEL_S500", label: "Diesel S500" },
@@ -238,14 +239,13 @@ export default function AbastecimentosPage() {
                     { value: "ETANOL", label: "Etanol" },
                   ]}
                 />
-                <ToolbarFilterSelect
-                  label="Motorista"
+                <Combobox
                   value={tableState.filters.motoristaId}
                   onChange={(v) => tableState.setFilter("motoristaId", v)}
+                  placeholder="Motorista"
                   options={motoristaOptions}
                 />
-                <ToolbarFilterSelect
-                  label="Empresa"
+                <Combobox
                   value={tableState.filters.empresaId ?? (tableState.filters.semEmpresa === "true" ? "__sem__" : undefined)}
                   onChange={(v) => {
                     if (v === "__sem__") {
@@ -256,6 +256,7 @@ export default function AbastecimentosPage() {
                       tableState.setFilter("semEmpresa", undefined);
                     }
                   }}
+                  placeholder="Empresa"
                   options={empresaOptions}
                 />
                 <ToolbarFilterDateRange state={tableState} label="Período" />

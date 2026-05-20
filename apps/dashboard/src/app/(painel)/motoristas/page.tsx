@@ -21,8 +21,8 @@ import {
   DataTable,
   DataTableColumnHeader,
   DataTableToolbar,
-  ToolbarFilterSelect,
 } from "@/components/data-table";
+import { Combobox } from "@/components/ui/combobox";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import { usePaginatedList, useUpdateResource } from "@/lib/client-api";
 
@@ -205,10 +205,11 @@ export default function MotoristasPage() {
             state={tableState}
             searchPlaceholder="Buscar por nome, CPF, telefone, email…"
             filters={
-              <ToolbarFilterSelect
-                label="Status"
+              <Combobox
                 value={tableState.filters.ativo}
                 onChange={(v) => tableState.setFilter("ativo", v)}
+                placeholder="Status"
+                showSearch={false}
                 options={[
                   { value: "true", label: "Ativos" },
                   { value: "false", label: "Inativos" },

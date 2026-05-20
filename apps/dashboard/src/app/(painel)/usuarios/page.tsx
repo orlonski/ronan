@@ -13,8 +13,8 @@ import {
   DataTable,
   DataTableColumnHeader,
   DataTableToolbar,
-  ToolbarFilterSelect,
 } from "@/components/data-table";
+import { Combobox } from "@/components/ui/combobox";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import { usePaginatedList, useUpdateResource } from "@/lib/client-api";
 
@@ -155,19 +155,21 @@ export default function UsuariosPage() {
             searchPlaceholder="Buscar por nome ou email…"
             filters={
               <>
-                <ToolbarFilterSelect
-                  label="Perfil"
+                <Combobox
                   value={tableState.filters.perfil}
                   onChange={(v) => tableState.setFilter("perfil", v)}
+                  placeholder="Perfil"
+                  showSearch={false}
                   options={[
                     { value: "ADMIN", label: "Admin" },
                     { value: "OPERADOR", label: "Operador" },
                   ]}
                 />
-                <ToolbarFilterSelect
-                  label="Status"
+                <Combobox
                   value={tableState.filters.ativo}
                   onChange={(v) => tableState.setFilter("ativo", v)}
+                  placeholder="Status"
+                  showSearch={false}
                   options={[
                     { value: "true", label: "Ativos" },
                     { value: "false", label: "Inativos" },

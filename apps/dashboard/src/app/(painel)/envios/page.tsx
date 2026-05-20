@@ -22,8 +22,8 @@ import {
   DataTable,
   DataTableColumnHeader,
   DataTableToolbar,
-  ToolbarFilterSelect,
 } from "@/components/data-table";
+import { Combobox } from "@/components/ui/combobox";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import { useResourceOptions } from "@/lib/client-api";
 import { fmtBR, fmtDataHoraBR } from "@/lib/fechamento-helpers";
@@ -197,16 +197,17 @@ export default function EnviosPage() {
             searchPlaceholder="Buscar por nome do arquivo, canal, empresa…"
             filters={
               <>
-                <ToolbarFilterSelect
-                  label="Empresa"
+                <Combobox
                   value={tableState.filters.empresaId}
                   onChange={(v) => tableState.setFilter("empresaId", v)}
+                  placeholder="Empresa"
                   options={empresaOptions}
                 />
-                <ToolbarFilterSelect
-                  label="Status"
+                <Combobox
                   value={tableState.filters.status}
                   onChange={(v) => tableState.setFilter("status", v)}
+                  placeholder="Status"
+                  showSearch={false}
                   options={[
                     { value: "GERADO", label: "Gerado" },
                     { value: "ENVIADO", label: "Enviado" },

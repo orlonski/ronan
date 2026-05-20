@@ -11,7 +11,7 @@ import type {
 } from "@ronan/shared-types";
 import { formatCpf } from "@ronan/shared-types";
 import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { Spinner } from "@/components/loading";
 import { MotoristaCombobox } from "@/components/motorista-combobox";
 import { ExcluirButton } from "@/components/excluir-button";
@@ -97,35 +97,29 @@ export default function NotificacoesAdminPage() {
         </p>
       </header>
 
-      <div className="flex flex-wrap items-end gap-3">
-        <FiltroCampo label="Motorista">
-          <MotoristaCombobox value={motoristaId} onChange={setMotoristaId} />
-        </FiltroCampo>
-        <FiltroCampo label="Entrega">
-          <Select
-            value={entregaStatus ?? ""}
-            onChange={(e) =>
-              setEntregaStatus(e.target.value === "" ? undefined : e.target.value)
-            }
-            className="h-10 min-w-[140px]"
-          >
-            <option value="">Todos</option>
-            <option value="PENDENTE">Pendente</option>
-            <option value="ENTREGUE">Entregue</option>
-            <option value="ERRO">Erro</option>
-          </Select>
-        </FiltroCampo>
-        <FiltroCampo label="Lida">
-          <Select
-            value={lida ?? ""}
-            onChange={(e) => setLida(e.target.value === "" ? undefined : e.target.value)}
-            className="h-10 min-w-[120px]"
-          >
-            <option value="">Todas</option>
-            <option value="true">Lidas</option>
-            <option value="false">Não lidas</option>
-          </Select>
-        </FiltroCampo>
+      <div className="flex flex-wrap items-center gap-3">
+        <MotoristaCombobox value={motoristaId} onChange={setMotoristaId} />
+        <Combobox
+          value={entregaStatus}
+          onChange={setEntregaStatus}
+          placeholder="Entrega"
+          showSearch={false}
+          options={[
+            { value: "PENDENTE", label: "Pendente" },
+            { value: "ENTREGUE", label: "Entregue" },
+            { value: "ERRO", label: "Erro" },
+          ]}
+        />
+        <Combobox
+          value={lida}
+          onChange={setLida}
+          placeholder="Lida"
+          showSearch={false}
+          options={[
+            { value: "true", label: "Lidas" },
+            { value: "false", label: "Não lidas" },
+          ]}
+        />
         {hasFilters && (
           <Button
             type="button"
@@ -250,15 +244,6 @@ function NotificacaoRow({ n }: { n: NotificacaoAdminItem }) {
         />
       </TableCell>
     </TableRow>
-  );
-}
-
-function FiltroCampo({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      {children}
-    </label>
   );
 }
 

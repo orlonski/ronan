@@ -12,8 +12,8 @@ import {
   DataTable,
   DataTableColumnHeader,
   DataTableToolbar,
-  ToolbarFilterSelect,
 } from "@/components/data-table";
+import { Combobox } from "@/components/ui/combobox";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import { usePaginatedList, useUpdateResource } from "@/lib/client-api";
 
@@ -139,20 +139,22 @@ export default function EmpresasPage() {
             searchPlaceholder="Buscar por nome, CNPJ, contato…"
             filters={
               <>
-                <ToolbarFilterSelect
-                  label="Papel"
+                <Combobox
                   value={tableState.filters.papel}
                   onChange={(v) => tableState.setFilter("papel", v)}
+                  placeholder="Papel"
+                  showSearch={false}
                   options={[
                     { value: "AMBOS", label: "Ambos" },
                     { value: "RECEBE_PLANILHA", label: "Recebe planilha" },
                     { value: "MANDA_FECHAMENTO", label: "Manda fechamento" },
                   ]}
                 />
-                <ToolbarFilterSelect
-                  label="Status"
+                <Combobox
                   value={tableState.filters.ativa}
                   onChange={(v) => tableState.setFilter("ativa", v)}
+                  placeholder="Status"
+                  showSearch={false}
                   options={[
                     { value: "true", label: "Ativas" },
                     { value: "false", label: "Inativas" },

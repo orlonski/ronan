@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, ChevronRight, Filter, RotateCcw } from "lucide-react";
+import { CheckCircle2, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Select } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import {
   Table,
   TableBody,
@@ -15,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { LoadingCard, LoadingInline, Spinner } from "@/components/loading";
+import { LoadingCard, Spinner } from "@/components/loading";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 
 type ErroAgrupado = {
@@ -135,28 +135,28 @@ export default function ErrosPage() {
           </p>
         </div>
         <div className="flex flex-col gap-2 md:flex-row md:items-center">
-          <Select
+          <Combobox
             value={status}
-            onChange={(e) => setStatus(e.target.value as StatusFiltro)}
-            className="w-full md:w-44"
-          >
-            <option value="pendentes">Pendentes</option>
-            <option value="resolvidos">Resolvidos</option>
-            <option value="todos">Todos</option>
-          </Select>
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <Select
-              value={origem}
-              onChange={(e) => setOrigem(e.target.value)}
-              className="w-full md:w-48"
-            >
-              <option value="">Todas origens</option>
-              <option value="motorista-app">App motorista</option>
-              <option value="dashboard">Dashboard</option>
-              <option value="api">API (backend)</option>
-            </Select>
-          </div>
+            onChange={(v) => setStatus((v ?? "pendentes") as StatusFiltro)}
+            placeholder="Status"
+            showSearch={false}
+            options={[
+              { value: "pendentes", label: "Pendentes" },
+              { value: "resolvidos", label: "Resolvidos" },
+              { value: "todos", label: "Todos" },
+            ]}
+          />
+          <Combobox
+            value={origem || undefined}
+            onChange={(v) => setOrigem(v ?? "")}
+            placeholder="Origem"
+            showSearch={false}
+            options={[
+              { value: "motorista-app", label: "App motorista" },
+              { value: "dashboard", label: "Dashboard" },
+              { value: "api", label: "API (backend)" },
+            ]}
+          />
         </div>
       </header>
 
