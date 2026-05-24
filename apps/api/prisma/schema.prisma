@@ -142,49 +142,49 @@ model User {
   criadoEm      DateTime      @default(now())
   alteradoEm    DateTime      @updatedAt
 
-  resolucoes      FechamentoLinha[]
-  envios          EnvioFechamento[]
-  auditorias      AuditLog[]
-  layoutsEnvio    LayoutEnvio[]
-  configsTracking ConfiguracaoTracking[]
-  configsIa       ConfiguracaoIa[]
-  configsAgente   ConfiguracaoAgente[]
-  whatsappSessao  WhatsappSessao?
+  resolucoes       FechamentoLinha[]
+  envios           EnvioFechamento[]
+  auditorias       AuditLog[]
+  layoutsEnvio     LayoutEnvio[]
+  configsTracking  ConfiguracaoTracking[]
+  configsIa        ConfiguracaoIa[]
+  configsAgente    ConfiguracaoAgente[]
+  whatsappSessao   WhatsappSessao?
   whatsappConvites WhatsappConvite[]
 
   @@map("users")
 }
 
 model Motorista {
-  id               String    @id @default(uuid())
-  nome             String
-  cpf              String    @unique // 11 dígitos (sem máscara) — também é o login
-  senhaHash        String
-  telefone         String?
-  email            String?
-  veiculoDefault   Veiculo?  @relation("VeiculoDefaultMotorista", fields: [veiculoDefaultId], references: [id])
-  veiculoDefaultId String?
-  ativo            Boolean   @default(true)
-  ultimoLoginEm    DateTime?
-  tentativasLogin  Int       @default(0)
-  bloqueadoAte     DateTime?
-  expoPushToken         String?
-  pushTokenAtualizadoEm DateTime?
+  id                      String    @id @default(uuid())
+  nome                    String
+  cpf                     String    @unique // 11 dígitos (sem máscara) — também é o login
+  senhaHash               String
+  telefone                String?
+  email                   String?
+  veiculoDefault          Veiculo?  @relation("VeiculoDefaultMotorista", fields: [veiculoDefaultId], references: [id])
+  veiculoDefaultId        String?
+  ativo                   Boolean   @default(true)
+  ultimoLoginEm           DateTime?
+  tentativasLogin         Int       @default(0)
+  bloqueadoAte            DateTime?
+  expoPushToken           String?
+  pushTokenAtualizadoEm   DateTime?
   // Acessos por funcionalidade (controle de feature flag por motorista).
   // Default true = não quebra fluxo existente; admin desativa pelo dashboard.
-  podeLancarViagem        Boolean @default(true)
-  podeIniciarViagem       Boolean @default(true)
-  podeLancarPedagio       Boolean @default(true)
-  podeLancarAbastecimento Boolean @default(true)
-  criadoEm         DateTime  @default(now())
-  alteradoEm       DateTime  @updatedAt
+  podeLancarViagem        Boolean   @default(true)
+  podeIniciarViagem       Boolean   @default(true)
+  podeLancarPedagio       Boolean   @default(true)
+  podeLancarAbastecimento Boolean   @default(true)
+  criadoEm                DateTime  @default(now())
+  alteradoEm              DateTime  @updatedAt
 
-  viagens        Viagem[]
-  pedagios       Pedagio[]
-  abastecimentos Abastecimento[]
+  viagens          Viagem[]
+  pedagios         Pedagio[]
+  abastecimentos   Abastecimento[]
   veiculos         MotoristaVeiculo[]
   documentos       MotoristaDocumento[]
-  locaisCriados    Local[]               @relation("LocalCriadoPor")
+  locaisCriados    Local[]              @relation("LocalCriadoPor")
   evidenciasLocal  LocalEvidencia[]
   whatsappSessao   WhatsappSessao?
   whatsappConvites WhatsappConvite[]
@@ -199,17 +199,17 @@ model Motorista {
 /// `validade` é opcional (alguns docs não têm); status (válido/vencendo/vencido)
 /// é derivado em runtime, não persistido. Arquivos ficam no MinIO sob a key.
 model MotoristaDocumento {
-  id           String                 @id @default(uuid())
-  motoristaId  String
-  motorista    Motorista              @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
-  tipo         TipoDocumentoMotorista
-  nomeArquivo  String
-  storageKey   String
-  mimetype     String
-  tamanho      Int
-  validade     DateTime?              @db.Date
-  criadoEm     DateTime               @default(now())
-  alteradoEm   DateTime               @updatedAt
+  id          String                 @id @default(uuid())
+  motoristaId String
+  motorista   Motorista              @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  tipo        TipoDocumentoMotorista
+  nomeArquivo String
+  storageKey  String
+  mimetype    String
+  tamanho     Int
+  validade    DateTime?              @db.Date
+  criadoEm    DateTime               @default(now())
+  alteradoEm  DateTime               @updatedAt
 
   @@unique([motoristaId, tipo])
   @@index([motoristaId])
@@ -237,13 +237,13 @@ model MotoristaVeiculo {
 /// Sessão por telefone — quem mandar mensagem desse número é identificado e roteado
 /// pro toolset adequado (motorista lança viagem; admin consulta dashboard).
 model WhatsappSessao {
-  id             String     @id @default(uuid())
-  telefone       String     @unique // formato "5541999999999" (só dígitos, com DDI 55)
-  motorista      Motorista? @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
-  motoristaId    String?    @unique
-  user           User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId         String?    @unique
-  vinculadoEm    DateTime   @default(now())
+  id             String             @id @default(uuid())
+  telefone       String             @unique // formato "5541999999999" (só dígitos, com DDI 55)
+  motorista      Motorista?         @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  motoristaId    String?            @unique
+  user           User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String?            @unique
+  vinculadoEm    DateTime           @default(now())
   ultimaMensagem DateTime?
   mensagens      WhatsappMensagem[]
 
@@ -270,15 +270,15 @@ model WhatsappConvite {
 /// Histórico de mensagens recebidas/enviadas pelo bot. Usado pra auditoria E pra
 /// montar contexto curto (últimas N) que vai pro Claude na próxima rodada.
 model WhatsappMensagem {
-  id        String          @id @default(uuid())
-  sessao    WhatsappSessao? @relation(fields: [sessaoId], references: [id], onDelete: Cascade)
-  sessaoId  String?
-  telefone  String // sempre presente, mesmo sem sessão (fluxo inicial)
-  direcao   String // "ENTRADA" | "SAIDA"
-  conteudo  String  @db.Text
-  tipo      String // "TEXTO" | "IMAGEM" | "AUDIO"
-  metadata  Json?  // { fotoStorageKey, viagemCriadaId, toolsChamadas, evolutionMsgId, ... }
-  criadoEm  DateTime @default(now())
+  id       String          @id @default(uuid())
+  sessao   WhatsappSessao? @relation(fields: [sessaoId], references: [id], onDelete: Cascade)
+  sessaoId String?
+  telefone String // sempre presente, mesmo sem sessão (fluxo inicial)
+  direcao  String // "ENTRADA" | "SAIDA"
+  conteudo String          @db.Text
+  tipo     String // "TEXTO" | "IMAGEM" | "AUDIO"
+  metadata Json? // { fotoStorageKey, viagemCriadaId, toolsChamadas, evolutionMsgId, ... }
+  criadoEm DateTime        @default(now())
 
   @@index([telefone, criadoEm])
   @@index([sessaoId, criadoEm])
@@ -293,7 +293,7 @@ model Veiculo {
   criadoEm   DateTime @default(now())
   alteradoEm DateTime @updatedAt
 
-  motoristasComoDefault Motorista[]     @relation("VeiculoDefaultMotorista")
+  motoristasComoDefault Motorista[]        @relation("VeiculoDefaultMotorista")
   motoristas            MotoristaVeiculo[]
   viagens               Viagem[]
   pedagios              Pedagio[]
@@ -367,7 +367,7 @@ model Cliente {
   criadoEm   DateTime @default(now())
   alteradoEm DateTime @updatedAt
 
-  locais  Local[]
+  locais  LocalCliente[]
   viagens Viagem[]
 
   @@index([empresaId])
@@ -406,8 +406,6 @@ model Local {
   /// chama no dia a dia (ex: "pedreira nova", "do souza", "balança 2").
   apelidos             String[]            @default([])
   tipo                 TipoLocal
-  cliente              Cliente?            @relation(fields: [clienteId], references: [id])
-  clienteId            String?
   ativo                Boolean             @default(true)
   /// Confiança no local. Começa RASCUNHO quando motorista cadastra; sobe
   /// sozinho conforme evidências (LocalEvidencia) chegam. RECORRENTE/HUMANO
@@ -421,17 +419,33 @@ model Local {
   criadoEm             DateTime            @default(now())
   alteradoEm           DateTime            @updatedAt
 
-  viagensCarga    Viagem[]          @relation("LocalCarga")
-  viagensDescarga Viagem[]          @relation("LocalDescarga")
-  rotasOrigem     RotaCache[]       @relation("RotaOrigem")
-  rotasDestino    RotaCache[]       @relation("RotaDestino")
+  clientes        LocalCliente[]
+  viagensCarga    Viagem[]         @relation("LocalCarga")
+  viagensDescarga Viagem[]         @relation("LocalDescarga")
+  rotasOrigem     RotaCache[]      @relation("RotaOrigem")
+  rotasDestino    RotaCache[]      @relation("RotaDestino")
   evidencias      LocalEvidencia[]
 
-  @@index([clienteId])
   @@index([cidade, uf])
   @@index([ativo])
   @@index([nivelConfianca])
   @@map("locais")
+}
+
+/// Junction Local↔Cliente (N:N). Um local pode atender vários clientes
+/// (pátio compartilhado, pedreira); um cliente tem vários locais.
+/// `LocalCliente` vazio (sem entradas pra um Local) = local genérico,
+/// aparece pra qualquer cliente em Nova Viagem.
+model LocalCliente {
+  local     Local    @relation(fields: [localId], references: [id], onDelete: Cascade)
+  localId   String
+  cliente   Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  clienteId String
+  criadoEm  DateTime @default(now())
+
+  @@id([localId, clienteId])
+  @@index([clienteId])
+  @@map("local_cliente")
 }
 
 /// Histórico de evidências que promoveram um Local. Audit trail pra debug e
@@ -646,11 +660,11 @@ model LayoutEnvio {
   nome        String // ex: "Planilha mensal viagens", "Pedágios"
   colunas     Json // [{ campo, header, ordem, formato? }]
   config      Json? // { incluiCabecalhoEmpresa, formatoData, separadorDecimal }
-  padrao      Boolean        @default(false)
-  criadoPor   User?          @relation(fields: [criadoPorId], references: [id])
+  padrao      Boolean  @default(false)
+  criadoPor   User?    @relation(fields: [criadoPorId], references: [id])
   criadoPorId String?
-  criadoEm    DateTime       @default(now())
-  alteradoEm  DateTime       @updatedAt
+  criadoEm    DateTime @default(now())
+  alteradoEm  DateTime @updatedAt
 
   envios EnvioFechamento[]
 
@@ -806,31 +820,31 @@ model CampoLayout {
 /// Cada ocorrência é uma row. Agrupamento por hash do stack trace
 /// é feito em query (GROUP BY hash). Sem expurgo automático.
 model ErrorLog {
-  id          String   @id @default(uuid())
+  id             String    @id @default(uuid())
   /// Hash sha256(message + stack normalizado) — agrupa erros idênticos
-  hash        String
+  hash           String
   /// Origem: 'motorista-app' | 'dashboard' | 'api'
-  origem      String
+  origem         String
   /// Mensagem curta do erro
-  message     String   @db.Text
+  message        String    @db.Text
   /// Stack trace completo (pode ser ofuscado em prod)
-  stack       String?  @db.Text
+  stack          String?   @db.Text
   /// Versão do app/release (commit SHA ou app version)
-  versao      String?
+  versao         String?
   /// Quem estava logado (motorista, user admin)
-  userId      String?
-  userType    String?
+  userId         String?
+  userType       String?
   /// Rota / URL onde ocorreu
-  url         String?
+  url            String?
   /// User agent (web) ou device info (mobile)
-  userAgent   String?
+  userAgent      String?
   /// Contexto extra: device specs, network, breadcrumbs, etc
-  extra       Json?
+  extra          Json?
   /// Marcado como corrigido por um admin — não bloqueia novos eventos do mesmo hash
-  resolvido       Boolean   @default(false)
-  resolvidoEm     DateTime?
-  resolvidoPorId  String?
-  capturadoEm DateTime @default(now())
+  resolvido      Boolean   @default(false)
+  resolvidoEm    DateTime?
+  resolvidoPorId String?
+  capturadoEm    DateTime  @default(now())
 
   @@index([hash])
   @@index([origem, capturadoEm])

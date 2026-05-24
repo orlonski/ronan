@@ -15,13 +15,28 @@ type ListLocaisParams = PaginationQuery & {
   emValidacao?: "true" | "false";
 };
 
+const LOCAL_INCLUDE = {
+  clientes: {
+    select: { cliente: { select: { id: true, nome: true } } },
+    orderBy: { criadoEm: "asc" },
+  },
+  criadoPorMotorista: { select: { id: true, nome: true } },
+} satisfies Prisma.LocalInclude;
+
+type LocalRaw = Prisma.LocalGetPayload<{ include: typeof LOCAL_INCLUDE }>;
+
+function flattenLocal<T extends LocalRaw>(local: T) {
+  const { clientes, ...rest } = local;
+  return { ...rest, clientes: clientes.map((c) => c.cliente) };
+}
+
 @Injectable()
 export class LocaisService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list(params: ListLocaisParams) {
+  async list(params: ListLocaisParams) {
     const where: Prisma.LocalWhereInput = {};
-    if (params.clienteId) where.clienteId = params.clienteId;
+    if (params.clienteId) where.clientes = { some: { clienteId: params.clienteId } };
     if (params.tipo) where.tipo = params.tipo;
     if (params.ativo === "true") where.ativo = true;
     else if (params.ativo === "false") where.ativo = false;
@@ -36,7 +51,7 @@ export class LocaisService {
         ],
       };
     }
-    return paginate(this.prisma.local, {
+    const result = await paginate(this.prisma.local, {
       params,
       where: where as Record<string, unknown>,
       searchFields: ["nome", "logradouro", "bairro", "cidade", "pontoReferencia"],
@@ -50,18 +65,17 @@ export class LocaisService {
         nivelConfianca: "nivelConfianca",
       },
       defaultSort: { field: "nome", order: "asc" },
-      include: {
-        cliente: { select: { id: true, nome: true } },
-        criadoPorMotorista: { select: { id: true, nome: true } },
-      },
+      include: LOCAL_INCLUDE,
     });
+    return { ...result, data: (result.data as LocalRaw[]).map(flattenLocal) };
   }
 
-  findOne(id: string) {
-    return this.prisma.local.findUniqueOrThrow({
+  async findOne(id: string) {
+    const local = await this.prisma.local.findUniqueOrThrow({
       where: { id },
-      include: { cliente: { select: { id: true, nome: true } } },
+      include: LOCAL_INCLUDE,
     });
+    return flattenLocal(local);
   }
 
   /**
@@ -132,15 +146,41 @@ export class LocaisService {
   }
 
   async create(data: CriarLocalInput) {
-    return this.prisma.local.create({ data: data as Prisma.LocalUncheckedCreateInput });
+    const { clienteIds, ...rest } = data;
+    const local = await this.prisma.local.create({
+      data: {
+        ...(rest as Prisma.LocalUncheckedCreateInput),
+        clientes: clienteIds.length
+          ? { create: clienteIds.map((clienteId) => ({ clienteId })) }
+          : undefined,
+      },
+      include: LOCAL_INCLUDE,
+    });
+    return flattenLocal(local);
   }
 
-  async update(id: string, data: Partial<CriarLocalInput> & { ativo?: boolean }) {
+  async update(
+    id: string,
+    data: Partial<CriarLocalInput> & { ativo?: boolean },
+  ) {
     await this.ensureExists(id);
-    return this.prisma.local.update({
-      where: { id },
-      data: data as Prisma.LocalUncheckedUpdateInput,
+    const { clienteIds, ...rest } = data;
+    const local = await this.prisma.$transaction(async (tx) => {
+      if (clienteIds !== undefined) {
+        await tx.localCliente.deleteMany({ where: { localId: id } });
+        if (clienteIds.length) {
+          await tx.localCliente.createMany({
+            data: clienteIds.map((clienteId) => ({ localId: id, clienteId })),
+          });
+        }
+      }
+      return tx.local.update({
+        where: { id },
+        data: rest as Prisma.LocalUncheckedUpdateInput,
+        include: LOCAL_INCLUDE,
+      });
     });
+    return flattenLocal(local);
   }
 
   async remove(id: string) {

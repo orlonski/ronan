@@ -26,7 +26,7 @@ type Cliente = { id: string; nome: string };
 type Local = {
   id: string; nome: string; logradouro: string; numero: string | null; bairro: string | null;
   cidade: string; uf: string; cep: string | null; pontoReferencia: string | null;
-  tipo: Tipo; clienteId: string | null; ativo: boolean; cliente: Cliente | null;
+  tipo: Tipo; ativo: boolean; clientes: Cliente[];
 };
 
 const PATH = "/admin/locais";
@@ -77,7 +77,18 @@ export default function LocaisPage() {
         id: "cliente",
         enableSorting: false,
         header: "Cliente",
-        cell: ({ row }) => row.original.cliente?.nome ?? "—",
+        cell: ({ row }) => {
+          const cs = row.original.clientes;
+          const primeiro = cs[0];
+          if (!primeiro) return "—";
+          if (cs.length === 1) return primeiro.nome;
+          return (
+            <span title={cs.map((c) => c.nome).join(", ")}>
+              {primeiro.nome}{" "}
+              <span className="text-muted-foreground">+{cs.length - 1}</span>
+            </span>
+          );
+        },
       },
       {
         id: "tipo",
@@ -221,10 +232,13 @@ export default function LocaisPage() {
                 <span className="text-muted-foreground">Tipo: </span>
                 {l.tipo}
               </span>
-              {l.cliente && (
-                <span>
+              {l.clientes[0] && (
+                <span title={l.clientes.map((c) => c.nome).join(", ")}>
                   <span className="text-muted-foreground">Cliente: </span>
-                  {l.cliente.nome}
+                  {l.clientes[0].nome}
+                  {l.clientes.length > 1 && (
+                    <span className="text-muted-foreground"> +{l.clientes.length - 1}</span>
+                  )}
                 </span>
               )}
             </div>

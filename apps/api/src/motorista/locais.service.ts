@@ -32,7 +32,7 @@ export class LocaisMotoristaService {
       cep?: string;
       pontoReferencia?: string;
       tipo: "CARGA" | "DESCARGA" | "AMBOS";
-      clienteId?: string;
+      clienteIds?: string[];
       lat?: number;
       lng?: number;
       forcarCriacao?: boolean;
@@ -48,7 +48,8 @@ export class LocaisMotoristaService {
       }
     }
 
-    return this.prisma.local.create({
+    const clienteIds = input.clienteIds ?? [];
+    const local = await this.prisma.local.create({
       data: {
         nome: input.nome,
         logradouro: input.logradouro,
@@ -59,11 +60,13 @@ export class LocaisMotoristaService {
         cep: input.cep,
         pontoReferencia: input.pontoReferencia,
         tipo: input.tipo,
-        clienteId: input.clienteId,
         lat: input.lat,
         lng: input.lng,
         criadoPorMotoristaId: motoristaId,
         nivelConfianca: NivelConfiancaLocal.RASCUNHO,
+        clientes: clienteIds.length
+          ? { create: clienteIds.map((clienteId) => ({ clienteId })) }
+          : undefined,
       },
       select: {
         id: true,
@@ -75,12 +78,14 @@ export class LocaisMotoristaService {
         uf: true,
         pontoReferencia: true,
         tipo: true,
-        clienteId: true,
         lat: true,
         lng: true,
         nivelConfianca: true,
+        clientes: { select: { clienteId: true } },
       },
     });
+    const { clientes, ...rest } = local;
+    return { ...rest, clienteIds: clientes.map((c) => c.clienteId) };
   }
 
   /**
@@ -193,7 +198,7 @@ export class LocaisMotoristaService {
         lat: true,
         lng: true,
         nivelConfianca: true,
-        clienteId: true,
+        clientes: { select: { clienteId: true } },
       },
     });
 
@@ -242,7 +247,7 @@ export class LocaisMotoristaService {
       lat: f.lat,
       lng: f.lng,
       nivelConfianca: f.nivelConfianca,
-      clienteId: f.clienteId,
+      clienteIds: f.clientes.map((c) => c.clienteId),
       distanciaMetros: Math.round(f.distanciaMetros),
       vezesUsadoMotorista: contador.get(f.id) ?? 0,
     }));
@@ -256,10 +261,11 @@ export class LocaisMotoristaService {
    */
   async criarRapido(
     motoristaId: string,
-    input: { nome: string; lat: number; lng: number; tipo: TipoLocal; clienteId?: string },
+    input: { nome: string; lat: number; lng: number; tipo: TipoLocal; clienteIds?: string[] },
   ) {
     const reverse = await this.geocoding.reverseGeocoding(input.lat, input.lng);
-    return this.prisma.local.create({
+    const clienteIds = input.clienteIds ?? [];
+    const local = await this.prisma.local.create({
       data: {
         nome: input.nome,
         logradouro: reverse.logradouro ?? "(sem endereço)",
@@ -269,11 +275,13 @@ export class LocaisMotoristaService {
         uf: reverse.uf.toUpperCase().slice(0, 2),
         cep: reverse.cep,
         tipo: input.tipo,
-        clienteId: input.clienteId,
         lat: input.lat,
         lng: input.lng,
         criadoPorMotoristaId: motoristaId,
         nivelConfianca: NivelConfiancaLocal.RASCUNHO,
+        clientes: clienteIds.length
+          ? { create: clienteIds.map((clienteId) => ({ clienteId })) }
+          : undefined,
       },
       select: {
         id: true,
@@ -281,12 +289,14 @@ export class LocaisMotoristaService {
         cidade: true,
         uf: true,
         tipo: true,
-        clienteId: true,
         lat: true,
         lng: true,
         nivelConfianca: true,
+        clientes: { select: { clienteId: true } },
       },
     });
+    const { clientes, ...rest } = local;
+    return { ...rest, clienteIds: clientes.map((c) => c.clienteId) };
   }
 
   /**

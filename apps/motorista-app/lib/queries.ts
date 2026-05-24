@@ -28,7 +28,7 @@ export type Local = {
   uf: string;
   pontoReferencia: string | null;
   tipo: "CARGA" | "DESCARGA" | "AMBOS";
-  clienteId: string | null;
+  clienteIds: string[];
   lat: number | null;
   lng: number | null;
 };
@@ -107,7 +107,7 @@ function normalizarViagem<T extends { cliente?: unknown; obra?: unknown }>(v: T)
   return v;
 }
 
-function normalizarCatalogos<T extends { clientes?: unknown; obras?: unknown }>(c: T): T {
+function normalizarCatalogos<T extends { clientes?: unknown; obras?: unknown; locais?: unknown }>(c: T): T {
   if (!c) return c;
   const anyC = c as Record<string, unknown>;
   if (!anyC.clientes && Array.isArray(anyC.obras)) {
@@ -118,7 +118,22 @@ function normalizarCatalogos<T extends { clientes?: unknown; obras?: unknown }>(
   }
   // Cache pré-empresas: garante o array, evita undefined no select de Empresa.
   if (!Array.isArray(anyC.empresas)) anyC.empresas = [];
+  // Compat Local 1:N → N:N: cache antigo vinha com clienteId; novo vem com clienteIds[].
+  if (Array.isArray(anyC.locais)) {
+    anyC.locais = (anyC.locais as Array<Record<string, unknown>>).map(normalizarLocal);
+  }
   return c;
+}
+
+// Cache pré-rename de Local (1 cliente → N clientes). Garante clienteIds: string[]
+// pra qualquer payload — backend novo já manda, cache legado tinha clienteId único.
+function normalizarLocal<T>(l: T): T {
+  if (!l) return l;
+  const anyL = l as unknown as Record<string, unknown>;
+  if (Array.isArray(anyL.clienteIds)) return l;
+  const legacy = anyL.clienteId as string | null | undefined;
+  anyL.clienteIds = legacy ? [legacy] : [];
+  return l;
 }
 
 // Cache pré-rename (Abastecimento ganhou campo empresa). Garante null em vez
@@ -616,7 +631,7 @@ export type CriarLocalInput = {
   cep?: string;
   pontoReferencia?: string;
   tipo: "CARGA" | "DESCARGA" | "AMBOS";
-  clienteId?: string;
+  clienteIds?: string[];
   lat?: number;
   lng?: number;
   /**
@@ -630,7 +645,8 @@ export type CriarLocalInput = {
 export function useCriarLocal() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: CriarLocalInput) => api.post<Local>("/m/locais", input),
+    mutationFn: async (input: CriarLocalInput) =>
+      normalizarLocal(await api.post<Local>("/m/locais", input)),
     onSuccess: (novo) => {
       qc.setQueryData<Catalogos>(["catalogos"], (cur) => {
         if (!cur) return cur;
@@ -649,7 +665,7 @@ export type LocalProximo = {
   lat: number | null;
   lng: number | null;
   nivelConfianca: string;
-  clienteId: string | null;
+  clienteIds: string[];
   distanciaMetros: number;
   vezesUsadoMotorista: number;
 };
@@ -672,7 +688,8 @@ export async function buscarLocaisProximos(input: {
   if (input.tipoUso) qs.set("tipoUso", input.tipoUso);
   if (input.raioM != null) qs.set("raioM", String(input.raioM));
   if (input.limit != null) qs.set("limit", String(input.limit));
-  return api.get<LocalProximo[]>(`/m/locais/proximos?${qs.toString()}`);
+  const list = await api.get<LocalProximo[]>(`/m/locais/proximos?${qs.toString()}`);
+  return list.map(normalizarLocal);
 }
 
 /**
@@ -687,8 +704,8 @@ export function useCriarLocalRapido() {
       lat: number;
       lng: number;
       tipo: "CARGA" | "DESCARGA" | "AMBOS";
-      clienteId?: string;
-    }) => api.post<Local>("/m/locais/rapido", input),
+      clienteIds?: string[];
+    }) => normalizarLocal(await api.post<Local>("/m/locais/rapido", input)),
     onSuccess: (novo) => {
       qc.setQueryData<Catalogos>(["catalogos"], (cur) => {
         if (!cur) return cur;

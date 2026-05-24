@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { AddressAutocomplete, type SugestaoEndereco } from "@/components/ui/address-autocomplete";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ComboboxMulti } from "@/components/ui/combobox-multi";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -38,9 +39,8 @@ export type Local = {
   cep: string | null;
   pontoReferencia: string | null;
   tipo: Tipo;
-  clienteId: string | null;
   ativo: boolean;
-  cliente: Cliente | null;
+  clientes: Cliente[];
   lat: number | null;
   lng: number | null;
   apelidos: string[];
@@ -77,7 +77,7 @@ export function LocalForm({ initial }: Props) {
     cep: initial?.cep ?? "",
     pontoReferencia: initial?.pontoReferencia ?? "",
     tipo: (initial?.tipo ?? "AMBOS") as Tipo,
-    clienteId: initial?.clienteId ?? "",
+    clienteIds: initial?.clientes?.map((c) => c.id) ?? ([] as string[]),
     lat: initial?.lat ?? (null as number | null),
     lng: initial?.lng ?? (null as number | null),
     apelidos: initial?.apelidos ?? [],
@@ -136,7 +136,7 @@ export function LocalForm({ initial }: Props) {
       bairro: form.bairro || undefined,
       cep: form.cep ? form.cep.replace(/\D/g, "") : undefined,
       pontoReferencia: form.pontoReferencia || undefined,
-      clienteId: form.clienteId || undefined,
+      clienteIds: form.clienteIds,
       lat: form.lat ?? undefined,
       lng: form.lng ?? undefined,
       apelidos: form.apelidos,
@@ -279,18 +279,18 @@ export function LocalForm({ initial }: Props) {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Cliente (opcional)</Label>
-            <Select
-              value={form.clienteId}
-              onChange={(e) => setForm({ ...form, clienteId: e.target.value })}
-            >
-              <option value="">— sem cliente —</option>
-              {clientes.data?.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nome}
-                </option>
-              ))}
-            </Select>
+            <Label>Clientes (opcional)</Label>
+            <ComboboxMulti
+              value={form.clienteIds}
+              onChange={(ids) => setForm({ ...form, clienteIds: ids })}
+              options={(clientes.data ?? []).map((c) => ({ value: c.id, label: c.nome }))}
+              placeholder="Sem cliente vinculado"
+              searchPlaceholder="Buscar cliente…"
+              loading={clientes.isLoading}
+            />
+            <p className="text-xs text-muted-foreground">
+              Sem cliente vinculado = local genérico, aparece pra qualquer viagem.
+            </p>
           </div>
         </div>
 

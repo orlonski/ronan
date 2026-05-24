@@ -884,7 +884,7 @@ export class MotoristaService {
           uf: true,
           pontoReferencia: true,
           tipo: true,
-          clienteId: true,
+          clientes: { select: { clienteId: true } },
           lat: true,
           lng: true,
         },
@@ -896,7 +896,11 @@ export class MotoristaService {
         orderBy: { nome: "asc" },
       }),
     ]);
-    return { veiculos, materiais, clientes, locais, empresas };
+    const locaisFlat = locais.map(({ clientes, ...l }) => ({
+      ...l,
+      clienteIds: clientes.map((c) => c.clienteId),
+    }));
+    return { veiculos, materiais, clientes, locais: locaisFlat, empresas };
   }
 
   /**

@@ -18,7 +18,7 @@ const CriarLocalInput = z.object({
   cep: z.string().max(15).optional(),
   pontoReferencia: z.string().max(200).optional(),
   tipo: z.enum(["CARGA", "DESCARGA", "AMBOS"]),
-  clienteId: z.string().uuid().optional(),
+  clienteIds: z.array(z.string().uuid()).optional(),
   lat: z.number().optional(),
   lng: z.number().optional(),
   /**
@@ -49,7 +49,7 @@ const CriarRapidoInput = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   tipo: z.enum(["CARGA", "DESCARGA", "AMBOS"]),
-  clienteId: z.string().uuid().optional(),
+  clienteIds: z.array(z.string().uuid()).optional(),
 });
 
 @ApiTags("motorista/locais")

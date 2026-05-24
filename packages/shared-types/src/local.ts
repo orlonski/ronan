@@ -13,7 +13,7 @@ export const CriarLocalInput = z.object({
   lng: z.number().optional(),
   pontoReferencia: z.string().max(200).optional(),
   tipo: z.nativeEnum(TipoLocal),
-  clienteId: z.string().uuid().optional(),
+  clienteIds: z.array(z.string().uuid()).default([]),
   apelidos: z.array(z.string().min(1).max(60)).max(20).default([]),
 });
 export type CriarLocalInput = z.infer<typeof CriarLocalInput>;
@@ -23,7 +23,7 @@ export const CriarLocalRapidoInput = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   tipo: z.nativeEnum(TipoLocal),
-  clienteId: z.string().uuid().optional(),
+  clienteIds: z.array(z.string().uuid()).default([]),
 });
 export type CriarLocalRapidoInput = z.infer<typeof CriarLocalRapidoInput>;
 
@@ -36,7 +36,7 @@ export type LocalProximo = {
   lat: number | null;
   lng: number | null;
   nivelConfianca: string;
-  clienteId: string | null;
+  clienteIds: string[];
   distanciaMetros: number;
   vezesUsadoMotorista: number;
 };

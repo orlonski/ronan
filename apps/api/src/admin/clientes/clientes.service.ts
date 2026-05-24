@@ -54,7 +54,7 @@ export class ClientesService {
   async remove(id: string) {
     await this.ensureExists(id);
     const [locais, viagens] = await Promise.all([
-      this.prisma.local.count({ where: { clienteId: id } }),
+      this.prisma.localCliente.count({ where: { clienteId: id } }),
       this.prisma.viagem.count({ where: { clienteId: id } }),
     ]);
     const partes: string[] = [];

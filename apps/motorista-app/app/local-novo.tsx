@@ -139,7 +139,7 @@ export default function LocalNovo() {
       cep: cepDigits.length === 8 ? cepDigits : undefined,
       pontoReferencia: pontoReferencia.trim() || undefined,
       tipo,
-      clienteId: params.clienteId && params.clienteId.length > 0 ? params.clienteId : undefined,
+      clienteIds: params.clienteId && params.clienteId.length > 0 ? [params.clienteId] : undefined,
       lat: lat ?? undefined,
       lng: lng ?? undefined,
     };
@@ -214,7 +214,7 @@ export default function LocalNovo() {
       uf: s.uf,
       pontoReferencia: null,
       tipo: s.tipo,
-      clienteId: null,
+      clienteIds: [],
       lat: s.lat,
       lng: s.lng,
     };

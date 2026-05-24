@@ -119,7 +119,7 @@ export function DescargaPorGps({
         lat: estado.coords.lat,
         lng: estado.coords.lng,
         tipo: "DESCARGA",
-        clienteId: clienteId ?? undefined,
+        clienteIds: clienteId ? [clienteId] : undefined,
       });
       onChange(novo.id);
       setEstado({

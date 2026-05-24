@@ -283,7 +283,8 @@ export default function NovaViagem() {
       ...extraLocais.filter((l) => !todosIds.has(l.id)),
     ];
     const noCliente = merged.filter(
-      (l) => !clienteId || l.clienteId === clienteId || l.clienteId === null,
+      (l) =>
+        !clienteId || l.clienteIds.length === 0 || l.clienteIds.includes(clienteId),
     );
 
     // Calcula distância de cada local até a posição atual do motorista (se temos GPS).
