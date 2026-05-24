@@ -57,8 +57,10 @@ export default function LocaisPage() {
   const [view, setView] = useState<"lista" | "mapa">("lista");
 
   // Carrega só quando aba "Mapa" tá ativa. Backend filtra por ativo + lat/lng.
+  // QueryKey começa com PATH pra invalidate de create/update/delete pegar o mapa
+  // junto (TanStack faz partial match por prefixo do array).
   const mapa = useQuery({
-    queryKey: ["/admin/locais/mapa", token],
+    queryKey: [PATH, "mapa", token],
     enabled: view === "mapa" && !!token,
     queryFn: () => fetchApi<LocalMapa[]>("/admin/locais/mapa", { token }),
     staleTime: 60_000,
