@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { AlertCircle, Pencil, Plus } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
+import { useQuery } from "@tanstack/react-query";
 import { StatusToggle } from "@/components/status-toggle";
 import { ExcluirButton } from "@/components/excluir-button";
 import { Button } from "@/components/ui/button";
@@ -16,10 +18,24 @@ import {
 import { Combobox } from "@/components/ui/combobox";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import {
+  fetchApi,
+  useAuthToken,
   usePaginatedList,
   useResourceOptions,
   useUpdateResource,
 } from "@/lib/client-api";
+import type { LocalMapa } from "@/components/mapa-locais";
+
+// Leaflet quebra em SSR (acessa window). Import dinâmico igual PontoMap.
+const MapaLocais = dynamic(
+  () => import("@/components/mapa-locais").then((m) => m.MapaLocais),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[calc(100vh-260px)] min-h-[500px] rounded-lg border bg-muted/30" />
+    ),
+  },
+);
 
 type Tipo = "CARGA" | "DESCARGA" | "AMBOS";
 type Cliente = { id: string; nome: string };
@@ -37,6 +53,20 @@ export default function LocaisPage() {
   const list = usePaginatedList<Local>(PATH, tableState);
   const clientes = useResourceOptions<Cliente>(CLIENTES_PATH);
   const update = useUpdateResource<Record<string, unknown>, Local>(PATH, PATH);
+  const token = useAuthToken();
+  const [view, setView] = useState<"lista" | "mapa">("lista");
+
+  // Carrega só quando aba "Mapa" tá ativa. Backend filtra por ativo + lat/lng.
+  const mapa = useQuery({
+    queryKey: ["/admin/locais/mapa", token],
+    enabled: view === "mapa" && !!token,
+    queryFn: () => fetchApi<LocalMapa[]>("/admin/locais/mapa", { token }),
+    staleTime: 60_000,
+  });
+
+  const totalGeral = list.data?.pagination.total ?? 0;
+  const totalNoMapa = mapa.data?.length ?? 0;
+  const semCoord = view === "mapa" && mapa.data ? Math.max(totalGeral - totalNoMapa, 0) : 0;
 
   const clienteOptions = useMemo(
     () => (clientes.data ?? []).map((o) => ({ value: o.id, label: o.nome })),
@@ -149,6 +179,37 @@ export default function LocaisPage() {
         </div>
       </header>
 
+      <div className="flex gap-1 border-b">
+        {(["lista", "mapa"] as const).map((v) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => setView(v)}
+            className={`border-b-2 px-4 py-2 text-sm transition-colors ${
+              view === v
+                ? "border-blue-600 font-medium text-blue-700"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {v === "lista" ? "Lista" : "Mapa"}
+          </button>
+        ))}
+      </div>
+
+      {view === "mapa" && semCoord > 0 && (
+        <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            {semCoord} local{semCoord === 1 ? "" : "is"} sem coordenada não
+            aparece{semCoord === 1 ? "" : "m"} no mapa. Edite pra preencher
+            endereço completo.
+          </span>
+        </div>
+      )}
+
+      {view === "mapa" ? (
+        <MapaLocais locais={mapa.data ?? []} loading={mapa.isLoading} />
+      ) : (
       <DataTable
         columns={columns}
         data={list.data?.data ?? []}
@@ -245,6 +306,7 @@ export default function LocaisPage() {
           </Card>
         )}
       />
+      )}
     </div>
   );
 }

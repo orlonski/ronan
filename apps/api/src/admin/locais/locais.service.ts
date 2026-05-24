@@ -79,6 +79,39 @@ export class LocaisService {
   }
 
   /**
+   * Lista enxuta pra exibição num mapa — só locais ativos com lat/lng,
+   * sem paginação. Volume esperado: dezenas/centenas. Inclui clientes
+   * achatado pro popup.
+   */
+  async mapa() {
+    const locais = await this.prisma.local.findMany({
+      where: {
+        ativo: true,
+        lat: { not: null },
+        lng: { not: null },
+      },
+      select: {
+        id: true,
+        nome: true,
+        logradouro: true,
+        numero: true,
+        bairro: true,
+        cidade: true,
+        uf: true,
+        tipo: true,
+        lat: true,
+        lng: true,
+        clientes: { select: { cliente: { select: { id: true, nome: true } } } },
+      },
+      orderBy: { nome: "asc" },
+    });
+    return locais.map(({ clientes, ...l }) => ({
+      ...l,
+      clientes: clientes.map((c) => c.cliente),
+    }));
+  }
+
+  /**
    * Admin homologa manualmente — sobe pra HUMANO (top da hierarquia).
    */
   async homologar(id: string) {

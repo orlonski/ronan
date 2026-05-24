@@ -44,6 +44,15 @@ export class LocaisController {
     return this.service.list(query);
   }
 
+  /**
+   * Lista enxuta pra exibir no mapa (sem paginação). Definida ANTES de :id
+   * pra Nest não interpretar "mapa" como id.
+   */
+  @Get("mapa")
+  mapa() {
+    return this.service.mapa();
+  }
+
   @Get(":id")
   findOne(@Param("id") id: string) {
     return this.service.findOne(id);

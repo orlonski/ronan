@@ -1,0 +1,185 @@
+"use client";
+
+import { useEffect, useMemo } from "react";
+import Link from "next/link";
+import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+
+type Tipo = "CARGA" | "DESCARGA" | "AMBOS";
+
+export type LocalMapa = {
+  id: string;
+  nome: string;
+  logradouro: string;
+  numero: string | null;
+  bairro: string | null;
+  cidade: string;
+  uf: string;
+  tipo: Tipo;
+  lat: number | null;
+  lng: number | null;
+  clientes: { id: string; nome: string }[];
+};
+
+// Cores por tipo. Mesmas usadas na legenda.
+const COR_POR_TIPO: Record<Tipo, string> = {
+  CARGA: "#16a34a",     // verde
+  DESCARGA: "#dc2626",  // vermelho
+  AMBOS: "#2563eb",     // azul
+};
+
+const LABEL_POR_TIPO: Record<Tipo, string> = {
+  CARGA: "Carga",
+  DESCARGA: "Descarga",
+  AMBOS: "Carga e descarga",
+};
+
+function pinIcon(cor: string) {
+  return L.divIcon({
+    html: `<div style="
+      width:24px;height:24px;border-radius:50% 50% 50% 0;
+      transform:rotate(-45deg);
+      background:${cor};
+      border:2px solid #fff;
+      box-shadow:0 2px 6px rgba(0,0,0,0.4);
+      display:flex;align-items:center;justify-content:center;
+    ">
+      <div style="
+        width:8px;height:8px;border-radius:50%;
+        background:#fff;
+        transform:rotate(45deg);
+      "></div>
+    </div>`,
+    className: "",
+    iconSize: [24, 24],
+    iconAnchor: [12, 24],
+    popupAnchor: [0, -22],
+  });
+}
+
+const ICONES: Record<Tipo, L.DivIcon> = {
+  CARGA: pinIcon(COR_POR_TIPO.CARGA),
+  DESCARGA: pinIcon(COR_POR_TIPO.DESCARGA),
+  AMBOS: pinIcon(COR_POR_TIPO.AMBOS),
+};
+
+// Centro default = Curitiba (projeto regional do amigo). Auto-fit
+// sobrescreve isso quando há locais.
+const CENTRO_DEFAULT: [number, number] = [-25.4284, -49.2733];
+const ZOOM_DEFAULT = 11;
+
+function FitBounds({ locais }: { locais: LocalMapa[] }) {
+  const map = useMap();
+  useEffect(() => {
+    const pts = locais
+      .filter((l): l is LocalMapa & { lat: number; lng: number } =>
+        l.lat != null && l.lng != null,
+      )
+      .map((l) => [l.lat, l.lng] as [number, number]);
+    if (pts.length === 0) return;
+    if (pts.length === 1) {
+      const p = pts[0]!;
+      map.setView(p, 15);
+      return;
+    }
+    const bounds = L.latLngBounds(pts);
+    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+  }, [locais, map]);
+  return null;
+}
+
+function Legenda() {
+  return (
+    <div className="absolute right-3 top-3 z-[400] rounded-md border bg-background/95 p-2 shadow-md backdrop-blur">
+      <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Tipo
+      </p>
+      <ul className="space-y-1">
+        {(Object.keys(LABEL_POR_TIPO) as Tipo[]).map((t) => (
+          <li key={t} className="flex items-center gap-2 text-xs">
+            <span
+              className="inline-block h-3 w-3 rounded-full"
+              style={{ background: COR_POR_TIPO[t] }}
+            />
+            {LABEL_POR_TIPO[t]}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export function MapaLocais({
+  locais,
+  loading,
+}: {
+  locais: LocalMapa[];
+  loading?: boolean;
+}) {
+  const pontos = useMemo(
+    () =>
+      locais.filter(
+        (l): l is LocalMapa & { lat: number; lng: number } =>
+          l.lat != null && l.lng != null,
+      ),
+    [locais],
+  );
+
+  return (
+    <div className="relative h-[calc(100vh-260px)] min-h-[500px] overflow-hidden rounded-lg border">
+      {loading && (
+        <div className="absolute inset-0 z-[500] flex items-center justify-center bg-background/60 backdrop-blur-sm">
+          <p className="text-sm text-muted-foreground">Carregando locais…</p>
+        </div>
+      )}
+      <MapContainer
+        center={CENTRO_DEFAULT}
+        zoom={ZOOM_DEFAULT}
+        style={{ height: "100%", width: "100%" }}
+        scrollWheelZoom
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <FitBounds locais={pontos} />
+        {pontos.map((l) => (
+          <Marker key={l.id} position={[l.lat, l.lng]} icon={ICONES[l.tipo]}>
+            <Popup>
+              <div className="min-w-[200px] space-y-1.5">
+                <p className="font-semibold leading-tight">{l.nome}</p>
+                <p className="text-xs leading-snug text-muted-foreground">
+                  {l.logradouro}
+                  {l.numero ? `, ${l.numero}` : ""}
+                  {l.bairro ? ` — ${l.bairro}` : ""}
+                  <br />
+                  {l.cidade}/{l.uf}
+                </p>
+                <p className="text-xs">
+                  <span className="text-muted-foreground">Tipo: </span>
+                  <span className="font-medium">{LABEL_POR_TIPO[l.tipo]}</span>
+                </p>
+                <p className="text-xs">
+                  <span className="text-muted-foreground">Cliente: </span>
+                  {l.clientes.length === 0
+                    ? "—"
+                    : l.clientes.map((c) => c.nome).join(", ")}
+                </p>
+                <div className="pt-1">
+                  <Link
+                    href={`/locais/${l.id}`}
+                    className="text-xs font-medium text-blue-700 hover:underline"
+                  >
+                    Editar →
+                  </Link>
+                </div>
+              </div>
+            </Popup>
+          </Marker>
+        ))}
+      </MapContainer>
+      <Legenda />
+    </div>
+  );
+}
