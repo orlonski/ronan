@@ -56,21 +56,13 @@ type Props = {
 
 export function MapaTrajetoViagem({ carga, descarga, lancamento, geometria }: Props) {
   const traçado = useMemo<[number, number][]>(() => {
-    if (geometria) {
-      try {
-        return polylineLib.decode(geometria) as [number, number][];
-      } catch {
-        return [];
-      }
+    if (!geometria) return [];
+    try {
+      return polylineLib.decode(geometria) as [number, number][];
+    } catch {
+      return [];
     }
-    if (carga && descarga) {
-      return [
-        [carga.lat, carga.lng],
-        [descarga.lat, descarga.lng],
-      ];
-    }
-    return [];
-  }, [geometria, carga, descarga]);
+  }, [geometria]);
 
   const todosPontos = useMemo<[number, number][]>(() => {
     const pts: [number, number][] = [];
@@ -84,7 +76,6 @@ export function MapaTrajetoViagem({ carga, descarga, lancamento, geometria }: Pr
   if (todosPontos.length === 0) return null;
 
   const center: [number, number] = todosPontos[0]!;
-  const ehFallbackReta = !geometria && traçado.length > 0;
 
   const gmaps =
     carga && descarga
@@ -107,12 +98,7 @@ export function MapaTrajetoViagem({ carga, descarga, lancamento, geometria }: Pr
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           {traçado.length >= 2 && (
-            <Polyline
-              positions={traçado}
-              color={ehFallbackReta ? "#94a3b8" : "#ea580c"}
-              weight={ehFallbackReta ? 3 : 4}
-              dashArray={ehFallbackReta ? "6, 8" : undefined}
-            />
+            <Polyline positions={traçado} color="#ea580c" weight={4} />
           )}
           {carga && (
             <Marker position={[carga.lat, carga.lng]} icon={ICONE_CARGA}>
@@ -137,7 +123,6 @@ export function MapaTrajetoViagem({ carga, descarga, lancamento, geometria }: Pr
           <Legenda cor="#16a34a" label="Carga" />
           <Legenda cor="#dc2626" label="Descarga" />
           {lancamento && <Legenda cor="#2563eb" label="Lançamento" />}
-          {ehFallbackReta && <span className="italic">(linha estimada)</span>}
         </div>
         {gmaps && (
           <a

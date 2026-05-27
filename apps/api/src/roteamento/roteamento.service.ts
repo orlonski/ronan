@@ -24,6 +24,7 @@ export class RoteamentoService {
   async calcularKm(
     localOrigemId: string,
     localDestinoId: string,
+    opts: { force?: boolean } = {},
   ): Promise<RotaResult> {
     if (localOrigemId === localDestinoId) {
       return { km: "0.00", duracaoSegundos: 0, geometria: null, fonte: "cache" };
@@ -34,7 +35,7 @@ export class RoteamentoService {
         localOrigemId_localDestinoId: { localOrigemId, localDestinoId },
       },
     });
-    if (cached && this.cacheValido(cached.calculadoEm)) {
+    if (!opts.force && cached && this.cacheValido(cached.calculadoEm)) {
       return {
         km: cached.km.toString(),
         duracaoSegundos: cached.duracaoSegundos,

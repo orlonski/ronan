@@ -1,8 +1,14 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import type { Prisma, StatusViagem } from "@prisma/client";
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import { AcaoAuditoria, type Prisma, type StatusViagem } from "@prisma/client";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
 import { serializarViagemComMinimos } from "../../common/viagem-minimos";
 import { PrismaService } from "../../prisma/prisma.service";
+import { RoteamentoService } from "../../roteamento/roteamento.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 
@@ -21,6 +27,7 @@ export class ViagensAdminService {
     private readonly prisma: PrismaService,
     private readonly auditoria: AuditoriaService,
     private readonly uploads: UploadsService,
+    private readonly roteamento: RoteamentoService,
   ) {}
 
   async list(params: ListViagensParams) {
@@ -144,6 +151,53 @@ export class ViagensAdminService {
     });
 
     return { ...serializarViagemComMinimos(viagem), rotaGeometria: rota?.geometria ?? null };
+  }
+
+  async recalcularTrajeto(id: string, usuarioId: string) {
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { id },
+      select: { id: true, localCargaId: true, localDescargaId: true },
+    });
+    if (!viagem) throw new NotFoundException("Viagem não encontrada");
+
+    const cacheAntes = await this.prisma.rotaCache.findUnique({
+      where: {
+        localOrigemId_localDestinoId: {
+          localOrigemId: viagem.localCargaId,
+          localDestinoId: viagem.localDescargaId,
+        },
+      },
+      select: { km: true, geometria: true },
+    });
+
+    const resultado = await this.roteamento.calcularKm(
+      viagem.localCargaId,
+      viagem.localDescargaId,
+      { force: true },
+    );
+    if (resultado.km === null) {
+      throw new BadRequestException(resultado.erro);
+    }
+
+    await this.auditoria.log({
+      usuarioId,
+      entidade: "Viagem",
+      entidadeId: viagem.id,
+      acao: AcaoAuditoria.RECALCULAR_TRAJETO,
+      metadata: {
+        kmAntes: cacheAntes?.km.toString() ?? null,
+        kmDepois: resultado.km,
+        tinhaGeometria: cacheAntes?.geometria != null,
+        temGeometria: resultado.geometria != null,
+      },
+    });
+
+    return {
+      ok: true,
+      km: resultado.km,
+      duracaoSegundos: resultado.duracaoSegundos,
+      geometria: resultado.geometria,
+    };
   }
 
   async historico(viagemId: string) {

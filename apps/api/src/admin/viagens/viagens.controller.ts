@@ -1,11 +1,23 @@
-import { Controller, Delete, Get, HttpCode, Param, Query, Res, UseGuards } from "@nestjs/common";
+import {
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Query,
+  Res,
+  UseGuards,
+} from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { z } from "zod";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { paginationQuerySchema } from "../../common/pagination";
+import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
+import type { AuthAdminUser } from "../../auth/types";
 import { ViagensAdminService } from "./viagens.service";
 
 const ListViagensQuery = paginationQuerySchema.extend({
@@ -41,6 +53,14 @@ export class ViagensAdminController {
   @Get(":id/historico")
   historico(@Param("id") id: string) {
     return this.service.historico(id);
+  }
+
+  @Post(":id/recalcular-trajeto")
+  recalcularTrajeto(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.recalcularTrajeto(id, user.id);
   }
 
   @Roles("ADMIN")

@@ -74,6 +74,7 @@ enum AcaoAuditoria {
   MARCAR_ENVIADO
   MATCH_AUTOMATICO
   MATCH_IA
+  RECALCULAR_TRAJETO
 }
 
 enum TipoCombustivel {

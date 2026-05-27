@@ -44,25 +44,15 @@ export function MapaCargaDescarga({
   }, []);
 
   const traçado = useMemo<{ latitude: number; longitude: number }[]>(() => {
-    if (geometria) {
-      try {
-        return (polylineLib.decode(geometria) as [number, number][]).map(
-          ([lat, lng]) => ({ latitude: lat, longitude: lng }),
-        );
-      } catch {
-        return [];
-      }
+    if (!geometria) return [];
+    try {
+      return (polylineLib.decode(geometria) as [number, number][]).map(
+        ([lat, lng]) => ({ latitude: lat, longitude: lng }),
+      );
+    } catch {
+      return [];
     }
-    if (carga && descarga) {
-      return [
-        { latitude: carga.lat, longitude: carga.lng },
-        { latitude: descarga.lat, longitude: descarga.lng },
-      ];
-    }
-    return [];
-  }, [geometria, carga, descarga]);
-
-  const ehFallbackReta = !geometria && traçado.length > 0;
+  }, [geometria]);
 
   const todosLats = useMemo(() => {
     const lats: number[] = [];
@@ -112,12 +102,7 @@ export function MapaCargaDescarga({
     <View className="overflow-hidden rounded-xl" style={{ height }}>
       <MapView {...mapProps}>
         {traçado.length >= 2 && (
-          <Polyline
-            coordinates={traçado}
-            strokeColor={ehFallbackReta ? "#94a3b8" : "#ea580c"}
-            strokeWidth={ehFallbackReta ? 3 : 4}
-            lineDashPattern={ehFallbackReta ? [6, 8] : undefined}
-          />
+          <Polyline coordinates={traçado} strokeColor="#ea580c" strokeWidth={4} />
         )}
         {carga && (
           <Marker

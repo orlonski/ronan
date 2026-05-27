@@ -29,11 +29,14 @@ import {
   History,
   ImageOff,
   MapPin,
+  RefreshCw,
   Sparkles,
   User as UserIcon,
   X,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import {
@@ -44,7 +47,7 @@ import {
 } from "@/lib/fechamento-helpers";
 import { ValorComMinimo } from "@/components/valor-com-minimo";
 import { useHistoricoViagem } from "@/lib/fechamentos-api";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 type ViagemDetalhe = {
   id: string;
@@ -122,6 +125,24 @@ export default function ViagemDetalhePage({
     queryFn: () => fetchApi<ViagemDetalhe>(`/admin/viagens/${id}`, { token }),
   });
   const historico = useHistoricoViagem(id);
+  const queryClient = useQueryClient();
+  const recalcular = useMutation({
+    mutationFn: () =>
+      fetchApi<{ ok: true }>(`/admin/viagens/${id}/recalcular-trajeto`, {
+        method: "POST",
+        token,
+      }),
+    onSuccess: () => {
+      toast.success("Trajeto recalculado.");
+      void queryClient.invalidateQueries({ queryKey: ["viagem-admin", id] });
+      void queryClient.invalidateQueries({ queryKey: ["viagem-historico", id] });
+    },
+    onError: (err) => {
+      toast.error("Não foi possível recalcular", {
+        description: (err as Error).message,
+      });
+    },
+  });
   const [tab, setTab] = useState<Tab>("dados");
 
   if (viagem.isLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
@@ -263,9 +284,23 @@ export default function ViagemDetalhePage({
             v.localDescarga.lat != null ||
             v.lat != null) && (
             <Card className="p-5 md:col-span-2">
-              <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
-                <MapPin className="h-4 w-4" /> Trajeto da viagem
-              </h3>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="flex items-center gap-2 text-base font-medium">
+                  <MapPin className="h-4 w-4" /> Trajeto da viagem
+                </h3>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => recalcular.mutate()}
+                  disabled={recalcular.isPending}
+                  title="Reprocessa o trajeto via OSRM (atualiza polilinha e km de cache)"
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 ${recalcular.isPending ? "animate-spin" : ""}`}
+                  />
+                  {recalcular.isPending ? "Recalculando…" : "Recalcular trajeto"}
+                </Button>
+              </div>
               <MapaTrajetoViagem
                 carga={
                   v.localCarga.lat != null && v.localCarga.lng != null
@@ -410,6 +445,7 @@ function labelForAcao(acao: string): string {
       MARCAR_ENVIADO: "Marcado como enviado",
       MATCH_AUTOMATICO: "Match automático",
       MATCH_IA: "Match via IA",
+      RECALCULAR_TRAJETO: "Recálculo de trajeto",
     } as const
   )[acao as never] ?? acao;
 }
@@ -418,6 +454,7 @@ function iconForAcao(acao: string) {
   if (acao === "MATCH_IA") return Sparkles;
   if (acao === "MATCH_AUTOMATICO" || acao === "RESOLVER") return CheckCircle2;
   if (acao === "UPDATE") return Edit3;
+  if (acao === "RECALCULAR_TRAJETO") return RefreshCw;
   return Clock;
 }
 
@@ -427,6 +464,7 @@ function colorForAcao(acao: string): string {
   if (acao === "RESOLVER") return "bg-blue-500";
   if (acao === "UPDATE") return "bg-orange-500";
   if (acao === "EXPORTAR" || acao === "MARCAR_ENVIADO") return "bg-purple-500";
+  if (acao === "RECALCULAR_TRAJETO") return "bg-cyan-500";
   return "bg-gray-500";
 }
 
