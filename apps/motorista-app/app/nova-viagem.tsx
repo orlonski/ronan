@@ -106,6 +106,9 @@ export default function NovaViagem() {
   );
   const [foto, setFoto] = useState<CapturedPhoto | null>(null);
   const [sugestoesIa, setSugestoesIa] = useState<ExtrairTicketResult | null>(null);
+  // Campos preenchidos pela IA e mantidos pelo motorista até o submit.
+  const [ocrCampos, setOcrCampos] = useState<Set<string>>(new Set());
+  const [ocrConfidence, setOcrConfidence] = useState<number | null>(null);
   const extrairTicket = useExtrairTicket();
   const [submitting, setSubmitting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -316,29 +319,57 @@ export default function NovaViagem() {
 
   function update<K extends keyof FormShape>(k: K, v: FormShape[K]) {
     setForm((f) => ({ ...f, [k]: v }));
+    // Edição manual remove marca de OCR — esse valor não é mais "da IA"
+    setOcrCampos((s) => {
+      if (!s.has(k as string)) return s;
+      const next = new Set(s);
+      next.delete(k as string);
+      return next;
+    });
   }
 
   /**
-   * Preenche apenas campos vazios do form com as sugestões da IA.
-   * Não sobrescreve nada que o motorista já digitou.
+   * Preenche apenas campos vazios do form com as sugestões da IA. Não
+   * sobrescreve nada que o motorista já digitou. Marca cada campo aplicado
+   * em `ocrCampos` pra persistir no submit.
    */
   function aplicarSugestoesIa(s: ExtrairTicketResult) {
+    const aplicados = new Set<string>();
     setForm((f) => {
       const next = { ...f };
-      if (!next.ticket && s.ticket) next.ticket = s.ticket.toUpperCase();
+      if (!next.ticket && s.ticket) {
+        next.ticket = s.ticket.toUpperCase();
+        aplicados.add("ticket");
+      }
       if (!next.toneladas.trim() && typeof s.toneladas === "number") {
         next.toneladas = String(s.toneladas).replace(".", ",");
+        aplicados.add("toneladas");
       }
       if (!next.km.trim() && typeof s.km === "number") {
         next.km = String(s.km).replace(".", ",");
+        aplicados.add("km");
       }
-      if (!next.clienteId && s.clienteId) next.clienteId = s.clienteId;
-      if (!next.materialId && s.materialId) next.materialId = s.materialId;
-      if (!next.veiculoId && s.veiculoId) next.veiculoId = s.veiculoId;
+      if (!next.clienteId && s.clienteId) {
+        next.clienteId = s.clienteId;
+        aplicados.add("clienteId");
+      }
+      if (!next.materialId && s.materialId) {
+        next.materialId = s.materialId;
+        aplicados.add("materialId");
+      }
+      if (!next.veiculoId && s.veiculoId) {
+        next.veiculoId = s.veiculoId;
+        aplicados.add("veiculoId");
+      }
       // Data: só sobrescreve se motorista ainda tá no default de hoje
-      if (s.data && next.data === today()) next.data = s.data;
+      if (s.data && next.data === today()) {
+        next.data = s.data;
+        aplicados.add("data");
+      }
       return next;
     });
+    setOcrCampos(aplicados);
+    setOcrConfidence(s.confidence);
   }
 
   function validar(): string | null {
@@ -422,6 +453,12 @@ export default function NovaViagem() {
             ? orig.criadoOfflineEm
             : new Date().toISOString()),
         ...(c ? { lat: c.lat, lng: c.lng } : {}),
+        ...(ocrCampos.size > 0
+          ? {
+              ocrCampos: Array.from(ocrCampos),
+              ocrConfidence: ocrConfidence ?? undefined,
+            }
+          : {}),
         ...preservaFotoKey,
         ...preservaTracking,
       };

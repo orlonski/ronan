@@ -290,6 +290,8 @@ export class ViagensMotoristaService {
         iniciadoEm: rest.iniciadoEm,
         kmReal: rest.kmReal,
         criadoOfflineEm: rest.criadoOfflineEm,
+        ocrCampos: rest.ocrCampos ?? [],
+        ocrConfidence: rest.ocrConfidence,
         ...(fotoKey
           ? {
               fotos: {

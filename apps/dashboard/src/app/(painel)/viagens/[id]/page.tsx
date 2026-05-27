@@ -114,6 +114,8 @@ type ViagemDetalhe = {
   revisadoEm: string | null;
   revisadoPor: { id: string; nome: string } | null;
   motivoStatus: string | null;
+  ocrCampos: string[];
+  ocrConfidence: number | null;
   fotos: { id: string; storageKey: string; rotacao: number }[];
   matchesFechamento: Array<{
     id: string;
@@ -266,11 +268,20 @@ export default function ViagemDetalhePage({
           <Card className="p-5">
             <h3 className="mb-3 text-base font-medium">Dados do lançamento</h3>
             <dl className="space-y-2 text-sm">
-              <Row label="Material" value={v.material.nome} />
-              <Row label="Cliente" value={v.cliente.nome} />
+              <Row
+                label="Material"
+                value={v.material.nome}
+                fromAi={v.ocrCampos.includes("materialId")}
+              />
+              <Row
+                label="Cliente"
+                value={v.cliente.nome}
+                fromAi={v.ocrCampos.includes("clienteId")}
+              />
               <Row label="Empresa" value={v.cliente.empresa.nome} />
               <Row
                 label="Toneladas"
+                fromAi={v.ocrCampos.includes("toneladas")}
                 value={
                   <ValorComMinimo
                     efetivo={v.toneladasEfetiva}
@@ -283,6 +294,7 @@ export default function ViagemDetalhePage({
               />
               <Row
                 label="Km rodados"
+                fromAi={v.ocrCampos.includes("km")}
                 value={
                   <span>
                     <ValorComMinimo
@@ -304,7 +316,12 @@ export default function ViagemDetalhePage({
               {v.kmReal && (
                 <Row label="Km real (GPS)" value={fmtNum(v.kmReal, 2)} />
               )}
-              <Row label="Ticket" value={v.ticket} mono />
+              <Row
+                label="Ticket"
+                value={v.ticket}
+                mono
+                fromAi={v.ocrCampos.includes("ticket")}
+              />
               {v.valorPedagioTotal && <Row label="Pedágio" value={fmtBRL(v.valorPedagioTotal)} />}
               {v.observacao && <Row label="Observação" value={v.observacao} />}
             </dl>
@@ -616,10 +633,30 @@ export default function ViagemDetalhePage({
   );
 }
 
-function Row({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
+function Row({
+  label,
+  value,
+  mono,
+  fromAi,
+}: {
+  label: string;
+  value: React.ReactNode;
+  mono?: boolean;
+  fromAi?: boolean;
+}) {
   return (
     <div className="flex justify-between gap-3">
-      <dt className="text-muted-foreground">{label}</dt>
+      <dt className="text-muted-foreground">
+        {label}
+        {fromAi && (
+          <span
+            className="ml-1 text-xs text-indigo-600"
+            title="Preenchido pela IA"
+          >
+            ✨
+          </span>
+        )}
+      </dt>
       <dd className={mono ? "font-mono" : ""}>{value}</dd>
     </div>
   );

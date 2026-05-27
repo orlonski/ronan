@@ -31,6 +31,7 @@ type Viagem = {
   kmInformado: string;
   kmEfetivo: string;
   kmAjustada: boolean;
+  ocrCampos: string[];
   veiculo: { id: string; placa: string };
   motorista: { id: string; nome: string };
   cliente: { id: string; nome: string };
@@ -163,7 +164,19 @@ export default function ViagensPage() {
         id: "ticket",
         accessorKey: "ticket",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Ticket" />,
-        cell: ({ row }) => <span className="font-mono text-sm">{row.original.ticket}</span>,
+        cell: ({ row }) => (
+          <span className="font-mono text-sm">
+            {row.original.ticket}
+            {row.original.ocrCampos.length > 0 && (
+              <span
+                className="ml-1 text-xs text-indigo-600"
+                title={`Campos pela IA: ${row.original.ocrCampos.join(", ")}`}
+              >
+                ✨
+              </span>
+            )}
+          </span>
+        ),
       },
       {
         id: "km",

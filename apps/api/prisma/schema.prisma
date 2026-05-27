@@ -561,6 +561,13 @@ model Viagem {
   // Tracking GPS do trajeto (opcional — só preenchido se motorista usou "Iniciar viagem")
   iniciadoEm        DateTime? // quando tocou Iniciar
   kmReal            Decimal?     @db.Decimal(10, 2) // somatório das distâncias entre pontos consecutivos
+  /// Rastreamento granular do OCR de ticket via IA. Cada campo preenchido
+  /// pela IA (e mantido pelo motorista até o submit) entra no array. Ex:
+  /// ["ticket","toneladas","clienteId"]. Quando motorista edita um campo
+  /// depois de aplicar IA, ele sai do array (não é mais "valor da IA").
+  ocrCampos         String[]     @default([])
+  /// Confidence geral da extração OCR (0..1). Null se IA não rodou.
+  ocrConfidence     Float?
   /// Pré-validação manual pelo admin no dashboard. Quando revisadoEm está
   /// preenchido, o FechamentoProcessor NÃO sobrescreve o status no match
   /// (preserva a decisão manual).

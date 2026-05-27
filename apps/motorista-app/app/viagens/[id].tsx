@@ -187,6 +187,7 @@ export default function ViagemDetalheScreen() {
               <Stat
                 label="Toneladas"
                 value={fmtNum(detalhe.data.toneladasEfetiva, 3)}
+                fromAi={detalhe.data.ocrCampos.includes("toneladas")}
                 subValue={
                   detalhe.data.toneladasAjustada
                     ? `informado ${fmtNum(detalhe.data.toneladasInformada, 3)}`
@@ -196,6 +197,7 @@ export default function ViagemDetalheScreen() {
               <Stat
                 label="Km"
                 value={fmtNum(detalhe.data.kmEfetivo, 2)}
+                fromAi={detalhe.data.ocrCampos.includes("km")}
                 subValue={
                   detalhe.data.kmAjustada
                     ? `informado ${fmtNum(detalhe.data.kmInformado, 2)}`
@@ -206,7 +208,12 @@ export default function ViagemDetalheScreen() {
                       : undefined
                 }
               />
-              <Stat label="Ticket" value={detalhe.data.ticket} mono />
+              <Stat
+                label="Ticket"
+                value={detalhe.data.ticket}
+                mono
+                fromAi={detalhe.data.ocrCampos.includes("ticket")}
+              />
             </View>
             {detalhe.data.valorPedagioTotal && (
               <View className="mt-3 border-t-2 border-border pt-3">
@@ -391,16 +398,19 @@ function Stat({
   value,
   mono = true,
   subValue,
+  fromAi = false,
 }: {
   label: string;
   value: string;
   mono?: boolean;
   subValue?: string;
+  fromAi?: boolean;
 }) {
   return (
     <View>
       <Text className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         {label}
+        {fromAi ? " ✨" : ""}
       </Text>
       <Text
         className="text-lg font-bold text-foreground"

@@ -41,6 +41,10 @@ export const CriarViagemInput = z.object({
   iniciadoEm: z.coerce.date().optional(),
   kmReal: z.number().nonnegative().max(MAX_KM).optional(),
   pontos: z.array(ViagemPontoInput).max(2000).optional(),
+  // Rastreamento OCR: campos preenchidos via IA (slugs do form). Vazio
+  // quando motorista não usou OCR ou editou tudo depois.
+  ocrCampos: z.array(z.string().min(1).max(40)).max(20).optional(),
+  ocrConfidence: z.number().min(0).max(1).optional(),
 });
 export type CriarViagemInput = z.infer<typeof CriarViagemInput>;
 

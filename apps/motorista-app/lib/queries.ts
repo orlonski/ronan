@@ -70,6 +70,10 @@ export type Viagem = {
   // Snapshot do km OSRM no momento do lançamento. Quando km !== kmCalculado,
   // motorista sobrescreveu o sugerido — exibimos os dois lado a lado.
   kmCalculado: string | null;
+  // OCR de ticket via IA: campos preenchidos pela IA (e mantidos pelo
+  // motorista) + confidence geral. Vazio se IA não rodou ou nada aplicado.
+  ocrCampos: string[];
+  ocrConfidence: number | null;
   // Derivados pelo backend (helper viagem-minimos) — quando ajustada=true,
   // toneladasEfetiva/kmEfetivo = piso do cliente; senão = valor informado.
   toneladasInformada: string;
