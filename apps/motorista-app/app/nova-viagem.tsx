@@ -532,25 +532,44 @@ export default function NovaViagem() {
                   setFoto(novaFoto);
                   setSugestoesIa(null);
                   // OCR só quando há foto nova E motorista tem permissão.
-                  // Best-effort: erro silencioso (sem internet, sem IA etc).
-                  if (novaFoto && me.data?.podeUsarOcrTicket) {
-                    void (async () => {
-                      try {
-                        const fotoBase64 = await FileSystem.readAsStringAsync(
-                          novaFoto.uri,
-                          { encoding: "base64" },
-                        );
-                        const res = await extrairTicket.mutateAsync({
-                          fotoBase64,
-                          mime: novaFoto.mime,
-                        });
-                        // Confidence muito baixo: provavelmente lixo, não mostra
-                        if (res.confidence > 0.2) setSugestoesIa(res);
-                      } catch {
-                        // silencioso — motorista preenche manual
-                      }
-                    })();
+                  // [DEBUG] Toast/Alert visível enquanto a feature não estabiliza.
+                  if (!novaFoto) return;
+                  if (!me.data) {
+                    Alert.alert("OCR debug", "me.data ainda não carregou");
+                    return;
                   }
+                  if (!me.data.podeUsarOcrTicket) {
+                    Alert.alert(
+                      "OCR debug",
+                      "Flag podeUsarOcrTicket está false no app. Reabra o app pra atualizar o cache do /m/me.",
+                    );
+                    return;
+                  }
+                  void (async () => {
+                    try {
+                      const fotoBase64 = await FileSystem.readAsStringAsync(
+                        novaFoto.uri,
+                        { encoding: "base64" },
+                      );
+                      const res = await extrairTicket.mutateAsync({
+                        fotoBase64,
+                        mime: novaFoto.mime,
+                      });
+                      if (res.confidence > 0.2) {
+                        setSugestoesIa(res);
+                      } else {
+                        Alert.alert(
+                          "OCR debug",
+                          `Confidence ${res.confidence.toFixed(2)} — IA não confiou na leitura. obs: ${res.observacoes ?? "n/a"}`,
+                        );
+                      }
+                    } catch (err) {
+                      Alert.alert(
+                        "OCR debug — erro",
+                        (err as Error)?.message ?? String(err),
+                      );
+                    }
+                  })();
                 }}
               />
               {extrairTicket.isPending && (
