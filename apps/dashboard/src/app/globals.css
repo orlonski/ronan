@@ -400,13 +400,22 @@
 }
 
 /* Fix: Leaflet usa z-index 200~1000 que sobrepõe modais (z-50 do
-   Dialog/Sheet/lightbox). Baixa todos os panes/controles mantendo a
-   hierarquia interna (tile < overlay < shadow < marker < tooltip <
-   popup < control) abaixo de 50. */
+   Dialog/Sheet/lightbox). isolation:isolate cria stacking context próprio
+   no container — todos os z-indexes internos ficam confinados e qualquer
+   modal externo (position:fixed z-50) aparece acima. Override extra dos
+   panes/containers como cinto-e-suspensório caso o stacking context falhe
+   em algum browser. */
+.leaflet-container {
+  isolation: isolate;
+}
+.leaflet-pane          { z-index: 4 !important; }
 .leaflet-tile-pane     { z-index: 1 !important; }
 .leaflet-overlay-pane  { z-index: 2 !important; }
 .leaflet-shadow-pane   { z-index: 3 !important; }
 .leaflet-marker-pane   { z-index: 4 !important; }
 .leaflet-tooltip-pane  { z-index: 5 !important; }
 .leaflet-popup-pane    { z-index: 6 !important; }
+.leaflet-zoom-box      { z-index: 9 !important; }
+.leaflet-top,
+.leaflet-bottom        { z-index: 10 !important; }
 .leaflet-control       { z-index: 10 !important; }
