@@ -6,6 +6,13 @@
 
 const RAIO_TERRA_M = 6_371_000;
 
+/**
+ * Raio (em metros) usado no alerta "você está perto do local de carga" no
+ * lançamento de viagem. Conservador o suficiente pra reduzir falso-positivo
+ * (motorista entrou na rua mas está no cliente ali do lado).
+ */
+export const RAIO_ALERTA_CARGA_M = 150;
+
 export function haversineMetros(
   lat1: number,
   lng1: number,

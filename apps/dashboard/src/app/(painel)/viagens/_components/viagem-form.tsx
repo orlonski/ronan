@@ -11,11 +11,19 @@ import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fetchApi, useAuthToken, useResourceOptions } from "@/lib/client-api";
+import { haversineMetros } from "@/lib/geo";
 
 type Veiculo = { id: string; placa: string; modelo: string | null };
 type Cliente = { id: string; nome: string };
 type Material = { id: string; nome: string };
-type Local = { id: string; nome: string; cidade: string; uf: string };
+type Local = {
+  id: string;
+  nome: string;
+  cidade: string;
+  uf: string;
+  lat: number | null;
+  lng: number | null;
+};
 type Motorista = { id: string; nome: string };
 
 export type ViagemEditavel = {
@@ -28,6 +36,10 @@ export type ViagemEditavel = {
   observacao: string | null;
   valorPedagioTotal: string | null;
   status: string;
+  // Coordenadas capturadas pelo motorista no momento do lançamento (opcional —
+  // null se ele negou GPS). Usado pra sugerir local de descarga próximo.
+  lat: number | null;
+  lng: number | null;
   veiculo: { id: string; placa: string; modelo: string | null };
   motorista: Motorista;
   cliente: { id: string; nome: string };
@@ -117,6 +129,30 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
       })),
     [locais.data],
   );
+
+  // Sugere o local mais próximo do lat/lng capturado pelo motorista no
+  // lançamento (raio 500m). Útil pra corrigir viagens onde motorista
+  // selecionou local errado mas o GPS estava certo.
+  const sugestaoDescarga = useMemo(() => {
+    if (initial.lat == null || initial.lng == null || !locais.data) return null;
+    const lat0 = initial.lat;
+    const lng0 = initial.lng;
+    const candidatos = locais.data
+      .filter(
+        (l) =>
+          l.lat != null &&
+          l.lng != null &&
+          l.id !== form.localDescargaId,
+      )
+      .map((l) => ({
+        id: l.id,
+        nome: l.nome,
+        dist: haversineMetros(lat0, lng0, l.lat as number, l.lng as number),
+      }))
+      .filter((l) => l.dist <= 500)
+      .sort((a, b) => a.dist - b.dist);
+    return candidatos[0] ?? null;
+  }, [initial.lat, initial.lng, locais.data, form.localDescargaId]);
 
   const mutation = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
@@ -266,6 +302,20 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
           </div>
           <div className="space-y-2">
             <Label>Local de descarga</Label>
+            {sugestaoDescarga && (
+              <button
+                type="button"
+                onClick={() =>
+                  setForm((f) => ({ ...f, localDescargaId: sugestaoDescarga.id }))
+                }
+                className="w-full rounded border border-blue-300 bg-blue-50 px-3 py-2 text-left text-xs text-blue-900 hover:bg-blue-100"
+                title="Usa o lat/lng que o motorista capturou no lançamento"
+              >
+                📍 Usar lugar do lançamento:{" "}
+                <strong>{sugestaoDescarga.nome}</strong> (
+                {Math.round(sugestaoDescarga.dist)}m)
+              </button>
+            )}
             <Combobox
               value={form.localDescargaId}
               onChange={(v) => setForm({ ...form, localDescargaId: v ?? "" })}

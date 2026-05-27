@@ -274,6 +274,17 @@ export default function NovaViagem() {
     return all.find((l) => l.id === form.localDescargaId)?.nome;
   }, [form.localDescargaId, cat.data?.locais, extraLocais]);
 
+  // Coordenadas do local de carga selecionado — passadas ao DescargaPorGps
+  // pra detectar se o motorista está perto do carregamento ao tentar lançar
+  // a descarga (caso clássico de engano).
+  const localCargaCoords = useMemo(() => {
+    if (!form.localCargaId) return null;
+    const all = [...(cat.data?.locais ?? []), ...extraLocais];
+    const l = all.find((x) => x.id === form.localCargaId);
+    if (!l || l.lat == null || l.lng == null) return null;
+    return { lat: l.lat, lng: l.lng, nome: l.nome };
+  }, [form.localCargaId, cat.data?.locais, extraLocais]);
+
   const locaisFiltrados = useMemo(() => {
     if (!cat.data) return { carga: [] as SelectOption[] };
     const clienteId = form.clienteId || null;
@@ -606,6 +617,7 @@ export default function NovaViagem() {
               value={form.localDescargaId}
               onChange={(v) => update("localDescargaId", v)}
               nomeSelecionadoFallback={nomeDescargaSelecionado}
+              localCargaCoords={localCargaCoords}
             />
             {tracking && (
               <GpsHint

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -13,7 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { CheckCircle2, MapPin, X } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { pegarCoords } from "@/lib/geo";
+import { haversineMetros, pegarCoords, RAIO_ALERTA_CARGA_M } from "@/lib/geo";
 import {
   buscarLocaisProximos,
   useCriarLocalRapido,
@@ -32,11 +33,16 @@ export function DescargaPorGps({
   value,
   onChange,
   nomeSelecionadoFallback,
+  localCargaCoords,
 }: {
   clienteId: string | null;
   value: string;
   onChange: (id: string) => void;
   nomeSelecionadoFallback?: string;
+  /** Coordenadas do local de carga já selecionado no form (se houver) — usadas
+   * pra alertar quando o motorista está perto do carregamento ao tentar
+   * lançar a descarga. */
+  localCargaCoords?: { lat: number; lng: number; nome: string } | null;
 }) {
   const [estado, setEstado] = useState<Estado>(() =>
     value && nomeSelecionadoFallback
@@ -56,6 +62,35 @@ export function DescargaPorGps({
       setErro("Não consegui pegar o GPS. Verifique a permissão e tente de novo.");
       return;
     }
+
+    // Se motorista escolheu local de carga e o GPS atual está dentro do raio
+    // dele, alerta antes de prosseguir — provável engano (lançou no carregamento).
+    if (localCargaCoords) {
+      const distCarga = haversineMetros(
+        coords.lat,
+        coords.lng,
+        localCargaCoords.lat,
+        localCargaCoords.lng,
+      );
+      if (distCarga <= RAIO_ALERTA_CARGA_M) {
+        const continua = await new Promise<boolean>((resolve) => {
+          Alert.alert(
+            "Você está perto do local de carga",
+            `Está a ${Math.round(distCarga)}m de "${localCargaCoords.nome}". A viagem deve ser lançada na descarga, não no carregamento. Tem certeza?`,
+            [
+              { text: "Cancelar", onPress: () => resolve(false), style: "cancel" },
+              { text: "Continuar mesmo assim", onPress: () => resolve(true) },
+            ],
+            { cancelable: false },
+          );
+        });
+        if (!continua) {
+          setEstado({ tipo: "vazio" });
+          return;
+        }
+      }
+    }
+
     try {
       const matches = await buscarLocaisProximos({
         lat: coords.lat,
