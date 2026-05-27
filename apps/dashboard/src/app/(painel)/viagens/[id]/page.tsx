@@ -409,7 +409,7 @@ export default function ViagemDetalhePage({
                       <span className="font-medium">{labelForAcao(ev.acao)}</span>
                       {ev.campo && (
                         <Badge className="border-slate-200 bg-slate-50 text-slate-700">
-                          {ev.campo}
+                          {labelForCampo(ev.campo)}
                         </Badge>
                       )}
                       <span className="ml-auto text-xs text-muted-foreground">
@@ -506,8 +506,43 @@ function colorForAcao(acao: string): string {
 
 function formatVal(v: unknown): string {
   if (v === null || v === undefined) return "—";
-  if (typeof v === "string") return v;
+  // FK enriquecida pelo backend: { id, nome } — mostra só o nome
+  if (
+    typeof v === "object" &&
+    v !== null &&
+    "nome" in v &&
+    typeof (v as { nome: unknown }).nome === "string"
+  ) {
+    return (v as { nome: string }).nome;
+  }
+  if (typeof v === "string") {
+    // Data ISO (YYYY-MM-DD ou ISO completo) → formato BR
+    if (/^\d{4}-\d{2}-\d{2}/.test(v)) {
+      const formatted = fmtBR(v);
+      if (formatted !== "—") return formatted;
+    }
+    return v;
+  }
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
   return JSON.stringify(v, null, 2);
+}
+
+const CAMPO_LABEL: Record<string, string> = {
+  toneladas: "Toneladas",
+  km: "Km",
+  ticket: "Ticket",
+  data: "Data",
+  observacao: "Observação",
+  valorPedagioTotal: "Pedágio",
+  veiculoId: "Veículo",
+  clienteId: "Cliente",
+  materialId: "Material",
+  localCargaId: "Local de carga",
+  localDescargaId: "Local de descarga",
+};
+
+function labelForCampo(campo: string): string {
+  return CAMPO_LABEL[campo] ?? campo;
 }
 
 function FotosViagem({

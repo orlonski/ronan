@@ -195,13 +195,95 @@ export class ViagensAdminService {
 
     // Remove o _count antes de gravar o diff — ele não é campo da entidade.
     const { _count: _ignored, ...antesPlain } = antes;
+
+    // Enriquece campos FK pra log legível: troca UUID por { id, nome } onde
+    // possível. Frontend mostra o nome direto, sem precisar fazer lookup.
+    const [antesEnriquecido, depoisEnriquecido] = await Promise.all([
+      this.enriquecerCamposFK(antesPlain),
+      this.enriquecerCamposFK(depois),
+    ]);
+
     await this.auditoria.logDiff(
       { usuarioId, entidade: "Viagem", entidadeId: id, acao: AcaoAuditoria.UPDATE },
-      antesPlain,
-      depois,
+      antesEnriquecido,
+      depoisEnriquecido,
     );
 
     return this.detalhe(id);
+  }
+
+  /**
+   * Resolve os campos FK da viagem em { id, nome } pra log legível.
+   * Mantém os outros campos inalterados. Best-effort: se a FK não existir
+   * mais (ex: cliente deletado), grava só o id.
+   */
+  private async enriquecerCamposFK(
+    viagem: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const out: Record<string, unknown> = { ...viagem };
+
+    const clienteId = typeof out.clienteId === "string" ? out.clienteId : null;
+    const materialId = typeof out.materialId === "string" ? out.materialId : null;
+    const veiculoId = typeof out.veiculoId === "string" ? out.veiculoId : null;
+    const localCargaId = typeof out.localCargaId === "string" ? out.localCargaId : null;
+    const localDescargaId =
+      typeof out.localDescargaId === "string" ? out.localDescargaId : null;
+
+    const [cliente, material, veiculo, localCarga, localDescarga] = await Promise.all([
+      clienteId
+        ? this.prisma.cliente.findUnique({
+            where: { id: clienteId },
+            select: { nome: true },
+          })
+        : null,
+      materialId
+        ? this.prisma.material.findUnique({
+            where: { id: materialId },
+            select: { nome: true },
+          })
+        : null,
+      veiculoId
+        ? this.prisma.veiculo.findUnique({
+            where: { id: veiculoId },
+            select: { placa: true, modelo: true },
+          })
+        : null,
+      localCargaId
+        ? this.prisma.local.findUnique({
+            where: { id: localCargaId },
+            select: { nome: true, cidade: true, uf: true },
+          })
+        : null,
+      localDescargaId
+        ? this.prisma.local.findUnique({
+            where: { id: localDescargaId },
+            select: { nome: true, cidade: true, uf: true },
+          })
+        : null,
+    ]);
+
+    if (cliente) out.clienteId = { id: clienteId, nome: cliente.nome };
+    if (material) out.materialId = { id: materialId, nome: material.nome };
+    if (veiculo) {
+      out.veiculoId = {
+        id: veiculoId,
+        nome: veiculo.modelo ? `${veiculo.placa} (${veiculo.modelo})` : veiculo.placa,
+      };
+    }
+    if (localCarga) {
+      out.localCargaId = {
+        id: localCargaId,
+        nome: `${localCarga.nome} (${localCarga.cidade}/${localCarga.uf})`,
+      };
+    }
+    if (localDescarga) {
+      out.localDescargaId = {
+        id: localDescargaId,
+        nome: `${localDescarga.nome} (${localDescarga.cidade}/${localDescarga.uf})`,
+      };
+    }
+
+    return out;
   }
 
   async recalcularTrajeto(id: string, usuarioId: string) {
