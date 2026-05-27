@@ -75,6 +75,7 @@ enum AcaoAuditoria {
   MATCH_AUTOMATICO
   MATCH_IA
   RECALCULAR_TRAJETO
+  MOTORISTA_AJUSTOU_KM
 }
 
 enum TipoCombustivel {
@@ -510,6 +511,10 @@ model Viagem {
   toneladas         Decimal      @db.Decimal(10, 3)
   ticket            String
   km                Decimal      @db.Decimal(10, 2)
+  /// Snapshot do km que o OSRM calculou no momento do lançamento. Permite
+  /// detectar quando motorista sobrescreveu o sugerido (km != kmCalculado).
+  /// Null pra viagens antigas (pré-feature) e quando OSRM não respondeu.
+  kmCalculado       Decimal?     @db.Decimal(10, 2)
   observacao        String?
   status            StatusViagem @default(ENVIADA)
   localCarga        Local        @relation("LocalCarga", fields: [localCargaId], references: [id])

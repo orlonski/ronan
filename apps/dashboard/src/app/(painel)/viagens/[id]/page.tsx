@@ -56,6 +56,7 @@ type ViagemDetalhe = {
   ticket: string;
   km: string;
   kmReal: string | null;
+  kmCalculado: string | null;
   toneladasInformada: string;
   toneladasEfetiva: string;
   toneladasAjustada: boolean;
@@ -245,13 +246,21 @@ export default function ViagemDetalhePage({
               <Row
                 label="Km rodados"
                 value={
-                  <ValorComMinimo
-                    efetivo={v.kmEfetivo}
-                    real={v.kmInformado}
-                    ajustada={v.kmAjustada}
-                    unidade="km"
-                    casas={2}
-                  />
+                  <span>
+                    <ValorComMinimo
+                      efetivo={v.kmEfetivo}
+                      real={v.kmInformado}
+                      ajustada={v.kmAjustada}
+                      unidade="km"
+                      casas={2}
+                    />
+                    {v.kmCalculado &&
+                      Number(v.kmCalculado) !== Number(v.km) && (
+                        <span className="ml-1 text-xs text-muted-foreground">
+                          (calculado: {fmtNum(v.kmCalculado, 2)})
+                        </span>
+                      )}
+                  </span>
                 }
               />
               {v.kmReal && (
@@ -407,10 +416,15 @@ export default function ViagemDetalhePage({
                         {fmtDataHoraBR(ev.criadoEm)}
                       </span>
                     </div>
-                    {ev.usuario && (
+                    {(ev.usuario?.nome ??
+                      (ev.metadata as { motoristaNome?: string } | null)
+                        ?.motoristaNome) && (
                       <p className="mt-1 text-xs text-muted-foreground">
                         <UserIcon className="mr-1 inline h-3 w-3" />
-                        {ev.usuario.nome}
+                        {ev.usuario?.nome ??
+                          (
+                            ev.metadata as { motoristaNome?: string } | null
+                          )?.motoristaNome}
                       </p>
                     )}
                     {ev.motivo && <p className="mt-2 text-sm">{ev.motivo}</p>}
@@ -466,6 +480,7 @@ function labelForAcao(acao: string): string {
       MATCH_AUTOMATICO: "Match automático",
       MATCH_IA: "Match via IA",
       RECALCULAR_TRAJETO: "Recálculo de trajeto",
+      MOTORISTA_AJUSTOU_KM: "Motorista ajustou o km",
     } as const
   )[acao as never] ?? acao;
 }
@@ -473,7 +488,7 @@ function labelForAcao(acao: string): string {
 function iconForAcao(acao: string) {
   if (acao === "MATCH_IA") return Sparkles;
   if (acao === "MATCH_AUTOMATICO" || acao === "RESOLVER") return CheckCircle2;
-  if (acao === "UPDATE") return Edit3;
+  if (acao === "UPDATE" || acao === "MOTORISTA_AJUSTOU_KM") return Edit3;
   if (acao === "RECALCULAR_TRAJETO") return RefreshCw;
   return Clock;
 }
@@ -485,6 +500,7 @@ function colorForAcao(acao: string): string {
   if (acao === "UPDATE") return "bg-orange-500";
   if (acao === "EXPORTAR" || acao === "MARCAR_ENVIADO") return "bg-purple-500";
   if (acao === "RECALCULAR_TRAJETO") return "bg-cyan-500";
+  if (acao === "MOTORISTA_AJUSTOU_KM") return "bg-amber-500";
   return "bg-gray-500";
 }
 

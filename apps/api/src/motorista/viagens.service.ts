@@ -4,8 +4,9 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma, type StatusViagem } from "@prisma/client";
+import { AcaoAuditoria, Prisma, type StatusViagem } from "@prisma/client";
 import type { CriarViagemInput } from "@ronan/shared-types";
+import { AuditoriaService } from "../auditoria/auditoria.service";
 import { aplicarMinimosCliente, serializarViagemComMinimos } from "../common/viagem-minimos";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
@@ -51,6 +52,7 @@ export class ViagensMotoristaService {
     private readonly prisma: PrismaService,
     private readonly uploads: UploadsService,
     private readonly validacao: ValidacaoLocalService,
+    private readonly auditoria: AuditoriaService,
   ) {}
 
   async list(
@@ -278,6 +280,7 @@ export class ViagensMotoristaService {
         toneladas: rest.toneladas,
         ticket: rest.ticket,
         km: rest.km,
+        kmCalculado: rest.kmCalculado,
         observacao: rest.observacao,
         localCargaId: rest.localCargaId,
         localDescargaId: rest.localDescargaId,
@@ -312,6 +315,32 @@ export class ViagensMotoristaService {
       },
       include: VIAGEM_INCLUDE,
     });
+
+    // Se motorista sobrescreveu o km calculado pelo OSRM, registra na timeline.
+    // Best-effort: falha no log não derruba a criação da viagem.
+    if (
+      rest.kmCalculado != null &&
+      Math.abs(rest.kmCalculado - rest.km) > 0.001
+    ) {
+      try {
+        const motorista = await this.prisma.motorista.findUnique({
+          where: { id: motoristaId },
+          select: { nome: true },
+        });
+        await this.auditoria.log({
+          usuarioId: null,
+          entidade: "Viagem",
+          entidadeId: viagem.id,
+          acao: AcaoAuditoria.MOTORISTA_AJUSTOU_KM,
+          campo: "km",
+          valorAntes: rest.kmCalculado,
+          valorDepois: rest.km,
+          metadata: { motoristaId, motoristaNome: motorista?.nome ?? null },
+        });
+      } catch {
+        // best-effort
+      }
+    }
 
     // Valida locais cadastrados em rascunho. Camada 1 (GPS do registro) sempre
     // roda; camada 2 (dwell por tracking) só faz diferença se a viagem trouxe

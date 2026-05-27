@@ -199,7 +199,11 @@ export default function ViagemDetalheScreen() {
                 subValue={
                   detalhe.data.kmAjustada
                     ? `informado ${fmtNum(detalhe.data.kmInformado, 2)}`
-                    : undefined
+                    : detalhe.data.kmCalculado &&
+                        Number(detalhe.data.kmCalculado) !==
+                          Number(detalhe.data.km)
+                      ? `calculado ${fmtNum(detalhe.data.kmCalculado, 2)}`
+                      : undefined
                 }
               />
               <Stat label="Ticket" value={detalhe.data.ticket} mono />

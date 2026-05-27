@@ -25,6 +25,10 @@ export const CriarViagemInput = z.object({
   toneladas: z.number().positive().max(MAX_TONELADAS, `Toneladas acima do limite (${MAX_TONELADAS}).`),
   ticket: z.string().min(1).max(50),
   km: z.number().nonnegative().max(MAX_KM, `Km acima do limite (${MAX_KM}).`),
+  // Snapshot do km que o OSRM calculou no momento do lançamento. App envia
+  // sempre que `useCalcularRota` resolveu; null quando OSRM falhou ou
+  // motorista digitou antes da resposta.
+  kmCalculado: z.number().nonnegative().max(MAX_KM).optional(),
   localCargaId: z.string().uuid(),
   localDescargaId: z.string().uuid(),
   valorPedagioTotal: z.number().nonnegative().max(MAX_VALOR).optional(),

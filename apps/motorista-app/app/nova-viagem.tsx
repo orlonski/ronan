@@ -381,6 +381,12 @@ export default function NovaViagem() {
         toneladas: parseFloat(form.toneladas.replace(",", ".")),
         ticket: form.ticket.trim(),
         km: parseFloat(form.km.replace(",", ".")),
+        // Snapshot do km OSRM no momento do lançamento — captura mesmo que
+        // motorista tenha sobrescrito. Null quando OSRM não respondeu.
+        kmCalculado:
+          rota.data && "km" in rota.data && rota.data.km !== null
+            ? parseFloat(String(rota.data.km))
+            : undefined,
         localCargaId: form.localCargaId,
         localDescargaId: form.localDescargaId,
         valorPedagioTotal: form.valorPedagio

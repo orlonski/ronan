@@ -24,6 +24,7 @@ export type ViagemEditavel = {
   toneladas: string;
   ticket: string;
   km: string;
+  kmCalculado: string | null;
   observacao: string | null;
   valorPedagioTotal: string | null;
   status: string;

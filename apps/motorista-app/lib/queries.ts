@@ -65,6 +65,9 @@ export type Viagem = {
   toneladas: string;
   ticket: string;
   km: string;
+  // Snapshot do km OSRM no momento do lançamento. Quando km !== kmCalculado,
+  // motorista sobrescreveu o sugerido — exibimos os dois lado a lado.
+  kmCalculado: string | null;
   // Derivados pelo backend (helper viagem-minimos) — quando ajustada=true,
   // toneladasEfetiva/kmEfetivo = piso do cliente; senão = valor informado.
   toneladasInformada: string;
