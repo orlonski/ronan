@@ -376,6 +376,18 @@ export class ViagensAdminService {
     return { ok: true };
   }
 
+  async rotacionarFoto(viagemId: string, fotoId: string, rotacao: number) {
+    const foto = await this.prisma.ticketFoto.findFirst({
+      where: { id: fotoId, viagemId },
+      select: { id: true },
+    });
+    if (!foto) throw new NotFoundException("Foto não encontrada");
+    return this.prisma.ticketFoto.update({
+      where: { id: fotoId },
+      data: { rotacao },
+    });
+  }
+
   async fotoBuffer(viagemId: string, fotoId: string) {
     const foto = await this.prisma.ticketFoto.findFirst({
       where: { id: fotoId, viagemId },

@@ -580,6 +580,8 @@ model TicketFoto {
   viagem      Viagem   @relation(fields: [viagemId], references: [id], onDelete: Cascade)
   viagemId    String
   storageKey  String // chave no MinIO
+  /// Rotação aplicada via CSS na exibição admin. 0/90/180/270. Persistente.
+  rotacao     Int      @default(0)
   capturadaEm DateTime @default(now())
 
   @@index([viagemId])
@@ -940,6 +942,8 @@ model AbastecimentoFoto {
   abastecimento   Abastecimento @relation(fields: [abastecimentoId], references: [id], onDelete: Cascade)
   abastecimentoId String
   storageKey      String // chave no MinIO
+  /// Rotação aplicada via CSS na exibição admin. 0/90/180/270. Persistente.
+  rotacao         Int           @default(0)
   capturadaEm     DateTime      @default(now())
 
   @@index([abastecimentoId])

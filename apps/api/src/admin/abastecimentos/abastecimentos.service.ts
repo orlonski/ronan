@@ -126,4 +126,16 @@ export class AbastecimentosAdminService {
     const contentType = ext === "png" ? "image/png" : "image/jpeg";
     return { buffer, contentType };
   }
+
+  async rotacionarFoto(abastecimentoId: string, fotoId: string, rotacao: number) {
+    const foto = await this.prisma.abastecimentoFoto.findFirst({
+      where: { id: fotoId, abastecimentoId },
+      select: { id: true },
+    });
+    if (!foto) throw new NotFoundException("Foto não encontrada");
+    return this.prisma.abastecimentoFoto.update({
+      where: { id: fotoId },
+      data: { rotacao },
+    });
+  }
 }

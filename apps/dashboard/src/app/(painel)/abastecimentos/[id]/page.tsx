@@ -12,14 +12,16 @@ import {
   Gauge,
   ImageOff,
   MapPin,
+  RotateCw,
   User as UserIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 import { formatCpf } from "@ronan/shared-types";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { fmtNum } from "@/lib/fechamento-helpers";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 const PontoMap = dynamic(
   () => import("@/components/ponto-map").then((m) => m.PontoMap),
@@ -43,7 +45,7 @@ type AbastecimentoDetalhe = {
   veiculo: { id: string; placa: string; modelo: string | null };
   motorista: { id: string; nome: string; cpf: string };
   empresa: { id: string; nome: string } | null;
-  fotos: { id: string; storageKey: string; capturadaEm: string }[];
+  fotos: { id: string; storageKey: string; rotacao: number; capturadaEm: string }[];
   sincronizadoEm: string;
 };
 
@@ -213,6 +215,7 @@ export default function AbastecimentoDetalhePage({
                     key={f.id}
                     abastecimentoId={x.id}
                     fotoId={f.id}
+                    rotacao={f.rotacao}
                     token={token}
                   />
                 ))}
@@ -248,12 +251,15 @@ function Info({
 function FotoThumb({
   abastecimentoId,
   fotoId,
+  rotacao,
   token,
 }: {
   abastecimentoId: string;
   fotoId: string;
+  rotacao: number;
   token: string | undefined;
 }) {
+  const qc = useQueryClient();
   const q = useQuery({
     queryKey: ["abastecimento-foto-blob", abastecimentoId, fotoId],
     enabled: !!token,
@@ -270,6 +276,19 @@ function FotoThumb({
       const blob = await res.blob();
       return URL.createObjectURL(blob);
     },
+  });
+
+  const rotacionar = useMutation({
+    mutationFn: () =>
+      fetchApi(`/admin/abastecimentos/${abastecimentoId}/fotos/${fotoId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ rotacao: (rotacao + 90) % 360 }),
+        token,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["abastecimento-admin", abastecimentoId] });
+    },
+    onError: (err) => toast.error((err as Error).message),
   });
 
   if (q.error instanceof Error && q.error.message.includes("404")) {
@@ -290,15 +309,36 @@ function FotoThumb({
   }
 
   return (
-    <a
-      href={q.data}
-      target="_blank"
-      rel="noopener"
-      className="aspect-square overflow-hidden rounded-md border bg-muted transition-opacity hover:opacity-80"
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={q.data} alt="Comprovante" className="h-full w-full object-cover" />
-    </a>
+    <div className="relative aspect-square overflow-hidden rounded-md border bg-muted">
+      <a
+        href={q.data}
+        target="_blank"
+        rel="noopener"
+        className="absolute inset-0 transition-opacity hover:opacity-80"
+        title="Abrir foto em nova aba"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={q.data}
+          alt="Comprovante"
+          className="h-full w-full object-cover"
+          style={{ transform: `rotate(${rotacao}deg)` }}
+        />
+      </a>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          rotacionar.mutate();
+        }}
+        className="absolute right-1 top-1 z-10 rounded-md bg-black/60 p-1.5 text-white shadow hover:bg-black/80"
+        title="Rotacionar 90°"
+        disabled={rotacionar.isPending}
+      >
+        <RotateCw className="h-4 w-4" />
+      </button>
+    </div>
   );
 }
 

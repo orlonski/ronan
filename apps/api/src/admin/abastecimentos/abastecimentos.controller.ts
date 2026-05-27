@@ -1,4 +1,15 @@
-import { Controller, Delete, Get, HttpCode, Param, Query, Res, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Query,
+  Res,
+  UseGuards,
+} from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { z } from "zod";
@@ -7,6 +18,11 @@ import { paginationQuerySchema } from "../../common/pagination";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { AbastecimentosAdminService } from "./abastecimentos.service";
+
+const RotacaoFotoInput = z.object({
+  rotacao: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]),
+});
+type RotacaoFotoInput = z.infer<typeof RotacaoFotoInput>;
 
 const ListAbastecimentosQuery = paginationQuerySchema.extend({
   motoristaId: z.string().uuid().optional(),
@@ -54,5 +70,14 @@ export class AbastecimentosAdminController {
     res.set("Content-Type", contentType);
     res.set("Cache-Control", "private, max-age=3600");
     res.send(buffer);
+  }
+
+  @Patch(":id/fotos/:fotoId")
+  rotacionarFoto(
+    @Param("id") id: string,
+    @Param("fotoId") fotoId: string,
+    @Body(new ZodValidationPipe(RotacaoFotoInput)) body: RotacaoFotoInput,
+  ) {
+    return this.service.rotacionarFoto(id, fotoId, body.rotacao);
   }
 }

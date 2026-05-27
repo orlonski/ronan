@@ -30,6 +30,7 @@ import {
   ImageOff,
   MapPin,
   RefreshCw,
+  RotateCw,
   Sparkles,
   User as UserIcon,
   X,
@@ -97,7 +98,7 @@ type ViagemDetalhe = {
     lng: number | null;
   };
   rotaGeometria: string | null;
-  fotos: { id: string; storageKey: string }[];
+  fotos: { id: string; storageKey: string; rotacao: number }[];
   matchesFechamento: Array<{
     id: string;
     fechamento: {
@@ -550,10 +551,24 @@ function FotosViagem({
   fotos,
 }: {
   viagemId: string;
-  fotos: { id: string; storageKey: string }[];
+  fotos: { id: string; storageKey: string; rotacao: number }[];
 }) {
   const token = useAuthToken();
-  const [zoom, setZoom] = useState<string | null>(null);
+  const qc = useQueryClient();
+  const [zoom, setZoom] = useState<{ url: string; rotacao: number } | null>(null);
+
+  const rotacionar = useMutation({
+    mutationFn: (params: { fotoId: string; rotacao: number }) =>
+      fetchApi(`/admin/viagens/${viagemId}/fotos/${params.fotoId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ rotacao: params.rotacao }),
+        token,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["viagem-admin", viagemId] });
+    },
+    onError: (err) => toast.error((err as Error).message),
+  });
 
   return (
     <>
@@ -563,8 +578,15 @@ function FotosViagem({
             key={f.id}
             viagemId={viagemId}
             fotoId={f.id}
+            rotacao={f.rotacao}
             token={token}
-            onClick={(url) => setZoom(url)}
+            onClick={(url) => setZoom({ url, rotacao: f.rotacao })}
+            onRotacionar={() =>
+              rotacionar.mutate({
+                fotoId: f.id,
+                rotacao: (f.rotacao + 90) % 360,
+              })
+            }
           />
         ))}
       </div>
@@ -583,9 +605,10 @@ function FotosViagem({
           </button>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={zoom}
+            src={zoom.url}
             alt="Foto do ticket"
             className="max-h-full max-w-full object-contain"
+            style={{ transform: `rotate(${zoom.rotacao}deg)` }}
             onClick={(e) => e.stopPropagation()}
           />
         </div>
@@ -597,13 +620,17 @@ function FotosViagem({
 function FotoThumb({
   viagemId,
   fotoId,
+  rotacao,
   token,
   onClick,
+  onRotacionar,
 }: {
   viagemId: string;
   fotoId: string;
+  rotacao: number;
   token: string | undefined;
   onClick: (url: string) => void;
+  onRotacionar: () => void;
 }) {
   const q = useQuery({
     queryKey: ["viagem-foto-blob", viagemId, fotoId],
@@ -645,13 +672,32 @@ function FotoThumb({
   }
 
   return (
-    <button
-      type="button"
-      onClick={() => onClick(q.data!)}
-      className="aspect-square overflow-hidden rounded-md border bg-muted transition-opacity hover:opacity-80"
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={q.data} alt="Ticket" className="h-full w-full object-cover" />
-    </button>
+    <div className="relative aspect-square overflow-hidden rounded-md border bg-muted">
+      <button
+        type="button"
+        onClick={() => onClick(q.data!)}
+        className="absolute inset-0 transition-opacity hover:opacity-80"
+        title="Ampliar"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={q.data}
+          alt="Ticket"
+          className="h-full w-full object-cover"
+          style={{ transform: `rotate(${rotacao}deg)` }}
+        />
+      </button>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onRotacionar();
+        }}
+        className="absolute right-1 top-1 z-10 rounded-md bg-black/60 p-1.5 text-white shadow hover:bg-black/80"
+        title="Rotacionar 90°"
+      >
+        <RotateCw className="h-4 w-4" />
+      </button>
+    </div>
   );
 }

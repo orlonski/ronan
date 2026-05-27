@@ -23,6 +23,11 @@ import { RolesGuard } from "../../auth/guards/roles.guard";
 import type { AuthAdminUser } from "../../auth/types";
 import { ViagensAdminService } from "./viagens.service";
 
+const RotacaoFotoInput = z.object({
+  rotacao: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]),
+});
+type RotacaoFotoInput = z.infer<typeof RotacaoFotoInput>;
+
 const ListViagensQuery = paginationQuerySchema.extend({
   motoristaId: z.string().uuid().optional(),
   veiculoId: z.string().uuid().optional(),
@@ -93,5 +98,14 @@ export class ViagensAdminController {
     res.set("Content-Type", contentType);
     res.set("Cache-Control", "private, max-age=3600");
     res.send(buffer);
+  }
+
+  @Patch(":id/fotos/:fotoId")
+  rotacionarFoto(
+    @Param("id") id: string,
+    @Param("fotoId") fotoId: string,
+    @Body(new ZodValidationPipe(RotacaoFotoInput)) body: RotacaoFotoInput,
+  ) {
+    return this.service.rotacionarFoto(id, fotoId, body.rotacao);
   }
 }
