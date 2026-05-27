@@ -21,6 +21,7 @@ type Papel = "RECEBE_PLANILHA" | "MANDA_FECHAMENTO" | "AMBOS";
 type Empresa = {
   id: string; nome: string; cnpj: string | null; contato: string | null;
   papel: Papel; ativa: boolean;
+  criadoPor: { id: string; nome: string } | null;
 };
 const PATH = "/admin/empresas";
 
@@ -56,6 +57,16 @@ export default function EmpresasPage() {
         accessorKey: "papel",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Papel" />,
         cell: ({ row }) => PAPEL_LABEL[row.original.papel],
+      },
+      {
+        id: "criadoPor",
+        enableSorting: false,
+        header: "Criado por",
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground">
+            {row.original.criadoPor?.nome ?? "—"}
+          </span>
+        ),
       },
       {
         id: "ativa",

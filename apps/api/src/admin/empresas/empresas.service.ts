@@ -24,20 +24,24 @@ export class EmpresasService {
       searchFields: ["nome", "cnpj", "contato"],
       sortable: { nome: "nome", cnpj: "cnpj", papel: "papel", ativa: "ativa", criadoEm: "criadoEm" },
       defaultSort: { field: "nome", order: "asc" },
+      include: { criadoPor: { select: { id: true, nome: true } } },
     });
   }
 
   findOne(id: string) {
-    return this.prisma.empresa.findUniqueOrThrow({ where: { id } });
+    return this.prisma.empresa.findUniqueOrThrow({
+      where: { id },
+      include: { criadoPor: { select: { id: true, nome: true } } },
+    });
   }
 
-  async create(data: CriarEmpresaInput) {
+  async create(data: CriarEmpresaInput, usuarioId: string) {
     if (data.cnpj) {
       const exists = await this.prisma.empresa.findUnique({ where: { cnpj: data.cnpj } });
       if (exists) throw new ConflictException("CNPJ já cadastrado");
     }
     return this.prisma.empresa.create({
-      data: data as Prisma.EmpresaUncheckedCreateInput,
+      data: { ...data, criadoPorId: usuarioId } as Prisma.EmpresaUncheckedCreateInput,
     });
   }
 

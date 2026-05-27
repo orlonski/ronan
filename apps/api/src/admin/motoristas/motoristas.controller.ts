@@ -4,8 +4,10 @@ import { z } from "zod";
 import { AtualizarMotoristaInput, CriarMotoristaInput, EnviarPushInput } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { paginationQuerySchema } from "../../common/pagination";
+import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
+import type { AuthAdminUser } from "../../auth/types";
 import { MotoristasService } from "./motoristas.service";
 
 const ListMotoristasQuery = paginationQuerySchema.extend({
@@ -40,8 +42,11 @@ export class MotoristasController {
   }
 
   @Post()
-  create(@Body(new ZodValidationPipe(CriarMotoristaInput)) body: CriarMotoristaInput) {
-    return this.service.create(body);
+  create(
+    @Body(new ZodValidationPipe(CriarMotoristaInput)) body: CriarMotoristaInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.create(body, user.id);
   }
 
   @Patch(":id")
@@ -69,7 +74,8 @@ export class MotoristasController {
   enviarPush(
     @Param("id") id: string,
     @Body(new ZodValidationPipe(EnviarPushInput)) body: EnviarPushInput,
+    @CurrentUser() user: AuthAdminUser,
   ) {
-    return this.service.enviarPush(id, body);
+    return this.service.enviarPush(id, body, user.id);
   }
 }

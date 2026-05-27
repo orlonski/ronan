@@ -48,6 +48,7 @@ const SAFE_SELECT = {
   podeLancarPedagio: true,
   podeLancarAbastecimento: true,
   criadoEm: true,
+  criadoPor: { select: { id: true, nome: true } },
 } as const;
 
 type PrismaTx = Parameters<Parameters<PrismaService["$transaction"]>[0]>[0];
@@ -96,7 +97,7 @@ export class MotoristasService {
     return this.flatten(m);
   }
 
-  async create(data: CriarMotoristaInput) {
+  async create(data: CriarMotoristaInput, usuarioId: string) {
     const exists = await this.prisma.motorista.findUnique({ where: { cpf: data.cpf } });
     if (exists) throw new ConflictException("CPF já cadastrado");
     const senhaHash = await AuthService.hashPassword(data.senha);
@@ -109,6 +110,7 @@ export class MotoristasService {
           senhaHash,
           telefone: data.telefone,
           email: data.email,
+          criadoPorId: usuarioId,
         },
       });
       const resolvidos = await this.upsertPlacas(tx, data.placas);
@@ -325,7 +327,11 @@ export class MotoristasService {
     };
   }
 
-  async enviarPush(motoristaId: string, body: EnviarPushInput): Promise<EnviarPushResultado> {
+  async enviarPush(
+    motoristaId: string,
+    body: EnviarPushInput,
+    usuarioId: string,
+  ): Promise<EnviarPushResultado> {
     const m = await this.prisma.motorista.findUnique({
       where: { id: motoristaId },
       select: { id: true, ativo: true, expoPushToken: true },
@@ -342,6 +348,7 @@ export class MotoristasService {
       corpo: body.corpo,
       dados: body.dados,
       tipo: "mensagem-admin",
+      criadoPorId: usuarioId,
     });
   }
 }

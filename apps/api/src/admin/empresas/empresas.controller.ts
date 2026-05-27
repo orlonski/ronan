@@ -4,8 +4,10 @@ import { z } from "zod";
 import { AtualizarEmpresaInput, CriarEmpresaInput } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { paginationQuerySchema } from "../../common/pagination";
+import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
+import type { AuthAdminUser } from "../../auth/types";
 import { EmpresasService } from "./empresas.service";
 
 const ListEmpresasQuery = paginationQuerySchema.extend({
@@ -33,8 +35,11 @@ export class EmpresasController {
   }
 
   @Post()
-  create(@Body(new ZodValidationPipe(CriarEmpresaInput)) body: CriarEmpresaInput) {
-    return this.service.create(body);
+  create(
+    @Body(new ZodValidationPipe(CriarEmpresaInput)) body: CriarEmpresaInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.create(body, user.id);
   }
 
   @Patch(":id")

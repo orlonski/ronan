@@ -21,6 +21,7 @@ const LOCAL_INCLUDE = {
     orderBy: { criadoEm: "asc" },
   },
   criadoPorMotorista: { select: { id: true, nome: true } },
+  criadoPor: { select: { id: true, nome: true } },
 } satisfies Prisma.LocalInclude;
 
 type LocalRaw = Prisma.LocalGetPayload<{ include: typeof LOCAL_INCLUDE }>;
@@ -178,11 +179,12 @@ export class LocaisService {
     return m.id;
   }
 
-  async create(data: CriarLocalInput) {
+  async create(data: CriarLocalInput, usuarioId: string) {
     const { clienteIds, ...rest } = data;
     const local = await this.prisma.local.create({
       data: {
         ...(rest as Prisma.LocalUncheckedCreateInput),
+        criadoPorId: usuarioId,
         clientes: clienteIds.length
           ? { create: clienteIds.map((clienteId) => ({ clienteId })) }
           : undefined,

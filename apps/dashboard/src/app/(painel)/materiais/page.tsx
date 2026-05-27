@@ -17,7 +17,12 @@ import { Combobox } from "@/components/ui/combobox";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import { usePaginatedList, useUpdateResource } from "@/lib/client-api";
 
-type Material = { id: string; nome: string; ativo: boolean };
+type Material = {
+  id: string;
+  nome: string;
+  ativo: boolean;
+  criadoPor: { id: string; nome: string } | null;
+};
 
 const PATH = "/admin/materiais";
 
@@ -33,6 +38,16 @@ export default function MateriaisPage() {
         accessorKey: "nome",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Nome" />,
         cell: ({ row }) => <span className="font-medium">{row.original.nome}</span>,
+      },
+      {
+        id: "criadoPor",
+        enableSorting: false,
+        header: "Criado por",
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground">
+            {row.original.criadoPor?.nome ?? "—"}
+          </span>
+        ),
       },
       {
         id: "ativo",

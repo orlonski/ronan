@@ -142,6 +142,7 @@ export default function NotificacoesAdminPage() {
               <TableHead>Motorista</TableHead>
               <TableHead>Título</TableHead>
               <TableHead>Mensagem</TableHead>
+              <TableHead className="w-[120px]">Criado por</TableHead>
               <TableHead className="w-[110px]">Entrega</TableHead>
               <TableHead className="w-[80px]">Lida</TableHead>
               <TableHead className="w-[60px]"></TableHead>
@@ -150,14 +151,14 @@ export default function NotificacoesAdminPage() {
           <TableBody>
             {q.isLoading && (
               <TableRow>
-                <TableCell colSpan={7} className="text-center">
+                <TableCell colSpan={8} className="text-center">
                   <Spinner />
                 </TableCell>
               </TableRow>
             )}
             {!q.isLoading && itens.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="py-12 text-center text-muted-foreground">
+                <TableCell colSpan={8} className="py-12 text-center text-muted-foreground">
                   <Bell className="mx-auto mb-2 h-6 w-6 opacity-50" />
                   Nenhuma notificação encontrada.
                 </TableCell>
@@ -214,6 +215,9 @@ function NotificacaoRow({ n }: { n: NotificacaoAdminItem }) {
       <TableCell className="font-medium">{n.titulo}</TableCell>
       <TableCell className="max-w-md text-sm text-muted-foreground">
         <span className="line-clamp-2">{n.corpo}</span>
+      </TableCell>
+      <TableCell className="text-sm text-muted-foreground">
+        {n.criadoPor?.nome ?? "—"}
       </TableCell>
       <TableCell>
         <StatusBadge status={n.entregaStatus} />

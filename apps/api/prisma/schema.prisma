@@ -154,6 +154,20 @@ model User {
   whatsappSessao   WhatsappSessao?
   whatsappConvites WhatsappConvite[]
 
+  // Backreferences pra rastreamento "Cadastrado por": cada recurso admin
+  // tem `criadoPorId` opcional → User. Listas inversas necessárias pelo Prisma.
+  clientesCriados     Cliente[]     @relation("CriouCliente")
+  materiaisCriados    Material[]    @relation("CriouMaterial")
+  veiculosCriados     Veiculo[]     @relation("CriouVeiculo")
+  motoristasCriados   Motorista[]   @relation("CriouMotorista")
+  empresasCriadas     Empresa[]     @relation("CriouEmpresa")
+  locaisCriados       Local[]       @relation("CriouLocal")
+  usuariosCriados     User[]        @relation("CriouUser")
+  criadoPor           User?         @relation("CriouUser", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId         String?
+  notificacoesCriadas Notificacao[] @relation("CriouNotificacao")
+  fechamentosCriados  Fechamento[]  @relation("CriouFechamento")
+
   @@map("users")
 }
 
@@ -191,6 +205,8 @@ model Motorista {
   whatsappSessao   WhatsappSessao?
   whatsappConvites WhatsappConvite[]
   notificacoes     Notificacao[]
+  criadoPor        User?                @relation("CriouMotorista", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId      String?
 
   @@index([ativo])
   @@map("motoristas")
@@ -300,6 +316,8 @@ model Veiculo {
   viagens               Viagem[]
   pedagios              Pedagio[]
   abastecimentos        Abastecimento[]
+  criadoPor             User?              @relation("CriouVeiculo", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId           String?
 
   @@index([ativo])
   @@map("veiculos")
@@ -329,6 +347,8 @@ model Empresa {
   layoutsImport  LayoutImportBloco[]
   enviosDiretos  EnvioFechamento[]
   abastecimentos Abastecimento[]
+  criadoPor      User?               @relation("CriouEmpresa", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId    String?
 
   @@index([ativa])
   @@map("empresas")
@@ -375,8 +395,10 @@ model Cliente {
   criadoEm   DateTime @default(now())
   alteradoEm DateTime @updatedAt
 
-  locais  LocalCliente[]
-  viagens Viagem[]
+  locais      LocalCliente[]
+  viagens     Viagem[]
+  criadoPor   User?          @relation("CriouCliente", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId String?
 
   @@index([empresaId])
   @@index([ativa])
@@ -392,7 +414,9 @@ model Material {
   criadoEm   DateTime @default(now())
   alteradoEm DateTime @updatedAt
 
-  viagens Viagem[]
+  viagens     Viagem[]
+  criadoPor   User?    @relation("CriouMaterial", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId String?
 
   @@index([ativo])
   @@map("materiais")
@@ -433,6 +457,9 @@ model Local {
   rotasOrigem     RotaCache[]      @relation("RotaOrigem")
   rotasDestino    RotaCache[]      @relation("RotaDestino")
   evidencias      LocalEvidencia[]
+  /// Quando o admin cadastra/edita pelo dashboard. Pra motorista, ver criadoPorMotorista.
+  criadoPor       User?            @relation("CriouLocal", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId     String?
 
   @@index([cidade, uf])
   @@index([ativo])
@@ -620,8 +647,10 @@ model Fechamento {
   criadoEm            DateTime         @default(now())
   alteradoEm          DateTime         @updatedAt
 
-  linhas FechamentoLinha[]
-  envios EnvioFechamento[]
+  linhas      FechamentoLinha[]
+  envios      EnvioFechamento[]
+  criadoPor   User?             @relation("CriouFechamento", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId String?
 
   @@index([empresaId, periodoInicio])
   @@index([status])
@@ -940,6 +969,8 @@ model Notificacao {
   entregaStatus NotificacaoEntregaStatus @default(PENDENTE)
   entregaErro   String?
   expoTicketId  String?
+  criadoPor     User?                    @relation("CriouNotificacao", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId   String?
   criadoEm      DateTime                 @default(now())
 
   @@index([motoristaId, criadoEm(sort: Desc)])

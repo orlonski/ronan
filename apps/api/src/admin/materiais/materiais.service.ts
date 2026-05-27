@@ -20,17 +20,21 @@ export class MateriaisService {
       searchFields: ["nome"],
       sortable: { nome: "nome", criadoEm: "criadoEm", ativo: "ativo" },
       defaultSort: { field: "nome", order: "asc" },
+      include: { criadoPor: { select: { id: true, nome: true } } },
     });
   }
 
   findOne(id: string) {
-    return this.prisma.material.findUniqueOrThrow({ where: { id } });
+    return this.prisma.material.findUniqueOrThrow({
+      where: { id },
+      include: { criadoPor: { select: { id: true, nome: true } } },
+    });
   }
 
-  async create(data: CriarMaterialInput) {
+  async create(data: CriarMaterialInput, usuarioId: string) {
     const exists = await this.prisma.material.findUnique({ where: { nome: data.nome } });
     if (exists) throw new ConflictException("Material já cadastrado");
-    return this.prisma.material.create({ data });
+    return this.prisma.material.create({ data: { ...data, criadoPorId: usuarioId } });
   }
 
   async update(id: string, data: AtualizarMaterialInput) {

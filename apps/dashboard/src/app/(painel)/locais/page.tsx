@@ -43,6 +43,8 @@ type Local = {
   id: string; nome: string; logradouro: string; numero: string | null; bairro: string | null;
   cidade: string; uf: string; cep: string | null; pontoReferencia: string | null;
   tipo: Tipo; ativo: boolean; clientes: Cliente[];
+  criadoPor: { id: string; nome: string } | null;
+  criadoPorMotorista: { id: string; nome: string } | null;
 };
 
 const PATH = "/admin/locais";
@@ -126,6 +128,18 @@ export default function LocaisPage() {
         id: "tipo",
         accessorKey: "tipo",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Tipo" />,
+      },
+      {
+        id: "criadoPor",
+        enableSorting: false,
+        header: "Criado por",
+        cell: ({ row }) => {
+          const nome =
+            row.original.criadoPor?.nome ??
+            row.original.criadoPorMotorista?.nome ??
+            "—";
+          return <span className="text-sm text-muted-foreground">{nome}</span>;
+        },
       },
       {
         id: "acoes",

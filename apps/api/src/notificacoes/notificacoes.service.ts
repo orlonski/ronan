@@ -84,6 +84,7 @@ export class NotificacoesService {
     titulo: string;
     corpo: string;
     dados?: Record<string, unknown>;
+    criadoPorId?: string | null;
   }): Promise<{ id: string }> {
     const n = await this.prisma.notificacao.create({
       data: {
@@ -92,6 +93,7 @@ export class NotificacoesService {
         titulo: input.titulo,
         corpo: input.corpo,
         dados: (input.dados ?? undefined) as Prisma.InputJsonValue | undefined,
+        criadoPorId: input.criadoPorId ?? null,
       },
       select: { id: true },
     });
@@ -116,6 +118,7 @@ export class NotificacoesService {
       take: q.limit + 1,
       include: {
         motorista: { select: { id: true, nome: true, cpf: true } },
+        criadoPor: { select: { id: true, nome: true } },
       },
     });
 
@@ -134,6 +137,7 @@ export class NotificacoesService {
       entregaErro: n.entregaErro,
       expoTicketId: n.expoTicketId,
       criadoEm: n.criadoEm.toISOString(),
+      criadoPor: n.criadoPor,
     }));
 
     return {

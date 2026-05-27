@@ -43,8 +43,11 @@ export class UsersController {
 
   @Roles("ADMIN")
   @Post()
-  create(@Body(new ZodValidationPipe(CriarUserInput)) body: CriarUserInput) {
-    return this.service.create(body);
+  create(
+    @Body(new ZodValidationPipe(CriarUserInput)) body: CriarUserInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.create(body, user.id);
   }
 
   @Roles("ADMIN")

@@ -18,6 +18,7 @@ const SAFE_SELECT = {
   ativo: true,
   ultimoLoginEm: true,
   criadoEm: true,
+  criadoPor: { select: { id: true, nome: true } },
 } as const;
 
 @Injectable()
@@ -50,7 +51,7 @@ export class UsersService {
     return this.prisma.user.findUniqueOrThrow({ where: { id }, select: SAFE_SELECT });
   }
 
-  async create(data: CriarUserInput) {
+  async create(data: CriarUserInput, usuarioId: string) {
     const exists = await this.prisma.user.findUnique({ where: { email: data.email } });
     if (exists) throw new ConflictException("Email já cadastrado");
     return this.prisma.user.create({
@@ -59,6 +60,7 @@ export class UsersService {
         email: data.email,
         perfil: data.perfil,
         senhaHash: await AuthService.hashPassword(data.senha),
+        criadoPorId: usuarioId,
       },
       select: SAFE_SELECT,
     });

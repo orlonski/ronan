@@ -26,6 +26,7 @@ type User = {
   perfil: Perfil;
   ativo: boolean;
   ultimoLoginEm: string | null;
+  criadoPor: { id: string; nome: string } | null;
 };
 const PATH = "/admin/users";
 
@@ -76,6 +77,16 @@ export default function UsuariosPage() {
         cell: ({ row }) => (
           <span className="text-xs text-muted-foreground">
             {fmtUltimoLogin(row.original.ultimoLoginEm)}
+          </span>
+        ),
+      },
+      {
+        id: "criadoPor",
+        enableSorting: false,
+        header: "Criado por",
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground">
+            {row.original.criadoPor?.nome ?? "—"}
           </span>
         ),
       },

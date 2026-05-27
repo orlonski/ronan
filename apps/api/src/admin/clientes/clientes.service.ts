@@ -29,20 +29,26 @@ export class ClientesService {
         criadoEm: "criadoEm",
       },
       defaultSort: { field: "nome", order: "asc" },
-      include: { empresa: { select: { id: true, nome: true } } },
+      include: {
+        empresa: { select: { id: true, nome: true } },
+        criadoPor: { select: { id: true, nome: true } },
+      },
     });
   }
 
   findOne(id: string) {
     return this.prisma.cliente.findUniqueOrThrow({
       where: { id },
-      include: { empresa: { select: { id: true, nome: true } } },
+      include: {
+        empresa: { select: { id: true, nome: true } },
+        criadoPor: { select: { id: true, nome: true } },
+      },
     });
   }
 
-  async create(data: CriarClienteInput) {
+  async create(data: CriarClienteInput, usuarioId: string) {
     await this.ensureEmpresa(data.empresaId);
-    return this.prisma.cliente.create({ data });
+    return this.prisma.cliente.create({ data: { ...data, criadoPorId: usuarioId } });
   }
 
   async update(id: string, data: AtualizarClienteInput) {

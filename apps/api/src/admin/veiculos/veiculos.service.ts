@@ -20,13 +20,14 @@ export class VeiculosService {
       searchFields: ["placa", "modelo"],
       sortable: { placa: "placa", modelo: "modelo", criadoEm: "criadoEm", ativo: "ativo" },
       defaultSort: { field: "placa", order: "asc" },
+      include: { criadoPor: { select: { id: true, nome: true } } },
     });
   }
 
-  async create(data: CriarVeiculoInput) {
+  async create(data: CriarVeiculoInput, usuarioId: string) {
     const exists = await this.prisma.veiculo.findUnique({ where: { placa: data.placa } });
     if (exists) throw new ConflictException("Placa já cadastrada");
-    return this.prisma.veiculo.create({ data });
+    return this.prisma.veiculo.create({ data: { ...data, criadoPorId: usuarioId } });
   }
 
   async update(id: string, data: AtualizarVeiculoInput) {

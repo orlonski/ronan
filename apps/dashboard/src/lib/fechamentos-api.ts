@@ -37,6 +37,7 @@ export type FechamentoLista = {
     extra?: number;
   } | null;
   criadoEm: string;
+  criadoPor: { id: string; nome: string } | null;
   _count: { linhas: number; envios: number };
 };
 

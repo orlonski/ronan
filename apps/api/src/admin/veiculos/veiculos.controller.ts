@@ -4,8 +4,10 @@ import { z } from "zod";
 import { AtualizarVeiculoInput, CriarVeiculoInput } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { paginationQuerySchema } from "../../common/pagination";
+import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
+import type { AuthAdminUser } from "../../auth/types";
 import { VeiculosService } from "./veiculos.service";
 
 const ListVeiculosQuery = paginationQuerySchema.extend({
@@ -27,8 +29,11 @@ export class VeiculosController {
   }
 
   @Post()
-  create(@Body(new ZodValidationPipe(CriarVeiculoInput)) body: CriarVeiculoInput) {
-    return this.service.create(body);
+  create(
+    @Body(new ZodValidationPipe(CriarVeiculoInput)) body: CriarVeiculoInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.create(body, user.id);
   }
 
   @Patch(":id")

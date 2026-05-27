@@ -40,6 +40,7 @@ type Motorista = {
   veiculos: Veiculo[];
   documentos: DocumentoResumo[];
   temPushToken: boolean;
+  criadoPor: { id: string; nome: string } | null;
 };
 const PATH = "/admin/motoristas";
 
@@ -119,6 +120,16 @@ export default function MotoristasPage() {
               documentos={row.original.documentos ?? []}
             />
           </div>
+        ),
+      },
+      {
+        id: "criadoPor",
+        enableSorting: false,
+        header: "Criado por",
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground">
+            {row.original.criadoPor?.nome ?? "—"}
+          </span>
         ),
       },
       {

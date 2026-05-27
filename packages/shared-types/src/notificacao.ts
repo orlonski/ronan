@@ -58,6 +58,7 @@ export type NotificacaoAdminItem = {
   entregaErro: string | null;
   expoTicketId: string | null;
   criadoEm: string;
+  criadoPor: { id: string; nome: string } | null;
 };
 
 export type ListarNotificacoesAdminResponse = {

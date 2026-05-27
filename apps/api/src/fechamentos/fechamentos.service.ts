@@ -27,6 +27,7 @@ const FECHAMENTO_INCLUDE = {
   empresa: { select: { id: true, nome: true } },
   substituidoPor: { select: { id: true, versao: true, criadoEm: true } },
   substitui: { select: { id: true, versao: true, criadoEm: true } },
+  criadoPor: { select: { id: true, nome: true } },
   envios: {
     orderBy: { geradoEm: "desc" as const },
     include: {
@@ -87,6 +88,7 @@ export class FechamentosService {
       defaultSort: { field: "criadoEm", order: "desc" },
       include: {
         empresa: { select: { id: true, nome: true } },
+        criadoPor: { select: { id: true, nome: true } },
         _count: { select: { linhas: true, envios: true } },
       },
     });
@@ -183,6 +185,7 @@ export class FechamentosService {
         arquivoMimetype: input.arquivo.mimetype,
         versao,
         status: StatusFechamento.RECEBIDO,
+        criadoPorId: input.usuarioId,
       },
       include: FECHAMENTO_INCLUDE,
     });

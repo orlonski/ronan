@@ -21,6 +21,8 @@ export type EnviarArgs = {
   corpo: string;
   dados?: Record<string, unknown>;
   tipo?: string; // default "mensagem-admin"
+  /** Admin que disparou (null pra notificações automáticas do sistema). */
+  criadoPorId?: string | null;
 };
 
 export type EnviarResultado = { enviado: boolean; motivo?: string };
@@ -59,6 +61,7 @@ export class PushService {
       titulo: args.titulo,
       corpo: args.corpo,
       dados: args.dados,
+      criadoPorId: args.criadoPorId ?? null,
     });
 
     if (!Expo.isExpoPushToken(args.token)) {

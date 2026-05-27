@@ -100,6 +100,16 @@ export default function FechamentosPage() {
         ),
       },
       {
+        id: "criadoPor",
+        enableSorting: false,
+        header: "Criado por",
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground">
+            {row.original.criadoPor?.nome ?? "—"}
+          </span>
+        ),
+      },
+      {
         id: "acoes",
         size: 110,
         enableSorting: false,

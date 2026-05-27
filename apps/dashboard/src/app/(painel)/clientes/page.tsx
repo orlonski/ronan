@@ -25,6 +25,7 @@ type Empresa = { id: string; nome: string };
 type Cliente = {
   id: string; nome: string; ativa: boolean;
   empresa: Empresa; empresaId: string;
+  criadoPor: { id: string; nome: string } | null;
 };
 const PATH = "/admin/clientes";
 const EMPRESAS_PATH = "/admin/empresas";
@@ -53,6 +54,16 @@ export default function ClientesPage() {
         accessorKey: "empresa.nome",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Empresa" />,
         cell: ({ row }) => row.original.empresa.nome,
+      },
+      {
+        id: "criadoPor",
+        enableSorting: false,
+        header: "Criado por",
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground">
+            {row.original.criadoPor?.nome ?? "—"}
+          </span>
+        ),
       },
       {
         id: "ativa",
