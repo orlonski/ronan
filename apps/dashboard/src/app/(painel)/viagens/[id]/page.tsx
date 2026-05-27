@@ -37,6 +37,7 @@ import {
   fmtDataHoraBR,
   fmtNum,
 } from "@/lib/fechamento-helpers";
+import { ValorComMinimo } from "@/components/valor-com-minimo";
 import { useHistoricoViagem } from "@/lib/fechamentos-api";
 import { useQuery } from "@tanstack/react-query";
 
@@ -47,6 +48,12 @@ type ViagemDetalhe = {
   ticket: string;
   km: string;
   kmReal: string | null;
+  toneladasInformada: string;
+  toneladasEfetiva: string;
+  toneladasAjustada: boolean;
+  kmInformado: string;
+  kmEfetivo: string;
+  kmAjustada: boolean;
   iniciadoEm: string | null;
   pontos: {
     lat: number;
@@ -162,8 +169,30 @@ export default function ViagemDetalhePage({
               <Row label="Material" value={v.material.nome} />
               <Row label="Cliente" value={v.cliente.nome} />
               <Row label="Empresa" value={v.cliente.empresa.nome} />
-              <Row label="Toneladas" value={fmtNum(v.toneladas, 3)} />
-              <Row label="Km rodados" value={fmtNum(v.km, 2)} />
+              <Row
+                label="Toneladas"
+                value={
+                  <ValorComMinimo
+                    efetivo={v.toneladasEfetiva}
+                    real={v.toneladasInformada}
+                    ajustada={v.toneladasAjustada}
+                    unidade="t"
+                    casas={3}
+                  />
+                }
+              />
+              <Row
+                label="Km rodados"
+                value={
+                  <ValorComMinimo
+                    efetivo={v.kmEfetivo}
+                    real={v.kmInformado}
+                    ajustada={v.kmAjustada}
+                    unidade="km"
+                    casas={2}
+                  />
+                }
+              />
               {v.kmReal && (
                 <Row label="Km real (GPS)" value={fmtNum(v.kmReal, 2)} />
               )}
@@ -320,7 +349,7 @@ export default function ViagemDetalhePage({
   );
 }
 
-function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function Row({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
   return (
     <div className="flex justify-between gap-3">
       <dt className="text-muted-foreground">{label}</dt>

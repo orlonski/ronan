@@ -4,15 +4,16 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import type { Prisma, StatusViagem } from "@prisma/client";
+import { Prisma, type StatusViagem } from "@prisma/client";
 import type { CriarViagemInput } from "@ronan/shared-types";
+import { aplicarMinimosCliente, serializarViagemComMinimos } from "../common/viagem-minimos";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
 import { ValidacaoLocalService } from "./validacao-local.service";
 
 const VIAGEM_INCLUDE = {
   veiculo: { select: { id: true, placa: true, modelo: true } },
-  cliente: { select: { id: true, nome: true } },
+  cliente: { select: { id: true, nome: true, toneladasMinimas: true, kmMinimos: true } },
   material: { select: { id: true, nome: true } },
   localCarga: { select: { id: true, nome: true, cidade: true, uf: true } },
   localDescarga: { select: { id: true, nome: true, cidade: true, uf: true } },
@@ -25,6 +26,8 @@ const VIAGEM_DETALHE_INCLUDE = {
     select: {
       id: true,
       nome: true,
+      toneladasMinimas: true,
+      kmMinimos: true,
       empresa: { select: { id: true, nome: true } },
     },
   },
@@ -75,7 +78,7 @@ export class ViagensMotoristaService {
     const pageItens = hasMore ? itens.slice(0, filtros.limit) : itens;
     const nextCursor = hasMore ? pageItens[pageItens.length - 1].id : null;
 
-    return { itens: pageItens, nextCursor };
+    return { itens: pageItens.map(serializarViagemComMinimos), nextCursor };
   }
 
   async resumoMes(motoristaId: string, mes: string) {
@@ -86,11 +89,21 @@ export class ViagensMotoristaService {
       data: { gte: inicio, lt: fim },
     } satisfies Prisma.PedagioWhereInput;
 
-    const [agg, porStatus, pedagiosAgg] = await this.prisma.$transaction([
+    // findMany pra somar toneladas/km com mínimo do cliente aplicado.
+    // Volume típico < 300 viagens/mês — custo irrelevante vs aggregate.
+    const [viagens, pedagioAgg, porStatus, pedagiosAgg] = await this.prisma.$transaction([
+      this.prisma.viagem.findMany({
+        where,
+        select: {
+          toneladas: true,
+          km: true,
+          cliente: { select: { toneladasMinimas: true, kmMinimos: true } },
+        },
+      }),
       this.prisma.viagem.aggregate({
         where,
         _count: { _all: true },
-        _sum: { toneladas: true, km: true, valorPedagioTotal: true },
+        _sum: { valorPedagioTotal: true },
       }),
       this.prisma.viagem.groupBy({
         where,
@@ -105,6 +118,14 @@ export class ViagensMotoristaService {
       }),
     ]);
 
+    let totalToneladas = new Prisma.Decimal(0);
+    let totalKm = new Prisma.Decimal(0);
+    for (const v of viagens) {
+      const m = aplicarMinimosCliente(v, v.cliente);
+      totalToneladas = totalToneladas.plus(m.toneladasEfetiva);
+      totalKm = totalKm.plus(m.kmEfetivo);
+    }
+
     const contadores = { aguardando: 0, conferida: 0, divergente: 0 };
     for (const linha of porStatus) {
       const grupo = mapStatusToGrupo(linha.status);
@@ -116,10 +137,10 @@ export class ViagensMotoristaService {
 
     return {
       mes,
-      totalViagens: agg._count._all,
-      totalToneladas: (agg._sum.toneladas ?? "0").toString(),
-      totalKm: (agg._sum.km ?? "0").toString(),
-      totalPedagio: (agg._sum.valorPedagioTotal ?? "0").toString(),
+      totalViagens: pedagioAgg._count._all,
+      totalToneladas: totalToneladas.toFixed(3),
+      totalKm: totalKm.toFixed(2),
+      totalPedagio: (pedagioAgg._sum.valorPedagioTotal ?? "0").toString(),
       porStatus: contadores,
       pedagios: {
         count: pedagiosAgg._count._all,
@@ -155,7 +176,7 @@ export class ViagensMotoristaService {
     if (viagem.motoristaId !== motoristaId) {
       throw new ForbiddenException("Esta viagem não é sua.");
     }
-    return viagem;
+    return serializarViagemComMinimos(viagem);
   }
 
   async fotoBuffer(motoristaId: string, viagemId: string, fotoId: string) {
@@ -207,10 +228,11 @@ export class ViagensMotoristaService {
     const exists = await this.prisma.viagem.findUnique({ where: { clientId: input.clientId } });
     if (exists) {
       // Idempotência: já recebido (sync duplicado), retorna o existente
-      return this.prisma.viagem.findUnique({
+      const existente = await this.prisma.viagem.findUnique({
         where: { clientId: input.clientId },
         include: VIAGEM_INCLUDE,
       });
+      return existente ? serializarViagemComMinimos(existente) : null;
     }
 
     // Ticket é único por empresa (regra de negócio).
@@ -292,7 +314,7 @@ export class ViagensMotoristaService {
       // best-effort; logado pelo próprio service.
     }
 
-    return viagem;
+    return serializarViagemComMinimos(viagem);
   }
 }
 

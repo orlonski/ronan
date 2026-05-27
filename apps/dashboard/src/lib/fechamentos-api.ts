@@ -87,9 +87,15 @@ export type LinhaFechamento = {
     ticket: string;
     km: string;
     toneladas: string;
+    toneladasInformada: string;
+    toneladasEfetiva: string;
+    toneladasAjustada: boolean;
+    kmInformado: string;
+    kmEfetivo: string;
+    kmAjustada: boolean;
     veiculo: { placa: string };
     motorista: { nome: string };
-    cliente: { nome: string };
+    cliente: { nome: string; toneladasMinimas: string | null; kmMinimos: string | null };
     material: { nome: string };
   } | null;
   resolvidoPor: { id: string; nome: string } | null;

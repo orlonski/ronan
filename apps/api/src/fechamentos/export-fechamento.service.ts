@@ -12,6 +12,7 @@ import {
 } from "@prisma/client";
 import ExcelJS from "exceljs";
 import { AuditoriaService } from "../auditoria/auditoria.service";
+import { aplicarMinimosCliente } from "../common/viagem-minimos";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
 import { paginate, type PaginationQuery } from "../common/pagination";
@@ -449,9 +450,9 @@ function valorParaColuna(
     case "material":
       return viagem.material.nome;
     case "toneladas":
-      return Number(viagem.toneladas);
+      return Number(aplicarMinimosCliente(viagem, viagem.cliente).toneladasEfetiva);
     case "km":
-      return Number(viagem.km);
+      return Number(aplicarMinimosCliente(viagem, viagem.cliente).kmEfetivo);
     case "valor_pedagio":
       return viagem.valorPedagioTotal ? Number(viagem.valorPedagioTotal) : 0;
     case "valor_total":

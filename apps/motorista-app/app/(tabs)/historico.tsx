@@ -583,8 +583,16 @@ function ViagemCard({ v }: { v: Viagem }) {
       </View>
 
       <View className="mt-3 flex-row gap-5 border-t-2 border-border pt-3">
-        <Stat label="t" value={fmtNum(v.toneladas, 3)} />
-        <Stat label="km" value={fmtNum(v.km, 2)} />
+        <Stat
+          label="t"
+          value={fmtNum(v.toneladasEfetiva, 3)}
+          subValue={v.toneladasAjustada ? `(${fmtNum(v.toneladasInformada, 3)})` : undefined}
+        />
+        <Stat
+          label="km"
+          value={fmtNum(v.kmEfetivo, 2)}
+          subValue={v.kmAjustada ? `(${fmtNum(v.kmInformado, 2)})` : undefined}
+        />
         <Stat label="ticket" value={v.ticket} />
       </View>
     </Pressable>
@@ -749,7 +757,15 @@ function AbastecimentoCard({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({
+  label,
+  value,
+  subValue,
+}: {
+  label: string;
+  value: string;
+  subValue?: string;
+}) {
   return (
     <View>
       <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
@@ -761,6 +777,9 @@ function Stat({ label, value }: { label: string; value: string }) {
       >
         {value}
       </Text>
+      {subValue && (
+        <Text className="text-[10px] text-muted-foreground">{subValue}</Text>
+      )}
     </View>
   );
 }

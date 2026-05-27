@@ -11,6 +11,7 @@ import {
   StatusFechamento,
 } from "@prisma/client";
 import { AuditoriaService } from "../auditoria/auditoria.service";
+import { aplicarMinimosCliente } from "../common/viagem-minimos";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
 import { FechamentoProcessorService } from "./fechamento-processor.service";
@@ -45,7 +46,7 @@ const LINHA_INCLUDE = {
       toneladas: true,
       veiculo: { select: { placa: true } },
       motorista: { select: { nome: true } },
-      cliente: { select: { nome: true } },
+      cliente: { select: { nome: true, toneladasMinimas: true, kmMinimos: true } },
       material: { select: { nome: true } },
     },
   },
@@ -111,11 +112,17 @@ export class FechamentosService {
     if (tipo && ["VIAGEM", "PEDAGIO", "COMBUSTIVEL"].includes(tipo)) {
       where.tipo = tipo as Prisma.EnumTipoBlocoFechamentoFilter["equals"];
     }
-    return this.prisma.fechamentoLinha.findMany({
+    const linhas = await this.prisma.fechamentoLinha.findMany({
       where,
       include: LINHA_INCLUDE,
       orderBy: { ordem: "asc" },
     });
+    return linhas.map((l) => ({
+      ...l,
+      viagemMatch: l.viagemMatch
+        ? { ...l.viagemMatch, ...aplicarMinimosCliente(l.viagemMatch, l.viagemMatch.cliente) }
+        : null,
+    }));
   }
 
   /**

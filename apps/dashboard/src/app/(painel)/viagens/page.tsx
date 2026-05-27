@@ -16,6 +16,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { firstDayOfMonth, useDataTableState } from "@/hooks/use-data-table-state";
 import { usePaginatedList, useResourceOptions } from "@/lib/client-api";
 import { fmtBR, fmtNum } from "@/lib/fechamento-helpers";
+import { ValorComMinimo } from "@/components/valor-com-minimo";
 
 type Viagem = {
   id: string;
@@ -24,6 +25,12 @@ type Viagem = {
   ticket: string;
   km: string;
   status: string;
+  toneladasInformada: string;
+  toneladasEfetiva: string;
+  toneladasAjustada: boolean;
+  kmInformado: string;
+  kmEfetivo: string;
+  kmAjustada: boolean;
   veiculo: { id: string; placa: string };
   motorista: { id: string; nome: string };
   cliente: { id: string; nome: string };
@@ -141,7 +148,16 @@ export default function ViagensPage() {
         id: "toneladas",
         accessorKey: "toneladas",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Toneladas" />,
-        cell: ({ row }) => <span className="text-sm">{fmtNum(row.original.toneladas, 3)}</span>,
+        cell: ({ row }) => (
+          <ValorComMinimo
+            className="text-sm"
+            efetivo={row.original.toneladasEfetiva}
+            real={row.original.toneladasInformada}
+            ajustada={row.original.toneladasAjustada}
+            unidade="t"
+            casas={3}
+          />
+        ),
       },
       {
         id: "ticket",
@@ -153,7 +169,16 @@ export default function ViagensPage() {
         id: "km",
         accessorKey: "km",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Km" />,
-        cell: ({ row }) => <span className="text-sm">{fmtNum(row.original.km, 2)}</span>,
+        cell: ({ row }) => (
+          <ValorComMinimo
+            className="text-sm"
+            efetivo={row.original.kmEfetivo}
+            real={row.original.kmInformado}
+            ajustada={row.original.kmAjustada}
+            unidade="km"
+            casas={2}
+          />
+        ),
       },
       {
         id: "acoes",
@@ -265,11 +290,25 @@ export default function ViagensPage() {
                 </span>
                 <span>
                   <span className="text-muted-foreground">T: </span>
-                  <span className="font-medium">{fmtNum(v.toneladas, 3)}</span>
+                  <ValorComMinimo
+                    className="font-medium"
+                    efetivo={v.toneladasEfetiva}
+                    real={v.toneladasInformada}
+                    ajustada={v.toneladasAjustada}
+                    unidade=""
+                    casas={3}
+                  />
                 </span>
                 <span>
                   <span className="text-muted-foreground">km: </span>
-                  <span className="font-medium">{fmtNum(v.km, 2)}</span>
+                  <ValorComMinimo
+                    className="font-medium"
+                    efetivo={v.kmEfetivo}
+                    real={v.kmInformado}
+                    ajustada={v.kmAjustada}
+                    unidade=""
+                    casas={2}
+                  />
                 </span>
                 <span>
                   <span className="text-muted-foreground">Ticket: </span>

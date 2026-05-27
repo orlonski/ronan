@@ -364,6 +364,12 @@ model Cliente {
   empresa    Empresa  @relation(fields: [empresaId], references: [id])
   empresaId  String
   ativa      Boolean  @default(true)
+  /// Piso de toneladas: viagens deste cliente que vierem abaixo deste valor são
+  /// contabilizadas pelo mínimo (real continua gravado em Viagem.toneladas).
+  /// null = sem regra.
+  toneladasMinimas Decimal? @db.Decimal(10, 3)
+  /// Piso de quilômetros (mesma regra). Aplica em Viagem.km, não em kmReal/GPS.
+  kmMinimos        Decimal? @db.Decimal(10, 2)
   criadoEm   DateTime @default(now())
   alteradoEm DateTime @updatedAt
 

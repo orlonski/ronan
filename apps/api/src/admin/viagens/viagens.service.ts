@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import type { Prisma, StatusViagem } from "@prisma/client";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
+import { serializarViagemComMinimos } from "../../common/viagem-minimos";
 import { PrismaService } from "../../prisma/prisma.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
@@ -22,7 +23,7 @@ export class ViagensAdminService {
     private readonly uploads: UploadsService,
   ) {}
 
-  list(params: ListViagensParams) {
+  async list(params: ListViagensParams) {
     const where: Prisma.ViagemWhereInput = {};
     if (params.motoristaId) where.motoristaId = params.motoristaId;
     if (params.veiculoId) where.veiculoId = params.veiculoId;
@@ -34,7 +35,21 @@ export class ViagensAdminService {
       if (params.ate) where.data.lte = new Date(params.ate);
     }
 
-    return paginate(this.prisma.viagem, {
+    const result = await paginate<
+      Prisma.ViagemGetPayload<{
+        include: {
+          veiculo: { select: { id: true; placa: true } };
+          motorista: { select: { id: true; nome: true } };
+          cliente: { select: { id: true; nome: true; toneladasMinimas: true; kmMinimos: true } };
+          material: { select: { id: true; nome: true } };
+          localCarga: { select: { id: true; nome: true; cidade: true; uf: true } };
+          localDescarga: { select: { id: true; nome: true; cidade: true; uf: true } };
+          fotos: { select: { id: true; storageKey: true } };
+          _count: { select: { matchesFechamento: true } };
+        };
+      }>,
+      ListViagensParams
+    >(this.prisma.viagem, {
       params,
       where: where as Record<string, unknown>,
       searchFields: [
@@ -59,7 +74,7 @@ export class ViagensAdminService {
       include: {
         veiculo: { select: { id: true, placa: true } },
         motorista: { select: { id: true, nome: true } },
-        cliente: { select: { id: true, nome: true } },
+        cliente: { select: { id: true, nome: true, toneladasMinimas: true, kmMinimos: true } },
         material: { select: { id: true, nome: true } },
         localCarga: { select: { id: true, nome: true, cidade: true, uf: true } },
         localDescarga: { select: { id: true, nome: true, cidade: true, uf: true } },
@@ -67,6 +82,8 @@ export class ViagensAdminService {
         _count: { select: { matchesFechamento: true } },
       },
     });
+
+    return { ...result, data: result.data.map(serializarViagemComMinimos) };
   }
 
   async detalhe(id: string) {
@@ -75,7 +92,15 @@ export class ViagensAdminService {
       include: {
         veiculo: true,
         motorista: { select: { id: true, nome: true, cpf: true } },
-        cliente: { select: { id: true, nome: true, empresa: { select: { id: true, nome: true } } } },
+        cliente: {
+          select: {
+            id: true,
+            nome: true,
+            toneladasMinimas: true,
+            kmMinimos: true,
+            empresa: { select: { id: true, nome: true } },
+          },
+        },
         material: true,
         localCarga: true,
         localDescarga: true,
@@ -107,7 +132,7 @@ export class ViagensAdminService {
       },
     });
     if (!viagem) throw new NotFoundException("Viagem não encontrada");
-    return viagem;
+    return serializarViagemComMinimos(viagem);
   }
 
   async historico(viagemId: string) {

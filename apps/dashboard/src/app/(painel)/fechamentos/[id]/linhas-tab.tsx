@@ -116,8 +116,22 @@ function TabelaViagens({ linhas, loading }: { linhas: Linha[] | undefined; loadi
             <TableCell className="font-mono text-sm">{l.placa ?? "—"}</TableCell>
             <TableCell className="text-sm">{fmtBR(l.data)}</TableCell>
             <TableCell className="font-mono text-sm">{l.ticket ?? "—"}</TableCell>
-            <TableCell className="text-sm">{fmtNum(l.toneladas, 3)}</TableCell>
-            <TableCell className="text-sm">{fmtNum(l.km, 2)}</TableCell>
+            <TableCell className="text-sm">
+              {fmtNum(l.toneladas, 3)}
+              {l.viagemMatch?.toneladasAjustada && (
+                <div className="text-xs text-muted-foreground">
+                  banco: {fmtNum(l.viagemMatch.toneladasEfetiva, 3)} (mín)
+                </div>
+              )}
+            </TableCell>
+            <TableCell className="text-sm">
+              {fmtNum(l.km, 2)}
+              {l.viagemMatch?.kmAjustada && (
+                <div className="text-xs text-muted-foreground">
+                  banco: {fmtNum(l.viagemMatch.kmEfetivo, 2)} (mín)
+                </div>
+              )}
+            </TableCell>
             <TableCell className="text-sm">{fmtBRL(l.valor)}</TableCell>
             <TableCell>
               <Badge className={STATUS_LINHA_COLOR[l.status]}>

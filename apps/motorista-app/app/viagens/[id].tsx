@@ -184,8 +184,24 @@ export default function ViagemDetalheScreen() {
           {/* Stats */}
           <Card>
             <View className="flex-row gap-6">
-              <Stat label="Toneladas" value={fmtNum(detalhe.data.toneladas, 3)} />
-              <Stat label="Km" value={fmtNum(detalhe.data.km, 2)} />
+              <Stat
+                label="Toneladas"
+                value={fmtNum(detalhe.data.toneladasEfetiva, 3)}
+                subValue={
+                  detalhe.data.toneladasAjustada
+                    ? `informado ${fmtNum(detalhe.data.toneladasInformada, 3)}`
+                    : undefined
+                }
+              />
+              <Stat
+                label="Km"
+                value={fmtNum(detalhe.data.kmEfetivo, 2)}
+                subValue={
+                  detalhe.data.kmAjustada
+                    ? `informado ${fmtNum(detalhe.data.kmInformado, 2)}`
+                    : undefined
+                }
+              />
               <Stat label="Ticket" value={detalhe.data.ticket} mono />
             </View>
             {detalhe.data.valorPedagioTotal && (
@@ -348,10 +364,12 @@ function Stat({
   label,
   value,
   mono = true,
+  subValue,
 }: {
   label: string;
   value: string;
   mono?: boolean;
+  subValue?: string;
 }) {
   return (
     <View>
@@ -364,6 +382,9 @@ function Stat({
       >
         {value}
       </Text>
+      {subValue && (
+        <Text className="text-xs text-muted-foreground">{subValue}</Text>
+      )}
     </View>
   );
 }

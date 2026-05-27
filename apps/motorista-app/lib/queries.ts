@@ -65,6 +65,14 @@ export type Viagem = {
   toneladas: string;
   ticket: string;
   km: string;
+  // Derivados pelo backend (helper viagem-minimos) — quando ajustada=true,
+  // toneladasEfetiva/kmEfetivo = piso do cliente; senão = valor informado.
+  toneladasInformada: string;
+  toneladasEfetiva: string;
+  toneladasAjustada: boolean;
+  kmInformado: string;
+  kmEfetivo: string;
+  kmAjustada: boolean;
   observacao: string | null;
   status: string;
   sincronizadoEm: string;
