@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { Check, Plus } from "lucide-react-native";
+import { Check } from "lucide-react-native";
 import {
   ActivityIndicator,
   Alert,
@@ -25,7 +25,6 @@ import { humanizeZodError } from "@/lib/validation";
 import { CriarViagemInput } from "@ronan/shared-types";
 import { formatarDistancia, haversineMetros, localMaisProximo, pegarCoords, pegarCoordsRapido } from "@/lib/geo";
 import { simplificarPontos } from "@/lib/polyline";
-import { consumePendingLocal } from "@/lib/local-novo-bridge";
 import { listPendingViagens, type PendingViagem } from "@/db/database";
 import { atualizarViagemPendente } from "@/lib/sync";
 import {
@@ -220,20 +219,6 @@ export default function NovaViagem() {
       alive = false;
     };
   }, []);
-
-  // Quando volta da tela /local-novo, consome o local pendente
-  useFocusEffect(
-    useCallback(() => {
-      const p = consumePendingLocal();
-      if (!p) return;
-      setExtraLocais((cur) =>
-        cur.find((l) => l.id === p.local.id) ? cur : [...cur, p.local],
-      );
-      if (p.side === "carga") setForm((f) => ({ ...f, localCargaId: p.local.id }));
-      if (p.side === "descarga")
-        setForm((f) => ({ ...f, localDescargaId: p.local.id }));
-    }, []),
-  );
 
   // Pré-seleciona placa default
   useEffect(() => {
@@ -580,30 +565,14 @@ export default function NovaViagem() {
             </View>
 
             <Field label="Local de carga">
-              <View className="flex-row gap-2">
-                <View className="flex-1">
-                  <Select
-                    value={form.localCargaId}
-                    onChange={(v) => update("localCargaId", v)}
-                    options={locaisFiltrados.carga}
-                    placeholder="Escolha o local"
-                    searchable
-                    emptyMessage="Nenhum local de carga pra esse cliente"
-                  />
-                </View>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onPress={() =>
-                    router.push({
-                      pathname: "/local-novo",
-                      params: { side: "carga", clienteId: form.clienteId || "" },
-                    })
-                  }
-                >
-                  <Plus size={20} color="#0f172a" />
-                </Button>
-              </View>
+              <Select
+                value={form.localCargaId}
+                onChange={(v) => update("localCargaId", v)}
+                options={locaisFiltrados.carga}
+                placeholder="Escolha o local"
+                searchable
+                emptyMessage="Nenhum local de carga pra esse cliente"
+              />
               {tracking && (
                 <GpsHint
                   match={matchesGps?.carga ?? null}
