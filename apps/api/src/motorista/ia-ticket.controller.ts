@@ -61,11 +61,11 @@ export class IaTicketController {
     const [clientes, materiais] = await Promise.all([
       this.prisma.cliente.findMany({
         where: { ativa: true },
-        select: { id: true, nome: true },
+        select: { id: true, nome: true, apelidos: true },
       }),
       this.prisma.material.findMany({
         where: { ativo: true },
-        select: { id: true, nome: true },
+        select: { id: true, nome: true, apelidos: true },
       }),
     ]);
 

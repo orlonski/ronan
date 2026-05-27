@@ -269,8 +269,8 @@ Responda APENAS um JSON válido:
     fotoBase64: string;
     mime: string;
     catalogos: {
-      clientes: { id: string; nome: string }[];
-      materiais: { id: string; nome: string }[];
+      clientes: { id: string; nome: string; apelidos?: string[] }[];
+      materiais: { id: string; nome: string; apelidos?: string[] }[];
       veiculos: { id: string; placa: string; modelo: string | null }[];
     };
   }): Promise<ExtrairTicketResult> {
@@ -280,8 +280,16 @@ Responda APENAS um JSON válido:
 
     const catalogoStr = JSON.stringify(
       {
-        clientes: args.catalogos.clientes.map((c) => ({ id: c.id, nome: c.nome })),
-        materiais: args.catalogos.materiais.map((m) => ({ id: m.id, nome: m.nome })),
+        clientes: args.catalogos.clientes.map((c) => ({
+          id: c.id,
+          nome: c.nome,
+          apelidos: c.apelidos ?? [],
+        })),
+        materiais: args.catalogos.materiais.map((m) => ({
+          id: m.id,
+          nome: m.nome,
+          apelidos: m.apelidos ?? [],
+        })),
         veiculos: args.catalogos.veiculos.map((v) => ({
           id: v.id,
           placa: v.placa,
@@ -301,7 +309,7 @@ ${catalogoStr}
 Retorne UM objeto JSON puro (sem markdown, sem texto antes/depois) com este schema:
 {
   "ticket": "string ou null",            // número do ticket
-  "toneladas": number ou null,           // em toneladas (converta de kg dividindo por 1000)
+  "toneladas": number ou null,           // PESO LÍQUIDO em toneladas (ver regras abaixo)
   "data": "YYYY-MM-DD ou null",
   "km": number ou null,                  // km rodados se aparecer
   "clienteId": "string ou null",         // ID do catálogo se reconhecer; senão null
@@ -314,10 +322,22 @@ Retorne UM objeto JSON puro (sem markdown, sem texto antes/depois) com este sche
   "confidence": number                    // 0..1 confiança geral da extração
 }
 
-Regras:
+REGRAS DE PESO (importante — erro recorrente):
+- O ticket geralmente mostra TRÊS valores: PESO BRUTO, TARA e PESO LÍQUIDO. Use SEMPRE o PESO LÍQUIDO em "toneladas". NUNCA o bruto, NUNCA a tara.
+- Se só aparecerem dois valores (bruto e tara) sem líquido explícito, calcule: líquido = bruto − tara.
+- Se aparecer um valor único de peso sem rótulo, assuma que é líquido.
+- Converta de kg pra toneladas dividindo por 1000 (ex: 32.000 kg → 32 toneladas; 32500 kg → 32.5).
+- Se o valor já vier em toneladas/t, use direto.
+
+REGRAS DE MATCHING DE NOMES (cliente / material / placa):
+- Cada item do catálogo tem "nome" e "apelidos" (array de variações conhecidas). SEMPRE compare contra nome+apelidos antes de desistir.
+- Normalize antes de comparar: ignore caixa (lowercase), pontos, espaços, hífens, acentos. Ex: "C.B.U.Q" e "cbuq" são iguais; "São José" e "SAO JOSE" são iguais.
+- Ignore sufixos descritivos como "FAIXA A/B/C", "TIPO 1/2", "GRUPO X", "GRADUAÇÃO Y" — esses qualificam o material mas não mudam a identidade. Ex: "C.B.U.Q FAIXA C" deve casar com catálogo "CBUQ".
+- Se bater por qualquer forma (nome ou apelido, mesmo com sufixo extra), preencha o Id correspondente. Só use *Sugerido quando o ticket trouxer um nome que claramente não tem equivalente nenhum no catálogo.
+- Para placa, normalize removendo hífen/espaço (ABC-1234 = ABC1234 = abc 1234).
+
+OUTRAS REGRAS:
 - Só preencha campos que conseguir ler com confiança. Em dúvida, deixe null.
-- Se reconhecer nome do cliente/material/placa mas não casar 100% com catálogo, deixe Id null e preencha *Sugerido.
-- Toneladas geralmente vem como peso líquido (líquido = bruto - tara).
 - Confidence baixo (<0.5) quando foto está ruim/incompleta.`;
 
     const modelo = await this.modeloAtual();
@@ -379,17 +399,60 @@ Regras:
           ? Math.min(1, Math.max(0, parsed.confidence))
           : 0;
 
+      let clienteId = safeId(parsed.clienteId, clienteIds);
+      let clienteSugerido = safeStr(parsed.clienteSugerido);
+      let materialId = safeId(parsed.materialId, materialIds);
+      let materialSugerido = safeStr(parsed.materialSugerido);
+      let veiculoId = safeId(parsed.veiculoId, veiculoIds);
+      let placaSugerida = safeStr(parsed.placaSugerida);
+
+      // Fallback server-side: quando a IA admitiu não saber mas leu o texto bruto
+      // (campo *Sugerido), tentamos fazer um match normalizado contra nome+apelidos
+      // do catálogo. Cobre casos tipo "C.B.U.Q FAIXA C" vs "CBUQ" sem precisar
+      // cadastrar apelidos.
+      if (!clienteId && clienteSugerido) {
+        const matched = matchPorNomeOuApelido(
+          clienteSugerido,
+          args.catalogos.clientes,
+        );
+        if (matched) {
+          clienteId = matched;
+          clienteSugerido = undefined;
+        }
+      }
+      if (!materialId && materialSugerido) {
+        const matched = matchPorNomeOuApelido(
+          materialSugerido,
+          args.catalogos.materiais,
+        );
+        if (matched) {
+          materialId = matched;
+          materialSugerido = undefined;
+        }
+      }
+      if (!veiculoId && placaSugerida) {
+        const placasCatalogo = args.catalogos.veiculos.map((v) => ({
+          id: v.id,
+          nome: v.placa,
+        }));
+        const matched = matchPorNomeOuApelido(placaSugerida, placasCatalogo);
+        if (matched) {
+          veiculoId = matched;
+          placaSugerida = undefined;
+        }
+      }
+
       return {
         ticket: safeStr(parsed.ticket),
         toneladas: safeNum(parsed.toneladas),
         data: safeStr(parsed.data),
         km: safeNum(parsed.km),
-        clienteId: safeId(parsed.clienteId, clienteIds),
-        clienteSugerido: safeStr(parsed.clienteSugerido),
-        materialId: safeId(parsed.materialId, materialIds),
-        materialSugerido: safeStr(parsed.materialSugerido),
-        veiculoId: safeId(parsed.veiculoId, veiculoIds),
-        placaSugerida: safeStr(parsed.placaSugerida),
+        clienteId,
+        clienteSugerido,
+        materialId,
+        materialSugerido,
+        veiculoId,
+        placaSugerida,
         observacoes: safeStr(parsed.observacoes),
         confidence,
       };
@@ -398,6 +461,54 @@ Regras:
       throw err;
     }
   }
+}
+
+/**
+ * Normaliza string pra comparação fuzzy: lowercase + remove acentos +
+ * remove tudo que não for letra/dígito. "C.B.U.Q FAIXA C" → "cbuqfaixac".
+ */
+function normalizar(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * Tenta achar um item do catálogo (por id+nome+apelidos) que case com o texto
+ * bruto via normalização. Match exato após normalizar tem prioridade; fallback
+ * é prefix (em qualquer direção) quando o alvo tem 4+ chars — conservador pra
+ * evitar falsos positivos de strings muito curtas.
+ */
+function matchPorNomeOuApelido(
+  bruto: string,
+  catalogo: { id: string; nome: string; apelidos?: string[] }[],
+): string | undefined {
+  const alvo = normalizar(bruto);
+  if (!alvo) return undefined;
+
+  // Pass 1: match exato após normalização
+  for (const item of catalogo) {
+    if (normalizar(item.nome) === alvo) return item.id;
+    for (const ap of item.apelidos ?? []) {
+      if (normalizar(ap) === alvo) return item.id;
+    }
+  }
+
+  // Pass 2: prefix match (cobre "CBUQ" vs "C.B.U.Q FAIXA C" → "cbuqfaixac")
+  if (alvo.length >= 4) {
+    for (const item of catalogo) {
+      const candidatos = [item.nome, ...(item.apelidos ?? [])];
+      for (const cand of candidatos) {
+        const n = normalizar(cand);
+        if (n.length < 4) continue;
+        if (n.startsWith(alvo) || alvo.startsWith(n)) return item.id;
+      }
+    }
+  }
+
+  return undefined;
 }
 
 function extractJson<T>(text: string): T | null {
