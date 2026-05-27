@@ -271,17 +271,17 @@ export default function ViagemDetalhePage({
               <Row
                 label="Material"
                 value={v.material.nome}
-                fromAi={v.ocrCampos.includes("materialId")}
+                fromAi={v.ocrCampos?.includes("materialId")}
               />
               <Row
                 label="Cliente"
                 value={v.cliente.nome}
-                fromAi={v.ocrCampos.includes("clienteId")}
+                fromAi={v.ocrCampos?.includes("clienteId")}
               />
               <Row label="Empresa" value={v.cliente.empresa.nome} />
               <Row
                 label="Toneladas"
-                fromAi={v.ocrCampos.includes("toneladas")}
+                fromAi={v.ocrCampos?.includes("toneladas")}
                 value={
                   <ValorComMinimo
                     efetivo={v.toneladasEfetiva}
@@ -294,7 +294,7 @@ export default function ViagemDetalhePage({
               />
               <Row
                 label="Km rodados"
-                fromAi={v.ocrCampos.includes("km")}
+                fromAi={v.ocrCampos?.includes("km")}
                 value={
                   <span>
                     <ValorComMinimo
@@ -320,7 +320,7 @@ export default function ViagemDetalhePage({
                 label="Ticket"
                 value={v.ticket}
                 mono
-                fromAi={v.ocrCampos.includes("ticket")}
+                fromAi={v.ocrCampos?.includes("ticket")}
               />
               {v.valorPedagioTotal && <Row label="Pedágio" value={fmtBRL(v.valorPedagioTotal)} />}
               {v.observacao && <Row label="Observação" value={v.observacao} />}

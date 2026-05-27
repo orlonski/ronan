@@ -167,7 +167,7 @@ export default function ViagensPage() {
         cell: ({ row }) => (
           <span className="font-mono text-sm">
             {row.original.ticket}
-            {row.original.ocrCampos.length > 0 && (
+            {row.original.ocrCampos && row.original.ocrCampos.length > 0 && (
               <span
                 className="ml-1 text-xs text-indigo-600"
                 title={`Campos pela IA: ${row.original.ocrCampos.join(", ")}`}

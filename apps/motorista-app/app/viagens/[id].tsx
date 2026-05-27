@@ -187,7 +187,7 @@ export default function ViagemDetalheScreen() {
               <Stat
                 label="Toneladas"
                 value={fmtNum(detalhe.data.toneladasEfetiva, 3)}
-                fromAi={detalhe.data.ocrCampos.includes("toneladas")}
+                fromAi={detalhe.data.ocrCampos?.includes("toneladas")}
                 subValue={
                   detalhe.data.toneladasAjustada
                     ? `informado ${fmtNum(detalhe.data.toneladasInformada, 3)}`
@@ -197,7 +197,7 @@ export default function ViagemDetalheScreen() {
               <Stat
                 label="Km"
                 value={fmtNum(detalhe.data.kmEfetivo, 2)}
-                fromAi={detalhe.data.ocrCampos.includes("km")}
+                fromAi={detalhe.data.ocrCampos?.includes("km")}
                 subValue={
                   detalhe.data.kmAjustada
                     ? `informado ${fmtNum(detalhe.data.kmInformado, 2)}`
@@ -212,7 +212,7 @@ export default function ViagemDetalheScreen() {
                 label="Ticket"
                 value={detalhe.data.ticket}
                 mono
-                fromAi={detalhe.data.ocrCampos.includes("ticket")}
+                fromAi={detalhe.data.ocrCampos?.includes("ticket")}
               />
             </View>
             {detalhe.data.valorPedagioTotal && (
