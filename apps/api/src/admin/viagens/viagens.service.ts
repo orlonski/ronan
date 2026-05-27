@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { AcaoAuditoria, type Prisma, type StatusViagem } from "@prisma/client";
+import type { AtualizarViagemInput } from "@ronan/shared-types";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
 import { serializarViagemComMinimos } from "../../common/viagem-minimos";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -151,6 +152,56 @@ export class ViagensAdminService {
     });
 
     return { ...serializarViagemComMinimos(viagem), rotaGeometria: rota?.geometria ?? null };
+  }
+
+  async atualizar(id: string, input: AtualizarViagemInput, usuarioId: string) {
+    const antes = await this.prisma.viagem.findUnique({
+      where: { id },
+      include: { _count: { select: { matchesFechamento: true } } },
+    });
+    if (!antes) throw new NotFoundException("Viagem não encontrada");
+    if (antes._count.matchesFechamento > 0) {
+      throw new ConflictException(
+        "Não é possível editar: viagem já vinculada a fechamento. Desfaça o match primeiro.",
+      );
+    }
+
+    // Se trocou ticket OU clienteId, valida unicidade ticket+empresa
+    const novoTicket = input.ticket ?? antes.ticket;
+    const novoClienteId = input.clienteId ?? antes.clienteId;
+    if (novoTicket !== antes.ticket || novoClienteId !== antes.clienteId) {
+      const cliente = await this.prisma.cliente.findUnique({
+        where: { id: novoClienteId },
+        select: { empresaId: true },
+      });
+      if (!cliente) throw new NotFoundException("Cliente não encontrado");
+      const dup = await this.prisma.viagem.findFirst({
+        where: {
+          id: { not: id },
+          ticket: novoTicket,
+          cliente: { empresaId: cliente.empresaId },
+        },
+        select: { id: true },
+      });
+      if (dup) {
+        throw new ConflictException(`Ticket ${novoTicket} já existe pra essa empresa.`);
+      }
+    }
+
+    const depois = await this.prisma.viagem.update({
+      where: { id },
+      data: input,
+    });
+
+    // Remove o _count antes de gravar o diff — ele não é campo da entidade.
+    const { _count: _ignored, ...antesPlain } = antes;
+    await this.auditoria.logDiff(
+      { usuarioId, entidade: "Viagem", entidadeId: id, acao: AcaoAuditoria.UPDATE },
+      antesPlain,
+      depois,
+    );
+
+    return this.detalhe(id);
   }
 
   async recalcularTrajeto(id: string, usuarioId: string) {

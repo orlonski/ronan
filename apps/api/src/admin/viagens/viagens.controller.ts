@@ -1,9 +1,11 @@
 import {
+  Body,
   Controller,
   Delete,
   Get,
   HttpCode,
   Param,
+  Patch,
   Post,
   Query,
   Res,
@@ -12,6 +14,7 @@ import {
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { z } from "zod";
+import { AtualizarViagemInput } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { paginationQuerySchema } from "../../common/pagination";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
@@ -53,6 +56,16 @@ export class ViagensAdminController {
   @Get(":id/historico")
   historico(@Param("id") id: string) {
     return this.service.historico(id);
+  }
+
+  @Patch(":id")
+  atualizar(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(AtualizarViagemInput))
+    body: AtualizarViagemInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.atualizar(id, body, user.id);
   }
 
   @Post(":id/recalcular-trajeto")

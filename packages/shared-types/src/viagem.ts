@@ -39,3 +39,21 @@ export const CriarViagemInput = z.object({
   pontos: z.array(ViagemPontoInput).max(2000).optional(),
 });
 export type CriarViagemInput = z.infer<typeof CriarViagemInput>;
+
+// Edição admin: campos que motorista lança continuam editáveis. Imutáveis aqui:
+// id, clientId (idempotência), motoristaId, status, tracking GPS, fotos, timestamps.
+// `null` em valorPedagioTotal/observacao permite limpar o campo.
+export const AtualizarViagemInput = z.object({
+  veiculoId: z.string().uuid().optional(),
+  clienteId: z.string().uuid().optional(),
+  materialId: z.string().uuid().optional(),
+  data: z.coerce.date().optional(),
+  toneladas: z.number().positive().max(MAX_TONELADAS, `Toneladas acima do limite (${MAX_TONELADAS}).`).optional(),
+  ticket: z.string().min(1).max(50).optional(),
+  km: z.number().nonnegative().max(MAX_KM, `Km acima do limite (${MAX_KM}).`).optional(),
+  localCargaId: z.string().uuid().optional(),
+  localDescargaId: z.string().uuid().optional(),
+  valorPedagioTotal: z.number().nonnegative().max(MAX_VALOR).nullable().optional(),
+  observacao: z.string().max(500).nullable().optional(),
+});
+export type AtualizarViagemInput = z.infer<typeof AtualizarViagemInput>;

@@ -169,16 +169,36 @@ export default function ViagemDetalhePage({
             {fmtBR(v.data)}
           </p>
         </div>
-        <ExcluirButton
-          path="/admin/viagens"
-          id={v.id}
-          nomeRecurso={`a viagem ${v.ticket}`}
-          size="sm"
-          variant="outline"
-          label="Excluir"
-          invalidateKeys={[["viagem-admin", v.id], "/admin/viagens"]}
-          onSuccess={() => router.push("/viagens")}
-        />
+        <div className="flex items-center gap-2">
+          {v.matchesFechamento.length === 0 ? (
+            <Link href={`/viagens/${v.id}/editar`}>
+              <Button variant="outline" size="sm">
+                <Edit3 className="h-4 w-4" />
+                Editar
+              </Button>
+            </Link>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled
+              title="Viagem em fechamento — desfaça o match antes de editar"
+            >
+              <Edit3 className="h-4 w-4" />
+              Editar
+            </Button>
+          )}
+          <ExcluirButton
+            path="/admin/viagens"
+            id={v.id}
+            nomeRecurso={`a viagem ${v.ticket}`}
+            size="sm"
+            variant="outline"
+            label="Excluir"
+            invalidateKeys={[["viagem-admin", v.id], "/admin/viagens"]}
+            onSuccess={() => router.push("/viagens")}
+          />
+        </div>
       </header>
 
       <div className="flex gap-1 border-b">
