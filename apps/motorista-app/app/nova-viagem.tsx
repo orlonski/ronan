@@ -557,9 +557,11 @@ export default function NovaViagem() {
                 <Label>Ticket</Label>
                 <Input
                   value={form.ticket}
-                  onChangeText={(v) => update("ticket", v)}
+                  onChangeText={(v) => update("ticket", v.toUpperCase())}
                   placeholder="número"
                   maxLength={50}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
                 />
               </View>
             </View>
