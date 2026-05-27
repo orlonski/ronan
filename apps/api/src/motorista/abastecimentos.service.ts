@@ -102,7 +102,11 @@ export class AbastecimentosMotoristaService {
       );
     }
 
-    const precoLitro = Number((input.valorTotal / input.litros).toFixed(3));
+    // Abastecimento em comboio: valor pode vir vazio. Sem valor, sem preço/litro.
+    const precoLitro =
+      input.valorTotal != null
+        ? Number((input.valorTotal / input.litros).toFixed(3))
+        : null;
 
     const { fotoKey, clientId, ...rest } = input;
     return this.prisma.abastecimento.create({
@@ -114,8 +118,9 @@ export class AbastecimentosMotoristaService {
         data: rest.data,
         tipo: rest.tipo,
         litros: rest.litros,
-        valorTotal: rest.valorTotal,
+        valorTotal: rest.valorTotal ?? null,
         precoLitro,
+        emComboio: rest.emComboio,
         odometro: rest.odometro,
         postoNome: rest.postoNome,
         tanqueCheio: rest.tanqueCheio,

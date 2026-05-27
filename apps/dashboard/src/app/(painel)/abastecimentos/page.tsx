@@ -25,8 +25,9 @@ type Abastecimento = {
   data: string;
   tipo: string;
   litros: string;
-  valorTotal: string;
+  valorTotal: string | null;
   precoLitro: string | null;
+  emComboio: boolean;
   odometro: number;
   postoNome: string | null;
   tanqueCheio: boolean;
@@ -151,9 +152,12 @@ export default function AbastecimentosPage() {
         id: "valorTotal",
         accessorKey: "valorTotal",
         header: ({ column }) => <DataTableColumnHeader column={column} title="R$ total" />,
-        cell: ({ row }) => (
-          <span className="text-sm">R$ {fmtNum(row.original.valorTotal, 2)}</span>
-        ),
+        cell: ({ row }) =>
+          row.original.valorTotal != null ? (
+            <span className="text-sm">R$ {fmtNum(row.original.valorTotal, 2)}</span>
+          ) : (
+            <span className="text-xs italic text-amber-700">comboio</span>
+          ),
       },
       {
         id: "precoLitro",
@@ -292,7 +296,11 @@ export default function AbastecimentosPage() {
                 </span>
                 <span>
                   <span className="text-muted-foreground">R$: </span>
-                  <span className="font-medium">{fmtNum(a.valorTotal, 2)}</span>
+                  {a.valorTotal != null ? (
+                    <span className="font-medium">{fmtNum(a.valorTotal, 2)}</span>
+                  ) : (
+                    <span className="italic text-amber-700">comboio</span>
+                  )}
                 </span>
                 {a.precoLitro && (
                   <span>

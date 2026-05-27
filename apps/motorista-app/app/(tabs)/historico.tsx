@@ -139,10 +139,11 @@ export default function HistoricoScreen() {
   function confirmarExcluirAbastecimento(a: Abastecimento) {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const litros = parseFloat(a.litros);
-    const valor = parseFloat(a.valorTotal);
+    const valor = a.valorTotal != null ? parseFloat(a.valorTotal) : null;
+    const valorStr = valor != null ? `(R$ ${valor.toFixed(2)})` : "(em comboio)";
     Alert.alert(
       "Excluir este abastecimento?",
-      `Apagar abastecimento de ${litros.toFixed(2)} L (R$ ${valor.toFixed(2)})${a.postoNome ? ` em ${a.postoNome}` : ""}?`,
+      `Apagar abastecimento de ${litros.toFixed(2)} L ${valorStr}${a.postoNome ? ` em ${a.postoNome}` : ""}?`,
       [
         { text: "Cancelar", style: "cancel" },
         {
@@ -672,7 +673,7 @@ function AbastecimentoCard({
   onExcluir: () => void;
 }) {
   const litros = parseFloat(a.litros);
-  const valor = parseFloat(a.valorTotal);
+  const valor = a.valorTotal != null ? parseFloat(a.valorTotal) : null;
   const preco = a.precoLitro ? parseFloat(a.precoLitro) : null;
 
   const card = (
@@ -712,10 +713,14 @@ function AbastecimentoCard({
         />
         <Stat
           label="R$"
-          value={valor.toLocaleString("pt-BR", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}
+          value={
+            valor != null
+              ? valor.toLocaleString("pt-BR", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })
+              : "comboio"
+          }
         />
         {preco !== null && (
           <Stat

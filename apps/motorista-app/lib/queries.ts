@@ -443,8 +443,10 @@ export type Abastecimento = {
   data: string;
   tipo: "DIESEL_S10" | "DIESEL_S500" | "ARLA_32" | "GASOLINA" | "ETANOL";
   litros: string;
-  valorTotal: string;
+  // Null quando emComboio = true (motorista não soube o valor na hora).
+  valorTotal: string | null;
   precoLitro: string | null;
+  emComboio: boolean;
   odometro: number;
   postoNome: string | null;
   tanqueCheio: boolean;

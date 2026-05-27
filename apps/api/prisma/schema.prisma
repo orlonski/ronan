@@ -913,8 +913,13 @@ model Abastecimento {
   data            DateTime // timestamp completo (hora importa)
   tipo            TipoCombustivel @default(DIESEL_S10)
   litros          Decimal         @db.Decimal(8, 3)
-  valorTotal      Decimal         @db.Decimal(10, 2)
+  /// Null quando abastecimento em comboio (motorista não soube o valor na
+  /// hora). Listagens e fechamentos lidam com null como "sem valor".
+  valorTotal      Decimal?        @db.Decimal(10, 2)
   precoLitro      Decimal?        @db.Decimal(6, 3) // calculado server-side
+  /// True quando o abastecimento foi no comboio: valor real será informado
+  /// depois (admin pode editar). Distingue de "motorista esqueceu".
+  emComboio       Boolean         @default(false)
   odometro        Int // km do hodômetro
   postoNome       String?
   tanqueCheio     Boolean         @default(true)

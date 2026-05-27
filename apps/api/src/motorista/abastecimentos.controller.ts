@@ -13,7 +13,7 @@ import {
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { z } from "zod";
-import { CriarAbastecimentoInput } from "@ronan/shared-types";
+import { CriarAbastecimentoBaseInput } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
@@ -23,8 +23,11 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { AuthMotorista } from "../auth/types";
 import { AbastecimentosMotoristaService } from "./abastecimentos.service";
 
-const CriarAbastecimentoPayload = CriarAbastecimentoInput.extend({
+const CriarAbastecimentoPayload = CriarAbastecimentoBaseInput.extend({
   fotoKey: z.string().optional(),
+}).refine((d) => d.emComboio || d.valorTotal !== undefined, {
+  message: "Valor obrigatório quando não é abastecimento em comboio.",
+  path: ["valorTotal"],
 });
 
 const MesSchema = z

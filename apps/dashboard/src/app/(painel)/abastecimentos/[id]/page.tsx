@@ -33,7 +33,8 @@ type AbastecimentoDetalhe = {
   data: string;
   tipo: string;
   litros: string;
-  valorTotal: string;
+  valorTotal: string | null;
+  emComboio: boolean;
   precoLitro: string | null;
   odometro: number;
   postoNome: string | null;
@@ -123,7 +124,13 @@ export default function AbastecimentoDetalhePage({
             />
             <Info
               label="Valor total"
-              value={`R$ ${fmtNum(x.valorTotal, 2)}`}
+              value={
+                x.valorTotal != null
+                  ? `R$ ${fmtNum(x.valorTotal, 2)}`
+                  : x.emComboio
+                    ? "Em comboio — pendente"
+                    : "—"
+              }
             />
             <Info
               label="Preço por litro"

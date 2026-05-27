@@ -16,7 +16,8 @@ const MAX_LITROS = 2000;
 const MAX_VALOR = 50_000;
 const MAX_ODOMETRO = 99_999_999;
 
-export const CriarAbastecimentoInput = z.object({
+// Base ZodObject sem refine — permite .extend() em controllers/forms.
+export const CriarAbastecimentoBaseInput = z.object({
   clientId: z.string().uuid(),
   veiculoId: z.string().uuid(),
   empresaId: z.string().uuid(),
@@ -26,10 +27,15 @@ export const CriarAbastecimentoInput = z.object({
     .number()
     .positive()
     .max(MAX_LITROS, `Litros acima do limite (${MAX_LITROS}).`),
+  // Opcional: motorista pode lançar sem valor quando abastece em comboio.
   valorTotal: z
     .number()
     .positive()
-    .max(MAX_VALOR, `Valor acima do limite (${MAX_VALOR}).`),
+    .max(MAX_VALOR, `Valor acima do limite (${MAX_VALOR}).`)
+    .optional(),
+  // True quando motorista não sabe o valor (comboio). Admin pode preencher
+  // depois pelo dashboard.
+  emComboio: z.boolean().default(false),
   odometro: z.number().int().nonnegative().max(MAX_ODOMETRO),
   postoNome: z.string().max(120).optional(),
   tanqueCheio: z.boolean().default(true),
@@ -39,4 +45,13 @@ export const CriarAbastecimentoInput = z.object({
   precisao: z.number().nonnegative().optional(),
   criadoOfflineEm: z.coerce.date().optional(),
 });
+
+// Wrapper com regra cruzada: valor obrigatório quando NÃO é em comboio.
+export const CriarAbastecimentoInput = CriarAbastecimentoBaseInput.refine(
+  (d) => d.emComboio || d.valorTotal !== undefined,
+  {
+    message: "Valor obrigatório quando não é abastecimento em comboio.",
+    path: ["valorTotal"],
+  },
+);
 export type CriarAbastecimentoInput = z.infer<typeof CriarAbastecimentoInput>;

@@ -64,6 +64,7 @@ export default function NovoAbastecimento() {
   const [tipo, setTipo] = useState<TipoCombustivel>("DIESEL_S10");
   const [litros, setLitros] = useState("");
   const [valor, setValor] = useState("");
+  const [emComboio, setEmComboio] = useState(false);
   const [odometro, setOdometro] = useState("");
   const [postoNome, setPostoNome] = useState("");
   const [tanqueCheio, setTanqueCheio] = useState(true);
@@ -148,8 +149,8 @@ export default function NovoAbastecimento() {
       return falhar("Informe os litros.");
     }
     const valorNum = parseFloat(valor.replace(",", "."));
-    if (!Number.isFinite(valorNum) || valorNum <= 0) {
-      return falhar("Informe o valor.");
+    if (!emComboio && (!Number.isFinite(valorNum) || valorNum <= 0)) {
+      return falhar("Informe o valor (ou marque \"em comboio\").");
     }
     const odometroNum = parseInt(odometro.replace(/\D/g, ""), 10);
     if (!Number.isFinite(odometroNum) || odometroNum < 0) {
@@ -176,7 +177,8 @@ export default function NovoAbastecimento() {
         data: combinarDataComHoraAtual(data),
         tipo,
         litros: litrosNum,
-        valorTotal: valorNum,
+        valorTotal: emComboio ? undefined : valorNum,
+        emComboio,
         odometro: odometroNum,
         postoNome: postoNome.trim() || undefined,
         tanqueCheio,
@@ -285,20 +287,36 @@ export default function NovoAbastecimento() {
               <View className="flex-1 gap-2">
                 <Label>Valor (R$)</Label>
                 <Input
-                  value={valor}
+                  value={emComboio ? "" : valor}
                   onChangeText={setValor}
                   keyboardType="decimal-pad"
-                  placeholder="0,00"
-                  editable={!submitting}
+                  placeholder={emComboio ? "—" : "0,00"}
+                  editable={!submitting && !emComboio}
                   maxLength={8}
                 />
                 <Text className="text-xs text-muted-foreground">
-                  Em R$ (máx 50000)
+                  {emComboio ? "Preenchido depois pelo escritório" : "Em R$ (máx 50000)"}
                 </Text>
               </View>
             </View>
 
-            {precoLitro !== null && (
+            <View className="flex-row items-start gap-3 rounded-lg border border-border bg-muted/30 p-3">
+              <Switch
+                value={emComboio}
+                onValueChange={setEmComboio}
+                disabled={submitting}
+              />
+              <View className="flex-1">
+                <Text className="text-sm font-medium text-foreground">
+                  Abastecimento em comboio
+                </Text>
+                <Text className="mt-0.5 text-xs text-muted-foreground">
+                  Marque se ainda não soube o valor. O escritório completa depois.
+                </Text>
+              </View>
+            </View>
+
+            {!emComboio && precoLitro !== null && (
               <View className="rounded-md bg-muted px-3 py-2">
                 <Text className="text-xs text-muted-foreground">
                   Preço por litro
