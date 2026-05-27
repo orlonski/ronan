@@ -17,6 +17,7 @@ import { LocaisMotoristaService } from "./locais.service";
 import { RotasMotoristaController } from "./rotas.controller";
 import { TrackingConfigMotoristaController } from "./tracking-config.controller";
 import { ValidacaoLocalService } from "./validacao-local.service";
+import { IaTicketController } from "./ia-ticket.controller";
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { ValidacaoLocalService } from "./validacao-local.service";
     LocaisMotoristaController,
     RotasMotoristaController,
     TrackingConfigMotoristaController,
+    IaTicketController,
   ],
   providers: [
     MotoristaService,

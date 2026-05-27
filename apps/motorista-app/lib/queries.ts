@@ -4,6 +4,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import type { ExtrairTicketResult } from "@ronan/shared-types";
 import { cacheGet, cachePut } from "@/db/database";
 import { api, ApiError } from "./api";
 import { enqueueAbastecimento, enqueuePedagio, enqueueViagem } from "./sync";
@@ -56,6 +57,7 @@ export type Me = {
   podeIniciarViagem: boolean;
   podeLancarPedagio: boolean;
   podeLancarAbastecimento: boolean;
+  podeUsarOcrTicket: boolean;
 };
 
 export type Viagem = {
@@ -180,6 +182,7 @@ function normalizarMe<T extends Record<string, unknown>>(m: T): T {
   if (typeof anyM.podeIniciarViagem !== "boolean") anyM.podeIniciarViagem = true;
   if (typeof anyM.podeLancarPedagio !== "boolean") anyM.podeLancarPedagio = true;
   if (typeof anyM.podeLancarAbastecimento !== "boolean") anyM.podeLancarAbastecimento = true;
+  if (typeof anyM.podeUsarOcrTicket !== "boolean") anyM.podeUsarOcrTicket = true;
   return m;
 }
 
@@ -885,5 +888,17 @@ export function useMarcarTodasNotificacoesLidas() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["notificacoes"] });
     },
+  });
+}
+
+/**
+ * OCR de ticket via Claude vision. Best-effort: motorista preenche manual
+ * se chamada falhar (sem internet, IA off, etc). Sem retry — uma tentativa
+ * só por foto. Timeout no client é controlado pelo `api.post`.
+ */
+export function useExtrairTicket() {
+  return useMutation({
+    mutationFn: async (input: { fotoBase64: string; mime: string }) =>
+      api.post<ExtrairTicketResult>("/m/ia/extrair-ticket", input),
   });
 }

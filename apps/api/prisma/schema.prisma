@@ -194,6 +194,9 @@ model Motorista {
   podeIniciarViagem       Boolean   @default(true)
   podeLancarPedagio       Boolean   @default(true)
   podeLancarAbastecimento Boolean   @default(true)
+  /// Quando true, o app dispara OCR via IA na foto do ticket pra sugerir
+  /// preenchimento. False = motorista preenche tudo manualmente.
+  podeUsarOcrTicket       Boolean   @default(true)
   criadoEm                DateTime  @default(now())
   alteradoEm              DateTime  @updatedAt
 

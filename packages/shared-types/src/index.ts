@@ -15,3 +15,4 @@ export * from "./material";
 export * from "./user";
 export * from "./push";
 export * from "./notificacao";
+export * from "./ia-ticket";

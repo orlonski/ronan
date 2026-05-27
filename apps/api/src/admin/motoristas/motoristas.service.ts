@@ -47,6 +47,7 @@ const SAFE_SELECT = {
   podeIniciarViagem: true,
   podeLancarPedagio: true,
   podeLancarAbastecimento: true,
+  podeUsarOcrTicket: true,
   criadoEm: true,
   criadoPor: { select: { id: true, nome: true } },
 } as const;
@@ -197,6 +198,7 @@ export class MotoristasService {
       podeIniciarViagem?: boolean;
       podeLancarPedagio?: boolean;
       podeLancarAbastecimento?: boolean;
+      podeUsarOcrTicket?: boolean;
     },
   ) {
     const exists = await this.prisma.motorista.findUnique({ where: { id }, select: { id: true } });
@@ -210,6 +212,7 @@ export class MotoristasService {
         podeIniciarViagem: true,
         podeLancarPedagio: true,
         podeLancarAbastecimento: true,
+        podeUsarOcrTicket: true,
       },
     });
   }

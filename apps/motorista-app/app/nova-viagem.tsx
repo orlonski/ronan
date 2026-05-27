@@ -26,11 +26,14 @@ import { CriarViagemInput } from "@ronan/shared-types";
 import { formatarDistancia, haversineMetros, localMaisProximo, pegarCoords, pegarCoordsRapido } from "@/lib/geo";
 import { simplificarPontos } from "@/lib/polyline";
 import { listPendingViagens, type PendingViagem } from "@/db/database";
+import * as FileSystem from "expo-file-system";
+import type { ExtrairTicketResult } from "@ronan/shared-types";
 import { atualizarViagemPendente } from "@/lib/sync";
 import {
   useCalcularRota,
   useCatalogos,
   useCriarViagem,
+  useExtrairTicket,
   useMe,
   type Local,
 } from "@/lib/queries";
@@ -102,6 +105,8 @@ export default function NovaViagem() {
     tracking ? { ...empty, km: tracking.kmReal } : empty,
   );
   const [foto, setFoto] = useState<CapturedPhoto | null>(null);
+  const [sugestoesIa, setSugestoesIa] = useState<ExtrairTicketResult | null>(null);
+  const extrairTicket = useExtrairTicket();
   const [submitting, setSubmitting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   // Locais criados nesta sessão — merged no Select pra garantir que aparecem
@@ -313,6 +318,29 @@ export default function NovaViagem() {
     setForm((f) => ({ ...f, [k]: v }));
   }
 
+  /**
+   * Preenche apenas campos vazios do form com as sugestões da IA.
+   * Não sobrescreve nada que o motorista já digitou.
+   */
+  function aplicarSugestoesIa(s: ExtrairTicketResult) {
+    setForm((f) => {
+      const next = { ...f };
+      if (!next.ticket && s.ticket) next.ticket = s.ticket.toUpperCase();
+      if (!next.toneladas.trim() && typeof s.toneladas === "number") {
+        next.toneladas = String(s.toneladas).replace(".", ",");
+      }
+      if (!next.km.trim() && typeof s.km === "number") {
+        next.km = String(s.km).replace(".", ",");
+      }
+      if (!next.clienteId && s.clienteId) next.clienteId = s.clienteId;
+      if (!next.materialId && s.materialId) next.materialId = s.materialId;
+      if (!next.veiculoId && s.veiculoId) next.veiculoId = s.veiculoId;
+      // Data: só sobrescreve se motorista ainda tá no default de hoje
+      if (s.data && next.data === today()) next.data = s.data;
+      return next;
+    });
+  }
+
   function validar(): string | null {
     if (!form.veiculoId) return "Escolha a placa.";
     if (!form.clienteId) return "Escolha o cliente.";
@@ -498,7 +526,52 @@ export default function NovaViagem() {
             )}
 
             <Field label="Foto do ticket" hint="opcional, mas ajuda na conferência">
-              <PhotoCapture value={foto} onChange={setFoto} />
+              <PhotoCapture
+                value={foto}
+                onChange={(novaFoto) => {
+                  setFoto(novaFoto);
+                  setSugestoesIa(null);
+                  // OCR só quando há foto nova E motorista tem permissão.
+                  // Best-effort: erro silencioso (sem internet, sem IA etc).
+                  if (novaFoto && me.data?.podeUsarOcrTicket) {
+                    void (async () => {
+                      try {
+                        const fotoBase64 = await FileSystem.readAsStringAsync(
+                          novaFoto.uri,
+                          { encoding: "base64" },
+                        );
+                        const res = await extrairTicket.mutateAsync({
+                          fotoBase64,
+                          mime: novaFoto.mime,
+                        });
+                        // Confidence muito baixo: provavelmente lixo, não mostra
+                        if (res.confidence > 0.2) setSugestoesIa(res);
+                      } catch {
+                        // silencioso — motorista preenche manual
+                      }
+                    })();
+                  }
+                }}
+              />
+              {extrairTicket.isPending && (
+                <View className="mt-2 flex-row items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2">
+                  <ActivityIndicator size="small" color="#64748b" />
+                  <Text className="text-sm text-muted-foreground">
+                    Lendo dados do ticket...
+                  </Text>
+                </View>
+              )}
+              {sugestoesIa && (
+                <BannerSugestoesIa
+                  sugestoes={sugestoesIa}
+                  catalogos={cat.data ?? null}
+                  onUsar={() => {
+                    aplicarSugestoesIa(sugestoesIa);
+                    setSugestoesIa(null);
+                  }}
+                  onDispensar={() => setSugestoesIa(null)}
+                />
+              )}
             </Field>
 
             <Field label="Placa">
@@ -735,6 +808,88 @@ function KmHint({
     <Text className="text-xs font-medium text-success">
       ✓ Calculado automaticamente ({rota.km} km · {minutos} min)
     </Text>
+  );
+}
+
+// Catalogos pode ser null enquanto carrega; recebe whatever vier de useCatalogos
+type CatalogosShape = {
+  clientes?: { id: string; nome: string }[];
+  materiais?: { id: string; nome: string }[];
+  veiculos?: { id: string; placa: string }[];
+} | null;
+
+function BannerSugestoesIa({
+  sugestoes,
+  catalogos,
+  onUsar,
+  onDispensar,
+}: {
+  sugestoes: ExtrairTicketResult;
+  catalogos: CatalogosShape;
+  onUsar: () => void;
+  onDispensar: () => void;
+}) {
+  const linhas: string[] = [];
+  if (sugestoes.ticket) linhas.push(`Ticket: ${sugestoes.ticket}`);
+  if (sugestoes.toneladas != null)
+    linhas.push(`Toneladas: ${sugestoes.toneladas.toString().replace(".", ",")}`);
+  if (sugestoes.km != null) linhas.push(`Km: ${sugestoes.km.toString().replace(".", ",")}`);
+  if (sugestoes.clienteId) {
+    const c = catalogos?.clientes?.find((x) => x.id === sugestoes.clienteId);
+    if (c) linhas.push(`Cliente: ${c.nome}`);
+  } else if (sugestoes.clienteSugerido) {
+    linhas.push(`Cliente lido: ${sugestoes.clienteSugerido} (sem match no cadastro)`);
+  }
+  if (sugestoes.materialId) {
+    const m = catalogos?.materiais?.find((x) => x.id === sugestoes.materialId);
+    if (m) linhas.push(`Material: ${m.nome}`);
+  } else if (sugestoes.materialSugerido) {
+    linhas.push(`Material lido: ${sugestoes.materialSugerido} (sem match no cadastro)`);
+  }
+  if (sugestoes.veiculoId) {
+    const v = catalogos?.veiculos?.find((x) => x.id === sugestoes.veiculoId);
+    if (v) linhas.push(`Placa: ${v.placa}`);
+  } else if (sugestoes.placaSugerida) {
+    linhas.push(`Placa lida: ${sugestoes.placaSugerida} (sem match no cadastro)`);
+  }
+  if (sugestoes.data) linhas.push(`Data: ${sugestoes.data}`);
+
+  const temAlgo = linhas.length > 0;
+
+  return (
+    <View className="mt-2 rounded-md border border-blue-300 bg-blue-50 p-3">
+      <Text className="text-sm font-semibold text-blue-900">
+        {temAlgo ? "✨ IA leu do ticket:" : "✨ IA analisou a foto"}
+      </Text>
+      {temAlgo ? (
+        linhas.map((l) => (
+          <Text key={l} className="mt-0.5 text-sm text-blue-900">
+            • {l}
+          </Text>
+        ))
+      ) : (
+        <Text className="mt-1 text-sm text-blue-900">
+          Não consegui ler dados claros. Preencha manualmente.
+        </Text>
+      )}
+      {sugestoes.observacoes && (
+        <Text className="mt-1 text-xs italic text-blue-800">
+          {sugestoes.observacoes}
+        </Text>
+      )}
+      <View className="mt-3 flex-row gap-2">
+        {temAlgo && (
+          <Button onPress={onUsar} className="flex-1">
+            <Text className="text-sm font-bold text-primary-foreground">
+              Usar sugestões
+            </Text>
+          </Button>
+        )}
+        <Button variant="outline" onPress={onDispensar} className="flex-1">
+          <Text className="text-sm font-medium text-foreground">Dispensar</Text>
+        </Button>
+      </View>
+    </View>
   );
 }
 

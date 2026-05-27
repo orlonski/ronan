@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import type { ExtrairTicketResult } from "@ronan/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
 
 // Default usado caso ConfiguracaoIa.modelo não esteja setada (raro).
@@ -255,6 +256,146 @@ Responda APENAS um JSON válido:
     } catch (err) {
       this.log.error(`Falha na sugestão de match: ${(err as Error).message}`);
       return null;
+    }
+  }
+
+  /**
+   * OCR de ticket de pesagem: envia foto + catálogos pra Claude vision,
+   * recebe campos extraídos com IDs já mapeados quando reconhecíveis no
+   * catálogo. Best-effort — chamadas que falham retornam confidence 0 +
+   * campos vazios, sem trasher exception (motorista preenche manual).
+   */
+  async extrairTicket(args: {
+    fotoBase64: string;
+    mime: string;
+    catalogos: {
+      clientes: { id: string; nome: string }[];
+      materiais: { id: string; nome: string }[];
+      veiculos: { id: string; placa: string; modelo: string | null }[];
+    };
+  }): Promise<ExtrairTicketResult> {
+    if (!this.client) {
+      throw new Error("Anthropic API key não configurada");
+    }
+
+    const catalogoStr = JSON.stringify(
+      {
+        clientes: args.catalogos.clientes.map((c) => ({ id: c.id, nome: c.nome })),
+        materiais: args.catalogos.materiais.map((m) => ({ id: m.id, nome: m.nome })),
+        veiculos: args.catalogos.veiculos.map((v) => ({
+          id: v.id,
+          placa: v.placa,
+          modelo: v.modelo,
+        })),
+      },
+      null,
+      0,
+    );
+
+    const sysPrompt = `Você lê tickets de pesagem (balança) de transporte de carga e extrai dados estruturados.
+Tickets têm tipicamente: número do ticket, data, placa do veículo, peso (toneladas), cliente, material/produto, origem/destino, eventualmente km.
+
+Catálogos do sistema (use os IDs daqui quando reconhecer):
+${catalogoStr}
+
+Retorne UM objeto JSON puro (sem markdown, sem texto antes/depois) com este schema:
+{
+  "ticket": "string ou null",            // número do ticket
+  "toneladas": number ou null,           // em toneladas (converta de kg dividindo por 1000)
+  "data": "YYYY-MM-DD ou null",
+  "km": number ou null,                  // km rodados se aparecer
+  "clienteId": "string ou null",         // ID do catálogo se reconhecer; senão null
+  "clienteSugerido": "string ou null",   // nome bruto do cliente no ticket quando não casar com catálogo
+  "materialId": "string ou null",
+  "materialSugerido": "string ou null",
+  "veiculoId": "string ou null",         // ID quando placa casar com catálogo
+  "placaSugerida": "string ou null",     // placa bruta lida
+  "observacoes": "string ou null",       // notas curtas (ex: "ticket borrado em parte")
+  "confidence": number                    // 0..1 confiança geral da extração
+}
+
+Regras:
+- Só preencha campos que conseguir ler com confiança. Em dúvida, deixe null.
+- Se reconhecer nome do cliente/material/placa mas não casar 100% com catálogo, deixe Id null e preencha *Sugerido.
+- Toneladas geralmente vem como peso líquido (líquido = bruto - tara).
+- Confidence baixo (<0.5) quando foto está ruim/incompleta.`;
+
+    const modelo = await this.modeloAtual();
+    try {
+      const resp = await this.client.messages.create({
+        model: modelo,
+        max_tokens: 1024,
+        system: sysPrompt,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: args.mime as "image/jpeg" | "image/png" | "image/webp",
+                  data: args.fotoBase64,
+                },
+              },
+              { type: "text", text: "Extraia os campos deste ticket." },
+            ],
+          },
+        ],
+      });
+      const text = resp.content
+        .filter((b) => b.type === "text")
+        .map((b) => (b as { type: "text"; text: string }).text)
+        .join("\n");
+      const parsed = extractJson<Record<string, unknown>>(text);
+      if (!parsed) {
+        this.log.warn("OCR ticket: resposta sem JSON válido");
+        return { confidence: 0 };
+      }
+
+      // Defesa contra alucinação de IDs: valida que cada ID existe no catálogo enviado.
+      const clienteIds = new Set(args.catalogos.clientes.map((c) => c.id));
+      const materialIds = new Set(args.catalogos.materiais.map((m) => m.id));
+      const veiculoIds = new Set(args.catalogos.veiculos.map((v) => v.id));
+
+      const safeId = (
+        raw: unknown,
+        valido: Set<string>,
+      ): string | undefined => {
+        if (typeof raw !== "string" || !raw) return undefined;
+        return valido.has(raw) ? raw : undefined;
+      };
+      const safeStr = (raw: unknown): string | undefined => {
+        if (typeof raw !== "string" || !raw.trim()) return undefined;
+        return raw.trim();
+      };
+      const safeNum = (raw: unknown): number | undefined => {
+        if (typeof raw !== "number" || !Number.isFinite(raw)) return undefined;
+        return raw;
+      };
+
+      const confidence =
+        typeof parsed.confidence === "number" && Number.isFinite(parsed.confidence)
+          ? Math.min(1, Math.max(0, parsed.confidence))
+          : 0;
+
+      return {
+        ticket: safeStr(parsed.ticket),
+        toneladas: safeNum(parsed.toneladas),
+        data: safeStr(parsed.data),
+        km: safeNum(parsed.km),
+        clienteId: safeId(parsed.clienteId, clienteIds),
+        clienteSugerido: safeStr(parsed.clienteSugerido),
+        materialId: safeId(parsed.materialId, materialIds),
+        materialSugerido: safeStr(parsed.materialSugerido),
+        veiculoId: safeId(parsed.veiculoId, veiculoIds),
+        placaSugerida: safeStr(parsed.placaSugerida),
+        observacoes: safeStr(parsed.observacoes),
+        confidence,
+      };
+    } catch (err) {
+      this.log.warn(`OCR ticket falhou: ${(err as Error).message}`);
+      throw err;
     }
   }
 }
