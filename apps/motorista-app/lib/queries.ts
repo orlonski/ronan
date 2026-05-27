@@ -79,8 +79,22 @@ export type Viagem = {
   veiculo: Veiculo;
   cliente: { id: string; nome: string };
   material: Material;
-  localCarga: { id: string; nome: string; cidade: string; uf: string };
-  localDescarga: { id: string; nome: string; cidade: string; uf: string };
+  localCarga: {
+    id: string;
+    nome: string;
+    cidade: string;
+    uf: string;
+    lat?: number | null;
+    lng?: number | null;
+  };
+  localDescarga: {
+    id: string;
+    nome: string;
+    cidade: string;
+    uf: string;
+    lat?: number | null;
+    lng?: number | null;
+  };
   fotos: { id: string; storageKey: string }[];
 };
 
@@ -309,6 +323,7 @@ export type ViagemDetalhe = Viagem & {
   cliente: { id: string; nome: string; empresa?: { id: string; nome: string } };
   localCarga: Viagem["localCarga"] & { logradouro: string; lat: number | null; lng: number | null };
   localDescarga: Viagem["localDescarga"] & { logradouro: string; lat: number | null; lng: number | null };
+  rotaGeometria: string | null;
 };
 
 export function useViagemDetalhe(id: string) {
@@ -541,7 +556,12 @@ export function useTrackingConfig() {
 }
 
 export type RotaCalculada =
-  | { km: string; duracaoSegundos: number; fonte: "osrm" | "cache" }
+  | {
+      km: string;
+      duracaoSegundos: number;
+      geometria: string | null;
+      fonte: "osrm" | "cache";
+    }
   | { km: null; erro: string };
 
 /**

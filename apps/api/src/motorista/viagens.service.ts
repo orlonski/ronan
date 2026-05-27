@@ -176,7 +176,18 @@ export class ViagensMotoristaService {
     if (viagem.motoristaId !== motoristaId) {
       throw new ForbiddenException("Esta viagem não é sua.");
     }
-    return serializarViagemComMinimos(viagem);
+
+    const rota = await this.prisma.rotaCache.findUnique({
+      where: {
+        localOrigemId_localDestinoId: {
+          localOrigemId: viagem.localCargaId,
+          localDestinoId: viagem.localDescargaId,
+        },
+      },
+      select: { geometria: true },
+    });
+
+    return { ...serializarViagemComMinimos(viagem), rotaGeometria: rota?.geometria ?? null };
   }
 
   async fotoBuffer(motoristaId: string, viagemId: string, fotoId: string) {

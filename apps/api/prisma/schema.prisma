@@ -484,6 +484,10 @@ model RotaCache {
   localDestino    Local    @relation("RotaDestino", fields: [localDestinoId], references: [id], onDelete: Cascade)
   km              Decimal  @db.Decimal(10, 2)
   duracaoSegundos Int
+  /// Polyline encoded (formato Google polyline, precision 5) retornado pelo OSRM
+  /// com overview=simplified. NULL pra rotas antigas (pré-feature) — frontend
+  /// renderiza reta como fallback. Decodifica com @mapbox/polyline.
+  geometria       String?
   calculadoEm     DateTime @default(now())
 
   @@unique([localOrigemId, localDestinoId])

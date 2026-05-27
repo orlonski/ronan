@@ -9,6 +9,7 @@ type RotaResult =
   | {
       km: string;
       duracaoSegundos: number;
+      geometria: string | null;
       fonte: "osrm" | "cache";
     }
   | { km: null; erro: string };
@@ -25,7 +26,7 @@ export class RoteamentoService {
     localDestinoId: string,
   ): Promise<RotaResult> {
     if (localOrigemId === localDestinoId) {
-      return { km: "0.00", duracaoSegundos: 0, fonte: "cache" };
+      return { km: "0.00", duracaoSegundos: 0, geometria: null, fonte: "cache" };
     }
 
     const cached = await this.prisma.rotaCache.findUnique({
@@ -37,6 +38,7 @@ export class RoteamentoService {
       return {
         km: cached.km.toString(),
         duracaoSegundos: cached.duracaoSegundos,
+        geometria: cached.geometria,
         fonte: "cache",
       };
     }
@@ -72,6 +74,7 @@ export class RoteamentoService {
       );
       const kmNum = route.distance / 1000;
       const km = kmNum.toFixed(2);
+      const geometria = route.geometry ?? null;
 
       await this.prisma.rotaCache.upsert({
         where: {
@@ -82,15 +85,22 @@ export class RoteamentoService {
           localDestinoId,
           km: new Prisma.Decimal(km),
           duracaoSegundos: Math.round(route.duration),
+          geometria,
         },
         update: {
           km: new Prisma.Decimal(km),
           duracaoSegundos: Math.round(route.duration),
+          geometria,
           calculadoEm: new Date(),
         },
       });
 
-      return { km, duracaoSegundos: Math.round(route.duration), fonte: "osrm" };
+      return {
+        km,
+        duracaoSegundos: Math.round(route.duration),
+        geometria,
+        fonte: "osrm",
+      };
     } catch (err) {
       this.logger.warn(
         `OSRM falhou ${localOrigemId}->${localDestinoId}: ${(err as Error).message}`,
@@ -109,8 +119,11 @@ export class RoteamentoService {
     lng1: number,
     lat2: number,
     lng2: number,
-  ): Promise<{ distance: number; duration: number }> {
-    const url = `${this.osrmUrl}/route/v1/driving/${lng1},${lat1};${lng2},${lat2}?overview=false`;
+  ): Promise<{ distance: number; duration: number; geometry?: string }> {
+    // overview=simplified retorna polyline encoded (precision 5) com algumas
+    // dezenas de pontos — suficiente pra render no mapa. Sem custo extra de
+    // requisição (mesma chamada que antes pegava só distance/duration).
+    const url = `${this.osrmUrl}/route/v1/driving/${lng1},${lat1};${lng2},${lat2}?overview=simplified&geometries=polyline`;
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
@@ -120,7 +133,7 @@ export class RoteamentoService {
       if (!res.ok) throw new Error(`OSRM HTTP ${res.status}`);
       const data = (await res.json()) as {
         code: string;
-        routes?: { distance: number; duration: number }[];
+        routes?: { distance: number; duration: number; geometry?: string }[];
       };
       if (data.code !== "Ok" || !data.routes?.[0]) {
         throw new Error(`OSRM resposta inválida: ${data.code}`);

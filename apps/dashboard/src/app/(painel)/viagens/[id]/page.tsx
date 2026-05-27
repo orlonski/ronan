@@ -12,6 +12,11 @@ const TrajetoMapPlayer = dynamic(
     import("@/components/trajeto-map-player").then((m) => m.TrajetoMapPlayer),
   { ssr: false, loading: () => <div className="h-80 rounded-lg border bg-muted/30" /> },
 );
+const MapaTrajetoViagem = dynamic(
+  () =>
+    import("@/components/mapa-trajeto-viagem").then((m) => m.MapaTrajetoViagem),
+  { ssr: false, loading: () => <div className="h-72 rounded-md border bg-muted/30" /> },
+);
 import {
   ArrowDown,
   ArrowLeft,
@@ -71,8 +76,23 @@ type ViagemDetalhe = {
   motorista: { id: string; nome: string; cpf: string };
   cliente: { id: string; nome: string; empresa: { nome: string } };
   material: { id: string; nome: string };
-  localCarga: { nome: string; cidade: string; uf: string; logradouro: string };
-  localDescarga: { nome: string; cidade: string; uf: string; logradouro: string };
+  localCarga: {
+    nome: string;
+    cidade: string;
+    uf: string;
+    logradouro: string;
+    lat: number | null;
+    lng: number | null;
+  };
+  localDescarga: {
+    nome: string;
+    cidade: string;
+    uf: string;
+    logradouro: string;
+    lat: number | null;
+    lng: number | null;
+  };
+  rotaGeometria: string | null;
   fotos: { id: string; storageKey: string }[];
   matchesFechamento: Array<{
     id: string;
@@ -239,12 +259,33 @@ export default function ViagemDetalhePage({
             </Card>
           )}
 
-          {v.lat != null && v.lng != null && (
+          {(v.localCarga.lat != null ||
+            v.localDescarga.lat != null ||
+            v.lat != null) && (
             <Card className="p-5 md:col-span-2">
               <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
-                <MapPin className="h-4 w-4" /> Onde foi lançada
+                <MapPin className="h-4 w-4" /> Trajeto da viagem
               </h3>
-              <MapaViagem lat={v.lat} lng={v.lng} />
+              <MapaTrajetoViagem
+                carga={
+                  v.localCarga.lat != null && v.localCarga.lng != null
+                    ? { lat: v.localCarga.lat, lng: v.localCarga.lng, nome: v.localCarga.nome }
+                    : null
+                }
+                descarga={
+                  v.localDescarga.lat != null && v.localDescarga.lng != null
+                    ? {
+                        lat: v.localDescarga.lat,
+                        lng: v.localDescarga.lng,
+                        nome: v.localDescarga.nome,
+                      }
+                    : null
+                }
+                lancamento={
+                  v.lat != null && v.lng != null ? { lat: v.lat, lng: v.lng } : null
+                }
+                geometria={v.rotaGeometria}
+              />
             </Card>
           )}
 
@@ -393,38 +434,6 @@ function formatVal(v: unknown): string {
   if (v === null || v === undefined) return "—";
   if (typeof v === "string") return v;
   return JSON.stringify(v, null, 2);
-}
-
-function MapaViagem({ lat, lng }: { lat: number; lng: number }) {
-  // Mini map estatico via OpenStreetMap (sem API key, free).
-  // bbox menor = zoom maior. ~0.0025 dá ~250m de raio (escala de quadra).
-  const delta = 0.0025;
-  const bbox = `${lng - delta},${lat - delta},${lng + delta},${lat + delta}`;
-  const osmEmbed = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lng}`;
-  const gmaps = `https://www.google.com/maps?q=${lat},${lng}`;
-  return (
-    <div className="space-y-2">
-      <iframe
-        src={osmEmbed}
-        className="h-64 w-full rounded-md border"
-        loading="lazy"
-        title={`Localização ${lat}, ${lng}`}
-      />
-      <div className="flex items-center justify-between text-xs">
-        <span className="font-mono text-muted-foreground">
-          {lat.toFixed(6)}, {lng.toFixed(6)}
-        </span>
-        <a
-          href={gmaps}
-          target="_blank"
-          rel="noreferrer"
-          className="flex items-center gap-1 text-blue-600 hover:underline"
-        >
-          Abrir no Google Maps <ExternalLink className="h-3 w-3" />
-        </a>
-      </div>
-    </div>
-  );
 }
 
 function FotosViagem({

@@ -11,8 +11,8 @@ import {
   Route,
   Trash2,
 } from "lucide-react-native";
-import { MapPino } from "@/components/map-pino";
 import { MapTrajeto } from "@/components/map-trajeto";
+import { MapaCargaDescarga } from "@/components/mapa-carga-descarga";
 import {
   ActivityIndicator,
   Alert,
@@ -285,41 +285,63 @@ export default function ViagemDetalheScreen() {
             </Card>
           )}
 
-          {/* Localização (só se nao tem trajeto — senao seria redundante) */}
-          {detalhe.data.lat != null &&
-            detalhe.data.lng != null &&
-            detalhe.data.pontos.length < 2 && (
+          {/* Trajeto carga→descarga (só se nao tem GPS tracking — senao MapTrajeto
+              acima já mostra o trajeto real) */}
+          {detalhe.data.pontos.length < 2 &&
+            (detalhe.data.localCarga.lat != null ||
+              detalhe.data.localDescarga.lat != null ||
+              detalhe.data.lat != null) && (
               <Card>
                 <View className="mb-2 flex-row items-center gap-2">
                   <MapPin size={16} color="#0f172a" />
                   <Text className="text-base font-bold text-foreground">
-                    Onde foi lançada
+                    Trajeto da viagem
                   </Text>
                 </View>
                 <View className="mb-3">
-                  <MapPino
-                    lat={detalhe.data.lat}
-                    lng={detalhe.data.lng}
-                    height={200}
+                  <MapaCargaDescarga
+                    carga={
+                      detalhe.data.localCarga.lat != null &&
+                      detalhe.data.localCarga.lng != null
+                        ? {
+                            lat: detalhe.data.localCarga.lat,
+                            lng: detalhe.data.localCarga.lng,
+                            nome: detalhe.data.localCarga.nome,
+                          }
+                        : null
+                    }
+                    descarga={
+                      detalhe.data.localDescarga.lat != null &&
+                      detalhe.data.localDescarga.lng != null
+                        ? {
+                            lat: detalhe.data.localDescarga.lat,
+                            lng: detalhe.data.localDescarga.lng,
+                            nome: detalhe.data.localDescarga.nome,
+                          }
+                        : null
+                    }
+                    lancamento={
+                      detalhe.data.lat != null && detalhe.data.lng != null
+                        ? { lat: detalhe.data.lat, lng: detalhe.data.lng }
+                        : null
+                    }
+                    geometria={detalhe.data.rotaGeometria}
+                    height={220}
                   />
                 </View>
-                <Text
-                  className="mb-3 text-sm font-medium text-muted-foreground"
-                  style={{ fontVariant: ["tabular-nums"] }}
-                >
-                  {detalhe.data.lat.toFixed(6)}, {detalhe.data.lng.toFixed(6)}
-                </Text>
-                <Button
-                  variant="outline"
-                  onPress={() =>
-                    abrirMapa(detalhe.data!.lat as number, detalhe.data!.lng as number)
-                  }
-                >
-                  <ExternalLink size={18} color="#0f172a" />
-                  <Text className="text-base font-medium text-foreground">
-                    Abrir no Google Maps
-                  </Text>
-                </Button>
+                {detalhe.data.lat != null && detalhe.data.lng != null && (
+                  <Button
+                    variant="outline"
+                    onPress={() =>
+                      abrirMapa(detalhe.data!.lat as number, detalhe.data!.lng as number)
+                    }
+                  >
+                    <ExternalLink size={18} color="#0f172a" />
+                    <Text className="text-base font-medium text-foreground">
+                      Abrir no Google Maps
+                    </Text>
+                  </Button>
+                )}
               </Card>
             )}
 
