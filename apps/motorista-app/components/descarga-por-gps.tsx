@@ -12,7 +12,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CheckCircle2, MapPin, X } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
-import { Select, type SelectOption } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { pegarCoords } from "@/lib/geo";
 import {
@@ -32,13 +31,11 @@ export function DescargaPorGps({
   clienteId,
   value,
   onChange,
-  locaisDoCliente,
   nomeSelecionadoFallback,
 }: {
   clienteId: string | null;
   value: string;
   onChange: (id: string) => void;
-  locaisDoCliente: SelectOption[];
   nomeSelecionadoFallback?: string;
 }) {
   const [estado, setEstado] = useState<Estado>(() =>
@@ -56,7 +53,7 @@ export function DescargaPorGps({
     const coords = await pegarCoords();
     if (!coords) {
       setEstado({ tipo: "vazio" });
-      setErro("Não consegui pegar o GPS. Tente de novo ou escolha da lista.");
+      setErro("Não consegui pegar o GPS. Verifique a permissão e tente de novo.");
       return;
     }
     try {
@@ -64,7 +61,7 @@ export function DescargaPorGps({
         lat: coords.lat,
         lng: coords.lng,
         tipoUso: "descarga",
-        raioM: 200,
+        raioM: 500,
         limit: 5,
       });
       if (matches.length === 0) {
@@ -142,38 +139,12 @@ export function DescargaPorGps({
       <Label>Local de descarga</Label>
 
       {estado.tipo === "vazio" && (
-        <View className="gap-3">
-          <Button onPress={capturarEBuscar} size="lg" className="h-16">
-            <MapPin size={22} color="white" />
-            <Text className="text-base font-bold text-primary-foreground">
-              Estou no local de descarga
-            </Text>
-          </Button>
-
-          <View className="flex-row items-center gap-2">
-            <View className="h-px flex-1 bg-border" />
-            <Text className="text-xs uppercase tracking-wider text-muted-foreground">ou</Text>
-            <View className="h-px flex-1 bg-border" />
-          </View>
-
-          <Select
-            value={value}
-            onChange={(v) => {
-              onChange(v);
-              const opt = locaisDoCliente.find((o) => o.value === v);
-              if (opt) {
-                setEstado({
-                  tipo: "selecionado",
-                  local: { id: v, nome: opt.label },
-                });
-              }
-            }}
-            options={locaisDoCliente}
-            placeholder="Escolher da lista"
-            searchable
-            emptyMessage="Nenhum local de descarga pra esse cliente"
-          />
-        </View>
+        <Button onPress={capturarEBuscar} size="lg" className="h-16">
+          <MapPin size={22} color="white" />
+          <Text className="text-base font-bold text-primary-foreground">
+            Estou no local de descarga
+          </Text>
+        </Button>
       )}
 
       {estado.tipo === "capturando" && (

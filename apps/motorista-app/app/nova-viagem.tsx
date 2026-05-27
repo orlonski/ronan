@@ -275,7 +275,7 @@ export default function NovaViagem() {
   }, [form.localDescargaId, cat.data?.locais, extraLocais]);
 
   const locaisFiltrados = useMemo(() => {
-    if (!cat.data) return { carga: [], descarga: [] };
+    if (!cat.data) return { carga: [] as SelectOption[] };
     const clienteId = form.clienteId || null;
     const todosIds = new Set(cat.data.locais.map((l) => l.id));
     const merged = [
@@ -309,9 +309,6 @@ export default function NovaViagem() {
     return {
       carga: ordenar(
         noCliente.filter((l) => l.tipo === "CARGA" || l.tipo === "AMBOS"),
-      ).map(opt),
-      descarga: ordenar(
-        noCliente.filter((l) => l.tipo === "DESCARGA" || l.tipo === "AMBOS"),
       ).map(opt),
     };
   }, [cat.data, form.clienteId, extraLocais, coords]);
@@ -602,7 +599,6 @@ export default function NovaViagem() {
               clienteId={form.clienteId || null}
               value={form.localDescargaId}
               onChange={(v) => update("localDescargaId", v)}
-              locaisDoCliente={locaisFiltrados.descarga}
               nomeSelecionadoFallback={nomeDescargaSelecionado}
             />
             {tracking && (
