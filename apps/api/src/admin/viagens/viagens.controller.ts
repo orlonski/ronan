@@ -28,6 +28,20 @@ const RotacaoFotoInput = z.object({
 });
 type RotacaoFotoInput = z.infer<typeof RotacaoFotoInput>;
 
+const PreValidarInput = z
+  .object({
+    status: z.enum(["OK", "DIVERGENTE", "DESFAZER"]),
+    motivo: z.string().min(2).max(500).optional(),
+  })
+  .refine(
+    (d) => d.status !== "DIVERGENTE" || (d.motivo && d.motivo.trim().length >= 2),
+    {
+      message: "Motivo obrigatório quando divergente.",
+      path: ["motivo"],
+    },
+  );
+type PreValidarInput = z.infer<typeof PreValidarInput>;
+
 const ListViagensQuery = paginationQuerySchema.extend({
   motoristaId: z.string().uuid().optional(),
   veiculoId: z.string().uuid().optional(),
@@ -79,6 +93,15 @@ export class ViagensAdminController {
     @CurrentUser() user: AuthAdminUser,
   ) {
     return this.service.recalcularTrajeto(id, user.id);
+  }
+
+  @Post(":id/pre-validar")
+  preValidar(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(PreValidarInput)) body: PreValidarInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.preValidar(id, body, user.id);
   }
 
   @Roles("ADMIN")

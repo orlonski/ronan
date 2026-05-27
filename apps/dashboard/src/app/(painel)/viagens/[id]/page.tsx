@@ -31,7 +31,10 @@ import {
   MapPin,
   RefreshCw,
   RotateCw,
+  ShieldCheck,
   Sparkles,
+  ThumbsUp,
+  ThumbsDown,
   User as UserIcon,
   X,
 } from "lucide-react";
@@ -39,6 +42,16 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import {
   fmtBR,
@@ -98,6 +111,9 @@ type ViagemDetalhe = {
     lng: number | null;
   };
   rotaGeometria: string | null;
+  revisadoEm: string | null;
+  revisadoPor: { id: string; nome: string } | null;
+  motivoStatus: string | null;
   fotos: { id: string; storageKey: string; rotacao: number }[];
   matchesFechamento: Array<{
     id: string;
@@ -145,11 +161,32 @@ export default function ViagemDetalhePage({
       });
     },
   });
+  const preValidar = useMutation({
+    mutationFn: (body: { status: "OK" | "DIVERGENTE" | "DESFAZER"; motivo?: string }) =>
+      fetchApi<{ ok: true }>(`/admin/viagens/${id}/pre-validar`, {
+        method: "POST",
+        body: JSON.stringify(body),
+        token,
+      }),
+    onSuccess: () => {
+      toast.success("Pré-validação registrada.");
+      void queryClient.invalidateQueries({ queryKey: ["viagem-admin", id] });
+      void queryClient.invalidateQueries({ queryKey: ["viagem-historico", id] });
+    },
+    onError: (err) => {
+      toast.error("Não foi possível pré-validar", {
+        description: (err as Error).message,
+      });
+    },
+  });
   const [tab, setTab] = useState<Tab>("dados");
+  const [dialogDivergente, setDialogDivergente] = useState(false);
+  const [motivoTexto, setMotivoTexto] = useState("");
 
   if (viagem.isLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
   if (!viagem.data) return <p className="text-sm text-red-600">Viagem não encontrada.</p>;
   const v = viagem.data;
+  const emFechamento = v.matchesFechamento.length > 0;
 
   return (
     <div className="space-y-6">
@@ -354,6 +391,80 @@ export default function ViagemDetalhePage({
             </Card>
           )}
 
+          <Card className="p-5 md:col-span-2">
+            <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
+              <ShieldCheck className="h-4 w-4" /> Pré-validação
+            </h3>
+            {v.revisadoEm ? (
+              <div className="space-y-2">
+                <p className="text-sm">
+                  <Badge
+                    className={
+                      v.status === "OK"
+                        ? "bg-green-100 text-green-800 border-green-200"
+                        : "bg-red-100 text-red-800 border-red-200"
+                    }
+                  >
+                    {v.status === "OK" ? "Validada" : "Divergente"}
+                  </Badge>
+                  <span className="ml-2 text-muted-foreground">
+                    por {v.revisadoPor?.nome ?? "—"} em {fmtDataHoraBR(v.revisadoEm)}
+                  </span>
+                </p>
+                {v.motivoStatus && (
+                  <p className="rounded-md border bg-muted/30 p-3 text-sm">
+                    <span className="font-medium">Motivo:</span> {v.motivoStatus}
+                  </p>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => preValidar.mutate({ status: "DESFAZER" })}
+                  disabled={preValidar.isPending}
+                >
+                  Desfazer pré-validação
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  Marque como validada ou divergente antes do fechamento.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => preValidar.mutate({ status: "OK" })}
+                    disabled={preValidar.isPending || emFechamento}
+                    title={
+                      emFechamento
+                        ? "Viagem em fechamento — desfaça o match antes de pré-validar"
+                        : undefined
+                    }
+                    className="border-green-300 bg-green-50 text-green-900 hover:bg-green-100"
+                  >
+                    <ThumbsUp className="h-4 w-4" /> Marcar como validada
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setMotivoTexto("");
+                      setDialogDivergente(true);
+                    }}
+                    disabled={preValidar.isPending || emFechamento}
+                    title={
+                      emFechamento
+                        ? "Viagem em fechamento — desfaça o match antes de pré-validar"
+                        : undefined
+                    }
+                    className="border-red-300 bg-red-50 text-red-900 hover:bg-red-100"
+                  >
+                    <ThumbsDown className="h-4 w-4" /> Marcar como divergente
+                  </Button>
+                </div>
+              </div>
+            )}
+          </Card>
+
           {v.fotos.length > 0 && (
             <Card className="p-5 md:col-span-2">
               <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
@@ -456,6 +567,51 @@ export default function ViagemDetalhePage({
           </ol>
         </Card>
       )}
+
+      <Dialog open={dialogDivergente} onOpenChange={setDialogDivergente}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Marcar viagem como divergente</DialogTitle>
+            <DialogDescription>
+              Descreva o motivo da divergência (mínimo 2 caracteres).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label>Motivo</Label>
+            <Textarea
+              autoFocus
+              rows={4}
+              value={motivoTexto}
+              onChange={(e) => setMotivoTexto(e.target.value)}
+              placeholder="Ex: Toneladas não conferem com ticket fotografado"
+              maxLength={500}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogDivergente(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                preValidar.mutate(
+                  { status: "DIVERGENTE", motivo: motivoTexto.trim() },
+                  {
+                    onSuccess: () => {
+                      setDialogDivergente(false);
+                      setMotivoTexto("");
+                    },
+                  },
+                );
+              }}
+              disabled={
+                motivoTexto.trim().length < 2 || preValidar.isPending
+              }
+            >
+              Confirmar divergência
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -482,6 +638,7 @@ function labelForAcao(acao: string): string {
       MATCH_IA: "Match via IA",
       RECALCULAR_TRAJETO: "Recálculo de trajeto",
       MOTORISTA_AJUSTOU_KM: "Motorista ajustou o km",
+      PRE_VALIDAR_VIAGEM: "Pré-validação manual",
     } as const
   )[acao as never] ?? acao;
 }
@@ -491,6 +648,7 @@ function iconForAcao(acao: string) {
   if (acao === "MATCH_AUTOMATICO" || acao === "RESOLVER") return CheckCircle2;
   if (acao === "UPDATE" || acao === "MOTORISTA_AJUSTOU_KM") return Edit3;
   if (acao === "RECALCULAR_TRAJETO") return RefreshCw;
+  if (acao === "PRE_VALIDAR_VIAGEM") return ShieldCheck;
   return Clock;
 }
 
@@ -502,6 +660,7 @@ function colorForAcao(acao: string): string {
   if (acao === "EXPORTAR" || acao === "MARCAR_ENVIADO") return "bg-purple-500";
   if (acao === "RECALCULAR_TRAJETO") return "bg-cyan-500";
   if (acao === "MOTORISTA_AJUSTOU_KM") return "bg-amber-500";
+  if (acao === "PRE_VALIDAR_VIAGEM") return "bg-indigo-500";
   return "bg-gray-500";
 }
 

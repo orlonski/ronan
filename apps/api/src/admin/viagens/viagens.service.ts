@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { AcaoAuditoria, type Prisma, type StatusViagem } from "@prisma/client";
+import { AcaoAuditoria, Prisma, StatusViagem } from "@prisma/client";
 import type { AtualizarViagemInput } from "@ronan/shared-types";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
 import { serializarViagemComMinimos } from "../../common/viagem-minimos";
@@ -284,6 +284,65 @@ export class ViagensAdminService {
     }
 
     return out;
+  }
+
+  async preValidar(
+    id: string,
+    input: { status: "OK" | "DIVERGENTE" | "DESFAZER"; motivo?: string },
+    usuarioId: string,
+  ) {
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        status: true,
+        _count: { select: { matchesFechamento: true } },
+      },
+    });
+    if (!viagem) throw new NotFoundException("Viagem não encontrada");
+    if (viagem._count.matchesFechamento > 0 && input.status !== "DESFAZER") {
+      throw new ConflictException(
+        "Não é possível pré-validar: viagem já vinculada a fechamento. Desfaça o match primeiro.",
+      );
+    }
+
+    const data: Prisma.ViagemUpdateInput = {};
+    let statusNovo: StatusViagem;
+    if (input.status === "OK") {
+      statusNovo = StatusViagem.OK;
+      data.status = StatusViagem.OK;
+      data.revisadoEm = new Date();
+      data.revisadoPor = { connect: { id: usuarioId } };
+      data.motivoStatus = null;
+    } else if (input.status === "DIVERGENTE") {
+      if (!input.motivo || input.motivo.trim().length < 2) {
+        throw new BadRequestException("Motivo obrigatório quando divergente.");
+      }
+      statusNovo = StatusViagem.DIVERGENTE;
+      data.status = StatusViagem.DIVERGENTE;
+      data.revisadoEm = new Date();
+      data.revisadoPor = { connect: { id: usuarioId } };
+      data.motivoStatus = input.motivo.trim();
+    } else {
+      statusNovo = StatusViagem.ENVIADA;
+      data.status = StatusViagem.ENVIADA;
+      data.revisadoEm = null;
+      data.revisadoPor = { disconnect: true };
+      data.motivoStatus = null;
+    }
+
+    await this.prisma.viagem.update({ where: { id }, data });
+
+    await this.auditoria.log({
+      usuarioId,
+      entidade: "Viagem",
+      entidadeId: id,
+      acao: AcaoAuditoria.PRE_VALIDAR_VIAGEM,
+      motivo: input.motivo ?? null,
+      metadata: { statusAnterior: viagem.status, statusNovo },
+    });
+
+    return this.detalhe(id);
   }
 
   async recalcularTrajeto(id: string, usuarioId: string) {

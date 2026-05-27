@@ -243,16 +243,21 @@ export class FechamentoProcessorService {
         });
 
         if (status === StatusLinhaFechamento.MATCH && viagemMatchId) {
+          // Se a viagem foi pré-validada manualmente, preserva o status.
+          const v = await this.prisma.viagem.findUnique({
+            where: { id: viagemMatchId },
+            select: { revisadoEm: true },
+          });
           await this.prisma.viagem.update({
             where: { id: viagemMatchId },
-            data: { status: "OK" },
+            data: v?.revisadoEm ? {} : { status: "OK" },
           });
           await this.auditoria.log({
             usuarioId,
             entidade: "Viagem",
             entidadeId: viagemMatchId,
             acao: AcaoAuditoria.MATCH_AUTOMATICO,
-            metadata: { fechamentoId },
+            metadata: { fechamentoId, preservouStatusManual: v?.revisadoEm != null },
           });
         }
       }
@@ -800,9 +805,14 @@ export class FechamentoProcessorService {
       });
 
       if (sugestao.viagemId && sugestao.confidence >= thresholdAuto) {
+        // Se a viagem foi pré-validada manualmente, preserva o status.
+        const v = await this.prisma.viagem.findUnique({
+          where: { id: sugestao.viagemId },
+          select: { revisadoEm: true },
+        });
         await this.prisma.viagem.update({
           where: { id: sugestao.viagemId },
-          data: { status: "AJUSTADA" },
+          data: v?.revisadoEm ? {} : { status: "AJUSTADA" },
         });
         await this.auditoria.log({
           usuarioId,
@@ -812,6 +822,7 @@ export class FechamentoProcessorService {
           metadata: {
             confidence: sugestao.confidence,
             motivo: sugestao.motivo,
+            preservouStatusManual: v?.revisadoEm != null,
             fechamentoLinhaId: linha.id,
           },
         });

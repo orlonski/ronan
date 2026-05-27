@@ -76,6 +76,7 @@ enum AcaoAuditoria {
   MATCH_IA
   RECALCULAR_TRAJETO
   MOTORISTA_AJUSTOU_KM
+  PRE_VALIDAR_VIAGEM
 }
 
 enum TipoCombustivel {
@@ -167,6 +168,7 @@ model User {
   criadoPorId         String?
   notificacoesCriadas Notificacao[] @relation("CriouNotificacao")
   fechamentosCriados  Fechamento[]  @relation("CriouFechamento")
+  viagensRevisadas    Viagem[]      @relation("RevisouViagem")
 
   @@map("users")
 }
@@ -556,6 +558,14 @@ model Viagem {
   // Tracking GPS do trajeto (opcional — só preenchido se motorista usou "Iniciar viagem")
   iniciadoEm        DateTime? // quando tocou Iniciar
   kmReal            Decimal?     @db.Decimal(10, 2) // somatório das distâncias entre pontos consecutivos
+  /// Pré-validação manual pelo admin no dashboard. Quando revisadoEm está
+  /// preenchido, o FechamentoProcessor NÃO sobrescreve o status no match
+  /// (preserva a decisão manual).
+  revisadoEm        DateTime?
+  revisadoPor       User?        @relation("RevisouViagem", fields: [revisadoPorId], references: [id], onDelete: SetNull)
+  revisadoPorId     String?
+  /// Texto obrigatório quando status foi marcado DIVERGENTE via pré-validação.
+  motivoStatus      String?
   criadoOfflineEm   DateTime?
   sincronizadoEm    DateTime     @default(now())
   alteradoEm        DateTime     @updatedAt
