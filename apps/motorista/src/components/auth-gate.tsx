@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { getAuthState, setAuthState, subscribeAuth } from "@/lib/auth-state";
 import { loadTokens } from "@/lib/auth";
@@ -7,16 +7,17 @@ import { enviarPendentes } from "@/lib/error-reporter";
 import { obterEEnviarPushToken } from "@/lib/notifications";
 
 /**
- * Gate de autenticação:
- * - Boot lê tokens do localStorage e atualiza `auth-state` global
- * - Redireciona pra /login se não logado
- * - Re-renderiza ao receber setAuthState (login/logout)
+ * Gate de autenticação. Usa useSyncExternalStore pra evitar bug de ordem
+ * entre boot (que muda o estado global) e subscribe (que escuta mudanças):
+ * em produção o boot rodava antes do subscribe e o componente ficava preso
+ * em null pra sempre.
  */
 export function AuthGate({ children }: { children: ReactNode }) {
-  const [, setVersion] = useState(0);
+  const state = useSyncExternalStore(subscribeAuth, getAuthState, () => null);
   const location = useLocation();
 
-  // Boot único: lê tokens, popula auth-state
+  // Boot único: lê tokens e popula auth-state. useSyncExternalStore re-renderiza
+  // automaticamente quando setAuthState muda o valor.
   useEffect(() => {
     if (getAuthState() !== null) return;
     try {
@@ -27,31 +28,19 @@ export function AuthGate({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Re-renderiza ao mudar estado (login/logout)
-  useEffect(() => subscribeAuth(() => setVersion((v) => v + 1)), []);
-
-  // Inicia auto-sync uma vez por sessão quando logado.
-  // Tenta registrar push só se o motorista já deu permissão (não força prompt
-  // no boot — Perfil tem botão pra ativar). Idempotente.
+  // Inicia auto-sync ao logar.
   useEffect(() => {
-    if (getAuthState() === true) {
-      startAutoSync();
-      void enviarPendentes();
-      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-        void obterEEnviarPushToken();
-      }
+    if (state !== true) return;
+    startAutoSync();
+    void enviarPendentes();
+    if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+      void obterEEnviarPushToken();
     }
-  }, [getAuthState()]);
+  }, [state]);
 
-  const state = getAuthState();
-  if (state === null) {
-    // Ainda lendo localStorage — render imediato ao próximo tick.
-    // Não usa loader visual porque é síncrono.
-    return null;
-  }
+  if (state === null) return null;
 
   const onLogin = location.pathname === "/login";
-
   if (!state && !onLogin) return <Navigate to="/login" replace />;
   if (state && onLogin) return <Navigate to="/" replace />;
 
