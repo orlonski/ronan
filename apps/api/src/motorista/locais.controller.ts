@@ -45,6 +45,11 @@ const ProximosQuery = z.object({
 });
 
 const CriarRapidoInput = z.object({
+  /** UUID opcional gerado client-side. Quando presente, faz a chamada
+   * idempotente — reenvio do mesmo id retorna o local existente sem criar
+   * duplicata. Usado pelo outbox offline do app (motorista cria local sem
+   * internet; sync envia esse id depois). */
+  id: z.string().uuid().optional(),
   nome: z.string().min(2).max(120),
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),

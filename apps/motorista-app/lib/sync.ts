@@ -1,17 +1,21 @@
 import { AppState } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
-import { drenar as drenarEventos } from "./event-reporter";
+import { drenar as drenarEventos, reportarEvento } from "./event-reporter";
 import {
   deletePendingAbastecimento,
+  deletePendingLocal,
   deletePendingPedagio,
   deletePendingViagem,
   listPendingAbastecimentos,
+  listPendingLocais,
   listPendingPedagios,
   listPendingViagens,
   upsertPendingAbastecimento,
+  upsertPendingLocal,
   upsertPendingPedagio,
   upsertPendingViagem,
   type PendingAbastecimento,
+  type PendingLocal,
   type PendingPedagio,
   type PendingViagem,
   type ZodIssueSaved,
@@ -221,6 +225,24 @@ export async function enqueueAbastecimento(
   void drain();
 }
 
+/**
+ * Enfileira a criação de um local novo (descarga em lugar nunca visto).
+ * clientId é o UUID gerado client-side, vira o id real no servidor pra
+ * idempotência. A viagem que referencia esse local usa o mesmo clientId
+ * como localDescargaId — drain processa locais antes de viagens (FK).
+ */
+export async function enqueueLocal(item: PendingLocal): Promise<void> {
+  await upsertPendingLocal(item);
+  void reportarEvento("local_criado", {
+    nome: item.payload.nome,
+    lat: item.payload.lat,
+    lng: item.payload.lng,
+    tipo: item.payload.tipo,
+  });
+  notify();
+  void drain();
+}
+
 export async function descartarAbastecimentoPendente(clientId: string): Promise<void> {
   await deletePendingAbastecimento(clientId);
   notify();
@@ -256,6 +278,9 @@ export async function drain(): Promise<void> {
   if (!net.isConnected) return;
   draining = true;
   try {
+    // Locais ANTES de viagens: viagens podem ter localDescargaId apontando
+    // pra um local pendente. Se a viagem chegar primeiro, FK violation.
+    await drainLocais();
     await drainViagens();
     await drainPedagios();
     await drainAbastecimentos();
@@ -263,6 +288,39 @@ export async function drain(): Promise<void> {
     draining = false;
     notify();
   }
+}
+
+async function drainLocais(): Promise<void> {
+  const list = await listPendingLocais();
+  for (const item of list) {
+    if (item.status === "syncing") continue;
+    if (item.attempts >= MAX_ATTEMPTS) continue;
+    const net = await NetInfo.fetch();
+    if (!net.isConnected) return;
+    await processLocal(item);
+  }
+}
+
+async function processLocal(item: PendingLocal): Promise<void> {
+  await upsertPendingLocal({ ...item, status: "syncing", lastTriedAt: Date.now() });
+  notify();
+  try {
+    // Idempotência: backend usa o clientId como id; reenvio retorna o existente.
+    await api.post("/m/locais/rapido", { id: item.clientId, ...item.payload });
+    await deletePendingLocal(item.clientId);
+  } catch (err) {
+    const permanente = isErroPermanente(err);
+    const { msg, status, issues } = extractErrorDetails(err);
+    await upsertPendingLocal({
+      ...item,
+      status: "error",
+      errorMsg: msg,
+      errorStatus: status,
+      errorIssues: issues,
+      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
+    });
+  }
+  notify();
 }
 
 async function drainViagens(): Promise<void> {

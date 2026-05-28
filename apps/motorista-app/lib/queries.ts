@@ -10,7 +10,7 @@ import { api, ApiError } from "./api";
 import { reportarEvento } from "./event-reporter";
 import { haversineMetros } from "./geo";
 import { getRotaCache, setRotaCache } from "./rota-cache";
-import { enqueueAbastecimento, enqueuePedagio, enqueueViagem } from "./sync";
+import { enqueueAbastecimento, enqueueLocal, enqueuePedagio, enqueueViagem } from "./sync";
 
 export type Veiculo = { id: string; placa: string; modelo: string | null };
 
@@ -892,6 +892,12 @@ export async function buscarLocaisProximos(input: {
  * Cria local rápido (só nome + GPS). Backend resolve endereço via reverse
  * geocoding. Local entra como RASCUNHO e vai pra fila Em Validação do dashboard.
  */
+/**
+ * Cria local rápido offline-first. UUID é gerado client-side, o local
+ * entra no cache de catalogos imediatamente, e a criação real no servidor
+ * acontece via outbox (enqueueLocal). Quando viagem que referencia esse
+ * local for sincronizar, drainLocais roda primeiro pra garantir a FK.
+ */
 export function useCriarLocalRapido() {
   const qc = useQueryClient();
   return useMutation({
@@ -901,13 +907,54 @@ export function useCriarLocalRapido() {
       lng: number;
       tipo: "CARGA" | "DESCARGA" | "AMBOS";
       clienteIds?: string[];
-    }) => normalizarLocal(await api.post<Local>("/m/locais/rapido", input)),
+    }): Promise<Local> => {
+      const clientId = gerarUuidLocal();
+      const novoLocal: Local = {
+        id: clientId,
+        nome: input.nome,
+        logradouro: "",
+        numero: null,
+        bairro: null,
+        cidade: "",
+        uf: "",
+        pontoReferencia: null,
+        tipo: input.tipo,
+        clienteIds: input.clienteIds ?? [],
+        lat: input.lat,
+        lng: input.lng,
+      };
+      await enqueueLocal({
+        clientId,
+        payload: {
+          nome: input.nome,
+          lat: input.lat,
+          lng: input.lng,
+          tipo: input.tipo,
+          clienteIds: input.clienteIds,
+        },
+        status: "pending",
+        attempts: 0,
+        createdAt: Date.now(),
+      });
+      return normalizarLocal(novoLocal);
+    },
     onSuccess: (novo) => {
       qc.setQueryData<Catalogos>(["catalogos"], (cur) => {
         if (!cur) return cur;
         return { ...cur, locais: [...cur.locais, novo] };
       });
     },
+  });
+}
+
+function gerarUuidLocal(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
   });
 }
 

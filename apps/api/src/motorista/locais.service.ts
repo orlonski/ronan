@@ -261,12 +261,37 @@ export class LocaisMotoristaService {
    */
   async criarRapido(
     motoristaId: string,
-    input: { nome: string; lat: number; lng: number; tipo: TipoLocal; clienteIds?: string[] },
+    input: { id?: string; nome: string; lat: number; lng: number; tipo: TipoLocal; clienteIds?: string[] },
   ) {
+    // Idempotência: se motorista já enviou esse id antes (outbox offline
+    // retentando, sync duplicado, etc), retorna o local existente sem
+    // criar duplicata nem refazer reverse geocoding.
+    if (input.id) {
+      const existente = await this.prisma.local.findUnique({
+        where: { id: input.id },
+        select: {
+          id: true,
+          nome: true,
+          cidade: true,
+          uf: true,
+          tipo: true,
+          lat: true,
+          lng: true,
+          nivelConfianca: true,
+          clientes: { select: { clienteId: true } },
+        },
+      });
+      if (existente) {
+        const { clientes, ...rest } = existente;
+        return { ...rest, clienteIds: clientes.map((c) => c.clienteId) };
+      }
+    }
+
     const reverse = await this.geocoding.reverseGeocoding(input.lat, input.lng);
     const clienteIds = input.clienteIds ?? [];
     const local = await this.prisma.local.create({
       data: {
+        ...(input.id ? { id: input.id } : {}),
         nome: input.nome,
         logradouro: reverse.logradouro ?? "(sem endereço)",
         numero: reverse.numero,

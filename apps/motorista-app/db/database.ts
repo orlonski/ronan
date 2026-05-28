@@ -84,9 +84,30 @@ export type PendingAbastecimento = {
   errorIssues?: ZodIssueSaved[];
 };
 
+/** Local de descarga criado offline. clientId vira id real no servidor
+ * (POST /m/locais/rapido aceita id pra idempotência). */
+export type PendingLocal = {
+  clientId: string;
+  payload: {
+    nome: string;
+    lat: number;
+    lng: number;
+    tipo: "CARGA" | "DESCARGA" | "AMBOS";
+    clienteIds?: string[];
+  };
+  status: "pending" | "syncing" | "error";
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
+};
+
 const VIAGENS_KEY = `${PREFIX}outbox.viagens`;
 const PEDAGIOS_KEY = `${PREFIX}outbox.pedagios`;
 const ABASTECIMENTOS_KEY = `${PREFIX}outbox.abastecimentos`;
+const LOCAIS_KEY = `${PREFIX}outbox.locais`;
 
 async function readList<T>(key: string): Promise<T[]> {
   try {
@@ -161,6 +182,26 @@ export async function deletePendingAbastecimento(clientId: string): Promise<void
   const list = await listPendingAbastecimentos();
   await writeList(
     ABASTECIMENTOS_KEY,
+    list.filter((x) => x.clientId !== clientId),
+  );
+}
+
+export async function listPendingLocais(): Promise<PendingLocal[]> {
+  return readList<PendingLocal>(LOCAIS_KEY);
+}
+
+export async function upsertPendingLocal(item: PendingLocal): Promise<void> {
+  const list = await listPendingLocais();
+  const idx = list.findIndex((x) => x.clientId === item.clientId);
+  if (idx >= 0) list[idx] = item;
+  else list.unshift(item);
+  await writeList(LOCAIS_KEY, list);
+}
+
+export async function deletePendingLocal(clientId: string): Promise<void> {
+  const list = await listPendingLocais();
+  await writeList(
+    LOCAIS_KEY,
     list.filter((x) => x.clientId !== clientId),
   );
 }

@@ -1,19 +1,24 @@
 import {
   deletePendingAbastecimento,
+  deletePendingLocal,
   deletePendingPedagio,
   deletePendingViagem,
   listPendingAbastecimentos,
+  listPendingLocais,
   listPendingPedagios,
   listPendingViagens,
   upsertPendingAbastecimento,
+  upsertPendingLocal,
   upsertPendingPedagio,
   upsertPendingViagem,
   type PendingAbastecimento,
+  type PendingLocal,
   type PendingPedagio,
   type PendingViagem,
   type ZodIssueSaved,
 } from "@/db/dexie";
 import { api, ApiError, humanizeApiError } from "./api";
+import { reportarEvento } from "./event-reporter";
 
 type ApiErrorBody = { issues?: ZodIssueSaved[] };
 
@@ -192,6 +197,19 @@ export async function enqueueAbastecimento(
   void drain();
 }
 
+/** Local criado offline. clientId vira id real no servidor (idempotência). */
+export async function enqueueLocal(item: PendingLocal): Promise<void> {
+  await upsertPendingLocal(item);
+  void reportarEvento("local_criado", {
+    nome: item.payload.nome,
+    lat: item.payload.lat,
+    lng: item.payload.lng,
+    tipo: item.payload.tipo,
+  });
+  notify();
+  void drain();
+}
+
 export async function descartarPedagioPendente(clientId: string): Promise<void> {
   await deletePendingPedagio(clientId);
   notify();
@@ -230,6 +248,9 @@ export async function drain(): Promise<void> {
   if (!isOnline()) return;
   draining = true;
   try {
+    // Locais ANTES de viagens: viagens podem ter localDescargaId apontando
+    // pra um local pendente. Se a viagem chegar primeiro, FK violation.
+    await drainLocais();
     await drainViagens();
     await drainPedagios();
     await drainAbastecimentos();
@@ -237,6 +258,37 @@ export async function drain(): Promise<void> {
     draining = false;
     notify();
   }
+}
+
+async function drainLocais(): Promise<void> {
+  const list = await listPendingLocais();
+  for (const item of list) {
+    if (item.status === "syncing") continue;
+    if (item.attempts >= MAX_ATTEMPTS) continue;
+    if (!isOnline()) return;
+    await processLocal(item);
+  }
+}
+
+async function processLocal(item: PendingLocal): Promise<void> {
+  await upsertPendingLocal({ ...item, status: "syncing", lastTriedAt: Date.now() });
+  notify();
+  try {
+    await api.post("/m/locais/rapido", { id: item.clientId, ...item.payload });
+    await deletePendingLocal(item.clientId);
+  } catch (err) {
+    const permanente = isErroPermanente(err);
+    const { msg, status, issues } = extractErrorDetails(err);
+    await upsertPendingLocal({
+      ...item,
+      status: "error",
+      errorMsg: msg,
+      errorStatus: status,
+      errorIssues: issues,
+      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
+    });
+  }
+  notify();
 }
 
 async function drainViagens(): Promise<void> {

@@ -15,6 +15,7 @@ export const TipoEvento = z.enum([
   "gps_capturado",
   "gps_falhou",
   "viagem_salva",
+  "local_criado",
 ]);
 export type TipoEvento = z.infer<typeof TipoEvento>;
 

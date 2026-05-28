@@ -48,6 +48,25 @@ export type PendingAbastecimento = {
   errorIssues?: ZodIssueSaved[];
 };
 
+/** Local criado offline. clientId vira id real no servidor (idempotência). */
+export type PendingLocal = {
+  clientId: string;
+  payload: {
+    nome: string;
+    lat: number;
+    lng: number;
+    tipo: "CARGA" | "DESCARGA" | "AMBOS";
+    clienteIds?: string[];
+  };
+  status: SyncStatus;
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
+};
+
 export type CacheEntry = {
   key: string;
   v: unknown;
@@ -58,6 +77,7 @@ class RonanDB extends Dexie {
   pendingViagens!: EntityTable<PendingViagem, "clientId">;
   pendingPedagios!: EntityTable<PendingPedagio, "clientId">;
   pendingAbastecimentos!: EntityTable<PendingAbastecimento, "clientId">;
+  pendingLocais!: EntityTable<PendingLocal, "clientId">;
   cache!: EntityTable<CacheEntry, "key">;
 
   constructor() {
@@ -85,6 +105,10 @@ class RonanDB extends Dexie {
       viagensCache: null,
       pedagiosCache: null,
       meCache: null,
+    });
+    // v4: criação de local de descarga offline (mesma estrutura do outbox).
+    this.version(4).stores({
+      pendingLocais: "clientId, status, createdAt",
     });
   }
 }
@@ -169,4 +193,20 @@ export async function deletePendingPedagio(clientId: string): Promise<void> {
 
 export async function deletePendingAbastecimento(clientId: string): Promise<void> {
   await db.pendingAbastecimentos.delete(clientId);
+}
+
+export async function listPendingLocais(): Promise<PendingLocal[]> {
+  try {
+    return await db.pendingLocais.orderBy("createdAt").reverse().toArray();
+  } catch {
+    return [];
+  }
+}
+
+export async function upsertPendingLocal(item: PendingLocal): Promise<void> {
+  await db.pendingLocais.put(item);
+}
+
+export async function deletePendingLocal(clientId: string): Promise<void> {
+  await db.pendingLocais.delete(clientId);
 }

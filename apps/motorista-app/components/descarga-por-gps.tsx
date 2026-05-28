@@ -181,6 +181,8 @@ export function DescargaPorGps({
     }
     setErro(null);
     try {
+      // Offline-first: gera id local, adiciona no catalogo e enfileira no
+      // outbox. Funciona sem internet — sync envia depois com idempotência.
       const novo = await criar.mutateAsync({
         nome,
         lat: estado.coords.lat,
@@ -194,11 +196,8 @@ export function DescargaPorGps({
         local: { id: novo.id, nome: novo.nome },
       });
     } catch (err) {
-      if (isNetworkError(err)) {
-        setErro("Sem internet. Conecte pra cadastrar esse local novo.");
-      } else {
-        setErro((err as Error).message || "Erro ao criar o local");
-      }
+      // Praticamente impossível agora — enqueueLocal só falha se AsyncStorage quebrar.
+      setErro((err as Error).message || "Erro ao criar o local");
     }
   }
 
