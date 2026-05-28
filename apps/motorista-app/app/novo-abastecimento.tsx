@@ -20,7 +20,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
+import { showAlert } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
+import { fmtDataBR, hojeISO } from "@/lib/datetime";
 import { humanizeZodError } from "@/lib/validation";
 import { CriarAbastecimentoInput } from "@ronan/shared-types";
 import {
@@ -46,7 +48,7 @@ const TIPOS: { value: TipoCombustivel; label: string }[] = [
   { value: "ETANOL", label: "Etanol" },
 ];
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = hojeISO;
 
 export default function NovoAbastecimento() {
   const me = useMe();
@@ -165,6 +167,25 @@ export default function NovoAbastecimento() {
       );
     }
 
+    let dataFinal = data;
+    if (dataFinal !== hojeISO()) {
+      const escolha = await showAlert({
+        title: "Data diferente de hoje",
+        message: `O abastecimento está marcado como ${fmtDataBR(dataFinal)}. Hoje é ${fmtDataBR(hojeISO())}. Tem certeza?`,
+        variant: "warning",
+        buttons: [
+          { label: "Cancelar", value: "cancel", style: "cancel" },
+          { label: "Marcar hoje", value: "today" },
+          { label: "Confirmar", value: "ok" },
+        ],
+      });
+      if (escolha === "cancel" || escolha === null) return;
+      if (escolha === "today") {
+        dataFinal = hojeISO();
+        setData(dataFinal);
+      }
+    }
+
     setSubmitting(true);
     try {
       const c = coords ?? (await pegarCoordsRapido());
@@ -174,7 +195,7 @@ export default function NovoAbastecimento() {
         veiculoId,
         empresaId,
         // Combina data (YYYY-MM-DD) com hora atual pra timestamp completo
-        data: combinarDataComHoraAtual(data),
+        data: combinarDataComHoraAtual(dataFinal),
         tipo,
         litros: litrosNum,
         valorTotal: emComboio ? undefined : valorNum,

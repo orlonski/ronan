@@ -19,7 +19,6 @@ import {
 } from "lucide-react-native";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Pressable,
   RefreshControl,
@@ -35,6 +34,7 @@ import { ViagemCardSkeleton } from "@/components/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { usePending } from "@/hooks/use-pending";
+import { showAlert, showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import {
   TRACKING_CONFIG_DEFAULTS,
@@ -89,40 +89,44 @@ export default function Home() {
         velocidadeMaxKmh: cfg.velocidadeMaxKmh,
       });
       if (!ok) {
-        Alert.alert(
-          "Permissão negada",
-          "Pra rastrear o trajeto, precisamos da sua localização o tempo todo.",
-        );
+        void showAlert({
+          title: "Permissão negada",
+          message:
+            "Pra rastrear o trajeto, precisamos da sua localização o tempo todo.",
+          variant: "warning",
+        });
         return;
       }
       router.push("/viagem-andamento");
     } catch (err) {
-      Alert.alert("Erro", (err as Error).message ?? "Falha ao iniciar.");
+      void showAlert({
+        title: "Erro",
+        message: (err as Error).message ?? "Falha ao iniciar.",
+        variant: "destructive",
+      });
     }
   }
 
-  function confirmarExcluir(v: Viagem) {
+  async function confirmarExcluir(v: Viagem) {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert(
-      "Excluir esta viagem?",
-      `Apagar viagem ticket ${v.ticket}?\nIsso só pode ser feito enquanto a operadora não conferiu.`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Excluir",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await excluir.mutateAsync(v.id);
-              void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            } catch (err) {
-              Alert.alert("Não foi possível excluir", humanizeApiError(err));
-              void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-            }
-          },
-        },
-      ],
-    );
+    const ok = await showConfirm({
+      title: "Excluir esta viagem?",
+      message: `Apagar viagem ticket ${v.ticket}? Isso só pode ser feito enquanto a operadora não conferiu.`,
+      confirmLabel: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      await excluir.mutateAsync(v.id);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      void showAlert({
+        title: "Não foi possível excluir",
+        message: humanizeApiError(err),
+        variant: "destructive",
+      });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
   }
 
   async function aplicarUpdate() {
@@ -132,7 +136,11 @@ export default function Home() {
       }
       await Updates.reloadAsync();
     } catch (err) {
-      Alert.alert("Erro", (err as Error).message ?? "Falha ao atualizar.");
+      void showAlert({
+        title: "Erro",
+        message: (err as Error).message ?? "Falha ao atualizar.",
+        variant: "destructive",
+      });
     }
   }
 

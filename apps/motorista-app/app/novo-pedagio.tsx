@@ -17,12 +17,14 @@ import { DateField } from "@/components/ui/date-field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
+import { showAlert } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
+import { fmtDataBR, hojeISO } from "@/lib/datetime";
 import { humanizeZodError } from "@/lib/validation";
 import { CriarPedagioInput } from "@ronan/shared-types";
 import { useCatalogos, useCriarPedagio, useMe } from "@/lib/queries";
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = hojeISO;
 
 export default function NovoPedagio() {
   const me = useMe();
@@ -69,12 +71,31 @@ export default function NovoPedagio() {
       return falhar("Valor inválido.");
     }
 
+    let dataFinal = data;
+    if (dataFinal !== hojeISO()) {
+      const escolha = await showAlert({
+        title: "Data diferente de hoje",
+        message: `O pedágio está marcado como ${fmtDataBR(dataFinal)}. Hoje é ${fmtDataBR(hojeISO())}. Tem certeza?`,
+        variant: "warning",
+        buttons: [
+          { label: "Cancelar", value: "cancel", style: "cancel" },
+          { label: "Marcar hoje", value: "today" },
+          { label: "Confirmar", value: "ok" },
+        ],
+      });
+      if (escolha === "cancel" || escolha === null) return;
+      if (escolha === "today") {
+        dataFinal = hojeISO();
+        setData(dataFinal);
+      }
+    }
+
     setSubmitting(true);
     try {
       const payload = {
         clientId: makeUuid(),
         veiculoId,
-        data,
+        data: dataFinal,
         pracaPedagio: pracaPedagio.trim(),
         valor: valorNum,
       };

@@ -13,7 +13,6 @@ import {
 } from "lucide-react-native";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Pressable,
   RefreshControl,
@@ -28,6 +27,7 @@ import { EmptyState } from "@/components/empty-state";
 import { ViagemCardSkeleton } from "@/components/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { showAlert, showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import {
   useAbastecimentos,
@@ -108,63 +108,51 @@ export default function HistoricoScreen() {
     [pedagios.data],
   );
 
-  function confirmarExcluirPedagio(p: Pedagio) {
+  async function confirmarExcluirPedagio(p: Pedagio) {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert(
-      "Excluir este pedágio?",
-      `Apagar pedágio de ${p.pracaPedagio} (R$ ${fmtNum(p.valor, 2)})?`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Excluir",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await excluirPedagio.mutateAsync(p.id);
-              void Haptics.notificationAsync(
-                Haptics.NotificationFeedbackType.Success,
-              );
-            } catch (err) {
-              Alert.alert("Não foi possível excluir", humanizeApiError(err));
-              void Haptics.notificationAsync(
-                Haptics.NotificationFeedbackType.Error,
-              );
-            }
-          },
-        },
-      ],
-    );
+    const ok = await showConfirm({
+      title: "Excluir este pedágio?",
+      message: `Apagar pedágio de ${p.pracaPedagio} (R$ ${fmtNum(p.valor, 2)})?`,
+      confirmLabel: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      await excluirPedagio.mutateAsync(p.id);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      void showAlert({
+        title: "Não foi possível excluir",
+        message: humanizeApiError(err),
+        variant: "destructive",
+      });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
   }
 
-  function confirmarExcluirAbastecimento(a: Abastecimento) {
+  async function confirmarExcluirAbastecimento(a: Abastecimento) {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const litros = parseFloat(a.litros);
     const valor = a.valorTotal != null ? parseFloat(a.valorTotal) : null;
     const valorStr = valor != null ? `(R$ ${valor.toFixed(2)})` : "(em comboio)";
-    Alert.alert(
-      "Excluir este abastecimento?",
-      `Apagar abastecimento de ${litros.toFixed(2)} L ${valorStr}${a.postoNome ? ` em ${a.postoNome}` : ""}?`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Excluir",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await excluirAbastecimento.mutateAsync(a.id);
-              void Haptics.notificationAsync(
-                Haptics.NotificationFeedbackType.Success,
-              );
-            } catch (err) {
-              Alert.alert("Não foi possível excluir", humanizeApiError(err));
-              void Haptics.notificationAsync(
-                Haptics.NotificationFeedbackType.Error,
-              );
-            }
-          },
-        },
-      ],
-    );
+    const ok = await showConfirm({
+      title: "Excluir este abastecimento?",
+      message: `Apagar abastecimento de ${litros.toFixed(2)} L ${valorStr}${a.postoNome ? ` em ${a.postoNome}` : ""}?`,
+      confirmLabel: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      await excluirAbastecimento.mutateAsync(a.id);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      void showAlert({
+        title: "Não foi possível excluir",
+        message: humanizeApiError(err),
+        variant: "destructive",
+      });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
   }
 
   const totalViagensMes = resumo.data?.totalViagens ?? 0;

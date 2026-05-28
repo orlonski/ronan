@@ -4,7 +4,6 @@ import * as Haptics from "expo-haptics";
 import { Check } from "lucide-react-native";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -20,7 +19,9 @@ import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { DescargaPorGps } from "@/components/descarga-por-gps";
+import { showAlert, showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
+import { fmtDataBR, hojeISO } from "@/lib/datetime";
 import { humanizeZodError } from "@/lib/validation";
 import { CriarViagemInput } from "@ronan/shared-types";
 import { formatarDistancia, haversineMetros, localMaisProximo, pegarCoords, pegarCoordsRapido } from "@/lib/geo";
@@ -52,7 +53,7 @@ type FormShape = {
   observacao: string;
 };
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = hojeISO;
 
 function numToStr(n: unknown): string {
   if (typeof n !== "number" || !Number.isFinite(n)) return "";
@@ -133,11 +134,11 @@ export default function NovaViagem() {
       const item = list.find((x) => x.clientId === params.editarClientId);
       if (!alive) return;
       if (!item) {
-        Alert.alert(
-          "Viagem não encontrada",
-          "Essa viagem pode ter sido sincronizada ou excluída.",
-          [{ text: "OK", onPress: () => router.back() }],
-        );
+        void showAlert({
+          title: "Viagem não encontrada",
+          message: "Essa viagem pode ter sido sincronizada ou excluída.",
+          variant: "warning",
+        }).then(() => router.back());
         return;
       }
       setPendingOriginal(item);
@@ -392,6 +393,26 @@ export default function NovaViagem() {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
+    // Aviso quando a data não é hoje — caso o motorista tenha tocado sem
+    // querer, dá chance de corrigir ou voltar pra hoje antes de salvar.
+    let dataFinal = form.data;
+    if (dataFinal !== hojeISO()) {
+      const escolha = await showAlert({
+        title: "Data diferente de hoje",
+        message: `A viagem está marcada como ${fmtDataBR(dataFinal)}. Hoje é ${fmtDataBR(hojeISO())}. Tem certeza?`,
+        variant: "warning",
+        buttons: [
+          { label: "Cancelar", value: "cancel", style: "cancel" },
+          { label: "Marcar hoje", value: "today" },
+          { label: "Confirmar", value: "ok" },
+        ],
+      });
+      if (escolha === "cancel" || escolha === null) return;
+      if (escolha === "today") {
+        dataFinal = hojeISO();
+        setForm((f) => ({ ...f, data: dataFinal }));
+      }
+    }
     setSubmitting(true);
     try {
       // GPS: usa o que foi pre-aquecido na montagem da tela. Se ainda nao
@@ -432,7 +453,7 @@ export default function NovaViagem() {
         veiculoId: form.veiculoId,
         clienteId: form.clienteId,
         materialId: form.materialId,
-        data: form.data,
+        data: dataFinal,
         toneladas: parseFloat(form.toneladas.replace(",", ".")),
         ticket: form.ticket.trim(),
         km: parseFloat(form.km.replace(",", ".")),
@@ -481,11 +502,11 @@ export default function NovaViagem() {
           foto: novaFoto,
         });
         if (res.removed) {
-          Alert.alert(
-            "Viagem já sincronizada",
-            "Essa viagem foi enviada com sucesso enquanto você editava. Não precisa salvar de novo.",
-            [{ text: "OK", onPress: () => router.back() }],
-          );
+          void showAlert({
+            title: "Viagem já sincronizada",
+            message:
+              "Essa viagem foi enviada com sucesso enquanto você editava. Não precisa salvar de novo.",
+          }).then(() => router.back());
           setSubmitting(false);
           return;
         }

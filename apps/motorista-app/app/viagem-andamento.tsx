@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import { router, Stack } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { Activity, AlertTriangle, Save, Square, Trash2 } from "lucide-react-native";
-import { ActivityIndicator, Alert, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MapTrajeto } from "@/components/map-trajeto";
 import { ScreenHeader } from "@/components/screen-header";
 import { Button } from "@/components/ui/button";
+import { showAlert, showConfirm } from "@/lib/alert";
 import {
   cancelarTracking,
   isTrackingAtivo,
@@ -50,30 +51,27 @@ export default function ViagemAndamentoScreen() {
         },
       });
     } catch (err) {
-      Alert.alert("Erro", (err as Error).message ?? "Falha ao finalizar.");
+      void showAlert({
+        title: "Erro",
+        message: (err as Error).message ?? "Falha ao finalizar.",
+        variant: "destructive",
+      });
       setParando(false);
     }
   }
 
-  function confirmarCancelar() {
-    Alert.alert(
-      "Descartar viagem?",
-      "Os pontos GPS capturados serão apagados. Quer mesmo descartar?",
-      [
-        { text: "Não", style: "cancel" },
-        {
-          text: "Descartar",
-          style: "destructive",
-          onPress: async () => {
-            void Haptics.notificationAsync(
-              Haptics.NotificationFeedbackType.Warning,
-            );
-            await cancelarTracking();
-            router.back();
-          },
-        },
-      ],
-    );
+  async function confirmarCancelar() {
+    const ok = await showConfirm({
+      title: "Descartar viagem?",
+      message: "Os pontos GPS capturados serão apagados. Quer mesmo descartar?",
+      confirmLabel: "Descartar",
+      cancelLabel: "Não",
+      destructive: true,
+    });
+    if (!ok) return;
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    await cancelarTracking();
+    router.back();
   }
 
   if (!data) {

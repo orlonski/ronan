@@ -9,6 +9,7 @@ import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { AlertHost } from "@/components/ui/alert-dialog";
 import { loadTokens } from "@/lib/auth";
 import {
   enviarPendentes,
@@ -209,6 +210,7 @@ export default function RootLayout() {
                 }}
               />
             </AuthGate>
+            <AlertHost />
           </ErrorBoundary>
         </QueryClientProvider>
       </SafeAreaProvider>

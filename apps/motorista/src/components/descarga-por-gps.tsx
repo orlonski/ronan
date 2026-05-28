@@ -3,6 +3,7 @@ import { CheckCircle2, MapPin, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { showConfirm } from "@/lib/alert";
 import { haversineMetros, pegarCoords, RAIO_ALERTA_CARGA_M } from "@/lib/geo";
 import {
   buscarLocaisProximos,
@@ -90,9 +91,13 @@ export function DescargaPorGps({
         localCargaCoords.lng,
       );
       if (distCarga <= RAIO_ALERTA_CARGA_M) {
-        const continua = window.confirm(
-          `Você está a ${Math.round(distCarga)}m de "${localCargaCoords.nome}" (local de carga). A viagem deve ser lançada na descarga, não no carregamento. Continuar mesmo assim?`,
-        );
+        const continua = await showConfirm({
+          title: "Você está perto do local de carga",
+          message: `Está a ${Math.round(distCarga)}m de "${localCargaCoords.nome}". A viagem deve ser lançada na descarga, não no carregamento. Tem certeza?`,
+          variant: "warning",
+          confirmLabel: "Continuar mesmo assim",
+          cancelLabel: "Cancelar",
+        });
         if (!continua) {
           setEstado({ tipo: "vazio" });
           return;

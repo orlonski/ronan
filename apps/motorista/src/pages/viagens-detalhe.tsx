@@ -12,6 +12,7 @@ import { AuthedImage } from "@/components/authed-image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { showAlert, showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { fmtDataBR } from "@/lib/datetime";
 import { fmtNum } from "@/lib/utils";
@@ -48,15 +49,22 @@ export default function ViagemDetalhePage() {
 
   async function confirmarExcluir() {
     if (!detalhe.data) return;
-    const ok = window.confirm(
-      `Apagar viagem ticket ${detalhe.data.ticket}?\n\nIsso só pode ser feito enquanto a operadora não conferiu.`,
-    );
+    const ok = await showConfirm({
+      title: "Excluir esta viagem?",
+      message: `Apagar viagem ticket ${detalhe.data.ticket}? Isso só pode ser feito enquanto a operadora não conferiu.`,
+      confirmLabel: "Excluir",
+      destructive: true,
+    });
     if (!ok) return;
     try {
       await excluir.mutateAsync(detalhe.data.id);
       navigate(-1);
     } catch (err) {
-      alert(humanizeApiError(err));
+      void showAlert({
+        title: "Não foi possível excluir",
+        message: humanizeApiError(err),
+        variant: "destructive",
+      });
     }
   }
 

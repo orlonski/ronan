@@ -3,6 +3,7 @@ import { BrowserRouter, Outlet, Route, Routes } from "react-router-dom";
 import { AuthGate } from "@/components/auth-gate";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { ProtectedLayout } from "@/components/protected-layout";
+import { AlertHost } from "@/components/ui/alert-dialog";
 
 import LoginPage from "@/pages/login";
 import HomePage from "@/pages/home";
@@ -55,6 +56,7 @@ export default function App() {
             <Route path="*" element={<HomePage />} />
           </Routes>
         </AuthGate>
+        <AlertHost />
       </BrowserRouter>
     </ErrorBoundary>
   );

@@ -11,7 +11,9 @@ import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { PhotoCapture } from "@/components/photo-capture";
 import { DescargaPorGps } from "@/components/descarga-por-gps";
+import { showAlert } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
+import { fmtDataBR } from "@/lib/datetime";
 import { humanizeZodError } from "@/lib/validation";
 import { listPendingViagens, type PendingViagem } from "@/db/dexie";
 import {
@@ -92,8 +94,11 @@ export default function NovaViagemPage() {
       const item = list.find((x) => x.clientId === params.clientId);
       if (!alive) return;
       if (!item) {
-        alert("Essa viagem pode ter sido sincronizada ou excluída.");
-        navigate(-1);
+        void showAlert({
+          title: "Viagem não encontrada",
+          message: "Essa viagem pode ter sido sincronizada ou excluída.",
+          variant: "warning",
+        }).then(() => navigate(-1));
         return;
       }
       setPendingOriginal(item);
@@ -267,6 +272,24 @@ export default function NovaViagemPage() {
       setErro(v);
       return;
     }
+    let dataFinal = form.data;
+    if (dataFinal !== hojeISO()) {
+      const escolha = await showAlert({
+        title: "Data diferente de hoje",
+        message: `A viagem está marcada como ${fmtDataBR(dataFinal)}. Hoje é ${fmtDataBR(hojeISO())}. Tem certeza?`,
+        variant: "warning",
+        buttons: [
+          { label: "Cancelar", value: "cancel", style: "cancel" },
+          { label: "Marcar hoje", value: "today" },
+          { label: "Confirmar", value: "ok" },
+        ],
+      });
+      if (escolha === "cancel" || escolha === null) return;
+      if (escolha === "today") {
+        dataFinal = hojeISO();
+        setForm((f) => ({ ...f, data: dataFinal }));
+      }
+    }
     setSubmitting(true);
     try {
       const orig = pendingOriginal?.payload as Record<string, unknown> | undefined;
@@ -281,7 +304,7 @@ export default function NovaViagemPage() {
         veiculoId: form.veiculoId,
         clienteId: form.clienteId,
         materialId: form.materialId,
-        data: form.data,
+        data: dataFinal,
         toneladas: parseFloat(form.toneladas.replace(",", ".")),
         ticket: form.ticket.trim(),
         km: parseFloat(form.km.replace(",", ".")),
@@ -323,8 +346,10 @@ export default function NovaViagemPage() {
           foto: novaFoto,
         });
         if (res.removed) {
-          alert("Essa viagem foi enviada com sucesso enquanto você editava. Não precisa salvar de novo.");
-          navigate(-1);
+          void showAlert({
+            title: "Viagem já sincronizada",
+            message: "Essa viagem foi enviada com sucesso enquanto você editava. Não precisa salvar de novo.",
+          }).then(() => navigate(-1));
           return;
         }
       } else {

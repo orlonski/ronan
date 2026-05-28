@@ -15,7 +15,6 @@ import { MapTrajeto } from "@/components/map-trajeto";
 import { MapaCargaDescarga } from "@/components/mapa-carga-descarga";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Linking,
   ScrollView,
@@ -27,6 +26,7 @@ import { ScreenHeader } from "@/components/screen-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { showAlert, showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { API_URL } from "@/lib/api-url";
 import { loadTokens } from "@/lib/auth";
@@ -68,30 +68,28 @@ export default function ViagemDetalheScreen() {
     });
   }
 
-  function confirmarExcluir() {
+  async function confirmarExcluir() {
     if (!detalhe.data) return;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert(
-      "Excluir esta viagem?",
-      `Apagar viagem ticket ${detalhe.data.ticket}?\nIsso só pode ser feito enquanto a operadora não conferiu.`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Excluir",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await excluir.mutateAsync(detalhe.data!.id);
-              void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              router.back();
-            } catch (err) {
-              Alert.alert("Não foi possível excluir", humanizeApiError(err));
-              void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-            }
-          },
-        },
-      ],
-    );
+    const ok = await showConfirm({
+      title: "Excluir esta viagem?",
+      message: `Apagar viagem ticket ${detalhe.data.ticket}? Isso só pode ser feito enquanto a operadora não conferiu.`,
+      confirmLabel: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      await excluir.mutateAsync(detalhe.data!.id);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.back();
+    } catch (err) {
+      void showAlert({
+        title: "Não foi possível excluir",
+        message: humanizeApiError(err),
+        variant: "destructive",
+      });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
   }
 
   return (

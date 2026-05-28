@@ -19,6 +19,7 @@ import { ViagemCardSkeleton } from "@/components/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { UpdateBanner } from "@/components/update-banner";
 import { usePending } from "@/hooks/use-pending";
+import { showAlert, showConfirm } from "@/lib/alert";
 import { fmtDataHoraCurta, fmtDataCurta, fmtMesLongo } from "@/lib/datetime";
 import { humanizeApiError } from "@/lib/api";
 import {
@@ -58,14 +59,21 @@ export default function HomePage() {
   const excluir = useExcluirViagem();
 
   async function confirmarExcluir(v: Viagem) {
-    const ok = window.confirm(
-      `Apagar viagem ticket ${v.ticket}?\n\nIsso só pode ser feito enquanto a operadora não conferiu.`,
-    );
+    const ok = await showConfirm({
+      title: "Excluir esta viagem?",
+      message: `Apagar viagem ticket ${v.ticket}? Isso só pode ser feito enquanto a operadora não conferiu.`,
+      confirmLabel: "Excluir",
+      destructive: true,
+    });
     if (!ok) return;
     try {
       await excluir.mutateAsync(v.id);
     } catch (err) {
-      alert(humanizeApiError(err));
+      void showAlert({
+        title: "Não foi possível excluir",
+        message: humanizeApiError(err),
+        variant: "destructive",
+      });
     }
   }
 

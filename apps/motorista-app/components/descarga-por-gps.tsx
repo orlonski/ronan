@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -15,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { CheckCircle2, MapPin, X } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { showConfirm } from "@/lib/alert";
 import { haversineMetros, pegarCoords, RAIO_ALERTA_CARGA_M } from "@/lib/geo";
 import {
   buscarLocaisProximos,
@@ -83,16 +83,12 @@ export function DescargaPorGps({
         localCargaCoords.lng,
       );
       if (distCarga <= RAIO_ALERTA_CARGA_M) {
-        const continua = await new Promise<boolean>((resolve) => {
-          Alert.alert(
-            "Você está perto do local de carga",
-            `Está a ${Math.round(distCarga)}m de "${localCargaCoords.nome}". A viagem deve ser lançada na descarga, não no carregamento. Tem certeza?`,
-            [
-              { text: "Cancelar", onPress: () => resolve(false), style: "cancel" },
-              { text: "Continuar mesmo assim", onPress: () => resolve(true) },
-            ],
-            { cancelable: false },
-          );
+        const continua = await showConfirm({
+          title: "Você está perto do local de carga",
+          message: `Está a ${Math.round(distCarga)}m de "${localCargaCoords.nome}". A viagem deve ser lançada na descarga, não no carregamento. Tem certeza?`,
+          variant: "warning",
+          confirmLabel: "Continuar mesmo assim",
+          cancelLabel: "Cancelar",
         });
         if (!continua) {
           setEstado({ tipo: "vazio" });

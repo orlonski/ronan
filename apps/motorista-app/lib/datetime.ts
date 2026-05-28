@@ -39,6 +39,15 @@ export function fmtDataBR(iso: string): string {
   return `${dia}/${mes}/${d.getFullYear()}`;
 }
 
+/** "YYYY-MM-DD" do dia atual em horário LOCAL (não UTC). */
+export function hojeISO(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dia = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dia}`;
+}
+
 /** "06/05/2026 14:30" */
 export function fmtDataHora(iso: string): string {
   const d = new Date(iso); // ISO com timezone explícito é OK

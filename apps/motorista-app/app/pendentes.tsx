@@ -3,7 +3,6 @@ import { router, Stack } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { CloudOff, Pencil, RefreshCw, Trash2 } from "lucide-react-native";
 import {
-  Alert,
   FlatList,
   Modal,
   Pressable,
@@ -17,6 +16,7 @@ import { ScreenHeader } from "@/components/screen-header";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { showConfirm } from "@/lib/alert";
 import { type PendingViagem } from "@/db/database";
 import { usePendingViagens } from "@/hooks/use-pending-viagens";
 import {
@@ -42,23 +42,17 @@ export default function Pendentes() {
     return { v, o, m, l };
   }, [cat.data]);
 
-  function confirmarExcluir(item: PendingViagem) {
+  async function confirmarExcluir(item: PendingViagem) {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert(
-      "Excluir esta viagem?",
-      "A viagem ainda não foi enviada. Apagar agora não pode ser desfeito.",
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Excluir",
-          style: "destructive",
-          onPress: async () => {
-            await descartarViagemPendente(item.clientId);
-            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          },
-        },
-      ],
-    );
+    const ok = await showConfirm({
+      title: "Excluir esta viagem?",
+      message: "A viagem ainda não foi enviada. Apagar agora não pode ser desfeito.",
+      confirmLabel: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
+    await descartarViagemPendente(item.clientId);
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
 
   async function onTentarNovamente(item: PendingViagem) {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Alert } from "react-native";
 import * as Haptics from "expo-haptics";
+import { showConfirm } from "./alert";
 import {
   clearViagemAndamento,
   getViagemAndamento,
@@ -27,16 +27,12 @@ export async function isTrackingAtivo(): Promise<boolean> {
  * popup nativo logo em seguida), false se cancelou.
  */
 function prePromptBackgroundLocation(): Promise<boolean> {
-  return new Promise((resolve) => {
-    Alert.alert(
-      "Permitir localização o tempo todo?",
-      "Pra rastrear o trajeto da sua viagem mesmo com o app fechado ou celular bloqueado, precisamos da sua localização em segundo plano.\n\nSeus dados vão SOMENTE pro servidor da empresa — não compartilhamos com terceiros. A captura para automaticamente quando você finaliza a viagem.\n\nNa próxima tela, escolha \"Permitir o tempo todo\".",
-      [
-        { text: "Cancelar", style: "cancel", onPress: () => resolve(false) },
-        { text: "Continuar", style: "default", onPress: () => resolve(true) },
-      ],
-      { cancelable: false },
-    );
+  return showConfirm({
+    title: "Permitir localização o tempo todo?",
+    message:
+      'Pra rastrear o trajeto da sua viagem mesmo com o app fechado ou celular bloqueado, precisamos da sua localização em segundo plano.\n\nSeus dados vão SOMENTE pro servidor da empresa — não compartilhamos com terceiros. A captura para automaticamente quando você finaliza a viagem.\n\nNa próxima tela, escolha "Permitir o tempo todo".',
+    confirmLabel: "Continuar",
+    cancelLabel: "Cancelar",
   });
 }
 

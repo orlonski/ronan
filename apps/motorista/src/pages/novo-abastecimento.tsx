@@ -9,9 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { PhotoCapture } from "@/components/photo-capture";
+import { showAlert } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { humanizeZodError } from "@/lib/validation";
-import { hojeISO } from "@/lib/datetime";
+import { fmtDataBR, hojeISO } from "@/lib/datetime";
 import {
   useAbastecimentos,
   useCatalogos,
@@ -139,13 +140,32 @@ export default function NovoAbastecimentoPage() {
       );
     }
 
+    let dataFinal = data;
+    if (dataFinal !== hojeISO()) {
+      const escolha = await showAlert({
+        title: "Data diferente de hoje",
+        message: `O abastecimento está marcado como ${fmtDataBR(dataFinal)}. Hoje é ${fmtDataBR(hojeISO())}. Tem certeza?`,
+        variant: "warning",
+        buttons: [
+          { label: "Cancelar", value: "cancel", style: "cancel" },
+          { label: "Marcar hoje", value: "today" },
+          { label: "Confirmar", value: "ok" },
+        ],
+      });
+      if (escolha === "cancel" || escolha === null) return;
+      if (escolha === "today") {
+        dataFinal = hojeISO();
+        setData(dataFinal);
+      }
+    }
+
     setSubmitting(true);
     try {
       const payload = {
         clientId: gerarClientId(),
         veiculoId,
         empresaId,
-        data: combinarDataComHoraAtual(data),
+        data: combinarDataComHoraAtual(dataFinal),
         tipo,
         litros: litrosNum,
         valorTotal: emComboio ? undefined : valorNum,
