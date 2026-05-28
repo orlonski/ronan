@@ -22,6 +22,9 @@ export class ApiError extends Error {
  */
 export function humanizeApiError(err: unknown): string {
   if (!(err instanceof ApiError)) {
+    // fetch nativo do RN joga TypeError("Network request failed") quando o
+    // device está offline ou não consegue completar a chamada.
+    if (err instanceof TypeError) return "Sem internet. Verifique sua conexão.";
     return (err as Error)?.message ?? "Erro inesperado.";
   }
   if (err.status === 400 && err.body && typeof err.body === "object") {

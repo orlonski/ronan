@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ActivityIndicator,
   Alert,
@@ -17,9 +18,17 @@ import { Label } from "@/components/ui/label";
 import { haversineMetros, pegarCoords, RAIO_ALERTA_CARGA_M } from "@/lib/geo";
 import {
   buscarLocaisProximos,
+  buscarLocaisProximosOffline,
   useCriarLocalRapido,
+  type Catalogos,
   type LocalProximo,
 } from "@/lib/queries";
+
+// `fetch` nativo do RN dispara TypeError("Network request failed") quando
+// o device está offline. Detecta esse caso pra cair no fallback local.
+function isNetworkError(err: unknown): boolean {
+  return err instanceof TypeError;
+}
 
 type Estado =
   | { tipo: "vazio" }
@@ -52,6 +61,7 @@ export function DescargaPorGps({
   const [erro, setErro] = useState<string | null>(null);
   const [nomeNovo, setNomeNovo] = useState("");
   const criar = useCriarLocalRapido();
+  const qc = useQueryClient();
 
   async function capturarEBuscar() {
     setErro(null);
@@ -91,32 +101,61 @@ export function DescargaPorGps({
       }
     }
 
+    let matches: LocalProximo[];
     try {
-      const matches = await buscarLocaisProximos({
+      matches = await buscarLocaisProximos({
         lat: coords.lat,
         lng: coords.lng,
         tipoUso: "descarga",
         raioM: 500,
         limit: 5,
       });
-      if (matches.length === 0) {
-        setEstado({ tipo: "sem_match", coords });
-        setNomeNovo("");
-      } else if (matches.length === 1) {
-        const m = matches[0]!;
-        onChange(m.id);
-        setEstado({
-          tipo: "selecionado",
-          local: { id: m.id, nome: m.nome },
-          distanciaMetros: m.distanciaMetros,
-          vezesUsado: m.vezesUsadoMotorista,
-        });
-      } else {
-        setEstado({ tipo: "escolha", matches, coords });
-      }
     } catch (err) {
-      setErro((err as Error).message || "Erro ao buscar locais próximos");
-      setEstado({ tipo: "vazio" });
+      if (!isNetworkError(err)) {
+        setErro((err as Error).message || "Erro ao buscar locais próximos");
+        setEstado({ tipo: "vazio" });
+        return;
+      }
+      // Offline: busca no catálogo cacheado.
+      const catalogos = qc.getQueryData<Catalogos>(["catalogos"]);
+      if (!catalogos) {
+        setErro(
+          "Sem internet e sem catálogo carregado. Abra o app com sinal pelo menos uma vez antes.",
+        );
+        setEstado({ tipo: "vazio" });
+        return;
+      }
+      matches = buscarLocaisProximosOffline({
+        lat: coords.lat,
+        lng: coords.lng,
+        locais: catalogos.locais,
+        tipoUso: "descarga",
+        raioM: 500,
+        limit: 5,
+      });
+      if (matches.length === 0) {
+        setErro(
+          "Sem internet e não achei locais conhecidos perto. Tente de novo quando o sinal voltar.",
+        );
+        setEstado({ tipo: "vazio" });
+        return;
+      }
+    }
+
+    if (matches.length === 0) {
+      setEstado({ tipo: "sem_match", coords });
+      setNomeNovo("");
+    } else if (matches.length === 1) {
+      const m = matches[0]!;
+      onChange(m.id);
+      setEstado({
+        tipo: "selecionado",
+        local: { id: m.id, nome: m.nome },
+        distanciaMetros: m.distanciaMetros,
+        vezesUsado: m.vezesUsadoMotorista,
+      });
+    } else {
+      setEstado({ tipo: "escolha", matches, coords });
     }
   }
 
@@ -159,7 +198,11 @@ export function DescargaPorGps({
         local: { id: novo.id, nome: novo.nome },
       });
     } catch (err) {
-      setErro((err as Error).message || "Erro ao criar o local");
+      if (isNetworkError(err)) {
+        setErro("Sem internet. Conecte pra cadastrar esse local novo.");
+      } else {
+        setErro((err as Error).message || "Erro ao criar o local");
+      }
     }
   }
 

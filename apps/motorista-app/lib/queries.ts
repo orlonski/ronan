@@ -7,6 +7,7 @@ import {
 import type { ExtrairTicketResult } from "@ronan/shared-types";
 import { cacheGet, cachePut } from "@/db/database";
 import { api, ApiError } from "./api";
+import { haversineMetros } from "./geo";
 import { enqueueAbastecimento, enqueuePedagio, enqueueViagem } from "./sync";
 
 export type Veiculo = { id: string; placa: string; modelo: string | null };
@@ -753,6 +754,52 @@ export function useCriarLocalRapido() {
       });
     },
   });
+}
+
+/**
+ * Versão offline de buscarLocaisProximos: usa o catálogo cacheado em vez de
+ * chamar o servidor. Fallback pra quando o motorista está sem internet.
+ * Sem vezesUsadoMotorista (não temos o histórico cá fora) — sempre 0.
+ */
+export function buscarLocaisProximosOffline(input: {
+  lat: number;
+  lng: number;
+  locais: Local[];
+  tipoUso?: "carga" | "descarga" | "ambos";
+  raioM?: number;
+  limit?: number;
+}): LocalProximo[] {
+  const raio = input.raioM ?? 500;
+  const limit = input.limit ?? 5;
+  const tiposPermitidos: Array<Local["tipo"]> =
+    input.tipoUso === "carga"
+      ? ["CARGA", "AMBOS"]
+      : input.tipoUso === "descarga"
+        ? ["DESCARGA", "AMBOS"]
+        : ["CARGA", "DESCARGA", "AMBOS"];
+
+  const matches: LocalProximo[] = [];
+  for (const l of input.locais) {
+    if (l.lat == null || l.lng == null) continue;
+    if (!tiposPermitidos.includes(l.tipo)) continue;
+    const d = haversineMetros(input.lat, input.lng, l.lat, l.lng);
+    if (d > raio) continue;
+    matches.push({
+      id: l.id,
+      nome: l.nome,
+      cidade: l.cidade,
+      uf: l.uf,
+      tipo: l.tipo,
+      lat: l.lat,
+      lng: l.lng,
+      nivelConfianca: "OFFLINE",
+      clienteIds: l.clienteIds,
+      distanciaMetros: Math.round(d),
+      vezesUsadoMotorista: 0,
+    });
+  }
+  matches.sort((a, b) => a.distanciaMetros - b.distanciaMetros);
+  return matches.slice(0, limit);
 }
 
 /**
