@@ -1,3 +1,4 @@
+import NetInfo from "@react-native-community/netinfo";
 import { router } from "expo-router";
 import { API_URL } from "./api-url";
 import { clearTokens, loadTokens, saveTokens, type Tokens } from "./auth";
@@ -99,6 +100,12 @@ async function reportarSilencioso(
   ctx: { method: string; path: string; status?: number | null },
 ): Promise<void> {
   try {
+    // Falha de fetch sem status: pode ser servidor caído OU motorista offline.
+    // Só faz sentido reportar a primeira; offline é limitação física do device.
+    if (ctx.status == null) {
+      const net = await NetInfo.fetch();
+      if (!net.isConnected) return;
+    }
     const { reportarErro } = await import("./error-reporter");
     void reportarErro(err, {
       url: `${ctx.method} ${ctx.path}`,
