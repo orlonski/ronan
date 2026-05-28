@@ -270,6 +270,28 @@ export class ViagensMotoristaService {
       );
     }
 
+    // Valida explicitamente que os locais existem antes de inserir. Sem isso,
+    // Prisma joga FK violation como 500 e o sync do app fica retentando
+    // pra sempre. Acontece quando o catálogo do device tem ID de local que
+    // foi removido/desativado server-side, OU quando motorista mistura caches
+    // de sessões diferentes. Como 4xx, o outbox para de tentar e a viagem
+    // vai pra Pendentes pro motorista editar/descartar.
+    const locaisExistentes = await this.prisma.local.findMany({
+      where: { id: { in: [input.localCargaId, input.localDescargaId] } },
+      select: { id: true },
+    });
+    const idsEncontrados = new Set(locaisExistentes.map((l) => l.id));
+    if (!idsEncontrados.has(input.localCargaId)) {
+      throw new ConflictException(
+        "Local de carga não foi encontrado no servidor. Pode ter sido removido. Edite a viagem na lista de Pendentes e selecione outro.",
+      );
+    }
+    if (!idsEncontrados.has(input.localDescargaId)) {
+      throw new ConflictException(
+        "Local de descarga não foi encontrado no servidor. Pode ter sido removido. Edite a viagem na lista de Pendentes e selecione outro.",
+      );
+    }
+
     const { fotoKey, clientId, pontos, ...rest } = input;
     const viagem = await this.prisma.viagem.create({
       data: {
