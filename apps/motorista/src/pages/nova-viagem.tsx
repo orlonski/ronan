@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Check, Plus, Sparkles, X } from "lucide-react";
+import { Check, Sparkles, X } from "lucide-react";
 import { CriarViagemInput } from "@ronan/shared-types";
 import type { ExtrairTicketResult } from "@ronan/shared-types";
 import { ScreenHeader } from "@/components/screen-header";
@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { PhotoCapture } from "@/components/photo-capture";
-import { LocalNovoModal } from "@/components/local-novo-modal";
+import { DescargaPorGps } from "@/components/descarga-por-gps";
 import { humanizeApiError } from "@/lib/api";
 import { humanizeZodError } from "@/lib/validation";
 import { listPendingViagens, type PendingViagem } from "@/db/dexie";
@@ -78,9 +78,7 @@ export default function NovaViagemPage() {
   const [ocrConfidence, setOcrConfidence] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [extraLocais, setExtraLocais] = useState<Local[]>([]);
   const [kmEditadoManual, setKmEditadoManual] = useState(false);
-  const [novoLocalAberto, setNovoLocalAberto] = useState<null | "CARGA" | "DESCARGA">(null);
   const [hidratando, setHidratando] = useState<boolean>(modoEdit);
   const [pendingOriginal, setPendingOriginal] = useState<PendingViagem | null>(null);
 
@@ -142,11 +140,22 @@ export default function NovaViagemPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me.data]);
 
-  const todosLocais = useMemo<Local[]>(() => {
-    const base = cat.data?.locais ?? [];
-    const ids = new Set(base.map((l) => l.id));
-    return [...base, ...extraLocais.filter((l) => !ids.has(l.id))];
-  }, [cat.data?.locais, extraLocais]);
+  const todosLocais = useMemo<Local[]>(() => cat.data?.locais ?? [], [cat.data?.locais]);
+
+  // Nome do local de descarga selecionado (pra DescargaPorGps mostrar quando edita)
+  const nomeDescargaSelecionado = useMemo(() => {
+    if (!form.localDescargaId) return undefined;
+    return todosLocais.find((l) => l.id === form.localDescargaId)?.nome;
+  }, [form.localDescargaId, todosLocais]);
+
+  // Coords do local de carga selecionado (pra DescargaPorGps alertar se motorista
+  // tá lançando descarga no mesmo lugar da carga)
+  const localCargaCoords = useMemo(() => {
+    if (!form.localCargaId) return null;
+    const l = todosLocais.find((x) => x.id === form.localCargaId);
+    if (!l || l.lat == null || l.lng == null) return null;
+    return { lat: l.lat, lng: l.lng, nome: l.nome };
+  }, [form.localCargaId, todosLocais]);
 
   const veiculoOptions: SelectOption[] = useMemo(
     () =>
@@ -173,6 +182,7 @@ export default function NovaViagemPage() {
     [cat.data?.materiais],
   );
 
+  // Apenas locais de carga listados pro Select. Descarga vai via DescargaPorGps.
   const locaisFiltrados = useMemo(() => {
     const clienteId = form.clienteId || null;
     const noCliente = todosLocais.filter(
@@ -186,7 +196,6 @@ export default function NovaViagemPage() {
     });
     return {
       carga: noCliente.filter((l) => l.tipo === "CARGA" || l.tipo === "AMBOS").map(opt),
-      descarga: noCliente.filter((l) => l.tipo === "DESCARGA" || l.tipo === "AMBOS").map(opt),
     };
   }, [todosLocais, form.clienteId]);
 
@@ -355,8 +364,10 @@ export default function NovaViagemPage() {
 
       {cat.data && !hidratando && (
         <div className="space-y-4 p-4 pb-32">
-          <Field label="Foto do ticket" hint="opcional, mas ajuda na conferência">
+          <div className="space-y-2">
+            <FieldLabel label="Foto do ticket" hint="opcional, mas ajuda na conferência" />
             <PhotoCapture
+              label=""
               value={foto}
               obrigatorio={false}
               onChange={(novaFoto) => {
@@ -394,7 +405,7 @@ export default function NovaViagemPage() {
                 onDispensar={() => setSugestoesIa(null)}
               />
             )}
-          </Field>
+          </div>
 
           <Field label="Placa" markOcr={ocrCampos.has("veiculoId")}>
             <Select
@@ -462,17 +473,7 @@ export default function NovaViagemPage() {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <FieldLabel label="Local de carga" />
-              <button
-                type="button"
-                onClick={() => setNovoLocalAberto("CARGA")}
-                className="flex items-center gap-1 rounded-md px-2 py-1 text-sm font-bold text-primary active:opacity-75"
-              >
-                <Plus size={14} /> novo
-              </button>
-            </div>
+          <Field label="Local de carga">
             <Select
               value={form.localCargaId}
               onChange={(v) => update("localCargaId", v)}
@@ -482,29 +483,15 @@ export default function NovaViagemPage() {
               title="Local de carga"
               emptyMessage="Nenhum local de carga pra esse cliente"
             />
-          </div>
+          </Field>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <FieldLabel label="Local de descarga" />
-              <button
-                type="button"
-                onClick={() => setNovoLocalAberto("DESCARGA")}
-                className="flex items-center gap-1 rounded-md px-2 py-1 text-sm font-bold text-primary active:opacity-75"
-              >
-                <Plus size={14} /> novo
-              </button>
-            </div>
-            <Select
-              value={form.localDescargaId}
-              onChange={(v) => update("localDescargaId", v)}
-              options={locaisFiltrados.descarga}
-              placeholder="Escolha o local"
-              searchable
-              title="Local de descarga"
-              emptyMessage="Nenhum local de descarga"
-            />
-          </div>
+          <DescargaPorGps
+            clienteId={form.clienteId || null}
+            value={form.localDescargaId}
+            onChange={(v) => update("localDescargaId", v)}
+            nomeSelecionadoFallback={nomeDescargaSelecionado}
+            localCargaCoords={localCargaCoords}
+          />
 
           <Field label="Km rodados" markOcr={ocrCampos.has("km")}>
             <Input
@@ -557,18 +544,6 @@ export default function NovaViagemPage() {
           </Button>
         </div>
       )}
-
-      <LocalNovoModal
-        open={novoLocalAberto !== null}
-        tipo={novoLocalAberto ?? "CARGA"}
-        clienteId={form.clienteId || undefined}
-        onClose={() => setNovoLocalAberto(null)}
-        onCreated={(novo) => {
-          setExtraLocais((prev) => [...prev, novo]);
-          if (novoLocalAberto === "CARGA") update("localCargaId", novo.id);
-          else update("localDescargaId", novo.id);
-        }}
-      />
     </div>
   );
 }
