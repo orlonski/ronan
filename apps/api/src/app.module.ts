@@ -13,6 +13,7 @@ import { IaModule } from "./ia/ia.module";
 import { FechamentosModule } from "./fechamentos/fechamentos.module";
 import { ErrorsModule } from "./errors/errors.module";
 import { ErrorsExceptionFilter } from "./errors/errors.filter";
+import { EventosModule } from "./eventos/eventos.module";
 import { WhatsappModule } from "./whatsapp/whatsapp.module";
 import { NotificacoesModule } from "./notificacoes/notificacoes.module";
 
@@ -30,6 +31,7 @@ import { NotificacoesModule } from "./notificacoes/notificacoes.module";
     GeocodingModule,
     HealthModule,
     ErrorsModule,
+    EventosModule,
     WhatsappModule,
     NotificacoesModule,
   ],

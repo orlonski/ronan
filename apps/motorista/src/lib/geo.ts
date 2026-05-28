@@ -13,15 +13,19 @@ export type Coords = { lat: number; lng: number; precisao?: number };
  * Timeout 15s. enableHighAccuracy=true pra ter precisão de GPS em vez
  * de só wifi/IP.
  */
-export function pegarCoords(timeoutMs = 15_000): Promise<Coords | null> {
+export async function pegarCoords(timeoutMs = 15_000): Promise<Coords | null> {
+  // Lazy import pra evitar ciclo (event-reporter → api → ...)
+  const { reportarEvento } = await import("./event-reporter");
   if (typeof navigator === "undefined" || !navigator.geolocation) {
-    return Promise.resolve(null);
+    void reportarEvento("gps_falhou", { motivo: "hardware" });
+    return null;
   }
   return new Promise((resolve) => {
     let resolved = false;
     const timer = setTimeout(() => {
       if (resolved) return;
       resolved = true;
+      void reportarEvento("gps_falhou", { motivo: "timeout" });
       resolve(null);
     }, timeoutMs);
 
@@ -30,16 +34,26 @@ export function pegarCoords(timeoutMs = 15_000): Promise<Coords | null> {
         if (resolved) return;
         resolved = true;
         clearTimeout(timer);
-        resolve({
+        const coords = {
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
           precisao: pos.coords.accuracy,
+        };
+        void reportarEvento("gps_capturado", {
+          lat: coords.lat,
+          lng: coords.lng,
+          precisao: coords.precisao ?? null,
+          fonte: "current",
         });
+        resolve(coords);
       },
-      () => {
+      (err) => {
         if (resolved) return;
         resolved = true;
         clearTimeout(timer);
+        const motivo =
+          err.code === 1 ? "permissao" : err.code === 3 ? "timeout" : "hardware";
+        void reportarEvento("gps_falhou", { motivo, msg: err.message });
         resolve(null);
       },
       { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 30_000 },

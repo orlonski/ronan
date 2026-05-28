@@ -62,6 +62,7 @@ import {
 import { ValorComMinimo } from "@/components/valor-com-minimo";
 import { useHistoricoViagem } from "@/lib/fechamentos-api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { DiagnosticoViagem } from "./_components/diagnostico-viagem";
 
 type ViagemDetalhe = {
   id: string;
@@ -129,7 +130,7 @@ type ViagemDetalhe = {
   }>;
 };
 
-type Tab = "dados" | "historico";
+type Tab = "dados" | "historico" | "diagnostico";
 
 export default function ViagemDetalhePage({
   params,
@@ -247,6 +248,7 @@ export default function ViagemDetalhePage({
           [
             ["dados", "Dados"],
             ["historico", "Histórico de alterações"],
+            ["diagnostico", "Diagnóstico"],
           ] as const
         ).map(([key, label]) => (
           <button
@@ -584,6 +586,8 @@ export default function ViagemDetalhePage({
           </ol>
         </Card>
       )}
+
+      {tab === "diagnostico" && <DiagnosticoViagem viagemId={v.id} />}
 
       <Dialog open={dialogDivergente} onOpenChange={setDialogDivergente}>
         <DialogContent>

@@ -1,5 +1,6 @@
 import { AppState } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
+import { drenar as drenarEventos } from "./event-reporter";
 import {
   deletePendingAbastecimento,
   deletePendingPedagio,
@@ -419,19 +420,27 @@ export function startAutoSync(): void {
   autoSyncStarted = true;
 
   NetInfo.addEventListener((state) => {
-    if (state.isConnected) void drain();
+    if (state.isConnected) {
+      void drain();
+      void drenarEventos();
+    }
   });
 
   AppState.addEventListener("change", (s) => {
-    if (s === "active") void drain();
+    if (s === "active") {
+      void drain();
+      void drenarEventos();
+    }
   });
 
   setInterval(() => {
     void drain();
+    void drenarEventos();
   }, 60_000);
 
   // Boot: dispara depois de 2s pra dar tempo de tudo inicializar.
   setTimeout(() => {
     void drain();
+    void drenarEventos();
   }, 2_000);
 }

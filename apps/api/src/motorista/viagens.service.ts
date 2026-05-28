@@ -8,6 +8,7 @@ import { AcaoAuditoria, Prisma, type StatusViagem } from "@prisma/client";
 import type { CriarViagemInput } from "@ronan/shared-types";
 import { AuditoriaService } from "../auditoria/auditoria.service";
 import { aplicarMinimosCliente, serializarViagemComMinimos } from "../common/viagem-minimos";
+import { EventosService } from "../eventos/eventos.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
 import { ValidacaoLocalService } from "./validacao-local.service";
@@ -53,6 +54,7 @@ export class ViagensMotoristaService {
     private readonly uploads: UploadsService,
     private readonly validacao: ValidacaoLocalService,
     private readonly auditoria: AuditoriaService,
+    private readonly eventos: EventosService,
   ) {}
 
   async list(
@@ -317,6 +319,15 @@ export class ViagensMotoristaService {
       },
       include: VIAGEM_INCLUDE,
     });
+
+    // Backfill: eventos enviados antes da viagem chegar (offline) usam
+    // viagemClientId. Agora que a viagem existe, linka viagemId pros eventos
+    // ficarem visíveis na aba de Diagnóstico do dashboard.
+    try {
+      await this.eventos.reconciliarPorClientId(clientId, viagem.id);
+    } catch {
+      /* best-effort — eventos sem reconciliação ainda batem por clientId no fallback */
+    }
 
     // Se motorista sobrescreveu o km calculado pelo OSRM, registra na timeline.
     // Best-effort: falha no log não derruba a criação da viagem.

@@ -14,6 +14,7 @@ import { DescargaPorGps } from "@/components/descarga-por-gps";
 import { showAlert } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { fmtDataBR } from "@/lib/datetime";
+import { reportarEvento } from "@/lib/event-reporter";
 import { humanizeZodError } from "@/lib/validation";
 import { listPendingViagens, type PendingViagem } from "@/db/dexie";
 import {
@@ -358,6 +359,19 @@ export default function NovaViagemPage() {
           foto: foto ? { blob: foto.blob, mime: foto.mime } : undefined,
         });
       }
+      void reportarEvento(
+        "viagem_salva",
+        {
+          kmInformado: form.km,
+          kmCalculado: rota.data && "km" in rota.data ? rota.data.km : null,
+          kmFonte: rota.data && "fonte" in rota.data ? rota.data.fonte : null,
+          kmEditadoManual,
+          temFoto: !!foto,
+          ocrCampos: Array.from(ocrCampos),
+          modoEdit,
+        },
+        { viagemClientId: payload.clientId },
+      );
       navigate(-1);
     } catch (err) {
       setErro(humanizeApiError(err));
@@ -527,9 +541,22 @@ export default function NovaViagemPage() {
               maxLength={10}
             />
             {rota.data && "km" in rota.data && rota.data.km !== null && !kmEditadoManual && (
-              <p className="mt-1 text-xs text-muted-foreground">
-                Sugerido pela rota: {rota.data.km} km
+              <p
+                className={
+                  rota.data.fonte === "estimado_haversine"
+                    ? "mt-1 text-xs font-medium text-warning-foreground"
+                    : "mt-1 text-xs font-medium text-success"
+                }
+              >
+                {rota.data.fonte === "estimado_haversine"
+                  ? `≈ ${rota.data.km} km estimado por GPS (sem rede pra calcular preciso)`
+                  : rota.data.fonte === "cache_local"
+                    ? `✓ Estimado de cálculo anterior (${rota.data.km} km)`
+                    : `✓ Sugerido pela rota: ${rota.data.km} km`}
               </p>
+            )}
+            {rota.data && "km" in rota.data && rota.data.km === null && (
+              <p className="mt-1 text-xs text-muted-foreground">{rota.data.erro}</p>
             )}
           </Field>
 

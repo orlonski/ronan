@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import {
+  Activity,
   AlertCircle,
   Bell,
   Boxes,
@@ -76,6 +77,7 @@ const GRUPOS: Grupo[] = [
       { href: "/usuarios", label: "Usuários", icon: Users2 },
       { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle },
       { href: "/erros", label: "Erros", icon: AlertCircle },
+      { href: "/diagnosticos", label: "Diagnósticos", icon: Activity },
       { href: "/configuracoes/tracking", label: "Tracking GPS", icon: Settings },
       { href: "/configuracoes/ia", label: "Inteligência Artificial", icon: Sparkles },
       { href: "/configuracoes/agente-whatsapp", label: "Agente WhatsApp", icon: MessageCircle },

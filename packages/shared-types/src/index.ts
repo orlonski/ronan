@@ -16,3 +16,4 @@ export * from "./user";
 export * from "./push";
 export * from "./notificacao";
 export * from "./ia-ticket";
+export * from "./evento-motorista";

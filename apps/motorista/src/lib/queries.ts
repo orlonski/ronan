@@ -14,6 +14,9 @@ import {
   normalizarMe,
   normalizarViagem,
 } from "./compat";
+import { reportarEvento } from "./event-reporter";
+import { haversineMetros } from "./geo";
+import { getRotaCache, setRotaCache } from "./rota-cache";
 import { enqueueAbastecimento, enqueuePedagio, enqueueViagem } from "./sync";
 
 export type Veiculo = { id: string; placa: string; modelo: string | null };
@@ -451,7 +454,24 @@ export function useCriarAbastecimento() {
   };
 }
 
+const FATOR_HAVERSINE = 1.3;
+
+export type FonteRota =
+  | "osrm"
+  | "cache_server"
+  | "cache_local"
+  | "estimado_haversine";
+
 export type RotaCalculada =
+  | {
+      km: string;
+      duracaoSegundos: number | null;
+      geometria: string | null;
+      fonte: FonteRota;
+    }
+  | { km: null; erro: string };
+
+type RotaServerResponse =
   | {
       km: string;
       duracaoSegundos: number;
@@ -460,17 +480,123 @@ export type RotaCalculada =
     }
   | { km: null; erro: string };
 
+let qcGlobalRef: ReturnType<typeof useQueryClient> | null = null;
+export function setQueryClientGlobal(qc: ReturnType<typeof useQueryClient>): void {
+  qcGlobalRef = qc;
+}
+
 export function useCalcularRota(origemId?: string, destinoId?: string) {
-  return useQuery({
+  return useQuery<RotaCalculada>({
     queryKey: ["rota-calcular", origemId, destinoId],
     enabled: !!origemId && !!destinoId && origemId !== destinoId,
     staleTime: Infinity,
     retry: false,
-    queryFn: () =>
-      api.get<RotaCalculada>(
-        `/m/rotas/calcular?origem=${origemId}&destino=${destinoId}`,
-      ),
+    queryFn: async () => {
+      const oid = origemId!;
+      const did = destinoId!;
+      const t0 = Date.now();
+      void reportarEvento("rota_calculo_iniciado", { origemId: oid, destinoId: did });
+
+      try {
+        const res = await api.get<RotaServerResponse>(
+          `/m/rotas/calcular?origem=${oid}&destino=${did}`,
+        );
+        if (res.km !== null) {
+          void setRotaCache(oid, did, {
+            km: res.km,
+            duracaoSegundos: res.duracaoSegundos,
+            geometria: res.geometria,
+          });
+          const fonte: FonteRota = res.fonte === "cache" ? "cache_server" : "osrm";
+          void reportarEvento("rota_calculo_sucesso", {
+            km: res.km,
+            fonte,
+            duracaoMs: Date.now() - t0,
+          });
+          return {
+            km: res.km,
+            duracaoSegundos: res.duracaoSegundos,
+            geometria: res.geometria,
+            fonte,
+          };
+        }
+        const fallback = await tentarFallbacks(oid, did);
+        if (fallback) {
+          void reportarEvento("rota_calculo_sucesso", {
+            km: fallback.km,
+            fonte: fallback.fonte,
+            duracaoMs: Date.now() - t0,
+          });
+          return fallback;
+        }
+        void reportarEvento("rota_calculo_falhou", {
+          motivo: "sem_coordenadas",
+          apiErro: res.erro,
+          origemId: oid,
+          destinoId: did,
+        });
+        return { km: null, erro: res.erro } as RotaCalculada;
+      } catch (err) {
+        const isNet = err instanceof TypeError;
+        const fallback = await tentarFallbacks(oid, did);
+        if (fallback) {
+          void reportarEvento("rota_calculo_sucesso", {
+            km: fallback.km,
+            fonte: fallback.fonte,
+            duracaoMs: Date.now() - t0,
+          });
+          return fallback;
+        }
+        void reportarEvento("rota_calculo_falhou", {
+          motivo: isNet ? "offline_sem_cache_nem_coords" : "outro",
+          apiErro: (err as Error)?.message,
+          origemId: oid,
+          destinoId: did,
+        });
+        return {
+          km: null,
+          erro: isNet
+            ? "Sem internet e sem cálculo anterior dessa rota."
+            : "Não foi possível calcular a rota agora.",
+        } as RotaCalculada;
+      }
+    },
   });
+}
+
+async function tentarFallbacks(
+  origemId: string,
+  destinoId: string,
+): Promise<
+  | { km: string; duracaoSegundos: number | null; geometria: string | null; fonte: FonteRota }
+  | null
+> {
+  const cached = await getRotaCache(origemId, destinoId);
+  if (cached) {
+    return {
+      km: cached.km,
+      duracaoSegundos: cached.duracaoSegundos ?? null,
+      geometria: cached.geometria ?? null,
+      fonte: "cache_local",
+    };
+  }
+  const catalogos = qcGlobalRef?.getQueryData<Catalogos>(["catalogos"]);
+  if (!catalogos) return null;
+  const origem = catalogos.locais.find((l) => l.id === origemId);
+  const destino = catalogos.locais.find((l) => l.id === destinoId);
+  if (
+    !origem ||
+    !destino ||
+    origem.lat == null ||
+    origem.lng == null ||
+    destino.lat == null ||
+    destino.lng == null
+  ) {
+    return null;
+  }
+  const metros = haversineMetros(origem.lat, origem.lng, destino.lat, destino.lng);
+  const km = ((metros * FATOR_HAVERSINE) / 1000).toFixed(2);
+  return { km, duracaoSegundos: null, geometria: null, fonte: "estimado_haversine" };
 }
 
 export function useExcluirViagem() {

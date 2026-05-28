@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { AuditoriaModule } from "../auditoria/auditoria.module";
+import { EventosModule } from "../eventos/eventos.module";
 import { GeocodingModule } from "../geocoding/geocoding.module";
 import { RoteamentoModule } from "../roteamento/roteamento.module";
 import { TrackingConfigModule } from "../admin/tracking-config/tracking-config.module";
@@ -26,6 +27,7 @@ import { IaTicketController } from "./ia-ticket.controller";
     TrackingConfigModule,
     GeocodingModule,
     AuditoriaModule,
+    EventosModule,
   ],
   controllers: [
     MotoristaController,

@@ -210,6 +210,7 @@ model Motorista {
   whatsappSessao   WhatsappSessao?
   whatsappConvites WhatsappConvite[]
   notificacoes     Notificacao[]
+  eventos          EventoMotorista[]
   criadoPor        User?                @relation("CriouMotorista", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId      String?
 
@@ -584,6 +585,7 @@ model Viagem {
   pedagios          Pedagio[]
   pontos            ViagemPonto[]
   matchesFechamento FechamentoLinha[]
+  eventos           EventoMotorista[]
 
   @@index([motoristaId, data])
   @@index([veiculoId, data])
@@ -919,6 +921,41 @@ model ErrorLog {
   @@index([userId])
   @@index([resolvido, capturadoEm])
   @@map("error_logs")
+}
+
+/// Telemetria de operação do motorista. Eventos semânticos (tipos enumerados)
+/// pra investigar falhas silenciosas (rota não calculada, GPS falhou, viagem
+/// salva offline, etc). Diferente de ErrorLog que captura crashes JS, aqui é
+/// "isso aconteceu e queremos saber". Linkados a viagem (via id ou clientId)
+/// quando aplicável. Reconciliação: quando viagem chega no backend, faz
+/// UPDATE WHERE viagemClientId = ? AND viagemId IS NULL.
+model EventoMotorista {
+  id             String    @id // motorista gera uuid local (idempotência)
+  motorista      Motorista @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  motoristaId    String
+  viagem         Viagem?   @relation(fields: [viagemId], references: [id], onDelete: SetNull)
+  viagemId       String?
+  /// Pré-sync usa esse campo (viagem ainda não foi enviada). Após viagem
+  /// criada no backend, reconciliação popula viagemId.
+  viagemClientId String?
+  /// Snake_case enumerado em shared-types (TipoEvento). Aceita string livre
+  /// no banco pra permitir adicionar tipos novos sem migration.
+  tipo           String
+  /// Payload semântico (km, fonte, motivo, etc). Forma depende do tipo.
+  contexto       Json
+  online         Boolean
+  versaoApp      String?
+  /// 'motorista-app' | 'motorista-pwa'
+  origem         String
+  /// Timestamp do device quando o evento aconteceu.
+  capturadoEm    DateTime
+  recebidoEm     DateTime  @default(now())
+
+  @@index([motoristaId, capturadoEm])
+  @@index([viagemId, capturadoEm])
+  @@index([viagemClientId, capturadoEm])
+  @@index([tipo, capturadoEm])
+  @@map("eventos_motorista")
 }
 
 model Abastecimento {

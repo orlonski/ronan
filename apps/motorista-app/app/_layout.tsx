@@ -11,6 +11,9 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { AlertHost } from "@/components/ui/alert-dialog";
 import { loadTokens } from "@/lib/auth";
+import { drenar as drenarEventos } from "@/lib/event-reporter";
+import { setQueryClientGlobal } from "@/lib/queries";
+import { pruneExpired as pruneRotaCache } from "@/lib/rota-cache";
 import {
   enviarPendentes,
   instalarHandlersGlobais,
@@ -44,6 +47,13 @@ const queryClient = new QueryClient({
     queries: { retry: 1, staleTime: 60_000 },
   },
 });
+
+// Permite o useCalcularRota fora-de-hook (queryFn) ler cache de catalogos
+// pra calcular fallback haversine quando offline.
+setQueryClientGlobal(queryClient);
+
+// Prune entradas expiradas do cache local de rotas no boot.
+void pruneRotaCache();
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(getAuthState() !== null);
@@ -87,6 +97,11 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // (capturados antes do login ou quando estava offline).
   useEffect(() => {
     if (loggedIn) void enviarPendentes();
+  }, [loggedIn]);
+
+  // Idem pra fila de eventos de telemetria — drena após login.
+  useEffect(() => {
+    if (loggedIn) void drenarEventos();
   }, [loggedIn]);
 
   // Quando o sync completa um item (viagem ou pedágio), invalida as queries

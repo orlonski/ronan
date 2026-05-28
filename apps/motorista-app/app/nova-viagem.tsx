@@ -22,6 +22,7 @@ import { DescargaPorGps } from "@/components/descarga-por-gps";
 import { showAlert, showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { fmtDataBR, hojeISO } from "@/lib/datetime";
+import { reportarEvento } from "@/lib/event-reporter";
 import { humanizeZodError } from "@/lib/validation";
 import { CriarViagemInput } from "@ronan/shared-types";
 import { formatarDistancia, haversineMetros, localMaisProximo, pegarCoords, pegarCoordsRapido } from "@/lib/geo";
@@ -516,6 +517,22 @@ export default function NovaViagem() {
           foto: foto ?? undefined,
         });
       }
+      // Telemetria: registra estado da viagem no momento do salvar pra
+      // investigação posterior no dashboard (fontes do KM, foto, OCR, GPS).
+      void reportarEvento(
+        "viagem_salva",
+        {
+          kmInformado: form.km,
+          kmCalculado: rota.data && "km" in rota.data ? rota.data.km : null,
+          kmFonte: rota.data && "fonte" in rota.data ? rota.data.fonte : null,
+          kmEditadoManual,
+          temFoto: !!foto,
+          ocrCampos: Array.from(ocrCampos),
+          temGps: !!coords,
+          modoEdit,
+        },
+        { viagemClientId: payload.clientId },
+      );
       // Limpa o tracking armazenado localmente — viagem ja salva
       if (tracking && !modoEdit) {
         const { clearViagemAndamento } = await import("@/lib/tracking-storage");
@@ -840,7 +857,10 @@ function KmHint({
   loading,
   editado,
 }: {
-  rota: { km: string; duracaoSegundos: number; fonte: string } | { km: null; erro: string } | null;
+  rota:
+    | { km: string; duracaoSegundos: number | null; fonte: string }
+    | { km: null; erro: string }
+    | null;
   loading: boolean;
   editado: boolean;
 }) {
@@ -853,7 +873,8 @@ function KmHint({
   if (rota.km === null) {
     return <Text className="text-xs text-muted-foreground">{rota.erro}</Text>;
   }
-  const minutos = Math.round(rota.duracaoSegundos / 60);
+  const minutos =
+    rota.duracaoSegundos != null ? Math.round(rota.duracaoSegundos / 60) : null;
   if (editado) {
     return (
       <Text className="text-xs text-muted-foreground">
@@ -861,9 +882,24 @@ function KmHint({
       </Text>
     );
   }
+  if (rota.fonte === "estimado_haversine") {
+    return (
+      <Text className="text-xs font-medium text-warning-foreground">
+        ≈ {rota.km} km estimado por GPS (sem rede pra calcular preciso)
+      </Text>
+    );
+  }
+  if (rota.fonte === "cache_local") {
+    return (
+      <Text className="text-xs font-medium text-success">
+        ✓ Estimado de cálculo anterior ({rota.km} km)
+      </Text>
+    );
+  }
   return (
     <Text className="text-xs font-medium text-success">
-      ✓ Calculado automaticamente ({rota.km} km · {minutos} min)
+      ✓ Calculado automaticamente ({rota.km} km
+      {minutos != null ? ` · ${minutos} min` : ""})
     </Text>
   );
 }

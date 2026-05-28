@@ -82,27 +82,51 @@ export function localMaisProximo<L extends LocalComCoords>(
  * evita crash no boot do expo-router.
  */
 export async function pegarCoords(): Promise<{ lat: number; lng: number } | null> {
+  // Lazy import pra não criar ciclo (event-reporter usa api → queries → geo).
+  const { reportarEvento } = await import("./event-reporter");
   try {
     const Location = await import("expo-location");
     const cur = await Location.getForegroundPermissionsAsync();
     if (cur.status !== "granted") {
       const r = await Location.requestForegroundPermissionsAsync();
-      if (r.status !== "granted") return null;
+      if (r.status !== "granted") {
+        void reportarEvento("gps_falhou", { motivo: "permissao" });
+        return null;
+      }
     }
     const last = await Location.getLastKnownPositionAsync({
       maxAge: 60_000,
       requiredAccuracy: 200,
     });
     if (last) {
+      void reportarEvento("gps_capturado", {
+        lat: last.coords.latitude,
+        lng: last.coords.longitude,
+        precisao: last.coords.accuracy ?? null,
+        fonte: "last_known",
+      });
       return { lat: last.coords.latitude, lng: last.coords.longitude };
     }
     const result = await Promise.race([
       Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 15_000)),
     ]);
-    if (!result || !("coords" in result)) return null;
+    if (!result || !("coords" in result)) {
+      void reportarEvento("gps_falhou", { motivo: "timeout" });
+      return null;
+    }
+    void reportarEvento("gps_capturado", {
+      lat: result.coords.latitude,
+      lng: result.coords.longitude,
+      precisao: result.coords.accuracy ?? null,
+      fonte: "current",
+    });
     return { lat: result.coords.latitude, lng: result.coords.longitude };
-  } catch {
+  } catch (err) {
+    void reportarEvento("gps_falhou", {
+      motivo: "hardware",
+      msg: (err as Error)?.message,
+    });
     return null;
   }
 }
