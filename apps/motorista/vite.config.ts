@@ -9,13 +9,13 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       injectRegister: "auto",
-      includeAssets: ["favicon.ico", "robots.txt"],
+      includeAssets: ["favicon.ico", "robots.txt", "icon-192.png", "icon-512.png"],
       manifest: {
-        name: "Ronan — Motorista",
-        short_name: "Ronan",
-        description: "Lançamento de viagens da transportadora",
-        theme_color: "#1e40af",
-        background_color: "#ffffff",
+        name: "Schaba — Motorista",
+        short_name: "Schaba",
+        description: "App do motorista da Schaba. Lança viagens, pedágios e abastecimentos com suporte offline.",
+        theme_color: "#13316b",
+        background_color: "#13316b",
         display: "standalone",
         orientation: "portrait",
         lang: "pt-BR",
@@ -26,28 +26,63 @@ export default defineConfig({
           { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
           { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
+        categories: ["business", "productivity"],
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,png,ico}"],
         navigateFallback: "/index.html",
+        navigateFallbackDenylist: [/^\/m\//],
         runtimeCaching: [
           {
             urlPattern: ({ request }) => request.destination === "image",
             handler: "CacheFirst",
-            options: { cacheName: "imgs", expiration: { maxEntries: 64 } },
+            options: { cacheName: "imgs", expiration: { maxEntries: 128, maxAgeSeconds: 60 * 60 * 24 * 30 } },
           },
           {
-            urlPattern: ({ url }) => url.pathname.startsWith("/m/cache/"),
-            handler: "StaleWhileRevalidate",
-            options: { cacheName: "cadastros" },
+            // GETs no /m/* (catalogos, viagens, resumo) — tenta rede, cai pro cache se offline
+            urlPattern: ({ url, request }) => url.pathname.startsWith("/m/") && request.method === "GET",
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "api-m",
+              networkTimeoutSeconds: 8,
+              expiration: { maxEntries: 64, maxAgeSeconds: 60 * 60 * 24 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
           },
         ],
       },
-      devOptions: { enabled: true, type: "module" },
+      devOptions: { enabled: false, type: "module" },
     }),
   ],
   resolve: {
-    alias: { "@": path.resolve(__dirname, "./src") },
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+      // Aponta direto pro src TS do shared-types — evita CJS->ESM dance e o build
+      // do dashboard (Next) continua usando o dist/ via package.main.
+      "@ronan/shared-types": path.resolve(__dirname, "../../packages/shared-types/src/index.ts"),
+    },
   },
   server: { port: 3002, host: true },
+  optimizeDeps: {
+    // shared-types é CJS (output do tsc com module: commonjs). Pré-bundle pro
+    // Rollup conseguir resolver named exports estaticamente.
+    include: ["@ronan/shared-types"],
+  },
+  build: {
+    target: "es2020",
+    sourcemap: false,
+    commonjsOptions: {
+      transformMixedEsModules: true,
+    },
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ["react", "react-dom", "react-router-dom"],
+          query: ["@tanstack/react-query"],
+          // Leaflet só carrega na tela de detalhe da viagem, mantém em chunk próprio
+          leaflet: ["leaflet", "react-leaflet"],
+        },
+      },
+    },
+  },
 });

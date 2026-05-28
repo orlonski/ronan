@@ -1,185 +1,226 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { AddressAutocomplete } from "./address-autocomplete";
-import { useCriarLocal, type Local, type SugestaoEndereco } from "@/lib/queries";
+import { humanizeApiError } from "@/lib/api";
+import { humanizeZodError } from "@/lib/validation";
+import { useCriarLocal, type Local } from "@/lib/queries";
+import { z } from "zod";
 
-type Tipo = "CARGA" | "DESCARGA" | "AMBOS";
+const LocalNovoInput = z.object({
+  nome: z.string().min(2, "Nome muito curto").max(120),
+  cidade: z.string().min(2, "Cidade obrigatória").max(80),
+  uf: z.string().length(2, "UF: 2 letras"),
+  tipo: z.enum(["CARGA", "DESCARGA", "AMBOS"]),
+  logradouro: z.string().min(2, "Endereço obrigatório").max(160),
+  numero: z.string().max(20).optional(),
+  bairro: z.string().max(60).optional(),
+  cep: z.string().max(10).optional(),
+  pontoReferencia: z.string().max(160).optional(),
+});
 
+const UFS = [
+  "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA",
+  "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN",
+  "RO", "RR", "RS", "SC", "SE", "SP", "TO",
+];
+
+/**
+ * Modal pra motorista cadastrar local novo direto do Nova Viagem
+ * sem perder o que já preencheu. Espelha o local-novo-modal do nativo
+ * simplificado pro PWA (sem busca via GPS).
+ */
 export function LocalNovoModal({
   open,
+  tipo,
+  clienteId,
   onClose,
   onCreated,
-  clienteId,
-  tipoSugerido = "AMBOS",
 }: {
   open: boolean;
+  tipo: "CARGA" | "DESCARGA" | "AMBOS";
+  clienteId?: string;
   onClose: () => void;
   onCreated: (l: Local) => void;
-  clienteId?: string;
-  tipoSugerido?: Tipo;
 }) {
   const criar = useCriarLocal();
+  const [erro, setErro] = useState<string | null>(null);
   const [nome, setNome] = useState("");
+  const [cidade, setCidade] = useState("");
+  const [uf, setUf] = useState("SP");
   const [logradouro, setLogradouro] = useState("");
   const [numero, setNumero] = useState("");
   const [bairro, setBairro] = useState("");
-  const [cidade, setCidade] = useState("");
-  const [uf, setUf] = useState("PR");
-  const [cep, setCep] = useState("");
-  const [pontoReferencia, setPontoReferencia] = useState("");
-  const [tipo, setTipo] = useState<Tipo>(tipoSugerido);
-  const [lat, setLat] = useState<number | null>(null);
-  const [lng, setLng] = useState<number | null>(null);
-  const [erro, setErro] = useState<string | null>(null);
+  const [referencia, setReferencia] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    setErro(null);
+    setNome("");
+    setCidade("");
+    setUf("SP");
+    setLogradouro("");
+    setNumero("");
+    setBairro("");
+    setReferencia("");
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
 
   if (!open) return null;
-
-  function reset() {
-    setNome(""); setLogradouro(""); setNumero(""); setBairro("");
-    setCidade(""); setUf("PR"); setCep(""); setPontoReferencia("");
-    setTipo(tipoSugerido); setLat(null); setLng(null); setErro(null);
-  }
-
-  function aplicarSugestao(s: SugestaoEndereco) {
-    if (!nome && s.nome) setNome(s.nome);
-    setLogradouro(s.logradouro ?? s.nome ?? "");
-    setNumero(s.numero ?? "");
-    setBairro(s.bairro ?? "");
-    setCidade(s.cidade);
-    setUf(s.uf);
-    setCep(s.cep ?? "");
-    setLat(s.lat ?? null);
-    setLng(s.lng ?? null);
-  }
 
   async function salvar(e: React.FormEvent) {
     e.preventDefault();
     setErro(null);
-    if (!nome.trim() || !logradouro.trim() || !cidade.trim() || !uf.trim()) {
-      setErro("Preencha nome, endereço e cidade.");
+    const parsed = LocalNovoInput.safeParse({
+      nome: nome.trim(),
+      cidade: cidade.trim(),
+      uf: uf.toUpperCase(),
+      tipo,
+      logradouro: logradouro.trim(),
+      numero: numero.trim() || undefined,
+      bairro: bairro.trim() || undefined,
+      pontoReferencia: referencia.trim() || undefined,
+    });
+    if (!parsed.success) {
+      setErro(humanizeZodError(parsed.error));
       return;
     }
     try {
       const novo = await criar.mutateAsync({
-        nome: nome.trim(),
-        logradouro: logradouro.trim(),
-        numero: numero.trim() || undefined,
-        bairro: bairro.trim() || undefined,
-        cidade: cidade.trim(),
-        uf: uf.trim().toUpperCase(),
-        cep: cep ? cep.replace(/\D/g, "") : undefined,
-        pontoReferencia: pontoReferencia.trim() || undefined,
-        tipo,
-        clienteId,
-        lat: lat ?? undefined,
-        lng: lng ?? undefined,
+        ...parsed.data,
+        clienteIds: clienteId ? [clienteId] : [],
       });
       onCreated(novo);
-      reset();
       onClose();
     } catch (err) {
-      setErro((err as Error).message || "Erro ao salvar local");
+      setErro(humanizeApiError(err));
     }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center">
-      <div className="max-h-[90vh] w-full overflow-y-auto rounded-t-2xl bg-background p-4 sm:max-w-md sm:rounded-2xl">
-        <header className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Cadastrar local novo</h2>
-          <Button variant="ghost" size="icon" onClick={() => { reset(); onClose(); }}>
-            <X className="h-5 w-5" />
-          </Button>
-        </header>
+    <div className="fixed inset-0 z-50 flex flex-col bg-background">
+      <div className="bg-brand px-4 pb-3 pt-safe">
+        <div className="flex items-center gap-3 pt-3">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar"
+            className="flex h-12 w-12 items-center justify-center rounded-full bg-white/15 active:bg-white/25"
+          >
+            <X size={22} color="white" />
+          </button>
+          <h2 className="flex-1 truncate text-2xl font-bold text-white">
+            Cadastrar local de {tipo === "CARGA" ? "carga" : tipo === "DESCARGA" ? "descarga" : "carga/descarga"}
+          </h2>
+        </div>
+      </div>
 
-        <form onSubmit={salvar} className="space-y-3">
-          <div className="space-y-1.5">
-            <Label>Nome do local *</Label>
+      <form onSubmit={salvar} className="flex-1 space-y-4 overflow-y-auto p-4 pb-32">
+        <div className="space-y-2">
+          <Label htmlFor="ln-nome">Nome do local</Label>
+          <Input
+            id="ln-nome"
+            value={nome}
+            onChange={(e) => setNome(e.target.value)}
+            placeholder="Ex.: Pedreira Bom Jardim"
+            maxLength={120}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="ln-end">Endereço</Label>
+          <Input
+            id="ln-end"
+            value={logradouro}
+            onChange={(e) => setLogradouro(e.target.value)}
+            placeholder="Rua ou rodovia"
+            maxLength={160}
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label htmlFor="ln-num">Número</Label>
             <Input
-              required
-              placeholder='ex: "Pedreira Souza Naves — balança 2"'
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              Nome específico ajuda na conferência depois.
-            </p>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Buscar endereço</Label>
-            <AddressAutocomplete
-              value={logradouro}
-              onChange={setLogradouro}
-              onSelect={aplicarSugestao}
+              id="ln-num"
+              value={numero}
+              onChange={(e) => setNumero(e.target.value)}
+              placeholder="opcional"
+              maxLength={20}
             />
           </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            <div className="space-y-1.5">
-              <Label>Número</Label>
-              <Input value={numero} onChange={(e) => setNumero(e.target.value)} />
-            </div>
-            <div className="col-span-2 space-y-1.5">
-              <Label>Bairro</Label>
-              <Input value={bairro} onChange={(e) => setBairro(e.target.value)} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            <div className="col-span-2 space-y-1.5">
-              <Label>Cidade *</Label>
-              <Input required value={cidade} onChange={(e) => setCidade(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>UF *</Label>
-              <Input
-                required
-                maxLength={2}
-                value={uf}
-                onChange={(e) => setUf(e.target.value.toUpperCase())}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Ponto de referência</Label>
+          <div className="space-y-2">
+            <Label htmlFor="ln-bairro">Bairro</Label>
             <Input
-              value={pontoReferencia}
-              onChange={(e) => setPontoReferencia(e.target.value)}
-              placeholder='ex: "portaria fundos"'
+              id="ln-bairro"
+              value={bairro}
+              onChange={(e) => setBairro(e.target.value)}
+              placeholder="opcional"
+              maxLength={60}
             />
           </div>
+        </div>
 
-          <div className="space-y-1.5">
-            <Label>Tipo</Label>
-            <Select value={tipo} onChange={(e) => setTipo(e.target.value as Tipo)}>
-              <option value="AMBOS">Carga e descarga</option>
-              <option value="CARGA">Apenas carga</option>
-              <option value="DESCARGA">Apenas descarga</option>
-            </Select>
+        <div className="grid grid-cols-[1fr_120px] gap-3">
+          <div className="space-y-2">
+            <Label htmlFor="ln-cidade">Cidade</Label>
+            <Input
+              id="ln-cidade"
+              value={cidade}
+              onChange={(e) => setCidade(e.target.value)}
+              placeholder="Cidade"
+              maxLength={80}
+            />
           </div>
-
-          {erro && <p className="text-sm text-red-600">{erro}</p>}
-
-          <div className="flex gap-2 pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="flex-1"
-              onClick={() => { reset(); onClose(); }}
-            >
-              Cancelar
-            </Button>
-            <Button type="submit" className="flex-1" disabled={criar.isPending}>
-              {criar.isPending ? "Salvando..." : "Salvar local"}
-            </Button>
+          <div className="space-y-2">
+            <Label>UF</Label>
+            <Select
+              value={uf}
+              onChange={setUf}
+              options={UFS.map((u) => ({ value: u, label: u }))}
+              title="UF"
+              placeholder="UF"
+            />
           </div>
-        </form>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="ln-ref">Ponto de referência</Label>
+          <Input
+            id="ln-ref"
+            value={referencia}
+            onChange={(e) => setReferencia(e.target.value)}
+            placeholder="opcional — ajuda a identificar"
+            maxLength={160}
+          />
+        </div>
+
+        {erro && (
+          <div className="rounded-xl border-2 border-destructive bg-destructive/10 p-3">
+            <p className="text-base font-medium text-destructive whitespace-pre-line">{erro}</p>
+          </div>
+        )}
+      </form>
+
+      <div className="border-t border-border bg-background p-4 pb-safe">
+        <Button
+          onClick={salvar}
+          size="xl"
+          className="w-full"
+          loading={criar.isPending}
+        >
+          {criar.isPending ? "Salvando..." : "Salvar local"}
+        </Button>
       </div>
     </div>
   );

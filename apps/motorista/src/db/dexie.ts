@@ -1,7 +1,12 @@
 import Dexie, { type EntityTable } from "dexie";
-import type { Catalogos, Me, Viagem, Pedagio } from "@/lib/queries";
 
 export type SyncStatus = "pending" | "syncing" | "error";
+
+export type ZodIssueSaved = {
+  path: string;
+  code: string;
+  message: string;
+};
 
 export type PendingViagem = {
   clientId: string;
@@ -9,56 +14,55 @@ export type PendingViagem = {
   fotoBlob?: Blob;
   fotoMime?: string;
   status: SyncStatus;
-  errorMsg?: string;
   attempts: number;
   createdAt: number;
   lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
 };
 
 export type PendingPedagio = {
   clientId: string;
   payload: Record<string, unknown>;
   status: SyncStatus;
-  errorMsg?: string;
   attempts: number;
   createdAt: number;
   lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
 };
 
-export type CachedMe = {
-  id: "current";
-  data: Me;
-  cachedAt: number;
+export type PendingAbastecimento = {
+  clientId: string;
+  payload: Record<string, unknown>;
+  fotoBlob?: Blob;
+  fotoMime?: string;
+  status: SyncStatus;
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
 };
 
-export type CachedCatalogos = {
-  id: "current";
-  data: Catalogos;
-  cachedAt: number;
-};
-
-export type CachedViagens = {
-  id: "current";
-  data: Viagem[];
-  cachedAt: number;
-};
-
-export type CachedPedagios = {
-  id: "current";
-  data: Pedagio[];
-  cachedAt: number;
+export type CacheEntry = {
+  key: string;
+  v: unknown;
+  t: number;
 };
 
 class RonanDB extends Dexie {
   pendingViagens!: EntityTable<PendingViagem, "clientId">;
   pendingPedagios!: EntityTable<PendingPedagio, "clientId">;
-  meCache!: EntityTable<CachedMe, "id">;
-  catalogos!: EntityTable<CachedCatalogos, "id">;
-  viagensCache!: EntityTable<CachedViagens, "id">;
-  pedagiosCache!: EntityTable<CachedPedagios, "id">;
+  pendingAbastecimentos!: EntityTable<PendingAbastecimento, "clientId">;
+  cache!: EntityTable<CacheEntry, "key">;
 
   constructor() {
     super("ronan-motorista");
+    // v1-v2 vieram do PWA antigo (catalogos/viagensCache/pedagiosCache/meCache).
     this.version(1).stores({
       pendingViagens: "clientId, status, createdAt",
       pendingPedagios: "clientId, status, createdAt",
@@ -69,7 +73,100 @@ class RonanDB extends Dexie {
     this.version(2).stores({
       meCache: "id",
     });
+    // v3: novo schema unificado de cache + abastecimentos pendentes.
+    this.version(3).stores({
+      pendingViagens: "clientId, status, createdAt",
+      pendingPedagios: "clientId, status, createdAt",
+      pendingAbastecimentos: "clientId, status, createdAt",
+      cache: "key",
+      // Tabelas antigas continuam declaradas (sem rebuild) — Dexie só dropa
+      // se eu omitir, e quero migrar opcionalmente, não perder dados.
+      catalogos: null,
+      viagensCache: null,
+      pedagiosCache: null,
+      meCache: null,
+    });
   }
 }
 
 export const db = new RonanDB();
+
+// ===== Helpers de cache key-value (espelha o database.ts do nativo) =====
+
+const CACHE_PREFIX = "q:";
+
+export async function cacheGet<T>(key: string): Promise<T | null> {
+  try {
+    const row = await db.cache.get(CACHE_PREFIX + key);
+    if (!row) return null;
+    return row.v as T;
+  } catch {
+    return null;
+  }
+}
+
+export async function cachePut<T>(key: string, value: T): Promise<void> {
+  try {
+    await db.cache.put({ key: CACHE_PREFIX + key, v: value, t: Date.now() });
+  } catch {
+    /* sem espaço / corrupted — ignora silenciosamente */
+  }
+}
+
+export async function cacheDelete(key: string): Promise<void> {
+  try {
+    await db.cache.delete(CACHE_PREFIX + key);
+  } catch {
+    /* */
+  }
+}
+
+// ===== Outbox helpers (mesma API do nativo, sobre Dexie) =====
+
+export async function listPendingViagens(): Promise<PendingViagem[]> {
+  try {
+    return await db.pendingViagens.orderBy("createdAt").reverse().toArray();
+  } catch {
+    return [];
+  }
+}
+
+export async function listPendingPedagios(): Promise<PendingPedagio[]> {
+  try {
+    return await db.pendingPedagios.orderBy("createdAt").reverse().toArray();
+  } catch {
+    return [];
+  }
+}
+
+export async function listPendingAbastecimentos(): Promise<PendingAbastecimento[]> {
+  try {
+    return await db.pendingAbastecimentos.orderBy("createdAt").reverse().toArray();
+  } catch {
+    return [];
+  }
+}
+
+export async function upsertPendingViagem(item: PendingViagem): Promise<void> {
+  await db.pendingViagens.put(item);
+}
+
+export async function upsertPendingPedagio(item: PendingPedagio): Promise<void> {
+  await db.pendingPedagios.put(item);
+}
+
+export async function upsertPendingAbastecimento(item: PendingAbastecimento): Promise<void> {
+  await db.pendingAbastecimentos.put(item);
+}
+
+export async function deletePendingViagem(clientId: string): Promise<void> {
+  await db.pendingViagens.delete(clientId);
+}
+
+export async function deletePendingPedagio(clientId: string): Promise<void> {
+  await db.pendingPedagios.delete(clientId);
+}
+
+export async function deletePendingAbastecimento(clientId: string): Promise<void> {
+  await db.pendingAbastecimentos.delete(clientId);
+}

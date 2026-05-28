@@ -9,7 +9,11 @@ export function saveTokens(t: Tokens) {
 export function loadTokens(): Tokens | null {
   const raw = localStorage.getItem(KEY);
   if (!raw) return null;
-  try { return JSON.parse(raw) as Tokens; } catch { return null; }
+  try {
+    return JSON.parse(raw) as Tokens;
+  } catch {
+    return null;
+  }
 }
 
 export function clearTokens() {

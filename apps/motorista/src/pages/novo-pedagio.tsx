@@ -1,13 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Check } from "lucide-react";
+import { Check } from "lucide-react";
+import { CriarPedagioInput } from "@ronan/shared-types";
+import { ScreenHeader } from "@/components/screen-header";
 import { Button } from "@/components/ui/button";
+import { DateField } from "@/components/ui/date-field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
+import { Select, type SelectOption } from "@/components/ui/select";
+import { humanizeApiError } from "@/lib/api";
+import { humanizeZodError } from "@/lib/validation";
+import { hojeISO } from "@/lib/datetime";
 import { useCatalogos, useCriarPedagio, useMe } from "@/lib/queries";
-
-const today = () => new Date().toISOString().slice(0, 10);
+import { gerarClientId } from "@/lib/utils";
 
 export default function NovoPedagioPage() {
   const navigate = useNavigate();
@@ -16,92 +21,135 @@ export default function NovoPedagioPage() {
   const criar = useCriarPedagio();
 
   const [veiculoId, setVeiculoId] = useState("");
-  const [data, setData] = useState(today());
-  const [pracaPedagio, setPraca] = useState("");
+  const [data, setData] = useState(hojeISO());
+  const [pracaPedagio, setPracaPedagio] = useState("");
   const [valor, setValor] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
     if (me.data?.veiculoDefaultId && !veiculoId) {
       setVeiculoId(me.data.veiculoDefaultId);
     }
-  }, [me.data]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me.data]);
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
+  const veiculoOptions: SelectOption[] = useMemo(
+    () =>
+      (cat.data?.veiculos ?? []).map((v) => ({
+        value: v.id,
+        label: v.placa,
+        sublabel: v.modelo ?? undefined,
+      })),
+    [cat.data?.veiculos],
+  );
+
+  async function salvar() {
+    setErro(null);
+    if (!veiculoId) return setErro("Escolha a placa.");
+    if (!pracaPedagio.trim()) return setErro("Informe a praça do pedágio.");
+    if (!valor.trim()) return setErro("Informe o valor.");
+
+    const valorNum = parseFloat(valor.replace(",", "."));
+    if (!Number.isFinite(valorNum) || valorNum <= 0) {
+      return setErro("Valor inválido.");
+    }
+
     setSubmitting(true);
     try {
-      await criar({
-        clientId: crypto.randomUUID(),
+      const payload = {
+        clientId: gerarClientId(),
         veiculoId,
         data,
         pracaPedagio: pracaPedagio.trim(),
-        valor: parseFloat(valor.replace(",", ".")),
-      });
-      navigate("/", { replace: true });
+        valor: valorNum,
+      };
+
+      const parsed = CriarPedagioInput.safeParse(payload);
+      if (!parsed.success) {
+        setErro(humanizeZodError(parsed.error));
+        setSubmitting(false);
+        return;
+      }
+
+      await criar(payload);
+      navigate(-1);
     } catch (err) {
-      setError((err as Error).message || "Erro ao salvar");
+      setErro(humanizeApiError(err));
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <div className="mx-auto max-w-md p-4">
-      <header className="mb-4 flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <h1 className="text-xl font-semibold">Novo pedágio</h1>
-      </header>
+    <div className="flex min-h-screen-safe flex-col bg-background pb-20">
+      <ScreenHeader title="Novo pedágio" />
 
-      {cat.isLoading && <p className="text-sm text-muted-foreground">Carregando dados...</p>}
+      {(cat.isLoading || me.isLoading) && !cat.data && !me.data && (
+        <div className="py-8 text-center text-sm text-muted-foreground">Carregando dados...</div>
+      )}
 
       {cat.data && (
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div className="space-y-1.5">
+        <div className="space-y-4 p-4 pb-32">
+          <div className="space-y-2">
             <Label>Placa</Label>
-            <Select required value={veiculoId} onChange={(e) => setVeiculoId(e.target.value)}>
-              <option value="">— escolha —</option>
-              {cat.data.veiculos.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.placa}{v.modelo ? ` · ${v.modelo}` : ""}
-                </option>
-              ))}
-            </Select>
+            <Select
+              value={veiculoId}
+              onChange={setVeiculoId}
+              options={veiculoOptions}
+              placeholder="Escolha a placa"
+              searchable
+              title="Placa"
+            />
           </div>
 
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             <Label>Data</Label>
-            <Input type="date" required value={data} onChange={(e) => setData(e.target.value)} />
+            <DateField value={data} onChange={setData} disabled={submitting} />
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Praça de pedágio</Label>
+          <div className="space-y-2">
+            <Label htmlFor="praca">Praça do pedágio</Label>
             <Input
-              required
-              placeholder='ex: "BR-376 km 503"'
+              id="praca"
               value={pracaPedagio}
-              onChange={(e) => setPraca(e.target.value)}
+              onChange={(e) => setPracaPedagio(e.target.value)}
+              placeholder='ex: "Praça Reg. Norte BR-376"'
+              autoCapitalize="words"
+              disabled={submitting}
+              maxLength={120}
             />
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Valor (R$)</Label>
+          <div className="space-y-2">
+            <Label htmlFor="valor">Valor (R$)</Label>
             <Input
-              required inputMode="decimal" placeholder="0,00"
-              value={valor} onChange={(e) => setValor(e.target.value)}
+              id="valor"
+              value={valor}
+              onChange={(e) => setValor(e.target.value)}
+              inputMode="decimal"
+              placeholder="0,00"
+              disabled={submitting}
+              maxLength={10}
             />
+            <p className="text-xs text-muted-foreground">Em R$</p>
           </div>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {erro && (
+            <p className="rounded-xl border-2 border-destructive bg-destructive/10 p-3 text-sm font-medium text-destructive whitespace-pre-line">
+              {erro}
+            </p>
+          )}
+        </div>
+      )}
 
-          <Button type="submit" size="lg" className="w-full" disabled={submitting}>
-            <Check className="h-5 w-5" /> {submitting ? "Salvando..." : "Salvar pedágio"}
+      {cat.data && (
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background p-4 pb-safe">
+          <Button onClick={salvar} size="xl" className="w-full" loading={submitting}>
+            <Check size={20} />
+            {submitting ? "Salvando..." : "Salvar pedágio"}
           </Button>
-        </form>
+        </div>
       )}
     </div>
   );

@@ -5,20 +5,24 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatBR(date: Date | string): string {
-  const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleDateString("pt-BR");
+export function fmtNum(v: string | number, casas: number): string {
+  const n = typeof v === "string" ? parseFloat(v) : v;
+  if (Number.isNaN(n)) return String(v);
+  return n.toLocaleString("pt-BR", {
+    minimumFractionDigits: casas,
+    maximumFractionDigits: casas,
+  });
 }
 
-export function formatBRL(value: number | string): string {
-  const n = typeof value === "string" ? parseFloat(value) : value;
+export function fmtBRL(v: string | number): string {
+  const n = typeof v === "string" ? parseFloat(v) : v;
+  if (Number.isNaN(n)) return String(v);
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-export function formatNumber(value: number | string, fractionDigits = 2): string {
-  const n = typeof value === "string" ? parseFloat(value) : value;
-  return n.toLocaleString("pt-BR", {
-    minimumFractionDigits: fractionDigits,
-    maximumFractionDigits: fractionDigits,
-  });
+export function gerarClientId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }

@@ -1,0 +1,271 @@
+import { lazy, Suspense } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  ArrowDown,
+  ArrowUp,
+  Building2,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
+import { ScreenHeader } from "@/components/screen-header";
+import { AuthedImage } from "@/components/authed-image";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { humanizeApiError } from "@/lib/api";
+import { fmtDataBR } from "@/lib/datetime";
+import { fmtNum } from "@/lib/utils";
+import { useExcluirViagem, useViagemDetalhe } from "@/lib/queries";
+
+const MapTrajeto = lazy(() =>
+  import("@/components/map-trajeto").then((m) => ({ default: m.MapTrajeto })),
+);
+
+const STATUS_VARIANT: Record<
+  string,
+  "default" | "secondary" | "outline" | "destructive" | "success" | "warning"
+> = {
+  ENVIADA: "warning",
+  OK: "success",
+  EM_CONFERENCIA: "warning",
+  DIVERGENTE: "destructive",
+  AJUSTADA: "secondary",
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  ENVIADA: "Enviada",
+  OK: "Conferida",
+  EM_CONFERENCIA: "Conferindo",
+  DIVERGENTE: "Divergente",
+  AJUSTADA: "Ajustada",
+};
+
+export default function ViagemDetalhePage() {
+  const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
+  const detalhe = useViagemDetalhe(id ?? "");
+  const excluir = useExcluirViagem();
+
+  async function confirmarExcluir() {
+    if (!detalhe.data) return;
+    const ok = window.confirm(
+      `Apagar viagem ticket ${detalhe.data.ticket}?\n\nIsso só pode ser feito enquanto a operadora não conferiu.`,
+    );
+    if (!ok) return;
+    try {
+      await excluir.mutateAsync(detalhe.data.id);
+      navigate(-1);
+    } catch (err) {
+      alert(humanizeApiError(err));
+    }
+  }
+
+  const d = detalhe.data;
+
+  const temPontos = d && d.pontos && d.pontos.length > 1;
+  const temGeometria = !!d?.rotaGeometria;
+  const temCargaCoords = d && d.localCarga.lat != null && d.localCarga.lng != null;
+  const temDescargaCoords = d && d.localDescarga.lat != null && d.localDescarga.lng != null;
+  const mostrarMapa = temPontos || temGeometria || (temCargaCoords && temDescargaCoords);
+
+  return (
+    <div className="flex min-h-screen-safe flex-col bg-background pb-20">
+      <ScreenHeader title="Detalhe da viagem" />
+
+      {detalhe.isLoading && (
+        <div className="py-12 text-center text-sm text-muted-foreground">Carregando...</div>
+      )}
+
+      {detalhe.error && (
+        <div className="m-4 rounded-lg border border-destructive bg-destructive/10 p-4">
+          <p className="font-semibold text-destructive">{humanizeApiError(detalhe.error)}</p>
+        </div>
+      )}
+
+      {d && (
+        <div className="space-y-4 p-4 pb-32">
+          <Card>
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Cliente
+                </p>
+                <p className="mt-0.5 text-xl font-bold text-foreground">{d.cliente.nome}</p>
+                {d.cliente.empresa && (
+                  <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <Building2 size={14} /> {d.cliente.empresa.nome}
+                  </p>
+                )}
+              </div>
+              <Badge variant={STATUS_VARIANT[d.status] ?? "outline"}>
+                {STATUS_LABEL[d.status] ?? d.status}
+              </Badge>
+            </div>
+
+            <div className="mt-4 flex gap-6 border-t-2 border-border pt-3">
+              <Info label="Data" value={fmtDataBR(d.data)} />
+              <Info label="Placa" value={d.veiculo.placa} mono />
+              <Info label="Material" value={d.material.nome} />
+            </div>
+          </Card>
+
+          <Card>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Trajeto
+            </p>
+            <div className="space-y-2">
+              <div className="flex items-start gap-3">
+                <ArrowUp size={20} className="text-success mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-base font-semibold text-foreground">{d.localCarga.nome}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {d.localCarga.logradouro} — {d.localCarga.cidade}/{d.localCarga.uf}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <ArrowDown size={20} className="text-destructive mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-base font-semibold text-foreground">{d.localDescarga.nome}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {d.localDescarga.logradouro} — {d.localDescarga.cidade}/{d.localDescarga.uf}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {mostrarMapa && (
+            <Suspense
+              fallback={
+                <div className="skeleton-pulse h-72 rounded-2xl bg-muted" aria-hidden />
+              }
+            >
+              <MapTrajeto
+                pontosCrus={temPontos ? d.pontos.map((p) => ({ lat: p.lat, lng: p.lng })) : undefined}
+                geometria={d.rotaGeometria ?? null}
+                carga={
+                  temCargaCoords
+                    ? { lat: d.localCarga.lat as number, lng: d.localCarga.lng as number, nome: d.localCarga.nome }
+                    : null
+                }
+                descarga={
+                  temDescargaCoords
+                    ? {
+                        lat: d.localDescarga.lat as number,
+                        lng: d.localDescarga.lng as number,
+                        nome: d.localDescarga.nome,
+                      }
+                    : null
+                }
+              />
+            </Suspense>
+          )}
+
+          <Card>
+            <div className="flex gap-6">
+              <Stat
+                label="Toneladas"
+                value={fmtNum(d.toneladasEfetiva, 3)}
+                fromAi={d.ocrCampos?.includes("toneladas")}
+                subValue={
+                  d.toneladasAjustada
+                    ? `informado ${fmtNum(d.toneladasInformada, 3)}`
+                    : undefined
+                }
+              />
+              <Stat
+                label="Km"
+                value={fmtNum(d.kmEfetivo, 2)}
+                fromAi={d.ocrCampos?.includes("km")}
+                subValue={d.kmAjustada ? `informado ${fmtNum(d.kmInformado, 2)}` : undefined}
+              />
+              <Stat
+                label="Ticket"
+                value={d.ticket}
+                fromAi={d.ocrCampos?.includes("ticket")}
+              />
+            </div>
+            {d.ocrConfidence != null && (d.ocrCampos?.length ?? 0) > 0 && (
+              <p className="mt-3 flex items-center gap-1.5 border-t-2 border-border pt-3 text-xs text-muted-foreground">
+                <Sparkles size={12} className="text-primary" />
+                Alguns campos foram preenchidos pela IA (confiança{" "}
+                {Math.round(d.ocrConfidence * 100)}%)
+              </p>
+            )}
+          </Card>
+
+          {d.observacao && (
+            <Card>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Observação
+              </p>
+              <p className="text-base text-foreground whitespace-pre-line">{d.observacao}</p>
+            </Card>
+          )}
+
+          {d.fotos && d.fotos.length > 0 && (
+            <Card className="p-3">
+              <p className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Foto do ticket
+              </p>
+              {d.fotos.map((f) => (
+                <AuthedImage
+                  key={f.id}
+                  path={`/m/viagens/${d.id}/fotos/${f.id}`}
+                  alt={`Ticket ${d.ticket}`}
+                  className="max-h-[60vh]"
+                />
+              ))}
+            </Card>
+          )}
+
+          {d.status === "ENVIADA" && (
+            <Button
+              onClick={confirmarExcluir}
+              variant="destructive"
+              size="lg"
+              className="w-full"
+              loading={excluir.isPending}
+            >
+              <Trash2 size={18} />
+              Excluir viagem
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Info({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div>
+      <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className={`text-base font-semibold text-foreground ${mono ? "tabular" : ""}`}>{value}</p>
+    </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  subValue,
+  fromAi,
+}: {
+  label: string;
+  value: string;
+  subValue?: string;
+  fromAi?: boolean;
+}) {
+  return (
+    <div>
+      <div className="flex items-center gap-1">
+        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
+        {fromAi && <Sparkles size={10} className="text-primary" />}
+      </div>
+      <p className="text-lg font-bold text-foreground tabular">{value}</p>
+      {subValue && <p className="text-[10px] text-muted-foreground">{subValue}</p>}
+    </div>
+  );
+}

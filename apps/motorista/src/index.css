@@ -3,17 +3,6 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 210 40% 98%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-    --border: 214 32% 91%;
-    --radius: 0.75rem;
-  }
-
   html,
   body,
   #root {
@@ -22,6 +11,64 @@
 
   body {
     @apply bg-background text-foreground antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      "Helvetica Neue", Arial, sans-serif;
     -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    overscroll-behavior-y: contain;
+  }
+
+  /* iOS: impede zoom involuntário ao focar input (fontes < 16px) */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  /* No iOS dentro do PWA standalone, esconde a barra de seleção textual */
+  button {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* tabular-nums utility — bate visual idêntico ao nativo */
+  .tabular {
+    font-variant-numeric: tabular-nums;
   }
 }
+
+@layer utilities {
+  /* Encaixa elementos por baixo da notch / home indicator no iPhone */
+  .pt-safe {
+    padding-top: max(env(safe-area-inset-top), 0.75rem);
+  }
+  .pb-safe {
+    padding-bottom: max(env(safe-area-inset-bottom), 0.5rem);
+  }
+
+  .min-h-screen-safe {
+    min-height: 100dvh;
+  }
+
+  /* Pulsa skeleton com opacidade */
+  .skeleton-pulse {
+    animation: skeleton-pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes skeleton-pulse {
+    0%,
+    100% {
+      opacity: 0.55;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
+  /* Tap feedback nos pressables (substitui Pressable active:opacity-75 do RN) */
+  .tap-feedback {
+    @apply transition-opacity duration-100 active:opacity-75;
+  }
+}
+
+/* Leaflet (lazy importado em pages/viagens/[id]) precisa do CSS global */

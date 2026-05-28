@@ -1,84 +1,104 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Truck } from "lucide-react";
+import { cpfDigits } from "@ronan/shared-types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { api } from "@/lib/api";
-import { isLoggedIn, saveTokens } from "@/lib/auth";
+import { api, ApiError } from "@/lib/api";
+import { saveTokens } from "@/lib/auth";
+import { setAuthState } from "@/lib/auth-state";
+
+function maskCpf(input: string): string {
+  const d = cpfDigits(input).slice(0, 11);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
+  if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+}
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const [cpf, setCpf] = useState("");
   const [senha, setSenha] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (isLoggedIn()) navigate("/", { replace: true });
-  }, [navigate]);
-
-  async function onSubmit(e: React.FormEvent) {
+  async function entrar(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
-    const cpfDigitos = cpf.replace(/\D/g, "");
+    setErro(null);
+    const cpfDigitos = cpfDigits(cpf);
+    if (cpfDigitos.length !== 11 || !senha) {
+      setErro("Informe o CPF (11 dígitos) e a senha.");
+      return;
+    }
+    setSubmitting(true);
     try {
       const tokens = await api.loginMotorista(cpfDigitos, senha);
       saveTokens(tokens);
+      setAuthState(true);
       navigate("/", { replace: true });
-    } catch {
-      setError("CPF ou senha inválidos");
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        setErro("CPF ou senha incorretos.");
+      } else {
+        setErro((err as Error).message ?? "Falha ao entrar.");
+      }
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   }
 
   return (
-    <main className="flex min-h-full flex-col items-center justify-center px-6 py-12">
-      <div className="w-full max-w-sm space-y-8">
-        <div className="flex flex-col items-center gap-2 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <Truck className="h-7 w-7" />
-          </div>
-          <h1 className="text-2xl font-semibold">Ronan</h1>
-          <p className="text-sm text-muted-foreground">Lançamento de viagens</p>
+    <div className="flex min-h-screen-safe flex-col bg-background">
+      {/* Hero brand */}
+      <div className="bg-brand px-6 pb-10 pt-safe">
+        <div className="pt-12">
+          <h1 className="text-5xl font-extrabold tracking-tight text-white">SCHABA</h1>
+          <p className="mt-2 text-base font-medium text-white/80">Aplicativo do motorista</p>
         </div>
+      </div>
 
-        <form onSubmit={onSubmit} className="space-y-4">
+      <form onSubmit={entrar} className="flex flex-1 flex-col px-6 py-8">
+        <div className="space-y-5">
           <div className="space-y-2">
             <Label htmlFor="cpf">CPF</Label>
             <Input
               id="cpf"
+              value={cpf}
+              onChange={(e) => setCpf(maskCpf(e.target.value))}
+              type="tel"
               inputMode="numeric"
+              autoCorrect="off"
               autoComplete="username"
               placeholder="000.000.000-00"
-              required
-              value={cpf}
-              onChange={(e) => setCpf(e.target.value)}
+              disabled={submitting}
             />
           </div>
+
           <div className="space-y-2">
             <Label htmlFor="senha">Senha</Label>
             <Input
               id="senha"
-              type="password"
-              autoComplete="current-password"
-              required
               value={senha}
               onChange={(e) => setSenha(e.target.value)}
+              type="password"
+              autoComplete="current-password"
+              placeholder="••••••"
+              disabled={submitting}
             />
           </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <Button type="submit" size="lg" className="w-full" disabled={loading}>
-            {loading ? "Entrando..." : "Entrar"}
-          </Button>
-        </form>
 
-        <p className="text-center text-xs text-muted-foreground">
-          Esqueceu a senha? Procure o responsável da empresa.
-        </p>
-      </div>
-    </main>
+          {erro && (
+            <div className="rounded-xl border-2 border-destructive bg-destructive/10 p-3">
+              <p className="text-base font-medium text-destructive whitespace-pre-line">{erro}</p>
+            </div>
+          )}
+
+          <Button type="submit" size="xl" className="mt-3 w-full" loading={submitting}>
+            {submitting ? "Entrando..." : "Entrar"}
+          </Button>
+        </div>
+      </form>
+    </div>
   );
 }

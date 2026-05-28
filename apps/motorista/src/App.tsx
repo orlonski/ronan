@@ -1,14 +1,23 @@
-import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom";
-import { isLoggedIn } from "@/lib/auth";
-import LoginPage from "@/pages/login";
-import HomePage from "@/pages/home";
-import NovaViagemPage from "@/pages/nova-viagem";
-import NovoPedagioPage from "@/pages/novo-pedagio";
-import PerfilPage from "@/pages/perfil";
+import { lazy, Suspense } from "react";
+import { BrowserRouter, Outlet, Route, Routes } from "react-router-dom";
+import { AuthGate } from "@/components/auth-gate";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { ProtectedLayout } from "@/components/protected-layout";
 
-function ProtectedRoute() {
-  if (!isLoggedIn()) return <Navigate to="/login" replace />;
+import LoginPage from "@/pages/login";
+import HomePage from "@/pages/home";
+import HistoricoPage from "@/pages/historico";
+import PerfilPage from "@/pages/perfil";
+import NovaViagemPage from "@/pages/nova-viagem";
+import NovoPedagioPage from "@/pages/novo-pedagio";
+import NovoAbastecimentoPage from "@/pages/novo-abastecimento";
+import PendentesPage from "@/pages/pendentes";
+import NotificacoesPage from "@/pages/notificacoes";
+
+// Detalhe da viagem usa Leaflet — chunk separado.
+const ViagemDetalhePage = lazy(() => import("@/pages/viagens-detalhe"));
+
+function WithTabs() {
   return (
     <ProtectedLayout>
       <Outlet />
@@ -18,17 +27,35 @@ function ProtectedRoute() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route element={<ProtectedRoute />}>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/nova-viagem" element={<NovaViagemPage />} />
-          <Route path="/novo-pedagio" element={<NovoPedagioPage />} />
-          <Route path="/perfil" element={<PerfilPage />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AuthGate>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route element={<WithTabs />}>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/historico" element={<HistoricoPage />} />
+              <Route path="/perfil" element={<PerfilPage />} />
+            </Route>
+            {/* Telas internas full-screen (sem tab bar) */}
+            <Route path="/nova-viagem" element={<NovaViagemPage />} />
+            <Route path="/nova-viagem/:clientId" element={<NovaViagemPage />} />
+            <Route path="/novo-pedagio" element={<NovoPedagioPage />} />
+            <Route path="/novo-abastecimento" element={<NovoAbastecimentoPage />} />
+            <Route path="/pendentes" element={<PendentesPage />} />
+            <Route path="/notificacoes" element={<NotificacoesPage />} />
+            <Route
+              path="/viagens/:id"
+              element={
+                <Suspense fallback={<div className="p-6">Carregando...</div>}>
+                  <ViagemDetalhePage />
+                </Suspense>
+              }
+            />
+            <Route path="*" element={<HomePage />} />
+          </Routes>
+        </AuthGate>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }

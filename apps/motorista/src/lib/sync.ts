@@ -1,27 +1,154 @@
-import { db, type PendingPedagio, type PendingViagem } from "@/db/dexie";
-import { api } from "./api";
+import {
+  deletePendingAbastecimento,
+  deletePendingPedagio,
+  deletePendingViagem,
+  listPendingAbastecimentos,
+  listPendingPedagios,
+  listPendingViagens,
+  upsertPendingAbastecimento,
+  upsertPendingPedagio,
+  upsertPendingViagem,
+  type PendingAbastecimento,
+  type PendingPedagio,
+  type PendingViagem,
+  type ZodIssueSaved,
+} from "@/db/dexie";
+import { api, ApiError, humanizeApiError } from "./api";
+
+type ApiErrorBody = { issues?: ZodIssueSaved[] };
+
+function extractErrorDetails(err: unknown): {
+  msg: string;
+  status?: number;
+  issues?: ZodIssueSaved[];
+} {
+  const msg = humanizeApiError(err);
+  if (err instanceof ApiError) {
+    const body = err.body as ApiErrorBody | null;
+    const issues = Array.isArray(body?.issues) ? body!.issues : undefined;
+    return { msg, status: err.status, issues };
+  }
+  return { msg };
+}
 
 const MAX_ATTEMPTS = 8;
+
+function isErroPermanente(err: unknown): boolean {
+  if (!(err instanceof ApiError)) return false;
+  if (err.status >= 500) return false;
+  if (err.status === 408 || err.status === 429) return false;
+  return err.status >= 400 && err.status < 500;
+}
 
 let draining = false;
 const listeners = new Set<() => void>();
 
-export function onSyncChange(listener: () => void) {
+export function onSyncChange(listener: () => void): () => void {
   listeners.add(listener);
-  return () => listeners.delete(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
-function notify() {
+function notify(): void {
   for (const l of listeners) l();
+}
+
+function isOnline(): boolean {
+  return typeof navigator === "undefined" ? true : navigator.onLine;
+}
+
+// ===== Viagens =====
+
+export async function descartarViagemPendente(clientId: string): Promise<void> {
+  await deletePendingViagem(clientId);
+  notify();
+}
+
+export async function atualizarViagemPendente(input: {
+  clientId: string;
+  payload: Record<string, unknown>;
+  foto?: { blob: Blob; mime: string };
+}): Promise<{ removed: boolean }> {
+  const list = await listPendingViagens();
+  const existing = list.find((x) => x.clientId === input.clientId);
+  if (!existing) return { removed: true };
+
+  const fotoBlob = input.foto?.blob ?? existing.fotoBlob;
+  const fotoMime = input.foto?.mime ?? existing.fotoMime;
+
+  await upsertPendingViagem({
+    clientId: existing.clientId,
+    payload: input.payload,
+    fotoBlob,
+    fotoMime,
+    status: "pending",
+    attempts: 0,
+    createdAt: existing.createdAt,
+    lastTriedAt: undefined,
+    errorMsg: undefined,
+    errorStatus: undefined,
+    errorIssues: undefined,
+  });
+  notify();
+  void drain();
+  return { removed: false };
+}
+
+export async function tentarNovamenteViagemPendente(clientId: string): Promise<void> {
+  const list = await listPendingViagens();
+  const item = list.find((x) => x.clientId === clientId);
+  if (!item) return;
+  await upsertPendingViagem({
+    ...item,
+    status: "pending",
+    attempts: 0,
+    errorMsg: undefined,
+    errorStatus: undefined,
+    errorIssues: undefined,
+  });
+  notify();
+  void drain();
+}
+
+export async function tentarNovamentePedagioPendente(clientId: string): Promise<void> {
+  const list = await listPendingPedagios();
+  const item = list.find((x) => x.clientId === clientId);
+  if (!item) return;
+  await upsertPendingPedagio({
+    ...item,
+    status: "pending",
+    attempts: 0,
+    errorMsg: undefined,
+    errorStatus: undefined,
+    errorIssues: undefined,
+  });
+  notify();
+  void drain();
+}
+
+export async function tentarNovamenteAbastecimentoPendente(clientId: string): Promise<void> {
+  const list = await listPendingAbastecimentos();
+  const item = list.find((x) => x.clientId === clientId);
+  if (!item) return;
+  await upsertPendingAbastecimento({
+    ...item,
+    status: "pending",
+    attempts: 0,
+    errorMsg: undefined,
+    errorStatus: undefined,
+    errorIssues: undefined,
+  });
+  notify();
+  void drain();
 }
 
 export async function enqueueViagem(
   payload: Record<string, unknown>,
   foto?: { blob: Blob; mime: string },
-) {
+): Promise<void> {
   const clientId = payload.clientId as string;
-  console.log("[sync] enqueueViagem", clientId, "online:", navigator.onLine, "hasFoto:", !!foto);
-  await db.pendingViagens.put({
+  await upsertPendingViagem({
     clientId,
     payload,
     fotoBlob: foto?.blob,
@@ -30,14 +157,13 @@ export async function enqueueViagem(
     attempts: 0,
     createdAt: Date.now(),
   });
-  console.log("[sync] enqueueViagem put OK", clientId);
   notify();
   void drain();
 }
 
-export async function enqueuePedagio(payload: Record<string, unknown>) {
+export async function enqueuePedagio(payload: Record<string, unknown>): Promise<void> {
   const clientId = payload.clientId as string;
-  await db.pendingPedagios.put({
+  await upsertPendingPedagio({
     clientId,
     payload,
     status: "pending",
@@ -48,108 +174,227 @@ export async function enqueuePedagio(payload: Record<string, unknown>) {
   void drain();
 }
 
+export async function enqueueAbastecimento(
+  payload: Record<string, unknown>,
+  foto?: { blob: Blob; mime: string },
+): Promise<void> {
+  const clientId = payload.clientId as string;
+  await upsertPendingAbastecimento({
+    clientId,
+    payload,
+    fotoBlob: foto?.blob,
+    fotoMime: foto?.mime,
+    status: "pending",
+    attempts: 0,
+    createdAt: Date.now(),
+  });
+  notify();
+  void drain();
+}
+
+export async function descartarPedagioPendente(clientId: string): Promise<void> {
+  await deletePendingPedagio(clientId);
+  notify();
+}
+
+export async function descartarAbastecimentoPendente(clientId: string): Promise<void> {
+  await deletePendingAbastecimento(clientId);
+  notify();
+}
+
+export async function pendingCounts(): Promise<{
+  viagens: number;
+  pedagios: number;
+  abastecimentos: number;
+  comErro: number;
+}> {
+  const [v, p, a] = await Promise.all([
+    listPendingViagens(),
+    listPendingPedagios(),
+    listPendingAbastecimentos(),
+  ]);
+  const comErro =
+    v.filter((i) => i.attempts >= MAX_ATTEMPTS).length +
+    p.filter((i) => i.attempts >= MAX_ATTEMPTS).length +
+    a.filter((i) => i.attempts >= MAX_ATTEMPTS).length;
+  return {
+    viagens: v.length,
+    pedagios: p.length,
+    abastecimentos: a.length,
+    comErro,
+  };
+}
+
 export async function drain(): Promise<void> {
-  if (draining) {
-    console.log("[sync] drain skip (já rodando)");
-    return;
-  }
-  if (!navigator.onLine) {
-    console.log("[sync] drain skip (offline)");
-    return;
-  }
-  console.log("[sync] drain start");
+  if (draining) return;
+  if (!isOnline()) return;
   draining = true;
   try {
     await drainViagens();
     await drainPedagios();
-    console.log("[sync] drain done");
-  } catch (err) {
-    console.error("[sync] drain error", err);
+    await drainAbastecimentos();
   } finally {
     draining = false;
     notify();
   }
 }
 
-async function drainViagens() {
-  const items = await db.pendingViagens.where("status").notEqual("syncing").toArray();
-  for (const item of items) {
+async function drainViagens(): Promise<void> {
+  const list = await listPendingViagens();
+  for (const item of list) {
+    if (item.status === "syncing") continue;
     if (item.attempts >= MAX_ATTEMPTS) continue;
-    if (!navigator.onLine) return;
+    if (!isOnline()) return;
     await processViagem(item);
   }
 }
 
-async function processViagem(item: PendingViagem) {
-  console.log("[sync] viagem start", item.clientId, "hasFoto:", !!item.fotoBlob);
-  await db.pendingViagens.update(item.clientId, { status: "syncing", lastTriedAt: Date.now() });
+function buildFotoFormData(prefix: string, clientId: string, blob: Blob, mime: string): FormData {
+  const fd = new FormData();
+  const ext = mime.includes("png") ? "png" : "jpg";
+  const filename = `${prefix}-${clientId}.${ext}`;
+  fd.append("foto", new File([blob], filename, { type: mime }));
+  return fd;
+}
+
+async function processViagem(item: PendingViagem): Promise<void> {
+  await upsertPendingViagem({ ...item, status: "syncing", lastTriedAt: Date.now() });
   notify();
   try {
     let payload = { ...item.payload };
     if (item.fotoBlob && !payload.fotoKey) {
-      const fd = new FormData();
-      const filename = `ticket-${item.clientId}.${item.fotoMime?.includes("png") ? "png" : "jpg"}`;
-      fd.append("foto", new File([item.fotoBlob], filename, { type: item.fotoMime ?? "image/jpeg" }));
+      const fd = buildFotoFormData("ticket", item.clientId, item.fotoBlob, item.fotoMime ?? "image/jpeg");
       const up = await api.postForm<{ storageKey: string }>("/m/uploads/ticket", fd);
       payload = { ...payload, fotoKey: up.storageKey };
-      // marca foto como já subida pra não tentar de novo se viagem falhar
-      await db.pendingViagens.update(item.clientId, {
+      await upsertPendingViagem({
+        ...item,
         payload,
         fotoBlob: undefined,
         fotoMime: undefined,
+        status: "syncing",
       });
     }
     await api.post("/m/viagens", payload);
-    console.log("[sync] viagem ok", item.clientId);
-    await db.pendingViagens.delete(item.clientId);
+    await deletePendingViagem(item.clientId);
   } catch (err) {
-    console.error("[sync] viagem fail", item.clientId, err);
-    await db.pendingViagens.update(item.clientId, {
+    const permanente = isErroPermanente(err);
+    const { msg, status, issues } = extractErrorDetails(err);
+    await upsertPendingViagem({
+      ...item,
       status: "error",
-      errorMsg: (err as Error).message,
-      attempts: (item.attempts ?? 0) + 1,
+      errorMsg: msg,
+      errorStatus: status,
+      errorIssues: issues,
+      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
     });
   }
   notify();
 }
 
-async function drainPedagios() {
-  const items = await db.pendingPedagios.where("status").notEqual("syncing").toArray();
-  for (const item of items) {
+async function drainPedagios(): Promise<void> {
+  const list = await listPendingPedagios();
+  for (const item of list) {
+    if (item.status === "syncing") continue;
     if (item.attempts >= MAX_ATTEMPTS) continue;
-    if (!navigator.onLine) return;
+    if (!isOnline()) return;
     await processPedagio(item);
   }
 }
 
-async function processPedagio(item: PendingPedagio) {
-  await db.pendingPedagios.update(item.clientId, { status: "syncing", lastTriedAt: Date.now() });
+async function processPedagio(item: PendingPedagio): Promise<void> {
+  await upsertPendingPedagio({ ...item, status: "syncing", lastTriedAt: Date.now() });
   notify();
   try {
     await api.post("/m/pedagios", item.payload);
-    await db.pendingPedagios.delete(item.clientId);
+    await deletePendingPedagio(item.clientId);
   } catch (err) {
-    await db.pendingPedagios.update(item.clientId, {
+    const permanente = isErroPermanente(err);
+    const { msg, status, issues } = extractErrorDetails(err);
+    await upsertPendingPedagio({
+      ...item,
       status: "error",
-      errorMsg: (err as Error).message,
-      attempts: (item.attempts ?? 0) + 1,
+      errorMsg: msg,
+      errorStatus: status,
+      errorIssues: issues,
+      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
     });
   }
   notify();
 }
 
-export function startAutoSync() {
-  window.addEventListener("online", () => void drain());
+async function drainAbastecimentos(): Promise<void> {
+  const list = await listPendingAbastecimentos();
+  for (const item of list) {
+    if (item.status === "syncing") continue;
+    if (item.attempts >= MAX_ATTEMPTS) continue;
+    if (!isOnline()) return;
+    await processAbastecimento(item);
+  }
+}
+
+async function processAbastecimento(item: PendingAbastecimento): Promise<void> {
+  await upsertPendingAbastecimento({
+    ...item,
+    status: "syncing",
+    lastTriedAt: Date.now(),
+  });
+  notify();
+  try {
+    let payload = { ...item.payload };
+    if (item.fotoBlob && !payload.fotoKey) {
+      const fd = buildFotoFormData("abast", item.clientId, item.fotoBlob, item.fotoMime ?? "image/jpeg");
+      const up = await api.postForm<{ storageKey: string }>("/m/uploads/abastecimento", fd);
+      payload = { ...payload, fotoKey: up.storageKey };
+      await upsertPendingAbastecimento({
+        ...item,
+        payload,
+        fotoBlob: undefined,
+        fotoMime: undefined,
+        status: "syncing",
+      });
+    }
+    await api.post("/m/abastecimentos", payload);
+    await deletePendingAbastecimento(item.clientId);
+  } catch (err) {
+    const permanente = isErroPermanente(err);
+    const { msg, status, issues } = extractErrorDetails(err);
+    await upsertPendingAbastecimento({
+      ...item,
+      status: "error",
+      errorMsg: msg,
+      errorStatus: status,
+      errorIssues: issues,
+      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
+    });
+  }
+  notify();
+}
+
+let autoSyncStarted = false;
+
+export function startAutoSync(): void {
+  if (autoSyncStarted) return;
+  if (typeof window === "undefined") return;
+  autoSyncStarted = true;
+
+  window.addEventListener("online", () => {
+    void drain();
+  });
+
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") void drain();
   });
-  // tenta logo no boot caso sobrou pendente
-  void drain();
-  // retry periódico (modo defensivo)
-  setInterval(() => void drain(), 60_000);
-}
 
-export async function pendingCount() {
-  const [v, p] = await Promise.all([db.pendingViagens.count(), db.pendingPedagios.count()]);
-  return v + p;
+  // pageshow dispara também em iOS quando volta do bfcache.
+  window.addEventListener("pageshow", () => {
+    void drain();
+  });
+
+  setInterval(() => {
+    void drain();
+  }, 60_000);
+
+  setTimeout(() => {
+    void drain();
+  }, 2_000);
 }

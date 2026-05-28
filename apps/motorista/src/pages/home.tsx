@@ -1,156 +1,362 @@
-import { Link } from "react-router-dom";
-import { ArrowDown, ArrowUp, CloudUpload, Clock, Receipt, Truck } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { useMe, usePedagios, useViagens } from "@/lib/queries";
-import { formatBR, formatBRL, formatNumber } from "@/lib/utils";
-import { usePendingPedagios, usePendingViagens } from "@/hooks/use-pending";
-import { useOnline } from "@/hooks/use-online";
-import { drain } from "@/lib/sync";
+import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowRight,
+  ArrowUp,
+  CloudOff,
+  Fuel,
+  Plus,
+  Receipt,
+  Trash2,
+  Truck,
+  WifiOff,
+} from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { EmptyState } from "@/components/empty-state";
+import { IosInstallPrompt } from "@/components/ios-install-prompt";
+import { NotificationBell } from "@/components/notification-bell";
+import { ViagemCardSkeleton } from "@/components/skeleton";
+import { Badge } from "@/components/ui/badge";
+import { UpdateBanner } from "@/components/update-banner";
+import { usePending } from "@/hooks/use-pending";
+import { fmtDataHoraCurta, fmtDataCurta, fmtMesLongo } from "@/lib/datetime";
+import { humanizeApiError } from "@/lib/api";
+import {
+  useExcluirViagem,
+  useMe,
+  useResumoMes,
+  useViagens,
+  type Viagem,
+} from "@/lib/queries";
+import { fmtNum } from "@/lib/utils";
+
+const statusVariant: Record<
+  string,
+  "default" | "secondary" | "outline" | "destructive" | "success" | "warning"
+> = {
+  ENVIADA: "warning",
+  OK: "success",
+  EM_CONFERENCIA: "warning",
+  DIVERGENTE: "destructive",
+  AJUSTADA: "secondary",
+};
+
+const statusLabel: Record<string, string> = {
+  ENVIADA: "Enviada",
+  OK: "Conferida",
+  EM_CONFERENCIA: "Conferindo",
+  DIVERGENTE: "Divergente",
+  AJUSTADA: "Ajustada",
+};
 
 export default function HomePage() {
+  const navigate = useNavigate();
   const me = useMe();
   const viagens = useViagens();
-  const pedagios = usePedagios();
-  const pendingViagens = usePendingViagens();
-  const pendingPedagios = usePendingPedagios();
-  const online = useOnline();
-  const totalPending = pendingViagens.length + pendingPedagios.length;
+  const resumo = useResumoMes();
+  const pending = usePending();
+  const excluir = useExcluirViagem();
+
+  async function confirmarExcluir(v: Viagem) {
+    const ok = window.confirm(
+      `Apagar viagem ticket ${v.ticket}?\n\nIsso só pode ser feito enquanto a operadora não conferiu.`,
+    );
+    if (!ok) return;
+    try {
+      await excluir.mutateAsync(v.id);
+    } catch (err) {
+      alert(humanizeApiError(err));
+    }
+  }
 
   return (
-    <div className="mx-auto max-w-md space-y-5 p-4">
-      <header className="space-y-1 pt-2">
-        <p className="text-sm text-muted-foreground">Olá,</p>
-        <h1 className="text-2xl font-semibold tracking-tight">{me.data?.nome ?? "—"}</h1>
-        {me.data?.veiculoDefault && (
-          <p className="text-sm text-muted-foreground">
-            Placa padrão: <span className="font-mono">{me.data.veiculoDefault.placa}</span>
-          </p>
-        )}
-      </header>
-
-      {totalPending > 0 && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm">
-              <Clock className="h-4 w-4 text-amber-700" />
-              <span className="font-medium text-amber-900">
-                {totalPending} {totalPending === 1 ? "lançamento aguardando" : "lançamentos aguardando"} envio
-              </span>
-            </div>
-            {online && (
-              <Button size="sm" variant="ghost" onClick={() => void drain()}>
-                <CloudUpload className="h-4 w-4" /> Sincronizar
-              </Button>
+    <div className="bg-background">
+      {/* Header brand */}
+      <div className="bg-brand">
+        <div className="flex items-start justify-between gap-3 px-5 pb-6 pt-safe">
+          <div className="flex-1 pt-3">
+            <p className="text-xs font-semibold uppercase tracking-wider text-white/70">Motorista</p>
+            {me.isLoading && (
+              <p className="mt-1 text-sm text-white/70">Carregando...</p>
+            )}
+            {me.data && (
+              <>
+                <p className="mt-0.5 text-2xl font-bold text-white">{me.data.nome}</p>
+                {me.data.veiculoDefault && (
+                  <p className="mt-0.5 text-base font-medium text-white/80 tabular">
+                    Placa {me.data.veiculoDefault.placa}
+                  </p>
+                )}
+              </>
+            )}
+            {me.error && (
+              <p className="mt-1 text-sm text-white/80">Perfil indisponível offline</p>
             )}
           </div>
+          <div className="pt-3">
+            <NotificationBell />
+          </div>
         </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-3">
-        <Link to="/nova-viagem" className="rounded-xl bg-primary p-4 text-primary-foreground shadow active:scale-[0.99]">
-          <Truck className="h-6 w-6" />
-          <p className="mt-2 text-base font-medium">Nova viagem</p>
-          <p className="text-xs opacity-80">Lançar carga/descarga</p>
-        </Link>
-        <Link to="/novo-pedagio" className="rounded-xl border bg-background p-4 shadow-sm active:scale-[0.99]">
-          <Receipt className="h-6 w-6 text-muted-foreground" />
-          <p className="mt-2 text-base font-medium">Pedágio</p>
-          <p className="text-xs text-muted-foreground">Praça, valor</p>
-        </Link>
       </div>
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-medium text-muted-foreground">Últimas viagens</h2>
-        <div className="space-y-2">
-          {pendingViagens.map((p) => {
-            return (
-              <article
-                key={p.clientId}
-                className="rounded-lg border border-amber-200 bg-amber-50/40 p-3"
-              >
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-mono">— pendente —</span>
-                  <span className="text-xs text-amber-700">
-                    {p.status === "syncing" ? "enviando..." : p.status === "error" ? `erro · ${p.attempts}x` : "aguardando rede"}
-                  </span>
-                </div>
-                <p className="mt-1 text-sm">
-                  Ticket {String(p.payload.ticket)} · {formatNumber(Number(p.payload.toneladas), 3)} t
-                </p>
-                {!!p.fotoBlob && (
-                  <p className="mt-1 text-xs text-muted-foreground">📷 com foto local</p>
-                )}
-              </article>
-            );
-          })}
+      <div className="space-y-3 px-4 pb-8 pt-4">
+        <UpdateBanner />
 
-          {viagens.isLoading && pendingViagens.length === 0 && <SkeletonRow />}
-          {viagens.data?.length === 0 && pendingViagens.length === 0 && (
-            <p className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
-              Nenhuma viagem lançada ainda.
-            </p>
+        <IosInstallPrompt />
+
+        {pending.comErro > 0 && (
+          <button
+            type="button"
+            onClick={() => navigate("/pendentes")}
+            className="flex w-full items-center gap-3 rounded-2xl border-2 border-destructive/40 bg-destructive/10 p-4 text-left active:opacity-75"
+          >
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive">
+              <AlertTriangle size={22} color="white" />
+            </div>
+            <div className="flex-1">
+              <p className="text-base font-bold text-foreground">{pending.comErro} com erro</p>
+              <p className="text-sm text-muted-foreground">Toque pra revisar e descartar</p>
+            </div>
+          </button>
+        )}
+
+        {pending.viagens + pending.pedagios + pending.abastecimentos - pending.comErro > 0 && (
+          <button
+            type="button"
+            onClick={() => navigate("/pendentes")}
+            className="flex w-full items-center gap-3 rounded-2xl border-2 border-warning/30 bg-warning/15 p-4 text-left active:opacity-75"
+          >
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-warning">
+              <CloudOff size={22} color="#0f172a" />
+            </div>
+            <div className="flex-1">
+              <p className="text-base font-bold text-foreground">
+                {pending.viagens + pending.pedagios + pending.abastecimentos - pending.comErro} aguardando
+                sincronizar
+              </p>
+              <p className="text-sm text-muted-foreground">Toque pra ver e gerenciar</p>
+            </div>
+          </button>
+        )}
+
+        {me.data?.podeLancarViagem && (
+          <button
+            type="button"
+            onClick={() => navigate("/nova-viagem")}
+            className="flex w-full items-center gap-4 overflow-hidden rounded-2xl bg-primary p-5 text-left active:opacity-85"
+          >
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/20">
+              <Truck size={32} color="white" strokeWidth={2.5} />
+            </div>
+            <div className="flex-1">
+              <p className="text-2xl font-extrabold text-primary-foreground">Nova viagem</p>
+              <p className="mt-0.5 text-base font-medium text-primary-foreground/85">
+                Lançar carga, descarga e foto
+              </p>
+            </div>
+            <Plus size={28} color="white" strokeWidth={2.5} />
+          </button>
+        )}
+
+        {me.data?.podeLancarPedagio && (
+          <button
+            type="button"
+            onClick={() => navigate("/novo-pedagio")}
+            className="flex w-full items-center gap-4 rounded-2xl border-2 border-border bg-card p-4 text-left active:opacity-75"
+          >
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-secondary">
+              <Receipt size={26} color="#13316b" strokeWidth={2.5} />
+            </div>
+            <div className="flex-1">
+              <p className="text-lg font-bold text-foreground">Pedágio</p>
+              <p className="text-sm text-muted-foreground">Registrar passagem em praça</p>
+            </div>
+          </button>
+        )}
+
+        {me.data?.podeLancarAbastecimento && (
+          <button
+            type="button"
+            onClick={() => navigate("/novo-abastecimento")}
+            className="flex w-full items-center gap-4 rounded-2xl border-2 border-border bg-card p-4 text-left active:opacity-75"
+          >
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-secondary">
+              <Fuel size={26} color="#13316b" strokeWidth={2.5} />
+            </div>
+            <div className="flex-1">
+              <p className="text-lg font-bold text-foreground">Abastecimento</p>
+              <p className="text-sm text-muted-foreground">Registrar combustível e odômetro</p>
+            </div>
+          </button>
+        )}
+
+        {me.data &&
+          !me.data.podeLancarViagem &&
+          !me.data.podeLancarPedagio &&
+          !me.data.podeLancarAbastecimento && (
+            <div className="rounded-2xl border-2 border-dashed border-border bg-card p-6 text-center">
+              <p className="text-base font-semibold text-foreground">
+                Nenhuma funcionalidade liberada agora
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Fale com o escritório pra liberar lançamentos no app.
+              </p>
+            </div>
           )}
-          {viagens.data?.map((v) => (
-            <article key={v.id} className="rounded-lg border bg-background p-3">
-              <div className="flex items-center justify-between text-sm">
-                <span className="font-mono">{v.veiculo.placa}</span>
-                <span className="text-muted-foreground">{formatBR(v.data)}</span>
+
+        {/* Resumo mês */}
+        {resumo.data && resumo.data.totalViagens > 0 && (
+          <div className="mt-3 rounded-2xl border-2 border-border bg-card p-4">
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              Resumo de {fmtMesLongo(resumo.data.mes)}
+            </p>
+            <div className="mt-3 flex gap-6">
+              <ResumoStat label="viagens" value={String(resumo.data.totalViagens)} />
+              <ResumoStat label="t" value={fmtNum(resumo.data.totalToneladas, 1)} />
+              <ResumoStat label="km" value={fmtNum(resumo.data.totalKm, 0)} />
+            </div>
+            {resumo.data.pedagios.count > 0 && (
+              <div className="mt-3 flex gap-6 border-t-2 border-border pt-3">
+                <ResumoStat label="pedágios" value={String(resumo.data.pedagios.count)} />
+                <ResumoStat label="total" value={`R$ ${fmtNum(resumo.data.pedagios.totalValor, 2)}`} />
               </div>
-              <div className="mt-1 flex items-baseline justify-between">
-                <p className="font-medium">{v.material.nome}</p>
-                <p className="text-sm">
-                  {formatNumber(v.toneladas, 3)} t · ticket {v.ticket}
-                </p>
-              </div>
-              <div className="mt-2 space-y-0.5 text-xs text-muted-foreground">
-                <div className="flex items-center gap-1">
-                  <ArrowUp className="h-3 w-3" /> {v.localCarga.nome} ({v.localCarga.cidade}/{v.localCarga.uf})
-                </div>
-                <div className="flex items-center gap-1">
-                  <ArrowDown className="h-3 w-3" /> {v.localDescarga.nome} ({v.localDescarga.cidade}/{v.localDescarga.uf})
-                </div>
-              </div>
-            </article>
+            )}
+          </div>
+        )}
+
+        <p className="mt-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
+          Suas viagens recentes
+        </p>
+
+        {viagens.isLoading && (
+          <div className="space-y-3">
+            <ViagemCardSkeleton />
+            <ViagemCardSkeleton />
+            <ViagemCardSkeleton />
+          </div>
+        )}
+
+        {!viagens.isLoading && viagens.error && (
+          <EmptyState
+            icon={WifiOff}
+            title="Sem viagens disponíveis"
+            description="Sem internet e sem viagens em cache."
+            iconColor="#dc2626"
+          />
+        )}
+
+        {!viagens.isLoading && !viagens.error && (viagens.data?.length ?? 0) === 0 && (
+          <EmptyState
+            icon={Truck}
+            title="Nenhuma viagem ainda"
+            description='Toque em "Nova viagem" pra começar.'
+          />
+        )}
+
+        <div className="space-y-3">
+          {(viagens.data ?? []).map((v) => (
+            <ViagemCard key={v.id} v={v} onExcluir={() => confirmarExcluir(v)} />
           ))}
         </div>
-      </section>
 
-      {(pendingPedagios.length > 0 || (pedagios.data && pedagios.data.length > 0)) && (
-        <section className="space-y-2">
-          <h2 className="text-sm font-medium text-muted-foreground">Últimos pedágios</h2>
-          <div className="space-y-2">
-            {pendingPedagios.map((p) => (
-              <article
-                key={p.clientId}
-                className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50/40 p-3 text-sm"
-              >
-                <div>
-                  <p className="font-medium">{String(p.payload.pracaPedagio)}</p>
-                  <p className="text-xs text-amber-700">
-                    {p.status === "syncing" ? "enviando..." : "aguardando rede"}
-                  </p>
-                </div>
-                <span className="font-mono">{formatBRL(Number(p.payload.valor))}</span>
-              </article>
-            ))}
-            {pedagios.data?.slice(0, 5).map((p) => (
-              <article key={p.id} className="flex items-center justify-between rounded-lg border bg-background p-3 text-sm">
-                <div>
-                  <p className="font-medium">{p.pracaPedagio}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {p.veiculo.placa} · {formatBR(p.data)}
-                  </p>
-                </div>
-                <span className="font-mono">{formatBRL(p.valor)}</span>
-              </article>
-            ))}
+        {(viagens.data?.length ?? 0) > 0 && (
+          <button
+            type="button"
+            onClick={() => navigate("/historico")}
+            className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
+          >
+            <span className="text-base font-bold text-foreground">Ver tudo</span>
+            <ArrowRight size={18} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ViagemCard({ v, onExcluir }: { v: Viagem; onExcluir: () => void }) {
+  const navigate = useNavigate();
+  const variant = statusVariant[v.status] ?? "outline";
+  const label = statusLabel[v.status] ?? v.status;
+  const podeExcluir = v.status === "ENVIADA";
+
+  return (
+    <div className="overflow-hidden rounded-2xl border-2 border-border bg-card">
+      <button
+        type="button"
+        onClick={() => navigate(`/viagens/${v.id}`)}
+        className="block w-full p-4 text-left active:opacity-75"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="truncate text-lg font-bold text-foreground">{v.cliente.nome}</p>
+            <p className="mt-0.5 text-base font-medium text-muted-foreground tabular">
+              {fmtDataCurta(v.data)} · {v.veiculo.placa}
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground/80 tabular">
+              Cadastrada {fmtDataHoraCurta(v.sincronizadoEm)}
+            </p>
           </div>
-        </section>
+          <Badge variant={variant}>{label}</Badge>
+        </div>
+
+        <div className="mt-3 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <ArrowUp size={16} className="text-success" />
+            <span className="flex-1 truncate text-base font-medium text-foreground">
+              {v.localCarga.nome}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <ArrowDown size={16} className="text-destructive" />
+            <span className="flex-1 truncate text-base font-medium text-foreground">
+              {v.localDescarga.nome}
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-3 flex gap-5 border-t-2 border-border pt-3">
+          <Stat
+            label="t"
+            value={fmtNum(v.toneladasEfetiva, 3)}
+            subValue={v.toneladasAjustada ? `(${fmtNum(v.toneladasInformada, 3)})` : undefined}
+          />
+          <Stat
+            label="km"
+            value={fmtNum(v.kmEfetivo, 2)}
+            subValue={v.kmAjustada ? `(${fmtNum(v.kmInformado, 2)})` : undefined}
+          />
+          <Stat label="ticket" value={v.ticket} />
+        </div>
+      </button>
+      {podeExcluir && (
+        <button
+          type="button"
+          onClick={onExcluir}
+          className="flex w-full items-center justify-center gap-2 border-t-2 border-border bg-muted py-2 text-sm font-bold text-destructive active:opacity-75"
+        >
+          <Trash2 size={16} /> Excluir
+        </button>
       )}
     </div>
   );
 }
 
-function SkeletonRow() {
-  return <div className="h-20 animate-pulse rounded-lg border bg-muted/30" />;
+function Stat({ label, value, subValue }: { label: string; value: string; subValue?: string }) {
+  return (
+    <div>
+      <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="text-lg font-bold text-foreground tabular">{value}</p>
+      {subValue && <p className="text-[10px] text-muted-foreground">{subValue}</p>}
+    </div>
+  );
+}
+
+function ResumoStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="text-2xl font-extrabold text-foreground tabular">{value}</p>
+    </div>
+  );
 }

@@ -1,39 +1,31 @@
 import { useEffect, useState } from "react";
-import { db, type PendingPedagio, type PendingViagem } from "@/db/dexie";
-import { onSyncChange } from "@/lib/sync";
+import { onSyncChange, pendingCounts } from "@/lib/sync";
 
-export function usePendingViagens(): PendingViagem[] {
-  const [items, setItems] = useState<PendingViagem[]>([]);
+export function usePending() {
+  const [counts, setCounts] = useState({
+    viagens: 0,
+    pedagios: 0,
+    abastecimentos: 0,
+    comErro: 0,
+  });
+
   useEffect(() => {
     let alive = true;
     const refresh = async () => {
-      const all = await db.pendingViagens.orderBy("createdAt").reverse().toArray();
-      if (alive) setItems(all);
+      try {
+        const c = await pendingCounts();
+        if (alive) setCounts(c);
+      } catch {
+        /* db pode não estar pronto ainda */
+      }
     };
     void refresh();
     const off = onSyncChange(refresh);
-    return () => { alive = false; off(); };
-  }, []);
-  return items;
-}
-
-export function usePendingPedagios(): PendingPedagio[] {
-  const [items, setItems] = useState<PendingPedagio[]>([]);
-  useEffect(() => {
-    let alive = true;
-    const refresh = async () => {
-      const all = await db.pendingPedagios.orderBy("createdAt").reverse().toArray();
-      if (alive) setItems(all);
+    return () => {
+      alive = false;
+      off();
     };
-    void refresh();
-    const off = onSyncChange(refresh);
-    return () => { alive = false; off(); };
   }, []);
-  return items;
-}
 
-export function usePendingCount() {
-  const v = usePendingViagens();
-  const p = usePendingPedagios();
-  return v.length + p.length;
+  return counts;
 }
