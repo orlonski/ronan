@@ -348,7 +348,13 @@ export class ViagensAdminService {
   async recalcularTrajeto(id: string, usuarioId: string) {
     const viagem = await this.prisma.viagem.findUnique({
       where: { id },
-      select: { id: true, localCargaId: true, localDescargaId: true },
+      select: {
+        id: true,
+        localCargaId: true,
+        localDescargaId: true,
+        km: true,
+        kmCalculado: true,
+      },
     });
     if (!viagem) throw new NotFoundException("Viagem não encontrada");
 
@@ -371,6 +377,14 @@ export class ViagensAdminService {
       throw new BadRequestException(resultado.erro);
     }
 
+    // Persiste o novo valor na viagem. Admin clicou explicitamente, quer ver
+    // o KM atualizado na tela e no fechamento.
+    const novoKm = parseFloat(resultado.km);
+    await this.prisma.viagem.update({
+      where: { id: viagem.id },
+      data: { km: novoKm, kmCalculado: novoKm },
+    });
+
     await this.auditoria.log({
       usuarioId,
       entidade: "Viagem",
@@ -379,6 +393,10 @@ export class ViagensAdminService {
       metadata: {
         kmAntes: cacheAntes?.km.toString() ?? null,
         kmDepois: resultado.km,
+        kmInformadoAntes: viagem.km.toString(),
+        kmInformadoDepois: resultado.km,
+        kmCalculadoAntes: viagem.kmCalculado?.toString() ?? null,
+        kmCalculadoDepois: resultado.km,
         tinhaGeometria: cacheAntes?.geometria != null,
         temGeometria: resultado.geometria != null,
       },
