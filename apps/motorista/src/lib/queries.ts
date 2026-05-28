@@ -683,6 +683,51 @@ export async function buscarLocaisProximos(input: {
 }
 
 /**
+ * Versão offline de buscarLocaisProximos: filtra o catálogo cacheado
+ * client-side. Sem vezesUsadoMotorista (não temos o histórico) — sempre 0.
+ */
+export function buscarLocaisProximosOffline(input: {
+  lat: number;
+  lng: number;
+  locais: Local[];
+  tipoUso?: "carga" | "descarga" | "ambos";
+  raioM?: number;
+  limit?: number;
+}): LocalProximo[] {
+  const raio = input.raioM ?? 500;
+  const limit = input.limit ?? 5;
+  const tiposPermitidos: Array<Local["tipo"]> =
+    input.tipoUso === "carga"
+      ? ["CARGA", "AMBOS"]
+      : input.tipoUso === "descarga"
+        ? ["DESCARGA", "AMBOS"]
+        : ["CARGA", "DESCARGA", "AMBOS"];
+
+  const matches: LocalProximo[] = [];
+  for (const l of input.locais) {
+    if (l.lat == null || l.lng == null) continue;
+    if (!tiposPermitidos.includes(l.tipo)) continue;
+    const d = haversineMetros(input.lat, input.lng, l.lat, l.lng);
+    if (d > raio) continue;
+    matches.push({
+      id: l.id,
+      nome: l.nome,
+      cidade: l.cidade,
+      uf: l.uf,
+      tipo: l.tipo,
+      lat: l.lat,
+      lng: l.lng,
+      nivelConfianca: "OFFLINE",
+      clienteIds: l.clienteIds,
+      distanciaMetros: Math.round(d),
+      vezesUsadoMotorista: 0,
+    });
+  }
+  matches.sort((a, b) => a.distanciaMetros - b.distanciaMetros);
+  return matches.slice(0, limit);
+}
+
+/**
  * Cria local rápido (só nome + GPS). Backend resolve endereço via reverse
  * geocoding. Local entra como RASCUNHO e vai pra fila Em Validação do dashboard.
  */

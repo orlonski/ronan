@@ -129,13 +129,9 @@ export function DescargaPorGps({
         raioM: 500,
         limit: 5,
       });
-      if (matches.length === 0) {
-        setErro(
-          "Sem internet e não achei locais conhecidos perto. Tente de novo quando o sinal voltar.",
-        );
-        setEstado({ tipo: "vazio" });
-        return;
-      }
+      // Se nada veio do cache (lugar novo), cai no fluxo padrão de
+      // sem_match abaixo — motorista digita o nome e o local entra no
+      // outbox offline (pendingLocais). Não bloqueia mais.
     }
 
     if (matches.length === 0) {
