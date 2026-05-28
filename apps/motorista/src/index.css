@@ -3,6 +3,13 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    /* Base reduzida pra escala mais próxima de app web mobile padrão.
+       Todos os utilitários Tailwind baseados em rem encolhem junto:
+       text-base (1rem) = 13px, h-14 (3.5rem) = 45.5px, p-4 (1rem) = 13px etc. */
+    font-size: 13px;
+  }
+
   html,
   body,
   #root {
@@ -18,7 +25,8 @@
     overscroll-behavior-y: contain;
   }
 
-  /* iOS: impede zoom involuntário ao focar input (fontes < 16px) */
+  /* iOS exige font-size >= 16px em inputs pra não dar zoom involuntário ao focar.
+     Override explícito porque a base agora é 13px. */
   input,
   select,
   textarea {
