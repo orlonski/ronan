@@ -58,38 +58,39 @@ export default function ViagemDetalheScreen() {
   const detalhe = useViagemDetalhe(id ?? "");
   const excluir = useExcluirViagem();
   const [token, setToken] = useState<string | null>(null);
-  const [novaFoto, setNovaFoto] = useState<CapturedPhoto | null>(null);
-  const [enviandoFoto, setEnviandoFoto] = useState(false);
+  // Timestamp do último envio bem-sucedido. Usado pra mostrar feedback
+  // inline ("✓ anexada") por ~3s sem travar o motorista num alert modal.
+  const [ultimoEnvio, setUltimoEnvio] = useState<number | null>(null);
 
   useEffect(() => {
     void loadTokens().then((t) => setToken(t?.accessToken ?? null));
   }, []);
 
-  async function adicionarFoto() {
-    if (!novaFoto || !detalhe.data) return;
-    setEnviandoFoto(true);
+  async function onFotoCapturada(foto: CapturedPhoto | null) {
+    // Motorista cancelou (descartou no PhotoCapture). Ignora.
+    if (!foto || !detalhe.data) return;
     try {
-      // Enfileira no outbox — sincroniza online; UI mostra "adicionada"
-      // imediatamente. Refetch puxa quando o servidor confirmar.
+      // Enfileira direto no outbox — sem segundo botão "Anexar". PhotoCapture
+      // já fez o motorista confirmar ("Usar foto") dentro da câmera.
       await enqueueFoto({
         viagemId: detalhe.data.id,
-        fotoUri: novaFoto.uri,
-        fotoMime: novaFoto.mime,
+        fotoUri: foto.uri,
+        fotoMime: foto.mime,
       });
-      setNovaFoto(null);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      void showAlert({
-        title: "Foto enviada",
-        message: "Foi pra fila. Aparece aqui depois que sincronizar.",
-      });
+      const agora = Date.now();
+      setUltimoEnvio(agora);
+      // Esconde a confirmação depois de 3s, mas só se não veio outra foto
+      // no meio (motorista tirou várias seguidas — mantém o último ativo).
+      setTimeout(() => {
+        setUltimoEnvio((t) => (t === agora ? null : t));
+      }, 3000);
     } catch (err) {
       void showAlert({
-        title: "Erro",
+        title: "Erro ao anexar foto",
         message: humanizeApiError(err),
         variant: "destructive",
       });
-    } finally {
-      setEnviandoFoto(false);
     }
   }
 
@@ -332,18 +333,14 @@ export default function ViagemDetalheScreen() {
               </Text>
             )}
             <View className="mt-3 gap-2">
-              <PhotoCapture value={novaFoto} onChange={setNovaFoto} />
-              {novaFoto && (
-                <Button
-                  onPress={adicionarFoto}
-                  loading={enviandoFoto}
-                  disabled={enviandoFoto}
-                >
-                  <Camera size={18} color="white" />
-                  <Text className="text-base font-bold text-primary-foreground">
-                    Anexar foto à viagem
-                  </Text>
-                </Button>
+              {/* value sempre null → componente reseta após cada captura.
+                  onChange já enfileira a foto direto (motorista confirmou
+                  com "Usar foto" dentro da câmera). */}
+              <PhotoCapture value={null} onChange={onFotoCapturada} />
+              {ultimoEnvio && (
+                <Text className="text-sm font-medium text-success">
+                  ✓ Foto anexada. Sincroniza assim que tiver internet.
+                </Text>
               )}
             </View>
           </Card>

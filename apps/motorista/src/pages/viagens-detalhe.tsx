@@ -1,6 +1,5 @@
 import { lazy, Suspense, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Camera } from "lucide-react";
 import {
   ArrowDown,
   ArrowUp,
@@ -50,31 +49,29 @@ export default function ViagemDetalhePage() {
   const { id } = useParams<{ id: string }>();
   const detalhe = useViagemDetalhe(id ?? "");
   const excluir = useExcluirViagem();
-  const [novaFoto, setNovaFoto] = useState<FotoComprimida | null>(null);
-  const [enviandoFoto, setEnviandoFoto] = useState(false);
+  // Timestamp do último envio bem-sucedido. Mostra confirmação inline
+  // por ~3s em vez de modal — não trava o motorista.
+  const [ultimoEnvio, setUltimoEnvio] = useState<number | null>(null);
 
-  async function adicionarFoto() {
-    if (!novaFoto || !detalhe.data) return;
-    setEnviandoFoto(true);
+  async function onFotoCapturada(foto: FotoComprimida | null) {
+    if (!foto || !detalhe.data) return;
     try {
       await enqueueFoto({
         viagemId: detalhe.data.id,
-        blob: novaFoto.blob,
-        mime: novaFoto.mime,
+        blob: foto.blob,
+        mime: foto.mime,
       });
-      setNovaFoto(null);
-      void showAlert({
-        title: "Foto enviada",
-        message: "Foi pra fila. Aparece aqui depois que sincronizar.",
-      });
+      const agora = Date.now();
+      setUltimoEnvio(agora);
+      setTimeout(() => {
+        setUltimoEnvio((t) => (t === agora ? null : t));
+      }, 3000);
     } catch (err) {
       void showAlert({
-        title: "Erro",
+        title: "Erro ao anexar foto",
         message: humanizeApiError(err),
         variant: "destructive",
       });
-    } finally {
-      setEnviandoFoto(false);
     }
   }
 
@@ -265,17 +262,14 @@ export default function ViagemDetalhePage() {
               </p>
             )}
             <div className="mt-3 space-y-2">
-              <PhotoCapture value={novaFoto} onChange={setNovaFoto} />
-              {novaFoto && (
-                <Button
-                  onClick={adicionarFoto}
-                  loading={enviandoFoto}
-                  disabled={enviandoFoto}
-                  className="w-full"
-                >
-                  <Camera size={18} />
-                  Anexar foto à viagem
-                </Button>
+              {/* value sempre null → reseta após cada captura. Confirmação
+                  "Usar foto" do próprio PhotoCapture já é o "confirmar" —
+                  não pede segundo clique. */}
+              <PhotoCapture value={null} onChange={onFotoCapturada} />
+              {ultimoEnvio && (
+                <p className="text-sm font-medium text-success">
+                  ✓ Foto anexada. Sincroniza assim que tiver internet.
+                </p>
               )}
             </div>
           </Card>
