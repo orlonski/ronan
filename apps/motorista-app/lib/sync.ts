@@ -41,6 +41,16 @@ function extractErrorDetails(err: unknown): {
 const MAX_ATTEMPTS = 8;
 
 /**
+ * Tempo após o qual um item com status="syncing" é considerado órfão.
+ * Acontece quando o processo morre no meio do upload de foto / POST viagem
+ * (background kill do SO, app fechado, foreground service do tracking
+ * competindo). Sem rescue, o item fica eternamente travado — drain skipa
+ * todos os "syncing". 5 min cobre folga generosa pro upload legítimo de
+ * foto em 3G ruim (timeout configurado é 60s).
+ */
+const STALE_SYNCING_MS = 5 * 60 * 1000;
+
+/**
  * Erros 4xx do servidor são "permanentes" — não vão dar certo no retry.
  * Pra evitar 8 tentativas inúteis, marca como permanente (attempts =
  * MAX_ATTEMPTS) e o motorista resolve no app (editando ou descartando).
@@ -278,6 +288,10 @@ export async function drain(): Promise<void> {
   if (!net.isConnected) return;
   draining = true;
   try {
+    // Destrava itens com status="syncing" órfão de drain anterior morto
+    // no meio do envio. Backend é idempotente (clientId @unique), retry
+    // seguro — retorna existente em vez de duplicar.
+    await rescueStaleItems();
     // Locais ANTES de viagens: viagens podem ter localDescargaId apontando
     // pra um local pendente. Se a viagem chegar primeiro, FK violation.
     await drainLocais();
@@ -287,6 +301,33 @@ export async function drain(): Promise<void> {
   } finally {
     draining = false;
     notify();
+  }
+}
+
+async function rescueStaleItems(): Promise<void> {
+  const limite = Date.now() - STALE_SYNCING_MS;
+  const isStale = (lastTriedAt?: number) =>
+    !lastTriedAt || lastTriedAt < limite;
+
+  for (const v of await listPendingViagens()) {
+    if (v.status === "syncing" && isStale(v.lastTriedAt)) {
+      await upsertPendingViagem({ ...v, status: "pending" });
+    }
+  }
+  for (const l of await listPendingLocais()) {
+    if (l.status === "syncing" && isStale(l.lastTriedAt)) {
+      await upsertPendingLocal({ ...l, status: "pending" });
+    }
+  }
+  for (const p of await listPendingPedagios()) {
+    if (p.status === "syncing" && isStale(p.lastTriedAt)) {
+      await upsertPendingPedagio({ ...p, status: "pending" });
+    }
+  }
+  for (const a of await listPendingAbastecimentos()) {
+    if (a.status === "syncing" && isStale(a.lastTriedAt)) {
+      await upsertPendingAbastecimento({ ...a, status: "pending" });
+    }
   }
 }
 

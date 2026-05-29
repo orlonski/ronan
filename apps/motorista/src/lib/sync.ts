@@ -38,6 +38,10 @@ function extractErrorDetails(err: unknown): {
 
 const MAX_ATTEMPTS = 8;
 
+/** Tempo após o qual um item com status="syncing" é considerado órfão.
+ *  Espelha o motorista-app — ver doc lá. */
+const STALE_SYNCING_MS = 5 * 60 * 1000;
+
 function isErroPermanente(err: unknown): boolean {
   if (!(err instanceof ApiError)) return false;
   if (err.status >= 500) return false;
@@ -248,6 +252,9 @@ export async function drain(): Promise<void> {
   if (!isOnline()) return;
   draining = true;
   try {
+    // Destrava itens com status="syncing" órfão de drain anterior morto
+    // no meio do envio. Backend idempotente — retry seguro.
+    await rescueStaleItems();
     // Locais ANTES de viagens: viagens podem ter localDescargaId apontando
     // pra um local pendente. Se a viagem chegar primeiro, FK violation.
     await drainLocais();
@@ -257,6 +264,33 @@ export async function drain(): Promise<void> {
   } finally {
     draining = false;
     notify();
+  }
+}
+
+async function rescueStaleItems(): Promise<void> {
+  const limite = Date.now() - STALE_SYNCING_MS;
+  const isStale = (lastTriedAt?: number) =>
+    !lastTriedAt || lastTriedAt < limite;
+
+  for (const v of await listPendingViagens()) {
+    if (v.status === "syncing" && isStale(v.lastTriedAt)) {
+      await upsertPendingViagem({ ...v, status: "pending" });
+    }
+  }
+  for (const l of await listPendingLocais()) {
+    if (l.status === "syncing" && isStale(l.lastTriedAt)) {
+      await upsertPendingLocal({ ...l, status: "pending" });
+    }
+  }
+  for (const p of await listPendingPedagios()) {
+    if (p.status === "syncing" && isStale(p.lastTriedAt)) {
+      await upsertPendingPedagio({ ...p, status: "pending" });
+    }
+  }
+  for (const a of await listPendingAbastecimentos()) {
+    if (a.status === "syncing" && isStale(a.lastTriedAt)) {
+      await upsertPendingAbastecimento({ ...a, status: "pending" });
+    }
   }
 }
 
