@@ -26,11 +26,13 @@ import { ScreenHeader } from "@/components/screen-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { showAlert, showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { API_URL } from "@/lib/api-url";
 import { loadTokens } from "@/lib/auth";
 import { useExcluirViagem, useViagemDetalhe } from "@/lib/queries";
+import { enqueueFoto } from "@/lib/sync";
 
 const STATUS_VARIANT: Record<
   string,
@@ -56,10 +58,40 @@ export default function ViagemDetalheScreen() {
   const detalhe = useViagemDetalhe(id ?? "");
   const excluir = useExcluirViagem();
   const [token, setToken] = useState<string | null>(null);
+  const [novaFoto, setNovaFoto] = useState<CapturedPhoto | null>(null);
+  const [enviandoFoto, setEnviandoFoto] = useState(false);
 
   useEffect(() => {
     void loadTokens().then((t) => setToken(t?.accessToken ?? null));
   }, []);
+
+  async function adicionarFoto() {
+    if (!novaFoto || !detalhe.data) return;
+    setEnviandoFoto(true);
+    try {
+      // Enfileira no outbox — sincroniza online; UI mostra "adicionada"
+      // imediatamente. Refetch puxa quando o servidor confirmar.
+      await enqueueFoto({
+        viagemId: detalhe.data.id,
+        fotoUri: novaFoto.uri,
+        fotoMime: novaFoto.mime,
+      });
+      setNovaFoto(null);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      void showAlert({
+        title: "Foto enviada",
+        message: "Foi pra fila. Aparece aqui depois que sincronizar.",
+      });
+    } catch (err) {
+      void showAlert({
+        title: "Erro",
+        message: humanizeApiError(err),
+        variant: "destructive",
+      });
+    } finally {
+      setEnviandoFoto(false);
+    }
+  }
 
   function abrirMapa(lat: number, lng: number) {
     void Linking.openURL(`geo:${lat},${lng}?q=${lat},${lng}`).catch(() => {
@@ -271,28 +303,50 @@ export default function ViagemDetalheScreen() {
             </Card>
           )}
 
-          {/* Foto */}
-          {detalhe.data.fotos.length > 0 && token && (
-            <Card>
-              <View className="mb-2 flex-row items-center gap-2">
-                <Camera size={16} color="#0f172a" />
-                <Text className="text-base font-bold text-foreground">
-                  Foto do ticket
-                </Text>
+          {/* Foto do ticket — mostra existentes + permite adicionar nova */}
+          <Card>
+            <View className="mb-2 flex-row items-center gap-2">
+              <Camera size={16} color="#0f172a" />
+              <Text className="text-base font-bold text-foreground">
+                Foto do ticket
+              </Text>
+            </View>
+            {detalhe.data.fotos.length > 0 && token && (
+              <View className="gap-2">
+                {detalhe.data.fotos.map((f) => (
+                  <Image
+                    key={f.id}
+                    source={{
+                      uri: `${API_URL}/m/viagens/${detalhe.data!.id}/fotos/${f.id}`,
+                      headers: { Authorization: `Bearer ${token}` },
+                    }}
+                    style={{ width: "100%", aspectRatio: 4 / 3, borderRadius: 12 }}
+                    resizeMode="cover"
+                  />
+                ))}
               </View>
-              {detalhe.data.fotos.map((f) => (
-                <Image
-                  key={f.id}
-                  source={{
-                    uri: `${API_URL}/m/viagens/${detalhe.data!.id}/fotos/${f.id}`,
-                    headers: { Authorization: `Bearer ${token}` },
-                  }}
-                  style={{ width: "100%", aspectRatio: 4 / 3, borderRadius: 12 }}
-                  resizeMode="cover"
-                />
-              ))}
-            </Card>
-          )}
+            )}
+            {detalhe.data.fotos.length === 0 && (
+              <Text className="mb-3 text-sm text-muted-foreground">
+                Nenhuma foto anexada.
+              </Text>
+            )}
+            <View className="mt-3 gap-2">
+              <PhotoCapture value={novaFoto} onChange={setNovaFoto} />
+              {novaFoto && (
+                <Button
+                  onPress={adicionarFoto}
+                  loading={enviandoFoto}
+                  disabled={enviandoFoto}
+                >
+                  <Camera size={18} color="white" />
+                  <Text className="text-base font-bold text-primary-foreground">
+                    Anexar foto à viagem
+                  </Text>
+                </Button>
+              )}
+            </View>
+          </Card>
 
           {/* Trajeto carga→descarga (só se nao tem GPS tracking — senao MapTrajeto
               acima já mostra o trajeto real) */}

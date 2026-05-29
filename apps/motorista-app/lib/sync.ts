@@ -3,18 +3,22 @@ import NetInfo from "@react-native-community/netinfo";
 import { drenar as drenarEventos, reportarEvento } from "./event-reporter";
 import {
   deletePendingAbastecimento,
+  deletePendingFoto,
   deletePendingLocal,
   deletePendingPedagio,
   deletePendingViagem,
   listPendingAbastecimentos,
+  listPendingFotos,
   listPendingLocais,
   listPendingPedagios,
   listPendingViagens,
   upsertPendingAbastecimento,
+  upsertPendingFoto,
   upsertPendingLocal,
   upsertPendingPedagio,
   upsertPendingViagem,
   type PendingAbastecimento,
+  type PendingFoto,
   type PendingLocal,
   type PendingPedagio,
   type PendingViagem,
@@ -236,6 +240,30 @@ export async function enqueueAbastecimento(
 }
 
 /**
+ * Enfileira uma foto pra anexar em viagem JÁ sincronizada. Motorista
+ * abre detalhe da viagem e adiciona foto que esqueceu. Drain faz 2-step:
+ * sobe a foto via /m/uploads/ticket, depois POST /m/viagens/:id/fotos.
+ */
+export async function enqueueFoto(item: {
+  viagemId: string;
+  fotoUri: string;
+  fotoMime: string;
+}): Promise<void> {
+  const clientId = `${item.viagemId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  await upsertPendingFoto({
+    clientId,
+    viagemId: item.viagemId,
+    fotoUri: item.fotoUri,
+    fotoMime: item.fotoMime,
+    status: "pending",
+    attempts: 0,
+    createdAt: Date.now(),
+  });
+  notify();
+  void drain();
+}
+
+/**
  * Enfileira a criação de um local novo (descarga em lugar nunca visto).
  * clientId é o UUID gerado client-side, vira o id real no servidor pra
  * idempotência. A viagem que referencia esse local usa o mesmo clientId
@@ -296,6 +324,9 @@ export async function drain(): Promise<void> {
     // pra um local pendente. Se a viagem chegar primeiro, FK violation.
     await drainLocais();
     await drainViagens();
+    // Fotos DEPOIS de viagens: foto pode estar referenciando viagem que
+    // acabou de ser sincronizada (raro mas possível).
+    await drainFotos();
     await drainPedagios();
     await drainAbastecimentos();
   } finally {
@@ -329,6 +360,54 @@ async function rescueStaleItems(): Promise<void> {
       await upsertPendingAbastecimento({ ...a, status: "pending" });
     }
   }
+  for (const f of await listPendingFotos()) {
+    if (f.status === "syncing" && isStale(f.lastTriedAt)) {
+      await upsertPendingFoto({ ...f, status: "pending" });
+    }
+  }
+}
+
+async function drainFotos(): Promise<void> {
+  const list = await listPendingFotos();
+  for (const item of list) {
+    if (item.status === "syncing") continue;
+    if (item.attempts >= MAX_ATTEMPTS) continue;
+    const net = await NetInfo.fetch();
+    if (!net.isConnected) return;
+    await processFoto(item);
+  }
+}
+
+async function processFoto(item: PendingFoto): Promise<void> {
+  await upsertPendingFoto({ ...item, status: "syncing", lastTriedAt: Date.now() });
+  notify();
+  try {
+    // 2-step: sobe a foto pro MinIO pegando storageKey, depois associa à viagem.
+    const fd = new FormData();
+    const filename = `ticket-${item.clientId}.${
+      item.fotoMime.includes("png") ? "png" : "jpg"
+    }`;
+    fd.append("foto", {
+      uri: item.fotoUri,
+      type: item.fotoMime,
+      name: filename,
+    } as unknown as Blob);
+    const up = await api.postForm<{ storageKey: string }>("/m/uploads/ticket", fd);
+    await api.post(`/m/viagens/${item.viagemId}/fotos`, { fotoKey: up.storageKey });
+    await deletePendingFoto(item.clientId);
+  } catch (err) {
+    const permanente = isErroPermanente(err);
+    const { msg, status, issues } = extractErrorDetails(err);
+    await upsertPendingFoto({
+      ...item,
+      status: "error",
+      errorMsg: msg,
+      errorStatus: status,
+      errorIssues: issues,
+      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
+    });
+  }
+  notify();
 }
 
 async function drainLocais(): Promise<void> {

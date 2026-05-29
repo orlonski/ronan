@@ -48,6 +48,22 @@ export type PendingAbastecimento = {
   errorIssues?: ZodIssueSaved[];
 };
 
+/** Foto a anexar em viagem JÁ sincronizada (motorista esqueceu no
+ *  lançamento). viagemId é o id real do servidor. */
+export type PendingFoto = {
+  clientId: string;
+  viagemId: string;
+  fotoBlob: Blob;
+  fotoMime: string;
+  status: SyncStatus;
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
+};
+
 /** Local criado offline. clientId vira id real no servidor (idempotência). */
 export type PendingLocal = {
   clientId: string;
@@ -78,6 +94,7 @@ class RonanDB extends Dexie {
   pendingPedagios!: EntityTable<PendingPedagio, "clientId">;
   pendingAbastecimentos!: EntityTable<PendingAbastecimento, "clientId">;
   pendingLocais!: EntityTable<PendingLocal, "clientId">;
+  pendingFotos!: EntityTable<PendingFoto, "clientId">;
   cache!: EntityTable<CacheEntry, "key">;
 
   constructor() {
@@ -109,6 +126,10 @@ class RonanDB extends Dexie {
     // v4: criação de local de descarga offline (mesma estrutura do outbox).
     this.version(4).stores({
       pendingLocais: "clientId, status, createdAt",
+    });
+    // v5: foto anexada a viagem já sincronizada.
+    this.version(5).stores({
+      pendingFotos: "clientId, status, createdAt, viagemId",
     });
   }
 }
@@ -209,4 +230,20 @@ export async function upsertPendingLocal(item: PendingLocal): Promise<void> {
 
 export async function deletePendingLocal(clientId: string): Promise<void> {
   await db.pendingLocais.delete(clientId);
+}
+
+export async function listPendingFotos(): Promise<PendingFoto[]> {
+  try {
+    return await db.pendingFotos.orderBy("createdAt").reverse().toArray();
+  } catch {
+    return [];
+  }
+}
+
+export async function upsertPendingFoto(item: PendingFoto): Promise<void> {
+  await db.pendingFotos.put(item);
+}
+
+export async function deletePendingFoto(clientId: string): Promise<void> {
+  await db.pendingFotos.delete(clientId);
 }

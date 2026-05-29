@@ -84,6 +84,24 @@ export type PendingAbastecimento = {
   errorIssues?: ZodIssueSaved[];
 };
 
+/** Foto a anexar em viagem JÁ sincronizada. Motorista esqueceu de anexar
+ * no lançamento; abre a tela de detalhe da viagem e adiciona depois.
+ * viagemId é o id real do servidor (viagem precisa existir lá). */
+export type PendingFoto = {
+  /** UUID gerado client-side pra identificar essa pending. */
+  clientId: string;
+  viagemId: string;
+  fotoUri: string;
+  fotoMime: string;
+  status: "pending" | "syncing" | "error";
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
+};
+
 /** Local de descarga criado offline. clientId vira id real no servidor
  * (POST /m/locais/rapido aceita id pra idempotência). */
 export type PendingLocal = {
@@ -108,6 +126,7 @@ const VIAGENS_KEY = `${PREFIX}outbox.viagens`;
 const PEDAGIOS_KEY = `${PREFIX}outbox.pedagios`;
 const ABASTECIMENTOS_KEY = `${PREFIX}outbox.abastecimentos`;
 const LOCAIS_KEY = `${PREFIX}outbox.locais`;
+const FOTOS_KEY = `${PREFIX}outbox.fotos`;
 
 async function readList<T>(key: string): Promise<T[]> {
   try {
@@ -202,6 +221,26 @@ export async function deletePendingLocal(clientId: string): Promise<void> {
   const list = await listPendingLocais();
   await writeList(
     LOCAIS_KEY,
+    list.filter((x) => x.clientId !== clientId),
+  );
+}
+
+export async function listPendingFotos(): Promise<PendingFoto[]> {
+  return readList<PendingFoto>(FOTOS_KEY);
+}
+
+export async function upsertPendingFoto(item: PendingFoto): Promise<void> {
+  const list = await listPendingFotos();
+  const idx = list.findIndex((x) => x.clientId === item.clientId);
+  if (idx >= 0) list[idx] = item;
+  else list.unshift(item);
+  await writeList(FOTOS_KEY, list);
+}
+
+export async function deletePendingFoto(clientId: string): Promise<void> {
+  const list = await listPendingFotos();
+  await writeList(
+    FOTOS_KEY,
     list.filter((x) => x.clientId !== clientId),
   );
 }

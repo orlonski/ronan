@@ -1,17 +1,21 @@
 import {
   deletePendingAbastecimento,
+  deletePendingFoto,
   deletePendingLocal,
   deletePendingPedagio,
   deletePendingViagem,
   listPendingAbastecimentos,
+  listPendingFotos,
   listPendingLocais,
   listPendingPedagios,
   listPendingViagens,
   upsertPendingAbastecimento,
+  upsertPendingFoto,
   upsertPendingLocal,
   upsertPendingPedagio,
   upsertPendingViagem,
   type PendingAbastecimento,
+  type PendingFoto,
   type PendingLocal,
   type PendingPedagio,
   type PendingViagem,
@@ -201,6 +205,27 @@ export async function enqueueAbastecimento(
   void drain();
 }
 
+/** Foto pra anexar em viagem JÁ sincronizada. 2-step: drain sobe a foto e
+ *  associa via POST /m/viagens/:id/fotos. */
+export async function enqueueFoto(item: {
+  viagemId: string;
+  blob: Blob;
+  mime: string;
+}): Promise<void> {
+  const clientId = `${item.viagemId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  await upsertPendingFoto({
+    clientId,
+    viagemId: item.viagemId,
+    fotoBlob: item.blob,
+    fotoMime: item.mime,
+    status: "pending",
+    attempts: 0,
+    createdAt: Date.now(),
+  });
+  notify();
+  void drain();
+}
+
 /** Local criado offline. clientId vira id real no servidor (idempotência). */
 export async function enqueueLocal(item: PendingLocal): Promise<void> {
   await upsertPendingLocal(item);
@@ -259,6 +284,7 @@ export async function drain(): Promise<void> {
     // pra um local pendente. Se a viagem chegar primeiro, FK violation.
     await drainLocais();
     await drainViagens();
+    await drainFotos();
     await drainPedagios();
     await drainAbastecimentos();
   } finally {
@@ -292,6 +318,48 @@ async function rescueStaleItems(): Promise<void> {
       await upsertPendingAbastecimento({ ...a, status: "pending" });
     }
   }
+  for (const f of await listPendingFotos()) {
+    if (f.status === "syncing" && isStale(f.lastTriedAt)) {
+      await upsertPendingFoto({ ...f, status: "pending" });
+    }
+  }
+}
+
+async function drainFotos(): Promise<void> {
+  const list = await listPendingFotos();
+  for (const item of list) {
+    if (item.status === "syncing") continue;
+    if (item.attempts >= MAX_ATTEMPTS) continue;
+    if (!isOnline()) return;
+    await processFoto(item);
+  }
+}
+
+async function processFoto(item: PendingFoto): Promise<void> {
+  await upsertPendingFoto({ ...item, status: "syncing", lastTriedAt: Date.now() });
+  notify();
+  try {
+    const fd = new FormData();
+    const filename = `ticket-${item.clientId}.${
+      item.fotoMime.includes("png") ? "png" : "jpg"
+    }`;
+    fd.append("foto", item.fotoBlob, filename);
+    const up = await api.postForm<{ storageKey: string }>("/m/uploads/ticket", fd);
+    await api.post(`/m/viagens/${item.viagemId}/fotos`, { fotoKey: up.storageKey });
+    await deletePendingFoto(item.clientId);
+  } catch (err) {
+    const permanente = isErroPermanente(err);
+    const { msg, status, issues } = extractErrorDetails(err);
+    await upsertPendingFoto({
+      ...item,
+      status: "error",
+      errorMsg: msg,
+      errorStatus: status,
+      errorIssues: issues,
+      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
+    });
+  }
+  notify();
 }
 
 async function drainLocais(): Promise<void> {

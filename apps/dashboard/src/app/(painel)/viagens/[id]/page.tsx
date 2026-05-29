@@ -484,14 +484,17 @@ export default function ViagemDetalhePage({
             )}
           </Card>
 
-          {v.fotos.length > 0 && (
-            <Card className="p-5 md:col-span-2">
-              <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
-                <Camera className="h-4 w-4" /> Fotos do ticket
-              </h3>
-              <FotosViagem viagemId={v.id} fotos={v.fotos} />
-            </Card>
-          )}
+          <Card className="p-5 md:col-span-2">
+            <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
+              <Camera className="h-4 w-4" /> Fotos do ticket
+            </h3>
+            {v.fotos.length === 0 && (
+              <p className="mb-2 text-sm text-muted-foreground">
+                Nenhuma foto anexada pelo motorista.
+              </p>
+            )}
+            <FotosViagem viagemId={v.id} fotos={v.fotos} />
+          </Card>
 
           {v.matchesFechamento.length > 0 && (
             <Card className="p-5 md:col-span-2">
@@ -770,6 +773,35 @@ function FotosViagem({
     onError: (err) => toast.error((err as Error).message),
   });
 
+  const adicionar = useMutation({
+    mutationFn: (file: File) => {
+      const fd = new FormData();
+      fd.append("foto", file);
+      return fetchApi(`/admin/viagens/${viagemId}/fotos`, {
+        method: "POST",
+        body: fd,
+        token,
+      });
+    },
+    onSuccess: () => {
+      toast.success("Foto anexada.");
+      void qc.invalidateQueries({ queryKey: ["viagem-admin", viagemId] });
+      void qc.invalidateQueries({ queryKey: ["viagem-historico", viagemId] });
+    },
+    onError: (err) => toast.error("Falha ao anexar", { description: (err as Error).message }),
+  });
+
+  function onPickFile(ev: React.ChangeEvent<HTMLInputElement>) {
+    const file = ev.target.files?.[0];
+    ev.target.value = "";
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Foto maior que 10MB");
+      return;
+    }
+    adicionar.mutate(file);
+  }
+
   return (
     <>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -789,6 +821,19 @@ function FotosViagem({
             }
           />
         ))}
+      </div>
+
+      <div className="mt-3">
+        <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium hover:bg-muted">
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={onPickFile}
+            disabled={adicionar.isPending}
+          />
+          {adicionar.isPending ? "Enviando…" : "+ Anexar foto"}
+        </label>
       </div>
 
       {zoom && (

@@ -1,5 +1,6 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { Camera } from "lucide-react";
 import {
   ArrowDown,
   ArrowUp,
@@ -12,9 +13,12 @@ import { AuthedImage } from "@/components/authed-image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { PhotoCapture } from "@/components/photo-capture";
 import { showAlert, showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { fmtDataBR } from "@/lib/datetime";
+import type { FotoComprimida } from "@/lib/photo";
+import { enqueueFoto } from "@/lib/sync";
 import { fmtNum } from "@/lib/utils";
 import { useExcluirViagem, useViagemDetalhe } from "@/lib/queries";
 
@@ -46,6 +50,33 @@ export default function ViagemDetalhePage() {
   const { id } = useParams<{ id: string }>();
   const detalhe = useViagemDetalhe(id ?? "");
   const excluir = useExcluirViagem();
+  const [novaFoto, setNovaFoto] = useState<FotoComprimida | null>(null);
+  const [enviandoFoto, setEnviandoFoto] = useState(false);
+
+  async function adicionarFoto() {
+    if (!novaFoto || !detalhe.data) return;
+    setEnviandoFoto(true);
+    try {
+      await enqueueFoto({
+        viagemId: detalhe.data.id,
+        blob: novaFoto.blob,
+        mime: novaFoto.mime,
+      });
+      setNovaFoto(null);
+      void showAlert({
+        title: "Foto enviada",
+        message: "Foi pra fila. Aparece aqui depois que sincronizar.",
+      });
+    } catch (err) {
+      void showAlert({
+        title: "Erro",
+        message: humanizeApiError(err),
+        variant: "destructive",
+      });
+    } finally {
+      setEnviandoFoto(false);
+    }
+  }
 
   async function confirmarExcluir() {
     if (!detalhe.data) return;
@@ -212,21 +243,42 @@ export default function ViagemDetalhePage() {
             </Card>
           )}
 
-          {d.fotos && d.fotos.length > 0 && (
-            <Card className="p-3">
-              <p className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Foto do ticket
+          <Card className="p-3">
+            <p className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Foto do ticket
+            </p>
+            {d.fotos && d.fotos.length > 0 && (
+              <div className="space-y-2">
+                {d.fotos.map((f) => (
+                  <AuthedImage
+                    key={f.id}
+                    path={`/m/viagens/${d.id}/fotos/${f.id}`}
+                    alt={`Ticket ${d.ticket}`}
+                    className="max-h-[60vh]"
+                  />
+                ))}
+              </div>
+            )}
+            {(!d.fotos || d.fotos.length === 0) && (
+              <p className="px-2 text-sm text-muted-foreground">
+                Nenhuma foto anexada.
               </p>
-              {d.fotos.map((f) => (
-                <AuthedImage
-                  key={f.id}
-                  path={`/m/viagens/${d.id}/fotos/${f.id}`}
-                  alt={`Ticket ${d.ticket}`}
-                  className="max-h-[60vh]"
-                />
-              ))}
-            </Card>
-          )}
+            )}
+            <div className="mt-3 space-y-2">
+              <PhotoCapture value={novaFoto} onChange={setNovaFoto} />
+              {novaFoto && (
+                <Button
+                  onClick={adicionarFoto}
+                  loading={enviandoFoto}
+                  disabled={enviandoFoto}
+                  className="w-full"
+                >
+                  <Camera size={18} />
+                  Anexar foto à viagem
+                </Button>
+              )}
+            </div>
+          </Card>
 
           {d.status === "ENVIADA" && (
             <Button

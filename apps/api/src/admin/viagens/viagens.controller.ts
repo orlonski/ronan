@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -9,8 +10,11 @@ import {
   Post,
   Query,
   Res,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { z } from "zod";
@@ -130,5 +134,27 @@ export class ViagensAdminController {
     @Body(new ZodValidationPipe(RotacaoFotoInput)) body: RotacaoFotoInput,
   ) {
     return this.service.rotacionarFoto(id, fotoId, body.rotacao);
+  }
+
+  /**
+   * Admin anexa foto a viagem existente. Multipart direto (sem 2-step),
+   * já que admin no dashboard sempre tem rede. Registra auditoria.
+   */
+  @Post(":id/fotos")
+  @UseInterceptors(FileInterceptor("foto"))
+  async adicionarFoto(
+    @Param("id") id: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    if (!file) throw new BadRequestException("Foto não enviada");
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowed.includes(file.mimetype)) {
+      throw new BadRequestException(`Tipo não permitido: ${file.mimetype}`);
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      throw new BadRequestException("Foto maior que 10MB");
+    }
+    return this.service.adicionarFoto(id, file.buffer, file.mimetype, user.id);
   }
 }

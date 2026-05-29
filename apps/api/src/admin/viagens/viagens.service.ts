@@ -476,4 +476,40 @@ export class ViagensAdminService {
     const contentType = ext === "png" ? "image/png" : "image/jpeg";
     return { buffer, contentType };
   }
+
+  /**
+   * Admin anexa foto a viagem existente. Multipart direto — sobe pro MinIO
+   * e cria TicketFoto em uma única operação. Registra auditoria.
+   */
+  async adicionarFoto(
+    viagemId: string,
+    buffer: Buffer,
+    mimetype: string,
+    usuarioId: string,
+  ) {
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { id: viagemId },
+      select: { id: true },
+    });
+    if (!viagem) throw new NotFoundException("Viagem não encontrada");
+
+    // Reusa o helper de upload do motorista — path fica
+    // `tickets/YYYY-MM-DD/{usuarioId}/uuid.jpg`. Caminho convive
+    // bem com fotos enviadas pelo motorista (mesmo bucket).
+    const storageKey = await this.uploads.putTicketFoto(buffer, mimetype, usuarioId);
+    const foto = await this.prisma.ticketFoto.create({
+      data: { viagemId, storageKey, capturadaEm: new Date() },
+      select: { id: true, storageKey: true },
+    });
+
+    await this.auditoria.log({
+      usuarioId,
+      entidade: "Viagem",
+      entidadeId: viagemId,
+      acao: AcaoAuditoria.ADICIONAR_FOTO,
+      metadata: { storageKey, fotoId: foto.id },
+    });
+
+    return foto;
+  }
 }

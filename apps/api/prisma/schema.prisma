@@ -77,6 +77,7 @@ enum AcaoAuditoria {
   RECALCULAR_TRAJETO
   MOTORISTA_AJUSTOU_KM
   PRE_VALIDAR_VIAGEM
+  ADICIONAR_FOTO
 }
 
 enum TipoCombustivel {

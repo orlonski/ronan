@@ -27,6 +27,10 @@ const CriarViagemPayload = CriarViagemInput.extend({
   fotoKey: z.string().optional(),
 });
 
+const AdicionarFotoInput = z.object({
+  fotoKey: z.string().min(1),
+});
+
 const MesSchema = z
   .string()
   .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "mes deve estar no formato YYYY-MM");
@@ -115,5 +119,20 @@ export class ViagensMotoristaController {
     res.set("Content-Type", contentType);
     res.set("Cache-Control", "private, max-age=3600");
     res.send(buffer);
+  }
+
+  /**
+   * Anexa foto a uma viagem já criada. Motorista subiu a foto antes via
+   * POST /m/uploads/ticket (obtém fotoKey) e chama aqui. Padrão 2-step,
+   * compatível com o outbox offline.
+   */
+  @Post(":id/fotos")
+  adicionarFoto(
+    @CurrentUser() user: AuthMotorista,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(AdicionarFotoInput))
+    body: z.infer<typeof AdicionarFotoInput>,
+  ) {
+    return this.service.adicionarFoto(user.id, id, body.fotoKey);
   }
 }

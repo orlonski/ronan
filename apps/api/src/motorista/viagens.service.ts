@@ -207,6 +207,26 @@ export class ViagensMotoristaService {
   }
 
   /**
+   * Anexa foto a viagem existente (motorista). storageKey já foi obtida via
+   * POST /m/uploads/ticket. Valida ownership pra não anexar foto em viagem
+   * de outro motorista.
+   */
+  async adicionarFoto(motoristaId: string, viagemId: string, storageKey: string) {
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { id: viagemId },
+      select: { id: true, motoristaId: true },
+    });
+    if (!viagem) throw new NotFoundException("Viagem não encontrada.");
+    if (viagem.motoristaId !== motoristaId) {
+      throw new ForbiddenException("Você não pode anexar foto nesta viagem.");
+    }
+    return this.prisma.ticketFoto.create({
+      data: { viagemId, storageKey, capturadaEm: new Date() },
+      select: { id: true, storageKey: true },
+    });
+  }
+
+  /**
    * Motorista pode apagar a propria viagem APENAS enquanto status=ENVIADA
    * (ainda nao foi conferida pela operadora). Apaga fotos no MinIO + DB.
    */
