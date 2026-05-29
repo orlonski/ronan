@@ -808,7 +808,9 @@ function FotosViagem({
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      {/* 1 coluna em telas md+ (a Card já fica numa coluna do grid externo,
+          então 1-col aqui maximiza tamanho da foto pra conferência). */}
+      <div className="grid grid-cols-1 gap-3">
         {fotos.map((f) => (
           <FotoThumb
             key={f.id}
@@ -905,7 +907,7 @@ function FotoThumb({
 
   if (q.error instanceof Error && q.error.message.includes("404")) {
     return (
-      <div className="flex aspect-square flex-col items-center justify-center gap-1 rounded-md border border-dashed bg-muted/30 text-xs text-muted-foreground">
+      <div className="flex aspect-[4/3] flex-col items-center justify-center gap-1 rounded-md border border-dashed bg-muted/30 text-xs text-muted-foreground">
         <ImageOff className="h-7 w-7 opacity-40" />
         <span>Foto indisponível</span>
       </div>
@@ -914,26 +916,63 @@ function FotoThumb({
 
   if (q.isLoading || !q.data) {
     return (
-      <div className="flex aspect-square items-center justify-center rounded-md border bg-muted text-xs text-muted-foreground">
+      <div className="flex aspect-[4/3] items-center justify-center rounded-md border bg-muted text-xs text-muted-foreground">
         carregando...
       </div>
     );
   }
 
   return (
-    <div className="relative aspect-square overflow-hidden rounded-md border bg-muted">
+    <FotoThumbInner
+      src={q.data}
+      rotacao={rotacao}
+      onClick={() => onClick(q.data!)}
+      onRotacionar={onRotacionar}
+    />
+  );
+}
+
+function FotoThumbInner({
+  src,
+  rotacao,
+  onClick,
+  onRotacionar,
+}: {
+  src: string;
+  rotacao: number;
+  onClick: () => void;
+  onRotacionar: () => void;
+}) {
+  const [origin, setOrigin] = useState<{ x: number; y: number } | null>(null);
+
+  function onMove(e: React.MouseEvent<HTMLElement>) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    setOrigin({ x, y });
+  }
+
+  return (
+    <div className="relative aspect-[4/3] overflow-hidden rounded-md border bg-muted">
       <button
         type="button"
-        onClick={() => onClick(q.data!)}
-        className="absolute inset-0 transition-opacity hover:opacity-80"
+        onClick={onClick}
+        onMouseMove={onMove}
+        onMouseLeave={() => setOrigin(null)}
+        className="group absolute inset-0 cursor-zoom-in"
         title="Ampliar"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={q.data}
+          src={src}
           alt="Ticket"
-          className="h-full w-full object-cover"
-          style={{ transform: `rotate(${rotacao}deg)` }}
+          className="h-full w-full object-cover transition-transform duration-150 ease-out"
+          style={{
+            transform: origin
+              ? `rotate(${rotacao}deg) scale(2.5)`
+              : `rotate(${rotacao}deg)`,
+            transformOrigin: origin ? `${origin.x}% ${origin.y}%` : "center",
+          }}
         />
       </button>
       <button
