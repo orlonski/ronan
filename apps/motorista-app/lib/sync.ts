@@ -1,6 +1,7 @@
 import { AppState } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
 import { drenar as drenarEventos, reportarEvento } from "./event-reporter";
+import { drenarPosicoes } from "./posicao-sync";
 import {
   deletePendingAbastecimento,
   deletePendingFoto,
@@ -601,6 +602,7 @@ export function startAutoSync(): void {
     if (state.isConnected) {
       void drain();
       void drenarEventos();
+      void drenarPosicoes();
     }
   });
 
@@ -608,17 +610,20 @@ export function startAutoSync(): void {
     if (s === "active") {
       void drain();
       void drenarEventos();
+      void drenarPosicoes();
     }
   });
 
   setInterval(() => {
     void drain();
     void drenarEventos();
+    void drenarPosicoes();
   }, 60_000);
 
   // Boot: dispara depois de 2s pra dar tempo de tudo inicializar.
   setTimeout(() => {
     void drain();
     void drenarEventos();
+    void drenarPosicoes();
   }, 2_000);
 }

@@ -15,6 +15,8 @@ import { AbastecimentosMotoristaController } from "./abastecimentos.controller";
 import { AbastecimentosMotoristaService } from "./abastecimentos.service";
 import { LocaisMotoristaController } from "./locais.controller";
 import { LocaisMotoristaService } from "./locais.service";
+import { PosicaoMotoristaController } from "./posicao.controller";
+import { PosicaoMotoristaService } from "./posicao.service";
 import { RotasMotoristaController } from "./rotas.controller";
 import { TrackingConfigMotoristaController } from "./tracking-config.controller";
 import { ValidacaoLocalService } from "./validacao-local.service";
@@ -38,6 +40,7 @@ import { IaTicketController } from "./ia-ticket.controller";
     RotasMotoristaController,
     TrackingConfigMotoristaController,
     IaTicketController,
+    PosicaoMotoristaController,
   ],
   providers: [
     MotoristaService,
@@ -46,6 +49,7 @@ import { IaTicketController } from "./ia-ticket.controller";
     AbastecimentosMotoristaService,
     LocaisMotoristaService,
     ValidacaoLocalService,
+    PosicaoMotoristaService,
   ],
   exports: [
     MotoristaService,

@@ -564,6 +564,35 @@ export const TRACKING_CONFIG_DEFAULTS: TrackingConfig = {
  * Config global de tracking. Cacheia agressivamente no servidor + offline.
  * Se app falhar em buscar, usa defaults — tracking ainda funciona.
  */
+/**
+ * Config do motorista pra compartilhar posição periódica (controle de frota).
+ * Opt-in: ativada=false por default. Janela horária null/null = 24/7.
+ */
+export type PosicaoConfig = {
+  ativada: boolean;
+  horarioInicio: number | null;
+  horarioFim: number | null;
+};
+
+export function usePosicaoConfig() {
+  return useQuery({
+    queryKey: ["posicao-config"],
+    queryFn: () => api.get<PosicaoConfig>("/m/posicao-config"),
+    staleTime: 60_000,
+  });
+}
+
+export function useSalvarPosicaoConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: PosicaoConfig) =>
+      api.put<PosicaoConfig>("/m/posicao-config", input),
+    onSuccess: (data) => {
+      qc.setQueryData(["posicao-config"], data);
+    },
+  });
+}
+
 export function useTrackingConfig() {
   return useQuery(
     offlineCacheQuery<TrackingConfig>("tracking-config", "/m/tracking-config", {

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { router, Stack } from "expo-router";
-import { KeyRound, LogOut } from "lucide-react-native";
+import { KeyRound, LogOut, MapPin } from "lucide-react-native";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -185,6 +185,17 @@ export default function Perfil() {
               {feedback.msg}
             </Text>
           )}
+
+          <Button
+            variant="outline"
+            size="lg"
+            onPress={() => router.push("/perfil-posicao")}
+          >
+            <MapPin size={18} color="#0f172a" />
+            <Text className="text-base font-medium text-foreground">
+              Compartilhar posição
+            </Text>
+          </Button>
 
           <Button variant="outline" size="lg" onPress={sair}>
             <LogOut size={18} color="#dc2626" />

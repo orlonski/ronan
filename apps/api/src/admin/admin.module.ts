@@ -14,6 +14,7 @@ import { AgenteConfigModule } from "./agente-config/agente-config.module";
 import { LayoutImportModule } from "./layout-import/layout-import.module";
 import { CamposLayoutModule } from "./campos-layout/campos-layout.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
+import { FrotaAdminModule } from "./frota/frota.module";
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { DashboardModule } from "./dashboard/dashboard.module";
     LayoutImportModule,
     CamposLayoutModule,
     DashboardModule,
+    FrotaAdminModule,
   ],
 })
 export class AdminModule {}

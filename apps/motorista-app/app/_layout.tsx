@@ -142,6 +142,32 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         void geofence.sincronizarGeofences();
         void geofence.drenarFila();
 
+        // Captura periódica de posição (controle de frota — opt-in).
+        // Sempre registra a task; só inicia o foreground service se o
+        // motorista ativou. Refetch da config + start serve pra cobrir
+        // reabertura do app (task pode ter sido morta pelo SO).
+        const posicao = await import("@/lib/posicao-periodica");
+        await posicao.registerPosicaoTask();
+        void (async () => {
+          try {
+            const { api } = await import("@/lib/api");
+            const cfg = await api.get<{
+              ativada: boolean;
+              horarioInicio: number | null;
+              horarioFim: number | null;
+            }>("/m/posicao-config");
+            await posicao.setConfigLocal(cfg);
+            if (cfg.ativada) {
+              const ativa = await posicao.isCapturaPeriodicaAtiva();
+              if (!ativa) await posicao.iniciarCapturaPeriodica();
+            } else {
+              await posicao.pararCapturaPeriodica();
+            }
+          } catch {
+            // Offline ou erro de rede — usa cache local que já está em uso.
+          }
+        })();
+
         // Push remoto: pede permissão, pega o ExpoPushToken e manda pro backend.
         // Fire-and-forget — falha silenciosa (não pode bloquear o app).
         const { obterEEnviarPushToken } = await import("@/lib/notifications");
