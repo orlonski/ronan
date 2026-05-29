@@ -266,7 +266,7 @@ export default function ViagemDetalhePage({
       </div>
 
       {tab === "dados" && (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2 md:auto-rows-min">
           <Card className="p-5">
             <h3 className="mb-3 text-base font-medium">Dados do lançamento</h3>
             <dl className="space-y-2 text-sm">
@@ -328,6 +328,22 @@ export default function ViagemDetalhePage({
               {v.observacao && <Row label="Observação" value={v.observacao} />}
             </dl>
           </Card>
+
+          {/* Fotos do ticket: na coluna direita pra ficar lado a lado com
+              os dados — admin confere foto + valores sem rolar. row-span-2
+              estende ela embaixo do Trajeto textual também. */}
+          <Card className="p-5 md:row-span-2">
+            <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
+              <Camera className="h-4 w-4" /> Fotos do ticket
+            </h3>
+            {v.fotos.length === 0 && (
+              <p className="mb-2 text-sm text-muted-foreground">
+                Nenhuma foto anexada pelo motorista.
+              </p>
+            )}
+            <FotosViagem viagemId={v.id} fotos={v.fotos} />
+          </Card>
+
           <Card className="p-5">
             <h3 className="mb-3 text-base font-medium">Trajeto</h3>
             <div className="space-y-3 text-sm">
@@ -482,18 +498,6 @@ export default function ViagemDetalhePage({
                 </div>
               </div>
             )}
-          </Card>
-
-          <Card className="p-5 md:col-span-2">
-            <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
-              <Camera className="h-4 w-4" /> Fotos do ticket
-            </h3>
-            {v.fotos.length === 0 && (
-              <p className="mb-2 text-sm text-muted-foreground">
-                Nenhuma foto anexada pelo motorista.
-              </p>
-            )}
-            <FotosViagem viagemId={v.id} fotos={v.fotos} />
           </Card>
 
           {v.matchesFechamento.length > 0 && (
