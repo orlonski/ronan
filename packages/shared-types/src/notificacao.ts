@@ -9,6 +9,7 @@ export const TipoNotificacao = z.enum([
   "viagem-divergente",
   "viagem-conferida",
   "viagem-editada",
+  "abastecimento-editado",
 ]);
 export type TipoNotificacao = z.infer<typeof TipoNotificacao>;
 

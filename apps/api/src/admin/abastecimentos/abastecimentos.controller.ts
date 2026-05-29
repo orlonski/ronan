@@ -13,10 +13,13 @@ import {
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { z } from "zod";
+import { AtualizarAbastecimentoInput } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { paginationQuerySchema } from "../../common/pagination";
+import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
+import type { AuthAdminUser } from "../../auth/types";
 import { AbastecimentosAdminService } from "./abastecimentos.service";
 
 const RotacaoFotoInput = z.object({
@@ -51,6 +54,21 @@ export class AbastecimentosAdminController {
   @Get(":id")
   detalhe(@Param("id") id: string) {
     return this.service.detalhe(id);
+  }
+
+  @Get(":id/historico")
+  historico(@Param("id") id: string) {
+    return this.service.historico(id);
+  }
+
+  @Patch(":id")
+  atualizar(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(AtualizarAbastecimentoInput))
+    body: z.infer<typeof AtualizarAbastecimentoInput>,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.atualizar(id, body, user.id);
   }
 
   @Roles("ADMIN")

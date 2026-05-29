@@ -55,3 +55,28 @@ export const CriarAbastecimentoInput = CriarAbastecimentoBaseInput.refine(
   },
 );
 export type CriarAbastecimentoInput = z.infer<typeof CriarAbastecimentoInput>;
+
+/**
+ * Input pra atualização parcial (admin no dashboard). Todos os campos
+ * opcionais; precoLitro é recalculado no servidor a partir de litros+valor.
+ * Campos imutáveis (motoristaId, clientId, lat, lng, criadoOfflineEm)
+ * não entram aqui.
+ */
+export const AtualizarAbastecimentoInput = z
+  .object({
+    data: z.coerce.date().optional(),
+    tipo: TipoCombustivelEnum.optional(),
+    litros: z.number().positive().max(MAX_LITROS).optional(),
+    valorTotal: z.number().positive().max(MAX_VALOR).nullable().optional(),
+    emComboio: z.boolean().optional(),
+    odometro: z.number().int().nonnegative().max(MAX_ODOMETRO).optional(),
+    postoNome: z.string().max(120).nullable().optional(),
+    tanqueCheio: z.boolean().optional(),
+    observacao: z.string().max(500).nullable().optional(),
+    veiculoId: z.string().uuid().optional(),
+    empresaId: z.string().uuid().optional(),
+  })
+  .refine((d) => Object.keys(d).length > 0, {
+    message: "Informe ao menos um campo pra atualizar.",
+  });
+export type AtualizarAbastecimentoInput = z.infer<typeof AtualizarAbastecimentoInput>;

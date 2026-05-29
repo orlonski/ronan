@@ -189,6 +189,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
             } else {
               router.push("/notificacoes");
             }
+          } else if (kind === "abastecimento-editado") {
+            // Não temos tela de detalhe de abastecimento no app motorista —
+            // abre a central pra ver a notificação completa com o diff.
+            router.push("/notificacoes");
           } else if (kind === "mensagem-admin") {
             router.push("/notificacoes");
           }

@@ -1,6 +1,9 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import type { Prisma, TipoCombustivel } from "@prisma/client";
+import { AcaoAuditoria, type Prisma, type TipoCombustivel } from "@prisma/client";
+import type { AtualizarAbastecimentoInput } from "@ronan/shared-types";
+import { AuditoriaService } from "../../auditoria/auditoria.service";
 import { PrismaService } from "../../prisma/prisma.service";
+import { PushService } from "../../push/push.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 
@@ -19,6 +22,8 @@ export class AbastecimentosAdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly uploads: UploadsService,
+    private readonly auditoria: AuditoriaService,
+    private readonly push: PushService,
   ) {}
 
   async list(params: ListAbastecimentosParams) {
@@ -138,4 +143,213 @@ export class AbastecimentosAdminService {
       data: { rotacao },
     });
   }
+
+  /**
+   * Edita um abastecimento (admin dashboard). Espelha o padrão da viagem:
+   * snapshot antes/depois, enriquece FK com nomes, registra logDiff
+   * (1 log por campo alterado), notifica motorista com resumo.
+   */
+  async atualizar(id: string, input: AtualizarAbastecimentoInput, usuarioId: string) {
+    const antes = await this.prisma.abastecimento.findUnique({
+      where: { id },
+      include: { _count: { select: { fechamentoLinhas: true } } },
+    });
+    if (!antes) throw new NotFoundException("Abastecimento não encontrado");
+    if (antes._count.fechamentoLinhas > 0) {
+      throw new ConflictException(
+        "Não é possível editar: abastecimento já vinculado a fechamento. Desfaça o match primeiro.",
+      );
+    }
+
+    // precoLitro é derivado de litros + valorTotal. Recalcula quando algum
+    // dos dois muda. Em comboio (valorTotal null), precoLitro = null.
+    const litrosNovo = input.litros ?? Number(antes.litros);
+    const valorTotalNovo =
+      input.valorTotal !== undefined ? input.valorTotal : antes.valorTotal != null ? Number(antes.valorTotal) : null;
+    const precoLitroNovo =
+      valorTotalNovo != null && litrosNovo > 0 ? valorTotalNovo / litrosNovo : null;
+
+    const depois = await this.prisma.abastecimento.update({
+      where: { id },
+      data: {
+        ...input,
+        // valorTotal vem como `null | number | undefined` no input
+        // (preserva semântica de "limpar" vs "não mexer"). Prisma aceita
+        // null direto pra anular o campo.
+        precoLitro: precoLitroNovo,
+      },
+    });
+
+    const { _count: _ignored, ...antesPlain } = antes;
+    const [antesEnriquecido, depoisEnriquecido] = await Promise.all([
+      this.enriquecerCamposFK(antesPlain),
+      this.enriquecerCamposFK(depois),
+    ]);
+
+    await this.auditoria.logDiff(
+      { usuarioId, entidade: "Abastecimento", entidadeId: id, acao: AcaoAuditoria.UPDATE },
+      antesEnriquecido,
+      depoisEnriquecido,
+    );
+
+    const diffs = computarDiffAbastecimento(antesEnriquecido, depoisEnriquecido);
+    if (diffs.length > 0) {
+      void this.notificarMotorista({
+        abastecimentoId: id,
+        titulo: "Seu abastecimento foi editado",
+        corpo: corpoDoDiff(diffs),
+        dados: { diffs },
+        criadoPorId: usuarioId,
+      });
+    }
+
+    return this.detalhe(id);
+  }
+
+  async historico(abastecimentoId: string) {
+    const a = await this.prisma.abastecimento.findUnique({ where: { id: abastecimentoId } });
+    if (!a) throw new NotFoundException("Abastecimento não encontrado");
+    return this.auditoria.historicoDe("Abastecimento", abastecimentoId);
+  }
+
+  private async notificarMotorista(args: {
+    abastecimentoId: string;
+    titulo: string;
+    corpo: string;
+    dados?: Record<string, unknown>;
+    criadoPorId: string;
+  }): Promise<void> {
+    try {
+      const ab = await this.prisma.abastecimento.findUnique({
+        where: { id: args.abastecimentoId },
+        select: {
+          motoristaId: true,
+          motorista: { select: { expoPushToken: true } },
+        },
+      });
+      if (!ab) return;
+      const token = ab.motorista?.expoPushToken;
+      await this.push.enviar({
+        motoristaId: ab.motoristaId,
+        token: token ?? "",
+        titulo: args.titulo,
+        corpo: args.corpo,
+        dados: { ...(args.dados ?? {}), abastecimentoId: args.abastecimentoId },
+        tipo: "abastecimento-editado",
+        criadoPorId: args.criadoPorId,
+      });
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  /**
+   * Enriquece FK do abastecimento pra log/notificação legível.
+   * Substitui id "uuid" por { id, nome|placa } onde aplicável.
+   */
+  private async enriquecerCamposFK(
+    abastecimento: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const out: Record<string, unknown> = { ...abastecimento };
+    const veiculoId = typeof out.veiculoId === "string" ? out.veiculoId : null;
+    const empresaId = typeof out.empresaId === "string" ? out.empresaId : null;
+
+    const [veiculo, empresa] = await Promise.all([
+      veiculoId
+        ? this.prisma.veiculo.findUnique({
+            where: { id: veiculoId },
+            select: { placa: true },
+          })
+        : null,
+      empresaId
+        ? this.prisma.empresa.findUnique({
+            where: { id: empresaId },
+            select: { nome: true },
+          })
+        : null,
+    ]);
+
+    if (veiculoId) out.veiculoId = { id: veiculoId, placa: veiculo?.placa ?? null };
+    if (empresaId) out.empresaId = { id: empresaId, nome: empresa?.nome ?? null };
+
+    return out;
+  }
+}
+
+// ===== Helpers de diff pra notificação =====
+
+const CAMPOS_IGNORADOS_NOTIF_ABA = new Set([
+  "id",
+  "clientId",
+  "motoristaId",
+  "alteradoEm",
+  "sincronizadoEm",
+  "criadoEm",
+  "criadoOfflineEm",
+  "lat",
+  "lng",
+  "precisao",
+  "precoLitro", // derivado (mostramos só litros + valorTotal)
+]);
+
+const LABEL_CAMPO_ABA: Record<string, string> = {
+  data: "Data",
+  tipo: "Tipo",
+  litros: "Litros",
+  valorTotal: "Valor",
+  emComboio: "Em comboio",
+  odometro: "Odômetro",
+  postoNome: "Posto",
+  tanqueCheio: "Tanque cheio",
+  observacao: "Observação",
+  veiculoId: "Veículo",
+  empresaId: "Empresa",
+};
+
+type DiffCampoAba = { campo: string; label: string; antes: unknown; depois: unknown };
+
+function computarDiffAbastecimento(
+  antes: Record<string, unknown>,
+  depois: Record<string, unknown>,
+): DiffCampoAba[] {
+  const fields = new Set<string>([...Object.keys(antes), ...Object.keys(depois)]);
+  const diffs: DiffCampoAba[] = [];
+  for (const f of fields) {
+    if (CAMPOS_IGNORADOS_NOTIF_ABA.has(f)) continue;
+    if (JSON.stringify(antes[f]) === JSON.stringify(depois[f])) continue;
+    diffs.push({
+      campo: f,
+      label: LABEL_CAMPO_ABA[f] ?? f,
+      antes: antes[f],
+      depois: depois[f],
+    });
+  }
+  return diffs;
+}
+
+function formatarValorDiff(v: unknown): string {
+  if (v == null || v === "") return "—";
+  if (typeof v === "object" && v !== null) {
+    if ("nome" in v && typeof (v as { nome: unknown }).nome === "string") {
+      return (v as { nome: string }).nome;
+    }
+    if ("placa" in v && typeof (v as { placa: unknown }).placa === "string") {
+      return (v as { placa: string }).placa;
+    }
+  }
+  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}T/.test(v)) {
+    return v.slice(8, 10) + "/" + v.slice(5, 7) + "/" + v.slice(0, 4);
+  }
+  return String(v);
+}
+
+function corpoDoDiff(diffs: DiffCampoAba[]): string {
+  if (diffs.length === 0) return "Seu abastecimento foi atualizado.";
+  const partes = diffs
+    .slice(0, 2)
+    .map((d) => `${d.label}: ${formatarValorDiff(d.antes)} → ${formatarValorDiff(d.depois)}`);
+  let corpo = partes.join("; ");
+  const extras = diffs.length - partes.length;
+  if (extras > 0) corpo += ` (+${extras} ${extras === 1 ? "mudança" : "mudanças"})`;
+  return corpo;
 }

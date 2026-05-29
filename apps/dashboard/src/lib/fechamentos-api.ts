@@ -409,6 +409,19 @@ export function useHistoricoViagem(viagemId: string | undefined) {
   });
 }
 
+// Histórico de abastecimento — mesmo formato (AuditEntry) que viagem.
+export function useHistoricoAbastecimento(abastecimentoId: string | undefined) {
+  const token = useAuthToken();
+  return useQuery({
+    queryKey: ["abastecimento-historico", abastecimentoId],
+    enabled: !!token && !!abastecimentoId,
+    queryFn: () =>
+      fetchApi<AuditEntry[]>(`/admin/abastecimentos/${abastecimentoId}/historico`, {
+        token,
+      }),
+  });
+}
+
 export function useViagem(viagemId: string | undefined) {
   const token = useAuthToken();
   return useQuery({

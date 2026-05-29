@@ -3,11 +3,12 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { use } from "react";
+import { use, useState } from "react";
 import { ExcluirButton } from "@/components/excluir-button";
 import {
   ArrowLeft,
   Camera,
+  Edit3,
   Fuel,
   Gauge,
   ImageOff,
@@ -18,10 +19,30 @@ import {
 import { toast } from "sonner";
 import { formatCpf } from "@ronan/shared-types";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { HistoricoTimeline } from "@/components/historico-timeline";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { fmtNum } from "@/lib/fechamento-helpers";
+import { useHistoricoAbastecimento } from "@/lib/fechamentos-api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+const CAMPO_LABEL: Record<string, string> = {
+  data: "Data",
+  tipo: "Tipo",
+  litros: "Litros",
+  valorTotal: "Valor",
+  emComboio: "Em comboio",
+  odometro: "Odômetro",
+  postoNome: "Posto",
+  tanqueCheio: "Tanque cheio",
+  observacao: "Observação",
+  veiculoId: "Veículo",
+  empresaId: "Empresa",
+};
+const labelForCampoAbastecimento = (campo: string) => CAMPO_LABEL[campo] ?? campo;
+
+type Tab = "dados" | "historico";
 
 const PontoMap = dynamic(
   () => import("@/components/ponto-map").then((m) => m.PontoMap),
@@ -66,12 +87,14 @@ export default function AbastecimentoDetalhePage({
   const { id } = use(params);
   const router = useRouter();
   const token = useAuthToken();
+  const [tab, setTab] = useState<Tab>("dados");
   const a = useQuery({
     queryKey: ["abastecimento-admin", id],
     enabled: !!token,
     queryFn: () =>
       fetchApi<AbastecimentoDetalhe>(`/admin/abastecimentos/${id}`, { token }),
   });
+  const historico = useHistoricoAbastecimento(id);
 
   if (a.isLoading)
     return <p className="text-sm text-muted-foreground">Carregando...</p>;
@@ -99,6 +122,12 @@ export default function AbastecimentoDetalhePage({
           </p>
         </div>
         <Badge>{TIPO_LABEL[x.tipo] ?? x.tipo}</Badge>
+        <Link href={`/abastecimentos/${x.id}/editar`}>
+          <Button variant="outline" size="sm">
+            <Edit3 className="h-4 w-4" />
+            Editar
+          </Button>
+        </Link>
         <ExcluirButton
           path="/admin/abastecimentos"
           id={x.id}
@@ -111,6 +140,37 @@ export default function AbastecimentoDetalhePage({
         />
       </div>
 
+      <div className="flex gap-1 border-b">
+        {(
+          [
+            ["dados", "Dados"],
+            ["historico", "Histórico de alterações"],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setTab(key)}
+            className={
+              tab === key
+                ? "border-b-2 border-primary px-3 py-2 text-sm font-medium text-primary"
+                : "border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+            }
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "historico" && (
+        <HistoricoTimeline
+          entries={historico.data}
+          loading={historico.isLoading}
+          labelForCampo={labelForCampoAbastecimento}
+        />
+      )}
+
+      {tab === "dados" && (
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="space-y-4 p-5">
           <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
@@ -231,6 +291,7 @@ export default function AbastecimentoDetalhePage({
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }
