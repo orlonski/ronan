@@ -27,6 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
+import { usePendingFotosViagem } from "@/hooks/use-pending-fotos-viagem";
 import { showAlert, showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { API_URL } from "@/lib/api-url";
@@ -58,9 +59,7 @@ export default function ViagemDetalheScreen() {
   const detalhe = useViagemDetalhe(id ?? "");
   const excluir = useExcluirViagem();
   const [token, setToken] = useState<string | null>(null);
-  // Timestamp do último envio bem-sucedido. Usado pra mostrar feedback
-  // inline ("✓ anexada") por ~3s sem travar o motorista num alert modal.
-  const [ultimoEnvio, setUltimoEnvio] = useState<number | null>(null);
+  const pendingFotos = usePendingFotosViagem(detalhe.data?.id);
 
   useEffect(() => {
     void loadTokens().then((t) => setToken(t?.accessToken ?? null));
@@ -70,21 +69,14 @@ export default function ViagemDetalheScreen() {
     // Motorista cancelou (descartou no PhotoCapture). Ignora.
     if (!foto || !detalhe.data) return;
     try {
-      // Enfileira direto no outbox — sem segundo botão "Anexar". PhotoCapture
-      // já fez o motorista confirmar ("Usar foto") dentro da câmera.
+      // Enfileira direto no outbox — feedback visual vem via usePendingFotosViagem
+      // (foto aparece na lista imediatamente com badge "enviando").
       await enqueueFoto({
         viagemId: detalhe.data.id,
         fotoUri: foto.uri,
         fotoMime: foto.mime,
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      const agora = Date.now();
-      setUltimoEnvio(agora);
-      // Esconde a confirmação depois de 3s, mas só se não veio outra foto
-      // no meio (motorista tirou várias seguidas — mantém o último ativo).
-      setTimeout(() => {
-        setUltimoEnvio((t) => (t === agora ? null : t));
-      }, 3000);
     } catch (err) {
       void showAlert({
         title: "Erro ao anexar foto",
@@ -304,7 +296,7 @@ export default function ViagemDetalheScreen() {
             </Card>
           )}
 
-          {/* Foto do ticket — mostra existentes + permite adicionar nova */}
+          {/* Foto do ticket — mostra existentes + pendentes (offline) + permite anexar */}
           <Card>
             <View className="mb-2 flex-row items-center gap-2">
               <Camera size={16} color="#0f172a" />
@@ -312,9 +304,14 @@ export default function ViagemDetalheScreen() {
                 Foto do ticket
               </Text>
             </View>
-            {detalhe.data.fotos.length > 0 && token && (
+            {detalhe.data.fotos.length === 0 && pendingFotos.length === 0 && (
+              <Text className="mb-3 text-sm text-muted-foreground">
+                Nenhuma foto anexada.
+              </Text>
+            )}
+            {(detalhe.data.fotos.length > 0 || pendingFotos.length > 0) && (
               <View className="gap-2">
-                {detalhe.data.fotos.map((f) => (
+                {detalhe.data.fotos.map((f) => token && (
                   <Image
                     key={f.id}
                     source={{
@@ -325,23 +322,28 @@ export default function ViagemDetalheScreen() {
                     resizeMode="cover"
                   />
                 ))}
+                {pendingFotos.map((f) => (
+                  <View key={f.clientId} className="relative">
+                    <Image
+                      source={{ uri: f.fotoUri }}
+                      style={{ width: "100%", aspectRatio: 4 / 3, borderRadius: 12, opacity: 0.75 }}
+                      resizeMode="cover"
+                    />
+                    <View className="absolute right-2 top-2 rounded-full bg-warning px-3 py-1">
+                      <Text className="text-xs font-bold text-warning-foreground">
+                        {f.status === "error"
+                          ? "Erro — vai tentar de novo"
+                          : "Enviando…"}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
               </View>
-            )}
-            {detalhe.data.fotos.length === 0 && (
-              <Text className="mb-3 text-sm text-muted-foreground">
-                Nenhuma foto anexada.
-              </Text>
             )}
             <View className="mt-3 gap-2">
               {/* value sempre null → componente reseta após cada captura.
-                  onChange já enfileira a foto direto (motorista confirmou
-                  com "Usar foto" dentro da câmera). */}
+                  onChange enfileira direto. Feedback visual via pendingFotos. */}
               <PhotoCapture value={null} onChange={onFotoCapturada} />
-              {ultimoEnvio && (
-                <Text className="text-sm font-medium text-success">
-                  ✓ Foto anexada. Sincroniza assim que tiver internet.
-                </Text>
-              )}
             </View>
           </Card>
 

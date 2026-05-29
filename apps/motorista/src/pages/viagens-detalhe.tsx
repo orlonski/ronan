@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowDown,
@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PhotoCapture } from "@/components/photo-capture";
+import { usePendingFotosViagem } from "@/hooks/use-pending-fotos-viagem";
 import { showAlert, showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { fmtDataBR } from "@/lib/datetime";
@@ -49,9 +50,7 @@ export default function ViagemDetalhePage() {
   const { id } = useParams<{ id: string }>();
   const detalhe = useViagemDetalhe(id ?? "");
   const excluir = useExcluirViagem();
-  // Timestamp do último envio bem-sucedido. Mostra confirmação inline
-  // por ~3s em vez de modal — não trava o motorista.
-  const [ultimoEnvio, setUltimoEnvio] = useState<number | null>(null);
+  const pendingFotos = usePendingFotosViagem(detalhe.data?.id);
 
   async function onFotoCapturada(foto: FotoComprimida | null) {
     if (!foto || !detalhe.data) return;
@@ -61,11 +60,7 @@ export default function ViagemDetalhePage() {
         blob: foto.blob,
         mime: foto.mime,
       });
-      const agora = Date.now();
-      setUltimoEnvio(agora);
-      setTimeout(() => {
-        setUltimoEnvio((t) => (t === agora ? null : t));
-      }, 3000);
+      // Feedback visual vem via pendingFotos — foto aparece com badge "enviando".
     } catch (err) {
       void showAlert({
         title: "Erro ao anexar foto",
@@ -244,9 +239,14 @@ export default function ViagemDetalhePage() {
             <p className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Foto do ticket
             </p>
-            {d.fotos && d.fotos.length > 0 && (
+            {(!d.fotos || d.fotos.length === 0) && pendingFotos.length === 0 && (
+              <p className="px-2 text-sm text-muted-foreground">
+                Nenhuma foto anexada.
+              </p>
+            )}
+            {((d.fotos && d.fotos.length > 0) || pendingFotos.length > 0) && (
               <div className="space-y-2">
-                {d.fotos.map((f) => (
+                {d.fotos?.map((f) => (
                   <AuthedImage
                     key={f.id}
                     path={`/m/viagens/${d.id}/fotos/${f.id}`}
@@ -254,23 +254,14 @@ export default function ViagemDetalhePage() {
                     className="max-h-[60vh]"
                   />
                 ))}
+                {pendingFotos.map((f) => (
+                  <PendingFotoPreview key={f.clientId} foto={f} />
+                ))}
               </div>
             )}
-            {(!d.fotos || d.fotos.length === 0) && (
-              <p className="px-2 text-sm text-muted-foreground">
-                Nenhuma foto anexada.
-              </p>
-            )}
             <div className="mt-3 space-y-2">
-              {/* value sempre null → reseta após cada captura. Confirmação
-                  "Usar foto" do próprio PhotoCapture já é o "confirmar" —
-                  não pede segundo clique. */}
+              {/* value sempre null → reseta. onChange enfileira direto. */}
               <PhotoCapture value={null} onChange={onFotoCapturada} />
-              {ultimoEnvio && (
-                <p className="text-sm font-medium text-success">
-                  ✓ Foto anexada. Sincroniza assim que tiver internet.
-                </p>
-              )}
             </div>
           </Card>
 
@@ -288,6 +279,33 @@ export default function ViagemDetalhePage() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function PendingFotoPreview({
+  foto,
+}: {
+  foto: { clientId: string; fotoBlob: Blob; status: string };
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    const u = URL.createObjectURL(foto.fotoBlob);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [foto.fotoBlob]);
+  if (!url) return null;
+  const label = foto.status === "error" ? "Erro — vai tentar de novo" : "Enviando…";
+  return (
+    <div className="relative">
+      <img
+        src={url}
+        alt="Foto pendente"
+        className="max-h-[60vh] w-full rounded-md object-contain opacity-75"
+      />
+      <span className="absolute right-2 top-2 rounded-full bg-amber-500 px-3 py-1 text-xs font-bold text-white">
+        {label}
+      </span>
     </div>
   );
 }

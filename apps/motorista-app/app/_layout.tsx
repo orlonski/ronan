@@ -111,6 +111,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     return onSyncChange(() => {
       void queryClient.invalidateQueries({ queryKey: ["viagens"] });
       void queryClient.invalidateQueries({ queryKey: ["viagens-filtradas"] });
+      void queryClient.invalidateQueries({ queryKey: ["viagem-detalhe"] });
       void queryClient.invalidateQueries({ queryKey: ["pedagios"] });
       void queryClient.invalidateQueries({ queryKey: ["pedagios-filtrados"] });
       void queryClient.invalidateQueries({ queryKey: ["resumo-mes"] });

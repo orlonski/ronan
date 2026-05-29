@@ -6,6 +6,7 @@ import { instalarHandlersGlobais } from "./lib/error-reporter";
 import { instalarDrenoAutomatico } from "./lib/event-reporter";
 import { setQueryClientGlobal } from "./lib/queries";
 import { pruneExpired as pruneRotaCache } from "./lib/rota-cache";
+import { onSyncChange } from "./lib/sync";
 import "./index.css";
 
 instalarHandlersGlobais();
@@ -31,6 +32,18 @@ const queryClient = new QueryClient({
 });
 
 setQueryClientGlobal(queryClient);
+
+// Quando o sync completa um item do outbox (viagem, foto, etc), invalida
+// as queries dependentes pra refetch trazer os dados atualizados — sem
+// motorista precisar pull-to-refresh.
+onSyncChange(() => {
+  void queryClient.invalidateQueries({ queryKey: ["viagens"] });
+  void queryClient.invalidateQueries({ queryKey: ["viagens-filtradas"] });
+  void queryClient.invalidateQueries({ queryKey: ["viagem-detalhe"] });
+  void queryClient.invalidateQueries({ queryKey: ["pedagios"] });
+  void queryClient.invalidateQueries({ queryKey: ["pedagios-filtrados"] });
+  void queryClient.invalidateQueries({ queryKey: ["resumo-mes"] });
+});
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
