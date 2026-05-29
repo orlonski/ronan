@@ -67,8 +67,8 @@ export function MapaFrota({ items }: { items: MapaFrotaItem[] }) {
     i.ultimaPosicao.lat,
     i.ultimaPosicao.lng,
   ]);
-  // Centro inicial: primeiro motorista OU São Paulo como fallback.
-  const centro: [number, number] = pontos[0] ?? [-23.55, -46.63];
+  // Centro inicial: primeiro motorista OU Ponta Grossa/PR como fallback.
+  const centro: [number, number] = pontos[0] ?? [-25.095, -50.1619];
 
   return (
     <div className="h-[70vh] w-full overflow-hidden rounded-lg border bg-muted">
