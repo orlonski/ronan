@@ -9,6 +9,7 @@ import type { AtualizarViagemInput } from "@ronan/shared-types";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
 import { serializarViagemComMinimos } from "../../common/viagem-minimos";
 import { PrismaService } from "../../prisma/prisma.service";
+import { PushService } from "../../push/push.service";
 import { RoteamentoService } from "../../roteamento/roteamento.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
@@ -29,7 +30,45 @@ export class ViagensAdminService {
     private readonly auditoria: AuditoriaService,
     private readonly uploads: UploadsService,
     private readonly roteamento: RoteamentoService,
+    private readonly push: PushService,
   ) {}
+
+  /**
+   * Notifica o motorista sobre uma ação do admin na viagem dele. Pega o
+   * expoPushToken e envia via PushService. Best-effort: falha silenciosa
+   * pra não derrubar a operação admin.
+   */
+  private async notificarMotorista(args: {
+    viagemId: string;
+    titulo: string;
+    corpo: string;
+    tipo: "viagem-divergente" | "viagem-conferida" | "viagem-editada";
+    dados?: Record<string, unknown>;
+    criadoPorId: string;
+  }): Promise<void> {
+    try {
+      const viagem = await this.prisma.viagem.findUnique({
+        where: { id: args.viagemId },
+        select: { motoristaId: true, motorista: { select: { expoPushToken: true } } },
+      });
+      if (!viagem) return;
+      const token = viagem.motorista?.expoPushToken;
+      // Sem token: ainda registra a notificação na central (motorista vê
+      // quando abrir o sino). PushService.enviar lida com isso registrando
+      // entregaStatus=ERRO mas persistindo o item.
+      await this.push.enviar({
+        motoristaId: viagem.motoristaId,
+        token: token ?? "",
+        titulo: args.titulo,
+        corpo: args.corpo,
+        dados: { ...(args.dados ?? {}), viagemId: args.viagemId },
+        tipo: args.tipo,
+        criadoPorId: args.criadoPorId,
+      });
+    } catch {
+      /* best-effort */
+    }
+  }
 
   async list(params: ListViagensParams) {
     const where: Prisma.ViagemWhereInput = {};
@@ -209,6 +248,20 @@ export class ViagensAdminService {
       depoisEnriquecido,
     );
 
+    // Notifica motorista com 1 push agrupado descrevendo o que mudou.
+    // FK já vêm enriquecidas com { id, nome } pra resumo legível.
+    const diffs = computarDiffViagem(antesEnriquecido, depoisEnriquecido);
+    if (diffs.length > 0) {
+      void this.notificarMotorista({
+        viagemId: id,
+        tipo: "viagem-editada",
+        titulo: "Sua viagem foi editada",
+        corpo: corpoDoDiff(diffs),
+        dados: { diffs },
+        criadoPorId: usuarioId,
+      });
+    }
+
     return this.detalhe(id);
   }
 
@@ -341,6 +394,28 @@ export class ViagensAdminService {
       motivo: input.motivo ?? null,
       metadata: { statusAnterior: viagem.status, statusNovo },
     });
+
+    // Notifica motorista sobre a mudança de status. DESFAZER (volta pra
+    // ENVIADA) não notifica — admin desfez a própria ação, motorista não
+    // precisa ver vai-e-volta.
+    if (statusNovo === StatusViagem.DIVERGENTE) {
+      void this.notificarMotorista({
+        viagemId: id,
+        tipo: "viagem-divergente",
+        titulo: "Viagem marcada como divergente",
+        corpo: `Motivo: ${data.motivoStatus as string}`,
+        dados: { motivo: data.motivoStatus },
+        criadoPorId: usuarioId,
+      });
+    } else if (statusNovo === StatusViagem.OK) {
+      void this.notificarMotorista({
+        viagemId: id,
+        tipo: "viagem-conferida",
+        titulo: "Viagem conferida ✓",
+        corpo: "A operadora aprovou sua viagem.",
+        criadoPorId: usuarioId,
+      });
+    }
 
     return this.detalhe(id);
   }
@@ -512,4 +587,96 @@ export class ViagensAdminService {
 
     return foto;
   }
+}
+
+// ===== Helpers de diff pra notificação ao motorista =====
+
+/** Campos que não interessam pro motorista (técnicos/internos). */
+const CAMPOS_IGNORADOS_NOTIF = new Set([
+  "alteradoEm",
+  "sincronizadoEm",
+  "criadoEm",
+  "id",
+  "clientId",
+  "motoristaId",
+  "revisadoEm",
+  "revisadoPorId",
+  "lat",
+  "lng",
+  "iniciadoEm",
+  "kmReal",
+  "kmCalculado",
+  "ocrCampos",
+  "ocrConfidence",
+  "criadoOfflineEm",
+  "status",
+  "motivoStatus",
+]);
+
+const LABEL_CAMPO: Record<string, string> = {
+  km: "Km",
+  toneladas: "Toneladas",
+  ticket: "Ticket",
+  data: "Data",
+  observacao: "Observação",
+  valorPedagioTotal: "Valor pedágio",
+  cliente: "Cliente",
+  material: "Material",
+  veiculo: "Veículo",
+  localCarga: "Local de carga",
+  localDescarga: "Local de descarga",
+  clienteId: "Cliente",
+  materialId: "Material",
+  veiculoId: "Veículo",
+  localCargaId: "Local de carga",
+  localDescargaId: "Local de descarga",
+};
+
+type DiffCampo = { campo: string; label: string; antes: unknown; depois: unknown };
+
+function computarDiffViagem(
+  antes: Record<string, unknown>,
+  depois: Record<string, unknown>,
+): DiffCampo[] {
+  const fields = new Set<string>([...Object.keys(antes), ...Object.keys(depois)]);
+  const diffs: DiffCampo[] = [];
+  for (const f of fields) {
+    if (CAMPOS_IGNORADOS_NOTIF.has(f)) continue;
+    if (JSON.stringify(antes[f]) === JSON.stringify(depois[f])) continue;
+    diffs.push({
+      campo: f,
+      label: LABEL_CAMPO[f] ?? f,
+      antes: antes[f],
+      depois: depois[f],
+    });
+  }
+  return diffs;
+}
+
+function formatarValorDiff(v: unknown): string {
+  if (v == null || v === "") return "—";
+  if (typeof v === "object" && v !== null) {
+    if ("nome" in v && typeof (v as { nome: unknown }).nome === "string") {
+      return (v as { nome: string }).nome;
+    }
+    if ("placa" in v && typeof (v as { placa: unknown }).placa === "string") {
+      return (v as { placa: string }).placa;
+    }
+  }
+  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}T/.test(v)) {
+    // Datetime ISO → DD/MM/YYYY pro motorista (sem horário).
+    return v.slice(8, 10) + "/" + v.slice(5, 7) + "/" + v.slice(0, 4);
+  }
+  return String(v);
+}
+
+function corpoDoDiff(diffs: DiffCampo[]): string {
+  if (diffs.length === 0) return "Sua viagem foi atualizada.";
+  const partes = diffs
+    .slice(0, 2)
+    .map((d) => `${d.label}: ${formatarValorDiff(d.antes)} → ${formatarValorDiff(d.depois)}`);
+  let corpo = partes.join("; ");
+  const extras = diffs.length - partes.length;
+  if (extras > 0) corpo += ` (+${extras} ${extras === 1 ? "mudança" : "mudanças"})`;
+  return corpo;
 }

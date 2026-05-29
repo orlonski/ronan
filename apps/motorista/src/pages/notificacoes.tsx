@@ -1,5 +1,6 @@
 import { Bell } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { EmptyState } from "@/components/empty-state";
 import { ScreenHeader } from "@/components/screen-header";
 import { ViagemCardSkeleton } from "@/components/skeleton";
@@ -29,6 +30,7 @@ function fmtRelativo(iso: string): string {
 }
 
 export default function NotificacoesPage() {
+  const navigate = useNavigate();
   const q = useNotificacoes();
   const marcarLida = useMarcarNotificacaoLida();
   const marcarTodas = useMarcarTodasNotificacoesLidas();
@@ -55,6 +57,13 @@ export default function NotificacoesPage() {
 
   function handleTap(n: Notificacao) {
     if (!n.lida) marcarLida.mutate(n.id);
+    // Deep-link: se a notificação referencia uma viagem (kind viagem-*),
+    // abre o detalhe diretamente.
+    const dados = n.dados ?? {};
+    const viagemId = typeof dados.viagemId === "string" ? dados.viagemId : null;
+    if (viagemId) {
+      navigate(`/viagens/${viagemId}`);
+    }
   }
 
   return (

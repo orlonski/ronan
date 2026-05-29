@@ -178,6 +178,17 @@ function AuthGate({ children }: { children: React.ReactNode }) {
             router.push("/viagem-andamento");
           } else if (kind === "iniciar-tracking") {
             router.push("/");
+          } else if (
+            kind === "viagem-divergente" ||
+            kind === "viagem-conferida" ||
+            kind === "viagem-editada"
+          ) {
+            const viagemId = typeof data.viagemId === "string" ? data.viagemId : null;
+            if (viagemId) {
+              router.push(`/viagens/${viagemId}`);
+            } else {
+              router.push("/notificacoes");
+            }
           } else if (kind === "mensagem-admin") {
             router.push("/notificacoes");
           }

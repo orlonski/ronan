@@ -86,6 +86,8 @@ export type Viagem = {
   kmAjustada: boolean;
   observacao: string | null;
   status: string;
+  /** Texto explicando a divergência quando admin marca status=DIVERGENTE. */
+  motivoStatus: string | null;
   sincronizadoEm: string;
   veiculo: Veiculo;
   cliente: { id: string; nome: string };

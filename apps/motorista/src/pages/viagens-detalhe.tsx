@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
+  AlertTriangle,
   ArrowDown,
   ArrowUp,
   Building2,
@@ -139,6 +140,20 @@ export default function ViagemDetalhePage() {
               <Info label="Material" value={d.material.nome} />
             </div>
           </Card>
+
+          {d.status === "DIVERGENTE" && d.motivoStatus && (
+            <Card className="border-2 border-destructive bg-destructive/10 p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle size={20} className="mt-0.5 text-destructive" />
+                <div className="flex-1">
+                  <p className="text-base font-bold text-destructive">
+                    Viagem marcada como divergente
+                  </p>
+                  <p className="mt-1 text-sm text-foreground">{d.motivoStatus}</p>
+                </div>
+              </div>
+            </Card>
+          )}
 
           <Card>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">

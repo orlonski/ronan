@@ -4,7 +4,12 @@ import { z } from "zod";
  * Tipos conhecidos hoje. O wire mantém `tipo` como `string` aberta pra app
  * antigo não quebrar quando novos tipos forem adicionados no backend.
  */
-export const TipoNotificacao = z.enum(["mensagem-admin"]);
+export const TipoNotificacao = z.enum([
+  "mensagem-admin",
+  "viagem-divergente",
+  "viagem-conferida",
+  "viagem-editada",
+]);
 export type TipoNotificacao = z.infer<typeof TipoNotificacao>;
 
 export type NotificacaoItem = {

@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import { Bell } from "lucide-react-native";
 import {
   ActivityIndicator,
@@ -29,7 +30,13 @@ export default function NotificacoesScreen() {
 
   function handleTap(n: Notificacao) {
     if (!n.lida) marcarLida.mutate(n.id);
-    // futuro: se n.dados?.rota → router.push(rota)
+    // Deep-link: se a notificação referencia uma viagem (kind viagem-*),
+    // abre a tela de detalhe diretamente. Senão fica na central.
+    const dados = n.dados ?? {};
+    const viagemId = typeof dados.viagemId === "string" ? dados.viagemId : null;
+    if (viagemId) {
+      router.push(`/viagens/${viagemId}`);
+    }
   }
 
   return (

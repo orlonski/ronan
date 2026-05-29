@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
+  AlertTriangle,
   ArrowDown,
   ArrowUp,
   Building2,
@@ -170,6 +171,23 @@ export default function ViagemDetalheScreen() {
               <Info label="Material" value={detalhe.data.material.nome} />
             </View>
           </Card>
+
+          {/* Card de divergência — motivo do admin pra motorista saber o que ajustar */}
+          {detalhe.data.status === "DIVERGENTE" && detalhe.data.motivoStatus && (
+            <Card className="border-2 border-destructive bg-destructive/10">
+              <View className="flex-row items-start gap-3">
+                <AlertTriangle size={20} color="#dc2626" />
+                <View className="flex-1">
+                  <Text className="text-base font-bold text-destructive">
+                    Viagem marcada como divergente
+                  </Text>
+                  <Text className="mt-1 text-sm text-foreground">
+                    {detalhe.data.motivoStatus}
+                  </Text>
+                </View>
+              </View>
+            </Card>
+          )}
 
           {/* Trajeto */}
           <Card>
