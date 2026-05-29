@@ -10,7 +10,7 @@ import { ExcluirButton } from "@/components/excluir-button";
 const TrajetoMapPlayer = dynamic(
   () =>
     import("@/components/trajeto-map-player").then((m) => m.TrajetoMapPlayer),
-  { ssr: false, loading: () => <div className="h-80 rounded-lg border bg-muted/30" /> },
+  { ssr: false, loading: () => <div className="h-48 rounded-lg border bg-muted/30" /> },
 );
 const MapaTrajetoViagem = dynamic(
   () =>
@@ -907,7 +907,7 @@ function FotoThumb({
 
   if (q.error instanceof Error && q.error.message.includes("404")) {
     return (
-      <div className="flex h-80 flex-col items-center justify-center gap-1 rounded-md border border-dashed bg-muted/30 text-xs text-muted-foreground">
+      <div className="flex h-48 flex-col items-center justify-center gap-1 rounded-md border border-dashed bg-muted/30 text-xs text-muted-foreground">
         <ImageOff className="h-7 w-7 opacity-40" />
         <span>Foto indisponível</span>
       </div>
@@ -916,7 +916,7 @@ function FotoThumb({
 
   if (q.isLoading || !q.data) {
     return (
-      <div className="flex h-80 items-center justify-center rounded-md border bg-muted text-xs text-muted-foreground">
+      <div className="flex h-48 items-center justify-center rounded-md border bg-muted text-xs text-muted-foreground">
         carregando...
       </div>
     );
@@ -943,36 +943,20 @@ function FotoThumbInner({
   onClick: () => void;
   onRotacionar: () => void;
 }) {
-  const [origin, setOrigin] = useState<{ x: number; y: number } | null>(null);
-
-  function onMove(e: React.MouseEvent<HTMLElement>) {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
-    setOrigin({ x, y });
-  }
-
   return (
-    <div className="relative h-80 overflow-hidden rounded-md border bg-muted">
+    <div className="relative w-full overflow-hidden rounded-md border bg-muted">
       <button
         type="button"
         onClick={onClick}
-        onMouseMove={onMove}
-        onMouseLeave={() => setOrigin(null)}
-        className="group absolute inset-0 cursor-zoom-in"
-        title="Ampliar"
+        className="block w-full cursor-zoom-in"
+        title="Clique pra ampliar"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={src}
           alt="Ticket"
-          className="h-full w-full object-contain transition-transform duration-150 ease-out"
-          style={{
-            transform: origin
-              ? `rotate(${rotacao}deg) scale(2.5)`
-              : `rotate(${rotacao}deg)`,
-            transformOrigin: origin ? `${origin.x}% ${origin.y}%` : "center",
-          }}
+          className="block max-h-[70vh] w-full object-contain"
+          style={{ transform: `rotate(${rotacao}deg)` }}
         />
       </button>
       <button
