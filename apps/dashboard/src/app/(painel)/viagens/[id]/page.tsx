@@ -907,7 +907,7 @@ function FotoThumb({
 
   if (q.error instanceof Error && q.error.message.includes("404")) {
     return (
-      <div className="flex aspect-[4/3] flex-col items-center justify-center gap-1 rounded-md border border-dashed bg-muted/30 text-xs text-muted-foreground">
+      <div className="flex h-64 flex-col items-center justify-center gap-1 rounded-md border border-dashed bg-muted/30 text-xs text-muted-foreground">
         <ImageOff className="h-7 w-7 opacity-40" />
         <span>Foto indisponível</span>
       </div>
@@ -916,7 +916,7 @@ function FotoThumb({
 
   if (q.isLoading || !q.data) {
     return (
-      <div className="flex aspect-[4/3] items-center justify-center rounded-md border bg-muted text-xs text-muted-foreground">
+      <div className="flex h-64 items-center justify-center rounded-md border bg-muted text-xs text-muted-foreground">
         carregando...
       </div>
     );
@@ -953,7 +953,7 @@ function FotoThumbInner({
   }
 
   return (
-    <div className="relative aspect-[4/3] overflow-hidden rounded-md border bg-muted">
+    <div className="relative h-64 overflow-hidden rounded-md border bg-muted">
       <button
         type="button"
         onClick={onClick}
