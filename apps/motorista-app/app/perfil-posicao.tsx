@@ -38,12 +38,22 @@ export default function PerfilPosicaoScreen() {
   useEffect(() => {
     if (!cfg.data) return;
     setAtivada(cfg.data.ativada);
-    const isWindow =
+    const temJanela =
       cfg.data.horarioInicio != null && cfg.data.horarioFim != null;
-    setVinteQuatroHoras(!isWindow);
-    if (isWindow) {
+    if (temJanela) {
+      // Motorista já configurou uma janela específica antes — usa ela.
+      setVinteQuatroHoras(false);
       setHorarioInicio(cfg.data.horarioInicio!);
       setHorarioFim(cfg.data.horarioFim!);
+    } else if (cfg.data.ativada) {
+      // Já tá ativo e sem janela = motorista escolheu 24h. Mantém.
+      setVinteQuatroHoras(true);
+    } else {
+      // Primeiro acesso (não-ativado, sem janela): sugere 8-18 como horário
+      // comercial padrão. Motorista pode ligar 24h se preferir.
+      setVinteQuatroHoras(false);
+      setHorarioInicio(8);
+      setHorarioFim(18);
     }
   }, [cfg.data]);
 

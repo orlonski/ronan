@@ -9,6 +9,7 @@ import {
   ArrowUp,
   CloudOff,
   Fuel,
+  MapPin,
   Play,
   Plus,
   Receipt,
@@ -34,6 +35,7 @@ import { ViagemCardSkeleton } from "@/components/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { usePending } from "@/hooks/use-pending";
+import { usePosicaoConfig } from "@/lib/queries";
 import { showAlert, showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import {
@@ -71,6 +73,7 @@ export default function Home() {
   const viagens = useViagens();
   const resumo = useResumoMes();
   const pending = usePending();
+  const posicaoConfig = usePosicaoConfig();
   const excluir = useExcluirViagem();
   const updates = Updates.useUpdates();
   const updateReady = updates.isUpdatePending || updates.isUpdateAvailable;
@@ -225,6 +228,28 @@ export default function Home() {
                     style={{ fontVariant: ["tabular-nums"] }}
                   >
                     {tracking.resumo?.kmReal.toFixed(1) ?? "0,0"} km · toque pra ver
+                  </Text>
+                </View>
+              </Pressable>
+            )}
+
+            {/* Banner: convite pra ativar compartilhamento de posição.
+                Aparece enquanto config.ativada=false. Some assim que
+                motorista ativa em /perfil-posicao. */}
+            {posicaoConfig.data && !posicaoConfig.data.ativada && (
+              <Pressable
+                onPress={() => router.push("/perfil-posicao")}
+                className="flex-row items-center gap-3 rounded-2xl border-2 border-brand/30 bg-brand/10 p-4 active:opacity-75"
+              >
+                <View className="h-12 w-12 items-center justify-center rounded-full bg-brand">
+                  <MapPin size={22} color="white" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-base font-bold text-foreground">
+                    Compartilhe sua posição com a empresa
+                  </Text>
+                  <Text className="text-sm text-muted-foreground">
+                    Toque pra configurar (sugestão: horário comercial 8h-18h)
                   </Text>
                 </View>
               </Pressable>
