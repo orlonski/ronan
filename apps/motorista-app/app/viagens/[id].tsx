@@ -20,6 +20,7 @@ import {
   Linking,
   ScrollView,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -35,6 +36,7 @@ import { API_URL } from "@/lib/api-url";
 import { loadTokens } from "@/lib/auth";
 import {
   useExcluirViagem,
+  useInformarValorPedagio,
   usePedagiosNaRota,
   useViagemDetalhe,
 } from "@/lib/queries";
@@ -67,6 +69,8 @@ export default function ViagemDetalheScreen() {
     detalhe.data?.localDescarga.id,
   );
   const excluir = useExcluirViagem();
+  const informarPedagio = useInformarValorPedagio();
+  const [valorPedagioStr, setValorPedagioStr] = useState("");
   const [token, setToken] = useState<string | null>(null);
   const pendingFotos = usePendingFotosViagem(detalhe.data?.id);
 
@@ -180,22 +184,88 @@ export default function ViagemDetalheScreen() {
             </View>
           </Card>
 
-          {/* Card de divergência — motivo do admin pra motorista saber o que ajustar */}
-          {detalhe.data.status === "DIVERGENTE" && detalhe.data.motivoStatus && (
-            <Card className="border-2 border-destructive bg-destructive/10">
-              <View className="flex-row items-start gap-3">
-                <AlertTriangle size={20} color="#dc2626" />
-                <View className="flex-1">
-                  <Text className="text-base font-bold text-destructive">
-                    Viagem marcada como divergente
-                  </Text>
-                  <Text className="mt-1 text-sm text-foreground">
-                    {detalhe.data.motivoStatus}
-                  </Text>
+          {/* Card de divergência — motivo do admin pra motorista saber o que ajustar.
+              Quando tipo=PEDAGIO_SEM_VALOR, vira fluxo dedicado: input do valor +
+              botão "Informar valor" em vez de exigir edição completa da viagem. */}
+          {detalhe.data.status === "DIVERGENTE" &&
+            detalhe.data.tipoDivergencia === "PEDAGIO_SEM_VALOR" && (
+              <Card className="border-2 border-orange-500 bg-orange-50">
+                <View className="flex-row items-start gap-3">
+                  <AlertTriangle size={20} color="#ea580c" />
+                  <View className="flex-1">
+                    <Text className="text-base font-bold text-orange-900">
+                      Falta informar o valor do pedágio
+                    </Text>
+                    {detalhe.data.motivoStatus && (
+                      <Text className="mt-1 text-sm text-foreground">
+                        {detalhe.data.motivoStatus}
+                      </Text>
+                    )}
+                    <View className="mt-3 flex-row items-center gap-2">
+                      <Text className="text-sm text-foreground">R$</Text>
+                      <TextInput
+                        value={valorPedagioStr}
+                        onChangeText={setValorPedagioStr}
+                        keyboardType="decimal-pad"
+                        placeholder="0,00"
+                        className="h-11 flex-1 rounded-md border border-input bg-white px-3 text-base text-foreground"
+                      />
+                    </View>
+                    <Button
+                      className="mt-3"
+                      loading={informarPedagio.isPending}
+                      disabled={!valorPedagioStr.trim()}
+                      onPress={async () => {
+                        const v = parseFloat(valorPedagioStr.replace(",", "."));
+                        if (isNaN(v) || v <= 0) {
+                          void showAlert({
+                            title: "Valor inválido",
+                            message: "Informe um valor maior que zero.",
+                          });
+                          return;
+                        }
+                        try {
+                          await informarPedagio.mutateAsync({
+                            viagemId: detalhe.data!.id,
+                            valor: v,
+                          });
+                          setValorPedagioStr("");
+                          void showAlert({
+                            title: "Obrigado!",
+                            message: "Valor informado — viagem foi marcada como ajustada.",
+                          });
+                        } catch (err) {
+                          void showAlert({
+                            title: "Erro",
+                            message: humanizeApiError(err),
+                          });
+                        }
+                      }}
+                    >
+                      Informar valor
+                    </Button>
+                  </View>
                 </View>
-              </View>
-            </Card>
-          )}
+              </Card>
+            )}
+
+          {detalhe.data.status === "DIVERGENTE" &&
+            detalhe.data.tipoDivergencia !== "PEDAGIO_SEM_VALOR" &&
+            detalhe.data.motivoStatus && (
+              <Card className="border-2 border-destructive bg-destructive/10">
+                <View className="flex-row items-start gap-3">
+                  <AlertTriangle size={20} color="#dc2626" />
+                  <View className="flex-1">
+                    <Text className="text-base font-bold text-destructive">
+                      Viagem marcada como divergente
+                    </Text>
+                    <Text className="mt-1 text-sm text-foreground">
+                      {detalhe.data.motivoStatus}
+                    </Text>
+                  </View>
+                </View>
+              </Card>
+            )}
 
           {/* Trajeto */}
           <Card>

@@ -211,6 +211,63 @@ export class ViagensMotoristaService {
    * POST /m/uploads/ticket. Valida ownership pra não anexar foto em viagem
    * de outro motorista.
    */
+  /**
+   * Motorista informa o valor do pedágio que ele tinha esquecido. Só funciona
+   * em viagem que admin marcou como DIVERGENTE com tipoDivergencia
+   * PEDAGIO_SEM_VALOR. Atualiza o valor, vira AJUSTADA, limpa o tipo da
+   * divergência (volta o motivo pro histórico mas o card especial some).
+   */
+  async informarValorPedagio(
+    motoristaId: string,
+    viagemId: string,
+    valor: number,
+  ) {
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { id: viagemId },
+      select: {
+        id: true,
+        motoristaId: true,
+        status: true,
+        tipoDivergencia: true,
+      },
+    });
+    if (!viagem) throw new NotFoundException("Viagem não encontrada.");
+    if (viagem.motoristaId !== motoristaId) {
+      throw new ForbiddenException("Esta viagem não é sua.");
+    }
+    if (
+      viagem.status !== "DIVERGENTE" ||
+      viagem.tipoDivergencia !== "PEDAGIO_SEM_VALOR"
+    ) {
+      throw new ConflictException(
+        "Essa viagem não está aguardando informação de pedágio.",
+      );
+    }
+    if (valor <= 0) {
+      throw new ConflictException("Valor de pedágio precisa ser positivo.");
+    }
+
+    await this.prisma.viagem.update({
+      where: { id: viagemId },
+      data: {
+        valorPedagioTotal: valor,
+        status: "AJUSTADA",
+        tipoDivergencia: null,
+      },
+    });
+
+    await this.auditoria.log({
+      usuarioId: motoristaId,
+      entidade: "Viagem",
+      entidadeId: viagemId,
+      acao: AcaoAuditoria.MOTORISTA_INFORMOU_PEDAGIO,
+      motivo: `Motorista informou valor de pedágio: R$ ${valor.toFixed(2)}`,
+      metadata: { valorInformado: valor },
+    });
+
+    return this.detalhe(motoristaId, viagemId);
+  }
+
   async adicionarFoto(motoristaId: string, viagemId: string, storageKey: string) {
     const viagem = await this.prisma.viagem.findUnique({
       where: { id: viagemId },

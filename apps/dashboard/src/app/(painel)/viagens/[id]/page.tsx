@@ -193,7 +193,11 @@ export default function ViagemDetalhePage({
     },
   });
   const preValidar = useMutation({
-    mutationFn: (body: { status: "OK" | "DIVERGENTE" | "DESFAZER"; motivo?: string }) =>
+    mutationFn: (body: {
+      status: "OK" | "DIVERGENTE" | "DESFAZER";
+      motivo?: string;
+      tipo?: "PEDAGIO_SEM_VALOR" | "OUTRO";
+    }) =>
       fetchApi<{ ok: true }>(`/admin/viagens/${id}/pre-validar`, {
         method: "POST",
         body: JSON.stringify(body),
@@ -213,6 +217,9 @@ export default function ViagemDetalhePage({
   const [tab, setTab] = useState<Tab>("dados");
   const [dialogDivergente, setDialogDivergente] = useState(false);
   const [motivoTexto, setMotivoTexto] = useState("");
+  const [tipoDivergencia, setTipoDivergencia] = useState<
+    "PEDAGIO_SEM_VALOR" | "OUTRO"
+  >("OUTRO");
 
   if (viagem.isLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
   if (!viagem.data) return <p className="text-sm text-red-600">Viagem não encontrada.</p>;
@@ -486,6 +493,9 @@ export default function ViagemDetalhePage({
                     variant="outline"
                     onClick={() => {
                       setMotivoTexto(motivoSugeridoPedagio);
+                      setTipoDivergencia(
+                        semValorMasTemPedagio ? "PEDAGIO_SEM_VALOR" : "OUTRO",
+                      );
                       setDialogDivergente(true);
                     }}
                     disabled={preValidar.isPending || emFechamento}
@@ -684,7 +694,11 @@ export default function ViagemDetalhePage({
             <Button
               onClick={() => {
                 preValidar.mutate(
-                  { status: "DIVERGENTE", motivo: motivoTexto.trim() },
+                  {
+                    status: "DIVERGENTE",
+                    motivo: motivoTexto.trim(),
+                    tipo: tipoDivergencia,
+                  },
                   {
                     onSuccess: () => {
                       setDialogDivergente(false);

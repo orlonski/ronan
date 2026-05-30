@@ -31,6 +31,10 @@ const AdicionarFotoInput = z.object({
   fotoKey: z.string().min(1),
 });
 
+const InformarPedagioInput = z.object({
+  valor: z.number().positive().max(99999.99),
+});
+
 const MesSchema = z
   .string()
   .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "mes deve estar no formato YYYY-MM");
@@ -134,5 +138,20 @@ export class ViagensMotoristaController {
     body: z.infer<typeof AdicionarFotoInput>,
   ) {
     return this.service.adicionarFoto(user.id, id, body.fotoKey);
+  }
+
+  /**
+   * Motorista responde a uma divergência tipo PEDAGIO_SEM_VALOR informando
+   * o valor que tinha esquecido. Faz a viagem virar AJUSTADA pra admin
+   * revisar antes de aprovar.
+   */
+  @Post(":id/informar-valor-pedagio")
+  informarValorPedagio(
+    @CurrentUser() user: AuthMotorista,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(InformarPedagioInput))
+    body: z.infer<typeof InformarPedagioInput>,
+  ) {
+    return this.service.informarValorPedagio(user.id, id, body.valor);
   }
 }

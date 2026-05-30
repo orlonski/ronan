@@ -384,7 +384,11 @@ export class ViagensAdminService {
 
   async preValidar(
     id: string,
-    input: { status: "OK" | "DIVERGENTE" | "DESFAZER"; motivo?: string },
+    input: {
+      status: "OK" | "DIVERGENTE" | "DESFAZER";
+      motivo?: string;
+      tipo?: "PEDAGIO_SEM_VALOR" | "OUTRO";
+    },
     usuarioId: string,
   ) {
     const viagem = await this.prisma.viagem.findUnique({
@@ -410,6 +414,7 @@ export class ViagensAdminService {
       data.revisadoEm = new Date();
       data.revisadoPor = { connect: { id: usuarioId } };
       data.motivoStatus = null;
+      data.tipoDivergencia = null;
     } else if (input.status === "DIVERGENTE") {
       if (!input.motivo || input.motivo.trim().length < 2) {
         throw new BadRequestException("Motivo obrigatório quando divergente.");
@@ -419,12 +424,14 @@ export class ViagensAdminService {
       data.revisadoEm = new Date();
       data.revisadoPor = { connect: { id: usuarioId } };
       data.motivoStatus = input.motivo.trim();
+      data.tipoDivergencia = input.tipo ?? "OUTRO";
     } else {
       statusNovo = StatusViagem.ENVIADA;
       data.status = StatusViagem.ENVIADA;
       data.revisadoEm = null;
       data.revisadoPor = { disconnect: true };
       data.motivoStatus = null;
+      data.tipoDivergencia = null;
     }
 
     await this.prisma.viagem.update({ where: { id }, data });

@@ -33,6 +33,15 @@ enum StatusViagem {
   OK
 }
 
+enum TipoDivergencia {
+  /// Admin marcou divergente pq motorista nao preencheu valor de pedagio
+  /// mas a rota passa por pedagio cadastrado. App motorista mostra card
+  /// dedicado pedindo so o valor.
+  PEDAGIO_SEM_VALOR
+  /// Qualquer outro motivo. Motorista corrige editando a viagem normal.
+  OUTRO
+}
+
 enum FonteFechamento {
   UPLOAD
   MANUAL
@@ -76,6 +85,7 @@ enum AcaoAuditoria {
   MATCH_IA
   RECALCULAR_TRAJETO
   MOTORISTA_AJUSTOU_KM
+  MOTORISTA_INFORMOU_PEDAGIO
   PRE_VALIDAR_VIAGEM
   ADICIONAR_FOTO
 }
@@ -655,6 +665,11 @@ model Viagem {
   revisadoPorId     String?
   /// Texto obrigatório quando status foi marcado DIVERGENTE via pré-validação.
   motivoStatus      String?
+  /// Tipifica a divergência pra UI dedicada no app motorista (ex: card pedindo
+  /// só o valor do pedágio em vez do fluxo genérico de edição). Limpo quando
+  /// motorista resolve. Default null = divergência genérica (motorista corrige
+  /// editando a viagem normalmente).
+  tipoDivergencia   TipoDivergencia?
   criadoOfflineEm   DateTime?
   sincronizadoEm    DateTime     @default(now())
   alteradoEm        DateTime     @updatedAt

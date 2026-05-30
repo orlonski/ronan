@@ -88,6 +88,8 @@ export type Viagem = {
   status: string;
   /** Texto explicando a divergência quando admin marca status=DIVERGENTE. */
   motivoStatus: string | null;
+  /** Quando preenchido, app mostra UI dedicada pra resolver. */
+  tipoDivergencia: "PEDAGIO_SEM_VALOR" | "OUTRO" | null;
   sincronizadoEm: string;
   veiculo: Veiculo;
   cliente: { id: string; nome: string };
@@ -647,6 +649,28 @@ export function useExcluirViagem() {
       qc.setQueryData<Viagem[]>(["viagens"], (cur) =>
         cur ? cur.filter((v) => v.id !== viagemId) : cur,
       );
+      void qc.invalidateQueries({ queryKey: ["viagens-filtradas"] });
+      void qc.invalidateQueries({ queryKey: ["resumo-mes"] });
+    },
+  });
+}
+
+/**
+ * Informa valor de pedágio em viagem que o admin recusou por essa razão.
+ * Backend muda pra AJUSTADA e limpa o tipoDivergencia.
+ */
+export function useInformarValorPedagio() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { viagemId: string; valor: number }) => {
+      return await api.post<ViagemDetalhe>(
+        `/m/viagens/${args.viagemId}/informar-valor-pedagio`,
+        { valor: args.valor },
+      );
+    },
+    onSuccess: (atualizada) => {
+      qc.setQueryData(["viagem-detalhe", atualizada.id], atualizada);
+      void qc.invalidateQueries({ queryKey: ["viagens"] });
       void qc.invalidateQueries({ queryKey: ["viagens-filtradas"] });
       void qc.invalidateQueries({ queryKey: ["resumo-mes"] });
     },

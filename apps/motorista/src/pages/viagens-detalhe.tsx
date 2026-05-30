@@ -23,6 +23,7 @@ import { enqueueFoto } from "@/lib/sync";
 import { fmtNum } from "@/lib/utils";
 import {
   useExcluirViagem,
+  useInformarValorPedagio,
   usePedagiosNaRota,
   useViagemDetalhe,
 } from "@/lib/queries";
@@ -59,6 +60,8 @@ export default function ViagemDetalhePage() {
     detalhe.data?.localDescarga.id,
   );
   const excluir = useExcluirViagem();
+  const informarPedagio = useInformarValorPedagio();
+  const [valorPedagioStr, setValorPedagioStr] = useState("");
   const pendingFotos = usePendingFotosViagem(detalhe.data?.id);
 
   async function onFotoCapturada(foto: FotoComprimida | null) {
@@ -149,19 +152,83 @@ export default function ViagemDetalhePage() {
             </div>
           </Card>
 
-          {d.status === "DIVERGENTE" && d.motivoStatus && (
-            <Card className="border-2 border-destructive bg-destructive/10 p-4">
-              <div className="flex items-start gap-3">
-                <AlertTriangle size={20} className="mt-0.5 text-destructive" />
-                <div className="flex-1">
-                  <p className="text-base font-bold text-destructive">
-                    Viagem marcada como divergente
-                  </p>
-                  <p className="mt-1 text-sm text-foreground">{d.motivoStatus}</p>
+          {d.status === "DIVERGENTE" &&
+            d.tipoDivergencia === "PEDAGIO_SEM_VALOR" && (
+              <Card className="border-2 border-orange-500 bg-orange-50 p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle size={20} className="mt-0.5 text-orange-600" />
+                  <div className="flex-1">
+                    <p className="text-base font-bold text-orange-900">
+                      Falta informar o valor do pedágio
+                    </p>
+                    {d.motivoStatus && (
+                      <p className="mt-1 text-sm text-foreground">{d.motivoStatus}</p>
+                    )}
+                    <div className="mt-3 flex items-center gap-2">
+                      <span className="text-sm text-foreground">R$</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={valorPedagioStr}
+                        onChange={(e) => setValorPedagioStr(e.target.value)}
+                        placeholder="0,00"
+                        className="h-11 flex-1 rounded-md border border-input bg-white px-3 text-base text-foreground"
+                      />
+                    </div>
+                    <Button
+                      className="mt-3"
+                      loading={informarPedagio.isPending}
+                      disabled={!valorPedagioStr.trim()}
+                      onClick={async () => {
+                        const v = parseFloat(valorPedagioStr.replace(",", "."));
+                        if (isNaN(v) || v <= 0) {
+                          void showAlert({
+                            title: "Valor inválido",
+                            message: "Informe um valor maior que zero.",
+                          });
+                          return;
+                        }
+                        try {
+                          await informarPedagio.mutateAsync({
+                            viagemId: d.id,
+                            valor: v,
+                          });
+                          setValorPedagioStr("");
+                          void showAlert({
+                            title: "Obrigado!",
+                            message:
+                              "Valor informado — viagem foi marcada como ajustada.",
+                          });
+                        } catch (err) {
+                          void showAlert({
+                            title: "Erro",
+                            message: humanizeApiError(err),
+                          });
+                        }
+                      }}
+                    >
+                      Informar valor
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            </Card>
-          )}
+              </Card>
+            )}
+
+          {d.status === "DIVERGENTE" &&
+            d.tipoDivergencia !== "PEDAGIO_SEM_VALOR" &&
+            d.motivoStatus && (
+              <Card className="border-2 border-destructive bg-destructive/10 p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle size={20} className="mt-0.5 text-destructive" />
+                  <div className="flex-1">
+                    <p className="text-base font-bold text-destructive">
+                      Viagem marcada como divergente
+                    </p>
+                    <p className="mt-1 text-sm text-foreground">{d.motivoStatus}</p>
+                  </div>
+                </div>
+              </Card>
+            )}
 
           <Card>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
