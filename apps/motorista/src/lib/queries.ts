@@ -17,7 +17,13 @@ import {
 import { reportarEvento } from "./event-reporter";
 import { haversineMetros } from "./geo";
 import { getRotaCache, setRotaCache } from "./rota-cache";
-import { enqueueAbastecimento, enqueueLocal, enqueuePedagio, enqueueViagem } from "./sync";
+import {
+  drainLocais,
+  enqueueAbastecimento,
+  enqueueLocal,
+  enqueuePedagio,
+  enqueueViagem,
+} from "./sync";
 
 export type Veiculo = { id: string; placa: string; modelo: string | null };
 export type Material = { id: string; nome: string };
@@ -870,6 +876,10 @@ export function useCriarLocalRapido() {
         attempts: 0,
         createdAt: Date.now(),
       });
+      // Espera o local sincronizar no backend ANTES de retornar — assim
+      // a próxima chamada (useCalcularRota) encontra o local e calcula via
+      // OSRM. Se offline, drainLocais retorna rapido sem fazer nada.
+      await drainLocais();
       return normalizarLocal(novoLocal);
     },
     onSuccess: (novo) => {

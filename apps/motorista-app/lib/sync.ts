@@ -411,7 +411,7 @@ async function processFoto(item: PendingFoto): Promise<void> {
   notify();
 }
 
-async function drainLocais(): Promise<void> {
+export async function drainLocais(): Promise<void> {
   const list = await listPendingLocais();
   for (const item of list) {
     if (item.status === "syncing") continue;
