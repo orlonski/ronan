@@ -18,6 +18,7 @@ const MapaTrajetoViagem = dynamic(
   { ssr: false, loading: () => <div className="h-72 rounded-md border bg-muted/30" /> },
 );
 import {
+  AlertTriangle,
   ArrowDown,
   ArrowLeft,
   ArrowUp,
@@ -217,6 +218,15 @@ export default function ViagemDetalhePage({
   if (!viagem.data) return <p className="text-sm text-red-600">Viagem não encontrada.</p>;
   const v = viagem.data;
   const emFechamento = v.matchesFechamento.length > 0;
+  const pedagiosEncontrados = pedagiosNaRota.data ?? [];
+  const semValorMasTemPedagio =
+    !v.valorPedagioTotal && pedagiosEncontrados.length > 0;
+  const motivoSugeridoPedagio = semValorMasTemPedagio
+    ? `Valor de pedágio não preenchido. Rota passa por ${pedagiosEncontrados.length} pedágio(s) cadastrado(s): ${pedagiosEncontrados
+        .slice(0, 5)
+        .map((p) => p.nome)
+        .join(", ")}${pedagiosEncontrados.length > 5 ? ", …" : ""}. Por favor, informe o valor.`
+    : "";
 
   return (
     <div className="space-y-6">
@@ -434,6 +444,27 @@ export default function ViagemDetalhePage({
               </div>
             ) : (
               <div className="space-y-2">
+                {semValorMasTemPedagio && (
+                  <div className="flex items-start gap-2 rounded-md border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <div className="space-y-1">
+                      <p className="font-medium">
+                        Sem valor de pedágio, mas rota passa por{" "}
+                        {pedagiosEncontrados.length} pedágio
+                        {pedagiosEncontrados.length === 1 ? "" : "s"}.
+                      </p>
+                      <p className="text-xs">
+                        {pedagiosEncontrados
+                          .slice(0, 5)
+                          .map((p) => p.nome + (p.rodovia ? ` (${p.rodovia})` : ""))
+                          .join(" · ")}
+                        {pedagiosEncontrados.length > 5
+                          ? ` · +${pedagiosEncontrados.length - 5}`
+                          : ""}
+                      </p>
+                    </div>
+                  </div>
+                )}
                 <p className="text-sm text-muted-foreground">
                   Marque como validada ou divergente antes do fechamento.
                 </p>
@@ -454,7 +485,7 @@ export default function ViagemDetalhePage({
                   <Button
                     variant="outline"
                     onClick={() => {
-                      setMotivoTexto("");
+                      setMotivoTexto(motivoSugeridoPedagio);
                       setDialogDivergente(true);
                     }}
                     disabled={preValidar.isPending || emFechamento}

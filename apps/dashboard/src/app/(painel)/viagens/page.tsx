@@ -39,6 +39,8 @@ type Viagem = {
   localCarga: { id: string; nome: string; cidade: string; uf: string };
   localDescarga: { id: string; nome: string; cidade: string; uf: string };
   fotos: { id: string; storageKey: string }[];
+  /** true quando rota passa por pedágio cadastrado mas motorista não pôs valor. */
+  temPedagioSemValor: boolean;
 };
 
 type Motorista = { id: string; nome: string };
@@ -87,9 +89,19 @@ export default function ViagensPage() {
         accessorKey: "status",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
         cell: ({ row }) => (
-          <Badge className={STATUS_VIAGEM_COLOR[row.original.status] ?? ""}>
-            {STATUS_VIAGEM_LABEL[row.original.status] ?? row.original.status}
-          </Badge>
+          <div className="flex flex-col items-start gap-1">
+            <Badge className={STATUS_VIAGEM_COLOR[row.original.status] ?? ""}>
+              {STATUS_VIAGEM_LABEL[row.original.status] ?? row.original.status}
+            </Badge>
+            {row.original.temPedagioSemValor && (
+              <Badge
+                className="border-orange-200 bg-orange-100 text-orange-900"
+                title="Rota passa por pedágio cadastrado mas valor não foi preenchido"
+              >
+                Pedágio?
+              </Badge>
+            )}
+          </div>
         ),
       },
       {

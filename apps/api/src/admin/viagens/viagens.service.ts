@@ -13,6 +13,7 @@ import { PushService } from "../../push/push.service";
 import { RoteamentoService } from "../../roteamento/roteamento.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
+import { PedagiosRodoviaConsultaService } from "../pedagios-rodovia/pedagios-rodovia-consulta.service";
 
 type ListViagensParams = PaginationQuery & {
   motoristaId?: string;
@@ -31,7 +32,42 @@ export class ViagensAdminService {
     private readonly uploads: UploadsService,
     private readonly roteamento: RoteamentoService,
     private readonly push: PushService,
+    private readonly pedagiosConsulta: PedagiosRodoviaConsultaService,
   ) {}
+
+  /**
+   * Pra cada viagem da lista, marca `temPedagioSemValor=true` quando a rota
+   * (cacheada) passa por pedágio cadastrado e o motorista não preencheu o
+   * valor. Roda em paralelo pra não somar latência. False (sem ruído) se:
+   * - já tem valor preenchido
+   * - rota nunca foi calculada (sem cache de geometria)
+   * - falha na consulta de pedágios
+   */
+  private async marcarPedagiosSemValor<
+    T extends {
+      id: string;
+      valorPedagioTotal: Prisma.Decimal | null;
+      localCargaId: string;
+      localDescargaId: string;
+    },
+  >(viagens: T[]): Promise<Array<T & { temPedagioSemValor: boolean }>> {
+    return Promise.all(
+      viagens.map(async (v) => {
+        if (v.valorPedagioTotal !== null && Number(v.valorPedagioTotal) > 0) {
+          return { ...v, temPedagioSemValor: false };
+        }
+        try {
+          const pedagios = await this.pedagiosConsulta.pedagiosNaRota(
+            v.localCargaId,
+            v.localDescargaId,
+          );
+          return { ...v, temPedagioSemValor: pedagios.length > 0 };
+        } catch {
+          return { ...v, temPedagioSemValor: false };
+        }
+      }),
+    );
+  }
 
   /**
    * Notifica o motorista sobre uma ação do admin na viagem dele. Pega o
@@ -130,7 +166,14 @@ export class ViagensAdminService {
       },
     });
 
-    return { ...result, data: result.data.map(serializarViagemComMinimos) };
+    const comAlertaPedagio = await this.marcarPedagiosSemValor(result.data);
+    return {
+      ...result,
+      data: comAlertaPedagio.map((v) => ({
+        ...serializarViagemComMinimos(v),
+        temPedagioSemValor: v.temPedagioSemValor,
+      })),
+    };
   }
 
   async detalhe(id: string) {
