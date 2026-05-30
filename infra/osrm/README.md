@@ -3,6 +3,26 @@
 Container que calcula rota carga→descarga em KM real seguindo estradas (OpenStreetMap).
 Usado pelo `ronan-api` no endpoint `GET /m/rotas/calcular`.
 
+## Profile: caminhão (truck)
+
+O Dockerfile gera `truck.lua` patchando o `car.lua` oficial durante o build:
+
+- **`hgv` adicionado ao topo da `access_tags_hierarchy`** — respeita tags
+  específicas de caminhão pesado no OSM (`hgv=no` bloqueia a via,
+  `hgv=designated` prioriza).
+- **Velocidades reduzidas em vias urbanas** — `residential=15km/h`,
+  `living_street=8km/h`, `service=10km/h`. Como o OSRM equilibra duração x
+  distância, vias urbanas ficam menos atrativas → motor tende a desviar
+  pra rodovias mesmo que seja um pouco mais longo.
+
+O patch via `sed` é defensivo: se uma versão futura do `car.lua` mudar
+os padrões, o build segue com o profile original sem quebrar. O `diff`
+roda no build pra deixar rastro nos logs.
+
+Pra adicionar restrições estritas (max_weight/max_height) seria preciso
+escrever profile do zero — fora do escopo atual porque o OSM brasileiro
+tem cobertura ruim dessas tags.
+
 ## Deploy no Easypanel
 
 1. **Criar serviço Docker novo**

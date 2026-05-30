@@ -1,4 +1,8 @@
-# OSRM (Open Source Routing Machine) com mapa Sul do Brasil pre-processado.
+# OSRM (Open Source Routing Machine) com mapa Sul do Brasil pre-processado,
+# usando profile TRUCK derivado do car.lua oficial com 2 patches:
+#   1) hgv no inicio da access_tags_hierarchy -> respeita tag hgv:no/yes
+#   2) speeds reduzidas em vias urbanas -> motorista de caminhao
+#      tende a evitar bairros (rate menor = penalidade no roteamento)
 #
 # Build leva 30-60min (download ~700MB + pre-processamento) e gasta ~3GB de RAM.
 # Pre-processamento roda em build-time (multi-stage) e fica embutido na imagem final.
@@ -25,7 +29,21 @@ ARG REGION=sul
 WORKDIR /data
 COPY --from=downloader /tmp/region.osm.pbf /data/${REGION}.osm.pbf
 
-RUN osrm-extract -p /opt/car.lua /data/${REGION}.osm.pbf \
+# Gera /opt/truck.lua patchando /opt/car.lua oficial:
+#  - Adiciona 'hgv' no topo da access_tags_hierarchy (Sequence { 'hgv', 'motorcar', ... })
+#  - Reduz velocidades de vias urbanas (residential, living_street, service)
+#  Os sed sao defensivos: se nao encontram o pattern (mudanca futura no car.lua),
+#  o build segue com car.lua original mas o RUN inicial garante que o /opt/truck.lua
+#  exista. Os patches sao loggados.
+RUN cp /opt/car.lua /opt/truck.lua \
+    && sed -i "s/Sequence *{ *'motorcar'/Sequence { 'hgv', 'motorcar'/" /opt/truck.lua \
+    && sed -i "s/residential *= *[0-9]\+/residential = 15/" /opt/truck.lua \
+    && sed -i "s/living_street *= *[0-9]\+/living_street = 8/" /opt/truck.lua \
+    && sed -i "s/service *= *[0-9]\+/service = 10/" /opt/truck.lua \
+    && echo "=== truck.lua diff vs car.lua ===" \
+    && diff /opt/car.lua /opt/truck.lua || true
+
+RUN osrm-extract -p /opt/truck.lua /data/${REGION}.osm.pbf \
     && osrm-partition /data/${REGION}.osrm \
     && osrm-customize /data/${REGION}.osrm \
     && rm /data/${REGION}.osm.pbf
