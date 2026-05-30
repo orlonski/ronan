@@ -246,10 +246,10 @@ export default function Home() {
                 </View>
                 <View className="flex-1">
                   <Text className="text-base font-bold text-foreground">
-                    Compartilhe sua posição com a empresa
+                    Compartilhar sua posição
                   </Text>
                   <Text className="text-sm text-muted-foreground">
-                    Toque pra configurar (sugestão: horário comercial 8h-18h)
+                    Ajuda quando cliente liga perguntando onde tá o material
                   </Text>
                 </View>
               </Pressable>

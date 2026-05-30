@@ -133,10 +133,11 @@ export default function PerfilPosicaoScreen() {
             </Text>
           </View>
           <Text className="text-sm leading-5 text-muted-foreground">
-            Quando você ativa, o app envia sua posição GPS a cada ~15 minutos
-            pra empresa. Serve pro controle de frota — admin vê no mapa onde
-            cada motorista está. Você pode desativar a qualquer momento. As
-            posições antigas são apagadas automaticamente depois de 90 dias.
+            Quando você ativa, o app envia sua posição GPS a cada ~15 minutos.
+            Ajuda nas operações — quando cliente liga perguntando onde tá o
+            material, a gente consegue responder na hora. Você pode desativar
+            a qualquer momento. Posições antigas são apagadas automaticamente
+            depois de 90 dias.
           </Text>
         </Card>
 

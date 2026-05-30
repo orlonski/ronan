@@ -64,7 +64,7 @@ const GRUPOS: Grupo[] = [
     titulo: "Cadastros",
     itens: [
       { href: "/motoristas", label: "Motoristas", icon: HardHat },
-      { href: "/motoristas/mapa", label: "Mapa da frota", icon: MapPin },
+      { href: "/motoristas/mapa", label: "Onde estão", icon: MapPin },
       { href: "/empresas", label: "Empresas", icon: Building2 },
       { href: "/clientes", label: "Clientes", icon: Boxes },
       { href: "/locais", label: "Locais", icon: MapPin },

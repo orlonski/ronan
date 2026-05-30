@@ -117,8 +117,7 @@ export async function iniciarCapturaPeriodica(): Promise<boolean> {
     showsBackgroundLocationIndicator: true,
     foregroundService: {
       notificationTitle: "Compartilhando posição",
-      notificationBody:
-        "A empresa consegue saber onde você está pelo mapa. Toque pra configurar.",
+      notificationBody: "Toque pra abrir o app e ajustar.",
       notificationColor: "#2563eb",
     },
   });
@@ -191,7 +190,7 @@ async function prePromptCompartilharPosicao(): Promise<boolean> {
   return showConfirm({
     title: "Permitir localização em segundo plano",
     message:
-      'Pra compartilhar sua posição com a empresa de forma periódica (a cada ~15min), o Android precisa de permissão "o tempo todo". Você pode desativar isso no app a qualquer momento. Na próxima tela, escolha "Permitir o tempo todo".',
+      'Pra enviar sua posição a cada ~15min (ajuda quando cliente pergunta cadê o material), o Android precisa de permissão "o tempo todo". Você pode desativar isso no app a qualquer momento. Na próxima tela, escolha "Permitir o tempo todo".',
     confirmLabel: "Continuar",
     cancelLabel: "Cancelar",
   });

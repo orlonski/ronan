@@ -46,7 +46,7 @@ export default function MapaFrotaPage() {
         <MapPin className="mt-1 h-6 w-6 text-muted-foreground" />
         <div className="flex-1">
           <h1 className="text-2xl font-semibold tracking-tight">
-            Mapa da frota
+            Onde estão os motoristas
           </h1>
           <p className="text-sm text-muted-foreground">
             Posições recentes dos motoristas que optaram por compartilhar.
