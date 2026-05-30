@@ -1,9 +1,11 @@
 import {
+  BadGatewayException,
   Body,
   Controller,
   Delete,
   Get,
   HttpCode,
+  Logger,
   Param,
   Patch,
   Post,
@@ -44,6 +46,7 @@ const ListQuery = paginationQuerySchema.extend({
 @Roles("ADMIN", "OPERADOR")
 @Controller("admin/pedagios-rodovia")
 export class PedagiosRodoviaController {
+  private readonly log = new Logger(PedagiosRodoviaController.name);
   constructor(private readonly service: PedagiosRodoviaService) {}
 
   @Get()
@@ -82,7 +85,15 @@ export class PedagiosRodoviaController {
    */
   @Roles("ADMIN")
   @Post("importar-osm")
-  importarOSM() {
-    return this.service.importarOSM();
+  async importarOSM() {
+    try {
+      return await this.service.importarOSM();
+    } catch (err) {
+      const msg = (err as Error).message ?? "Erro desconhecido";
+      this.log.error(`Importação OSM falhou: ${msg}`, (err as Error).stack);
+      // Expõe o motivo real ao admin (ex.: "Overpass API 504", "timeout")
+      // pra ele saber se é flutuação do servidor público ou bug nosso.
+      throw new BadGatewayException(`Falha ao importar do OSM: ${msg}`);
+    }
   }
 }

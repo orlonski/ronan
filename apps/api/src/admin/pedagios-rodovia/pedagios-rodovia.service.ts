@@ -87,24 +87,23 @@ export class PedagiosRodoviaService {
    * desativação humana ou bug temporário do dado upstream).
    */
   async importarOSM(): Promise<{ criados: number; atualizados: number }> {
+    // Query usa área pré-definida do Brasil (relation/admin_level=2) — mais
+    // rápido que bbox cobrindo oceano. timeout interno generoso (90s);
+    // AbortController externo evita ficar pendurado se o servidor Overpass
+    // travar. Headers identificam a app (boas práticas Overpass).
     const query = `
-      [out:json][timeout:60];
-      (
-        node[barrier=toll_booth](-33.75,-74,-4,-34);
-        node[barrier=toll_gantry](-33.75,-74,-4,-34);
-      );
-      out body;
-    `;
+[out:json][timeout:90];
+area["ISO3166-1"="BR"][admin_level=2]->.br;
+(
+  node["barrier"="toll_booth"](area.br);
+  node["barrier"="toll_gantry"](area.br);
+);
+out body;
+`;
     const url = "https://overpass-api.de/api/interpreter";
-    const res = await fetch(url, {
-      method: "POST",
-      body: query,
-      headers: { "Content-Type": "text/plain" },
-    });
-    if (!res.ok) {
-      throw new Error(`Overpass API ${res.status}`);
-    }
-    const json = (await res.json()) as {
+    const ac = new AbortController();
+    const timeoutId = setTimeout(() => ac.abort(), 110_000);
+    let json: {
       elements: Array<{
         id: number;
         lat: number;
@@ -112,9 +111,39 @@ export class PedagiosRodoviaService {
         tags?: Record<string, string>;
       }>;
     };
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        body: `data=${encodeURIComponent(query)}`,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "User-Agent": "ronan-schaba/1.0 (contact: orlonski@icloud.com)",
+        },
+        signal: ac.signal,
+      });
+      if (!res.ok) {
+        const corpo = await res.text().catch(() => "");
+        throw new Error(
+          `Overpass API ${res.status} ${res.statusText}: ${corpo.slice(0, 300)}`,
+        );
+      }
+      json = (await res.json()) as typeof json;
+    } catch (err) {
+      if ((err as Error).name === "AbortError") {
+        throw new Error(
+          "Overpass API não respondeu em 110s. Tente de novo em alguns minutos (servidor público costuma sobrecarregar de manhã).",
+        );
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    this.log.log(`Overpass retornou ${json.elements.length} elementos`);
 
     let criados = 0;
     let atualizados = 0;
+    let pulados = 0;
     for (const el of json.elements) {
       if (typeof el.lat !== "number" || typeof el.lon !== "number") continue;
       const osmId = String(el.id);
@@ -123,33 +152,36 @@ export class PedagiosRodoviaService {
         tags["name"] ??
         tags["operator"] ??
         `Pedágio ${tags["ref"] ?? osmId}`;
-      const data = {
-        nome: nome.slice(0, 200),
-        concessionaria: tags["operator"] ?? null,
-        rodovia: tags["ref"] ?? null,
-        uf: null, // Overpass node não traz UF; admin pode preencher depois
-        cidade: null,
-        lat: el.lat,
-        lng: el.lon,
-        fonte: "osm" as const,
-        osmId,
-      };
-      const existente = await this.prisma.pedagioRodovia.findUnique({
-        where: { osmId },
-        select: { id: true },
-      });
-      if (existente) {
-        await this.prisma.pedagioRodovia.update({
+      try {
+        const res = await this.prisma.pedagioRodovia.upsert({
           where: { osmId },
-          data: { nome: data.nome, lat: data.lat, lng: data.lng },
+          create: {
+            nome: nome.slice(0, 200),
+            concessionaria: tags["operator"] ?? null,
+            rodovia: tags["ref"] ?? null,
+            uf: null,
+            cidade: null,
+            lat: el.lat,
+            lng: el.lon,
+            fonte: "osm",
+            osmId,
+          },
+          update: { nome: nome.slice(0, 200), lat: el.lat, lng: el.lon },
+          select: { criadoEm: true, alteradoEm: true },
         });
-        atualizados++;
-      } else {
-        await this.prisma.pedagioRodovia.create({ data });
-        criados++;
+        if (res.criadoEm.getTime() === res.alteradoEm.getTime()) {
+          criados++;
+        } else {
+          atualizados++;
+        }
+      } catch (err) {
+        pulados++;
+        this.log.warn(`Falha ao upsert pedágio osmId=${osmId}: ${(err as Error).message}`);
       }
     }
-    this.log.log(`Importação OSM: ${criados} criados, ${atualizados} atualizados`);
+    this.log.log(
+      `Importação OSM: ${criados} criados, ${atualizados} atualizados, ${pulados} pulados`,
+    );
     return { criados, atualizados };
   }
 
