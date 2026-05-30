@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   useInfiniteQuery,
   useMutation,
@@ -9,6 +10,10 @@ import { cacheGet, cachePut } from "@/db/database";
 import { api, ApiError } from "./api";
 import { reportarEvento } from "./event-reporter";
 import { haversineMetros } from "./geo";
+import {
+  pedagiosNaRotaOffline,
+  type PedagioCadastrado,
+} from "./pedagios-offline";
 import { getRotaCache, setRotaCache } from "./rota-cache";
 import {
   drainLocais,
@@ -745,21 +750,86 @@ export type PedagioNaRota = {
   lng: number;
 };
 
+// Cache local de TODOS os pedágios cadastrados — permite calcular alerta
+// "rota passa por pedágio" 100% offline. ~950 pontos × ~100B = ~100KB.
+const PEDAGIOS_CACHE_KEY = "ronan.pedagios-cadastrados-v1";
+const PEDAGIOS_REFRESH_MS = 24 * 60 * 60_000;
+
 /**
- * Pedágios cadastrados que ficam na rota OSRM cacheada (origem→destino).
- * Usado só pra alertar o motorista ao salvar viagem sem valor de pedágio.
- * Retorna [] se offline ou se a rota nunca foi calculada — o alerta vira
- * "skip" silencioso nesses casos (não trava o salvamento).
+ * Lista compacta de pedágios cadastrados. Refresh em background a cada 24h.
+ * Salva backup no AsyncStorage pra ler quando offline. Sempre retorna algo
+ * se o motorista já abriu o app online pelo menos 1 vez.
+ */
+export function usePedagiosCadastrados() {
+  return useQuery<PedagioCadastrado[]>({
+    queryKey: ["pedagios-cadastrados"],
+    staleTime: PEDAGIOS_REFRESH_MS,
+    retry: false,
+    queryFn: async () => {
+      try {
+        const lista = await api.get<PedagioCadastrado[]>("/m/pedagios-rodovia");
+        await AsyncStorage.setItem(
+          PEDAGIOS_CACHE_KEY,
+          JSON.stringify(lista),
+        );
+        return lista;
+      } catch {
+        // Offline: cai no cache local salvo da última sincronização.
+        try {
+          const raw = await AsyncStorage.getItem(PEDAGIOS_CACHE_KEY);
+          if (raw) return JSON.parse(raw) as PedagioCadastrado[];
+        } catch {
+          /* ignora */
+        }
+        return [];
+      }
+    },
+  });
+}
+
+/**
+ * Pedágios cadastrados que ficam na rota (origem→destino). Calcula 100%
+ * offline quando tem geometria cacheada + lista de pedágios — alerta no
+ * salvar funciona mesmo sem internet, desde que o motorista tenha aberto
+ * o app online pelo menos 1x nos últimos 24h.
+ *
+ * Fluxo:
+ * 1) Lê geometria do cache da query useCalcularRota (mesma tela já chama)
+ * 2) Lê pedágios do cache local
+ * 3) Roda haversine ponto-segmento — mesma lógica do backend
+ * 4) Fallback: se sem geometria local, tenta endpoint server
  */
 export function usePedagiosNaRota(origemId?: string, destinoId?: string) {
+  const qc = useQueryClient();
+  const cadastrados = usePedagiosCadastrados();
   return useQuery<PedagioNaRota[]>({
-    queryKey: ["pedagios-na-rota", origemId, destinoId],
-    enabled: !!origemId && !!destinoId && origemId !== destinoId,
-    // Pedágios mudam pouco mas mudam (admin cadastra/exclui via dashboard);
-    // 5min equilibra latência do alerta vs. reflexo de mudanças.
+    queryKey: [
+      "pedagios-na-rota",
+      origemId,
+      destinoId,
+      cadastrados.data?.length ?? 0,
+    ],
+    enabled:
+      !!origemId &&
+      !!destinoId &&
+      origemId !== destinoId &&
+      cadastrados.isFetched,
     staleTime: 5 * 60_000,
     retry: false,
     queryFn: async () => {
+      const rota = qc.getQueryData<RotaCalculada>([
+        "rota-calcular",
+        origemId,
+        destinoId,
+      ]);
+      const geometria =
+        rota && "geometria" in rota ? rota.geometria ?? null : null;
+      const pedagios = cadastrados.data ?? [];
+
+      if (geometria && pedagios.length > 0) {
+        return pedagiosNaRotaOffline(geometria, pedagios);
+      }
+      // Sem geometria local ou sem cache de pedagios — fallback online.
       try {
         return await api.get<PedagioNaRota[]>(
           `/m/pedagios-rodovia/na-rota?origem=${origemId}&destino=${destinoId}`,

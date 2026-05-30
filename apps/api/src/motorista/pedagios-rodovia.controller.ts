@@ -5,6 +5,7 @@ import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { PedagiosRodoviaConsultaService } from "../admin/pedagios-rodovia/pedagios-rodovia-consulta.service";
+import { PedagiosRodoviaService } from "../admin/pedagios-rodovia/pedagios-rodovia.service";
 
 const NaRotaQuery = z.object({
   origem: z.string().uuid(),
@@ -22,10 +23,23 @@ const NaRotaQuery = z.object({
 @Roles("MOTORISTA")
 @Controller("m/pedagios-rodovia")
 export class PedagiosRodoviaMotoristaController {
-  constructor(private readonly service: PedagiosRodoviaConsultaService) {}
+  constructor(
+    private readonly service: PedagiosRodoviaConsultaService,
+    private readonly admin: PedagiosRodoviaService,
+  ) {}
 
   @Get("na-rota")
   naRota(@Query(new ZodValidationPipe(NaRotaQuery)) q: z.infer<typeof NaRotaQuery>) {
     return this.service.pedagiosNaRota(q.origem, q.destino);
+  }
+
+  /**
+   * Lista compacta de todos os pedágios ativos. App motorista baixa isso
+   * pra cachear localmente e poder alertar offline. ~950 pontos = ~100KB,
+   * leve. Refresh diário no app é suficiente (cadastro muda raramente).
+   */
+  @Get()
+  listar() {
+    return this.admin.listarParaMapa();
   }
 }
