@@ -744,7 +744,9 @@ export function usePedagiosNaRota(origemId?: string, destinoId?: string) {
   return useQuery<PedagioNaRota[]>({
     queryKey: ["pedagios-na-rota", origemId, destinoId],
     enabled: !!origemId && !!destinoId && origemId !== destinoId,
-    staleTime: Infinity,
+    // Pedágios mudam pouco mas mudam (admin cadastra/exclui via dashboard);
+    // 5min equilibra latência do alerta vs. reflexo de mudanças.
+    staleTime: 5 * 60_000,
     retry: false,
     queryFn: async () => {
       try {
