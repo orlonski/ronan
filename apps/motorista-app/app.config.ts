@@ -43,7 +43,7 @@ const config: ExpoConfig = {
       process.env.GOOGLE_SERVICES_JSON ?? "./google-services.json",
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-icon.png",
-      backgroundColor: "#13316b",
+      backgroundColor: "#ffffff",
     },
     permissions: [
       "android.permission.CAMERA",

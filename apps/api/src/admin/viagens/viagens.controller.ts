@@ -137,6 +137,20 @@ export class ViagensAdminController {
   }
 
   /**
+   * Apaga uma TicketFoto específica (admin removendo foto ruim depois
+   * de recortar uma melhor, por exemplo). Remove o objeto no MinIO e
+   * a linha no DB.
+   */
+  @Delete(":id/fotos/:fotoId")
+  @HttpCode(204)
+  async excluirFoto(
+    @Param("id") id: string,
+    @Param("fotoId") fotoId: string,
+  ): Promise<void> {
+    await this.service.excluirFoto(id, fotoId);
+  }
+
+  /**
    * Admin anexa foto a viagem existente. Multipart direto (sem 2-step),
    * já que admin no dashboard sempre tem rede. Registra auditoria.
    */

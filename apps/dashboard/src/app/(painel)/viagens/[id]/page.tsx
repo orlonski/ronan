@@ -24,6 +24,7 @@ import {
   Camera,
   CheckCircle2,
   Clock,
+  Crop,
   Edit3,
   ExternalLink,
   History,
@@ -35,6 +36,7 @@ import {
   Sparkles,
   ThumbsUp,
   ThumbsDown,
+  Trash2,
   User as UserIcon,
   X,
 } from "lucide-react";
@@ -60,6 +62,7 @@ import {
   fmtNum,
 } from "@/lib/fechamento-helpers";
 import { ValorComMinimo } from "@/components/valor-com-minimo";
+import { CropFotoModal } from "@/components/crop-foto-modal";
 import { useHistoricoViagem } from "@/lib/fechamentos-api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DiagnosticoViagem } from "./_components/diagnostico-viagem";
@@ -330,9 +333,10 @@ export default function ViagemDetalhePage({
           </Card>
 
           {/* Fotos do ticket: na coluna direita pra ficar lado a lado com
-              os dados — admin confere foto + valores sem rolar. row-span-2
-              estende ela embaixo do Trajeto textual também. */}
-          <Card className="p-5 md:row-span-2">
+              os dados — admin confere foto + valores sem rolar. row-span-3
+              estende embaixo de Trajeto + Pré-validação também (mantém
+              foto longa sem deixar espaço vazio na esquerda). */}
+          <Card className="p-5 md:row-span-3">
             <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
               <Camera className="h-4 w-4" /> Fotos do ticket
             </h3>
@@ -368,65 +372,9 @@ export default function ViagemDetalhePage({
             </div>
           </Card>
 
-          {v.pontos && v.pontos.length >= 2 && (
-            <Card className="p-5 md:col-span-2">
-              <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
-                <MapPin className="h-4 w-4" /> Trajeto capturado por GPS
-              </h3>
-              <TrajetoMapPlayer pontos={v.pontos} />
-              <p className="mt-2 text-xs text-muted-foreground">
-                {v.pontos.length} pontos · capturado entre{" "}
-                {v.iniciadoEm ? fmtDataHoraBR(v.iniciadoEm) : "?"} e{" "}
-                {fmtDataHoraBR(v.pontos[v.pontos.length - 1]!.capturadoEm)}
-              </p>
-            </Card>
-          )}
-
-          {(v.localCarga.lat != null ||
-            v.localDescarga.lat != null ||
-            v.lat != null) && (
-            <Card className="p-5 md:col-span-2">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="flex items-center gap-2 text-base font-medium">
-                  <MapPin className="h-4 w-4" /> Trajeto da viagem
-                </h3>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => recalcular.mutate()}
-                  disabled={recalcular.isPending}
-                  title="Reprocessa o trajeto via OSRM (atualiza polilinha e km de cache)"
-                >
-                  <RefreshCw
-                    className={`h-4 w-4 ${recalcular.isPending ? "animate-spin" : ""}`}
-                  />
-                  {recalcular.isPending ? "Recalculando…" : "Recalcular trajeto"}
-                </Button>
-              </div>
-              <MapaTrajetoViagem
-                carga={
-                  v.localCarga.lat != null && v.localCarga.lng != null
-                    ? { lat: v.localCarga.lat, lng: v.localCarga.lng, nome: v.localCarga.nome }
-                    : null
-                }
-                descarga={
-                  v.localDescarga.lat != null && v.localDescarga.lng != null
-                    ? {
-                        lat: v.localDescarga.lat,
-                        lng: v.localDescarga.lng,
-                        nome: v.localDescarga.nome,
-                      }
-                    : null
-                }
-                lancamento={
-                  v.lat != null && v.lng != null ? { lat: v.lat, lng: v.lng } : null
-                }
-                geometria={v.rotaGeometria}
-              />
-            </Card>
-          )}
-
-          <Card className="p-5 md:col-span-2">
+          {/* Pré-validação: coluna 1 também, logo após Trajeto, pra preencher
+              o espaço embaixo (Fotos do ticket ocupa col 2 com row-span-3). */}
+          <Card className="p-5">
             <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
               <ShieldCheck className="h-4 w-4" /> Pré-validação
             </h3>
@@ -499,6 +447,64 @@ export default function ViagemDetalhePage({
               </div>
             )}
           </Card>
+
+          {v.pontos && v.pontos.length >= 2 && (
+            <Card className="p-5 md:col-span-2">
+              <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
+                <MapPin className="h-4 w-4" /> Trajeto capturado por GPS
+              </h3>
+              <TrajetoMapPlayer pontos={v.pontos} />
+              <p className="mt-2 text-xs text-muted-foreground">
+                {v.pontos.length} pontos · capturado entre{" "}
+                {v.iniciadoEm ? fmtDataHoraBR(v.iniciadoEm) : "?"} e{" "}
+                {fmtDataHoraBR(v.pontos[v.pontos.length - 1]!.capturadoEm)}
+              </p>
+            </Card>
+          )}
+
+          {(v.localCarga.lat != null ||
+            v.localDescarga.lat != null ||
+            v.lat != null) && (
+            <Card className="p-5 md:col-span-2">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="flex items-center gap-2 text-base font-medium">
+                  <MapPin className="h-4 w-4" /> Trajeto da viagem
+                </h3>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => recalcular.mutate()}
+                  disabled={recalcular.isPending}
+                  title="Reprocessa o trajeto via OSRM (atualiza polilinha e km de cache)"
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 ${recalcular.isPending ? "animate-spin" : ""}`}
+                  />
+                  {recalcular.isPending ? "Recalculando…" : "Recalcular trajeto"}
+                </Button>
+              </div>
+              <MapaTrajetoViagem
+                carga={
+                  v.localCarga.lat != null && v.localCarga.lng != null
+                    ? { lat: v.localCarga.lat, lng: v.localCarga.lng, nome: v.localCarga.nome }
+                    : null
+                }
+                descarga={
+                  v.localDescarga.lat != null && v.localDescarga.lng != null
+                    ? {
+                        lat: v.localDescarga.lat,
+                        lng: v.localDescarga.lng,
+                        nome: v.localDescarga.nome,
+                      }
+                    : null
+                }
+                lancamento={
+                  v.lat != null && v.lng != null ? { lat: v.lat, lng: v.lng } : null
+                }
+                geometria={v.rotaGeometria}
+              />
+            </Card>
+          )}
 
           {v.matchesFechamento.length > 0 && (
             <Card className="p-5 md:col-span-2">
@@ -778,9 +784,10 @@ function FotosViagem({
   });
 
   const adicionar = useMutation({
-    mutationFn: (file: File) => {
+    mutationFn: (file: File | Blob) => {
       const fd = new FormData();
-      fd.append("foto", file);
+      const name = file instanceof File ? file.name : "recorte.jpg";
+      fd.append("foto", file, name);
       return fetchApi(`/admin/viagens/${viagemId}/fotos`, {
         method: "POST",
         body: fd,
@@ -794,6 +801,22 @@ function FotosViagem({
     },
     onError: (err) => toast.error("Falha ao anexar", { description: (err as Error).message }),
   });
+
+  const excluirFoto = useMutation({
+    mutationFn: (fotoId: string) =>
+      fetchApi(`/admin/viagens/${viagemId}/fotos/${fotoId}`, {
+        method: "DELETE",
+        token,
+      }),
+    onSuccess: () => {
+      toast.success("Foto removida.");
+      void qc.invalidateQueries({ queryKey: ["viagem-admin", viagemId] });
+    },
+    onError: (err) => toast.error("Falha ao remover", { description: (err as Error).message }),
+  });
+
+  // Foto sendo recortada — null = modal fechado.
+  const [recortarFoto, setRecortarFoto] = useState<{ url: string } | null>(null);
 
   function onPickFile(ev: React.ChangeEvent<HTMLInputElement>) {
     const file = ev.target.files?.[0];
@@ -825,9 +848,25 @@ function FotosViagem({
                 rotacao: (f.rotacao + 90) % 360,
               })
             }
+            onRecortar={(url) => setRecortarFoto({ url })}
+            onRemover={() => {
+              if (confirm("Remover esta foto? Não pode ser desfeito.")) {
+                excluirFoto.mutate(f.id);
+              }
+            }}
           />
         ))}
       </div>
+
+      <CropFotoModal
+        open={!!recortarFoto}
+        src={recortarFoto?.url ?? ""}
+        onCancel={() => setRecortarFoto(null)}
+        onConfirmar={async (blob) => {
+          await adicionar.mutateAsync(blob);
+          setRecortarFoto(null);
+        }}
+      />
 
       <div className="mt-3">
         <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium hover:bg-muted">
@@ -875,6 +914,8 @@ function FotoThumb({
   token,
   onClick,
   onRotacionar,
+  onRecortar,
+  onRemover,
 }: {
   viagemId: string;
   fotoId: string;
@@ -882,6 +923,8 @@ function FotoThumb({
   token: string | undefined;
   onClick: (url: string) => void;
   onRotacionar: () => void;
+  onRecortar: (url: string) => void;
+  onRemover: () => void;
 }) {
   const q = useQuery({
     queryKey: ["viagem-foto-blob", viagemId, fotoId],
@@ -928,6 +971,8 @@ function FotoThumb({
       rotacao={rotacao}
       onClick={() => onClick(q.data!)}
       onRotacionar={onRotacionar}
+      onRecortar={() => onRecortar(q.data!)}
+      onRemover={onRemover}
     />
   );
 }
@@ -937,11 +982,15 @@ function FotoThumbInner({
   rotacao,
   onClick,
   onRotacionar,
+  onRecortar,
+  onRemover,
 }: {
   src: string;
   rotacao: number;
   onClick: () => void;
   onRotacionar: () => void;
+  onRecortar: () => void;
+  onRemover: () => void;
 }) {
   return (
     <div className="relative w-full overflow-hidden rounded-md border bg-muted">
@@ -959,17 +1008,41 @@ function FotoThumbInner({
           style={{ transform: `rotate(${rotacao}deg)` }}
         />
       </button>
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onRotacionar();
-        }}
-        className="absolute right-1 top-1 z-10 rounded-md bg-black/60 p-1.5 text-white shadow hover:bg-black/80"
-        title="Rotacionar 90°"
-      >
-        <RotateCw className="h-4 w-4" />
-      </button>
+      <div className="absolute right-1 top-1 z-10 flex gap-1">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRotacionar();
+          }}
+          className="rounded-md bg-black/60 p-1.5 text-white shadow hover:bg-black/80"
+          title="Rotacionar 90°"
+        >
+          <RotateCw className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRecortar();
+          }}
+          className="rounded-md bg-black/60 p-1.5 text-white shadow hover:bg-black/80"
+          title="Recortar"
+        >
+          <Crop className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemover();
+          }}
+          className="rounded-md bg-red-600/80 p-1.5 text-white shadow hover:bg-red-700"
+          title="Remover foto"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   );
 }

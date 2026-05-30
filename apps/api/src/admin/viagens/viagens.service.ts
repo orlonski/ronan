@@ -528,6 +528,18 @@ export class ViagensAdminService {
     return { ok: true };
   }
 
+  async excluirFoto(viagemId: string, fotoId: string) {
+    const foto = await this.prisma.ticketFoto.findFirst({
+      where: { id: fotoId, viagemId },
+      select: { id: true, storageKey: true },
+    });
+    if (!foto) throw new NotFoundException("Foto não encontrada");
+    // Best-effort: se MinIO falhar, ainda apaga DB pra UI consistir.
+    await this.uploads.removeObject(foto.storageKey).catch(() => {});
+    await this.prisma.ticketFoto.delete({ where: { id: fotoId } });
+    return { ok: true };
+  }
+
   async rotacionarFoto(viagemId: string, fotoId: string, rotacao: number) {
     const foto = await this.prisma.ticketFoto.findFirst({
       where: { id: fotoId, viagemId },
