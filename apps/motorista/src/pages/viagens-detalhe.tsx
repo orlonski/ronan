@@ -21,7 +21,11 @@ import { fmtDataBR } from "@/lib/datetime";
 import type { FotoComprimida } from "@/lib/photo";
 import { enqueueFoto } from "@/lib/sync";
 import { fmtNum } from "@/lib/utils";
-import { useExcluirViagem, useViagemDetalhe } from "@/lib/queries";
+import {
+  useExcluirViagem,
+  usePedagiosNaRota,
+  useViagemDetalhe,
+} from "@/lib/queries";
 
 const MapTrajeto = lazy(() =>
   import("@/components/map-trajeto").then((m) => ({ default: m.MapTrajeto })),
@@ -50,6 +54,10 @@ export default function ViagemDetalhePage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const detalhe = useViagemDetalhe(id ?? "");
+  const pedagiosNaRota = usePedagiosNaRota(
+    detalhe.data?.localCarga.id,
+    detalhe.data?.localDescarga.id,
+  );
   const excluir = useExcluirViagem();
   const pendingFotos = usePendingFotosViagem(detalhe.data?.id);
 
@@ -204,6 +212,7 @@ export default function ViagemDetalhePage() {
                       }
                     : null
                 }
+                pedagios={pedagiosNaRota.data ?? []}
               />
             </Suspense>
           )}

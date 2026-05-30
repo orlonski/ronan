@@ -26,6 +26,30 @@ const pinIcon = (color: string) =>
 const cargaIcon = pinIcon("#16a34a");
 const descargaIcon = pinIcon("#dc2626");
 
+const pedagioIcon = L.divIcon({
+  className: "",
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
+  html: `<div style="
+    width: 22px; height: 22px;
+    background: #ea580c;
+    color: white;
+    border: 2px solid white;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 11px; font-family: system-ui;
+  ">$</div>`,
+});
+
+export type PedagioMapa = {
+  id: string;
+  nome: string;
+  rodovia: string | null;
+  lat: number;
+  lng: number;
+};
+
 function FitBounds({ pontos }: { pontos: [number, number][] }) {
   const map = useMap();
   useEffect(() => {
@@ -40,11 +64,13 @@ export function MapTrajeto({
   geometria,
   carga,
   descarga,
+  pedagios = [],
 }: {
   pontosCrus?: { lat: number; lng: number }[];
   geometria?: string | null;
   carga?: { lat: number; lng: number; nome: string } | null;
   descarga?: { lat: number; lng: number; nome: string } | null;
+  pedagios?: PedagioMapa[];
 }) {
   const pontos = useMemo<[number, number][]>(() => {
     if (pontosCrus && pontosCrus.length > 0) {
@@ -64,8 +90,9 @@ export function MapTrajeto({
     const out = [...pontos];
     if (carga) out.push([carga.lat, carga.lng]);
     if (descarga) out.push([descarga.lat, descarga.lng]);
+    pedagios.forEach((p) => out.push([p.lat, p.lng]));
     return out;
-  }, [pontos, carga, descarga]);
+  }, [pontos, carga, descarga, pedagios]);
 
   if (all.length === 0) {
     return (
@@ -100,6 +127,14 @@ export function MapTrajeto({
             title={descarga.nome}
           />
         )}
+        {pedagios.map((p) => (
+          <Marker
+            key={p.id}
+            position={[p.lat, p.lng]}
+            icon={pedagioIcon}
+            title={p.rodovia ? `${p.nome} — ${p.rodovia}` : p.nome}
+          />
+        ))}
         <FitBounds pontos={all} />
       </MapContainer>
     </div>

@@ -16,11 +16,20 @@ type MapMod = any;
 
 export type Ponto = { lat: number; lng: number; nome?: string };
 
+export type PedagioMapa = {
+  id: string;
+  nome: string;
+  rodovia: string | null;
+  lat: number;
+  lng: number;
+};
+
 type Props = {
   carga: Ponto | null;
   descarga: Ponto | null;
   lancamento: { lat: number; lng: number } | null;
   geometria: string | null;
+  pedagios?: PedagioMapa[];
   height?: number;
 };
 
@@ -29,6 +38,7 @@ export function MapaCargaDescarga({
   descarga,
   lancamento,
   geometria,
+  pedagios = [],
   height = 240,
 }: Props) {
   const [mod, setMod] = useState<MapMod | null>(null);
@@ -60,8 +70,9 @@ export function MapaCargaDescarga({
     if (descarga) lats.push(descarga.lat);
     if (lancamento) lats.push(lancamento.lat);
     traçado.forEach((p) => lats.push(p.latitude));
+    pedagios.forEach((p) => lats.push(p.lat));
     return lats;
-  }, [carga, descarga, lancamento, traçado]);
+  }, [carga, descarga, lancamento, traçado, pedagios]);
 
   const todosLngs = useMemo(() => {
     const lngs: number[] = [];
@@ -69,8 +80,9 @@ export function MapaCargaDescarga({
     if (descarga) lngs.push(descarga.lng);
     if (lancamento) lngs.push(lancamento.lng);
     traçado.forEach((p) => lngs.push(p.longitude));
+    pedagios.forEach((p) => lngs.push(p.lng));
     return lngs;
-  }, [carga, descarga, lancamento, traçado]);
+  }, [carga, descarga, lancamento, traçado, pedagios]);
 
   if (todosLats.length === 0 || !mod) {
     return <View className="rounded-xl bg-muted/40" style={{ height }} />;
@@ -127,6 +139,15 @@ export function MapaCargaDescarga({
             description="Onde foi lançada"
           />
         )}
+        {pedagios.map((p) => (
+          <Marker
+            key={p.id}
+            coordinate={{ latitude: p.lat, longitude: p.lng }}
+            pinColor="orange"
+            title={p.nome}
+            description={p.rodovia ?? "Pedágio"}
+          />
+        ))}
       </MapView>
     </View>
   );

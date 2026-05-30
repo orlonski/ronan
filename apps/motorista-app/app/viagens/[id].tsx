@@ -33,7 +33,11 @@ import { showAlert, showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { API_URL } from "@/lib/api-url";
 import { loadTokens } from "@/lib/auth";
-import { useExcluirViagem, useViagemDetalhe } from "@/lib/queries";
+import {
+  useExcluirViagem,
+  usePedagiosNaRota,
+  useViagemDetalhe,
+} from "@/lib/queries";
 import { enqueueFoto } from "@/lib/sync";
 
 const STATUS_VARIANT: Record<
@@ -58,6 +62,10 @@ const STATUS_LABEL: Record<string, string> = {
 export default function ViagemDetalheScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const detalhe = useViagemDetalhe(id ?? "");
+  const pedagiosNaRota = usePedagiosNaRota(
+    detalhe.data?.localCarga.id,
+    detalhe.data?.localDescarga.id,
+  );
   const excluir = useExcluirViagem();
   const [token, setToken] = useState<string | null>(null);
   const pendingFotos = usePendingFotosViagem(detalhe.data?.id);
@@ -406,6 +414,7 @@ export default function ViagemDetalheScreen() {
                         : null
                     }
                     geometria={detalhe.data.rotaGeometria}
+                    pedagios={pedagiosNaRota.data ?? []}
                     height={220}
                   />
                 </View>

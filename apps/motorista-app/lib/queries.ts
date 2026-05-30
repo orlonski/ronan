@@ -732,6 +732,8 @@ export type PedagioNaRota = {
   rodovia: string | null;
   concessionaria: string | null;
   distanciaMetros: number;
+  lat: number;
+  lng: number;
 };
 
 /**
