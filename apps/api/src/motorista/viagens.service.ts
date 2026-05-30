@@ -256,14 +256,18 @@ export class ViagensMotoristaService {
       },
     });
 
-    await this.auditoria.log({
-      usuarioId: motoristaId,
-      entidade: "Viagem",
-      entidadeId: viagemId,
-      acao: AcaoAuditoria.MOTORISTA_INFORMOU_PEDAGIO,
-      motivo: `Motorista informou valor de pedágio: R$ ${valor.toFixed(2)}`,
-      metadata: { valorInformado: valor },
-    });
+    try {
+      await this.auditoria.log({
+        usuarioId: null,
+        entidade: "Viagem",
+        entidadeId: viagemId,
+        acao: AcaoAuditoria.MOTORISTA_INFORMOU_PEDAGIO,
+        motivo: `Motorista informou valor de pedágio: R$ ${valor.toFixed(2)}`,
+        metadata: { motoristaId, valorInformado: valor },
+      });
+    } catch {
+      // best-effort: nao quebra a resposta pro motorista se audit falhar
+    }
 
     return this.detalhe(motoristaId, viagemId);
   }
@@ -313,14 +317,18 @@ export class ViagensMotoristaService {
       return novaFoto;
     });
 
-    await this.auditoria.log({
-      usuarioId: motoristaId,
-      entidade: "Viagem",
-      entidadeId: viagemId,
-      acao: AcaoAuditoria.MOTORISTA_SUBSTITUIU_FOTO,
-      motivo: "Motorista enviou nova foto após divergência FOTO_ILEGIVEL",
-      metadata: { fotoId: foto.id, storageKey: foto.storageKey },
-    });
+    try {
+      await this.auditoria.log({
+        usuarioId: null,
+        entidade: "Viagem",
+        entidadeId: viagemId,
+        acao: AcaoAuditoria.MOTORISTA_SUBSTITUIU_FOTO,
+        motivo: "Motorista enviou nova foto após divergência FOTO_ILEGIVEL",
+        metadata: { motoristaId, fotoId: foto.id, storageKey: foto.storageKey },
+      });
+    } catch {
+      // best-effort
+    }
 
     return this.detalhe(motoristaId, viagemId);
   }
