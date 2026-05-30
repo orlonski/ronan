@@ -626,36 +626,36 @@ export function usePedagiosCadastrados() {
  * tenha aberto o app online 1x nos últimos 24h.
  */
 export function usePedagiosNaRota(origemId?: string, destinoId?: string) {
-  const qc = useQueryClient();
   const cadastrados = usePedagiosCadastrados();
+  const rotaQuery = useCalcularRota(origemId, destinoId);
+  const rota = rotaQuery.data;
+  const geometria =
+    rota && "geometria" in rota ? rota.geometria ?? null : null;
+  const pedagios = cadastrados.data ?? [];
+  const geomKey = geometria
+    ? geometria.length + ":" + geometria.slice(0, 8)
+    : "none";
+
   return useQuery<PedagioNaRota[]>({
     queryKey: [
       "pedagios-na-rota",
       origemId,
       destinoId,
-      cadastrados.data?.length ?? 0,
+      pedagios.length,
+      geomKey,
     ],
     enabled:
       !!origemId &&
       !!destinoId &&
       origemId !== destinoId &&
-      cadastrados.isFetched,
+      cadastrados.isFetched &&
+      rotaQuery.isFetched,
     staleTime: 5 * 60_000,
     retry: false,
     queryFn: async () => {
-      const rota = qc.getQueryData<RotaCalculada>([
-        "rota-calcular",
-        origemId,
-        destinoId,
-      ]);
-      const geometria =
-        rota && "geometria" in rota ? rota.geometria ?? null : null;
-      const pedagios = cadastrados.data ?? [];
-
       if (geometria && pedagios.length > 0) {
         return pedagiosNaRotaOffline(geometria, pedagios);
       }
-      // Fallback online se sem cache local.
       try {
         return await api.get<PedagioNaRota[]>(
           `/m/pedagios-rodovia/na-rota?origem=${origemId}&destino=${destinoId}`,
