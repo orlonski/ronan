@@ -154,4 +154,20 @@ export class ViagensMotoristaController {
   ) {
     return this.service.informarValorPedagio(user.id, id, body.valor);
   }
+
+  /**
+   * Motorista responde a uma divergência tipo FOTO_ILEGIVEL anexando uma
+   * foto nova (foi feito upload prévio em /m/uploads/ticket → fotoKey).
+   * Viagem vira AJUSTADA pra conferente revisar; fotos antigas continuam
+   * no histórico.
+   */
+  @Post(":id/responder-foto-divergente")
+  responderFotoDivergente(
+    @CurrentUser() user: AuthMotorista,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(AdicionarFotoInput))
+    body: z.infer<typeof AdicionarFotoInput>,
+  ) {
+    return this.service.responderFotoDivergente(user.id, id, body.fotoKey);
+  }
 }

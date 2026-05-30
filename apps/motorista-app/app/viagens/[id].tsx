@@ -38,6 +38,7 @@ import {
   useExcluirViagem,
   useInformarValorPedagio,
   usePedagiosNaRota,
+  useResponderFotoDivergente,
   useViagemDetalhe,
 } from "@/lib/queries";
 import { enqueueFoto } from "@/lib/sync";
@@ -70,7 +71,10 @@ export default function ViagemDetalheScreen() {
   );
   const excluir = useExcluirViagem();
   const informarPedagio = useInformarValorPedagio();
+  const responderFoto = useResponderFotoDivergente();
   const [valorPedagioStr, setValorPedagioStr] = useState("");
+  const [novaFotoDivergente, setNovaFotoDivergente] =
+    useState<CapturedPhoto | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const pendingFotos = usePendingFotosViagem(detalhe.data?.id);
 
@@ -250,7 +254,61 @@ export default function ViagemDetalheScreen() {
             )}
 
           {detalhe.data.status === "DIVERGENTE" &&
+            detalhe.data.tipoDivergencia === "FOTO_ILEGIVEL" && (
+              <Card className="border-2 border-orange-500 bg-orange-50">
+                <View className="flex-row items-start gap-3">
+                  <AlertTriangle size={20} color="#ea580c" />
+                  <View className="flex-1">
+                    <Text className="text-base font-bold text-orange-900">
+                      Foto do ticket precisa ser refeita
+                    </Text>
+                    {detalhe.data.motivoStatus && (
+                      <Text className="mt-1 text-sm text-foreground">
+                        {detalhe.data.motivoStatus}
+                      </Text>
+                    )}
+                    <View className="mt-3">
+                      <PhotoCapture
+                        value={novaFotoDivergente}
+                        onChange={setNovaFotoDivergente}
+                      />
+                    </View>
+                    <Button
+                      className="mt-3"
+                      loading={responderFoto.isPending}
+                      disabled={!novaFotoDivergente}
+                      onPress={async () => {
+                        if (!novaFotoDivergente) return;
+                        try {
+                          await responderFoto.mutateAsync({
+                            viagemId: detalhe.data!.id,
+                            fotoUri: novaFotoDivergente.uri,
+                            fotoMime: novaFotoDivergente.mime,
+                          });
+                          setNovaFotoDivergente(null);
+                          void showAlert({
+                            title: "Obrigado!",
+                            message:
+                              "Foto enviada — viagem foi marcada como ajustada.",
+                          });
+                        } catch (err) {
+                          void showAlert({
+                            title: "Erro",
+                            message: humanizeApiError(err),
+                          });
+                        }
+                      }}
+                    >
+                      Enviar foto nova
+                    </Button>
+                  </View>
+                </View>
+              </Card>
+            )}
+
+          {detalhe.data.status === "DIVERGENTE" &&
             detalhe.data.tipoDivergencia !== "PEDAGIO_SEM_VALOR" &&
+            detalhe.data.tipoDivergencia !== "FOTO_ILEGIVEL" &&
             detalhe.data.motivoStatus && (
               <Card className="border-2 border-destructive bg-destructive/10">
                 <View className="flex-row items-start gap-3">

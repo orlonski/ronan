@@ -89,7 +89,7 @@ export type Viagem = {
   /** Texto explicando a divergência quando admin marca status=DIVERGENTE. */
   motivoStatus: string | null;
   /** Quando preenchido, app mostra UI dedicada pra resolver. */
-  tipoDivergencia: "PEDAGIO_SEM_VALOR" | "OUTRO" | null;
+  tipoDivergencia: "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "OUTRO" | null;
   sincronizadoEm: string;
   veiculo: Veiculo;
   cliente: { id: string; nome: string };
@@ -649,6 +649,41 @@ export function useExcluirViagem() {
       qc.setQueryData<Viagem[]>(["viagens"], (cur) =>
         cur ? cur.filter((v) => v.id !== viagemId) : cur,
       );
+      void qc.invalidateQueries({ queryKey: ["viagens-filtradas"] });
+      void qc.invalidateQueries({ queryKey: ["resumo-mes"] });
+    },
+  });
+}
+
+/**
+ * Responde divergência FOTO_ILEGIVEL anexando foto nova. Direct call
+ * (upload + POST), sem outbox — se offline, falha e usuário tenta de novo.
+ */
+export function useResponderFotoDivergente() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      viagemId: string;
+      fotoBlob: Blob;
+      fotoMime: string;
+    }) => {
+      const fd = new FormData();
+      const filename = `ticket-${args.viagemId}.${
+        args.fotoMime.includes("png") ? "png" : "jpg"
+      }`;
+      fd.append("foto", args.fotoBlob, filename);
+      const up = await api.postForm<{ storageKey: string }>(
+        "/m/uploads/ticket",
+        fd,
+      );
+      return await api.post<ViagemDetalhe>(
+        `/m/viagens/${args.viagemId}/responder-foto-divergente`,
+        { fotoKey: up.storageKey },
+      );
+    },
+    onSuccess: (atualizada) => {
+      qc.setQueryData(["viagem-detalhe", atualizada.id], atualizada);
+      void qc.invalidateQueries({ queryKey: ["viagens"] });
       void qc.invalidateQueries({ queryKey: ["viagens-filtradas"] });
       void qc.invalidateQueries({ queryKey: ["resumo-mes"] });
     },

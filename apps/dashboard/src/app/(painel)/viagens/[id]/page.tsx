@@ -54,6 +54,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import {
@@ -196,7 +197,7 @@ export default function ViagemDetalhePage({
     mutationFn: (body: {
       status: "OK" | "DIVERGENTE" | "DESFAZER";
       motivo?: string;
-      tipo?: "PEDAGIO_SEM_VALOR" | "OUTRO";
+      tipo?: "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "OUTRO";
     }) =>
       fetchApi<{ ok: true }>(`/admin/viagens/${id}/pre-validar`, {
         method: "POST",
@@ -218,8 +219,9 @@ export default function ViagemDetalhePage({
   const [dialogDivergente, setDialogDivergente] = useState(false);
   const [motivoTexto, setMotivoTexto] = useState("");
   const [tipoDivergencia, setTipoDivergencia] = useState<
-    "PEDAGIO_SEM_VALOR" | "OUTRO"
+    "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "OUTRO"
   >("OUTRO");
+  const [motivoFoiEditado, setMotivoFoiEditado] = useState(false);
 
   if (viagem.isLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
   if (!viagem.data) return <p className="text-sm text-red-600">Viagem não encontrada.</p>;
@@ -234,6 +236,15 @@ export default function ViagemDetalhePage({
         .map((p) => p.nome)
         .join(", ")}${pedagiosEncontrados.length > 5 ? ", …" : ""}. Por favor, informe o valor.`
     : "";
+
+  function motivoSugeridoPorTipo(
+    tipo: "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "OUTRO",
+  ): string {
+    if (tipo === "PEDAGIO_SEM_VALOR") return motivoSugeridoPedagio;
+    if (tipo === "FOTO_ILEGIVEL")
+      return "A foto enviada não permite identificar o ticket. Por favor, tire uma foto nova com boa iluminação e foco no número e na data.";
+    return "";
+  }
 
   return (
     <div className="space-y-6">
@@ -492,10 +503,12 @@ export default function ViagemDetalhePage({
                   <Button
                     variant="outline"
                     onClick={() => {
-                      setMotivoTexto(motivoSugeridoPedagio);
-                      setTipoDivergencia(
-                        semValorMasTemPedagio ? "PEDAGIO_SEM_VALOR" : "OUTRO",
-                      );
+                      const tipoInicial = semValorMasTemPedagio
+                        ? "PEDAGIO_SEM_VALOR"
+                        : "OUTRO";
+                      setTipoDivergencia(tipoInicial);
+                      setMotivoTexto(motivoSugeridoPorTipo(tipoInicial));
+                      setMotivoFoiEditado(false);
                       setDialogDivergente(true);
                     }}
                     disabled={preValidar.isPending || emFechamento}
@@ -673,19 +686,47 @@ export default function ViagemDetalhePage({
           <DialogHeader>
             <DialogTitle>Marcar viagem como divergente</DialogTitle>
             <DialogDescription>
-              Descreva o motivo da divergência (mínimo 2 caracteres).
+              Escolha o tipo do problema. Quando o tipo abre fluxo dedicado no
+              app, o motorista vê um botão direto pra resolver (informar valor
+              de pedágio, tirar foto nova, etc).
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
-            <Label>Motivo</Label>
-            <Textarea
-              autoFocus
-              rows={4}
-              value={motivoTexto}
-              onChange={(e) => setMotivoTexto(e.target.value)}
-              placeholder="Ex: Toneladas não conferem com ticket fotografado"
-              maxLength={500}
-            />
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="tipo-divergencia">Tipo</Label>
+              <Select
+                id="tipo-divergencia"
+                value={tipoDivergencia}
+                onChange={(e) => {
+                  const novo = e.target.value as typeof tipoDivergencia;
+                  setTipoDivergencia(novo);
+                  if (!motivoFoiEditado) {
+                    setMotivoTexto(motivoSugeridoPorTipo(novo));
+                  }
+                }}
+              >
+                <option value="PEDAGIO_SEM_VALOR">
+                  Falta valor de pedágio
+                </option>
+                <option value="FOTO_ILEGIVEL">
+                  Foto ilegível / não aparece o ticket
+                </option>
+                <option value="OUTRO">Outro motivo</option>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Motivo (mínimo 2 caracteres)</Label>
+              <Textarea
+                rows={4}
+                value={motivoTexto}
+                onChange={(e) => {
+                  setMotivoTexto(e.target.value);
+                  setMotivoFoiEditado(true);
+                }}
+                placeholder="Ex: Toneladas não conferem com ticket fotografado"
+                maxLength={500}
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogDivergente(false)}>

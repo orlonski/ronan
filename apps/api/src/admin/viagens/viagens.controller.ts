@@ -36,9 +36,9 @@ const PreValidarInput = z
   .object({
     status: z.enum(["OK", "DIVERGENTE", "DESFAZER"]),
     motivo: z.string().min(2).max(500).optional(),
-    /** Tipo da divergência. Default "OUTRO" — só "PEDAGIO_SEM_VALOR" hoje
-     * desbloqueia UI dedicada no app motorista (card pedindo só o valor). */
-    tipo: z.enum(["PEDAGIO_SEM_VALOR", "OUTRO"]).optional(),
+    /** Tipo da divergência. Default "OUTRO". Tipos estruturados desbloqueiam
+     * UI dedicada no app motorista (input de valor, botão de tirar foto, etc). */
+    tipo: z.enum(["PEDAGIO_SEM_VALOR", "FOTO_ILEGIVEL", "OUTRO"]).optional(),
   })
   .refine(
     (d) => d.status !== "DIVERGENTE" || (d.motivo && d.motivo.trim().length >= 2),

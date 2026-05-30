@@ -91,7 +91,7 @@ export type Viagem = {
   motivoStatus: string | null;
   /** Quando preenchido, app mostra UI dedicada pra resolver (ex: card
    * pedindo só o valor do pedágio). Limpo após motorista resolver. */
-  tipoDivergencia: "PEDAGIO_SEM_VALOR" | "OUTRO" | null;
+  tipoDivergencia: "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "OUTRO" | null;
   sincronizadoEm: string;
   veiculo: Veiculo;
   cliente: { id: string; nome: string };
@@ -849,6 +849,47 @@ export function useExcluirViagem() {
       qc.setQueryData<Viagem[]>(["viagens"], (cur) =>
         cur ? cur.filter((v) => v.id !== viagemId) : cur,
       );
+      void qc.invalidateQueries({ queryKey: ["viagens-filtradas"] });
+      void qc.invalidateQueries({ queryKey: ["resumo-mes"] });
+    },
+  });
+}
+
+/**
+ * Motorista responde divergência FOTO_ILEGIVEL anexando foto nova.
+ * Fluxo direto (sem outbox): upload + POST. Se offline, falha e usuário
+ * tenta de novo — não vale a pena adicionar fila pro caso raro de admin
+ * recusar uma foto E motorista estar sem internet ao mesmo tempo.
+ */
+export function useResponderFotoDivergente() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      viagemId: string;
+      fotoUri: string;
+      fotoMime: string;
+    }) => {
+      const fd = new FormData();
+      const filename = `ticket-${args.viagemId}.${
+        args.fotoMime.includes("png") ? "png" : "jpg"
+      }`;
+      fd.append("foto", {
+        uri: args.fotoUri,
+        type: args.fotoMime,
+        name: filename,
+      } as unknown as Blob);
+      const up = await api.postForm<{ storageKey: string }>(
+        "/m/uploads/ticket",
+        fd,
+      );
+      return await api.post<ViagemDetalhe>(
+        `/m/viagens/${args.viagemId}/responder-foto-divergente`,
+        { fotoKey: up.storageKey },
+      );
+    },
+    onSuccess: (atualizada) => {
+      qc.setQueryData(["viagem-detalhe", atualizada.id], atualizada);
+      void qc.invalidateQueries({ queryKey: ["viagens"] });
       void qc.invalidateQueries({ queryKey: ["viagens-filtradas"] });
       void qc.invalidateQueries({ queryKey: ["resumo-mes"] });
     },

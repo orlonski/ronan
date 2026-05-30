@@ -387,7 +387,7 @@ export class ViagensAdminService {
     input: {
       status: "OK" | "DIVERGENTE" | "DESFAZER";
       motivo?: string;
-      tipo?: "PEDAGIO_SEM_VALOR" | "OUTRO";
+      tipo?: "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "OUTRO";
     },
     usuarioId: string,
   ) {

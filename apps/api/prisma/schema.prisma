@@ -38,6 +38,9 @@ enum TipoDivergencia {
   /// mas a rota passa por pedagio cadastrado. App motorista mostra card
   /// dedicado pedindo so o valor.
   PEDAGIO_SEM_VALOR
+  /// Foto do ticket nao da pra ler. App motorista mostra card com botao
+  /// de tirar nova foto. Fotos antigas continuam no historico.
+  FOTO_ILEGIVEL
   /// Qualquer outro motivo. Motorista corrige editando a viagem normal.
   OUTRO
 }
@@ -86,6 +89,7 @@ enum AcaoAuditoria {
   RECALCULAR_TRAJETO
   MOTORISTA_AJUSTOU_KM
   MOTORISTA_INFORMOU_PEDAGIO
+  MOTORISTA_SUBSTITUIU_FOTO
   PRE_VALIDAR_VIAGEM
   ADICIONAR_FOTO
 }

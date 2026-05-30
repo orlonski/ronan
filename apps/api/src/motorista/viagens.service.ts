@@ -268,6 +268,63 @@ export class ViagensMotoristaService {
     return this.detalhe(motoristaId, viagemId);
   }
 
+  /**
+   * Motorista responde divergência tipo FOTO_ILEGIVEL anexando uma foto nova.
+   * Backend cria a TicketFoto (mantém antigas — conferente compara), muda
+   * status pra AJUSTADA e limpa tipoDivergencia. Side-effect equivalente ao
+   * adicionarFoto + transição de status numa transação.
+   */
+  async responderFotoDivergente(
+    motoristaId: string,
+    viagemId: string,
+    storageKey: string,
+  ) {
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { id: viagemId },
+      select: {
+        id: true,
+        motoristaId: true,
+        status: true,
+        tipoDivergencia: true,
+      },
+    });
+    if (!viagem) throw new NotFoundException("Viagem não encontrada.");
+    if (viagem.motoristaId !== motoristaId) {
+      throw new ForbiddenException("Esta viagem não é sua.");
+    }
+    if (
+      viagem.status !== "DIVERGENTE" ||
+      viagem.tipoDivergencia !== "FOTO_ILEGIVEL"
+    ) {
+      throw new ConflictException(
+        "Essa viagem não está aguardando nova foto.",
+      );
+    }
+
+    const foto = await this.prisma.$transaction(async (tx) => {
+      const novaFoto = await tx.ticketFoto.create({
+        data: { viagemId, storageKey, capturadaEm: new Date() },
+        select: { id: true, storageKey: true },
+      });
+      await tx.viagem.update({
+        where: { id: viagemId },
+        data: { status: "AJUSTADA", tipoDivergencia: null },
+      });
+      return novaFoto;
+    });
+
+    await this.auditoria.log({
+      usuarioId: motoristaId,
+      entidade: "Viagem",
+      entidadeId: viagemId,
+      acao: AcaoAuditoria.MOTORISTA_SUBSTITUIU_FOTO,
+      motivo: "Motorista enviou nova foto após divergência FOTO_ILEGIVEL",
+      metadata: { fotoId: foto.id, storageKey: foto.storageKey },
+    });
+
+    return this.detalhe(motoristaId, viagemId);
+  }
+
   async adicionarFoto(motoristaId: string, viagemId: string, storageKey: string) {
     const viagem = await this.prisma.viagem.findUnique({
       where: { id: viagemId },
