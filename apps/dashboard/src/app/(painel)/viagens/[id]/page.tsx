@@ -430,7 +430,50 @@ export default function ViagemDetalhePage({
             <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
               <ShieldCheck className="h-4 w-4" /> Pré-validação
             </h3>
-            {v.revisadoEm ? (
+            {v.status === "AJUSTADA" ? (
+              <div className="space-y-3">
+                <p className="text-sm">
+                  <Badge className="border-blue-200 bg-blue-100 text-blue-900">
+                    Aguardando sua revisão
+                  </Badge>
+                  <span className="ml-2 text-muted-foreground">
+                    motorista respondeu à divergência
+                  </span>
+                </p>
+                {v.motivoStatus && (
+                  <p className="rounded-md border bg-muted/30 p-3 text-sm">
+                    <span className="font-medium">Você pediu:</span>{" "}
+                    {v.motivoStatus}
+                  </p>
+                )}
+                <p className="text-sm text-muted-foreground">
+                  Revise a correção e aprove ou recuse de novo.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => preValidar.mutate({ status: "OK" })}
+                    disabled={preValidar.isPending || emFechamento}
+                    className="border-green-300 bg-green-50 text-green-900 hover:bg-green-100"
+                  >
+                    <ThumbsUp className="h-4 w-4" /> Aprovar correção
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setTipoDivergencia("OUTRO");
+                      setMotivoTexto("");
+                      setMotivoFoiEditado(false);
+                      setDialogDivergente(true);
+                    }}
+                    disabled={preValidar.isPending || emFechamento}
+                    className="border-red-300 bg-red-50 text-red-900 hover:bg-red-100"
+                  >
+                    <ThumbsDown className="h-4 w-4" /> Recusar de novo
+                  </Button>
+                </div>
+              </div>
+            ) : v.revisadoEm ? (
               <div className="space-y-2">
                 <p className="text-sm">
                   <Badge
