@@ -19,6 +19,7 @@ import { paginationQuerySchema } from "../../common/pagination";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { PedagiosRodoviaService } from "./pedagios-rodovia.service";
+import { PedagiosRodoviaConsultaService } from "./pedagios-rodovia-consulta.service";
 
 const CriarInput = z.object({
   nome: z.string().min(1).max(200),
@@ -47,7 +48,10 @@ const ListQuery = paginationQuerySchema.extend({
 @Controller("admin/pedagios-rodovia")
 export class PedagiosRodoviaController {
   private readonly log = new Logger(PedagiosRodoviaController.name);
-  constructor(private readonly service: PedagiosRodoviaService) {}
+  constructor(
+    private readonly service: PedagiosRodoviaService,
+    private readonly consulta: PedagiosRodoviaConsultaService,
+  ) {}
 
   @Get()
   list(@Query(new ZodValidationPipe(ListQuery)) q: z.infer<typeof ListQuery>) {
@@ -57,6 +61,16 @@ export class PedagiosRodoviaController {
   @Get("mapa")
   mapa() {
     return this.service.listarParaMapa();
+  }
+
+  @Get("na-rota")
+  naRota(
+    @Query(new ZodValidationPipe(z.object({
+      origem: z.string().uuid(),
+      destino: z.string().uuid(),
+    }))) q: { origem: string; destino: string },
+  ) {
+    return this.consulta.pedagiosNaRota(q.origem, q.destino);
   }
 
   @Get(":id")

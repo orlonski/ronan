@@ -99,6 +99,7 @@ type ViagemDetalhe = {
   cliente: { id: string; nome: string; empresa: { nome: string } };
   material: { id: string; nome: string };
   localCarga: {
+    id: string;
     nome: string;
     cidade: string;
     uf: string;
@@ -107,6 +108,7 @@ type ViagemDetalhe = {
     lng: number | null;
   };
   localDescarga: {
+    id: string;
     nome: string;
     cidade: string;
     uf: string;
@@ -147,6 +149,28 @@ export default function ViagemDetalhePage({
     queryKey: ["viagem-admin", id],
     enabled: !!token,
     queryFn: () => fetchApi<ViagemDetalhe>(`/admin/viagens/${id}`, { token }),
+  });
+  const localCargaId = viagem.data?.localCarga.id;
+  const localDescargaId = viagem.data?.localDescarga.id;
+  const pedagiosNaRota = useQuery({
+    queryKey: ["viagem-pedagios", localCargaId, localDescargaId, token],
+    enabled: !!token && !!localCargaId && !!localDescargaId,
+    staleTime: 60_000,
+    queryFn: () =>
+      fetchApi<
+        Array<{
+          id: string;
+          nome: string;
+          rodovia: string | null;
+          concessionaria: string | null;
+          distanciaMetros: number;
+          lat: number;
+          lng: number;
+        }>
+      >(
+        `/admin/pedagios-rodovia/na-rota?origem=${localCargaId}&destino=${localDescargaId}`,
+        { token },
+      ),
   });
   const historico = useHistoricoViagem(id);
   const queryClient = useQueryClient();
@@ -502,6 +526,7 @@ export default function ViagemDetalhePage({
                   v.lat != null && v.lng != null ? { lat: v.lat, lng: v.lng } : null
                 }
                 geometria={v.rotaGeometria}
+                pedagios={pedagiosNaRota.data ?? []}
               />
             </Card>
           )}

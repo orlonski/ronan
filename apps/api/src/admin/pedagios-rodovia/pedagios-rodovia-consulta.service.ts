@@ -1,8 +1,8 @@
 import { Injectable } from "@nestjs/common";
-import { PedagiosRodoviaService } from "../admin/pedagios-rodovia/pedagios-rodovia.service";
-import { PrismaService } from "../prisma/prisma.service";
+import { PedagiosRodoviaService } from "./pedagios-rodovia.service";
+import { PrismaService } from "../../prisma/prisma.service";
 
-const DISTANCIA_MAX_METROS = 80; // raio em volta da polyline pra considerar "na rota"
+const DISTANCIA_MAX_METROS = 150; // raio em volta da polyline pra considerar "na rota"
 const ENVELOPE_PADDING_GRAUS = 0.05; // ~5.5km de folga no bbox pré-filtro
 
 @Injectable()
@@ -29,6 +29,8 @@ export class PedagiosRodoviaConsultaService {
       rodovia: string | null;
       concessionaria: string | null;
       distanciaMetros: number;
+      lat: number;
+      lng: number;
     }>
   > {
     if (origemId === destinoId) return [];
@@ -53,6 +55,8 @@ export class PedagiosRodoviaConsultaService {
       rodovia: string | null;
       concessionaria: string | null;
       distanciaMetros: number;
+      lat: number;
+      lng: number;
     }> = [];
     for (const p of candidatos) {
       const dist = menorDistanciaAteRota(p.lat, p.lng, pontos);
@@ -63,6 +67,8 @@ export class PedagiosRodoviaConsultaService {
           rodovia: p.rodovia,
           concessionaria: p.concessionaria,
           distanciaMetros: Math.round(dist),
+          lat: p.lat,
+          lng: p.lng,
         });
       }
     }

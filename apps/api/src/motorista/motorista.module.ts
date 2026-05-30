@@ -13,7 +13,6 @@ import { ViagensMotoristaService } from "./viagens.service";
 import { PedagiosMotoristaController } from "./pedagios.controller";
 import { PedagiosMotoristaService } from "./pedagios.service";
 import { PedagiosRodoviaMotoristaController } from "./pedagios-rodovia.controller";
-import { PedagiosRodoviaConsultaService } from "./pedagios-rodovia-consulta.service";
 import { AbastecimentosMotoristaController } from "./abastecimentos.controller";
 import { AbastecimentosMotoristaService } from "./abastecimentos.service";
 import { LocaisMotoristaController } from "./locais.controller";
@@ -51,7 +50,6 @@ import { IaTicketController } from "./ia-ticket.controller";
     MotoristaService,
     ViagensMotoristaService,
     PedagiosMotoristaService,
-    PedagiosRodoviaConsultaService,
     AbastecimentosMotoristaService,
     LocaisMotoristaService,
     ValidacaoLocalService,

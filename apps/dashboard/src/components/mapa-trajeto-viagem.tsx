@@ -34,7 +34,33 @@ const ICONE_CARGA = pinoIcon("#16a34a");
 const ICONE_DESCARGA = pinoIcon("#dc2626");
 const ICONE_LANCAMENTO = pinoIcon("#2563eb", 16);
 
+const ICONE_PEDAGIO = L.divIcon({
+  className: "",
+  html: `<div style="
+    width: 22px; height: 22px;
+    background: #ea580c;
+    color: white;
+    border: 2px solid white;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 11px; font-family: system-ui;
+  ">$</div>`,
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
+});
+
 export type Ponto = { lat: number; lng: number; nome?: string };
+
+export type PedagioNoTrajeto = {
+  id: string;
+  nome: string;
+  rodovia: string | null;
+  concessionaria: string | null;
+  distanciaMetros: number;
+  lat?: number;
+  lng?: number;
+};
 
 function FitBounds({ pontos }: { pontos: [number, number][] }) {
   const map = useMap();
@@ -52,9 +78,16 @@ type Props = {
   descarga: Ponto | null;
   lancamento: { lat: number; lng: number } | null;
   geometria: string | null;
+  pedagios?: PedagioNoTrajeto[];
 };
 
-export function MapaTrajetoViagem({ carga, descarga, lancamento, geometria }: Props) {
+export function MapaTrajetoViagem({
+  carga,
+  descarga,
+  lancamento,
+  geometria,
+  pedagios = [],
+}: Props) {
   const traçado = useMemo<[number, number][]>(() => {
     if (!geometria) return [];
     try {
@@ -115,6 +148,24 @@ export function MapaTrajetoViagem({ carga, descarga, lancamento, geometria }: Pr
               <Popup>Onde foi lançada</Popup>
             </Marker>
           )}
+          {pedagios.map((p) =>
+            p.lat != null && p.lng != null ? (
+              <Marker key={p.id} position={[p.lat, p.lng]} icon={ICONE_PEDAGIO}>
+                <Popup>
+                  <div className="space-y-1 text-sm">
+                    <p className="font-bold">{p.nome}</p>
+                    {p.rodovia && <p className="text-xs">{p.rodovia}</p>}
+                    {p.concessionaria && (
+                      <p className="text-xs text-muted-foreground">{p.concessionaria}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      ~{p.distanciaMetros}m da rota
+                    </p>
+                  </div>
+                </Popup>
+              </Marker>
+            ) : null,
+          )}
           <FitBounds pontos={todosPontos} />
         </MapContainer>
       </div>
@@ -123,6 +174,9 @@ export function MapaTrajetoViagem({ carga, descarga, lancamento, geometria }: Pr
           <Legenda cor="#16a34a" label="Carga" />
           <Legenda cor="#dc2626" label="Descarga" />
           {lancamento && <Legenda cor="#2563eb" label="Lançamento" />}
+          {pedagios.length > 0 && (
+            <Legenda cor="#ea580c" label={`${pedagios.length} pedágio${pedagios.length === 1 ? "" : "s"}`} />
+          )}
         </div>
         {gmaps && (
           <a

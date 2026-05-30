@@ -4,7 +4,7 @@ import { z } from "zod";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
-import { PedagiosRodoviaConsultaService } from "./pedagios-rodovia-consulta.service";
+import { PedagiosRodoviaConsultaService } from "../admin/pedagios-rodovia/pedagios-rodovia-consulta.service";
 
 const NaRotaQuery = z.object({
   origem: z.string().uuid(),
