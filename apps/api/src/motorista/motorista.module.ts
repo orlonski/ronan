@@ -4,6 +4,7 @@ import { EventosModule } from "../eventos/eventos.module";
 import { GeocodingModule } from "../geocoding/geocoding.module";
 import { RoteamentoModule } from "../roteamento/roteamento.module";
 import { TrackingConfigModule } from "../admin/tracking-config/tracking-config.module";
+import { PedagiosRodoviaModule } from "../admin/pedagios-rodovia/pedagios-rodovia.module";
 import { UploadsModule } from "../uploads/uploads.module";
 import { MotoristaController } from "./motorista.controller";
 import { MotoristaService } from "./motorista.service";
@@ -11,6 +12,8 @@ import { ViagensMotoristaController } from "./viagens.controller";
 import { ViagensMotoristaService } from "./viagens.service";
 import { PedagiosMotoristaController } from "./pedagios.controller";
 import { PedagiosMotoristaService } from "./pedagios.service";
+import { PedagiosRodoviaMotoristaController } from "./pedagios-rodovia.controller";
+import { PedagiosRodoviaConsultaService } from "./pedagios-rodovia-consulta.service";
 import { AbastecimentosMotoristaController } from "./abastecimentos.controller";
 import { AbastecimentosMotoristaService } from "./abastecimentos.service";
 import { LocaisMotoristaController } from "./locais.controller";
@@ -30,11 +33,13 @@ import { IaTicketController } from "./ia-ticket.controller";
     GeocodingModule,
     AuditoriaModule,
     EventosModule,
+    PedagiosRodoviaModule,
   ],
   controllers: [
     MotoristaController,
     ViagensMotoristaController,
     PedagiosMotoristaController,
+    PedagiosRodoviaMotoristaController,
     AbastecimentosMotoristaController,
     LocaisMotoristaController,
     RotasMotoristaController,
@@ -46,6 +51,7 @@ import { IaTicketController } from "./ia-ticket.controller";
     MotoristaService,
     ViagensMotoristaService,
     PedagiosMotoristaService,
+    PedagiosRodoviaConsultaService,
     AbastecimentosMotoristaService,
     LocaisMotoristaService,
     ValidacaoLocalService,

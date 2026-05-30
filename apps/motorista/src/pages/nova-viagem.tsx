@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { PhotoCapture } from "@/components/photo-capture";
 import { DescargaPorGps } from "@/components/descarga-por-gps";
-import { showAlert } from "@/lib/alert";
+import { showAlert, showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { fmtDataBR } from "@/lib/datetime";
 import { reportarEvento } from "@/lib/event-reporter";
@@ -23,6 +23,7 @@ import {
   useCriarViagem,
   useExtrairTicket,
   useMe,
+  usePedagiosNaRota,
   type Catalogos,
   type Local,
 } from "@/lib/queries";
@@ -86,6 +87,7 @@ export default function NovaViagemPage() {
   const [pendingOriginal, setPendingOriginal] = useState<PendingViagem | null>(null);
 
   const rota = useCalcularRota(form.localCargaId, form.localDescargaId);
+  const pedagiosNaRota = usePedagiosNaRota(form.localCargaId, form.localDescargaId);
 
   useEffect(() => {
     if (!modoEdit) return;
@@ -290,6 +292,16 @@ export default function NovaViagemPage() {
         dataFinal = hojeISO();
         setForm((f) => ({ ...f, data: dataFinal }));
       }
+    }
+    if (!form.valorPedagio.trim() && (pedagiosNaRota.data?.length ?? 0) > 0) {
+      const lista = pedagiosNaRota.data!.slice(0, 5).map((p) => `• ${p.nome}`).join("\n");
+      const ok = await showConfirm({
+        title: "Sem valor de pedágio?",
+        message: `A rota passa por ${pedagiosNaRota.data!.length} pedágio(s) cadastrado(s):\n\n${lista}\n\nVocê não preencheu o valor. Quer voltar e preencher?`,
+        confirmLabel: "Voltar e preencher",
+        cancelLabel: "Salvar mesmo assim",
+      });
+      if (ok) return;
     }
     setSubmitting(true);
     try {

@@ -37,6 +37,7 @@ import {
   useCriarViagem,
   useExtrairTicket,
   useMe,
+  usePedagiosNaRota,
   type Local,
 } from "@/lib/queries";
 
@@ -174,6 +175,7 @@ export default function NovaViagem() {
   }, [modoEdit, params.editarClientId]);
 
   const rota = useCalcularRota(form.localCargaId, form.localDescargaId);
+  const pedagiosNaRota = usePedagiosNaRota(form.localCargaId, form.localDescargaId);
 
   // Auto-preenche KM com valor calculado pelo OSRM, se motorista nao editou
   useEffect(() => {
@@ -413,6 +415,19 @@ export default function NovaViagem() {
         dataFinal = hojeISO();
         setForm((f) => ({ ...f, data: dataFinal }));
       }
+    }
+    // Aviso quando rota passa por pedágios cadastrados mas o motorista
+    // deixou o valor em branco — chance comum de esquecer de lançar.
+    // Skip silencioso se a query ainda não respondeu ou veio vazia.
+    if (!form.valorPedagio.trim() && (pedagiosNaRota.data?.length ?? 0) > 0) {
+      const lista = pedagiosNaRota.data!.slice(0, 5).map((p) => `• ${p.nome}`).join("\n");
+      const ok = await showConfirm({
+        title: "Sem valor de pedágio?",
+        message: `A rota passa por ${pedagiosNaRota.data!.length} pedágio(s) cadastrado(s):\n\n${lista}\n\nVocê não preencheu o valor. Quer voltar e preencher?`,
+        confirmLabel: "Voltar e preencher",
+        cancelLabel: "Salvar mesmo assim",
+      });
+      if (ok) return;
     }
     setSubmitting(true);
     try {

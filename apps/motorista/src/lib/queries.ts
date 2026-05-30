@@ -566,6 +566,37 @@ export function useCalcularRota(origemId?: string, destinoId?: string) {
   });
 }
 
+export type PedagioNaRota = {
+  id: string;
+  nome: string;
+  rodovia: string | null;
+  concessionaria: string | null;
+  distanciaMetros: number;
+};
+
+/**
+ * Pedágios cadastrados na rota OSRM cacheada (origem→destino). Usado só
+ * pra alertar o motorista ao salvar viagem sem valor de pedágio. Retorna
+ * [] silenciosamente se offline ou rota nunca calculada.
+ */
+export function usePedagiosNaRota(origemId?: string, destinoId?: string) {
+  return useQuery<PedagioNaRota[]>({
+    queryKey: ["pedagios-na-rota", origemId, destinoId],
+    enabled: !!origemId && !!destinoId && origemId !== destinoId,
+    staleTime: Infinity,
+    retry: false,
+    queryFn: async () => {
+      try {
+        return await api.get<PedagioNaRota[]>(
+          `/m/pedagios-rodovia/na-rota?origem=${origemId}&destino=${destinoId}`,
+        );
+      } catch {
+        return [];
+      }
+    },
+  });
+}
+
 async function tentarFallbacks(
   origemId: string,
   destinoId: string,

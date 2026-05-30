@@ -726,6 +726,38 @@ export function useCalcularRota(origemId?: string, destinoId?: string) {
   });
 }
 
+export type PedagioNaRota = {
+  id: string;
+  nome: string;
+  rodovia: string | null;
+  concessionaria: string | null;
+  distanciaMetros: number;
+};
+
+/**
+ * Pedágios cadastrados que ficam na rota OSRM cacheada (origem→destino).
+ * Usado só pra alertar o motorista ao salvar viagem sem valor de pedágio.
+ * Retorna [] se offline ou se a rota nunca foi calculada — o alerta vira
+ * "skip" silencioso nesses casos (não trava o salvamento).
+ */
+export function usePedagiosNaRota(origemId?: string, destinoId?: string) {
+  return useQuery<PedagioNaRota[]>({
+    queryKey: ["pedagios-na-rota", origemId, destinoId],
+    enabled: !!origemId && !!destinoId && origemId !== destinoId,
+    staleTime: Infinity,
+    retry: false,
+    queryFn: async () => {
+      try {
+        return await api.get<PedagioNaRota[]>(
+          `/m/pedagios-rodovia/na-rota?origem=${origemId}&destino=${destinoId}`,
+        );
+      } catch {
+        return [];
+      }
+    },
+  });
+}
+
 /**
  * Tenta cache local primeiro, depois haversine. Retorna null se ambos
  * falharem (motivoBase é usado pra contexto do evento de falha).

@@ -68,6 +68,7 @@ const GRUPOS: Grupo[] = [
       { href: "/empresas", label: "Empresas", icon: Building2 },
       { href: "/clientes", label: "Clientes", icon: Boxes },
       { href: "/locais", label: "Locais", icon: MapPin },
+      { href: "/pedagios-rodovia", label: "Pedágios (rodovias)", icon: MapPin },
       { href: "/materiais", label: "Materiais", icon: Package },
     ],
   },

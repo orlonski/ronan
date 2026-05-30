@@ -237,6 +237,42 @@ model MotoristaPosicaoConfig {
   @@map("motorista_posicao_config")
 }
 
+/// Pedágio em rodovia (cadastro permanente da praça física).
+/// IMPORTANTE: diferente do model `Pedagio` mais abaixo, que é o lançamento
+/// de DESPESA que o motorista registra por viagem. Esse aqui é a praça em
+/// si — coordenada GPS + valor base — usada pra detectar quais pedágios
+/// uma rota carga→descarga atravessa (haversine ponto vs polyline OSRM
+/// cacheada). Cadastro manual ou importado do OpenStreetMap.
+model PedagioRodovia {
+  id             String   @id @default(uuid())
+  nome           String   // ex: "Praça Reg. Norte BR-376 Ponta Grossa"
+  concessionaria String?  // ex: "Arteris", "CCR ViaSul"
+  rodovia        String?  // ex: "BR-376"
+  cidade         String?
+  uf             String?  // sigla (2 chars)
+  lat            Float
+  lng            Float
+  /// Valor base por eixo simples em R$. Caminhão com N eixos = valorBase * N.
+  /// Null se ainda não cadastrado (vem da importação OSM sem valor).
+  valorBase      Decimal? @db.Decimal(8, 2)
+  ativo          Boolean  @default(true)
+  /// Origem do registro: "osm" (importado do OpenStreetMap) ou "manual".
+  fonte          String   @default("manual")
+  /// ID original do OSM pra dedup em re-importação. Null pra cadastros manuais.
+  osmId          String?  @unique
+  criadoEm       DateTime @default(now())
+  alteradoEm     DateTime @updatedAt
+
+  // Bounding-box pré-filtro: a app calcula menor distância ponto-segmento
+  // só pros pedágios cujo lat/lng cabe num envelope da rota. Sem índice
+  // espacial dedicado (sem PostGIS) — índices simples cobrem o volume
+  // esperado (~poucas centenas de pedágios no BR).
+  @@index([lat, lng])
+  @@index([uf])
+  @@index([ativo])
+  @@map("pedagios_rodovia")
+}
+
 /// Histórico append-only de posições GPS do motorista capturadas via task
 /// periódica em background (a cada ~15min, configurável). Diferente de
 /// ViagemPonto que é tracking granular durante viagem ativa. TTL = 90d
