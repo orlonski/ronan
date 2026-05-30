@@ -89,20 +89,26 @@ export default function ViagensPage() {
         accessorKey: "status",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
         cell: ({ row }) => (
-          <div className="flex flex-col items-start gap-1">
-            <Badge className={STATUS_VIAGEM_COLOR[row.original.status] ?? ""}>
-              {STATUS_VIAGEM_LABEL[row.original.status] ?? row.original.status}
-            </Badge>
-            {row.original.temPedagioSemValor && (
-              <Badge
-                className="border-orange-200 bg-orange-100 text-orange-900"
-                title="Rota passa por pedágio cadastrado mas valor não foi preenchido"
-              >
-                Pedágio?
-              </Badge>
-            )}
-          </div>
+          <Badge className={STATUS_VIAGEM_COLOR[row.original.status] ?? ""}>
+            {STATUS_VIAGEM_LABEL[row.original.status] ?? row.original.status}
+          </Badge>
         ),
+      },
+      {
+        id: "alertas",
+        enableSorting: false,
+        header: () => <span>Alertas</span>,
+        cell: ({ row }) =>
+          row.original.temPedagioSemValor ? (
+            <Badge
+              className="border-orange-200 bg-orange-100 text-orange-900"
+              title="Rota passa por pedágio cadastrado mas valor não foi preenchido"
+            >
+              Pedágio?
+            </Badge>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          ),
       },
       {
         id: "data",
