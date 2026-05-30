@@ -54,6 +54,11 @@ export class PedagiosRodoviaController {
     return this.service.list(q);
   }
 
+  @Get("mapa")
+  mapa() {
+    return this.service.listarParaMapa();
+  }
+
   @Get(":id")
   detalhe(@Param("id") id: string) {
     return this.service.detalhe(id);

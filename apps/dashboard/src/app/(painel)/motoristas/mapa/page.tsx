@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Activity, MapPin, Users } from "lucide-react";
 import type { MapaFrotaItem } from "@ronan/shared-types";
+import type { PedagioMapa } from "@/components/mapa-frota";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
@@ -27,6 +28,7 @@ const JANELA_OPCOES = [
 export default function MapaFrotaPage() {
   const token = useAuthToken();
   const [janela, setJanela] = useState("60");
+  const [mostrarPedagios, setMostrarPedagios] = useState(false);
 
   const q = useQuery({
     queryKey: ["frota-mapa", janela, token],
@@ -38,7 +40,18 @@ export default function MapaFrotaPage() {
       }),
   });
 
+  // Carregado só quando admin toca no toggle — ~1000 pontos é leve mas
+  // evita a request inicial se ele não se importa com pedágios.
+  const qp = useQuery({
+    queryKey: ["pedagios-mapa", token],
+    enabled: !!token && mostrarPedagios,
+    staleTime: 5 * 60_000,
+    queryFn: () =>
+      fetchApi<PedagioMapa[]>(`/admin/pedagios-rodovia/mapa`, { token }),
+  });
+
   const items = q.data ?? [];
+  const pedagios = mostrarPedagios ? qp.data ?? [] : [];
 
   return (
     <div className="space-y-6">
@@ -79,6 +92,22 @@ export default function MapaFrotaPage() {
               <span className="text-xs text-muted-foreground">atualizando…</span>
             )}
           </div>
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={mostrarPedagios}
+              onChange={(e) => setMostrarPedagios(e.target.checked)}
+              className="h-4 w-4 rounded border-input accent-orange-600"
+            />
+            <span className="select-none">
+              Mostrar pedágios
+              {mostrarPedagios && qp.data && (
+                <span className="ml-1 text-xs text-muted-foreground">
+                  ({qp.data.length})
+                </span>
+              )}
+            </span>
+          </label>
         </div>
       </Card>
 
@@ -98,7 +127,7 @@ export default function MapaFrotaPage() {
         </Card>
       )}
 
-      <MapaFrota items={items} />
+      <MapaFrota items={items} pedagios={pedagios} />
     </div>
   );
 }

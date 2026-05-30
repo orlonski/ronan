@@ -6,6 +6,15 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { MapaFrotaItem } from "@ronan/shared-types";
 
+export type PedagioMapa = {
+  id: string;
+  nome: string;
+  rodovia: string | null;
+  concessionaria: string | null;
+  lat: number;
+  lng: number;
+};
+
 delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
@@ -30,6 +39,24 @@ function pinoMotorista(iniciais: string): L.DivIcon {
     iconAnchor: [18, 18],
   });
 }
+
+// Pino menor e cor distinta pra não confundir com motorista. Glifo "$"
+// indica custo/pedágio sem precisar de imagem.
+const pinoPedagio = L.divIcon({
+  className: "",
+  html: `<div style="
+    width: 22px; height: 22px;
+    background: #ea580c;
+    color: white;
+    border: 2px solid white;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 11px; font-family: system-ui;
+  ">$</div>`,
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
+});
 
 function FitBounds({ pontos }: { pontos: [number, number][] }) {
   const map = useMap();
@@ -62,7 +89,13 @@ function iniciais(nome: string): string {
   return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
 }
 
-export function MapaFrota({ items }: { items: MapaFrotaItem[] }) {
+export function MapaFrota({
+  items,
+  pedagios = [],
+}: {
+  items: MapaFrotaItem[];
+  pedagios?: PedagioMapa[];
+}) {
   const pontos: [number, number][] = items.map((i) => [
     i.ultimaPosicao.lat,
     i.ultimaPosicao.lng,
@@ -101,6 +134,21 @@ export function MapaFrota({ items }: { items: MapaFrotaItem[] }) {
                 <p className="text-xs text-muted-foreground">
                   {tempoRelativo(m.ultimaPosicao.capturadoEm)}
                 </p>
+              </div>
+            </Popup>
+          </Marker>
+        ))}
+        {pedagios.map((p) => (
+          <Marker key={p.id} position={[p.lat, p.lng]} icon={pinoPedagio}>
+            <Popup>
+              <div className="space-y-1 text-sm">
+                <p className="font-bold">{p.nome}</p>
+                {p.rodovia && (
+                  <p className="text-xs text-muted-foreground">{p.rodovia}</p>
+                )}
+                {p.concessionaria && (
+                  <p className="text-xs text-muted-foreground">{p.concessionaria}</p>
+                )}
               </div>
             </Popup>
           </Marker>
