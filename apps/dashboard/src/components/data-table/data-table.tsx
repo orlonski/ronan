@@ -33,6 +33,12 @@ export type DataTableProps<T> = {
   toolbar?: React.ReactNode;
   /** Versão mobile alternativa: cards renderizados pra cada linha. Se ausente, mostra a tabela em qualquer breakpoint. */
   renderMobileCard?: (row: T) => React.ReactNode;
+  /**
+   * Modo de visualização. Quando especificado, força cards/tabela em todos
+   * os breakpoints. Quando undefined, mantém comportamento legado: cards
+   * em <md, tabela em md+.
+   */
+  viewMode?: "cards" | "table";
   emptyMessage?: string;
 };
 
@@ -45,6 +51,7 @@ export function DataTable<T>({
   isFetching,
   toolbar,
   renderMobileCard,
+  viewMode,
   emptyMessage = "Nenhum registro encontrado.",
 }: DataTableProps<T>) {
   const sorting: SortingState = React.useMemo(
@@ -79,9 +86,18 @@ export function DataTable<T>({
     <div className="space-y-3">
       {toolbar}
 
-      {/* Mobile (renderMobileCard opcional) */}
+      {/* Cards: sempre quando viewMode="cards", ou só em <md quando legado.
+          Tabela: oposto. */}
       {renderMobileCard && (
-        <div className="space-y-3 md:hidden">
+        <div
+          className={
+            viewMode === "cards"
+              ? "space-y-3"
+              : viewMode === "table"
+                ? "hidden"
+                : "space-y-3 md:hidden"
+          }
+        >
           {isLoading && <Card className="p-6"><LoadingInline /></Card>}
           {showEmpty && (
             <Card className="p-6 text-center text-sm text-muted-foreground">
@@ -94,7 +110,17 @@ export function DataTable<T>({
         </div>
       )}
 
-      <Card className={renderMobileCard ? "hidden md:block" : undefined}>
+      <Card
+        className={
+          viewMode === "table"
+            ? undefined
+            : viewMode === "cards"
+              ? "hidden"
+              : renderMobileCard
+                ? "hidden md:block"
+                : undefined
+        }
+      >
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((hg) => (

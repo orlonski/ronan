@@ -1,10 +1,21 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowDown, ArrowUp, Camera, ExternalLink } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowRight,
+  ArrowUp,
+  Camera,
+  ChevronRight,
+  ExternalLink,
+  LayoutGrid,
+  Table as TableIcon,
+} from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
   DataTable,
@@ -64,6 +75,18 @@ const STATUS_VIAGEM_COLOR: Record<string, string> = {
   RASCUNHO_OFFLINE: "bg-gray-100 text-gray-700 border-gray-200",
 };
 
+const VIEW_MODE_KEY = "ronan.viagens-view-mode";
+
+function getInitialViewMode(): "cards" | "table" {
+  if (typeof window === "undefined") return "cards";
+  try {
+    const saved = localStorage.getItem(VIEW_MODE_KEY);
+    return saved === "table" ? "table" : "cards";
+  } catch {
+    return "cards";
+  }
+}
+
 export default function ViagensPage() {
   const tableState = useDataTableState({
     defaultSort: { field: "data", order: "desc" },
@@ -72,6 +95,20 @@ export default function ViagensPage() {
   const list = usePaginatedList<Viagem>("/admin/viagens", tableState);
   const motoristas = useResourceOptions<Motorista>("/admin/motoristas");
   const clientes = useResourceOptions<Cliente>("/admin/clientes");
+
+  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+  // Carrega preferência do localStorage só no cliente (evita mismatch SSR).
+  useEffect(() => {
+    setViewMode(getInitialViewMode());
+  }, []);
+  function trocarView(novo: "cards" | "table"): void {
+    setViewMode(novo);
+    try {
+      localStorage.setItem(VIEW_MODE_KEY, novo);
+    } catch {
+      /* localStorage cheio etc — ignora */
+    }
+  }
 
   const motoristaOptions = useMemo(
     () => (motoristas.data ?? []).map((m) => ({ value: m.id, label: m.nome })),
@@ -242,6 +279,34 @@ export default function ViagensPage() {
             Lançamentos dos motoristas, com status visual de conferência.
           </p>
         </div>
+        <div className="inline-flex rounded-md border bg-background p-0.5">
+          <button
+            type="button"
+            onClick={() => trocarView("cards")}
+            aria-pressed={viewMode === "cards"}
+            title="Visualizar como cards"
+            className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+              viewMode === "cards"
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            <LayoutGrid className="h-3.5 w-3.5" /> Cards
+          </button>
+          <button
+            type="button"
+            onClick={() => trocarView("table")}
+            aria-pressed={viewMode === "table"}
+            title="Visualizar como tabela compacta"
+            className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+              viewMode === "table"
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            <TableIcon className="h-3.5 w-3.5" /> Tabela
+          </button>
+        </div>
       </header>
 
       <DataTable
@@ -288,74 +353,136 @@ export default function ViagensPage() {
           />
         }
         emptyMessage="Nenhuma viagem nesse filtro."
-        renderMobileCard={(v) => (
-          <Link href={`/viagens/${v.id}`} className="block">
-            <Card className="space-y-3 p-4 hover:bg-muted/40">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{v.cliente.nome}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {fmtBR(v.data)} · {v.veiculo.placa} · {v.motorista.nome}
-                  </p>
-                </div>
-                <Badge className={STATUS_VIAGEM_COLOR[v.status] ?? ""}>
-                  {STATUS_VIAGEM_LABEL[v.status] ?? v.status}
-                </Badge>
-              </div>
+        viewMode={viewMode}
+        renderMobileCard={(v) => <ViagemCard v={v} />}
+      />
+    </div>
+  );
+}
 
-              <div className="space-y-1 text-xs">
-                <div className="flex items-center gap-1.5">
-                  <ArrowUp className="h-3 w-3 text-muted-foreground" />
-                  <span className="truncate">{v.localCarga.nome}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <ArrowDown className="h-3 w-3 text-muted-foreground" />
-                  <span className="truncate">{v.localDescarga.nome}</span>
-                </div>
-              </div>
+/**
+ * Card horizontal moderno pra cada viagem. Layout adapta:
+ * - Mobile/notebook estreito: tudo empilhado
+ * - Notebook/desktop: grid horizontal com colunas (status, info, trajeto, métricas)
+ *
+ * Estética: borda sutil, hover com sombra leve, hierarquia clara (status colorido
+ * no canto, motorista e ticket em destaque, cliente em cinza, métricas alinhadas).
+ */
+function ViagemCard({ v }: { v: Viagem }) {
+  return (
+    <Link href={`/viagens/${v.id}`} className="block group">
+      <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">
+        <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-6">
+          {/* Coluna 1: status + alertas (compacta, sempre alinhada à esquerda) */}
+          <div className="flex flex-row items-center gap-2 sm:flex-col sm:items-start">
+            <Badge className={STATUS_VIAGEM_COLOR[v.status] ?? ""}>
+              {STATUS_VIAGEM_LABEL[v.status] ?? v.status}
+            </Badge>
+            {v.temPedagioSemValor && (
+              <Badge
+                className="gap-1 border-orange-200 bg-orange-100 text-orange-900"
+                title="Rota passa por pedágio cadastrado mas valor não foi preenchido"
+              >
+                <AlertTriangle className="h-3 w-3" /> Pedágio?
+              </Badge>
+            )}
+          </div>
 
-              <div className="flex flex-wrap gap-x-4 gap-y-1 border-t pt-2 text-xs">
-                <span>
-                  <span className="text-muted-foreground">Material: </span>
-                  {v.material.nome}
-                </span>
-                <span>
-                  <span className="text-muted-foreground">T: </span>
+          {/* Coluna 2 (principal): trajeto + cliente + motorista */}
+          <div className="min-w-0 space-y-2">
+            {/* Trajeto inline com seta */}
+            <div className="flex items-center gap-2 text-sm">
+              <ArrowUp className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+              <span className="truncate font-medium">{v.localCarga.nome}</span>
+              <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <ArrowDown className="h-3.5 w-3.5 shrink-0 text-rose-600" />
+              <span className="truncate font-medium">{v.localDescarga.nome}</span>
+            </div>
+            {/* Detalhes secundários separados por bullet */}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+              <span>{fmtBR(v.data)}</span>
+              <span>·</span>
+              <span>{v.motorista.nome}</span>
+              <span>·</span>
+              <span className="font-mono">{v.veiculo.placa}</span>
+              <span>·</span>
+              <span>{v.material.nome}</span>
+              <span>·</span>
+              <span className="text-foreground/70">{v.cliente.nome}</span>
+            </div>
+          </div>
+
+          {/* Coluna 3: métricas + ações (alinhada à direita) */}
+          <div className="flex items-center gap-4">
+            <div className="grid grid-cols-3 gap-3 text-right sm:gap-4">
+              <Metric
+                label="Toneladas"
+                value={
                   <ValorComMinimo
-                    className="font-medium"
+                    className="text-sm font-semibold tabular-nums"
                     efetivo={v.toneladasEfetiva}
                     real={v.toneladasInformada}
                     ajustada={v.toneladasAjustada}
-                    unidade=""
+                    unidade="t"
                     casas={3}
                   />
-                </span>
-                <span>
-                  <span className="text-muted-foreground">km: </span>
+                }
+              />
+              <Metric
+                label="Km"
+                value={
                   <ValorComMinimo
-                    className="font-medium"
+                    className="text-sm font-semibold tabular-nums"
                     efetivo={v.kmEfetivo}
                     real={v.kmInformado}
                     ajustada={v.kmAjustada}
-                    unidade=""
+                    unidade="km"
                     casas={2}
                   />
-                </span>
-                <span>
-                  <span className="text-muted-foreground">Ticket: </span>
-                  <span className="font-mono">{v.ticket}</span>
-                </span>
-                {v.fotos.length > 0 && (
-                  <span className="flex items-center gap-1">
-                    <Camera className="h-3 w-3" />
-                    {v.fotos.length}
+                }
+              />
+              <Metric
+                label="Ticket"
+                value={
+                  <span className="font-mono text-sm font-semibold">
+                    {v.ticket}
+                    {v.ocrCampos && v.ocrCampos.length > 0 && (
+                      <span
+                        className="ml-1 text-xs text-indigo-600"
+                        title={`Campos pela IA: ${v.ocrCampos.join(", ")}`}
+                      >
+                        ✨
+                      </span>
+                    )}
                   </span>
-                )}
-              </div>
-            </Card>
-          </Link>
-        )}
-      />
+                }
+              />
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5 text-muted-foreground">
+              {v.fotos.length > 0 && (
+                <span
+                  className="flex items-center gap-0.5 text-xs"
+                  title={`${v.fotos.length} foto${v.fotos.length === 1 ? "" : "s"}`}
+                >
+                  <Camera className="h-3.5 w-3.5" /> {v.fotos.length}
+                </span>
+              )}
+              <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+            </div>
+          </div>
+        </div>
+      </Card>
+    </Link>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex min-w-[60px] flex-col items-end gap-0.5">
+      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      <span>{value}</span>
     </div>
   );
 }
