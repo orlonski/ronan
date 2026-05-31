@@ -17,6 +17,7 @@ import {
 import { reportarEvento } from "./event-reporter";
 import { haversineMetros } from "./geo";
 import {
+  pedagiosNaLinhaReta,
   pedagiosNaRotaOffline,
   type PedagioCadastrado,
 } from "./pedagios-offline";
@@ -586,6 +587,9 @@ export type PedagioNaRota = {
   distanciaMetros: number;
   lat: number;
   lng: number;
+  /** True quando vem do fallback de linha reta (offline + rota nova).
+   * UI deve avisar "provavelmente passa por" em vez de "passa por". */
+  aproximado?: boolean;
 };
 
 // Cache local da lista de pedágios cadastrados. Permite calcular alerta
@@ -626,6 +630,7 @@ export function usePedagiosCadastrados() {
  * tenha aberto o app online 1x nos últimos 24h.
  */
 export function usePedagiosNaRota(origemId?: string, destinoId?: string) {
+  const qc = useQueryClient();
   const cadastrados = usePedagiosCadastrados();
   const rotaQuery = useCalcularRota(origemId, destinoId);
   const rota = rotaQuery.data;
@@ -655,6 +660,26 @@ export function usePedagiosNaRota(origemId?: string, destinoId?: string) {
     queryFn: async () => {
       if (geometria && pedagios.length > 0) {
         return pedagiosNaRotaOffline(geometria, pedagios);
+      }
+      if (pedagios.length > 0) {
+        const catalogos = qc.getQueryData<Catalogos>(["catalogos"]);
+        const origemLoc = catalogos?.locais.find((l) => l.id === origemId);
+        const destinoLoc = catalogos?.locais.find((l) => l.id === destinoId);
+        if (
+          origemLoc?.lat != null &&
+          origemLoc?.lng != null &&
+          destinoLoc?.lat != null &&
+          destinoLoc?.lng != null
+        ) {
+          const aproximados = pedagiosNaLinhaReta(
+            origemLoc.lat,
+            origemLoc.lng,
+            destinoLoc.lat,
+            destinoLoc.lng,
+            pedagios,
+          );
+          return aproximados.map((p) => ({ ...p, aproximado: true }));
+        }
       }
       try {
         return await api.get<PedagioNaRota[]>(

@@ -27,6 +27,12 @@ export type PedagioNaRotaOffline = PedagioCadastrado & {
 const DISTANCIA_MAX_METROS = 150;
 const ENVELOPE_PADDING_GRAUS = 0.05;
 
+// Fallback grosseiro quando NÃO tem polyline (motorista offline e sem
+// cache_local de rota — typically lugar novo). Usa linha reta entre os
+// 2 locais + buffer largo. Aceita falsos positivos pra nao deixar passar
+// rotas com pedagio sem aviso.
+const DISTANCIA_MAX_LINHA_RETA_M = 1000;
+
 /**
  * Dado uma polyline encoded (OSRM) e a lista de pedágios cadastrados,
  * retorna quais estão até DISTANCIA_MAX_METROS da rota. Retorna [] se a
@@ -60,6 +66,46 @@ export function pedagiosNaRotaOffline(
   for (const p of candidatos) {
     const d = menorDistanciaAteRota(p.lat, p.lng, pontos);
     if (d <= DISTANCIA_MAX_METROS) {
+      proximos.push({ ...p, distanciaMetros: Math.round(d) });
+    }
+  }
+  proximos.sort((a, b) => a.distanciaMetros - b.distanciaMetros);
+  return proximos;
+}
+
+/**
+ * Fallback grosseiro: sem polyline, considera a linha reta entre origem
+ * e destino + buffer largo (1km). Erro pro lado da segurança — alerta
+ * com possível falso positivo é melhor que ferrar motorista sem aviso.
+ * Resultado deve ser apresentado com mensagem "provavelmente passa por"
+ * em vez de "passa por" pra não confundir.
+ */
+export function pedagiosNaLinhaReta(
+  origemLat: number,
+  origemLng: number,
+  destinoLat: number,
+  destinoLng: number,
+  pedagios: PedagioCadastrado[],
+): PedagioNaRotaOffline[] {
+  if (pedagios.length === 0) return [];
+  const pontos: Array<[number, number]> = [
+    [origemLat, origemLng],
+    [destinoLat, destinoLng],
+  ];
+  const bbox = bboxComFolga(pontos);
+  const candidatos = pedagios.filter(
+    (p) =>
+      p.lat >= bbox.minLat &&
+      p.lat <= bbox.maxLat &&
+      p.lng >= bbox.minLng &&
+      p.lng <= bbox.maxLng,
+  );
+  if (candidatos.length === 0) return [];
+
+  const proximos: PedagioNaRotaOffline[] = [];
+  for (const p of candidatos) {
+    const d = menorDistanciaAteRota(p.lat, p.lng, pontos);
+    if (d <= DISTANCIA_MAX_LINHA_RETA_M) {
       proximos.push({ ...p, distanciaMetros: Math.round(d) });
     }
   }

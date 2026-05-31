@@ -11,6 +11,7 @@ import { api, ApiError } from "./api";
 import { reportarEvento } from "./event-reporter";
 import { haversineMetros } from "./geo";
 import {
+  pedagiosNaLinhaReta,
   pedagiosNaRotaOffline,
   type PedagioCadastrado,
 } from "./pedagios-offline";
@@ -748,6 +749,9 @@ export type PedagioNaRota = {
   distanciaMetros: number;
   lat: number;
   lng: number;
+  /** True quando vem do fallback de linha reta (sem polyline real, offline
+   * com rota nova). UI deve avisar "provavelmente passa por". */
+  aproximado?: boolean;
 };
 
 // Cache local de TODOS os pedágios cadastrados — permite calcular alerta
@@ -800,18 +804,16 @@ export function usePedagiosCadastrados() {
  * 4) Fallback: se sem geometria local, tenta endpoint server
  */
 export function usePedagiosNaRota(origemId?: string, destinoId?: string) {
+  const qc = useQueryClient();
   const cadastrados = usePedagiosCadastrados();
-  // Subscribe na rota — quando ela termina (ou muda fonte), o re-render
-  // dispara nova avaliação do queryKey abaixo. Mesma query do hook que
-  // a tela nova-viagem ja usa: TanStack compartilha cache, nao duplica request.
   const rotaQuery = useCalcularRota(origemId, destinoId);
   const rota = rotaQuery.data;
   const geometria =
     rota && "geometria" in rota ? rota.geometria ?? null : null;
   const pedagios = cadastrados.data ?? [];
-  // Hash simples (length + primeira coord) garante key diferente quando
-  // a geometria muda mesmo que origemId/destinoId iguais.
-  const geomKey = geometria ? geometria.length + ":" + geometria.slice(0, 8) : "none";
+  const geomKey = geometria
+    ? geometria.length + ":" + geometria.slice(0, 8)
+    : "none";
 
   return useQuery<PedagioNaRota[]>({
     queryKey: [
@@ -830,10 +832,34 @@ export function usePedagiosNaRota(origemId?: string, destinoId?: string) {
     staleTime: 5 * 60_000,
     retry: false,
     queryFn: async () => {
+      // 1) Com polyline (online ou cache_local) — calculo preciso
       if (geometria && pedagios.length > 0) {
         return pedagiosNaRotaOffline(geometria, pedagios);
       }
-      // Sem geometria local ou sem cache de pedagios — fallback online.
+      // 2) Sem polyline mas com coords dos locais — fallback linha reta
+      // (margem grande, pode dar falso positivo). Marca aproximado:true
+      // pra UI mostrar mensagem diferente.
+      if (pedagios.length > 0) {
+        const catalogos = qc.getQueryData<Catalogos>(["catalogos"]);
+        const origemLoc = catalogos?.locais.find((l) => l.id === origemId);
+        const destinoLoc = catalogos?.locais.find((l) => l.id === destinoId);
+        if (
+          origemLoc?.lat != null &&
+          origemLoc?.lng != null &&
+          destinoLoc?.lat != null &&
+          destinoLoc?.lng != null
+        ) {
+          const aproximados = pedagiosNaLinhaReta(
+            origemLoc.lat,
+            origemLoc.lng,
+            destinoLoc.lat,
+            destinoLoc.lng,
+            pedagios,
+          );
+          return aproximados.map((p) => ({ ...p, aproximado: true }));
+        }
+      }
+      // 3) Fallback online se nada local serviu
       try {
         return await api.get<PedagioNaRota[]>(
           `/m/pedagios-rodovia/na-rota?origem=${origemId}&destino=${destinoId}`,

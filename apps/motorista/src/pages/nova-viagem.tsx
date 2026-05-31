@@ -294,10 +294,20 @@ export default function NovaViagemPage() {
       }
     }
     if (!form.valorPedagio.trim() && (pedagiosNaRota.data?.length ?? 0) > 0) {
-      const lista = pedagiosNaRota.data!.slice(0, 5).map((p) => `• ${p.nome}`).join("\n");
+      const lista = pedagiosNaRota
+        .data!.slice(0, 5)
+        .map((p) => `• ${p.nome}`)
+        .join("\n");
+      const aproximado = pedagiosNaRota.data!.some((p) => p.aproximado);
+      const titulo = aproximado
+        ? "Sem internet — provavelmente passa por pedágio"
+        : "Sem valor de pedágio?";
+      const message = aproximado
+        ? `Sem internet pra confirmar, mas a rota geral passa perto de ${pedagiosNaRota.data!.length} pedágio(s):\n\n${lista}\n\nVocê não preencheu o valor. Quer voltar e preencher?`
+        : `A rota passa por ${pedagiosNaRota.data!.length} pedágio(s) cadastrado(s):\n\n${lista}\n\nVocê não preencheu o valor. Quer voltar e preencher?`;
       const ok = await showConfirm({
-        title: "Sem valor de pedágio?",
-        message: `A rota passa por ${pedagiosNaRota.data!.length} pedágio(s) cadastrado(s):\n\n${lista}\n\nVocê não preencheu o valor. Quer voltar e preencher?`,
+        title: titulo,
+        message,
         confirmLabel: "Voltar e preencher",
         cancelLabel: "Salvar mesmo assim",
       });
