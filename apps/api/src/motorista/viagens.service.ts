@@ -10,6 +10,7 @@ import { AuditoriaService } from "../auditoria/auditoria.service";
 import { aplicarMinimosCliente, serializarViagemComMinimos } from "../common/viagem-minimos";
 import { EventosService } from "../eventos/eventos.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { RoteamentoService } from "../roteamento/roteamento.service";
 import { UploadsService } from "../uploads/uploads.service";
 import { ValidacaoLocalService } from "./validacao-local.service";
 
@@ -55,6 +56,7 @@ export class ViagensMotoristaService {
     private readonly validacao: ValidacaoLocalService,
     private readonly auditoria: AuditoriaService,
     private readonly eventos: EventosService,
+    private readonly roteamento: RoteamentoService,
   ) {}
 
   async list(
@@ -571,6 +573,17 @@ export class ViagensMotoristaService {
     } catch (err) {
       // best-effort; logado pelo próprio service.
     }
+
+    // Garante que rotaCache exista pro par origem→destino. Cobre 2 casos:
+    // - Local recém recriado via auto-recovery (sem rotaCache no banco)
+    // - Motorista sincronizou viagem mas nao abriu /m/rotas/calcular pra esse par
+    // Sem isso, o dashboard nao mostra polilinha no mapa de trajeto e
+    // a query de "pedagios na rota" volta vazia. Best-effort em background.
+    void this.roteamento
+      .calcularKm(rest.localCargaId, rest.localDescargaId)
+      .catch(() => {
+        /* best-effort: OSRM down, fora de cobertura, etc — nao bloqueia */
+      });
 
     return serializarViagemComMinimos(viagem);
   }
