@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import Link from "next/link";
-import { Camera, ExternalLink } from "lucide-react";
+import { Camera, ChevronRight, ExternalLink, Fuel } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -13,7 +13,10 @@ import {
   ToolbarFilterDateRange,
 } from "@/components/data-table";
 import { Combobox } from "@/components/ui/combobox";
+import { ViewModeToggle } from "@/components/view-mode-toggle";
+import { ListMetric } from "@/components/list-metric";
 import { firstDayOfMonth, useDataTableState } from "@/hooks/use-data-table-state";
+import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { useAuthToken, fetchApi, useResourceOptions } from "@/lib/client-api";
 import type { Pagination } from "@/lib/client-api";
 import type { DataTableParams } from "@/hooks/use-data-table-state";
@@ -70,6 +73,7 @@ export default function AbastecimentosPage() {
   });
   const motoristas = useResourceOptions<Motorista>("/admin/motoristas");
   const empresas = useResourceOptions<Empresa>("/admin/empresas");
+  const { viewMode, setViewMode } = useListViewMode("abastecimentos");
 
   const url = buildUrl("/admin/abastecimentos", tableState);
   const list = useQuery({
@@ -207,6 +211,7 @@ export default function AbastecimentosPage() {
             Combustível registrado pelos motoristas, com odômetro e foto.
           </p>
         </div>
+        <ViewModeToggle value={viewMode} onChange={setViewMode} />
       </header>
 
       {list.data && list.data.totais.count > 0 && (
@@ -269,61 +274,8 @@ export default function AbastecimentosPage() {
           />
         }
         emptyMessage="Nenhum abastecimento nesse filtro."
-        renderMobileCard={(a) => (
-          <Link href={`/abastecimentos/${a.id}`} className="block">
-            <Card className="space-y-3 p-4 hover:bg-muted/40">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">
-                    {a.postoNome ?? "Posto não informado"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {fmtData(a.data)} · {a.veiculo.placa} · {a.motorista.nome}
-                  </p>
-                  {a.empresa && (
-                    <p className="truncate text-xs text-muted-foreground">{a.empresa.nome}</p>
-                  )}
-                </div>
-                <Badge className={TIPO_COLOR[a.tipo] ?? ""}>
-                  {TIPO_LABEL[a.tipo] ?? a.tipo}
-                </Badge>
-              </div>
-
-              <div className="flex flex-wrap gap-x-4 gap-y-1 border-t pt-2 text-xs">
-                <span>
-                  <span className="text-muted-foreground">L: </span>
-                  <span className="font-medium">{fmtNum(a.litros, 2)}</span>
-                </span>
-                <span>
-                  <span className="text-muted-foreground">R$: </span>
-                  {a.valorTotal != null ? (
-                    <span className="font-medium">{fmtNum(a.valorTotal, 2)}</span>
-                  ) : (
-                    <span className="italic text-amber-700">comboio</span>
-                  )}
-                </span>
-                {a.precoLitro && (
-                  <span>
-                    <span className="text-muted-foreground">R$/L: </span>
-                    <span className="font-medium">{fmtNum(a.precoLitro, 3)}</span>
-                  </span>
-                )}
-                <span>
-                  <span className="text-muted-foreground">km: </span>
-                  <span className="font-mono">
-                    {a.odometro.toLocaleString("pt-BR")}
-                  </span>
-                </span>
-                {a._count.fotos > 0 && (
-                  <span className="flex items-center gap-1">
-                    <Camera className="h-3 w-3" />
-                    {a._count.fotos}
-                  </span>
-                )}
-              </div>
-            </Card>
-          </Link>
-        )}
+        viewMode={viewMode}
+        renderMobileCard={(a) => <AbastecimentoCard a={a} />}
       />
     </div>
   );
@@ -343,6 +295,84 @@ function buildUrl(path: string, params: Partial<DataTableParams>): string {
   }
   const qs = usp.toString();
   return qs ? `${path}?${qs}` : path;
+}
+
+function AbastecimentoCard({ a }: { a: Abastecimento }) {
+  return (
+    <Link href={`/abastecimentos/${a.id}`} className="group block">
+      <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">
+        <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-6">
+          <div className="flex flex-row items-center gap-2 sm:flex-col sm:items-start">
+            <Badge className={TIPO_COLOR[a.tipo] ?? ""}>
+              {TIPO_LABEL[a.tipo] ?? a.tipo}
+            </Badge>
+            {a.emComboio && (
+              <Badge className="border-amber-200 bg-amber-100 text-amber-900">
+                Comboio
+              </Badge>
+            )}
+          </div>
+
+          <div className="min-w-0 space-y-2">
+            <div className="flex items-center gap-2 text-sm">
+              <Fuel className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="truncate font-medium">
+                {a.postoNome ?? "Posto não informado"}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+              <span>{fmtData(a.data)}</span>
+              <span>·</span>
+              <span>{a.motorista.nome}</span>
+              <span>·</span>
+              <span className="font-mono">{a.veiculo.placa}</span>
+              {a.empresa && (
+                <>
+                  <span>·</span>
+                  <span className="text-foreground/70">{a.empresa.nome}</span>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="flex gap-4">
+              <ListMetric label="Litros" width={90} value={`${fmtNum(a.litros, 2)} L`} />
+              <ListMetric
+                label="Total"
+                width={100}
+                value={
+                  a.valorTotal != null ? (
+                    `R$ ${fmtNum(a.valorTotal, 2)}`
+                  ) : (
+                    <span className="text-xs italic text-amber-700">—</span>
+                  )
+                }
+              />
+              <ListMetric
+                label="Odômetro"
+                width={90}
+                value={
+                  <span className="font-mono">
+                    {a.odometro.toLocaleString("pt-BR")}
+                  </span>
+                }
+              />
+            </div>
+            <div className="flex w-12 shrink-0 items-center justify-end gap-1.5 text-muted-foreground">
+              <span
+                className={`flex items-center gap-0.5 text-xs ${a._count.fotos > 0 ? "" : "invisible"}`}
+                title={`${a._count.fotos} foto${a._count.fotos === 1 ? "" : "s"}`}
+              >
+                <Camera className="h-3.5 w-3.5" /> {a._count.fotos || ""}
+              </span>
+              <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+            </div>
+          </div>
+        </div>
+      </Card>
+    </Link>
+  );
 }
 
 function Resumo({ label, value }: { label: string; value: string }) {

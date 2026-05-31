@@ -3,13 +3,22 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { AlertCircle, Pencil, Plus } from "lucide-react";
+import {
+  AlertCircle,
+  ChevronRight,
+  MapPin,
+  Pencil,
+  Plus,
+} from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useQuery } from "@tanstack/react-query";
 import { StatusToggle } from "@/components/status-toggle";
 import { ExcluirButton } from "@/components/excluir-button";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ViewModeToggle } from "@/components/view-mode-toggle";
+import { useListViewMode } from "@/hooks/use-list-view-mode";
 import {
   DataTable,
   DataTableColumnHeader,
@@ -50,6 +59,12 @@ type Local = {
 const PATH = "/admin/locais";
 const CLIENTES_PATH = "/admin/clientes";
 
+const TIPO_LOCAL_COLOR: Record<Tipo, string> = {
+  CARGA: "border-emerald-200 bg-emerald-50 text-emerald-900",
+  DESCARGA: "border-rose-200 bg-rose-50 text-rose-900",
+  AMBOS: "border-violet-200 bg-violet-50 text-violet-900",
+};
+
 export default function LocaisPage() {
   const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
   const list = usePaginatedList<Local>(PATH, tableState);
@@ -57,6 +72,7 @@ export default function LocaisPage() {
   const update = useUpdateResource<Record<string, unknown>, Local>(PATH, PATH);
   const token = useAuthToken();
   const [view, setView] = useState<"lista" | "mapa">("lista");
+  const { viewMode, setViewMode } = useListViewMode("locais");
 
   // Carrega só quando aba "Mapa" tá ativa. Backend filtra por ativo + lat/lng.
   // QueryKey começa com PATH pra invalidate de create/update/delete pegar o mapa
@@ -181,14 +197,15 @@ export default function LocaisPage() {
             Locais de carga e descarga. Busque por nome, endereço ou ponto de interesse.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {view === "lista" && <ViewModeToggle value={viewMode} onChange={setViewMode} />}
           <Link href="/locais/em-validacao">
-            <Button variant="outline" className="w-full md:w-auto">
+            <Button variant="outline">
               <AlertCircle className="h-4 w-4" /> Em validação
             </Button>
           </Link>
           <Link href="/locais/novo">
-            <Button className="w-full md:w-auto">
+            <Button>
               <Plus className="h-4 w-4" /> Novo local
             </Button>
           </Link>
@@ -271,21 +288,48 @@ export default function LocaisPage() {
           />
         }
         emptyMessage="Nenhum local cadastrado."
+        viewMode={viewMode}
         renderMobileCard={(l) => (
-          <Card className="space-y-2 p-4">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{l.nome}</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {l.cidade}/{l.uf}
-                </p>
+          <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">
+            <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-6">
+              <Badge className={TIPO_LOCAL_COLOR[l.tipo] ?? ""}>{l.tipo}</Badge>
+
+              <div className="min-w-0 space-y-2">
+                <div className="flex items-center gap-2 text-sm">
+                  <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="truncate font-medium">{l.nome}</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                  <span className="truncate">
+                    {l.logradouro}
+                    {l.numero ? `, ${l.numero}` : ""}
+                    {l.bairro ? ` — ${l.bairro}` : ""}
+                  </span>
+                  <span>·</span>
+                  <span>{l.cidade}/{l.uf}</span>
+                  {l.clientes[0] && (
+                    <>
+                      <span>·</span>
+                      <span title={l.clientes.map((c) => c.nome).join(", ")}>
+                        {l.clientes[0].nome}
+                        {l.clientes.length > 1 && (
+                          <span className="ml-1 opacity-70">
+                            +{l.clientes.length - 1}
+                          </span>
+                        )}
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
+
+              <div className="flex w-32 shrink-0 items-center justify-end gap-1 text-muted-foreground">
                 <StatusToggle
                   active={l.ativo}
-                  onChange={(next) => update.mutate({ id: l.id, body: { ativo: next } })}
+                  onChange={(next) =>
+                    update.mutate({ id: l.id, body: { ativo: next } })
+                  }
                   size="sm"
-                  label
                 />
                 <Link href={`/locais/${l.id}`}>
                   <Button variant="ghost" size="icon" title="Editar">
@@ -298,26 +342,6 @@ export default function LocaisPage() {
                   nomeRecurso={`o local "${l.nome}"`}
                 />
               </div>
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {l.logradouro}
-              {l.numero ? `, ${l.numero}` : ""}
-              {l.bairro ? ` — ${l.bairro}` : ""}
-            </div>
-            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-              <span>
-                <span className="text-muted-foreground">Tipo: </span>
-                {l.tipo}
-              </span>
-              {l.clientes[0] && (
-                <span title={l.clientes.map((c) => c.nome).join(", ")}>
-                  <span className="text-muted-foreground">Cliente: </span>
-                  {l.clientes[0].nome}
-                  {l.clientes.length > 1 && (
-                    <span className="text-muted-foreground"> +{l.clientes.length - 1}</span>
-                  )}
-                </span>
-              )}
             </div>
           </Card>
         )}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowLeft, Check, GitMerge } from "lucide-react";
+import { ArrowLeft, Check, GitMerge, MapPin } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
@@ -19,7 +19,9 @@ import {
   DataTableToolbar,
 } from "@/components/data-table";
 import { Combobox } from "@/components/ui/combobox";
+import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { useDataTableState } from "@/hooks/use-data-table-state";
+import { useListViewMode } from "@/hooks/use-list-view-mode";
 import {
   fetchApi,
   useAuthToken,
@@ -76,6 +78,7 @@ export default function LocaisEmValidacaoPage() {
   const token = useAuthToken();
   const qc = useQueryClient();
   const [mesclando, setMesclando] = useState<LocalEmValidacao | null>(null);
+  const { viewMode, setViewMode } = useListViewMode("locais-em-validacao");
 
   const homologar = useMutation({
     mutationFn: (id: string) =>
@@ -199,6 +202,7 @@ export default function LocaisEmValidacaoPage() {
             </p>
           </div>
         </div>
+        <ViewModeToggle value={viewMode} onChange={setViewMode} />
       </header>
 
       <DataTable
@@ -228,46 +232,56 @@ export default function LocaisEmValidacaoPage() {
           />
         }
         emptyMessage="Nenhum local em validação. Sistema homologou tudo sozinho 👍"
+        viewMode={viewMode}
         renderMobileCard={(l) => (
-          <Card className="space-y-2 p-4">
-            <div className="space-y-0.5">
-              <p className="font-medium">{l.nome}</p>
-              <p className="text-xs text-muted-foreground">
-                {formatarEndereco(l)} · {l.cidade}/{l.uf}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2 text-xs">
+          <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">
+            <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-6">
               <span
-                className={`rounded px-2 py-0.5 ${NIVEL_LABEL[l.nivelConfianca].cls}`}
+                className={`shrink-0 rounded px-2 py-1 text-xs font-medium ${NIVEL_LABEL[l.nivelConfianca].cls}`}
               >
                 {NIVEL_LABEL[l.nivelConfianca].label}
               </span>
-              {l.criadoPorMotorista && (
-                <span className="text-muted-foreground">
-                  por {l.criadoPorMotorista.nome}
-                </span>
-              )}
-              <span className="text-muted-foreground">{formatBR(l.criadoEm)}</span>
-            </div>
-            <div className="flex gap-1">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => homologar.mutate(l.id)}
-                disabled={homologar.isPending}
-              >
-                <Check className="h-3.5 w-3.5" />
-                <span className="ml-1">Homologar</span>
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setMesclando(l)}>
-                <GitMerge className="h-3.5 w-3.5" />
-                <span className="ml-1">Mesclar</span>
-              </Button>
-              <ExcluirButton
-                path={PATH}
-                id={l.id}
-                nomeRecurso={`o local "${l.nome}"`}
-              />
+
+              <div className="min-w-0 space-y-2">
+                <div className="flex items-center gap-2 text-sm">
+                  <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="truncate font-medium">{l.nome}</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                  <span className="truncate">{formatarEndereco(l)}</span>
+                  <span>·</span>
+                  <span>{l.cidade}/{l.uf}</span>
+                  {l.criadoPorMotorista && (
+                    <>
+                      <span>·</span>
+                      <span>por {l.criadoPorMotorista.nome}</span>
+                    </>
+                  )}
+                  <span>·</span>
+                  <span>{formatBR(l.criadoEm)}</span>
+                </div>
+              </div>
+
+              <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => homologar.mutate(l.id)}
+                  disabled={homologar.isPending}
+                >
+                  <Check className="h-3.5 w-3.5" />
+                  <span className="ml-1">Homologar</span>
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setMesclando(l)}>
+                  <GitMerge className="h-3.5 w-3.5" />
+                  <span className="ml-1">Mesclar</span>
+                </Button>
+                <ExcluirButton
+                  path={PATH}
+                  id={l.id}
+                  nomeRecurso={`o local "${l.nome}"`}
+                />
+              </div>
             </div>
           </Card>
         )}

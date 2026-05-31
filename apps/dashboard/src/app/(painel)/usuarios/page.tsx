@@ -3,10 +3,11 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { Pencil, Plus } from "lucide-react";
+import { Pencil, Plus, UserCircle } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { StatusToggle } from "@/components/status-toggle";
 import { ConviteWhatsappButton } from "@/components/convite-whatsapp-button";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -15,7 +16,9 @@ import {
   DataTableToolbar,
 } from "@/components/data-table";
 import { Combobox } from "@/components/ui/combobox";
+import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { useDataTableState } from "@/hooks/use-data-table-state";
+import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePaginatedList, useUpdateResource } from "@/lib/client-api";
 
 type Perfil = "ADMIN" | "OPERADOR";
@@ -49,6 +52,7 @@ export default function UsuariosPage() {
   const isAdmin = session?.user?.perfil === "ADMIN";
   const list = usePaginatedList<User>(PATH, tableState, { enabled: isAdmin });
   const update = useUpdateResource<{ ativo?: boolean }, User>(PATH, PATH);
+  const { viewMode, setViewMode } = useListViewMode("usuarios");
 
   const currentEmail = session?.user?.email ?? "";
 
@@ -146,11 +150,14 @@ export default function UsuariosPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Usuários</h1>
           <p className="text-sm text-muted-foreground">Quem acessa o painel admin.</p>
         </div>
-        <Link href="/usuarios/novo">
-          <Button className="w-full md:w-auto">
-            <Plus className="h-4 w-4" /> Novo usuário
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          <Link href="/usuarios/novo">
+            <Button>
+              <Plus className="h-4 w-4" /> Novo usuário
+            </Button>
+          </Link>
+        </div>
       </header>
 
       <DataTable
@@ -191,20 +198,40 @@ export default function UsuariosPage() {
           />
         }
         emptyMessage="Nenhum usuário cadastrado."
+        viewMode={viewMode}
         renderMobileCard={(u) => (
-          <Card className="space-y-2 p-4">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{u.nome}</p>
-                <p className="truncate text-xs text-muted-foreground">{u.email}</p>
+          <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">
+            <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-6">
+              <Badge
+                className={
+                  u.perfil === "ADMIN"
+                    ? "border-violet-200 bg-violet-50 text-violet-900"
+                    : "border-slate-200 bg-slate-50 text-slate-800"
+                }
+              >
+                {u.perfil}
+              </Badge>
+
+              <div className="min-w-0 space-y-1">
+                <div className="flex items-center gap-2 text-sm">
+                  <UserCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="truncate font-medium">{u.nome}</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                  <span className="truncate">{u.email}</span>
+                  <span>·</span>
+                  <span>Último login: {fmtUltimoLogin(u.ultimoLoginEm)}</span>
+                </div>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
+
+              <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
                 <StatusToggle
                   active={u.ativo}
-                  onChange={(next) => update.mutate({ id: u.id, body: { ativo: next } })}
+                  onChange={(next) =>
+                    update.mutate({ id: u.id, body: { ativo: next } })
+                  }
                   disabled={u.email === currentEmail}
                   size="sm"
-                  label
                 />
                 <Link href={`/usuarios/${u.id}`}>
                   <Button variant="ghost" size="icon" title="Editar">
@@ -213,16 +240,6 @@ export default function UsuariosPage() {
                 </Link>
                 <ConviteWhatsappButton tipo="user" id={u.id} nome={u.nome} />
               </div>
-            </div>
-            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-              <span>
-                <span className="text-muted-foreground">Perfil: </span>
-                {u.perfil}
-              </span>
-              <span>
-                <span className="text-muted-foreground">Último login: </span>
-                {fmtUltimoLogin(u.ultimoLoginEm)}
-              </span>
             </div>
           </Card>
         )}

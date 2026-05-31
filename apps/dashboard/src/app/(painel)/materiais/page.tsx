@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { Pencil, Plus } from "lucide-react";
+import { Package, Pencil, Plus } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { StatusToggle } from "@/components/status-toggle";
 import { ExcluirButton } from "@/components/excluir-button";
@@ -14,7 +14,9 @@ import {
   DataTableToolbar,
 } from "@/components/data-table";
 import { Combobox } from "@/components/ui/combobox";
+import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { useDataTableState } from "@/hooks/use-data-table-state";
+import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePaginatedList, useUpdateResource } from "@/lib/client-api";
 
 type Material = {
@@ -30,6 +32,7 @@ export default function MateriaisPage() {
   const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
   const list = usePaginatedList<Material>(PATH, tableState);
   const update = useUpdateResource<{ ativo?: boolean }, Material>(PATH, PATH);
+  const { viewMode, setViewMode } = useListViewMode("materiais");
 
   const columns = useMemo<ColumnDef<Material>[]>(
     () => [
@@ -94,11 +97,14 @@ export default function MateriaisPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Materiais</h1>
           <p className="text-sm text-muted-foreground">Tipos de material transportado.</p>
         </div>
-        <Link href="/materiais/novo">
-          <Button className="w-full md:w-auto">
-            <Plus className="h-4 w-4" /> Novo material
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          <Link href="/materiais/novo">
+            <Button>
+              <Plus className="h-4 w-4" /> Novo material
+            </Button>
+          </Link>
+        </div>
       </header>
 
       <DataTable
@@ -127,18 +133,28 @@ export default function MateriaisPage() {
           />
         }
         emptyMessage="Nenhum material cadastrado."
+        viewMode={viewMode}
         renderMobileCard={(m) => (
-          <Card className="space-y-2 p-4">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{m.nome}</p>
+          <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">
+            <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-[1fr_auto] sm:items-center sm:gap-6">
+              <div className="min-w-0 space-y-1">
+                <div className="flex items-center gap-2 text-sm">
+                  <Package className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="truncate font-medium">{m.nome}</span>
+                </div>
+                {m.criadoPor && (
+                  <div className="text-xs text-muted-foreground">
+                    Criado por {m.criadoPor.nome}
+                  </div>
+                )}
               </div>
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
                 <StatusToggle
                   active={m.ativo}
-                  onChange={(next) => update.mutate({ id: m.id, body: { ativo: next } })}
+                  onChange={(next) =>
+                    update.mutate({ id: m.id, body: { ativo: next } })
+                  }
                   size="sm"
-                  label
                 />
                 <Link href={`/materiais/${m.id}`}>
                   <Button variant="ghost" size="icon" title="Editar">

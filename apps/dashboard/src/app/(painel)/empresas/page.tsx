@@ -1,11 +1,18 @@
 "use client";
 
 import { useMemo } from "react";
-import { FileSpreadsheet, FileInput, Pencil, Plus } from "lucide-react";
+import {
+  Building2,
+  FileSpreadsheet,
+  FileInput,
+  Pencil,
+  Plus,
+} from "lucide-react";
 import Link from "next/link";
 import type { ColumnDef } from "@tanstack/react-table";
 import { StatusToggle } from "@/components/status-toggle";
 import { ExcluirButton } from "@/components/excluir-button";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -14,7 +21,9 @@ import {
   DataTableToolbar,
 } from "@/components/data-table";
 import { Combobox } from "@/components/ui/combobox";
+import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { useDataTableState } from "@/hooks/use-data-table-state";
+import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePaginatedList, useUpdateResource } from "@/lib/client-api";
 
 type Papel = "RECEBE_PLANILHA" | "MANDA_FECHAMENTO" | "AMBOS";
@@ -35,6 +44,7 @@ export default function EmpresasPage() {
   const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
   const list = usePaginatedList<Empresa>(PATH, tableState);
   const update = useUpdateResource<Partial<Empresa>, Empresa>(PATH, PATH);
+  const { viewMode, setViewMode } = useListViewMode("empresas");
 
   const columns = useMemo<ColumnDef<Empresa>[]>(
     () => [
@@ -130,11 +140,14 @@ export default function EmpresasPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Empresas-cliente</h1>
           <p className="text-sm text-muted-foreground">Empresas pra quem prestamos serviço.</p>
         </div>
-        <Link href="/empresas/novo">
-          <Button className="w-full md:w-auto">
-            <Plus className="h-4 w-4" /> Nova empresa
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          <Link href="/empresas/novo">
+            <Button>
+              <Plus className="h-4 w-4" /> Nova empresa
+            </Button>
+          </Link>
+        </div>
       </header>
 
       <DataTable
@@ -176,14 +189,29 @@ export default function EmpresasPage() {
           />
         }
         emptyMessage="Nenhuma empresa cadastrada."
+        viewMode={viewMode}
         renderMobileCard={(e) => (
-          <Card className="space-y-2 p-4">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{e.nome}</p>
-                <p className="text-xs text-muted-foreground">{PAPEL_LABEL[e.papel]}</p>
+          <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">
+            <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-6">
+              <Badge className="border-slate-200 bg-slate-50 text-slate-800">
+                {PAPEL_LABEL[e.papel]}
+              </Badge>
+
+              <div className="min-w-0 space-y-1">
+                <div className="flex items-center gap-2 text-sm">
+                  <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="truncate font-medium">{e.nome}</span>
+                </div>
+                {(e.cnpj || e.contato) && (
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                    {e.cnpj && <span className="font-mono">{e.cnpj}</span>}
+                    {e.cnpj && e.contato && <span>·</span>}
+                    {e.contato && <span>{e.contato}</span>}
+                  </div>
+                )}
               </div>
-              <div className="flex shrink-0 gap-1">
+
+              <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
                 {(e.papel === "RECEBE_PLANILHA" || e.papel === "AMBOS") && (
                   <Link href={`/empresas/${e.id}/layout-envio`}>
                     <Button variant="ghost" size="icon" title="Layout de envio">
@@ -205,7 +233,9 @@ export default function EmpresasPage() {
                 </Link>
                 <StatusToggle
                   active={e.ativa}
-                  onChange={(next) => update.mutate({ id: e.id, body: { ativa: next } })}
+                  onChange={(next) =>
+                    update.mutate({ id: e.id, body: { ativa: next } })
+                  }
                   size="sm"
                 />
                 <ExcluirButton
@@ -214,17 +244,6 @@ export default function EmpresasPage() {
                   nomeRecurso={`a empresa "${e.nome}"`}
                 />
               </div>
-            </div>
-            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-              {e.cnpj && (
-                <span>
-                  <span className="text-muted-foreground">CNPJ: </span>
-                  <span className="font-mono">{e.cnpj}</span>
-                </span>
-              )}
-              <span className={e.ativa ? "text-green-700" : "text-muted-foreground"}>
-                {e.ativa ? "ativa" : "inativa"}
-              </span>
             </div>
           </Card>
         )}

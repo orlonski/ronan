@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -10,12 +10,9 @@ import {
   Camera,
   ChevronRight,
   ExternalLink,
-  LayoutGrid,
-  Table as TableIcon,
 } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
   DataTable,
@@ -24,7 +21,10 @@ import {
   ToolbarFilterDateRange,
 } from "@/components/data-table";
 import { Combobox } from "@/components/ui/combobox";
+import { ViewModeToggle } from "@/components/view-mode-toggle";
+import { ListMetric } from "@/components/list-metric";
 import { firstDayOfMonth, useDataTableState } from "@/hooks/use-data-table-state";
+import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePaginatedList, useResourceOptions } from "@/lib/client-api";
 import { fmtBR, fmtNum } from "@/lib/fechamento-helpers";
 import { ValorComMinimo } from "@/components/valor-com-minimo";
@@ -75,18 +75,6 @@ const STATUS_VIAGEM_COLOR: Record<string, string> = {
   RASCUNHO_OFFLINE: "bg-gray-100 text-gray-700 border-gray-200",
 };
 
-const VIEW_MODE_KEY = "ronan.viagens-view-mode";
-
-function getInitialViewMode(): "cards" | "table" {
-  if (typeof window === "undefined") return "cards";
-  try {
-    const saved = localStorage.getItem(VIEW_MODE_KEY);
-    return saved === "table" ? "table" : "cards";
-  } catch {
-    return "cards";
-  }
-}
-
 export default function ViagensPage() {
   const tableState = useDataTableState({
     defaultSort: { field: "data", order: "desc" },
@@ -95,20 +83,7 @@ export default function ViagensPage() {
   const list = usePaginatedList<Viagem>("/admin/viagens", tableState);
   const motoristas = useResourceOptions<Motorista>("/admin/motoristas");
   const clientes = useResourceOptions<Cliente>("/admin/clientes");
-
-  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
-  // Carrega preferência do localStorage só no cliente (evita mismatch SSR).
-  useEffect(() => {
-    setViewMode(getInitialViewMode());
-  }, []);
-  function trocarView(novo: "cards" | "table"): void {
-    setViewMode(novo);
-    try {
-      localStorage.setItem(VIEW_MODE_KEY, novo);
-    } catch {
-      /* localStorage cheio etc — ignora */
-    }
-  }
+  const { viewMode, setViewMode } = useListViewMode("viagens");
 
   const motoristaOptions = useMemo(
     () => (motoristas.data ?? []).map((m) => ({ value: m.id, label: m.nome })),
@@ -279,34 +254,7 @@ export default function ViagensPage() {
             Lançamentos dos motoristas, com status visual de conferência.
           </p>
         </div>
-        <div className="inline-flex rounded-md border bg-background p-0.5">
-          <button
-            type="button"
-            onClick={() => trocarView("cards")}
-            aria-pressed={viewMode === "cards"}
-            title="Visualizar como cards"
-            className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors ${
-              viewMode === "cards"
-                ? "bg-foreground text-background"
-                : "text-muted-foreground hover:bg-muted"
-            }`}
-          >
-            <LayoutGrid className="h-3.5 w-3.5" /> Cards
-          </button>
-          <button
-            type="button"
-            onClick={() => trocarView("table")}
-            aria-pressed={viewMode === "table"}
-            title="Visualizar como tabela compacta"
-            className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors ${
-              viewMode === "table"
-                ? "bg-foreground text-background"
-                : "text-muted-foreground hover:bg-muted"
-            }`}
-          >
-            <TableIcon className="h-3.5 w-3.5" /> Tabela
-          </button>
-        </div>
+        <ViewModeToggle value={viewMode} onChange={setViewMode} />
       </header>
 
       <DataTable
@@ -412,11 +360,14 @@ function ViagemCard({ v }: { v: Viagem }) {
             </div>
           </div>
 
-          {/* Coluna 3: métricas + ações (alinhada à direita) */}
+          {/* Coluna 3: métricas alinhadas em larguras fixas + slot reservado
+              pra ícone foto (invisível quando 0). Garante alinhamento vertical
+              perfeito entre cards independente de haver foto ou não. */}
           <div className="flex items-center gap-4">
-            <div className="grid grid-cols-3 gap-3 text-right sm:gap-4">
-              <Metric
+            <div className="flex gap-4">
+              <ListMetric
                 label="Toneladas"
+                width={100}
                 value={
                   <ValorComMinimo
                     className="text-sm font-semibold tabular-nums"
@@ -428,8 +379,9 @@ function ViagemCard({ v }: { v: Viagem }) {
                   />
                 }
               />
-              <Metric
+              <ListMetric
                 label="Km"
+                width={90}
                 value={
                   <ValorComMinimo
                     className="text-sm font-semibold tabular-nums"
@@ -441,8 +393,9 @@ function ViagemCard({ v }: { v: Viagem }) {
                   />
                 }
               />
-              <Metric
+              <ListMetric
                 label="Ticket"
+                width={90}
                 value={
                   <span className="font-mono text-sm font-semibold">
                     {v.ticket}
@@ -458,15 +411,15 @@ function ViagemCard({ v }: { v: Viagem }) {
                 }
               />
             </div>
-            <div className="flex shrink-0 items-center gap-1.5 text-muted-foreground">
-              {v.fotos.length > 0 && (
-                <span
-                  className="flex items-center gap-0.5 text-xs"
-                  title={`${v.fotos.length} foto${v.fotos.length === 1 ? "" : "s"}`}
-                >
-                  <Camera className="h-3.5 w-3.5" /> {v.fotos.length}
-                </span>
-              )}
+            {/* Slot fixo: icone foto (com contador) + chevron. Width fixa
+                garante alinhamento mesmo quando viagem nao tem foto. */}
+            <div className="flex w-12 shrink-0 items-center justify-end gap-1.5 text-muted-foreground">
+              <span
+                className={`flex items-center gap-0.5 text-xs ${v.fotos.length > 0 ? "" : "invisible"}`}
+                title={`${v.fotos.length} foto${v.fotos.length === 1 ? "" : "s"}`}
+              >
+                <Camera className="h-3.5 w-3.5" /> {v.fotos.length || ""}
+              </span>
               <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
             </div>
           </div>
@@ -476,13 +429,3 @@ function ViagemCard({ v }: { v: Viagem }) {
   );
 }
 
-function Metric({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div className="flex min-w-[60px] flex-col items-end gap-0.5">
-      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </span>
-      <span>{value}</span>
-    </div>
-  );
-}

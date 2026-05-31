@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { FileSpreadsheet, Plus } from "lucide-react";
+import { Building2, ChevronRight, FileSpreadsheet, Plus } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,10 @@ import {
   DataTableToolbar,
 } from "@/components/data-table";
 import { Combobox } from "@/components/ui/combobox";
+import { ViewModeToggle } from "@/components/view-mode-toggle";
+import { ListMetric } from "@/components/list-metric";
 import { useDataTableState } from "@/hooks/use-data-table-state";
+import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { useResourceOptions } from "@/lib/client-api";
 import { useFechamentos, type FechamentoLista } from "@/lib/fechamentos-api";
 import {
@@ -31,6 +34,7 @@ export default function FechamentosPage() {
   });
   const list = useFechamentos(tableState);
   const empresas = useResourceOptions<Empresa>("/admin/empresas");
+  const { viewMode, setViewMode } = useListViewMode("fechamentos");
 
   const empresaOptions = useMemo(
     () => (empresas.data ?? []).map((e) => ({ value: e.id, label: e.nome })),
@@ -137,11 +141,14 @@ export default function FechamentosPage() {
             Conferências de planilhas que as empresas enviam — extração + match automático com IA.
           </p>
         </div>
-        <Link href="/fechamentos/novo">
-          <Button className="w-full md:w-auto">
-            <Plus className="h-4 w-4" /> Novo fechamento
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          <Link href="/fechamentos/novo">
+            <Button>
+              <Plus className="h-4 w-4" /> Novo fechamento
+            </Button>
+          </Link>
+        </div>
       </header>
 
       <DataTable
@@ -188,40 +195,71 @@ export default function FechamentosPage() {
           />
         }
         emptyMessage='Nenhum fechamento ainda. Clique em "Novo fechamento" pra subir a primeira planilha.'
+        viewMode={viewMode}
         renderMobileCard={(f) => (
-          <Link href={`/fechamentos/${f.id}`} className="block">
-            <Card className="space-y-3 p-4 hover:bg-muted/40">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{f.empresa.nome}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {fmtBR(f.periodoInicio)} → {fmtBR(f.periodoFim)} · v{f.versao}
-                  </p>
-                </div>
+          <Link href={`/fechamentos/${f.id}`} className="group block">
+            <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">
+              <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-6">
                 <Badge className={STATUS_FECHAMENTO_COLOR[f.status]}>
                   {STATUS_FECHAMENTO_LABEL[f.status]}
                 </Badge>
-              </div>
 
-              <div className="flex flex-wrap gap-x-4 gap-y-1 border-t pt-2 text-xs">
-                <span>
-                  <span className="text-muted-foreground">Linhas: </span>
-                  <span className="font-medium">{f._count.linhas}</span>
-                </span>
-                {f.resumoIa && (
-                  <span>
-                    <span className="text-muted-foreground">OK: </span>
-                    <span className="font-medium">
-                      {f.resumoIa.matchAuto + f.resumoIa.matchIa}
+                <div className="min-w-0 space-y-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="truncate font-medium">{f.empresa.nome}</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                    <span>
+                      {fmtBR(f.periodoInicio)} → {fmtBR(f.periodoFim)}
                     </span>
-                    <span className="ml-1 text-muted-foreground">
-                      · {f.resumoIa.divergencia} pendentes
-                    </span>
-                  </span>
-                )}
-                <span className="text-muted-foreground">
-                  Recebido {fmtDataHoraBR(f.criadoEm)}
-                </span>
+                    <span>·</span>
+                    <span>v{f.versao}</span>
+                    <span>·</span>
+                    <span>Recebido {fmtDataHoraBR(f.criadoEm)}</span>
+                    {f.criadoPor && (
+                      <>
+                        <span>·</span>
+                        <span>por {f.criadoPor.nome}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <div className="flex gap-4">
+                    <ListMetric label="Linhas" width={70} value={f._count.linhas} />
+                    <ListMetric
+                      label="OK"
+                      width={70}
+                      value={
+                        f.resumoIa
+                          ? f.resumoIa.matchAuto + f.resumoIa.matchIa
+                          : "—"
+                      }
+                    />
+                    <ListMetric
+                      label="Pendentes"
+                      width={80}
+                      value={
+                        f.resumoIa ? (
+                          <span
+                            className={
+                              f.resumoIa.divergencia > 0
+                                ? "text-amber-700"
+                                : "text-emerald-700"
+                            }
+                          >
+                            {f.resumoIa.divergencia}
+                          </span>
+                        ) : (
+                          "—"
+                        )
+                      }
+                    />
+                  </div>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                </div>
               </div>
             </Card>
           </Link>

@@ -2,7 +2,13 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Download, Plus, Send } from "lucide-react";
+import {
+  Building2,
+  CheckCircle2,
+  Download,
+  Plus,
+  Send,
+} from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { ExcluirButton } from "@/components/excluir-button";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +30,10 @@ import {
   DataTableToolbar,
 } from "@/components/data-table";
 import { Combobox } from "@/components/ui/combobox";
+import { ViewModeToggle } from "@/components/view-mode-toggle";
+import { ListMetric } from "@/components/list-metric";
 import { useDataTableState } from "@/hooks/use-data-table-state";
+import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { useResourceOptions } from "@/lib/client-api";
 import { fmtBR, fmtDataHoraBR } from "@/lib/fechamento-helpers";
 import {
@@ -44,6 +53,7 @@ export default function EnviosPage() {
   const empresas = useResourceOptions<Empresa>("/admin/empresas");
   const marcar = useMarcarEnvioEnviado();
   const baixar = useBaixarArquivo();
+  const { viewMode, setViewMode } = useListViewMode("envios");
   const [editando, setEditando] = useState<EnvioStandalone | null>(null);
   const [canalEnvio, setCanalEnvio] = useState("WhatsApp");
   const [observacao, setObservacao] = useState("");
@@ -177,11 +187,14 @@ export default function EnviosPage() {
             Planilhas geradas pra mandar pras empresas que recebem o fechamento.
           </p>
         </div>
-        <Link href="/envios/novo">
-          <Button className="w-full md:w-auto">
-            <Plus className="h-4 w-4" /> Novo envio
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          <Link href="/envios/novo">
+            <Button>
+              <Plus className="h-4 w-4" /> Novo envio
+            </Button>
+          </Link>
+        </div>
       </header>
 
       <DataTable
@@ -218,69 +231,88 @@ export default function EnviosPage() {
           />
         }
         emptyMessage='Nenhum envio gerado ainda. Clique em "Novo envio" pra gerar.'
+        viewMode={viewMode}
         renderMobileCard={(e) => {
           const periodoInicio = e.periodoInicio ?? e.fechamento?.periodoInicio;
           const periodoFim = e.periodoFim ?? e.fechamento?.periodoFim;
           return (
-            <Card className="space-y-2 p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{e.empresa?.nome ?? "—"}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {fmtBR(periodoInicio)} → {fmtBR(periodoFim)}
-                  </p>
-                </div>
+            <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">
+              <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-6">
                 {e.status === "ENVIADO" ? (
-                  <Badge className="shrink-0 border-green-200 bg-green-50 text-green-800">
+                  <Badge className="border-green-200 bg-green-50 text-green-800">
                     <CheckCircle2 className="mr-1 h-3 w-3" /> Enviado
                   </Badge>
                 ) : (
-                  <Badge className="shrink-0 border-blue-200 bg-blue-50 text-blue-800">
+                  <Badge className="border-blue-200 bg-blue-50 text-blue-800">
                     Gerado
                   </Badge>
                 )}
-              </div>
-              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                {e.fechamentoId ? (
-                  <span className="text-purple-700">Fechamento v{e.fechamento?.versao}</span>
-                ) : (
-                  <span className="text-blue-700">Direto</span>
-                )}
-                {e.totalLinhas != null && (
-                  <span>
-                    <span className="text-muted-foreground">Linhas: </span>
-                    {e.totalLinhas}
-                  </span>
-                )}
-                {e.layout?.nome && (
-                  <span className="text-muted-foreground">{e.layout.nome}</span>
-                )}
-              </div>
-              <div className="flex justify-end gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  title="Baixar"
-                  onClick={() => baixar(`/admin/envios/${e.id}/download`, e.arquivoNome)}
-                >
-                  <Download className="h-4 w-4" />
-                </Button>
-                {e.status === "GERADO" && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setEditando(e)}
-                    title="Marcar como enviado"
-                  >
-                    <Send className="h-4 w-4" />
-                  </Button>
-                )}
-                <ExcluirButton
-                  path="/admin/envios"
-                  id={e.id}
-                  nomeRecurso={`o envio de ${e.empresa?.nome ?? "—"}`}
-                  invalidateKeys={[["/admin/envios"]]}
-                />
+
+                <div className="min-w-0 space-y-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="truncate font-medium">
+                      {e.empresa?.nome ?? "—"}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                    <span>
+                      {fmtBR(periodoInicio)} → {fmtBR(periodoFim)}
+                    </span>
+                    <span>·</span>
+                    {e.fechamentoId ? (
+                      <span className="text-purple-700">
+                        Fechamento v{e.fechamento?.versao}
+                      </span>
+                    ) : (
+                      <span className="text-blue-700">Direto</span>
+                    )}
+                    {e.layout?.nome && (
+                      <>
+                        <span>·</span>
+                        <span>{e.layout.nome}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <ListMetric
+                    label="Linhas"
+                    width={70}
+                    value={e.totalLinhas ?? "—"}
+                  />
+                  <div className="flex w-28 shrink-0 items-center justify-end gap-0.5 text-muted-foreground">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title="Baixar"
+                      onClick={() =>
+                        baixar(`/admin/envios/${e.id}/download`, e.arquivoNome)
+                      }
+                    >
+                      <Download className="h-4 w-4" />
+                    </Button>
+                    {e.status === "GERADO" ? (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setEditando(e)}
+                        title="Marcar como enviado"
+                      >
+                        <Send className="h-4 w-4" />
+                      </Button>
+                    ) : (
+                      <span className="inline-block h-9 w-9" />
+                    )}
+                    <ExcluirButton
+                      path="/admin/envios"
+                      id={e.id}
+                      nomeRecurso={`o envio de ${e.empresa?.nome ?? "—"}`}
+                      invalidateKeys={[["/admin/envios"]]}
+                    />
+                  </div>
+                </div>
               </div>
             </Card>
           );
