@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
+import { ViewModeToggle } from "@/components/view-mode-toggle";
+import { useListViewMode } from "@/hooks/use-list-view-mode";
 import {
   Table,
   TableBody,
@@ -64,6 +66,7 @@ export default function ErrosPage() {
   const [origem, setOrigem] = useState<string>("");
   const [status, setStatus] = useState<StatusFiltro>("pendentes");
   const [hashSelecionado, setHashSelecionado] = useState<string | null>(null);
+  const { viewMode, setViewMode } = useListViewMode("erros");
 
   const grupos = useQuery({
     queryKey: ["errors-agrupados", origem, status, token],
@@ -134,7 +137,7 @@ export default function ErrosPage() {
             ver ocorrências e stack trace.
           </p>
         </div>
-        <div className="flex flex-col gap-2 md:flex-row md:items-center">
+        <div className="flex flex-wrap items-center gap-2">
           <Combobox
             value={status}
             onChange={(v) => setStatus((v ?? "pendentes") as StatusFiltro)}
@@ -157,6 +160,7 @@ export default function ErrosPage() {
               { value: "api", label: "API (backend)" },
             ]}
           />
+          <ViewModeToggle value={viewMode} onChange={setViewMode} />
         </div>
       </header>
 
@@ -171,62 +175,77 @@ export default function ErrosPage() {
         </Card>
       )}
 
-      {/* Mobile: cards */}
-      <div className="space-y-3 md:hidden">
-        {grupos.data?.map((g) => (
-          <Card
-            key={g.hash}
-            className="cursor-pointer space-y-2 p-4 hover:bg-muted/40"
-            onClick={() => setHashSelecionado(g.hash)}
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <Badge className={ORIGEM_COLOR[g.origem] ?? ""}>
-                  {ORIGEM_LABEL[g.origem] ?? g.origem}
-                </Badge>
-                {g.resolvido && (
-                  <Badge className="border-green-200 bg-green-50 text-green-800">
-                    <CheckCircle2 className="mr-1 h-3 w-3" /> Corrigido
+      {viewMode === "cards" && (
+        <div className="space-y-3">
+          {grupos.data?.map((g) => (
+            <Card
+              key={g.hash}
+              className="cursor-pointer overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md"
+              onClick={() => setHashSelecionado(g.hash)}
+            >
+              <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-6">
+                <div className="flex flex-col items-start gap-1.5">
+                  <Badge className={ORIGEM_COLOR[g.origem] ?? ""}>
+                    {ORIGEM_LABEL[g.origem] ?? g.origem}
                   </Badge>
-                )}
-              </div>
-              <span className="text-xs text-muted-foreground">
-                {g.ocorrencias}×
-              </span>
-            </div>
-            <p className="break-words text-sm font-medium">{g.message}</p>
-            <div className="text-xs text-muted-foreground">
-              Última: {fmtDataHora(g.ultimaOcorrencia)}
-            </div>
-            <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
-              {g.resolvido ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={reabrir.isPending}
-                  onClick={() => reabrir.mutate(g.hash)}
-                >
-                  {reabrir.isPending ? <Spinner /> : <RotateCcw className="h-4 w-4" />}
-                  Reabrir
-                </Button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={resolver.isPending}
-                  onClick={() => resolver.mutate(g.hash)}
-                >
-                  {resolver.isPending ? <Spinner /> : <CheckCircle2 className="h-4 w-4" />}
-                  Marcar como corrigido
-                </Button>
-              )}
-            </div>
-          </Card>
-        ))}
-      </div>
+                  {g.resolvido ? (
+                    <Badge className="border-green-200 bg-green-50 text-green-800">
+                      <CheckCircle2 className="mr-1 h-3 w-3" /> Corrigido
+                    </Badge>
+                  ) : (
+                    <Badge className="border-amber-200 bg-amber-50 text-amber-800">
+                      Pendente
+                    </Badge>
+                  )}
+                </div>
 
-      {/* Desktop: tabela */}
-      <Card className="hidden md:block">
+                <div className="min-w-0 space-y-1.5">
+                  <p className="break-words text-sm font-medium">{g.message}</p>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                    <span className="font-mono tabular-nums">
+                      {g.ocorrencias}× ocorrências
+                    </span>
+                    <span>·</span>
+                    <span>Primeira: {fmtDataHora(g.primeiraOcorrencia)}</span>
+                    <span>·</span>
+                    <span>Última: {fmtDataHora(g.ultimaOcorrencia)}</span>
+                  </div>
+                </div>
+
+                <div
+                  className="flex shrink-0 items-center"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {g.resolvido ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={reabrir.isPending}
+                      onClick={() => reabrir.mutate(g.hash)}
+                    >
+                      {reabrir.isPending ? <Spinner /> : <RotateCcw className="h-4 w-4" />}
+                      Reabrir
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={resolver.isPending}
+                      onClick={() => resolver.mutate(g.hash)}
+                    >
+                      {resolver.isPending ? <Spinner /> : <CheckCircle2 className="h-4 w-4" />}
+                      Marcar como corrigido
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {viewMode === "table" && (
+      <Card>
         <Table>
           <TableHeader>
             <TableRow>
@@ -302,6 +321,7 @@ export default function ErrosPage() {
           </TableBody>
         </Table>
       </Card>
+      )}
     </div>
   );
 }

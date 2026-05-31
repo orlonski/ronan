@@ -15,6 +15,8 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ViewModeToggle } from "@/components/view-mode-toggle";
+import { useListViewMode } from "@/hooks/use-list-view-mode";
 import {
   Dialog,
   DialogContent,
@@ -67,6 +69,7 @@ export default function WhatsappPage() {
   const { confirmar, ConfirmDialog } = useConfirm();
   const [qrOpen, setQrOpen] = useState(false);
   const [sessaoSelecionada, setSessaoSelecionada] = useState<string | null>(null);
+  const { viewMode, setViewMode } = useListViewMode("whatsapp-sessoes");
 
   const isAdmin = session?.user?.perfil === "ADMIN";
 
@@ -140,16 +143,89 @@ export default function WhatsappPage() {
 
       {/* Sessões vinculadas */}
       <section className="space-y-3">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-          Sessões vinculadas
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+            Sessões vinculadas
+          </h2>
+          {sessoes.data && sessoes.data.length > 0 && (
+            <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          )}
+        </div>
         {sessoes.isLoading && <LoadingCard />}
         {sessoes.data?.length === 0 && (
           <Card className="p-6 text-center text-sm text-muted-foreground">
             Ninguém vinculado ainda. Gera um convite no card de um motorista ou usuário.
           </Card>
         )}
-        {sessoes.data && sessoes.data.length > 0 && (
+        {sessoes.data && sessoes.data.length > 0 && viewMode === "cards" && (
+          <div className="space-y-3">
+            {sessoes.data.map((s) => {
+              const nome = s.motorista?.nome ?? s.user?.nome ?? "—";
+              const perfil = s.motorista
+                ? "Motorista"
+                : s.user?.perfil === "ADMIN"
+                ? "Admin"
+                : "Operador";
+              return (
+                <Card
+                  key={s.id}
+                  className={`cursor-pointer overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md ${
+                    sessaoSelecionada === s.id ? "border-primary/40 bg-muted/40" : ""
+                  }`}
+                  onClick={() => setSessaoSelecionada(s.id)}
+                >
+                  <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-6">
+                    <Badge
+                      className={
+                        s.motorista
+                          ? "border-blue-200 bg-blue-50 text-blue-800"
+                          : "border-purple-200 bg-purple-50 text-purple-800"
+                      }
+                    >
+                      {perfil}
+                    </Badge>
+
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex items-center gap-2 text-sm">
+                        <MessageCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <span className="truncate font-medium">{nome}</span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                        <span className="font-mono">+{s.telefone}</span>
+                        <span>·</span>
+                        <span>Vinculado {fmtDataHora(s.vinculadoEm)}</span>
+                        {s.ultimaMensagem && (
+                          <>
+                            <span>·</span>
+                            <span>Última msg {fmtDataHora(s.ultimaMensagem)}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
+                      {isAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Desvincular"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void pedirDesvincular(s.id, nome);
+                          }}
+                          className="hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+        {sessoes.data && sessoes.data.length > 0 && viewMode === "table" && (
           <Card>
             <Table>
               <TableHeader>

@@ -11,10 +11,12 @@ import type {
 } from "@ronan/shared-types";
 import { formatCpf } from "@ronan/shared-types";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
 import { Spinner } from "@/components/loading";
 import { MotoristaCombobox } from "@/components/motorista-combobox";
 import { ExcluirButton } from "@/components/excluir-button";
+import { ViewModeToggle } from "@/components/view-mode-toggle";
 import {
   Table,
   TableBody,
@@ -23,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 
 const statusClasses: Record<string, string> = {
@@ -58,6 +61,7 @@ export default function NotificacoesAdminPage() {
   );
   const [entregaStatus, setEntregaStatus] = useState<string | undefined>();
   const [lida, setLida] = useState<string | undefined>();
+  const { viewMode, setViewMode } = useListViewMode("notificacoes");
 
   const q = useInfiniteQuery({
     queryKey: ["admin-notificacoes", { motoristaId, entregaStatus, lida, token }],
@@ -90,11 +94,14 @@ export default function NotificacoesAdminPage() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Notificações</h1>
-        <p className="text-sm text-muted-foreground">
-          Histórico de notificações push enviadas pros motoristas.
-        </p>
+      <header className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Notificações</h1>
+          <p className="text-sm text-muted-foreground">
+            Histórico de notificações push enviadas pros motoristas.
+          </p>
+        </div>
+        <ViewModeToggle value={viewMode} onChange={setViewMode} />
       </header>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -134,42 +141,61 @@ export default function NotificacoesAdminPage() {
         )}
       </div>
 
-      <div className="rounded-lg border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[150px]">Quando</TableHead>
-              <TableHead>Motorista</TableHead>
-              <TableHead>Título</TableHead>
-              <TableHead>Mensagem</TableHead>
-              <TableHead className="w-[120px]">Criado por</TableHead>
-              <TableHead className="w-[110px]">Entrega</TableHead>
-              <TableHead className="w-[80px]">Lida</TableHead>
-              <TableHead className="w-[60px]"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {q.isLoading && (
+      {viewMode === "table" ? (
+        <div className="rounded-lg border bg-card">
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={8} className="text-center">
-                  <Spinner />
-                </TableCell>
+                <TableHead className="w-[150px]">Quando</TableHead>
+                <TableHead>Motorista</TableHead>
+                <TableHead>Título</TableHead>
+                <TableHead>Mensagem</TableHead>
+                <TableHead className="w-[120px]">Criado por</TableHead>
+                <TableHead className="w-[110px]">Entrega</TableHead>
+                <TableHead className="w-[80px]">Lida</TableHead>
+                <TableHead className="w-[60px]"></TableHead>
               </TableRow>
-            )}
-            {!q.isLoading && itens.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={8} className="py-12 text-center text-muted-foreground">
-                  <Bell className="mx-auto mb-2 h-6 w-6 opacity-50" />
-                  Nenhuma notificação encontrada.
-                </TableCell>
-              </TableRow>
-            )}
-            {itens.map((n) => (
-              <NotificacaoRow key={n.id} n={n} />
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+            </TableHeader>
+            <TableBody>
+              {q.isLoading && (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center">
+                    <Spinner />
+                  </TableCell>
+                </TableRow>
+              )}
+              {!q.isLoading && itens.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={8} className="py-12 text-center text-muted-foreground">
+                    <Bell className="mx-auto mb-2 h-6 w-6 opacity-50" />
+                    Nenhuma notificação encontrada.
+                  </TableCell>
+                </TableRow>
+              )}
+              {itens.map((n) => (
+                <NotificacaoRow key={n.id} n={n} />
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {q.isLoading && (
+            <Card className="p-6 text-center">
+              <Spinner />
+            </Card>
+          )}
+          {!q.isLoading && itens.length === 0 && (
+            <Card className="p-12 text-center text-sm text-muted-foreground">
+              <Bell className="mx-auto mb-2 h-6 w-6 opacity-50" />
+              Nenhuma notificação encontrada.
+            </Card>
+          )}
+          {itens.map((n) => (
+            <NotificacaoCard key={n.id} n={n} />
+          ))}
+        </div>
+      )}
 
       {q.hasNextPage && (
         <div className="flex justify-center">
@@ -189,6 +215,62 @@ export default function NotificacoesAdminPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function NotificacaoCard({ n }: { n: NotificacaoAdminItem }) {
+  return (
+    <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">
+      <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-start sm:gap-6">
+        <div className="flex flex-col items-start gap-1.5">
+          <StatusBadge status={n.entregaStatus} />
+          {n.lida && (
+            <span className="inline-flex items-center gap-1 text-xs text-green-700">
+              <Check className="h-3 w-3" /> Lida
+            </span>
+          )}
+        </div>
+
+        <div className="min-w-0 space-y-1.5">
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            <span className="text-sm font-medium">{n.titulo}</span>
+            <Link
+              href={`/motoristas/${n.motorista.id}`}
+              className="text-xs text-muted-foreground hover:underline"
+            >
+              {n.motorista.nome}
+            </Link>
+          </div>
+          <p className="line-clamp-2 text-sm text-muted-foreground">{n.corpo}</p>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            <span className="font-mono tabular-nums">{fmtDataHora(n.criadoEm)}</span>
+            {n.criadoPor && (
+              <>
+                <span>·</span>
+                <span>por {n.criadoPor.nome}</span>
+              </>
+            )}
+          </div>
+          {n.entregaErro && (
+            <p
+              className="line-clamp-2 text-xs text-destructive"
+              title={n.entregaErro}
+            >
+              {n.entregaErro}
+            </p>
+          )}
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
+          <ExcluirButton
+            path="/admin/notificacoes"
+            id={n.id}
+            nomeRecurso="esta notificação"
+            invalidateKeys={[["admin-notificacoes"]]}
+          />
+        </div>
+      </div>
+    </Card>
   );
 }
 

@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { FileText, Pencil, Plus } from "lucide-react";
+import { FileText, HardHat, Pencil, Plus } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   formatCpf,
@@ -23,7 +23,9 @@ import {
   DataTableToolbar,
 } from "@/components/data-table";
 import { Combobox } from "@/components/ui/combobox";
+import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { useDataTableState } from "@/hooks/use-data-table-state";
+import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePaginatedList, useUpdateResource } from "@/lib/client-api";
 
 type Veiculo = { id: string; placa: string; modelo: string | null };
@@ -48,6 +50,7 @@ export default function MotoristasPage() {
   const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
   const list = usePaginatedList<Motorista>(PATH, tableState);
   const update = useUpdateResource<{ ativo?: boolean }, Motorista>(PATH, PATH);
+  const { viewMode, setViewMode } = useListViewMode("motoristas");
 
   const columns = useMemo<ColumnDef<Motorista>[]>(
     () => [
@@ -197,11 +200,14 @@ export default function MotoristasPage() {
             Cadastro de motoristas e suas placas. Cada motorista pode ter várias placas.
           </p>
         </div>
-        <Link href="/motoristas/novo">
-          <Button className="w-full md:w-auto">
-            <Plus className="h-4 w-4" /> Novo motorista
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          <Link href="/motoristas/novo">
+            <Button>
+              <Plus className="h-4 w-4" /> Novo motorista
+            </Button>
+          </Link>
+        </div>
       </header>
 
       <DataTable
@@ -230,19 +236,65 @@ export default function MotoristasPage() {
           />
         }
         emptyMessage="Nenhum motorista encontrado."
+        viewMode={viewMode}
         renderMobileCard={(m) => (
-          <Card className="space-y-2 p-4">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{m.nome}</p>
-                <p className="font-mono text-xs text-muted-foreground">{formatCpf(m.cpf)}</p>
+          <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">
+            <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-6">
+              <DocumentosBadge
+                motoristaId={m.id}
+                motoristaNome={m.nome}
+                documentos={m.documentos}
+              />
+
+              <div className="min-w-0 space-y-2">
+                <div className="flex items-center gap-2 text-sm">
+                  <HardHat className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="truncate font-medium">{m.nome}</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                  <span className="font-mono">{formatCpf(m.cpf)}</span>
+                  {m.telefone && (
+                    <>
+                      <span>·</span>
+                      <span>{formatTelefone(m.telefone)}</span>
+                    </>
+                  )}
+                  {m.email && (
+                    <>
+                      <span>·</span>
+                      <span className="truncate">{m.email}</span>
+                    </>
+                  )}
+                  {m.veiculos.length > 0 && (
+                    <>
+                      <span>·</span>
+                      <span className="flex flex-wrap gap-1">
+                        {m.veiculos.map((v) => (
+                          <span
+                            key={v.id}
+                            className={`rounded px-1.5 py-0.5 font-mono ${
+                              v.id === m.veiculoDefaultId
+                                ? "bg-blue-100 text-blue-700"
+                                : "bg-muted text-muted-foreground"
+                            }`}
+                            title={v.id === m.veiculoDefaultId ? "Padrão" : undefined}
+                          >
+                            {v.placa}
+                          </span>
+                        ))}
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
+
+              <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
                 <StatusToggle
                   active={m.ativo}
-                  onChange={(next) => update.mutate({ id: m.id, body: { ativo: next } })}
+                  onChange={(next) =>
+                    update.mutate({ id: m.id, body: { ativo: next } })
+                  }
                   size="sm"
-                  label
                 />
                 <DocumentosDrawerButton motoristaId={m.id} motoristaNome={m.nome}>
                   {(open) => (
@@ -269,37 +321,6 @@ export default function MotoristasPage() {
                 />
               </div>
             </div>
-            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-              {m.telefone && (
-                <span>
-                  <span className="text-muted-foreground">Tel: </span>
-                  {formatTelefone(m.telefone)}
-                </span>
-              )}
-              {m.email && (
-                <span>
-                  <span className="text-muted-foreground">Email: </span>
-                  {m.email}
-                </span>
-              )}
-            </div>
-            {m.veiculos.length > 0 && (
-              <div className="flex flex-wrap gap-1 pt-1">
-                {m.veiculos.map((v) => (
-                  <span
-                    key={v.id}
-                    className={`rounded px-1.5 py-0.5 font-mono text-xs ${
-                      v.id === m.veiculoDefaultId
-                        ? "bg-blue-100 text-blue-700"
-                        : "bg-muted text-muted-foreground"
-                    }`}
-                    title={v.id === m.veiculoDefaultId ? "Padrão" : undefined}
-                  >
-                    {v.placa}
-                  </span>
-                ))}
-              </div>
-            )}
           </Card>
         )}
       />

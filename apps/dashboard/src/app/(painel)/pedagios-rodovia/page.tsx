@@ -3,8 +3,10 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Download, RefreshCw } from "lucide-react";
+import { Download, MapPin, RefreshCw } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   DataTable,
   DataTableColumnHeader,
@@ -12,7 +14,9 @@ import {
 } from "@/components/data-table";
 import { ExcluirButton } from "@/components/excluir-button";
 import { StatusToggle } from "@/components/status-toggle";
+import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { useDataTableState } from "@/hooks/use-data-table-state";
+import { useListViewMode } from "@/hooks/use-list-view-mode";
 import {
   fetchApi,
   useAuthToken,
@@ -44,6 +48,7 @@ export default function PedagiosRodoviaPage() {
   const token = useAuthToken();
   const qc = useQueryClient();
   const [resultado, setResultado] = useState<string | null>(null);
+  const { viewMode, setViewMode } = useListViewMode("pedagios-rodovia");
 
   const importar = useMutation({
     mutationFn: () =>
@@ -130,21 +135,24 @@ export default function PedagiosRodoviaPage() {
             pedágio numa rota que passa por um deles. Importa do OpenStreetMap.
           </p>
         </div>
-        <Button
-          onClick={() => importar.mutate()}
-          disabled={importar.isPending}
-          variant="outline"
-        >
-          {importar.isPending ? (
-            <>
-              <RefreshCw className="h-4 w-4 animate-spin" /> Importando…
-            </>
-          ) : (
-            <>
-              <Download className="h-4 w-4" /> Importar do OpenStreetMap
-            </>
-          )}
-        </Button>
+        <div className="flex items-center gap-2">
+          <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          <Button
+            onClick={() => importar.mutate()}
+            disabled={importar.isPending}
+            variant="outline"
+          >
+            {importar.isPending ? (
+              <>
+                <RefreshCw className="h-4 w-4 animate-spin" /> Importando…
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4" /> Importar do OpenStreetMap
+              </>
+            )}
+          </Button>
+        </div>
       </header>
 
       {resultado && (
@@ -167,6 +175,49 @@ export default function PedagiosRodoviaPage() {
           />
         }
         emptyMessage="Nenhum pedágio cadastrado. Importe do OpenStreetMap pra começar."
+        viewMode={viewMode}
+        renderMobileCard={(p) => (
+          <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">
+            <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-6">
+              <Badge className="border-orange-200 bg-orange-100 text-orange-900">
+                $
+              </Badge>
+
+              <div className="min-w-0 space-y-1">
+                <div className="flex items-center gap-2 text-sm">
+                  <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="truncate font-medium">{p.nome}</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                  {p.rodovia && <span>{p.rodovia}</span>}
+                  {p.rodovia && (p.concessionaria || p.uf) && <span>·</span>}
+                  {p.concessionaria && <span>{p.concessionaria}</span>}
+                  {p.concessionaria && p.uf && <span>·</span>}
+                  {p.uf && <span>{p.uf}</span>}
+                  <span>·</span>
+                  <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
+                    {p.fonte}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
+                <StatusToggle
+                  active={p.ativo}
+                  onChange={(next) =>
+                    update.mutate({ id: p.id, body: { ativo: next } })
+                  }
+                  size="sm"
+                />
+                <ExcluirButton
+                  path={PATH}
+                  id={p.id}
+                  nomeRecurso={`o pedágio "${p.nome}"`}
+                />
+              </div>
+            </div>
+          </Card>
+        )}
       />
     </div>
   );
