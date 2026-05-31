@@ -16,6 +16,18 @@ const MAX_TONELADAS = 9999;
 const MAX_KM = 99999;
 const MAX_VALOR = 999999.99;
 
+// Fallback de auto-recovery: snapshot do local que estava no cache do app
+// no momento que motorista criou a viagem. Backend usa esses dados pra
+// recriar o local se o ID enviado nao existir mais (motorista offline
+// usou local do cache que foi excluido por algum admin / motorista).
+// Inclui apenas o essencial — endereco completo nao é necessario.
+export const LocalSnapshot = z.object({
+  nome: z.string().min(1).max(200),
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+});
+export type LocalSnapshot = z.infer<typeof LocalSnapshot>;
+
 export const CriarViagemInput = z.object({
   clientId: z.string().uuid(),
   veiculoId: z.string().uuid(),
@@ -31,6 +43,11 @@ export const CriarViagemInput = z.object({
   kmCalculado: z.number().nonnegative().max(MAX_KM).optional(),
   localCargaId: z.string().uuid(),
   localDescargaId: z.string().uuid(),
+  // Fallback pra auto-recovery quando local foi excluido entre o cache
+  // do app e a sync. Backend cria local com esses dados antes de salvar
+  // a viagem. Apps devem enviar sempre que possivel.
+  localCargaDados: LocalSnapshot.optional(),
+  localDescargaDados: LocalSnapshot.optional(),
   valorPedagioTotal: z.number().nonnegative().max(MAX_VALOR).optional(),
   observacao: z.string().max(500).optional(),
   fotoKey: z.string().optional(),

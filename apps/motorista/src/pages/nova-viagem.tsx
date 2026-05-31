@@ -327,6 +327,22 @@ export default function NovaViagemPage() {
             : undefined,
         localCargaId: form.localCargaId,
         localDescargaId: form.localDescargaId,
+        // Snapshot pra auto-recovery: se o local foi excluido server-side
+        // entre o lancamento offline e a sync, backend recria a partir destes
+        // dados.
+        ...(() => {
+          const locais = cat.data?.locais ?? [];
+          const carga = locais.find((l) => l.id === form.localCargaId);
+          const descarga = locais.find((l) => l.id === form.localDescargaId);
+          const snap = (l: typeof carga) =>
+            l && l.lat != null && l.lng != null
+              ? { nome: l.nome, lat: l.lat, lng: l.lng }
+              : undefined;
+          return {
+            localCargaDados: snap(carga),
+            localDescargaDados: snap(descarga),
+          };
+        })(),
         valorPedagioTotal: form.valorPedagio
           ? parseFloat(form.valorPedagio.replace(",", "."))
           : undefined,

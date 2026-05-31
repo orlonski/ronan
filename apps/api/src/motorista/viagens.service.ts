@@ -381,6 +381,50 @@ export class ViagensMotoristaService {
     await this.prisma.viagem.delete({ where: { id: viagemId } });
   }
 
+  /**
+   * Garante que um Local com o id passado exista. Se não existir e o app
+   * mandou snapshot (nome+lat+lng), recria com aquele id. Usado pra
+   * auto-recovery quando motorista lança viagem offline com local cacheado
+   * que entrementes foi excluído. Se não existe E não há snapshot,
+   * devolve 4xx claro pro motorista corrigir manual.
+   */
+  private async garantirLocal(args: {
+    id: string;
+    snapshot?: { nome: string; lat: number; lng: number };
+    lado: "carga" | "descarga";
+    motoristaId: string;
+  }): Promise<void> {
+    const existe = await this.prisma.local.findUnique({
+      where: { id: args.id },
+      select: { id: true },
+    });
+    if (existe) return;
+
+    if (!args.snapshot) {
+      throw new ConflictException(
+        `Local de ${args.lado} não foi encontrado no servidor. Pode ter sido removido. Edite a viagem na lista de Pendentes e selecione outro.`,
+      );
+    }
+    // Cria com o id que o app já está usando — idempotente: se duas viagens
+    // pendentes do mesmo local sincronizarem ao mesmo tempo, a segunda
+    // bate em findUnique e segue.
+    await this.prisma.local.create({
+      data: {
+        id: args.id,
+        nome: args.snapshot.nome,
+        lat: args.snapshot.lat,
+        lng: args.snapshot.lng,
+        // Defaults seguros — admin pode completar endereço depois.
+        logradouro: "",
+        cidade: "",
+        uf: "",
+        tipo: args.lado === "carga" ? "CARGA" : "DESCARGA",
+        criadoPorMotoristaId: args.motoristaId,
+        nivelConfianca: "RASCUNHO",
+      },
+    });
+  }
+
   async create(motoristaId: string, input: CriarViagemInput & { fotoKey?: string }) {
     const exists = await this.prisma.viagem.findUnique({ where: { clientId: input.clientId } });
     if (exists) {
@@ -412,27 +456,24 @@ export class ViagensMotoristaService {
       );
     }
 
-    // Valida explicitamente que os locais existem antes de inserir. Sem isso,
-    // Prisma joga FK violation como 500 e o sync do app fica retentando
-    // pra sempre. Acontece quando o catálogo do device tem ID de local que
-    // foi removido/desativado server-side, OU quando motorista mistura caches
-    // de sessões diferentes. Como 4xx, o outbox para de tentar e a viagem
-    // vai pra Pendentes pro motorista editar/descartar.
-    const locaisExistentes = await this.prisma.local.findMany({
-      where: { id: { in: [input.localCargaId, input.localDescargaId] } },
-      select: { id: true },
+    // Valida que os locais existem antes de inserir. Auto-recovery:
+    // se o ID nao existe mas o app enviou um snapshot (nome+lat+lng), o
+    // backend recria o local com o MESMO id. Cobre o caso do motorista
+    // ter usado um local do cache offline que ja foi excluido por outro
+    // usuario. Sem snapshot, devolve 4xx claro pro motorista editar a
+    // viagem na lista de Pendentes.
+    await this.garantirLocal({
+      id: input.localCargaId,
+      snapshot: input.localCargaDados,
+      lado: "carga",
+      motoristaId,
     });
-    const idsEncontrados = new Set(locaisExistentes.map((l) => l.id));
-    if (!idsEncontrados.has(input.localCargaId)) {
-      throw new ConflictException(
-        "Local de carga não foi encontrado no servidor. Pode ter sido removido. Edite a viagem na lista de Pendentes e selecione outro.",
-      );
-    }
-    if (!idsEncontrados.has(input.localDescargaId)) {
-      throw new ConflictException(
-        "Local de descarga não foi encontrado no servidor. Pode ter sido removido. Edite a viagem na lista de Pendentes e selecione outro.",
-      );
-    }
+    await this.garantirLocal({
+      id: input.localDescargaId,
+      snapshot: input.localDescargaDados,
+      lado: "descarga",
+      motoristaId,
+    });
 
     const { fotoKey, clientId, pontos, ...rest } = input;
     const viagem = await this.prisma.viagem.create({
