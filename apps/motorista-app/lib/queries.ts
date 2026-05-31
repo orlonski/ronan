@@ -823,12 +823,11 @@ export function usePedagiosNaRota(origemId?: string, destinoId?: string) {
       pedagios.length,
       geomKey,
     ],
+    // Não bloqueia em isFetched do cadastrados/rota — se queries dependentes
+    // demoram ou falham, o queryFn abaixo lida (com fallback online). Bloquear
+    // aqui causa "alerta nunca aparece" se uma das dependências entrar em erro.
     enabled:
-      !!origemId &&
-      !!destinoId &&
-      origemId !== destinoId &&
-      cadastrados.isFetched &&
-      rotaQuery.isFetched,
+      !!origemId && !!destinoId && origemId !== destinoId,
     staleTime: 5 * 60_000,
     retry: false,
     queryFn: async () => {
