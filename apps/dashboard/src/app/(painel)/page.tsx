@@ -105,7 +105,7 @@ function BlocoHoje({ d }: { d: Snapshot }) {
       <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
         Hoje
       </h2>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
         <StatCard
           icon={Truck}
           label="Viagens"
@@ -173,7 +173,7 @@ function BlocoMes({ d }: { d: Snapshot }) {
       <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
         Este mês
       </h2>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
         <StatCard icon={Truck} label="Viagens" value={d.mes.viagens} tone="default" />
         <StatCard
           icon={Weight}
@@ -205,7 +205,7 @@ function BlocoPendencias({ d }: { d: Snapshot }) {
       <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
         Precisa de atenção
       </h2>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
         <StatCard
           icon={FileSpreadsheet}
           label="Fechamentos em revisão"
