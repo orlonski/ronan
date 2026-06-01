@@ -184,8 +184,34 @@ model User {
   notificacoesCriadas Notificacao[] @relation("CriouNotificacao")
   fechamentosCriados  Fechamento[]  @relation("CriouFechamento")
   viagensRevisadas    Viagem[]      @relation("RevisouViagem")
+  adminNotificacoes   AdminNotificacao[]
 
   @@map("users")
+}
+
+/// Caixa de entrada do admin no dashboard. Sininho no topo le esta tabela.
+/// Cada evento relevante (motorista lancou viagem, respondeu divergencia, etc)
+/// gera 1 linha por admin/operador ativo (fan-out na criacao). Admin marca
+/// como lida individualmente sem afetar os outros.
+model AdminNotificacao {
+  id          String   @id @default(uuid())
+  usuario     User     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId   String
+  /// Tipo do evento: "nova-viagem" | "resposta-divergencia-pedagio" |
+  /// "resposta-divergencia-foto" | "foto-anexada" | "local-em-validacao".
+  /// String pra poder evoluir sem migration.
+  tipo        String
+  titulo      String
+  corpo       String
+  /// JSON com IDs auxiliares pra UI navegar (viagemId, motoristaId, localId).
+  dados       Json?
+  lida        Boolean  @default(false)
+  lidaEm      DateTime?
+  criadoEm    DateTime @default(now())
+
+  @@index([usuarioId, lida, criadoEm])
+  @@index([criadoEm])
+  @@map("admin_notificacoes")
 }
 
 model Motorista {

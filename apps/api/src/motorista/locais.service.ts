@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable } from "@nestjs/comm
 import { NivelConfiancaLocal, type TipoLocal } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { GeocodingService } from "../geocoding/geocoding.service";
+import { AdminInboxService } from "../admin/inbox/inbox.service";
 import { ValidacaoLocalService } from "./validacao-local.service";
 
 const RAIO_SUGESTAO_M = 200;
@@ -13,6 +14,7 @@ export class LocaisMotoristaService {
     private readonly prisma: PrismaService,
     private readonly validacao: ValidacaoLocalService,
     private readonly geocoding: GeocodingService,
+    private readonly inbox: AdminInboxService,
   ) {}
 
   /**
@@ -320,6 +322,24 @@ export class LocaisMotoristaService {
         clientes: { select: { clienteId: true } },
       },
     });
+    void (async () => {
+      try {
+        const m = await this.prisma.motorista.findUnique({
+          where: { id: motoristaId },
+          select: { nome: true },
+        });
+        await this.inbox.disparar({
+          tipo: "local-em-validacao",
+          titulo: `${m?.nome ?? "Motorista"} cadastrou local`,
+          corpo: `${local.nome} (${local.cidade}/${local.uf}) — precisa validar`,
+          dados: { localId: local.id, motoristaId },
+        });
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn(`[inbox] falha local-em-validacao: ${(err as Error).message}`);
+      }
+    })();
+
     const { clientes, ...rest } = local;
     return { ...rest, clienteIds: clientes.map((c) => c.clienteId) };
   }

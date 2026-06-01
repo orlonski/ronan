@@ -16,6 +16,7 @@ import { CamposLayoutModule } from "./campos-layout/campos-layout.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { FrotaAdminModule } from "./frota/frota.module";
 import { PedagiosRodoviaModule } from "./pedagios-rodovia/pedagios-rodovia.module";
+import { AdminInboxModule } from "./inbox/inbox.module";
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { PedagiosRodoviaModule } from "./pedagios-rodovia/pedagios-rodovia.modul
     DashboardModule,
     FrotaAdminModule,
     PedagiosRodoviaModule,
+    AdminInboxModule,
   ],
 })
 export class AdminModule {}

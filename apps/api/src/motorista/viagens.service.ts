@@ -13,6 +13,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { RoteamentoService } from "../roteamento/roteamento.service";
 import { UploadsService } from "../uploads/uploads.service";
 import { ValidacaoLocalService } from "./validacao-local.service";
+import { AdminInboxService } from "../admin/inbox/inbox.service";
 
 const VIAGEM_INCLUDE = {
   veiculo: { select: { id: true, placa: true, modelo: true } },
@@ -57,7 +58,32 @@ export class ViagensMotoristaService {
     private readonly auditoria: AuditoriaService,
     private readonly eventos: EventosService,
     private readonly roteamento: RoteamentoService,
+    private readonly inbox: AdminInboxService,
   ) {}
+
+  /**
+   * Dispara notificação pra inbox de todos os admins. Best-effort: erro
+   * aqui nunca derruba a operação que disparou (caller pode envolver em
+   * try/catch também).
+   */
+  private async notificarAdmins(
+    tipo:
+      | "nova-viagem"
+      | "resposta-divergencia-pedagio"
+      | "resposta-divergencia-foto"
+      | "foto-anexada",
+    titulo: string,
+    corpo: string,
+    dados: Record<string, string | number>,
+  ): Promise<void> {
+    try {
+      await this.inbox.disparar({ tipo, titulo, corpo, dados });
+    } catch (err) {
+      // Logado mas nao bloqueia. Inbox e' nice-to-have.
+      // eslint-disable-next-line no-console
+      console.warn(`[inbox] falha ao notificar ${tipo}:`, (err as Error).message);
+    }
+  }
 
   async list(
     motoristaId: string,
@@ -271,6 +297,19 @@ export class ViagensMotoristaService {
       // best-effort: nao quebra a resposta pro motorista se audit falhar
     }
 
+    void (async () => {
+      const m = await this.prisma.motorista.findUnique({
+        where: { id: motoristaId },
+        select: { nome: true },
+      });
+      await this.notificarAdmins(
+        "resposta-divergencia-pedagio",
+        `${m?.nome ?? "Motorista"} informou pedágio`,
+        `R$ ${valor.toFixed(2)} — viagem aguardando sua revisão`,
+        { viagemId, motoristaId, valor },
+      );
+    })();
+
     return this.detalhe(motoristaId, viagemId);
   }
 
@@ -332,22 +371,50 @@ export class ViagensMotoristaService {
       // best-effort
     }
 
+    void (async () => {
+      const m = await this.prisma.motorista.findUnique({
+        where: { id: motoristaId },
+        select: { nome: true },
+      });
+      await this.notificarAdmins(
+        "resposta-divergencia-foto",
+        `${m?.nome ?? "Motorista"} enviou foto nova`,
+        `Resposta à divergência de foto — viagem aguardando sua revisão`,
+        { viagemId, motoristaId },
+      );
+    })();
+
     return this.detalhe(motoristaId, viagemId);
   }
 
   async adicionarFoto(motoristaId: string, viagemId: string, storageKey: string) {
     const viagem = await this.prisma.viagem.findUnique({
       where: { id: viagemId },
-      select: { id: true, motoristaId: true },
+      select: { id: true, motoristaId: true, ticket: true },
     });
     if (!viagem) throw new NotFoundException("Viagem não encontrada.");
     if (viagem.motoristaId !== motoristaId) {
       throw new ForbiddenException("Você não pode anexar foto nesta viagem.");
     }
-    return this.prisma.ticketFoto.create({
+    const foto = await this.prisma.ticketFoto.create({
       data: { viagemId, storageKey, capturadaEm: new Date() },
       select: { id: true, storageKey: true },
     });
+
+    void (async () => {
+      const m = await this.prisma.motorista.findUnique({
+        where: { id: motoristaId },
+        select: { nome: true },
+      });
+      await this.notificarAdmins(
+        "foto-anexada",
+        `${m?.nome ?? "Motorista"} anexou foto`,
+        `Foto extra em viagem do ticket ${viagem.ticket}`,
+        { viagemId, motoristaId },
+      );
+    })();
+
+    return foto;
   }
 
   /**
@@ -584,6 +651,19 @@ export class ViagensMotoristaService {
       .catch(() => {
         /* best-effort: OSRM down, fora de cobertura, etc — nao bloqueia */
       });
+
+    void (async () => {
+      const m = await this.prisma.motorista.findUnique({
+        where: { id: motoristaId },
+        select: { nome: true },
+      });
+      await this.notificarAdmins(
+        "nova-viagem",
+        `Nova viagem de ${m?.nome ?? "motorista"}`,
+        `Ticket ${viagem.ticket} · ${viagem.cliente.nome} · ${viagem.toneladas}t`,
+        { viagemId: viagem.id, motoristaId },
+      );
+    })();
 
     return serializarViagemComMinimos(viagem);
   }

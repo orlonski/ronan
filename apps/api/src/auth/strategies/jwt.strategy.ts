@@ -14,7 +14,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const secret = config.get<string>("JWT_SECRET");
     if (!secret) throw new Error("JWT_SECRET não configurado");
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      // Aceita Authorization: Bearer (padrão) OU ?access_token=... na query.
+      // O query param e' necessario porque EventSource (SSE) nativo do
+      // browser nao suporta headers customizados. Usado em /admin/inbox/stream.
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+        ExtractJwt.fromUrlQueryParameter("access_token"),
+      ]),
       ignoreExpiration: false,
       secretOrKey: secret,
     });
