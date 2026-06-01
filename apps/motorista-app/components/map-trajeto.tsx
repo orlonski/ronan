@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 
 /**
  * Encapsula react-native-maps via dynamic import. Top-level import
@@ -63,7 +63,9 @@ export function MapTrajeto({
   const MapView = mod.default;
   const Marker = mod.Marker;
   const Polyline = mod.Polyline;
-  const provider = mod.PROVIDER_GOOGLE;
+  // iOS: Apple Maps default (sem provider). Google Maps no iOS exigiria
+  // setup nativo extra. Android: continua Google.
+  const provider = Platform.OS === "android" ? mod.PROVIDER_GOOGLE : undefined;
 
   const lats = pontos.map((p) => p.lat);
   const lngs = pontos.map((p) => p.lng);

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import polylineLib from "@mapbox/polyline";
 
 /**
@@ -91,7 +91,12 @@ export function MapaCargaDescarga({
   const MapView = mod.default;
   const Marker = mod.Marker;
   const Polyline = mod.Polyline;
-  const provider = mod.PROVIDER_GOOGLE;
+  // iOS: usar Apple Maps (default, sem provider). PROVIDER_GOOGLE exigiria
+  // Google Maps SDK iOS configurado nativamente (chave + Info.plist + linkagem
+  // AirGoogleMaps), que e' bem mais trabalhoso. Apple Maps cobre o caso de
+  // uso (mostrar pinos + polyline) sem custo adicional.
+  // Android: continua com Google Maps (ja configurado via google-services).
+  const provider = Platform.OS === "android" ? mod.PROVIDER_GOOGLE : undefined;
 
   const minLat = Math.min(...todosLats);
   const maxLat = Math.max(...todosLats);
