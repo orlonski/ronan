@@ -54,6 +54,7 @@ const GRUPOS: Grupo[] = [
     titulo: "Operação",
     itens: [
       { href: "/viagens", label: "Viagens", icon: ClipboardCheck },
+      { href: "/descargas-suspeitas", label: "Descargas suspeitas", icon: MapPin },
       { href: "/abastecimentos", label: "Abastecimentos", icon: Fuel },
       { href: "/fechamentos", label: "Fechamentos", icon: FileSpreadsheet },
       { href: "/envios", label: "Envios", icon: Send },

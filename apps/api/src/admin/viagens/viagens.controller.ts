@@ -74,6 +74,17 @@ export class ViagensAdminController {
     return this.service.list(query);
   }
 
+  /**
+   * Audita viagens cujo local de descarga provavelmente foi escolhido errado
+   * com o raio antigo (maior). Lista com sugestão do local mais próximo do GPS
+   * real, pra admin revisar e corrigir 1 a 1 (via PATCH :id). Não altera nada.
+   * Declarado antes de :id pra não ser capturado pela rota dinâmica.
+   */
+  @Get("descargas-suspeitas")
+  descargasSuspeitas() {
+    return this.service.descargasSuspeitas();
+  }
+
   @Get(":id")
   detalhe(@Param("id") id: string) {
     return this.service.detalhe(id);

@@ -14,6 +14,7 @@ import { RoteamentoService } from "../../roteamento/roteamento.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { PedagiosRodoviaConsultaService } from "../pedagios-rodovia/pedagios-rodovia-consulta.service";
+import { BuscaLocaisConfigService } from "../busca-locais-config/busca-locais-config.service";
 
 type ListViagensParams = PaginationQuery & {
   motoristaId?: string;
@@ -33,7 +34,106 @@ export class ViagensAdminService {
     private readonly roteamento: RoteamentoService,
     private readonly push: PushService,
     private readonly pedagiosConsulta: PedagiosRodoviaConsultaService,
+    private readonly buscaConfig: BuscaLocaisConfigService,
   ) {}
+
+  /**
+   * Audita viagens cujo GPS de lançamento ficou FORA do raio inicial atual em
+   * relação ao local de descarga escolhido — mas existe OUTRO local de descarga
+   * dentro do raio inicial do GPS real. São candidatas a erro do raio antigo
+   * (busca de 500m), pra admin revisar e corrigir 1 a 1. Não altera nada.
+   */
+  async descargasSuspeitas(opts?: { limit?: number }) {
+    const cfg = await this.buscaConfig.get();
+    const raio = cfg.raioInicialM;
+    const LIMITE = opts?.limit ?? 300;
+
+    const locais = await this.prisma.local.findMany({
+      where: {
+        ativo: true,
+        tipo: { in: ["DESCARGA", "AMBOS"] },
+        lat: { not: null },
+        lng: { not: null },
+      },
+      select: { id: true, nome: true, cidade: true, uf: true, lat: true, lng: true },
+    });
+
+    const viagens = await this.prisma.viagem.findMany({
+      where: { lat: { not: null }, lng: { not: null } },
+      select: {
+        id: true,
+        ticket: true,
+        data: true,
+        lat: true,
+        lng: true,
+        localDescargaId: true,
+        localDescarga: {
+          select: { id: true, nome: true, cidade: true, uf: true, lat: true, lng: true },
+        },
+        motorista: { select: { id: true, nome: true } },
+        _count: { select: { matchesFechamento: true } },
+      },
+      orderBy: { data: "desc" },
+    });
+
+    const itens = [];
+    for (const v of viagens) {
+      if (v.lat == null || v.lng == null) continue;
+
+      const distAtual =
+        v.localDescarga?.lat != null && v.localDescarga.lng != null
+          ? distHaversine(v.lat, v.lng, v.localDescarga.lat, v.localDescarga.lng)
+          : Number.POSITIVE_INFINITY;
+      // Dentro do raio novo: a escolha está ok, não é suspeita.
+      if (distAtual <= raio) continue;
+
+      // Local de descarga mais perto do GPS real.
+      let melhor: { id: string; nome: string; cidade: string; uf: string; dist: number } | null =
+        null;
+      for (const l of locais) {
+        if (l.lat == null || l.lng == null) continue;
+        const d = distHaversine(v.lat, v.lng, l.lat, l.lng);
+        if (melhor == null || d < melhor.dist) {
+          melhor = { id: l.id, nome: l.nome, cidade: l.cidade, uf: l.uf, dist: d };
+        }
+      }
+      // Só sinaliza se há OUTRO local dentro do raio novo (sugestão real).
+      if (!melhor || melhor.id === v.localDescargaId || melhor.dist > raio) continue;
+
+      itens.push({
+        viagemId: v.id,
+        ticket: v.ticket,
+        data: v.data,
+        motorista: v.motorista,
+        bloqueada: v._count.matchesFechamento > 0,
+        localAtual: v.localDescarga
+          ? {
+              id: v.localDescarga.id,
+              nome: v.localDescarga.nome,
+              cidade: v.localDescarga.cidade,
+              uf: v.localDescarga.uf,
+              distanciaMetros: Number.isFinite(distAtual) ? Math.round(distAtual) : null,
+            }
+          : null,
+        sugestao: {
+          id: melhor.id,
+          nome: melhor.nome,
+          cidade: melhor.cidade,
+          uf: melhor.uf,
+          distanciaMetros: Math.round(melhor.dist),
+        },
+      });
+    }
+
+    // Pior caso primeiro (mais longe do local atual; sem coords vai pro topo).
+    itens.sort(
+      (a, b) =>
+        (b.localAtual?.distanciaMetros ?? Number.MAX_SAFE_INTEGER) -
+        (a.localAtual?.distanciaMetros ?? Number.MAX_SAFE_INTEGER),
+    );
+
+    return { raioInicialM: raio, total: itens.length, itens: itens.slice(0, LIMITE) };
+  }
 
   /**
    * Pra cada viagem da lista, marca `temPedagioSemValor=true` quando a rota
@@ -741,4 +841,16 @@ function corpoDoDiff(diffs: DiffCampo[]): string {
   const extras = diffs.length - partes.length;
   if (extras > 0) corpo += ` (+${extras} ${extras === 1 ? "mudança" : "mudanças"})`;
   return corpo;
+}
+
+/** Distância em metros entre dois pontos (Haversine). */
+function distHaversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const toRad = (v: number) => (v * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
 }

@@ -3,11 +3,18 @@ import { PushModule } from "../../push/push.module";
 import { RoteamentoModule } from "../../roteamento/roteamento.module";
 import { UploadsModule } from "../../uploads/uploads.module";
 import { PedagiosRodoviaModule } from "../pedagios-rodovia/pedagios-rodovia.module";
+import { BuscaLocaisConfigModule } from "../busca-locais-config/busca-locais-config.module";
 import { ViagensAdminController } from "./viagens.controller";
 import { ViagensAdminService } from "./viagens.service";
 
 @Module({
-  imports: [UploadsModule, RoteamentoModule, PushModule, PedagiosRodoviaModule],
+  imports: [
+    UploadsModule,
+    RoteamentoModule,
+    PushModule,
+    PedagiosRodoviaModule,
+    BuscaLocaisConfigModule,
+  ],
   controllers: [ViagensAdminController],
   providers: [ViagensAdminService],
 })
