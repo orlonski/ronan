@@ -4,6 +4,7 @@ import { RoteamentoModule } from "../../roteamento/roteamento.module";
 import { UploadsModule } from "../../uploads/uploads.module";
 import { PedagiosRodoviaModule } from "../pedagios-rodovia/pedagios-rodovia.module";
 import { BuscaLocaisConfigModule } from "../busca-locais-config/busca-locais-config.module";
+import { GeocodingModule } from "../../geocoding/geocoding.module";
 import { ViagensAdminController } from "./viagens.controller";
 import { ViagensAdminService } from "./viagens.service";
 
@@ -14,6 +15,7 @@ import { ViagensAdminService } from "./viagens.service";
     PushModule,
     PedagiosRodoviaModule,
     BuscaLocaisConfigModule,
+    GeocodingModule,
   ],
   controllers: [ViagensAdminController],
   providers: [ViagensAdminService],

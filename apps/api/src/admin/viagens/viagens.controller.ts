@@ -49,6 +49,10 @@ const PreValidarInput = z
   );
 type PreValidarInput = z.infer<typeof PreValidarInput>;
 
+const CadastrarLocalDescargaInput = z.object({
+  nome: z.string().min(2).max(120),
+});
+
 const ListViagensQuery = paginationQuerySchema.extend({
   motoristaId: z.string().uuid().optional(),
   veiculoId: z.string().uuid().optional(),
@@ -83,6 +87,20 @@ export class ViagensAdminController {
   @Get("descargas-suspeitas")
   descargasSuspeitas() {
     return this.service.descargasSuspeitas();
+  }
+
+  /**
+   * Caso "sem local cadastrado" da auditoria: admin digita o nome, cria o
+   * local no GPS de lançamento da viagem e já atribui. Reusa atualizar.
+   */
+  @Post("descargas-suspeitas/:id/cadastrar-local")
+  cadastrarLocalDescarga(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(CadastrarLocalDescargaInput))
+    body: z.infer<typeof CadastrarLocalDescargaInput>,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.cadastrarLocalDescarga(id, body.nome, user.id);
   }
 
   @Get(":id")

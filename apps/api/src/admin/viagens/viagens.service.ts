@@ -4,7 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { AcaoAuditoria, Prisma, StatusViagem } from "@prisma/client";
+import {
+  AcaoAuditoria,
+  NivelConfiancaLocal,
+  Prisma,
+  StatusViagem,
+  TipoLocal,
+} from "@prisma/client";
 import type { AtualizarViagemInput } from "@ronan/shared-types";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
 import { serializarViagemComMinimos } from "../../common/viagem-minimos";
@@ -15,6 +21,7 @@ import { UploadsService } from "../../uploads/uploads.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { PedagiosRodoviaConsultaService } from "../pedagios-rodovia/pedagios-rodovia-consulta.service";
 import { BuscaLocaisConfigService } from "../busca-locais-config/busca-locais-config.service";
+import { GeocodingService } from "../../geocoding/geocoding.service";
 
 type ListViagensParams = PaginationQuery & {
   motoristaId?: string;
@@ -35,6 +42,7 @@ export class ViagensAdminService {
     private readonly push: PushService,
     private readonly pedagiosConsulta: PedagiosRodoviaConsultaService,
     private readonly buscaConfig: BuscaLocaisConfigService,
+    private readonly geocoding: GeocodingService,
   ) {}
 
   /**
@@ -45,7 +53,8 @@ export class ViagensAdminService {
    */
   async descargasSuspeitas(opts?: { limit?: number }) {
     const cfg = await this.buscaConfig.get();
-    const raio = cfg.raioInicialM;
+    const raioInicial = cfg.raioInicialM;
+    const raioAmpliado = cfg.raioAmpliadoM;
     const LIMITE = opts?.limit ?? 300;
 
     const locais = await this.prisma.local.findMany({
@@ -84,8 +93,8 @@ export class ViagensAdminService {
         v.localDescarga?.lat != null && v.localDescarga.lng != null
           ? distHaversine(v.lat, v.lng, v.localDescarga.lat, v.localDescarga.lng)
           : Number.POSITIVE_INFINITY;
-      // Dentro do raio novo: a escolha está ok, não é suspeita.
-      if (distAtual <= raio) continue;
+      // Dentro do raio inicial: a escolha está ok, não é suspeita.
+      if (distAtual <= raioInicial) continue;
 
       // Local de descarga mais perto do GPS real.
       let melhor: { id: string; nome: string; cidade: string; uf: string; dist: number } | null =
@@ -97,8 +106,31 @@ export class ViagensAdminService {
           melhor = { id: l.id, nome: l.nome, cidade: l.cidade, uf: l.uf, dist: d };
         }
       }
-      // Só sinaliza se há OUTRO local dentro do raio novo (sugestão real).
-      if (!melhor || melhor.id === v.localDescargaId || melhor.dist > raio) continue;
+      const dMelhor = melhor ? melhor.dist : Number.POSITIVE_INFINITY;
+      let tipo: "COM_SUGESTAO" | "SEM_LOCAL";
+      let sugestao:
+        | { id: string; nome: string; cidade: string; uf: string; distanciaMetros: number }
+        | null = null;
+
+      if (melhor && melhor.id !== v.localDescargaId && dMelhor <= raioAmpliado) {
+        // Existe OUTRO local dentro do alcance da busca (50→500m): sugere.
+        tipo = "COM_SUGESTAO";
+        sugestao = {
+          id: melhor.id,
+          nome: melhor.nome,
+          cidade: melhor.cidade,
+          uf: melhor.uf,
+          distanciaMetros: Math.round(melhor.dist),
+        };
+      } else if (dMelhor > raioAmpliado) {
+        // Nada cadastrado nem dentro do raio ampliado: não dá pra sugerir.
+        // Admin cadastra o local na hora ou manda revisar.
+        tipo = "SEM_LOCAL";
+      } else {
+        // melhor é o próprio local escolhido (é o mais perto), só que além do
+        // raio inicial. Motorista pegou o mais perto disponível — não sinaliza.
+        continue;
+      }
 
       itens.push({
         viagemId: v.id,
@@ -106,6 +138,9 @@ export class ViagensAdminService {
         data: v.data,
         motorista: v.motorista,
         bloqueada: v._count.matchesFechamento > 0,
+        lat: v.lat,
+        lng: v.lng,
+        tipo,
         localAtual: v.localDescarga
           ? {
               id: v.localDescarga.id,
@@ -115,13 +150,7 @@ export class ViagensAdminService {
               distanciaMetros: Number.isFinite(distAtual) ? Math.round(distAtual) : null,
             }
           : null,
-        sugestao: {
-          id: melhor.id,
-          nome: melhor.nome,
-          cidade: melhor.cidade,
-          uf: melhor.uf,
-          distanciaMetros: Math.round(melhor.dist),
-        },
+        sugestao,
       });
     }
 
@@ -132,7 +161,66 @@ export class ViagensAdminService {
         (a.localAtual?.distanciaMetros ?? Number.MAX_SAFE_INTEGER),
     );
 
-    return { raioInicialM: raio, total: itens.length, itens: itens.slice(0, LIMITE) };
+    return {
+      raioInicialM: raioInicial,
+      raioAmpliadoM: raioAmpliado,
+      total: itens.length,
+      itens: itens.slice(0, LIMITE),
+    };
+  }
+
+  /**
+   * Cadastra um Local de descarga a partir do nome digitado pelo admin + o GPS
+   * de lançamento da viagem (reverse geocoding preenche o endereço), e já
+   * atribui à viagem. Usado no caso "sem local cadastrado" da auditoria de
+   * descargas suspeitas. Reusa `atualizar` pra validar/auditar/notificar.
+   */
+  async cadastrarLocalDescarga(id: string, nome: string, usuarioId: string) {
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        lat: true,
+        lng: true,
+        _count: { select: { matchesFechamento: true } },
+      },
+    });
+    if (!viagem) throw new NotFoundException("Viagem não encontrada");
+    if (viagem._count.matchesFechamento > 0) {
+      throw new ConflictException(
+        "Viagem já vinculada a fechamento. Desfaça o match primeiro.",
+      );
+    }
+    if (viagem.lat == null || viagem.lng == null) {
+      throw new BadRequestException(
+        "Viagem sem GPS de lançamento — não dá pra cadastrar o local pela posição.",
+      );
+    }
+
+    const reverse = await this.geocoding
+      .reverseGeocoding(viagem.lat, viagem.lng)
+      .catch(() => null);
+
+    const local = await this.prisma.local.create({
+      data: {
+        nome: nome.trim(),
+        logradouro: reverse?.logradouro ?? "(sem endereço)",
+        numero: reverse?.numero ?? null,
+        bairro: reverse?.bairro ?? null,
+        cidade: reverse?.cidade ?? "?",
+        uf: (reverse?.uf ?? "??").toUpperCase().slice(0, 2),
+        cep: reverse?.cep ?? null,
+        tipo: TipoLocal.DESCARGA,
+        lat: viagem.lat,
+        lng: viagem.lng,
+        criadoPorId: usuarioId,
+        nivelConfianca: NivelConfiancaLocal.RASCUNHO,
+      },
+    });
+
+    // Atribui à viagem reusando atualizar (valida fechamento, audita o diff
+    // localDescarga antes→depois e notifica o motorista da troca de local).
+    return this.atualizar(id, { localDescargaId: local.id }, usuarioId);
   }
 
   /**
