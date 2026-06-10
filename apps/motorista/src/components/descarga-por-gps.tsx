@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, MapPin, X } from "lucide-react";
+import { CheckCircle2, MapPin, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -305,13 +305,15 @@ export function DescargaPorGps({
               </div>
             </button>
           ))}
-          <button
+          <Button
             type="button"
+            variant="outline"
             onClick={abrirSemMatch}
-            className="mt-1 block w-full p-2 text-center text-sm font-medium text-primary active:opacity-70"
+            className="mt-1 w-full"
           >
+            <Plus size={18} />
             Nenhum desses — criar novo
-          </button>
+          </Button>
         </div>
       )}
 

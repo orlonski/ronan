@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { CheckCircle2, MapPin, X } from "lucide-react-native";
+import { CheckCircle2, MapPin, Plus, X } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { showConfirm } from "@/lib/alert";
@@ -306,11 +306,12 @@ export function DescargaPorGps({
               </View>
             </Pressable>
           ))}
-          <Pressable onPress={abrirSemMatch} className="mt-1 p-2 active:opacity-70">
-            <Text className="text-center text-sm font-medium text-primary">
+          <Button variant="outline" onPress={abrirSemMatch} className="mt-1">
+            <Plus size={18} color="#0f172a" />
+            <Text className="text-sm font-semibold text-foreground">
               Nenhum desses — criar novo
             </Text>
-          </Pressable>
+          </Button>
         </View>
       )}
 
