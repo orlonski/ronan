@@ -44,6 +44,12 @@ const ProximosQuery = z.object({
   limit: z.coerce.number().int().min(1).max(20).optional(),
 });
 
+const ProximosDescargaQuery = z.object({
+  lat: z.coerce.number().min(-90).max(90),
+  lng: z.coerce.number().min(-180).max(180),
+  limit: z.coerce.number().int().min(1).max(20).optional(),
+});
+
 const CriarRapidoInput = z.object({
   /** UUID opcional gerado client-side. Quando presente, faz a chamada
    * idempotente — reenvio do mesmo id retorna o local existente sem criar
@@ -97,6 +103,25 @@ export class LocaisMotoristaController {
       lng: query.lng,
       tipoUso: query.tipoUso,
       raioM: query.raioM,
+      limit: query.limit,
+    });
+  }
+
+  /**
+   * Busca local de descarga por GPS em 2 etapas com raios configuráveis
+   * (ConfiguracaoBuscaLocais). Usado pelo botão "Estou no local de descarga".
+   * Retorna { locais, usouRaioAmpliado, raioInicialM, raioAmpliadoM }.
+   */
+  @Get("proximos-descarga")
+  proximosDescarga(
+    @CurrentUser() user: AuthMotorista,
+    @Query(new ZodValidationPipe(ProximosDescargaQuery))
+    query: z.infer<typeof ProximosDescargaQuery>,
+  ) {
+    return this.service.proximosDescargaDuasEtapas({
+      motoristaId: user.id,
+      lat: query.lat,
+      lng: query.lng,
       limit: query.limit,
     });
   }

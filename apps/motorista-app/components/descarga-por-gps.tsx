@@ -17,8 +17,8 @@ import { Label } from "@/components/ui/label";
 import { showConfirm } from "@/lib/alert";
 import { haversineMetros, pegarCoords, RAIO_ALERTA_CARGA_M } from "@/lib/geo";
 import {
-  buscarLocaisProximos,
-  buscarLocaisProximosOffline,
+  buscarDescargaDuasEtapas,
+  buscarDescargaDuasEtapasOffline,
   useCriarLocalRapido,
   type Catalogos,
   type LocalProximo,
@@ -34,7 +34,14 @@ type Estado =
   | { tipo: "vazio" }
   | { tipo: "capturando" }
   | { tipo: "selecionado"; local: { id: string; nome: string }; distanciaMetros?: number; vezesUsado?: number }
-  | { tipo: "escolha"; matches: LocalProximo[]; coords: { lat: number; lng: number } }
+  | {
+      tipo: "escolha";
+      matches: LocalProximo[];
+      coords: { lat: number; lng: number };
+      /** true = resultados vêm do raio ampliado (sugestão); nunca auto-selecionados. */
+      ampliado: boolean;
+      raioInicialM: number;
+    }
   | { tipo: "sem_match"; coords: { lat: number; lng: number } };
 
 export function DescargaPorGps({
@@ -98,21 +105,24 @@ export function DescargaPorGps({
     }
 
     let matches: LocalProximo[];
+    let usouRaioAmpliado: boolean;
+    let raioInicialM: number;
     try {
-      matches = await buscarLocaisProximos({
+      const res = await buscarDescargaDuasEtapas({
         lat: coords.lat,
         lng: coords.lng,
-        tipoUso: "descarga",
-        raioM: 500,
         limit: 5,
       });
+      matches = res.locais;
+      usouRaioAmpliado = res.usouRaioAmpliado;
+      raioInicialM = res.raioInicialM;
     } catch (err) {
       if (!isNetworkError(err)) {
         setErro((err as Error).message || "Erro ao buscar locais próximos");
         setEstado({ tipo: "vazio" });
         return;
       }
-      // Offline: busca no catálogo cacheado.
+      // Offline: busca no catálogo cacheado (2 etapas com raios padrão).
       const catalogos = qc.getQueryData<Catalogos>(["catalogos"]);
       if (!catalogos) {
         setErro(
@@ -121,14 +131,15 @@ export function DescargaPorGps({
         setEstado({ tipo: "vazio" });
         return;
       }
-      matches = buscarLocaisProximosOffline({
+      const res = buscarDescargaDuasEtapasOffline({
         lat: coords.lat,
         lng: coords.lng,
         locais: catalogos.locais,
-        tipoUso: "descarga",
-        raioM: 500,
         limit: 5,
       });
+      matches = res.locais;
+      usouRaioAmpliado = res.usouRaioAmpliado;
+      raioInicialM = res.raioInicialM;
       // Se nada veio do cache (lugar novo), cai no fluxo padrão de
       // sem_match abaixo — motorista digita o nome e o local entra no
       // outbox offline (pendingLocais). Não bloqueia mais.
@@ -137,7 +148,8 @@ export function DescargaPorGps({
     if (matches.length === 0) {
       setEstado({ tipo: "sem_match", coords });
       setNomeNovo("");
-    } else if (matches.length === 1) {
+    } else if (matches.length === 1 && !usouRaioAmpliado) {
+      // 1 match dentro do raio apertado: motorista está em cima do local.
       const m = matches[0]!;
       onChange(m.id);
       setEstado({
@@ -147,7 +159,9 @@ export function DescargaPorGps({
         vezesUsado: m.vezesUsadoMotorista,
       });
     } else {
-      setEstado({ tipo: "escolha", matches, coords });
+      // N matches, OU veio do raio ampliado (mesmo 1 só): sempre pede
+      // confirmação — nunca auto-seleciona algo que está longe.
+      setEstado({ tipo: "escolha", matches, coords, ampliado: usouRaioAmpliado, raioInicialM });
     }
   }
 
@@ -255,10 +269,20 @@ export function DescargaPorGps({
       )}
 
       {estado.tipo === "escolha" && (
-        <View className="gap-2 rounded-2xl border-2 border-border bg-card p-3">
-          <Text className="text-sm font-medium text-foreground">
-            Achei {estado.matches.length} perto. Qual é?
-          </Text>
+        <View
+          className={`gap-2 rounded-2xl border-2 bg-card p-3 ${estado.ampliado ? "border-warning/50" : "border-border"}`}
+        >
+          {estado.ampliado ? (
+            <Text className="text-sm font-medium text-foreground">
+              Não achei nada a {estado.raioInicialM}m de você. Um pouco mais longe tem{" "}
+              {estado.matches.length === 1 ? "este" : `estes ${estado.matches.length}`} — é
+              algum deles?
+            </Text>
+          ) : (
+            <Text className="text-sm font-medium text-foreground">
+              Achei {estado.matches.length} perto. Qual é?
+            </Text>
+          )}
           {estado.matches.map((m, i) => (
             <Pressable
               key={m.id}

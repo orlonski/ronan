@@ -4,6 +4,7 @@ import { EventosModule } from "../eventos/eventos.module";
 import { GeocodingModule } from "../geocoding/geocoding.module";
 import { RoteamentoModule } from "../roteamento/roteamento.module";
 import { TrackingConfigModule } from "../admin/tracking-config/tracking-config.module";
+import { BuscaLocaisConfigModule } from "../admin/busca-locais-config/busca-locais-config.module";
 import { PedagiosRodoviaModule } from "../admin/pedagios-rodovia/pedagios-rodovia.module";
 import { AdminInboxModule } from "../admin/inbox/inbox.module";
 import { UploadsModule } from "../uploads/uploads.module";
@@ -30,6 +31,7 @@ import { IaTicketController } from "./ia-ticket.controller";
     UploadsModule,
     RoteamentoModule,
     TrackingConfigModule,
+    BuscaLocaisConfigModule,
     GeocodingModule,
     AuditoriaModule,
     EventosModule,

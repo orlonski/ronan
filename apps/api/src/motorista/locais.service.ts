@@ -4,9 +4,10 @@ import { PrismaService } from "../prisma/prisma.service";
 import { GeocodingService } from "../geocoding/geocoding.service";
 import { AdminInboxService } from "../admin/inbox/inbox.service";
 import { ValidacaoLocalService } from "./validacao-local.service";
+import { BuscaLocaisConfigService } from "../admin/busca-locais-config/busca-locais-config.service";
 
 const RAIO_SUGESTAO_M = 200;
-const RAIO_GRAUS_APROX = 0.003; // ~330m — pre-filtra antes do haversine exato
+const METROS_POR_GRAU_LAT = 111_320; // ~constante; longitude encolhe com cos(lat)
 
 @Injectable()
 export class LocaisMotoristaService {
@@ -15,7 +16,48 @@ export class LocaisMotoristaService {
     private readonly validacao: ValidacaoLocalService,
     private readonly geocoding: GeocodingService,
     private readonly inbox: AdminInboxService,
+    private readonly buscaConfig: BuscaLocaisConfigService,
   ) {}
+
+  /**
+   * Busca local de DESCARGA por GPS em 2 etapas, com raios configuráveis pela
+   * operadora (ConfiguracaoBuscaLocais). Etapa 1 usa o raio inicial (apertado);
+   * se não achar nada, etapa 2 tenta o raio ampliado. O flag `usouRaioAmpliado`
+   * avisa o app pra tratar o resultado como SUGESTÃO (nunca auto-selecionar).
+   */
+  async proximosDescargaDuasEtapas(input: {
+    motoristaId: string;
+    lat: number;
+    lng: number;
+    limit?: number;
+  }) {
+    const cfg = await this.buscaConfig.get();
+    const base = {
+      motoristaId: input.motoristaId,
+      lat: input.lat,
+      lng: input.lng,
+      tipoUso: "descarga" as const,
+      limit: input.limit,
+    };
+
+    const inicial = await this.proximosPorGps({ ...base, raioM: cfg.raioInicialM });
+    if (inicial.length > 0) {
+      return {
+        locais: inicial,
+        usouRaioAmpliado: false,
+        raioInicialM: cfg.raioInicialM,
+        raioAmpliadoM: cfg.raioAmpliadoM,
+      };
+    }
+
+    const ampliado = await this.proximosPorGps({ ...base, raioM: cfg.raioAmpliadoM });
+    return {
+      locais: ampliado,
+      usouRaioAmpliado: ampliado.length > 0,
+      raioInicialM: cfg.raioInicialM,
+      raioAmpliadoM: cfg.raioAmpliadoM,
+    };
+  }
 
   /**
    * Antes de criar, busca locais ativos dentro de 200m do GPS enviado. Se
@@ -177,6 +219,12 @@ export class LocaisMotoristaService {
   }) {
     const raio = input.raioM ?? RAIO_SUGESTAO_M;
     const limit = input.limit ?? 5;
+    // Bounding-box derivada do raio real (com folga de 10%) pra nao descartar
+    // candidatos antes do haversine exato. Longitude encolhe com a latitude.
+    const margem = raio * 1.1;
+    const grausLat = margem / METROS_POR_GRAU_LAT;
+    const grausLng =
+      margem / (METROS_POR_GRAU_LAT * Math.max(Math.cos((input.lat * Math.PI) / 180), 0.01));
     const tiposPermitidos: TipoLocal[] =
       input.tipoUso === "carga"
         ? ["CARGA", "AMBOS"]
@@ -188,8 +236,8 @@ export class LocaisMotoristaService {
       where: {
         ativo: true,
         tipo: { in: tiposPermitidos },
-        lat: { gte: input.lat - RAIO_GRAUS_APROX, lte: input.lat + RAIO_GRAUS_APROX },
-        lng: { gte: input.lng - RAIO_GRAUS_APROX, lte: input.lng + RAIO_GRAUS_APROX },
+        lat: { gte: input.lat - grausLat, lte: input.lat + grausLat },
+        lng: { gte: input.lng - grausLng, lte: input.lng + grausLng },
       },
       select: {
         id: true,
@@ -349,11 +397,15 @@ export class LocaisMotoristaService {
    * por bounding-box (graus aprox) pra evitar haversine em todos os locais.
    */
   private async buscarProximos(lat: number, lng: number, raioM: number) {
+    const margem = raioM * 1.1;
+    const grausLat = margem / METROS_POR_GRAU_LAT;
+    const grausLng =
+      margem / (METROS_POR_GRAU_LAT * Math.max(Math.cos((lat * Math.PI) / 180), 0.01));
     const candidatos = await this.prisma.local.findMany({
       where: {
         ativo: true,
-        lat: { gte: lat - RAIO_GRAUS_APROX, lte: lat + RAIO_GRAUS_APROX },
-        lng: { gte: lng - RAIO_GRAUS_APROX, lte: lng + RAIO_GRAUS_APROX },
+        lat: { gte: lat - grausLat, lte: lat + grausLat },
+        lng: { gte: lng - grausLng, lte: lng + grausLng },
       },
       select: {
         id: true,

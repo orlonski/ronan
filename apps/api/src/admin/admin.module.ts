@@ -11,6 +11,7 @@ import { AbastecimentosAdminModule } from "./abastecimentos/abastecimentos.modul
 import { TrackingConfigModule } from "./tracking-config/tracking-config.module";
 import { IaConfigModule } from "./ia-config/ia-config.module";
 import { AgenteConfigModule } from "./agente-config/agente-config.module";
+import { BuscaLocaisConfigModule } from "./busca-locais-config/busca-locais-config.module";
 import { LayoutImportModule } from "./layout-import/layout-import.module";
 import { CamposLayoutModule } from "./campos-layout/campos-layout.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
@@ -32,6 +33,7 @@ import { AdminInboxModule } from "./inbox/inbox.module";
     TrackingConfigModule,
     IaConfigModule,
     AgenteConfigModule,
+    BuscaLocaisConfigModule,
     LayoutImportModule,
     CamposLayoutModule,
     DashboardModule,

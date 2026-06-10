@@ -167,6 +167,7 @@ model User {
   configsTracking  ConfiguracaoTracking[]
   configsIa        ConfiguracaoIa[]
   configsAgente    ConfiguracaoAgente[]
+  configsBuscaLocais ConfiguracaoBuscaLocais[]
   whatsappSessao   WhatsappSessao?
   whatsappConvites WhatsappConvite[]
 
@@ -985,6 +986,23 @@ model ConfiguracaoAgente {
   alteradoPorId   String?
 
   @@map("configuracao_agente")
+}
+
+/// Singleton (id="default"): raios da busca de local de DESCARGA por GPS.
+/// Busca em 2 etapas — tenta o raio inicial (apertado, pra nao confundir locais
+/// proximos um do outro); se nao achar nada, tenta o ampliado e o app SUGERE o
+/// resultado (nunca auto-seleciona). Ajustado pela operadora no dashboard.
+model ConfiguracaoBuscaLocais {
+  id            String   @id @default("default")
+  // Raio apertado da 1a tentativa (metros). 1 match aqui pode auto-selecionar.
+  raioInicialM  Int      @default(50)
+  // Raio da 2a tentativa quando o inicial nao acha nada (metros). So sugere.
+  raioAmpliadoM Int      @default(500)
+  alteradoEm    DateTime @updatedAt
+  alteradoPor   User?    @relation(fields: [alteradoPorId], references: [id])
+  alteradoPorId String?
+
+  @@map("configuracao_busca_locais")
 }
 
 /// Campos disponíveis pra mapear no layout de importação de fechamento.

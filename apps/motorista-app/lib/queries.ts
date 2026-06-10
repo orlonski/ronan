@@ -1127,6 +1127,41 @@ export async function buscarLocaisProximos(input: {
   return list.map(normalizarLocal);
 }
 
+// Raios padrão usados no fallback OFFLINE da busca de descarga (a config real
+// vive no backend; offline não temos acesso a ela, então usamos os defaults).
+export const DESCARGA_RAIO_INICIAL_PADRAO = 50;
+export const DESCARGA_RAIO_AMPLIADO_PADRAO = 500;
+
+export type BuscaDescargaResult = {
+  locais: LocalProximo[];
+  /** true = nada foi achado no raio inicial; `locais` vêm do raio ampliado e
+   * devem ser tratados como SUGESTÃO (nunca auto-selecionar). */
+  usouRaioAmpliado: boolean;
+  raioInicialM: number;
+  raioAmpliadoM: number;
+};
+
+/**
+ * Busca local de descarga por GPS em 2 etapas (raio inicial → ampliado), com
+ * raios configurados pela operadora no dashboard. Usado pelo botão "Estou no
+ * local de descarga".
+ */
+export async function buscarDescargaDuasEtapas(input: {
+  lat: number;
+  lng: number;
+  limit?: number;
+}): Promise<BuscaDescargaResult> {
+  const qs = new URLSearchParams({
+    lat: String(input.lat),
+    lng: String(input.lng),
+  });
+  if (input.limit != null) qs.set("limit", String(input.limit));
+  const res = await api.get<BuscaDescargaResult>(
+    `/m/locais/proximos-descarga?${qs.toString()}`,
+  );
+  return { ...res, locais: res.locais.map(normalizarLocal) };
+}
+
 /**
  * Cria local rápido (só nome + GPS). Backend resolve endereço via reverse
  * geocoding. Local entra como RASCUNHO e vai pra fila Em Validação do dashboard.
@@ -1246,6 +1281,36 @@ export function buscarLocaisProximosOffline(input: {
   }
   matches.sort((a, b) => a.distanciaMetros - b.distanciaMetros);
   return matches.slice(0, limit);
+}
+
+/**
+ * Versão offline da busca de descarga em 2 etapas. Usa os raios padrão (a
+ * config do backend não está acessível offline) sobre o catálogo cacheado.
+ */
+export function buscarDescargaDuasEtapasOffline(input: {
+  lat: number;
+  lng: number;
+  locais: Local[];
+  limit?: number;
+}): BuscaDescargaResult {
+  const meta = {
+    raioInicialM: DESCARGA_RAIO_INICIAL_PADRAO,
+    raioAmpliadoM: DESCARGA_RAIO_AMPLIADO_PADRAO,
+  };
+  const inicial = buscarLocaisProximosOffline({
+    ...input,
+    tipoUso: "descarga",
+    raioM: DESCARGA_RAIO_INICIAL_PADRAO,
+  });
+  if (inicial.length > 0) {
+    return { locais: inicial, usouRaioAmpliado: false, ...meta };
+  }
+  const ampliado = buscarLocaisProximosOffline({
+    ...input,
+    tipoUso: "descarga",
+    raioM: DESCARGA_RAIO_AMPLIADO_PADRAO,
+  });
+  return { locais: ampliado, usouRaioAmpliado: ampliado.length > 0, ...meta };
 }
 
 /**
