@@ -115,30 +115,34 @@ async function reportarDiagPush(
 }
 
 export async function obterEEnviarPushToken(): Promise<void> {
+  // DIAG TEMPORÁRIO: rastreia o caminho exato e mostra num Alert no iOS no
+  // final (não depende de /erros nem de rede). Se NENHUM alerta aparecer no
+  // iPhone, é porque a função nem foi chamada. Remover após diagnosticar.
+  let diag = "1-inicio";
   try {
     await instalarHandlerForeground();
     await instalarCanalAndroid();
 
     const Device = await import("expo-device");
     if (!Device.isDevice) {
-      await reportarDiagPush("push-diag: rodando em simulador (isDevice=false)", {
-        isDevice: false,
-      });
+      diag = "2-simulador (isDevice=false)";
       return; // emulador/simulador não recebe push real
     }
 
     const Notifications = await import("expo-notifications");
-    // Checa/pede permissão aqui (em vez de pedirPermissaoNotificacao) pra
-    // capturar o status detalhado quando negado — no iOS é a causa #1.
     let perm = await Notifications.getPermissionsAsync();
+    diag = `3-perm.get=${perm.status}`;
     if (perm.status !== "granted") {
       perm = await Notifications.requestPermissionsAsync();
+      diag = `4-perm.req=${perm.status}`;
     }
     if (perm.status !== "granted") {
-      await reportarDiagPush(
-        `push-diag: permissao nao concedida (status=${perm.status}, canAskAgain=${perm.canAskAgain})`,
-        { status: perm.status, canAskAgain: perm.canAskAgain, ios: perm.ios ?? null },
-      );
+      diag = `5-permissao NEGADA status=${perm.status} canAsk=${perm.canAskAgain}`;
+      await reportarDiagPush(`push-diag: ${diag}`, {
+        status: perm.status,
+        canAskAgain: perm.canAskAgain,
+        ios: perm.ios ?? null,
+      });
       return;
     }
     pediuPermissaoUmaVez = true;
@@ -147,23 +151,38 @@ export async function obterEEnviarPushToken(): Promise<void> {
       (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas
         ?.projectId ?? EXPO_PROJECT_ID_FALLBACK;
 
+    diag = "6-chamando getExpoPushTokenAsync";
     const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
     if (!token) {
-      await reportarDiagPush("push-diag: getExpoPushTokenAsync retornou vazio", {
-        projectId,
-      });
+      diag = "7-token VAZIO";
+      await reportarDiagPush(`push-diag: ${diag}`, { projectId });
       return;
     }
+    diag = `8-token OK ${token.slice(0, 24)}…`;
 
     const ultimo = await AsyncStorage.getItem(KEY_ULTIMO_TOKEN);
-    if (ultimo === token) return;
+    if (ultimo === token) {
+      diag = "9-token ja em cache — PULOU envio ao backend";
+      return;
+    }
 
     const { api } = await import("./api");
     await api.atualizarPushToken(token);
     await AsyncStorage.setItem(KEY_ULTIMO_TOKEN, token);
+    diag = "10-SUCESSO: token enviado ao backend";
   } catch (err) {
-    // AQUI mora o ouro: o erro real do getExpoPushTokenAsync no iOS
-    // (ex: "no valid 'aps-environment' entitlement string found").
+    diag = `11-EXCECAO: ${(err as Error)?.message ?? String(err)}`;
     await reportarDiagPush("push-diag: excecao no registro", {}, err);
+  } finally {
+    // Mostra o resultado direto na tela do iPhone (a forma mais confiável de
+    // capturar — não depende de fila de erros nem do dashboard).
+    if (Platform.OS === "ios") {
+      try {
+        const { Alert } = await import("react-native");
+        Alert.alert("PUSH DIAG (iOS)", diag);
+      } catch {
+        /* nunca quebra */
+      }
+    }
   }
 }
