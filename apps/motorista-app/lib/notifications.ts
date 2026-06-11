@@ -5,7 +5,10 @@
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
-import { Platform } from "react-native";
+// Import estático nomeado: NÃO enumera todos os exports do react-native (o
+// `await import("react-native")` fazia isso e disparava o getter legado
+// PushNotificationIOS → new NativeEventEmitter(null) → crash no iOS).
+import { Alert, Platform } from "react-native";
 
 let pediuPermissaoUmaVez = false;
 let handlerForegroundInstalado = false;
@@ -175,10 +178,10 @@ export async function obterEEnviarPushToken(): Promise<void> {
     await reportarDiagPush("push-diag: excecao no registro", {}, err);
   } finally {
     // Mostra o resultado direto na tela do iPhone (a forma mais confiável de
-    // capturar — não depende de fila de erros nem do dashboard).
+    // capturar — não depende de fila de erros nem do dashboard). Alert vem do
+    // import estático no topo (dynamic import de react-native crasheava).
     if (Platform.OS === "ios") {
       try {
-        const { Alert } = await import("react-native");
         Alert.alert("PUSH DIAG (iOS)", diag);
       } catch {
         /* nunca quebra */
