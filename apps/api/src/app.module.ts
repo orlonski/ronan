@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
-import { APP_FILTER } from "@nestjs/core";
+import { APP_FILTER, APP_INTERCEPTOR } from "@nestjs/core";
 import { PrismaModule } from "./prisma/prisma.module";
 import { HealthModule } from "./health/health.module";
 import { AuthModule } from "./auth/auth.module";
@@ -16,6 +16,7 @@ import { ErrorsExceptionFilter } from "./errors/errors.filter";
 import { EventosModule } from "./eventos/eventos.module";
 import { WhatsappModule } from "./whatsapp/whatsapp.module";
 import { NotificacoesModule } from "./notificacoes/notificacoes.module";
+import { AppVersionInterceptor } from "./common/app-version.interceptor";
 
 @Module({
   imports: [
@@ -35,6 +36,9 @@ import { NotificacoesModule } from "./notificacoes/notificacoes.module";
     WhatsappModule,
     NotificacoesModule,
   ],
-  providers: [{ provide: APP_FILTER, useClass: ErrorsExceptionFilter }],
+  providers: [
+    { provide: APP_FILTER, useClass: ErrorsExceptionFilter },
+    { provide: APP_INTERCEPTOR, useClass: AppVersionInterceptor },
+  ],
 })
 export class AppModule {}

@@ -127,6 +127,22 @@ export function useResourceItem<T>(basePath: string, id: string | undefined) {
   });
 }
 
+/**
+ * GET genérico simples (sem paginação) com cache do React Query.
+ */
+export function useApiQuery<T>(
+  path: string | undefined,
+  options?: { enabled?: boolean; staleTime?: number },
+) {
+  const token = useAuthToken();
+  return useQuery({
+    queryKey: [path, "get", token],
+    enabled: !!token && !!path && options?.enabled !== false,
+    staleTime: options?.staleTime,
+    queryFn: () => fetchApi<T>(path as string, { token }),
+  });
+}
+
 export function useCreateResource<TInput, TOutput>(path: string, listPath: string) {
   const token = useAuthToken();
   const qc = useQueryClient();

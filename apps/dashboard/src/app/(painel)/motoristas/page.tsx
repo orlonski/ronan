@@ -24,13 +24,14 @@ import {
 } from "@/components/data-table";
 import { Combobox } from "@/components/ui/combobox";
 import { ViewModeToggle } from "@/components/view-mode-toggle";
+import { AppVersaoCell, type AppVersaoInfo } from "@/components/app-versao-badge";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
-import { usePaginatedList, useUpdateResource } from "@/lib/client-api";
+import { usePaginatedList, useUpdateResource, useApiQuery } from "@/lib/client-api";
 
 type Veiculo = { id: string; placa: string; modelo: string | null };
 type DocumentoResumo = { tipo: TipoDocumentoMotorista; validade: string | null };
-type Motorista = {
+type Motorista = AppVersaoInfo & {
   id: string;
   nome: string;
   cpf: string;
@@ -44,6 +45,11 @@ type Motorista = {
   temPushToken: boolean;
   criadoPor: { id: string; nome: string } | null;
 };
+type ResumoVersoes = {
+  latestVersion: string | null;
+  latestUpdateId: string | null;
+  latestBuiltAt: string | null;
+};
 const PATH = "/admin/motoristas";
 
 export default function MotoristasPage() {
@@ -51,6 +57,10 @@ export default function MotoristasPage() {
   const list = usePaginatedList<Motorista>(PATH, tableState);
   const update = useUpdateResource<{ ativo?: boolean }, Motorista>(PATH, PATH);
   const { viewMode, setViewMode } = useListViewMode("motoristas");
+  const resumo = useApiQuery<ResumoVersoes>(`${PATH}/versoes/resumo`, {
+    staleTime: 60_000,
+  });
+  const latestUpdateId = resumo.data?.latestUpdateId ?? null;
 
   const columns = useMemo<ColumnDef<Motorista>[]>(
     () => [
@@ -126,6 +136,14 @@ export default function MotoristasPage() {
         ),
       },
       {
+        id: "appVersao",
+        enableSorting: false,
+        header: "Versão app",
+        cell: ({ row }) => (
+          <AppVersaoCell motorista={row.original} latestUpdateId={latestUpdateId} />
+        ),
+      },
+      {
         id: "criadoPor",
         enableSorting: false,
         header: "Criado por",
@@ -188,7 +206,7 @@ export default function MotoristasPage() {
         ),
       },
     ],
-    [update],
+    [update, latestUpdateId],
   );
 
   return (
@@ -286,6 +304,7 @@ export default function MotoristasPage() {
                     </>
                   )}
                 </div>
+                <AppVersaoCell motorista={m} latestUpdateId={latestUpdateId} />
               </div>
 
               <div className="flex shrink-0 items-center gap-1 text-muted-foreground">

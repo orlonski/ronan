@@ -230,6 +230,15 @@ model Motorista {
   bloqueadoAte            DateTime?
   expoPushToken           String?
   pushTokenAtualizadoEm   DateTime?
+  // Versão do app que o motorista está rodando — capturada via headers em
+  // toda request pelo AppVersionInterceptor. Como o runtimeVersion usa policy
+  // "appVersion", o appVersion sozinho NÃO muda entre updates OTA; o que
+  // identifica o código real é o appUpdateId / appBuiltAt (bundle EAS Update).
+  appVersion              String?   // ex: "1.2.0" (Constants.expoConfig.version)
+  appUpdateId             String?   // id do bundle OTA rodando (Updates.updateId)
+  appBuiltAt              DateTime? // quando o bundle foi publicado (Updates.createdAt)
+  appCanal                String?   // canal EAS Update (ex: "production")
+  appVistoEm              DateTime? // última vez que o app reportou versão (= visto online)
   // Acessos por funcionalidade (controle de feature flag por motorista).
   // Default true = não quebra fluxo existente; admin desativa pelo dashboard.
   podeLancarViagem        Boolean   @default(true)

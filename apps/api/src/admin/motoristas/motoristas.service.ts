@@ -42,6 +42,11 @@ const SAFE_SELECT = {
   },
   ativo: true,
   ultimoLoginEm: true,
+  appVersion: true,
+  appUpdateId: true,
+  appBuiltAt: true,
+  appCanal: true,
+  appVistoEm: true,
   expoPushToken: true,
   podeLancarViagem: true,
   podeIniciarViagem: true,
@@ -96,6 +101,24 @@ export class MotoristasService {
     const m = await this.prisma.motorista.findUnique({ where: { id }, select: SAFE_SELECT });
     if (!m) throw new NotFoundException("Motorista não encontrado");
     return this.flatten(m);
+  }
+
+  /**
+   * Referência pra auto-calibrar o selo de "atualizado" no dashboard: o código
+   * mais novo rodando entre todos os motoristas (= último OTA publicado, na
+   * prática). Quem está com appUpdateId diferente desse está atrás.
+   */
+  async resumoVersoes() {
+    const maisNovo = await this.prisma.motorista.findFirst({
+      where: { appBuiltAt: { not: null } },
+      orderBy: { appBuiltAt: "desc" },
+      select: { appVersion: true, appUpdateId: true, appBuiltAt: true },
+    });
+    return {
+      latestVersion: maisNovo?.appVersion ?? null,
+      latestUpdateId: maisNovo?.appUpdateId ?? null,
+      latestBuiltAt: maisNovo?.appBuiltAt ?? null,
+    };
   }
 
   async create(data: CriarMotoristaInput, usuarioId: string) {

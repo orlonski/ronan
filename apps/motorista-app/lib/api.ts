@@ -1,4 +1,6 @@
 import NetInfo from "@react-native-community/netinfo";
+import Constants from "expo-constants";
+import * as Updates from "expo-updates";
 import { router } from "expo-router";
 import { API_URL } from "./api-url";
 import { clearTokens, loadTokens, saveTokens, type Tokens } from "./auth";
@@ -37,6 +39,27 @@ export function humanizeApiError(err: unknown): string {
   if (err.status === 409) return err.message; // ConflictException ja vem em PT-BR (ex: ticket duplicado)
   if (err.status >= 500) return "Servidor com problema. Tente de novo em alguns minutos.";
   return err.message;
+}
+
+/**
+ * Headers que identificam a versão do app rodando, pro backend registrar e o
+ * dashboard mostrar quem está atualizado. Memoizado: nada disso muda durante a
+ * sessão (só num reload OTA, que reinicia o processo). Em dev/Expo Go vários
+ * desses vêm vazios — tudo bem, mandamos só o que existir.
+ */
+let versionHeadersCache: Record<string, string> | null = null;
+function appVersionHeaders(): Record<string, string> {
+  if (versionHeadersCache) return versionHeadersCache;
+  const h: Record<string, string> = {};
+  const versao = Constants.expoConfig?.version;
+  if (versao) h["x-app-version"] = versao;
+  if (Updates.updateId) h["x-app-update-id"] = Updates.updateId;
+  // createdAt é a data de publicação do bundle OTA rodando — o sinal real de
+  // "quão velho é o código deste motorista".
+  if (Updates.createdAt) h["x-app-built-at"] = Updates.createdAt.toISOString();
+  if (Updates.channel) h["x-app-channel"] = Updates.channel;
+  versionHeadersCache = h;
+  return h;
 }
 
 let refreshing: Promise<Tokens | null> | null = null;
@@ -125,7 +148,7 @@ export async function request<T>(
   init: { body?: unknown; isFormData?: boolean; auth?: boolean } = { auth: true },
 ): Promise<T> {
   const { body, isFormData = false, auth = true } = init;
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...appVersionHeaders() };
   if (body !== undefined && !isFormData) headers["content-type"] = "application/json";
   // Aceita gzip — backend agora tem compression() middleware
   headers["accept-encoding"] = "gzip, deflate";

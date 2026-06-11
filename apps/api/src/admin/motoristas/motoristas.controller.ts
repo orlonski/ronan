@@ -37,6 +37,12 @@ export class MotoristasController {
     return this.service.list(query);
   }
 
+  // Antes do :id pra não ser capturado como id="versoes".
+  @Get("versoes/resumo")
+  resumoVersoes() {
+    return this.service.resumoVersoes();
+  }
+
   @Get(":id")
   findOne(@Param("id") id: string) {
     return this.service.findOne(id);
