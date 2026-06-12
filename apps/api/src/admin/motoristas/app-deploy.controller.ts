@@ -1,6 +1,7 @@
 import { Controller, Get, Headers, Post, Query, UnauthorizedException } from "@nestjs/common";
 import { ApiExcludeController } from "@nestjs/swagger";
 import { createHash } from "node:crypto";
+import { Public } from "../../auth/decorators/public.decorator";
 import { AppUpdateNotifierService } from "./app-update-notifier.service";
 
 /**
@@ -11,6 +12,7 @@ import { AppUpdateNotifierService } from "./app-update-notifier.service";
  * Uso (de apps/motorista-app, após publicar o OTA):
  *   eas update --branch production --message "..." && pnpm ota:avisar
  */
+@Public() // pula o JwtAuthGuard global; a auth aqui é o segredo de header
 @ApiExcludeController()
 @Controller("app/deploy")
 export class AppDeployController {
