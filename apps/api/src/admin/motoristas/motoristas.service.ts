@@ -12,6 +12,7 @@ import { AuthService } from "../../auth/auth.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { PushService } from "../../push/push.service";
 import { paginate, type Paginated, type PaginationQuery } from "../../common/pagination";
+import { EasUpdateService } from "./eas-update.service";
 
 type ListMotoristasParams = PaginationQuery & { ativo?: "true" | "false" };
 
@@ -65,6 +66,7 @@ export class MotoristasService {
     private readonly prisma: PrismaService,
     private readonly uploads: UploadsService,
     private readonly push: PushService,
+    private readonly eas: EasUpdateService,
   ) {}
 
   async list(params: ListMotoristasParams): Promise<Paginated<ReturnType<typeof this.flatten>>> {
@@ -104,9 +106,13 @@ export class MotoristasService {
   }
 
   /**
-   * Referência pra auto-calibrar o selo de "atualizado" no dashboard: o código
-   * mais novo rodando entre todos os motoristas (= último OTA publicado, na
-   * prática). Quem está com appUpdateId diferente desse está atrás.
+   * Referência pro selo de "atualizado" no dashboard: o último OTA publicado de
+   * verdade, consultado direto no servidor de updates da Expo (fonte
+   * autoritativa). Se a Expo não responder, cai no fallback da heurística antiga
+   * (o bundle mais novo visto entre os motoristas) — nunca pior do que era.
+   *
+   * `fonte` indica qual referência venceu, pro dashboard poder sinalizar quando
+   * está em modo degradado.
    */
   async resumoVersoes() {
     const maisNovo = await this.prisma.motorista.findFirst({
@@ -114,10 +120,26 @@ export class MotoristasService {
       orderBy: { appBuiltAt: "desc" },
       select: { appVersion: true, appUpdateId: true, appBuiltAt: true },
     });
+
+    // Runtime a consultar: a maior versão de app vista (auto-ajusta quando sobe
+    // build nativo novo); fallback pra versão atual do app.
+    const runtime = maisNovo?.appVersion ?? "1.0.0";
+    const eas = await this.eas.latest(runtime);
+
+    if (eas?.latestBuiltAt) {
+      return {
+        latestVersion: eas.latestVersion ?? maisNovo?.appVersion ?? null,
+        latestUpdateId: eas.latestUpdateId,
+        latestBuiltAt: eas.latestBuiltAt,
+        fonte: "eas" as const,
+      };
+    }
+
     return {
       latestVersion: maisNovo?.appVersion ?? null,
       latestUpdateId: maisNovo?.appUpdateId ?? null,
-      latestBuiltAt: maisNovo?.appBuiltAt ?? null,
+      latestBuiltAt: maisNovo?.appBuiltAt?.toISOString() ?? null,
+      fonte: "motoristas" as const,
     };
   }
 

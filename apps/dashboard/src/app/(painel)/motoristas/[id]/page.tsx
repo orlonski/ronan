@@ -10,7 +10,7 @@ import {
 import { MotoristaForm, type Motorista } from "../_components/motorista-form";
 import { HistoricoNotificacoes } from "./historico-notificacoes";
 
-type ResumoVersoes = { latestUpdateId: string | null };
+type ResumoVersoes = { latestUpdateId: string | null; latestBuiltAt: string | null };
 
 export default function EditarMotoristaPage({
   params,
@@ -36,7 +36,10 @@ export default function EditarMotoristaPage({
         <>
           <AppVersaoCard
             motorista={item.data}
-            latestUpdateId={resumo.data?.latestUpdateId ?? null}
+            latest={{
+              latestUpdateId: resumo.data?.latestUpdateId ?? null,
+              latestBuiltAt: resumo.data?.latestBuiltAt ?? null,
+            }}
           />
           <MotoristaForm initial={item.data} />
           <HistoricoNotificacoes motoristaId={id} />

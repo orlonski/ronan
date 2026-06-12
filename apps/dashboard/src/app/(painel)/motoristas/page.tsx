@@ -60,7 +60,13 @@ export default function MotoristasPage() {
   const resumo = useApiQuery<ResumoVersoes>(`${PATH}/versoes/resumo`, {
     staleTime: 60_000,
   });
-  const latestUpdateId = resumo.data?.latestUpdateId ?? null;
+  const latest = useMemo(
+    () => ({
+      latestUpdateId: resumo.data?.latestUpdateId ?? null,
+      latestBuiltAt: resumo.data?.latestBuiltAt ?? null,
+    }),
+    [resumo.data?.latestUpdateId, resumo.data?.latestBuiltAt],
+  );
 
   const columns = useMemo<ColumnDef<Motorista>[]>(
     () => [
@@ -140,7 +146,7 @@ export default function MotoristasPage() {
         enableSorting: false,
         header: "Versão app",
         cell: ({ row }) => (
-          <AppVersaoCell motorista={row.original} latestUpdateId={latestUpdateId} />
+          <AppVersaoCell motorista={row.original} latest={latest} />
         ),
       },
       {
@@ -206,7 +212,7 @@ export default function MotoristasPage() {
         ),
       },
     ],
-    [update, latestUpdateId],
+    [update, latest],
   );
 
   return (
@@ -304,7 +310,7 @@ export default function MotoristasPage() {
                     </>
                   )}
                 </div>
-                <AppVersaoCell motorista={m} latestUpdateId={latestUpdateId} />
+                <AppVersaoCell motorista={m} latest={latest} />
               </div>
 
               <div className="flex shrink-0 items-center gap-1 text-muted-foreground">

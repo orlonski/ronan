@@ -5,10 +5,11 @@ import { MotoristasController } from "./motoristas.controller";
 import { MotoristasService } from "./motoristas.service";
 import { MotoristasDocumentosController } from "./documentos.controller";
 import { MotoristasDocumentosService } from "./documentos.service";
+import { EasUpdateService } from "./eas-update.service";
 
 @Module({
   imports: [UploadsModule, PushModule],
   controllers: [MotoristasController, MotoristasDocumentosController],
-  providers: [MotoristasService, MotoristasDocumentosService],
+  providers: [MotoristasService, MotoristasDocumentosService, EasUpdateService],
 })
 export class MotoristasModule {}

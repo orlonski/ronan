@@ -13,12 +13,32 @@ export type AppVersaoInfo = {
 
 type Status = "atualizado" | "desatualizado" | "sem-dados";
 
-function resolverStatus(m: AppVersaoInfo, latestUpdateId: string | null): Status {
+export type LatestRef = {
+  latestUpdateId: string | null;
+  latestBuiltAt: string | null;
+};
+
+// Tolerância de relógio ao comparar a data de publicação do bundle (1 min).
+const TOL_MS = 60_000;
+
+function resolverStatus(m: AppVersaoInfo, latest: LatestRef): Status {
   if (!m.appVistoEm) return "sem-dados";
-  // Auto-calibrado: "atualizado" = roda o mesmo bundle OTA mais novo visto
-  // entre todos os motoristas. (Se ninguém reportou updateId ainda, latest é
-  // null e quem também não tem updateId casa como atualizado.)
-  return m.appUpdateId === latestUpdateId ? "atualizado" : "desatualizado";
+  // Reporta versão mas sem data do bundle (ex.: dev build sem OTA) — não dá pra
+  // afirmar se está atualizado.
+  if (!m.appBuiltAt) return "sem-dados";
+  if (latest.latestBuiltAt) {
+    // Autoritativo (referência vinda do servidor de OTA da Expo): atualizado =
+    // roda o último bundle publicado (ou mais novo). Compara por data de publish,
+    // que é idêntica entre iOS/Android pro mesmo update.
+    return new Date(m.appBuiltAt).getTime() >= new Date(latest.latestBuiltAt).getTime() - TOL_MS
+      ? "atualizado"
+      : "desatualizado";
+  }
+  // Fallback (Expo indisponível): compara pelo bundle mais novo visto entre os
+  // motoristas.
+  return m.appUpdateId != null && m.appUpdateId === latest.latestUpdateId
+    ? "atualizado"
+    : "desatualizado";
 }
 
 function tempoRelativo(iso: string | null): string {
@@ -62,12 +82,12 @@ const ROTULO: Record<Status, string> = {
  */
 export function AppVersaoCell({
   motorista,
-  latestUpdateId,
+  latest,
 }: {
   motorista: AppVersaoInfo;
-  latestUpdateId: string | null;
+  latest: LatestRef;
 }) {
-  const status = resolverStatus(motorista, latestUpdateId);
+  const status = resolverStatus(motorista, latest);
   if (status === "sem-dados") {
     return <span className="text-xs text-muted-foreground">—</span>;
   }
@@ -104,12 +124,12 @@ export function AppVersaoCell({
  */
 export function AppVersaoCard({
   motorista,
-  latestUpdateId,
+  latest,
 }: {
   motorista: AppVersaoInfo;
-  latestUpdateId: string | null;
+  latest: LatestRef;
 }) {
-  const status = resolverStatus(motorista, latestUpdateId);
+  const status = resolverStatus(motorista, latest);
   const codigo = motorista.appBuiltAt
     ? new Date(motorista.appBuiltAt).toLocaleString("pt-BR", {
         timeZone: "America/Sao_Paulo",
