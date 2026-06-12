@@ -22,9 +22,18 @@ export class AppUpdateNotifierService {
 
   /** Dispara a push pra todos os motoristas ativos com token. Retorna quantos. */
   async notificarTodos(): Promise<number> {
-    const alvos = await this.prisma.motorista.findMany({
+    const todos = await this.prisma.motorista.findMany({
       where: { ativo: true, expoPushToken: { not: null } },
       select: { id: true, expoPushToken: true },
+    });
+    // Dedup por token: se o mesmo aparelho aparece em 2 cadastros (token órfão),
+    // manda só 1 push pra ele. A unicidade de verdade é garantida no registro
+    // do token (registrarPushToken), isto aqui é rede de segurança.
+    const vistos = new Set<string>();
+    const alvos = todos.filter((m) => {
+      if (!m.expoPushToken || vistos.has(m.expoPushToken)) return false;
+      vistos.add(m.expoPushToken);
+      return true;
     });
     if (alvos.length === 0) return 0;
 

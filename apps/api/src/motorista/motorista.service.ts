@@ -91,10 +91,19 @@ export class MotoristaService {
   }
 
   async registrarPushToken(motoristaId: string, token: string): Promise<void> {
-    await this.prisma.motorista.update({
-      where: { id: motoristaId },
-      data: { expoPushToken: token, pushTokenAtualizadoEm: new Date() },
-    });
+    // Um Expo push token pertence a UM aparelho. Se outro motorista ainda tem
+    // esse token (troca de conta no mesmo celular), tira dele primeiro — senão o
+    // device recebe push duplicado (1 por motorista que compartilha o token).
+    await this.prisma.$transaction([
+      this.prisma.motorista.updateMany({
+        where: { expoPushToken: token, id: { not: motoristaId } },
+        data: { expoPushToken: null, pushTokenAtualizadoEm: null },
+      }),
+      this.prisma.motorista.update({
+        where: { id: motoristaId },
+        data: { expoPushToken: token, pushTokenAtualizadoEm: new Date() },
+      }),
+    ]);
   }
 
   async me(id: string) {
