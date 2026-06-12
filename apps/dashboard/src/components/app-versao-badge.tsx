@@ -16,6 +16,8 @@ type Status = "atualizado" | "desatualizado" | "sem-dados";
 export type LatestRef = {
   latestUpdateId: string | null;
   latestBuiltAt: string | null;
+  /** true quando a Expo não respondeu e a referência caiu no fallback antigo. */
+  degradado?: boolean;
 };
 
 // Tolerância de relógio ao comparar a data de publicação do bundle (1 min).
@@ -92,11 +94,14 @@ export function AppVersaoCell({
     return <span className="text-xs text-muted-foreground">—</span>;
   }
   const codigo = dataCurta(motorista.appBuiltAt);
+  const ultimaPublicada = dataCurta(latest.latestBuiltAt);
   const title = [
     motorista.appVersion ? `Versão ${motorista.appVersion}` : null,
     codigo ? `Código de ${codigo}` : null,
+    status === "desatualizado" && ultimaPublicada ? `Última versão de ${ultimaPublicada}` : null,
     motorista.appCanal ? `Canal ${motorista.appCanal}` : null,
     `Visto ${tempoRelativo(motorista.appVistoEm)}`,
+    latest.degradado ? "Referência aproximada (Expo indisponível)" : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -130,16 +135,19 @@ export function AppVersaoCard({
   latest: LatestRef;
 }) {
   const status = resolverStatus(motorista, latest);
-  const codigo = motorista.appBuiltAt
-    ? new Date(motorista.appBuiltAt).toLocaleString("pt-BR", {
-        timeZone: "America/Sao_Paulo",
-        day: "2-digit",
-        month: "2-digit",
-        year: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : null;
+  const fmtBundle = (iso: string | null) =>
+    iso
+      ? new Date(iso).toLocaleString("pt-BR", {
+          timeZone: "America/Sao_Paulo",
+          day: "2-digit",
+          month: "2-digit",
+          year: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : null;
+  const codigo = fmtBundle(motorista.appBuiltAt);
+  const ultimaPublicada = fmtBundle(latest.latestBuiltAt);
 
   return (
     <div className="rounded-lg border border-border/60 bg-card p-4">
@@ -177,7 +185,20 @@ export function AppVersaoCard({
 
           <dt className="text-muted-foreground">Visto online</dt>
           <dd className="font-medium">{tempoRelativo(motorista.appVistoEm)}</dd>
+
+          {status === "desatualizado" && ultimaPublicada && (
+            <>
+              <dt className="text-muted-foreground">Última publicada</dt>
+              <dd className="font-medium">{ultimaPublicada}</dd>
+            </>
+          )}
         </dl>
+      )}
+
+      {latest.degradado && (
+        <p className="mt-3 text-xs text-amber-600">
+          Referência aproximada — não consegui confirmar o último OTA com a Expo agora.
+        </p>
       )}
     </div>
   );

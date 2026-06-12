@@ -49,6 +49,7 @@ type ResumoVersoes = {
   latestVersion: string | null;
   latestUpdateId: string | null;
   latestBuiltAt: string | null;
+  fonte: "eas" | "motoristas";
 };
 const PATH = "/admin/motoristas";
 
@@ -64,8 +65,9 @@ export default function MotoristasPage() {
     () => ({
       latestUpdateId: resumo.data?.latestUpdateId ?? null,
       latestBuiltAt: resumo.data?.latestBuiltAt ?? null,
+      degradado: resumo.data?.fonte === "motoristas",
     }),
-    [resumo.data?.latestUpdateId, resumo.data?.latestBuiltAt],
+    [resumo.data?.latestUpdateId, resumo.data?.latestBuiltAt, resumo.data?.fonte],
   );
 
   const columns = useMemo<ColumnDef<Motorista>[]>(

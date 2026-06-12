@@ -10,7 +10,11 @@ import {
 import { MotoristaForm, type Motorista } from "../_components/motorista-form";
 import { HistoricoNotificacoes } from "./historico-notificacoes";
 
-type ResumoVersoes = { latestUpdateId: string | null; latestBuiltAt: string | null };
+type ResumoVersoes = {
+  latestUpdateId: string | null;
+  latestBuiltAt: string | null;
+  fonte: "eas" | "motoristas";
+};
 
 export default function EditarMotoristaPage({
   params,
@@ -39,6 +43,7 @@ export default function EditarMotoristaPage({
             latest={{
               latestUpdateId: resumo.data?.latestUpdateId ?? null,
               latestBuiltAt: resumo.data?.latestBuiltAt ?? null,
+              degradado: resumo.data?.fonte === "motoristas",
             }}
           />
           <MotoristaForm initial={item.data} />
