@@ -42,9 +42,14 @@ type Resposta = {
 
 const PATH = "/admin/viagens/descargas-suspeitas";
 
+// data vem de viagem.data (@db.Date = meia-noite UTC): exibir em UTC, senão
+// no Brasil (UTC-3) volta um dia.
 function fmtData(iso: string): string {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("pt-BR");
+  if (Number.isNaN(d.getTime())) return "—";
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  return `${dd}/${mm}/${d.getUTCFullYear()}`;
 }
 
 function fmtDist(m: number | null): string {

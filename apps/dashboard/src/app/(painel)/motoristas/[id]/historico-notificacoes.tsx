@@ -8,6 +8,7 @@ import type {
   NotificacaoAdminItem,
 } from "@ronan/shared-types";
 import { Spinner } from "@/components/loading";
+import { partesSP } from "@/lib/datetime-br";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 
 const statusClasses: Record<string, string> = {
@@ -131,9 +132,6 @@ function NotificacaoItem({ n }: { n: NotificacaoAdminItem }) {
 function fmtDataHora(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  const dia = String(d.getDate()).padStart(2, "0");
-  const mes = String(d.getMonth() + 1).padStart(2, "0");
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${dia}/${mes} ${hh}:${mm}`;
+  const t = partesSP(d);
+  return `${t.dia}/${t.mes} ${t.hora}:${t.min}`;
 }

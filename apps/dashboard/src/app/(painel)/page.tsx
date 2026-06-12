@@ -67,6 +67,7 @@ export default function PainelHome() {
   });
 
   const dataHoje = new Date().toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
     weekday: "long",
     day: "2-digit",
     month: "long",
@@ -357,6 +358,7 @@ function tempoRelativo(iso: string | null): string {
   const d = Math.floor(h / 24);
   if (d < 7) return `${d}d atrás`;
   return new Date(iso).toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
     day: "2-digit",
     month: "2-digit",
   });

@@ -10,6 +10,7 @@ import type {
   NotificacaoAdminItem,
 } from "@ronan/shared-types";
 import { formatCpf } from "@ronan/shared-types";
+import { partesSP } from "@/lib/datetime-br";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
@@ -336,9 +337,6 @@ function NotificacaoRow({ n }: { n: NotificacaoAdminItem }) {
 function fmtDataHora(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  const dia = String(d.getDate()).padStart(2, "0");
-  const mes = String(d.getMonth() + 1).padStart(2, "0");
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${dia}/${mes} ${hh}:${mm}`;
+  const t = partesSP(d);
+  return `${t.dia}/${t.mes} ${t.hora}:${t.min}`;
 }

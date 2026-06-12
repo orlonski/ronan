@@ -37,7 +37,11 @@ function tempoRelativo(iso: string | null): string {
 
 function dataCurta(iso: string | null): string | null {
   if (!iso) return null;
-  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  return new Date(iso).toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+  });
 }
 
 const DOT: Record<Status, string> = {
@@ -108,6 +112,7 @@ export function AppVersaoCard({
   const status = resolverStatus(motorista, latestUpdateId);
   const codigo = motorista.appBuiltAt
     ? new Date(motorista.appBuiltAt).toLocaleString("pt-BR", {
+        timeZone: "America/Sao_Paulo",
         day: "2-digit",
         month: "2-digit",
         year: "2-digit",

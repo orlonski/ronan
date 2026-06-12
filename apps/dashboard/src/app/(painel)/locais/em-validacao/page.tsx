@@ -6,6 +6,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
 import { ExcluirButton } from "@/components/excluir-button";
+import { partesSP } from "@/lib/datetime-br";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -417,7 +418,6 @@ function MesclarDialog({
 function formatBR(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  return `${dd}/${mm}/${d.getFullYear()}`;
+  const t = partesSP(d);
+  return `${t.dia}/${t.mes}/${t.ano}`;
 }

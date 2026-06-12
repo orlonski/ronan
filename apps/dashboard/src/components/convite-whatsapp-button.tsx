@@ -102,7 +102,11 @@ export function ConviteWhatsappButton({
             </div>
             {expiraEm && (
               <p className="text-xs text-muted-foreground">
-                Válido até {new Date(expiraEm).toLocaleString("pt-BR")}.
+                Válido até{" "}
+                {new Date(expiraEm).toLocaleString("pt-BR", {
+                  timeZone: "America/Sao_Paulo",
+                })}
+                .
               </p>
             )}
           </div>

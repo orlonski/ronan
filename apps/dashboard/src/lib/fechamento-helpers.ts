@@ -2,6 +2,7 @@ import type {
   StatusFechamento,
   StatusLinhaFechamento,
 } from "./fechamentos-api";
+import { fmtDataHoraSP } from "./datetime-br";
 
 export const STATUS_FECHAMENTO_LABEL: Record<StatusFechamento, string> = {
   RECEBIDO: "Recebido",
@@ -69,14 +70,7 @@ export function fmtBRL(value: string | number | null | undefined): string {
   });
 }
 
+/** Timestamp → "dd/mm/yyyy hh:mm" em horário de Brasília (campos DateTime). */
 export function fmtDataHoraBR(d: string | Date | null | undefined): string {
-  if (!d) return "—";
-  const date = typeof d === "string" ? new Date(d) : d;
-  if (Number.isNaN(date.getTime())) return "—";
-  const dd = String(date.getDate()).padStart(2, "0");
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const yyyy = date.getFullYear();
-  const HH = String(date.getHours()).padStart(2, "0");
-  const MM = String(date.getMinutes()).padStart(2, "0");
-  return `${dd}/${mm}/${yyyy} ${HH}:${MM}`;
+  return fmtDataHoraSP(d);
 }
