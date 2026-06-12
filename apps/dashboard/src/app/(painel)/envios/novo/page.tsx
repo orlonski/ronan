@@ -15,6 +15,7 @@ import {
   useCriarEnvio,
   useLayoutsEnvio,
 } from "@/lib/fechamentos-api";
+import { primeiroDiaDoMesSP, ultimoDiaDoMesSP } from "@/lib/datetime-br";
 
 type Empresa = {
   id: string;
@@ -286,11 +287,8 @@ export default function NovoEnvioPage() {
 }
 
 function thisMonthStart() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  return primeiroDiaDoMesSP();
 }
 function thisMonthEnd() {
-  const d = new Date();
-  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-  return `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, "0")}-${String(last.getDate()).padStart(2, "0")}`;
+  return ultimoDiaDoMesSP();
 }

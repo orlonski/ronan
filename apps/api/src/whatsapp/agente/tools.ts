@@ -7,6 +7,7 @@ import { DashboardService } from "../../admin/dashboard/dashboard.service";
 import { ErrorsService } from "../../errors/errors.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { EvolutionClientService } from "../evolution-client.service";
+import { ymdSaoPaulo } from "../../common/timezone";
 import type { SessaoResolvida } from "../sessao.service";
 import type { AgentToolDefinition } from "./providers/agent.provider";
 
@@ -744,15 +745,16 @@ function derivarClientId(motoristaId: string, input: Record<string, unknown>): s
   return randomUUID();
 }
 
+/**
+ * Início da janela de consulta, ancorado na data civil de Brasília (UTC-3) —
+ * NÃO no fuso do container (que roda em UTC). Retorna meia-noite UTC da data BR,
+ * que é o formato que casa com a coluna `viagem.data` (@db.Date).
+ * Sem isso, das 21h às 23h59 de Brasília o "hoje" pula pro dia seguinte e some.
+ */
 function inicioJanela(desde: string): Date {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  if (desde === "ontem") {
-    d.setDate(d.getDate() - 1);
-  } else if (desde === "semana") {
-    d.setDate(d.getDate() - 7);
-  } else if (desde === "mes") {
-    d.setDate(1);
-  }
-  return d;
+  const [y, m, dia] = ymdSaoPaulo();
+  if (desde === "ontem") return new Date(Date.UTC(y, m - 1, dia - 1));
+  if (desde === "semana") return new Date(Date.UTC(y, m - 1, dia - 7));
+  if (desde === "mes") return new Date(Date.UTC(y, m - 1, 1));
+  return new Date(Date.UTC(y, m - 1, dia)); // hoje
 }

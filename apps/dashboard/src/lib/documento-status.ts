@@ -1,4 +1,5 @@
 import type { TipoDocumentoMotorista } from "@ronan/shared-types";
+import { ymdSaoPaulo } from "@/lib/datetime-br";
 
 export type DocumentoStatus = "FALTANDO" | "OK" | "A_VENCER" | "VENCIDO";
 
@@ -53,7 +54,8 @@ export function statusDocumento(doc: DocLike, hoje: Date = new Date()): Document
   const p = partesData(doc.validade);
   if (!p) return "OK";
   const venc = new Date(Date.UTC(p.y, p.m - 1, p.d));
-  const inicioHoje = new Date(Date.UTC(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()));
+  const [hy, hm, hd] = ymdSaoPaulo(hoje);
+  const inicioHoje = new Date(Date.UTC(hy, hm - 1, hd));
   const dias = Math.round((venc.getTime() - inicioHoje.getTime()) / DIA_MS);
   if (dias < 0) return "VENCIDO";
   if (dias <= LIMIAR_VENCER_DIAS) return "A_VENCER";
@@ -64,7 +66,8 @@ export function diasParaVencer(validade: string | null, hoje: Date = new Date())
   const p = partesData(validade);
   if (!p) return null;
   const venc = new Date(Date.UTC(p.y, p.m - 1, p.d));
-  const inicioHoje = new Date(Date.UTC(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()));
+  const [hy, hm, hd] = ymdSaoPaulo(hoje);
+  const inicioHoje = new Date(Date.UTC(hy, hm - 1, hd));
   return Math.round((venc.getTime() - inicioHoje.getTime()) / DIA_MS);
 }
 

@@ -1,10 +1,18 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
+import { ymdSaoPaulo } from "../../common/timezone";
 
 /**
  * Service do dashboard executivo. Tudo em paralelo via Promise.all —
- * é uma tela de leitura, latência manda. Datas usam fuso local do servidor
- * (não UTC): viagem é diária, sem hora exata.
+ * é uma tela de leitura, latência manda.
+ *
+ * Fuso: o container roda em UTC, então NUNCA usar new Date().setHours(0) —
+ * isso ancora o dia em UTC e, a partir das 21h de Brasília (00h UTC), o "hoje"
+ * pula pro dia seguinte e a tela zera. As fronteiras são calculadas na data
+ * civil de São Paulo (UTC-3). Dois tipos:
+ *  - `*00` (meia-noite UTC da data BR): casa com colunas @db.Date (viagem, pedagio).
+ *  - `*Inst` (meia-noite de Brasília = 03:00 UTC): pra colunas timestamp
+ *    (abastecimento.data, ultimoLoginEm).
  */
 @Injectable()
 export class DashboardService {
@@ -12,11 +20,19 @@ export class DashboardService {
 
   async snapshot() {
     const agora = new Date();
-    const hoje00 = inicioDoDia(agora);
-    const amanha00 = adicionarDias(hoje00, 1);
-    const inicioMes = inicioDoMes(agora);
-    const inicioMesQueVem = inicioDoMes(adicionarDias(inicioMes, 32));
-    const inicio14d = inicioDoDia(adicionarDias(agora, -13)); // hoje incluso = 14 dias
+    const [y, m, dia] = ymdSaoPaulo(agora); // data civil em SP (m = 1-12)
+
+    // Fronteiras pra colunas @db.Date (data-only) — meia-noite UTC da data BR
+    const hoje00 = new Date(Date.UTC(y, m - 1, dia));
+    const amanha00 = new Date(Date.UTC(y, m - 1, dia + 1));
+    const inicioMes = new Date(Date.UTC(y, m - 1, 1));
+    const inicioMesQueVem = new Date(Date.UTC(y, m, 1));
+    const inicio14d = new Date(Date.UTC(y, m - 1, dia - 13)); // hoje incluso = 14 dias
+
+    // Fronteiras pra colunas timestamp — meia-noite de Brasília (UTC-3) em UTC
+    const hoje00Inst = new Date(Date.UTC(y, m - 1, dia, 3));
+    const inicioMesInst = new Date(Date.UTC(y, m - 1, 1, 3));
+    const inicioMesQueVemInst = new Date(Date.UTC(y, m, 1, 3));
 
     const [
       // Hoje
@@ -50,7 +66,7 @@ export class DashboardService {
         where: { data: { gte: hoje00, lt: amanha00 } },
         _sum: { toneladas: true },
       }),
-      this.prisma.motorista.count({ where: { ultimoLoginEm: { gte: hoje00 } } }),
+      this.prisma.motorista.count({ where: { ultimoLoginEm: { gte: hoje00Inst } } }),
       this.prisma.viagem.findMany({
         where: { data: { gte: hoje00, lt: amanha00 } },
         distinct: ["veiculoId"],
@@ -62,7 +78,7 @@ export class DashboardService {
         _sum: { toneladas: true },
       }),
       this.prisma.abastecimento.aggregate({
-        where: { data: { gte: inicioMes, lt: inicioMesQueVem } },
+        where: { data: { gte: inicioMesInst, lt: inicioMesQueVemInst } },
         _sum: { valorTotal: true },
       }),
       this.prisma.pedagio.aggregate({
@@ -193,26 +209,11 @@ export class DashboardService {
   }
 }
 
-function inicioDoDia(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-function inicioDoMes(d: Date): Date {
-  const x = new Date(d);
-  x.setDate(1);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-function adicionarDias(d: Date, n: number): Date {
-  const x = new Date(d);
-  x.setDate(x.getDate() + n);
-  return x;
-}
-
 /**
  * Recebe linhas { data, _count } com furos e devolve array completo de N dias
  * a partir de `inicio`, ordenado asc, com 0 nos dias sem viagem.
+ * Tudo em UTC: `data` vem de coluna @db.Date (meia-noite UTC) e `inicio` é
+ * construído com Date.UTC, então a chave YYYY-MM-DD bate.
  */
 function preencherDias(
   linhas: Array<{ data: Date; _count: { _all: number } }>,
@@ -221,12 +222,12 @@ function preencherDias(
 ): Array<{ dia: string; total: number }> {
   const mapa = new Map<string, number>();
   for (const r of linhas) {
-    const k = inicioDoDia(r.data).toISOString().slice(0, 10);
+    const k = r.data.toISOString().slice(0, 10);
     mapa.set(k, (mapa.get(k) ?? 0) + r._count._all);
   }
   const out: Array<{ dia: string; total: number }> = [];
   for (let i = 0; i < n; i++) {
-    const d = adicionarDias(inicio, i);
+    const d = new Date(inicio.getTime() + i * 86400000);
     const k = d.toISOString().slice(0, 10);
     out.push({ dia: k, total: mapa.get(k) ?? 0 });
   }

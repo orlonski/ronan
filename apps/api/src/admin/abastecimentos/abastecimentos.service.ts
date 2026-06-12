@@ -6,6 +6,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { PushService } from "../../push/push.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
+import { inicioDoDiaBR } from "../../common/timezone";
 
 type ListAbastecimentosParams = PaginationQuery & {
   motoristaId?: string;
@@ -34,9 +35,11 @@ export class AbastecimentosAdminService {
     if (params.semEmpresa === "true") where.empresaId = null;
     if (params.tipo) where.tipo = params.tipo;
     if (params.de || params.ate) {
+      // data é timestamp: ancorar nas fronteiras do dia civil de Brasília.
+      // `lt` no dia seguinte do "ate" pra incluir o último dia inteiro.
       where.data = {};
-      if (params.de) where.data.gte = new Date(params.de);
-      if (params.ate) where.data.lte = new Date(params.ate);
+      if (params.de) where.data.gte = inicioDoDiaBR(params.de);
+      if (params.ate) where.data.lt = new Date(inicioDoDiaBR(params.ate).getTime() + 86_400_000);
     }
 
     const [paged, totais] = await Promise.all([

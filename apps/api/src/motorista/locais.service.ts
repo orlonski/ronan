@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable } from "@nestjs/common";
 import { NivelConfiancaLocal, type TipoLocal } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { inicioDiasAtras } from "../common/timezone";
 import { GeocodingService } from "../geocoding/geocoding.service";
 import { AdminInboxService } from "../admin/inbox/inbox.service";
 import { ValidacaoLocalService } from "./validacao-local.service";
@@ -267,8 +268,7 @@ export class LocaisMotoristaService {
     if (filtrados.length === 0) return [];
 
     // Conta uso pelo motorista nos últimos 90d (carga + descarga)
-    const desde = new Date();
-    desde.setDate(desde.getDate() - 90);
+    const desde = inicioDiasAtras(90);
     const ids = filtrados.map((f) => f.id);
     const usos = await this.prisma.viagem.findMany({
       where: {

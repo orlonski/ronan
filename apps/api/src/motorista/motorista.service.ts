@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { inicioDoDiaData, inicioDiasAtras } from "../common/timezone";
 
 export type CatalogoTipo = "material" | "cliente" | "local" | "veiculo";
 
@@ -516,14 +517,15 @@ export class MotoristaService {
       faltando.push("cliente");
     }
 
-    // DATA
-    let data = new Date();
+    // DATA — ancorada no dia civil de Brasília (container roda em UTC).
+    // Sem isso, viagem lançada após 21h cai no dia seguinte.
+    let data = inicioDoDiaData();
     if (input.data) {
       const lower = input.data.toLowerCase().trim();
       if (lower === "hoje" || lower === "agora") {
-        // já é now
+        // já é hoje em SP
       } else if (lower === "ontem") {
-        data.setDate(data.getDate() - 1);
+        data = new Date(data.getTime() - 86400000);
       } else {
         const parsed = new Date(input.data);
         if (!isNaN(parsed.getTime())) data = parsed;
@@ -734,8 +736,7 @@ export class MotoristaService {
       filtroMotorista: boolean,
       diasJanela: number,
     ): Promise<Row[]> => {
-      const desde = new Date();
-      desde.setDate(desde.getDate() - diasJanela);
+      const desde = inicioDiasAtras(diasJanela);
       const motoristaFilter = filtroMotorista ? motoristaId : null;
       if (tipo === "material") {
         return this.prisma.$queryRaw<Row[]>`
@@ -953,8 +954,7 @@ export class MotoristaService {
       comoCarga: bigint;
       comoDescarga: bigint;
     };
-    const desde = new Date();
-    desde.setDate(desde.getDate() - dias);
+    const desde = inicioDiasAtras(dias);
     const inclCarga = tipoUso !== "descarga";
     const inclDescarga = tipoUso !== "carga";
     const rows = await this.prisma.$queryRaw<Row[]>`
@@ -1039,8 +1039,7 @@ export class MotoristaService {
     }>;
   }> {
     const JANELA_DIAS = 180;
-    const desde = new Date();
-    desde.setDate(desde.getDate() - JANELA_DIAS);
+    const desde = inicioDiasAtras(JANELA_DIAS);
 
     type Row = {
       clienteId: string;

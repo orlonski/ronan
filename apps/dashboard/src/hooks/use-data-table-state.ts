@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { usePathname, useSearchParams } from "next/navigation";
+import { primeiroDiaDoMesSP } from "@/lib/datetime-br";
 
 export type SortOrder = "asc" | "desc";
 
@@ -43,8 +44,7 @@ export type UseDataTableStateOptions = {
 
 /** Primeiro dia do mês atual em formato YYYY-MM-DD (pra usar em filtros de data). */
 export function firstDayOfMonth(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  return primeiroDiaDoMesSP();
 }
 
 /**
