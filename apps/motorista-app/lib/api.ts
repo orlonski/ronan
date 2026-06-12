@@ -62,25 +62,49 @@ function appVersionHeaders(): Record<string, string> {
   return h;
 }
 
-let refreshing: Promise<Tokens | null> | null = null;
+/**
+ * Resultado da renovação. CRUCIAL distinguir:
+ *  - "invalido": servidor REJEITOU o refresh token (401/403) ou não há token →
+ *    a sessão acabou de verdade, pode deslogar.
+ *  - "transitorio": rede/timeout/servidor fora (5xx) — NÃO desloga. O refresh
+ *    token segue válido (dura 90d); é só uma falha momentânea (sem sinal, túnel,
+ *    deploy da API). Mantém a sessão e tenta de novo na próxima request.
+ */
+type RefreshResult =
+  | { status: "ok"; tokens: Tokens }
+  | { status: "invalido" }
+  | { status: "transitorio" };
 
-async function refresh(): Promise<Tokens | null> {
+let refreshing: Promise<RefreshResult> | null = null;
+
+async function refresh(): Promise<RefreshResult> {
   if (refreshing) return refreshing;
   const tokens = await loadTokens();
-  if (!tokens?.refreshToken) return null;
+  if (!tokens?.refreshToken) return { status: "invalido" };
   refreshing = (async () => {
     try {
-      const res = await fetch(`${API_URL}/m/auth/refresh`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ refreshToken: tokens.refreshToken }),
-      });
-      if (!res.ok) return null;
-      const fresh = (await res.json()) as Tokens;
-      await saveTokens(fresh);
-      return fresh;
+      const res = await fetchComTimeout(
+        `${API_URL}/m/auth/refresh`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ refreshToken: tokens.refreshToken }),
+        },
+        REQUEST_TIMEOUT_MS,
+      );
+      if (res.ok) {
+        const fresh = (await res.json()) as Tokens;
+        await saveTokens(fresh);
+        return { status: "ok", tokens: fresh };
+      }
+      // Só 401/403 = refresh token realmente inválido/expirado → deslogar.
+      // 5xx/429/etc = servidor com problema momentâneo → não desloga.
+      return res.status === 401 || res.status === 403
+        ? { status: "invalido" }
+        : { status: "transitorio" };
     } catch {
-      return null;
+      // Erro de rede / timeout (sem sinal, túnel) → não desloga.
+      return { status: "transitorio" };
     } finally {
       refreshing = null;
     }
@@ -178,9 +202,9 @@ export async function request<T>(
   }
 
   if (res.status === 401 && auth) {
-    const fresh = await refresh();
-    if (fresh) {
-      headers["authorization"] = `Bearer ${fresh.accessToken}`;
+    const renov = await refresh();
+    if (renov.status === "ok") {
+      headers["authorization"] = `Bearer ${renov.tokens.accessToken}`;
       try {
         res = await fetchComTimeout(url, { ...fetchInit, headers }, timeoutMs);
       } catch (err) {
@@ -193,11 +217,15 @@ export async function request<T>(
         }
         throw wrapped;
       }
-    } else {
+    } else if (renov.status === "invalido") {
+      // Sessão acabou de verdade — desloga.
       await clearTokens();
       setAuthState(false);
       router.replace("/login");
       throw new ApiError(401, null);
+    } else {
+      // Transitório (rede/servidor): mantém a sessão, só falha esta request.
+      throw new TypeError("Sem conexão com o servidor. Tente de novo em instantes.");
     }
   }
 
