@@ -12,6 +12,8 @@
     "build:android": "eas build --local --platform android --profile production",
     "build:ios:preview": "eas build --local --platform ios --profile preview",
     "build:ios": "eas build --local --platform ios --profile production",
+    "ota:avisar": "node scripts/avisar-ota.mjs",
+    "ota": "eas update --branch production && node scripts/avisar-ota.mjs",
     "assets": "node scripts/generate-assets.mjs",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
