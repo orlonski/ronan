@@ -1032,6 +1032,11 @@ model ConfiguracaoAgente {
   modeloAnthropic String   @default("claude-sonnet-4-6")
   // Modelo usado quando provider=gemini
   modeloGemini    String   @default("gemini-2.5-flash")
+  // Agente conversacional ligado? Desligado = não gasta IA, responde aviso educado.
+  // Nasce desligado de propósito: o número hoje serve só pra envios automáticos.
+  ativo           Boolean  @default(false)
+  // Resposta educada quando agente desligado; null = usa default do código.
+  mensagemInativo String?  @db.Text
   alteradoEm      DateTime @updatedAt
   alteradoPor     User?    @relation(fields: [alteradoPorId], references: [id])
   alteradoPorId   String?

@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, MessageCircle, Save } from "lucide-react";
+import { AlertTriangle, CheckCircle2, MessageCircle, Power, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { StatusToggle } from "@/components/status-toggle";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 
 type ProviderId = "anthropic" | "gemini";
@@ -15,9 +16,14 @@ type ConfigAgente = {
   provider: ProviderId;
   modeloAnthropic: string;
   modeloGemini: string;
+  ativo: boolean;
+  mensagemInativo: string | null;
   alteradoEm: string;
   keys: { anthropic: boolean; gemini: boolean };
 };
+
+const MENSAGEM_INATIVO_PLACEHOLDER =
+  "Oi! 👋 Esse número é só pra envios automáticos (avisos e código de cadastro). Pra registrar suas viagens, use o app. Qualquer dúvida, fala com o escritório!";
 
 const PATH = "/admin/agente-config";
 
@@ -77,12 +83,16 @@ export default function AgenteConfigPage() {
   const [provider, setProvider] = useState<ProviderId>("anthropic");
   const [modeloAnthropic, setModeloAnthropic] = useState("claude-sonnet-4-6");
   const [modeloGemini, setModeloGemini] = useState("gemini-2.5-flash");
+  const [ativo, setAtivo] = useState(true);
+  const [mensagemInativo, setMensagemInativo] = useState("");
 
   useEffect(() => {
     if (cfg.data) {
       setProvider(cfg.data.provider);
       setModeloAnthropic(cfg.data.modeloAnthropic);
       setModeloGemini(cfg.data.modeloGemini);
+      setAtivo(cfg.data.ativo);
+      setMensagemInativo(cfg.data.mensagemInativo ?? "");
     }
   }, [cfg.data]);
 
@@ -91,6 +101,8 @@ export default function AgenteConfigPage() {
       provider: ProviderId;
       modeloAnthropic: string;
       modeloGemini: string;
+      ativo: boolean;
+      mensagemInativo: string | null;
     }) =>
       fetchApi<ConfigAgente>(PATH, {
         method: "PUT",
@@ -115,7 +127,13 @@ export default function AgenteConfigPage() {
   if (cfg.isLoading) return <p className="text-sm text-muted-foreground">Carregando…</p>;
 
   async function salvar() {
-    await update.mutateAsync({ provider, modeloAnthropic, modeloGemini });
+    await update.mutateAsync({
+      provider,
+      modeloAnthropic,
+      modeloGemini,
+      ativo,
+      mensagemInativo: mensagemInativo.trim() || null,
+    });
   }
 
   const keys = cfg.data?.keys ?? { anthropic: false, gemini: false };
@@ -135,8 +153,46 @@ export default function AgenteConfigPage() {
         </p>
       </header>
 
+      {/* Liga/desliga do agente */}
+      <Card className={`space-y-3 p-5 ${ativo ? "" : "border-amber-300 bg-amber-50"}`}>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">
+              <Power className="h-4 w-4" />
+              Agente do WhatsApp
+            </h2>
+            <p className="mt-1 max-w-2xl text-xs text-muted-foreground">
+              Ligado: a IA responde e ajuda motoristas/admin (gera custo por
+              mensagem). Desligado: <strong>não gasta nada de IA</strong> — quem
+              mandar mensagem recebe um aviso automático educado. O envio de código
+              de cadastro continua funcionando normalmente nos dois casos.
+            </p>
+          </div>
+          <StatusToggle active={ativo} onChange={setAtivo} label />
+        </div>
+
+        {!ativo && (
+          <div className="space-y-2 border-t pt-3">
+            <label className="block text-xs font-medium text-muted-foreground">
+              Resposta automática (quando desligado)
+            </label>
+            <textarea
+              value={mensagemInativo}
+              onChange={(e) => setMensagemInativo(e.target.value)}
+              placeholder={MENSAGEM_INATIVO_PLACEHOLDER}
+              rows={3}
+              maxLength={500}
+              className="w-full rounded-md border border-input bg-background p-2 text-sm"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Deixe em branco pra usar a mensagem padrão. Máx. 500 caracteres.
+            </p>
+          </div>
+        )}
+      </Card>
+
       {/* Status das keys */}
-      <Card className="space-y-3 p-5">
+      <Card className={`space-y-3 p-5 ${ativo ? "" : "opacity-50"}`}>
         <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Status das chaves no servidor
         </h2>
@@ -170,7 +226,7 @@ export default function AgenteConfigPage() {
       </Card>
 
       {/* Seleção de provider */}
-      <Card className="space-y-3 p-5">
+      <Card className={`space-y-3 p-5 ${ativo ? "" : "opacity-50"}`}>
         <div>
           <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
             Qual provider de IA usar?
@@ -216,7 +272,7 @@ export default function AgenteConfigPage() {
       </Card>
 
       {/* Modelo do provider escolhido */}
-      <Card className="space-y-3 p-5">
+      <Card className={`space-y-3 p-5 ${ativo ? "" : "opacity-50"}`}>
         <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Qual modelo do {provider === "anthropic" ? "Anthropic" : "Gemini"}?
         </h2>
@@ -253,7 +309,7 @@ export default function AgenteConfigPage() {
       </Card>
 
       {/* Alerta se provider escolhido não tem key */}
-      {!providerEscolhidoTemKey && (
+      {ativo && !providerEscolhidoTemKey && (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <strong>Atenção:</strong> o provider selecionado não tem chave de API
           configurada no servidor. Se você salvar assim, o agente vai responder

@@ -8,6 +8,8 @@ export type AtualizarAgenteConfigInput = {
   provider?: "anthropic" | "gemini";
   modeloAnthropic?: string;
   modeloGemini?: string;
+  ativo?: boolean;
+  mensagemInativo?: string | null;
 };
 
 @Injectable()

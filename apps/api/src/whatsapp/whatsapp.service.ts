@@ -10,6 +10,15 @@ import { TranscricaoService } from "./transcricao.service";
 type MensagemTipo = "TEXTO" | "IMAGEM" | "AUDIO";
 
 /**
+ * Resposta padrão quando o agente está desligado (ConfiguracaoAgente.ativo=false).
+ * Tom de parceria: esse número hoje serve só pra envios automáticos (avisos +
+ * código de cadastro). Admin pode customizar via mensagemInativo na tela.
+ */
+const MENSAGEM_AGENTE_INATIVO =
+  "Oi! 👋 Esse número é só pra envios automáticos (avisos e código de cadastro). " +
+  "Pra registrar suas viagens, use o app. Qualquer dúvida, fala com o escritório!";
+
+/**
  * Orquestrador da Fase 1: recebe webhook, identifica perfil, lida com fluxo
  * de vinculação (telefone novo) e responde ping/pong simples. A partir da
  * Fase 2, mensagens de telefone JÁ VINCULADO vão pra AgenteService (Claude
@@ -104,6 +113,38 @@ export class WhatsappService {
     try {
       faseAtual = "sessao";
       identidade = await this.sessao.resolverPorTelefone(telefone);
+
+      // Agente desligado na config → não gasta IA (sem Whisper, sem Claude/Gemini).
+      // Loga a entrada e responde educado. Vale pra qualquer remetente: hoje esse
+      // número serve só pra enviar código de cadastro (outbound, fora deste fluxo).
+      const cfgAgente = await this.prisma.configuracaoAgente.upsert({
+        where: { id: "default" },
+        update: {},
+        create: { id: "default" },
+      });
+      if (!cfgAgente.ativo) {
+        faseAtual = "agente_desligado";
+        await this.prisma.whatsappMensagem.create({
+          data: {
+            sessaoId: identidade.sessaoId,
+            telefone,
+            direcao: "ENTRADA",
+            conteudo: textoEntrada,
+            tipo,
+            metadata: {
+              evolutionMsgId: evolutionMessageId,
+              pushName: data.pushName ?? null,
+              agenteDesligado: true,
+            },
+          },
+        });
+        await this.enviarTexto(
+          telefone,
+          cfgAgente.mensagemInativo?.trim() || MENSAGEM_AGENTE_INATIVO,
+          identidade.sessaoId,
+        );
+        return;
+      }
 
       // Áudio: transcreve via Whisper antes de logar — assim conteudo persiste
       // já com o texto entendido, sem retranscrever pra montar histórico depois.

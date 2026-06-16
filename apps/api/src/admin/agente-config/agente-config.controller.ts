@@ -12,6 +12,8 @@ const AtualizarAgenteConfigSchema = z.object({
   provider: z.enum(["anthropic", "gemini"]).optional(),
   modeloAnthropic: z.string().min(1).max(100).optional(),
   modeloGemini: z.string().min(1).max(100).optional(),
+  ativo: z.boolean().optional(),
+  mensagemInativo: z.string().max(500).nullable().optional(),
 });
 
 @ApiTags("admin/agente-config")
