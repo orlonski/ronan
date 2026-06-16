@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import * as Updates from "expo-updates";
@@ -29,6 +30,7 @@ import {
 import { Swipeable } from "react-native-gesture-handler";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { CoachTarget } from "@/components/coach-target";
 import { EmptyState } from "@/components/empty-state";
 import { NotificationBell } from "@/components/notification-bell";
 import { ViagemCardSkeleton } from "@/components/skeleton";
@@ -48,6 +50,7 @@ import {
   type Viagem,
 } from "@/lib/queries";
 import { iniciarTracking, useViagemAndamento } from "@/lib/tracking";
+import { startHomeTutorialIfNeeded } from "@/lib/home-tutorial";
 
 const statusVariant: Record<
   string,
@@ -79,6 +82,16 @@ export default function Home() {
   const updateReady = updates.isUpdatePending || updates.isUpdateAvailable;
   const tracking = useViagemAndamento(true);
   const trackingCfg = useTrackingConfig();
+
+  // Tutorial de primeiro uso: dispara assim que o perfil carrega (precisamos
+  // das permissões pra saber quais botões existem). Só uma vez por sessão;
+  // o próprio tutorial-state checa em AsyncStorage se já foi visto.
+  const tutorialDisparado = useRef(false);
+  useEffect(() => {
+    if (tutorialDisparado.current || !me.data) return;
+    tutorialDisparado.current = true;
+    startHomeTutorialIfNeeded(me.data);
+  }, [me.data]);
 
   async function iniciarViagem() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -189,7 +202,9 @@ export default function Home() {
               </Text>
             )}
           </View>
-          <NotificationBell />
+          <CoachTarget id="coach-sino" className="rounded-full">
+            <NotificationBell />
+          </CoachTarget>
         </View>
       </View>
 
@@ -318,6 +333,7 @@ export default function Home() {
 
             {/* Botão Hero "Nova viagem" */}
             {me.data?.podeLancarViagem && (
+              <CoachTarget id="coach-nova-viagem" className="rounded-2xl">
               <Pressable
                 onPress={() => router.push("/nova-viagem")}
                 className="overflow-hidden rounded-2xl bg-primary active:opacity-85"
@@ -337,10 +353,12 @@ export default function Home() {
                   <Plus size={28} color="white" strokeWidth={2.5} />
                 </View>
               </Pressable>
+              </CoachTarget>
             )}
 
             {/* Botão Iniciar viagem (tracking GPS) */}
             {me.data?.podeIniciarViagem && (
+              <CoachTarget id="coach-iniciar-viagem" className="rounded-2xl">
               <Pressable
                 onPress={iniciarViagem}
                 className="flex-row items-center gap-4 rounded-2xl border-2 border-primary bg-card p-4 active:opacity-75"
@@ -359,10 +377,12 @@ export default function Home() {
                   </Text>
                 </View>
               </Pressable>
+              </CoachTarget>
             )}
 
             {/* Botão Pedágio */}
             {me.data?.podeLancarPedagio && (
+              <CoachTarget id="coach-pedagio" className="rounded-2xl">
               <Pressable
                 onPress={() => router.push("/novo-pedagio")}
                 className="flex-row items-center gap-4 rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
@@ -379,10 +399,12 @@ export default function Home() {
                   </Text>
                 </View>
               </Pressable>
+              </CoachTarget>
             )}
 
             {/* Botão Abastecimento */}
             {me.data?.podeLancarAbastecimento && (
+              <CoachTarget id="coach-abastecimento" className="rounded-2xl">
               <Pressable
                 onPress={() => router.push("/novo-abastecimento")}
                 className="flex-row items-center gap-4 rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
@@ -399,6 +421,7 @@ export default function Home() {
                   </Text>
                 </View>
               </Pressable>
+              </CoachTarget>
             )}
 
             {/* Empty state se todas as 4 funcionalidades estão desabilitadas */}

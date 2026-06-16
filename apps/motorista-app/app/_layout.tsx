@@ -10,6 +10,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { AlertHost } from "@/components/ui/alert-dialog";
+import { TutorialHost } from "@/components/tutorial-host";
 import { loadTokens } from "@/lib/auth";
 import { drenar as drenarEventos } from "@/lib/event-reporter";
 import { setQueryClientGlobal } from "@/lib/queries";
@@ -267,6 +268,7 @@ export default function RootLayout() {
                 }}
               />
             </AuthGate>
+            <TutorialHost />
             <AlertHost />
           </ErrorBoundary>
         </QueryClientProvider>

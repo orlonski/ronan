@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { router, Stack } from "expo-router";
-import { KeyRound, LogOut, MapPin } from "lucide-react-native";
+import { HelpCircle, KeyRound, LogOut, MapPin } from "lucide-react-native";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -19,6 +19,7 @@ import { api } from "@/lib/api";
 import { clearTokens } from "@/lib/auth";
 import { setAuthState } from "@/lib/auth-state";
 import { useMe } from "@/lib/queries";
+import { replayHomeTutorial } from "@/lib/home-tutorial";
 
 export default function Perfil() {
   const me = useMe();
@@ -196,6 +197,23 @@ export default function Perfil() {
               Compartilhar posição
             </Text>
           </Button>
+
+          {me.data && (
+            <Button
+              variant="outline"
+              size="lg"
+              onPress={() => {
+                router.push("/");
+                // pequeno atraso pra Home montar os alvos antes de medir
+                setTimeout(() => replayHomeTutorial(me.data!), 350);
+              }}
+            >
+              <HelpCircle size={18} color="#0f172a" />
+              <Text className="text-base font-medium text-foreground">
+                Rever tutorial
+              </Text>
+            </Button>
+          )}
 
           <Button variant="outline" size="lg" onPress={sair}>
             <LogOut size={18} color="#dc2626" />
