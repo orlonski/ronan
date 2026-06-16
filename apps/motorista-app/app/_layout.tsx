@@ -6,11 +6,14 @@ import { focusManager, QueryClient, QueryClientProvider } from "@tanstack/react-
 import { Redirect, router, Stack, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
+import * as Updates from "expo-updates";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { AlertHost } from "@/components/ui/alert-dialog";
 import { TutorialHost } from "@/components/tutorial-host";
+import { TelaCarregando } from "@/components/tela-carregando";
+import { aplicarUpdateNoBoot } from "@/lib/ota";
 import { loadTokens } from "@/lib/auth";
 import {
   getCadastroStatus,
@@ -252,8 +255,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     SplashScreen.hideAsync().catch(() => {});
   }, [ready]);
 
-  // Splash nativo cobre enquanto !ready
-  if (!ready) return null;
+  // Enquanto a auth não resolveu: o splash nativo ainda cobre no caminho
+  // normal; mas se o BootGate já escondeu o splash (passou pela tela de
+  // atualização), a TelaCarregando evita um flash em branco aqui.
+  if (!ready) return <TelaCarregando />;
 
   // Redirect declarativo (preferido vs router.replace imperativo).
   // Evita double-mount da rota destino.
@@ -267,6 +272,48 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Roda ANTES do AuthGate, mirando o primeiro download da loja: enquanto o app
+ * ainda está no bundle embutido, baixa a OTA mais recente e recarrega, pra o
+ * motorista já cair na versão atual sem fechar/reabrir. Em launches seguintes
+ * (já numa OTA aplicada) é no-op e libera o app na hora.
+ */
+function BootGate({ children }: { children: React.ReactNode }) {
+  // "checking" = checando OTA (splash nativo cobre)
+  // "updating" = baixando uma OTA nova (mostra TelaCarregando)
+  // "done"     = segue pro app (AuthGate)
+  const [phase, setPhase] = useState<"checking" | "updating" | "done">(
+    Updates.isEnabled && Updates.isEmbeddedLaunch ? "checking" : "done",
+  );
+
+  useEffect(() => {
+    if (phase !== "checking") return;
+    let alive = true;
+    void aplicarUpdateNoBoot({
+      onDownloadStart: () => {
+        if (alive) setPhase("updating");
+      },
+    }).finally(() => {
+      // Só é alcançado se NÃO recarregou (sem update, timeout ou erro).
+      if (alive) setPhase("done");
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Ao entrar em "updating", esconde o splash nativo pra revelar a TelaCarregando.
+  useEffect(() => {
+    if (phase === "updating") SplashScreen.hideAsync().catch(() => {});
+  }, [phase]);
+
+  if (phase === "checking") return null; // splash nativo cobre
+  if (phase === "updating")
+    return <TelaCarregando mensagem="Atualizando para a versão mais recente…" />;
+  return <>{children}</>;
+}
+
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -274,16 +321,18 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <StatusBar style="light" />
           <ErrorBoundary>
-            <AuthGate>
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                  contentStyle: { backgroundColor: "white" },
-                }}
-              />
-            </AuthGate>
-            <TutorialHost />
-            <AlertHost />
+            <BootGate>
+              <AuthGate>
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                    contentStyle: { backgroundColor: "white" },
+                  }}
+                />
+              </AuthGate>
+              <TutorialHost />
+              <AlertHost />
+            </BootGate>
           </ErrorBoundary>
         </QueryClientProvider>
       </SafeAreaProvider>
