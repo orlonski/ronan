@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Dimensions, Modal, Pressable, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Dimensions, Pressable, StyleSheet, Text, View } from "react-native";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -27,10 +27,18 @@ const GAP = 14;
  *  - um anel branco no furo;
  *  - um balão com título, texto, contador e botões Pular/Próximo.
  * Sem alvo (targetId ausente) → fundo escuro cheio + card centralizado.
+ *
+ * NÃO usa <Modal>: no Android (edge-to-edge, SDK 54) o Modal vive numa janela
+ * separada, então measureInWindow do botão (janela do app) e o desenho (janela
+ * do Modal) ficam em sistemas de coordenadas diferentes — o furo saía deslocado.
+ * Aqui o overlay é um View absoluto na MESMA janela dos botões, e a posição do
+ * alvo é calculada relativa à origem do próprio overlay (mede os dois e subtrai),
+ * o que cancela qualquer offset de status/nav bar nos dois sistemas.
  */
 export function TutorialHost() {
   const [run, setRun] = useState<TutorialRun | null>(getTutorialRun());
   const [rect, setRect] = useState<CoachRect | null>(null);
+  const hostRef = useRef<View>(null);
   const insets = useSafeAreaInsets();
 
   useEffect(() => subscribeTutorial(() => setRun(getTutorialRun())), []);
@@ -40,7 +48,8 @@ export function TutorialHost() {
   const targetId = step?.targetId;
 
   // Mede o alvo quando o passo muda. Layout pode não estar pronto na hora
-  // (FlatList header, navegação) — tenta de novo algumas vezes.
+  // (FlatList header, navegação) — tenta de novo algumas vezes. Mede o alvo E
+  // a origem do overlay e subtrai → coordenadas relativas ao overlay.
   useEffect(() => {
     let alive = true;
     if (!targetId) {
@@ -49,20 +58,32 @@ export function TutorialHost() {
     }
     setRect(null);
     let tries = 0;
+    const retry = () => {
+      if (tries++ < 15 && alive) setTimeout(attempt, 80);
+    };
     const attempt = () => {
       if (!alive) return;
       const measurer = getCoachMeasurer(targetId);
-      if (!measurer) {
-        if (tries++ < 12) setTimeout(attempt, 80);
+      const host = hostRef.current;
+      if (!measurer || !host) {
+        retry();
         return;
       }
       void measurer().then((r) => {
         if (!alive) return;
-        if (r) {
-          setRect(r);
+        if (!r) {
+          retry();
           return;
         }
-        if (tries++ < 12) setTimeout(attempt, 80);
+        host.measureInWindow((hx, hy) => {
+          if (!alive) return;
+          setRect({
+            x: r.x - hx,
+            y: r.y - hy,
+            width: r.width,
+            height: r.height,
+          });
+        });
       });
     };
     attempt();
@@ -73,7 +94,7 @@ export function TutorialHost() {
 
   if (!run || !step) return null;
 
-  const { width: W, height: H } = Dimensions.get("window");
+  const { height: H } = Dimensions.get("window");
   const total = run.steps.length;
   const isLast = run.index === total - 1;
   const isFirst = run.index === 0;
@@ -91,23 +112,19 @@ export function TutorialHost() {
     backTutorial();
   }
 
-  // Se o alvo estiver (mesmo que parcialmente) fora da tela — telas pequenas
-  // com banners empurrando a lista —, cai pro balão centralizado em vez de
-  // desenhar um furo invisível lá embaixo/em cima.
-  const onScreen =
-    !!rect &&
-    rect.y >= insets.top &&
-    rect.y + rect.height <= H - insets.bottom;
-  const hasSpot = !!rect && onScreen;
   const sx = rect ? rect.x - SPOT_PAD : 0;
   const sy = rect ? rect.y - SPOT_PAD : 0;
   const sw = rect ? rect.width + SPOT_PAD * 2 : 0;
   const sh = rect ? rect.height + SPOT_PAD * 2 : 0;
+
+  // Cai pro balão centralizado se o alvo está fora da área visível (telas
+  // pequenas com banners empurrando a lista) — furo invisível confunde.
+  const onScreen = !!rect && sy + sh > 0 && sy < H;
+  const hasSpot = !!rect && onScreen;
   const isCircle = step.shape === "circle";
   const radius = isCircle ? Math.max(sw, sh) : 18;
 
   // Onde colocar o balão: embaixo do furo se couber, senão em cima.
-  // Sem furo, centraliza verticalmente.
   const spaceBelow = H - (sy + sh);
   const placeBelow = spaceBelow >= TOOLTIP_EST_HEIGHT + insets.bottom;
 
@@ -180,72 +197,81 @@ export function TutorialHost() {
   );
 
   return (
-    // Sem statusBarTranslucent de propósito: no Android essa prop faz o Modal
-    // desenhar a partir do topo físico (atrás da status bar), mas measureInWindow
-    // mede relativo à janela do app — o descasamento jogava o furo pra cima.
-    // No iOS a prop é ignorada (lá já estava alinhado).
-    <Modal visible transparent animationType="fade">
-      {hasSpot ? (
-        <View className="flex-1">
-          {/* painéis escuros ao redor do furo — capturam toque (sem passthrough
-              pro botão real) pra não disparar ação no meio do tutorial */}
-          <View
-            style={{ position: "absolute", left: 0, top: 0, right: 0, height: sy }}
-            className="bg-black/70"
-          />
-          <View
-            style={{ position: "absolute", left: 0, top: sy + sh, right: 0, bottom: 0 }}
-            className="bg-black/70"
-          />
-          <View
-            style={{ position: "absolute", left: 0, top: sy, width: sx, height: sh }}
-            className="bg-black/70"
-          />
-          <View
-            style={{
-              position: "absolute",
-              left: sx + sw,
-              top: sy,
-              right: 0,
-              height: sh,
-            }}
-            className="bg-black/70"
-          />
+    // Overlay absoluto na mesma janela. O View raiz captura os toques (inclusive
+    // no "furo") pra não disparar o botão real no meio do tutorial.
+    <View
+      ref={hostRef}
+      style={[StyleSheet.absoluteFillObject, { zIndex: 9999, elevation: 9999 }]}
+    >
+      <Animated.View
+        key={run.key}
+        entering={FadeIn.duration(150)}
+        style={StyleSheet.absoluteFillObject}
+      >
+        {hasSpot ? (
+          <View style={StyleSheet.absoluteFillObject}>
+            {/* painéis escuros ao redor do furo */}
+            <View
+              style={{ position: "absolute", left: 0, top: 0, right: 0, height: sy }}
+              className="bg-black/70"
+            />
+            <View
+              style={{ position: "absolute", left: 0, top: sy + sh, right: 0, bottom: 0 }}
+              className="bg-black/70"
+            />
+            <View
+              style={{ position: "absolute", left: 0, top: sy, width: sx, height: sh }}
+              className="bg-black/70"
+            />
+            <View
+              style={{
+                position: "absolute",
+                left: sx + sw,
+                top: sy,
+                right: 0,
+                height: sh,
+              }}
+              className="bg-black/70"
+            />
 
-          {/* anel destacando o alvo */}
-          <View
-            pointerEvents="none"
-            style={{
-              position: "absolute",
-              left: sx,
-              top: sy,
-              width: sw,
-              height: sh,
-              borderRadius: radius,
-              borderWidth: 3,
-              borderColor: "#ffffff",
-            }}
-          />
+            {/* anel destacando o alvo */}
+            <View
+              pointerEvents="none"
+              style={{
+                position: "absolute",
+                left: sx,
+                top: sy,
+                width: sw,
+                height: sh,
+                borderRadius: radius,
+                borderWidth: 3,
+                borderColor: "#ffffff",
+              }}
+            />
 
-          {/* balão posicionado acima/abaixo do furo */}
-          <View
-            style={{
-              position: "absolute",
-              left: 16,
-              right: 16,
-              ...(placeBelow
-                ? { top: sy + sh + GAP }
-                : { bottom: H - sy + GAP }),
-            }}
-          >
-            {tooltip}
+            {/* balão posicionado acima/abaixo do furo */}
+            <View
+              style={{
+                position: "absolute",
+                left: 16,
+                right: 16,
+                ...(placeBelow
+                  ? { top: sy + sh + GAP }
+                  : { bottom: H - sy + GAP }),
+              }}
+            >
+              {tooltip}
+            </View>
           </View>
-        </View>
-      ) : (
-        <View className="flex-1 items-center justify-center bg-black/70 px-6">
-          <View className="w-full max-w-sm">{tooltip}</View>
-        </View>
-      )}
-    </Modal>
+        ) : (
+          <View
+            style={StyleSheet.absoluteFillObject}
+            className="items-center justify-center bg-black/70 px-6"
+          >
+            <View className="w-full max-w-sm">{tooltip}</View>
+          </View>
+        )}
+      </Animated.View>
+    </View>
   );
 }
