@@ -1,12 +1,16 @@
 import { Body, Controller, HttpCode, Post, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import {
+  CadastroMotoristaInput,
+  ConfirmarCadastroInput,
   LoginInput,
   LoginMotoristaInput,
   RefreshInput,
+  ReenviarCodigoInput,
   TrocarSenhaInput,
 } from "@ronan/shared-types";
 import { AuthService } from "./auth.service";
+import { CadastroMotoristaService } from "./cadastro-motorista.service";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { Public } from "./decorators/public.decorator";
 import { Roles } from "./decorators/roles.decorator";
@@ -17,7 +21,37 @@ import type { AuthMotorista } from "./types";
 @ApiTags("auth")
 @Controller()
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly cadastro: CadastroMotoristaService,
+  ) {}
+
+  @Public()
+  @HttpCode(200)
+  @Post("m/auth/cadastro/iniciar")
+  async iniciarCadastro(
+    @Body(new ZodValidationPipe(CadastroMotoristaInput)) body: CadastroMotoristaInput,
+  ) {
+    return this.cadastro.iniciar(body);
+  }
+
+  @Public()
+  @HttpCode(200)
+  @Post("m/auth/cadastro/reenviar")
+  async reenviarCodigo(
+    @Body(new ZodValidationPipe(ReenviarCodigoInput)) body: ReenviarCodigoInput,
+  ) {
+    return this.cadastro.reenviar(body.cpf);
+  }
+
+  @Public()
+  @HttpCode(200)
+  @Post("m/auth/cadastro/confirmar")
+  async confirmarCadastro(
+    @Body(new ZodValidationPipe(ConfirmarCadastroInput)) body: ConfirmarCadastroInput,
+  ) {
+    return this.cadastro.confirmar(body.cpf, body.codigo);
+  }
 
   @Public()
   @HttpCode(200)

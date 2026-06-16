@@ -7,9 +7,12 @@ import type { ColumnDef } from "@tanstack/react-table";
 import {
   formatCpf,
   formatTelefone,
+  type StatusMotorista,
   type TipoDocumentoMotorista,
 } from "@ronan/shared-types";
 import { StatusToggle } from "@/components/status-toggle";
+import { StatusCadastroBadge } from "@/components/status-cadastro-badge";
+import { AprovacaoMotoristaButtons } from "@/components/aprovacao-motorista-buttons";
 import { ExcluirButton } from "@/components/excluir-button";
 import { ConviteWhatsappButton } from "@/components/convite-whatsapp-button";
 import { EnviarPushButton } from "@/components/enviar-push-button";
@@ -38,6 +41,8 @@ type Motorista = AppVersaoInfo & {
   telefone: string | null;
   email: string | null;
   ativo: boolean;
+  status: StatusMotorista;
+  aprovadoEm: string | null;
   veiculoDefaultId: string | null;
   veiculoDefault: Veiculo | null;
   veiculos: Veiculo[];
@@ -162,10 +167,17 @@ export default function MotoristasPage() {
         ),
       },
       {
+        id: "status",
+        enableSorting: false,
+        size: 96,
+        header: "Cadastro",
+        cell: ({ row }) => <StatusCadastroBadge status={row.original.status} />,
+      },
+      {
         id: "ativo",
         accessorKey: "ativo",
         size: 96,
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Ativo" />,
         cell: ({ row }) => (
           <StatusToggle
             active={row.original.ativo}
@@ -179,11 +191,14 @@ export default function MotoristasPage() {
       },
       {
         id: "acoes",
-        size: 220,
+        size: 300,
         enableSorting: false,
         header: () => <span className="block text-center">Ações</span>,
         cell: ({ row }) => (
-          <div className="flex justify-center">
+          <div className="flex items-center justify-center gap-1">
+            {row.original.status === "PENDENTE_APROVACAO" && (
+              <AprovacaoMotoristaButtons id={row.original.id} nome={row.original.nome} />
+            )}
             <DocumentosDrawerButton
               motoristaId={row.original.id}
               motoristaNome={row.original.nome}
@@ -248,16 +263,29 @@ export default function MotoristasPage() {
             state={tableState}
             searchPlaceholder="Buscar por nome, CPF, telefone, email…"
             filters={
-              <Combobox
-                value={tableState.filters.ativo}
-                onChange={(v) => tableState.setFilter("ativo", v)}
-                placeholder="Status"
-                showSearch={false}
-                options={[
-                  { value: "true", label: "Ativos" },
-                  { value: "false", label: "Inativos" },
-                ]}
-              />
+              <>
+                <Combobox
+                  value={tableState.filters.status}
+                  onChange={(v) => tableState.setFilter("status", v)}
+                  placeholder="Cadastro"
+                  showSearch={false}
+                  options={[
+                    { value: "PENDENTE_APROVACAO", label: "Pendentes" },
+                    { value: "APROVADO", label: "Aprovados" },
+                    { value: "REJEITADO", label: "Rejeitados" },
+                  ]}
+                />
+                <Combobox
+                  value={tableState.filters.ativo}
+                  onChange={(v) => tableState.setFilter("ativo", v)}
+                  placeholder="Ativo"
+                  showSearch={false}
+                  options={[
+                    { value: "true", label: "Ativos" },
+                    { value: "false", label: "Inativos" },
+                  ]}
+                />
+              </>
             }
           />
         }
@@ -276,7 +304,11 @@ export default function MotoristasPage() {
                 <div className="flex items-center gap-2 text-sm">
                   <HardHat className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   <span className="truncate font-medium">{m.nome}</span>
+                  <StatusCadastroBadge status={m.status} />
                 </div>
+                {m.status === "PENDENTE_APROVACAO" && (
+                  <AprovacaoMotoristaButtons id={m.id} nome={m.nome} />
+                )}
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                   <span className="font-mono">{formatCpf(m.cpf)}</span>
                   {m.telefone && (

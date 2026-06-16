@@ -5,23 +5,22 @@ import { ErrorsModule } from "../errors/errors.module";
 import { UploadsModule } from "../uploads/uploads.module";
 import { AgenteService } from "./agente/agente.service";
 import { ConviteService } from "./convite.service";
-import { EvolutionClientService } from "./evolution-client.service";
+import { EvolutionModule } from "./evolution.module";
 import { SessaoService } from "./sessao.service";
 import { TranscricaoService } from "./transcricao.service";
 import { WhatsappController } from "./whatsapp.controller";
 import { WhatsappService } from "./whatsapp.service";
 
 @Module({
-  imports: [MotoristaModule, DashboardModule, ErrorsModule, UploadsModule],
+  imports: [MotoristaModule, DashboardModule, ErrorsModule, UploadsModule, EvolutionModule],
   controllers: [WhatsappController],
   providers: [
     WhatsappService,
-    EvolutionClientService,
     SessaoService,
     ConviteService,
     AgenteService,
     TranscricaoService,
   ],
-  exports: [WhatsappService, SessaoService, ConviteService, EvolutionClientService],
+  exports: [WhatsappService, SessaoService, ConviteService, EvolutionModule],
 })
 export class WhatsappModule {}

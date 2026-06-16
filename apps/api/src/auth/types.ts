@@ -1,4 +1,4 @@
-import type { PerfilUsuario } from "@prisma/client";
+import type { PerfilUsuario, StatusMotorista } from "@prisma/client";
 
 export type AuthAdminUser = {
   kind: "ADMIN_USER";
@@ -13,6 +13,7 @@ export type AuthMotorista = {
   id: string;
   nome: string;
   cpf: string;
+  status: StatusMotorista;
 };
 
 export type AuthUser = AuthAdminUser | AuthMotorista;

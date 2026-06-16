@@ -97,6 +97,15 @@ export default function LoginPage() {
           <Button type="submit" size="xl" className="mt-3 w-full" loading={submitting}>
             {submitting ? "Entrando..." : "Entrar"}
           </Button>
+
+          <button
+            type="button"
+            onClick={() => navigate("/signup")}
+            disabled={submitting}
+            className="w-full py-2 text-center text-base font-semibold text-brand"
+          >
+            Não tem cadastro? Criar agora
+          </button>
         </div>
       </form>
     </div>

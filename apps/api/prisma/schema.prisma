@@ -177,6 +177,7 @@ model User {
   materiaisCriados    Material[]    @relation("CriouMaterial")
   veiculosCriados     Veiculo[]     @relation("CriouVeiculo")
   motoristasCriados   Motorista[]   @relation("CriouMotorista")
+  motoristasAprovados Motorista[]   @relation("AprovouMotorista")
   empresasCriadas     Empresa[]     @relation("CriouEmpresa")
   locaisCriados       Local[]       @relation("CriouLocal")
   usuariosCriados     User[]        @relation("CriouUser")
@@ -215,15 +216,32 @@ model AdminNotificacao {
   @@map("admin_notificacoes")
 }
 
+/// Ciclo de aprovação do cadastro do motorista.
+/// PENDENTE_APROVACAO: auto-cadastro recém-criado, aguardando admin validar.
+/// APROVADO: pode usar o app normalmente (criados pelo admin nascem aqui).
+/// REJEITADO: cadastro recusado — não consegue logar.
+enum StatusMotorista {
+  PENDENTE_APROVACAO
+  APROVADO
+  REJEITADO
+}
+
 model Motorista {
-  id                      String    @id @default(uuid())
+  id                      String          @id @default(uuid())
   nome                    String
-  cpf                     String    @unique // 11 dígitos (sem máscara) — também é o login
+  cpf                     String          @unique // 11 dígitos (sem máscara) — também é o login
   senhaHash               String
   telefone                String?
   email                   String?
-  veiculoDefault          Veiculo?  @relation("VeiculoDefaultMotorista", fields: [veiculoDefaultId], references: [id])
+  veiculoDefault          Veiculo?        @relation("VeiculoDefaultMotorista", fields: [veiculoDefaultId], references: [id])
   veiculoDefaultId        String?
+  // Status de aprovação do cadastro. Default APROVADO pra não quebrar fluxo
+  // existente (admin cria já aprovado; migration seta existentes pra APROVADO).
+  // Auto-cadastro pelo app nasce PENDENTE_APROVACAO.
+  status                  StatusMotorista @default(APROVADO)
+  aprovadoEm              DateTime?
+  aprovadoPor             User?           @relation("AprovouMotorista", fields: [aprovadoPorId], references: [id], onDelete: SetNull)
+  aprovadoPorId           String?
   ativo                   Boolean   @default(true)
   ultimoLoginEm           DateTime?
   tentativasLogin         Int       @default(0)
@@ -268,7 +286,31 @@ model Motorista {
   criadoPorId      String?
 
   @@index([ativo])
+  @@index([status])
   @@map("motoristas")
+}
+
+/// Cadastro de motorista iniciado pelo app, aguardando verificação do código
+/// enviado por WhatsApp. Guarda os dados do formulário (com senha já hasheada)
+/// antes do Motorista existir; vira Motorista ao confirmar o código e é apagado.
+/// Espelha o padrão de WhatsappConvite (código curto + expiração).
+model CadastroMotoristaPendente {
+  id            String   @id @default(uuid())
+  cpf           String   @unique // 11 dígitos (sem máscara) — chave do cadastro
+  nome          String
+  telefone      String // celular onde o código é enviado
+  email         String?
+  senhaHash     String
+  /// Lista de placas do formulário: { placa, modelo?, default }
+  placas        Json
+  codigo        String // 6 dígitos numéricos
+  expiraEm      DateTime
+  tentativas    Int      @default(0) // confirmações erradas
+  reenvios      Int      @default(0)
+  ultimoEnvioEm DateTime @default(now())
+  criadoEm      DateTime @default(now())
+
+  @@map("cadastros_motorista_pendentes")
 }
 
 /// Preferências do motorista pra compartilhamento de posição periódica

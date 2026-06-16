@@ -3,6 +3,7 @@ import { router } from "expo-router";
 import {
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   Text,
   View,
@@ -117,6 +118,16 @@ export default function LoginScreen() {
                   {submitting ? "Entrando..." : "Entrar"}
                 </Text>
               </Button>
+
+              <Pressable
+                onPress={() => router.push("/signup")}
+                disabled={submitting}
+                className="mt-2 py-2"
+              >
+                <Text className="text-center text-base font-semibold text-brand">
+                  Não tem cadastro? Criar agora
+                </Text>
+              </Pressable>
             </View>
           </View>
         </ScrollView>

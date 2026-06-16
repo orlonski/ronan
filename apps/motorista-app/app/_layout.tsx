@@ -12,6 +12,12 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { AlertHost } from "@/components/ui/alert-dialog";
 import { TutorialHost } from "@/components/tutorial-host";
 import { loadTokens } from "@/lib/auth";
+import {
+  getCadastroStatus,
+  loadCadastroStatus,
+  subscribeCadastroStatus,
+} from "@/lib/cadastro-status";
+import { EmAnalise } from "@/components/em-analise";
 import { drenar as drenarEventos } from "@/lib/event-reporter";
 import { setQueryClientGlobal } from "@/lib/queries";
 import { pruneExpired as pruneRotaCache } from "@/lib/rota-cache";
@@ -61,17 +67,19 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const [, setVersion] = useState(0);
   const segments = useSegments();
   const loggedIn = getAuthState() === true;
-  const onLogin = segments[0] === "login";
+  // Rotas públicas (pré-login): login e o fluxo de auto-cadastro.
+  const onAuthScreen = segments[0] === "login" || segments[0] === "signup";
+  const pendenteAprovacao = getCadastroStatus() === "PENDENTE_APROVACAO";
 
-  // Boot: lê tokens do SecureStore uma vez e atualiza o store.
+  // Boot: lê tokens + status do SecureStore uma vez e atualiza os stores.
   useEffect(() => {
     if (getAuthState() !== null) {
       setReady(true);
       return;
     }
     let alive = true;
-    loadTokens()
-      .then((t) => {
+    Promise.all([loadTokens(), loadCadastroStatus()])
+      .then(([t]) => {
         if (!alive) return;
         setAuthState(!!t?.accessToken);
         setReady(true);
@@ -86,8 +94,9 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // Re-renderiza ao mudar o estado de auth (login/logout disparam setAuthState).
+  // Re-renderiza ao mudar auth (login/logout) ou status (aprovação).
   useEffect(() => subscribeAuth(() => setVersion((v) => v + 1)), []);
+  useEffect(() => subscribeCadastroStatus(() => setVersion((v) => v + 1)), []);
 
   // Inicia listeners de sync (online + visibility + intervalo) uma vez.
   useEffect(() => {
@@ -247,8 +256,12 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   // Redirect declarativo (preferido vs router.replace imperativo).
   // Evita double-mount da rota destino.
-  if (!loggedIn && !onLogin) return <Redirect href="/login" />;
-  if (loggedIn && onLogin) return <Redirect href="/" />;
+  if (!loggedIn && !onAuthScreen) return <Redirect href="/login" />;
+  if (loggedIn && onAuthScreen) return <Redirect href="/" />;
+
+  // Logado mas cadastro ainda em análise: cobre o app inteiro com a tela de
+  // espera (some sozinho quando o status vira APROVADO).
+  if (loggedIn && pendenteAprovacao) return <EmAnalise />;
 
   return <>{children}</>;
 }

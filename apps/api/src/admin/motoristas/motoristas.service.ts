@@ -6,6 +6,7 @@ import type {
   PlacaInput,
   EnviarPushInput,
   EnviarPushResultado,
+  StatusMotorista,
 } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuthService } from "../../auth/auth.service";
@@ -14,7 +15,10 @@ import { PushService } from "../../push/push.service";
 import { paginate, type Paginated, type PaginationQuery } from "../../common/pagination";
 import { EasUpdateService } from "./eas-update.service";
 
-type ListMotoristasParams = PaginationQuery & { ativo?: "true" | "false" };
+type ListMotoristasParams = PaginationQuery & {
+  ativo?: "true" | "false";
+  status?: StatusMotorista;
+};
 
 const SAFE_SELECT = {
   id: true,
@@ -42,6 +46,9 @@ const SAFE_SELECT = {
     orderBy: { tipo: "asc" },
   },
   ativo: true,
+  status: true,
+  aprovadoEm: true,
+  aprovadoPor: { select: { id: true, nome: true } },
   ultimoLoginEm: true,
   appVersion: true,
   appUpdateId: true,
@@ -73,6 +80,7 @@ export class MotoristasService {
     const where: Prisma.MotoristaWhereInput = {};
     if (params.ativo === "true") where.ativo = true;
     if (params.ativo === "false") where.ativo = false;
+    if (params.status) where.status = params.status;
 
     const result = await paginate<Record<string, unknown>, ListMotoristasParams>(
       this.prisma.motorista,
@@ -260,6 +268,27 @@ export class MotoristasService {
         podeUsarOcrTicket: true,
       },
     });
+  }
+
+  /**
+   * Aprova ou rejeita um cadastro pendente. Aprovar registra quem/quando
+   * (auditoria). Rejeitar limpa o carimbo de aprovação. Login do motorista
+   * respeita o status: REJEITADO não loga; APROVADO libera o app.
+   */
+  async definirAprovacao(id: string, status: "APROVADO" | "REJEITADO", usuarioId: string) {
+    const exists = await this.prisma.motorista.findUnique({ where: { id }, select: { id: true } });
+    if (!exists) throw new NotFoundException("Motorista não encontrado");
+    const aprovando = status === "APROVADO";
+    const updated = await this.prisma.motorista.update({
+      where: { id },
+      data: {
+        status,
+        aprovadoEm: aprovando ? new Date() : null,
+        aprovadoPorId: aprovando ? usuarioId : null,
+      },
+      select: SAFE_SELECT,
+    });
+    return this.flatten(updated);
   }
 
   async remove(id: string) {

@@ -37,6 +37,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     const motorista = await this.prisma.motorista.findUnique({ where: { id: payload.sub } });
     if (!motorista || !motorista.ativo) throw new UnauthorizedException("Motorista inativo");
-    return { kind: "MOTORISTA", id: motorista.id, nome: motorista.nome, cpf: motorista.cpf };
+    return {
+      kind: "MOTORISTA",
+      id: motorista.id,
+      nome: motorista.nome,
+      cpf: motorista.cpf,
+      status: motorista.status,
+    };
   }
 }

@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common";
+import { ForbiddenException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
 import * as bcrypt from "bcrypt";
@@ -37,6 +37,14 @@ export class AuthService {
     const motorista = await this.prisma.motorista.findUnique({ where: { cpf } });
     if (!motorista || !motorista.ativo) throw new UnauthorizedException("Credenciais inválidas");
 
+    // Cadastro recusado não loga (PENDENTE_APROVACAO loga normal — o app mostra
+    // o modo "em análise"). Só REJEITADO é barrado aqui.
+    if (motorista.status === "REJEITADO") {
+      throw new ForbiddenException(
+        "Seu cadastro não foi aprovado. Fale com a empresa pra mais informações.",
+      );
+    }
+
     if (motorista.bloqueadoAte && motorista.bloqueadoAte > new Date()) {
       throw new UnauthorizedException(
         `Conta bloqueada. Tente novamente em ${Math.ceil(
@@ -63,7 +71,8 @@ export class AuthService {
       where: { id: motorista.id },
       data: { tentativasLogin: 0, bloqueadoAte: null, ultimoLoginEm: new Date() },
     });
-    return this.issueTokens({ sub: motorista.id, kind: "MOTORISTA" });
+    const tokens = await this.issueTokens({ sub: motorista.id, kind: "MOTORISTA" });
+    return { ...tokens, status: motorista.status };
   }
 
   async refresh(refreshToken: string) {
@@ -76,7 +85,21 @@ export class AuthService {
       throw new UnauthorizedException("Refresh token inválido");
     }
     if (payload.type !== "refresh") throw new UnauthorizedException("Token inválido");
-    return this.issueTokens({ sub: payload.sub, kind: payload.kind });
+    const tokens = await this.issueTokens({ sub: payload.sub, kind: payload.kind });
+    // App do motorista usa o status pra decidir entre app normal e modo "em
+    // análise". Devolve no refresh pra refletir aprovação sem precisar relogar.
+    if (payload.kind === "MOTORISTA") {
+      const motorista = await this.prisma.motorista.findUnique({
+        where: { id: payload.sub },
+        select: { status: true, ativo: true },
+      });
+      if (!motorista || !motorista.ativo) throw new UnauthorizedException("Motorista inativo");
+      if (motorista.status === "REJEITADO") {
+        throw new ForbiddenException("Seu cadastro não foi aprovado.");
+      }
+      return { ...tokens, status: motorista.status };
+    }
+    return tokens;
   }
 
   async trocarSenhaMotorista(motoristaId: string, senhaAtual: string, novaSenha: string) {
@@ -87,6 +110,11 @@ export class AuthService {
       where: { id: motoristaId },
       data: { senhaHash: await AuthService.hashPassword(novaSenha) },
     });
+  }
+
+  /** Emite tokens pra um motorista já criado (usado no auto-cadastro). */
+  async issueMotoristaTokens(motoristaId: string) {
+    return this.issueTokens({ sub: motoristaId, kind: "MOTORISTA" });
   }
 
   private async issueTokens(base: Pick<JwtPayload, "sub" | "kind">) {

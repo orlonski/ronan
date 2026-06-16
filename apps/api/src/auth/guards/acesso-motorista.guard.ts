@@ -37,8 +37,14 @@ export class AcessoMotoristaGuard implements CanActivate {
 
     const motorista = await this.prisma.motorista.findUnique({
       where: { id: user.id },
-      select: { [required]: true } as Record<AcessoFlag, true>,
+      select: { status: true, [required]: true } as Record<AcessoFlag | "status", true>,
     });
+    // Cadastro ainda não aprovado não lança nada (modo "em análise" no app).
+    if (motorista?.status !== "APROVADO") {
+      throw new ForbiddenException(
+        "Seu cadastro ainda está em análise. Aguarde a aprovação pra usar o app.",
+      );
+    }
     if (!motorista?.[required as keyof typeof motorista]) {
       throw new ForbiddenException("Funcionalidade desabilitada pra esse motorista.");
     }

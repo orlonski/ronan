@@ -2,10 +2,19 @@ import NetInfo from "@react-native-community/netinfo";
 import Constants from "expo-constants";
 import * as Updates from "expo-updates";
 import { router } from "expo-router";
+import type {
+  CadastroMotoristaInput,
+  ConfirmarCadastroInput,
+  StatusMotorista,
+} from "@ronan/shared-types";
 import { API_URL } from "./api-url";
 import { clearTokens, loadTokens, saveTokens, type Tokens } from "./auth";
 import { setAuthState } from "./auth-state";
+import { clearCadastroStatus, setCadastroStatus } from "./cadastro-status";
 import { humanizeZodIssues, type ZodIssueLite } from "./validation";
+
+/** Resposta de login/confirmar-cadastro: tokens + status de aprovação. */
+export type AuthResposta = Tokens & { status: StatusMotorista };
 
 export class ApiError extends Error {
   constructor(public status: number, public body: unknown) {
@@ -93,8 +102,10 @@ async function refresh(): Promise<RefreshResult> {
         REQUEST_TIMEOUT_MS,
       );
       if (res.ok) {
-        const fresh = (await res.json()) as Tokens;
+        const fresh = (await res.json()) as Tokens & { status?: StatusMotorista };
         await saveTokens(fresh);
+        // Reflete aprovação sem precisar relogar (modo "em análise" some sozinho).
+        if (fresh.status) setCadastroStatus(fresh.status);
         return { status: "ok", tokens: fresh };
       }
       // Só 401/403 = refresh token realmente inválido/expirado → deslogar.
@@ -220,6 +231,7 @@ export async function request<T>(
     } else if (renov.status === "invalido") {
       // Sessão acabou de verdade — desloga.
       await clearTokens();
+      await clearCadastroStatus();
       setAuthState(false);
       router.replace("/login");
       throw new ApiError(401, null);
@@ -261,11 +273,32 @@ export const api = {
   delete: <T>(path: string) => request<T>("DELETE", path),
   postForm: <T>(path: string, body: FormData) =>
     request<T>("POST", path, { body, isFormData: true }),
-  loginMotorista: (cpf: string, senha: string) =>
-    request<Tokens>("POST", "/m/auth/login", {
+  loginMotorista: async (cpf: string, senha: string) => {
+    const res = await request<AuthResposta>("POST", "/m/auth/login", {
       body: { cpf, senha },
       auth: false,
+    });
+    setCadastroStatus(res.status);
+    return res;
+  },
+  iniciarCadastro: (body: CadastroMotoristaInput) =>
+    request<{ ok: true; expiraEmSegundos: number }>("POST", "/m/auth/cadastro/iniciar", {
+      body,
+      auth: false,
     }),
+  reenviarCodigoCadastro: (cpf: string) =>
+    request<{ ok: true; expiraEmSegundos: number }>("POST", "/m/auth/cadastro/reenviar", {
+      body: { cpf },
+      auth: false,
+    }),
+  confirmarCadastro: async (body: ConfirmarCadastroInput) => {
+    const res = await request<AuthResposta>("POST", "/m/auth/cadastro/confirmar", {
+      body,
+      auth: false,
+    });
+    setCadastroStatus(res.status);
+    return res;
+  },
   atualizarPushToken: (token: string) =>
     request<{ ok: true }>("POST", "/m/push-token", { body: { token } }),
   listarNotificacoes: (opts: { cursor?: string; limit?: number } = {}) => {

@@ -114,6 +114,7 @@ export class MotoristaService {
         nome: true,
         cpf: true,
         telefone: true,
+        status: true,
         veiculoDefaultId: true,
         veiculoDefault: { select: { id: true, placa: true, modelo: true } },
         veiculos: {

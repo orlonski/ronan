@@ -4,7 +4,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { ExtrairTicketResult } from "@ronan/shared-types";
+import type { ExtrairTicketResult, StatusMotorista } from "@ronan/shared-types";
 import { cacheGet, cachePut } from "@/db/dexie";
 import { api, ApiError } from "./api";
 import {
@@ -68,6 +68,7 @@ export type Me = {
   nome: string;
   cpf: string;
   telefone: string | null;
+  status: StatusMotorista;
   veiculoDefaultId: string | null;
   veiculoDefault: Veiculo | null;
   veiculos: Veiculo[];

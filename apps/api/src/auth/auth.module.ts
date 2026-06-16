@@ -4,14 +4,21 @@ import { PassportModule } from "@nestjs/passport";
 import { APP_GUARD } from "@nestjs/core";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
+import { CadastroMotoristaService } from "./cadastro-motorista.service";
 import { JwtStrategy } from "./strategies/jwt.strategy";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+import { EvolutionModule } from "../whatsapp/evolution.module";
 
 @Module({
-  imports: [PassportModule.register({ defaultStrategy: "jwt" }), JwtModule.register({})],
+  imports: [
+    PassportModule.register({ defaultStrategy: "jwt" }),
+    JwtModule.register({}),
+    EvolutionModule,
+  ],
   controllers: [AuthController],
   providers: [
     AuthService,
+    CadastroMotoristaService,
     JwtStrategy,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],

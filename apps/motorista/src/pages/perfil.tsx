@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { api, ApiError } from "@/lib/api";
 import { clearTokens } from "@/lib/auth";
 import { setAuthState } from "@/lib/auth-state";
+import { clearCadastroStatus } from "@/lib/cadastro-status";
 import { useMe } from "@/lib/queries";
 import {
   estadoPermissao,
@@ -36,6 +37,7 @@ export default function PerfilPage() {
   function sair() {
     if (!confirm("Sair da conta?")) return;
     clearTokens();
+    clearCadastroStatus();
     setAuthState(false);
     navigate("/login", { replace: true });
   }

@@ -1,7 +1,12 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
-import { AtualizarMotoristaInput, CriarMotoristaInput, EnviarPushInput } from "@ronan/shared-types";
+import {
+  AprovarMotoristaInput,
+  AtualizarMotoristaInput,
+  CriarMotoristaInput,
+  EnviarPushInput,
+} from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { paginationQuerySchema } from "../../common/pagination";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
@@ -12,6 +17,7 @@ import { MotoristasService } from "./motoristas.service";
 
 const ListMotoristasQuery = paginationQuerySchema.extend({
   ativo: z.enum(["true", "false"]).optional(),
+  status: z.enum(["PENDENTE_APROVACAO", "APROVADO", "REJEITADO"]).optional(),
 });
 type ListMotoristasQuery = z.infer<typeof ListMotoristasQuery>;
 
@@ -70,6 +76,15 @@ export class MotoristasController {
     @Body(new ZodValidationPipe(AcessosInput)) body: AcessosInput,
   ) {
     return this.service.atualizarAcessos(id, body);
+  }
+
+  @Patch(":id/aprovacao")
+  aprovar(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(AprovarMotoristaInput)) body: AprovarMotoristaInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.definirAprovacao(id, body.status, user.id);
   }
 
   @Delete(":id")

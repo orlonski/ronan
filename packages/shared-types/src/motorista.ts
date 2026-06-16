@@ -3,6 +3,15 @@ import { cpfDigits, isCpfValid } from "./cpf";
 import { isTelefoneValid, telefoneDigits } from "./telefone";
 
 /**
+ * Telefone OBRIGATÓRIO (usado no auto-cadastro: é pra esse número que vai o
+ * código de verificação por WhatsApp). Normaliza pra dígitos puros.
+ */
+const TelefoneObrigatorioSchema = z.preprocess(
+  (v) => (typeof v === "string" ? telefoneDigits(v) : v),
+  z.string().refine(isTelefoneValid, "Celular deve ter 10 ou 11 dígitos"),
+);
+
+/**
  * Aceita CPF com ou sem máscara, normaliza pra 11 dígitos e valida pelos
  * dígitos verificadores. Saída sempre = 11 dígitos puros.
  */
@@ -130,3 +139,59 @@ export const AtualizarMotoristaInput = z
     }
   });
 export type AtualizarMotoristaInput = z.infer<typeof AtualizarMotoristaInput>;
+
+/**
+ * Auto-cadastro feito pelo próprio motorista no app (pré-login). Diferente do
+ * CriarMotoristaInput (admin): celular é OBRIGATÓRIO (recebe o código por
+ * WhatsApp) e exige ao menos uma placa. A senha é definida pelo motorista.
+ */
+export const CadastroMotoristaInput = z
+  .object({
+    nome: z.string().min(2, "Nome muito curto").max(120),
+    cpf: CpfSchema,
+    telefone: TelefoneObrigatorioSchema,
+    email: EmailOpcionalSchema,
+    senha: z.string().min(6, "Senha deve ter ao menos 6 caracteres").max(80),
+    placas: z.array(PlacaInput).min(1, "Informe ao menos uma placa"),
+    /** Placa default — string (não id). Backend resolve pro id após upsert. */
+    placaDefault: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(placaRegex)
+      .nullable()
+      .optional(),
+  })
+  .superRefine((v, ctx) => {
+    placasSemDuplicatas(v.placas, ctx);
+    if (v.placaDefault && !v.placas.some((p) => p.placa === v.placaDefault)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["placaDefault"],
+        message: "Placa padrão precisa estar na lista de placas",
+      });
+    }
+  });
+export type CadastroMotoristaInput = z.infer<typeof CadastroMotoristaInput>;
+
+/** Confirma o código de 6 dígitos enviado por WhatsApp e finaliza o cadastro. */
+export const ConfirmarCadastroInput = z.object({
+  cpf: CpfSchema,
+  codigo: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, "Código deve ter 6 dígitos"),
+});
+export type ConfirmarCadastroInput = z.infer<typeof ConfirmarCadastroInput>;
+
+/** Reenvia o código de verificação pro cadastro pendente daquele CPF. */
+export const ReenviarCodigoInput = z.object({
+  cpf: CpfSchema,
+});
+export type ReenviarCodigoInput = z.infer<typeof ReenviarCodigoInput>;
+
+/** Admin aprova ou rejeita um cadastro pendente. */
+export const AprovarMotoristaInput = z.object({
+  status: z.enum(["APROVADO", "REJEITADO"]),
+});
+export type AprovarMotoristaInput = z.infer<typeof AprovarMotoristaInput>;

@@ -6,6 +6,8 @@ import { ProtectedLayout } from "@/components/protected-layout";
 import { AlertHost } from "@/components/ui/alert-dialog";
 
 import LoginPage from "@/pages/login";
+import SignupPage from "@/pages/signup";
+import SignupCodigoPage from "@/pages/signup-codigo";
 import HomePage from "@/pages/home";
 import HistoricoPage from "@/pages/historico";
 import PerfilPage from "@/pages/perfil";
@@ -33,6 +35,8 @@ export default function App() {
         <AuthGate>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/signup" element={<SignupPage />} />
+            <Route path="/signup/codigo" element={<SignupCodigoPage />} />
             <Route element={<WithTabs />}>
               <Route path="/" element={<HomePage />} />
               <Route path="/historico" element={<HistoricoPage />} />

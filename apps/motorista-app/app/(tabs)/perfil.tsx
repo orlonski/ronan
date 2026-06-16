@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import { clearTokens } from "@/lib/auth";
+import { clearCadastroStatus } from "@/lib/cadastro-status";
 import { setAuthState } from "@/lib/auth-state";
 import { useMe } from "@/lib/queries";
 import { replayHomeTutorial } from "@/lib/home-tutorial";
@@ -33,6 +34,7 @@ export default function Perfil() {
 
   async function sair() {
     await clearTokens();
+    await clearCadastroStatus();
     setAuthState(false);
     router.replace("/login");
   }
