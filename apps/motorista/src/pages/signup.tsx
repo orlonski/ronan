@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import { cpfDigits, telefoneDigits } from "@ronan/shared-types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { api, humanizeApiError } from "@/lib/api";
 
@@ -103,10 +104,12 @@ export default function SignupPage() {
           <Label htmlFor="cpf">CPF</Label>
           <Input
             id="cpf"
+            name="username"
             value={cpf}
             onChange={(e) => setCpf(maskCpf(e.target.value))}
             type="tel"
             inputMode="numeric"
+            autoComplete="username"
             placeholder="000.000.000-00"
             disabled={submitting}
           />
@@ -185,11 +188,11 @@ export default function SignupPage() {
 
         <div className="space-y-2">
           <Label htmlFor="senha">Senha</Label>
-          <Input
+          <PasswordInput
             id="senha"
             value={senha}
             onChange={(e) => setSenha(e.target.value)}
-            type="password"
+            autoComplete="new-password"
             placeholder="Mínimo 6 caracteres"
             disabled={submitting}
           />
@@ -197,11 +200,11 @@ export default function SignupPage() {
 
         <div className="space-y-2">
           <Label htmlFor="confirmar">Confirmar senha</Label>
-          <Input
+          <PasswordInput
             id="confirmar"
             value={confirmar}
             onChange={(e) => setConfirmar(e.target.value)}
-            type="password"
+            autoComplete="new-password"
             placeholder="Repita a senha"
             disabled={submitting}
           />

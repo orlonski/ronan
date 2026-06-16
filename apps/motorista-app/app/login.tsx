@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { cpfDigits } from "@ronan/shared-types";
 import { api, ApiError } from "@/lib/api";
@@ -90,11 +91,11 @@ export default function LoginScreen() {
 
               <View className="gap-2">
                 <Label>Senha</Label>
-                <Input
+                <PasswordInput
                   value={senha}
                   onChangeText={setSenha}
-                  secureTextEntry
                   autoComplete="password"
+                  textContentType="password"
                   placeholder="••••••"
                   editable={!submitting}
                 />

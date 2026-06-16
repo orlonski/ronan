@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { cpfDigits } from "@ronan/shared-types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { api, ApiError } from "@/lib/api";
 import { saveTokens } from "@/lib/auth";
@@ -77,11 +78,10 @@ export default function LoginPage() {
 
           <div className="space-y-2">
             <Label htmlFor="senha">Senha</Label>
-            <Input
+            <PasswordInput
               id="senha"
               value={senha}
               onChange={(e) => setSenha(e.target.value)}
-              type="password"
               autoComplete="current-password"
               placeholder="••••••"
               disabled={submitting}

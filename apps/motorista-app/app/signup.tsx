@@ -4,6 +4,7 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } fro
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { cpfDigits, telefoneDigits } from "@ronan/shared-types";
 import { api, humanizeApiError } from "@/lib/api";
@@ -118,6 +119,8 @@ export default function SignupScreen() {
                 value={cpf}
                 onChangeText={(v) => setCpf(maskCpf(v))}
                 keyboardType="numeric"
+                autoComplete="username"
+                textContentType="username"
                 placeholder="000.000.000-00"
                 editable={!submitting}
               />
@@ -187,10 +190,11 @@ export default function SignupScreen() {
 
             <View className="gap-2">
               <Label>Senha</Label>
-              <Input
+              <PasswordInput
                 value={senha}
                 onChangeText={setSenha}
-                secureTextEntry
+                autoComplete="password-new"
+                textContentType="newPassword"
                 placeholder="Mínimo 6 caracteres"
                 editable={!submitting}
               />
@@ -198,10 +202,11 @@ export default function SignupScreen() {
 
             <View className="gap-2">
               <Label>Confirmar senha</Label>
-              <Input
+              <PasswordInput
                 value={confirmar}
                 onChangeText={setConfirmar}
-                secureTextEntry
+                autoComplete="password-new"
+                textContentType="newPassword"
                 placeholder="Repita a senha"
                 editable={!submitting}
               />
