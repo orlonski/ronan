@@ -25,6 +25,7 @@ const TIPO_LABEL: Record<string, string> = {
   "resposta-divergencia-foto": "Resposta de foto",
   "foto-anexada": "Foto anexada",
   "local-em-validacao": "Local em validação",
+  "motorista-cadastro": "Novo cadastro",
 };
 
 export default function InboxPage() {

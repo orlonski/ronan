@@ -8,12 +8,14 @@ import { CadastroMotoristaService } from "./cadastro-motorista.service";
 import { JwtStrategy } from "./strategies/jwt.strategy";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { EvolutionModule } from "../whatsapp/evolution.module";
+import { AdminInboxModule } from "../admin/inbox/inbox.module";
 
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: "jwt" }),
     JwtModule.register({}),
     EvolutionModule,
+    AdminInboxModule,
   ],
   controllers: [AuthController],
   providers: [

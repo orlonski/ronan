@@ -8,7 +8,8 @@ export type TipoNotificacaoAdmin =
   | "resposta-divergencia-pedagio"
   | "resposta-divergencia-foto"
   | "foto-anexada"
-  | "local-em-validacao";
+  | "local-em-validacao"
+  | "motorista-cadastro";
 
 export type DispararNotificacaoInput = {
   tipo: TipoNotificacaoAdmin;

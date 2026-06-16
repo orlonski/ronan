@@ -2,13 +2,15 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { randomInt } from "node:crypto";
-import type { CadastroMotoristaInput, PlacaInput } from "@ronan/shared-types";
+import { formatCpf, type CadastroMotoristaInput, type PlacaInput } from "@ronan/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
 import { EvolutionClientService } from "../whatsapp/evolution-client.service";
 import { SessaoService } from "../whatsapp/sessao.service";
+import { AdminInboxService } from "../admin/inbox/inbox.service";
 import { AuthService } from "./auth.service";
 
 const CODIGO_TTL_MIN = 10;
@@ -28,9 +30,12 @@ type PrismaTx = Parameters<Parameters<PrismaService["$transaction"]>[0]>[0];
  */
 @Injectable()
 export class CadastroMotoristaService {
+  private readonly log = new Logger(CadastroMotoristaService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly evolution: EvolutionClientService,
+    private readonly inbox: AdminInboxService,
     private readonly auth: AuthService,
   ) {}
 
@@ -170,6 +175,19 @@ export class CadastroMotoristaService {
       await tx.cadastroMotoristaPendente.delete({ where: { cpf } });
       return motorista.id;
     });
+
+    // Avisa os admins no sininho do dashboard (best-effort — nunca derruba o
+    // cadastro). Clicar leva pra lista filtrada em Pendentes.
+    try {
+      await this.inbox.disparar({
+        tipo: "motorista-cadastro",
+        titulo: "Novo cadastro de motorista",
+        corpo: `${pendente.nome} (CPF ${formatCpf(pendente.cpf)}) se cadastrou e aguarda aprovação.`,
+        dados: { motoristaId },
+      });
+    } catch (e) {
+      this.log.warn(`Falha ao notificar admins do cadastro: ${(e as Error).message}`);
+    }
 
     const tokens = await this.auth.issueMotoristaTokens(motoristaId);
     return { ...tokens, status: "PENDENTE_APROVACAO" as const };

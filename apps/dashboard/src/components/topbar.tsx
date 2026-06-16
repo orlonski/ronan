@@ -10,6 +10,7 @@ import {
   ClipboardCheck,
   MapPin,
   PiggyBank,
+  UserPlus,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -164,6 +165,8 @@ export function IconeTipo({ tipo }: { tipo: string }) {
     return <Camera className={`${cls} text-emerald-600`} />;
   if (tipo === "local-em-validacao")
     return <MapPin className={`${cls} text-violet-600`} />;
+  if (tipo === "motorista-cadastro")
+    return <UserPlus className={`${cls} text-blue-600`} />;
   return <Bell className={`${cls} text-muted-foreground`} />;
 }
 
@@ -200,6 +203,9 @@ export function rotaParaNotificacao(n: AdminNotificacao): string | null {
   }
   if (n.tipo === "local-em-validacao") {
     return `/locais/em-validacao`;
+  }
+  if (n.tipo === "motorista-cadastro") {
+    return `/motoristas?status=PENDENTE_APROVACAO`;
   }
   return null;
 }
