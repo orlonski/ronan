@@ -8,6 +8,7 @@ import { randomInt } from "node:crypto";
 import type { CadastroMotoristaInput, PlacaInput } from "@ronan/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
 import { EvolutionClientService } from "../whatsapp/evolution-client.service";
+import { SessaoService } from "../whatsapp/sessao.service";
 import { AuthService } from "./auth.service";
 
 const CODIGO_TTL_MIN = 10;
@@ -210,8 +211,11 @@ export class CadastroMotoristaService {
   }
 
   private async enviarCodigo(telefone: string, codigo: string) {
+    // Evolution exige número internacional (DDI 55). O telefone do cadastro vem
+    // só com DDD (ex: 41999998888) — sem normalizar, dá 400 no sendText.
+    const numero = SessaoService.normalizar(telefone);
     await this.evolution.enviarTexto(
-      telefone,
+      numero,
       `Seu código de cadastro Schaba é ${codigo}. Vale por ${CODIGO_TTL_MIN} minutos. Se não foi você, ignore.`,
     );
   }
