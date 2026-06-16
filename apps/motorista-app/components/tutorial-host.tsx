@@ -180,7 +180,11 @@ export function TutorialHost() {
   );
 
   return (
-    <Modal visible transparent animationType="fade" statusBarTranslucent>
+    // Sem statusBarTranslucent de propósito: no Android essa prop faz o Modal
+    // desenhar a partir do topo físico (atrás da status bar), mas measureInWindow
+    // mede relativo à janela do app — o descasamento jogava o furo pra cima.
+    // No iOS a prop é ignorada (lá já estava alinhado).
+    <Modal visible transparent animationType="fade">
       {hasSpot ? (
         <View className="flex-1">
           {/* painéis escuros ao redor do furo — capturam toque (sem passthrough
