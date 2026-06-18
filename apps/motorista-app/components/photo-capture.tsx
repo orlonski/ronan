@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImageManipulator from "expo-image-manipulator";
+import { ImageManipulator as Manip } from "expo-image-manipulator";
 import { Camera, Crop, RotateCcw, RotateCw, X } from "lucide-react-native";
 import {
   ActivityIndicator,
@@ -292,8 +293,11 @@ function CropMode({
   onDone: (uri: string) => void;
   onCancelar: () => void;
 }) {
-  // uri de trabalho: muda quando o motorista gira a imagem
-  const [workUri, setWorkUri] = useState(uri);
+  // Imagem normalizada (orientacao EXIF "assada" nos pixels) que e exibida e recortada.
+  // Derivada sempre do original `uri` + rotacao absoluta — sem perda acumulada e sem
+  // discrepancia de EXIF (no Android Image.getSize/<Image>/crop divergiam, recortando errado).
+  const [normUri, setNormUri] = useState<string | null>(null);
+  const [rotation, setRotation] = useState(0); // 0 | 90 | 180 | 270
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
   const [container, setContainer] = useState<{ w: number; h: number } | null>(null);
   // Retangulo da imagem efetivamente exibida (contain => letterbox)
@@ -322,23 +326,32 @@ function CropMode({
   const bw = useSharedValue(0);
   const bh = useSharedValue(0);
 
-  // Mede dimensoes reais do arquivo (re-roda quando gira)
+  // Normaliza orientacao via renderAsync (assa o EXIF nos pixels) e le as dims reais
+  // do bitmap renderizado. Re-roda quando a rotacao muda. Sempre parte do original.
   useEffect(() => {
     let alive = true;
     setImgSize(null);
-    Image.getSize(
-      workUri,
-      (ww, hh) => {
-        if (alive) setImgSize({ w: ww, h: hh });
-      },
-      () => {
-        if (alive) setImgSize(null);
-      },
-    );
+    setNormUri(null);
+    (async () => {
+      try {
+        let ctx = Manip.manipulate(uri);
+        if (rotation) ctx = ctx.rotate(rotation);
+        const ref = await ctx.renderAsync();
+        const saved = await ref.saveAsync({
+          compress: 1,
+          format: ImageManipulator.SaveFormat.JPEG,
+        });
+        if (!alive) return;
+        setNormUri(saved.uri);
+        setImgSize({ w: ref.width, h: ref.height });
+      } catch {
+        // mantem spinner; motorista pode cancelar
+      }
+    })();
     return () => {
       alive = false;
     };
-  }, [workUri]);
+  }, [uri, rotation]);
 
   // Calcula area exibida + reinicia o retangulo cobrindo a imagem inteira
   useEffect(() => {
@@ -472,26 +485,16 @@ function CropMode({
     top: y.value + h.value - HANDLE / 2,
   }));
 
-  async function girar() {
+  function girar() {
     if (working) return;
-    setWorking(true);
-    try {
-      const r = await ImageManipulator.manipulateAsync(
-        workUri,
-        [{ rotate: 90 }],
-        { compress: 1, format: ImageManipulator.SaveFormat.JPEG },
-      );
-      setWorkUri(r.uri); // dispara remedicao + reset do retangulo
-    } finally {
-      setWorking(false);
-    }
+    setRotation((r) => (r + 90) % 360); // dispara renormalizacao + reset do retangulo
   }
 
   async function aplicar() {
-    if (!disp || !imgSize || working) return;
+    if (!disp || !imgSize || !normUri || working) return;
     setWorking(true);
     try {
-      // tela -> pixels da imagem de origem
+      // tela -> pixels da imagem normalizada (mesma orientacao em que sera recortada)
       const relX = (x.value - disp.offsetX) / disp.scale;
       const relY = (y.value - disp.offsetY) / disp.scale;
       const relW = w.value / disp.scale;
@@ -500,12 +503,14 @@ function CropMode({
       const originY = Math.max(0, Math.round(relY));
       const width = Math.min(imgSize.w - originX, Math.round(relW));
       const height = Math.min(imgSize.h - originY, Math.round(relH));
-      const r = await ImageManipulator.manipulateAsync(
-        workUri,
-        [{ crop: { originX, originY, width, height } }],
-        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
-      );
-      onDone(r.uri);
+      const ref = await Manip.manipulate(normUri)
+        .crop({ originX, originY, width, height })
+        .renderAsync();
+      const saved = await ref.saveAsync({
+        compress: 0.7,
+        format: ImageManipulator.SaveFormat.JPEG,
+      });
+      onDone(saved.uri);
     } finally {
       setWorking(false);
     }
@@ -514,12 +519,14 @@ function CropMode({
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View className="flex-1" onLayout={onContainerLayout}>
-        <Image
-          source={{ uri: workUri }}
-          style={{ flex: 1 }}
-          resizeMode="contain"
-        />
-        {disp ? (
+        {normUri ? (
+          <Image
+            source={{ uri: normUri }}
+            style={{ flex: 1 }}
+            resizeMode="contain"
+          />
+        ) : null}
+        {disp && normUri ? (
           <>
             <Animated.View
               pointerEvents="none"
