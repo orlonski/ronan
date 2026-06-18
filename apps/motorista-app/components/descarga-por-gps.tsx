@@ -15,7 +15,7 @@ import { CheckCircle2, MapPin, Plus, X } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { showConfirm } from "@/lib/alert";
-import { haversineMetros, pegarCoords, RAIO_ALERTA_CARGA_M } from "@/lib/geo";
+import { haversineMetros, pegarCoordsPrecisa, RAIO_ALERTA_CARGA_M } from "@/lib/geo";
 import {
   buscarDescargaDuasEtapas,
   buscarDescargaDuasEtapasOffline,
@@ -32,7 +32,7 @@ function isNetworkError(err: unknown): boolean {
 
 type Estado =
   | { tipo: "vazio" }
-  | { tipo: "capturando" }
+  | { tipo: "capturando"; precisao: number | null }
   | { tipo: "selecionado"; local: { id: string; nome: string }; distanciaMetros?: number; vezesUsado?: number }
   | {
       tipo: "escolha";
@@ -72,12 +72,32 @@ export function DescargaPorGps({
 
   async function capturarEBuscar() {
     setErro(null);
-    setEstado({ tipo: "capturando" });
-    const coords = await pegarCoords();
+    setEstado({ tipo: "capturando", precisao: null });
+    const coords = await pegarCoordsPrecisa({
+      alvoMetros: 10,
+      maxMs: 20_000,
+      onAmostra: (precisao) => setEstado({ tipo: "capturando", precisao }),
+    });
     if (!coords) {
       setEstado({ tipo: "vazio" });
       setErro("Não consegui pegar o GPS. Verifique a permissão e tente de novo.");
       return;
+    }
+
+    // Sinal fraco: avisa que a posição pode não bater com o local certo e
+    // deixa tentar de novo antes de seguir com a busca.
+    if (coords.precisao != null && coords.precisao > 50) {
+      const continua = await showConfirm({
+        title: "Sinal fraco aqui",
+        message: `A posição saiu com precisão de ±${Math.round(coords.precisao)}m, então pode não bater com o local certo. Quer tentar de novo ou continuar assim?`,
+        variant: "warning",
+        confirmLabel: "Continuar assim",
+        cancelLabel: "Tentar de novo",
+      });
+      if (!continua) {
+        void capturarEBuscar();
+        return;
+      }
     }
 
     // Se motorista escolheu local de carga e o GPS atual está dentro do raio
@@ -234,7 +254,8 @@ export function DescargaPorGps({
         <View className="flex-row items-center gap-3 rounded-2xl border-2 border-border bg-muted/30 p-4">
           <ActivityIndicator size="small" color="#64748b" />
           <Text className="text-base font-medium text-muted-foreground">
-            Pegando localização...
+            Buscando posição precisa…{" "}
+            {estado.precisao != null ? `±${Math.round(estado.precisao)} m` : "—"}
           </Text>
         </View>
       )}

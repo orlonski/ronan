@@ -25,7 +25,7 @@ import { fmtDataBR, hojeISO } from "@/lib/datetime";
 import { reportarEvento } from "@/lib/event-reporter";
 import { humanizeZodError } from "@/lib/validation";
 import { CriarViagemInput } from "@ronan/shared-types";
-import { formatarDistancia, haversineMetros, localMaisProximo, pegarCoords, pegarCoordsRapido } from "@/lib/geo";
+import { formatarDistancia, haversineMetros, localMaisProximo, pegarCoordsPrecisa, pegarCoordsRapido } from "@/lib/geo";
 import { simplificarPontos } from "@/lib/polyline";
 import { listPendingViagens, type PendingViagem } from "@/db/database";
 import * as FileSystem from "expo-file-system/legacy";
@@ -224,7 +224,7 @@ export default function NovaViagem() {
 
   useEffect(() => {
     let alive = true;
-    void pegarCoords().then((c) => {
+    void pegarCoordsPrecisa().then((c) => {
       if (alive && c) setCoords(c);
     });
     return () => {

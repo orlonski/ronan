@@ -32,6 +32,7 @@ import {
   useMe,
   usePostosRecentes,
 } from "@/lib/queries";
+import { pegarCoordsPrecisa } from "@/lib/geo";
 
 type TipoCombustivel =
   | "DIESEL_S10"
@@ -89,8 +90,10 @@ export default function NovoAbastecimento() {
   // GPS pré-aquece em background
   useEffect(() => {
     let alive = true;
-    void pegarCoords().then((c) => {
-      if (alive && c) setCoords(c);
+    void pegarCoordsPrecisa().then((c) => {
+      if (alive && c) {
+        setCoords({ lat: c.lat, lng: c.lng, precisao: c.precisao ?? undefined });
+      }
     });
     return () => {
       alive = false;
@@ -449,44 +452,6 @@ function makeUuid(): string {
     const v = c === "x" ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
-}
-
-async function pegarCoords(): Promise<{
-  lat: number;
-  lng: number;
-  precisao?: number;
-} | null> {
-  try {
-    const Location = await import("expo-location");
-    const cur = await Location.getForegroundPermissionsAsync();
-    if (cur.status !== "granted") {
-      const r = await Location.requestForegroundPermissionsAsync();
-      if (r.status !== "granted") return null;
-    }
-    const last = await Location.getLastKnownPositionAsync({
-      maxAge: 60_000,
-      requiredAccuracy: 200,
-    });
-    if (last) {
-      return {
-        lat: last.coords.latitude,
-        lng: last.coords.longitude,
-        precisao: last.coords.accuracy ?? undefined,
-      };
-    }
-    const result = await Promise.race([
-      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 15_000)),
-    ]);
-    if (!result || !("coords" in result)) return null;
-    return {
-      lat: result.coords.latitude,
-      lng: result.coords.longitude,
-      precisao: result.coords.accuracy ?? undefined,
-    };
-  } catch {
-    return null;
-  }
 }
 
 async function pegarCoordsRapido(): Promise<{
