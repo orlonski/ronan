@@ -4,6 +4,10 @@ WORKDIR /repo
 
 # ---- deps com tudo (pra build) ----
 FROM base AS deps
+# Ferramentas pra compilar addons nativos (bcrypt) do código-fonte quando o
+# binário pré-compilado do GitHub não baixa (DNS/rede piscando no build host).
+# Só no estágio deps — não vai pra imagem final.
+RUN apk add --no-cache python3 build-base
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/api/package.json apps/api/
 COPY packages/shared-types/package.json packages/shared-types/
