@@ -22,6 +22,7 @@ import {
   Weight,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { InfoHint } from "@/components/ui/info-hint";
 import { LoadingCard } from "@/components/loading";
 import { Sparkline } from "@/components/sparkline";
 import { StatCard } from "@/components/stat-card";
@@ -124,6 +125,7 @@ function BlocoHoje({ d }: { d: Snapshot }) {
           icon={Truck}
           label="Viagens"
           value={d.hoje.viagens}
+          info="Quantas viagens os motoristas registraram hoje."
           tone="info"
           size="lg"
         />
@@ -131,6 +133,7 @@ function BlocoHoje({ d }: { d: Snapshot }) {
           icon={Weight}
           label="Toneladas"
           value={fmtNum(d.hoje.toneladas, 1)}
+          info="O peso total carregado nas viagens de hoje, somado em toneladas."
           tone="info"
           size="lg"
         />
@@ -139,6 +142,7 @@ function BlocoHoje({ d }: { d: Snapshot }) {
           label="Motoristas ativos"
           value={d.hoje.motoristasAtivos}
           subtitle="logaram hoje"
+          info="Quantos motoristas diferentes abriram o app e entraram hoje."
           tone="success"
           size="lg"
         />
@@ -146,6 +150,7 @@ function BlocoHoje({ d }: { d: Snapshot }) {
           icon={Truck}
           label="Veículos em uso"
           value={d.hoje.veiculosEmUso}
+          info="Quantos caminhões diferentes rodaram em viagens hoje."
           tone="success"
           size="lg"
         />
@@ -165,8 +170,9 @@ function BlocoTendencia({ d }: { d: Snapshot }) {
       <Card className="p-5">
         <div className="mb-3 flex items-end justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+            <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
               Viagens — últimos 14 dias
+              <InfoHint text="Quantas viagens foram registradas em cada um dos últimos 14 dias. A linha sobe nos dias com mais viagens e desce nos dias com menos. O número grande é o total das duas semanas." />
             </p>
             <p className="text-3xl font-bold tracking-tight tabular-nums">{total14d}</p>
           </div>
@@ -203,8 +209,9 @@ function BlocoConferencia({ d }: { d: Snapshot }) {
         <div>
           <div className="mb-2 flex items-end justify-between gap-3">
             <div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
                 Conferido
+                <InfoHint text="De todas as viagens já registradas, quantas já foram conferidas por alguém da equipe (marcadas como OK ou divergente). A barra verde mostra essa fatia." />
               </p>
               <p className="text-3xl font-bold tracking-tight tabular-nums">{pct}%</p>
             </div>
@@ -226,6 +233,7 @@ function BlocoConferencia({ d }: { d: Snapshot }) {
             label="Pendentes"
             value={pendentes}
             subtitle="aguardando conferência"
+            info="Viagens que ainda ninguém conferiu. Estão na fila esperando alguém olhar e marcar como OK ou divergente. Clique pra ver a lista."
             tone={pendentes > 0 ? "warning" : "success"}
             href="/viagens"
           />
@@ -234,6 +242,7 @@ function BlocoConferencia({ d }: { d: Snapshot }) {
             label="Ritmo"
             value={`${fmtNum(ritmoDia, 1)}/dia`}
             subtitle="média dos últimos 14 dias"
+            info="Em média, quantas viagens a equipe está conferindo por dia, olhando as últimas 2 semanas."
             tone="info"
           />
           <StatCard
@@ -241,6 +250,7 @@ function BlocoConferencia({ d }: { d: Snapshot }) {
             label="Previsão p/ zerar"
             value={etaLabel}
             subtitle="nesse ritmo"
+            info="Mantendo o ritmo atual, quanto tempo falta pra conferir todas as viagens que estão pendentes."
             tone={pendentes > 0 && etaDias != null ? "info" : "success"}
           />
           <StatCard
@@ -248,6 +258,7 @@ function BlocoConferencia({ d }: { d: Snapshot }) {
             label="Tempo médio"
             value={fmtDuracaoDias(tempoMedioDias)}
             subtitle="da entrada à conferência"
+            info="Quanto tempo, em média, uma viagem fica esperando desde que é registrada até alguém conferir."
             tone="default"
           />
         </div>
@@ -272,23 +283,32 @@ function BlocoMes({ d }: { d: Snapshot }) {
         Este mês
       </h2>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
-        <StatCard icon={Truck} label="Viagens" value={d.mes.viagens} tone="default" />
+        <StatCard
+          icon={Truck}
+          label="Viagens"
+          value={d.mes.viagens}
+          info="Total de viagens registradas desde o dia 1º deste mês até agora."
+          tone="default"
+        />
         <StatCard
           icon={Weight}
           label="Toneladas"
           value={fmtNum(d.mes.toneladas, 1)}
+          info="Peso total carregado em todas as viagens deste mês, somado em toneladas."
           tone="default"
         />
         <StatCard
           icon={Fuel}
           label="Combustível"
           value={fmtBRL(d.mes.combustivelValor)}
+          info="Quanto foi gasto em abastecimentos registrados neste mês."
           tone="default"
         />
         <StatCard
           icon={Droplet}
           label="Pedágios"
           value={fmtBRL(d.mes.pedagioValor)}
+          info="Quanto foi gasto em pedágios nas viagens deste mês."
           tone="default"
         />
       </div>
@@ -308,6 +328,7 @@ function BlocoPendencias({ d }: { d: Snapshot }) {
           icon={FileSpreadsheet}
           label="Fechamentos em revisão"
           value={d.pendencias.fechamentosRevisao}
+          info="Fechamentos esperando alguém revisar antes de mandar pro cliente. Clique pra abrir."
           tone={tone(d.pendencias.fechamentosRevisao)}
           href="/fechamentos"
         />
@@ -315,6 +336,7 @@ function BlocoPendencias({ d }: { d: Snapshot }) {
           icon={Send}
           label="Envios prontos"
           value={d.pendencias.enviosAbertos}
+          info="Arquivos de fechamento já gerados e prontos pra enviar ao cliente."
           tone={tone(d.pendencias.enviosAbertos)}
           href="/envios"
         />
@@ -322,6 +344,7 @@ function BlocoPendencias({ d }: { d: Snapshot }) {
           icon={AlertTriangle}
           label="Viagens divergentes"
           value={d.pendencias.viagensDivergentes}
+          info="Viagens que foram conferidas e tinham algum problema (foto ruim, valor faltando, etc). O motorista precisa corrigir."
           tone={d.pendencias.viagensDivergentes > 0 ? "danger" : "success"}
           href="/viagens"
         />
@@ -329,6 +352,7 @@ function BlocoPendencias({ d }: { d: Snapshot }) {
           icon={Bug}
           label="Erros pendentes"
           value={d.pendencias.errosPendentes}
+          info="Erros internos do sistema que ainda não foram resolvidos. Útil pro acompanhamento técnico."
           tone={d.pendencias.errosPendentes > 0 ? "danger" : "success"}
           href="/erros"
         />
@@ -348,6 +372,7 @@ function BlocoRankings({ d }: { d: Snapshot }) {
           icon={UserIcon}
           titulo="Motoristas"
           subtitulo="por toneladas"
+          info="Os 5 motoristas que mais carregaram peso (em toneladas) neste mês."
           itens={d.rankings.motoristas.map((m) => ({
             nome: m.nome,
             valor: `${fmtNum(m.toneladas, 1)} t`,
@@ -357,6 +382,7 @@ function BlocoRankings({ d }: { d: Snapshot }) {
           icon={Building2}
           titulo="Clientes"
           subtitulo="por viagens"
+          info="Os 5 clientes que mais receberam viagens neste mês."
           itens={d.rankings.clientes.map((c) => ({
             nome: c.nome,
             valor: `${c.viagens} viagens`,
@@ -366,6 +392,7 @@ function BlocoRankings({ d }: { d: Snapshot }) {
           icon={Package}
           titulo="Materiais"
           subtitulo="por toneladas"
+          info="Os 5 materiais mais transportados (por peso) neste mês."
           itens={d.rankings.materiais.map((m) => ({
             nome: m.nome,
             valor: `${fmtNum(m.toneladas, 1)} t`,
@@ -380,21 +407,24 @@ function RankingCard({
   icon: Icon,
   titulo,
   subtitulo,
+  info,
   itens,
 }: {
   icon: typeof UserIcon;
   titulo: string;
   subtitulo: string;
+  info?: string;
   itens: Array<{ nome: string; valor: string }>;
 }) {
   return (
     <Card className="p-4">
       <div className="mb-3 flex items-center gap-2">
         <Icon className="h-4 w-4 text-muted-foreground" />
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-medium">{titulo}</p>
           <p className="text-xs text-muted-foreground">{subtitulo}</p>
         </div>
+        {info && <InfoHint text={info} className="mt-0.5" />}
       </div>
       {itens.length === 0 ? (
         <p className="text-sm text-muted-foreground">—</p>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { InfoHint } from "@/components/ui/info-hint";
 import { cn } from "@/lib/utils";
 
 type Tone = "default" | "success" | "warning" | "danger" | "info";
@@ -40,6 +41,7 @@ export function StatCard({
   label,
   value,
   subtitle,
+  info,
   tone = "default",
   href,
   size = "md",
@@ -48,6 +50,7 @@ export function StatCard({
   label: string;
   value: string | number;
   subtitle?: string;
+  info?: string;
   tone?: Tone;
   href?: string;
   size?: "md" | "lg";
@@ -75,6 +78,7 @@ export function StatCard({
           <p className="mt-0.5 truncate text-xs text-muted-foreground">{subtitle}</p>
         )}
       </div>
+      {info && <InfoHint text={info} className="-mr-1 mt-0.5" />}
     </Card>
   );
 
