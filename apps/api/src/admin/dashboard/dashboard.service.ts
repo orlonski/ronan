@@ -147,7 +147,7 @@ export class DashboardService {
       // do momento que chegou no servidor (sincronizadoEm) até a conferência (revisadoEm).
       this.prisma.$queryRaw<Array<{ avg_secs: number | null }>>`
         SELECT AVG(EXTRACT(EPOCH FROM ("revisadoEm" - "sincronizadoEm")))::float8 AS avg_secs
-        FROM "Viagem"
+        FROM "viagens"
         WHERE "revisadoEm" >= ${inicio14dInst}
       `,
     ]);
