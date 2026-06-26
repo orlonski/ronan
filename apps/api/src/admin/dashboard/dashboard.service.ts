@@ -33,6 +33,7 @@ export class DashboardService {
     const hoje00Inst = new Date(Date.UTC(y, m - 1, dia, 3));
     const inicioMesInst = new Date(Date.UTC(y, m - 1, 1, 3));
     const inicioMesQueVemInst = new Date(Date.UTC(y, m, 1, 3));
+    const inicio14dInst = new Date(Date.UTC(y, m - 1, dia - 13, 3)); // hoje incluso = 14 dias
 
     const [
       // Hoje
@@ -60,6 +61,11 @@ export class DashboardService {
       ultimaViagem,
       ultimoAbastecimento,
       ultimoFechamento,
+      // Conferência
+      conferidasTotal,
+      pendentesConferencia,
+      conferidas14d,
+      leadTimeRows,
     ] = await Promise.all([
       this.prisma.viagem.count({ where: { data: { gte: hoje00, lt: amanha00 } } }),
       this.prisma.viagem.aggregate({
@@ -131,6 +137,19 @@ export class DashboardService {
         orderBy: { criadoEm: "desc" },
         select: { criadoEm: true },
       }),
+      // Conferência — universo conferível exclui rascunhos offline
+      this.prisma.viagem.count({ where: { revisadoEm: { not: null } } }),
+      this.prisma.viagem.count({
+        where: { revisadoEm: null, status: { not: "RASCUNHO_OFFLINE" } },
+      }),
+      this.prisma.viagem.count({ where: { revisadoEm: { gte: inicio14dInst } } }),
+      // Lead time médio (segundos) das viagens conferidas nos últimos 14 dias:
+      // do momento que chegou no servidor (sincronizadoEm) até a conferência (revisadoEm).
+      this.prisma.$queryRaw<Array<{ avg_secs: number | null }>>`
+        SELECT AVG(EXTRACT(EPOCH FROM ("revisadoEm" - "sincronizadoEm")))::float8 AS avg_secs
+        FROM "Viagem"
+        WHERE "revisadoEm" >= ${inicio14dInst}
+      `,
     ]);
 
     // Resolve nomes dos rankings em um round adicional (ids únicos, ~15 registros)
@@ -163,6 +182,19 @@ export class DashboardService {
     const nomeCliente = new Map(clientesNomes.map((c) => [c.id, c.nome]));
     const nomeMaterial = new Map(materiaisNomes.map((m) => [m.id, m.nome]));
 
+    // Vazão: viagens conferidas/dia na média das últimas 2 semanas.
+    const ritmoDia = conferidas14d / 14;
+    // Previsão pra zerar o backlog. 0 quando nada pendente; null quando há
+    // pendentes mas o ritmo recente é zero (não dá pra estimar).
+    const etaDias =
+      pendentesConferencia === 0
+        ? 0
+        : ritmoDia > 0
+          ? Math.ceil(pendentesConferencia / ritmoDia)
+          : null;
+    const avgSecs = leadTimeRows[0]?.avg_secs ?? null;
+    const tempoMedioDias = avgSecs != null ? avgSecs / 86400 : null;
+
     return {
       hoje: {
         viagens: viagensHoje,
@@ -181,6 +213,14 @@ export class DashboardService {
         enviosAbertos,
         viagensDivergentes,
         errosPendentes: errosPendentesGroups.length,
+      },
+      conferencia: {
+        total: conferidasTotal + pendentesConferencia,
+        conferidas: conferidasTotal,
+        pendentes: pendentesConferencia,
+        ritmoDia,
+        etaDias,
+        tempoMedioDias,
       },
       tendenciaViagens: preencherDias(tendenciaRows, inicio14d, 14),
       rankings: {

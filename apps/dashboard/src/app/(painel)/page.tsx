@@ -6,10 +6,14 @@ import {
   AlertTriangle,
   Bug,
   Building2,
+  CalendarClock,
+  ClipboardList,
   Clock,
   Droplet,
   FileSpreadsheet,
   Fuel,
+  Gauge,
+  Hourglass,
   Package,
   Send,
   Truck,
@@ -42,6 +46,14 @@ type Snapshot = {
     enviosAbertos: number;
     viagensDivergentes: number;
     errosPendentes: number;
+  };
+  conferencia: {
+    total: number;
+    conferidas: number;
+    pendentes: number;
+    ritmoDia: number;
+    etaDias: number | null;
+    tempoMedioDias: number | null;
   };
   tendenciaViagens: Array<{ dia: string; total: number }>;
   rankings: {
@@ -90,6 +102,7 @@ export default function PainelHome() {
         <>
           <BlocoHoje d={data} />
           <BlocoTendencia d={data} />
+          <BlocoConferencia d={data} />
           <BlocoMes d={data} />
           <BlocoPendencias d={data} />
           <BlocoRankings d={data} />
@@ -166,6 +179,90 @@ function BlocoTendencia({ d }: { d: Snapshot }) {
       </Card>
     </section>
   );
+}
+
+function BlocoConferencia({ d }: { d: Snapshot }) {
+  const { total, conferidas, pendentes, ritmoDia, etaDias, tempoMedioDias } = d.conferencia;
+  const pct = total > 0 ? Math.round((conferidas / total) * 100) : 0;
+
+  const etaLabel =
+    pendentes === 0
+      ? "tudo em dia"
+      : etaDias == null
+        ? "sem ritmo"
+        : etaDias <= 1
+          ? "~1 dia"
+          : `~${etaDias} dias`;
+
+  return (
+    <section className="space-y-3">
+      <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+        Conferência de viagens
+      </h2>
+      <Card className="space-y-5 p-5">
+        <div>
+          <div className="mb-2 flex items-end justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                Conferido
+              </p>
+              <p className="text-3xl font-bold tracking-tight tabular-nums">{pct}%</p>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground tabular-nums">{conferidas}</span> de{" "}
+              <span className="tabular-nums">{total}</span> viagens
+            </p>
+          </div>
+          <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-emerald-500 transition-all"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
+          <StatCard
+            icon={ClipboardList}
+            label="Pendentes"
+            value={pendentes}
+            subtitle="aguardando conferência"
+            tone={pendentes > 0 ? "warning" : "success"}
+            href="/viagens"
+          />
+          <StatCard
+            icon={Gauge}
+            label="Ritmo"
+            value={`${fmtNum(ritmoDia, 1)}/dia`}
+            subtitle="média dos últimos 14 dias"
+            tone="info"
+          />
+          <StatCard
+            icon={CalendarClock}
+            label="Previsão p/ zerar"
+            value={etaLabel}
+            subtitle="nesse ritmo"
+            tone={pendentes > 0 && etaDias != null ? "info" : "success"}
+          />
+          <StatCard
+            icon={Hourglass}
+            label="Tempo médio"
+            value={fmtDuracaoDias(tempoMedioDias)}
+            subtitle="da entrada à conferência"
+            tone="default"
+          />
+        </div>
+      </Card>
+    </section>
+  );
+}
+
+function fmtDuracaoDias(dias: number | null): string {
+  if (dias == null) return "—";
+  if (dias < 1) {
+    const h = Math.max(1, Math.round(dias * 24));
+    return `${h}h`;
+  }
+  return `${fmtNum(dias, 1)} dias`;
 }
 
 function BlocoMes({ d }: { d: Snapshot }) {
