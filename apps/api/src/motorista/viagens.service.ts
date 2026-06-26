@@ -490,6 +490,7 @@ export class ViagensMotoristaService {
         tipo: args.lado === "carga" ? "CARGA" : "DESCARGA",
         criadoPorMotoristaId: args.motoristaId,
         nivelConfianca: "RASCUNHO",
+        origemCadastro: "VIAGEM_OFFLINE",
       },
     });
   }

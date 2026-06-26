@@ -5,10 +5,12 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
   AlertCircle,
-  ChevronRight,
+  Eye,
   MapPin,
   Pencil,
   Plus,
+  Truck,
+  User,
 } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useQuery } from "@tanstack/react-query";
@@ -47,11 +49,19 @@ const MapaLocais = dynamic(
 );
 
 type Tipo = "CARGA" | "DESCARGA" | "AMBOS";
+type Origem =
+  | "MOTORISTA_FORMULARIO"
+  | "MOTORISTA_RAPIDO"
+  | "VIAGEM_OFFLINE"
+  | "ADMIN_MANUAL"
+  | "ADMIN_AUDITORIA";
 type Cliente = { id: string; nome: string };
 type Local = {
   id: string; nome: string; logradouro: string; numero: string | null; bairro: string | null;
   cidade: string; uf: string; cep: string | null; pontoReferencia: string | null;
   tipo: Tipo; ativo: boolean; clientes: Cliente[];
+  origemCadastro: Origem | null;
+  totalViagens: number;
   criadoPor: { id: string; nome: string } | null;
   criadoPorMotorista: { id: string; nome: string } | null;
 };
@@ -64,6 +74,20 @@ const TIPO_LOCAL_COLOR: Record<Tipo, string> = {
   DESCARGA: "border-rose-200 bg-rose-50 text-rose-900",
   AMBOS: "border-violet-200 bg-violet-50 text-violet-900",
 };
+
+// Rótulos curtos pra cada fluxo de cadastro. Registros antigos (pré-rastreio)
+// vêm com origemCadastro=null → exibe "—".
+const ORIGEM_LABEL: Record<Origem, string> = {
+  MOTORISTA_FORMULARIO: "Motorista",
+  MOTORISTA_RAPIDO: "Motorista (rápido)",
+  VIAGEM_OFFLINE: "Viagem offline",
+  ADMIN_MANUAL: "Admin",
+  ADMIN_AUDITORIA: "Admin (auditoria)",
+};
+
+function nomeCriador(l: Local): string {
+  return l.criadoPor?.nome ?? l.criadoPorMotorista?.nome ?? "—";
+}
 
 export default function LocaisPage() {
   const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
@@ -146,16 +170,45 @@ export default function LocaisPage() {
         header: ({ column }) => <DataTableColumnHeader column={column} title="Tipo" />,
       },
       {
+        id: "viagens",
+        enableSorting: false,
+        header: () => <span className="block text-center">Viagens</span>,
+        cell: ({ row }) => (
+          <span
+            className={`block text-center text-sm tabular-nums ${
+              row.original.totalViagens === 0
+                ? "text-amber-600"
+                : "text-muted-foreground"
+            }`}
+            title={
+              row.original.totalViagens === 0
+                ? "Nenhuma viagem usou este local"
+                : undefined
+            }
+          >
+            {row.original.totalViagens}
+          </span>
+        ),
+      },
+      {
+        id: "origem",
+        enableSorting: false,
+        header: "Origem",
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground">
+            {row.original.origemCadastro
+              ? ORIGEM_LABEL[row.original.origemCadastro]
+              : "—"}
+          </span>
+        ),
+      },
+      {
         id: "criadoPor",
         enableSorting: false,
         header: "Criado por",
-        cell: ({ row }) => {
-          const nome =
-            row.original.criadoPor?.nome ??
-            row.original.criadoPorMotorista?.nome ??
-            "—";
-          return <span className="text-sm text-muted-foreground">{nome}</span>;
-        },
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground">{nomeCriador(row.original)}</span>
+        ),
       },
       {
         id: "acoes",
@@ -171,6 +224,11 @@ export default function LocaisPage() {
               }
               size="sm"
             />
+            <Link href={`/locais/${row.original.id}/ver`}>
+              <Button variant="ghost" size="icon" title="Visualizar">
+                <Eye className="h-4 w-4" />
+              </Button>
+            </Link>
             <Link href={`/locais/${row.original.id}`}>
               <Button variant="ghost" size="icon" title="Editar">
                 <Pencil className="h-4 w-4" />
@@ -321,9 +379,33 @@ export default function LocaisPage() {
                     </>
                   )}
                 </div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  <span
+                    className={`flex items-center gap-1 ${
+                      l.totalViagens === 0 ? "text-amber-600" : ""
+                    }`}
+                    title={
+                      l.totalViagens === 0
+                        ? "Nenhuma viagem usou este local"
+                        : undefined
+                    }
+                  >
+                    <Truck className="h-3.5 w-3.5 shrink-0" />
+                    {l.totalViagens} viage{l.totalViagens === 1 ? "m" : "ns"}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <User className="h-3.5 w-3.5 shrink-0" />
+                    {nomeCriador(l)}
+                  </span>
+                  {l.origemCadastro && (
+                    <span className="rounded bg-muted px-1.5 py-0.5">
+                      {ORIGEM_LABEL[l.origemCadastro]}
+                    </span>
+                  )}
+                </div>
               </div>
 
-              <div className="flex w-32 shrink-0 items-center justify-end gap-1 text-muted-foreground">
+              <div className="flex shrink-0 items-center justify-end gap-1 text-muted-foreground">
                 <StatusToggle
                   active={l.ativo}
                   onChange={(next) =>
@@ -331,6 +413,11 @@ export default function LocaisPage() {
                   }
                   size="sm"
                 />
+                <Link href={`/locais/${l.id}/ver`}>
+                  <Button variant="ghost" size="icon" title="Visualizar">
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                </Link>
                 <Link href={`/locais/${l.id}`}>
                   <Button variant="ghost" size="icon" title="Editar">
                     <Pencil className="h-4 w-4" />

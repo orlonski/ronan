@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable } from "@nestjs/common";
-import { NivelConfiancaLocal, type TipoLocal } from "@prisma/client";
+import { NivelConfiancaLocal, OrigemCadastroLocal, type TipoLocal } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { inicioDiasAtras } from "../common/timezone";
 import { GeocodingService } from "../geocoding/geocoding.service";
@@ -109,6 +109,7 @@ export class LocaisMotoristaService {
         lng: input.lng,
         criadoPorMotoristaId: motoristaId,
         nivelConfianca: NivelConfiancaLocal.RASCUNHO,
+        origemCadastro: OrigemCadastroLocal.MOTORISTA_FORMULARIO,
         clientes: clienteIds.length
           ? { create: clienteIds.map((clienteId) => ({ clienteId })) }
           : undefined,
@@ -354,6 +355,7 @@ export class LocaisMotoristaService {
         lng: input.lng,
         criadoPorMotoristaId: motoristaId,
         nivelConfianca: NivelConfiancaLocal.RASCUNHO,
+        origemCadastro: OrigemCadastroLocal.MOTORISTA_RAPIDO,
         clientes: clienteIds.length
           ? { create: clienteIds.map((clienteId) => ({ clienteId })) }
           : undefined,

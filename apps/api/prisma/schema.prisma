@@ -122,6 +122,21 @@ enum FonteEvidencia {
   ADMIN
 }
 
+/// De qual fluxo o Local nasceu. null = cadastrado antes do rastreio existir
+/// (dados antigos, não dá pra inferir sem inventar).
+enum OrigemCadastroLocal {
+  /// Motorista preencheu o formulário completo de endereço no app.
+  MOTORISTA_FORMULARIO
+  /// Motorista digitou só o nome + GPS; backend completou via reverse geocoding.
+  MOTORISTA_RAPIDO
+  /// Recriado no servidor ao sincronizar viagem offline cujo local sumiu.
+  VIAGEM_OFFLINE
+  /// Admin cadastrou manualmente pelo dashboard.
+  ADMIN_MANUAL
+  /// Admin cadastrou na auditoria de uma viagem (local de descarga pelo GPS).
+  ADMIN_AUDITORIA
+}
+
 /// Tipos fixos de anexo que admin guarda por motorista (CNH, CRLV, seguro,
 /// ASO, EPIs, eSocial, NR, OS, registro, comodato, laudo, plano de
 /// manutenção). 1 arquivo por tipo — reupload substitui o anterior.
@@ -619,6 +634,8 @@ model Local {
   /// sozinho conforme evidências (LocalEvidencia) chegam. RECORRENTE/HUMANO
   /// = limpo, sem destaque no app.
   nivelConfianca       NivelConfiancaLocal @default(RASCUNHO)
+  /// De qual fluxo o local nasceu. null pra registros antigos (pré-rastreio).
+  origemCadastro       OrigemCadastroLocal?
   /// Quem cadastrou. null quando criado pelo admin.
   criadoPorMotoristaId String?
   criadoPorMotorista   Motorista?          @relation("LocalCriadoPor", fields: [criadoPorMotoristaId], references: [id])

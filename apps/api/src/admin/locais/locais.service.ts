@@ -1,5 +1,11 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import { NivelConfiancaLocal, type Prisma, type TipoLocal, FonteEvidencia } from "@prisma/client";
+import {
+  FonteEvidencia,
+  NivelConfiancaLocal,
+  OrigemCadastroLocal,
+  type Prisma,
+  type TipoLocal,
+} from "@prisma/client";
 import type { CriarLocalInput } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
@@ -22,13 +28,18 @@ const LOCAL_INCLUDE = {
   },
   criadoPorMotorista: { select: { id: true, nome: true } },
   criadoPor: { select: { id: true, nome: true } },
+  _count: { select: { viagensCarga: true, viagensDescarga: true } },
 } satisfies Prisma.LocalInclude;
 
 type LocalRaw = Prisma.LocalGetPayload<{ include: typeof LOCAL_INCLUDE }>;
 
 function flattenLocal<T extends LocalRaw>(local: T) {
-  const { clientes, ...rest } = local;
-  return { ...rest, clientes: clientes.map((c) => c.cliente) };
+  const { clientes, _count, ...rest } = local;
+  return {
+    ...rest,
+    clientes: clientes.map((c) => c.cliente),
+    totalViagens: _count.viagensCarga + _count.viagensDescarga,
+  };
 }
 
 @Injectable()
@@ -185,6 +196,7 @@ export class LocaisService {
       data: {
         ...(rest as Prisma.LocalUncheckedCreateInput),
         criadoPorId: usuarioId,
+        origemCadastro: OrigemCadastroLocal.ADMIN_MANUAL,
         clientes: clienteIds.length
           ? { create: clienteIds.map((clienteId) => ({ clienteId })) }
           : undefined,

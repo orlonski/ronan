@@ -7,6 +7,7 @@ import {
 import {
   AcaoAuditoria,
   NivelConfiancaLocal,
+  OrigemCadastroLocal,
   Prisma,
   StatusViagem,
   TipoLocal,
@@ -27,6 +28,7 @@ type ListViagensParams = PaginationQuery & {
   motoristaId?: string;
   veiculoId?: string;
   clienteId?: string;
+  localId?: string;
   status?: StatusViagem;
   de?: string;
   ate?: string;
@@ -215,6 +217,7 @@ export class ViagensAdminService {
         lng: viagem.lng,
         criadoPorId: usuarioId,
         nivelConfianca: NivelConfiancaLocal.RASCUNHO,
+        origemCadastro: OrigemCadastroLocal.ADMIN_AUDITORIA,
       },
     });
 
@@ -299,6 +302,12 @@ export class ViagensAdminService {
     if (params.motoristaId) where.motoristaId = params.motoristaId;
     if (params.veiculoId) where.veiculoId = params.veiculoId;
     if (params.clienteId) where.clienteId = params.clienteId;
+    if (params.localId) {
+      where.OR = [
+        { localCargaId: params.localId },
+        { localDescargaId: params.localId },
+      ];
+    }
     if (params.status) where.status = params.status;
     if (params.de || params.ate) {
       where.data = {};
