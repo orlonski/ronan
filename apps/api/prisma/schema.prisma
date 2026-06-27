@@ -746,6 +746,15 @@ model Viagem {
   // (silencioso — null se permissão negada ou GPS indisponível)
   lat               Float?
   lng               Float?
+  // Captura do GPS quando o motorista tocou "Estou no local de descarga":
+  // posição dele, precisão do sinal (accuracy em metros) e distância até o
+  // local que ele acabou selecionando. Auditoria de confiabilidade da
+  // marcação. Null quando não houve captura fresca (edição reaproveitando
+  // local já selecionado, ou viagem antiga pré-feature).
+  descargaLat            Float?
+  descargaLng            Float?
+  descargaPrecisao       Float? // accuracy em metros do GPS no clique
+  descargaDistanciaMetros Int?  // distância do clique até o local selecionado
   // Tracking GPS do trajeto (opcional — só preenchido se motorista usou "Iniciar viagem")
   iniciadoEm        DateTime? // quando tocou Iniciar
   kmReal            Decimal?     @db.Decimal(10, 2) // somatório das distâncias entre pontos consecutivos

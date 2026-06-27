@@ -30,6 +30,9 @@ function isNetworkError(err: unknown): boolean {
   return err instanceof TypeError;
 }
 
+// Coordenadas com precisão, carregadas pelos estados pra repassar na captura.
+type CoordsCap = { lat: number; lng: number; precisao: number | null };
+
 type Estado =
   | { tipo: "vazio" }
   | { tipo: "capturando"; precisao: number | null }
@@ -37,23 +40,35 @@ type Estado =
   | {
       tipo: "escolha";
       matches: LocalProximo[];
-      coords: { lat: number; lng: number };
+      coords: CoordsCap;
       /** true = resultados vêm do raio ampliado (sugestão); nunca auto-selecionados. */
       ampliado: boolean;
       raioInicialM: number;
     }
-  | { tipo: "sem_match"; coords: { lat: number; lng: number } };
+  | { tipo: "sem_match"; coords: CoordsCap };
+
+/** Snapshot do GPS no momento que o motorista marcou a descarga, pra auditoria. */
+export type DescargaCaptura = {
+  lat: number;
+  lng: number;
+  precisao: number | null;
+  distanciaMetros: number | null;
+};
 
 export function DescargaPorGps({
   clienteId,
   value,
   onChange,
+  onCaptura,
   nomeSelecionadoFallback,
   localCargaCoords,
 }: {
   clienteId: string | null;
   value: string;
   onChange: (id: string) => void;
+  /** Snapshot do GPS no clique (onde estava, precisão, distância até o local
+   * escolhido). null quando a seleção não veio de uma captura fresca. */
+  onCaptura?: (c: DescargaCaptura | null) => void;
   nomeSelecionadoFallback?: string;
   /** Coordenadas do local de carga já selecionado no form (se houver) — usadas
    * pra alertar quando o motorista está perto do carregamento ao tentar
@@ -165,13 +180,15 @@ export function DescargaPorGps({
       // outbox offline (pendingLocais). Não bloqueia mais.
     }
 
+    const cap: CoordsCap = { lat: coords.lat, lng: coords.lng, precisao: coords.precisao };
     if (matches.length === 0) {
-      setEstado({ tipo: "sem_match", coords });
+      setEstado({ tipo: "sem_match", coords: cap });
       setNomeNovo("");
     } else if (matches.length === 1 && !usouRaioAmpliado) {
       // 1 match dentro do raio apertado: motorista está em cima do local.
       const m = matches[0]!;
       onChange(m.id);
+      onCaptura?.({ ...cap, distanciaMetros: m.distanciaMetros });
       setEstado({
         tipo: "selecionado",
         local: { id: m.id, nome: m.nome },
@@ -181,11 +198,14 @@ export function DescargaPorGps({
     } else {
       // N matches, OU veio do raio ampliado (mesmo 1 só): sempre pede
       // confirmação — nunca auto-seleciona algo que está longe.
-      setEstado({ tipo: "escolha", matches, coords, ampliado: usouRaioAmpliado, raioInicialM });
+      setEstado({ tipo: "escolha", matches, coords: cap, ampliado: usouRaioAmpliado, raioInicialM });
     }
   }
 
   function escolherMatch(m: LocalProximo) {
+    if (estado.tipo === "escolha") {
+      onCaptura?.({ ...estado.coords, distanciaMetros: m.distanciaMetros });
+    }
     onChange(m.id);
     setEstado({
       tipo: "selecionado",
@@ -221,6 +241,8 @@ export function DescargaPorGps({
         clienteIds: clienteId ? [clienteId] : undefined,
       });
       onChange(novo.id);
+      // Local criado em cima da posição capturada → distância 0.
+      onCaptura?.({ ...estado.coords, distanciaMetros: 0 });
       setEstado({
         tipo: "selecionado",
         local: { id: novo.id, nome: novo.nome },
@@ -233,6 +255,7 @@ export function DescargaPorGps({
 
   function trocar() {
     onChange("");
+    onCaptura?.(null);
     setEstado({ tipo: "vazio" });
     setErro(null);
   }

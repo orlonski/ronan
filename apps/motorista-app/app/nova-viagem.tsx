@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
-import { DescargaPorGps } from "@/components/descarga-por-gps";
+import { DescargaPorGps, type DescargaCaptura } from "@/components/descarga-por-gps";
 import { showAlert, showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { fmtDataBR, hojeISO } from "@/lib/datetime";
@@ -121,6 +121,9 @@ export default function NovaViagem() {
   // GPS pré-aquecido em background — modulo carrega + permissao + fix
   // enquanto motorista preenche o form. Quando toca Salvar, usa o que ja tem.
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  // Snapshot do GPS quando o motorista marcou a descarga (auditoria). Reseta
+  // ao trocar (onCaptura(null)). Não persiste em edição de viagem já sincronizada.
+  const [descargaCaptura, setDescargaCaptura] = useState<DescargaCaptura | null>(null);
   // Rastreia se motorista editou KM manualmente — se sim, parou de auto-preencher
   const [kmEditadoManual, setKmEditadoManual] = useState(false);
 
@@ -518,6 +521,18 @@ export default function NovaViagem() {
             ? orig.criadoOfflineEm
             : new Date().toISOString()),
         ...(c ? { lat: c.lat, lng: c.lng } : {}),
+        ...(descargaCaptura
+          ? {
+              descargaLat: descargaCaptura.lat,
+              descargaLng: descargaCaptura.lng,
+              ...(descargaCaptura.precisao != null
+                ? { descargaPrecisao: descargaCaptura.precisao }
+                : {}),
+              ...(descargaCaptura.distanciaMetros != null
+                ? { descargaDistanciaMetros: descargaCaptura.distanciaMetros }
+                : {}),
+            }
+          : {}),
         ...(ocrCampos.size > 0
           ? {
               ocrCampos: Array.from(ocrCampos),
@@ -777,6 +792,7 @@ export default function NovaViagem() {
               clienteId={form.clienteId || null}
               value={form.localDescargaId}
               onChange={(v) => update("localDescargaId", v)}
+              onCaptura={setDescargaCaptura}
               nomeSelecionadoFallback={nomeDescargaSelecionado}
               localCargaCoords={localCargaCoords}
             />

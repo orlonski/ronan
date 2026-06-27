@@ -96,6 +96,11 @@ type ViagemDetalhe = {
   valorPedagioTotal: string | null;
   lat: number | null;
   lng: number | null;
+  // Captura do GPS no clique "Estou no local de descarga"
+  descargaLat: number | null;
+  descargaLng: number | null;
+  descargaPrecisao: number | null;
+  descargaDistanciaMetros: number | null;
   veiculo: { id: string; placa: string; modelo: string | null };
   motorista: { id: string; nome: string; cpf: string };
   cliente: { id: string; nome: string; empresa: { nome: string } };
@@ -376,6 +381,12 @@ export default function ViagemDetalhePage({
               />
               {v.kmReal && (
                 <Row label="Km real (GPS)" value={fmtNum(v.kmReal, 2)} />
+              )}
+              {(v.descargaDistanciaMetros != null || v.descargaPrecisao != null) && (
+                <Row
+                  label="Marcação da descarga"
+                  value={<MarcacaoDescarga viagem={v} />}
+                />
               )}
               <Row
                 label="Ticket"
@@ -834,6 +845,32 @@ function Row({
       </dt>
       <dd className={mono ? "font-mono" : ""}>{value}</dd>
     </div>
+  );
+}
+
+// Mostra quão confiável foi a marcação da descarga pelo motorista: distância
+// do GPS no clique até o local escolhido + precisão do sinal. Destaca em âmbar
+// quando ficou ruim (longe do local ou sinal fraco) — sinal de revisar.
+function MarcacaoDescarga({ viagem }: { viagem: ViagemDetalhe }) {
+  const dist = viagem.descargaDistanciaMetros;
+  const prec = viagem.descargaPrecisao;
+  const partes: string[] = [];
+  if (dist != null) partes.push(dist === 0 ? "local criado aqui" : `${dist} m do local`);
+  if (prec != null) partes.push(`precisão ±${Math.round(prec)} m`);
+  const suspeito = (dist != null && dist > 200) || (prec != null && prec > 50);
+  return (
+    <span
+      className={suspeito ? "text-amber-600" : ""}
+      style={{ fontVariant: "tabular-nums" }}
+      title={
+        viagem.descargaLat != null && viagem.descargaLng != null
+          ? `GPS do clique: ${viagem.descargaLat}, ${viagem.descargaLng}`
+          : undefined
+      }
+    >
+      {partes.join(" · ")}
+      {suspeito && " ⚠️"}
+    </span>
   );
 }
 

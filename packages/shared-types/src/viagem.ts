@@ -54,6 +54,15 @@ export const CriarViagemInput = z.object({
   criadoOfflineEm: z.coerce.date().optional(),
   lat: z.number().min(-90).max(90).optional(),
   lng: z.number().min(-180).max(180).optional(),
+  // Captura do GPS no momento que o motorista tocou "Estou no local de
+  // descarga": onde ele estava, a precisão do sinal (±m) e a distância até o
+  // local que acabou selecionado. Servem pra auditar no dashboard quão
+  // confiável foi a marcação. Null quando não houve captura fresca (ex.:
+  // edição reaproveitando local já selecionado).
+  descargaLat: z.number().min(-90).max(90).optional(),
+  descargaLng: z.number().min(-180).max(180).optional(),
+  descargaPrecisao: z.number().nonnegative().max(100000).optional(),
+  descargaDistanciaMetros: z.number().nonnegative().max(MAX_KM * 1000).optional(),
   // Tracking GPS (opcional — só preenchido se motorista usou "Iniciar viagem")
   iniciadoEm: z.coerce.date().optional(),
   kmReal: z.number().nonnegative().max(MAX_KM).optional(),

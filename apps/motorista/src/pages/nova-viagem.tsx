@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { PhotoCapture } from "@/components/photo-capture";
-import { DescargaPorGps } from "@/components/descarga-por-gps";
+import { DescargaPorGps, type DescargaCaptura } from "@/components/descarga-por-gps";
 import { showAlert, showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { fmtDataBR } from "@/lib/datetime";
@@ -85,6 +85,9 @@ export default function NovaViagemPage() {
   const [kmEditadoManual, setKmEditadoManual] = useState(false);
   const [hidratando, setHidratando] = useState<boolean>(modoEdit);
   const [pendingOriginal, setPendingOriginal] = useState<PendingViagem | null>(null);
+  // Snapshot do GPS quando o motorista marcou a descarga (auditoria). null
+  // ao trocar; não persiste em edição reaproveitando local já selecionado.
+  const [descargaCaptura, setDescargaCaptura] = useState<DescargaCaptura | null>(null);
 
   const rota = useCalcularRota(form.localCargaId, form.localDescargaId);
   const pedagiosNaRota = usePedagiosNaRota(form.localCargaId, form.localDescargaId);
@@ -357,6 +360,18 @@ export default function NovaViagemPage() {
           ? parseFloat(form.valorPedagio.replace(",", "."))
           : undefined,
         observacao: form.observacao.trim() || undefined,
+        ...(descargaCaptura
+          ? {
+              descargaLat: descargaCaptura.lat,
+              descargaLng: descargaCaptura.lng,
+              ...(descargaCaptura.precisao != null
+                ? { descargaPrecisao: descargaCaptura.precisao }
+                : {}),
+              ...(descargaCaptura.distanciaMetros != null
+                ? { descargaDistanciaMetros: descargaCaptura.distanciaMetros }
+                : {}),
+            }
+          : {}),
         criadoOfflineEm:
           modoEdit && typeof orig?.criadoOfflineEm === "string"
             ? (orig.criadoOfflineEm as string)
@@ -566,6 +581,7 @@ export default function NovaViagemPage() {
             clienteId={form.clienteId || null}
             value={form.localDescargaId}
             onChange={(v) => update("localDescargaId", v)}
+            onCaptura={setDescargaCaptura}
             nomeSelecionadoFallback={nomeDescargaSelecionado}
             localCargaCoords={localCargaCoords}
           />
