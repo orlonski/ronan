@@ -312,7 +312,15 @@ export class LocaisMotoristaService {
    */
   async criarRapido(
     motoristaId: string,
-    input: { id?: string; nome: string; lat: number; lng: number; tipo: TipoLocal; clienteIds?: string[] },
+    input: {
+      id?: string;
+      nome: string;
+      lat: number;
+      lng: number;
+      precisao?: number;
+      tipo: TipoLocal;
+      clienteIds?: string[];
+    },
   ) {
     // Idempotência: se motorista já enviou esse id antes (outbox offline
     // retentando, sync duplicado, etc), retorna o local existente sem
@@ -353,6 +361,7 @@ export class LocaisMotoristaService {
         tipo: input.tipo,
         lat: input.lat,
         lng: input.lng,
+        latLngPrecisao: input.precisao,
         criadoPorMotoristaId: motoristaId,
         nivelConfianca: NivelConfiancaLocal.RASCUNHO,
         origemCadastro: OrigemCadastroLocal.MOTORISTA_RAPIDO,

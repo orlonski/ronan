@@ -22,6 +22,9 @@ export const CriarLocalRapidoInput = z.object({
   nome: z.string().min(2).max(120),
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
+  // Precisão (accuracy em metros) do GPS no momento que o motorista estava no
+  // local e tocou "Estou no local". Auditoria de quão confiável é a coordenada.
+  precisao: z.number().nonnegative().max(100000).optional(),
   tipo: z.nativeEnum(TipoLocal),
   clienteIds: z.array(z.string().uuid()).default([]),
 });

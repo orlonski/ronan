@@ -990,6 +990,7 @@ export function useCriarLocalRapido() {
       nome: string;
       lat: number;
       lng: number;
+      precisao?: number;
       tipo: "CARGA" | "DESCARGA" | "AMBOS";
       clienteIds?: string[];
     }): Promise<Local> => {
@@ -1014,6 +1015,7 @@ export function useCriarLocalRapido() {
           nome: input.nome,
           lat: input.lat,
           lng: input.lng,
+          ...(input.precisao != null ? { precisao: input.precisao } : {}),
           tipo: input.tipo,
           clienteIds: input.clienteIds,
         },

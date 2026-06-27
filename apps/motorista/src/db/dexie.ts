@@ -71,6 +71,7 @@ export type PendingLocal = {
     nome: string;
     lat: number;
     lng: number;
+    precisao?: number;
     tipo: "CARGA" | "DESCARGA" | "AMBOS";
     clienteIds?: string[];
   };

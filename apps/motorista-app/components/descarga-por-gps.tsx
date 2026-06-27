@@ -237,6 +237,7 @@ export function DescargaPorGps({
         nome,
         lat: estado.coords.lat,
         lng: estado.coords.lng,
+        precisao: estado.coords.precisao ?? undefined,
         tipo: "DESCARGA",
         clienteIds: clienteId ? [clienteId] : undefined,
       });

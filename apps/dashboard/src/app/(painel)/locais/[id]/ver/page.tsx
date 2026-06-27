@@ -50,6 +50,7 @@ type Local = {
   ativo: boolean;
   lat: number | null;
   lng: number | null;
+  latLngPrecisao: number | null;
   nivelConfianca: Nivel;
   origemCadastro: Origem | null;
   totalViagens: number;
@@ -284,6 +285,13 @@ export default function VisualizarLocalPage({
               <PontoMap lat={l.lat} lng={l.lng} label={l.nome} />
               <p className="text-xs text-muted-foreground">
                 Coordenadas: {l.lat.toFixed(6)}, {l.lng.toFixed(6)}.
+                {l.latLngPrecisao != null && (
+                  <span className={l.latLngPrecisao > 50 ? "text-amber-600" : ""}>
+                    {" "}
+                    GPS do cadastro: ±{Math.round(l.latLngPrecisao)} m
+                    {l.latLngPrecisao > 50 ? " (sinal fraco)" : ""}.
+                  </span>
+                )}
               </p>
             </Card>
           )}

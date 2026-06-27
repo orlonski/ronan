@@ -624,6 +624,10 @@ model Local {
   cep                  String?
   lat                  Float?
   lng                  Float?
+  /// Precisão (accuracy em metros) do GPS quando o motorista cadastrou o local
+  /// estando nele ("Estou no local", fluxo rápido). null pra locais cadastrados
+  /// pelo admin (endereço digitado) ou antigos pré-feature.
+  latLngPrecisao       Float?
   pontoReferencia      String?
   /// Apelidos/sinônimos pra busca fuzzy do agente WhatsApp. Como o motorista
   /// chama no dia a dia (ex: "pedreira nova", "do souza", "balança 2").
