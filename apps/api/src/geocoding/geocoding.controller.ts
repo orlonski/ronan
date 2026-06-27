@@ -39,4 +39,21 @@ export class GeocodingController {
   place(@Query("placeId") placeId: string) {
     return this.service.resolverPlace(placeId ?? "");
   }
+
+  @Get("reverso")
+  reverso(@Query("lat") lat: string, @Query("lng") lng: string) {
+    const latN = Number(lat);
+    const lngN = Number(lng);
+    if (
+      !Number.isFinite(latN) ||
+      !Number.isFinite(lngN) ||
+      latN < -90 ||
+      latN > 90 ||
+      lngN < -180 ||
+      lngN > 180
+    ) {
+      return null;
+    }
+    return this.service.reverseGeocoding(latN, lngN);
+  }
 }

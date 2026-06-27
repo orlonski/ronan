@@ -157,30 +157,31 @@ export function LocalForm({ initial }: Props) {
       <div className={temCoord ? "grid grid-cols-1 gap-6 lg:grid-cols-2" : ""}>
         <Card className="space-y-4 p-6">
           <div className="space-y-2">
-            <Label>Nome do local *</Label>
-          <Input
-            required
-            autoFocus
-            placeholder='ex: "Pedreira Souza Naves — balança 2"'
-            value={form.nome}
-            onChange={(e) => setForm({ ...form, nome: e.target.value })}
-          />
-          <p className="text-xs text-muted-foreground">
-            Use um nome específico (não só rua) — ajuda na conferência com o motorista.
-          </p>
-        </div>
+            <Label>Buscar endereço</Label>
+            <AddressAutocomplete
+              value={form.logradouro}
+              onChange={(v) => setForm((f) => ({ ...f, logradouro: v }))}
+              onSelect={aplicarSugestao}
+            />
+            <p className="text-xs text-muted-foreground">
+              Busque por nome do lugar, rua ou bairro — ou cole as coordenadas
+              (ex.: <span className="font-mono">-25.4284, -49.2733</span>) pra puxar o
+              endereço. Os campos abaixo são preenchidos automaticamente.
+            </p>
+          </div>
 
-        <div className="space-y-2">
-          <Label>Buscar endereço</Label>
-          <AddressAutocomplete
-            value={form.logradouro}
-            onChange={(v) => setForm((f) => ({ ...f, logradouro: v }))}
-            onSelect={aplicarSugestao}
-          />
-          <p className="text-xs text-muted-foreground">
-            Busque por nome do lugar, rua ou bairro. Os campos abaixo são preenchidos automaticamente.
-          </p>
-        </div>
+          <div className="space-y-2">
+            <Label>Nome do local *</Label>
+            <Input
+              required
+              placeholder='ex: "Pedreira Souza Naves — balança 2"'
+              value={form.nome}
+              onChange={(e) => setForm({ ...form, nome: e.target.value })}
+            />
+            <p className="text-xs text-muted-foreground">
+              Use um nome específico (não só rua) — ajuda na conferência com o motorista.
+            </p>
+          </div>
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <div className="space-y-2">
