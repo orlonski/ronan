@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { router } from "expo-router";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { KeyboardAvoidingView, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -96,7 +96,10 @@ export default function SignupScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        // padding nos dois: no Android o edge-to-edge (SDK 54) não redimensiona
+        // a janela, então behavior baseado em resize não funciona — padding usa
+        // os eventos de teclado e recua o conteúdo em ambas as plataformas.
+        behavior="padding"
         className="flex-1"
       >
         <ScrollView
