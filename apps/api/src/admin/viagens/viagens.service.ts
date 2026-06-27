@@ -699,12 +699,21 @@ export class ViagensAdminService {
       throw new BadRequestException(resultado.erro);
     }
 
-    // Persiste o novo valor na viagem. Admin clicou explicitamente, quer ver
-    // o KM atualizado na tela e no fechamento.
+    // Recalcular sempre atualiza o kmCalculado (referência OSRM). O km de
+    // faturamento só é sobrescrito quando o motorista NÃO editou na mão — se
+    // ele ajustou (km != kmCalculado), preservamos o valor dele e mexemos só
+    // na referência. kmCalculado null = viagem antiga sem auto-cálculo, tratada
+    // como "não editada" (sobrescreve o km).
     const novoKm = parseFloat(resultado.km);
+    const motoristaEditou =
+      viagem.kmCalculado != null &&
+      Math.abs(Number(viagem.km) - Number(viagem.kmCalculado)) > 0.001;
+
     await this.prisma.viagem.update({
       where: { id: viagem.id },
-      data: { km: novoKm, kmCalculado: novoKm },
+      data: motoristaEditou
+        ? { kmCalculado: novoKm }
+        : { km: novoKm, kmCalculado: novoKm },
     });
 
     await this.auditoria.log({
@@ -713,15 +722,22 @@ export class ViagensAdminService {
       entidadeId: viagem.id,
       acao: AcaoAuditoria.RECALCULAR_TRAJETO,
       // campo/valorAntes/valorDepois ficam visíveis na timeline (o metadata não é
-      // renderizado lá). Mostra o km da viagem antes → depois do recálculo.
-      campo: "km",
-      valorAntes: viagem.km.toString(),
+      // renderizado lá). Quando o motorista editou, o km dele foi preservado, então
+      // mostramos o diff do kmCalculado e o motivo; senão, o diff do km.
+      campo: motoristaEditou ? "kmCalculado" : "km",
+      valorAntes: motoristaEditou
+        ? (viagem.kmCalculado?.toString() ?? null)
+        : viagem.km.toString(),
       valorDepois: resultado.km,
+      motivo: motoristaEditou
+        ? `Km do motorista (${viagem.km.toString()}) preservado — só o calculado foi atualizado.`
+        : undefined,
       metadata: {
         kmAntes: cacheAntes?.km.toString() ?? null,
         kmDepois: resultado.km,
+        motoristaEditou,
         kmInformadoAntes: viagem.km.toString(),
-        kmInformadoDepois: resultado.km,
+        kmInformadoDepois: motoristaEditou ? viagem.km.toString() : resultado.km,
         kmCalculadoAntes: viagem.kmCalculado?.toString() ?? null,
         kmCalculadoDepois: resultado.km,
         tinhaGeometria: cacheAntes?.geometria != null,
@@ -731,7 +747,9 @@ export class ViagensAdminService {
 
     return {
       ok: true,
-      km: resultado.km,
+      km: motoristaEditou ? viagem.km.toString() : resultado.km,
+      kmCalculado: resultado.km,
+      motoristaEditou,
       duracaoSegundos: resultado.duracaoSegundos,
       geometria: resultado.geometria,
     };

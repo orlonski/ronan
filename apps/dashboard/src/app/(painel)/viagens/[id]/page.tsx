@@ -178,12 +178,16 @@ export default function ViagemDetalhePage({
   const queryClient = useQueryClient();
   const recalcular = useMutation({
     mutationFn: () =>
-      fetchApi<{ ok: true }>(`/admin/viagens/${id}/recalcular-trajeto`, {
-        method: "POST",
-        token,
-      }),
-    onSuccess: () => {
-      toast.success("Trajeto recalculado.");
+      fetchApi<{ ok: true; km: string; kmCalculado: string; motoristaEditou: boolean }>(
+        `/admin/viagens/${id}/recalcular-trajeto`,
+        { method: "POST", token },
+      ),
+    onSuccess: (res) => {
+      toast.success("Trajeto recalculado.", {
+        description: res.motoristaEditou
+          ? `Km do motorista (${res.km}) preservado. Calculado: ${res.kmCalculado}.`
+          : `Km atualizado para ${res.km}.`,
+      });
       void queryClient.invalidateQueries({ queryKey: ["viagem-admin", id] });
       void queryClient.invalidateQueries({ queryKey: ["viagem-historico", id] });
     },
@@ -898,6 +902,7 @@ function formatVal(v: unknown): string {
 const CAMPO_LABEL: Record<string, string> = {
   toneladas: "Toneladas",
   km: "Km",
+  kmCalculado: "Km calculado",
   ticket: "Ticket",
   data: "Data",
   observacao: "Observação",
