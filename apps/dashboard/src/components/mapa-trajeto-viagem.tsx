@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import polylineLib from "@mapbox/polyline";
-import { ExternalLink } from "lucide-react";
+import { Check, Copy, ExternalLink } from "lucide-react";
 
 // Fix dos icons do leaflet com bundlers Next — mesmo do trajeto-map-player.
 delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
@@ -135,17 +135,32 @@ export function MapaTrajetoViagem({
           )}
           {carga && (
             <Marker position={[carga.lat, carga.lng]} icon={ICONE_CARGA}>
-              <Popup>Carga: {carga.nome ?? "—"}</Popup>
+              <Popup>
+                <div className="space-y-1 text-sm">
+                  <p className="font-bold">Carga: {carga.nome ?? "—"}</p>
+                  <CopiarCoord lat={carga.lat} lng={carga.lng} />
+                </div>
+              </Popup>
             </Marker>
           )}
           {descarga && (
             <Marker position={[descarga.lat, descarga.lng]} icon={ICONE_DESCARGA}>
-              <Popup>Descarga: {descarga.nome ?? "—"}</Popup>
+              <Popup>
+                <div className="space-y-1 text-sm">
+                  <p className="font-bold">Descarga: {descarga.nome ?? "—"}</p>
+                  <CopiarCoord lat={descarga.lat} lng={descarga.lng} />
+                </div>
+              </Popup>
             </Marker>
           )}
           {lancamento && (
             <Marker position={[lancamento.lat, lancamento.lng]} icon={ICONE_LANCAMENTO}>
-              <Popup>Onde foi lançada</Popup>
+              <Popup>
+                <div className="space-y-1 text-sm">
+                  <p className="font-bold">Onde foi lançada</p>
+                  <CopiarCoord lat={lancamento.lat} lng={lancamento.lng} />
+                </div>
+              </Popup>
             </Marker>
           )}
           {pedagios.map((p) =>
@@ -161,6 +176,7 @@ export function MapaTrajetoViagem({
                     <p className="text-xs text-muted-foreground">
                       ~{p.distanciaMetros}m da rota
                     </p>
+                    <CopiarCoord lat={p.lat} lng={p.lng} />
                   </div>
                 </Popup>
               </Marker>
@@ -190,6 +206,40 @@ export function MapaTrajetoViagem({
         )}
       </div>
     </div>
+  );
+}
+
+function CopiarCoord({ lat, lng }: { lat: number; lng: number }) {
+  const [copiado, setCopiado] = useState(false);
+  const texto = `${lat}, ${lng}`;
+
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText(texto);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 1500);
+    } catch {
+      // clipboard pode falhar fora de contexto seguro — silencioso
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={copiar}
+      className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
+      title="Copiar coordenadas"
+    >
+      {copiado ? (
+        <>
+          <Check className="h-3 w-3" /> Copiado!
+        </>
+      ) : (
+        <>
+          <Copy className="h-3 w-3" /> {texto}
+        </>
+      )}
+    </button>
   );
 }
 
