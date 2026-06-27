@@ -712,6 +712,11 @@ export class ViagensAdminService {
       entidade: "Viagem",
       entidadeId: viagem.id,
       acao: AcaoAuditoria.RECALCULAR_TRAJETO,
+      // campo/valorAntes/valorDepois ficam visíveis na timeline (o metadata não é
+      // renderizado lá). Mostra o km da viagem antes → depois do recálculo.
+      campo: "km",
+      valorAntes: viagem.km.toString(),
+      valorDepois: resultado.km,
       metadata: {
         kmAntes: cacheAntes?.km.toString() ?? null,
         kmDepois: resultado.km,
