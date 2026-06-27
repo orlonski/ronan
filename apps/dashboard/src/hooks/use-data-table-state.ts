@@ -47,6 +47,46 @@ export function firstDayOfMonth(): string {
   return primeiroDiaDoMesSP();
 }
 
+// Persistência dos filtros por tela em localStorage (mesmo padrão de use-list-view-mode).
+const PERSIST_PREFIX = "ronan.table-state.";
+
+type PersistedState = {
+  page: number;
+  pageSize: number;
+  sort?: string;
+  order: SortOrder;
+  q?: string;
+  filters: FilterValues;
+};
+
+function lerPersistido(key: string): PersistedState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(PERSIST_PREFIX + key);
+    return raw ? (JSON.parse(raw) as PersistedState) : null;
+  } catch {
+    return null;
+  }
+}
+
+function salvarPersistido(key: string, s: PersistedState): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(PERSIST_PREFIX + key, JSON.stringify(s));
+  } catch {
+    /* ignora quota */
+  }
+}
+
+function limparPersistido(key: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(PERSIST_PREFIX + key);
+  } catch {
+    /* ignora */
+  }
+}
+
 /**
  * Hook que controla page/pageSize/sort/order/q/filters de uma listagem,
  * com sincronização opcional com a URL e debounce no campo de busca.
@@ -87,19 +127,46 @@ export function useDataTableState(
     for (const [k, v] of params.entries()) {
       if (!known.has(k) && v) filters[k] = v;
     }
-    // Se a URL não trouxe nenhum filtro, aplica os defaults
-    const hasUrlFilters = Object.keys(filters).length > 0;
-    if (!hasUrlFilters && defaultFilters) {
+    // A URL tem precedência (deeplink/link compartilhado): se houver qualquer
+    // param conhecido ou filtro, usa a URL como fonte da verdade.
+    const hasUrlParams =
+      Object.keys(filters).length > 0 ||
+      [...known].some((k) => params.get(k));
+    if (hasUrlParams) {
+      return {
+        page: Number(params.get("page")) || 1,
+        pageSize: Number(params.get("pageSize")) || defaultPageSize,
+        sort: params.get("sort") ?? defaultSort?.field,
+        order: ((params.get("order") as SortOrder) ?? defaultSort?.order ?? "asc") as SortOrder,
+        q: params.get("q") ?? undefined,
+        filters,
+      };
+    }
+    // Sem params na URL: tenta restaurar do localStorage (filtros que o usuário
+    // deixou da última vez nesta tela).
+    const saved = lerPersistido(pathname);
+    if (saved) {
+      return {
+        page: saved.page || 1,
+        pageSize: saved.pageSize || defaultPageSize,
+        sort: saved.sort ?? defaultSort?.field,
+        order: saved.order ?? defaultSort?.order ?? "asc",
+        q: saved.q ?? undefined,
+        filters: saved.filters ?? {},
+      };
+    }
+    // Sem URL e sem nada salvo: aplica os defaults.
+    if (defaultFilters) {
       for (const [k, v] of Object.entries(defaultFilters)) {
         if (v) filters[k] = v;
       }
     }
     return {
-      page: Number(params.get("page")) || 1,
-      pageSize: Number(params.get("pageSize")) || defaultPageSize,
-      sort: params.get("sort") ?? defaultSort?.field,
-      order: ((params.get("order") as SortOrder) ?? defaultSort?.order ?? "asc") as SortOrder,
-      q: params.get("q") ?? undefined,
+      page: 1,
+      pageSize: defaultPageSize,
+      sort: defaultSort?.field,
+      order: (defaultSort?.order ?? "asc") as SortOrder,
+      q: undefined,
       filters,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -143,6 +210,8 @@ export function useDataTableState(
     const qs = next.toString();
     const url = qs ? `${pathname}?${qs}` : pathname;
     window.history.replaceState(null, "", url);
+    // Persiste o estado da tela pra restaurar ao sair e voltar.
+    salvarPersistido(pathname, { page, pageSize, sort, order, q: qDebounced, filters });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, pageSize, sort, order, qDebounced, JSON.stringify(filters)]);
 
@@ -169,8 +238,9 @@ export function useDataTableState(
     setSortField(defaultSort?.field);
     setOrderState(defaultSort?.order ?? "asc");
     setPageState(1);
+    limparPersistido(pathname);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [defaultSort?.field, defaultSort?.order]);
+  }, [defaultSort?.field, defaultSort?.order, pathname]);
 
   return {
     page,
