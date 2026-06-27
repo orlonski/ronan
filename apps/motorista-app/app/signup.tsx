@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { router } from "expo-router";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -38,6 +38,14 @@ export default function SignupScreen() {
   const [placas, setPlacas] = useState<string[]>([""]);
   const [submitting, setSubmitting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+
+  // Ao focar um campo lá embaixo, espera o teclado/resize assentar e rola até
+  // o fim — garante que senha, confirmar e o botão "Continuar" fiquem visíveis
+  // acima do teclado (Android não faz isso sozinho de forma confiável).
+  function rolarParaFim() {
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
+  }
 
   function setPlaca(i: number, v: string) {
     setPlacas((arr) => arr.map((p, idx) => (idx === i ? maskPlaca(v) : p)));
@@ -92,6 +100,7 @@ export default function SignupScreen() {
         className="flex-1"
       >
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
@@ -197,6 +206,7 @@ export default function SignupScreen() {
               <PasswordInput
                 value={senha}
                 onChangeText={setSenha}
+                onFocus={rolarParaFim}
                 autoComplete="password-new"
                 textContentType="newPassword"
                 placeholder="Mínimo 6 caracteres"
@@ -209,6 +219,7 @@ export default function SignupScreen() {
               <PasswordInput
                 value={confirmar}
                 onChangeText={setConfirmar}
+                onFocus={rolarParaFim}
                 autoComplete="password-new"
                 textContentType="newPassword"
                 placeholder="Repita a senha"
