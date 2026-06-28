@@ -91,17 +91,18 @@ export class LocaisService {
   }
 
   /**
-   * Pontos de lançamento das viagens que usam este local (carga OU descarga).
-   * Cada viagem grava lat/lng de onde foi lançada — o "ponto azul". Mais
-   * recentes primeiro, limitado a 300 pra não pesar o mapa.
+   * Pontos de lançamento das viagens que tiveram este local como DESCARGA —
+   * é onde o motorista tocou "Estou no local de descarga", então o lat/lng da
+   * viagem fica em cima do local. Mais recentes primeiro, limitado a 500 pra
+   * não pesar o mapa (acima disso, plota só os 500 últimos).
    */
   async lancamentos(id: string) {
+    const LIMITE = 500;
+    const total = await this.prisma.viagem.count({
+      where: { localDescargaId: id, lat: { not: null }, lng: { not: null } },
+    });
     const viagens = await this.prisma.viagem.findMany({
-      where: {
-        OR: [{ localCargaId: id }, { localDescargaId: id }],
-        lat: { not: null },
-        lng: { not: null },
-      },
+      where: { localDescargaId: id, lat: { not: null }, lng: { not: null } },
       select: {
         id: true,
         lat: true,
@@ -109,20 +110,22 @@ export class LocaisService {
         data: true,
         ticket: true,
         status: true,
-        localDescargaId: true,
       },
       orderBy: { data: "desc" },
-      take: 300,
+      take: LIMITE,
     });
-    return viagens.map((v) => ({
-      id: v.id,
-      lat: v.lat as number,
-      lng: v.lng as number,
-      data: v.data,
-      ticket: v.ticket,
-      status: v.status,
-      lado: v.localDescargaId === id ? "DESCARGA" : "CARGA",
-    }));
+    return {
+      total,
+      truncado: total > LIMITE,
+      pontos: viagens.map((v) => ({
+        id: v.id,
+        lat: v.lat as number,
+        lng: v.lng as number,
+        data: v.data,
+        ticket: v.ticket,
+        status: v.status,
+      })),
+    };
   }
 
   /**

@@ -111,6 +111,23 @@ const STATUS_VIAGEM_COLOR: Record<string, string> = {
   RASCUNHO_OFFLINE: "bg-gray-100 text-gray-700 border-gray-200",
 };
 
+// Distância em linha reta (Haversine) em metros.
+function distanciaMetros(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number,
+): number {
+  const R = 6371000;
+  const rad = (g: number) => (g * Math.PI) / 180;
+  const dLat = rad(lat2 - lat1);
+  const dLng = rad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
 function InfoLinha({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-0.5">
@@ -140,23 +157,24 @@ export default function VisualizarLocalPage({
   });
   const limiteSinalFraco = gpsConfig.data?.gpsLimiteSinalFracoM ?? 50;
 
-  // Pontos de lançamento das viagens deste local (bolinhas azuis no mapa).
+  // Pontos de lançamento das viagens que descarregaram neste local.
   const lancamentos = useQuery({
     queryKey: ["local-lancamentos", id, token],
     enabled: !!token,
     staleTime: 60_000,
     queryFn: () =>
-      fetchApi<
-        Array<{
+      fetchApi<{
+        total: number;
+        truncado: boolean;
+        pontos: Array<{
           id: string;
           lat: number;
           lng: number;
           data: string;
           ticket: string;
           status: string;
-          lado: "CARGA" | "DESCARGA";
-        }>
-      >(`/admin/locais/${id}/lancamentos`, { token }),
+        }>;
+      }>(`/admin/locais/${id}/lancamentos`, { token }),
   });
 
   // Viagens deste local (carga OU descarga) — backend filtra por localId.
@@ -317,20 +335,25 @@ export default function VisualizarLocalPage({
                 lat={l.lat}
                 lng={l.lng}
                 label={l.nome}
-                pontos={(lancamentos.data ?? []).map((p) => ({
+                precisao={l.latLngPrecisao}
+                pontos={(lancamentos.data?.pontos ?? []).map((p) => ({
                   id: p.id,
                   lat: p.lat,
                   lng: p.lng,
-                  label: `${fmtBR(p.data)} · ${p.ticket} · ${p.lado === "DESCARGA" ? "descarga" : "carga"}`,
+                  status: p.status,
+                  label: `${fmtBR(p.data)} · ${p.ticket}`,
+                  distanciaMetros: distanciaMetros(l.lat!, l.lng!, p.lat, p.lng),
+                  href: `/viagens/${p.id}`,
                 }))}
               />
               <p className="text-xs text-muted-foreground">
                 Coordenadas: {l.lat.toFixed(6)}, {l.lng.toFixed(6)}.
-                {lancamentos.data && lancamentos.data.length > 0 && (
+                {lancamentos.data && lancamentos.data.pontos.length > 0 && (
                   <>
                     {" "}
-                    <span className="text-blue-600">●</span> {lancamentos.data.length}{" "}
-                    {lancamentos.data.length === 1 ? "lançamento" : "lançamentos"} de viagem.
+                    <span className="text-blue-600">●</span> {lancamentos.data.pontos.length}{" "}
+                    {lancamentos.data.pontos.length === 1 ? "descarga" : "descargas"} no mapa
+                    {lancamentos.data.truncado && ` (de ${lancamentos.data.total} — mostrando as 500 mais recentes)`}.
                   </>
                 )}
                 {l.latLngPrecisao != null && (
