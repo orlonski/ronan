@@ -1084,6 +1084,13 @@ model ConfiguracaoBuscaLocais {
   raioInicialM  Int      @default(50)
   // Raio da 2a tentativa quando o inicial nao acha nada (metros). So sugere.
   raioAmpliadoM Int      @default(500)
+  // Captura de GPS ao tocar "Estou no local de descarga":
+  // alvo de precisao (m) que encerra a captura cedo; tempo maximo (s) que
+  // amostra o GPS; e limite (m) acima do qual avisa "sinal fraco" e marca
+  // a coordenada como suspeita no dashboard.
+  gpsAlvoMetros        Int @default(10)
+  gpsMaxSegundos       Int @default(20)
+  gpsLimiteSinalFracoM Int @default(50)
   alteradoEm    DateTime @updatedAt
   alteradoPor   User?    @relation(fields: [alteradoPorId], references: [id])
   alteradoPorId String?

@@ -157,6 +157,15 @@ export default function ViagemDetalhePage({
     enabled: !!token,
     queryFn: () => fetchApi<ViagemDetalhe>(`/admin/viagens/${id}`, { token }),
   });
+  // Limite de sinal fraco configurável — usado pra marcar a descarga em âmbar.
+  const gpsConfig = useQuery({
+    queryKey: ["busca-locais-config", token],
+    enabled: !!token,
+    staleTime: 30 * 60_000,
+    queryFn: () =>
+      fetchApi<{ gpsLimiteSinalFracoM: number }>("/admin/busca-locais-config", { token }),
+  });
+  const limiteSinalFraco = gpsConfig.data?.gpsLimiteSinalFracoM ?? 50;
   const localCargaId = viagem.data?.localCarga.id;
   const localDescargaId = viagem.data?.localDescarga.id;
   const pedagiosNaRota = useQuery({
@@ -385,7 +394,7 @@ export default function ViagemDetalhePage({
               {(v.descargaDistanciaMetros != null || v.descargaPrecisao != null) && (
                 <Row
                   label="Marcação da descarga"
-                  value={<MarcacaoDescarga viagem={v} />}
+                  value={<MarcacaoDescarga viagem={v} limiteSinalFraco={limiteSinalFraco} />}
                 />
               )}
               <Row
@@ -851,13 +860,19 @@ function Row({
 // Mostra quão confiável foi a marcação da descarga pelo motorista: distância
 // do GPS no clique até o local escolhido + precisão do sinal. Destaca em âmbar
 // quando ficou ruim (longe do local ou sinal fraco) — sinal de revisar.
-function MarcacaoDescarga({ viagem }: { viagem: ViagemDetalhe }) {
+function MarcacaoDescarga({
+  viagem,
+  limiteSinalFraco,
+}: {
+  viagem: ViagemDetalhe;
+  limiteSinalFraco: number;
+}) {
   const dist = viagem.descargaDistanciaMetros;
   const prec = viagem.descargaPrecisao;
   const partes: string[] = [];
   if (dist != null) partes.push(dist === 0 ? "local criado aqui" : `${dist} m do local`);
   if (prec != null) partes.push(`precisão ±${Math.round(prec)} m`);
-  const suspeito = (dist != null && dist > 200) || (prec != null && prec > 50);
+  const suspeito = (dist != null && dist > 200) || (prec != null && prec > limiteSinalFraco);
   return (
     <span
       className={suspeito ? "text-amber-600" : ""}

@@ -13,9 +13,10 @@ import {
   DataTable,
   DataTableColumnHeader,
 } from "@/components/data-table";
+import { useQuery } from "@tanstack/react-query";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import { fmtBR } from "@/lib/fechamento-helpers";
-import { useResourceItem, usePaginatedList } from "@/lib/client-api";
+import { fetchApi, useAuthToken, useResourceItem, usePaginatedList } from "@/lib/client-api";
 
 const PontoMap = dynamic(
   () => import("@/components/ponto-map").then((m) => m.PontoMap),
@@ -127,6 +128,17 @@ export default function VisualizarLocalPage({
   const { id } = use(params);
   const item = useResourceItem<Local>("/admin/locais", id);
   const l = item.data;
+
+  // Limite de sinal fraco configurável — marca o GPS do cadastro em âmbar.
+  const token = useAuthToken();
+  const gpsConfig = useQuery({
+    queryKey: ["busca-locais-config", token],
+    enabled: !!token,
+    staleTime: 30 * 60_000,
+    queryFn: () =>
+      fetchApi<{ gpsLimiteSinalFracoM: number }>("/admin/busca-locais-config", { token }),
+  });
+  const limiteSinalFraco = gpsConfig.data?.gpsLimiteSinalFracoM ?? 50;
 
   // Viagens deste local (carga OU descarga) — backend filtra por localId.
   const tableState = useDataTableState({ defaultSort: { field: "data", order: "desc" } });
@@ -286,10 +298,10 @@ export default function VisualizarLocalPage({
               <p className="text-xs text-muted-foreground">
                 Coordenadas: {l.lat.toFixed(6)}, {l.lng.toFixed(6)}.
                 {l.latLngPrecisao != null && (
-                  <span className={l.latLngPrecisao > 50 ? "text-amber-600" : ""}>
+                  <span className={l.latLngPrecisao > limiteSinalFraco ? "text-amber-600" : ""}>
                     {" "}
                     GPS do cadastro: ±{Math.round(l.latLngPrecisao)} m
-                    {l.latLngPrecisao > 50 ? " (sinal fraco)" : ""}.
+                    {l.latLngPrecisao > limiteSinalFraco ? " (sinal fraco)" : ""}.
                   </span>
                 )}
               </p>

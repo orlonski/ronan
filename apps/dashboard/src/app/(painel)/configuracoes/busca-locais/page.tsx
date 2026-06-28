@@ -14,6 +14,9 @@ type ConfigBuscaLocais = {
   id: string;
   raioInicialM: number;
   raioAmpliadoM: number;
+  gpsAlvoMetros: number;
+  gpsMaxSegundos: number;
+  gpsLimiteSinalFracoM: number;
 };
 
 const PATH = "/admin/busca-locais-config";
@@ -115,6 +118,53 @@ export default function BuscaLocaisConfigPage() {
               O raio ampliado deve ser maior ou igual ao raio inicial.
             </p>
           )}
+        </Card>
+
+        <Card className="space-y-4 p-5">
+          <div>
+            <h2 className="text-base font-semibold">Captura de GPS</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Quando o motorista toca “Estou no local de descarga”, o app amostra
+              o GPS por alguns segundos pra pegar a melhor posição. Vale na
+              próxima captura (o app revalida a config a cada ~30 min).
+            </p>
+          </div>
+
+          <Field
+            label="Precisão alvo (metros)"
+            help="Assim que o GPS atinge essa precisão, a captura encerra na hora. Menor = espera um sinal melhor (pode demorar um pouco mais)."
+          >
+            <NumInput
+              value={form.gpsAlvoMetros}
+              onChange={(v) => set("gpsAlvoMetros", v)}
+              min={3}
+              max={100}
+            />
+          </Field>
+
+          <Field
+            label="Tempo máximo (segundos)"
+            help="Limite de espera pela precisão alvo. Estourou o tempo, usa a melhor leitura que conseguiu até ali."
+          >
+            <NumInput
+              value={form.gpsMaxSegundos}
+              onChange={(v) => set("gpsMaxSegundos", v)}
+              min={3}
+              max={60}
+            />
+          </Field>
+
+          <Field
+            label="Limite de sinal fraco (metros)"
+            help="Acima disso, o app avisa “sinal fraco” (deixa tentar de novo) e o dashboard marca a coordenada em âmbar pra revisão."
+          >
+            <NumInput
+              value={form.gpsLimiteSinalFracoM}
+              onChange={(v) => set("gpsLimiteSinalFracoM", v)}
+              min={10}
+              max={500}
+            />
+          </Field>
         </Card>
 
         <div className="flex items-center gap-3">

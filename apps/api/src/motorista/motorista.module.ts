@@ -23,6 +23,7 @@ import { PosicaoMotoristaController } from "./posicao.controller";
 import { PosicaoMotoristaService } from "./posicao.service";
 import { RotasMotoristaController } from "./rotas.controller";
 import { TrackingConfigMotoristaController } from "./tracking-config.controller";
+import { BuscaLocaisConfigMotoristaController } from "./busca-locais-config.controller";
 import { ValidacaoLocalService } from "./validacao-local.service";
 import { IaTicketController } from "./ia-ticket.controller";
 
@@ -47,6 +48,7 @@ import { IaTicketController } from "./ia-ticket.controller";
     LocaisMotoristaController,
     RotasMotoristaController,
     TrackingConfigMotoristaController,
+    BuscaLocaisConfigMotoristaController,
     IaTicketController,
     PosicaoMotoristaController,
   ],

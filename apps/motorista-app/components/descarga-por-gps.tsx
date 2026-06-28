@@ -19,7 +19,9 @@ import { haversineMetros, pegarCoordsPrecisa, RAIO_ALERTA_CARGA_M } from "@/lib/
 import {
   buscarDescargaDuasEtapas,
   buscarDescargaDuasEtapasOffline,
+  useBuscaGpsConfig,
   useCriarLocalRapido,
+  BUSCA_GPS_CONFIG_DEFAULTS,
   type Catalogos,
   type LocalProximo,
 } from "@/lib/queries";
@@ -83,14 +85,16 @@ export function DescargaPorGps({
   const [erro, setErro] = useState<string | null>(null);
   const [nomeNovo, setNomeNovo] = useState("");
   const criar = useCriarLocalRapido();
+  const gpsConfig = useBuscaGpsConfig();
   const qc = useQueryClient();
 
   async function capturarEBuscar() {
     setErro(null);
     setEstado({ tipo: "capturando", precisao: null });
+    const cfg = gpsConfig.data ?? BUSCA_GPS_CONFIG_DEFAULTS;
     const coords = await pegarCoordsPrecisa({
-      alvoMetros: 10,
-      maxMs: 20_000,
+      alvoMetros: cfg.gpsAlvoMetros,
+      maxMs: cfg.gpsMaxSegundos * 1000,
       onAmostra: (precisao) => setEstado({ tipo: "capturando", precisao }),
     });
     if (!coords) {
@@ -101,7 +105,7 @@ export function DescargaPorGps({
 
     // Sinal fraco: avisa que a posição pode não bater com o local certo e
     // deixa tentar de novo antes de seguir com a busca.
-    if (coords.precisao != null && coords.precisao > 50) {
+    if (coords.precisao != null && coords.precisao > cfg.gpsLimiteSinalFracoM) {
       const continua = await showConfirm({
         title: "Sinal fraco aqui",
         message: `A posição saiu com precisão de ±${Math.round(coords.precisao)}m, então pode não bater com o local certo. Quer tentar de novo ou continuar assim?`,

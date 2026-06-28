@@ -6,6 +6,9 @@ const SINGLETON_ID = "default";
 export type AtualizarBuscaLocaisInput = {
   raioInicialM?: number;
   raioAmpliadoM?: number;
+  gpsAlvoMetros?: number;
+  gpsMaxSegundos?: number;
+  gpsLimiteSinalFracoM?: number;
 };
 
 @Injectable()

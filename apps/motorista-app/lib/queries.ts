@@ -617,6 +617,33 @@ export function useTrackingConfig() {
   );
 }
 
+/** Config da captura de GPS no "Estou no local de descarga" (editável no admin). */
+export type BuscaGpsConfig = {
+  gpsAlvoMetros: number;
+  gpsMaxSegundos: number;
+  gpsLimiteSinalFracoM: number;
+};
+
+export const BUSCA_GPS_CONFIG_DEFAULTS: BuscaGpsConfig = {
+  gpsAlvoMetros: 10,
+  gpsMaxSegundos: 20,
+  gpsLimiteSinalFracoM: 50,
+};
+
+/**
+ * Cacheia agressivo + offline. Falhou em buscar → usa defaults.
+ * Buscado 1x quando a tela monta (não a cada clique do botão) e revalidado só
+ * a cada 30min — config raramente muda, então não onera a UX. O clique de
+ * "Estou no local de descarga" lê o valor já em memória, sem rede.
+ */
+export function useBuscaGpsConfig() {
+  return useQuery(
+    offlineCacheQuery<BuscaGpsConfig>("busca-locais-config", "/m/busca-locais-config", {
+      staleTime: 30 * 60_000,
+    }),
+  );
+}
+
 /** Fator empírico de tortuosidade (distância em estrada / linha reta). */
 const FATOR_HAVERSINE = 1.3;
 

@@ -12,6 +12,9 @@ const AtualizarSchema = z
   .object({
     raioInicialM: z.number().int().min(20).max(2000).optional(),
     raioAmpliadoM: z.number().int().min(20).max(2000).optional(),
+    gpsAlvoMetros: z.number().int().min(3).max(100).optional(),
+    gpsMaxSegundos: z.number().int().min(3).max(60).optional(),
+    gpsLimiteSinalFracoM: z.number().int().min(10).max(500).optional(),
   })
   .refine(
     (v) =>
