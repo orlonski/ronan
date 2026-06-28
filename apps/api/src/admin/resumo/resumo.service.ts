@@ -20,10 +20,17 @@ function fmt(n: number): string {
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 }
 
-// Toneladas com 1 casa e separadores pt-BR (ex.: 1.234,5).
+// Número com 1 casa e separadores pt-BR (ex.: 1.234,5). Usado pra toneladas,
+// km, litros, ritmo e tempo médio.
 function fmtTon(n: number): string {
   const [int, dec] = (Math.round(n * 10) / 10).toFixed(1).split(".");
   return `${int.replace(/\B(?=(\d{3})+(?!\d))/g, ".")},${dec}`;
+}
+
+// Valor em R$ com 2 casas e separadores pt-BR (ex.: R$ 1.234,56).
+function fmtBRL(n: number): string {
+  const [int, dec] = (Math.round(n * 100) / 100).toFixed(2).split(".");
+  return `R$ ${int.replace(/\B(?=(\d{3})+(?!\d))/g, ".")},${dec}`;
 }
 
 @Injectable()
@@ -106,6 +113,9 @@ export class ResumoService {
     const sem7I = new Date(hoje00I.getTime() - 6 * DIA_MS);
     const inicioMesI = new Date(Date.UTC(y, m - 1, 1, 3));
     const inicioMesQueVemI = new Date(Date.UTC(y, m, 1, 3));
+    // Janelas pra produtividade/saúde (colunas timestamp).
+    const inicio14dInst = new Date(hoje00I.getTime() - 13 * DIA_MS); // hoje + 13 = 14 dias
+    const corte7d = new Date(hoje00I.getTime() - 7 * DIA_MS);
 
     const [
       motTotal,
@@ -184,6 +194,76 @@ export class ResumoService {
       }),
     ]);
 
+    // ---- Métricas estendidas: financeiro, produção, pendências, saúde ----
+    const [
+      viAggHoje,
+      viAgg7,
+      viAggMes,
+      abAggHoje,
+      abAgg7,
+      abAggMes,
+      pedHoje,
+      ped7,
+      pedMes,
+      comboioPend,
+      fechAguardando,
+      envGerados,
+      pedSemValor,
+      locaisRascunho,
+      conferidas14d,
+      pendentesConf,
+      errosGrupos,
+      motSumidos,
+      maxBuiltAgg,
+      tempoRaw,
+    ] = await Promise.all([
+      this.prisma.viagem.aggregate({ where: { data: { gte: hoje00, lt: amanha00 } }, _sum: { toneladas: true, km: true } }),
+      this.prisma.viagem.aggregate({ where: { data: { gte: sem7, lt: amanha00 } }, _sum: { toneladas: true, km: true } }),
+      this.prisma.viagem.aggregate({ where: { data: { gte: inicioMes, lt: inicioMesQueVem } }, _sum: { toneladas: true, km: true } }),
+      this.prisma.abastecimento.aggregate({ where: { data: { gte: hoje00I, lt: amanha00I } }, _sum: { valorTotal: true, litros: true } }),
+      this.prisma.abastecimento.aggregate({ where: { data: { gte: sem7I, lt: amanha00I } }, _sum: { valorTotal: true, litros: true } }),
+      this.prisma.abastecimento.aggregate({ where: { data: { gte: inicioMesI, lt: inicioMesQueVemI } }, _sum: { valorTotal: true, litros: true } }),
+      this.prisma.pedagio.aggregate({ where: { data: { gte: hoje00, lt: amanha00 } }, _sum: { valor: true } }),
+      this.prisma.pedagio.aggregate({ where: { data: { gte: sem7, lt: amanha00 } }, _sum: { valor: true } }),
+      this.prisma.pedagio.aggregate({ where: { data: { gte: inicioMes, lt: inicioMesQueVem } }, _sum: { valor: true } }),
+      this.prisma.abastecimento.count({ where: { emComboio: true, valorTotal: null } }),
+      this.prisma.fechamento.count({ where: { status: "AGUARDANDO_REVISAO" } }),
+      this.prisma.envioFechamento.count({ where: { status: "GERADO" } }),
+      this.prisma.viagem.count({ where: { tipoDivergencia: "PEDAGIO_SEM_VALOR" } }),
+      this.prisma.local.count({ where: { nivelConfianca: "RASCUNHO", ativo: true } }),
+      this.prisma.viagem.count({ where: { revisadoEm: { gte: inicio14dInst } } }),
+      this.prisma.viagem.count({ where: { revisadoEm: null, status: { not: "RASCUNHO_OFFLINE" } } }),
+      this.prisma.errorLog.groupBy({ by: ["hash"], where: { resolvido: false } }),
+      this.prisma.motorista.count({ where: { status: "APROVADO", ativo: true, appVistoEm: { lt: corte7d } } }),
+      this.prisma.motorista.aggregate({ where: { status: "APROVADO", ativo: true }, _max: { appBuiltAt: true } }),
+      this.prisma.$queryRaw<Array<{ s: number | null }>>`
+        SELECT AVG(EXTRACT(EPOCH FROM ("revisadoEm" - "sincronizadoEm")))::float8 AS s
+        FROM "viagens"
+        WHERE "revisadoEm" >= ${inicio14dInst}
+      `,
+    ]);
+
+    // App desatualizado: motoristas cujo bundle (appBuiltAt) é mais antigo que o
+    // mais novo já visto entre os ativos — depende do max, então roda depois.
+    const maxBuilt = maxBuiltAgg._max.appBuiltAt;
+    const motDesatualizados = maxBuilt
+      ? await this.prisma.motorista.count({
+          where: { status: "APROVADO", ativo: true, appBuiltAt: { lt: maxBuilt } },
+        })
+      : 0;
+
+    const errosNaoResolvidos = errosGrupos.length;
+    const ritmoDia = conferidas14d / 14;
+    const etaDias = ritmoDia > 0 ? Math.ceil(pendentesConf / ritmoDia) : null;
+    const tempoMedioDias = tempoRaw[0]?.s != null ? tempoRaw[0].s / 86400 : null;
+
+    // Extratores de _sum (Prisma devolve Decimal | null).
+    const tonDe = (a: { _sum: { toneladas: unknown } }) => Number(a._sum.toneladas ?? 0);
+    const kmDe = (a: { _sum: { km: unknown } }) => Number(a._sum.km ?? 0);
+    const combDe = (a: { _sum: { valorTotal: unknown } }) => Number(a._sum.valorTotal ?? 0);
+    const litDe = (a: { _sum: { litros: unknown } }) => Number(a._sum.litros ?? 0);
+    const pedDe = (a: { _sum: { valor: unknown } }) => Number(a._sum.valor ?? 0);
+
     const nomeDe = (arr: { id: string; nome: string }[], id: string) =>
       arr.find((x) => x.id === id)?.nome ?? "?";
 
@@ -224,15 +304,39 @@ export class ResumoService {
       `• Mês: ${fmt(viMes)}`,
       `• Total: ${fmt(viTotal)}`,
       "",
+      "📦 *Produção* (hoje · 7d · mês)",
+      `• Toneladas: ${fmtTon(tonDe(viAggHoje))} · ${fmtTon(tonDe(viAgg7))} · ${fmtTon(tonDe(viAggMes))}`,
+      `• Km rodados: ${fmtTon(kmDe(viAggHoje))} · ${fmtTon(kmDe(viAgg7))} · ${fmtTon(kmDe(viAggMes))}`,
+      "",
       "⛽ *Abastecimentos*",
       `• Hoje: ${fmt(abHoje)}`,
       `• Últimos 7 dias: ${fmt(ab7)}`,
       `• Mês: ${fmt(abMes)}`,
       `• Total: ${fmt(abTotal)}`,
+      `• Litros (hoje · 7d · mês): ${fmtTon(litDe(abAggHoje))} · ${fmtTon(litDe(abAgg7))} · ${fmtTon(litDe(abAggMes))}`,
       "",
-      "⏳ *Viagens pendentes*",
-      `• Aguardando conferência: ${fmt(viAguardando)}`,
-      `• Divergentes: ${fmt(viDivergente)}`,
+      "💰 *Custos* (hoje · 7d · mês)",
+      `• Combustível: ${fmtBRL(combDe(abAggHoje))} · ${fmtBRL(combDe(abAgg7))} · ${fmtBRL(combDe(abAggMes))}`,
+      `• Pedágio: ${fmtBRL(pedDe(pedHoje))} · ${fmtBRL(pedDe(ped7))} · ${fmtBRL(pedDe(pedMes))}`,
+      `• Comboios sem valor lançado: ${fmt(comboioPend)}`,
+      "",
+      "⏳ *Pendências*",
+      `• Viagens aguardando conferência: ${fmt(viAguardando)}`,
+      `• Viagens divergentes: ${fmt(viDivergente)}`,
+      `• Pedágios sem valor: ${fmt(pedSemValor)}`,
+      `• Fechamentos aguardando revisão: ${fmt(fechAguardando)}`,
+      `• Relatórios gerados não enviados: ${fmt(envGerados)}`,
+      `• Locais novos a validar: ${fmt(locaisRascunho)}`,
+      "",
+      "⚡ *Conferência*",
+      `• Ritmo: ${fmtTon(ritmoDia)} viagens/dia (média 14d)`,
+      `• Fila: ${fmt(pendentesConf)} pendentes${etaDias != null ? ` (~${fmt(etaDias)} dia(s) pra zerar)` : ""}`,
+      `• Tempo médio de conferência: ${tempoMedioDias != null ? `${fmtTon(tempoMedioDias)} dia(s)` : "—"}`,
+      "",
+      "🩺 *Saúde*",
+      `• Erros não resolvidos: ${fmt(errosNaoResolvidos)}`,
+      `• Motoristas sumidos (+7 dias sem abrir): ${fmt(motSumidos)}`,
+      `• Com app desatualizado: ${fmt(motDesatualizados)}`,
       "",
       "🏆 *Top 5 do mês*",
       "_Ordenado por nº de viagens. Mostra também as toneladas carregadas no mês._",
