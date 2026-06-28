@@ -91,6 +91,41 @@ export class LocaisService {
   }
 
   /**
+   * Pontos de lançamento das viagens que usam este local (carga OU descarga).
+   * Cada viagem grava lat/lng de onde foi lançada — o "ponto azul". Mais
+   * recentes primeiro, limitado a 300 pra não pesar o mapa.
+   */
+  async lancamentos(id: string) {
+    const viagens = await this.prisma.viagem.findMany({
+      where: {
+        OR: [{ localCargaId: id }, { localDescargaId: id }],
+        lat: { not: null },
+        lng: { not: null },
+      },
+      select: {
+        id: true,
+        lat: true,
+        lng: true,
+        data: true,
+        ticket: true,
+        status: true,
+        localDescargaId: true,
+      },
+      orderBy: { data: "desc" },
+      take: 300,
+    });
+    return viagens.map((v) => ({
+      id: v.id,
+      lat: v.lat as number,
+      lng: v.lng as number,
+      data: v.data,
+      ticket: v.ticket,
+      status: v.status,
+      lado: v.localDescargaId === id ? "DESCARGA" : "CARGA",
+    }));
+  }
+
+  /**
    * Lista enxuta pra exibição num mapa — só locais ativos com lat/lng,
    * sem paginação. Volume esperado: dezenas/centenas. Inclui clientes
    * achatado pro popup.

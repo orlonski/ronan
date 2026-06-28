@@ -60,6 +60,15 @@ export class LocaisController {
     return this.service.findOne(id);
   }
 
+  /**
+   * Pontos de lançamento (lat/lng da viagem) das viagens deste local — pra
+   * plotar no mapa do "ver local". Mais recentes primeiro, limitado.
+   */
+  @Get(":id/lancamentos")
+  lancamentos(@Param("id") id: string) {
+    return this.service.lancamentos(id);
+  }
+
   @Post()
   create(
     @Body(new ZodValidationPipe(CriarLocalInput)) body: CriarLocalInput,

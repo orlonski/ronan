@@ -140,6 +140,25 @@ export default function VisualizarLocalPage({
   });
   const limiteSinalFraco = gpsConfig.data?.gpsLimiteSinalFracoM ?? 50;
 
+  // Pontos de lançamento das viagens deste local (bolinhas azuis no mapa).
+  const lancamentos = useQuery({
+    queryKey: ["local-lancamentos", id, token],
+    enabled: !!token,
+    staleTime: 60_000,
+    queryFn: () =>
+      fetchApi<
+        Array<{
+          id: string;
+          lat: number;
+          lng: number;
+          data: string;
+          ticket: string;
+          status: string;
+          lado: "CARGA" | "DESCARGA";
+        }>
+      >(`/admin/locais/${id}/lancamentos`, { token }),
+  });
+
   // Viagens deste local (carga OU descarga) — backend filtra por localId.
   const tableState = useDataTableState({ defaultSort: { field: "data", order: "desc" } });
   const viagens = usePaginatedList<Viagem>("/admin/viagens", {
@@ -294,9 +313,26 @@ export default function VisualizarLocalPage({
               <div className="flex items-center gap-2 text-sm font-medium">
                 <MapPin className="h-4 w-4 text-muted-foreground" /> Localização no mapa
               </div>
-              <PontoMap lat={l.lat} lng={l.lng} label={l.nome} />
+              <PontoMap
+                lat={l.lat}
+                lng={l.lng}
+                label={l.nome}
+                pontos={(lancamentos.data ?? []).map((p) => ({
+                  id: p.id,
+                  lat: p.lat,
+                  lng: p.lng,
+                  label: `${fmtBR(p.data)} · ${p.ticket} · ${p.lado === "DESCARGA" ? "descarga" : "carga"}`,
+                }))}
+              />
               <p className="text-xs text-muted-foreground">
                 Coordenadas: {l.lat.toFixed(6)}, {l.lng.toFixed(6)}.
+                {lancamentos.data && lancamentos.data.length > 0 && (
+                  <>
+                    {" "}
+                    <span className="text-blue-600">●</span> {lancamentos.data.length}{" "}
+                    {lancamentos.data.length === 1 ? "lançamento" : "lançamentos"} de viagem.
+                  </>
+                )}
                 {l.latLngPrecisao != null && (
                   <span className={l.latLngPrecisao > limiteSinalFraco ? "text-amber-600" : ""}>
                     {" "}
