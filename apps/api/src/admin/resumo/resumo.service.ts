@@ -20,6 +20,12 @@ function fmt(n: number): string {
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 }
 
+// Toneladas com 1 casa e separadores pt-BR (ex.: 1.234,5).
+function fmtTon(n: number): string {
+  const [int, dec] = (Math.round(n * 10) / 10).toFixed(1).split(".");
+  return `${int.replace(/\B(?=(\d{3})+(?!\d))/g, ".")},${dec}`;
+}
+
 @Injectable()
 export class ResumoService {
   private readonly log = new Logger(ResumoService.name);
@@ -107,7 +113,6 @@ export class ResumoService {
       motPend,
       locCarga,
       locDescarga,
-      locAmbos,
       viHoje,
       vi7,
       viMes,
@@ -125,9 +130,9 @@ export class ResumoService {
       this.prisma.motorista.count(),
       this.prisma.motorista.count({ where: { status: "APROVADO" } }),
       this.prisma.motorista.count({ where: { status: "PENDENTE_APROVACAO" } }),
-      this.prisma.local.count({ where: { tipo: "CARGA", ativo: true } }),
-      this.prisma.local.count({ where: { tipo: "DESCARGA", ativo: true } }),
-      this.prisma.local.count({ where: { tipo: "AMBOS", ativo: true } }),
+      // "Ambos" serve carga E descarga, então conta nos dois.
+      this.prisma.local.count({ where: { tipo: { in: ["CARGA", "AMBOS"] }, ativo: true } }),
+      this.prisma.local.count({ where: { tipo: { in: ["DESCARGA", "AMBOS"] }, ativo: true } }),
       this.prisma.viagem.count({ where: { data: { gte: hoje00, lt: amanha00 } } }),
       this.prisma.viagem.count({ where: { data: { gte: sem7, lt: amanha00 } } }),
       this.prisma.viagem.count({ where: { data: { gte: inicioMes, lt: inicioMesQueVem } } }),
@@ -142,6 +147,7 @@ export class ResumoService {
         by: ["motoristaId"],
         where: { data: { gte: inicioMes, lt: inicioMesQueVem } },
         _count: { _all: true },
+        _sum: { toneladas: true },
         orderBy: { _count: { motoristaId: "desc" } },
         take: 5,
       }),
@@ -149,6 +155,7 @@ export class ResumoService {
         by: ["clienteId"],
         where: { data: { gte: inicioMes, lt: inicioMesQueVem } },
         _count: { _all: true },
+        _sum: { toneladas: true },
         orderBy: { _count: { clienteId: "desc" } },
         take: 5,
       }),
@@ -156,6 +163,7 @@ export class ResumoService {
         by: ["materialId"],
         where: { data: { gte: inicioMes, lt: inicioMesQueVem } },
         _count: { _all: true },
+        _sum: { toneladas: true },
         orderBy: { _count: { materialId: "desc" } },
         take: 5,
       }),
@@ -181,13 +189,16 @@ export class ResumoService {
 
     const ranking = (
       titulo: string,
-      raw: { _count: { _all: number } }[],
+      raw: { _count: { _all: number }; _sum: { toneladas: unknown } }[],
       ids: string[],
       arr: { id: string; nome: string }[],
     ) => {
       if (raw.length === 0) return `${titulo}\n_sem viagens no mês_`;
       const linhas = raw
-        .map((r, i) => `${i + 1}. ${nomeDe(arr, ids[i])} — ${fmt(r._count._all)}`)
+        .map((r, i) => {
+          const ton = Number(r._sum.toneladas ?? 0);
+          return `${i + 1}. ${nomeDe(arr, ids[i])} — ${fmt(r._count._all)} viagens · ${fmtTon(ton)} t`;
+        })
         .join("\n");
       return `${titulo}\n${linhas}`;
     };
@@ -204,7 +215,8 @@ export class ResumoService {
       `• Pendentes: ${fmt(motPend)}`,
       "",
       "📍 *Locais ativos*",
-      `• Carga: ${fmt(locCarga)} · Descarga: ${fmt(locDescarga)} · Ambos: ${fmt(locAmbos)}`,
+      `• Carga: ${fmt(locCarga)}`,
+      `• Descarga: ${fmt(locDescarga)}`,
       "",
       "🚚 *Viagens*",
       `• Hoje: ${fmt(viHoje)}`,
@@ -223,22 +235,24 @@ export class ResumoService {
       `• Divergentes: ${fmt(viDivergente)}`,
       "",
       "🏆 *Top 5 do mês*",
+      "_Ordenado por nº de viagens. Mostra também as toneladas carregadas no mês._",
+      "",
       ranking(
-        "*Motoristas*",
+        "*Motoristas* (quem mais rodou)",
         rankMotRaw,
         rankMotRaw.map((r) => r.motoristaId),
         motoristas,
       ),
       "",
       ranking(
-        "*Clientes*",
+        "*Clientes* (quem mais movimentou)",
         rankCliRaw,
         rankCliRaw.map((r) => r.clienteId),
         clientes,
       ),
       "",
       ranking(
-        "*Materiais*",
+        "*Materiais* (mais transportados)",
         rankMatRaw,
         rankMatRaw.map((r) => r.materialId),
         materiais,

@@ -249,6 +249,9 @@ export default function UsuariosPage() {
                   </Button>
                 </Link>
                 <ConviteWhatsappButton tipo="user" id={u.id} nome={u.nome} />
+                {u.whatsappResumo && (
+                  <EnviarResumoButton userId={u.id} nome={u.nome} />
+                )}
               </div>
             </div>
           </Card>
