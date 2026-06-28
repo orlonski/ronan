@@ -17,6 +17,8 @@ const SAFE_SELECT = {
   perfil: true,
   ativo: true,
   ultimoLoginEm: true,
+  whatsappResumo: true,
+  receberResumoDiario: true,
   criadoEm: true,
   criadoPor: { select: { id: true, nome: true } },
 } as const;
@@ -60,6 +62,8 @@ export class UsersService {
         email: data.email,
         perfil: data.perfil,
         senhaHash: await AuthService.hashPassword(data.senha),
+        whatsappResumo: data.whatsappResumo || null,
+        receberResumoDiario: data.receberResumoDiario ?? false,
         criadoPorId: usuarioId,
       },
       select: SAFE_SELECT,
@@ -71,6 +75,8 @@ export class UsersService {
     const { senha, ...rest } = data;
     const update: Record<string, unknown> = { ...rest };
     if (senha) update.senhaHash = await AuthService.hashPassword(senha);
+    // String vazia limpa o número (vira null).
+    if ("whatsappResumo" in rest) update.whatsappResumo = rest.whatsappResumo || null;
     return this.prisma.user.update({ where: { id }, data: update, select: SAFE_SELECT });
   }
 

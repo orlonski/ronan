@@ -172,6 +172,9 @@ model User {
   perfil        PerfilUsuario @default(OPERADOR)
   ativo         Boolean       @default(true)
   ultimoLoginEm DateTime?
+  // Resumo diário no WhatsApp: número (normalizado com DDI) e opt-in.
+  whatsappResumo      String?
+  receberResumoDiario Boolean @default(false)
   criadoEm      DateTime      @default(now())
   alteradoEm    DateTime      @updatedAt
 

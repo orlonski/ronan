@@ -18,6 +18,7 @@ import { DashboardModule } from "./dashboard/dashboard.module";
 import { FrotaAdminModule } from "./frota/frota.module";
 import { PedagiosRodoviaModule } from "./pedagios-rodovia/pedagios-rodovia.module";
 import { AdminInboxModule } from "./inbox/inbox.module";
+import { ResumoModule } from "./resumo/resumo.module";
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { AdminInboxModule } from "./inbox/inbox.module";
     FrotaAdminModule,
     PedagiosRodoviaModule,
     AdminInboxModule,
+    ResumoModule,
   ],
 })
 export class AdminModule {}

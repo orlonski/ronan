@@ -6,6 +6,10 @@ export const CriarUserInput = z.object({
   email: z.string().email(),
   senha: z.string().min(8).max(80),
   perfil: z.nativeEnum(PerfilUsuario).default(PerfilUsuario.OPERADOR),
+  // Número WhatsApp pra receber o resumo diário (só dígitos ou formatado;
+  // backend normaliza o DDI). Vazio = não recebe. null/"" limpa.
+  whatsappResumo: z.string().max(20).nullish(),
+  receberResumoDiario: z.boolean().optional(),
 });
 export type CriarUserInput = z.infer<typeof CriarUserInput>;
 

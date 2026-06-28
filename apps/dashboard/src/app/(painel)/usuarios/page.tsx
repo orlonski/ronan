@@ -7,6 +7,7 @@ import { Pencil, Plus, UserCircle } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { StatusToggle } from "@/components/status-toggle";
 import { ConviteWhatsappButton } from "@/components/convite-whatsapp-button";
+import { EnviarResumoButton } from "@/components/enviar-resumo-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -29,6 +30,8 @@ type User = {
   perfil: Perfil;
   ativo: boolean;
   ultimoLoginEm: string | null;
+  whatsappResumo: string | null;
+  receberResumoDiario: boolean;
   criadoPor: { id: string; nome: string } | null;
 };
 const PATH = "/admin/users";
@@ -129,6 +132,12 @@ export default function UsuariosPage() {
               id={row.original.id}
               nome={row.original.nome}
             />
+            {row.original.whatsappResumo && (
+              <EnviarResumoButton
+                userId={row.original.id}
+                nome={row.original.nome}
+              />
+            )}
           </div>
         ),
       },

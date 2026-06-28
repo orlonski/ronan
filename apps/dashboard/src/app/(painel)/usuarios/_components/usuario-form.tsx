@@ -18,6 +18,17 @@ export type User = {
   perfil: Perfil;
   ativo: boolean;
   ultimoLoginEm: string | null;
+  whatsappResumo: string | null;
+  receberResumoDiario: boolean;
+};
+
+type UserBody = {
+  nome?: string;
+  email?: string;
+  senha?: string;
+  perfil?: Perfil;
+  whatsappResumo?: string;
+  receberResumoDiario?: boolean;
 };
 
 const PATH = "/admin/users";
@@ -26,33 +37,38 @@ type Props = { initial?: User };
 
 export function UsuarioForm({ initial }: Props) {
   const router = useRouter();
-  const create = useCreateResource<
-    { nome: string; email: string; senha: string; perfil: Perfil },
-    User
-  >(PATH, PATH);
-  const update = useUpdateResource<
-    { nome?: string; senha?: string; perfil?: Perfil },
-    User
-  >(PATH, PATH);
+  const create = useCreateResource<UserBody, User>(PATH, PATH);
+  const update = useUpdateResource<UserBody, User>(PATH, PATH);
 
   const [form, setForm] = useState({
     nome: initial?.nome ?? "",
     email: initial?.email ?? "",
     senha: "",
     perfil: (initial?.perfil ?? "OPERADOR") as Perfil,
+    whatsappResumo: initial?.whatsappResumo ?? "",
+    receberResumoDiario: initial?.receberResumoDiario ?? false,
   });
 
   async function onSubmit(ev: React.FormEvent) {
     ev.preventDefault();
     if (initial) {
-      const body: { nome: string; perfil: Perfil; senha?: string } = {
+      const body: UserBody = {
         nome: form.nome,
         perfil: form.perfil,
+        whatsappResumo: form.whatsappResumo,
+        receberResumoDiario: form.receberResumoDiario,
       };
       if (form.senha) body.senha = form.senha;
       await update.mutateAsync({ id: initial.id, body });
     } else {
-      await create.mutateAsync(form);
+      await create.mutateAsync({
+        nome: form.nome,
+        email: form.email,
+        senha: form.senha,
+        perfil: form.perfil,
+        whatsappResumo: form.whatsappResumo,
+        receberResumoDiario: form.receberResumoDiario,
+      });
     }
     router.push("/usuarios");
   }
@@ -101,6 +117,32 @@ export function UsuarioForm({ initial }: Props) {
             <option value="ADMIN">Administrador</option>
           </Select>
         </div>
+
+        <div className="space-y-2 rounded-md border p-4">
+          <Label>WhatsApp pra resumo diário</Label>
+          <Input
+            type="tel"
+            placeholder="ex: (41) 99999-9999"
+            value={form.whatsappResumo}
+            onChange={(e) => setForm({ ...form, whatsappResumo: e.target.value })}
+          />
+          <p className="text-xs text-muted-foreground">
+            Número que recebe o resumo. Pode digitar com ou sem DDD/DDI — o sistema
+            ajusta. Deixe vazio pra não receber.
+          </p>
+          <label className="flex cursor-pointer items-center gap-2 pt-1">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-input"
+              checked={form.receberResumoDiario}
+              onChange={(e) =>
+                setForm({ ...form, receberResumoDiario: e.target.checked })
+              }
+            />
+            <span className="text-sm">Receber resumo diário (todo dia às 20h)</span>
+          </label>
+        </div>
+
         <div className="flex justify-end gap-2 pt-2">
           <Link href="/usuarios">
             <Button type="button" variant="outline">
