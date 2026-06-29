@@ -7,6 +7,7 @@ import { AuthService } from "./auth.service";
 import { CadastroMotoristaService } from "./cadastro-motorista.service";
 import { JwtStrategy } from "./strategies/jwt.strategy";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+import { PermissaoGuard } from "./guards/permissao.guard";
 import { EvolutionModule } from "../whatsapp/evolution.module";
 import { AdminInboxModule } from "../admin/inbox/inbox.module";
 
@@ -23,6 +24,8 @@ import { AdminInboxModule } from "../admin/inbox/inbox.module";
     CadastroMotoristaService,
     JwtStrategy,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    // Roda global; só bloqueia onde houver @RequerPermissao (senão libera).
+    { provide: APP_GUARD, useClass: PermissaoGuard },
   ],
   exports: [AuthService],
 })

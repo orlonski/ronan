@@ -13,6 +13,7 @@ export * from "./motorista-documento";
 export * from "./veiculo";
 export * from "./material";
 export * from "./user";
+export * from "./permissoes";
 export * from "./push";
 export * from "./notificacao";
 export * from "./ia-ticket";

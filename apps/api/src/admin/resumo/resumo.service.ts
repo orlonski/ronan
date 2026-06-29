@@ -51,17 +51,24 @@ export class ResumoService {
         ativo: true,
         whatsappResumo: { not: null },
       },
-      select: { id: true, nome: true, whatsappResumo: true },
+      select: {
+        id: true,
+        nome: true,
+        whatsappResumo: true,
+        papel: { select: { permissoes: true } },
+      },
     });
     if (users.length === 0) return;
     if (!this.evolution.configurado) {
       this.log.warn("Resumo diário: Evolution não configurado — pulando.");
       return;
     }
-    const texto = await this.montarMensagem();
     let ok = 0;
     for (const u of users) {
+      const chaves = this.chavesResumo(u.papel?.permissoes ?? []);
+      if (chaves.size === 0) continue; // papel sem nenhum assunto liberado
       try {
+        const texto = await this.montarMensagem(chaves);
         await this.enviar(u.whatsappResumo!, texto);
         ok++;
       } catch (e) {
@@ -75,7 +82,7 @@ export class ResumoService {
   async enviarAgora(userId: string): Promise<{ ok: true }> {
     const u = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { whatsappResumo: true },
+      select: { whatsappResumo: true, papel: { select: { permissoes: true } } },
     });
     if (!u) throw new NotFoundException("Usuário não encontrado");
     if (!u.whatsappResumo) {
@@ -86,7 +93,13 @@ export class ResumoService {
     if (!this.evolution.configurado) {
       throw new BadRequestException("WhatsApp (Evolution) não está configurado no servidor.");
     }
-    const texto = await this.montarMensagem();
+    const chaves = this.chavesResumo(u.papel?.permissoes ?? []);
+    if (chaves.size === 0) {
+      throw new BadRequestException(
+        "O papel deste usuário não libera nenhum assunto do resumo. Ajuste em Papéis e permissões.",
+      );
+    }
+    const texto = await this.montarMensagem(chaves);
     await this.enviar(u.whatsappResumo, texto);
     return { ok: true };
   }
@@ -96,8 +109,16 @@ export class ResumoService {
     await this.evolution.enviarTexto(numero, texto);
   }
 
-  /** Monta o texto do resumo com as métricas do momento. */
-  private async montarMensagem(): Promise<string> {
+  /** Filtra as chaves de assunto do resumo (resumo.*) das permissões do papel. */
+  private chavesResumo(permissoes: string[]): Set<string> {
+    return new Set(permissoes.filter((c) => c.startsWith("resumo.")));
+  }
+
+  /**
+   * Monta o texto do resumo só com os blocos liberados (`chaves`). As métricas
+   * são sempre calculadas; o filtro decide o que entra na mensagem.
+   */
+  private async montarMensagem(chaves: Set<string>): Promise<string> {
     const [y, m, dia] = ymdSaoPaulo();
 
     // Colunas @db.Date (Viagem.data): fronteiras em meia-noite UTC da data BR.
@@ -285,82 +306,93 @@ export class ResumoService {
 
     const pad = (n: number) => String(n).padStart(2, "0");
     const dataLabel = `${pad(dia)}/${pad(m)}/${y}`;
+    const has = (c: string) => chaves.has(c);
 
-    return [
-      `📊 *Resumo Schaba* — ${dataLabel}`,
-      "",
-      "👷 *Motoristas*",
-      `• Cadastrados: ${fmt(motTotal)}`,
-      `• Aprovados: ${fmt(motAprov)}`,
-      `• Pendentes: ${fmt(motPend)}`,
-      "",
-      "📍 *Locais ativos*",
-      `• Carga: ${fmt(locCarga)}`,
-      `• Descarga: ${fmt(locDescarga)}`,
-      "",
-      "🚚 *Viagens*",
-      `• Hoje: ${fmt(viHoje)}`,
-      `• Últimos 7 dias: ${fmt(vi7)}`,
-      `• Mês: ${fmt(viMes)}`,
-      `• Total: ${fmt(viTotal)}`,
-      "",
-      "📦 *Produção* (hoje · 7d · mês)",
-      `• Toneladas: ${fmtTon(tonDe(viAggHoje))} · ${fmtTon(tonDe(viAgg7))} · ${fmtTon(tonDe(viAggMes))}`,
-      `• Km rodados: ${fmtTon(kmDe(viAggHoje))} · ${fmtTon(kmDe(viAgg7))} · ${fmtTon(kmDe(viAggMes))}`,
-      "",
-      "⛽ *Abastecimentos*",
-      `• Hoje: ${fmt(abHoje)}`,
-      `• Últimos 7 dias: ${fmt(ab7)}`,
-      `• Mês: ${fmt(abMes)}`,
-      `• Total: ${fmt(abTotal)}`,
-      `• Litros (hoje · 7d · mês): ${fmtTon(litDe(abAggHoje))} · ${fmtTon(litDe(abAgg7))} · ${fmtTon(litDe(abAggMes))}`,
-      "",
-      "💰 *Custos* (hoje · 7d · mês)",
-      `• Combustível: ${fmtBRL(combDe(abAggHoje))} · ${fmtBRL(combDe(abAgg7))} · ${fmtBRL(combDe(abAggMes))}`,
-      `• Pedágio: ${fmtBRL(pedDe(pedHoje))} · ${fmtBRL(pedDe(ped7))} · ${fmtBRL(pedDe(pedMes))}`,
-      `• Comboios sem valor lançado: ${fmt(comboioPend)}`,
-      "",
-      "⏳ *Pendências*",
-      `• Viagens aguardando conferência: ${fmt(viAguardando)}`,
-      `• Viagens divergentes: ${fmt(viDivergente)}`,
-      `• Pedágios sem valor: ${fmt(pedSemValor)}`,
-      `• Fechamentos aguardando revisão: ${fmt(fechAguardando)}`,
-      `• Relatórios gerados não enviados: ${fmt(envGerados)}`,
-      `• Locais novos a validar: ${fmt(locaisRascunho)}`,
-      "",
-      "⚡ *Conferência*",
-      `• Ritmo: ${fmtTon(ritmoDia)} viagens/dia (média 14d)`,
-      `• Fila: ${fmt(pendentesConf)} pendentes${etaDias != null ? ` (~${fmt(etaDias)} dia(s) pra zerar)` : ""}`,
-      `• Tempo médio de conferência: ${tempoMedioDias != null ? `${fmtTon(tempoMedioDias)} dia(s)` : "—"}`,
-      "",
-      "🩺 *Saúde*",
-      `• Erros não resolvidos: ${fmt(errosNaoResolvidos)}`,
-      `• Motoristas sumidos (+7 dias sem abrir): ${fmt(motSumidos)}`,
-      `• Com app desatualizado: ${fmt(motDesatualizados)}`,
-      "",
-      "🏆 *Top 5 do mês*",
-      "_Ordenado por nº de viagens. Mostra também as toneladas carregadas no mês._",
-      "",
-      ranking(
-        "*Motoristas* (quem mais rodou)",
-        rankMotRaw,
-        rankMotRaw.map((r) => r.motoristaId),
-        motoristas,
-      ),
-      "",
-      ranking(
-        "*Clientes* (quem mais movimentou)",
-        rankCliRaw,
-        rankCliRaw.map((r) => r.clienteId),
-        clientes,
-      ),
-      "",
-      ranking(
-        "*Materiais* (mais transportados)",
-        rankMatRaw,
-        rankMatRaw.map((r) => r.materialId),
-        materiais,
-      ),
-    ].join("\n");
+    // Cada bloco só entra se o assunto estiver liberado no papel do usuário.
+    const blocos: string[] = [`📊 *Resumo Schaba* — ${dataLabel}`];
+
+    if (has("resumo.motoristas"))
+      blocos.push(
+        ["👷 *Motoristas*", `• Cadastrados: ${fmt(motTotal)}`, `• Aprovados: ${fmt(motAprov)}`, `• Pendentes: ${fmt(motPend)}`].join("\n"),
+      );
+    if (has("resumo.locais"))
+      blocos.push(["📍 *Locais ativos*", `• Carga: ${fmt(locCarga)}`, `• Descarga: ${fmt(locDescarga)}`].join("\n"));
+    if (has("resumo.viagens"))
+      blocos.push(
+        ["🚚 *Viagens*", `• Hoje: ${fmt(viHoje)}`, `• Últimos 7 dias: ${fmt(vi7)}`, `• Mês: ${fmt(viMes)}`, `• Total: ${fmt(viTotal)}`].join("\n"),
+      );
+    if (has("resumo.producao"))
+      blocos.push(
+        [
+          "📦 *Produção* (hoje · 7d · mês)",
+          `• Toneladas: ${fmtTon(tonDe(viAggHoje))} · ${fmtTon(tonDe(viAgg7))} · ${fmtTon(tonDe(viAggMes))}`,
+          `• Km rodados: ${fmtTon(kmDe(viAggHoje))} · ${fmtTon(kmDe(viAgg7))} · ${fmtTon(kmDe(viAggMes))}`,
+        ].join("\n"),
+      );
+    if (has("resumo.abastecimentos"))
+      blocos.push(
+        [
+          "⛽ *Abastecimentos*",
+          `• Hoje: ${fmt(abHoje)}`,
+          `• Últimos 7 dias: ${fmt(ab7)}`,
+          `• Mês: ${fmt(abMes)}`,
+          `• Total: ${fmt(abTotal)}`,
+          `• Litros (hoje · 7d · mês): ${fmtTon(litDe(abAggHoje))} · ${fmtTon(litDe(abAgg7))} · ${fmtTon(litDe(abAggMes))}`,
+        ].join("\n"),
+      );
+    if (has("resumo.custos"))
+      blocos.push(
+        [
+          "💰 *Custos* (hoje · 7d · mês)",
+          `• Combustível: ${fmtBRL(combDe(abAggHoje))} · ${fmtBRL(combDe(abAgg7))} · ${fmtBRL(combDe(abAggMes))}`,
+          `• Pedágio: ${fmtBRL(pedDe(pedHoje))} · ${fmtBRL(pedDe(ped7))} · ${fmtBRL(pedDe(pedMes))}`,
+          `• Comboios sem valor lançado: ${fmt(comboioPend)}`,
+        ].join("\n"),
+      );
+    if (has("resumo.pendencias"))
+      blocos.push(
+        [
+          "⏳ *Pendências*",
+          `• Viagens aguardando conferência: ${fmt(viAguardando)}`,
+          `• Viagens divergentes: ${fmt(viDivergente)}`,
+          `• Pedágios sem valor: ${fmt(pedSemValor)}`,
+          `• Fechamentos aguardando revisão: ${fmt(fechAguardando)}`,
+          `• Relatórios gerados não enviados: ${fmt(envGerados)}`,
+          `• Locais novos a validar: ${fmt(locaisRascunho)}`,
+        ].join("\n"),
+      );
+    if (has("resumo.conferencia"))
+      blocos.push(
+        [
+          "⚡ *Conferência*",
+          `• Ritmo: ${fmtTon(ritmoDia)} viagens/dia (média 14d)`,
+          `• Fila: ${fmt(pendentesConf)} pendentes${etaDias != null ? ` (~${fmt(etaDias)} dia(s) pra zerar)` : ""}`,
+          `• Tempo médio de conferência: ${tempoMedioDias != null ? `${fmtTon(tempoMedioDias)} dia(s)` : "—"}`,
+        ].join("\n"),
+      );
+    if (has("resumo.saude"))
+      blocos.push(
+        [
+          "🩺 *Saúde*",
+          `• Erros não resolvidos: ${fmt(errosNaoResolvidos)}`,
+          `• Motoristas sumidos (+7 dias sem abrir): ${fmt(motSumidos)}`,
+          `• Com app desatualizado: ${fmt(motDesatualizados)}`,
+        ].join("\n"),
+      );
+    if (has("resumo.ranking"))
+      blocos.push(
+        [
+          "🏆 *Top 5 do mês*",
+          "_Ordenado por nº de viagens. Mostra também as toneladas carregadas no mês._",
+          "",
+          ranking("*Motoristas* (quem mais rodou)", rankMotRaw, rankMotRaw.map((r) => r.motoristaId), motoristas),
+          "",
+          ranking("*Clientes* (quem mais movimentou)", rankCliRaw, rankCliRaw.map((r) => r.clienteId), clientes),
+          "",
+          ranking("*Materiais* (mais transportados)", rankMatRaw, rankMatRaw.map((r) => r.materialId), materiais),
+        ].join("\n"),
+      );
+
+    return blocos.join("\n\n");
   }
 }

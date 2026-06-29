@@ -30,9 +30,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (payload.type !== "access") throw new UnauthorizedException("Token inválido");
 
     if (payload.kind === "ADMIN_USER") {
-      const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.sub },
+        include: { papel: { select: { permissoes: true } } },
+      });
       if (!user || !user.ativo) throw new UnauthorizedException("Usuário inativo");
-      return { kind: "ADMIN_USER", id: user.id, nome: user.nome, email: user.email, perfil: user.perfil };
+      return {
+        kind: "ADMIN_USER",
+        id: user.id,
+        nome: user.nome,
+        email: user.email,
+        perfil: user.perfil,
+        permissoes: user.papel?.permissoes ?? [],
+      };
     }
 
     const motorista = await this.prisma.motorista.findUnique({ where: { id: payload.sub } });

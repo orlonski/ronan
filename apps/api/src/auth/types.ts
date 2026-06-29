@@ -6,6 +6,8 @@ export type AuthAdminUser = {
   nome: string;
   email: string;
   perfil: PerfilUsuario;
+  /** Permissões efetivas (chaves do papel). Vazio = nenhum papel atribuído. */
+  permissoes: string[];
 };
 
 export type AuthMotorista = {

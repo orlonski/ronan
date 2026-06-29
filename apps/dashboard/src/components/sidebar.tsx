@@ -23,12 +23,14 @@ import {
   Package,
   Send,
   Settings,
+  ShieldCheck,
   Sparkles,
   UserCircle,
   Users2,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { usePermissoes } from "@/lib/permissoes";
 import { Button } from "@/components/ui/button";
 import { SchabaLogo } from "@/components/schaba-logo";
 import { ThemeSwitcher } from "@/components/theme-switcher";
@@ -37,55 +39,54 @@ type Item = {
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
-  admin?: boolean;
+  // Chave de permissão (catálogo RBAC). Item só aparece se o papel tiver.
+  perm: string;
 };
 
 type Grupo = {
   titulo: string;
   itens: Item[];
-  // Se admin = true, grupo inteiro só aparece pra admin
-  admin?: boolean;
 };
 
-const DASHBOARD_ITEM: Item = { href: "/", label: "Dashboard", icon: LayoutDashboard };
+const DASHBOARD_ITEM = { href: "/", label: "Dashboard", icon: LayoutDashboard };
 
 const GRUPOS: Grupo[] = [
   {
     titulo: "Operação",
     itens: [
-      { href: "/viagens", label: "Viagens", icon: ClipboardCheck },
-      { href: "/descargas-suspeitas", label: "Descargas suspeitas", icon: MapPin },
-      { href: "/abastecimentos", label: "Abastecimentos", icon: Fuel },
-      { href: "/fechamentos", label: "Fechamentos", icon: FileSpreadsheet },
-      { href: "/envios", label: "Envios", icon: Send },
-      { href: "/notificacoes", label: "Notificações", icon: Bell },
+      { href: "/viagens", label: "Viagens", icon: ClipboardCheck, perm: "tela.viagens" },
+      { href: "/descargas-suspeitas", label: "Descargas suspeitas", icon: MapPin, perm: "tela.descargas-suspeitas" },
+      { href: "/abastecimentos", label: "Abastecimentos", icon: Fuel, perm: "tela.abastecimentos" },
+      { href: "/fechamentos", label: "Fechamentos", icon: FileSpreadsheet, perm: "tela.fechamentos" },
+      { href: "/envios", label: "Envios", icon: Send, perm: "tela.envios" },
+      { href: "/notificacoes", label: "Notificações", icon: Bell, perm: "tela.notificacoes" },
     ],
   },
   {
     titulo: "Cadastros",
     itens: [
-      { href: "/motoristas", label: "Motoristas", icon: HardHat },
-      { href: "/mapa", label: "Mapa", icon: MapPin },
-      { href: "/empresas", label: "Empresas", icon: Building2 },
-      { href: "/clientes", label: "Clientes", icon: Boxes },
-      { href: "/locais", label: "Locais", icon: MapPin },
-      { href: "/pedagios-rodovia", label: "Pedágios (rodovias)", icon: MapPin },
-      { href: "/materiais", label: "Materiais", icon: Package },
+      { href: "/motoristas", label: "Motoristas", icon: HardHat, perm: "tela.motoristas" },
+      { href: "/mapa", label: "Mapa", icon: MapPin, perm: "tela.mapa" },
+      { href: "/empresas", label: "Empresas", icon: Building2, perm: "tela.empresas" },
+      { href: "/clientes", label: "Clientes", icon: Boxes, perm: "tela.clientes" },
+      { href: "/locais", label: "Locais", icon: MapPin, perm: "tela.locais" },
+      { href: "/pedagios-rodovia", label: "Pedágios (rodovias)", icon: MapPin, perm: "tela.pedagios-rodovia" },
+      { href: "/materiais", label: "Materiais", icon: Package, perm: "tela.materiais" },
     ],
   },
   {
     titulo: "Sistema",
-    admin: true,
     itens: [
-      { href: "/usuarios", label: "Usuários", icon: Users2 },
-      { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle },
-      { href: "/erros", label: "Erros", icon: AlertCircle },
-      { href: "/diagnosticos", label: "Diagnósticos", icon: Activity },
-      { href: "/configuracoes/tracking", label: "Tracking GPS", icon: Settings },
-      { href: "/configuracoes/busca-locais", label: "Busca de locais", icon: MapPin },
-      { href: "/configuracoes/ia", label: "Inteligência Artificial", icon: Sparkles },
-      { href: "/configuracoes/agente-whatsapp", label: "Agente WhatsApp", icon: MessageCircle },
-      { href: "/configuracoes/campos-layout", label: "Campos do layout", icon: Sparkles },
+      { href: "/usuarios", label: "Usuários", icon: Users2, perm: "tela.usuarios" },
+      { href: "/configuracoes/permissoes", label: "Papéis e permissões", icon: ShieldCheck, perm: "tela.permissoes" },
+      { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle, perm: "tela.whatsapp" },
+      { href: "/erros", label: "Erros", icon: AlertCircle, perm: "tela.erros" },
+      { href: "/diagnosticos", label: "Diagnósticos", icon: Activity, perm: "tela.diagnosticos" },
+      { href: "/configuracoes/tracking", label: "Tracking GPS", icon: Settings, perm: "tela.config-tracking" },
+      { href: "/configuracoes/busca-locais", label: "Busca de locais", icon: MapPin, perm: "tela.config-busca-locais" },
+      { href: "/configuracoes/ia", label: "Inteligência Artificial", icon: Sparkles, perm: "tela.config-ia" },
+      { href: "/configuracoes/agente-whatsapp", label: "Agente WhatsApp", icon: MessageCircle, perm: "tela.config-agente" },
+      { href: "/configuracoes/campos-layout", label: "Campos do layout", icon: Sparkles, perm: "tela.config-campos-layout" },
     ],
   },
 ];
@@ -99,7 +100,13 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const { data: session } = useSession();
-  const isAdmin = session?.user?.perfil === "ADMIN";
+  const { temPermissao } = usePermissoes();
+
+  // Itens visíveis por permissão; grupo só aparece se sobrar algum item.
+  const gruposVisiveis = GRUPOS.map((g) => ({
+    ...g,
+    itens: g.itens.filter((i) => temPermissao(i.perm)),
+  })).filter((g) => g.itens.length > 0);
 
   // Accordion: só um grupo aberto por vez. Operação é o default ao abrir
   // a plataforma. Ao mudar de rota, abre o grupo correspondente.
@@ -180,7 +187,7 @@ export function Sidebar({
             );
           })()}
 
-          {GRUPOS.filter((g) => !g.admin || isAdmin).map((grupo) => {
+          {gruposVisiveis.map((grupo) => {
             const aberto = grupoAberto === grupo.titulo;
             return (
               <div key={grupo.titulo} className="space-y-1">

@@ -19,6 +19,8 @@ const SAFE_SELECT = {
   ultimoLoginEm: true,
   whatsappResumo: true,
   receberResumoDiario: true,
+  papelId: true,
+  papel: { select: { id: true, nome: true, permissoes: true } },
   criadoEm: true,
   criadoPor: { select: { id: true, nome: true } },
 } as const;
@@ -56,6 +58,13 @@ export class UsersService {
   async create(data: CriarUserInput, usuarioId: string) {
     const exists = await this.prisma.user.findUnique({ where: { email: data.email } });
     if (exists) throw new ConflictException("Email já cadastrado");
+    // Sem papel escolhido → herda o padrão pelo perfil (evita usuário sem acesso).
+    let papelId = data.papelId ?? null;
+    if (!papelId) {
+      const nome = data.perfil === "ADMIN" ? "Administrador" : "Operador";
+      const papel = await this.prisma.papel.findUnique({ where: { nome }, select: { id: true } });
+      papelId = papel?.id ?? null;
+    }
     return this.prisma.user.create({
       data: {
         nome: data.nome,
@@ -64,6 +73,7 @@ export class UsersService {
         senhaHash: await AuthService.hashPassword(data.senha),
         whatsappResumo: data.whatsappResumo || null,
         receberResumoDiario: data.receberResumoDiario ?? false,
+        papelId,
         criadoPorId: usuarioId,
       },
       select: SAFE_SELECT,
@@ -89,8 +99,10 @@ export class UsersService {
     });
   }
 
-  me(id: string) {
-    return this.prisma.user.findUniqueOrThrow({ where: { id }, select: SAFE_SELECT });
+  async me(id: string) {
+    const u = await this.prisma.user.findUniqueOrThrow({ where: { id }, select: SAFE_SELECT });
+    // `permissoes` no topo facilita o frontend (sidebar/guards) checar acesso.
+    return { ...u, permissoes: u.papel?.permissoes ?? [] };
   }
 
   private async ensureExists(id: string) {

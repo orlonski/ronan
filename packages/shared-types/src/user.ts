@@ -10,6 +10,8 @@ export const CriarUserInput = z.object({
   // backend normaliza o DDI). Vazio = não recebe. null/"" limpa.
   whatsappResumo: z.string().max(20).nullish(),
   receberResumoDiario: z.boolean().optional(),
+  // Papel (RBAC) que define as permissões granulares do usuário.
+  papelId: z.string().uuid().nullish(),
 });
 export type CriarUserInput = z.infer<typeof CriarUserInput>;
 

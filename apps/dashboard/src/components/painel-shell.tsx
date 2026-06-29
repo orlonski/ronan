@@ -7,6 +7,7 @@ import { GlobalLoadingBar } from "@/components/loading";
 import { SchabaLogo } from "@/components/schaba-logo";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { Topbar } from "@/components/topbar";
+import { TelaGuard } from "@/components/requer-tela";
 import { useInboxStream } from "@/lib/inbox";
 
 /**
@@ -54,7 +55,7 @@ export function PainelShell({ children }: { children: React.ReactNode }) {
         </header>
 
         <main className="flex-1 overflow-auto bg-background p-4 md:p-8">
-          {children}
+          <TelaGuard>{children}</TelaGuard>
         </main>
       </div>
     </div>

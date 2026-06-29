@@ -8,9 +8,10 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { useCreateResource, useUpdateResource } from "@/lib/client-api";
+import { useApiQuery, useCreateResource, useUpdateResource } from "@/lib/client-api";
 
 type Perfil = "ADMIN" | "OPERADOR";
+type Papel = { id: string; nome: string };
 export type User = {
   id: string;
   nome: string;
@@ -20,6 +21,7 @@ export type User = {
   ultimoLoginEm: string | null;
   whatsappResumo: string | null;
   receberResumoDiario: boolean;
+  papelId: string | null;
 };
 
 type UserBody = {
@@ -29,6 +31,7 @@ type UserBody = {
   perfil?: Perfil;
   whatsappResumo?: string;
   receberResumoDiario?: boolean;
+  papelId?: string | null;
 };
 
 const PATH = "/admin/users";
@@ -39,6 +42,7 @@ export function UsuarioForm({ initial }: Props) {
   const router = useRouter();
   const create = useCreateResource<UserBody, User>(PATH, PATH);
   const update = useUpdateResource<UserBody, User>(PATH, PATH);
+  const papeis = useApiQuery<Papel[]>("/admin/papeis");
 
   const [form, setForm] = useState({
     nome: initial?.nome ?? "",
@@ -47,6 +51,7 @@ export function UsuarioForm({ initial }: Props) {
     perfil: (initial?.perfil ?? "OPERADOR") as Perfil,
     whatsappResumo: initial?.whatsappResumo ?? "",
     receberResumoDiario: initial?.receberResumoDiario ?? false,
+    papelId: initial?.papelId ?? "",
   });
 
   async function onSubmit(ev: React.FormEvent) {
@@ -57,6 +62,7 @@ export function UsuarioForm({ initial }: Props) {
         perfil: form.perfil,
         whatsappResumo: form.whatsappResumo,
         receberResumoDiario: form.receberResumoDiario,
+        papelId: form.papelId || null,
       };
       if (form.senha) body.senha = form.senha;
       await update.mutateAsync({ id: initial.id, body });
@@ -68,6 +74,7 @@ export function UsuarioForm({ initial }: Props) {
         perfil: form.perfil,
         whatsappResumo: form.whatsappResumo,
         receberResumoDiario: form.receberResumoDiario,
+        papelId: form.papelId || null,
       });
     }
     router.push("/usuarios");
@@ -116,6 +123,28 @@ export function UsuarioForm({ initial }: Props) {
             <option value="OPERADOR">Operador</option>
             <option value="ADMIN">Administrador</option>
           </Select>
+          <p className="text-xs text-muted-foreground">
+            Define o gate base (ADMIN/OPERADOR). O acesso fino às telas vem do papel.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Papel (permissões)</Label>
+          <Select
+            value={form.papelId}
+            onChange={(e) => setForm({ ...form, papelId: e.target.value })}
+          >
+            <option value="">— Sem papel —</option>
+            {(papeis.data ?? []).map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nome}
+              </option>
+            ))}
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Define quais telas o usuário acessa e quais assuntos do resumo recebe.
+            Configure os papéis em Papéis e permissões.
+          </p>
         </div>
 
         <div className="space-y-2 rounded-md border p-4">

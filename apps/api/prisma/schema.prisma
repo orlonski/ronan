@@ -175,6 +175,10 @@ model User {
   // Resumo diário no WhatsApp: número (normalizado com DDI) e opt-in.
   whatsappResumo      String?
   receberResumoDiario Boolean @default(false)
+  // Papel (RBAC): define as permissões granulares (telas, assuntos do resumo).
+  // perfil continua como gate grosso (login, @Roles); o papel é a camada fina.
+  papel         Papel?        @relation(fields: [papelId], references: [id], onDelete: SetNull)
+  papelId       String?
   criadoEm      DateTime      @default(now())
   alteradoEm    DateTime      @updatedAt
 
@@ -207,6 +211,37 @@ model User {
   adminNotificacoes   AdminNotificacao[]
 
   @@map("users")
+}
+
+/// Catálogo de permissões liberáveis (RBAC). Semeado no boot (sistema=true) —
+/// cada chave é referenciada pelo código (telas, blocos do resumo). A liberação
+/// (quem tem) vive nos papéis; este catálogo só descreve o que existe pra a UI.
+model Permissao {
+  chave     String  @id // ex: "tela.viagens", "resumo.producao"
+  modulo    String // agrupador na UI: "Telas", "Resumo diário"
+  titulo    String
+  descricao String?
+  ordem     Int     @default(100)
+  sistema   Boolean @default(true)
+
+  @@index([modulo, ordem])
+  @@map("permissoes")
+}
+
+/// Papel (RBAC): conjunto nomeado de permissões. `permissoes` guarda as chaves
+/// liberadas. `sistema=true` nos embutidos (Administrador/Operador).
+model Papel {
+  id         String   @id @default(uuid())
+  nome       String   @unique
+  descricao  String?
+  permissoes String[] @default([])
+  sistema    Boolean  @default(false)
+  criadoEm   DateTime @default(now())
+  alteradoEm DateTime @updatedAt
+
+  usuarios User[]
+
+  @@map("papeis")
 }
 
 /// Caixa de entrada do admin no dashboard. Sininho no topo le esta tabela.
