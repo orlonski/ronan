@@ -55,7 +55,7 @@ export class ResumoService {
         id: true,
         nome: true,
         whatsappResumo: true,
-        papel: { select: { permissoes: true } },
+        resumoAssuntos: true,
       },
     });
     if (users.length === 0) return;
@@ -65,8 +65,8 @@ export class ResumoService {
     }
     let ok = 0;
     for (const u of users) {
-      const chaves = this.chavesResumo(u.papel?.permissoes ?? []);
-      if (chaves.size === 0) continue; // papel sem nenhum assunto liberado
+      const chaves = new Set(u.resumoAssuntos);
+      if (chaves.size === 0) continue; // usuário sem nenhum assunto marcado
       try {
         const texto = await this.montarMensagem(chaves);
         await this.enviar(u.whatsappResumo!, texto);
@@ -82,7 +82,7 @@ export class ResumoService {
   async enviarAgora(userId: string): Promise<{ ok: true }> {
     const u = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { whatsappResumo: true, papel: { select: { permissoes: true } } },
+      select: { whatsappResumo: true, resumoAssuntos: true },
     });
     if (!u) throw new NotFoundException("Usuário não encontrado");
     if (!u.whatsappResumo) {
@@ -93,10 +93,10 @@ export class ResumoService {
     if (!this.evolution.configurado) {
       throw new BadRequestException("WhatsApp (Evolution) não está configurado no servidor.");
     }
-    const chaves = this.chavesResumo(u.papel?.permissoes ?? []);
+    const chaves = new Set(u.resumoAssuntos);
     if (chaves.size === 0) {
       throw new BadRequestException(
-        "O papel deste usuário não libera nenhum assunto do resumo. Ajuste em Papéis e permissões.",
+        "Este usuário não tem nenhum assunto do resumo marcado. Edite o usuário e selecione os assuntos.",
       );
     }
     const texto = await this.montarMensagem(chaves);
@@ -109,14 +109,9 @@ export class ResumoService {
     await this.evolution.enviarTexto(numero, texto);
   }
 
-  /** Filtra as chaves de assunto do resumo (resumo.*) das permissões do papel. */
-  private chavesResumo(permissoes: string[]): Set<string> {
-    return new Set(permissoes.filter((c) => c.startsWith("resumo.")));
-  }
-
   /**
-   * Monta o texto do resumo só com os blocos liberados (`chaves`). As métricas
-   * são sempre calculadas; o filtro decide o que entra na mensagem.
+   * Monta o texto do resumo só com os blocos marcados (`chaves` = assuntos do
+   * usuário). As métricas são sempre calculadas; o filtro decide o que entra.
    */
   private async montarMensagem(chaves: Set<string>): Promise<string> {
     const [y, m, dia] = ymdSaoPaulo();
@@ -311,17 +306,17 @@ export class ResumoService {
     // Cada bloco só entra se o assunto estiver liberado no papel do usuário.
     const blocos: string[] = [`📊 *Resumo Schaba* — ${dataLabel}`];
 
-    if (has("resumo.motoristas"))
+    if (has("motoristas"))
       blocos.push(
         ["👷 *Motoristas*", `• Cadastrados: ${fmt(motTotal)}`, `• Aprovados: ${fmt(motAprov)}`, `• Pendentes: ${fmt(motPend)}`].join("\n"),
       );
-    if (has("resumo.locais"))
+    if (has("locais"))
       blocos.push(["📍 *Locais ativos*", `• Carga: ${fmt(locCarga)}`, `• Descarga: ${fmt(locDescarga)}`].join("\n"));
-    if (has("resumo.viagens"))
+    if (has("viagens"))
       blocos.push(
         ["🚚 *Viagens*", `• Hoje: ${fmt(viHoje)}`, `• Últimos 7 dias: ${fmt(vi7)}`, `• Mês: ${fmt(viMes)}`, `• Total: ${fmt(viTotal)}`].join("\n"),
       );
-    if (has("resumo.producao"))
+    if (has("producao"))
       blocos.push(
         [
           "📦 *Produção* (hoje · 7d · mês)",
@@ -329,7 +324,7 @@ export class ResumoService {
           `• Km rodados: ${fmtTon(kmDe(viAggHoje))} · ${fmtTon(kmDe(viAgg7))} · ${fmtTon(kmDe(viAggMes))}`,
         ].join("\n"),
       );
-    if (has("resumo.abastecimentos"))
+    if (has("abastecimentos"))
       blocos.push(
         [
           "⛽ *Abastecimentos*",
@@ -340,7 +335,7 @@ export class ResumoService {
           `• Litros (hoje · 7d · mês): ${fmtTon(litDe(abAggHoje))} · ${fmtTon(litDe(abAgg7))} · ${fmtTon(litDe(abAggMes))}`,
         ].join("\n"),
       );
-    if (has("resumo.custos"))
+    if (has("custos"))
       blocos.push(
         [
           "💰 *Custos* (hoje · 7d · mês)",
@@ -349,7 +344,7 @@ export class ResumoService {
           `• Comboios sem valor lançado: ${fmt(comboioPend)}`,
         ].join("\n"),
       );
-    if (has("resumo.pendencias"))
+    if (has("pendencias"))
       blocos.push(
         [
           "⏳ *Pendências*",
@@ -361,7 +356,7 @@ export class ResumoService {
           `• Locais novos a validar: ${fmt(locaisRascunho)}`,
         ].join("\n"),
       );
-    if (has("resumo.conferencia"))
+    if (has("conferencia"))
       blocos.push(
         [
           "⚡ *Conferência*",
@@ -370,7 +365,7 @@ export class ResumoService {
           `• Tempo médio de conferência: ${tempoMedioDias != null ? `${fmtTon(tempoMedioDias)} dia(s)` : "—"}`,
         ].join("\n"),
       );
-    if (has("resumo.saude"))
+    if (has("saude"))
       blocos.push(
         [
           "🩺 *Saúde*",
@@ -379,7 +374,7 @@ export class ResumoService {
           `• Com app desatualizado: ${fmt(motDesatualizados)}`,
         ].join("\n"),
       );
-    if (has("resumo.ranking"))
+    if (has("ranking"))
       blocos.push(
         [
           "🏆 *Top 5 do mês*",

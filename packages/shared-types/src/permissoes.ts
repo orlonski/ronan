@@ -5,8 +5,9 @@ import { z } from "zod";
  * catálogo + papéis sistema) e pelo frontend (sidebar, matriz de papéis).
  *
  * `chave` é o identificador estável referenciado no código. `modulo` agrupa na
- * UI. Telas seguem os grupos do menu (Operação/Cadastros/Sistema); o resumo é um
- * módulo à parte. Adicionar feature nova = adicionar uma chave aqui.
+ * UI seguindo os grupos do menu (Operação/Cadastros/Sistema). Permissões são
+ * SOMENTE de acesso a telas — o resumo diário é preferência por usuário (ver
+ * `resumo.ts`), não um papel. Adicionar tela nova = adicionar uma chave aqui.
  */
 export type PermissaoCatalogo = {
   chave: string;
@@ -43,25 +44,14 @@ export const CATALOGO_PERMISSOES: PermissaoCatalogo[] = [
   { chave: "tela.config-ia", modulo: "Sistema", titulo: "Inteligência Artificial", ordem: 270 },
   { chave: "tela.config-agente", modulo: "Sistema", titulo: "Agente WhatsApp", ordem: 280 },
   { chave: "tela.config-campos-layout", modulo: "Sistema", titulo: "Campos do layout", ordem: 290 },
-  // ---- Resumo diário (assuntos do WhatsApp) ----
-  { chave: "resumo.motoristas", modulo: "Resumo diário", titulo: "Motoristas", ordem: 310 },
-  { chave: "resumo.locais", modulo: "Resumo diário", titulo: "Locais ativos", ordem: 320 },
-  { chave: "resumo.viagens", modulo: "Resumo diário", titulo: "Viagens", ordem: 330 },
-  { chave: "resumo.producao", modulo: "Resumo diário", titulo: "Produção", ordem: 340 },
-  { chave: "resumo.abastecimentos", modulo: "Resumo diário", titulo: "Abastecimentos", ordem: 350 },
-  { chave: "resumo.custos", modulo: "Resumo diário", titulo: "Custos", ordem: 360 },
-  { chave: "resumo.pendencias", modulo: "Resumo diário", titulo: "Pendências", ordem: 370 },
-  { chave: "resumo.conferencia", modulo: "Resumo diário", titulo: "Conferência", ordem: 380 },
-  { chave: "resumo.saude", modulo: "Resumo diário", titulo: "Saúde", ordem: 390 },
-  { chave: "resumo.ranking", modulo: "Resumo diário", titulo: "Top 5 do mês", ordem: 400 },
 ];
 
 export const TODAS_AS_CHAVES: string[] = CATALOGO_PERMISSOES.map((p) => p.chave);
 
-/** Permissões do papel Operador embutido: tudo de Operação + Cadastros + Resumo
+/** Permissões do papel Operador embutido: tudo de Operação + Cadastros
  * (espelha o acesso de hoje; sem o módulo Sistema). */
 export const PERMISSOES_OPERADOR: string[] = CATALOGO_PERMISSOES.filter(
-  (p) => p.modulo === "Operação" || p.modulo === "Cadastros" || p.modulo === "Resumo diário",
+  (p) => p.modulo === "Operação" || p.modulo === "Cadastros",
 ).map((p) => p.chave);
 
 export const CriarPapelInput = z.object({

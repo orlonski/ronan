@@ -175,6 +175,9 @@ model User {
   // Resumo diário no WhatsApp: número (normalizado com DDI) e opt-in.
   whatsappResumo      String?
   receberResumoDiario Boolean @default(false)
+  // Assuntos do resumo que ESTE usuário recebe (preferência pessoal, não papel).
+  // Vazio = trata como "todos" no envio. Ids em @ronan/shared-types ASSUNTOS_RESUMO.
+  resumoAssuntos      String[] @default([])
   // Papel (RBAC): define as permissões granulares (telas, assuntos do resumo).
   // perfil continua como gate grosso (login, @Roles); o papel é a camada fina.
   papel         Papel?        @relation(fields: [papelId], references: [id], onDelete: SetNull)

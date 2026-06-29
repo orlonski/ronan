@@ -149,8 +149,9 @@ function PermissoesInner() {
       <div>
         <h1 className="text-2xl font-bold">Papéis e permissões</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Defina papéis e o que cada um libera — telas do sistema e assuntos do
-          resumo diário. Atribua o papel a cada usuário na tela de Usuários.
+          Defina papéis e quais telas cada um libera. Atribua o papel a cada
+          usuário na tela de Usuários. (O resumo diário é configurado por usuário,
+          não pelo papel.)
         </p>
       </div>
 

@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import type { PerfilUsuario, Prisma } from "@prisma/client";
-import type { CriarUserInput, AtualizarUserInput } from "@ronan/shared-types";
+import { ASSUNTOS_RESUMO_IDS, type CriarUserInput, type AtualizarUserInput } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuthService } from "../../auth/auth.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
@@ -19,6 +19,7 @@ const SAFE_SELECT = {
   ultimoLoginEm: true,
   whatsappResumo: true,
   receberResumoDiario: true,
+  resumoAssuntos: true,
   papelId: true,
   papel: { select: { id: true, nome: true, permissoes: true } },
   criadoEm: true,
@@ -73,6 +74,8 @@ export class UsersService {
         senhaHash: await AuthService.hashPassword(data.senha),
         whatsappResumo: data.whatsappResumo || null,
         receberResumoDiario: data.receberResumoDiario ?? false,
+        // Novo usuário recebe todos os assuntos por padrão (até personalizar).
+        resumoAssuntos: data.resumoAssuntos ?? ASSUNTOS_RESUMO_IDS,
         papelId,
         criadoPorId: usuarioId,
       },

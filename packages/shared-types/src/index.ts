@@ -14,6 +14,7 @@ export * from "./veiculo";
 export * from "./material";
 export * from "./user";
 export * from "./permissoes";
+export * from "./resumo";
 export * from "./push";
 export * from "./notificacao";
 export * from "./ia-ticket";

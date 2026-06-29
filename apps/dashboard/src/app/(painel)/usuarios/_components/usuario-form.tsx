@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { ASSUNTOS_RESUMO } from "@ronan/shared-types";
 import { useApiQuery, useCreateResource, useUpdateResource } from "@/lib/client-api";
 
 type Perfil = "ADMIN" | "OPERADOR";
@@ -21,6 +22,7 @@ export type User = {
   ultimoLoginEm: string | null;
   whatsappResumo: string | null;
   receberResumoDiario: boolean;
+  resumoAssuntos: string[];
   papelId: string | null;
 };
 
@@ -31,6 +33,7 @@ type UserBody = {
   perfil?: Perfil;
   whatsappResumo?: string;
   receberResumoDiario?: boolean;
+  resumoAssuntos?: string[];
   papelId?: string | null;
 };
 
@@ -51,8 +54,21 @@ export function UsuarioForm({ initial }: Props) {
     perfil: (initial?.perfil ?? "OPERADOR") as Perfil,
     whatsappResumo: initial?.whatsappResumo ?? "",
     receberResumoDiario: initial?.receberResumoDiario ?? false,
+    // Novo usuário começa com todos os assuntos marcados.
+    resumoAssuntos: new Set<string>(
+      initial?.resumoAssuntos ?? ASSUNTOS_RESUMO.map((a) => a.id),
+    ),
     papelId: initial?.papelId ?? "",
   });
+
+  function toggleAssunto(id: string) {
+    setForm((f) => {
+      const s = new Set(f.resumoAssuntos);
+      if (s.has(id)) s.delete(id);
+      else s.add(id);
+      return { ...f, resumoAssuntos: s };
+    });
+  }
 
   async function onSubmit(ev: React.FormEvent) {
     ev.preventDefault();
@@ -62,6 +78,7 @@ export function UsuarioForm({ initial }: Props) {
         perfil: form.perfil,
         whatsappResumo: form.whatsappResumo,
         receberResumoDiario: form.receberResumoDiario,
+        resumoAssuntos: [...form.resumoAssuntos],
         papelId: form.papelId || null,
       };
       if (form.senha) body.senha = form.senha;
@@ -74,6 +91,7 @@ export function UsuarioForm({ initial }: Props) {
         perfil: form.perfil,
         whatsappResumo: form.whatsappResumo,
         receberResumoDiario: form.receberResumoDiario,
+        resumoAssuntos: [...form.resumoAssuntos],
         papelId: form.papelId || null,
       });
     }
@@ -142,13 +160,13 @@ export function UsuarioForm({ initial }: Props) {
             ))}
           </Select>
           <p className="text-xs text-muted-foreground">
-            Define quais telas o usuário acessa e quais assuntos do resumo recebe.
-            Configure os papéis em Papéis e permissões.
+            Define quais telas o usuário acessa. Configure os papéis em Papéis e
+            permissões.
           </p>
         </div>
 
-        <div className="space-y-2 rounded-md border p-4">
-          <Label>WhatsApp pra resumo diário</Label>
+        <div className="space-y-3 rounded-md border p-4">
+          <Label>Resumo diário no WhatsApp</Label>
           <Input
             type="tel"
             placeholder="ex: (41) 99999-9999"
@@ -159,7 +177,7 @@ export function UsuarioForm({ initial }: Props) {
             Número que recebe o resumo. Pode digitar com ou sem DDD/DDI — o sistema
             ajusta. Deixe vazio pra não receber.
           </p>
-          <label className="flex cursor-pointer items-center gap-2 pt-1">
+          <label className="flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
               className="h-4 w-4 rounded border-input"
@@ -170,6 +188,31 @@ export function UsuarioForm({ initial }: Props) {
             />
             <span className="text-sm">Receber resumo diário (todo dia às 20h)</span>
           </label>
+
+          <div className="space-y-1 pt-1">
+            <p className="text-xs font-medium text-muted-foreground">
+              Assuntos que este usuário recebe
+            </p>
+            <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
+              {ASSUNTOS_RESUMO.map((a) => (
+                <label
+                  key={a.id}
+                  className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted"
+                >
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-input"
+                    checked={form.resumoAssuntos.has(a.id)}
+                    onChange={() => toggleAssunto(a.id)}
+                  />
+                  <span>{a.titulo}</span>
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Cada usuário escolhe o que recebe — independente do papel de acesso.
+            </p>
+          </div>
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
