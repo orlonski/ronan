@@ -14,6 +14,7 @@ import {
 } from "@/components/data-table";
 import { ExcluirButton } from "@/components/excluir-button";
 import { StatusToggle } from "@/components/status-toggle";
+import { Permitido } from "@/components/requer-tela";
 import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
@@ -106,13 +107,15 @@ export default function PedagiosRodoviaPage() {
         header: () => <span className="block text-center">Ações</span>,
         cell: ({ row }) => (
           <div className="flex items-center justify-center gap-2">
-            <StatusToggle
-              active={row.original.ativo}
-              onChange={(next) =>
-                update.mutate({ id: row.original.id, body: { ativo: next } })
-              }
-              size="sm"
-            />
+            <Permitido chave="pedagios.editar">
+              <StatusToggle
+                active={row.original.ativo}
+                onChange={(next) =>
+                  update.mutate({ id: row.original.id, body: { ativo: next } })
+                }
+                size="sm"
+              />
+            </Permitido>
             <ExcluirButton perm="pedagios.excluir"
               path={PATH}
               id={row.original.id}
@@ -137,6 +140,7 @@ export default function PedagiosRodoviaPage() {
         </div>
         <div className="flex items-center gap-2">
           <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          <Permitido chave="pedagios.importar">
           <Button
             onClick={() => importar.mutate()}
             disabled={importar.isPending}
@@ -152,6 +156,7 @@ export default function PedagiosRodoviaPage() {
               </>
             )}
           </Button>
+          </Permitido>
         </div>
       </header>
 
@@ -202,13 +207,15 @@ export default function PedagiosRodoviaPage() {
               </div>
 
               <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
-                <StatusToggle
-                  active={p.ativo}
-                  onChange={(next) =>
-                    update.mutate({ id: p.id, body: { ativo: next } })
-                  }
-                  size="sm"
-                />
+                <Permitido chave="pedagios.editar">
+                  <StatusToggle
+                    active={p.ativo}
+                    onChange={(next) =>
+                      update.mutate({ id: p.id, body: { ativo: next } })
+                    }
+                    size="sm"
+                  />
+                </Permitido>
                 <ExcluirButton perm="pedagios.excluir"
                   path={PATH}
                   id={p.id}

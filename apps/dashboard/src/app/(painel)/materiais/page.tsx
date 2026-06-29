@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Package, Pencil, Plus } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { StatusToggle } from "@/components/status-toggle";
+import { Permitido } from "@/components/requer-tela";
 import { ExcluirButton } from "@/components/excluir-button";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -58,12 +59,14 @@ export default function MateriaisPage() {
         size: 128,
         header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
         cell: ({ row }) => (
-          <StatusToggle
-            active={row.original.ativo}
-            onChange={(next) => update.mutate({ id: row.original.id, body: { ativo: next } })}
-            size="sm"
-            label
-          />
+          <Permitido chave="materiais.editar">
+            <StatusToggle
+              active={row.original.ativo}
+              onChange={(next) => update.mutate({ id: row.original.id, body: { ativo: next } })}
+              size="sm"
+              label
+            />
+          </Permitido>
         ),
       },
       {
@@ -73,11 +76,13 @@ export default function MateriaisPage() {
         header: () => <span className="block text-center">Ações</span>,
         cell: ({ row }) => (
           <div className="flex justify-center">
-            <Link href={`/materiais/${row.original.id}`}>
-              <Button variant="ghost" size="icon" title="Editar">
-                <Pencil className="h-4 w-4" />
-              </Button>
-            </Link>
+            <Permitido chave="materiais.editar">
+              <Link href={`/materiais/${row.original.id}`}>
+                <Button variant="ghost" size="icon" title="Editar">
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              </Link>
+            </Permitido>
             <ExcluirButton perm="materiais.excluir"
               path="/admin/materiais"
               id={row.original.id}
@@ -99,11 +104,13 @@ export default function MateriaisPage() {
         </div>
         <div className="flex items-center gap-2">
           <ViewModeToggle value={viewMode} onChange={setViewMode} />
-          <Link href="/materiais/novo">
-            <Button>
-              <Plus className="h-4 w-4" /> Novo material
-            </Button>
-          </Link>
+          <Permitido chave="materiais.criar">
+            <Link href="/materiais/novo">
+              <Button>
+                <Plus className="h-4 w-4" /> Novo material
+              </Button>
+            </Link>
+          </Permitido>
         </div>
       </header>
 
@@ -149,18 +156,22 @@ export default function MateriaisPage() {
                 )}
               </div>
               <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
-                <StatusToggle
-                  active={m.ativo}
-                  onChange={(next) =>
-                    update.mutate({ id: m.id, body: { ativo: next } })
-                  }
-                  size="sm"
-                />
-                <Link href={`/materiais/${m.id}`}>
-                  <Button variant="ghost" size="icon" title="Editar">
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                </Link>
+                <Permitido chave="materiais.editar">
+                  <StatusToggle
+                    active={m.ativo}
+                    onChange={(next) =>
+                      update.mutate({ id: m.id, body: { ativo: next } })
+                    }
+                    size="sm"
+                  />
+                </Permitido>
+                <Permitido chave="materiais.editar">
+                  <Link href={`/materiais/${m.id}`}>
+                    <Button variant="ghost" size="icon" title="Editar">
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </Link>
+                </Permitido>
                 <ExcluirButton perm="materiais.excluir"
                   path="/admin/materiais"
                   id={m.id}

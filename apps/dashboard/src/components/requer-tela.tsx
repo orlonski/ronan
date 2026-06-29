@@ -13,6 +13,15 @@ const AcessoRestrito = () => (
 );
 
 /**
+ * Mostra os filhos só se o papel tiver a permissão. Usado pra esconder botões
+ * de ação (Novo, Editar, Excluir, etc.) que o usuário não pode usar.
+ */
+export function Permitido({ chave, children }: { chave: string; children: ReactNode }) {
+  const { temPermissao } = usePermissoes();
+  return temPermissao(chave) ? <>{children}</> : null;
+}
+
+/**
  * Gate central por rota (usado no shell do painel). Lê a permissão exigida pela
  * URL atual e bloqueia se o papel não tiver. Rotas sem permissão mapeada passam.
  * Salvaguarda: usuário sem papel (permissoes vazias) mas perfil ADMIN é liberado

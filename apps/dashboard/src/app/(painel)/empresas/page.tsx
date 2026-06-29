@@ -11,6 +11,7 @@ import {
 import Link from "next/link";
 import type { ColumnDef } from "@tanstack/react-table";
 import { StatusToggle } from "@/components/status-toggle";
+import { Permitido } from "@/components/requer-tela";
 import { ExcluirButton } from "@/components/excluir-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -115,11 +116,13 @@ export default function EmpresasPage() {
                   </Button>
                 </Link>
               )}
-              <Link href={`/empresas/${e.id}`} title="Editar">
-                <Button variant="ghost" size="icon">
-                  <Pencil className="h-4 w-4" />
-                </Button>
-              </Link>
+              <Permitido chave="empresas.editar">
+                <Link href={`/empresas/${e.id}`} title="Editar">
+                  <Button variant="ghost" size="icon">
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </Link>
+              </Permitido>
               <ExcluirButton perm="empresas.excluir"
                 path="/admin/empresas"
                 id={e.id}
@@ -142,11 +145,13 @@ export default function EmpresasPage() {
         </div>
         <div className="flex items-center gap-2">
           <ViewModeToggle value={viewMode} onChange={setViewMode} />
-          <Link href="/empresas/novo">
-            <Button>
-              <Plus className="h-4 w-4" /> Nova empresa
-            </Button>
-          </Link>
+          <Permitido chave="empresas.criar">
+            <Link href="/empresas/novo">
+              <Button>
+                <Plus className="h-4 w-4" /> Nova empresa
+              </Button>
+            </Link>
+          </Permitido>
         </div>
       </header>
 
@@ -226,18 +231,22 @@ export default function EmpresasPage() {
                     </Button>
                   </Link>
                 )}
-                <Link href={`/empresas/${e.id}`}>
-                  <Button variant="ghost" size="icon" title="Editar">
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                </Link>
-                <StatusToggle
-                  active={e.ativa}
-                  onChange={(next) =>
-                    update.mutate({ id: e.id, body: { ativa: next } })
-                  }
-                  size="sm"
-                />
+                <Permitido chave="empresas.editar">
+                  <Link href={`/empresas/${e.id}`}>
+                    <Button variant="ghost" size="icon" title="Editar">
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </Link>
+                </Permitido>
+                <Permitido chave="empresas.editar">
+                  <StatusToggle
+                    active={e.ativa}
+                    onChange={(next) =>
+                      update.mutate({ id: e.id, body: { ativa: next } })
+                    }
+                    size="sm"
+                  />
+                </Permitido>
                 <ExcluirButton perm="empresas.excluir"
                   path="/admin/empresas"
                   id={e.id}

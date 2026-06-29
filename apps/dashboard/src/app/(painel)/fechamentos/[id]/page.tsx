@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useState } from "react";
 import { ExcluirButton } from "@/components/excluir-button";
+import { Permitido } from "@/components/requer-tela";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -96,50 +97,60 @@ export default function FechamentoDetalhePage({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => reprocessar.mutate(undefined)}
-            disabled={reprocessar.isPending}
-            title="Reprocessa todos os tipos (viagens, pedágios, combustível)"
-          >
-            <RefreshCw className="h-4 w-4" /> Reprocessar tudo
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => reprocessar.mutate("VIAGEM")}
-            disabled={reprocessar.isPending}
-            title="Reprocessa só linhas de viagem"
-          >
-            🚛 Viagens
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => reprocessar.mutate("PEDAGIO")}
-            disabled={reprocessar.isPending}
-            title="Reprocessa só linhas de pedágio"
-          >
-            🛣️ Pedágios
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => reprocessar.mutate("COMBUSTIVEL")}
-            disabled={reprocessar.isPending}
-            title="Reprocessa só linhas de combustível"
-          >
-            ⛽ Combustível
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => exportar.mutate({})}
-            disabled={exportar.isPending || pendentes > 0}
-          >
-            <Download className="h-4 w-4" />
-            {exportar.isPending ? "Gerando..." : "Exportar planilha"}
-          </Button>
+          <Permitido chave="fechamentos.conferir">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => reprocessar.mutate(undefined)}
+              disabled={reprocessar.isPending}
+              title="Reprocessa todos os tipos (viagens, pedágios, combustível)"
+            >
+              <RefreshCw className="h-4 w-4" /> Reprocessar tudo
+            </Button>
+          </Permitido>
+          <Permitido chave="fechamentos.conferir">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => reprocessar.mutate("VIAGEM")}
+              disabled={reprocessar.isPending}
+              title="Reprocessa só linhas de viagem"
+            >
+              🚛 Viagens
+            </Button>
+          </Permitido>
+          <Permitido chave="fechamentos.conferir">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => reprocessar.mutate("PEDAGIO")}
+              disabled={reprocessar.isPending}
+              title="Reprocessa só linhas de pedágio"
+            >
+              🛣️ Pedágios
+            </Button>
+          </Permitido>
+          <Permitido chave="fechamentos.conferir">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => reprocessar.mutate("COMBUSTIVEL")}
+              disabled={reprocessar.isPending}
+              title="Reprocessa só linhas de combustível"
+            >
+              ⛽ Combustível
+            </Button>
+          </Permitido>
+          <Permitido chave="fechamentos.exportar">
+            <Button
+              size="sm"
+              onClick={() => exportar.mutate({})}
+              disabled={exportar.isPending || pendentes > 0}
+            >
+              <Download className="h-4 w-4" />
+              {exportar.isPending ? "Gerando..." : "Exportar planilha"}
+            </Button>
+          </Permitido>
           <ExcluirButton perm="fechamentos.excluir"
             path="/admin/fechamentos"
             id={f.id}

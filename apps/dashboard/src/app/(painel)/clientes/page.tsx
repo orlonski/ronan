@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Boxes, Pencil, Plus } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { StatusToggle } from "@/components/status-toggle";
+import { Permitido } from "@/components/requer-tela";
 import { ExcluirButton } from "@/components/excluir-button";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -74,12 +75,14 @@ export default function ClientesPage() {
         size: 96,
         header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
         cell: ({ row }) => (
-          <StatusToggle
-            active={row.original.ativa}
-            onChange={(next) => update.mutate({ id: row.original.id, body: { ativa: next } })}
-            size="sm"
-            label
-          />
+          <Permitido chave="clientes.editar">
+            <StatusToggle
+              active={row.original.ativa}
+              onChange={(next) => update.mutate({ id: row.original.id, body: { ativa: next } })}
+              size="sm"
+              label
+            />
+          </Permitido>
         ),
       },
       {
@@ -89,11 +92,13 @@ export default function ClientesPage() {
         header: () => <span className="block text-center">Ações</span>,
         cell: ({ row }) => (
           <div className="flex justify-center">
-            <Link href={`/clientes/${row.original.id}`}>
-              <Button variant="ghost" size="icon" title="Editar">
-                <Pencil className="h-4 w-4" />
-              </Button>
-            </Link>
+            <Permitido chave="clientes.editar">
+              <Link href={`/clientes/${row.original.id}`}>
+                <Button variant="ghost" size="icon" title="Editar">
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              </Link>
+            </Permitido>
             <ExcluirButton perm="clientes.excluir"
               path="/admin/clientes"
               id={row.original.id}
@@ -115,11 +120,13 @@ export default function ClientesPage() {
         </div>
         <div className="flex items-center gap-2">
           <ViewModeToggle value={viewMode} onChange={setViewMode} />
-          <Link href="/clientes/novo">
-            <Button disabled={!empresas.data?.length}>
-              <Plus className="h-4 w-4" /> Novo cliente
-            </Button>
-          </Link>
+          <Permitido chave="clientes.criar">
+            <Link href="/clientes/novo">
+              <Button disabled={!empresas.data?.length}>
+                <Plus className="h-4 w-4" /> Novo cliente
+              </Button>
+            </Link>
+          </Permitido>
         </div>
       </header>
 
@@ -183,18 +190,22 @@ export default function ClientesPage() {
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
-                <StatusToggle
-                  active={c.ativa}
-                  onChange={(next) =>
-                    update.mutate({ id: c.id, body: { ativa: next } })
-                  }
-                  size="sm"
-                />
-                <Link href={`/clientes/${c.id}`}>
-                  <Button variant="ghost" size="icon" title="Editar">
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                </Link>
+                <Permitido chave="clientes.editar">
+                  <StatusToggle
+                    active={c.ativa}
+                    onChange={(next) =>
+                      update.mutate({ id: c.id, body: { ativa: next } })
+                    }
+                    size="sm"
+                  />
+                </Permitido>
+                <Permitido chave="clientes.editar">
+                  <Link href={`/clientes/${c.id}`}>
+                    <Button variant="ghost" size="icon" title="Editar">
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </Link>
+                </Permitido>
                 <ExcluirButton perm="clientes.excluir"
                   path="/admin/clientes"
                   id={c.id}

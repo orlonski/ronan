@@ -18,6 +18,7 @@ import { ConviteWhatsappButton } from "@/components/convite-whatsapp-button";
 import { EnviarPushButton } from "@/components/enviar-push-button";
 import { DocumentosBadge } from "@/components/documentos-badge";
 import { DocumentosDrawerButton } from "@/components/documentos-drawer";
+import { Permitido } from "@/components/requer-tela";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -179,14 +180,16 @@ export default function MotoristasPage() {
         size: 96,
         header: ({ column }) => <DataTableColumnHeader column={column} title="Ativo" />,
         cell: ({ row }) => (
-          <StatusToggle
-            active={row.original.ativo}
-            onChange={(next) =>
-              update.mutate({ id: row.original.id, body: { ativo: next } })
-            }
-            size="sm"
-            label
-          />
+          <Permitido chave="motoristas.editar">
+            <StatusToggle
+              active={row.original.ativo}
+              onChange={(next) =>
+                update.mutate({ id: row.original.id, body: { ativo: next } })
+              }
+              size="sm"
+              label
+            />
+          </Permitido>
         ),
       },
       {
@@ -197,29 +200,39 @@ export default function MotoristasPage() {
         cell: ({ row }) => (
           <div className="flex items-center justify-center gap-1">
             {row.original.status === "PENDENTE_APROVACAO" && (
-              <AprovacaoMotoristaButtons id={row.original.id} nome={row.original.nome} />
+              <Permitido chave="motoristas.aprovar">
+                <AprovacaoMotoristaButtons id={row.original.id} nome={row.original.nome} />
+              </Permitido>
             )}
-            <DocumentosDrawerButton
-              motoristaId={row.original.id}
-              motoristaNome={row.original.nome}
-            >
-              {(open) => (
-                <Button variant="ghost" size="icon" title="Documentos" onClick={open}>
-                  <FileText className="h-4 w-4" />
+            <Permitido chave="motoristas.documentos">
+              <DocumentosDrawerButton
+                motoristaId={row.original.id}
+                motoristaNome={row.original.nome}
+              >
+                {(open) => (
+                  <Button variant="ghost" size="icon" title="Documentos" onClick={open}>
+                    <FileText className="h-4 w-4" />
+                  </Button>
+                )}
+              </DocumentosDrawerButton>
+            </Permitido>
+            <Permitido chave="motoristas.editar">
+              <Link href={`/motoristas/${row.original.id}`}>
+                <Button variant="ghost" size="icon" title="Editar">
+                  <Pencil className="h-4 w-4" />
                 </Button>
-              )}
-            </DocumentosDrawerButton>
-            <Link href={`/motoristas/${row.original.id}`}>
-              <Button variant="ghost" size="icon" title="Editar">
-                <Pencil className="h-4 w-4" />
-              </Button>
-            </Link>
-            <EnviarPushButton
-              motoristaId={row.original.id}
-              motoristaNome={row.original.nome}
-              temPushToken={row.original.temPushToken}
-            />
-            <ConviteWhatsappButton tipo="motorista" id={row.original.id} nome={row.original.nome} />
+              </Link>
+            </Permitido>
+            <Permitido chave="motoristas.editar">
+              <EnviarPushButton
+                motoristaId={row.original.id}
+                motoristaNome={row.original.nome}
+                temPushToken={row.original.temPushToken}
+              />
+            </Permitido>
+            <Permitido chave="motoristas.editar">
+              <ConviteWhatsappButton tipo="motorista" id={row.original.id} nome={row.original.nome} />
+            </Permitido>
             <ExcluirButton perm="motoristas.excluir"
               path="/admin/motoristas"
               id={row.original.id}
@@ -243,11 +256,13 @@ export default function MotoristasPage() {
         </div>
         <div className="flex items-center gap-2">
           <ViewModeToggle value={viewMode} onChange={setViewMode} />
-          <Link href="/motoristas/novo">
-            <Button>
-              <Plus className="h-4 w-4" /> Novo motorista
-            </Button>
-          </Link>
+          <Permitido chave="motoristas.criar">
+            <Link href="/motoristas/novo">
+              <Button>
+                <Plus className="h-4 w-4" /> Novo motorista
+              </Button>
+            </Link>
+          </Permitido>
         </div>
       </header>
 
@@ -348,31 +363,41 @@ export default function MotoristasPage() {
               </div>
 
               <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
-                <StatusToggle
-                  active={m.ativo}
-                  onChange={(next) =>
-                    update.mutate({ id: m.id, body: { ativo: next } })
-                  }
-                  size="sm"
-                />
-                <DocumentosDrawerButton motoristaId={m.id} motoristaNome={m.nome}>
-                  {(open) => (
-                    <Button variant="ghost" size="icon" title="Documentos" onClick={open}>
-                      <FileText className="h-4 w-4" />
+                <Permitido chave="motoristas.editar">
+                  <StatusToggle
+                    active={m.ativo}
+                    onChange={(next) =>
+                      update.mutate({ id: m.id, body: { ativo: next } })
+                    }
+                    size="sm"
+                  />
+                </Permitido>
+                <Permitido chave="motoristas.documentos">
+                  <DocumentosDrawerButton motoristaId={m.id} motoristaNome={m.nome}>
+                    {(open) => (
+                      <Button variant="ghost" size="icon" title="Documentos" onClick={open}>
+                        <FileText className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </DocumentosDrawerButton>
+                </Permitido>
+                <Permitido chave="motoristas.editar">
+                  <Link href={`/motoristas/${m.id}`}>
+                    <Button variant="ghost" size="icon" title="Editar">
+                      <Pencil className="h-4 w-4" />
                     </Button>
-                  )}
-                </DocumentosDrawerButton>
-                <Link href={`/motoristas/${m.id}`}>
-                  <Button variant="ghost" size="icon" title="Editar">
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                </Link>
-                <EnviarPushButton
-                  motoristaId={m.id}
-                  motoristaNome={m.nome}
-                  temPushToken={m.temPushToken}
-                />
-                <ConviteWhatsappButton tipo="motorista" id={m.id} nome={m.nome} />
+                  </Link>
+                </Permitido>
+                <Permitido chave="motoristas.editar">
+                  <EnviarPushButton
+                    motoristaId={m.id}
+                    motoristaNome={m.nome}
+                    temPushToken={m.temPushToken}
+                  />
+                </Permitido>
+                <Permitido chave="motoristas.editar">
+                  <ConviteWhatsappButton tipo="motorista" id={m.id} nome={m.nome} />
+                </Permitido>
                 <ExcluirButton perm="motoristas.excluir"
                   path="/admin/motoristas"
                   id={m.id}

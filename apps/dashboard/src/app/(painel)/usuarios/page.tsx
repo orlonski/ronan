@@ -8,6 +8,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { StatusToggle } from "@/components/status-toggle";
 import { ConviteWhatsappButton } from "@/components/convite-whatsapp-button";
 import { EnviarResumoButton } from "@/components/enviar-resumo-button";
+import { Permitido } from "@/components/requer-tela";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -104,15 +105,17 @@ export default function UsuariosPage() {
         size: 96,
         header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
         cell: ({ row }) => (
-          <StatusToggle
-            active={row.original.ativo}
-            onChange={(next) =>
-              update.mutate({ id: row.original.id, body: { ativo: next } })
-            }
-            disabled={row.original.email === currentEmail}
-            size="sm"
-            label
-          />
+          <Permitido chave="usuarios.editar">
+            <StatusToggle
+              active={row.original.ativo}
+              onChange={(next) =>
+                update.mutate({ id: row.original.id, body: { ativo: next } })
+              }
+              disabled={row.original.email === currentEmail}
+              size="sm"
+              label
+            />
+          </Permitido>
         ),
       },
       {
@@ -122,11 +125,13 @@ export default function UsuariosPage() {
         header: () => <span className="block text-center">Ações</span>,
         cell: ({ row }) => (
           <div className="flex justify-center">
-            <Link href={`/usuarios/${row.original.id}`}>
-              <Button variant="ghost" size="icon" title="Editar">
-                <Pencil className="h-4 w-4" />
-              </Button>
-            </Link>
+            <Permitido chave="usuarios.editar">
+              <Link href={`/usuarios/${row.original.id}`}>
+                <Button variant="ghost" size="icon" title="Editar">
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              </Link>
+            </Permitido>
             <ConviteWhatsappButton
               tipo="user"
               id={row.original.id}
@@ -162,11 +167,13 @@ export default function UsuariosPage() {
         </div>
         <div className="flex items-center gap-2">
           <ViewModeToggle value={viewMode} onChange={setViewMode} />
-          <Link href="/usuarios/novo">
-            <Button>
-              <Plus className="h-4 w-4" /> Novo usuário
-            </Button>
-          </Link>
+          <Permitido chave="usuarios.criar">
+            <Link href="/usuarios/novo">
+              <Button>
+                <Plus className="h-4 w-4" /> Novo usuário
+              </Button>
+            </Link>
+          </Permitido>
         </div>
       </header>
 
@@ -235,19 +242,23 @@ export default function UsuariosPage() {
               </div>
 
               <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
-                <StatusToggle
-                  active={u.ativo}
-                  onChange={(next) =>
-                    update.mutate({ id: u.id, body: { ativo: next } })
-                  }
-                  disabled={u.email === currentEmail}
-                  size="sm"
-                />
-                <Link href={`/usuarios/${u.id}`}>
-                  <Button variant="ghost" size="icon" title="Editar">
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                </Link>
+                <Permitido chave="usuarios.editar">
+                  <StatusToggle
+                    active={u.ativo}
+                    onChange={(next) =>
+                      update.mutate({ id: u.id, body: { ativo: next } })
+                    }
+                    disabled={u.email === currentEmail}
+                    size="sm"
+                  />
+                </Permitido>
+                <Permitido chave="usuarios.editar">
+                  <Link href={`/usuarios/${u.id}`}>
+                    <Button variant="ghost" size="icon" title="Editar">
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </Link>
+                </Permitido>
                 <ConviteWhatsappButton tipo="user" id={u.id} nome={u.nome} />
                 {u.whatsappResumo && (
                   <EnviarResumoButton userId={u.id} nome={u.nome} />

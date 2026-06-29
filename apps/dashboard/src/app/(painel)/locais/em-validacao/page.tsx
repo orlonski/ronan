@@ -6,6 +6,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
 import { ExcluirButton } from "@/components/excluir-button";
+import { Permitido } from "@/components/requer-tela";
 import { partesSP } from "@/lib/datetime-br";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -154,24 +155,28 @@ export default function LocaisEmValidacaoPage() {
         header: () => <span className="block text-center">Ações</span>,
         cell: ({ row }) => (
           <div className="flex items-center justify-center gap-1">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => homologar.mutate(row.original.id)}
-              disabled={homologar.isPending}
-              title="Homologar — confirma manualmente como válido"
-            >
-              <Check className="h-3.5 w-3.5" />
-              <span className="ml-1">Homologar</span>
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setMesclando(row.original)}
-              title="Mesclar em outro local existente"
-            >
-              <GitMerge className="h-3.5 w-3.5" />
-            </Button>
+            <Permitido chave="locais.homologar">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => homologar.mutate(row.original.id)}
+                disabled={homologar.isPending}
+                title="Homologar — confirma manualmente como válido"
+              >
+                <Check className="h-3.5 w-3.5" />
+                <span className="ml-1">Homologar</span>
+              </Button>
+            </Permitido>
+            <Permitido chave="locais.homologar">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setMesclando(row.original)}
+                title="Mesclar em outro local existente"
+              >
+                <GitMerge className="h-3.5 w-3.5" />
+              </Button>
+            </Permitido>
             <ExcluirButton perm="locais.excluir"
               path={PATH}
               id={row.original.id}

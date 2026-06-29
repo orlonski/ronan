@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { use, useState } from "react";
 import { ExcluirButton } from "@/components/excluir-button";
+import { Permitido } from "@/components/requer-tela";
 
 // Leaflet quebra com SSR; carrega só no cliente.
 const TrajetoMapPlayer = dynamic(
@@ -286,12 +287,14 @@ export default function ViagemDetalhePage({
         </div>
         <div className="flex items-center gap-2">
           {v.matchesFechamento.length === 0 ? (
-            <Link href={`/viagens/${v.id}/editar`}>
-              <Button variant="outline" size="sm">
-                <Edit3 className="h-4 w-4" />
-                Editar
-              </Button>
-            </Link>
+            <Permitido chave="viagens.editar">
+              <Link href={`/viagens/${v.id}/editar`}>
+                <Button variant="outline" size="sm">
+                  <Edit3 className="h-4 w-4" />
+                  Editar
+                </Button>
+              </Link>
+            </Permitido>
           ) : (
             <Button
               variant="outline"
@@ -615,18 +618,20 @@ export default function ViagemDetalhePage({
                 <h3 className="flex items-center gap-2 text-base font-medium">
                   <MapPin className="h-4 w-4" /> Trajeto da viagem
                 </h3>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => recalcular.mutate()}
-                  disabled={recalcular.isPending}
-                  title="Reprocessa o trajeto via OSRM (atualiza polilinha e km de cache)"
-                >
-                  <RefreshCw
-                    className={`h-4 w-4 ${recalcular.isPending ? "animate-spin" : ""}`}
-                  />
-                  {recalcular.isPending ? "Recalculando…" : "Recalcular trajeto"}
-                </Button>
+                <Permitido chave="viagens.editar">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => recalcular.mutate()}
+                    disabled={recalcular.isPending}
+                    title="Reprocessa o trajeto via OSRM (atualiza polilinha e km de cache)"
+                  >
+                    <RefreshCw
+                      className={`h-4 w-4 ${recalcular.isPending ? "animate-spin" : ""}`}
+                    />
+                    {recalcular.isPending ? "Recalculando…" : "Recalcular trajeto"}
+                  </Button>
+                </Permitido>
               </div>
               <MapaTrajetoViagem
                 carga={

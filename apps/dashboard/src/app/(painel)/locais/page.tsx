@@ -15,6 +15,7 @@ import {
 import type { ColumnDef } from "@tanstack/react-table";
 import { useQuery } from "@tanstack/react-query";
 import { StatusToggle } from "@/components/status-toggle";
+import { Permitido } from "@/components/requer-tela";
 import { ExcluirButton } from "@/components/excluir-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -217,23 +218,27 @@ export default function LocaisPage() {
         header: () => <span className="block text-center">Ações</span>,
         cell: ({ row }) => (
           <div className="flex items-center justify-center gap-2">
-            <StatusToggle
-              active={row.original.ativo}
-              onChange={(next) =>
-                update.mutate({ id: row.original.id, body: { ativo: next } })
-              }
-              size="sm"
-            />
+            <Permitido chave="locais.editar">
+              <StatusToggle
+                active={row.original.ativo}
+                onChange={(next) =>
+                  update.mutate({ id: row.original.id, body: { ativo: next } })
+                }
+                size="sm"
+              />
+            </Permitido>
             <Link href={`/locais/${row.original.id}/ver`}>
               <Button variant="ghost" size="icon" title="Visualizar">
                 <Eye className="h-4 w-4" />
               </Button>
             </Link>
-            <Link href={`/locais/${row.original.id}`}>
-              <Button variant="ghost" size="icon" title="Editar">
-                <Pencil className="h-4 w-4" />
-              </Button>
-            </Link>
+            <Permitido chave="locais.editar">
+              <Link href={`/locais/${row.original.id}`}>
+                <Button variant="ghost" size="icon" title="Editar">
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              </Link>
+            </Permitido>
             <ExcluirButton perm="locais.excluir"
               path="/admin/locais"
               id={row.original.id}
@@ -262,11 +267,13 @@ export default function LocaisPage() {
               <AlertCircle className="h-4 w-4" /> Em validação
             </Button>
           </Link>
-          <Link href="/locais/novo">
-            <Button>
-              <Plus className="h-4 w-4" /> Novo local
-            </Button>
-          </Link>
+          <Permitido chave="locais.criar">
+            <Link href="/locais/novo">
+              <Button>
+                <Plus className="h-4 w-4" /> Novo local
+              </Button>
+            </Link>
+          </Permitido>
         </div>
       </header>
 
@@ -406,23 +413,27 @@ export default function LocaisPage() {
               </div>
 
               <div className="flex shrink-0 items-center justify-end gap-1 text-muted-foreground">
-                <StatusToggle
-                  active={l.ativo}
-                  onChange={(next) =>
-                    update.mutate({ id: l.id, body: { ativo: next } })
-                  }
-                  size="sm"
-                />
+                <Permitido chave="locais.editar">
+                  <StatusToggle
+                    active={l.ativo}
+                    onChange={(next) =>
+                      update.mutate({ id: l.id, body: { ativo: next } })
+                    }
+                    size="sm"
+                  />
+                </Permitido>
                 <Link href={`/locais/${l.id}/ver`}>
                   <Button variant="ghost" size="icon" title="Visualizar">
                     <Eye className="h-4 w-4" />
                   </Button>
                 </Link>
-                <Link href={`/locais/${l.id}`}>
-                  <Button variant="ghost" size="icon" title="Editar">
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                </Link>
+                <Permitido chave="locais.editar">
+                  <Link href={`/locais/${l.id}`}>
+                    <Button variant="ghost" size="icon" title="Editar">
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </Link>
+                </Permitido>
                 <ExcluirButton perm="locais.excluir"
                   path="/admin/locais"
                   id={l.id}
