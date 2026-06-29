@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RECURSOS_LABEL } from "@ronan/shared-types";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { RequerTela } from "@/components/requer-tela";
 import { cn } from "@/lib/utils";
@@ -25,9 +26,22 @@ type Papel = {
 const PATH_PAPEIS = "/admin/papeis";
 const PATH_PERM = "/admin/permissoes";
 
+// Agrupa as permissões de um módulo por recurso (parte antes do "."), mantendo
+// a ordem de chegada. Cada linha da matriz é um recurso com suas ações.
+function agruparPorRecurso(itens: PermissaoRow[]): [string, PermissaoRow[]][] {
+  const map = new Map<string, PermissaoRow[]>();
+  for (const it of itens) {
+    const recurso = it.chave.split(".")[0] ?? it.chave;
+    const arr = map.get(recurso) ?? [];
+    arr.push(it);
+    map.set(recurso, arr);
+  }
+  return [...map.entries()];
+}
+
 export default function PermissoesPage() {
   return (
-    <RequerTela chave="tela.permissoes">
+    <RequerTela chave="permissoes.gerenciar">
       <PermissoesInner />
     </RequerTela>
   );
@@ -239,24 +253,36 @@ function PermissoesInner() {
                       {todos ? "Desmarcar todos" : "Marcar todos"}
                     </button>
                   </div>
-                  <div className="grid grid-cols-1 gap-x-4 p-2 sm:grid-cols-2">
-                    {itens.map((it) => (
-                      <label
-                        key={it.chave}
-                        className={cn(
-                          "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted",
-                          bloqueado && "cursor-not-allowed opacity-60",
-                        )}
+                  <div className="divide-y">
+                    {agruparPorRecurso(itens).map(([recurso, acoes]) => (
+                      <div
+                        key={recurso}
+                        className="flex flex-col gap-1 p-3 sm:flex-row sm:items-center sm:gap-3"
                       >
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-input"
-                          checked={form.permissoes.has(it.chave)}
-                          disabled={bloqueado}
-                          onChange={() => toggle(it.chave)}
-                        />
-                        <span>{it.titulo}</span>
-                      </label>
+                        <span className="w-44 shrink-0 text-sm font-medium">
+                          {RECURSOS_LABEL[recurso] ?? recurso}
+                        </span>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1">
+                          {acoes.map((it) => (
+                            <label
+                              key={it.chave}
+                              className={cn(
+                                "flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-1 text-sm hover:bg-muted",
+                                bloqueado && "cursor-not-allowed opacity-60",
+                              )}
+                            >
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-input"
+                                checked={form.permissoes.has(it.chave)}
+                                disabled={bloqueado}
+                                onChange={() => toggle(it.chave)}
+                              />
+                              <span>{it.titulo}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </div>

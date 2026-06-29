@@ -19,6 +19,7 @@ import { paginationQuerySchema } from "../../common/pagination";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
+import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import type { AuthAdminUser } from "../../auth/types";
 import { AbastecimentosAdminService } from "./abastecimentos.service";
 
@@ -61,6 +62,7 @@ export class AbastecimentosAdminController {
     return this.service.historico(id);
   }
 
+  @RequerPermissao("abastecimentos.editar")
   @Patch(":id")
   atualizar(
     @Param("id") id: string,
@@ -72,6 +74,7 @@ export class AbastecimentosAdminController {
   }
 
   @Roles("ADMIN")
+  @RequerPermissao("abastecimentos.excluir")
   @Delete(":id")
   @HttpCode(204)
   async excluir(@Param("id") id: string) {
@@ -90,6 +93,7 @@ export class AbastecimentosAdminController {
     res.send(buffer);
   }
 
+  @RequerPermissao("abastecimentos.editar")
   @Patch(":id/fotos/:fotoId")
   rotacionarFoto(
     @Param("id") id: string,

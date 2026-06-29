@@ -128,7 +128,7 @@ export default function AbastecimentoDetalhePage({
             Editar
           </Button>
         </Link>
-        <ExcluirButton
+        <ExcluirButton perm="abastecimentos.excluir"
           path="/admin/abastecimentos"
           id={x.id}
           nomeRecurso={`o abastecimento de ${fmtNum(x.litros, 3)}L`}

@@ -14,6 +14,7 @@ import { z } from "zod";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
+import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import { CamposLayoutService } from "./campos-layout.service";
 
 const TIPOS = ["TEXTO", "NUMERO", "DATA"] as const;
@@ -50,6 +51,7 @@ export class CamposLayoutController {
   }
 
   @Roles("ADMIN")
+  @RequerPermissao("config-campos-layout.editar")
   @Post()
   create(
     @Body(new ZodValidationPipe(CriarCampoSchema))
@@ -59,6 +61,7 @@ export class CamposLayoutController {
   }
 
   @Roles("ADMIN")
+  @RequerPermissao("config-campos-layout.editar")
   @Patch(":id")
   update(
     @Param("id") id: string,
@@ -69,6 +72,7 @@ export class CamposLayoutController {
   }
 
   @Roles("ADMIN")
+  @RequerPermissao("config-campos-layout.editar")
   @Delete(":id")
   @HttpCode(204)
   async remove(@Param("id") id: string) {

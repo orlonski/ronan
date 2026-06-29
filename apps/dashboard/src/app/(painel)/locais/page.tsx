@@ -234,7 +234,7 @@ export default function LocaisPage() {
                 <Pencil className="h-4 w-4" />
               </Button>
             </Link>
-            <ExcluirButton
+            <ExcluirButton perm="locais.excluir"
               path="/admin/locais"
               id={row.original.id}
               nomeRecurso={`o local "${row.original.nome}"`}
@@ -423,7 +423,7 @@ export default function LocaisPage() {
                     <Pencil className="h-4 w-4" />
                   </Button>
                 </Link>
-                <ExcluirButton
+                <ExcluirButton perm="locais.excluir"
                   path="/admin/locais"
                   id={l.id}
                   nomeRecurso={`o local "${l.nome}"`}

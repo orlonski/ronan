@@ -18,6 +18,7 @@ import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { paginationQuerySchema } from "../../common/pagination";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
+import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import { PedagiosRodoviaService } from "./pedagios-rodovia.service";
 import { PedagiosRodoviaConsultaService } from "./pedagios-rodovia-consulta.service";
 
@@ -78,11 +79,13 @@ export class PedagiosRodoviaController {
     return this.service.detalhe(id);
   }
 
+  @RequerPermissao("pedagios.criar")
   @Post()
   criar(@Body(new ZodValidationPipe(CriarInput)) body: z.infer<typeof CriarInput>) {
     return this.service.criar(body);
   }
 
+  @RequerPermissao("pedagios.editar")
   @Patch(":id")
   atualizar(
     @Param("id") id: string,
@@ -92,6 +95,7 @@ export class PedagiosRodoviaController {
   }
 
   @Roles("ADMIN")
+  @RequerPermissao("pedagios.excluir")
   @Delete(":id")
   @HttpCode(204)
   async excluir(@Param("id") id: string) {
@@ -103,6 +107,7 @@ export class PedagiosRodoviaController {
    * porque o volume é pequeno (~poucas centenas pra BR todo). Idempotente.
    */
   @Roles("ADMIN")
+  @RequerPermissao("pedagios.importar")
   @Post("importar-osm")
   async importarOSM() {
     try {

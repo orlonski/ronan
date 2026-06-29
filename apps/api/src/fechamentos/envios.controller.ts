@@ -16,6 +16,7 @@ import { z } from "zod";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
+import { RequerPermissao } from "../auth/decorators/requer-permissao.decorator";
 import type { AuthAdminUser } from "../auth/types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { paginationQuerySchema } from "../common/pagination";
@@ -54,6 +55,7 @@ export class EnviosController {
     return this.exporter.listar(query);
   }
 
+  @RequerPermissao("envios.criar")
   @Post()
   criar(
     @CurrentUser() user: AuthAdminUser,
@@ -80,6 +82,7 @@ export class EnviosController {
     res.send(arquivo.buffer);
   }
 
+  @RequerPermissao("envios.criar")
   @Post(":envioId/marcar-enviado")
   marcarEnviado(
     @CurrentUser() user: AuthAdminUser,
@@ -95,6 +98,7 @@ export class EnviosController {
   }
 
   @Roles("ADMIN")
+  @RequerPermissao("envios.excluir")
   @Delete(":envioId")
   @HttpCode(204)
   async excluir(@Param("envioId") envioId: string) {

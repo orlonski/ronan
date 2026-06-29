@@ -19,6 +19,7 @@ import { z } from "zod";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
+import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import { LayoutImportService } from "./layout-import.service";
 
 const MAX_AMOSTRA_BYTES = 10 * 1024 * 1024;
@@ -72,6 +73,7 @@ export class LayoutImportController {
    * Sobe planilha amostral e roda IA pra sugerir mapeamento.
    * Aceita ?tipo= pra direcionar a IA pro bloco específico.
    */
+  @RequerPermissao("empresas.layouts")
   @Post("inferir")
   @UseInterceptors(FileInterceptor("arquivo"))
   async inferir(
@@ -106,6 +108,7 @@ export class LayoutImportController {
   }
 
   /** Salva 1 bloco específico. */
+  @RequerPermissao("empresas.layouts")
   @Put(":tipo")
   salvar(
     @Param("empresaId") empresaId: string,
@@ -118,6 +121,7 @@ export class LayoutImportController {
   }
 
   /** Apaga 1 bloco específico. */
+  @RequerPermissao("empresas.layouts")
   @Delete(":tipo")
   @HttpCode(204)
   async limpar(

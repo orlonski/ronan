@@ -24,6 +24,7 @@ import {
 } from "@ronan/shared-types";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
+import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { PrismaService } from "../../prisma/prisma.service";
 import { UploadsService } from "../../uploads/uploads.service";
@@ -144,6 +145,7 @@ export class MotoristasDocumentosController {
     stream.pipe(res);
   }
 
+  @RequerPermissao("motoristas.documentos")
   @Post(":tipo")
   @UseInterceptors(FileInterceptor("arquivo"))
   async upload(
@@ -166,6 +168,7 @@ export class MotoristasDocumentosController {
     return publicShape(doc);
   }
 
+  @RequerPermissao("motoristas.documentos")
   @Patch(":tipo/validade")
   async patchValidade(
     @Param("motoristaId") motoristaId: string,
@@ -178,6 +181,7 @@ export class MotoristasDocumentosController {
     return publicShape(doc);
   }
 
+  @RequerPermissao("motoristas.documentos")
   @Delete(":tipo")
   async remove(
     @Param("motoristaId") motoristaId: string,

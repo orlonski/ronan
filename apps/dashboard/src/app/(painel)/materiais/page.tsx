@@ -78,7 +78,7 @@ export default function MateriaisPage() {
                 <Pencil className="h-4 w-4" />
               </Button>
             </Link>
-            <ExcluirButton
+            <ExcluirButton perm="materiais.excluir"
               path="/admin/materiais"
               id={row.original.id}
               nomeRecurso={`o material "${row.original.nome}"`}
@@ -161,7 +161,7 @@ export default function MateriaisPage() {
                     <Pencil className="h-4 w-4" />
                   </Button>
                 </Link>
-                <ExcluirButton
+                <ExcluirButton perm="materiais.excluir"
                   path="/admin/materiais"
                   id={m.id}
                   nomeRecurso={`o material "${m.nome}"`}

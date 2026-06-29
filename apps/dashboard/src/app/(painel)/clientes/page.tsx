@@ -94,7 +94,7 @@ export default function ClientesPage() {
                 <Pencil className="h-4 w-4" />
               </Button>
             </Link>
-            <ExcluirButton
+            <ExcluirButton perm="clientes.excluir"
               path="/admin/clientes"
               id={row.original.id}
               nomeRecurso={`o cliente "${row.original.nome}"`}
@@ -195,7 +195,7 @@ export default function ClientesPage() {
                     <Pencil className="h-4 w-4" />
                   </Button>
                 </Link>
-                <ExcluirButton
+                <ExcluirButton perm="clientes.excluir"
                   path="/admin/clientes"
                   id={c.id}
                   nomeRecurso={`o cliente "${c.nome}"`}

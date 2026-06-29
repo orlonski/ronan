@@ -4,6 +4,7 @@ import { AtualizarPapelInput, CriarPapelInput } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
+import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import { PapeisService } from "./papeis.service";
 
 @ApiTags("admin/papeis")
@@ -24,11 +25,13 @@ export class PapeisController {
     return this.service.findOne(id);
   }
 
+  @RequerPermissao("permissoes.gerenciar")
   @Post()
   create(@Body(new ZodValidationPipe(CriarPapelInput)) body: CriarPapelInput) {
     return this.service.create(body);
   }
 
+  @RequerPermissao("permissoes.gerenciar")
   @Patch(":id")
   update(
     @Param("id") id: string,
@@ -37,6 +40,7 @@ export class PapeisController {
     return this.service.update(id, body);
   }
 
+  @RequerPermissao("permissoes.gerenciar")
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.service.remove(id);

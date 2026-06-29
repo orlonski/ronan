@@ -140,7 +140,7 @@ export default function FechamentoDetalhePage({
             <Download className="h-4 w-4" />
             {exportar.isPending ? "Gerando..." : "Exportar planilha"}
           </Button>
-          <ExcluirButton
+          <ExcluirButton perm="fechamentos.excluir"
             path="/admin/fechamentos"
             id={f.id}
             nomeRecurso={`o fechamento de ${f.empresa.nome} (${fmtBR(f.periodoInicio)} → ${fmtBR(f.periodoFim)})`}

@@ -113,7 +113,7 @@ export default function PedagiosRodoviaPage() {
               }
               size="sm"
             />
-            <ExcluirButton
+            <ExcluirButton perm="pedagios.excluir"
               path={PATH}
               id={row.original.id}
               nomeRecurso={`o pedágio "${row.original.nome}"`}
@@ -209,7 +209,7 @@ export default function PedagiosRodoviaPage() {
                   }
                   size="sm"
                 />
-                <ExcluirButton
+                <ExcluirButton perm="pedagios.excluir"
                   path={PATH}
                   id={p.id}
                   nomeRecurso={`o pedágio "${p.nome}"`}

@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useSession } from "next-auth/react";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { usePermissoes } from "@/lib/permissoes";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/confirm-dialog";
 
@@ -27,6 +27,7 @@ export function ExcluirButton({
   variant = "ghost",
   disabled = false,
   label,
+  perm,
 }: {
   /** Path base do endpoint admin (ex: "/admin/motoristas") */
   path: string;
@@ -41,14 +42,16 @@ export function ExcluirButton({
   disabled?: boolean;
   /** Quando size != "icon", texto do botão */
   label?: string;
+  /** Permissão exigida (ex: "motoristas.excluir"). Sem ela, não renderiza. */
+  perm?: string;
 }) {
-  const { data: session } = useSession();
+  const { temPermissao } = usePermissoes();
   const token = useAuthToken();
   const qc = useQueryClient();
   const { confirmar, ConfirmDialog } = useConfirm();
   const [working, setWorking] = useState(false);
 
-  const isAdmin = session?.user?.perfil === "ADMIN";
+  const podeExcluir = perm ? temPermissao(perm) : false;
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -62,7 +65,7 @@ export function ExcluirButton({
     },
   });
 
-  if (!isAdmin) return null;
+  if (!podeExcluir) return null;
 
   async function onClick() {
     if (working) return;

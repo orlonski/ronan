@@ -10,6 +10,7 @@ import { paginationQuerySchema } from "../../common/pagination";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
+import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import type { AuthAdminUser } from "../../auth/types";
 import { MateriaisService } from "./materiais.service";
 
@@ -36,6 +37,7 @@ export class MateriaisController {
     return this.service.findOne(id);
   }
 
+  @RequerPermissao("materiais.criar")
   @Post()
   create(
     @Body(new ZodValidationPipe(CriarMaterialInput)) body: CriarMaterialInput,
@@ -44,6 +46,7 @@ export class MateriaisController {
     return this.service.create(body, user.id);
   }
 
+  @RequerPermissao("materiais.editar")
   @Patch(":id")
   update(
     @Param("id") id: string,
@@ -52,6 +55,7 @@ export class MateriaisController {
     return this.service.update(id, body);
   }
 
+  @RequerPermissao("materiais.excluir")
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.service.remove(id);

@@ -172,7 +172,7 @@ export default function LocaisEmValidacaoPage() {
             >
               <GitMerge className="h-3.5 w-3.5" />
             </Button>
-            <ExcluirButton
+            <ExcluirButton perm="locais.excluir"
               path={PATH}
               id={row.original.id}
               nomeRecurso={`o local "${row.original.nome}"`}
@@ -277,7 +277,7 @@ export default function LocaisEmValidacaoPage() {
                   <GitMerge className="h-3.5 w-3.5" />
                   <span className="ml-1">Mesclar</span>
                 </Button>
-                <ExcluirButton
+                <ExcluirButton perm="locais.excluir"
                   path={PATH}
                   id={l.id}
                   nomeRecurso={`o local "${l.nome}"`}

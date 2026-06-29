@@ -7,6 +7,7 @@ import { paginationQuerySchema } from "../../common/pagination";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
+import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import type { AuthAdminUser } from "../../auth/types";
 import { EmpresasService } from "./empresas.service";
 
@@ -34,6 +35,7 @@ export class EmpresasController {
     return this.service.findOne(id);
   }
 
+  @RequerPermissao("empresas.criar")
   @Post()
   create(
     @Body(new ZodValidationPipe(CriarEmpresaInput)) body: CriarEmpresaInput,
@@ -42,6 +44,7 @@ export class EmpresasController {
     return this.service.create(body, user.id);
   }
 
+  @RequerPermissao("empresas.editar")
   @Patch(":id")
   update(
     @Param("id") id: string,
@@ -50,6 +53,7 @@ export class EmpresasController {
     return this.service.update(id, body);
   }
 
+  @RequerPermissao("empresas.excluir")
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.service.remove(id);

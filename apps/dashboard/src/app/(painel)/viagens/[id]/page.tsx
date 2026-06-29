@@ -303,7 +303,7 @@ export default function ViagemDetalhePage({
               Editar
             </Button>
           )}
-          <ExcluirButton
+          <ExcluirButton perm="viagens.excluir"
             path="/admin/viagens"
             id={v.id}
             nomeRecurso={`a viagem ${v.ticket}`}

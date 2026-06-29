@@ -20,6 +20,7 @@ import { z } from "zod";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
+import { RequerPermissao } from "../auth/decorators/requer-permissao.decorator";
 import type { AuthAdminUser } from "../auth/types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { paginationQuerySchema } from "../common/pagination";
@@ -95,6 +96,7 @@ export class FechamentosController {
     return this.service.linhas(id, status, tipo);
   }
 
+  @RequerPermissao("fechamentos.criar")
   @Post()
   @UseInterceptors(FileInterceptor("arquivo", { limits: { fileSize: 50 * 1024 * 1024 } }))
   async upload(
@@ -126,6 +128,7 @@ export class FechamentosController {
     });
   }
 
+  @RequerPermissao("fechamentos.conferir")
   @Post(":id/reprocessar")
   reprocessar(
     @CurrentUser() user: AuthAdminUser,
@@ -140,12 +143,14 @@ export class FechamentosController {
   }
 
   @Roles("ADMIN")
+  @RequerPermissao("fechamentos.excluir")
   @Delete(":id")
   @HttpCode(204)
   async excluir(@Param("id") id: string) {
     await this.service.excluir(id);
   }
 
+  @RequerPermissao("fechamentos.conferir")
   @Post(":id/linhas/:linhaId/resolver")
   resolverLinha(
     @CurrentUser() user: AuthAdminUser,
@@ -163,6 +168,7 @@ export class FechamentosController {
     });
   }
 
+  @RequerPermissao("fechamentos.exportar")
   @Post(":id/exportar")
   exportar(
     @CurrentUser() user: AuthAdminUser,
@@ -191,6 +197,7 @@ export class FechamentosController {
     res.send(arquivo.buffer);
   }
 
+  @RequerPermissao("fechamentos.conferir")
   @Post(":id/envios/marcar-enviado")
   marcarEnviado(
     @CurrentUser() user: AuthAdminUser,

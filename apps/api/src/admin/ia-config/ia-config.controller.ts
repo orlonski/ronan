@@ -4,6 +4,7 @@ import { z } from "zod";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
+import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import type { AuthAdminUser } from "../../auth/types";
 import { IaConfigService } from "./ia-config.service";
@@ -40,6 +41,7 @@ export class IaConfigController {
   }
 
   @Roles("ADMIN")
+  @RequerPermissao("config-ia.editar")
   @Put()
   update(
     @CurrentUser() user: AuthAdminUser,

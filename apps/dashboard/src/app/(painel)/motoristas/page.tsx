@@ -220,7 +220,7 @@ export default function MotoristasPage() {
               temPushToken={row.original.temPushToken}
             />
             <ConviteWhatsappButton tipo="motorista" id={row.original.id} nome={row.original.nome} />
-            <ExcluirButton
+            <ExcluirButton perm="motoristas.excluir"
               path="/admin/motoristas"
               id={row.original.id}
               nomeRecurso={`o motorista "${row.original.nome}"`}
@@ -373,7 +373,7 @@ export default function MotoristasPage() {
                   temPushToken={m.temPushToken}
                 />
                 <ConviteWhatsappButton tipo="motorista" id={m.id} nome={m.nome} />
-                <ExcluirButton
+                <ExcluirButton perm="motoristas.excluir"
                   path="/admin/motoristas"
                   id={m.id}
                   nomeRecurso={`o motorista "${m.nome}"`}

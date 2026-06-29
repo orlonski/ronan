@@ -164,7 +164,7 @@ export default function EnviosPage() {
                   <Send className="h-4 w-4" />
                 </Button>
               )}
-              <ExcluirButton
+              <ExcluirButton perm="envios.excluir"
                 path="/admin/envios"
                 id={e.id}
                 nomeRecurso={`o envio de ${e.empresa?.nome ?? "—"}`}
@@ -305,7 +305,7 @@ export default function EnviosPage() {
                     ) : (
                       <span className="inline-block h-9 w-9" />
                     )}
-                    <ExcluirButton
+                    <ExcluirButton perm="envios.excluir"
                       path="/admin/envios"
                       id={e.id}
                       nomeRecurso={`o envio de ${e.empresa?.nome ?? "—"}`}

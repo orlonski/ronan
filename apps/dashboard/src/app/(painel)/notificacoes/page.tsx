@@ -263,7 +263,7 @@ function NotificacaoCard({ n }: { n: NotificacaoAdminItem }) {
         </div>
 
         <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
-          <ExcluirButton
+          <ExcluirButton perm="notificacoes.excluir"
             path="/admin/notificacoes"
             id={n.id}
             nomeRecurso="esta notificação"
@@ -323,7 +323,7 @@ function NotificacaoRow({ n }: { n: NotificacaoAdminItem }) {
         )}
       </TableCell>
       <TableCell>
-        <ExcluirButton
+        <ExcluirButton perm="notificacoes.excluir"
           path="/admin/notificacoes"
           id={n.id}
           nomeRecurso="esta notificação"

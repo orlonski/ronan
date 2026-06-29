@@ -6,6 +6,7 @@ import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { paginationQuerySchema } from "../../common/pagination";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
+import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import type { AuthAdminUser } from "../../auth/types";
 import { UsersService } from "./users.service";
@@ -42,6 +43,7 @@ export class UsersController {
   }
 
   @Roles("ADMIN")
+  @RequerPermissao("usuarios.criar")
   @Post()
   create(
     @Body(new ZodValidationPipe(CriarUserInput)) body: CriarUserInput,
@@ -51,6 +53,7 @@ export class UsersController {
   }
 
   @Roles("ADMIN")
+  @RequerPermissao("usuarios.editar")
   @Patch(":id")
   update(
     @Param("id") id: string,
@@ -60,6 +63,7 @@ export class UsersController {
   }
 
   @Roles("ADMIN")
+  @RequerPermissao("usuarios.excluir")
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.service.remove(id);

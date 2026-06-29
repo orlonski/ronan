@@ -4,6 +4,7 @@ import { z } from "zod";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
+import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import type { AuthAdminUser } from "../../auth/types";
 import { BuscaLocaisConfigService } from "./busca-locais-config.service";
@@ -38,6 +39,7 @@ export class BuscaLocaisConfigController {
   }
 
   @Roles("ADMIN")
+  @RequerPermissao("config-busca-locais.editar")
   @Put()
   update(
     @CurrentUser() user: AuthAdminUser,

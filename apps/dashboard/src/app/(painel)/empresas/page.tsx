@@ -120,7 +120,7 @@ export default function EmpresasPage() {
                   <Pencil className="h-4 w-4" />
                 </Button>
               </Link>
-              <ExcluirButton
+              <ExcluirButton perm="empresas.excluir"
                 path="/admin/empresas"
                 id={e.id}
                 nomeRecurso={`a empresa "${e.nome}"`}
@@ -238,7 +238,7 @@ export default function EmpresasPage() {
                   }
                   size="sm"
                 />
-                <ExcluirButton
+                <ExcluirButton perm="empresas.excluir"
                   path="/admin/empresas"
                   id={e.id}
                   nomeRecurso={`a empresa "${e.nome}"`}

@@ -14,6 +14,7 @@ import { ConfigService } from "@nestjs/config";
 import { Public } from "../auth/decorators/public.decorator";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
+import { RequerPermissao } from "../auth/decorators/requer-permissao.decorator";
 import { ConviteService } from "./convite.service";
 import { EvolutionClientService } from "./evolution-client.service";
 import { SessaoService } from "./sessao.service";
@@ -118,6 +119,7 @@ export class WhatsappController {
   @ApiBearerAuth()
   @UseGuards(RolesGuard)
   @Roles("ADMIN")
+  @RequerPermissao("whatsapp.gerenciar")
   @Delete("admin/whatsapp/sessoes/:id")
   @HttpCode(204)
   async desvincular(@Param("id") id: string) {

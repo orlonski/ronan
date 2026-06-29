@@ -4,6 +4,7 @@ import { z } from "zod";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
+import { RequerPermissao } from "../auth/decorators/requer-permissao.decorator";
 import type { AuthAdminUser } from "../auth/types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { LayoutEnvioService } from "./layout-envio.service";
@@ -52,6 +53,7 @@ export class LayoutEnvioController {
     return this.service.detalhe(id);
   }
 
+  @RequerPermissao("empresas.layouts")
   @Post()
   criar(
     @CurrentUser() user: AuthAdminUser,
@@ -61,6 +63,7 @@ export class LayoutEnvioController {
     return this.service.criar({ ...body, empresaId, usuarioId: user.id });
   }
 
+  @RequerPermissao("empresas.layouts")
   @Patch(":id")
   atualizar(
     @Param("id") id: string,
@@ -69,6 +72,7 @@ export class LayoutEnvioController {
     return this.service.atualizar({ id, ...body });
   }
 
+  @RequerPermissao("empresas.layouts")
   @Delete(":id")
   remover(@Param("id") id: string) {
     return this.service.remover(id);

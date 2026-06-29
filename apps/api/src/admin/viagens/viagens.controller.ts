@@ -23,6 +23,7 @@ import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { paginationQuerySchema } from "../../common/pagination";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
+import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import type { AuthAdminUser } from "../../auth/types";
 import { ViagensAdminService } from "./viagens.service";
@@ -94,6 +95,7 @@ export class ViagensAdminController {
    * Caso "sem local cadastrado" da auditoria: admin digita o nome, cria o
    * local no GPS de lançamento da viagem e já atribui. Reusa atualizar.
    */
+  @RequerPermissao("descargas-suspeitas.corrigir")
   @Post("descargas-suspeitas/:id/cadastrar-local")
   cadastrarLocalDescarga(
     @Param("id") id: string,
@@ -114,6 +116,7 @@ export class ViagensAdminController {
     return this.service.historico(id);
   }
 
+  @RequerPermissao("viagens.editar")
   @Patch(":id")
   atualizar(
     @Param("id") id: string,
@@ -124,6 +127,7 @@ export class ViagensAdminController {
     return this.service.atualizar(id, body, user.id);
   }
 
+  @RequerPermissao("viagens.editar")
   @Post(":id/recalcular-trajeto")
   recalcularTrajeto(
     @Param("id") id: string,
@@ -132,6 +136,7 @@ export class ViagensAdminController {
     return this.service.recalcularTrajeto(id, user.id);
   }
 
+  @RequerPermissao("viagens.validar")
   @Post(":id/pre-validar")
   preValidar(
     @Param("id") id: string,
@@ -142,6 +147,7 @@ export class ViagensAdminController {
   }
 
   @Roles("ADMIN")
+  @RequerPermissao("viagens.excluir")
   @Delete(":id")
   @HttpCode(204)
   async excluir(@Param("id") id: string) {
@@ -160,6 +166,7 @@ export class ViagensAdminController {
     res.send(buffer);
   }
 
+  @RequerPermissao("viagens.editar")
   @Patch(":id/fotos/:fotoId")
   rotacionarFoto(
     @Param("id") id: string,
@@ -174,6 +181,7 @@ export class ViagensAdminController {
    * de recortar uma melhor, por exemplo). Remove o objeto no MinIO e
    * a linha no DB.
    */
+  @RequerPermissao("viagens.editar")
   @Delete(":id/fotos/:fotoId")
   @HttpCode(204)
   async excluirFoto(
@@ -187,6 +195,7 @@ export class ViagensAdminController {
    * Admin anexa foto a viagem existente. Multipart direto (sem 2-step),
    * já que admin no dashboard sempre tem rede. Registra auditoria.
    */
+  @RequerPermissao("viagens.editar")
   @Post(":id/fotos")
   @UseInterceptors(FileInterceptor("foto"))
   async adicionarFoto(

@@ -13,6 +13,7 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
+import { RequerPermissao } from "../auth/decorators/requer-permissao.decorator";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { AuthAdminUser, AuthMotorista } from "../auth/types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
@@ -120,6 +121,7 @@ export class ErrorsController {
    */
   @UseGuards(RolesGuard)
   @Roles("ADMIN", "OPERADOR")
+  @RequerPermissao("erros.resolver")
   @Patch("grupo/:hash/resolver")
   async resolverGrupo(
     @Param("hash") hash: string,
@@ -130,6 +132,7 @@ export class ErrorsController {
 
   @UseGuards(RolesGuard)
   @Roles("ADMIN", "OPERADOR")
+  @RequerPermissao("erros.resolver")
   @Patch("grupo/:hash/reabrir")
   async reabrirGrupo(@Param("hash") hash: string) {
     return this.service.reabrirGrupo(hash);
