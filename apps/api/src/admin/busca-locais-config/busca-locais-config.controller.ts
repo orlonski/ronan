@@ -32,13 +32,13 @@ const AtualizarSchema = z
 export class BuscaLocaisConfigController {
   constructor(private readonly service: BuscaLocaisConfigService) {}
 
-  @Roles("ADMIN", "OPERADOR")
+  @Roles("ADMIN_USER")
   @Get()
   get() {
     return this.service.get();
   }
 
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
   @RequerPermissao("config-busca-locais.editar")
   @Put()
   update(

@@ -96,7 +96,7 @@ export class ConviteService {
         },
         include: {
           motorista: { select: { nome: true } },
-          user: { select: { nome: true, perfil: true } },
+          user: { select: { nome: true } },
         },
       });
       await tx.whatsappConvite.update({

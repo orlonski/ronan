@@ -7,11 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum PerfilUsuario {
-  ADMIN
-  OPERADOR
-}
-
 enum PapelEmpresa {
   RECEBE_PLANILHA
   MANDA_FECHAMENTO
@@ -169,7 +164,6 @@ model User {
   nome          String
   email         String        @unique
   senhaHash     String
-  perfil        PerfilUsuario @default(OPERADOR)
   ativo         Boolean       @default(true)
   ultimoLoginEm DateTime?
   // Resumo diário no WhatsApp: número (normalizado com DDI) e opt-in.

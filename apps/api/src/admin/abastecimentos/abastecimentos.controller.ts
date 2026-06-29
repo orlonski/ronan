@@ -42,7 +42,7 @@ type ListAbastecimentosQuery = z.infer<typeof ListAbastecimentosQuery>;
 @ApiTags("admin/abastecimentos")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
-@Roles("ADMIN", "OPERADOR")
+@Roles("ADMIN_USER")
 @Controller("admin/abastecimentos")
 export class AbastecimentosAdminController {
   constructor(private readonly service: AbastecimentosAdminService) {}
@@ -73,7 +73,7 @@ export class AbastecimentosAdminController {
     return this.service.atualizar(id, body, user.id);
   }
 
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
   @RequerPermissao("abastecimentos.excluir")
   @Delete(":id")
   @HttpCode(204)

@@ -18,7 +18,7 @@ export class RolesGuard implements CanActivate {
     if (!user) throw new ForbiddenException("Não autenticado");
 
     const userRoles: RoleName[] =
-      user.kind === "ADMIN_USER" ? [user.perfil as RoleName] : ["MOTORISTA"];
+      user.kind === "ADMIN_USER" ? ["ADMIN_USER"] : ["MOTORISTA"];
 
     if (!required.some((r) => userRoles.includes(r))) {
       throw new ForbiddenException("Permissão insuficiente");

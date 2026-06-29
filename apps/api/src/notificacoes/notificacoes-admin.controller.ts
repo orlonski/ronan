@@ -10,7 +10,7 @@ import { NotificacoesService } from "./notificacoes.service";
 @ApiTags("admin/notificacoes")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
-@Roles("ADMIN", "OPERADOR")
+@Roles("ADMIN_USER")
 @Controller("admin/notificacoes")
 export class NotificacoesAdminController {
   constructor(private readonly service: NotificacoesService) {}
@@ -22,7 +22,7 @@ export class NotificacoesAdminController {
     return this.service.listarAdmin(q);
   }
 
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
   @RequerPermissao("notificacoes.excluir")
   @Delete(":id")
   @HttpCode(204)

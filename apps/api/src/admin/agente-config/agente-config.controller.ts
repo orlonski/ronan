@@ -24,13 +24,13 @@ const AtualizarAgenteConfigSchema = z.object({
 export class AgenteConfigController {
   constructor(private readonly service: AgenteConfigService) {}
 
-  @Roles("ADMIN", "OPERADOR")
+  @Roles("ADMIN_USER")
   @Get()
   get() {
     return this.service.get();
   }
 
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
   @RequerPermissao("config-agente.editar")
   @Put()
   update(

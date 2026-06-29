@@ -45,7 +45,7 @@ const ListQuery = paginationQuerySchema.extend({
 @ApiTags("admin/pedagios-rodovia")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
-@Roles("ADMIN", "OPERADOR")
+@Roles("ADMIN_USER")
 @Controller("admin/pedagios-rodovia")
 export class PedagiosRodoviaController {
   private readonly log = new Logger(PedagiosRodoviaController.name);
@@ -94,7 +94,7 @@ export class PedagiosRodoviaController {
     return this.service.atualizar(id, body);
   }
 
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
   @RequerPermissao("pedagios.excluir")
   @Delete(":id")
   @HttpCode(204)
@@ -106,7 +106,7 @@ export class PedagiosRodoviaController {
    * Importa pedágios do OpenStreetMap via Overpass API. Roda síncrono
    * porque o volume é pequeno (~poucas centenas pra BR todo). Idempotente.
    */
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
   @RequerPermissao("pedagios.importar")
   @Post("importar-osm")
   async importarOSM() {

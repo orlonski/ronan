@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,7 +21,6 @@ type ConfigBuscaLocais = {
 const PATH = "/admin/busca-locais-config";
 
 export default function BuscaLocaisConfigPage() {
-  const { data: session } = useSession();
   const token = useAuthToken();
   const qc = useQueryClient();
 
@@ -49,17 +47,6 @@ export default function BuscaLocaisConfigPage() {
       void qc.invalidateQueries({ queryKey: [PATH] });
     },
   });
-
-  if (session?.user?.perfil !== "ADMIN") {
-    return (
-      <div className="rounded-md border bg-muted/30 p-6">
-        <p className="text-sm text-muted-foreground">
-          Acesso restrito a administradores.
-        </p>
-      </div>
-    );
-  }
-
   if (!form) return <p className="text-sm text-muted-foreground">Carregando…</p>;
 
   function set<K extends keyof ConfigBuscaLocais>(k: K, v: ConfigBuscaLocais[K]) {

@@ -37,10 +37,9 @@ export class ErrorsExceptionFilter implements ExceptionFilter {
     // 4xx (client errors) entopem o log sem serem úteis.
     if (status >= 500) {
       const err = exception as Error;
-      const userId =
-        (req as Request & { user?: { id?: string; perfil?: string } }).user?.id;
-      const userType =
-        (req as Request & { user?: { id?: string; perfil?: string } }).user?.perfil;
+      const reqUser = (req as Request & { user?: { id?: string; kind?: string } }).user;
+      const userId = reqUser?.id;
+      const userType = reqUser?.kind;
 
       try {
         await this.errors.reportar({

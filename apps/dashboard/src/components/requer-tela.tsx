@@ -29,13 +29,11 @@ export function Permitido({ chave, children }: { chave: string; children: ReactN
  */
 export function TelaGuard({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { temPermissao, isLoading, perfil, papelNome } = usePermissoes();
+  const { temPermissao, isLoading } = usePermissoes();
 
   const perm = permDaRota(pathname);
   if (!perm) return <>{children}</>;
   if (isLoading) return <p className="text-sm text-muted-foreground">Carregando…</p>;
-  const semPapel = papelNome === null;
-  if (semPapel && perfil === "ADMIN") return <>{children}</>;
   if (!temPermissao(perm)) return <AcessoRestrito />;
   return <>{children}</>;
 }

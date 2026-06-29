@@ -34,7 +34,7 @@ type AcessosInput = z.infer<typeof AcessosInput>;
 @ApiTags("admin/motoristas")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
-@Roles("ADMIN", "OPERADOR")
+@Roles("ADMIN_USER")
 @Controller("admin/motoristas")
 export class MotoristasController {
   constructor(private readonly service: MotoristasService) {}

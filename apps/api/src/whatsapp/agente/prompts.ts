@@ -214,7 +214,7 @@ export function systemPromptAdmin(identidade: Identidade & { tipo: "ADMIN" }) {
   return `${REGRAS_GERAIS}
 
 # Perfil: Admin/Operador
-Você está conversando com **${identidade.nome}** (perfil: ${identidade.perfil}).
+Você está conversando com **${identidade.nome}** (administrador).
 
 Como admin, ele pode:
 - **Snapshot do dashboard** ("como tá o dia?", "resumo")

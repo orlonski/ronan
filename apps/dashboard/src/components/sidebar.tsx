@@ -100,7 +100,7 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const { data: session } = useSession();
-  const { temPermissao } = usePermissoes();
+  const { temPermissao, papelNome } = usePermissoes();
 
   // Itens visíveis por permissão; grupo só aparece se sobrar algum item.
   const gruposVisiveis = GRUPOS.map((g) => ({
@@ -233,7 +233,7 @@ export function Sidebar({
             <UserCircle className="h-5 w-5 text-muted-foreground" />
             <div className="min-w-0">
               <p className="truncate font-medium">{session?.user?.name ?? "—"}</p>
-              <p className="truncate text-xs text-muted-foreground">{session?.user?.perfil}</p>
+              <p className="truncate text-xs text-muted-foreground">{papelNome ?? "—"}</p>
             </div>
           </div>
           <Button

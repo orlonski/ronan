@@ -23,16 +23,15 @@ import { useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePaginatedList, useUpdateResource } from "@/lib/client-api";
 
-type Perfil = "ADMIN" | "OPERADOR";
 type User = {
   id: string;
   nome: string;
   email: string;
-  perfil: Perfil;
   ativo: boolean;
   ultimoLoginEm: string | null;
   whatsappResumo: string | null;
   receberResumoDiario: boolean;
+  papel: { id: string; nome: string } | null;
   criadoPor: { id: string; nome: string } | null;
 };
 const PATH = "/admin/users";
@@ -52,12 +51,11 @@ function fmtUltimoLogin(iso: string | null): string {
 }
 
 export default function UsuariosPage() {
-  const { data: session } = useSession();
   const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
-  const isAdmin = session?.user?.perfil === "ADMIN";
-  const list = usePaginatedList<User>(PATH, tableState, { enabled: isAdmin });
+  const list = usePaginatedList<User>(PATH, tableState);
   const update = useUpdateResource<{ ativo?: boolean }, User>(PATH, PATH);
   const { viewMode, setViewMode } = useListViewMode("usuarios");
+  const { data: session } = useSession();
 
   const currentEmail = session?.user?.email ?? "";
 
@@ -75,9 +73,12 @@ export default function UsuariosPage() {
         header: ({ column }) => <DataTableColumnHeader column={column} title="Email" />,
       },
       {
-        id: "perfil",
-        accessorKey: "perfil",
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Perfil" />,
+        id: "papel",
+        enableSorting: false,
+        header: () => <span>Papel</span>,
+        cell: ({ row }) => (
+          <span className="text-sm">{row.original.papel?.nome ?? "—"}</span>
+        ),
       },
       {
         id: "ultimoLoginEm",
@@ -150,14 +151,6 @@ export default function UsuariosPage() {
     [update, currentEmail],
   );
 
-  if (!isAdmin) {
-    return (
-      <div className="rounded-md border bg-muted/30 p-6">
-        <p className="text-sm text-muted-foreground">Acesso restrito a administradores.</p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -191,16 +184,6 @@ export default function UsuariosPage() {
             filters={
               <>
                 <Combobox
-                  value={tableState.filters.perfil}
-                  onChange={(v) => tableState.setFilter("perfil", v)}
-                  placeholder="Perfil"
-                  showSearch={false}
-                  options={[
-                    { value: "ADMIN", label: "Admin" },
-                    { value: "OPERADOR", label: "Operador" },
-                  ]}
-                />
-                <Combobox
                   value={tableState.filters.ativo}
                   onChange={(v) => tableState.setFilter("ativo", v)}
                   placeholder="Status"
@@ -219,14 +202,8 @@ export default function UsuariosPage() {
         renderMobileCard={(u) => (
           <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">
             <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-6">
-              <Badge
-                className={
-                  u.perfil === "ADMIN"
-                    ? "border-violet-200 bg-violet-50 text-violet-900"
-                    : "border-slate-200 bg-slate-50 text-slate-800"
-                }
-              >
-                {u.perfil}
+              <Badge className="border-slate-200 bg-slate-50 text-slate-800">
+                {u.papel?.nome ?? "—"}
               </Badge>
 
               <div className="min-w-0 space-y-1">

@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useSession } from "next-auth/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Lock, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,7 +30,6 @@ type Campo = {
 const PATH = "/admin/campos-layout";
 
 export default function CamposLayoutPage() {
-  const { data: session } = useSession();
   const token = useAuthToken();
   const qc = useQueryClient();
 
@@ -55,17 +53,6 @@ export default function CamposLayoutPage() {
       fetchApi<void>(`${PATH}/${id}`, { method: "DELETE", token }),
     onSuccess: () => qc.invalidateQueries({ queryKey: [PATH] }),
   });
-
-  if (session?.user?.perfil !== "ADMIN") {
-    return (
-      <div className="rounded-md border bg-muted/30 p-6">
-        <p className="text-sm text-muted-foreground">
-          Acesso restrito a administradores.
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">

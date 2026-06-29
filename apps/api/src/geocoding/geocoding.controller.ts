@@ -7,7 +7,7 @@ import { GeocodingService } from "./geocoding.service";
 @ApiTags("geocoding")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
-@Roles("ADMIN", "OPERADOR", "MOTORISTA")
+@Roles("ADMIN_USER", "MOTORISTA")
 @Controller("geocoding")
 export class GeocodingController {
   constructor(private readonly service: GeocodingService) {}

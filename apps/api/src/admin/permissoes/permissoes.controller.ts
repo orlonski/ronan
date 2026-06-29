@@ -1,13 +1,15 @@
 import { Controller, Get, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Roles } from "../../auth/decorators/roles.decorator";
+import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { PermissoesService } from "./permissoes.service";
 
 @ApiTags("admin/permissoes")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
-@Roles("ADMIN")
+@Roles("ADMIN_USER")
+@RequerPermissao("permissoes.gerenciar")
 @Controller("admin/permissoes")
 export class PermissoesController {
   constructor(private readonly service: PermissoesService) {}

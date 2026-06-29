@@ -28,7 +28,7 @@ const ListarQuery = z.object({
 @ApiTags("admin/inbox")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
-@Roles("ADMIN", "OPERADOR")
+@Roles("ADMIN_USER")
 @Controller("admin/inbox")
 export class AdminInboxController {
   constructor(private readonly service: AdminInboxService) {}

@@ -8,7 +8,6 @@ declare module "next-auth" {
       name?: string | null;
       email?: string | null;
       image?: string | null;
-      perfil?: "ADMIN" | "OPERADOR";
     };
   }
 }
@@ -17,6 +16,5 @@ declare module "next-auth/jwt" {
   interface JWT {
     accessToken?: string;
     refreshToken?: string;
-    perfil?: "ADMIN" | "OPERADOR";
   }
 }

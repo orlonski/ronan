@@ -19,7 +19,7 @@ type ListVeiculosQuery = z.infer<typeof ListVeiculosQuery>;
 @ApiTags("admin/veiculos")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
-@Roles("ADMIN", "OPERADOR")
+@Roles("ADMIN_USER")
 @Controller("admin/veiculos")
 export class VeiculosController {
   constructor(private readonly service: VeiculosService) {}

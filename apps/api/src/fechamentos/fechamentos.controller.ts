@@ -69,7 +69,7 @@ const ALLOWED_MIMES = [
 @ApiTags("admin/fechamentos")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
-@Roles("ADMIN", "OPERADOR")
+@Roles("ADMIN_USER")
 @Controller("admin/fechamentos")
 export class FechamentosController {
   constructor(
@@ -142,7 +142,7 @@ export class FechamentosController {
     return this.service.reprocessar(id, user.id, tipos);
   }
 
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
   @RequerPermissao("fechamentos.excluir")
   @Delete(":id")
   @HttpCode(204)

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useSession } from "next-auth/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Save, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -94,7 +93,6 @@ function frasePraJanela(d: number): string {
 }
 
 export default function IaConfigPage() {
-  const { data: session } = useSession();
   const token = useAuthToken();
   const qc = useQueryClient();
 
@@ -150,17 +148,6 @@ export default function IaConfigPage() {
   const totalSugestoes = historico.data?.length ?? 0;
   const fechariam = (historico.data ?? []).filter((s) => s.confidence >= confidence).length;
   const reveriam = totalSugestoes - fechariam;
-
-  if (session?.user?.perfil !== "ADMIN") {
-    return (
-      <div className="rounded-md border bg-muted/30 p-6">
-        <p className="text-sm text-muted-foreground">
-          Acesso restrito a administradores.
-        </p>
-      </div>
-    );
-  }
-
   if (cfg.isLoading) return <p className="text-sm text-muted-foreground">Carregando…</p>;
 
   function aplicarPreset(p: (typeof PRESETS)[number]) {

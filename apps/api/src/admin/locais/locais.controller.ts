@@ -37,7 +37,7 @@ const MesclarInput = z.object({ destinoId: z.string().uuid() });
 @ApiTags("admin/locais")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
-@Roles("ADMIN", "OPERADOR")
+@Roles("ADMIN_USER")
 @Controller("admin/locais")
 export class LocaisController {
   constructor(private readonly service: LocaisService) {}

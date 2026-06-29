@@ -13,7 +13,7 @@ export class ResumoController {
   constructor(private readonly service: ResumoService) {}
 
   /** Envia o resumo atualizado agora pro WhatsApp do usuário informado. */
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
   @RequerPermissao("usuarios.editar")
   @Post("enviar/:userId")
   enviar(@Param("userId") userId: string) {

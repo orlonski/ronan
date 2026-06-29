@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, MessageCircle, Power, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -70,7 +69,6 @@ const MODELOS_GEMINI = [
 ];
 
 export default function AgenteConfigPage() {
-  const { data: session } = useSession();
   const token = useAuthToken();
   const qc = useQueryClient();
 
@@ -113,17 +111,6 @@ export default function AgenteConfigPage() {
       void qc.invalidateQueries({ queryKey: [PATH] });
     },
   });
-
-  if (session?.user?.perfil !== "ADMIN") {
-    return (
-      <div className="rounded-md border bg-muted/30 p-6">
-        <p className="text-sm text-muted-foreground">
-          Acesso restrito a administradores.
-        </p>
-      </div>
-    );
-  }
-
   if (cfg.isLoading) return <p className="text-sm text-muted-foreground">Carregando…</p>;
 
   async function salvar() {

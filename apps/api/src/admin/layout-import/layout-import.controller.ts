@@ -53,7 +53,7 @@ const SalvarLayoutSchema = z.object({
 @ApiTags("admin/layout-import")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
-@Roles("ADMIN", "OPERADOR")
+@Roles("ADMIN_USER")
 @Controller("admin/empresas/:empresaId/layout-import")
 export class LayoutImportController {
   constructor(private readonly service: LayoutImportService) {}

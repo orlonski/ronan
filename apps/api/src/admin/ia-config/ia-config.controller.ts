@@ -28,19 +28,19 @@ const AtualizarIaConfigSchema = z.object({
 export class IaConfigController {
   constructor(private readonly service: IaConfigService) {}
 
-  @Roles("ADMIN", "OPERADOR")
+  @Roles("ADMIN_USER")
   @Get()
   get() {
     return this.service.get();
   }
 
-  @Roles("ADMIN", "OPERADOR")
+  @Roles("ADMIN_USER")
   @Get("historico-sugestoes")
   historico() {
     return this.service.historicoSugestoes();
   }
 
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
   @RequerPermissao("config-ia.editar")
   @Put()
   update(

@@ -72,7 +72,7 @@ function publicShape(doc: {
 @ApiTags("admin/motoristas/documentos")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
-@Roles("ADMIN", "OPERADOR")
+@Roles("ADMIN_USER")
 @Controller("admin/motoristas/:motoristaId/documentos")
 export class MotoristasDocumentosController {
   constructor(

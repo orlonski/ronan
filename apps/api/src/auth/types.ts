@@ -1,11 +1,10 @@
-import type { PerfilUsuario, StatusMotorista } from "@prisma/client";
+import type { StatusMotorista } from "@prisma/client";
 
 export type AuthAdminUser = {
   kind: "ADMIN_USER";
   id: string;
   nome: string;
   email: string;
-  perfil: PerfilUsuario;
   /** Permissões efetivas (chaves do papel). Vazio = nenhum papel atribuído. */
   permissoes: string[];
 };

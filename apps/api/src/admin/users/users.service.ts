@@ -1,12 +1,12 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import type { PerfilUsuario, Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { ASSUNTOS_RESUMO_IDS, type CriarUserInput, type AtualizarUserInput } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuthService } from "../../auth/auth.service";
+import { PAPEL_OPERADOR } from "../permissoes/permissoes.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 
 type ListUsersParams = PaginationQuery & {
-  perfil?: PerfilUsuario;
   ativo?: "true" | "false";
 };
 
@@ -14,7 +14,6 @@ const SAFE_SELECT = {
   id: true,
   nome: true,
   email: true,
-  perfil: true,
   ativo: true,
   ultimoLoginEm: true,
   whatsappResumo: true,
@@ -32,7 +31,6 @@ export class UsersService {
 
   list(params: ListUsersParams) {
     const where: Prisma.UserWhereInput = {};
-    if (params.perfil) where.perfil = params.perfil;
     if (params.ativo === "true") where.ativo = true;
     if (params.ativo === "false") where.ativo = false;
     return paginate(this.prisma.user, {
@@ -42,7 +40,6 @@ export class UsersService {
       sortable: {
         nome: "nome",
         email: "email",
-        perfil: "perfil",
         ativo: "ativo",
         ultimoLoginEm: "ultimoLoginEm",
         criadoEm: "criadoEm",
@@ -59,18 +56,19 @@ export class UsersService {
   async create(data: CriarUserInput, usuarioId: string) {
     const exists = await this.prisma.user.findUnique({ where: { email: data.email } });
     if (exists) throw new ConflictException("Email já cadastrado");
-    // Sem papel escolhido → herda o padrão pelo perfil (evita usuário sem acesso).
+    // Sem papel escolhido → cai no Operador (evita usuário sem acesso nenhum).
     let papelId = data.papelId ?? null;
     if (!papelId) {
-      const nome = data.perfil === "ADMIN" ? "Administrador" : "Operador";
-      const papel = await this.prisma.papel.findUnique({ where: { nome }, select: { id: true } });
+      const papel = await this.prisma.papel.findUnique({
+        where: { nome: PAPEL_OPERADOR },
+        select: { id: true },
+      });
       papelId = papel?.id ?? null;
     }
     return this.prisma.user.create({
       data: {
         nome: data.nome,
         email: data.email,
-        perfil: data.perfil,
         senhaHash: await AuthService.hashPassword(data.senha),
         whatsappResumo: data.whatsappResumo || null,
         receberResumoDiario: data.receberResumoDiario ?? false,

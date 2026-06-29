@@ -6,7 +6,6 @@ import { useApiQuery } from "@/lib/client-api";
 type MePayload = {
   id: string;
   nome: string;
-  perfil: "ADMIN" | "OPERADOR";
   permissoes: string[];
   papel: { id: string; nome: string } | null;
 };
@@ -23,7 +22,6 @@ export function usePermissoes() {
   const set = useMemo(() => new Set(data?.permissoes ?? []), [data]);
   return {
     isLoading,
-    perfil: data?.perfil,
     papelNome: data?.papel?.nome ?? null,
     temPermissao: (chave: string) => set.has(chave),
   };

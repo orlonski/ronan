@@ -70,7 +70,7 @@ export class ErrorsController {
    * Endpoint do dashboard pra reportar erros JS do navegador.
    */
   @UseGuards(RolesGuard)
-  @Roles("ADMIN", "OPERADOR")
+  @Roles("ADMIN_USER")
   @Post("dashboard")
   @HttpCode(204)
   async reportarDashboard(
@@ -82,14 +82,14 @@ export class ErrorsController {
       ...body,
       origem: "dashboard",
       userId: user.id,
-      userType: user.perfil,
+      userType: "ADMIN_USER",
     });
   }
 
   // ===== Admin: ler erros =====
 
   @UseGuards(RolesGuard)
-  @Roles("ADMIN", "OPERADOR")
+  @Roles("ADMIN_USER")
   @Get("agrupados")
   agrupados(
     @Query(new ZodValidationPipe(ListarQuery))
@@ -99,7 +99,7 @@ export class ErrorsController {
   }
 
   @UseGuards(RolesGuard)
-  @Roles("ADMIN", "OPERADOR")
+  @Roles("ADMIN_USER")
   @Get()
   listar(
     @Query(new ZodValidationPipe(ListarQuery))
@@ -109,7 +109,7 @@ export class ErrorsController {
   }
 
   @UseGuards(RolesGuard)
-  @Roles("ADMIN", "OPERADOR")
+  @Roles("ADMIN_USER")
   @Get(":id")
   detalhe(@Param("id") id: string) {
     return this.service.detalhe(id);
@@ -120,7 +120,7 @@ export class ErrorsController {
    * a aparecer (novo evento), entra como pendente de novo — não silencia.
    */
   @UseGuards(RolesGuard)
-  @Roles("ADMIN", "OPERADOR")
+  @Roles("ADMIN_USER")
   @RequerPermissao("erros.resolver")
   @Patch("grupo/:hash/resolver")
   async resolverGrupo(
@@ -131,7 +131,7 @@ export class ErrorsController {
   }
 
   @UseGuards(RolesGuard)
-  @Roles("ADMIN", "OPERADOR")
+  @Roles("ADMIN_USER")
   @RequerPermissao("erros.resolver")
   @Patch("grupo/:hash/reabrir")
   async reabrirGrupo(@Param("hash") hash: string) {

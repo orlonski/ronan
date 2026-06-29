@@ -319,7 +319,7 @@ export class WhatsappService {
       try {
         const sessao = await this.convite.consumir(possivelCodigo, telefone);
         const nome = sessao.motorista?.nome ?? sessao.user?.nome ?? "amigo";
-        const tipoStr = sessao.motoristaId ? "motorista" : sessao.user?.perfil ?? "admin";
+        const tipoStr = sessao.motoristaId ? "motorista" : "admin";
         await this.enviarTexto(
           telefone,
           `Beleza, ${nome}! Você foi vinculado(a) como ${tipoStr}. Manda "ajuda" pra ver o que dá pra fazer.`,

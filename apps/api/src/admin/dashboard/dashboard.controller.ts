@@ -11,7 +11,7 @@ import { DashboardService } from "./dashboard.service";
 export class DashboardController {
   constructor(private readonly service: DashboardService) {}
 
-  @Roles("ADMIN", "OPERADOR")
+  @Roles("ADMIN_USER")
   @Get()
   snapshot() {
     return this.service.snapshot();

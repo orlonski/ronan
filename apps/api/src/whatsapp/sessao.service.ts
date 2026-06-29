@@ -3,7 +3,7 @@ import { PrismaService } from "../prisma/prisma.service";
 
 export type SessaoResolvida =
   | { tipo: "MOTORISTA"; sessaoId: string; motoristaId: string; nome: string }
-  | { tipo: "ADMIN"; sessaoId: string; userId: string; nome: string; perfil: "ADMIN" | "OPERADOR" }
+  | { tipo: "ADMIN"; sessaoId: string; userId: string; nome: string }
   | { tipo: "DESCONHECIDO"; sessaoId: null };
 
 /**
@@ -34,7 +34,7 @@ export class SessaoService {
       where: { telefone },
       include: {
         motorista: { select: { id: true, nome: true, ativo: true } },
-        user: { select: { id: true, nome: true, perfil: true, ativo: true } },
+        user: { select: { id: true, nome: true, ativo: true } },
       },
     });
     if (!sessao) return { tipo: "DESCONHECIDO", sessaoId: null };
@@ -53,7 +53,6 @@ export class SessaoService {
         sessaoId: sessao.id,
         userId: sessao.user.id,
         nome: sessao.user.nome,
-        perfil: sessao.user.perfil,
       };
     }
     // Sessão existe mas relação foi inativada — trata como desconhecido.
@@ -75,7 +74,7 @@ export class SessaoService {
     return this.prisma.whatsappSessao.findMany({
       include: {
         motorista: { select: { id: true, nome: true, cpf: true } },
-        user: { select: { id: true, nome: true, email: true, perfil: true } },
+        user: { select: { id: true, nome: true, email: true } },
       },
       orderBy: { vinculadoEm: "desc" },
     });

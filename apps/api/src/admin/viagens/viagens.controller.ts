@@ -70,7 +70,7 @@ type ListViagensQuery = z.infer<typeof ListViagensQuery>;
 @ApiTags("admin/viagens")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
-@Roles("ADMIN", "OPERADOR")
+@Roles("ADMIN_USER")
 @Controller("admin/viagens")
 export class ViagensAdminController {
   constructor(private readonly service: ViagensAdminService) {}
@@ -146,7 +146,7 @@ export class ViagensAdminController {
     return this.service.preValidar(id, body, user.id);
   }
 
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
   @RequerPermissao("viagens.excluir")
   @Delete(":id")
   @HttpCode(204)

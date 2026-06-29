@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { cpfDigits } from "./cpf";
-import { PerfilUsuario } from "./enums";
 
 export const LoginInput = z.object({
   email: z.string().email(),
@@ -38,5 +37,5 @@ export const TrocarSenhaInput = z.object({
 export type TrocarSenhaInput = z.infer<typeof TrocarSenhaInput>;
 
 export type AuthUser =
-  | { kind: "ADMIN_USER"; id: string; nome: string; email: string; perfil: PerfilUsuario }
+  | { kind: "ADMIN_USER"; id: string; nome: string; email: string }
   | { kind: "MOTORISTA"; id: string; nome: string; cpf: string };

@@ -359,7 +359,7 @@ async function executarToolInterno(
     case "quem_sou_eu":
       return ctx.identidade.tipo === "MOTORISTA"
         ? { tipo: "MOTORISTA", nome: ctx.identidade.nome, motoristaId: ctx.identidade.motoristaId }
-        : { tipo: "ADMIN", nome: ctx.identidade.nome, perfil: ctx.identidade.perfil };
+        : { tipo: "ADMIN", nome: ctx.identidade.nome };
 
     case "perfil_motorista": {
       if (ctx.identidade.tipo !== "MOTORISTA") throw new Error("tool não disponível pra esse perfil");

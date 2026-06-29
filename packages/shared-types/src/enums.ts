@@ -21,12 +21,6 @@ export const PapelEmpresa = {
 } as const;
 export type PapelEmpresa = (typeof PapelEmpresa)[keyof typeof PapelEmpresa];
 
-export const PerfilUsuario = {
-  ADMIN: "ADMIN",
-  OPERADOR: "OPERADOR",
-} as const;
-export type PerfilUsuario = (typeof PerfilUsuario)[keyof typeof PerfilUsuario];
-
 /**
  * Ciclo de aprovação do cadastro do motorista.
  * PENDENTE_APROVACAO: auto-cadastro recém-criado, aguardando admin validar.

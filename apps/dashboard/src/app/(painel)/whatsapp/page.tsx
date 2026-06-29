@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSession } from "next-auth/react";
 import {
   CheckCircle2,
   MessageCircle,
@@ -36,6 +35,7 @@ import {
 import { LoadingCard, LoadingInline, Spinner } from "@/components/loading";
 import { useConfirm } from "@/components/confirm-dialog";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { usePermissoes } from "@/lib/permissoes";
 
 type Status = {
   configurado: boolean;
@@ -49,7 +49,7 @@ type Sessao = {
   vinculadoEm: string;
   ultimaMensagem: string | null;
   motorista: { id: string; nome: string; cpf: string } | null;
-  user: { id: string; nome: string; email: string; perfil: "ADMIN" | "OPERADOR" } | null;
+  user: { id: string; nome: string; email: string } | null;
 };
 
 type Mensagem = {
@@ -63,7 +63,6 @@ type Mensagem = {
 };
 
 export default function WhatsappPage() {
-  const { data: session } = useSession();
   const token = useAuthToken();
   const qc = useQueryClient();
   const { confirmar, ConfirmDialog } = useConfirm();
@@ -71,7 +70,8 @@ export default function WhatsappPage() {
   const [sessaoSelecionada, setSessaoSelecionada] = useState<string | null>(null);
   const { viewMode, setViewMode } = useListViewMode("whatsapp-sessoes");
 
-  const isAdmin = session?.user?.perfil === "ADMIN";
+  const { temPermissao } = usePermissoes();
+  const isAdmin = temPermissao("whatsapp.gerenciar");
 
   const status = useQuery({
     queryKey: ["whatsapp-status", token],
@@ -161,11 +161,7 @@ export default function WhatsappPage() {
           <div className="space-y-3">
             {sessoes.data.map((s) => {
               const nome = s.motorista?.nome ?? s.user?.nome ?? "—";
-              const perfil = s.motorista
-                ? "Motorista"
-                : s.user?.perfil === "ADMIN"
-                ? "Admin"
-                : "Operador";
+              const perfil = s.motorista ? "Motorista" : "Admin";
               return (
                 <Card
                   key={s.id}
@@ -241,11 +237,7 @@ export default function WhatsappPage() {
               <TableBody>
                 {sessoes.data.map((s) => {
                   const nome = s.motorista?.nome ?? s.user?.nome ?? "—";
-                  const perfil = s.motorista
-                    ? "Motorista"
-                    : s.user?.perfil === "ADMIN"
-                    ? "Admin"
-                    : "Operador";
+                  const perfil = s.motorista ? "Motorista" : "Admin";
                   return (
                     <TableRow
                       key={s.id}

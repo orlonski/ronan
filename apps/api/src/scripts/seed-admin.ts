@@ -19,10 +19,24 @@ async function main() {
   const prisma = new PrismaClient();
   const senhaHash = await bcrypt.hash(senha, 10);
 
+  // Garante o papel Administrador (acesso total) e atribui ao admin semeado.
+  // Caso o app ainda não tenha rodado o seed do RBAC, cria com todas as chaves.
+  const { TODAS_AS_CHAVES } = await import("@ronan/shared-types");
+  const papelAdmin = await prisma.papel.upsert({
+    where: { nome: "Administrador" },
+    update: { permissoes: TODAS_AS_CHAVES, sistema: true },
+    create: {
+      nome: "Administrador",
+      descricao: "Acesso total ao sistema.",
+      permissoes: TODAS_AS_CHAVES,
+      sistema: true,
+    },
+  });
+
   const user = await prisma.user.upsert({
     where: { email },
-    update: { senhaHash, nome, perfil: "ADMIN", ativo: true },
-    create: { email, senhaHash, nome, perfil: "ADMIN" },
+    update: { senhaHash, nome, ativo: true, papelId: papelAdmin.id },
+    create: { email, senhaHash, nome, papelId: papelAdmin.id },
   });
 
   console.log(`✓ Admin pronto: ${user.email} (id: ${user.id})`);

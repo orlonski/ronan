@@ -38,19 +38,19 @@ const AtualizarCampoSchema = CriarCampoSchema.partial().extend({
 export class CamposLayoutController {
   constructor(private readonly service: CamposLayoutService) {}
 
-  @Roles("ADMIN", "OPERADOR")
+  @Roles("ADMIN_USER")
   @Get()
   list() {
     return this.service.list();
   }
 
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
   @Get(":id")
   findOne(@Param("id") id: string) {
     return this.service.findOne(id);
   }
 
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
   @RequerPermissao("config-campos-layout.editar")
   @Post()
   create(
@@ -60,7 +60,7 @@ export class CamposLayoutController {
     return this.service.create(body);
   }
 
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
   @RequerPermissao("config-campos-layout.editar")
   @Patch(":id")
   update(
@@ -71,7 +71,7 @@ export class CamposLayoutController {
     return this.service.update(id, body);
   }
 
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
   @RequerPermissao("config-campos-layout.editar")
   @Delete(":id")
   @HttpCode(204)

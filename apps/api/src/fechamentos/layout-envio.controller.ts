@@ -38,7 +38,7 @@ const AtualizarSchema = CriarSchema.partial();
 @ApiTags("admin/layouts-envio")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
-@Roles("ADMIN", "OPERADOR")
+@Roles("ADMIN_USER")
 @Controller("admin/empresas/:empresaId/layouts-envio")
 export class LayoutEnvioController {
   constructor(private readonly service: LayoutEnvioService) {}

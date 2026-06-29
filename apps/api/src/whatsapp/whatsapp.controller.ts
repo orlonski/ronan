@@ -76,7 +76,7 @@ export class WhatsappController {
    *  /instance/connect retorna vazio mas o QR foi enviado por webhook). */
   @ApiBearerAuth()
   @UseGuards(RolesGuard)
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
   @Get("admin/whatsapp/qrcode-cache")
   qrcodeCache() {
     return ultimoQrCode ?? { base64: null, capturadoEm: null };
@@ -86,7 +86,7 @@ export class WhatsappController {
 
   @ApiBearerAuth()
   @UseGuards(RolesGuard)
-  @Roles("ADMIN", "OPERADOR")
+  @Roles("ADMIN_USER")
   @Get("admin/whatsapp/status")
   async status() {
     if (!this.evolution.configurado) {
@@ -102,7 +102,7 @@ export class WhatsappController {
 
   @ApiBearerAuth()
   @UseGuards(RolesGuard)
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
   @Get("admin/whatsapp/qrcode")
   async qrcode() {
     return this.evolution.pegarQrCode();
@@ -110,7 +110,7 @@ export class WhatsappController {
 
   @ApiBearerAuth()
   @UseGuards(RolesGuard)
-  @Roles("ADMIN", "OPERADOR")
+  @Roles("ADMIN_USER")
   @Get("admin/whatsapp/sessoes")
   async listarSessoes() {
     return this.sessao.listar();
@@ -118,7 +118,7 @@ export class WhatsappController {
 
   @ApiBearerAuth()
   @UseGuards(RolesGuard)
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
   @RequerPermissao("whatsapp.gerenciar")
   @Delete("admin/whatsapp/sessoes/:id")
   @HttpCode(204)
@@ -128,7 +128,7 @@ export class WhatsappController {
 
   @ApiBearerAuth()
   @UseGuards(RolesGuard)
-  @Roles("ADMIN", "OPERADOR")
+  @Roles("ADMIN_USER")
   @Get("admin/whatsapp/mensagens")
   async mensagens(
     @Query("sessaoId") sessaoId: string,
@@ -140,7 +140,7 @@ export class WhatsappController {
 
   @ApiBearerAuth()
   @UseGuards(RolesGuard)
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
   @Post("admin/motoristas/:id/convite-whatsapp")
   async conviteMotorista(@Param("id") id: string) {
     return this.convite.gerarParaMotorista(id);
@@ -148,7 +148,7 @@ export class WhatsappController {
 
   @ApiBearerAuth()
   @UseGuards(RolesGuard)
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
   @Post("admin/users/:id/convite-whatsapp")
   async conviteUser(@Param("id") id: string) {
     return this.convite.gerarParaUser(id);

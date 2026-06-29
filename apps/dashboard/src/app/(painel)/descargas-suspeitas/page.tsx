@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useSession } from "next-auth/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowRight, ExternalLink, MapPin, Plus } from "lucide-react";
@@ -88,18 +87,14 @@ function LocalAtual({ s }: { s: Suspeita }) {
 }
 
 export default function DescargasSuspeitasPage() {
-  const { data: session } = useSession();
   const token = useAuthToken();
   const qc = useQueryClient();
   const [ignorados, setIgnorados] = useState<Set<string>>(new Set());
   const [nomes, setNomes] = useState<Record<string, string>>({});
 
-  const perfil = session?.user?.perfil;
-  const podeVer = perfil === "ADMIN" || perfil === "OPERADOR";
-
   const lista = useQuery({
     queryKey: [PATH, token],
-    enabled: !!token && podeVer,
+    enabled: !!token,
     queryFn: () => fetchApi<Resposta>(PATH, { token }),
   });
 
@@ -139,14 +134,6 @@ export default function DescargasSuspeitasPage() {
 
   function ocultar(viagemId: string) {
     setIgnorados((s) => new Set(s).add(viagemId));
-  }
-
-  if (!podeVer) {
-    return (
-      <div className="rounded-md border bg-muted/30 p-6">
-        <p className="text-sm text-muted-foreground">Acesso restrito.</p>
-      </div>
-    );
   }
 
   const visiveis = (lista.data?.itens ?? []).filter((i) => !ignorados.has(i.viagemId));

@@ -22,7 +22,7 @@ type ListMateriaisQuery = z.infer<typeof ListMateriaisQuery>;
 @ApiTags("admin/materiais")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
-@Roles("ADMIN", "OPERADOR")
+@Roles("ADMIN_USER")
 @Controller("admin/materiais")
 export class MateriaisController {
   constructor(private readonly service: MateriaisService) {}

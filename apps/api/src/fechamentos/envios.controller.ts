@@ -45,7 +45,7 @@ const MarcarEnviadoInput = z.object({
 @ApiTags("admin/envios")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
-@Roles("ADMIN", "OPERADOR")
+@Roles("ADMIN_USER")
 @Controller("admin/envios")
 export class EnviosController {
   constructor(private readonly exporter: ExportFechamentoService) {}
@@ -97,7 +97,7 @@ export class EnviosController {
     });
   }
 
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
   @RequerPermissao("envios.excluir")
   @Delete(":envioId")
   @HttpCode(204)

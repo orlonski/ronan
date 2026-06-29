@@ -14,7 +14,7 @@ const MapaQuery = z.object({
 @ApiTags("admin/frota")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
-@Roles("ADMIN", "OPERADOR")
+@Roles("ADMIN_USER")
 @Controller("admin/frota")
 export class FrotaAdminController {
   constructor(private readonly service: FrotaAdminService) {}

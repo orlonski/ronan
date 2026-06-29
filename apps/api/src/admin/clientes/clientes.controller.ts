@@ -30,7 +30,7 @@ type ListClientesQuery = z.infer<typeof ListClientesQuery>;
 @ApiTags("admin/clientes")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
-@Roles("ADMIN", "OPERADOR")
+@Roles("ADMIN_USER")
 @Controller("admin/clientes")
 export class ClientesController {
   constructor(private readonly service: ClientesService) {}

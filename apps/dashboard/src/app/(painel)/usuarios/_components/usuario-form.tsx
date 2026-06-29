@@ -11,13 +11,11 @@ import { Select } from "@/components/ui/select";
 import { ASSUNTOS_RESUMO } from "@ronan/shared-types";
 import { useApiQuery, useCreateResource, useUpdateResource } from "@/lib/client-api";
 
-type Perfil = "ADMIN" | "OPERADOR";
 type Papel = { id: string; nome: string };
 export type User = {
   id: string;
   nome: string;
   email: string;
-  perfil: Perfil;
   ativo: boolean;
   ultimoLoginEm: string | null;
   whatsappResumo: string | null;
@@ -30,7 +28,6 @@ type UserBody = {
   nome?: string;
   email?: string;
   senha?: string;
-  perfil?: Perfil;
   whatsappResumo?: string;
   receberResumoDiario?: boolean;
   resumoAssuntos?: string[];
@@ -51,7 +48,6 @@ export function UsuarioForm({ initial }: Props) {
     nome: initial?.nome ?? "",
     email: initial?.email ?? "",
     senha: "",
-    perfil: (initial?.perfil ?? "OPERADOR") as Perfil,
     whatsappResumo: initial?.whatsappResumo ?? "",
     receberResumoDiario: initial?.receberResumoDiario ?? false,
     // Novo usuário começa com todos os assuntos marcados.
@@ -75,7 +71,6 @@ export function UsuarioForm({ initial }: Props) {
     if (initial) {
       const body: UserBody = {
         nome: form.nome,
-        perfil: form.perfil,
         whatsappResumo: form.whatsappResumo,
         receberResumoDiario: form.receberResumoDiario,
         resumoAssuntos: [...form.resumoAssuntos],
@@ -88,7 +83,6 @@ export function UsuarioForm({ initial }: Props) {
         nome: form.nome,
         email: form.email,
         senha: form.senha,
-        perfil: form.perfil,
         whatsappResumo: form.whatsappResumo,
         receberResumoDiario: form.receberResumoDiario,
         resumoAssuntos: [...form.resumoAssuntos],
@@ -132,20 +126,6 @@ export function UsuarioForm({ initial }: Props) {
             onChange={(e) => setForm({ ...form, senha: e.target.value })}
           />
         </div>
-        <div className="space-y-2">
-          <Label>Perfil</Label>
-          <Select
-            value={form.perfil}
-            onChange={(e) => setForm({ ...form, perfil: e.target.value as Perfil })}
-          >
-            <option value="OPERADOR">Operador</option>
-            <option value="ADMIN">Administrador</option>
-          </Select>
-          <p className="text-xs text-muted-foreground">
-            Define o gate base (ADMIN/OPERADOR). O acesso fino às telas vem do papel.
-          </p>
-        </div>
-
         <div className="space-y-2">
           <Label>Papel (permissões)</Label>
           <Select

@@ -12,7 +12,6 @@ import type { AuthAdminUser } from "../../auth/types";
 import { UsersService } from "./users.service";
 
 const ListUsersQuery = paginationQuerySchema.extend({
-  perfil: z.enum(["ADMIN", "OPERADOR"]).optional(),
   ativo: z.enum(["true", "false"]).optional(),
 });
 type ListUsersQuery = z.infer<typeof ListUsersQuery>;
@@ -24,25 +23,27 @@ type ListUsersQuery = z.infer<typeof ListUsersQuery>;
 export class UsersController {
   constructor(private readonly service: UsersService) {}
 
-  @Roles("ADMIN", "OPERADOR")
+  @Roles("ADMIN_USER")
   @Get("me")
   me(@CurrentUser() user: AuthAdminUser) {
     return this.service.me(user.id);
   }
 
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
+  @RequerPermissao("usuarios.ver")
   @Get()
   list(@Query(new ZodValidationPipe(ListUsersQuery)) query: ListUsersQuery) {
     return this.service.list(query);
   }
 
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
+  @RequerPermissao("usuarios.ver")
   @Get(":id")
   findOne(@Param("id") id: string) {
     return this.service.findOne(id);
   }
 
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
   @RequerPermissao("usuarios.criar")
   @Post()
   create(
@@ -52,7 +53,7 @@ export class UsersController {
     return this.service.create(body, user.id);
   }
 
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
   @RequerPermissao("usuarios.editar")
   @Patch(":id")
   update(
@@ -62,7 +63,7 @@ export class UsersController {
     return this.service.update(id, body);
   }
 
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
   @RequerPermissao("usuarios.excluir")
   @Delete(":id")
   remove(@Param("id") id: string) {

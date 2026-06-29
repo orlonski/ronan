@@ -60,7 +60,6 @@ export const authOptions: NextAuthOptions = {
             id: me.id,
             name: me.nome,
             email: me.email,
-            perfil: me.perfil,
             accessToken: tokens.accessToken,
             refreshToken: tokens.refreshToken,
           } as any;
@@ -76,7 +75,6 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.accessToken = (user as any).accessToken;
         token.refreshToken = (user as any).refreshToken;
-        token.perfil = (user as any).perfil;
         token.accessTokenExpires = decodeJwtExp((user as any).accessToken);
         return token;
       }
@@ -105,10 +103,6 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       session.accessToken = token.accessToken as string;
-      session.user = {
-        ...session.user,
-        perfil: token.perfil as "ADMIN" | "OPERADOR",
-      };
       (session as any).error = (token as any).error;
       return session;
     },

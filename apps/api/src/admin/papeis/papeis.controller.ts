@@ -10,7 +10,8 @@ import { PapeisService } from "./papeis.service";
 @ApiTags("admin/papeis")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
-@Roles("ADMIN")
+@Roles("ADMIN_USER")
+@RequerPermissao("permissoes.gerenciar")
 @Controller("admin/papeis")
 export class PapeisController {
   constructor(private readonly service: PapeisService) {}

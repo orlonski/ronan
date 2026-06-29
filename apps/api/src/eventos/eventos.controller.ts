@@ -62,7 +62,7 @@ export class EventosController {
   // ===== Admin: leitura =====
 
   @UseGuards(RolesGuard)
-  @Roles("ADMIN", "OPERADOR")
+  @Roles("ADMIN_USER")
   @Get("admin/eventos")
   listar(
     @Query(new ZodValidationPipe(ListarQuery))
@@ -86,7 +86,7 @@ export class EventosController {
    * reconciliado E viagemClientId pendente).
    */
   @UseGuards(RolesGuard)
-  @Roles("ADMIN", "OPERADOR")
+  @Roles("ADMIN_USER")
   @Get("admin/eventos/viagem/:viagemId")
   porViagem(@Param("viagemId") viagemId: string) {
     return this.service.listarPorViagem(viagemId);

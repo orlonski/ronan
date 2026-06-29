@@ -89,21 +89,16 @@ export class PermissoesService implements OnModuleInit {
     });
   }
 
-  /** Usuários sem papel herdam um pelo perfil atual (zero regressão). */
+  /** Rede de segurança: usuário sem papel cai no Operador (a migração inicial
+   * já atribuiu os papéis pelos perfis antigos). */
   async backfillUsuarios() {
-    const [admin, operador] = await Promise.all([
-      this.prisma.papel.findUnique({ where: { nome: PAPEL_ADMIN }, select: { id: true } }),
-      this.prisma.papel.findUnique({ where: { nome: PAPEL_OPERADOR }, select: { id: true } }),
-    ]);
-    if (admin) {
-      await this.prisma.user.updateMany({
-        where: { papelId: null, perfil: "ADMIN" },
-        data: { papelId: admin.id },
-      });
-    }
+    const operador = await this.prisma.papel.findUnique({
+      where: { nome: PAPEL_OPERADOR },
+      select: { id: true },
+    });
     if (operador) {
       await this.prisma.user.updateMany({
-        where: { papelId: null, perfil: "OPERADOR" },
+        where: { papelId: null },
         data: { papelId: operador.id },
       });
     }

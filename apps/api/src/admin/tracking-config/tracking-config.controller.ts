@@ -28,13 +28,13 @@ const AtualizarConfigSchema = z.object({
 export class TrackingConfigController {
   constructor(private readonly service: TrackingConfigService) {}
 
-  @Roles("ADMIN", "OPERADOR")
+  @Roles("ADMIN_USER")
   @Get()
   get() {
     return this.service.get();
   }
 
-  @Roles("ADMIN")
+  @Roles("ADMIN_USER")
   @RequerPermissao("config-tracking.editar")
   @Put()
   update(

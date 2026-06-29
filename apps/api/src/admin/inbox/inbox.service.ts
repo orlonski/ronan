@@ -47,7 +47,7 @@ export class AdminInboxService implements OnModuleDestroy {
    */
   async disparar(input: DispararNotificacaoInput): Promise<void> {
     const destinos = await this.prisma.user.findMany({
-      where: { ativo: true, perfil: { in: ["ADMIN", "OPERADOR"] } },
+      where: { ativo: true },
       select: { id: true },
     });
     if (destinos.length === 0) return;
