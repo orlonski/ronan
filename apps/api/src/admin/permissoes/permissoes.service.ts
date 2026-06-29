@@ -41,7 +41,25 @@ export class PermissoesService implements OnModuleInit {
         update: { modulo: p.modulo, titulo: p.titulo, descricao: p.descricao, ordem: p.ordem },
       });
     }
-    this.log.log(`Catálogo de permissões sincronizado (${CATALOGO_PERMISSOES.length}).`);
+    // Poda chaves que saíram do catálogo (ex.: o antigo módulo "Resumo diário",
+    // que virou preferência por usuário). Mantém a tabela = código.
+    const removidas = await this.prisma.permissao.deleteMany({
+      where: { chave: { notIn: TODAS_AS_CHAVES } },
+    });
+    // Limpa também referências órfãs nos papéis (chaves que não existem mais).
+    if (removidas.count > 0) {
+      const papeis = await this.prisma.papel.findMany({ select: { id: true, permissoes: true } });
+      const validas = new Set(TODAS_AS_CHAVES);
+      for (const pap of papeis) {
+        const limpas = pap.permissoes.filter((c) => validas.has(c));
+        if (limpas.length !== pap.permissoes.length) {
+          await this.prisma.papel.update({ where: { id: pap.id }, data: { permissoes: limpas } });
+        }
+      }
+    }
+    this.log.log(
+      `Catálogo de permissões sincronizado (${CATALOGO_PERMISSOES.length}; ${removidas.count} removidas).`,
+    );
   }
 
   /**
