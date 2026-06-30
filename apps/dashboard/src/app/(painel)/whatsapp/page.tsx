@@ -1,19 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2,
   MessageCircle,
   QrCode,
   RefreshCw,
+  Save,
   Trash2,
+  Users,
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Select } from "@/components/ui/select";
+import { StatusToggle } from "@/components/status-toggle";
 import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
 import {
@@ -61,6 +65,20 @@ type Mensagem = {
   metadata: Record<string, unknown> | null;
   criadoEm: string;
 };
+
+type Grupo = { jid: string; nome: string; tamanho: number };
+
+type ConfigAvisoGrupo = {
+  id: string;
+  ativo: boolean;
+  grupoJid: string | null;
+  grupoNome: string | null;
+  template: string | null;
+  alteradoEm: string;
+};
+
+const TEMPLATE_AVISO_PLACEHOLDER =
+  "🎉 {nome} acabou de entrar no app da Schaba! Seja bem-vindo, parceiro 🚛";
 
 export default function WhatsappPage() {
   const token = useAuthToken();
@@ -140,6 +158,9 @@ export default function WhatsappPage() {
           atualizando={status.isFetching}
         />
       )}
+
+      {/* Aviso automático no grupo quando motorista se cadastra */}
+      {status.data?.configurado && <AvisoGrupoCard isAdmin={isAdmin} online={status.data.state === "open"} />}
 
       {/* Sessões vinculadas */}
       <section className="space-y-3">
@@ -411,6 +432,145 @@ function StatusCard({
           )}
         </div>
       </div>
+    </Card>
+  );
+}
+
+function AvisoGrupoCard({ isAdmin, online }: { isAdmin: boolean; online: boolean }) {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+
+  const cfg = useQuery({
+    queryKey: ["aviso-grupo-config", token],
+    enabled: !!token,
+    queryFn: () => fetchApi<ConfigAvisoGrupo>("/admin/whatsapp/aviso-grupo", { token }),
+  });
+
+  // Grupos só carregam quando o número está conectado (precisa do Baileys).
+  const grupos = useQuery({
+    queryKey: ["whatsapp-grupos", token],
+    enabled: !!token && online,
+    staleTime: 60_000,
+    queryFn: () => fetchApi<Grupo[]>("/admin/whatsapp/grupos", { token }),
+  });
+
+  const [ativo, setAtivo] = useState(false);
+  const [grupoJid, setGrupoJid] = useState("");
+  const [template, setTemplate] = useState("");
+
+  useEffect(() => {
+    if (cfg.data) {
+      setAtivo(cfg.data.ativo);
+      setGrupoJid(cfg.data.grupoJid ?? "");
+      setTemplate(cfg.data.template ?? "");
+    }
+  }, [cfg.data]);
+
+  const salvar = useMutation({
+    mutationFn: () => {
+      const nome =
+        grupos.data?.find((g) => g.jid === grupoJid)?.nome ?? cfg.data?.grupoNome ?? null;
+      return fetchApi<ConfigAvisoGrupo>("/admin/whatsapp/aviso-grupo", {
+        method: "PUT",
+        token,
+        body: JSON.stringify({
+          ativo,
+          grupoJid: grupoJid || null,
+          grupoNome: grupoJid ? nome : null,
+          template: template.trim() || null,
+        }),
+      });
+    },
+    onSuccess: () => {
+      toast.success("Aviso no grupo salvo");
+      void qc.invalidateQueries({ queryKey: ["aviso-grupo-config"] });
+    },
+    onError: (e: Error) => toast.error("Falha ao salvar", { description: e.message }),
+  });
+
+  if (cfg.isLoading) return <LoadingCard label="Carregando aviso do grupo..." />;
+
+  // Se o grupo salvo não está na lista (offline ou sumiu), mostra ele mesmo assim.
+  const opcoes: Grupo[] = grupos.data ? [...grupos.data] : [];
+  if (cfg.data?.grupoJid && !opcoes.some((g) => g.jid === cfg.data!.grupoJid)) {
+    opcoes.unshift({
+      jid: cfg.data.grupoJid,
+      nome: cfg.data.grupoNome ?? "(grupo configurado)",
+      tamanho: 0,
+    });
+  }
+
+  return (
+    <Card className={`space-y-4 p-5 ${ativo ? "" : "border-border/60"}`}>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">
+            <Users className="h-4 w-4" />
+            Aviso no grupo quando motorista entra no app
+          </h2>
+          <p className="mt-1 max-w-2xl text-xs text-muted-foreground">
+            Quando um motorista que <strong>já está no grupo</strong> se cadastra no app, o
+            sistema posta um aviso no grupo. Dispara só uma vez por motorista. Quem não está
+            no grupo é ignorado.
+          </p>
+        </div>
+        <StatusToggle active={ativo} onChange={setAtivo} disabled={!isAdmin} label />
+      </div>
+
+      <div className="space-y-2 border-t pt-3">
+        <label className="block text-xs font-medium text-muted-foreground">Grupo destino</label>
+        {!online && (
+          <p className="text-[11px] text-amber-700">
+            WhatsApp offline — conecta pra listar os grupos. O grupo já salvo continua valendo.
+          </p>
+        )}
+        <Select
+          value={grupoJid}
+          onChange={(e) => setGrupoJid(e.target.value)}
+          disabled={!isAdmin}
+        >
+          <option value="">— Nenhum (desativado) —</option>
+          {opcoes.map((g) => (
+            <option key={g.jid} value={g.jid}>
+              {g.nome}
+              {g.tamanho ? ` (${g.tamanho})` : ""}
+            </option>
+          ))}
+        </Select>
+        {grupos.isFetching && <LoadingInline label="Carregando grupos..." />}
+      </div>
+
+      <div className="space-y-2">
+        <label className="block text-xs font-medium text-muted-foreground">
+          Mensagem do aviso
+        </label>
+        <textarea
+          value={template}
+          onChange={(e) => setTemplate(e.target.value)}
+          placeholder={TEMPLATE_AVISO_PLACEHOLDER}
+          rows={2}
+          maxLength={400}
+          disabled={!isAdmin}
+          className="w-full rounded-md border border-input bg-background p-2 text-sm disabled:opacity-60"
+        />
+        <p className="text-[11px] text-muted-foreground">
+          Use <code>{"{nome}"}</code> pro primeiro nome do motorista. Em branco usa o padrão.
+        </p>
+      </div>
+
+      {isAdmin && (
+        <div className="flex items-center justify-end gap-3">
+          {ativo && !grupoJid && (
+            <span className="text-[11px] text-amber-700">
+              Escolha um grupo pra ativar o disparo.
+            </span>
+          )}
+          <Button onClick={() => salvar.mutate()} disabled={salvar.isPending}>
+            <Save className="h-4 w-4" />
+            {salvar.isPending ? "Salvando..." : "Salvar"}
+          </Button>
+        </div>
+      )}
     </Card>
   );
 }

@@ -73,6 +73,45 @@ export class EvolutionClientService {
   }
 
   /**
+   * Lista os grupos em que o número conectado participa. `getParticipants=true`
+   * traz a lista de membros junto (mais pesado, mas evita N chamadas). Usado no
+   * painel pra o admin escolher em qual grupo postar os avisos.
+   */
+  async listarGrupos(): Promise<
+    Array<{ jid: string; nome: string; tamanho: number }>
+  > {
+    const data = await this.req(
+      `/group/fetchAllGroups/${this.instance}?getParticipants=false`,
+      undefined,
+      "GET",
+    );
+    const grupos = Array.isArray(data) ? data : [];
+    return grupos
+      .map((g) => {
+        const o = g as { id?: string; subject?: string; size?: number };
+        return { jid: o.id ?? "", nome: o.subject ?? "(sem nome)", tamanho: o.size ?? 0 };
+      })
+      .filter((g) => g.jid.endsWith("@g.us"));
+  }
+
+  /**
+   * Telefones (só dígitos, com DDI) dos participantes de um grupo. Usado pra
+   * conferir se um motorista recém-cadastrado já está no grupo antes de anunciar.
+   */
+  async participantesDoGrupo(grupoJid: string): Promise<string[]> {
+    const data = await this.req(
+      `/group/participants/${this.instance}?groupJid=${encodeURIComponent(grupoJid)}`,
+      undefined,
+      "GET",
+    );
+    const d = data as { participants?: Array<{ id?: string }> };
+    const lista = Array.isArray(d?.participants) ? d.participants : [];
+    return lista
+      .map((p) => (p?.id ?? "").split("@")[0]!.replace(/\D/g, ""))
+      .filter(Boolean);
+  }
+
+  /**
    * Verifica se a instância está conectada (Baileys "open").
    * Retorna estado bruto pra UI mostrar status.
    */

@@ -6,6 +6,7 @@ import {
   HttpCode,
   Param,
   Post,
+  Put,
   Query,
   UseGuards,
 } from "@nestjs/common";
@@ -15,6 +16,9 @@ import { Public } from "../auth/decorators/public.decorator";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { RequerPermissao } from "../auth/decorators/requer-permissao.decorator";
+import { CurrentUser } from "../auth/decorators/current-user.decorator";
+import type { AuthUser } from "../auth/types";
+import { AvisoGrupoService } from "./aviso-grupo.service";
 import { ConviteService } from "./convite.service";
 import { EvolutionClientService } from "./evolution-client.service";
 import { SessaoService } from "./sessao.service";
@@ -36,6 +40,7 @@ export class WhatsappController {
     private readonly sessao: SessaoService,
     private readonly convite: ConviteService,
     private readonly evolution: EvolutionClientService,
+    private readonly avisoGrupo: AvisoGrupoService,
     private readonly config: ConfigService,
   ) {}
 
@@ -136,6 +141,51 @@ export class WhatsappController {
   ) {
     if (!sessaoId) return [];
     return this.service.historicoRecente(sessaoId, Number(limit ?? 50));
+  }
+
+  // ===== Aviso automático no grupo quando motorista se cadastra =====
+
+  /** Grupos do número conectado, pro admin escolher o destino dos avisos. */
+  @ApiBearerAuth()
+  @UseGuards(RolesGuard)
+  @Roles("ADMIN_USER")
+  @Get("admin/whatsapp/grupos")
+  async grupos() {
+    return this.avisoGrupo.listarGrupos();
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(RolesGuard)
+  @Roles("ADMIN_USER")
+  @Get("admin/whatsapp/aviso-grupo")
+  async avisoGrupoConfig() {
+    return this.avisoGrupo.pegarConfig();
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(RolesGuard)
+  @Roles("ADMIN_USER")
+  @RequerPermissao("whatsapp.gerenciar")
+  @Put("admin/whatsapp/aviso-grupo")
+  async salvarAvisoGrupo(
+    @CurrentUser() user: AuthUser,
+    @Body()
+    body: {
+      ativo?: boolean;
+      grupoJid?: string | null;
+      grupoNome?: string | null;
+      template?: string | null;
+    },
+  ) {
+    return this.avisoGrupo.salvarConfig(
+      {
+        ativo: body.ativo,
+        grupoJid: body.grupoJid,
+        grupoNome: body.grupoNome,
+        template: body.template,
+      },
+      user.id,
+    );
   }
 
   @ApiBearerAuth()

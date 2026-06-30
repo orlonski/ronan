@@ -8,6 +8,7 @@ import {
 import { randomInt } from "node:crypto";
 import { formatCpf, type CadastroMotoristaInput, type PlacaInput } from "@ronan/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
+import { AvisoGrupoService } from "../whatsapp/aviso-grupo.service";
 import { EvolutionClientService } from "../whatsapp/evolution-client.service";
 import { SessaoService } from "../whatsapp/sessao.service";
 import { AdminInboxService } from "../admin/inbox/inbox.service";
@@ -35,6 +36,7 @@ export class CadastroMotoristaService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly evolution: EvolutionClientService,
+    private readonly avisoGrupo: AvisoGrupoService,
     private readonly inbox: AdminInboxService,
     private readonly auth: AuthService,
   ) {}
@@ -188,6 +190,10 @@ export class CadastroMotoristaService {
     } catch (e) {
       this.log.warn(`Falha ao notificar admins do cadastro: ${(e as Error).message}`);
     }
+
+    // Se ele já está no grupo de WhatsApp da operação, posta um "fulano entrou
+    // no app" lá (prova social). Best-effort e com trava de envio único dentro.
+    void this.avisoGrupo.anunciarCadastro(motoristaId);
 
     const tokens = await this.auth.issueMotoristaTokens(motoristaId);
     return { ...tokens, status: "PENDENTE_APROVACAO" as const };

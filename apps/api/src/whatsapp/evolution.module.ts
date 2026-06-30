@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { AvisoGrupoService } from "./aviso-grupo.service";
 import { EvolutionClientService } from "./evolution-client.service";
 
 /**
@@ -7,7 +8,7 @@ import { EvolutionClientService } from "./evolution-client.service";
  * auto-cadastro) poderem mandar mensagem WhatsApp sem importar tudo.
  */
 @Module({
-  providers: [EvolutionClientService],
-  exports: [EvolutionClientService],
+  providers: [EvolutionClientService, AvisoGrupoService],
+  exports: [EvolutionClientService, AvisoGrupoService],
 })
 export class EvolutionModule {}

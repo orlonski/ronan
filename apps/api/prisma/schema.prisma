@@ -187,6 +187,7 @@ model User {
   configsIa        ConfiguracaoIa[]
   configsAgente    ConfiguracaoAgente[]
   configsBuscaLocais ConfiguracaoBuscaLocais[]
+  configsAvisoGrupo  ConfiguracaoAvisoGrupo[]
   whatsappSessao   WhatsappSessao?
   whatsappConvites WhatsappConvite[]
 
@@ -307,6 +308,9 @@ model Motorista {
   appBuiltAt              DateTime? // quando o bundle foi publicado (Updates.createdAt)
   appCanal                String?   // canal EAS Update (ex: "production")
   appVistoEm              DateTime? // última vez que o app reportou versão (= visto online)
+  // Quando o aviso "fulano entrou no app" foi postado no grupo do WhatsApp.
+  // Trava de envio único: uma vez setado, nunca reanuncia esse motorista.
+  avisoGrupoEnviadoEm     DateTime?
   // Acessos por funcionalidade (controle de feature flag por motorista).
   // Default false nos campos sensíveis = novo motorista nasce travado e o admin
   // libera caso a caso pelo dashboard. podeLancarViagem/podeLancarAbastecimento
@@ -1132,6 +1136,28 @@ model ConfiguracaoAgente {
   alteradoPorId   String?
 
   @@map("configuracao_agente")
+}
+
+/// Singleton (id="default"): aviso automático no grupo de WhatsApp quando um
+/// motorista que já está no grupo se cadastra no app. Prova social numa
+/// comunidade pequena e fechada (~45 membros). Desligado por padrão; admin
+/// escolhe o grupo e ativa pelo dashboard.
+model ConfiguracaoAvisoGrupo {
+  id         String   @id @default("default")
+  // Liga/desliga o disparo. Nasce desligado até o admin escolher o grupo.
+  ativo      Boolean  @default(false)
+  // JID do grupo destino (ex: "120363...@g.us"). Null = nada configurado.
+  grupoJid   String?
+  // Nome do grupo no momento da escolha — só pra exibir no painel.
+  grupoNome  String?
+  // Template da mensagem. `{nome}` é trocado pelo primeiro nome do motorista.
+  // Null = usa o default do código.
+  template   String?  @db.Text
+  alteradoEm    DateTime @updatedAt
+  alteradoPor   User?    @relation(fields: [alteradoPorId], references: [id])
+  alteradoPorId String?
+
+  @@map("configuracao_aviso_grupo")
 }
 
 /// Singleton (id="default"): raios da busca de local de DESCARGA por GPS.
