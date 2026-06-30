@@ -54,9 +54,15 @@ export class RedefinicaoSenhaService {
     let destino: string;
     let vincular: boolean;
     if (motorista.telefone) {
-      // Já tem celular: o digitado tem que ser o mesmo. Se não bate, resposta
-      // genérica (não revela qual é o número certo).
-      if (telefoneDigits(motorista.telefone) !== telefone) return RESPOSTA_GENERICA;
+      // Já tem celular: o digitado TEM que ser o mesmo. Avisa explicitamente se
+      // não bater (escolha do produto por clareza — assume revelar que o CPF é
+      // cliente). Mesmo avisando, não dá pra tomar a conta: o código só vai pro
+      // número cadastrado, nunca pro digitado.
+      if (telefoneDigits(motorista.telefone) !== telefone) {
+        throw new BadRequestException(
+          "O celular informado não confere com o cadastrado pra esse CPF. Use o mesmo celular do seu cadastro.",
+        );
+      }
       destino = motorista.telefone;
       vincular = false;
     } else {
