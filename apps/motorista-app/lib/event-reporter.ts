@@ -10,6 +10,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
 import Constants from "expo-constants";
+import * as Updates from "expo-updates";
 import type { TipoEvento } from "@ronan/shared-types";
 import { api } from "./api";
 import { loadTokens } from "./auth";
@@ -116,7 +117,7 @@ async function checarOnline(): Promise<boolean> {
 
 function getVersao(): string {
   const ver = Constants.expoConfig?.version ?? "?";
-  const update = Constants.expoConfig?.runtimeVersion ?? "?";
+  const update = Updates.updateId ?? "embedded";
   return `${ver}+${update}`;
 }
 

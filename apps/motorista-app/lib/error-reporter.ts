@@ -9,6 +9,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import Constants from "expo-constants";
+import * as Updates from "expo-updates";
 import { api } from "./api";
 import { loadTokens } from "./auth";
 
@@ -117,7 +118,7 @@ function extrairStack(err: unknown): string | undefined {
 
 function getVersao(): string {
   const ver = Constants.expoConfig?.version ?? "?";
-  const update = Constants.expoConfig?.runtimeVersion ?? "?";
+  const update = Updates.updateId ?? "embedded";
   return `${ver}+${update}`;
 }
 

@@ -1,4 +1,3 @@
-import NetInfo from "@react-native-community/netinfo";
 import Constants from "expo-constants";
 import * as Updates from "expo-updates";
 import { router } from "expo-router";
@@ -151,7 +150,7 @@ async function fetchComTimeout(
  */
 function deveReportarErro(status: number | null, path: string): boolean {
   if (path.startsWith("/errors/")) return false; // não reportar erro do próprio reporter
-  if (status === null) return true; // network error / timeout / parse fail
+  if (status === null) return true; // parse fail de resposta 2xx (rede/timeout não passam mais por aqui)
   if (status >= 500) return true; // bug servidor
   return false; // 4xx esperado
 }
@@ -161,12 +160,6 @@ async function reportarSilencioso(
   ctx: { method: string; path: string; status?: number | null },
 ): Promise<void> {
   try {
-    // Falha de fetch sem status: pode ser servidor caído OU motorista offline.
-    // Só faz sentido reportar a primeira; offline é limitação física do device.
-    if (ctx.status == null) {
-      const net = await NetInfo.fetch();
-      if (!net.isConnected) return;
-    }
     const { reportarErro } = await import("./error-reporter");
     void reportarErro(err, {
       url: `${ctx.method} ${ctx.path}`,
@@ -206,9 +199,8 @@ export async function request<T>(
     const wrapped = isTimeout
       ? new TypeError("Tempo esgotado. Verifique sua conexão.")
       : (err as Error);
-    if (deveReportarErro(null, path)) {
-      void reportarSilencioso(wrapped, { method, path, status: null });
-    }
+    // Falha de rede/timeout (status null): ruído de conectividade na estrada,
+    // não bug acionável. Não reporta; só propaga pra UI/retry enxergar.
     throw wrapped;
   }
 
@@ -223,9 +215,7 @@ export async function request<T>(
         const wrapped = isTimeout
           ? new TypeError("Tempo esgotado. Verifique sua conexão.")
           : (err as Error);
-        if (deveReportarErro(null, path)) {
-          void reportarSilencioso(wrapped, { method, path, status: null });
-        }
+        // Falha de rede/timeout: não reporta (ver acima), só propaga.
         throw wrapped;
       }
     } else if (renov.status === "invalido") {
