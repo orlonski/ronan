@@ -56,6 +56,16 @@ export class LocaisController {
     return this.service.mapa();
   }
 
+  /**
+   * Grupos de locais ativos com nome parecido (provável duplicata). Usado pela
+   * lista pra exibir tarja vermelha. Definido ANTES de :id pra Nest não tratar
+   * "duplicatas" como id.
+   */
+  @Get("duplicatas")
+  duplicatas() {
+    return this.service.duplicatas();
+  }
+
   @Get(":id")
   findOne(@Param("id") id: string) {
     return this.service.findOne(id);

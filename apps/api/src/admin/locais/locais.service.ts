@@ -162,6 +162,132 @@ export class LocaisService {
   }
 
   /**
+   * Detecta grupos de locais ativos com nome parecido (provável duplicata por
+   * digitação errada ou cadastro offline). Roda global — a lista é paginada,
+   * então a detecção não pode ser por página.
+   *
+   * Estratégia: trigram (pg_trgm) sobre f_normalizar(nome) — reaproveita o
+   * índice GIN `locais_nome_trgm_idx` e a função de normalização já em prod.
+   * O `%` faz o prune pelo índice (threshold ~0.3); o filtro `similarity >= LIMIAR`
+   * aperta pro nível que queremos. A partir dos pares, monta componentes conexos
+   * (várias grafias do mesmo lugar caem no mesmo grupo).
+   *
+   * Em cada grupo: o membro com mais viagens é o "forte". Um membro com 0-1
+   * viagem, quando existe um forte com >= 2 viagens, é marcado "provavel_lixo"
+   * (cadastro errado a limpar). Os demais ficam "duplicata" (neutro).
+   */
+  async duplicatas() {
+    const LIMIAR = 0.5;
+
+    // Viagens por local ativo (carga + descarga). Raw usa o @@map: tabela
+    // "viagens", colunas camelCase entre aspas.
+    const counts = await this.prisma.$queryRaw<
+      { id: string; nome: string; viagens: bigint }[]
+    >`
+      SELECT l.id,
+             l.nome,
+             (SELECT count(*) FROM "viagens" v WHERE v."localCargaId" = l.id)
+           + (SELECT count(*) FROM "viagens" v WHERE v."localDescargaId" = l.id) AS viagens
+      FROM "locais" l
+      WHERE l.ativo = true
+    `;
+
+    const pares = await this.prisma.$queryRaw<
+      { id_a: string; id_b: string }[]
+    >`
+      SELECT a.id AS id_a, b.id AS id_b
+      FROM "locais" a
+      JOIN "locais" b
+        ON a.id < b.id
+       AND a.ativo = true
+       AND b.ativo = true
+       AND public.f_normalizar(a.nome) % public.f_normalizar(b.nome)
+      WHERE similarity(public.f_normalizar(a.nome), public.f_normalizar(b.nome)) >= ${LIMIAR}
+    `;
+
+    if (pares.length === 0) return [];
+
+    const viagensDe = new Map<string, number>();
+    const nomeDe = new Map<string, string>();
+    for (const c of counts) {
+      viagensDe.set(c.id, Number(c.viagens));
+      nomeDe.set(c.id, c.nome);
+    }
+
+    // Union-find pra agrupar pares em componentes conexos.
+    const parent = new Map<string, string>();
+    const find = (x: string): string => {
+      let r = x;
+      while (parent.get(r) !== r) r = parent.get(r) as string;
+      // path compression
+      let cur = x;
+      while (parent.get(cur) !== r) {
+        const next = parent.get(cur) as string;
+        parent.set(cur, r);
+        cur = next;
+      }
+      return r;
+    };
+    const ensure = (x: string) => {
+      if (!parent.has(x)) parent.set(x, x);
+    };
+    const union = (a: string, b: string) => {
+      ensure(a);
+      ensure(b);
+      parent.set(find(a), find(b));
+    };
+    for (const p of pares) union(p.id_a, p.id_b);
+
+    // Junta os ids por raiz do componente.
+    const grupos = new Map<string, string[]>();
+    for (const id of parent.keys()) {
+      const raiz = find(id);
+      const arr = grupos.get(raiz);
+      if (arr) arr.push(id);
+      else grupos.set(raiz, [id]);
+    }
+
+    type Similar = { id: string; nome: string; totalViagens: number };
+    const resultado: Array<
+      Similar & {
+        grupoId: string;
+        papel: "provavel_lixo" | "duplicata";
+        similares: Similar[];
+      }
+    > = [];
+
+    for (const [grupoId, ids] of grupos) {
+      if (ids.length < 2) continue;
+      const membros: Similar[] = ids.map((id) => ({
+        id,
+        nome: nomeDe.get(id) ?? "",
+        totalViagens: viagensDe.get(id) ?? 0,
+      }));
+      const maxViagens = Math.max(...membros.map((m) => m.totalViagens));
+      // Forte = quem tem mais viagens (desempate por maior, depois primeiro).
+      const forteId = membros.reduce((a, b) =>
+        b.totalViagens > a.totalViagens ? b : a,
+      ).id;
+
+      for (const m of membros) {
+        const ehLixo =
+          m.totalViagens <= 1 && maxViagens >= 2 && m.id !== forteId;
+        const similares = membros
+          .filter((o) => o.id !== m.id)
+          .sort((a, b) => b.totalViagens - a.totalViagens);
+        resultado.push({
+          ...m,
+          grupoId,
+          papel: ehLixo ? "provavel_lixo" : "duplicata",
+          similares,
+        });
+      }
+    }
+
+    return resultado;
+  }
+
+  /**
    * Admin homologa manualmente — sobe pra HUMANO (top da hierarquia).
    */
   async homologar(id: string) {

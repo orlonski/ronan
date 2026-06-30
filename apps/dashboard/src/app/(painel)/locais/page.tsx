@@ -5,7 +5,9 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
   AlertCircle,
+  AlertTriangle,
   Eye,
+  GitMerge,
   MapPin,
   Pencil,
   Plus,
@@ -13,13 +15,20 @@ import {
   User,
 } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { StatusToggle } from "@/components/status-toggle";
 import { Permitido } from "@/components/requer-tela";
 import { ExcluirButton } from "@/components/excluir-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
 import {
@@ -67,6 +76,16 @@ type Local = {
   criadoPorMotorista: { id: string; nome: string } | null;
 };
 
+type DupSimilar = { id: string; nome: string; totalViagens: number };
+type DupEntry = {
+  id: string;
+  nome: string;
+  totalViagens: number;
+  grupoId: string;
+  papel: "provavel_lixo" | "duplicata";
+  similares: DupSimilar[];
+};
+
 const PATH = "/admin/locais";
 const CLIENTES_PATH = "/admin/clientes";
 
@@ -90,14 +109,45 @@ function nomeCriador(l: Local): string {
   return l.criadoPor?.nome ?? l.criadoPorMotorista?.nome ?? "—";
 }
 
+function plural(n: number, sing: string, plur: string) {
+  return `${n} ${n === 1 ? sing : plur}`;
+}
+
+function DuplicataTag({ dup, onClick }: { dup: DupEntry; onClick: () => void }) {
+  const lixo = dup.papel === "provavel_lixo";
+  const forte = dup.similares[0];
+  const title = lixo
+    ? `Parece "${forte?.nome}" (${plural(forte?.totalViagens ?? 0, "viagem", "viagens")}). Este tem ${dup.totalViagens}. Clique pra mesclar ou conferir.`
+    : `Nome parecido com: ${dup.similares
+        .map((s) => `${s.nome} (${plural(s.totalViagens, "viagem", "viagens")})`)
+        .join(", ")}. Clique pra revisar.`;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium transition-colors ${
+        lixo
+          ? "border-red-200 bg-red-100 text-red-700 hover:bg-red-200"
+          : "border-amber-200 bg-amber-100 text-amber-700 hover:bg-amber-200"
+      }`}
+    >
+      <AlertTriangle className="h-3 w-3" />
+      {lixo ? "Provável duplicata" : "Nome parecido"}
+    </button>
+  );
+}
+
 export default function LocaisPage() {
   const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
   const list = usePaginatedList<Local>(PATH, tableState);
   const clientes = useResourceOptions<Cliente>(CLIENTES_PATH);
   const update = useUpdateResource<Record<string, unknown>, Local>(PATH, PATH);
   const token = useAuthToken();
+  const qc = useQueryClient();
   const [view, setView] = useState<"lista" | "mapa">("lista");
   const { viewMode, setViewMode } = useListViewMode("locais");
+  const [mesclando, setMesclando] = useState<DupEntry | null>(null);
 
   // Carrega só quando aba "Mapa" tá ativa. Backend filtra por ativo + lat/lng.
   // QueryKey começa com PATH pra invalidate de create/update/delete pegar o mapa
@@ -107,6 +157,37 @@ export default function LocaisPage() {
     enabled: view === "mapa" && !!token,
     queryFn: () => fetchApi<LocalMapa[]>("/admin/locais/mapa", { token }),
     staleTime: 60_000,
+  });
+
+  // Grupos de locais com nome parecido (provável duplicata). Carrega na aba Lista.
+  // Mesmo prefixo [PATH] → invalidate de create/update/delete/mescla revalida junto.
+  const duplicatas = useQuery({
+    queryKey: [PATH, "duplicatas", token],
+    enabled: view === "lista" && !!token,
+    queryFn: () => fetchApi<DupEntry[]>("/admin/locais/duplicatas", { token }),
+    staleTime: 60_000,
+  });
+  const dupMap = useMemo(() => {
+    const m = new Map<string, DupEntry>();
+    for (const d of duplicatas.data ?? []) m.set(d.id, d);
+    return m;
+  }, [duplicatas.data]);
+  const totalLixo = useMemo(
+    () => (duplicatas.data ?? []).filter((d) => d.papel === "provavel_lixo").length,
+    [duplicatas.data],
+  );
+
+  const mesclar = useMutation({
+    mutationFn: ({ origemId, destinoId }: { origemId: string; destinoId: string }) =>
+      fetchApi<{ ok: true }>(`${PATH}/${origemId}/mesclar`, {
+        method: "POST",
+        body: JSON.stringify({ destinoId }),
+        token,
+      }),
+    onSuccess: () => {
+      setMesclando(null);
+      qc.invalidateQueries({ queryKey: [PATH] });
+    },
   });
 
   const totalGeral = list.data?.pagination.total ?? 0;
@@ -124,7 +205,15 @@ export default function LocaisPage() {
         id: "nome",
         accessorKey: "nome",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Nome" />,
-        cell: ({ row }) => <span className="font-medium">{row.original.nome}</span>,
+        cell: ({ row }) => {
+          const dup = dupMap.get(row.original.id);
+          return (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium">{row.original.nome}</span>
+              {dup && <DuplicataTag dup={dup} onClick={() => setMesclando(dup)} />}
+            </div>
+          );
+        },
       },
       {
         id: "endereco",
@@ -248,7 +337,7 @@ export default function LocaisPage() {
         ),
       },
     ],
-    [update],
+    [update, dupMap],
   );
 
   return (
@@ -293,6 +382,17 @@ export default function LocaisPage() {
           </button>
         ))}
       </div>
+
+      {view === "lista" && totalLixo > 0 && (
+        <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            {plural(totalLixo, "local parece", "locais parecem")} cadastro
+            duplicado (nome quase igual a outro com mais viagens). Veja as tarjas
+            vermelhas na lista — clique pra mesclar ou conferir.
+          </span>
+        </div>
+      )}
 
       {view === "mapa" && semCoord > 0 && (
         <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
@@ -360,9 +460,15 @@ export default function LocaisPage() {
               <Badge className={TIPO_LOCAL_COLOR[l.tipo] ?? ""}>{l.tipo}</Badge>
 
               <div className="min-w-0 space-y-2">
-                <div className="flex items-center gap-2 text-sm">
+                <div className="flex flex-wrap items-center gap-2 text-sm">
                   <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   <span className="truncate font-medium">{l.nome}</span>
+                  {dupMap.get(l.id) && (
+                    <DuplicataTag
+                      dup={dupMap.get(l.id) as DupEntry}
+                      onClick={() => setMesclando(dupMap.get(l.id) as DupEntry)}
+                    />
+                  )}
                 </div>
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                   <span className="truncate">
@@ -445,6 +551,84 @@ export default function LocaisPage() {
         )}
       />
       )}
+
+      {mesclando && (
+        <MesclarDupDialog
+          dup={mesclando}
+          pending={mesclar.isPending}
+          onClose={() => setMesclando(null)}
+          onConfirm={(destinoId) =>
+            mesclar.mutate({ origemId: mesclando.id, destinoId })
+          }
+        />
+      )}
     </div>
+  );
+}
+
+function MesclarDupDialog({
+  dup,
+  pending,
+  onClose,
+  onConfirm,
+}: {
+  dup: DupEntry;
+  pending: boolean;
+  onClose: () => void;
+  onConfirm: (destinoId: string) => void;
+}) {
+  // Default: mesclar no irmão com mais viagens (o "forte"). Admin pode trocar.
+  const [destinoId, setDestinoId] = useState<string>(dup.similares[0]?.id ?? "");
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Mesclar &quot;{dup.nome}&quot;</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            &quot;{dup.nome}&quot; tem {plural(dup.totalViagens, "viagem", "viagens")} e
+            parece duplicata. Ao mesclar, {dup.totalViagens === 0 ? "ele" : "as viagens dele"} {dup.totalViagens === 0 ? "é apagado e some da lista" : "vão pro local escolhido e ele é apagado"}.
+            Escolha o local correto:
+          </p>
+          <div className="space-y-1 rounded-md border p-1">
+            {dup.similares.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setDestinoId(s.id)}
+                className={`block w-full rounded px-3 py-2 text-left text-sm transition-colors ${
+                  destinoId === s.id ? "bg-primary/10" : "hover:bg-muted"
+                }`}
+              >
+                <span className="font-medium">{s.nome}</span>
+                <span className="ml-2 text-xs text-muted-foreground tabular-nums">
+                  {plural(s.totalViagens, "viagem", "viagens")}
+                </span>
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Se preferir só apagar este local, feche aqui e use a lixeira na linha
+            (disponível quando não há viagens).
+          </p>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Permitido chave="locais.homologar">
+            <Button
+              type="button"
+              disabled={!destinoId || pending}
+              onClick={() => destinoId && onConfirm(destinoId)}
+            >
+              <GitMerge className="h-4 w-4" />
+              <span className="ml-1">Mesclar</span>
+            </Button>
+          </Permitido>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
