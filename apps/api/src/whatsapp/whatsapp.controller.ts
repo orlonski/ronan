@@ -188,6 +188,23 @@ export class WhatsappController {
     );
   }
 
+  /**
+   * Diagnóstico: dado o CPF (ou id) de um motorista, mostra cada etapa da régua
+   * do aviso e por que (não) dispara. `enviar=true` envia de verdade ignorando a
+   * trava de envio único — pra re-testar o mesmo motorista.
+   */
+  @ApiBearerAuth()
+  @UseGuards(RolesGuard)
+  @Roles("ADMIN_USER")
+  @Get("admin/whatsapp/aviso-grupo/diagnostico")
+  async diagnosticarAvisoGrupo(
+    @Query("motorista") motorista: string,
+    @Query("enviar") enviar?: string,
+  ) {
+    if (!motorista) return { ok: false, motivo: "Informe o CPF do motorista." };
+    return this.avisoGrupo.diagnosticar(motorista, { enviar: enviar === "true" });
+  }
+
   @ApiBearerAuth()
   @UseGuards(RolesGuard)
   @Roles("ADMIN_USER")

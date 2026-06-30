@@ -80,6 +80,22 @@ type ConfigAvisoGrupo = {
 const TEMPLATE_AVISO_PLACEHOLDER =
   "🎉 {nome} acabou de entrar no app da Schaba! Seja bem-vindo, parceiro 🚛";
 
+type Diagnostico = {
+  ok: boolean;
+  motivo?: string;
+  motorista?: { nome: string };
+  evolutionConfigurado?: boolean;
+  configAtivo?: boolean;
+  grupoJid?: string | null;
+  temTelefone?: boolean;
+  telefoneAlvo?: string | null;
+  jaAvisadoEm?: string | null;
+  totalParticipantes?: number;
+  presenteNoGrupo?: boolean;
+  textoPreview?: string | null;
+  enviado?: boolean;
+};
+
 export default function WhatsappPage() {
   const token = useAuthToken();
   const qc = useQueryClient();
@@ -571,8 +587,100 @@ function AvisoGrupoCard({ isAdmin, online }: { isAdmin: boolean; online: boolean
           </Button>
         </div>
       )}
+
+      {isAdmin && <DiagnosticoAvisoGrupo />}
     </Card>
   );
+}
+
+/**
+ * Testa a régua do aviso pra um motorista específico (por CPF) e mostra em qual
+ * etapa parou. "Testar" é dry-run; "Forçar envio" manda de verdade ignorando a
+ * trava de envio único — pra confirmar que o disparo no grupo funciona.
+ */
+function DiagnosticoAvisoGrupo() {
+  const token = useAuthToken();
+  const [cpf, setCpf] = useState("");
+
+  const rodar = useMutation({
+    mutationFn: (enviar: boolean) =>
+      fetchApi<Diagnostico>(
+        `/admin/whatsapp/aviso-grupo/diagnostico?motorista=${encodeURIComponent(
+          cpf.replace(/\D/g, ""),
+        )}&enviar=${enviar}`,
+        { token },
+      ),
+    onError: (e: Error) => toast.error("Falha no diagnóstico", { description: e.message }),
+  });
+
+  const d = rodar.data;
+
+  return (
+    <div className="space-y-3 border-t pt-3">
+      <label className="block text-xs font-medium text-muted-foreground">
+        Testar com um motorista
+      </label>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={cpf}
+          onChange={(e) => setCpf(e.target.value)}
+          placeholder="CPF do motorista (só números)"
+          inputMode="numeric"
+          className="w-56 rounded-md border border-input bg-background p-2 text-sm"
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={rodar.isPending || cpf.replace(/\D/g, "").length !== 11}
+          onClick={() => rodar.mutate(false)}
+        >
+          {rodar.isPending ? <Spinner /> : null} Testar (sem enviar)
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={rodar.isPending || cpf.replace(/\D/g, "").length !== 11}
+          onClick={() => rodar.mutate(true)}
+        >
+          Forçar envio
+        </Button>
+      </div>
+
+      {d && (
+        <div
+          className={`space-y-1 rounded-md border p-3 text-xs ${
+            d.enviado || d.presenteNoGrupo
+              ? "border-green-200 bg-green-50"
+              : "border-amber-200 bg-amber-50"
+          }`}
+        >
+          <p className="font-medium">{d.enviado ? "✅ Enviado!" : d.motivo}</p>
+          {d.motorista && <DiagLinha k="Motorista" v={d.motorista.nome} />}
+          <DiagLinha k="Evolution conectada" v={boolTxt(d.evolutionConfigurado)} />
+          <DiagLinha k="Aviso ligado" v={boolTxt(d.configAtivo)} />
+          <DiagLinha k="Grupo escolhido" v={d.grupoJid ? "sim" : "não"} />
+          <DiagLinha k="Telefone do motorista" v={d.telefoneAlvo ?? "—"} />
+          <DiagLinha k="Participantes lidos no grupo" v={String(d.totalParticipantes ?? 0)} />
+          <DiagLinha k="Está no grupo?" v={boolTxt(d.presenteNoGrupo)} />
+          {d.jaAvisadoEm && <DiagLinha k="Já avisado em" v={fmtDataHora(d.jaAvisadoEm)} />}
+          {d.textoPreview && <DiagLinha k="Mensagem" v={d.textoPreview} />}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DiagLinha({ k, v }: { k: string; v: string }) {
+  return (
+    <p className="flex justify-between gap-3">
+      <span className="text-muted-foreground">{k}</span>
+      <span className="text-right font-medium">{v}</span>
+    </p>
+  );
+}
+
+function boolTxt(b: boolean | undefined): string {
+  return b ? "sim" : "não";
 }
 
 function QRDialog({
