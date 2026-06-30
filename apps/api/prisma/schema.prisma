@@ -308,14 +308,16 @@ model Motorista {
   appCanal                String?   // canal EAS Update (ex: "production")
   appVistoEm              DateTime? // última vez que o app reportou versão (= visto online)
   // Acessos por funcionalidade (controle de feature flag por motorista).
-  // Default true = não quebra fluxo existente; admin desativa pelo dashboard.
+  // Default false nos campos sensíveis = novo motorista nasce travado e o admin
+  // libera caso a caso pelo dashboard. podeLancarViagem/podeLancarAbastecimento
+  // seguem true pra não quebrar fluxo existente.
   podeLancarViagem        Boolean   @default(true)
-  podeIniciarViagem       Boolean   @default(true)
-  podeLancarPedagio       Boolean   @default(true)
+  podeIniciarViagem       Boolean   @default(false)
+  podeLancarPedagio       Boolean   @default(false)
   podeLancarAbastecimento Boolean   @default(true)
   /// Quando true, o app dispara OCR via IA na foto do ticket pra sugerir
   /// preenchimento. False = motorista preenche tudo manualmente.
-  podeUsarOcrTicket       Boolean   @default(true)
+  podeUsarOcrTicket       Boolean   @default(false)
   criadoEm                DateTime  @default(now())
   alteradoEm              DateTime  @updatedAt
 
