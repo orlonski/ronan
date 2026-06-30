@@ -121,9 +121,19 @@ export default function LoginScreen() {
               </Button>
 
               <Pressable
-                onPress={() => router.push("/signup")}
+                onPress={() => router.push("/esqueci-senha")}
                 disabled={submitting}
                 className="mt-2 py-2"
+              >
+                <Text className="text-center text-base font-semibold text-brand">
+                  Esqueci minha senha
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => router.push("/signup")}
+                disabled={submitting}
+                className="py-2"
               >
                 <Text className="text-center text-base font-semibold text-brand">
                   Não tem cadastro? Criar agora

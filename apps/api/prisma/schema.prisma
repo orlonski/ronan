@@ -334,6 +334,7 @@ model Motorista {
   eventos          EventoMotorista[]
   posicaoConfig    MotoristaPosicaoConfig?
   posicoes         MotoristaPosicao[]
+  redefinicaoSenha RedefinicaoSenhaPendente?
   criadoPor        User?                @relation("CriouMotorista", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId      String?
 
@@ -363,6 +364,28 @@ model CadastroMotoristaPendente {
   criadoEm      DateTime @default(now())
 
   @@map("cadastros_motorista_pendentes")
+}
+
+/// Pedido de redefinição de senha do motorista verificado por código no
+/// WhatsApp (fluxo "esqueci minha senha"). Chave por motorista (1 pendente por
+/// vez). Curto prazo: criado no "esqueci", apagado ao redefinir/expirar.
+model RedefinicaoSenhaPendente {
+  id            String    @id @default(uuid())
+  motoristaId   String    @unique
+  motorista     Motorista @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  /// Número de destino do código (já normalizado pra dígitos com DDD).
+  telefone      String
+  /// Quando true, o telefone acima deve ser GRAVADO no cadastro do motorista
+  /// após a confirmação (caso de motorista que não tinha celular cadastrado).
+  vincular      Boolean   @default(false)
+  codigo        String // 6 dígitos numéricos
+  expiraEm      DateTime
+  tentativas    Int       @default(0) // confirmações erradas
+  reenvios      Int       @default(0)
+  ultimoEnvioEm DateTime  @default(now())
+  criadoEm      DateTime  @default(now())
+
+  @@map("redefinicoes_senha_pendentes")
 }
 
 /// Preferências do motorista pra compartilhamento de posição periódica

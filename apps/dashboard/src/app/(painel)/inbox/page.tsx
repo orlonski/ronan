@@ -26,6 +26,7 @@ const TIPO_LABEL: Record<string, string> = {
   "foto-anexada": "Foto anexada",
   "local-em-validacao": "Local em validação",
   "motorista-cadastro": "Novo cadastro",
+  "motorista-senha-reset": "Redefinição de senha",
 };
 
 export default function InboxPage() {

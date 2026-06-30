@@ -8,6 +8,7 @@ import {
   Bell,
   Camera,
   ClipboardCheck,
+  KeyRound,
   MapPin,
   PiggyBank,
   UserPlus,
@@ -167,6 +168,8 @@ export function IconeTipo({ tipo }: { tipo: string }) {
     return <MapPin className={`${cls} text-violet-600`} />;
   if (tipo === "motorista-cadastro")
     return <UserPlus className={`${cls} text-blue-600`} />;
+  if (tipo === "motorista-senha-reset")
+    return <KeyRound className={`${cls} text-amber-600`} />;
   return <Bell className={`${cls} text-muted-foreground`} />;
 }
 
@@ -206,6 +209,9 @@ export function rotaParaNotificacao(n: AdminNotificacao): string | null {
   }
   if (n.tipo === "motorista-cadastro") {
     return `/motoristas?status=PENDENTE_APROVACAO`;
+  }
+  if (n.tipo === "motorista-senha-reset" && dados.motoristaId) {
+    return `/motoristas/${dados.motoristaId}`;
   }
   return null;
 }

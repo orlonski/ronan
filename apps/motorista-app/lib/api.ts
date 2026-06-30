@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import type {
   CadastroMotoristaInput,
   ConfirmarCadastroInput,
+  RedefinirSenhaInput,
   StatusMotorista,
 } from "@ronan/shared-types";
 import { API_URL } from "./api-url";
@@ -283,6 +284,25 @@ export const api = {
     }),
   confirmarCadastro: async (body: ConfirmarCadastroInput) => {
     const res = await request<AuthResposta>("POST", "/m/auth/cadastro/confirmar", {
+      body,
+      auth: false,
+    });
+    setCadastroStatus(res.status);
+    return res;
+  },
+  // ---- Esqueci minha senha ----
+  esqueciSenha: (cpf: string, telefone: string) =>
+    request<{ ok: true; expiraEmSegundos: number }>("POST", "/m/auth/senha/esqueci", {
+      body: { cpf, telefone },
+      auth: false,
+    }),
+  reenviarCodigoSenha: (cpf: string) =>
+    request<{ ok: true; expiraEmSegundos: number }>("POST", "/m/auth/senha/reenviar", {
+      body: { cpf },
+      auth: false,
+    }),
+  redefinirSenha: async (body: RedefinirSenhaInput) => {
+    const res = await request<AuthResposta>("POST", "/m/auth/senha/redefinir", {
       body,
       auth: false,
     });

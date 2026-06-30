@@ -5,6 +5,7 @@ import { APP_GUARD } from "@nestjs/core";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { CadastroMotoristaService } from "./cadastro-motorista.service";
+import { RedefinicaoSenhaService } from "./redefinicao-senha.service";
 import { JwtStrategy } from "./strategies/jwt.strategy";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { PermissaoGuard } from "./guards/permissao.guard";
@@ -22,6 +23,7 @@ import { AdminInboxModule } from "../admin/inbox/inbox.module";
   providers: [
     AuthService,
     CadastroMotoristaService,
+    RedefinicaoSenhaService,
     JwtStrategy,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     // Roda global; só bloqueia onde houver @RequerPermissao (senão libera).

@@ -18,7 +18,8 @@ export type TipoNotificacaoAdmin =
   | "resposta-divergencia-foto"
   | "foto-anexada"
   | "local-em-validacao"
-  | "motorista-cadastro";
+  | "motorista-cadastro"
+  | "motorista-senha-reset";
 
 export type AdminNotificacao = {
   id: string;

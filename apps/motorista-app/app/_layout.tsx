@@ -70,9 +70,12 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const [, setVersion] = useState(0);
   const segments = useSegments();
   const loggedIn = getAuthState() === true;
-  // Rotas públicas (pré-login): login e o fluxo de auto-cadastro
-  // (signup E signup-codigo — ambos começam com "signup").
-  const onAuthScreen = segments[0] === "login" || (segments[0]?.startsWith("signup") ?? false);
+  // Rotas públicas (pré-login): login, auto-cadastro (signup*) e recuperação de
+  // senha (esqueci-senha*) — todas começam com esses prefixos.
+  const onAuthScreen =
+    segments[0] === "login" ||
+    (segments[0]?.startsWith("signup") ?? false) ||
+    (segments[0]?.startsWith("esqueci-senha") ?? false);
   const pendenteAprovacao = getCadastroStatus() === "PENDENTE_APROVACAO";
 
   // Boot: lê tokens + status do SecureStore uma vez e atualiza os stores.

@@ -3,14 +3,18 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import {
   CadastroMotoristaInput,
   ConfirmarCadastroInput,
+  EsqueciSenhaInput,
   LoginInput,
   LoginMotoristaInput,
+  RedefinirSenhaInput,
   RefreshInput,
   ReenviarCodigoInput,
+  ReenviarSenhaInput,
   TrocarSenhaInput,
 } from "@ronan/shared-types";
 import { AuthService } from "./auth.service";
 import { CadastroMotoristaService } from "./cadastro-motorista.service";
+import { RedefinicaoSenhaService } from "./redefinicao-senha.service";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { Public } from "./decorators/public.decorator";
 import { Roles } from "./decorators/roles.decorator";
@@ -24,6 +28,7 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly cadastro: CadastroMotoristaService,
+    private readonly redefinicaoSenha: RedefinicaoSenhaService,
   ) {}
 
   @Public()
@@ -51,6 +56,27 @@ export class AuthController {
     @Body(new ZodValidationPipe(ConfirmarCadastroInput)) body: ConfirmarCadastroInput,
   ) {
     return this.cadastro.confirmar(body.cpf, body.codigo);
+  }
+
+  @Public()
+  @HttpCode(200)
+  @Post("m/auth/senha/esqueci")
+  async esqueciSenha(@Body(new ZodValidationPipe(EsqueciSenhaInput)) body: EsqueciSenhaInput) {
+    return this.redefinicaoSenha.esqueci(body.cpf, body.telefone);
+  }
+
+  @Public()
+  @HttpCode(200)
+  @Post("m/auth/senha/reenviar")
+  async reenviarSenha(@Body(new ZodValidationPipe(ReenviarSenhaInput)) body: ReenviarSenhaInput) {
+    return this.redefinicaoSenha.reenviar(body.cpf);
+  }
+
+  @Public()
+  @HttpCode(200)
+  @Post("m/auth/senha/redefinir")
+  async redefinirSenha(@Body(new ZodValidationPipe(RedefinirSenhaInput)) body: RedefinirSenhaInput) {
+    return this.redefinicaoSenha.redefinir(body.cpf, body.codigo, body.novaSenha);
   }
 
   @Public()
