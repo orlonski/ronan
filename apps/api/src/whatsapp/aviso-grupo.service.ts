@@ -108,6 +108,9 @@ export class AvisoGrupoService {
     telefoneAlvo: string | null;
     jaAvisadoEm: Date | null;
     totalParticipantes: number;
+    participantesComTelefone: number;
+    participantesLid: number;
+    amostraParticipantes: string[];
     presenteNoGrupo: boolean;
     textoPreview: string | null;
   }> {
@@ -128,6 +131,9 @@ export class AvisoGrupoService {
       telefoneAlvo: motorista?.telefone ? SessaoService.normalizar(motorista.telefone) : null,
       jaAvisadoEm: motorista?.avisoGrupoEnviadoEm ?? null,
       totalParticipantes: 0,
+      participantesComTelefone: 0,
+      participantesLid: 0,
+      amostraParticipantes: [] as string[],
       presenteNoGrupo: false,
       textoPreview: null as string | null,
     };
@@ -141,20 +147,44 @@ export class AvisoGrupoService {
       return { ...base, motivo: `Já foi avisado em ${motorista.avisoGrupoEnviadoEm.toISOString()}.` };
     }
 
-    let participantes: string[];
+    let participantes: Array<Record<string, unknown>>;
     try {
       participantes = await this.evolution.participantesDoGrupo(config.grupoJid);
     } catch (e) {
       return { ...base, motivo: `Falha ao ler participantes do grupo: ${(e as Error).message}. O número da Evolution está DENTRO do grupo?` };
     }
-    const presente = participantes.some((p) => mesmoNumero(p, motorista.telefone!));
-    const comParticipantes = { ...base, totalParticipantes: participantes.length, presenteNoGrupo: presente };
+
+    // Extrai o telefone de cada participante. Quando o WhatsApp manda o id como
+    // @lid (id oculto), o número some — contamos isso à parte pra diagnosticar.
+    const numeros: string[] = [];
+    let lids = 0;
+    for (const p of participantes) {
+      const tel = telefoneDoParticipante(p);
+      if (tel) numeros.push(tel);
+      else if (ehLid(p)) lids++;
+    }
+    const presente = numeros.some((n) => mesmoNumero(n, motorista.telefone!));
+    const comParticipantes = {
+      ...base,
+      totalParticipantes: participantes.length,
+      participantesComTelefone: numeros.length,
+      participantesLid: lids,
+      amostraParticipantes: participantes.slice(0, 4).map(descreverParticipante),
+      presenteNoGrupo: presente,
+    };
 
     if (participantes.length === 0) {
       return { ...comParticipantes, motivo: "Grupo retornou 0 participantes — confira o JID do grupo e se o número da Evolution está nele." };
     }
     if (!presente) {
-      return { ...comParticipantes, motivo: `Telefone ${base.telefoneAlvo} não bate com nenhum dos ${participantes.length} participantes do grupo.` };
+      const dicaLid =
+        lids > 0 && numeros.length === 0
+          ? " O WhatsApp devolveu os participantes como @lid (id oculto, sem telefone) — não dá pra casar por número nesse grupo."
+          : "";
+      return {
+        ...comParticipantes,
+        motivo: `Telefone ${base.telefoneAlvo} não bate com nenhum dos ${numeros.length} participantes com telefone (de ${participantes.length} no total).${dicaLid}`,
+      };
     }
 
     const texto = (config.template?.trim() || TEMPLATE_DEFAULT).replace(
@@ -179,6 +209,50 @@ export class AvisoGrupoService {
 
 function primeiroNome(nome: string): string {
   return nome.trim().split(/\s+/)[0] ?? nome;
+}
+
+/** Campos onde o Evolution/Baileys pode trazer o telefone real do participante. */
+const CAMPOS_TELEFONE = ["jid", "phoneNumber", "number", "id"] as const;
+
+/**
+ * Tira o telefone (só dígitos) de um participante de grupo. O WhatsApp moderno
+ * às vezes manda `id` como `<aleatório>@lid` (id oculto que NÃO é telefone) e o
+ * número real em `jid`. Preferimos qualquer campo `@s.whatsapp.net`; nunca
+ * tratamos `@lid` como telefone. Retorna "" quando não há número resolvível.
+ */
+function telefoneDoParticipante(p: Record<string, unknown>): string {
+  for (const campo of CAMPOS_TELEFONE) {
+    const v = p[campo];
+    if (typeof v === "string" && v.includes("@s.whatsapp.net")) {
+      return v.split("@")[0]!.replace(/\D/g, "");
+    }
+  }
+  // Sem domínio explícito: aceita só se não for @lid e parecer telefone.
+  for (const campo of CAMPOS_TELEFONE) {
+    const v = p[campo];
+    if (typeof v === "string" && v && !v.includes("@lid")) {
+      const d = v.split("@")[0]!.replace(/\D/g, "");
+      if (d.length >= 10 && d.length <= 13) return d;
+    }
+  }
+  return "";
+}
+
+function ehLid(p: Record<string, unknown>): boolean {
+  return CAMPOS_TELEFONE.some((c) => typeof p[c] === "string" && (p[c] as string).includes("@lid"));
+}
+
+/** Versão curta e mascarada de um participante, só pra amostra no diagnóstico. */
+function descreverParticipante(p: Record<string, unknown>): string {
+  const id = typeof p.id === "string" ? p.id : "";
+  const jid = typeof p.jid === "string" ? p.jid : "";
+  const dominio = (s: string) => (s.includes("@") ? s.split("@")[1] : "?");
+  const mascarar = (s: string) => {
+    const d = s.split("@")[0]!.replace(/\D/g, "");
+    return d.length > 4 ? `…${d.slice(-4)}@${dominio(s)}` : `${d}@${dominio(s)}`;
+  };
+  const partes = [id && `id=${mascarar(id)}`, jid && `jid=${mascarar(jid)}`].filter(Boolean);
+  return partes.join(" ") || JSON.stringify(p).slice(0, 40);
 }
 
 /**

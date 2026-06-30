@@ -95,20 +95,20 @@ export class EvolutionClientService {
   }
 
   /**
-   * Telefones (só dígitos, com DDI) dos participantes de um grupo. Usado pra
-   * conferir se um motorista recém-cadastrado já está no grupo antes de anunciar.
+   * Participantes crus de um grupo (objetos como o WhatsApp devolve). A
+   * extração do telefone fica em quem chama, porque o WhatsApp moderno às vezes
+   * manda o `id` no formato `@lid` (id oculto, NÃO é telefone) e o número real
+   * num campo separado (`jid`/`phoneNumber`). Devolver cru deixa o chamador
+   * escolher o campo certo e diagnosticar.
    */
-  async participantesDoGrupo(grupoJid: string): Promise<string[]> {
+  async participantesDoGrupo(grupoJid: string): Promise<Array<Record<string, unknown>>> {
     const data = await this.req(
       `/group/participants/${this.instance}?groupJid=${encodeURIComponent(grupoJid)}`,
       undefined,
       "GET",
     );
-    const d = data as { participants?: Array<{ id?: string }> };
-    const lista = Array.isArray(d?.participants) ? d.participants : [];
-    return lista
-      .map((p) => (p?.id ?? "").split("@")[0]!.replace(/\D/g, ""))
-      .filter(Boolean);
+    const d = data as { participants?: Array<Record<string, unknown>> };
+    return Array.isArray(d?.participants) ? d.participants : [];
   }
 
   /**

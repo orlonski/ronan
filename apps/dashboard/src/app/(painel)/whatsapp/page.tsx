@@ -91,6 +91,9 @@ type Diagnostico = {
   telefoneAlvo?: string | null;
   jaAvisadoEm?: string | null;
   totalParticipantes?: number;
+  participantesComTelefone?: number;
+  participantesLid?: number;
+  amostraParticipantes?: string[];
   presenteNoGrupo?: boolean;
   textoPreview?: string | null;
   enviado?: boolean;
@@ -661,9 +664,19 @@ function DiagnosticoAvisoGrupo() {
           <DiagLinha k="Grupo escolhido" v={d.grupoJid ? "sim" : "não"} />
           <DiagLinha k="Telefone do motorista" v={d.telefoneAlvo ?? "—"} />
           <DiagLinha k="Participantes lidos no grupo" v={String(d.totalParticipantes ?? 0)} />
+          <DiagLinha k="…com telefone visível" v={String(d.participantesComTelefone ?? 0)} />
+          <DiagLinha k="…ocultos (@lid)" v={String(d.participantesLid ?? 0)} />
           <DiagLinha k="Está no grupo?" v={boolTxt(d.presenteNoGrupo)} />
           {d.jaAvisadoEm && <DiagLinha k="Já avisado em" v={fmtDataHora(d.jaAvisadoEm)} />}
           {d.textoPreview && <DiagLinha k="Mensagem" v={d.textoPreview} />}
+          {d.amostraParticipantes && d.amostraParticipantes.length > 0 && (
+            <div className="mt-1 border-t pt-1">
+              <p className="text-muted-foreground">Amostra de participantes:</p>
+              {d.amostraParticipantes.map((a, i) => (
+                <p key={i} className="break-all font-mono text-[10px]">{a}</p>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
