@@ -33,7 +33,8 @@ function isNetworkError(err: unknown): boolean {
 }
 
 // Coordenadas com precisão, carregadas pelos estados pra repassar na captura.
-type CoordsCap = { lat: number; lng: number; precisao: number | null };
+// buscaOffline: a busca de locais desse clique caiu no catálogo em cache.
+type CoordsCap = { lat: number; lng: number; precisao: number | null; buscaOffline: boolean };
 
 type Estado =
   | { tipo: "vazio" }
@@ -55,6 +56,8 @@ export type DescargaCaptura = {
   lng: number;
   precisao: number | null;
   distanciaMetros: number | null;
+  /** A busca de locais desse clique foi feita offline (catálogo em cache). */
+  buscaOffline: boolean;
 };
 
 export function DescargaPorGps({
@@ -146,6 +149,7 @@ export function DescargaPorGps({
     let matches: LocalProximo[];
     let usouRaioAmpliado: boolean;
     let raioInicialM: number;
+    let buscaOffline = false;
     try {
       const res = await buscarDescargaDuasEtapas({
         lat: coords.lat,
@@ -161,6 +165,7 @@ export function DescargaPorGps({
         setEstado({ tipo: "vazio" });
         return;
       }
+      buscaOffline = true;
       // Offline: busca no catálogo cacheado (2 etapas com raios padrão).
       const catalogos = qc.getQueryData<Catalogos>(["catalogos"]);
       if (!catalogos) {
@@ -184,7 +189,7 @@ export function DescargaPorGps({
       // outbox offline (pendingLocais). Não bloqueia mais.
     }
 
-    const cap: CoordsCap = { lat: coords.lat, lng: coords.lng, precisao: coords.precisao };
+    const cap: CoordsCap = { lat: coords.lat, lng: coords.lng, precisao: coords.precisao, buscaOffline };
     if (matches.length === 0) {
       setEstado({ tipo: "sem_match", coords: cap });
       setNomeNovo("");

@@ -854,6 +854,10 @@ model Viagem {
   descargaLng            Float?
   descargaPrecisao       Float? // accuracy em metros do GPS no clique
   descargaDistanciaMetros Int?  // distância do clique até o local selecionado
+  // true = a busca de locais no clique caiu no catálogo em cache (sem internet),
+  // então pode ter faltado algum local criado por outro motorista recentemente.
+  // null = não capturado (viagem antiga pré-feature ou sem captura fresca).
+  descargaBuscaOffline   Boolean?
   // Tracking GPS do trajeto (opcional — só preenchido se motorista usou "Iniciar viagem")
   iniciadoEm        DateTime? // quando tocou Iniciar
   kmReal            Decimal?     @db.Decimal(10, 2) // somatório das distâncias entre pontos consecutivos

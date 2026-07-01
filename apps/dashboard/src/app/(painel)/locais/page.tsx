@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import {
   AlertCircle,
   AlertTriangle,
+  Clock,
   Eye,
   GitMerge,
   MapPin,
@@ -72,6 +73,7 @@ type Local = {
   tipo: Tipo; ativo: boolean; clientes: Cliente[];
   origemCadastro: Origem | null;
   totalViagens: number;
+  criadoEm: string;
   criadoPor: { id: string; nome: string } | null;
   criadoPorMotorista: { id: string; nome: string } | null;
 };
@@ -107,6 +109,12 @@ const ORIGEM_LABEL: Record<Origem, string> = {
 
 function nomeCriador(l: Local): string {
   return l.criadoPor?.nome ?? l.criadoPorMotorista?.nome ?? "—";
+}
+
+// dd/mm/aaaa a partir do ISO de criadoEm.
+function fmtDataCurta(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("pt-BR");
 }
 
 function plural(n: number, sing: string, plur: string) {
@@ -307,6 +315,16 @@ export default function LocaisPage() {
         header: "Criado por",
         cell: ({ row }) => (
           <span className="text-sm text-muted-foreground">{nomeCriador(row.original)}</span>
+        ),
+      },
+      {
+        id: "criadoEm",
+        accessorKey: "criadoEm",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Criado em" />,
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground tabular-nums">
+            {fmtDataCurta(row.original.criadoEm)}
+          </span>
         ),
       },
       {
@@ -526,6 +544,10 @@ export default function LocaisPage() {
                   <span className="flex items-center gap-1">
                     <User className="h-3.5 w-3.5 shrink-0" />
                     {nomeCriador(l)}
+                  </span>
+                  <span className="flex items-center gap-1 tabular-nums">
+                    <Clock className="h-3.5 w-3.5 shrink-0" />
+                    {fmtDataCurta(l.criadoEm)}
                   </span>
                   {l.origemCadastro && (
                     <span className="rounded bg-muted px-1.5 py-0.5">

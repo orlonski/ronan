@@ -617,6 +617,7 @@ export class ViagensMotoristaService {
         descargaLng: rest.descargaLng,
         descargaPrecisao: rest.descargaPrecisao,
         descargaDistanciaMetros: rest.descargaDistanciaMetros,
+        descargaBuscaOffline: rest.descargaBuscaOffline,
         iniciadoEm: rest.iniciadoEm,
         kmReal: rest.kmReal,
         criadoOfflineEm: rest.criadoOfflineEm,

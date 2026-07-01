@@ -65,6 +65,9 @@ export const CriarViagemInput = z.object({
   descargaLng: z.number().min(-180).max(180).optional(),
   descargaPrecisao: z.number().nonnegative().max(100000).optional(),
   descargaDistanciaMetros: z.number().nonnegative().max(MAX_KM * 1000).optional(),
+  // true = a busca de locais no clique foi servida do catálogo em cache (sem
+  // internet no momento); pode ter faltado local recém-criado por outro motorista.
+  descargaBuscaOffline: z.boolean().optional(),
   // Tracking GPS (opcional — só preenchido se motorista usou "Iniciar viagem")
   iniciadoEm: z.coerce.date().optional(),
   kmReal: z.number().nonnegative().max(MAX_KM).optional(),

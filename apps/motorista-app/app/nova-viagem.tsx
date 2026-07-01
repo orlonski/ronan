@@ -540,6 +540,7 @@ export default function NovaViagem() {
               ...(descargaCaptura.distanciaMetros != null
                 ? { descargaDistanciaMetros: descargaCaptura.distanciaMetros }
                 : {}),
+              descargaBuscaOffline: descargaCaptura.buscaOffline,
             }
           : {}),
         ...(ocrCampos.size > 0
