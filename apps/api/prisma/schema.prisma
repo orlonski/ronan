@@ -666,6 +666,9 @@ model Material {
   /// Apelidos/sinônimos pra busca fuzzy do agente WhatsApp.
   apelidos   String[] @default([])
   ativo      Boolean  @default(true)
+  /// Se false, viagens desse material não exigem número de ticket (ex: concreto,
+  /// que não gera ticket de pesagem). Controlado pelo admin, nunca pelo motorista.
+  exigeTicket Boolean @default(true)
   criadoEm   DateTime @default(now())
   alteradoEm DateTime @updatedAt
 
@@ -797,7 +800,8 @@ model Viagem {
   materialId        String
   data              DateTime     @db.Date
   toneladas         Decimal      @db.Decimal(10, 3)
-  ticket            String
+  /// Null quando o material não exige ticket (ex: concreto). Ver Material.exigeTicket.
+  ticket            String?
   km                Decimal      @db.Decimal(10, 2)
   /// Snapshot do km que o OSRM calculou no momento do lançamento. Permite
   /// detectar quando motorista sobrescreveu o sugerido (km != kmCalculado).

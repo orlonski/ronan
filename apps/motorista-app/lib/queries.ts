@@ -33,7 +33,7 @@ export type Veiculo = {
   ultimoOdometro?: number | null;
 };
 
-export type Material = { id: string; nome: string };
+export type Material = { id: string; nome: string; exigeTicket?: boolean };
 
 export type Cliente = {
   id: string;

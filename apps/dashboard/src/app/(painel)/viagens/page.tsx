@@ -33,7 +33,7 @@ type Viagem = {
   id: string;
   data: string;
   toneladas: string;
-  ticket: string;
+  ticket: string | null;
   km: string;
   status: string;
   toneladasInformada: string;
@@ -46,7 +46,7 @@ type Viagem = {
   veiculo: { id: string; placa: string };
   motorista: { id: string; nome: string };
   cliente: { id: string; nome: string };
-  material: { id: string; nome: string };
+  material: { id: string; nome: string; exigeTicket: boolean };
   localCarga: { id: string; nome: string; cidade: string; uf: string };
   localDescarga: { id: string; nome: string; cidade: string; uf: string };
   fotos: { id: string; storageKey: string }[];
@@ -194,19 +194,29 @@ export default function ViagensPage() {
         id: "ticket",
         accessorKey: "ticket",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Ticket" />,
-        cell: ({ row }) => (
-          <span className="font-mono text-sm">
-            {row.original.ticket}
-            {row.original.ocrCampos && row.original.ocrCampos.length > 0 && (
-              <span
-                className="ml-1 text-xs text-indigo-600"
-                title={`Campos pela IA: ${row.original.ocrCampos.join(", ")}`}
-              >
-                ✨
-              </span>
-            )}
-          </span>
-        ),
+        cell: ({ row }) =>
+          row.original.ticket ? (
+            <span className="font-mono text-sm">
+              {row.original.ticket}
+              {row.original.ocrCampos && row.original.ocrCampos.length > 0 && (
+                <span
+                  className="ml-1 text-xs text-indigo-600"
+                  title={`Campos pela IA: ${row.original.ocrCampos.join(", ")}`}
+                >
+                  ✨
+                </span>
+              )}
+            </span>
+          ) : row.original.material.exigeTicket ? (
+            <span className="text-xs italic text-muted-foreground">sem ticket</span>
+          ) : (
+            <span
+              className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700"
+              title={`${row.original.material.nome} não exige ticket`}
+            >
+              não exige
+            </span>
+          ),
       },
       {
         id: "km",

@@ -268,6 +268,14 @@ export default function NovaViagem() {
     [cat.data?.materiais],
   );
 
+  // Alguns materiais não exigem ticket (ex: concreto) — o admin configura isso.
+  // Default true: se o catálogo é antigo (sem o campo) ou o material não foi
+  // escolhido, mantém a exigência.
+  const exigeTicket = useMemo(() => {
+    const m = cat.data?.materiais.find((x) => x.id === form.materialId);
+    return m?.exigeTicket ?? true;
+  }, [cat.data?.materiais, form.materialId]);
+
   const nomeDescargaSelecionado = useMemo(() => {
     if (!form.localDescargaId) return undefined;
     const all = [...(cat.data?.locais ?? []), ...extraLocais];
@@ -386,7 +394,7 @@ export default function NovaViagem() {
     if (!form.localCargaId) return "Escolha o local de carga.";
     if (!form.localDescargaId) return "Aperte 'Estou no local de descarga' ou escolha da lista.";
     if (!form.toneladas.trim()) return "Informe as toneladas.";
-    if (!form.ticket.trim()) return "Informe o ticket.";
+    if (exigeTicket && !form.ticket.trim()) return "Informe o ticket.";
     if (!form.km.trim()) return "Informe os km rodados.";
     return null;
   }
@@ -486,7 +494,8 @@ export default function NovaViagem() {
         materialId: form.materialId,
         data: dataFinal,
         toneladas: parseFloat(form.toneladas.replace(",", ".")),
-        ticket: form.ticket.trim(),
+        // Material que não exige ticket vai sem ticket (undefined).
+        ticket: exigeTicket ? form.ticket.trim() : undefined,
         km: parseFloat(form.km.replace(",", ".")),
         // Snapshot do km OSRM no momento do lançamento — captura mesmo que
         // motorista tenha sobrescrito. Null quando OSRM não respondeu.
@@ -742,6 +751,11 @@ export default function NovaViagem() {
                 placeholder="Escolha o material"
                 searchable
               />
+              {!exigeTicket && form.materialId ? (
+                <Text className="text-xs text-muted-foreground">
+                  Esse material não exige ticket — pode lançar sem número.
+                </Text>
+              ) : null}
             </Field>
 
             <View className="flex-row gap-3">
@@ -758,17 +772,19 @@ export default function NovaViagem() {
                   Em toneladas (máx 9999)
                 </Text>
               </View>
-              <View className="flex-1 gap-2">
-                <Label>Ticket</Label>
-                <Input
-                  value={form.ticket}
-                  onChangeText={(v) => update("ticket", v.toUpperCase())}
-                  placeholder="número"
-                  maxLength={50}
-                  autoCapitalize="characters"
-                  autoCorrect={false}
-                />
-              </View>
+              {exigeTicket && (
+                <View className="flex-1 gap-2">
+                  <Label>Ticket</Label>
+                  <Input
+                    value={form.ticket}
+                    onChangeText={(v) => update("ticket", v.toUpperCase())}
+                    placeholder="número"
+                    maxLength={50}
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                  />
+                </View>
+              )}
             </View>
 
             <Field label="Local de carga">

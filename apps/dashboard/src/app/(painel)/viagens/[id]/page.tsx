@@ -75,7 +75,7 @@ type ViagemDetalhe = {
   id: string;
   data: string;
   toneladas: string;
-  ticket: string;
+  ticket: string | null;
   km: string;
   kmReal: string | null;
   kmCalculado: string | null;
@@ -106,7 +106,7 @@ type ViagemDetalhe = {
   veiculo: { id: string; placa: string; modelo: string | null };
   motorista: { id: string; nome: string; cpf: string };
   cliente: { id: string; nome: string; empresa: { nome: string } };
-  material: { id: string; nome: string };
+  material: { id: string; nome: string; exigeTicket: boolean };
   localCarga: {
     id: string;
     nome: string;
@@ -277,9 +277,14 @@ export default function ViagemDetalhePage({
         <div className="flex-1">
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight">
-              Viagem {v.ticket}
+              {v.ticket ? `Viagem ${v.ticket}` : "Viagem sem ticket"}
             </h1>
             <Badge>{v.status}</Badge>
+            {!v.material.exigeTicket && (
+              <Badge className="border-amber-300 bg-amber-50 text-amber-700">
+                {v.material.nome} não exige ticket
+              </Badge>
+            )}
           </div>
           <p className="text-sm text-muted-foreground">
             {v.motorista.nome} · placa <span className="font-mono">{v.veiculo.placa}</span> ·{" "}
@@ -403,7 +408,15 @@ export default function ViagemDetalhePage({
               )}
               <Row
                 label="Ticket"
-                value={v.ticket}
+                value={
+                  v.ticket ? (
+                    v.ticket
+                  ) : (
+                    <span className="font-sans text-sm italic text-muted-foreground">
+                      {v.material.exigeTicket ? "sem ticket" : "material não exige ticket"}
+                    </span>
+                  )
+                }
                 mono
                 fromAi={v.ocrCampos?.includes("ticket")}
               />

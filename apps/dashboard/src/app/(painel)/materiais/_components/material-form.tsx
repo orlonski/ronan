@@ -8,15 +8,22 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TagInput } from "@/components/ui/tag-input";
+import { StatusToggle } from "@/components/status-toggle";
 import { useCreateResource, useUpdateResource } from "@/lib/client-api";
 
-export type Material = { id: string; nome: string; ativo: boolean; apelidos: string[] };
+export type Material = {
+  id: string;
+  nome: string;
+  ativo: boolean;
+  apelidos: string[];
+  exigeTicket: boolean;
+};
 
 const PATH = "/admin/materiais";
 
 type Props = { initial?: Material };
 
-type MaterialBody = { nome: string; apelidos: string[] };
+type MaterialBody = { nome: string; apelidos: string[]; exigeTicket: boolean };
 
 export function MaterialForm({ initial }: Props) {
   const router = useRouter();
@@ -25,6 +32,7 @@ export function MaterialForm({ initial }: Props) {
   const [form, setForm] = useState<MaterialBody>({
     nome: initial?.nome ?? "",
     apelidos: initial?.apelidos ?? [],
+    exigeTicket: initial?.exigeTicket ?? true,
   });
 
   async function onSubmit(e: React.FormEvent) {
@@ -62,6 +70,20 @@ export function MaterialForm({ initial }: Props) {
           <p className="text-xs text-muted-foreground">
             Como o motorista chama no WhatsApp/áudio. O agente IA usa pra
             achar o material quando ele escreve diferente do cadastro.
+          </p>
+        </div>
+        <div className="space-y-2 rounded-lg border p-3">
+          <div className="flex items-center justify-between gap-3">
+            <Label htmlFor="exigeTicket">Exige ticket na viagem</Label>
+            <StatusToggle
+              active={form.exigeTicket}
+              onChange={(next) => setForm({ ...form, exigeTicket: next })}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Ligado (padrão): o motorista precisa informar o número do ticket. Desligue
+            pra materiais que não geram ticket (ex: concreto) — aí o campo some pro
+            motorista e a viagem pode ser lançada sem ticket.
           </p>
         </div>
         <div className="flex justify-end gap-2 pt-2">

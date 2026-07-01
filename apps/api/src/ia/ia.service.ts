@@ -25,7 +25,7 @@ export type CandidatoMatch = {
   viagemId: string;
   data: string;
   placa: string;
-  ticket: string;
+  ticket: string | null;
   km: number;
   toneladas: number;
 };

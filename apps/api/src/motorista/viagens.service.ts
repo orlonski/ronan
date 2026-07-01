@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -409,7 +410,7 @@ export class ViagensMotoristaService {
       await this.notificarAdmins(
         "foto-anexada",
         `${m?.nome ?? "Motorista"} anexou foto`,
-        `Foto extra em viagem do ticket ${viagem.ticket}`,
+        viagem.ticket ? `Foto extra em viagem do ticket ${viagem.ticket}` : "Foto extra em viagem sem ticket",
         { viagemId, motoristaId },
       );
     })();
@@ -506,24 +507,39 @@ export class ViagensMotoristaService {
       return existente ? serializarViagemComMinimos(existente) : null;
     }
 
-    // Ticket é único por empresa (regra de negócio).
+    // Ticket é único por empresa (regra de negócio). Mas alguns materiais não
+    // exigem ticket (ex: concreto, sem ticket de pesagem) — nesses, o motorista
+    // manda vazio e a viagem fica sem ticket.
     const cliente = await this.prisma.cliente.findUnique({
       where: { id: input.clienteId },
       select: { empresaId: true },
     });
     if (!cliente) throw new NotFoundException("Cliente não encontrado");
 
-    const ticketDuplicado = await this.prisma.viagem.findFirst({
-      where: {
-        ticket: input.ticket,
-        cliente: { empresaId: cliente.empresaId },
-      },
-      select: { id: true },
+    const material = await this.prisma.material.findUnique({
+      where: { id: input.materialId },
+      select: { exigeTicket: true },
     });
-    if (ticketDuplicado) {
-      throw new ConflictException(
-        `Ticket ${input.ticket} já foi lançado para essa empresa.`,
-      );
+    const ticket = input.ticket?.trim() || null;
+    // Backend autoritativo: exige ticket quando o material exige (default true),
+    // mesmo com o Zod relaxado (protege PWA/admin que não escondem o campo).
+    if (material?.exigeTicket !== false && !ticket) {
+      throw new BadRequestException("Informe o número do ticket.");
+    }
+
+    if (ticket) {
+      const ticketDuplicado = await this.prisma.viagem.findFirst({
+        where: {
+          ticket,
+          cliente: { empresaId: cliente.empresaId },
+        },
+        select: { id: true },
+      });
+      if (ticketDuplicado) {
+        throw new ConflictException(
+          `Ticket ${ticket} já foi lançado para essa empresa.`,
+        );
+      }
     }
 
     // Valida que os locais existem antes de inserir. Auto-recovery:
@@ -555,7 +571,7 @@ export class ViagensMotoristaService {
         materialId: rest.materialId,
         data: rest.data,
         toneladas: rest.toneladas,
-        ticket: rest.ticket,
+        ticket,
         km: rest.km,
         kmCalculado: rest.kmCalculado,
         observacao: rest.observacao,
@@ -665,7 +681,7 @@ export class ViagensMotoristaService {
       await this.notificarAdmins(
         "nova-viagem",
         `Nova viagem de ${m?.nome ?? "motorista"}`,
-        `Ticket ${viagem.ticket} · ${viagem.cliente.nome} · ${viagem.toneladas}t`,
+        `${viagem.ticket ? `Ticket ${viagem.ticket} · ` : ""}${viagem.cliente.nome} · ${viagem.toneladas}t`,
         { viagemId: viagem.id, motoristaId },
       );
     })();

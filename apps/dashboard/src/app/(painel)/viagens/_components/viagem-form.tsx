@@ -30,7 +30,7 @@ export type ViagemEditavel = {
   id: string;
   data: string;
   toneladas: string;
-  ticket: string;
+  ticket: string | null;
   km: string;
   kmCalculado: string | null;
   observacao: string | null;
@@ -88,7 +88,7 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
 
   const [form, setForm] = useState<FormState>({
     data: toDateInput(initial.data),
-    ticket: initial.ticket,
+    ticket: initial.ticket ?? "",
     toneladas: String(initial.toneladas).replace(".", ","),
     km: String(initial.km).replace(".", ","),
     valorPedagioTotal:
@@ -181,7 +181,9 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
     if (form.data && form.data !== toDateInput(initial.data)) {
       diff.data = new Date(form.data + "T00:00:00.000Z").toISOString();
     }
-    if (form.ticket !== initial.ticket) diff.ticket = form.ticket;
+    // Ticket vazio vira null (material que não exige ticket).
+    const ticketNorm = form.ticket.trim() || null;
+    if (ticketNorm !== (initial.ticket ?? null)) diff.ticket = ticketNorm;
     if (form.veiculoId !== initial.veiculo.id) diff.veiculoId = form.veiculoId;
     if (form.clienteId !== initial.cliente.id) diff.clienteId = form.clienteId;
     if (form.materialId !== initial.material.id) diff.materialId = form.materialId;
@@ -243,10 +245,10 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
           <div className="space-y-2">
             <Label>Ticket</Label>
             <Input
-              required
               value={form.ticket}
               onChange={(e) => setForm({ ...form, ticket: e.target.value })}
               maxLength={50}
+              placeholder="deixe vazio se o material não exige"
             />
           </div>
           <div className="space-y-2">

@@ -35,7 +35,9 @@ export const CriarViagemInput = z.object({
   materialId: z.string().uuid(),
   data: z.coerce.date(),
   toneladas: z.number().positive().max(MAX_TONELADAS, `Toneladas acima do limite (${MAX_TONELADAS}).`),
-  ticket: z.string().min(1).max(50),
+  // Opcional aqui: a obrigatoriedade depende de Material.exigeTicket e é imposta
+  // no backend (autoritativo) e na UI do app com base no material escolhido.
+  ticket: z.string().max(50).optional(),
   km: z.number().nonnegative().max(MAX_KM, `Km acima do limite (${MAX_KM}).`),
   // Snapshot do km que o OSRM calculou no momento do lançamento. App envia
   // sempre que `useCalcularRota` resolveu; null quando OSRM falhou ou
@@ -83,7 +85,8 @@ export const AtualizarViagemInput = z.object({
   materialId: z.string().uuid().optional(),
   data: z.coerce.date().optional(),
   toneladas: z.number().positive().max(MAX_TONELADAS, `Toneladas acima do limite (${MAX_TONELADAS}).`).optional(),
-  ticket: z.string().min(1).max(50).optional(),
+  // nullable pra permitir limpar o ticket (material que não exige).
+  ticket: z.string().max(50).nullable().optional(),
   km: z.number().nonnegative().max(MAX_KM, `Km acima do limite (${MAX_KM}).`).optional(),
   localCargaId: z.string().uuid().optional(),
   localDescargaId: z.string().uuid().optional(),

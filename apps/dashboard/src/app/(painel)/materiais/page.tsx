@@ -24,6 +24,7 @@ type Material = {
   id: string;
   nome: string;
   ativo: boolean;
+  exigeTicket: boolean;
   criadoPor: { id: string; nome: string } | null;
 };
 
@@ -52,6 +53,20 @@ export default function MateriaisPage() {
             {row.original.criadoPor?.nome ?? "—"}
           </span>
         ),
+      },
+      {
+        id: "ticket",
+        enableSorting: false,
+        size: 120,
+        header: "Ticket",
+        cell: ({ row }) =>
+          row.original.exigeTicket ? (
+            <span className="text-xs text-muted-foreground">exige</span>
+          ) : (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+              não exige
+            </span>
+          ),
       },
       {
         id: "ativo",

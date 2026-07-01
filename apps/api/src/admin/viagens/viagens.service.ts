@@ -321,7 +321,7 @@ export class ViagensAdminService {
           veiculo: { select: { id: true; placa: true } };
           motorista: { select: { id: true; nome: true } };
           cliente: { select: { id: true; nome: true; toneladasMinimas: true; kmMinimos: true } };
-          material: { select: { id: true; nome: true } };
+          material: { select: { id: true; nome: true; exigeTicket: true } };
           localCarga: { select: { id: true; nome: true; cidade: true; uf: true } };
           localDescarga: { select: { id: true; nome: true; cidade: true; uf: true } };
           fotos: { select: { id: true; storageKey: true } };
@@ -355,7 +355,7 @@ export class ViagensAdminService {
         veiculo: { select: { id: true, placa: true } },
         motorista: { select: { id: true, nome: true } },
         cliente: { select: { id: true, nome: true, toneladasMinimas: true, kmMinimos: true } },
-        material: { select: { id: true, nome: true } },
+        material: { select: { id: true, nome: true, exigeTicket: true } },
         localCarga: { select: { id: true, nome: true, cidade: true, uf: true } },
         localDescarga: { select: { id: true, nome: true, cidade: true, uf: true } },
         fotos: { select: { id: true, storageKey: true } },
@@ -445,10 +445,12 @@ export class ViagensAdminService {
       );
     }
 
-    // Se trocou ticket OU clienteId, valida unicidade ticket+empresa
+    // Se trocou ticket OU clienteId, valida unicidade ticket+empresa. Só faz
+    // sentido quando há ticket — viagens sem ticket (material que não exige)
+    // não entram no dedup.
     const novoTicket = input.ticket ?? antes.ticket;
     const novoClienteId = input.clienteId ?? antes.clienteId;
-    if (novoTicket !== antes.ticket || novoClienteId !== antes.clienteId) {
+    if (novoTicket && (novoTicket !== antes.ticket || novoClienteId !== antes.clienteId)) {
       const cliente = await this.prisma.cliente.findUnique({
         where: { id: novoClienteId },
         select: { empresaId: true },

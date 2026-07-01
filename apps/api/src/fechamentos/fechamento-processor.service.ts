@@ -730,7 +730,7 @@ export class FechamentoProcessorService {
   private async executarIaEmOrfas(
     fechamentoId: string,
     usuarioId: string,
-    viagensPeriodo: { id: string; data: Date; ticket: string; km: Prisma.Decimal; toneladas: Prisma.Decimal; veiculo: { placa: string } }[],
+    viagensPeriodo: { id: string; data: Date; ticket: string | null; km: Prisma.Decimal; toneladas: Prisma.Decimal; veiculo: { placa: string } }[],
     stats: { matchIa: number; divergencia: number },
   ) {
     // Lê config dinâmica (atualizável via /configuracoes/ia no dashboard).
