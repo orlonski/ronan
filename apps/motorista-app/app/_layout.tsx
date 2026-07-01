@@ -12,6 +12,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { AlertHost } from "@/components/ui/alert-dialog";
 import { TutorialHost } from "@/components/tutorial-host";
+import { ConnectivityBanner } from "@/components/connectivity-banner";
 import { TelaCarregando } from "@/components/tela-carregando";
 import { aplicarUpdateNoBoot } from "@/lib/ota";
 import { loadTokens } from "@/lib/auth";
@@ -333,6 +334,7 @@ export default function RootLayout() {
                   }}
                 />
               </AuthGate>
+              <ConnectivityBanner />
               <TutorialHost />
               <AlertHost />
             </BootGate>
