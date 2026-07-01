@@ -16,9 +16,6 @@ import {
 
 const DIA_MS = 86_400_000;
 
-// Régua entre blocos do resumo (dá respiro na leitura no celular).
-const REGUA = "━━━━━━━━━━";
-
 function fmt(n: number): string {
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 }
@@ -511,6 +508,6 @@ export class ResumoService {
         ),
       );
 
-    return blocos.join(`\n\n${REGUA}\n\n`);
+    return blocos.join("\n\n");
   }
 }
