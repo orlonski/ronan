@@ -34,6 +34,7 @@ import {
 } from "@/lib/queries";
 import { atualizarAbastecimentoPendente } from "@/lib/sync";
 import { listPendingAbastecimentos } from "@/db/database";
+import { usePendingAbastecimentos } from "@/hooks/use-pending-abastecimentos";
 import { pegarCoordsPrecisa } from "@/lib/geo";
 
 type TipoCombustivel =
@@ -68,6 +69,9 @@ export default function NovoAbastecimento() {
   // Não é 100% (motorista pode ter abastecido no mês passado e estar sem net),
   // mas cobre 95% dos casos. Server-side faz checagem definitiva.
   const recentes = useAbastecimentos();
+  // Abastecimentos pendentes no outbox — entram no cálculo do último odômetro
+  // pra barrar 2 seguidos offline com odômetro decrescente.
+  const pendentes = usePendingAbastecimentos();
 
   const [veiculoId, setVeiculoId] = useState("");
   const [empresaId, setEmpresaId] = useState("");
@@ -167,13 +171,32 @@ export default function NovoAbastecimento() {
     return v / l;
   }, [litros, valor]);
 
-  // Último odômetro registrado pro veículo no cache local
+  // Último odômetro efetivo do veículo, combinando 3 fontes: o valor
+  // autoritativo do servidor (catálogo, disponível offline pelo cache), os
+  // abastecimentos já sincronizados em cache, e os PENDENTES no outbox (fecha
+  // o caso de 2 seguidos offline). Editando, ignora o próprio item pra não
+  // comparar consigo mesmo.
   const ultimoOdometroDoVeiculo = useMemo<number | null>(() => {
-    if (!veiculoId || !recentes.data) return null;
-    const doVeiculo = recentes.data.filter((a) => a.veiculo.id === veiculoId);
-    if (doVeiculo.length === 0) return null;
-    return Math.max(...doVeiculo.map((a) => a.odometro));
-  }, [veiculoId, recentes.data]);
+    if (!veiculoId) return null;
+    const candidatos: number[] = [];
+
+    const doCatalogo = cat.data?.veiculos.find((v) => v.id === veiculoId)?.ultimoOdometro;
+    if (typeof doCatalogo === "number") candidatos.push(doCatalogo);
+
+    for (const a of recentes.data ?? []) {
+      if (a.veiculo.id === veiculoId) candidatos.push(a.odometro);
+    }
+
+    for (const p of pendentes) {
+      if (p.clientId === editarClientId) continue;
+      const pl = p.payload as { veiculoId?: unknown; odometro?: unknown };
+      if (String(pl.veiculoId) === veiculoId && typeof pl.odometro === "number") {
+        candidatos.push(pl.odometro);
+      }
+    }
+
+    return candidatos.length > 0 ? Math.max(...candidatos) : null;
+  }, [veiculoId, cat.data, recentes.data, pendentes, editarClientId]);
 
   async function salvar() {
     setErro(null);
@@ -412,11 +435,21 @@ export default function NovoAbastecimento() {
                 editable={!submitting}
                 maxLength={8}
               />
-              {ultimoOdometroDoVeiculo !== null && (
-                <Text className="text-xs text-muted-foreground">
-                  Último registrado: {ultimoOdometroDoVeiculo.toLocaleString("pt-BR")} km
-                </Text>
-              )}
+              {ultimoOdometroDoVeiculo !== null &&
+                (() => {
+                  const n = parseInt(odometro.replace(/\D/g, ""), 10);
+                  const abaixo = Number.isFinite(n) && n < ultimoOdometroDoVeiculo;
+                  return abaixo ? (
+                    <Text className="text-xs font-semibold text-destructive">
+                      Odômetro menor que o último registrado (
+                      {ultimoOdometroDoVeiculo.toLocaleString("pt-BR")} km). Confira o valor.
+                    </Text>
+                  ) : (
+                    <Text className="text-xs text-muted-foreground">
+                      Último registrado: {ultimoOdometroDoVeiculo.toLocaleString("pt-BR")} km
+                    </Text>
+                  );
+                })()}
             </View>
 
             <View className="gap-2">

@@ -24,7 +24,14 @@ import {
   enqueueViagem,
 } from "./sync";
 
-export type Veiculo = { id: string; placa: string; modelo: string | null };
+export type Veiculo = {
+  id: string;
+  placa: string;
+  modelo: string | null;
+  // Último odômetro registrado (servidor) pra validar abastecimento na
+  // digitação. Opcional: cache offline antigo não tem o campo.
+  ultimoOdometro?: number | null;
+};
 
 export type Material = { id: string; nome: string };
 

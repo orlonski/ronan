@@ -863,7 +863,7 @@ export class MotoristaService {
         ? { ativo: true, id: { in: vinculadosIds } }
         : { ativo: true };
 
-    const [veiculos, materiais, clientes, locais, empresas] = await Promise.all([
+    const [veiculos, materiais, clientes, locais, empresas, ultimosAbast] = await Promise.all([
       this.prisma.veiculo.findMany({
         where: veiculosWhere,
         select: { id: true, placa: true, modelo: true },
@@ -906,12 +906,27 @@ export class MotoristaService {
         select: { id: true, nome: true },
         orderBy: { nome: "asc" },
       }),
+      // Último odômetro por veículo, pro app validar abastecimento já na
+      // digitação (não só no sync). Espelha o critério do create(): mais
+      // recente por `data`, de qualquer motorista do veículo. `distinct`
+      // devolve 1 linha por veiculoId (a primeira na ordem = a mais recente).
+      this.prisma.abastecimento.findMany({
+        where: vinculadosIds.length > 0 ? { veiculoId: { in: vinculadosIds } } : {},
+        distinct: ["veiculoId"],
+        orderBy: { data: "desc" },
+        select: { veiculoId: true, odometro: true },
+      }),
     ]);
+    const odometroMap = new Map(ultimosAbast.map((a) => [a.veiculoId, a.odometro]));
+    const veiculosComOdometro = veiculos.map((v) => ({
+      ...v,
+      ultimoOdometro: odometroMap.get(v.id) ?? null,
+    }));
     const locaisFlat = locais.map(({ clientes, ...l }) => ({
       ...l,
       clienteIds: clientes.map((c) => c.clienteId),
     }));
-    return { veiculos, materiais, clientes, locais: locaisFlat, empresas };
+    return { veiculos: veiculosComOdometro, materiais, clientes, locais: locaisFlat, empresas };
   }
 
   /**
