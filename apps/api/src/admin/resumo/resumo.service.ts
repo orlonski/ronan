@@ -152,6 +152,8 @@ export class ResumoService {
       rankMotRaw,
       rankCliRaw,
       rankMatRaw,
+      motHojeRaw,
+      matHojeRaw,
     ] = await Promise.all([
       this.prisma.motorista.count(),
       this.prisma.motorista.count({ where: { status: "APROVADO" } }),
@@ -193,11 +195,28 @@ export class ResumoService {
         orderBy: { _count: { materialId: "desc" } },
         take: 5,
       }),
+      // Detalhe do dia atual: todos os motoristas e materiais que rodaram hoje.
+      this.prisma.viagem.groupBy({
+        by: ["motoristaId"],
+        where: { data: { gte: hoje00, lt: amanha00 } },
+        _count: { _all: true },
+        _sum: { toneladas: true },
+        orderBy: { _count: { motoristaId: "desc" } },
+      }),
+      this.prisma.viagem.groupBy({
+        by: ["materialId"],
+        where: { data: { gte: hoje00, lt: amanha00 } },
+        _count: { _all: true },
+        _sum: { toneladas: true },
+        orderBy: { _count: { materialId: "desc" } },
+      }),
     ]);
 
     const [motoristas, clientes, materiais] = await Promise.all([
       this.prisma.motorista.findMany({
-        where: { id: { in: rankMotRaw.map((r) => r.motoristaId) } },
+        where: {
+          id: { in: [...rankMotRaw, ...motHojeRaw].map((r) => r.motoristaId) },
+        },
         select: { id: true, nome: true },
       }),
       this.prisma.cliente.findMany({
@@ -205,7 +224,9 @@ export class ResumoService {
         select: { id: true, nome: true },
       }),
       this.prisma.material.findMany({
-        where: { id: { in: rankMatRaw.map((r) => r.materialId) } },
+        where: {
+          id: { in: [...rankMatRaw, ...matHojeRaw].map((r) => r.materialId) },
+        },
         select: { id: true, nome: true },
       }),
     ]);
@@ -299,6 +320,25 @@ export class ResumoService {
       return `${titulo}\n${linhas}`;
     };
 
+    // Lista do dia (sem "top N"): cada linha é um item com nº de viagens e
+    // toneladas do dia. Ordenada por nº de viagens (vem ordenada do groupBy).
+    const listaHoje = (
+      titulo: string,
+      raw: { _count: { _all: number }; _sum: { toneladas: unknown } }[],
+      ids: string[],
+      arr: { id: string; nome: string }[],
+      vazio: string,
+    ) => {
+      if (raw.length === 0) return `${titulo}\n_${vazio}_`;
+      const linhas = raw
+        .map(
+          (r, i) =>
+            `• ${nomeDe(arr, ids[i])} — ${fmt(r._count._all)} viagens · ${fmtTon(Number(r._sum.toneladas ?? 0))} t`,
+        )
+        .join("\n");
+      return `${titulo}\n${linhas}`;
+    };
+
     const pad = (n: number) => String(n).padStart(2, "0");
     const dataLabel = `${pad(dia)}/${pad(m)}/${y}`;
     const has = (c: string) => chaves.has(c);
@@ -386,6 +426,26 @@ export class ResumoService {
           "",
           ranking("*Materiais* (mais transportados)", rankMatRaw, rankMatRaw.map((r) => r.materialId), materiais),
         ].join("\n"),
+      );
+    if (has("motoristas_hoje"))
+      blocos.push(
+        listaHoje(
+          "🚛 *Viagens por motorista (hoje)*",
+          motHojeRaw,
+          motHojeRaw.map((r) => r.motoristaId),
+          motoristas,
+          "nenhuma viagem hoje",
+        ),
+      );
+    if (has("materiais_hoje"))
+      blocos.push(
+        listaHoje(
+          "🧱 *Materiais (hoje)*",
+          matHojeRaw,
+          matHojeRaw.map((r) => r.materialId),
+          materiais,
+          "nenhuma viagem hoje",
+        ),
       );
 
     return blocos.join("\n\n");

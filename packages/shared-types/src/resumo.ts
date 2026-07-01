@@ -17,6 +17,8 @@ export const ASSUNTOS_RESUMO: AssuntoResumo[] = [
   { id: "conferencia", titulo: "Conferência" },
   { id: "saude", titulo: "Saúde" },
   { id: "ranking", titulo: "Top 5 do mês" },
+  { id: "motoristas_hoje", titulo: "Viagens por motorista (hoje)" },
+  { id: "materiais_hoje", titulo: "Materiais (hoje)" },
 ];
 
 /** Todos os ids — default pra quem ainda não personalizou (recebe tudo). */
