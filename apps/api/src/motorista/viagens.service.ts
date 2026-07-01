@@ -8,7 +8,11 @@ import {
 import { AcaoAuditoria, Prisma, type StatusViagem } from "@prisma/client";
 import type { CriarViagemInput } from "@ronan/shared-types";
 import { AuditoriaService } from "../auditoria/auditoria.service";
-import { aplicarMinimosCliente, serializarViagemComMinimos } from "../common/viagem-minimos";
+import {
+  aplicarMinimosCliente,
+  resolverRegraMinimo,
+  serializarViagemComMinimos,
+} from "../common/viagem-minimos";
 import { EventosService } from "../eventos/eventos.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { RoteamentoService } from "../roteamento/roteamento.service";
@@ -18,7 +22,7 @@ import { AdminInboxService } from "../admin/inbox/inbox.service";
 
 const VIAGEM_INCLUDE = {
   veiculo: { select: { id: true, placa: true, modelo: true } },
-  cliente: { select: { id: true, nome: true, toneladasMinimas: true, kmMinimos: true } },
+  cliente: { select: { id: true, nome: true, empresaId: true, toneladasMinimas: true, kmMinimos: true } },
   material: { select: { id: true, nome: true } },
   localCarga: { select: { id: true, nome: true, cidade: true, uf: true } },
   localDescarga: { select: { id: true, nome: true, cidade: true, uf: true } },
@@ -31,6 +35,7 @@ const VIAGEM_DETALHE_INCLUDE = {
     select: {
       id: true,
       nome: true,
+      empresaId: true,
       toneladasMinimas: true,
       kmMinimos: true,
       empresa: { select: { id: true, nome: true } },
@@ -61,6 +66,21 @@ export class ViagensMotoristaService {
     private readonly roteamento: RoteamentoService,
     private readonly inbox: AdminInboxService,
   ) {}
+
+  /** Regras de mínimo por faixa ativas (empresa+material+faixa de km). */
+  private regrasMinimoAtivas() {
+    return this.prisma.regraMinimo.findMany({
+      where: { ativo: true },
+      select: {
+        empresaId: true,
+        materialId: true,
+        kmFaixaDe: true,
+        kmFaixaAte: true,
+        kmMinimo: true,
+        toneladasMinimo: true,
+      },
+    });
+  }
 
   /**
    * Dispara notificação pra inbox de todos os admins. Best-effort: erro
@@ -111,7 +131,11 @@ export class ViagensMotoristaService {
     const pageItens = hasMore ? itens.slice(0, filtros.limit) : itens;
     const nextCursor = hasMore ? pageItens[pageItens.length - 1].id : null;
 
-    return { itens: pageItens.map(serializarViagemComMinimos), nextCursor };
+    const regras = await this.regrasMinimoAtivas();
+    return {
+      itens: pageItens.map((v) => serializarViagemComMinimos(v, regras)),
+      nextCursor,
+    };
   }
 
   async resumoMes(motoristaId: string, mes: string) {
@@ -130,7 +154,8 @@ export class ViagensMotoristaService {
         select: {
           toneladas: true,
           km: true,
-          cliente: { select: { toneladasMinimas: true, kmMinimos: true } },
+          materialId: true,
+          cliente: { select: { empresaId: true, toneladasMinimas: true, kmMinimos: true } },
         },
       }),
       this.prisma.viagem.aggregate({
@@ -151,10 +176,13 @@ export class ViagensMotoristaService {
       }),
     ]);
 
+    const regras = await this.regrasMinimoAtivas();
     let totalToneladas = new Prisma.Decimal(0);
     let totalKm = new Prisma.Decimal(0);
     for (const v of viagens) {
-      const m = aplicarMinimosCliente(v, v.cliente);
+      const override =
+        resolverRegraMinimo(regras, v.cliente.empresaId, v.materialId, v.km) ?? undefined;
+      const m = aplicarMinimosCliente(v, v.cliente, override);
       totalToneladas = totalToneladas.plus(m.toneladasEfetiva);
       totalKm = totalKm.plus(m.kmEfetivo);
     }
@@ -220,7 +248,11 @@ export class ViagensMotoristaService {
       select: { geometria: true },
     });
 
-    return { ...serializarViagemComMinimos(viagem), rotaGeometria: rota?.geometria ?? null };
+    const regras = await this.regrasMinimoAtivas();
+    return {
+      ...serializarViagemComMinimos(viagem, regras),
+      rotaGeometria: rota?.geometria ?? null,
+    };
   }
 
   async fotoBuffer(motoristaId: string, viagemId: string, fotoId: string) {
@@ -504,7 +536,8 @@ export class ViagensMotoristaService {
         where: { clientId: input.clientId },
         include: VIAGEM_INCLUDE,
       });
-      return existente ? serializarViagemComMinimos(existente) : null;
+      if (!existente) return null;
+      return serializarViagemComMinimos(existente, await this.regrasMinimoAtivas());
     }
 
     // Ticket é único por empresa (regra de negócio). Mas alguns materiais não
@@ -686,7 +719,7 @@ export class ViagensMotoristaService {
       );
     })();
 
-    return serializarViagemComMinimos(viagem);
+    return serializarViagemComMinimos(viagem, await this.regrasMinimoAtivas());
   }
 }
 

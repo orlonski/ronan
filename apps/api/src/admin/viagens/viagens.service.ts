@@ -320,7 +320,7 @@ export class ViagensAdminService {
         include: {
           veiculo: { select: { id: true; placa: true } };
           motorista: { select: { id: true; nome: true } };
-          cliente: { select: { id: true; nome: true; toneladasMinimas: true; kmMinimos: true } };
+          cliente: { select: { id: true; nome: true; empresaId: true; toneladasMinimas: true; kmMinimos: true } };
           material: { select: { id: true; nome: true; exigeTicket: true } };
           localCarga: { select: { id: true; nome: true; cidade: true; uf: true } };
           localDescarga: { select: { id: true; nome: true; cidade: true; uf: true } };
@@ -354,7 +354,7 @@ export class ViagensAdminService {
       include: {
         veiculo: { select: { id: true, placa: true } },
         motorista: { select: { id: true, nome: true } },
-        cliente: { select: { id: true, nome: true, toneladasMinimas: true, kmMinimos: true } },
+        cliente: { select: { id: true, nome: true, empresaId: true, toneladasMinimas: true, kmMinimos: true } },
         material: { select: { id: true, nome: true, exigeTicket: true } },
         localCarga: { select: { id: true, nome: true, cidade: true, uf: true } },
         localDescarga: { select: { id: true, nome: true, cidade: true, uf: true } },
@@ -364,10 +364,11 @@ export class ViagensAdminService {
     });
 
     const comAlertaPedagio = await this.marcarPedagiosSemValor(result.data);
+    const regras = await this.prisma.regraMinimo.findMany({ where: { ativo: true } });
     return {
       ...result,
       data: comAlertaPedagio.map((v) => ({
-        ...serializarViagemComMinimos(v),
+        ...serializarViagemComMinimos(v, regras),
         temPedagioSemValor: v.temPedagioSemValor,
       })),
     };
@@ -383,6 +384,7 @@ export class ViagensAdminService {
           select: {
             id: true,
             nome: true,
+            empresaId: true,
             toneladasMinimas: true,
             kmMinimos: true,
             empresa: { select: { id: true, nome: true } },
@@ -430,7 +432,11 @@ export class ViagensAdminService {
       select: { geometria: true },
     });
 
-    return { ...serializarViagemComMinimos(viagem), rotaGeometria: rota?.geometria ?? null };
+    const regras = await this.prisma.regraMinimo.findMany({ where: { ativo: true } });
+    return {
+      ...serializarViagemComMinimos(viagem, regras),
+      rotaGeometria: rota?.geometria ?? null,
+    };
   }
 
   async atualizar(id: string, input: AtualizarViagemInput, usuarioId: string) {

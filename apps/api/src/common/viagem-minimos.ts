@@ -17,6 +17,58 @@ export type ClienteMinimos = {
   kmMinimos: DecimalLike | null;
 };
 
+// Regra dinâmica de mínimo por empresa + material + faixa de km (tabela
+// regras_minimo). materialId null = qualquer material. kmFaixaDe inclusivo,
+// kmFaixaAte exclusivo (null = sem teto).
+export type RegraMinimoRow = {
+  empresaId: string;
+  materialId: string | null;
+  kmFaixaDe: DecimalLike;
+  kmFaixaAte: DecimalLike | null;
+  kmMinimo: DecimalLike | null;
+  toneladasMinimo: DecimalLike | null;
+  ativo?: boolean;
+};
+
+export type MinimoOverride = {
+  kmMinimo: Prisma.Decimal | null;
+  toneladasMinimo: Prisma.Decimal | null;
+};
+
+/**
+ * Acha a regra que casa pra (empresa, material, km rodado) e devolve os mínimos
+ * dela. Material-específico vence "qualquer" (materialId null); entre iguais, a
+ * faixa mais estreita (maior kmFaixaDe) vence. Retorna null se nada casar.
+ */
+export function resolverRegraMinimo(
+  regras: RegraMinimoRow[],
+  empresaId: string,
+  materialId: string,
+  kmReal: DecimalLike,
+): MinimoOverride | null {
+  const km = dec(kmReal);
+  const candidatas = regras.filter(
+    (r) =>
+      r.ativo !== false &&
+      r.empresaId === empresaId &&
+      (r.materialId == null || r.materialId === materialId) &&
+      dec(r.kmFaixaDe).lte(km) &&
+      (r.kmFaixaAte == null || km.lt(dec(r.kmFaixaAte))),
+  );
+  if (candidatas.length === 0) return null;
+  candidatas.sort((a, b) => {
+    const espA = a.materialId ? 1 : 0;
+    const espB = b.materialId ? 1 : 0;
+    if (espA !== espB) return espB - espA; // material específico primeiro
+    return Number(b.kmFaixaDe) - Number(a.kmFaixaDe); // faixa mais estreita
+  });
+  const r = candidatas[0]!;
+  return {
+    kmMinimo: r.kmMinimo != null ? dec(r.kmMinimo) : null,
+    toneladasMinimo: r.toneladasMinimo != null ? dec(r.toneladasMinimo) : null,
+  };
+}
+
 // Nomes evitam colidir com Viagem.kmReal (GPS tracking) — esse "kmInformado"
 // é o que o motorista lançou (Viagem.km), antes de aplicar o mínimo.
 export type CamposMinimos = {
@@ -35,12 +87,18 @@ function dec(v: DecimalLike): Prisma.Decimal {
 export function aplicarMinimosCliente(
   viagem: ViagemBruta,
   cliente: ClienteMinimos,
+  // Override da regra por faixa: quando presente, vence o mínimo do cliente
+  // (só nos campos que a regra define — null cai de volta pro cliente).
+  override?: MinimoOverride,
 ): CamposMinimos {
   const tonReal = dec(viagem.toneladas);
   const kmReal = dec(viagem.km);
 
-  const tonMin = cliente.toneladasMinimas != null ? dec(cliente.toneladasMinimas) : null;
-  const kmMin = cliente.kmMinimos != null ? dec(cliente.kmMinimos) : null;
+  const tonMin =
+    override?.toneladasMinimo ??
+    (cliente.toneladasMinimas != null ? dec(cliente.toneladasMinimas) : null);
+  const kmMin =
+    override?.kmMinimo ?? (cliente.kmMinimos != null ? dec(cliente.kmMinimos) : null);
 
   const tonAjustada = tonMin !== null && tonReal.lt(tonMin);
   const kmAjustada = kmMin !== null && kmReal.lt(kmMin);
@@ -59,7 +117,16 @@ export function aplicarMinimosCliente(
 }
 
 export function serializarViagemComMinimos<
-  T extends ViagemBruta & { cliente: ClienteMinimos },
->(viagem: T): T & CamposMinimos {
-  return { ...viagem, ...aplicarMinimosCliente(viagem, viagem.cliente) };
+  T extends ViagemBruta & {
+    cliente: ClienteMinimos & { empresaId?: string };
+    material?: { id: string } | null;
+  },
+>(viagem: T, regras?: RegraMinimoRow[]): T & CamposMinimos {
+  let override: MinimoOverride | undefined;
+  const empresaId = viagem.cliente?.empresaId;
+  const materialId = viagem.material?.id;
+  if (regras && regras.length > 0 && empresaId && materialId) {
+    override = resolverRegraMinimo(regras, empresaId, materialId, viagem.km) ?? undefined;
+  }
+  return { ...viagem, ...aplicarMinimosCliente(viagem, viagem.cliente, override) };
 }

@@ -21,6 +21,7 @@ import {
   MapPin,
   MessageCircle,
   Package,
+  Ruler,
   Send,
   Settings,
   ShieldCheck,
@@ -72,6 +73,7 @@ const GRUPOS: Grupo[] = [
       { href: "/locais", label: "Locais", icon: MapPin, perm: "locais.ver" },
       { href: "/pedagios-rodovia", label: "Pedágios (rodovias)", icon: MapPin, perm: "pedagios.ver" },
       { href: "/materiais", label: "Materiais", icon: Package, perm: "materiais.ver" },
+      { href: "/regras-minimo", label: "Mínimos por faixa", icon: Ruler, perm: "regras-minimo.ver" },
     ],
   },
   {

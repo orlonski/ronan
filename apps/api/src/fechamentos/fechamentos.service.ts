@@ -11,7 +11,7 @@ import {
   StatusFechamento,
 } from "@prisma/client";
 import { AuditoriaService } from "../auditoria/auditoria.service";
-import { aplicarMinimosCliente } from "../common/viagem-minimos";
+import { aplicarMinimosCliente, resolverRegraMinimo } from "../common/viagem-minimos";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
 import { FechamentoProcessorService } from "./fechamento-processor.service";
@@ -47,8 +47,8 @@ const LINHA_INCLUDE = {
       toneladas: true,
       veiculo: { select: { placa: true } },
       motorista: { select: { nome: true } },
-      cliente: { select: { nome: true, toneladasMinimas: true, kmMinimos: true } },
-      material: { select: { nome: true } },
+      cliente: { select: { nome: true, empresaId: true, toneladasMinimas: true, kmMinimos: true } },
+      material: { select: { id: true, nome: true } },
     },
   },
   resolvidoPor: { select: { id: true, nome: true } },
@@ -119,10 +119,23 @@ export class FechamentosService {
       include: LINHA_INCLUDE,
       orderBy: { ordem: "asc" },
     });
+    const regras = await this.prisma.regraMinimo.findMany({ where: { ativo: true } });
     return linhas.map((l) => ({
       ...l,
       viagemMatch: l.viagemMatch
-        ? { ...l.viagemMatch, ...aplicarMinimosCliente(l.viagemMatch, l.viagemMatch.cliente) }
+        ? {
+            ...l.viagemMatch,
+            ...aplicarMinimosCliente(
+              l.viagemMatch,
+              l.viagemMatch.cliente,
+              resolverRegraMinimo(
+                regras,
+                l.viagemMatch.cliente.empresaId,
+                l.viagemMatch.material.id,
+                l.viagemMatch.km,
+              ) ?? undefined,
+            ),
+          }
         : null,
     }));
   }

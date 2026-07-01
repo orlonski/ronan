@@ -12,7 +12,11 @@ import {
 } from "@prisma/client";
 import ExcelJS from "exceljs";
 import { AuditoriaService } from "../auditoria/auditoria.service";
-import { aplicarMinimosCliente } from "../common/viagem-minimos";
+import {
+  aplicarMinimosCliente,
+  resolverRegraMinimo,
+  type MinimoOverride,
+} from "../common/viagem-minimos";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
 import { paginate, type PaginationQuery } from "../common/pagination";
@@ -77,12 +81,17 @@ export class ExportFechamentoService {
     const layoutId = input.layoutEnvioId ?? fechamento.empresa.layoutsEnvio[0]?.id;
     const layout = await this.carregarLayout(layoutId, fechamento.empresaId);
 
+    const regras = await this.prisma.regraMinimo.findMany({ where: { ativo: true } });
     const linhasParaExport = fechamento.linhas
       .filter((l) => l.viagemMatch !== null)
-      .map((l) => ({
-        viagem: l.viagemMatch as ViagemFull,
-        valorTotal: l.valor ? Number(l.valor) : null,
-      }));
+      .map((l) => {
+        const viagem = l.viagemMatch as ViagemFull;
+        return {
+          viagem,
+          valorTotal: l.valor ? Number(l.valor) : null,
+          override: comOverride(regras, viagem),
+        };
+      });
 
     const buffer = await montarXlsx({
       empresaNome: fechamento.empresa.nome,
@@ -184,11 +193,16 @@ export class ExportFechamentoService {
       );
     }
 
-    const linhasParaExport = viagens.map((v) => ({
-      viagem: v as ViagemFull,
-      // valor unitário do contrato vezes toneladas (aproximação) — sem fechamento real
-      valorTotal: null as number | null,
-    }));
+    const regras = await this.prisma.regraMinimo.findMany({ where: { ativo: true } });
+    const linhasParaExport = viagens.map((v) => {
+      const viagem = v as ViagemFull;
+      return {
+        viagem,
+        // valor unitário do contrato vezes toneladas (aproximação) — sem fechamento real
+        valorTotal: null as number | null,
+        override: comOverride(regras, viagem),
+      };
+    });
 
     const buffer = await montarXlsx({
       empresaNome: empresa.nome,
@@ -345,7 +359,17 @@ export class ExportFechamentoService {
 type LinhaExport = {
   viagem: ViagemFull;
   valorTotal: number | null;
+  // Mínimo por faixa já resolvido (empresa+material+km) — vence o do cliente.
+  override: MinimoOverride | null;
 };
+
+/** Resolve o override de mínimo por faixa pra cada viagem que vai pro XLSX. */
+function comOverride(
+  regras: Parameters<typeof resolverRegraMinimo>[0],
+  viagem: ViagemFull,
+): MinimoOverride | null {
+  return resolverRegraMinimo(regras, viagem.cliente.empresaId, viagem.material.id, viagem.km);
+}
 
 async function montarXlsx(input: {
   empresaNome: string;
@@ -386,7 +410,9 @@ async function montarXlsx(input: {
   row++;
 
   for (const linha of input.linhas) {
-    const valores = colunas.map((c) => valorParaColuna(c, linha.viagem, linha.valorTotal, config));
+    const valores = colunas.map((c) =>
+      valorParaColuna(c, linha.viagem, linha.valorTotal, config, linha.override),
+    );
     ws.getRow(row).values = valores;
     row++;
   }
@@ -406,7 +432,7 @@ async function montarXlsx(input: {
         c.campo === "valor_pedagio"
       ) {
         const total = input.linhas.reduce((acc, l) => {
-          const v = valorParaColuna(c, l.viagem, l.valorTotal, config);
+          const v = valorParaColuna(c, l.viagem, l.valorTotal, config, l.override);
           return acc + (typeof v === "number" ? v : 0);
         }, 0);
         ws.getCell(row, i + 1).value = total;
@@ -429,6 +455,7 @@ function valorParaColuna(
   viagem: ViagemFull,
   valorTotalLinha: number | null,
   config: ConfigLayout,
+  override: MinimoOverride | null,
 ): string | number | Date | null {
   switch (coluna.campo) {
     case "data":
@@ -450,9 +477,13 @@ function valorParaColuna(
     case "material":
       return viagem.material.nome;
     case "toneladas":
-      return Number(aplicarMinimosCliente(viagem, viagem.cliente).toneladasEfetiva);
+      return Number(
+        aplicarMinimosCliente(viagem, viagem.cliente, override ?? undefined).toneladasEfetiva,
+      );
     case "km":
-      return Number(aplicarMinimosCliente(viagem, viagem.cliente).kmEfetivo);
+      return Number(
+        aplicarMinimosCliente(viagem, viagem.cliente, override ?? undefined).kmEfetivo,
+      );
     case "valor_pedagio":
       return viagem.valorPedagioTotal ? Number(viagem.valorPedagioTotal) : 0;
     case "valor_total":

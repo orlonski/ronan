@@ -199,6 +199,7 @@ model User {
   motoristasCriados   Motorista[]   @relation("CriouMotorista")
   motoristasAprovados Motorista[]   @relation("AprovouMotorista")
   empresasCriadas     Empresa[]     @relation("CriouEmpresa")
+  regrasMinimoCriadas RegraMinimo[] @relation("CriouRegraMinimo")
   locaisCriados       Local[]       @relation("CriouLocal")
   usuariosCriados     User[]        @relation("CriouUser")
   criadoPor           User?         @relation("CriouUser", fields: [criadoPorId], references: [id], onDelete: SetNull)
@@ -597,6 +598,7 @@ model Empresa {
   alteradoEm       DateTime     @updatedAt
 
   clientes       Cliente[]
+  regrasMinimo   RegraMinimo[]
   fechamentos    Fechamento[]
   layoutsEnvio   LayoutEnvio[]
   layoutsImport  LayoutImportBloco[]
@@ -672,12 +674,39 @@ model Material {
   criadoEm   DateTime @default(now())
   alteradoEm DateTime @updatedAt
 
-  viagens     Viagem[]
-  criadoPor   User?    @relation("CriouMaterial", fields: [criadoPorId], references: [id], onDelete: SetNull)
-  criadoPorId String?
+  viagens      Viagem[]
+  regrasMinimo RegraMinimo[]
+  criadoPor    User?    @relation("CriouMaterial", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId  String?
 
   @@index([ativo])
   @@map("materiais")
+}
+
+/// Regra dinâmica de mínimo faturado por empresa + material + faixa de km rodado.
+/// Quando a viagem casa (empresa da viagem, material — ou "qualquer" se null —,
+/// e km real dentro da faixa), o mínimo da regra vence o mínimo do cliente.
+/// kmFaixaDe inclusivo, kmFaixaAte exclusivo (null = sem teto). Pelo menos um
+/// dos mínimos (km/toneladas) preenchido.
+model RegraMinimo {
+  id              String    @id @default(uuid())
+  empresa         Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  empresaId       String
+  material        Material? @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  materialId      String?
+  kmFaixaDe       Decimal   @db.Decimal(10, 2)
+  kmFaixaAte      Decimal?  @db.Decimal(10, 2)
+  kmMinimo        Decimal?  @db.Decimal(10, 2)
+  toneladasMinimo Decimal?  @db.Decimal(10, 3)
+  ativo           Boolean   @default(true)
+  criadoPor       User?     @relation("CriouRegraMinimo", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId     String?
+  criadoEm        DateTime  @default(now())
+  alteradoEm      DateTime  @updatedAt
+
+  @@index([empresaId, materialId])
+  @@index([ativo])
+  @@map("regras_minimo")
 }
 
 model Local {
