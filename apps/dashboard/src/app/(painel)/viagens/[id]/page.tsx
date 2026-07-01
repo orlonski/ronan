@@ -28,6 +28,7 @@ import {
   Clock,
   Crop,
   Edit3,
+  Eye,
   ExternalLink,
   History,
   ImageOff,
@@ -434,7 +435,14 @@ export default function ViagemDetalhePage({
                 <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                   <ArrowUp className="h-3.5 w-3.5" /> Carga
                 </div>
-                <p className="mt-0.5 font-medium">{v.localCarga.nome}</p>
+                <Link
+                  href={`/locais/${v.localCarga.id}/ver`}
+                  title="Ver local"
+                  className="mt-0.5 inline-flex items-center gap-1 font-medium hover:text-primary hover:underline"
+                >
+                  {v.localCarga.nome}
+                  <Eye className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                </Link>
                 <p className="text-xs text-muted-foreground">
                   {v.localCarga.logradouro} — {v.localCarga.cidade}/{v.localCarga.uf}
                 </p>
@@ -443,7 +451,14 @@ export default function ViagemDetalhePage({
                 <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                   <ArrowDown className="h-3.5 w-3.5" /> Descarga
                 </div>
-                <p className="mt-0.5 font-medium">{v.localDescarga.nome}</p>
+                <Link
+                  href={`/locais/${v.localDescarga.id}/ver`}
+                  title="Ver local"
+                  className="mt-0.5 inline-flex items-center gap-1 font-medium hover:text-primary hover:underline"
+                >
+                  {v.localDescarga.nome}
+                  <Eye className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                </Link>
                 <p className="text-xs text-muted-foreground">
                   {v.localDescarga.logradouro} — {v.localDescarga.cidade}/{v.localDescarga.uf}
                 </p>
