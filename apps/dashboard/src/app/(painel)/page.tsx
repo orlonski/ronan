@@ -24,7 +24,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { InfoHint } from "@/components/ui/info-hint";
 import { LoadingCard } from "@/components/loading";
-import { Sparkline } from "@/components/sparkline";
+import { TendenciaChart } from "@/components/tendencia-chart";
 import { StatCard } from "@/components/stat-card";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { fmtBRL, fmtNum } from "@/lib/fechamento-helpers";
@@ -172,7 +172,7 @@ function BlocoTendencia({ d }: { d: Snapshot }) {
           <div>
             <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
               Viagens — últimos 14 dias
-              <InfoHint text="Quantas viagens foram registradas em cada um dos últimos 14 dias. A linha sobe nos dias com mais viagens e desce nos dias com menos. O número grande é o total das duas semanas." />
+              <InfoHint text="Cada barra é um dia dos últimos 14 dias: mais alta = mais viagens naquele dia. A barra destacada é o dia de pico e a linha pontilhada é a média diária. O número grande é o total das duas semanas." />
             </p>
             <p className="text-3xl font-bold tracking-tight tabular-nums">{total14d}</p>
           </div>
@@ -181,7 +181,7 @@ function BlocoTendencia({ d }: { d: Snapshot }) {
             <p>até hoje</p>
           </div>
         </div>
-        <Sparkline data={totais} height={70} />
+        <TendenciaChart data={d.tendenciaViagens} />
       </Card>
     </section>
   );
