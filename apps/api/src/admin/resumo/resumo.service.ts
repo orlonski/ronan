@@ -16,6 +16,9 @@ import {
 
 const DIA_MS = 86_400_000;
 
+// Régua entre blocos do resumo (dá respiro na leitura no celular).
+const REGUA = "━━━━━━━━━━";
+
 function fmt(n: number): string {
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 }
@@ -329,9 +332,17 @@ export class ResumoService {
     const nomeDe = (arr: { id: string; nome: string }[], id: string) =>
       arr.find((x) => x.id === id)?.nome ?? "?";
 
-    // Trio de período com rótulo inline; hoje em negrito (foco do resumo).
-    const trio = (label: string, hoje: string, sem: string, mes: string) =>
-      `• ${label}: hoje *${hoje}* · 7d ${sem} · mês ${mes}`;
+    // Bloco de períodos, um por linha (Hoje/Semana/Mês [+ Total]).
+    const periodos = (
+      hoje: string,
+      sem: string,
+      mes: string,
+      total?: string,
+    ) => {
+      const l = [`• Hoje: ${hoje}`, `• Semana: ${sem}`, `• Mês: ${mes}`];
+      if (total !== undefined) l.push(`• Total: ${total}`);
+      return l.join("\n");
+    };
 
     const ranking = (
       titulo: string,
@@ -377,41 +388,58 @@ export class ResumoService {
     const dataLabel = `${pad(dia)}/${pad(m)}/${y} · ${diaSemana(y, m, dia)}`;
     const has = (c: string) => chaves.has(c);
 
-    // Cabeçalho com data + dia da semana e uma régua fina separando do corpo.
-    const blocos: string[] = [`📊 *RESUMO SCHABA*\n🗓️ ${dataLabel}\n━━━━━━━━━━━━━━`];
+    // Cabeçalho: título + data com dia da semana. A régua entra no join.
+    const blocos: string[] = [`📊 *RESUMO SCHABA*\n🗓️ ${dataLabel}`];
 
     if (has("motoristas"))
       blocos.push(
-        ["👷 *Motoristas*", `• Cadastrados: *${fmt(motTotal)}* — ${fmt(motAprov)} aprovados, ${fmt(motPend)} pendentes`].join("\n"),
+        [
+          "👷 *Motoristas*",
+          `• Cadastrados: ${fmt(motTotal)}`,
+          `• Aprovados: ${fmt(motAprov)}`,
+          `• Pendentes: ${fmt(motPend)}`,
+        ].join("\n"),
       );
     if (has("locais"))
-      blocos.push(["📍 *Locais ativos*", `• Carga: ${fmt(locCarga)} · Descarga: ${fmt(locDescarga)}`].join("\n"));
+      blocos.push(
+        ["📍 *Locais ativos*", `• Carga: ${fmt(locCarga)}`, `• Descarga: ${fmt(locDescarga)}`].join("\n"),
+      );
     if (has("viagens"))
       blocos.push(
-        ["🚚 *Viagens*", `• Hoje: *${fmt(viHoje)}* · 7d ${fmt(vi7)} · mês ${fmt(viMes)} · total ${fmt(viTotal)}`].join("\n"),
+        [
+          "🚚 *Viagens*",
+          periodos(fmt(viHoje), fmt(vi7), fmt(viMes), fmt(viTotal)),
+        ].join("\n"),
       );
     if (has("producao"))
       blocos.push(
         [
-          "📦 *Produção*",
-          trio("Toneladas", `${fmtTon(tonDe(viAggHoje))} t`, `${fmtTon(tonDe(viAgg7))} t`, `${fmtTon(tonDe(viAggMes))} t`),
-          trio("Km rodados", fmtTon(kmDe(viAggHoje)), fmtTon(kmDe(viAgg7)), fmtTon(kmDe(viAggMes))),
+          "📦 *Produção em toneladas*",
+          periodos(fmtTon(tonDe(viAggHoje)), fmtTon(tonDe(viAgg7)), fmtTon(tonDe(viAggMes))),
+          "",
+          "📦 *Produção em km rodados*",
+          periodos(fmtTon(kmDe(viAggHoje)), fmtTon(kmDe(viAgg7)), fmtTon(kmDe(viAggMes))),
         ].join("\n"),
       );
     if (has("abastecimentos"))
       blocos.push(
         [
           "⛽ *Abastecimentos*",
-          `• Qtde: hoje *${fmt(abHoje)}* · 7d ${fmt(ab7)} · mês ${fmt(abMes)} · total ${fmt(abTotal)}`,
-          trio("Litros", fmtTon(litDe(abAggHoje)), fmtTon(litDe(abAgg7)), fmtTon(litDe(abAggMes))),
+          periodos(fmt(abHoje), fmt(ab7), fmt(abMes), fmt(abTotal)),
+          "",
+          "⛽ *Litros abastecidos*",
+          periodos(fmtTon(litDe(abAggHoje)), fmtTon(litDe(abAgg7)), fmtTon(litDe(abAggMes))),
         ].join("\n"),
       );
     if (has("custos"))
       blocos.push(
         [
-          "💰 *Custos*",
-          trio("Combustível", fmtBRL(combDe(abAggHoje)), fmtBRL(combDe(abAgg7)), fmtBRL(combDe(abAggMes))),
-          trio("Pedágio", fmtBRL(pedDe(pedHoje)), fmtBRL(pedDe(ped7)), fmtBRL(pedDe(pedMes))),
+          "💰 *Custos em combustível*",
+          periodos(fmtBRL(combDe(abAggHoje)), fmtBRL(combDe(abAgg7)), fmtBRL(combDe(abAggMes))),
+          "",
+          "💰 *Custos em pedágio*",
+          periodos(fmtBRL(pedDe(pedHoje)), fmtBRL(pedDe(ped7)), fmtBRL(pedDe(pedMes))),
+          "",
           `• Comboios sem valor: ${fmt(comboioPend)}`,
         ].join("\n"),
       );
@@ -483,6 +511,6 @@ export class ResumoService {
         ),
       );
 
-    return blocos.join("\n\n");
+    return blocos.join(`\n\n${REGUA}\n\n`);
   }
 }
