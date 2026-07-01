@@ -33,6 +33,31 @@ function fmtBRL(n: number): string {
   return `R$ ${int.replace(/\B(?=(\d{3})+(?!\d))/g, ".")},${dec}`;
 }
 
+// "1 viagem" vs "4 viagens" — evita o "1 viagens" errado.
+function plural(n: number, sing: string, plur: string): string {
+  return `${fmt(n)} ${n === 1 ? sing : plur}`;
+}
+
+// Medalha pro pódio das listas do dia; resto vira um marcador neutro.
+function medalha(i: number): string {
+  return ["🥇", "🥈", "🥉"][i] ?? "▫️";
+}
+
+const DIAS_SEMANA = [
+  "domingo",
+  "segunda",
+  "terça",
+  "quarta",
+  "quinta",
+  "sexta",
+  "sábado",
+];
+
+// Dia da semana em pt-BR pra data BR (y/m/dia já vêm de ymdSaoPaulo).
+function diaSemana(y: number, m: number, dia: number): string {
+  return DIAS_SEMANA[new Date(Date.UTC(y, m - 1, dia)).getUTCDay()];
+}
+
 @Injectable()
 export class ResumoService {
   private readonly log = new Logger(ResumoService.name);
@@ -304,6 +329,10 @@ export class ResumoService {
     const nomeDe = (arr: { id: string; nome: string }[], id: string) =>
       arr.find((x) => x.id === id)?.nome ?? "?";
 
+    // Trio de período com rótulo inline; hoje em negrito (foco do resumo).
+    const trio = (label: string, hoje: string, sem: string, mes: string) =>
+      `• ${label}: hoje *${hoje}* · 7d ${sem} · mês ${mes}`;
+
     const ranking = (
       titulo: string,
       raw: { _count: { _all: number }; _sum: { toneladas: unknown } }[],
@@ -314,86 +343,88 @@ export class ResumoService {
       const linhas = raw
         .map((r, i) => {
           const ton = Number(r._sum.toneladas ?? 0);
-          return `${i + 1}. ${nomeDe(arr, ids[i])} — ${fmt(r._count._all)} viagens · ${fmtTon(ton)} t`;
+          return `${i + 1}. *${nomeDe(arr, ids[i])}* — ${plural(r._count._all, "viagem", "viagens")} · ${fmtTon(ton)} t`;
         })
         .join("\n");
       return `${titulo}\n${linhas}`;
     };
 
-    // Lista do dia (sem "top N"): cada linha é um item com nº de viagens e
-    // toneladas do dia. Ordenada por nº de viagens (vem ordenada do groupBy).
+    // Lista do dia: subtotal no topo + 2 linhas por item (medalha no pódio,
+    // nome em negrito, nº de viagens e toneladas embaixo). Vem ordenada do groupBy.
     const listaHoje = (
       titulo: string,
+      rotuloSing: string,
+      rotuloPlur: string,
       raw: { _count: { _all: number }; _sum: { toneladas: unknown } }[],
       ids: string[],
       arr: { id: string; nome: string }[],
       vazio: string,
     ) => {
       if (raw.length === 0) return `${titulo}\n_${vazio}_`;
+      const totViagens = raw.reduce((s, r) => s + r._count._all, 0);
+      const totTon = raw.reduce((s, r) => s + Number(r._sum.toneladas ?? 0), 0);
+      const sub = `_${plural(raw.length, rotuloSing, rotuloPlur)} · ${plural(totViagens, "viagem", "viagens")} · ${fmtTon(totTon)} t_`;
       const linhas = raw
         .map(
           (r, i) =>
-            `• ${nomeDe(arr, ids[i])} — ${fmt(r._count._all)} viagens · ${fmtTon(Number(r._sum.toneladas ?? 0))} t`,
+            `${medalha(i)} *${nomeDe(arr, ids[i])}*\n     ${plural(r._count._all, "viagem", "viagens")} · ${fmtTon(Number(r._sum.toneladas ?? 0))} t`,
         )
         .join("\n");
-      return `${titulo}\n${linhas}`;
+      return `${titulo}\n${sub}\n\n${linhas}`;
     };
 
     const pad = (n: number) => String(n).padStart(2, "0");
-    const dataLabel = `${pad(dia)}/${pad(m)}/${y}`;
+    const dataLabel = `${pad(dia)}/${pad(m)}/${y} · ${diaSemana(y, m, dia)}`;
     const has = (c: string) => chaves.has(c);
 
-    // Cada bloco só entra se o assunto estiver liberado no papel do usuário.
-    const blocos: string[] = [`📊 *Resumo Schaba* — ${dataLabel}`];
+    // Cabeçalho com data + dia da semana e uma régua fina separando do corpo.
+    const blocos: string[] = [`📊 *RESUMO SCHABA*\n🗓️ ${dataLabel}\n━━━━━━━━━━━━━━`];
 
     if (has("motoristas"))
       blocos.push(
-        ["👷 *Motoristas*", `• Cadastrados: ${fmt(motTotal)}`, `• Aprovados: ${fmt(motAprov)}`, `• Pendentes: ${fmt(motPend)}`].join("\n"),
+        ["👷 *Motoristas*", `• Cadastrados: *${fmt(motTotal)}* — ${fmt(motAprov)} aprovados, ${fmt(motPend)} pendentes`].join("\n"),
       );
     if (has("locais"))
-      blocos.push(["📍 *Locais ativos*", `• Carga: ${fmt(locCarga)}`, `• Descarga: ${fmt(locDescarga)}`].join("\n"));
+      blocos.push(["📍 *Locais ativos*", `• Carga: ${fmt(locCarga)} · Descarga: ${fmt(locDescarga)}`].join("\n"));
     if (has("viagens"))
       blocos.push(
-        ["🚚 *Viagens*", `• Hoje: ${fmt(viHoje)}`, `• Últimos 7 dias: ${fmt(vi7)}`, `• Mês: ${fmt(viMes)}`, `• Total: ${fmt(viTotal)}`].join("\n"),
+        ["🚚 *Viagens*", `• Hoje: *${fmt(viHoje)}* · 7d ${fmt(vi7)} · mês ${fmt(viMes)} · total ${fmt(viTotal)}`].join("\n"),
       );
     if (has("producao"))
       blocos.push(
         [
-          "📦 *Produção* (hoje · 7d · mês)",
-          `• Toneladas: ${fmtTon(tonDe(viAggHoje))} · ${fmtTon(tonDe(viAgg7))} · ${fmtTon(tonDe(viAggMes))}`,
-          `• Km rodados: ${fmtTon(kmDe(viAggHoje))} · ${fmtTon(kmDe(viAgg7))} · ${fmtTon(kmDe(viAggMes))}`,
+          "📦 *Produção*",
+          trio("Toneladas", `${fmtTon(tonDe(viAggHoje))} t`, `${fmtTon(tonDe(viAgg7))} t`, `${fmtTon(tonDe(viAggMes))} t`),
+          trio("Km rodados", fmtTon(kmDe(viAggHoje)), fmtTon(kmDe(viAgg7)), fmtTon(kmDe(viAggMes))),
         ].join("\n"),
       );
     if (has("abastecimentos"))
       blocos.push(
         [
           "⛽ *Abastecimentos*",
-          `• Hoje: ${fmt(abHoje)}`,
-          `• Últimos 7 dias: ${fmt(ab7)}`,
-          `• Mês: ${fmt(abMes)}`,
-          `• Total: ${fmt(abTotal)}`,
-          `• Litros (hoje · 7d · mês): ${fmtTon(litDe(abAggHoje))} · ${fmtTon(litDe(abAgg7))} · ${fmtTon(litDe(abAggMes))}`,
+          `• Qtde: hoje *${fmt(abHoje)}* · 7d ${fmt(ab7)} · mês ${fmt(abMes)} · total ${fmt(abTotal)}`,
+          trio("Litros", fmtTon(litDe(abAggHoje)), fmtTon(litDe(abAgg7)), fmtTon(litDe(abAggMes))),
         ].join("\n"),
       );
     if (has("custos"))
       blocos.push(
         [
-          "💰 *Custos* (hoje · 7d · mês)",
-          `• Combustível: ${fmtBRL(combDe(abAggHoje))} · ${fmtBRL(combDe(abAgg7))} · ${fmtBRL(combDe(abAggMes))}`,
-          `• Pedágio: ${fmtBRL(pedDe(pedHoje))} · ${fmtBRL(pedDe(ped7))} · ${fmtBRL(pedDe(pedMes))}`,
-          `• Comboios sem valor lançado: ${fmt(comboioPend)}`,
+          "💰 *Custos*",
+          trio("Combustível", fmtBRL(combDe(abAggHoje)), fmtBRL(combDe(abAgg7)), fmtBRL(combDe(abAggMes))),
+          trio("Pedágio", fmtBRL(pedDe(pedHoje)), fmtBRL(pedDe(ped7)), fmtBRL(pedDe(pedMes))),
+          `• Comboios sem valor: ${fmt(comboioPend)}`,
         ].join("\n"),
       );
     if (has("pendencias"))
       blocos.push(
         [
           "⏳ *Pendências*",
-          `• Viagens aguardando conferência: ${fmt(viAguardando)}`,
-          `• Viagens divergentes: ${fmt(viDivergente)}`,
+          `• Aguardando conferência: *${fmt(viAguardando)}*`,
+          `• Divergentes: ${fmt(viDivergente)}`,
           `• Pedágios sem valor: ${fmt(pedSemValor)}`,
-          `• Fechamentos aguardando revisão: ${fmt(fechAguardando)}`,
-          `• Relatórios gerados não enviados: ${fmt(envGerados)}`,
-          `• Locais novos a validar: ${fmt(locaisRascunho)}`,
+          `• Fechamentos p/ revisar: ${fmt(fechAguardando)}`,
+          `• Relatórios não enviados: ${fmt(envGerados)}`,
+          `• Locais a validar: ${fmt(locaisRascunho)}`,
         ].join("\n"),
       );
     if (has("conferencia"))
@@ -401,8 +432,8 @@ export class ResumoService {
         [
           "⚡ *Conferência*",
           `• Ritmo: ${fmtTon(ritmoDia)} viagens/dia (média 14d)`,
-          `• Fila: ${fmt(pendentesConf)} pendentes${etaDias != null ? ` (~${fmt(etaDias)} dia(s) pra zerar)` : ""}`,
-          `• Tempo médio de conferência: ${tempoMedioDias != null ? `${fmtTon(tempoMedioDias)} dia(s)` : "—"}`,
+          `• Fila: ${plural(pendentesConf, "pendente", "pendentes")}${etaDias != null ? ` (~${plural(etaDias, "dia", "dias")} pra zerar)` : ""}`,
+          `• Tempo médio: ${tempoMedioDias != null ? `${fmtTon(tempoMedioDias)} dias` : "—"}`,
         ].join("\n"),
       );
     if (has("saude"))
@@ -410,15 +441,15 @@ export class ResumoService {
         [
           "🩺 *Saúde*",
           `• Erros não resolvidos: ${fmt(errosNaoResolvidos)}`,
-          `• Motoristas sumidos (+7 dias sem abrir): ${fmt(motSumidos)}`,
-          `• Com app desatualizado: ${fmt(motDesatualizados)}`,
+          `• Motoristas sumidos (+7d): ${fmt(motSumidos)}`,
+          `• App desatualizado: ${fmt(motDesatualizados)}`,
         ].join("\n"),
       );
     if (has("ranking"))
       blocos.push(
         [
           "🏆 *Top 5 do mês*",
-          "_Ordenado por nº de viagens. Mostra também as toneladas carregadas no mês._",
+          "_Por nº de viagens (+ toneladas do mês)_",
           "",
           ranking("*Motoristas* (quem mais rodou)", rankMotRaw, rankMotRaw.map((r) => r.motoristaId), motoristas),
           "",
@@ -430,7 +461,9 @@ export class ResumoService {
     if (has("motoristas_hoje"))
       blocos.push(
         listaHoje(
-          "🚛 *Viagens por motorista (hoje)*",
+          "🚛 *Viagens por motorista* · hoje",
+          "motorista",
+          "motoristas",
           motHojeRaw,
           motHojeRaw.map((r) => r.motoristaId),
           motoristas,
@@ -440,7 +473,9 @@ export class ResumoService {
     if (has("materiais_hoje"))
       blocos.push(
         listaHoje(
-          "🧱 *Materiais (hoje)*",
+          "🧱 *Materiais* · hoje",
+          "material",
+          "materiais",
           matHojeRaw,
           matHojeRaw.map((r) => r.materialId),
           materiais,
