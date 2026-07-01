@@ -13,7 +13,7 @@ import {
 import ExcelJS from "exceljs";
 import { AuditoriaService } from "../auditoria/auditoria.service";
 import {
-  aplicarMinimosCliente,
+  aplicarMinimos,
   resolverRegraMinimo,
   type MinimoOverride,
 } from "../common/viagem-minimos";
@@ -477,13 +477,9 @@ function valorParaColuna(
     case "material":
       return viagem.material.nome;
     case "toneladas":
-      return Number(
-        aplicarMinimosCliente(viagem, viagem.cliente, override ?? undefined).toneladasEfetiva,
-      );
+      return Number(aplicarMinimos(viagem, override ?? undefined).toneladasEfetiva);
     case "km":
-      return Number(
-        aplicarMinimosCliente(viagem, viagem.cliente, override ?? undefined).kmEfetivo,
-      );
+      return Number(aplicarMinimos(viagem, override ?? undefined).kmEfetivo);
     case "valor_pedagio":
       return viagem.valorPedagioTotal ? Number(viagem.valorPedagioTotal) : 0;
     case "valor_total":

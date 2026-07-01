@@ -23,8 +23,6 @@ export type Cliente = {
   empresa: Empresa;
   empresaId: string;
   apelidos: string[];
-  toneladasMinimas: string | null;
-  kmMinimos: string | null;
 };
 
 const PATH = "/admin/clientes";
@@ -36,21 +34,7 @@ type ClienteBody = {
   nome: string;
   empresaId: string;
   apelidos: string[];
-  toneladasMinimas: number | null;
-  kmMinimos: number | null;
 };
-
-type ClienteFormState = Omit<ClienteBody, "toneladasMinimas" | "kmMinimos"> & {
-  toneladasMinimas: string;
-  kmMinimos: string;
-};
-
-function parseDecimalBR(v: string): number | null {
-  const trimmed = v.trim();
-  if (!trimmed) return null;
-  const n = Number(trimmed.replace(",", "."));
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
 
 export function ClienteForm({ initial }: Props) {
   const router = useRouter();
@@ -58,12 +42,10 @@ export function ClienteForm({ initial }: Props) {
   const create = useCreateResource<ClienteBody, Cliente>(PATH, PATH);
   const update = useUpdateResource<Partial<ClienteBody>, Cliente>(PATH, PATH);
 
-  const [form, setForm] = useState<ClienteFormState>({
+  const [form, setForm] = useState<ClienteBody>({
     nome: initial?.nome ?? "",
     empresaId: initial?.empresaId ?? "",
     apelidos: initial?.apelidos ?? [],
-    toneladasMinimas: initial?.toneladasMinimas ?? "",
-    kmMinimos: initial?.kmMinimos ?? "",
   });
 
   useEffect(() => {
@@ -77,8 +59,6 @@ export function ClienteForm({ initial }: Props) {
       nome: form.nome,
       empresaId: form.empresaId,
       apelidos: form.apelidos,
-      toneladasMinimas: parseDecimalBR(form.toneladasMinimas),
-      kmMinimos: parseDecimalBR(form.kmMinimos),
     };
     if (initial) {
       await update.mutateAsync({ id: initial.id, body });
@@ -127,32 +107,6 @@ export function ClienteForm({ initial }: Props) {
             Como o motorista chama no WhatsApp/áudio. O agente IA usa pra
             achar o cliente quando ele escreve diferente do cadastro.
           </p>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label>Toneladas mínimas por viagem</Label>
-            <Input
-              inputMode="decimal"
-              placeholder="Deixe em branco se não houver mínimo"
-              value={form.toneladasMinimas}
-              onChange={(e) => setForm({ ...form, toneladasMinimas: e.target.value })}
-            />
-            <p className="text-xs text-muted-foreground">
-              Viagens abaixo desse valor são contabilizadas pelo mínimo.
-            </p>
-          </div>
-          <div className="space-y-2">
-            <Label>Quilômetros mínimos por viagem</Label>
-            <Input
-              inputMode="decimal"
-              placeholder="Deixe em branco se não houver mínimo"
-              value={form.kmMinimos}
-              onChange={(e) => setForm({ ...form, kmMinimos: e.target.value })}
-            />
-            <p className="text-xs text-muted-foreground">
-              Mesma regra para km calculados/informados.
-            </p>
-          </div>
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <Link href="/clientes">

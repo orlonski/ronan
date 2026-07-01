@@ -1,20 +1,16 @@
 import { Prisma } from "@prisma/client";
 
-// Regra de negócio: o motorista lança o real, mas se o cliente tem um piso
-// (toneladasMinimas/kmMinimos) e o real ficou abaixo, contabilizamos pelo
-// piso em telas, agregados, fechamentos e XLSX. O real nunca é sobrescrito
-// em Viagem.toneladas/km.
+// Regra de negócio: o motorista lança o real, mas se há uma regra de mínimo
+// (RegraMinimo, por empresa+material+faixa de km) e o real ficou abaixo,
+// contabilizamos pelo mínimo em telas, agregados, fechamentos e XLSX. O real
+// nunca é sobrescrito em Viagem.toneladas/km. (O mínimo antigo por cliente foi
+// aposentado — tudo passa pela RegraMinimo.)
 
 type DecimalLike = Prisma.Decimal | string | number;
 
 export type ViagemBruta = {
   toneladas: DecimalLike;
   km: DecimalLike;
-};
-
-export type ClienteMinimos = {
-  toneladasMinimas: DecimalLike | null;
-  kmMinimos: DecimalLike | null;
 };
 
 // Regra dinâmica de mínimo por empresa + material + faixa de km (tabela
@@ -84,21 +80,17 @@ function dec(v: DecimalLike): Prisma.Decimal {
   return v instanceof Prisma.Decimal ? v : new Prisma.Decimal(v);
 }
 
-export function aplicarMinimosCliente(
+export function aplicarMinimos(
   viagem: ViagemBruta,
-  cliente: ClienteMinimos,
-  // Override da regra por faixa: quando presente, vence o mínimo do cliente
-  // (só nos campos que a regra define — null cai de volta pro cliente).
+  // Mínimo resolvido da RegraMinimo (empresa+material+faixa). Sem regra que
+  // case, não há mínimo — vale o real.
   override?: MinimoOverride,
 ): CamposMinimos {
   const tonReal = dec(viagem.toneladas);
   const kmReal = dec(viagem.km);
 
-  const tonMin =
-    override?.toneladasMinimo ??
-    (cliente.toneladasMinimas != null ? dec(cliente.toneladasMinimas) : null);
-  const kmMin =
-    override?.kmMinimo ?? (cliente.kmMinimos != null ? dec(cliente.kmMinimos) : null);
+  const tonMin = override?.toneladasMinimo ?? null;
+  const kmMin = override?.kmMinimo ?? null;
 
   const tonAjustada = tonMin !== null && tonReal.lt(tonMin);
   const kmAjustada = kmMin !== null && kmReal.lt(kmMin);
@@ -118,7 +110,7 @@ export function aplicarMinimosCliente(
 
 export function serializarViagemComMinimos<
   T extends ViagemBruta & {
-    cliente: ClienteMinimos & { empresaId?: string };
+    cliente?: { empresaId?: string | null } | null;
     material?: { id: string } | null;
   },
 >(viagem: T, regras?: RegraMinimoRow[]): T & CamposMinimos {
@@ -128,5 +120,5 @@ export function serializarViagemComMinimos<
   if (regras && regras.length > 0 && empresaId && materialId) {
     override = resolverRegraMinimo(regras, empresaId, materialId, viagem.km) ?? undefined;
   }
-  return { ...viagem, ...aplicarMinimosCliente(viagem, viagem.cliente, override) };
+  return { ...viagem, ...aplicarMinimos(viagem, override) };
 }

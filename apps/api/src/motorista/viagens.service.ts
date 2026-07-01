@@ -9,7 +9,7 @@ import { AcaoAuditoria, Prisma, type StatusViagem } from "@prisma/client";
 import type { CriarViagemInput } from "@ronan/shared-types";
 import { AuditoriaService } from "../auditoria/auditoria.service";
 import {
-  aplicarMinimosCliente,
+  aplicarMinimos,
   resolverRegraMinimo,
   serializarViagemComMinimos,
 } from "../common/viagem-minimos";
@@ -182,7 +182,7 @@ export class ViagensMotoristaService {
     for (const v of viagens) {
       const override =
         resolverRegraMinimo(regras, v.cliente.empresaId, v.materialId, v.km) ?? undefined;
-      const m = aplicarMinimosCliente(v, v.cliente, override);
+      const m = aplicarMinimos(v, override);
       totalToneladas = totalToneladas.plus(m.toneladasEfetiva);
       totalKm = totalKm.plus(m.kmEfetivo);
     }
