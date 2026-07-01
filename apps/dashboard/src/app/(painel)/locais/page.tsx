@@ -149,13 +149,22 @@ export default function LocaisPage() {
   const { viewMode, setViewMode } = useListViewMode("locais");
   const [mesclando, setMesclando] = useState<DupEntry | null>(null);
 
-  // Carrega só quando aba "Mapa" tá ativa. Backend filtra por ativo + lat/lng.
-  // QueryKey começa com PATH pra invalidate de create/update/delete pegar o mapa
-  // junto (TanStack faz partial match por prefixo do array).
+  // Carrega só quando aba "Mapa" tá ativa. O mapa usa os MESMOS filtros da Lista
+  // (mesmo tableState), então a queryKey inclui q + filtros pra refazer quando
+  // mudam. QueryKey começa com PATH pra invalidate de create/update/delete pegar
+  // o mapa junto (TanStack faz partial match por prefixo do array).
   const mapa = useQuery({
-    queryKey: [PATH, "mapa", token],
+    queryKey: [PATH, "mapa", tableState.q, tableState.filters, token],
     enabled: view === "mapa" && !!token,
-    queryFn: () => fetchApi<LocalMapa[]>("/admin/locais/mapa", { token }),
+    queryFn: () => {
+      const usp = new URLSearchParams();
+      if (tableState.q) usp.set("q", tableState.q);
+      for (const [k, v] of Object.entries(tableState.filters)) {
+        if (v != null && v !== "") usp.set(k, v);
+      }
+      const qs = usp.toString();
+      return fetchApi<LocalMapa[]>(`/admin/locais/mapa${qs ? `?${qs}` : ""}`, { token });
+    },
     staleTime: 60_000,
   });
 
@@ -340,6 +349,47 @@ export default function LocaisPage() {
     [update, dupMap],
   );
 
+  // Filtros + busca compartilhados pelas duas abas (mesmo tableState). A toolbar
+  // do DataTable é standalone, então reaproveitamos ela acima do mapa também.
+  const filtros = (
+    <>
+      <Combobox
+        value={tableState.filters.tipo}
+        onChange={(v) => tableState.setFilter("tipo", v)}
+        placeholder="Tipo"
+        showSearch={false}
+        options={[
+          { value: "AMBOS", label: "Ambos" },
+          { value: "CARGA", label: "Carga" },
+          { value: "DESCARGA", label: "Descarga" },
+        ]}
+      />
+      <Combobox
+        value={tableState.filters.clienteId}
+        onChange={(v) => tableState.setFilter("clienteId", v)}
+        placeholder="Cliente"
+        options={clienteOptions}
+      />
+      <Combobox
+        value={tableState.filters.ativo}
+        onChange={(v) => tableState.setFilter("ativo", v)}
+        placeholder="Status"
+        showSearch={false}
+        options={[
+          { value: "true", label: "Ativos" },
+          { value: "false", label: "Inativos" },
+        ]}
+      />
+    </>
+  );
+  const toolbar = (
+    <DataTableToolbar
+      state={tableState}
+      searchPlaceholder="Buscar por nome, endereço, bairro, cidade…"
+      filters={filtros}
+    />
+  );
+
   return (
     <div className="space-y-6">
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -406,7 +456,10 @@ export default function LocaisPage() {
       )}
 
       {view === "mapa" ? (
-        <MapaLocais locais={mapa.data ?? []} loading={mapa.isLoading} />
+        <div className="space-y-3">
+          {toolbar}
+          <MapaLocais locais={mapa.data ?? []} loading={mapa.isLoading} />
+        </div>
       ) : (
       <DataTable
         columns={columns}
@@ -415,43 +468,7 @@ export default function LocaisPage() {
         state={tableState}
         isLoading={list.isLoading}
         isFetching={list.isFetching}
-        toolbar={
-          <DataTableToolbar
-            state={tableState}
-            searchPlaceholder="Buscar por nome, endereço, bairro, cidade…"
-            filters={
-              <>
-                <Combobox
-                  value={tableState.filters.tipo}
-                  onChange={(v) => tableState.setFilter("tipo", v)}
-                  placeholder="Tipo"
-                  showSearch={false}
-                  options={[
-                    { value: "AMBOS", label: "Ambos" },
-                    { value: "CARGA", label: "Carga" },
-                    { value: "DESCARGA", label: "Descarga" },
-                  ]}
-                />
-                <Combobox
-                  value={tableState.filters.clienteId}
-                  onChange={(v) => tableState.setFilter("clienteId", v)}
-                  placeholder="Cliente"
-                  options={clienteOptions}
-                />
-                <Combobox
-                  value={tableState.filters.ativo}
-                  onChange={(v) => tableState.setFilter("ativo", v)}
-                  placeholder="Status"
-                  showSearch={false}
-                  options={[
-                    { value: "true", label: "Ativos" },
-                    { value: "false", label: "Inativos" },
-                  ]}
-                />
-              </>
-            }
-          />
-        }
+        toolbar={toolbar}
         emptyMessage="Nenhum local cadastrado."
         viewMode={viewMode}
         renderMobileCard={(l) => (

@@ -52,8 +52,8 @@ export class LocaisController {
    * pra Nest não interpretar "mapa" como id.
    */
   @Get("mapa")
-  mapa() {
-    return this.service.mapa();
+  mapa(@Query(new ZodValidationPipe(ListLocaisQuery)) query: ListLocaisQuery) {
+    return this.service.mapa(query);
   }
 
   /**

@@ -21,6 +21,29 @@ type ListLocaisParams = PaginationQuery & {
   emValidacao?: "true" | "false";
 };
 
+const SEARCH_FIELDS = ["nome", "logradouro", "bairro", "cidade", "pontoReferencia"] as const;
+
+/** Filtros compartilhados por list e mapa (mesma régua, pra as abas baterem). */
+function montarWhereLocais(params: Omit<ListLocaisParams, keyof PaginationQuery>): Prisma.LocalWhereInput {
+  const where: Prisma.LocalWhereInput = {};
+  if (params.clienteId) where.clientes = { some: { clienteId: params.clienteId } };
+  if (params.tipo) where.tipo = params.tipo;
+  if (params.ativo === "true") where.ativo = true;
+  else if (params.ativo === "false") where.ativo = false;
+  else where.ativo = true;
+  if (params.nivelConfianca) where.nivelConfianca = params.nivelConfianca;
+  if (params.emValidacao === "true") {
+    where.nivelConfianca = {
+      in: [
+        NivelConfiancaLocal.RASCUNHO,
+        NivelConfiancaLocal.PRESENCA_PONTUAL,
+        NivelConfiancaLocal.DWELL_CONFIRMADO,
+      ],
+    };
+  }
+  return where;
+}
+
 const LOCAL_INCLUDE = {
   clientes: {
     select: { cliente: { select: { id: true, nome: true } } },
@@ -47,26 +70,11 @@ export class LocaisService {
   constructor(private readonly prisma: PrismaService) {}
 
   async list(params: ListLocaisParams) {
-    const where: Prisma.LocalWhereInput = {};
-    if (params.clienteId) where.clientes = { some: { clienteId: params.clienteId } };
-    if (params.tipo) where.tipo = params.tipo;
-    if (params.ativo === "true") where.ativo = true;
-    else if (params.ativo === "false") where.ativo = false;
-    else where.ativo = true;
-    if (params.nivelConfianca) where.nivelConfianca = params.nivelConfianca;
-    if (params.emValidacao === "true") {
-      where.nivelConfianca = {
-        in: [
-          NivelConfiancaLocal.RASCUNHO,
-          NivelConfiancaLocal.PRESENCA_PONTUAL,
-          NivelConfiancaLocal.DWELL_CONFIRMADO,
-        ],
-      };
-    }
+    const where = montarWhereLocais(params);
     const result = await paginate(this.prisma.local, {
       params,
       where: where as Record<string, unknown>,
-      searchFields: ["nome", "logradouro", "bairro", "cidade", "pontoReferencia"],
+      searchFields: [...SEARCH_FIELDS],
       sortable: {
         nome: "nome",
         cidade: "cidade",
@@ -133,13 +141,19 @@ export class LocaisService {
    * sem paginação. Volume esperado: dezenas/centenas. Inclui clientes
    * achatado pro popup.
    */
-  async mapa() {
+  async mapa(params: ListLocaisParams) {
+    const where: Prisma.LocalWhereInput = {
+      ...montarWhereLocais(params),
+      lat: { not: null },
+      lng: { not: null },
+    };
+    if (params.q) {
+      where.OR = SEARCH_FIELDS.map((f) => ({
+        [f]: { contains: params.q, mode: "insensitive" },
+      })) as Prisma.LocalWhereInput[];
+    }
     const locais = await this.prisma.local.findMany({
-      where: {
-        ativo: true,
-        lat: { not: null },
-        lng: { not: null },
-      },
+      where,
       select: {
         id: true,
         nome: true,
