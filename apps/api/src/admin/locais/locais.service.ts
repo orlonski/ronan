@@ -99,22 +99,36 @@ export class LocaisService {
   }
 
   /**
-   * Pontos de lançamento das viagens que tiveram este local como DESCARGA —
-   * é onde o motorista tocou "Estou no local de descarga", então o lat/lng da
-   * viagem fica em cima do local. Mais recentes primeiro, limitado a 500 pra
-   * não pesar o mapa (acima disso, plota só os 500 últimos).
+   * Pontos das viagens que tiveram este local como DESCARGA. Plota a posição
+   * REAL do "Estou no local de descarga" (descargaLat/descargaLng), com fallback
+   * pro lat/lng da abertura do lançamento quando a viagem não tem captura de
+   * descarga (viagens antigas / offline). O flag `origem` distingue os dois: só
+   * pontos de descarga ficam de fato em cima do local; os de abertura podem cair
+   * onde o motorista começou a preencher (balança/carga). Mais recentes primeiro,
+   * limitado a 500 pra não pesar o mapa.
    */
   async lancamentos(id: string) {
     const LIMITE = 500;
-    const total = await this.prisma.viagem.count({
-      where: { localDescargaId: id, lat: { not: null }, lng: { not: null } },
-    });
+    // Aceita viagem com GPS de descarga OU de abertura — antes filtrava só
+    // lat/lng, o que excluía todo o PWA (que não envia lat/lng) e viagens só
+    // com descargaLat.
+    const where: Prisma.ViagemWhereInput = {
+      localDescargaId: id,
+      OR: [
+        { descargaLat: { not: null }, descargaLng: { not: null } },
+        { lat: { not: null }, lng: { not: null } },
+      ],
+    };
+    const total = await this.prisma.viagem.count({ where });
     const viagens = await this.prisma.viagem.findMany({
-      where: { localDescargaId: id, lat: { not: null }, lng: { not: null } },
+      where,
       select: {
         id: true,
         lat: true,
         lng: true,
+        descargaLat: true,
+        descargaLng: true,
+        descargaDistanciaMetros: true,
         data: true,
         ticket: true,
         status: true,
@@ -125,14 +139,19 @@ export class LocaisService {
     return {
       total,
       truncado: total > LIMITE,
-      pontos: viagens.map((v) => ({
-        id: v.id,
-        lat: v.lat as number,
-        lng: v.lng as number,
-        data: v.data,
-        ticket: v.ticket,
-        status: v.status,
-      })),
+      pontos: viagens.map((v) => {
+        const temDescarga = v.descargaLat != null && v.descargaLng != null;
+        return {
+          id: v.id,
+          lat: (temDescarga ? v.descargaLat : v.lat) as number,
+          lng: (temDescarga ? v.descargaLng : v.lng) as number,
+          origem: temDescarga ? ("descarga" as const) : ("abertura" as const),
+          descargaDistanciaMetros: v.descargaDistanciaMetros,
+          data: v.data,
+          ticket: v.ticket,
+          status: v.status,
+        };
+      }),
     };
   }
 

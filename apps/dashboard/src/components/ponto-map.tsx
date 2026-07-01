@@ -28,6 +28,12 @@ export type PontoLancamento = {
   lat: number;
   lng: number;
   status?: string;
+  /**
+   * "descarga" = posição real do clique "Estou na descarga" (em cima do local).
+   * "abertura" = fallback: GPS de quando o lançamento foi aberto (viagem antiga
+   * sem captura de descarga) — pode cair longe do local.
+   */
+  origem?: "descarga" | "abertura";
   /** Texto curto pro popup: "data · ticket". */
   label?: string;
   /** Distância em linha reta até o local (m). */
@@ -60,10 +66,16 @@ function labelStatusDe(status?: string): string {
   return (status && LABEL_STATUS[status]) || status || "—";
 }
 
-function iconeDot(cor: string): L.DivIcon {
+function iconeDot(cor: string, origem?: "descarga" | "abertura"): L.DivIcon {
+  // Fallback de abertura: bolinha vazada (só contorno) pra deixar claro que não
+  // é a posição real da descarga.
+  const estilo =
+    origem === "abertura"
+      ? `background:white;border:2px dashed ${cor};`
+      : `background:${cor};border:2px solid white;`;
   return L.divIcon({
     className: "",
-    html: `<div style="width:14px;height:14px;background:${cor};border:2px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.35);"></div>`,
+    html: `<div style="width:14px;height:14px;${estilo}border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.35);"></div>`,
     iconSize: [14, 14],
     iconAnchor: [7, 7],
   });
@@ -92,7 +104,7 @@ function FitBounds({ pontos }: { pontos: [number, number][] }) {
 
 function MarcadorLancamento({ p }: { p: PontoLancamento }) {
   return (
-    <Marker position={[p.lat, p.lng]} icon={iconeDot(corDe(p.status))}>
+    <Marker position={[p.lat, p.lng]} icon={iconeDot(corDe(p.status), p.origem)}>
       <Popup>
         <div className="space-y-1 text-sm">
           {p.label && <p className="font-medium">{p.label}</p>}
@@ -102,10 +114,17 @@ function MarcadorLancamento({ p }: { p: PontoLancamento }) {
               {labelStatusDe(p.status)}
             </span>
           </p>
-          {p.distanciaMetros != null && (
-            <p className="text-xs text-muted-foreground">
-              {p.distanciaMetros} m do local (linha reta)
+          {p.origem === "abertura" ? (
+            <p className="text-xs text-amber-600">
+              Posição de abertura do lançamento (sem GPS de descarga)
+              {p.distanciaMetros != null && ` · ${p.distanciaMetros} m do local`}.
             </p>
+          ) : (
+            p.distanciaMetros != null && (
+              <p className="text-xs text-muted-foreground">
+                {p.distanciaMetros} m do local (linha reta)
+              </p>
+            )
           )}
           {p.href && (
             <a href={p.href} className="text-xs text-blue-600 hover:underline">

@@ -170,6 +170,8 @@ export default function VisualizarLocalPage({
           id: string;
           lat: number;
           lng: number;
+          origem: "descarga" | "abertura";
+          descargaDistanciaMetros: number | null;
           data: string;
           ticket: string;
           status: string;
@@ -341,21 +343,40 @@ export default function VisualizarLocalPage({
                   lat: p.lat,
                   lng: p.lng,
                   status: p.status,
+                  origem: p.origem,
                   label: `${fmtBR(p.data)} · ${p.ticket}`,
-                  distanciaMetros: distanciaMetros(l.lat!, l.lng!, p.lat, p.lng),
+                  // Prefere a distância que o app calculou no clique da descarga;
+                  // senão (fallback de abertura) mede em linha reta.
+                  distanciaMetros:
+                    p.descargaDistanciaMetros ??
+                    distanciaMetros(l.lat!, l.lng!, p.lat, p.lng),
                   href: `/viagens/${p.id}`,
                 }))}
               />
               <p className="text-xs text-muted-foreground">
                 Coordenadas: {l.lat.toFixed(6)}, {l.lng.toFixed(6)}.
-                {lancamentos.data && lancamentos.data.pontos.length > 0 && (
-                  <>
-                    {" "}
-                    <span className="text-blue-600">●</span> {lancamentos.data.pontos.length}{" "}
-                    {lancamentos.data.pontos.length === 1 ? "descarga" : "descargas"} no mapa
-                    {lancamentos.data.truncado && ` (de ${lancamentos.data.total} — mostrando as 500 mais recentes)`}.
-                  </>
-                )}
+                {lancamentos.data && lancamentos.data.pontos.length > 0 && (() => {
+                  const pts = lancamentos.data.pontos;
+                  const descargas = pts.filter((p) => p.origem === "descarga").length;
+                  const aberturas = pts.length - descargas;
+                  return (
+                    <>
+                      {" "}
+                      <span className="text-blue-600">●</span> {descargas}{" "}
+                      {descargas === 1 ? "descarga" : "descargas"} no mapa
+                      {lancamentos.data.truncado && ` (de ${lancamentos.data.total} — mostrando as 500 mais recentes)`}.
+                      {aberturas > 0 && (
+                        <>
+                          {" "}
+                          <span className="text-slate-400">●</span> {aberturas}{" "}
+                          {aberturas === 1 ? "viagem antiga" : "viagens antigas"} sem GPS de
+                          descarga — mostro a posição de abertura do lançamento (pode não bater
+                          com o local).
+                        </>
+                      )}
+                    </>
+                  );
+                })()}
                 {l.latLngPrecisao != null && (
                   <span className={l.latLngPrecisao > limiteSinalFraco ? "text-amber-600" : ""}>
                     {" "}
