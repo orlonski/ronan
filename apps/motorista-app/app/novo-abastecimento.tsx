@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { router, Stack } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { Check } from "lucide-react-native";
 import {
@@ -32,6 +32,8 @@ import {
   useMe,
   usePostosRecentes,
 } from "@/lib/queries";
+import { atualizarAbastecimentoPendente } from "@/lib/sync";
+import { listPendingAbastecimentos } from "@/db/database";
 import { pegarCoordsPrecisa } from "@/lib/geo";
 
 type TipoCombustivel =
@@ -52,6 +54,12 @@ const TIPOS: { value: TipoCombustivel; label: string }[] = [
 const today = hojeISO;
 
 export default function NovoAbastecimento() {
+  // Modo edição: quando vem da tela de Pendentes com um abastecimento travado,
+  // pré-preenche pra o motorista corrigir (ex: odômetro recusado pelo servidor)
+  // e reenviar — sem redigitar tudo.
+  const { editarClientId } = useLocalSearchParams<{ editarClientId?: string }>();
+  const editando = !!editarClientId;
+
   const me = useMe();
   const cat = useCatalogos();
   const criar = useCriarAbastecimento();
@@ -82,10 +90,37 @@ export default function NovoAbastecimento() {
   } | null>(null);
 
   useEffect(() => {
-    if (me.data?.veiculoDefaultId && !veiculoId) {
+    // Não força o veículo default no modo edição (o pré-preenchimento manda).
+    if (!editando && me.data?.veiculoDefaultId && !veiculoId) {
       setVeiculoId(me.data.veiculoDefaultId);
     }
   }, [me.data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Carrega o abastecimento pendente pra editar e preenche os campos.
+  useEffect(() => {
+    if (!editarClientId) return;
+    let alive = true;
+    void (async () => {
+      const list = await listPendingAbastecimentos();
+      const it = list.find((x) => x.clientId === editarClientId);
+      if (!alive || !it) return;
+      const p = it.payload as Record<string, unknown>;
+      if (p.veiculoId) setVeiculoId(String(p.veiculoId));
+      if (p.empresaId) setEmpresaId(String(p.empresaId));
+      if (p.data) setData(isoParaDataLocal(String(p.data)));
+      if (p.tipo) setTipo(p.tipo as TipoCombustivel);
+      if (p.litros != null) setLitros(String(p.litros));
+      if (p.valorTotal != null) setValor(String(p.valorTotal));
+      setEmComboio(!!p.emComboio);
+      if (p.odometro != null) setOdometro(String(p.odometro));
+      if (p.postoNome) setPostoNome(String(p.postoNome));
+      setTanqueCheio(p.tanqueCheio !== false);
+      if (p.observacao) setObservacao(String(p.observacao));
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [editarClientId]);
 
   // GPS pré-aquece em background
   useEffect(() => {
@@ -194,7 +229,8 @@ export default function NovoAbastecimento() {
       const c = coords ?? (await pegarCoordsRapido());
 
       const payload = {
-        clientId: makeUuid(),
+        // Editando: mantém o MESMO clientId (idempotência no servidor).
+        clientId: editarClientId ?? makeUuid(),
         veiculoId,
         empresaId,
         // Combina data (YYYY-MM-DD) com hora atual pra timestamp completo
@@ -220,7 +256,22 @@ export default function NovoAbastecimento() {
         return;
       }
 
-      await criar({ payload, foto: foto ?? undefined });
+      if (editando) {
+        const res = await atualizarAbastecimentoPendente({
+          clientId: editarClientId!,
+          payload,
+          foto: foto ?? undefined,
+        });
+        if (res.removed) {
+          void showAlert({
+            title: "Já sincronizado",
+            message: "Esse abastecimento já tinha sido enviado. Nada a corrigir.",
+            variant: "default",
+          });
+        }
+      } else {
+        await criar({ payload, foto: foto ?? undefined });
+      }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
     } catch (err) {
@@ -235,7 +286,7 @@ export default function NovoAbastecimento() {
     <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <ScreenHeader title="Novo abastecimento" />
+      <ScreenHeader title={editando ? "Editar abastecimento" : "Novo abastecimento"} />
 
       {(cat.isLoading || me.isLoading) && !cat.data && !me.data && (
         <View className="items-center py-8">
@@ -437,6 +488,16 @@ export default function NovoAbastecimento() {
       )}
     </SafeAreaView>
   );
+}
+
+/** ISO datetime → "YYYY-MM-DD" no fuso local (pra repopular o DateField). */
+function isoParaDataLocal(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dia = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dia}`;
 }
 
 function combinarDataComHoraAtual(dataYmd: string): string {

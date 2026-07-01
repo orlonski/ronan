@@ -311,8 +311,10 @@ export default function Home() {
               </Pressable>
             )}
 
-            {/* Banner: itens só aguardando sincronizar (sem erro). Amarelo — informativo. */}
-            {pending.viagens + pending.pedagios - pending.comErro > 0 && (
+            {/* Banner: itens só aguardando sincronizar (sem erro). Amarelo — informativo.
+                Inclui abastecimentos (antes só contava viagens+pedágios, e o
+                abastecimento sumia dessa conta). */}
+            {pending.viagens + pending.pedagios + pending.abastecimentos - pending.comErro > 0 && (
               <Pressable
                 onPress={() => router.push("/pendentes")}
                 className="flex-row items-center gap-3 rounded-2xl border-2 border-warning/30 bg-warning/15 p-4 active:opacity-75"
@@ -322,7 +324,7 @@ export default function Home() {
                 </View>
                 <View className="flex-1">
                   <Text className="text-base font-bold text-foreground">
-                    {pending.viagens + pending.pedagios - pending.comErro} aguardando sincronizar
+                    {pending.viagens + pending.pedagios + pending.abastecimentos - pending.comErro} aguardando sincronizar
                   </Text>
                   <Text className="text-sm text-muted-foreground">
                     Toque pra ver e gerenciar

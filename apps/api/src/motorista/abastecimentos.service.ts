@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -88,6 +89,32 @@ export class AbastecimentosMotoristaService {
         where: { clientId: input.clientId },
         include: ABAST_INCLUDE,
       });
+    }
+
+    // Valida FKs ANTES do create. Se o veículo/empresa não existir, o Prisma
+    // estouraria FK violation → 500, e o sync do app trata 5xx como transitório
+    // e retentaria pra sempre. O catálogo offline do app pode estar velho
+    // (veículo/empresa removidos pelo escritório). Devolve 409 (permanente) pro
+    // motorista corrigir na tela de Pendentes em vez de travar em loop.
+    const veiculo = await this.prisma.veiculo.findUnique({
+      where: { id: input.veiculoId },
+      select: { id: true },
+    });
+    if (!veiculo) {
+      throw new ConflictException(
+        "O veículo desse abastecimento não existe mais. Confira a placa na tela de Pendentes.",
+      );
+    }
+    if (input.empresaId) {
+      const empresa = await this.prisma.empresa.findUnique({
+        where: { id: input.empresaId },
+        select: { id: true },
+      });
+      if (!empresa) {
+        throw new ConflictException(
+          "A empresa desse abastecimento não existe mais. Confira na tela de Pendentes.",
+        );
+      }
     }
 
     // Valida odômetro: deve ser >= último registrado pro mesmo veículo.

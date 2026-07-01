@@ -155,6 +155,48 @@ export async function tentarNovamenteViagemPendente(
   void drain();
 }
 
+/**
+ * Substitui payload/foto de um abastecimento pendente existente (mesma
+ * clientId). Usado quando o motorista edita um abastecimento que ficou travado
+ * com erro (ex: corrigir o odômetro que o servidor recusou). Reseta attempts e
+ * status pra disparar nova tentativa imediata. Se sumiu (drain entre abrir o
+ * form e salvar), retorna { removed: true }.
+ */
+export async function atualizarAbastecimentoPendente(input: {
+  clientId: string;
+  payload: Record<string, unknown>;
+  foto?: { uri: string; mime: string };
+}): Promise<{ removed: boolean }> {
+  const list = await listPendingAbastecimentos();
+  const existing = list.find((x) => x.clientId === input.clientId);
+  if (!existing) return { removed: true };
+
+  const fotoUri = input.foto?.uri ?? existing.fotoUri;
+  const fotoMime = input.foto?.mime ?? existing.fotoMime;
+
+  await upsertPendingAbastecimento({
+    clientId: existing.clientId,
+    payload: input.payload,
+    fotoUri,
+    fotoMime,
+    status: "pending",
+    attempts: 0,
+    createdAt: existing.createdAt,
+    lastTriedAt: undefined,
+    errorMsg: undefined,
+    errorStatus: undefined,
+    errorIssues: undefined,
+  });
+  notify();
+  void drain();
+  return { removed: false };
+}
+
+export async function descartarPedagioPendente(clientId: string): Promise<void> {
+  await deletePendingPedagio(clientId);
+  notify();
+}
+
 export async function tentarNovamentePedagioPendente(
   clientId: string,
 ): Promise<void> {

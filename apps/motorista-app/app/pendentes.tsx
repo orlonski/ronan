@@ -17,20 +17,57 @@ import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { showConfirm } from "@/lib/alert";
-import { type PendingViagem } from "@/db/database";
+import {
+  type PendingViagem,
+  type PendingPedagio,
+  type PendingAbastecimento,
+  type ZodIssueSaved,
+} from "@/db/database";
 import { usePendingViagens } from "@/hooks/use-pending-viagens";
+import { usePendingPedagios } from "@/hooks/use-pending-pedagios";
+import { usePendingAbastecimentos } from "@/hooks/use-pending-abastecimentos";
 import {
   descartarViagemPendente,
+  descartarPedagioPendente,
+  descartarAbastecimentoPendente,
   drain,
   tentarNovamenteViagemPendente,
+  tentarNovamentePedagioPendente,
+  tentarNovamenteAbastecimentoPendente,
 } from "@/lib/sync";
 import { useCatalogos } from "@/lib/queries";
 import { frasePorCodigo, labelDoCampo } from "@/lib/validation";
 
+/** Item do outbox de qualquer tipo, pra listar tudo junto. */
+type PendingRow =
+  | { kind: "viagem"; item: PendingViagem }
+  | { kind: "pedagio"; item: PendingPedagio }
+  | { kind: "abastecimento"; item: PendingAbastecimento };
+
+const TIPO_COMBUSTIVEL_LABEL: Record<string, string> = {
+  DIESEL_S10: "Diesel S10",
+  DIESEL_S500: "Diesel S500",
+  ARLA_32: "ARLA 32",
+  GASOLINA: "Gasolina",
+  ETANOL: "Etanol",
+};
+
 export default function Pendentes() {
-  const lista = usePendingViagens();
+  const viagens = usePendingViagens();
+  const pedagios = usePendingPedagios();
+  const abastecimentos = usePendingAbastecimentos();
   const cat = useCatalogos();
-  const [detalheItem, setDetalheItem] = useState<PendingViagem | null>(null);
+  const [detalheItem, setDetalheItem] = useState<PendingComum | null>(null);
+
+  // Junta tudo numa lista só, mais antigos primeiro (ordem de criação).
+  const rows = useMemo<PendingRow[]>(() => {
+    const all: PendingRow[] = [
+      ...viagens.map((item) => ({ kind: "viagem" as const, item })),
+      ...pedagios.map((item) => ({ kind: "pedagio" as const, item })),
+      ...abastecimentos.map((item) => ({ kind: "abastecimento" as const, item })),
+    ];
+    return all.sort((a, b) => a.item.createdAt - b.item.createdAt);
+  }, [viagens, pedagios, abastecimentos]);
 
   // Helpers de lookup por id no catalogo
   const lookups = useMemo(() => {
@@ -39,25 +76,36 @@ export default function Pendentes() {
     const o = new Map(cat.data.clientes.map((x) => [x.id, x]));
     const m = new Map(cat.data.materiais.map((x) => [x.id, x]));
     const l = new Map(cat.data.locais.map((x) => [x.id, x]));
-    return { v, o, m, l };
+    const e = new Map((cat.data.empresas ?? []).map((x) => [x.id, x]));
+    return { v, o, m, l, e };
   }, [cat.data]);
 
-  async function confirmarExcluir(item: PendingViagem) {
+  async function confirmarExcluir(row: PendingRow) {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const nome =
+      row.kind === "viagem"
+        ? "esta viagem"
+        : row.kind === "pedagio"
+          ? "este pedágio"
+          : "este abastecimento";
     const ok = await showConfirm({
-      title: "Excluir esta viagem?",
-      message: "A viagem ainda não foi enviada. Apagar agora não pode ser desfeito.",
+      title: `Excluir ${nome}?`,
+      message: "Ainda não foi enviado. Apagar agora não pode ser desfeito.",
       confirmLabel: "Excluir",
       destructive: true,
     });
     if (!ok) return;
-    await descartarViagemPendente(item.clientId);
+    if (row.kind === "viagem") await descartarViagemPendente(row.item.clientId);
+    else if (row.kind === "pedagio") await descartarPedagioPendente(row.item.clientId);
+    else await descartarAbastecimentoPendente(row.item.clientId);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
 
-  async function onTentarNovamente(item: PendingViagem) {
+  async function onTentarNovamente(row: PendingRow) {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await tentarNovamenteViagemPendente(item.clientId);
+    if (row.kind === "viagem") await tentarNovamenteViagemPendente(row.item.clientId);
+    else if (row.kind === "pedagio") await tentarNovamentePedagioPendente(row.item.clientId);
+    else await tentarNovamenteAbastecimentoPendente(row.item.clientId);
   }
 
   return (
@@ -66,15 +114,15 @@ export default function Pendentes() {
         <Stack.Screen options={{ headerShown: false }} />
         <ScreenHeader title="Aguardando internet" />
 
-        <FlatList<PendingViagem>
-          data={lista}
-          keyExtractor={(v) => v.clientId}
+        <FlatList<PendingRow>
+          data={rows}
+          keyExtractor={(r) => `${r.kind}-${r.item.clientId}`}
           contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }}
           ListHeaderComponent={
-            lista.length > 0 ? (
+            rows.length > 0 ? (
               <View className="mb-2 gap-3">
                 <Text className="text-sm text-muted-foreground">
-                  {lista.length} {lista.length === 1 ? "viagem" : "viagens"} aguardando
+                  {rows.length} {rows.length === 1 ? "lançamento" : "lançamentos"} aguardando
                   envio. Arraste pra esquerda pra excluir, ou toque em
                   &quot;Sincronizar&quot; pra tentar enviar agora.
                 </Text>
@@ -86,24 +134,21 @@ export default function Pendentes() {
             <EmptyState
               icon={CloudOff}
               title="Tudo sincronizado"
-              description="Não tem viagens aguardando internet."
+              description="Nenhum lançamento aguardando internet."
             />
           }
-          renderItem={({ item }) => (
+          renderItem={({ item: row }) => (
             <PendingCard
-              item={item}
+              row={row}
               lookups={lookups}
-              onExcluir={confirmarExcluir}
-              onTentarNovamente={onTentarNovamente}
-              onVerDetalhes={() => setDetalheItem(item)}
+              onExcluir={() => confirmarExcluir(row)}
+              onTentarNovamente={() => onTentarNovamente(row)}
+              onVerDetalhes={() => setDetalheItem(row.item)}
             />
           )}
         />
 
-        <DetalheModal
-          item={detalheItem}
-          onClose={() => setDetalheItem(null)}
-        />
+        <DetalheModal item={detalheItem} onClose={() => setDetalheItem(null)} />
       </SafeAreaView>
     </GestureHandlerRootView>
   );
@@ -114,31 +159,35 @@ type Lookups = {
   o: Map<string, { id: string; nome: string }>;
   m: Map<string, { id: string; nome: string }>;
   l: Map<string, { id: string; nome: string; cidade: string; uf: string }>;
+  e: Map<string, { id: string; nome: string }>;
 } | null;
 
 function PendingCard({
-  item,
+  row,
   lookups,
   onExcluir,
   onTentarNovamente,
   onVerDetalhes,
 }: {
-  item: PendingViagem;
+  row: PendingRow;
   lookups: Lookups;
-  onExcluir: (item: PendingViagem) => void;
-  onTentarNovamente: (item: PendingViagem) => void;
+  onExcluir: () => void;
+  onTentarNovamente: () => void;
   onVerDetalhes: () => void;
 }) {
-  const p = item.payload as Record<string, string | number | undefined>;
-  const placa = lookups?.v.get(String(p.veiculoId))?.placa;
-  const cliente = lookups?.o.get(String(p.clienteId))?.nome;
-  const material = lookups?.m.get(String(p.materialId))?.nome;
-  const carga = lookups?.l.get(String(p.localCargaId))?.nome;
-  const descarga = lookups?.l.get(String(p.localDescargaId))?.nome;
-  const data = String(p.data ?? "");
-
+  const { item } = row;
   const temErro = item.status === "error";
   const temIssues = !!item.errorIssues && item.errorIssues.length > 0;
+  const cabecalho = resumoCard(row, lookups);
+
+  // Só abastecimento tem edição hoje (form suporta editarClientId). Viagem já
+  // tinha; pedágio ainda não.
+  const editarRota =
+    row.kind === "viagem"
+      ? "/nova-viagem"
+      : row.kind === "abastecimento"
+        ? "/novo-abastecimento"
+        : null;
 
   return (
     <Swipeable
@@ -147,7 +196,7 @@ function PendingCard({
           <Button
             variant="destructive"
             className="h-full w-24 rounded-2xl"
-            onPress={() => onExcluir(item)}
+            onPress={onExcluir}
           >
             <Trash2 size={22} color="white" />
           </Button>
@@ -158,14 +207,17 @@ function PendingCard({
       <View className="rounded-2xl border-2 border-border bg-card p-4">
         <View className="flex-row items-start justify-between gap-3">
           <View className="flex-1">
-            <Text className="text-lg font-bold text-foreground" numberOfLines={1}>
-              {cliente ?? "Cliente ?"}
+            <View className="flex-row items-center gap-2">
+              <Badge variant="outline">{cabecalho.tipoLabel}</Badge>
+            </View>
+            <Text className="mt-1.5 text-lg font-bold text-foreground" numberOfLines={1}>
+              {cabecalho.titulo}
             </Text>
             <Text
               className="mt-0.5 text-base font-medium text-muted-foreground"
               style={{ fontVariant: ["tabular-nums"] }}
             >
-              {fmtData(data)}{placa ? ` · ${placa}` : ""}
+              {cabecalho.subtitulo}
             </Text>
           </View>
           <Badge variant={temErro ? "destructive" : "warning"}>
@@ -177,12 +229,9 @@ function PendingCard({
           </Badge>
         </View>
 
-        <Text className="mt-2 text-sm text-muted-foreground" numberOfLines={1}>
-          {material} · ticket {String(p.ticket ?? "")} · {String(p.toneladas ?? "")} t
-        </Text>
-        {(carga || descarga) && (
-          <Text className="mt-1 text-xs text-muted-foreground" numberOfLines={2}>
-            {carga ?? "carga ?"} → {descarga ?? "descarga ?"}
+        {cabecalho.linha3 && (
+          <Text className="mt-2 text-sm text-muted-foreground" numberOfLines={2}>
+            {cabecalho.linha3}
           </Text>
         )}
 
@@ -216,26 +265,24 @@ function PendingCard({
           </Button>
           {temErro && (
             <View className="flex-row gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1"
-                onPress={() => {
-                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push({
-                    pathname: "/nova-viagem",
-                    params: { editarClientId: item.clientId },
-                  });
-                }}
-              >
-                <Pencil size={16} color="#0f172a" />
-                <Text className="ml-1 font-semibold">Editar</Text>
-              </Button>
-              <Button
-                size="sm"
-                className="flex-1"
-                onPress={() => onTentarNovamente(item)}
-              >
+              {editarRota && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onPress={() => {
+                    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    router.push({
+                      pathname: editarRota,
+                      params: { editarClientId: item.clientId },
+                    });
+                  }}
+                >
+                  <Pencil size={16} color="#0f172a" />
+                  <Text className="ml-1 font-semibold">Editar</Text>
+                </Button>
+              )}
+              <Button size="sm" className="flex-1" onPress={onTentarNovamente}>
                 <RefreshCw size={16} color="white" />
                 <Text className="ml-1 font-semibold text-primary-foreground">
                   Tentar de novo
@@ -249,11 +296,64 @@ function PendingCard({
   );
 }
 
+/** Monta o cabeçalho (tipo, título, subtítulo, linha extra) de cada card. */
+function resumoCard(
+  row: PendingRow,
+  lookups: Lookups,
+): { tipoLabel: string; titulo: string; subtitulo: string; linha3?: string } {
+  const p = row.item.payload as Record<string, string | number | undefined>;
+  const placa = lookups?.v.get(String(p.veiculoId))?.placa;
+
+  if (row.kind === "viagem") {
+    const cliente = lookups?.o.get(String(p.clienteId))?.nome;
+    const material = lookups?.m.get(String(p.materialId))?.nome;
+    const carga = lookups?.l.get(String(p.localCargaId))?.nome;
+    const descarga = lookups?.l.get(String(p.localDescargaId))?.nome;
+    return {
+      tipoLabel: "Viagem",
+      titulo: cliente ?? "Cliente ?",
+      subtitulo: `${fmtData(String(p.data ?? ""))}${placa ? ` · ${placa}` : ""}`,
+      linha3: `${material ?? "material ?"} · ticket ${String(p.ticket ?? "")} · ${String(p.toneladas ?? "")} t\n${carga ?? "carga ?"} → ${descarga ?? "descarga ?"}`,
+    };
+  }
+
+  if (row.kind === "pedagio") {
+    return {
+      tipoLabel: "Pedágio",
+      titulo: String(p.pracaPedagio ?? "Praça ?"),
+      subtitulo: `${fmtData(String(p.data ?? ""))}${placa ? ` · ${placa}` : ""}`,
+      linha3: `R$ ${fmtValor(p.valor)}`,
+    };
+  }
+
+  // abastecimento
+  const empresa = lookups?.e.get(String(p.empresaId))?.nome;
+  const tipoComb = TIPO_COMBUSTIVEL_LABEL[String(p.tipo)] ?? String(p.tipo ?? "");
+  return {
+    tipoLabel: "Abastecimento",
+    titulo: placa ? `${placa}${empresa ? ` · ${empresa}` : ""}` : (empresa ?? "Abastecimento"),
+    subtitulo: `${fmtData(String(p.data ?? ""))} · ${tipoComb}`,
+    linha3: `${String(p.litros ?? "")} L · odômetro ${String(p.odometro ?? "")} km${p.emComboio ? " · em comboio" : p.valorTotal != null ? ` · R$ ${fmtValor(p.valorTotal)}` : ""}`,
+  };
+}
+
+/** Campos comuns a todo item do outbox, pro modal de detalhe. */
+type PendingComum = {
+  payload: Record<string, unknown>;
+  status: string;
+  attempts: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
+  fotoUri?: string;
+};
+
 function DetalheModal({
   item,
   onClose,
 }: {
-  item: PendingViagem | null;
+  item: PendingComum | null;
   onClose: () => void;
 }) {
   if (!item) return null;
@@ -371,4 +471,13 @@ function fmtData(iso: string): string {
   const dia = String(d.getDate()).padStart(2, "0");
   const mes = String(d.getMonth() + 1).padStart(2, "0");
   return `${dia}/${mes}`;
+}
+
+function fmtValor(v: unknown): string {
+  const n = typeof v === "number" ? v : parseFloat(String(v));
+  if (Number.isNaN(n)) return String(v ?? "");
+  return n.toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
