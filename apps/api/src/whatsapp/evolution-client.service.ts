@@ -37,10 +37,34 @@ export class EvolutionClientService {
   }
 
   async enviarTexto(telefone: string, texto: string): Promise<void> {
-    await this.req(`/message/sendText/${this.instance}`, {
-      number: telefone,
-      text: texto,
-    });
+    // Garantia de envio: só consideramos enviado quando o Evolution devolve a
+    // `key.id` da mensagem (prova de que aceitou e enfileirou). Qualquer falha
+    // — erro HTTP, Evolution fora do ar, ou 200 "vazio"/de erro sem key — vira
+    // um 503 com código, pra quem chama NUNCA dizer ao motorista que o código
+    // foi enviado quando não foi.
+    let res: unknown;
+    try {
+      res = await this.req(`/message/sendText/${this.instance}`, {
+        number: telefone,
+        text: texto,
+      });
+    } catch (e) {
+      this.log.error(`Falha no sendText pra ${telefone}: ${(e as Error).message}`);
+      throw new ServiceUnavailableException({
+        code: "ENVIO_WHATSAPP_FALHOU",
+        message:
+          "Não conseguimos enviar o código pelo WhatsApp agora. Tente de novo em alguns instantes.",
+      });
+    }
+    const key = (res as { key?: { id?: string } } | null)?.key;
+    if (!key?.id) {
+      this.log.error(`sendText sem key.id — resposta: ${JSON.stringify(res).slice(0, 300)}`);
+      throw new ServiceUnavailableException({
+        code: "ENVIO_WHATSAPP_FALHOU",
+        message:
+          "Não conseguimos enviar o código pelo WhatsApp agora. Tente de novo em alguns instantes.",
+      });
+    }
   }
 
   /**

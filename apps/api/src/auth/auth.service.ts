@@ -3,6 +3,7 @@ import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
 import * as bcrypt from "bcrypt";
 import { PrismaService } from "../prisma/prisma.service";
+import { AvisoGrupoService } from "../whatsapp/aviso-grupo.service";
 import type { JwtPayload } from "./types";
 
 const BCRYPT_ROUNDS = 10;
@@ -15,6 +16,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly avisoGrupo: AvisoGrupoService,
   ) {}
 
   static async hashPassword(plain: string): Promise<string> {
@@ -67,10 +69,17 @@ export class AuthService {
       throw new UnauthorizedException("Credenciais inválidas");
     }
 
+    // Captura ANTES do update: ultimoLoginEm null = nunca acessou (ex: motorista
+    // criado pelo admin que agora entra pela 1ª vez). Sinal do primeiro acesso.
+    const primeiroAcesso = motorista.ultimoLoginEm === null;
     await this.prisma.motorista.update({
       where: { id: motorista.id },
       data: { tentativasLogin: 0, bloqueadoAte: null, ultimoLoginEm: new Date() },
     });
+    // No primeiro acesso, anuncia no grupo se ele já estiver lá (prova social).
+    // Best-effort e idempotente (trava avisoGrupoEnviadoEm) — não duplica com o
+    // disparo do auto-cadastro nem quebra o login.
+    if (primeiroAcesso) void this.avisoGrupo.anunciarCadastro(motorista.id);
     const tokens = await this.issueTokens({ sub: motorista.id, kind: "MOTORISTA" });
     return { ...tokens, status: motorista.status };
   }

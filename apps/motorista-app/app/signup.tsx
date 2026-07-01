@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { KeyboardAvoidingView, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { cpfDigits, telefoneDigits } from "@ronan/shared-types";
-import { api, humanizeApiError } from "@/lib/api";
+import { api, apiErrorCode, humanizeApiError } from "@/lib/api";
 
 function maskCpf(input: string): string {
   const d = cpfDigits(input).slice(0, 11);
@@ -29,8 +29,11 @@ function maskPlaca(input: string): string {
 }
 
 export default function SignupScreen() {
+  // Pode chegar com o CPF já preenchido (ex: veio do "esqueci minha senha" que
+  // detectou "CPF não cadastrado").
+  const params = useLocalSearchParams<{ cpf?: string }>();
   const [nome, setNome] = useState("");
-  const [cpf, setCpf] = useState("");
+  const [cpf, setCpf] = useState(() => (params.cpf ? maskCpf(params.cpf) : ""));
   const [celular, setCelular] = useState("");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
@@ -38,6 +41,7 @@ export default function SignupScreen() {
   const [placas, setPlacas] = useState<string[]>([""]);
   const [submitting, setSubmitting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [erroCode, setErroCode] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
 
   // Ao focar um campo lá embaixo, espera o teclado/resize assentar e rola até
@@ -59,6 +63,7 @@ export default function SignupScreen() {
 
   async function enviar() {
     setErro(null);
+    setErroCode(null);
     const cpfDigitos = cpfDigits(cpf);
     const celularDigitos = telefoneDigits(celular);
     const placasLimpa = placas.map((p) => p.trim()).filter(Boolean);
@@ -88,6 +93,7 @@ export default function SignupScreen() {
       });
     } catch (err) {
       setErro(humanizeApiError(err));
+      setErroCode(apiErrorCode(err));
     } finally {
       setSubmitting(false);
     }
@@ -233,6 +239,19 @@ export default function SignupScreen() {
             {erro && (
               <View className="rounded-xl border-2 border-destructive bg-destructive/10 p-3">
                 <Text className="text-base font-medium text-destructive">{erro}</Text>
+                {erroCode === "CPF_JA_CADASTRADO" && (
+                  <Pressable
+                    onPress={() =>
+                      router.push({ pathname: "/esqueci-senha", params: { cpf: cpfDigits(cpf) } })
+                    }
+                    disabled={submitting}
+                    className="mt-2"
+                  >
+                    <Text className="text-base font-bold text-destructive underline">
+                      Esqueci minha senha →
+                    </Text>
+                  </Pressable>
+                )}
               </View>
             )}
 

@@ -44,10 +44,24 @@ export function humanizeApiError(err: unknown): string {
       return humanizeZodIssues(body.issues);
     }
   }
+  // Erros com `code` do backend já trazem mensagem PT-BR pronta pro motorista
+  // (CPF não cadastrado, celular divergente, placa em uso, envio WhatsApp
+  // falhou…). Preferimos ela — inclusive nos 5xx, que teriam texto genérico.
+  if (apiErrorCode(err)) return err.message;
   if (err.status === 401) return "Sessão expirou. Entre de novo.";
   if (err.status === 409) return err.message; // ConflictException ja vem em PT-BR (ex: ticket duplicado)
   if (err.status >= 500) return "Servidor com problema. Tente de novo em alguns minutos.";
   return err.message;
+}
+
+/**
+ * Código de erro estruturado do backend (`body.code`), quando houver — pras
+ * telas reagirem (ex: mostrar link pro cadastro / pro "esqueci a senha").
+ */
+export function apiErrorCode(err: unknown): string | null {
+  if (!(err instanceof ApiError)) return null;
+  const body = err.body as { code?: unknown } | null;
+  return body && typeof body.code === "string" ? body.code : null;
 }
 
 /**

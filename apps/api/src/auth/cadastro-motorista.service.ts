@@ -213,7 +213,12 @@ export class CadastroMotoristaService {
     const db = tx ?? this.prisma;
 
     const porCpf = await db.motorista.findUnique({ where: { cpf }, select: { id: true } });
-    if (porCpf) throw new ConflictException("Esse CPF já tem cadastro.");
+    if (porCpf) {
+      throw new ConflictException({
+        code: "CPF_JA_CADASTRADO",
+        message: 'Esse CPF já tem cadastro. Se esqueceu a senha, use a opção "Esqueci minha senha".',
+      });
+    }
 
     const porTelefone = await db.motorista.findFirst({
       where: { telefone },
@@ -229,7 +234,10 @@ export class CadastroMotoristaService {
     for (const p of placas) {
       const veiculo = await db.veiculo.findUnique({ where: { placa: p.placa }, select: { id: true } });
       if (veiculo) {
-        throw new ConflictException(`A placa ${p.placa} já está cadastrada. Fale com a empresa.`);
+        throw new ConflictException({
+          code: "PLACA_EM_USO",
+          message: `A placa ${p.placa} já está cadastrada em outro cadastro. Se você trocou de placa, fale com o pessoal do administrativo pra atualizar.`,
+        });
       }
     }
   }

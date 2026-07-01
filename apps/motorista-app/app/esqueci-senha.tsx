@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cpfDigits, maskTelefone, telefoneDigits } from "@ronan/shared-types";
-import { api, humanizeApiError } from "@/lib/api";
+import { api, apiErrorCode, humanizeApiError } from "@/lib/api";
 
 // Aplica máscara CPF enquanto digita.
 function maskCpf(input: string): string {
@@ -25,13 +25,18 @@ function maskCpf(input: string): string {
 }
 
 export default function EsqueciSenhaScreen() {
-  const [cpf, setCpf] = useState("");
+  // Pode chegar com o CPF já preenchido (ex: veio da tela de cadastro que
+  // detectou "CPF já tem cadastro").
+  const params = useLocalSearchParams<{ cpf?: string }>();
+  const [cpf, setCpf] = useState(() => (params.cpf ? maskCpf(params.cpf) : ""));
   const [celular, setCelular] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [erroCode, setErroCode] = useState<string | null>(null);
 
   async function enviar() {
     setErro(null);
+    setErroCode(null);
     const cpfDigitos = cpfDigits(cpf);
     const celularDigitos = telefoneDigits(celular);
     if (cpfDigitos.length !== 11) return setErro("Informe o CPF (11 dígitos).");
@@ -45,6 +50,7 @@ export default function EsqueciSenhaScreen() {
       });
     } catch (err) {
       setErro(humanizeApiError(err));
+      setErroCode(apiErrorCode(err));
     } finally {
       setSubmitting(false);
     }
@@ -97,6 +103,19 @@ export default function EsqueciSenhaScreen() {
             {erro && (
               <View className="rounded-xl border-2 border-destructive bg-destructive/10 p-3">
                 <Text className="text-base font-medium text-destructive">{erro}</Text>
+                {erroCode === "CPF_NAO_CADASTRADO" && (
+                  <Pressable
+                    onPress={() =>
+                      router.push({ pathname: "/signup", params: { cpf: cpfDigits(cpf) } })
+                    }
+                    disabled={submitting}
+                    className="mt-2"
+                  >
+                    <Text className="text-base font-bold text-destructive underline">
+                      Fazer meu cadastro →
+                    </Text>
+                  </Pressable>
+                )}
               </View>
             )}
 

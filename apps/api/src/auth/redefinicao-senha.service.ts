@@ -1,10 +1,17 @@
-import { BadRequestException, ConflictException, Injectable, Logger } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from "@nestjs/common";
 import { randomInt } from "node:crypto";
 import { formatCpf, telefoneDigits } from "@ronan/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
 import { EvolutionClientService } from "../whatsapp/evolution-client.service";
 import { SessaoService } from "../whatsapp/sessao.service";
 import { AdminInboxService } from "../admin/inbox/inbox.service";
+import { AvisoGrupoService } from "../whatsapp/aviso-grupo.service";
 import { AuthService } from "./auth.service";
 
 const CODIGO_TTL_MIN = 10;
@@ -37,6 +44,7 @@ export class RedefinicaoSenhaService {
     private readonly evolution: EvolutionClientService,
     private readonly inbox: AdminInboxService,
     private readonly auth: AuthService,
+    private readonly avisoGrupo: AvisoGrupoService,
   ) {}
 
   async esqueci(cpf: string, telefoneInput: string) {
@@ -46,9 +54,21 @@ export class RedefinicaoSenhaService {
       select: { id: true, telefone: true, ativo: true, status: true },
     });
 
-    // Conta inexistente, inativa ou recusada: resposta genérica, não manda nada.
-    if (!motorista || !motorista.ativo || motorista.status === "REJEITADO") {
-      return RESPOSTA_GENERICA;
+    // Escolha do produto: preferimos clareza pro motorista (público leigo, base
+    // pequena e fechada) a proteção contra enumeração. CPF que não existe recebe
+    // mensagem clara + código pro app oferecer o cadastro; conta inativa/recusada
+    // é orientada ao administrativo.
+    if (!motorista) {
+      throw new NotFoundException({
+        code: "CPF_NAO_CADASTRADO",
+        message: "Não encontramos esse CPF no sistema. Confira o número ou faça seu cadastro.",
+      });
+    }
+    if (!motorista.ativo || motorista.status === "REJEITADO") {
+      throw new BadRequestException({
+        code: "CADASTRO_INATIVO",
+        message: "Seu cadastro não está ativo. Fale com o pessoal do administrativo.",
+      });
     }
 
     let destino: string;
@@ -59,9 +79,11 @@ export class RedefinicaoSenhaService {
       // cliente). Mesmo avisando, não dá pra tomar a conta: o código só vai pro
       // número cadastrado, nunca pro digitado.
       if (telefoneDigits(motorista.telefone) !== telefone) {
-        throw new BadRequestException(
-          "O celular informado não confere com o cadastrado pra esse CPF. Use o mesmo celular do seu cadastro.",
-        );
+        throw new BadRequestException({
+          code: "CELULAR_DIVERGENTE",
+          message:
+            "O celular informado não confere com o cadastrado pra esse CPF. Se você trocou de número, fale com o pessoal do administrativo pra atualizar seu cadastro.",
+        });
       }
       destino = motorista.telefone;
       vincular = false;
@@ -88,6 +110,10 @@ export class RedefinicaoSenhaService {
 
     const codigo = gerarCodigo();
     const expiraEm = new Date(Date.now() + CODIGO_TTL_MIN * 60_000);
+    // Envia ANTES de gravar o pendente: se o WhatsApp falhar, `enviarCodigo`
+    // lança e não persistimos nada (nem o cooldown). Assim o motorista pode
+    // tentar de novo na hora e nunca vê "código enviado" sem o código ter saído.
+    await this.enviarCodigo(destino, codigo);
     await this.prisma.redefinicaoSenhaPendente.upsert({
       where: { motoristaId: motorista.id },
       create: { motoristaId: motorista.id, telefone: destino, vincular, codigo, expiraEm },
@@ -101,8 +127,6 @@ export class RedefinicaoSenhaService {
         ultimoEnvioEm: new Date(),
       },
     });
-
-    await this.enviarCodigo(destino, codigo);
     return RESPOSTA_GENERICA;
   }
 
@@ -211,8 +235,14 @@ export class RedefinicaoSenhaService {
 
     const motorista = await this.prisma.motorista.findUniqueOrThrow({
       where: { id: pendente.motoristaId },
-      select: { status: true },
+      select: { status: true, ultimoLoginEm: true },
     });
+    // Reset emite token direto (não passa pelo loginMotorista). Se ele nunca
+    // acessou (ex: criado pelo admin, recupera senha pra entrar a 1ª vez),
+    // anuncia no grupo. Best-effort e idempotente (trava avisoGrupoEnviadoEm).
+    if (motorista.ultimoLoginEm === null) {
+      void this.avisoGrupo.anunciarCadastro(pendente.motoristaId);
+    }
     const tokens = await this.auth.issueMotoristaTokens(pendente.motoristaId);
     return { ...tokens, status: motorista.status };
   }

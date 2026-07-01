@@ -90,11 +90,6 @@ type Diagnostico = {
   temTelefone?: boolean;
   telefoneAlvo?: string | null;
   jaAvisadoEm?: string | null;
-  totalParticipantes?: number;
-  participantesComTelefone?: number;
-  participantesLid?: number;
-  amostraParticipantes?: string[];
-  presenteNoGrupo?: boolean;
   textoPreview?: string | null;
   enviado?: boolean;
 };
@@ -528,9 +523,9 @@ function AvisoGrupoCard({ isAdmin, online }: { isAdmin: boolean; online: boolean
             Aviso no grupo quando motorista entra no app
           </h2>
           <p className="mt-1 max-w-2xl text-xs text-muted-foreground">
-            Quando um motorista que <strong>já está no grupo</strong> se cadastra no app, o
-            sistema posta um aviso no grupo. Dispara só uma vez por motorista. Quem não está
-            no grupo é ignorado.
+            Quando um motorista <strong>se cadastra no app</strong>, o sistema posta um aviso no
+            grupo escolhido. Dispara só uma vez por motorista — não precisa que ele já esteja no
+            grupo.
           </p>
         </div>
         <StatusToggle active={ativo} onChange={setAtivo} disabled={!isAdmin} label />
@@ -652,9 +647,7 @@ function DiagnosticoAvisoGrupo() {
       {d && (
         <div
           className={`space-y-1 rounded-md border p-3 text-xs ${
-            d.enviado || d.presenteNoGrupo
-              ? "border-green-200 bg-green-50"
-              : "border-amber-200 bg-amber-50"
+            d.enviado ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"
           }`}
         >
           <p className="font-medium">{d.enviado ? "✅ Enviado!" : d.motivo}</p>
@@ -663,20 +656,8 @@ function DiagnosticoAvisoGrupo() {
           <DiagLinha k="Aviso ligado" v={boolTxt(d.configAtivo)} />
           <DiagLinha k="Grupo escolhido" v={d.grupoJid ? "sim" : "não"} />
           <DiagLinha k="Telefone do motorista" v={d.telefoneAlvo ?? "—"} />
-          <DiagLinha k="Participantes lidos no grupo" v={String(d.totalParticipantes ?? 0)} />
-          <DiagLinha k="…com telefone visível" v={String(d.participantesComTelefone ?? 0)} />
-          <DiagLinha k="…ocultos (@lid)" v={String(d.participantesLid ?? 0)} />
-          <DiagLinha k="Está no grupo?" v={boolTxt(d.presenteNoGrupo)} />
           {d.jaAvisadoEm && <DiagLinha k="Já avisado em" v={fmtDataHora(d.jaAvisadoEm)} />}
           {d.textoPreview && <DiagLinha k="Mensagem" v={d.textoPreview} />}
-          {d.amostraParticipantes && d.amostraParticipantes.length > 0 && (
-            <div className="mt-1 border-t pt-1">
-              <p className="text-muted-foreground">Amostra de participantes:</p>
-              {d.amostraParticipantes.map((a, i) => (
-                <p key={i} className="break-all font-mono text-[10px]">{a}</p>
-              ))}
-            </div>
-          )}
         </div>
       )}
     </div>
