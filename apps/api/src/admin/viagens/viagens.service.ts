@@ -443,7 +443,11 @@ export class ViagensAdminService {
     const regras = await this.prisma.regraMinimo.findMany({ where: { ativo: true } });
     return {
       ...serializarViagemComMinimos(viagem, regras),
-      rotaGeometria: rota?.geometria ?? null,
+      // Rota escolhida pelo motorista (fallback: cache/recomendada).
+      rotaGeometria: viagem.rotaGeometria ?? rota?.geometria ?? null,
+      // Sinaliza que o motorista escolheu uma rota no seletor (distingue de
+      // edição manual de km no painel).
+      rotaEscolhida: viagem.rotaGeometria != null,
     };
   }
 

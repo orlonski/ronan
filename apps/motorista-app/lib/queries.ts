@@ -724,6 +724,16 @@ type RotaServerResponse =
     }
   | { km: null; erro: string };
 
+/** Uma rota alternativa do OSRM (contrato do endpoint /m/rotas/alternativas). */
+export type RotaOption = {
+  km: string;
+  duracaoSegundos: number;
+  geometria: string | null;
+  recomendada: boolean;
+};
+
+type AlternativasResponse = { rotas: RotaOption[] } | { rotas: []; erro: string };
+
 /**
  * Calcula KM da rota carga→descarga. Cascata:
  * 1. Backend OSRM (já tem cache server-side de 90d).
@@ -817,6 +827,31 @@ export function useCalcularRota(origemId?: string, destinoId?: string) {
             ? "Sem internet e sem cálculo anterior dessa rota."
             : "Não foi possível calcular a rota agora.",
         } as RotaCalculada;
+      }
+    },
+  });
+}
+
+/**
+ * Busca as rotas alternativas (até 3) carga→descarga pro seletor de mapa.
+ * Online-only: sem fallback offline. Se falhar/offline, retorna [] e a tela
+ * segue com useCalcularRota (haversine/cache) e km editável. O seletor só
+ * aparece quando o resultado tem mais de 1 rota.
+ */
+export function useRotasAlternativas(origemId?: string, destinoId?: string) {
+  return useQuery<RotaOption[]>({
+    queryKey: ["rota-alternativas", origemId, destinoId],
+    enabled: !!origemId && !!destinoId && origemId !== destinoId,
+    staleTime: Infinity,
+    retry: false,
+    queryFn: async () => {
+      try {
+        const res = await api.get<AlternativasResponse>(
+          `/m/rotas/alternativas?origem=${origemId!}&destino=${destinoId!}`,
+        );
+        return res.rotas ?? [];
+      } catch {
+        return [];
       }
     },
   });

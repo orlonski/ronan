@@ -26,4 +26,12 @@ export class RotasMotoristaController {
   ) {
     return this.roteamento.calcularKm(query.origem, query.destino);
   }
+
+  @Get("alternativas")
+  alternativas(
+    @Query(new ZodValidationPipe(CalcularQuery))
+    query: z.infer<typeof CalcularQuery>,
+  ) {
+    return this.roteamento.calcularAlternativas(query.origem, query.destino);
+  }
 }

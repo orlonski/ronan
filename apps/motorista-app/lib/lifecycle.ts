@@ -47,6 +47,10 @@ export type FinalizarDraft = {
   ticket?: string;
   km?: string;
   kmEditadoManual?: boolean;
+  /** Polyline da rota escolhida no seletor de mapa (rota real p/ o painel). */
+  rotaGeometria?: string;
+  /** Índice da rota escolhida entre as alternativas (restaura o seletor). */
+  rotaIdx?: number;
   valorPedagio?: string;
   observacao?: string;
   fotoUri?: string;
@@ -367,6 +371,7 @@ export async function finalizarViagemGuiada(input: {
   toneladas: number;
   km: number;
   kmCalculado?: number;
+  rotaGeometria?: string;
   ticket?: string;
   localDescargaId: string;
   localDescargaDados?: LocalSnapshotLifecycle;
@@ -390,6 +395,7 @@ export async function finalizarViagemGuiada(input: {
       toneladas: input.toneladas,
       km: input.km,
       kmCalculado: input.kmCalculado,
+      rotaGeometria: input.rotaGeometria,
       ticket: input.ticket,
       localDescargaId: input.localDescargaId,
       localDescargaDados: input.localDescargaDados,

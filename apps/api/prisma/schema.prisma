@@ -848,6 +848,11 @@ model Viagem {
   /// detectar quando motorista sobrescreveu o sugerido (km != kmCalculado).
   /// Null pra viagens antigas (pré-feature) e quando OSRM não respondeu.
   kmCalculado       Decimal?     @db.Decimal(10, 2)
+  /// Polyline (formato Google, precision 5) da rota que o motorista ESCOLHEU
+  /// entre as alternativas OSRM no seletor de mapa. Null = não usou o seletor
+  /// (viagem antiga, rota única ou offline) → painel cai no rotaCache
+  /// (recomendada). Não-null também sinaliza "escolheu rota" no painel.
+  rotaGeometria     String?
   observacao        String?
   status            StatusViagem @default(ENVIADA)
   // Nullable p/ lifecycle: localCarga é preenchido no evento de carga (ou no

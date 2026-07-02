@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { DescargaPorGps, type DescargaCaptura } from "@/components/descarga-por-gps";
+import { SeletorRotas } from "@/components/seletor-rotas";
 import { showAlert, showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { fmtDataBR, hojeISO } from "@/lib/datetime";
@@ -40,6 +41,7 @@ import {
   useExtrairTicket,
   useMe,
   usePedagiosNaRota,
+  useRotasAlternativas,
   type Local,
 } from "@/lib/queries";
 
@@ -129,6 +131,9 @@ export default function NovaViagem() {
   const [descargaCaptura, setDescargaCaptura] = useState<DescargaCaptura | null>(null);
   // Rastreia se motorista editou KM manualmente — se sim, parou de auto-preencher
   const [kmEditadoManual, setKmEditadoManual] = useState(false);
+  // Rota escolhida no seletor de mapa (quando há alternativas).
+  const [rotaIdx, setRotaIdx] = useState(0);
+  const [rotaGeometriaEscolhida, setRotaGeometriaEscolhida] = useState<string | null>(null);
 
   // Modo edit: hidrata form com viagem pendente que falhou na sync
   const [hidratando, setHidratando] = useState<boolean>(modoEdit);
@@ -182,14 +187,43 @@ export default function NovaViagem() {
 
   const rota = useCalcularRota(form.localCargaId, form.localDescargaId);
   const pedagiosNaRota = usePedagiosNaRota(form.localCargaId, form.localDescargaId);
+  // Rotas alternativas pro seletor de mapa (online-only; [] offline). Em modo
+  // edit não faz sentido — o motorista já tinha um km explícito.
+  const alternativas = useRotasAlternativas(
+    modoEdit ? undefined : form.localCargaId,
+    modoEdit ? undefined : form.localDescargaId,
+  );
+  const temSeletor = !modoEdit && (alternativas.data?.length ?? 0) > 1;
+
+  // Escolher rota: seta km + guarda a geometria escolhida. NÃO marca edição
+  // manual (escolher rota ≠ digitar km na mão).
+  function escolherRota(idx: number) {
+    const r = alternativas.data?.[idx];
+    if (!r) return;
+    setRotaIdx(idx);
+    setRotaGeometriaEscolhida(r.geometria);
+    setForm((f) => ({ ...f, km: r.km }));
+  }
+
+  // Enquanto o seletor governa o km, o auto-fill fica parado.
+  const kmGovernadoPorRota = temSeletor && rotaGeometriaEscolhida != null;
 
   // Auto-preenche KM com valor calculado pelo OSRM, se motorista nao editou
   useEffect(() => {
-    if (kmEditadoManual) return;
+    if (kmEditadoManual || kmGovernadoPorRota) return;
     if (!rota.data || rota.data.km === null) return;
     const novoKm = rota.data.km;
     setForm((f) => (f.km === novoKm ? f : { ...f, km: novoKm }));
-  }, [rota.data, kmEditadoManual]);
+  }, [rota.data, kmEditadoManual, kmGovernadoPorRota]);
+
+  // Pré-seleciona a recomendada quando chegam as alternativas (>1).
+  useEffect(() => {
+    if (kmEditadoManual || rotaGeometriaEscolhida != null) return;
+    const alts = alternativas.data;
+    if (!alts || alts.length <= 1) return;
+    const recIdx = Math.max(0, alts.findIndex((r) => r.recomendada));
+    escolherRota(recIdx);
+  }, [alternativas.data, kmEditadoManual, rotaGeometriaEscolhida]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-detecta local de carga/descarga a partir dos pontos GPS do tracking.
   // Procura local cadastrado dentro de 200m do primeiro/último ponto.
@@ -507,6 +541,8 @@ export default function NovaViagem() {
           rota.data && "km" in rota.data && rota.data.km !== null
             ? parseFloat(String(rota.data.km))
             : undefined,
+        // Rota escolhida no seletor de mapa (rota real no painel).
+        rotaGeometria: rotaGeometriaEscolhida ?? undefined,
         localCargaId: form.localCargaId,
         localDescargaId: form.localDescargaId,
         // Snapshot pra auto-recovery: se o local foi excluido server-side
@@ -862,6 +898,9 @@ export default function NovaViagem() {
                 onChange={(v) => {
                   val.limpar();
                   update("localDescargaId", v);
+                  // Nova descarga = nova rota; reseta a escolha pra re-defaultar.
+                  setRotaGeometriaEscolhida(null);
+                  setRotaIdx(0);
                 }}
                 onCaptura={setDescargaCaptura}
                 nomeSelecionadoFallback={nomeDescargaSelecionado}
@@ -877,6 +916,14 @@ export default function NovaViagem() {
                 />
               )}
             </View>
+
+            {temSeletor ? (
+              <SeletorRotas
+                rotas={alternativas.data!}
+                selecionadaIdx={rotaIdx}
+                onSelecionar={escolherRota}
+              />
+            ) : null}
 
             <View onLayout={val.onLayoutCampo("km")}>
               <View className="flex-row gap-3">

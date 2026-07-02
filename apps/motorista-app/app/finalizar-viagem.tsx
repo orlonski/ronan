@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "@/components/screen-header";
 import { DescargaPorGps, type DescargaCaptura } from "@/components/descarga-por-gps";
+import { SeletorRotas } from "@/components/seletor-rotas";
 import { ErroCampo, useValidacaoGuiada } from "@/components/validacao-guiada";
 import { SemCatalogo } from "@/components/sem-catalogo";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
@@ -29,7 +30,7 @@ import {
   salvarFinalizarDraft,
   type LifecycleLocal,
 } from "@/lib/lifecycle";
-import { useCalcularRota, useCatalogos } from "@/lib/queries";
+import { useCalcularRota, useCatalogos, useRotasAlternativas } from "@/lib/queries";
 
 /**
  * Passo final do lifecycle guiado: coleta os dados que faltam pra fechar a
@@ -47,6 +48,9 @@ export default function FinalizarViagem() {
   const [ticket, setTicket] = useState("");
   const [km, setKm] = useState("");
   const [kmEditadoManual, setKmEditadoManual] = useState(false);
+  // Rota escolhida no seletor de mapa (quando há alternativas).
+  const [rotaIdx, setRotaIdx] = useState(0);
+  const [rotaGeometriaEscolhida, setRotaGeometriaEscolhida] = useState<string | null>(null);
   const [localDescargaId, setLocalDescargaId] = useState("");
   const [descargaCaptura, setDescargaCaptura] = useState<DescargaCaptura | null>(null);
   const [descargaNomeDraft, setDescargaNomeDraft] = useState<string | undefined>(undefined);
@@ -80,6 +84,8 @@ export default function FinalizarViagem() {
         if (d.ticket != null) setTicket(d.ticket);
         if (d.km != null) setKm(d.km);
         if (d.kmEditadoManual) setKmEditadoManual(true);
+        if (d.rotaGeometria != null) setRotaGeometriaEscolhida(d.rotaGeometria);
+        if (d.rotaIdx != null) setRotaIdx(d.rotaIdx);
         if (d.valorPedagio != null) setValorPedagio(d.valorPedagio);
         if (d.observacao != null) setObservacao(d.observacao);
         if (d.fotoUri && d.fotoMime) setFoto({ uri: d.fotoUri, mime: d.fotoMime });
@@ -106,12 +112,37 @@ export default function FinalizarViagem() {
   // KM auto via OSRM entre local de carga (se cadastrado) e descarga.
   const localCargaId = ciclo?.localCargaId ?? "";
   const rota = useCalcularRota(localCargaId, localDescargaId);
+  // Rotas alternativas pro seletor de mapa (online-only; [] offline).
+  const alternativas = useRotasAlternativas(localCargaId, localDescargaId);
+  const temSeletor = (alternativas.data?.length ?? 0) > 1;
 
+  // Escolher uma rota no seletor: seta km + guarda a geometria (rota real no
+  // painel) + o km da recomendada como kmCalculado. NÃO marca edição manual.
+  function escolherRota(idx: number) {
+    const r = alternativas.data?.[idx];
+    if (!r) return;
+    setRotaIdx(idx);
+    setRotaGeometriaEscolhida(r.geometria);
+    setKm(r.km);
+  }
+
+  // Enquanto o seletor governa o km (rota escolhida), o auto-fill fica parado.
+  const kmGovernadoPorRota = temSeletor && rotaGeometriaEscolhida != null;
   useEffect(() => {
-    if (kmEditadoManual) return;
+    if (kmEditadoManual || kmGovernadoPorRota) return;
     if (!rota.data || rota.data.km === null) return;
     setKm((cur) => (cur === rota.data!.km ? cur : (rota.data as { km: string }).km));
-  }, [rota.data, kmEditadoManual]);
+  }, [rota.data, kmEditadoManual, kmGovernadoPorRota]);
+
+  // Ao carregar as alternativas (>1), pré-seleciona a recomendada — a menos que
+  // o motorista já tenha escolhido/editado (draft restaurado inclusive).
+  useEffect(() => {
+    if (kmEditadoManual || rotaGeometriaEscolhida != null) return;
+    const alts = alternativas.data;
+    if (!alts || alts.length <= 1) return;
+    const recIdx = Math.max(0, alts.findIndex((r) => r.recomendada));
+    escolherRota(recIdx);
+  }, [alternativas.data, kmEditadoManual, rotaGeometriaEscolhida]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const nomeDescargaSelecionado = useMemo(() => {
     if (!localDescargaId) return undefined;
@@ -140,6 +171,8 @@ export default function FinalizarViagem() {
         ticket,
         km,
         kmEditadoManual,
+        rotaGeometria: rotaGeometriaEscolhida ?? undefined,
+        rotaIdx,
         valorPedagio,
         observacao,
         fotoUri: foto?.uri,
@@ -157,6 +190,8 @@ export default function FinalizarViagem() {
     ticket,
     km,
     kmEditadoManual,
+    rotaGeometriaEscolhida,
+    rotaIdx,
     valorPedagio,
     observacao,
     foto,
@@ -211,6 +246,7 @@ export default function FinalizarViagem() {
           rota.data && "km" in rota.data && rota.data.km !== null
             ? parseFloat(String(rota.data.km))
             : undefined,
+        rotaGeometria: rotaGeometriaEscolhida ?? undefined,
         ticket: exigeTicket ? ticket.trim() : undefined,
         localDescargaId,
         localDescargaDados,
@@ -281,6 +317,9 @@ export default function FinalizarViagem() {
                 onChange={(x) => {
                   val.limpar();
                   setLocalDescargaId(x);
+                  // Nova descarga = nova rota; reseta a escolha pra re-defaultar.
+                  setRotaGeometriaEscolhida(null);
+                  setRotaIdx(0);
                 }}
                 onCaptura={setDescargaCaptura}
                 nomeSelecionadoFallback={nomeDescargaSelecionado}
@@ -320,6 +359,15 @@ export default function FinalizarViagem() {
                 </Text>
               ) : null}
             </View>
+
+            {/* Seletor de rota (só quando o OSRM oferece alternativas reais) */}
+            {temSeletor ? (
+              <SeletorRotas
+                rotas={alternativas.data!}
+                selecionadaIdx={rotaIdx}
+                onSelecionar={escolherRota}
+              />
+            ) : null}
 
             {/* 3) Km e pedágio */}
             <View className="gap-2" onLayout={val.onLayoutCampo("km")}>

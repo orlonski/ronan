@@ -267,7 +267,9 @@ export class ViagensMotoristaService {
     const regras = await this.regrasMinimoAtivas();
     return {
       ...serializarViagemComMinimos(viagem, regras),
-      rotaGeometria: rota?.geometria ?? null,
+      // Prefere a rota que o motorista escolheu no seletor; cai no cache
+      // (recomendada) pra viagens antigas sem escolha registrada.
+      rotaGeometria: viagem.rotaGeometria ?? rota?.geometria ?? null,
     };
   }
 
@@ -623,6 +625,7 @@ export class ViagensMotoristaService {
         ticket,
         km: rest.km,
         kmCalculado: rest.kmCalculado,
+        rotaGeometria: rest.rotaGeometria,
         observacao: rest.observacao,
         localCargaId: rest.localCargaId,
         localDescargaId: rest.localDescargaId,
@@ -989,6 +992,7 @@ export class ViagensMotoristaService {
         toneladas: input.toneladas,
         km: input.km,
         kmCalculado: input.kmCalculado,
+        rotaGeometria: input.rotaGeometria,
         ticket,
         localDescargaId: input.localDescargaId,
         descargaLat: input.descargaLat,

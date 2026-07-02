@@ -127,6 +127,8 @@ type ViagemDetalhe = {
     lng: number | null;
   };
   rotaGeometria: string | null;
+  /** True quando o motorista escolheu a rota no seletor (≠ edição manual de km). */
+  rotaEscolhida?: boolean;
   revisadoEm: string | null;
   revisadoPor: { id: string; nome: string } | null;
   motivoStatus: string | null;
@@ -390,11 +392,21 @@ export default function ViagemDetalhePage({
                       casas={2}
                     />
                     {v.kmCalculado &&
-                      Number(v.kmCalculado) !== Number(v.km) && (
+                      Number(v.kmCalculado) !== Number(v.km) &&
+                      (v.rotaEscolhida ? (
+                        // Motorista escolheu outra rota no seletor de mapa.
+                        <span className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                          Rota alternativa:{" "}
+                          {Number(v.km) - Number(v.kmCalculado) > 0 ? "+" : ""}
+                          {fmtNum(String(Number(v.km) - Number(v.kmCalculado)), 0)} km
+                          {" "}vs. sugerida ({fmtNum(v.kmCalculado, 2)})
+                        </span>
+                      ) : (
+                        // Ajuste manual do km (sem escolha de rota).
                         <span className="ml-1 text-xs text-muted-foreground">
                           (calculado: {fmtNum(v.kmCalculado, 2)})
                         </span>
-                      )}
+                      ))}
                   </span>
                 }
               />
