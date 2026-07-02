@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ActivityIndicator,
@@ -6,6 +6,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
   View,
@@ -15,15 +16,17 @@ import { CheckCircle2, MapPin, Plus, X } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { showConfirm } from "@/lib/alert";
-import { pegarCoordsPrecisa } from "@/lib/geo";
+import { haversineMetros, pegarCoordsPrecisa } from "@/lib/geo";
 import {
   buscarDescargaDuasEtapas,
   buscarDescargaDuasEtapasOffline,
   buscarLocaisProximos,
   buscarLocaisProximosOffline,
   useBuscaGpsConfig,
+  useCatalogos,
   BUSCA_GPS_CONFIG_DEFAULTS,
   type Catalogos,
+  type Local,
   type LocalProximo,
 } from "@/lib/queries";
 
@@ -46,7 +49,9 @@ type Estado =
       ampliado: boolean;
       raioInicialM: number;
     }
-  | { tipo: "sem_match"; coords: CoordsCap };
+  | { tipo: "sem_match"; coords: CoordsCap }
+  // Carga: escolher da LISTA de locais cadastrados (nunca criar novo).
+  | { tipo: "lista"; coords: CoordsCap | null };
 
 /**
  * Local escolhido/detectado por GPS. `criarOffline` = lugar novo que o
@@ -104,8 +109,14 @@ export function LocalPorGps({
   );
   const [erro, setErro] = useState<string | null>(null);
   const [nomeNovo, setNomeNovo] = useState("");
+  const [buscaLista, setBuscaLista] = useState("");
   const gpsConfig = useBuscaGpsConfig();
+  const catalogos = useCatalogos();
   const qc = useQueryClient();
+
+  // Carga é sempre um cadastro existente — o motorista NUNCA cria local de
+  // carga. Só descarga (obra do cliente) permite lugar novo.
+  const permiteCriar = lado === "descarga";
 
   async function capturarEBuscar() {
     setErro(null);
@@ -205,8 +216,14 @@ export function LocalPorGps({
       buscaOffline,
     };
     if (matches.length === 0) {
-      setEstado({ tipo: "sem_match", coords: cap });
-      setNomeNovo("");
+      if (permiteCriar) {
+        setEstado({ tipo: "sem_match", coords: cap });
+        setNomeNovo("");
+      } else {
+        // Carga: nada por perto → escolher da lista de cadastrados.
+        setBuscaLista("");
+        setEstado({ tipo: "lista", coords: cap });
+      }
     } else if (matches.length === 1 && !usouRaioAmpliado) {
       const m = matches[0]!;
       selecionar(m, cap);
@@ -240,6 +257,60 @@ export function LocalPorGps({
     }
   }
 
+  function abrirLista() {
+    const coords = estado.tipo === "escolha" ? estado.coords : null;
+    setBuscaLista("");
+    setErro(null);
+    setEstado({ tipo: "lista", coords });
+  }
+
+  function selecionarDaLista(l: Local, coords: CoordsCap | null) {
+    const dist =
+      coords && l.lat != null && l.lng != null
+        ? Math.round(haversineMetros(coords.lat, coords.lng, l.lat, l.lng))
+        : null;
+    const sel: SelecaoLocal = {
+      id: l.id,
+      nome: l.nome,
+      lat: l.lat ?? undefined,
+      lng: l.lng ?? undefined,
+      precisao: coords?.precisao ?? null,
+      distanciaMetros: dist,
+      buscaOffline: coords?.buscaOffline ?? false,
+    };
+    onSelect(sel);
+    setEstado({ tipo: "selecionado", local: sel });
+  }
+
+  // Locais de carga cadastrados, filtrados pela busca e ordenados por distância
+  // (quando há posição) e nome. Nunca inclui "criar novo".
+  const listaCarga = useMemo<Array<Local & { _dist: number | null }>>(() => {
+    const locais = catalogos.data?.locais ?? [];
+    const coords = estado.tipo === "lista" ? estado.coords : null;
+    const termo = buscaLista.trim().toLowerCase();
+    return locais
+      .filter((l) => l.tipo === "CARGA" || l.tipo === "AMBOS")
+      .filter(
+        (l) =>
+          !termo ||
+          l.nome.toLowerCase().includes(termo) ||
+          (l.cidade ?? "").toLowerCase().includes(termo),
+      )
+      .map((l) => ({
+        ...l,
+        _dist:
+          coords && l.lat != null && l.lng != null
+            ? Math.round(haversineMetros(coords.lat, coords.lng, l.lat, l.lng))
+            : null,
+      }))
+      .sort((a, b) => {
+        if (a._dist != null && b._dist != null) return a._dist - b._dist;
+        if (a._dist != null) return -1;
+        if (b._dist != null) return 1;
+        return a.nome.localeCompare(b.nome);
+      });
+  }, [catalogos.data?.locais, estado, buscaLista]);
+
   function salvarNomeNovo() {
     if (estado.tipo !== "sem_match") return;
     const nome = nomeNovo.trim();
@@ -271,6 +342,7 @@ export function LocalPorGps({
   }
 
   const labelTexto = lado === "carga" ? "Local de carga" : "Local de descarga";
+  const coordsLista = estado.tipo === "lista" ? estado.coords : null;
 
   return (
     <View className="gap-2">
@@ -362,12 +434,21 @@ export function LocalPorGps({
               </View>
             </Pressable>
           ))}
-          <Button variant="outline" onPress={abrirSemMatch} className="mt-1">
-            <Plus size={18} color="#0f172a" />
-            <Text className="text-sm font-semibold text-foreground">
-              Nenhum desses — criar novo
-            </Text>
-          </Button>
+          {permiteCriar ? (
+            <Button variant="outline" onPress={abrirSemMatch} className="mt-1">
+              <Plus size={18} color="#0f172a" />
+              <Text className="text-sm font-semibold text-foreground">
+                Nenhum desses — criar novo
+              </Text>
+            </Button>
+          ) : (
+            <Button variant="outline" onPress={abrirLista} className="mt-1">
+              <MapPin size={18} color="#0f172a" />
+              <Text className="text-sm font-semibold text-foreground">
+                Nenhum desses — ver a lista
+              </Text>
+            </Button>
+          )}
         </View>
       )}
 
@@ -439,6 +520,102 @@ export function LocalPorGps({
               <Button className="flex-1" onPress={salvarNomeNovo}>
                 <Text className="text-base font-bold text-primary-foreground">
                   Salvar local
+                </Text>
+              </Button>
+            </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Modal: escolher o local de CARGA na lista dos cadastrados (nunca cria). */}
+      <Modal
+        visible={estado.tipo === "lista"}
+        animationType="slide"
+        onRequestClose={() => {
+          if (estado.tipo === "lista") setEstado({ tipo: "vazio" });
+        }}
+      >
+        <SafeAreaView edges={["top", "bottom"]} className="flex-1 bg-background">
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            className="flex-1"
+          >
+            <View className="flex-row items-center justify-between border-b border-border p-4">
+              <Text className="text-lg font-bold text-foreground">Local de carga</Text>
+              <Pressable
+                onPress={() => setEstado({ tipo: "vazio" })}
+                className="h-10 w-10 items-center justify-center rounded-full bg-muted"
+              >
+                <X size={20} color="#0f172a" />
+              </Pressable>
+            </View>
+
+            <View className="gap-3 p-4">
+              <Text className="text-sm text-muted-foreground">
+                Não achei local de carga bem perto de você. Escolha na lista dos locais
+                cadastrados (os mais próximos aparecem primeiro).
+              </Text>
+              <TextInput
+                value={buscaLista}
+                onChangeText={setBuscaLista}
+                placeholder="Buscar por nome ou cidade"
+                placeholderTextColor="#94a3b8"
+                autoCorrect={false}
+                className="rounded-xl border border-border bg-background px-3 py-3 text-base text-foreground"
+              />
+            </View>
+
+            <ScrollView
+              className="flex-1 px-4"
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingBottom: 16, gap: 8 }}
+            >
+              {listaCarga.length === 0 ? (
+                <Text className="mt-6 text-center text-sm text-muted-foreground">
+                  {catalogos.data
+                    ? "Nenhum local de carga encontrado."
+                    : "Carregando locais…"}
+                </Text>
+              ) : (
+                listaCarga.map((l) => (
+                  <Pressable
+                    key={l.id}
+                    onPress={() => selecionarDaLista(l, coordsLista)}
+                    className="flex-row items-center gap-3 rounded-xl border border-border bg-background p-3 active:opacity-70"
+                  >
+                    <View className="h-9 w-9 items-center justify-center rounded-full bg-primary/10">
+                      <MapPin size={18} color="#ea580c" />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-base font-semibold text-foreground" numberOfLines={1}>
+                        {l.nome}
+                      </Text>
+                      <Text
+                        className="text-xs text-muted-foreground"
+                        style={{ fontVariant: ["tabular-nums"] }}
+                      >
+                        {l.cidade}
+                        {l.uf ? `/${l.uf}` : ""}
+                        {l._dist != null ? ` · ${l._dist}m` : ""}
+                      </Text>
+                    </View>
+                  </Pressable>
+                ))
+              )}
+            </ScrollView>
+
+            <View className="flex-row gap-3 border-t border-border p-4">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onPress={() => setEstado({ tipo: "vazio" })}
+              >
+                <Text className="text-base font-medium text-foreground">Cancelar</Text>
+              </Button>
+              <Button className="flex-1" onPress={() => void capturarEBuscar()}>
+                <MapPin size={20} color="white" />
+                <Text className="text-base font-bold text-primary-foreground">
+                  Tentar por GPS
                 </Text>
               </Button>
             </View>
