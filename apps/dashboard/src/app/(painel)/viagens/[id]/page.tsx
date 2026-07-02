@@ -736,7 +736,27 @@ export default function ViagemDetalhePage({
                 <div className="mb-3 rounded-lg border bg-muted/20 p-3">
                   {rotasAlt.isLoading ? (
                     <p className="text-sm text-muted-foreground">Buscando rotas…</p>
-                  ) : rotasAlt.data && rotasAlt.data.rotas.length > 0 ? (
+                  ) : rotasAlt.data && rotasAlt.data.rotas.length === 1 ? (
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">
+                        Esse trajeto só tem um caminho no mapa (
+                        {fmtNum(rotasAlt.data.rotas[0]!.km, 2)} km ·{" "}
+                        {Math.round(rotasAlt.data.rotas[0]!.duracaoSegundos / 60)} min) — o
+                        OSRM não encontrou rota alternativa pra escolher. Pra ajustar o km,
+                        use a edição da viagem.
+                      </p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setEscolhendoRota(false);
+                          setRotaPreviewIdx(null);
+                        }}
+                      >
+                        Fechar
+                      </Button>
+                    </div>
+                  ) : rotasAlt.data && rotasAlt.data.rotas.length > 1 ? (
                     <div className="space-y-2">
                       <p className="text-sm font-medium">
                         Escolha a estrada usada (clique pra ver no mapa):
