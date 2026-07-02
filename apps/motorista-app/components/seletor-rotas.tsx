@@ -121,7 +121,9 @@ export function SeletorRotas({
       >
         {MapView && region ? (
           <MapView {...mapProps}>
-            {/* Desenha as não-selecionadas primeiro (ficam por baixo). */}
+            {/* Desenha as não-selecionadas primeiro (ficam por baixo).
+                Sem `tappable`/`onPress`/`zIndex`: no Apple Maps (iOS) essas
+                props em Polyline crasham nativo. A escolha é pelos botões. */}
             {rotasCoords.map((coords, idx) =>
               idx === selecionadaIdx || coords.length < 2 ? null : (
                 <Polyline
@@ -129,8 +131,6 @@ export function SeletorRotas({
                   coordinates={coords}
                   strokeColor={CINZA}
                   strokeWidth={4}
-                  tappable
-                  onPress={() => selecionar(idx)}
                 />
               ),
             )}
@@ -140,9 +140,6 @@ export function SeletorRotas({
                 coordinates={coordsSel}
                 strokeColor={corDaRota(selecionadaIdx)}
                 strokeWidth={7}
-                zIndex={10}
-                tappable
-                onPress={() => selecionar(selecionadaIdx)}
               />
             )}
             {inicio && (
