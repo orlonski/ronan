@@ -9,6 +9,7 @@
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { TipoEventoViagem } from "@ronan/shared-types";
+import { listPendingViagemCancelar } from "@/db/database";
 import { api } from "./api";
 import {
   enqueueEventoViagem,
@@ -152,6 +153,11 @@ export async function hidratarViagemDoServidor(): Promise<LifecycleLocal | null>
     const resp = await api.get<ServerAndamento>("/m/viagem/andamento");
     const v = resp?.viagem;
     if (!v) return null;
+    // Se essa viagem está sendo descartada (cancelamento na fila, ainda não
+    // sincronizou), NÃO ressuscita — senão o "descartar" reabre o banner de
+    // retomar na home. Quando o cancelamento sincroniza, o servidor a apaga.
+    const cancelPendentes = await listPendingViagemCancelar();
+    if (cancelPendentes.some((c) => c.clientId === v.clientId)) return null;
     const novo: LifecycleLocal = {
       clientId: v.clientId,
       veiculoId: v.veiculoId,
