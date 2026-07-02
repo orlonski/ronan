@@ -30,6 +30,28 @@ export type EventoLocal = {
   localNome?: string;
 };
 
+/** Rascunho da tela de finalizar (persistido pra não perder ao voltar/sair). */
+export type FinalizarDraft = {
+  localDescargaId?: string;
+  descargaNome?: string;
+  descargaCaptura?: {
+    lat: number;
+    lng: number;
+    precisao: number | null;
+    distanciaMetros: number | null;
+    buscaOffline: boolean;
+  } | null;
+  materialId?: string;
+  toneladas?: string;
+  ticket?: string;
+  km?: string;
+  kmEditadoManual?: boolean;
+  valorPedagio?: string;
+  observacao?: string;
+  fotoUri?: string;
+  fotoMime?: string;
+};
+
 /** Viagem em andamento no espelho local. */
 export type LifecycleLocal = {
   clientId: string;
@@ -39,6 +61,7 @@ export type LifecycleLocal = {
   iniciadoEm: string; // ISO
   localCargaId?: string;
   localCargaNome?: string;
+  finalizarDraft?: FinalizarDraft;
   eventos: EventoLocal[];
 };
 
@@ -76,6 +99,16 @@ async function setLifecycleLocal(v: LifecycleLocal): Promise<void> {
 
 export async function clearLifecycleLocal(): Promise<void> {
   await AsyncStorage.removeItem(KEY);
+}
+
+/**
+ * Salva o rascunho da tela de finalizar no espelho local (merge). Sobrevive a
+ * voltar/reabrir/sair do app; limpo junto com clearLifecycleLocal no fim.
+ */
+export async function salvarFinalizarDraft(draft: FinalizarDraft): Promise<void> {
+  const atual = await getLifecycleLocal();
+  if (!atual) return;
+  await setLifecycleLocal({ ...atual, finalizarDraft: draft });
 }
 
 /**

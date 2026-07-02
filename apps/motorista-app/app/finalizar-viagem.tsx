@@ -21,7 +21,12 @@ import { Select, type SelectOption } from "@/components/ui/select";
 import { showAlert } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { hojeISO } from "@/lib/datetime";
-import { finalizarViagemGuiada, getLifecycleLocal, type LifecycleLocal } from "@/lib/lifecycle";
+import {
+  finalizarViagemGuiada,
+  getLifecycleLocal,
+  salvarFinalizarDraft,
+  type LifecycleLocal,
+} from "@/lib/lifecycle";
 import { useCalcularRota, useCatalogos } from "@/lib/queries";
 
 /**
@@ -42,11 +47,14 @@ export default function FinalizarViagem() {
   const [kmEditadoManual, setKmEditadoManual] = useState(false);
   const [localDescargaId, setLocalDescargaId] = useState("");
   const [descargaCaptura, setDescargaCaptura] = useState<DescargaCaptura | null>(null);
+  const [descargaNomeDraft, setDescargaNomeDraft] = useState<string | undefined>(undefined);
   const [valorPedagio, setValorPedagio] = useState("");
   const [observacao, setObservacao] = useState("");
   const [foto, setFoto] = useState<CapturedPhoto | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  // Só começa a salvar o rascunho depois de hidratar (não sobrescrever com vazio).
+  const [hidratado, setHidratado] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -58,6 +66,22 @@ export default function FinalizarViagem() {
       }
       setCiclo(atual);
       setClienteId(atual.clienteId); // cliente já escolhido no iniciar
+      // Restaura o rascunho (descarga + campos) se já tinha começado a finalizar.
+      const d = atual.finalizarDraft;
+      if (d) {
+        if (d.localDescargaId) setLocalDescargaId(d.localDescargaId);
+        if (d.descargaCaptura) setDescargaCaptura(d.descargaCaptura);
+        if (d.descargaNome) setDescargaNomeDraft(d.descargaNome);
+        if (d.materialId) setMaterialId(d.materialId);
+        if (d.toneladas != null) setToneladas(d.toneladas);
+        if (d.ticket != null) setTicket(d.ticket);
+        if (d.km != null) setKm(d.km);
+        if (d.kmEditadoManual) setKmEditadoManual(true);
+        if (d.valorPedagio != null) setValorPedagio(d.valorPedagio);
+        if (d.observacao != null) setObservacao(d.observacao);
+        if (d.fotoUri && d.fotoMime) setFoto({ uri: d.fotoUri, mime: d.fotoMime });
+      }
+      setHidratado(true);
       setCarregando(false);
     });
     return () => {
@@ -88,8 +112,10 @@ export default function FinalizarViagem() {
 
   const nomeDescargaSelecionado = useMemo(() => {
     if (!localDescargaId) return undefined;
-    return cat.data?.locais.find((l) => l.id === localDescargaId)?.nome;
-  }, [localDescargaId, cat.data?.locais]);
+    // Catálogo primeiro; fallback pro nome do rascunho (local novo offline
+    // pode não estar no catálogo após reabrir o app).
+    return cat.data?.locais.find((l) => l.id === localDescargaId)?.nome ?? descargaNomeDraft;
+  }, [localDescargaId, cat.data?.locais, descargaNomeDraft]);
 
   const localCargaCoords = useMemo(() => {
     if (!localCargaId) return null;
@@ -97,6 +123,41 @@ export default function FinalizarViagem() {
     if (!l || l.lat == null || l.lng == null) return null;
     return { lat: l.lat, lng: l.lng, nome: l.nome };
   }, [localCargaId, cat.data?.locais]);
+
+  // Salva o rascunho (debounced) sempre que algo muda — sobrevive a voltar/sair.
+  useEffect(() => {
+    if (!hidratado) return;
+    const t = setTimeout(() => {
+      void salvarFinalizarDraft({
+        localDescargaId: localDescargaId || undefined,
+        descargaNome: nomeDescargaSelecionado,
+        descargaCaptura,
+        materialId: materialId || undefined,
+        toneladas,
+        ticket,
+        km,
+        kmEditadoManual,
+        valorPedagio,
+        observacao,
+        fotoUri: foto?.uri,
+        fotoMime: foto?.mime,
+      });
+    }, 300);
+    return () => clearTimeout(t);
+  }, [
+    hidratado,
+    localDescargaId,
+    nomeDescargaSelecionado,
+    descargaCaptura,
+    materialId,
+    toneladas,
+    ticket,
+    km,
+    kmEditadoManual,
+    valorPedagio,
+    observacao,
+    foto,
+  ]);
 
   function validar(): string | null {
     if (!clienteId) return "Escolha o cliente.";
