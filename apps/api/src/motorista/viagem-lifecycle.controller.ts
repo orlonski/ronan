@@ -74,4 +74,11 @@ export class ViagemLifecycleController {
   ) {
     return this.service.finalizar(user.id, clientId, body);
   }
+
+  /** Descartar/cancelar a viagem em andamento (apaga a EM_ANDAMENTO). Idempotente. */
+  @Post(":clientId/cancelar")
+  @AcessoMotorista("podeViagemLifecycle")
+  cancelar(@CurrentUser() user: AuthMotorista, @Param("clientId") clientId: string) {
+    return this.service.cancelar(user.id, clientId);
+  }
 }

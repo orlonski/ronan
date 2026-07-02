@@ -9,11 +9,14 @@
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { TipoEventoViagem } from "@ronan/shared-types";
+import { api } from "./api";
 import {
   enqueueEventoViagem,
+  enqueueViagemCancelar,
   enqueueViagemFinalizar,
   enqueueViagemIniciar,
   enqueueLocal,
+  removerItensLifecycleDaViagem,
 } from "./sync";
 
 export type LocalSnapshotLifecycle = { nome: string; lat: number; lng: number };
@@ -71,6 +74,65 @@ async function setLifecycleLocal(v: LifecycleLocal): Promise<void> {
 
 export async function clearLifecycleLocal(): Promise<void> {
   await AsyncStorage.removeItem(KEY);
+}
+
+/**
+ * Descarta a viagem em andamento: limpa a fila local (iniciar/eventos/
+ * finalizar), enfileira o cancelamento no servidor (idempotente) e apaga o
+ * espelho local. Resolve o caso do 409 "já tem viagem em andamento".
+ */
+export async function descartarViagemGuiada(clientId: string): Promise<void> {
+  await removerItensLifecycleDaViagem(clientId);
+  await enqueueViagemCancelar(clientId);
+  const atual = await getLifecycleLocal();
+  if (!atual || atual.clientId === clientId) {
+    await clearLifecycleLocal();
+  }
+}
+
+// Forma da resposta de GET /m/viagem/andamento (só o que usamos aqui).
+type ServerAndamento = {
+  viagem: {
+    clientId: string;
+    veiculoId: string;
+    iniciadoEm: string | null;
+    localCarga: { id: string; nome: string } | null;
+    eventosViagem: { id: string; tipoSlug: string; ocorridoEm: string }[];
+  } | null;
+};
+
+/**
+ * Reconciliação: se NÃO há espelho local mas o servidor tem uma viagem em
+ * andamento (órfã — ex: descartada só no celular antes), reconstrói o espelho
+ * local a partir do servidor pra o motorista poder retomar/descartar. Só
+ * preenche quando o espelho está vazio — nunca sobrescreve uma viagem local
+ * (que pode ser offline-pendente). Best-effort: offline, ignora.
+ */
+export async function hidratarViagemDoServidor(): Promise<LifecycleLocal | null> {
+  const atual = await getLifecycleLocal();
+  if (atual) return atual;
+  try {
+    const resp = await api.get<ServerAndamento>("/m/viagem/andamento");
+    const v = resp?.viagem;
+    if (!v) return null;
+    const novo: LifecycleLocal = {
+      clientId: v.clientId,
+      veiculoId: v.veiculoId,
+      iniciadoEm: v.iniciadoEm ?? nowIso(),
+      localCargaId: v.localCarga?.id,
+      localCargaNome: v.localCarga?.nome,
+      eventos: (v.eventosViagem ?? []).map((e) => ({
+        id: e.id,
+        tipoSlug: e.tipoSlug,
+        nome: e.tipoSlug,
+        ocorridoEm: e.ocorridoEm,
+      })),
+    };
+    await setLifecycleLocal(novo);
+    return novo;
+  } catch {
+    return null;
+  }
 }
 
 // ---- Máquina de estados (puras) ----

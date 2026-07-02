@@ -68,4 +68,11 @@ export class ViagensAndamentoAdminController {
   list() {
     return this.service.viagensEmAndamento();
   }
+
+  /** Cancela (apaga) uma viagem em andamento presa. */
+  @RequerPermissao("viagens.editar")
+  @Delete(":id")
+  cancelar(@Param("id") id: string) {
+    return this.service.cancelarEmAndamento(id);
+  }
 }

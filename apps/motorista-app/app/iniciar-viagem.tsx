@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { showAlert } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
-import { getLifecycleLocal, iniciarViagemGuiada } from "@/lib/lifecycle";
+import { hidratarViagemDoServidor, iniciarViagemGuiada } from "@/lib/lifecycle";
 import { useCatalogos, useMe } from "@/lib/queries";
 
 /**
@@ -38,7 +38,9 @@ export default function IniciarViagem() {
 
   useEffect(() => {
     let alive = true;
-    void getLifecycleLocal().then((atual) => {
+    // Reconcilia com o servidor: se já existe viagem em andamento (local ou
+    // órfã no servidor), retoma em vez de deixar abrir outra (evita o 409).
+    void hidratarViagemDoServidor().then((atual) => {
       if (!alive) return;
       if (atual) {
         router.replace("/viagem-guiada");

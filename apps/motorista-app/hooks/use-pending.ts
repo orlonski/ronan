@@ -6,6 +6,7 @@ export function usePending() {
     viagens: 0,
     pedagios: 0,
     abastecimentos: 0,
+    lifecycle: 0,
     comErro: 0,
   });
 

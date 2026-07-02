@@ -26,6 +26,7 @@ import {
 import { usePendingViagens } from "@/hooks/use-pending-viagens";
 import { usePendingPedagios } from "@/hooks/use-pending-pedagios";
 import { usePendingAbastecimentos } from "@/hooks/use-pending-abastecimentos";
+import { usePendingLifecycle, type LifecycleTrip } from "@/hooks/use-pending-lifecycle";
 import {
   descartarViagemPendente,
   descartarPedagioPendente,
@@ -34,7 +35,9 @@ import {
   tentarNovamenteViagemPendente,
   tentarNovamentePedagioPendente,
   tentarNovamenteAbastecimentoPendente,
+  tentarNovamenteTripLifecycle,
 } from "@/lib/sync";
+import { descartarViagemGuiada } from "@/lib/lifecycle";
 import { useCatalogos } from "@/lib/queries";
 import { frasePorCodigo, labelDoCampo } from "@/lib/validation";
 
@@ -56,8 +59,23 @@ export default function Pendentes() {
   const viagens = usePendingViagens();
   const pedagios = usePendingPedagios();
   const abastecimentos = usePendingAbastecimentos();
+  const lifecycleTrips = usePendingLifecycle();
   const cat = useCatalogos();
   const [detalheItem, setDetalheItem] = useState<PendingComum | null>(null);
+
+  async function descartarTrip(trip: LifecycleTrip) {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const ok = await showConfirm({
+      title: "Descartar esta viagem?",
+      message:
+        "A viagem em andamento vai ser cancelada (aqui e no escritório). Isso não pode ser desfeito.",
+      confirmLabel: "Descartar",
+      destructive: true,
+    });
+    if (!ok) return;
+    await descartarViagemGuiada(trip.clientId);
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }
 
   // Junta tudo numa lista só, mais antigos primeiro (ordem de criação).
   const rows = useMemo<PendingRow[]>(() => {
@@ -119,23 +137,34 @@ export default function Pendentes() {
           keyExtractor={(r) => `${r.kind}-${r.item.clientId}`}
           contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }}
           ListHeaderComponent={
-            rows.length > 0 ? (
+            rows.length > 0 || lifecycleTrips.length > 0 ? (
               <View className="mb-2 gap-3">
-                <Text className="text-sm text-muted-foreground">
-                  {rows.length} {rows.length === 1 ? "lançamento" : "lançamentos"} aguardando
-                  envio. Arraste pra esquerda pra excluir, ou toque em
-                  &quot;Sincronizar&quot; pra tentar enviar agora.
-                </Text>
+                {(rows.length > 0 || lifecycleTrips.length > 0) && (
+                  <Text className="text-sm text-muted-foreground">
+                    Lançamentos aguardando envio. Toque em &quot;Sincronizar&quot; pra tentar
+                    enviar agora.
+                  </Text>
+                )}
                 <Button onPress={() => void drain()}>Sincronizar agora</Button>
+                {lifecycleTrips.map((trip) => (
+                  <LifecycleTripCard
+                    key={`lc-${trip.clientId}`}
+                    trip={trip}
+                    onDescartar={() => descartarTrip(trip)}
+                    onTentarNovamente={() => tentarNovamenteTripLifecycle(trip.clientId)}
+                  />
+                ))}
               </View>
             ) : null
           }
           ListEmptyComponent={
-            <EmptyState
-              icon={CloudOff}
-              title="Tudo sincronizado"
-              description="Nenhum lançamento aguardando internet."
-            />
+            lifecycleTrips.length === 0 ? (
+              <EmptyState
+                icon={CloudOff}
+                title="Tudo sincronizado"
+                description="Nenhum lançamento aguardando internet."
+              />
+            ) : null
           }
           renderItem={({ item: row }) => (
             <PendingCard
@@ -161,6 +190,70 @@ type Lookups = {
   l: Map<string, { id: string; nome: string; cidade: string; uf: string }>;
   e: Map<string, { id: string; nome: string }>;
 } | null;
+
+const ESTAGIO_LABEL: Record<LifecycleTrip["estagio"], string> = {
+  abrindo: "Abrindo a viagem",
+  registrando: "Registrando eventos",
+  fechando: "Fechando a viagem",
+};
+
+function LifecycleTripCard({
+  trip,
+  onDescartar,
+  onTentarNovamente,
+}: {
+  trip: LifecycleTrip;
+  onDescartar: () => void;
+  onTentarNovamente: () => void;
+}) {
+  const temErro = trip.status === "error";
+  return (
+    <View className="rounded-2xl border-2 border-border bg-card p-4">
+      <View className="flex-row items-start justify-between gap-3">
+        <View className="flex-1">
+          <Badge variant="outline">Viagem guiada</Badge>
+          <Text className="mt-1.5 text-lg font-bold text-foreground">
+            Viagem em andamento
+          </Text>
+          <Text className="mt-0.5 text-base font-medium text-muted-foreground">
+            {ESTAGIO_LABEL[trip.estagio]}
+          </Text>
+        </View>
+        <Badge variant={temErro ? "destructive" : "warning"}>
+          {temErro
+            ? trip.errorStatus
+              ? `Erro ${trip.errorStatus}`
+              : `Falhou (${trip.attempts})`
+            : "Enviando"}
+        </Badge>
+      </View>
+
+      {temErro && (
+        <View className="mt-3 gap-1.5 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+          <Text className="text-xs font-semibold text-destructive">Último erro:</Text>
+          <Text className="text-xs text-destructive" numberOfLines={3}>
+            {trip.errorStatus === 409
+              ? "Você tem uma viagem começada que não foi finalizada. Descarte esta pra poder começar outra."
+              : (trip.errorMsg ?? "Erro desconhecido.")}
+          </Text>
+        </View>
+      )}
+
+      <View className="mt-3 flex-row gap-2">
+        <Button variant="outline" size="sm" className="flex-1" onPress={onDescartar}>
+          <Trash2 size={16} color="#dc2626" />
+          <Text className="ml-1 font-semibold text-destructive">Descartar</Text>
+        </Button>
+        {temErro && (
+          <Button size="sm" className="flex-1" onPress={onTentarNovamente}>
+            <RefreshCw size={16} color="white" />
+            <Text className="ml-1 font-semibold text-primary-foreground">Tentar de novo</Text>
+          </Button>
+        )}
+      </View>
+    </View>
+  );
+}
 
 function PendingCard({
   row,

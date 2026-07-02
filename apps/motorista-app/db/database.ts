@@ -152,6 +152,18 @@ export type PendingEventoViagem = {
   errorIssues?: ZodIssueSaved[];
 };
 
+/** Lifecycle: cancelamento/descarte de uma viagem em andamento. */
+export type PendingViagemCancelar = {
+  clientId: string; // clientId da viagem-mãe
+  status: "pending" | "syncing" | "error";
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
+};
+
 /** Lifecycle: finalização da viagem (POST /m/viagem/:clientId/finalizar). */
 export type PendingViagemFinalizar = {
   clientId: string; // clientId da viagem-mãe
@@ -175,6 +187,7 @@ const FOTOS_KEY = `${PREFIX}outbox.fotos`;
 const VG_INICIAR_KEY = `${PREFIX}outbox.viagem-iniciar`;
 const VG_EVENTOS_KEY = `${PREFIX}outbox.viagem-eventos`;
 const VG_FINALIZAR_KEY = `${PREFIX}outbox.viagem-finalizar`;
+const VG_CANCELAR_KEY = `${PREFIX}outbox.viagem-cancelar`;
 
 async function readList<T>(key: string): Promise<T[]> {
   try {
@@ -318,6 +331,21 @@ export async function upsertPendingViagemFinalizar(item: PendingViagemFinalizar)
 export async function deletePendingViagemFinalizar(clientId: string): Promise<void> {
   const list = await listPendingViagemFinalizar();
   await writeList(VG_FINALIZAR_KEY, list.filter((x) => x.clientId !== clientId));
+}
+
+export async function listPendingViagemCancelar(): Promise<PendingViagemCancelar[]> {
+  return readList<PendingViagemCancelar>(VG_CANCELAR_KEY);
+}
+export async function upsertPendingViagemCancelar(item: PendingViagemCancelar): Promise<void> {
+  const list = await listPendingViagemCancelar();
+  const idx = list.findIndex((x) => x.clientId === item.clientId);
+  if (idx >= 0) list[idx] = item;
+  else list.unshift(item);
+  await writeList(VG_CANCELAR_KEY, list);
+}
+export async function deletePendingViagemCancelar(clientId: string): Promise<void> {
+  const list = await listPendingViagemCancelar();
+  await writeList(VG_CANCELAR_KEY, list.filter((x) => x.clientId !== clientId));
 }
 
 export async function listPendingFotos(): Promise<PendingFoto[]> {

@@ -12,6 +12,7 @@ import {
   User,
 } from "lucide-react";
 import { RequerTela } from "@/components/requer-tela";
+import { ExcluirButton } from "@/components/excluir-button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
@@ -107,6 +108,16 @@ function ViagemCard({ v, agora }: { v: ViagemAndamento; agora: number }) {
             <Clock className="mr-1 h-3 w-3" />
             {tempoRelativo(v.iniciadoEm, agora)}
           </Badge>
+          <ExcluirButton
+            perm="viagens.editar"
+            path={PATH}
+            id={v.id}
+            nomeRecurso="esta viagem em andamento"
+            invalidateKeys={[PATH]}
+            size="sm"
+            variant="outline"
+            label="Cancelar"
+          />
         </div>
       </div>
 

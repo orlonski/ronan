@@ -31,7 +31,7 @@ import { showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { pegarCoordsPrecisa } from "@/lib/geo";
 import {
-  clearLifecycleLocal,
+  descartarViagemGuiada,
   extras,
   getLifecycleLocal,
   proximoPassoObrigatorio,
@@ -92,6 +92,7 @@ export default function ViagemGuiada() {
   }
 
   async function descartar() {
+    if (!local) return;
     const ok = await showConfirm({
       title: "Descartar esta viagem?",
       message:
@@ -102,9 +103,8 @@ export default function ViagemGuiada() {
     });
     if (!ok) return;
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    // TODO cancelar no servidor: se o /iniciar já sincronizou, a viagem fica
-    // EM_ANDAMENTO no backend. Por ora só limpa o espelho local (MVP).
-    await clearLifecycleLocal();
+    // Limpa a fila local E cancela no servidor (idempotente, enfileirado).
+    await descartarViagemGuiada(local.clientId);
     router.replace("/");
   }
 

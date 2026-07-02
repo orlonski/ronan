@@ -51,7 +51,7 @@ import {
   type Viagem,
 } from "@/lib/queries";
 import { iniciarTracking, useViagemAndamento } from "@/lib/tracking";
-import { getLifecycleLocal } from "@/lib/lifecycle";
+import { getLifecycleLocal, hidratarViagemDoServidor } from "@/lib/lifecycle";
 import { startHomeTutorialIfNeeded } from "@/lib/home-tutorial";
 
 const statusVariant: Record<
@@ -89,16 +89,20 @@ export default function Home() {
   // sempre que a Home ganha foco (após iniciar/finalizar/descartar) pra o
   // banner "Retomar" e o botão "Iniciar viagem" aparecerem/sumirem certo.
   const [temLifecycle, setTemLifecycle] = useState<boolean | null>(null);
+  const podeLifecycle = me.data?.podeViagemLifecycle ?? false;
   useFocusEffect(
     useCallback(() => {
       let alive = true;
-      void getLifecycleLocal().then((atual) => {
+      // Com a flag ligada, reconcilia com o servidor (pega viagem órfã). Sem a
+      // flag, só checa o espelho local (barato).
+      const p = podeLifecycle ? hidratarViagemDoServidor() : getLifecycleLocal();
+      void p.then((atual) => {
         if (alive) setTemLifecycle(!!atual);
       });
       return () => {
         alive = false;
       };
-    }, []),
+    }, [podeLifecycle]),
   );
 
   // Tutorial de primeiro uso: dispara assim que o perfil carrega (precisamos
@@ -354,7 +358,10 @@ export default function Home() {
             {/* Banner: itens só aguardando sincronizar (sem erro). Amarelo — informativo.
                 Inclui abastecimentos (antes só contava viagens+pedágios, e o
                 abastecimento sumia dessa conta). */}
-            {pending.viagens + pending.pedagios + pending.abastecimentos - pending.comErro > 0 && (
+            {Math.max(
+              0,
+              pending.viagens + pending.pedagios + pending.abastecimentos + pending.lifecycle - pending.comErro,
+            ) > 0 && (
               <Pressable
                 onPress={() => router.push("/pendentes")}
                 className="flex-row items-center gap-3 rounded-2xl border-2 border-warning/30 bg-warning/15 p-4 active:opacity-75"
@@ -364,7 +371,11 @@ export default function Home() {
                 </View>
                 <View className="flex-1">
                   <Text className="text-base font-bold text-foreground">
-                    {pending.viagens + pending.pedagios + pending.abastecimentos - pending.comErro} aguardando sincronizar
+                    {Math.max(
+                      0,
+                      pending.viagens + pending.pedagios + pending.abastecimentos + pending.lifecycle - pending.comErro,
+                    )}{" "}
+                    aguardando sincronizar
                   </Text>
                   <Text className="text-sm text-muted-foreground">
                     Toque pra ver e gerenciar

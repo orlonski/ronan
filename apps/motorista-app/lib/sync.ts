@@ -9,6 +9,7 @@ import {
   deletePendingLocal,
   deletePendingPedagio,
   deletePendingViagem,
+  deletePendingViagemCancelar,
   deletePendingViagemFinalizar,
   deletePendingViagemIniciar,
   listPendingAbastecimentos,
@@ -16,6 +17,7 @@ import {
   listPendingFotos,
   listPendingLocais,
   listPendingPedagios,
+  listPendingViagemCancelar,
   listPendingViagemFinalizar,
   listPendingViagemIniciar,
   listPendingViagens,
@@ -25,6 +27,7 @@ import {
   upsertPendingLocal,
   upsertPendingPedagio,
   upsertPendingViagem,
+  upsertPendingViagemCancelar,
   upsertPendingViagemFinalizar,
   upsertPendingViagemIniciar,
   type PendingAbastecimento,
@@ -33,6 +36,7 @@ import {
   type PendingLocal,
   type PendingPedagio,
   type PendingViagem,
+  type PendingViagemCancelar,
   type PendingViagemFinalizar,
   type PendingViagemIniciar,
   type ZodIssueSaved,
@@ -407,6 +411,45 @@ export async function enqueueViagemFinalizar(
   void drain();
 }
 
+/**
+ * Enfileira o cancelamento (descarte) de uma viagem em andamento no servidor.
+ * Idempotente no backend. Sincroniza quando houver rede.
+ */
+export async function enqueueViagemCancelar(viagemClientId: string): Promise<void> {
+  await upsertPendingViagemCancelar({
+    clientId: viagemClientId,
+    status: "pending",
+    attempts: 0,
+    createdAt: Date.now(),
+  });
+  notify();
+  void drain();
+}
+
+/** Remove do outbox todos os itens (iniciar/eventos/finalizar) de uma viagem. */
+export async function removerItensLifecycleDaViagem(viagemClientId: string): Promise<void> {
+  await deletePendingViagemIniciar(viagemClientId);
+  await deletePendingViagemFinalizar(viagemClientId);
+  for (const e of await listPendingEventosViagem()) {
+    if (e.viagemClientId === viagemClientId) await deletePendingEventoViagem(e.clientId);
+  }
+  notify();
+}
+
+/** Reseta o erro dos estágios de uma viagem guiada e dispara nova tentativa. */
+export async function tentarNovamenteTripLifecycle(viagemClientId: string): Promise<void> {
+  const reset = { status: "pending" as const, attempts: 0, errorMsg: undefined, errorStatus: undefined, errorIssues: undefined };
+  const ini = (await listPendingViagemIniciar()).find((x) => x.clientId === viagemClientId);
+  if (ini) await upsertPendingViagemIniciar({ ...ini, ...reset });
+  for (const e of await listPendingEventosViagem()) {
+    if (e.viagemClientId === viagemClientId) await upsertPendingEventoViagem({ ...e, ...reset });
+  }
+  const fin = (await listPendingViagemFinalizar()).find((x) => x.clientId === viagemClientId);
+  if (fin) await upsertPendingViagemFinalizar({ ...fin, ...reset });
+  notify();
+  void drain();
+}
+
 export async function pendingCounts(): Promise<{
   viagens: number;
   pedagios: number;
@@ -453,6 +496,8 @@ export async function drain(): Promise<void> {
     // Locais ANTES de viagens: viagens podem ter localDescargaId apontando
     // pra um local pendente. Se a viagem chegar primeiro, FK violation.
     await drainLocais();
+    // Cancelamentos primeiro (descarte de viagem em andamento).
+    await drainViagemCancelar();
     // Lifecycle guiado, em ordem: iniciar (cria a viagem) → eventos → finalizar.
     // Gates internos garantem que evento/finalizar só vão depois da viagem-mãe.
     await drainViagemIniciar();
@@ -513,6 +558,11 @@ async function rescueStaleItems(): Promise<void> {
   for (const f of await listPendingViagemFinalizar()) {
     if (f.status === "syncing" && isStale(f.lastTriedAt)) {
       await upsertPendingViagemFinalizar({ ...f, status: "pending" });
+    }
+  }
+  for (const c of await listPendingViagemCancelar()) {
+    if (c.status === "syncing" && isStale(c.lastTriedAt)) {
+      await upsertPendingViagemCancelar({ ...c, status: "pending" });
     }
   }
 }
@@ -593,7 +643,42 @@ async function processLocal(item: PendingLocal): Promise<void> {
   notify();
 }
 
-// ---- Lifecycle drains (ordem: iniciar → eventos → finalizar) ----
+// ---- Lifecycle drains (cancelar primeiro; depois iniciar → eventos → finalizar) ----
+
+async function drainViagemCancelar(): Promise<void> {
+  const list = await listPendingViagemCancelar();
+  for (const item of list) {
+    if (item.status === "syncing") continue;
+    if (item.attempts >= MAX_ATTEMPTS) continue;
+    const net = await NetInfo.fetch();
+    if (!net.isConnected) return;
+    await processViagemCancelar(item);
+  }
+}
+
+async function processViagemCancelar(item: PendingViagemCancelar): Promise<void> {
+  await upsertPendingViagemCancelar({ ...item, status: "syncing", lastTriedAt: Date.now() });
+  try {
+    await api.post(`/m/viagem/${item.clientId}/cancelar`, {});
+    await deletePendingViagemCancelar(item.clientId);
+  } catch (err) {
+    // 4xx (ex: não é sua / já não existe): nada mais a fazer, remove.
+    // 5xx/rede: tenta de novo depois.
+    if (isErroPermanente(err)) {
+      await deletePendingViagemCancelar(item.clientId);
+    } else {
+      const { msg, status } = extractErrorDetails(err);
+      await upsertPendingViagemCancelar({
+        ...item,
+        status: "error",
+        errorMsg: msg,
+        errorStatus: status,
+        attempts: item.attempts + 1,
+      });
+    }
+  }
+  notify();
+}
 
 async function drainViagemIniciar(): Promise<void> {
   const list = await listPendingViagemIniciar();

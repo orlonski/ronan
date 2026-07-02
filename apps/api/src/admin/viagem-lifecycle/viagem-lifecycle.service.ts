@@ -85,4 +85,21 @@ export class ViagemLifecycleAdminService {
       },
     });
   }
+
+  /**
+   * Cancela (apaga) uma viagem EM_ANDAMENTO presa, pelo dashboard. Só apaga se
+   * de fato estiver EM_ANDAMENTO — nunca uma viagem já finalizada.
+   */
+  async cancelarEmAndamento(id: string) {
+    const v = await this.prisma.viagem.findUnique({
+      where: { id },
+      select: { id: true, status: true },
+    });
+    if (!v) throw new NotFoundException("Viagem não encontrada");
+    if (v.status !== "EM_ANDAMENTO") {
+      throw new ConflictException("Só dá pra cancelar viagem que está em andamento.");
+    }
+    await this.prisma.viagem.delete({ where: { id } });
+    return { ok: true };
+  }
 }

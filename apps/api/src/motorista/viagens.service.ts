@@ -1008,6 +1008,29 @@ export class ViagensMotoristaService {
 
     return serializarViagemComMinimos(finalizada, await this.regrasMinimoAtivas());
   }
+
+  /**
+   * Cancela (apaga) uma viagem EM_ANDAMENTO do motorista. Usado pelo "Descartar
+   * viagem" do app. Idempotente: se não existe ou já foi finalizada, retorna ok
+   * sem erro (o motorista já não a quer; nada a fazer). Cascade apaga os
+   * EventoViagem. Não apaga viagem já ENVIADA/conferida (só EM_ANDAMENTO).
+   */
+  async cancelar(motoristaId: string, clientId: string) {
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { clientId },
+      select: { id: true, motoristaId: true, status: true },
+    });
+    if (!viagem) return { ok: true, jaRemovida: true };
+    if (viagem.motoristaId !== motoristaId) {
+      throw new ForbiddenException("Esta viagem não é sua.");
+    }
+    if (viagem.status !== "EM_ANDAMENTO") {
+      // Já finalizada — não dá pra cancelar por aqui; nada a fazer.
+      return { ok: true, jaFinalizada: true };
+    }
+    await this.prisma.viagem.delete({ where: { id: viagem.id } });
+    return { ok: true };
+  }
 }
 
 function grupoToStatus(
