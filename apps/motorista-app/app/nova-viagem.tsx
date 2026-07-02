@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "@/components/screen-header";
 import { ErroCampo, useValidacaoGuiada } from "@/components/validacao-guiada";
+import { SemCatalogo } from "@/components/sem-catalogo";
 import { Button } from "@/components/ui/button";
 import { DateField } from "@/components/ui/date-field";
 import { Input } from "@/components/ui/input";
@@ -635,12 +636,7 @@ export default function NovaViagem() {
       )}
 
       {!cat.isLoading && !cat.data && (
-        <View className="m-4 rounded-lg border border-amber-300 bg-amber-50 p-4">
-          <Text className="font-medium text-amber-900">Sem dados de catálogo</Text>
-          <Text className="mt-1 text-sm text-amber-800">
-            Conecte na internet uma vez pra carregar veículos, clientes, materiais e locais.
-          </Text>
-        </View>
+        <SemCatalogo carregando={cat.isFetching} aoBaixar={() => void cat.refetch()} />
       )}
 
       {cat.data && !hidratando && (

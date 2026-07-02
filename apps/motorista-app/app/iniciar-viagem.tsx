@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "@/components/screen-header";
 import { LocalPorGps, type SelecaoLocal } from "@/components/local-por-gps";
 import { ErroCampo, useValidacaoGuiada } from "@/components/validacao-guiada";
+import { SemCatalogo } from "@/components/sem-catalogo";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
@@ -130,6 +131,9 @@ export default function IniciarViagem() {
       <Stack.Screen options={{ headerShown: false }} />
       <ScreenHeader title="Iniciar viagem" />
 
+      {!cat.data ? (
+        <SemCatalogo carregando={cat.isFetching} aoBaixar={() => void cat.refetch()} />
+      ) : (
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         className="flex-1"
@@ -219,6 +223,7 @@ export default function IniciarViagem() {
           </Button>
         </ScrollView>
       </KeyboardAvoidingView>
+      )}
     </SafeAreaView>
   );
 }

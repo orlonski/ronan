@@ -14,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "@/components/screen-header";
 import { DescargaPorGps, type DescargaCaptura } from "@/components/descarga-por-gps";
 import { ErroCampo, useValidacaoGuiada } from "@/components/validacao-guiada";
+import { SemCatalogo } from "@/components/sem-catalogo";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -252,12 +253,7 @@ export default function FinalizarViagem() {
       <ScreenHeader title="Finalizar viagem" />
 
       {!cat.data ? (
-        <View className="m-4 rounded-lg border border-amber-300 bg-amber-50 p-4">
-          <Text className="font-medium text-amber-900">Sem dados de catálogo</Text>
-          <Text className="mt-1 text-sm text-amber-800">
-            Conecte na internet uma vez pra carregar clientes, materiais e locais.
-          </Text>
-        </View>
+        <SemCatalogo carregando={cat.isFetching} aoBaixar={() => void cat.refetch()} />
       ) : (
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}

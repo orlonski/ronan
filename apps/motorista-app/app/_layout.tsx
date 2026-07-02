@@ -22,8 +22,9 @@ import {
   subscribeCadastroStatus,
 } from "@/lib/cadastro-status";
 import { EmAnalise } from "@/components/em-analise";
+import NetInfo from "@react-native-community/netinfo";
 import { drenar as drenarEventos } from "@/lib/event-reporter";
-import { setQueryClientGlobal } from "@/lib/queries";
+import { prefetchDadosBase, setQueryClientGlobal } from "@/lib/queries";
 import { pruneExpired as pruneRotaCache } from "@/lib/rota-cache";
 import {
   enviarPendentes,
@@ -109,6 +110,19 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // Inicia listeners de sync (online + visibility + intervalo) uma vez.
   useEffect(() => {
     if (loggedIn) startAutoSync();
+  }, [loggedIn]);
+
+  // Baixa e persiste os dados-base (catálogos/perfil/tipos) pro uso offline
+  // assim que loga/abre logado — como login exige internet, quem logou já leva
+  // tudo pro mato. E rebaixa quando reconectar (logou com sinal ruim / dado
+  // velho). Best-effort (não trava nada).
+  useEffect(() => {
+    if (!loggedIn) return;
+    void prefetchDadosBase(queryClient);
+    const unsub = NetInfo.addEventListener((s) => {
+      if (s.isConnected) void prefetchDadosBase(queryClient);
+    });
+    return unsub;
   }, [loggedIn]);
 
   // Quando logar, tenta enviar erros que ficaram pendentes localmente

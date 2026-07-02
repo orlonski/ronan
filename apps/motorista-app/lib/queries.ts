@@ -4,6 +4,7 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
+  type QueryClient,
 } from "@tanstack/react-query";
 import type {
   ExtrairTicketResult,
@@ -268,6 +269,35 @@ export function useCatalogos() {
     ...base,
     queryFn: async () => normalizarCatalogos(await base.queryFn()),
   });
+}
+
+/**
+ * Baixa e persiste os dados-base pro uso offline (catálogos + perfil + tipos de
+ * evento). Chamado ao logar/reconectar — assim quem logou (login exige net) já
+ * tem tudo cacheado antes de ficar sem sinal. Best-effort: nunca lança
+ * (prefetchQuery engole o erro) e o staleTime deduplica chamadas seguidas.
+ */
+export async function prefetchDadosBase(qc: QueryClient): Promise<void> {
+  const cat = offlineCacheQuery<Catalogos>("catalogos", "/m/catalogos", { staleTime: 5 * 60_000 });
+  const me = offlineCacheQuery<Me>("me", "/m/me");
+  const tipos = offlineCacheQuery<TipoEventoViagemApp[]>(
+    "tipos-evento",
+    "/m/viagem/tipos-evento",
+    { staleTime: 5 * 60_000 },
+  );
+  await Promise.allSettled([
+    qc.prefetchQuery({
+      queryKey: cat.queryKey,
+      staleTime: cat.staleTime,
+      queryFn: async () => normalizarCatalogos(await cat.queryFn()),
+    }),
+    qc.prefetchQuery({
+      queryKey: me.queryKey,
+      staleTime: me.staleTime,
+      queryFn: async () => normalizarMe(await me.queryFn()),
+    }),
+    qc.prefetchQuery({ queryKey: tipos.queryKey, staleTime: tipos.staleTime, queryFn: tipos.queryFn }),
+  ]);
 }
 
 /** Catálogo dinâmico de tipos de evento (lifecycle guiado). Cacheado offline. */
