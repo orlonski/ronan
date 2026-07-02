@@ -9,6 +9,7 @@ import {
   Flag,
   MapPin,
   Trash2,
+  User,
 } from "lucide-react-native";
 import {
   ActivityIndicator,
@@ -84,6 +85,30 @@ export default function ViagemGuiada() {
     return v?.placa ?? null;
   }, [catalogos.data?.veiculos, local?.veiculoId]);
 
+  // Resumo do que já foi preenchido no fechamento (rascunho): descarga + campos.
+  const descargaNome = useMemo(() => {
+    const d = local?.finalizarDraft;
+    if (!d?.localDescargaId) return null;
+    return (
+      d.descargaNome ??
+      catalogos.data?.locais.find((l) => l.id === d.localDescargaId)?.nome ??
+      "Local de descarga"
+    );
+  }, [local?.finalizarDraft, catalogos.data?.locais]);
+
+  const resumoCampos = useMemo(() => {
+    const d = local?.finalizarDraft;
+    if (!d) return [] as { label: string; valor: string }[];
+    const materialNome = catalogos.data?.materiais.find((m) => m.id === d.materialId)?.nome;
+    const itens: { label: string; valor: string }[] = [];
+    if (materialNome) itens.push({ label: "Material", valor: materialNome });
+    if (d.toneladas?.trim()) itens.push({ label: "Toneladas", valor: `${d.toneladas} t` });
+    if (d.ticket?.trim()) itens.push({ label: "Ticket", valor: d.ticket });
+    if (d.km?.trim()) itens.push({ label: "Km", valor: `${d.km} km` });
+    if (d.valorPedagio?.trim()) itens.push({ label: "Pedágio", valor: `R$ ${d.valorPedagio}` });
+    return itens;
+  }, [local?.finalizarDraft, catalogos.data?.materiais]);
+
   async function onEventoRegistrado() {
     setSheetTipo(null);
     const atual = await getLifecycleLocal();
@@ -147,6 +172,14 @@ export default function ViagemGuiada() {
             </Text>
           ) : null}
           <View className="mt-3 gap-1.5">
+            {local.clienteNome ? (
+              <View className="flex-row items-start gap-2">
+                <User size={16} color="#64748b" style={{ marginTop: 2 }} />
+                <Text className="flex-1 text-base font-semibold text-foreground" numberOfLines={2}>
+                  {local.clienteNome}
+                </Text>
+              </View>
+            ) : null}
             <View className="flex-row items-start gap-2">
               <MapPin size={16} color="#64748b" style={{ marginTop: 2 }} />
               <Text className="flex-1 text-base font-semibold text-foreground" numberOfLines={2}>
@@ -199,6 +232,37 @@ export default function ViagemGuiada() {
               </View>
             </View>
           ))}
+
+          {/* Descarga (marco, se já marcada no fechamento) */}
+          {descargaNome ? (
+            <View className="flex-row items-start gap-3">
+              <View className="mt-0.5">
+                <CheckCircle2 size={20} color="#16a34a" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-base font-semibold text-foreground">
+                  Descarga · {descargaNome}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+
+          {/* Resumo do fechamento (rascunho) — campos já preenchidos */}
+          {resumoCampos.length > 0 ? (
+            <View className="mt-1 gap-1.5 border-t border-border pt-3">
+              {resumoCampos.map((r) => (
+                <View key={r.label} className="flex-row justify-between gap-3">
+                  <Text className="text-sm text-muted-foreground">{r.label}</Text>
+                  <Text
+                    className="flex-1 text-right text-sm font-semibold text-foreground"
+                    numberOfLines={1}
+                  >
+                    {r.valor}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
         </View>
 
         {/* BOTÃO PRIMÁRIO GRANDE = próximo passo obrigatório, ou Finalizar */}
