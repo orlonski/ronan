@@ -34,6 +34,7 @@ import { showAlert, showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { API_URL } from "@/lib/api-url";
 import { loadTokens } from "@/lib/auth";
+import { fmtDataBR } from "@/lib/datetime";
 import {
   useExcluirViagem,
   useInformarValorPedagio,
@@ -629,14 +630,6 @@ function Stat({
       )}
     </View>
   );
-}
-
-function fmtDataBR(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const dia = String(d.getDate()).padStart(2, "0");
-  const mes = String(d.getMonth() + 1).padStart(2, "0");
-  return `${dia}/${mes}/${d.getFullYear()}`;
 }
 
 function fmtNum(v: string, casas: number): string {

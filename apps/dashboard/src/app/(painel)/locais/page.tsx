@@ -114,7 +114,9 @@ function nomeCriador(l: Local): string {
 // dd/mm/aaaa a partir do ISO de criadoEm.
 function fmtDataCurta(iso: string): string {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("pt-BR");
+  return Number.isNaN(d.getTime())
+    ? "—"
+    : d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
 }
 
 function plural(n: number, sing: string, plur: string) {
