@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Download, MapPin, RefreshCw } from "lucide-react";
+import { Download, MapPin, Pencil, Plus, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -116,6 +117,13 @@ export default function PedagiosRodoviaPage() {
                 size="sm"
               />
             </Permitido>
+            <Permitido chave="pedagios.editar">
+              <Link href={`/pedagios-rodovia/${row.original.id}`}>
+                <Button variant="ghost" size="icon" title="Editar">
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              </Link>
+            </Permitido>
             <ExcluirButton perm="pedagios.excluir"
               path={PATH}
               id={row.original.id}
@@ -140,6 +148,13 @@ export default function PedagiosRodoviaPage() {
         </div>
         <div className="flex items-center gap-2">
           <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          <Permitido chave="pedagios.criar">
+            <Link href="/pedagios-rodovia/novo">
+              <Button variant="outline">
+                <Plus className="h-4 w-4" /> Novo pedágio
+              </Button>
+            </Link>
+          </Permitido>
           <Permitido chave="pedagios.importar">
           <Button
             onClick={() => importar.mutate()}
@@ -215,6 +230,13 @@ export default function PedagiosRodoviaPage() {
                     }
                     size="sm"
                   />
+                </Permitido>
+                <Permitido chave="pedagios.editar">
+                  <Link href={`/pedagios-rodovia/${p.id}`}>
+                    <Button variant="ghost" size="icon" title="Editar">
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </Link>
                 </Permitido>
                 <ExcluirButton perm="pedagios.excluir"
                   path={PATH}

@@ -223,6 +223,12 @@ export function MapaGeral({
                 {p.concessionaria && (
                   <p className="text-xs text-muted-foreground">{p.concessionaria}</p>
                 )}
+                <Link
+                  href={`/pedagios-rodovia/${p.id}`}
+                  className="text-xs font-medium text-blue-700 hover:underline"
+                >
+                  Ver / editar →
+                </Link>
               </div>
             </Popup>
           </Marker>
