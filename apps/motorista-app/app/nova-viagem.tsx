@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "@/components/screen-header";
+import { ErroCampo, useValidacaoGuiada } from "@/components/validacao-guiada";
 import { Button } from "@/components/ui/button";
 import { DateField } from "@/components/ui/date-field";
 import { Input } from "@/components/ui/input";
@@ -115,6 +116,7 @@ export default function NovaViagem() {
   const extrairTicket = useExtrairTicket();
   const [submitting, setSubmitting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const val = useValidacaoGuiada();
   // Locais criados nesta sessão — merged no Select pra garantir que aparecem
   // mesmo se o cache do TanStack Query ainda não propagou
   const [extraLocais, setExtraLocais] = useState<Local[]>([]);
@@ -387,26 +389,27 @@ export default function NovaViagem() {
     setOcrConfidence(s.confidence);
   }
 
-  function validar(): string | null {
-    if (!form.veiculoId) return "Escolha a placa.";
-    if (!form.clienteId) return "Escolha o cliente.";
-    if (!form.materialId) return "Escolha o material.";
-    if (!form.localCargaId) return "Escolha o local de carga.";
-    if (!form.localDescargaId) return "Aperte 'Estou no local de descarga' ou escolha da lista.";
-    if (!form.toneladas.trim()) return "Informe as toneladas.";
-    if (exigeTicket && !form.ticket.trim()) return "Informe o ticket.";
-    if (!form.km.trim()) return "Informe os km rodados.";
-    return null;
+  // Validação guiada: aponta o 1º campo que falta na ORDEM VISUAL da tela
+  // (placa → data → cliente → material → toneladas → ticket → carga →
+  // descarga → km), rolando até ele e destacando em vermelho.
+  function validar(): boolean {
+    if (!form.veiculoId) return void val.apontar("veiculoId", "Escolha a placa do caminhão"), false;
+    if (!form.clienteId) return void val.apontar("clienteId", "Escolha o cliente"), false;
+    if (!form.materialId) return void val.apontar("materialId", "Escolha o material"), false;
+    if (!form.toneladas.trim()) return void val.apontar("toneladas", "Informe as toneladas"), false;
+    if (exigeTicket && !form.ticket.trim())
+      return void val.apontar("ticket", "Informe o número do ticket"), false;
+    if (!form.localCargaId) return void val.apontar("localCarga", "Escolha o local de carga"), false;
+    if (!form.localDescargaId)
+      return void val.apontar("localDescarga", "Marque o local de descarga"), false;
+    if (!form.km.trim()) return void val.apontar("km", "Informe os km rodados"), false;
+    return true;
   }
 
   async function salvar() {
     setErro(null);
-    const v = validar();
-    if (v) {
-      setErro(v);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      return;
-    }
+    if (!validar()) return;
+    val.limpar();
     // Aviso quando a data não é hoje — caso o motorista tenha tocado sem
     // querer, dá chance de corrigir ou voltar pra hoje antes de salvar.
     let dataFinal = form.data;
@@ -646,6 +649,7 @@ export default function NovaViagem() {
           className="flex-1"
         >
           <ScrollView
+            ref={val.scrollRef}
             contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 16 }}
             keyboardShouldPersistTaps="handled"
           >
@@ -716,15 +720,21 @@ export default function NovaViagem() {
               )}
             </Field>
 
-            <Field label="Placa">
+            <View className="gap-2" onLayout={val.onLayoutCampo("veiculoId")}>
+              <Label error={!!val.erroDe("veiculoId")}>Placa</Label>
               <Select
                 value={form.veiculoId}
-                onChange={(v) => update("veiculoId", v)}
+                onChange={(v) => {
+                  val.limpar();
+                  update("veiculoId", v);
+                }}
                 options={veiculoOptions}
                 placeholder="Escolha a placa"
                 searchable
+                error={!!val.erroDe("veiculoId")}
               />
-            </Field>
+              {val.erroDe("veiculoId") ? <ErroCampo msg={val.erroDe("veiculoId")!} /> : null}
+            </View>
 
             <Field label="Data">
               <DateField
@@ -734,121 +744,178 @@ export default function NovaViagem() {
               />
             </Field>
 
-            <Field label="Cliente">
+            <View className="gap-2" onLayout={val.onLayoutCampo("clienteId")}>
+              <Label error={!!val.erroDe("clienteId")}>Cliente</Label>
               <Select
                 value={form.clienteId}
-                onChange={(v) => update("clienteId", v)}
+                onChange={(v) => {
+                  val.limpar();
+                  update("clienteId", v);
+                }}
                 options={clienteOptions}
                 placeholder="Escolha o cliente"
                 searchable
+                error={!!val.erroDe("clienteId")}
               />
-            </Field>
+              {val.erroDe("clienteId") ? <ErroCampo msg={val.erroDe("clienteId")!} /> : null}
+            </View>
 
-            <Field label="Material">
+            <View className="gap-2" onLayout={val.onLayoutCampo("materialId")}>
+              <Label error={!!val.erroDe("materialId")}>Material</Label>
               <Select
                 value={form.materialId}
-                onChange={(v) => update("materialId", v)}
+                onChange={(v) => {
+                  val.limpar();
+                  update("materialId", v);
+                }}
                 options={materialOptions}
                 placeholder="Escolha o material"
                 searchable
+                error={!!val.erroDe("materialId")}
               />
-              {!exigeTicket && form.materialId ? (
+              {val.erroDe("materialId") ? (
+                <ErroCampo msg={val.erroDe("materialId")!} />
+              ) : !exigeTicket && form.materialId ? (
                 <Text className="text-xs text-muted-foreground">
                   Esse material não exige ticket — pode lançar sem número.
                 </Text>
               ) : null}
-            </Field>
-
-            <View className="flex-row gap-3">
-              <View className="flex-1 gap-2">
-                <Label>Toneladas</Label>
-                <Input
-                  value={form.toneladas}
-                  onChangeText={(v) => update("toneladas", v)}
-                  keyboardType="decimal-pad"
-                  placeholder="0,000"
-                  maxLength={8}
-                />
-                <Text className="text-xs text-muted-foreground">
-                  Em toneladas (máx 9999)
-                </Text>
-              </View>
-              {exigeTicket && (
-                <View className="flex-1 gap-2">
-                  <Label>Ticket</Label>
-                  <Input
-                    value={form.ticket}
-                    onChangeText={(v) => update("ticket", v.toUpperCase())}
-                    placeholder="número"
-                    maxLength={50}
-                    autoCapitalize="characters"
-                    autoCorrect={false}
-                  />
-                </View>
-              )}
             </View>
 
-            <Field label="Local de carga">
+            <View
+              onLayout={(e) => {
+                // toneladas + ticket dividem a mesma row → mesma posição de scroll
+                val.onLayoutCampo("toneladas")(e);
+                val.onLayoutCampo("ticket")(e);
+              }}
+            >
+              <View className="flex-row gap-3">
+                <View className="flex-1 gap-2">
+                  <Label error={!!val.erroDe("toneladas")}>Toneladas</Label>
+                  <Input
+                    value={form.toneladas}
+                    onChangeText={(v) => {
+                      val.limpar();
+                      update("toneladas", v);
+                    }}
+                    keyboardType="decimal-pad"
+                    placeholder="0,000"
+                    maxLength={8}
+                    error={!!val.erroDe("toneladas")}
+                  />
+                  <Text className="text-xs text-muted-foreground">
+                    Em toneladas (máx 9999)
+                  </Text>
+                </View>
+                {exigeTicket && (
+                  <View className="flex-1 gap-2">
+                    <Label error={!!val.erroDe("ticket")}>Ticket</Label>
+                    <Input
+                      value={form.ticket}
+                      onChangeText={(v) => {
+                        val.limpar();
+                        update("ticket", v.toUpperCase());
+                      }}
+                      placeholder="número"
+                      maxLength={50}
+                      autoCapitalize="characters"
+                      autoCorrect={false}
+                      error={!!val.erroDe("ticket")}
+                    />
+                  </View>
+                )}
+              </View>
+              {val.erroDe("toneladas") ? <ErroCampo msg={val.erroDe("toneladas")!} /> : null}
+              {val.erroDe("ticket") ? <ErroCampo msg={val.erroDe("ticket")!} /> : null}
+            </View>
+
+            <View className="gap-2" onLayout={val.onLayoutCampo("localCarga")}>
+              <Label error={!!val.erroDe("localCarga")}>Local de carga</Label>
               <Select
                 value={form.localCargaId}
-                onChange={(v) => update("localCargaId", v)}
+                onChange={(v) => {
+                  val.limpar();
+                  update("localCargaId", v);
+                }}
                 options={locaisFiltrados.carga}
                 placeholder="Escolha o local"
                 searchable
                 emptyMessage="Nenhum local de carga pra esse cliente"
+                error={!!val.erroDe("localCarga")}
               />
+              {val.erroDe("localCarga") ? <ErroCampo msg={val.erroDe("localCarga")!} /> : null}
               {tracking && (
                 <GpsHint
                   match={matchesGps?.carga ?? null}
                   selecionadoId={form.localCargaId}
                 />
               )}
-            </Field>
+            </View>
 
-            <DescargaPorGps
-              clienteId={form.clienteId || null}
-              value={form.localDescargaId}
-              onChange={(v) => update("localDescargaId", v)}
-              onCaptura={setDescargaCaptura}
-              nomeSelecionadoFallback={nomeDescargaSelecionado}
-              localCargaCoords={localCargaCoords}
-            />
-            {tracking && (
-              <GpsHint
-                match={matchesGps?.descarga ?? null}
-                selecionadoId={form.localDescargaId}
+            <View
+              className={
+                val.erroDe("localDescarga")
+                  ? "rounded-2xl border-2 border-destructive bg-destructive/5 p-3"
+                  : undefined
+              }
+              onLayout={val.onLayoutCampo("localDescarga")}
+            >
+              <DescargaPorGps
+                clienteId={form.clienteId || null}
+                value={form.localDescargaId}
+                onChange={(v) => {
+                  val.limpar();
+                  update("localDescargaId", v);
+                }}
+                onCaptura={setDescargaCaptura}
+                nomeSelecionadoFallback={nomeDescargaSelecionado}
+                localCargaCoords={localCargaCoords}
               />
-            )}
+              {val.erroDe("localDescarga") ? (
+                <ErroCampo msg={val.erroDe("localDescarga")!} />
+              ) : null}
+              {tracking && (
+                <GpsHint
+                  match={matchesGps?.descarga ?? null}
+                  selecionadoId={form.localDescargaId}
+                />
+              )}
+            </View>
 
-            <View className="flex-row gap-3">
-              <View className="flex-1 gap-2">
-                <Label>Km rodados</Label>
-                <Input
-                  value={form.km}
-                  onChangeText={(v) => {
-                    setKmEditadoManual(true);
-                    update("km", v);
-                  }}
-                  keyboardType="decimal-pad"
-                  placeholder="0,00"
-                  maxLength={8}
-                />
-                <KmHint
-                  rota={rota.data ?? null}
-                  loading={rota.isFetching}
-                  editado={kmEditadoManual}
-                />
+            <View onLayout={val.onLayoutCampo("km")}>
+              <View className="flex-row gap-3">
+                <View className="flex-1 gap-2">
+                  <Label error={!!val.erroDe("km")}>Km rodados</Label>
+                  <Input
+                    value={form.km}
+                    onChangeText={(v) => {
+                      val.limpar();
+                      setKmEditadoManual(true);
+                      update("km", v);
+                    }}
+                    keyboardType="decimal-pad"
+                    placeholder="0,00"
+                    maxLength={8}
+                    error={!!val.erroDe("km")}
+                  />
+                  <KmHint
+                    rota={rota.data ?? null}
+                    loading={rota.isFetching}
+                    editado={kmEditadoManual}
+                  />
+                </View>
+                <View className="flex-1 gap-2">
+                  <Label>Pedágio (R$)</Label>
+                  <Input
+                    value={form.valorPedagio}
+                    onChangeText={(v) => update("valorPedagio", v)}
+                    keyboardType="decimal-pad"
+                    placeholder="opcional"
+                    maxLength={10}
+                  />
+                </View>
               </View>
-              <View className="flex-1 gap-2">
-                <Label>Pedágio (R$)</Label>
-                <Input
-                  value={form.valorPedagio}
-                  onChangeText={(v) => update("valorPedagio", v)}
-                  keyboardType="decimal-pad"
-                  placeholder="opcional"
-                  maxLength={10}
-                />
-              </View>
+              {val.erroDe("km") ? <ErroCampo msg={val.erroDe("km")!} /> : null}
             </View>
 
             <Field label="Observação" hint="opcional">
@@ -860,7 +927,7 @@ export default function NovaViagem() {
               />
             </Field>
 
-            {erro && <Text className="text-sm text-destructive">{erro}</Text>}
+            {erro ? <ErroCampo msg={erro} /> : null}
 
             <Button size="lg" className="h-20" onPress={salvar} loading={submitting}>
               <Check size={24} color="white" />

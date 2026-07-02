@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "@/components/screen-header";
 import { LocalPorGps, type SelecaoLocal } from "@/components/local-por-gps";
+import { ErroCampo, useValidacaoGuiada } from "@/components/validacao-guiada";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
@@ -36,6 +37,7 @@ export default function IniciarViagem() {
   const [localCarga, setLocalCarga] = useState<SelecaoLocal | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const v = useValidacaoGuiada();
   // Já tem viagem aberta? Não deixa abrir duas — redireciona pra andamento.
   const [checando, setChecando] = useState(true);
 
@@ -83,21 +85,11 @@ export default function IniciarViagem() {
 
   async function confirmar() {
     setErro(null);
-    if (!veiculoId) {
-      setErro("Escolha a placa.");
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      return;
-    }
-    if (!clienteId) {
-      setErro("Escolha o cliente.");
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      return;
-    }
-    if (!localCarga) {
-      setErro("Marque o local de carga (pela sua posição) pra começar.");
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      return;
-    }
+    if (!veiculoId) return void v.apontar("placa", "Escolha a placa do caminhão");
+    if (!clienteId) return void v.apontar("cliente", "Escolha o cliente");
+    if (!localCarga)
+      return void v.apontar("carga", "Toque em “Estou no local de carga” e marque o local");
+    v.limpar();
     setSubmitting(true);
     try {
       await iniciarViagemGuiada({
@@ -143,49 +135,72 @@ export default function IniciarViagem() {
         className="flex-1"
       >
         <ScrollView
+          ref={v.scrollRef}
           contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 20 }}
           keyboardShouldPersistTaps="handled"
         >
-          <View className="gap-2">
-            <Label>Placa</Label>
+          <View className="gap-2" onLayout={v.onLayoutCampo("placa")}>
+            <Label error={!!v.erroDe("placa")}>Placa</Label>
             <Select
               value={veiculoId}
-              onChange={setVeiculoId}
+              onChange={(x) => {
+                v.limpar();
+                setVeiculoId(x);
+              }}
               options={veiculoOptions}
               placeholder="Escolha a placa"
               searchable
+              error={!!v.erroDe("placa")}
             />
+            {v.erroDe("placa") ? <ErroCampo msg={v.erroDe("placa")!} /> : null}
           </View>
 
-          <View className="gap-2">
-            <Label>Cliente</Label>
+          <View className="gap-2" onLayout={v.onLayoutCampo("cliente")}>
+            <Label error={!!v.erroDe("cliente")}>Cliente</Label>
             <Select
               value={clienteId}
-              onChange={(v) => {
-                setClienteId(v);
+              onChange={(x) => {
+                v.limpar();
+                setClienteId(x);
                 setLocalCarga(null); // troca de cliente reseta o local de carga
               }}
               options={clienteOptions}
               placeholder="Escolha o cliente"
               searchable
+              error={!!v.erroDe("cliente")}
             />
+            {v.erroDe("cliente") ? <ErroCampo msg={v.erroDe("cliente")!} /> : null}
           </View>
 
           {/* Local de carga — só depois do cliente (busca só locais dele/perto). */}
           {clienteId ? (
-            <View className="gap-2">
+            <View
+              className={
+                v.erroDe("carga")
+                  ? "gap-2 rounded-2xl border-2 border-destructive bg-destructive/5 p-3"
+                  : "gap-2"
+              }
+              onLayout={v.onLayoutCampo("carga")}
+            >
               <LocalPorGps
                 lado="carga"
                 ctaLabel="Estou no local de carga"
                 clienteId={clienteId}
                 value={localCarga}
-                onSelect={setLocalCarga}
+                onSelect={(sel) => {
+                  v.limpar();
+                  setLocalCarga(sel);
+                }}
                 onLimpar={() => setLocalCarga(null)}
               />
-              <Text className="text-xs text-muted-foreground">
-                Toque quando estiver no pátio de carga — o app acha o local desse
-                cliente pela sua posição. Marca aqui a hora que você carregou.
-              </Text>
+              {v.erroDe("carga") ? (
+                <ErroCampo msg={v.erroDe("carga")!} />
+              ) : (
+                <Text className="text-xs text-muted-foreground">
+                  Toque quando estiver no pátio de carga — o app acha o local desse
+                  cliente pela sua posição. Marca aqui a hora que você carregou.
+                </Text>
+              )}
             </View>
           ) : (
             <Text className="text-sm text-muted-foreground">
@@ -193,7 +208,7 @@ export default function IniciarViagem() {
             </Text>
           )}
 
-          {erro && <Text className="text-sm text-destructive">{erro}</Text>}
+          {erro ? <ErroCampo msg={erro} /> : null}
 
           <Button size="lg" className="h-20" onPress={confirmar} loading={submitting}>
             <Play size={24} color="white" fill="white" />

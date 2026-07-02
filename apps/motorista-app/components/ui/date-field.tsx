@@ -15,11 +15,13 @@ export function DateField({
   onChange,
   disabled,
   className,
+  error,
 }: {
   value: string;
   onChange: (iso: string) => void;
   disabled?: boolean;
   className?: string;
+  error?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -43,7 +45,8 @@ export function DateField({
         onPress={abrir}
         disabled={disabled}
         className={cn(
-          "h-14 flex-row items-center justify-between rounded-xl border-2 border-border bg-background px-4",
+          "h-14 flex-row items-center justify-between rounded-xl border-2 bg-background px-4",
+          error ? "border-destructive bg-destructive/5" : "border-border",
           disabled && "opacity-50",
           className,
         )}

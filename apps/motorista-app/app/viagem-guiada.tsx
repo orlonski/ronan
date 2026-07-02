@@ -24,6 +24,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import type { TipoEventoViagem } from "@ronan/shared-types";
 import { ScreenHeader } from "@/components/screen-header";
 import { LocalPorGps, type SelecaoLocal } from "@/components/local-por-gps";
+import { ErroCampo, useValidacaoGuiada } from "@/components/validacao-guiada";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -360,6 +361,7 @@ function EventoSheet({
   const [observacao, setObservacao] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const val = useValidacaoGuiada();
 
   const visivel = tipo != null;
   const detectaLocal = !!tipo && tipo.pedeGps && (tipo.ehCarga || tipo.ehDescarga);
@@ -377,6 +379,7 @@ function EventoSheet({
     setObservacao("");
     setSalvando(false);
     setErro(null);
+    val.limpar();
   }
 
   function fechar() {
@@ -393,6 +396,7 @@ function EventoSheet({
       setErro("Não consegui pegar o GPS. Verifique a permissão.");
       return;
     }
+    val.limpar();
     setCoords({ lat: c.lat, lng: c.lng, precisao: c.precisao ?? undefined });
   }
 
@@ -400,26 +404,19 @@ function EventoSheet({
     if (!tipo) return;
     setErro(null);
 
-    if (detectaLocal && !local) {
-      setErro("Marque o local por GPS pra continuar.");
-      return;
-    }
-    if (tipo.pedeToneladas && !toneladas.trim()) {
-      setErro("Informe as toneladas.");
-      return;
-    }
-    if (tipo.pedeValor && !valor.trim()) {
-      setErro("Informe o valor.");
-      return;
-    }
-    if (tipo.pedeTicket && !ticket.trim()) {
-      setErro("Informe o ticket.");
-      return;
-    }
-    if (tipo.pedeFoto && !foto) {
-      setErro("Tire a foto pra continuar.");
-      return;
-    }
+    if (detectaLocal && !local)
+      return void val.apontar("local", "Marque o local por GPS");
+    if (gpsSolto && !coords)
+      return void val.apontar("gps", "Toque em “Marcar minha posição”");
+    if (tipo.pedeToneladas && !toneladas.trim())
+      return void val.apontar("toneladas", "Informe as toneladas");
+    if (tipo.pedeValor && !valor.trim())
+      return void val.apontar("valor", "Informe o valor");
+    if (tipo.pedeTicket && !ticket.trim())
+      return void val.apontar("ticket", "Informe o número do ticket");
+    if (tipo.pedeFoto && !foto)
+      return void val.apontar("foto", "Tire a foto pra continuar");
+    val.limpar();
 
     setSalvando(true);
     try {
@@ -475,29 +472,43 @@ function EventoSheet({
               className="flex-1"
             >
               <ScrollView
+                ref={val.scrollRef}
                 contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 20 }}
                 keyboardShouldPersistTaps="handled"
               >
                 {/* Local por GPS (carga/descarga) */}
                 {detectaLocal && (
-                  <LocalPorGps
-                    lado={tipo.ehDescarga ? "descarga" : "carga"}
-                    ctaLabel={
-                      tipo.ehDescarga
-                        ? "Estou no local de descarga"
-                        : "Estou no local de carga"
+                  <View
+                    className={
+                      val.erroDe("local")
+                        ? "rounded-2xl border-2 border-destructive bg-destructive/5 p-3"
+                        : undefined
                     }
-                    clienteId={clienteId}
-                    value={local}
-                    onSelect={setLocal}
-                    onLimpar={() => setLocal(null)}
-                  />
+                    onLayout={val.onLayoutCampo("local")}
+                  >
+                    <LocalPorGps
+                      lado={tipo.ehDescarga ? "descarga" : "carga"}
+                      ctaLabel={
+                        tipo.ehDescarga
+                          ? "Estou no local de descarga"
+                          : "Estou no local de carga"
+                      }
+                      clienteId={clienteId}
+                      value={local}
+                      onSelect={(sel) => {
+                        val.limpar();
+                        setLocal(sel);
+                      }}
+                      onLimpar={() => setLocal(null)}
+                    />
+                    {val.erroDe("local") ? <ErroCampo msg={val.erroDe("local")!} /> : null}
+                  </View>
                 )}
 
                 {/* GPS solto (parada etc) */}
                 {gpsSolto && (
-                  <View className="gap-2">
-                    <Label>Onde você está</Label>
+                  <View className="gap-2" onLayout={val.onLayoutCampo("gps")}>
+                    <Label error={!!val.erroDe("gps")}>Onde você está</Label>
                     {coords ? (
                       <View className="flex-row items-center gap-3 rounded-2xl border-2 border-success/40 bg-success/15 p-4">
                         <CheckCircle2 size={20} color="#16a34a" />
@@ -518,53 +529,76 @@ function EventoSheet({
                         </Text>
                       </Button>
                     )}
+                    {val.erroDe("gps") ? <ErroCampo msg={val.erroDe("gps")!} /> : null}
                   </View>
                 )}
 
                 {tipo.pedeToneladas && (
-                  <View className="gap-2">
-                    <Label>Toneladas</Label>
+                  <View className="gap-2" onLayout={val.onLayoutCampo("toneladas")}>
+                    <Label error={!!val.erroDe("toneladas")}>Toneladas</Label>
                     <Input
                       value={toneladas}
-                      onChangeText={setToneladas}
+                      onChangeText={(v) => {
+                        val.limpar();
+                        setToneladas(v);
+                      }}
                       keyboardType="decimal-pad"
                       placeholder="0,000"
                       maxLength={8}
+                      error={!!val.erroDe("toneladas")}
                     />
+                    {val.erroDe("toneladas") ? <ErroCampo msg={val.erroDe("toneladas")!} /> : null}
                   </View>
                 )}
 
                 {tipo.pedeValor && (
-                  <View className="gap-2">
-                    <Label>Valor (R$)</Label>
+                  <View className="gap-2" onLayout={val.onLayoutCampo("valor")}>
+                    <Label error={!!val.erroDe("valor")}>Valor (R$)</Label>
                     <Input
                       value={valor}
-                      onChangeText={setValor}
+                      onChangeText={(v) => {
+                        val.limpar();
+                        setValor(v);
+                      }}
                       keyboardType="decimal-pad"
                       placeholder="0,00"
                       maxLength={10}
+                      error={!!val.erroDe("valor")}
                     />
+                    {val.erroDe("valor") ? <ErroCampo msg={val.erroDe("valor")!} /> : null}
                   </View>
                 )}
 
                 {tipo.pedeTicket && (
-                  <View className="gap-2">
-                    <Label>Ticket</Label>
+                  <View className="gap-2" onLayout={val.onLayoutCampo("ticket")}>
+                    <Label error={!!val.erroDe("ticket")}>Ticket</Label>
                     <Input
                       value={ticket}
-                      onChangeText={(v) => setTicket(v.toUpperCase())}
+                      onChangeText={(v) => {
+                        val.limpar();
+                        setTicket(v.toUpperCase());
+                      }}
                       placeholder="número"
                       maxLength={50}
                       autoCapitalize="characters"
                       autoCorrect={false}
+                      error={!!val.erroDe("ticket")}
                     />
+                    {val.erroDe("ticket") ? <ErroCampo msg={val.erroDe("ticket")!} /> : null}
                   </View>
                 )}
 
                 {tipo.pedeFoto && (
-                  <View className="gap-2">
-                    <Label>Foto</Label>
-                    <PhotoCapture value={foto} onChange={setFoto} />
+                  <View className="gap-2" onLayout={val.onLayoutCampo("foto")}>
+                    <Label error={!!val.erroDe("foto")}>Foto</Label>
+                    <PhotoCapture
+                      value={foto}
+                      onChange={(f) => {
+                        val.limpar();
+                        setFoto(f);
+                      }}
+                    />
+                    {val.erroDe("foto") ? <ErroCampo msg={val.erroDe("foto")!} /> : null}
                   </View>
                 )}
 
@@ -580,7 +614,7 @@ function EventoSheet({
                   </View>
                 )}
 
-                {erro && <Text className="text-sm text-destructive">{erro}</Text>}
+                {erro ? <ErroCampo msg={erro} /> : null}
 
                 <Button size="lg" className="h-20" onPress={salvar} loading={salvando}>
                   <Check size={24} color="white" />

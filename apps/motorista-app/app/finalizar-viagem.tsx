@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "@/components/screen-header";
 import { DescargaPorGps, type DescargaCaptura } from "@/components/descarga-por-gps";
+import { ErroCampo, useValidacaoGuiada } from "@/components/validacao-guiada";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +54,7 @@ export default function FinalizarViagem() {
   const [foto, setFoto] = useState<CapturedPhoto | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const val = useValidacaoGuiada();
   // Só começa a salvar o rascunho depois de hidratar (não sobrescrever com vazio).
   const [hidratado, setHidratado] = useState(false);
 
@@ -159,24 +161,34 @@ export default function FinalizarViagem() {
     foto,
   ]);
 
-  function validar(): string | null {
-    if (!clienteId) return "Escolha o cliente.";
-    if (!materialId) return "Escolha o material.";
-    if (!toneladas.trim()) return "Informe as toneladas.";
-    if (exigeTicket && !ticket.trim()) return "Informe o ticket.";
-    if (!km.trim()) return "Informe os km rodados.";
-    if (!localDescargaId) return "Aperte 'Estou no local de descarga'.";
-    return null;
+  function validar(): boolean {
+    if (!localDescargaId) {
+      val.apontar("descarga", "Marque o local de descarga");
+      return false;
+    }
+    if (!materialId) {
+      val.apontar("material", "Escolha o material");
+      return false;
+    }
+    if (!km.trim()) {
+      val.apontar("km", "Informe os km rodados");
+      return false;
+    }
+    if (exigeTicket && !ticket.trim()) {
+      val.apontar("ticket", "Informe o número do ticket");
+      return false;
+    }
+    if (!toneladas.trim()) {
+      val.apontar("toneladas", "Informe as toneladas");
+      return false;
+    }
+    return true;
   }
 
   async function salvar() {
     setErro(null);
-    const v = validar();
-    if (v) {
-      setErro(v);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      return;
-    }
+    if (!validar()) return;
+    val.limpar();
     setSubmitting(true);
     try {
       const localDescargaDados =
@@ -252,20 +264,34 @@ export default function FinalizarViagem() {
           className="flex-1"
         >
           <ScrollView
+            ref={val.scrollRef}
             contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 16 }}
             keyboardShouldPersistTaps="handled"
           >
             {/* 1) Onde descarregou — captura já dispara sozinha ao abrir a tela
                    (o motorista veio do "Finalizar viagem" acabando de descarregar). */}
-            <DescargaPorGps
-              autoIniciar={!localDescargaId}
-              clienteId={clienteId || null}
-              value={localDescargaId}
-              onChange={setLocalDescargaId}
-              onCaptura={setDescargaCaptura}
-              nomeSelecionadoFallback={nomeDescargaSelecionado}
-              localCargaCoords={localCargaCoords}
-            />
+            <View
+              className={
+                val.erroDe("descarga")
+                  ? "rounded-2xl border-2 border-destructive bg-destructive/5 p-3"
+                  : undefined
+              }
+              onLayout={val.onLayoutCampo("descarga")}
+            >
+              <DescargaPorGps
+                autoIniciar={!localDescargaId}
+                clienteId={clienteId || null}
+                value={localDescargaId}
+                onChange={(x) => {
+                  val.limpar();
+                  setLocalDescargaId(x);
+                }}
+                onCaptura={setDescargaCaptura}
+                nomeSelecionadoFallback={nomeDescargaSelecionado}
+                localCargaCoords={localCargaCoords}
+              />
+              {val.erroDe("descarga") ? <ErroCampo msg={val.erroDe("descarga")!} /> : null}
+            </View>
 
             {/* 2) Cliente (já escolhido no início) + material */}
             <View className="gap-1.5">
@@ -277,16 +303,22 @@ export default function FinalizarViagem() {
               </View>
             </View>
 
-            <View className="gap-2">
-              <Label>Material</Label>
+            <View className="gap-2" onLayout={val.onLayoutCampo("material")}>
+              <Label error={!!val.erroDe("material")}>Material</Label>
               <Select
                 value={materialId}
-                onChange={setMaterialId}
+                onChange={(x) => {
+                  val.limpar();
+                  setMaterialId(x);
+                }}
                 options={materialOptions}
                 placeholder="Escolha o material"
                 searchable
+                error={!!val.erroDe("material")}
               />
-              {!exigeTicket && materialId ? (
+              {val.erroDe("material") ? (
+                <ErroCampo msg={val.erroDe("material")!} />
+              ) : !exigeTicket && materialId ? (
                 <Text className="text-xs text-muted-foreground">
                   Esse material não exige ticket — pode lançar sem número.
                 </Text>
@@ -294,51 +326,61 @@ export default function FinalizarViagem() {
             </View>
 
             {/* 3) Km e pedágio */}
-            <View className="flex-row gap-3">
-              <View className="flex-1 gap-2">
-                <Label>Km rodados</Label>
-                <Input
-                  value={km}
-                  onChangeText={(v) => {
-                    setKmEditadoManual(true);
-                    setKm(v);
-                  }}
-                  keyboardType="decimal-pad"
-                  placeholder="0,00"
-                  maxLength={8}
-                />
-                {rota.isFetching && !kmEditadoManual ? (
-                  <Text className="text-xs text-muted-foreground">Calculando rota…</Text>
-                ) : rota.data && "km" in rota.data && rota.data.km && !kmEditadoManual ? (
-                  <Text className="text-xs font-medium text-success">
-                    ✓ Calculado ({rota.data.km} km)
-                  </Text>
-                ) : null}
+            <View className="gap-2" onLayout={val.onLayoutCampo("km")}>
+              <View className="flex-row gap-3">
+                <View className="flex-1 gap-2">
+                  <Label error={!!val.erroDe("km")}>Km rodados</Label>
+                  <Input
+                    value={km}
+                    onChangeText={(v) => {
+                      val.limpar();
+                      setKmEditadoManual(true);
+                      setKm(v);
+                    }}
+                    keyboardType="decimal-pad"
+                    placeholder="0,00"
+                    maxLength={8}
+                    error={!!val.erroDe("km")}
+                  />
+                  {rota.isFetching && !kmEditadoManual ? (
+                    <Text className="text-xs text-muted-foreground">Calculando rota…</Text>
+                  ) : rota.data && "km" in rota.data && rota.data.km && !kmEditadoManual ? (
+                    <Text className="text-xs font-medium text-success">
+                      ✓ Calculado ({rota.data.km} km)
+                    </Text>
+                  ) : null}
+                </View>
+                <View className="flex-1 gap-2">
+                  <Label>Pedágio (R$)</Label>
+                  <Input
+                    value={valorPedagio}
+                    onChangeText={setValorPedagio}
+                    keyboardType="decimal-pad"
+                    placeholder="opcional"
+                    maxLength={10}
+                  />
+                </View>
               </View>
-              <View className="flex-1 gap-2">
-                <Label>Pedágio (R$)</Label>
-                <Input
-                  value={valorPedagio}
-                  onChangeText={setValorPedagio}
-                  keyboardType="decimal-pad"
-                  placeholder="opcional"
-                  maxLength={10}
-                />
-              </View>
+              {val.erroDe("km") ? <ErroCampo msg={val.erroDe("km")!} /> : null}
             </View>
 
             {/* 4) Ticket (se o material exigir) + foto */}
             {exigeTicket && (
-              <View className="gap-2">
-                <Label>Ticket</Label>
+              <View className="gap-2" onLayout={val.onLayoutCampo("ticket")}>
+                <Label error={!!val.erroDe("ticket")}>Ticket</Label>
                 <Input
                   value={ticket}
-                  onChangeText={(v) => setTicket(v.toUpperCase())}
+                  onChangeText={(v) => {
+                    val.limpar();
+                    setTicket(v.toUpperCase());
+                  }}
                   placeholder="número"
                   maxLength={50}
                   autoCapitalize="characters"
                   autoCorrect={false}
+                  error={!!val.erroDe("ticket")}
                 />
+                {val.erroDe("ticket") ? <ErroCampo msg={val.erroDe("ticket")!} /> : null}
               </View>
             )}
 
@@ -351,15 +393,20 @@ export default function FinalizarViagem() {
             </View>
 
             {/* 5) Por último: toneladas e observação */}
-            <View className="gap-2">
-              <Label>Toneladas</Label>
+            <View className="gap-2" onLayout={val.onLayoutCampo("toneladas")}>
+              <Label error={!!val.erroDe("toneladas")}>Toneladas</Label>
               <Input
                 value={toneladas}
-                onChangeText={setToneladas}
+                onChangeText={(v) => {
+                  val.limpar();
+                  setToneladas(v);
+                }}
                 keyboardType="decimal-pad"
                 placeholder="0,000"
                 maxLength={8}
+                error={!!val.erroDe("toneladas")}
               />
+              {val.erroDe("toneladas") ? <ErroCampo msg={val.erroDe("toneladas")!} /> : null}
             </View>
 
             <View className="gap-2">
@@ -372,7 +419,7 @@ export default function FinalizarViagem() {
               />
             </View>
 
-            {erro && <Text className="text-sm text-destructive">{erro}</Text>}
+            {erro ? <ErroCampo msg={erro} /> : null}
 
             <Button
               size="lg"
