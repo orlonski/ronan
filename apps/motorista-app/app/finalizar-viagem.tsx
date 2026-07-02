@@ -203,6 +203,17 @@ export default function FinalizarViagem() {
             contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 16 }}
             keyboardShouldPersistTaps="handled"
           >
+            {/* 1) Onde descarregou (ação física recém-feita) */}
+            <DescargaPorGps
+              clienteId={clienteId || null}
+              value={localDescargaId}
+              onChange={setLocalDescargaId}
+              onCaptura={setDescargaCaptura}
+              nomeSelecionadoFallback={nomeDescargaSelecionado}
+              localCargaCoords={localCargaCoords}
+            />
+
+            {/* 2) Pra quem / o quê */}
             <View className="gap-2">
               <Label>Cliente</Label>
               <Select
@@ -230,41 +241,7 @@ export default function FinalizarViagem() {
               ) : null}
             </View>
 
-            <View className="flex-row gap-3">
-              <View className="flex-1 gap-2">
-                <Label>Toneladas</Label>
-                <Input
-                  value={toneladas}
-                  onChangeText={setToneladas}
-                  keyboardType="decimal-pad"
-                  placeholder="0,000"
-                  maxLength={8}
-                />
-              </View>
-              {exigeTicket && (
-                <View className="flex-1 gap-2">
-                  <Label>Ticket</Label>
-                  <Input
-                    value={ticket}
-                    onChangeText={(v) => setTicket(v.toUpperCase())}
-                    placeholder="número"
-                    maxLength={50}
-                    autoCapitalize="characters"
-                    autoCorrect={false}
-                  />
-                </View>
-              )}
-            </View>
-
-            <DescargaPorGps
-              clienteId={clienteId || null}
-              value={localDescargaId}
-              onChange={setLocalDescargaId}
-              onCaptura={setDescargaCaptura}
-              nomeSelecionadoFallback={nomeDescargaSelecionado}
-              localCargaCoords={localCargaCoords}
-            />
-
+            {/* 3) Km e pedágio */}
             <View className="flex-row gap-3">
               <View className="flex-1 gap-2">
                 <Label>Km rodados</Label>
@@ -298,12 +275,39 @@ export default function FinalizarViagem() {
               </View>
             </View>
 
+            {/* 4) Ticket (se o material exigir) + foto */}
+            {exigeTicket && (
+              <View className="gap-2">
+                <Label>Ticket</Label>
+                <Input
+                  value={ticket}
+                  onChangeText={(v) => setTicket(v.toUpperCase())}
+                  placeholder="número"
+                  maxLength={50}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                />
+              </View>
+            )}
+
             <View className="gap-2">
               <Label>Foto do ticket</Label>
               <PhotoCapture value={foto} onChange={setFoto} />
               <Text className="text-xs text-muted-foreground">
                 Opcional, mas ajuda na conferência.
               </Text>
+            </View>
+
+            {/* 5) Por último: toneladas e observação */}
+            <View className="gap-2">
+              <Label>Toneladas</Label>
+              <Input
+                value={toneladas}
+                onChangeText={setToneladas}
+                keyboardType="decimal-pad"
+                placeholder="0,000"
+                maxLength={8}
+              />
             </View>
 
             <View className="gap-2">

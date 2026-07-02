@@ -78,8 +78,14 @@ export default function IniciarViagem() {
         coords: localCarga?.lat != null && localCarga?.lng != null
           ? { lat: localCarga.lat, lng: localCarga.lng, precisao: localCarga.precisao ?? undefined }
           : undefined,
-        localCarga: localCarga && !localCarga.criarOffline
-          ? { id: localCarga.id, nome: localCarga.nome }
+        localCarga: localCarga
+          ? {
+              id: localCarga.id,
+              nome: localCarga.nome,
+              lat: localCarga.lat,
+              lng: localCarga.lng,
+              criarOffline: localCarga.criarOffline,
+            }
           : undefined,
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -124,7 +130,7 @@ export default function IniciarViagem() {
             />
           </View>
 
-          {/* Local de carga — opcional no início. Detecta por GPS. */}
+          {/* Local de carga — detecta por GPS entre os locais cadastrados. */}
           <View className="gap-2">
             <LocalPorGps
               lado="carga"
@@ -134,8 +140,8 @@ export default function IniciarViagem() {
               onLimpar={() => setLocalCarga(null)}
             />
             <Text className="text-xs text-muted-foreground">
-              Opcional — se não achar o local agora, dá pra registrar a carga
-              depois, no andamento.
+              Toque quando estiver no pátio de carga — o app acha o local pela
+              sua posição. Marca aqui a hora que você carregou.
             </Text>
           </View>
 

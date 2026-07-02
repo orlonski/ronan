@@ -121,8 +121,12 @@ export default function TiposEventoViagemPage() {
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Eventos da viagem</h1>
             <p className="text-sm text-muted-foreground">
-              Catálogo de eventos que o motorista registra durante a viagem. A ordem define a
-              sequência guiada no app; &quot;obrigatório&quot; é um marco que bloqueia finalizar.
+              Eventos <strong>extras</strong> que o motorista registra no meio da viagem (parada,
+              balança, abastecimento…). A ordem define a sequência guiada no app.
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Carga e descarga são <strong>automáticas</strong> — a carga é marcada ao iniciar a
+              viagem e a descarga ao finalizar. Não precisa cadastrá-las aqui.
             </p>
           </div>
           <Permitido chave="tipos-evento-viagem.criar">

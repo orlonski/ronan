@@ -38,10 +38,11 @@ import {
   registrarEventoGuiado,
   type LifecycleLocal,
 } from "@/lib/lifecycle";
-import { useCatalogoEventos } from "@/lib/queries";
+import { useCatalogoEventos, useCatalogos } from "@/lib/queries";
 
 export default function ViagemGuiada() {
   const catalogo = useCatalogoEventos();
+  const catalogos = useCatalogos();
   const [local, setLocal] = useState<LifecycleLocal | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [sheetTipo, setSheetTipo] = useState<TipoEventoViagem | null>(null);
@@ -77,6 +78,11 @@ export default function ViagemGuiada() {
     [cat, slugsRegistrados],
   );
   const opcionais = useMemo(() => extras(cat), [cat]);
+
+  const placa = useMemo(() => {
+    const v = catalogos.data?.veiculos.find((x) => x.id === local?.veiculoId);
+    return v?.placa ?? null;
+  }, [catalogos.data?.veiculos, local?.veiculoId]);
 
   async function onEventoRegistrado() {
     setSheetTipo(null);
@@ -124,51 +130,76 @@ export default function ViagemGuiada() {
       <ScreenHeader title="Viagem em andamento" />
 
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 16 }}>
-        {/* Cabeçalho: desde quando + local de carga */}
+        {/* Cabeçalho: placa + local de carga + quando carregou */}
         <View className="rounded-2xl border-2 border-primary/30 bg-primary/10 p-5">
           <View className="flex-row items-center gap-2">
             <MapPin size={18} color="#ea580c" />
             <Text className="text-xs font-bold uppercase tracking-wider text-primary">
-              Em andamento
+              Viagem em andamento
             </Text>
           </View>
-          <Text className="mt-2 text-lg font-bold text-foreground">
-            Começou {tempoDesde(local.iniciadoEm)}
-          </Text>
-          {local.localCargaNome ? (
-            <Text className="mt-0.5 text-base text-muted-foreground" numberOfLines={1}>
-              Carga: {local.localCargaNome}
+          {placa ? (
+            <Text
+              className="mt-2 text-3xl font-extrabold text-foreground"
+              style={{ fontVariant: ["tabular-nums"] }}
+            >
+              {placa}
             </Text>
           ) : null}
+          <View className="mt-3 gap-1.5">
+            <View className="flex-row items-start gap-2">
+              <MapPin size={16} color="#64748b" style={{ marginTop: 2 }} />
+              <Text className="flex-1 text-base font-semibold text-foreground" numberOfLines={2}>
+                {local.localCargaNome ?? "Local de carga não informado"}
+              </Text>
+            </View>
+            <Text className="text-sm text-muted-foreground">
+              Carregou {fmtDataHora(local.iniciadoEm)} · começou {tempoDesde(local.iniciadoEm)}
+            </Text>
+          </View>
         </View>
 
-        {/* Timeline dos eventos já registrados */}
-        {local.eventos.length > 0 && (
-          <View className="gap-2 rounded-2xl border-2 border-border bg-card p-4">
-            <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              O que já foi feito
-            </Text>
-            {local.eventos.map((e) => (
-              <View key={e.id} className="flex-row items-start gap-3">
-                <View className="mt-0.5">
-                  <CheckCircle2 size={20} color="#16a34a" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-base font-semibold text-foreground">
-                    {e.nome}
-                    {e.localNome ? ` · ${e.localNome}` : ""}
-                  </Text>
-                  <Text
-                    className="text-xs text-muted-foreground"
-                    style={{ fontVariant: ["tabular-nums"] }}
-                  >
-                    {fmtHora(e.ocorridoEm)}
-                  </Text>
-                </View>
-              </View>
-            ))}
+        {/* Timeline: o marco da carga (do espelho) + os extras registrados */}
+        <View className="gap-3 rounded-2xl border-2 border-border bg-card p-4">
+          <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            O que já foi feito
+          </Text>
+          <View className="flex-row items-start gap-3">
+            <View className="mt-0.5">
+              <CheckCircle2 size={20} color="#16a34a" />
+            </View>
+            <View className="flex-1">
+              <Text className="text-base font-semibold text-foreground">
+                Carga{local.localCargaNome ? ` · ${local.localCargaNome}` : ""}
+              </Text>
+              <Text
+                className="text-xs text-muted-foreground"
+                style={{ fontVariant: ["tabular-nums"] }}
+              >
+                {fmtDataHora(local.iniciadoEm)}
+              </Text>
+            </View>
           </View>
-        )}
+          {local.eventos.map((e) => (
+            <View key={e.id} className="flex-row items-start gap-3">
+              <View className="mt-0.5">
+                <CheckCircle2 size={20} color="#16a34a" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-base font-semibold text-foreground">
+                  {e.nome}
+                  {e.localNome ? ` · ${e.localNome}` : ""}
+                </Text>
+                <Text
+                  className="text-xs text-muted-foreground"
+                  style={{ fontVariant: ["tabular-nums"] }}
+                >
+                  {fmtHora(e.ocorridoEm)}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
 
         {/* BOTÃO PRIMÁRIO GRANDE = próximo passo obrigatório, ou Finalizar */}
         {proximo ? (
@@ -548,4 +579,15 @@ function fmtHora(iso: string): string {
   const hh = String(d.getHours()).padStart(2, "0");
   const mm = String(d.getMinutes()).padStart(2, "0");
   return `${hh}:${mm}`;
+}
+
+/** "14:30 de 02/07" — hora + dia/mês locais. */
+function fmtDataHora(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  return `${hh}:${mm} de ${dd}/${mo}`;
 }

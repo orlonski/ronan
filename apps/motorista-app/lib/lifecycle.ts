@@ -75,10 +75,17 @@ export async function clearLifecycleLocal(): Promise<void> {
 
 // ---- Máquina de estados (puras) ----
 
-/** Tipos ativos ordenados pela sequência guiada. */
+/**
+ * Tipos ativos ordenados pela sequência guiada.
+ *
+ * Carga e descarga são bookends FIXOS do app (carga = tela Iniciar; descarga =
+ * tela Finalizar), não botões do meio da viagem — então os tipos ehCarga/
+ * ehDescarga NUNCA entram na lista guiada, mesmo que existam no catálogo. O
+ * catálogo guiado é só dos EXTRAS opcionais (parada, balança, abastecimento…).
+ */
 export function tiposOrdenados(catalogo: TipoEventoViagem[]): TipoEventoViagem[] {
   return [...catalogo]
-    .filter((t) => t.ativo)
+    .filter((t) => t.ativo && !t.ehCarga && !t.ehDescarga)
     .sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome));
 }
 
@@ -120,10 +127,27 @@ export function prontoParaFinalizar(
 export async function iniciarViagemGuiada(input: {
   veiculoId: string;
   coords?: { lat: number; lng: number; precisao?: number };
-  localCarga?: { id: string; nome: string };
+  localCarga?: { id: string; nome: string; lat?: number; lng?: number; criarOffline?: boolean };
 }): Promise<string> {
   const clientId = uuid();
   const iniciadoEm = nowIso();
+  const lc = input.localCarga;
+
+  // Local de carga novo (lugar fora do cadastro): enfileira antes pro drain
+  // criar o Local antes da viagem (ordem locais → lifecycle). Raro — a carga
+  // normalmente já existe no cadastro.
+  if (lc?.criarOffline && lc.lat != null && lc.lng != null) {
+    await enqueueLocal({
+      clientId: lc.id,
+      payload: { nome: lc.nome, lat: lc.lat, lng: lc.lng, precisao: input.coords?.precisao, tipo: "CARGA" },
+      status: "pending",
+      attempts: 0,
+      createdAt: Date.now(),
+    });
+  }
+  const localCargaDados: LocalSnapshotLifecycle | undefined =
+    lc && lc.lat != null && lc.lng != null ? { nome: lc.nome, lat: lc.lat, lng: lc.lng } : undefined;
+
   await enqueueViagemIniciar({
     clientId,
     veiculoId: input.veiculoId,
@@ -131,15 +155,16 @@ export async function iniciarViagemGuiada(input: {
     lat: input.coords?.lat,
     lng: input.coords?.lng,
     precisao: input.coords?.precisao,
-    localCargaId: input.localCarga?.id,
+    localCargaId: lc?.id,
+    localCargaDados,
     criadoOfflineEm: iniciadoEm,
   });
   await setLifecycleLocal({
     clientId,
     veiculoId: input.veiculoId,
     iniciadoEm,
-    localCargaId: input.localCarga?.id,
-    localCargaNome: input.localCarga?.nome,
+    localCargaId: lc?.id,
+    localCargaNome: lc?.nome,
     eventos: [],
   });
   return clientId;
