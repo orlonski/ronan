@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { router, Stack, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
@@ -23,7 +23,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import type { TipoEventoViagem } from "@ronan/shared-types";
 import { ScreenHeader } from "@/components/screen-header";
 import { LocalPorGps, type SelecaoLocal } from "@/components/local-por-gps";
-import { DescargaPorGps, type DescargaCaptura } from "@/components/descarga-por-gps";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,7 +34,6 @@ import {
   descartarViagemGuiada,
   extras,
   getLifecycleLocal,
-  marcarDescargaGuiada,
   proximoPassoObrigatorio,
   registrarEventoGuiado,
   type LifecycleLocal,
@@ -48,10 +46,6 @@ export default function ViagemGuiada() {
   const [local, setLocal] = useState<LifecycleLocal | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [sheetTipo, setSheetTipo] = useState<TipoEventoViagem | null>(null);
-  // Modal de captura da descarga (aberto pelo botão "Finalizar viagem").
-  const [capturaDescarga, setCapturaDescarga] = useState(false);
-  const [descId, setDescId] = useState("");
-  const [descCap, setDescCap] = useState<DescargaCaptura | null>(null);
 
   // Recarrega o espelho local sempre que a tela ganha foco (volta do sheet,
   // do finalizar etc). Se não há viagem, volta pra home.
@@ -89,38 +83,6 @@ export default function ViagemGuiada() {
     const v = catalogos.data?.veiculos.find((x) => x.id === local?.veiculoId);
     return v?.placa ?? null;
   }, [catalogos.data?.veiculos, local?.veiculoId]);
-
-  const localCargaCoords = useMemo(() => {
-    const l = catalogos.data?.locais.find((x) => x.id === local?.localCargaId);
-    if (!l || l.lat == null || l.lng == null) return null;
-    return { lat: l.lat, lng: l.lng, nome: l.nome };
-  }, [catalogos.data?.locais, local?.localCargaId]);
-
-  // Quando a descarga é resolvida no modal (id + snapshot GPS), grava no espelho
-  // e vai pra tela de finalizar já com a descarga marcada.
-  useEffect(() => {
-    if (!capturaDescarga || !descId || !descCap) return;
-    const nome = catalogos.data?.locais.find((x) => x.id === descId)?.nome;
-    let alive = true;
-    void marcarDescargaGuiada({
-      localId: descId,
-      nome,
-      lat: descCap.lat,
-      lng: descCap.lng,
-      precisao: descCap.precisao,
-      distanciaMetros: descCap.distanciaMetros,
-      buscaOffline: descCap.buscaOffline,
-    }).then(() => {
-      if (!alive) return;
-      setCapturaDescarga(false);
-      setDescId("");
-      setDescCap(null);
-      router.push("/finalizar-viagem");
-    });
-    return () => {
-      alive = false;
-    };
-  }, [capturaDescarga, descId, descCap, catalogos.data?.locais]);
 
   async function onEventoRegistrado() {
     setSheetTipo(null);
@@ -255,11 +217,7 @@ export default function ViagemGuiada() {
           <Button
             size="lg"
             className="h-24 bg-success"
-            onPress={() => {
-              setDescId("");
-              setDescCap(null);
-              setCapturaDescarga(true);
-            }}
+            onPress={() => router.push("/finalizar-viagem")}
           >
             <Flag size={26} color="white" strokeWidth={2.5} />
             <Text className="text-2xl font-extrabold text-primary-foreground">
@@ -309,37 +267,6 @@ export default function ViagemGuiada() {
         onRegistrado={onEventoRegistrado}
       />
 
-      {/* Captura da descarga (aberta pelo "Finalizar viagem"). Ao resolver,
-          grava no espelho e navega pra tela de finalizar. */}
-      <Modal
-        visible={capturaDescarga}
-        animationType="slide"
-        presentationStyle="fullScreen"
-        onRequestClose={() => setCapturaDescarga(false)}
-        statusBarTranslucent
-      >
-        <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
-          <ScreenHeaderLike
-            title="Onde você descarregou?"
-            onBack={() => setCapturaDescarga(false)}
-          />
-          <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
-            {capturaDescarga && (
-              <DescargaPorGps
-                autoIniciar
-                clienteId={local.clienteId}
-                value={descId}
-                onChange={setDescId}
-                onCaptura={setDescCap}
-                localCargaCoords={localCargaCoords}
-              />
-            )}
-            <Text className="text-sm text-muted-foreground">
-              Marque onde você descarregou. Na próxima tela é só conferir e enviar.
-            </Text>
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
     </SafeAreaView>
   );
 }

@@ -58,17 +58,6 @@ export default function FinalizarViagem() {
       }
       setCiclo(atual);
       setClienteId(atual.clienteId); // cliente já escolhido no iniciar
-      // Descarga já marcada ao apertar "Finalizar viagem" na tela guiada.
-      if (atual.descarga) {
-        setLocalDescargaId(atual.descarga.localId);
-        setDescargaCaptura({
-          lat: atual.descarga.lat,
-          lng: atual.descarga.lng,
-          precisao: atual.descarga.precisao ?? null,
-          distanciaMetros: atual.descarga.distanciaMetros ?? null,
-          buscaOffline: atual.descarga.buscaOffline ?? false,
-        });
-      }
       setCarregando(false);
     });
     return () => {
@@ -99,13 +88,8 @@ export default function FinalizarViagem() {
 
   const nomeDescargaSelecionado = useMemo(() => {
     if (!localDescargaId) return undefined;
-    // Catálogo primeiro; fallback pro nome guardado no espelho (local novo
-    // offline pode não estar no catálogo ainda).
-    return (
-      cat.data?.locais.find((l) => l.id === localDescargaId)?.nome ??
-      ciclo?.descarga?.nome
-    );
-  }, [localDescargaId, cat.data?.locais, ciclo?.descarga?.nome]);
+    return cat.data?.locais.find((l) => l.id === localDescargaId)?.nome;
+  }, [localDescargaId, cat.data?.locais]);
 
   const localCargaCoords = useMemo(() => {
     if (!localCargaId) return null;
@@ -210,8 +194,10 @@ export default function FinalizarViagem() {
             contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 16 }}
             keyboardShouldPersistTaps="handled"
           >
-            {/* 1) Onde descarregou (ação física recém-feita) */}
+            {/* 1) Onde descarregou — captura já dispara sozinha ao abrir a tela
+                   (o motorista veio do "Finalizar viagem" acabando de descarregar). */}
             <DescargaPorGps
+              autoIniciar={!localDescargaId}
               clienteId={clienteId || null}
               value={localDescargaId}
               onChange={setLocalDescargaId}
