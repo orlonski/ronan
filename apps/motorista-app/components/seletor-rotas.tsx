@@ -19,6 +19,9 @@ import type { RotaOption } from "@/lib/queries";
 
 // Paleta fixa por índice — casa a linha do mapa com o botão embaixo.
 const CORES = ["#ea580c", "#2563eb", "#16a34a"];
+const CINZA = "#94a3b8";
+// Ref estável do style do mapa — evita churn de props no MapView a cada render.
+const MAP_STYLE = { flex: 1 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MapMod = any;
@@ -37,16 +40,23 @@ function corDaRota(idx: number): string {
 }
 
 /**
- * Mapa isolado e memoizado. Só recebe `rotas` (referência estável do
- * react-query) + `height`, então NÃO re-renderiza quando o pai muda estado de
- * seleção/km. Overlays estáticos = sem mutação nativa = sem crash no iOS.
+ * Mapa isolado e memoizado. Destaca a rota escolhida (colorida/grossa) e apaga
+ * as outras (cinza). Memoizado por `rotas`/`height`/`selecionadaIdx`, então só
+ * re-renderiza ao TROCAR de rota — não a cada tecla do km.
+ *
+ * Segurança iOS: o conjunto de Polylines é FIXO (uma por rota, `key` e
+ * `coordinates` estáveis); a seleção muda só `strokeColor`/`strokeWidth`. NÃO
+ * adiciona/remove linha nem troca coordenadas (era isso que crashava o Apple
+ * Maps). Sem `tappable`/`onPress`/`zIndex`.
  */
 const RotasMapa = memo(function RotasMapa({
   rotas,
   height,
+  selecionadaIdx,
 }: {
   rotas: RotaOption[];
   height: number;
+  selecionadaIdx: number;
 }) {
   const [mod, setMod] = useState<MapMod | null>(null);
 
@@ -108,7 +118,7 @@ const RotasMapa = memo(function RotasMapa({
   const provider = Platform.OS === "android" ? mod.PROVIDER_GOOGLE : undefined;
 
   const mapProps: Record<string, unknown> = {
-    style: { flex: 1 },
+    style: MAP_STYLE,
     initialRegion: region,
   };
   if (provider) mapProps.provider = provider;
@@ -116,16 +126,19 @@ const RotasMapa = memo(function RotasMapa({
   return (
     <View className="overflow-hidden rounded-xl bg-muted/40" style={{ height }}>
       <MapView {...mapProps}>
-        {rotasCoords.map((coords, idx) =>
-          coords.length < 2 ? null : (
+        {rotasCoords.map((coords, idx) => {
+          if (coords.length < 2) return null;
+          const sel = idx === selecionadaIdx;
+          const apagado = !sel;
+          return (
             <Polyline
               key={idx}
               coordinates={coords}
-              strokeColor={corDaRota(idx)}
-              strokeWidth={5}
+              strokeColor={apagado ? CINZA : corDaRota(idx)}
+              strokeWidth={sel ? 7 : apagado ? 4 : 5}
             />
-          ),
-        )}
+          );
+        })}
         {inicio && <Marker coordinate={inicio} pinColor="green" title="Carga" />}
         {fim && <Marker coordinate={fim} pinColor="red" title="Descarga" />}
       </MapView>
@@ -152,7 +165,7 @@ export function SeletorRotas({
         {temEscolha ? "Qual estrada você pegou?" : "Trajeto calculado"}
       </Text>
 
-      <RotasMapa rotas={rotas} height={height} />
+      <RotasMapa rotas={rotas} height={height} selecionadaIdx={selecionadaIdx} />
 
       {/* Botões grandes — um por rota, cor-combinando com a linha. */}
       <View className="gap-2">
