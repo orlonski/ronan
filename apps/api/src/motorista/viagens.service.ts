@@ -6,7 +6,12 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { AcaoAuditoria, Prisma, type StatusViagem } from "@prisma/client";
-import type { CriarViagemInput } from "@ronan/shared-types";
+import type {
+  CriarViagemInput,
+  FinalizarViagemInput,
+  IniciarViagemInput,
+  RegistrarEventoInput,
+} from "@ronan/shared-types";
 import { AuditoriaService } from "../auditoria/auditoria.service";
 import {
   aplicarMinimos,
@@ -181,7 +186,8 @@ export class ViagensMotoristaService {
     let totalKm = new Prisma.Decimal(0);
     for (const v of viagens) {
       const override =
-        resolverRegraMinimo(regras, v.cliente.empresaId, v.materialId, v.km) ?? undefined;
+        resolverRegraMinimo(regras, v.cliente?.empresaId ?? "", v.materialId, v.km ?? 0) ??
+        undefined;
       const m = aplicarMinimos(v, override);
       totalToneladas = totalToneladas.plus(m.toneladasEfetiva);
       totalKm = totalKm.plus(m.kmEfetivo);
@@ -217,7 +223,13 @@ export class ViagensMotoristaService {
       grupoStatus?: "AGUARDANDO" | "CONFERIDA" | "DIVERGENTE";
     },
   ): Prisma.ViagemWhereInput {
-    const where: Prisma.ViagemWhereInput = { motoristaId };
+    // Viagem EM_ANDAMENTO (lifecycle aberto) não aparece em listas nem entra em
+    // resumos — só no endpoint dedicado /andamento. grupoStatus (quando vem)
+    // substitui por um `in` que nunca inclui EM_ANDAMENTO.
+    const where: Prisma.ViagemWhereInput = {
+      motoristaId,
+      status: { not: "EM_ANDAMENTO" },
+    };
     if (filtros.mes) {
       const { inicio, fim } = mesRange(filtros.mes);
       where.data = { gte: inicio, lt: fim };
@@ -238,15 +250,19 @@ export class ViagensMotoristaService {
       throw new ForbiddenException("Esta viagem não é sua.");
     }
 
-    const rota = await this.prisma.rotaCache.findUnique({
-      where: {
-        localOrigemId_localDestinoId: {
-          localOrigemId: viagem.localCargaId,
-          localDestinoId: viagem.localDescargaId,
-        },
-      },
-      select: { geometria: true },
-    });
+    // Viagem EM_ANDAMENTO pode não ter locais definidos ainda — sem rota.
+    const rota =
+      viagem.localCargaId && viagem.localDescargaId
+        ? await this.prisma.rotaCache.findUnique({
+            where: {
+              localOrigemId_localDestinoId: {
+                localOrigemId: viagem.localCargaId,
+                localDestinoId: viagem.localDescargaId,
+              },
+            },
+            select: { geometria: true },
+          })
+        : null;
 
     const regras = await this.regrasMinimoAtivas();
     return {
@@ -715,12 +731,282 @@ export class ViagensMotoristaService {
       await this.notificarAdmins(
         "nova-viagem",
         `Nova viagem de ${m?.nome ?? "motorista"}`,
-        `${viagem.ticket ? `Ticket ${viagem.ticket} · ` : ""}${viagem.cliente.nome} · ${viagem.toneladas}t`,
+        `${viagem.ticket ? `Ticket ${viagem.ticket} · ` : ""}${viagem.cliente?.nome ?? ""} · ${viagem.toneladas ?? 0}t`,
         { viagemId: viagem.id, motoristaId },
       );
     })();
 
     return serializarViagemComMinimos(viagem, await this.regrasMinimoAtivas());
+  }
+
+  // =========================================================================
+  // Lifecycle guiado (Iniciar → eventos → Finalizar). Flag podeViagemLifecycle.
+  // A viagem em andamento É a Viagem, no status EM_ANDAMENTO. Vira ENVIADA ao
+  // finalizar, entrando no fluxo de conferência/fechamento normal.
+  // =========================================================================
+
+  /** Catálogo de tipos de evento ativos, ordenado (app renderiza os botões). */
+  async catalogoTiposEvento() {
+    return this.prisma.tipoEventoViagem.findMany({
+      where: { ativo: true },
+      orderBy: [{ ordem: "asc" }, { nome: "asc" }],
+    });
+  }
+
+  /** Viagem em andamento do motorista (0 ou 1) com seus eventos + catálogo. */
+  async viagemAndamento(motoristaId: string) {
+    const [viagem, catalogo] = await Promise.all([
+      this.prisma.viagem.findFirst({
+        where: { motoristaId, status: "EM_ANDAMENTO" },
+        include: {
+          ...VIAGEM_INCLUDE,
+          eventosViagem: { orderBy: { ocorridoEm: "asc" } },
+        },
+      }),
+      this.catalogoTiposEvento(),
+    ]);
+    return { viagem, catalogo };
+  }
+
+  /**
+   * Abre uma viagem EM_ANDAMENTO. Idempotente por clientId. Só permite uma
+   * aberta por motorista (409 com o clientId da existente, pro app retomar).
+   */
+  async iniciar(motoristaId: string, input: IniciarViagemInput) {
+    const existente = await this.prisma.viagem.findUnique({
+      where: { clientId: input.clientId },
+      include: { ...VIAGEM_INCLUDE, eventosViagem: { orderBy: { ocorridoEm: "asc" } } },
+    });
+    if (existente) return existente; // sync duplicado → mesma viagem
+
+    // Uma viagem aberta por vez. Devolve o clientId da aberta pro app retomar
+    // em vez de tentar criar outra. (Índice parcial no banco também garante.)
+    const aberta = await this.prisma.viagem.findFirst({
+      where: { motoristaId, status: "EM_ANDAMENTO" },
+      select: { clientId: true },
+    });
+    if (aberta) {
+      throw new ConflictException({
+        message: "Você já tem uma viagem em andamento. Finalize antes de iniciar outra.",
+        clientIdEmAndamento: aberta.clientId,
+      });
+    }
+
+    // Local de carga é opcional no iniciar (pode ser detectado por GPS já, ou
+    // só no evento de carga). Auto-recovery se o id sumiu do servidor.
+    if (input.localCargaId) {
+      await this.garantirLocal({
+        id: input.localCargaId,
+        snapshot: input.localCargaDados,
+        lado: "carga",
+        motoristaId,
+      });
+    }
+
+    const viagem = await this.prisma.viagem.create({
+      data: {
+        clientId: input.clientId,
+        motoristaId,
+        veiculoId: input.veiculoId,
+        status: "EM_ANDAMENTO",
+        iniciadoEm: input.iniciadoEm,
+        lat: input.lat,
+        lng: input.lng,
+        localCargaId: input.localCargaId,
+        criadoOfflineEm: input.criadoOfflineEm,
+      },
+      include: { ...VIAGEM_INCLUDE, eventosViagem: { orderBy: { ocorridoEm: "asc" } } },
+    });
+
+    // Eventos disparados offline antes da viagem existir linkam por clientId.
+    try {
+      await this.eventos.reconciliarPorClientId(input.clientId, viagem.id);
+    } catch {
+      /* best-effort */
+    }
+    return viagem;
+  }
+
+  /**
+   * Registra um evento (carga/descarga/parada...) numa viagem em andamento.
+   * Idempotente por id. Marcos ehCarga/ehDescarga espelham campos na Viagem.
+   * 404 (viagem ainda não existe no servidor) é tratado como transiente no app.
+   */
+  async registrarEvento(motoristaId: string, clientId: string, input: RegistrarEventoInput) {
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { clientId },
+      select: { id: true, motoristaId: true, status: true, iniciadoEm: true },
+    });
+    if (!viagem) throw new NotFoundException("Viagem em andamento ainda não sincronizada.");
+    if (viagem.motoristaId !== motoristaId) {
+      throw new ForbiddenException("Esta viagem não é sua.");
+    }
+    if (viagem.status !== "EM_ANDAMENTO") {
+      throw new BadRequestException("Essa viagem não está mais em andamento.");
+    }
+
+    const tipo = await this.prisma.tipoEventoViagem.findUnique({
+      where: { slug: input.tipoSlug },
+    });
+    if (!tipo || !tipo.ativo) {
+      throw new BadRequestException("Tipo de evento inválido ou desativado.");
+    }
+
+    // Idempotência: reenvio do mesmo evento (offline) não duplica.
+    const jaExiste = await this.prisma.eventoViagem.findUnique({ where: { id: input.id } });
+    if (jaExiste) return jaExiste;
+
+    // Auto-recovery do local associado ao evento (carga/descarga por GPS).
+    if (input.localId) {
+      await this.garantirLocal({
+        id: input.localId,
+        snapshot: input.localDados,
+        lado: tipo.ehDescarga ? "descarga" : "carga",
+        motoristaId,
+      });
+    }
+
+    const evento = await this.prisma.eventoViagem.create({
+      data: {
+        id: input.id,
+        viagemId: viagem.id,
+        tipoEventoId: tipo.id,
+        tipoSlug: tipo.slug,
+        lat: input.lat,
+        lng: input.lng,
+        precisao: input.precisao,
+        localId: input.localId,
+        fotoKey: input.fotoKey,
+        toneladas: input.toneladas,
+        valor: input.valor,
+        ticket: input.ticket,
+        observacao: input.observacao,
+        ocorridoEm: input.ocorridoEm,
+        criadoOfflineEm: input.criadoOfflineEm,
+      },
+    });
+
+    // Marcos espelham campos da Viagem (compat com match/fechamento/dashboard).
+    if (tipo.ehCarga) {
+      await this.prisma.viagem.update({
+        where: { id: viagem.id },
+        data: {
+          localCargaId: input.localId ?? undefined,
+          lat: input.lat ?? undefined,
+          lng: input.lng ?? undefined,
+          iniciadoEm: viagem.iniciadoEm ?? input.ocorridoEm,
+        },
+      });
+    }
+    if (tipo.ehDescarga) {
+      await this.prisma.viagem.update({
+        where: { id: viagem.id },
+        data: {
+          localDescargaId: input.localId ?? undefined,
+          descargaLat: input.lat ?? undefined,
+          descargaLng: input.lng ?? undefined,
+          descargaPrecisao: input.precisao ?? undefined,
+        },
+      });
+    }
+
+    return evento;
+  }
+
+  /**
+   * Finaliza a viagem em andamento: preenche os campos que faltavam, valida os
+   * obrigatórios (autoritativo) e transita EM_ANDAMENTO → ENVIADA. Idempotente.
+   */
+  async finalizar(motoristaId: string, clientId: string, input: FinalizarViagemInput) {
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { clientId },
+      select: { id: true, motoristaId: true, status: true },
+    });
+    if (!viagem) throw new NotFoundException("Viagem em andamento ainda não sincronizada.");
+    if (viagem.motoristaId !== motoristaId) {
+      throw new ForbiddenException("Esta viagem não é sua.");
+    }
+    // Já finalizada (reenvio) → idempotente.
+    if (viagem.status !== "EM_ANDAMENTO") {
+      const existente = await this.prisma.viagem.findUnique({
+        where: { id: viagem.id },
+        include: VIAGEM_INCLUDE,
+      });
+      return serializarViagemComMinimos(existente!, await this.regrasMinimoAtivas());
+    }
+
+    const cliente = await this.prisma.cliente.findUnique({
+      where: { id: input.clienteId },
+      select: { empresaId: true },
+    });
+    if (!cliente) throw new NotFoundException("Cliente não encontrado");
+
+    const material = await this.prisma.material.findUnique({
+      where: { id: input.materialId },
+      select: { exigeTicket: true },
+    });
+    const ticket = input.ticket?.trim() || null;
+    if (material?.exigeTicket !== false && !ticket) {
+      throw new BadRequestException("Informe o número do ticket.");
+    }
+    if (ticket) {
+      const dup = await this.prisma.viagem.findFirst({
+        where: { ticket, cliente: { empresaId: cliente.empresaId }, id: { not: viagem.id } },
+        select: { id: true },
+      });
+      if (dup) {
+        throw new ConflictException(`Ticket ${ticket} já foi lançado para essa empresa.`);
+      }
+    }
+
+    await this.garantirLocal({
+      id: input.localDescargaId,
+      snapshot: input.localDescargaDados,
+      lado: "descarga",
+      motoristaId,
+    });
+
+    const finalizada = await this.prisma.viagem.update({
+      where: { id: viagem.id },
+      data: {
+        status: "ENVIADA",
+        clienteId: input.clienteId,
+        materialId: input.materialId,
+        data: input.data,
+        toneladas: input.toneladas,
+        km: input.km,
+        kmCalculado: input.kmCalculado,
+        ticket,
+        localDescargaId: input.localDescargaId,
+        descargaLat: input.descargaLat,
+        descargaLng: input.descargaLng,
+        descargaPrecisao: input.descargaPrecisao,
+        descargaDistanciaMetros: input.descargaDistanciaMetros,
+        valorPedagioTotal: input.valorPedagioTotal,
+        observacao: input.observacao,
+        sincronizadoEm: new Date(),
+        ...(input.fotoKey
+          ? { fotos: { create: { storageKey: input.fotoKey, capturadaEm: new Date() } } }
+          : {}),
+      },
+      include: VIAGEM_INCLUDE,
+    });
+
+    // Revalida locais + garante rota + notifica admin (best-effort, igual create).
+    try {
+      await this.validacao.revalidarApos(finalizada.id);
+    } catch {
+      /* best-effort */
+    }
+    if (finalizada.localCargaId && finalizada.localDescargaId) {
+      void this.roteamento
+        .calcularKm(finalizada.localCargaId, finalizada.localDescargaId)
+        .catch(() => {
+          /* best-effort */
+        });
+    }
+
+    return serializarViagemComMinimos(finalizada, await this.regrasMinimoAtivas());
   }
 }
 

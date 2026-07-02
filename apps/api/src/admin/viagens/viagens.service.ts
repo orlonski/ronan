@@ -238,13 +238,17 @@ export class ViagensAdminService {
     T extends {
       id: string;
       valorPedagioTotal: Prisma.Decimal | null;
-      localCargaId: string;
-      localDescargaId: string;
+      localCargaId: string | null;
+      localDescargaId: string | null;
     },
   >(viagens: T[]): Promise<Array<T & { temPedagioSemValor: boolean }>> {
     return Promise.all(
       viagens.map(async (v) => {
         if (v.valorPedagioTotal !== null && Number(v.valorPedagioTotal) > 0) {
+          return { ...v, temPedagioSemValor: false };
+        }
+        // EM_ANDAMENTO não tem locais definidos; já foi filtrada da listagem.
+        if (v.localCargaId === null || v.localDescargaId === null) {
           return { ...v, temPedagioSemValor: false };
         }
         try {
@@ -422,15 +426,19 @@ export class ViagensAdminService {
     });
     if (!viagem) throw new NotFoundException("Viagem não encontrada");
 
-    const rota = await this.prisma.rotaCache.findUnique({
-      where: {
-        localOrigemId_localDestinoId: {
-          localOrigemId: viagem.localCargaId,
-          localDestinoId: viagem.localDescargaId,
-        },
-      },
-      select: { geometria: true },
-    });
+    // EM_ANDAMENTO não tem locais; sem eles não há rota a buscar.
+    const rota =
+      viagem.localCargaId && viagem.localDescargaId
+        ? await this.prisma.rotaCache.findUnique({
+            where: {
+              localOrigemId_localDestinoId: {
+                localOrigemId: viagem.localCargaId,
+                localDestinoId: viagem.localDescargaId,
+              },
+            },
+            select: { geometria: true },
+          })
+        : null;
 
     const regras = await this.prisma.regraMinimo.findMany({ where: { ativo: true } });
     return {
@@ -456,7 +464,11 @@ export class ViagensAdminService {
     // não entram no dedup.
     const novoTicket = input.ticket ?? antes.ticket;
     const novoClienteId = input.clienteId ?? antes.clienteId;
-    if (novoTicket && (novoTicket !== antes.ticket || novoClienteId !== antes.clienteId)) {
+    if (
+      novoTicket &&
+      novoClienteId &&
+      (novoTicket !== antes.ticket || novoClienteId !== antes.clienteId)
+    ) {
       const cliente = await this.prisma.cliente.findUnique({
         where: { id: novoClienteId },
         select: { empresaId: true },
@@ -687,6 +699,10 @@ export class ViagensAdminService {
       },
     });
     if (!viagem) throw new NotFoundException("Viagem não encontrada");
+    // EM_ANDAMENTO não tem locais/km; sem locais não há trajeto a recalcular.
+    if (!viagem.localCargaId || !viagem.localDescargaId) {
+      throw new BadRequestException("Viagem sem locais definidos.");
+    }
 
     const cacheAntes = await this.prisma.rotaCache.findUnique({
       where: {
@@ -715,7 +731,7 @@ export class ViagensAdminService {
     const novoKm = parseFloat(resultado.km);
     const motoristaEditou =
       viagem.kmCalculado != null &&
-      Math.abs(Number(viagem.km) - Number(viagem.kmCalculado)) > 0.001;
+      Math.abs(Number(viagem.km ?? 0) - Number(viagem.kmCalculado)) > 0.001;
 
     await this.prisma.viagem.update({
       where: { id: viagem.id },
@@ -735,17 +751,17 @@ export class ViagensAdminService {
       campo: motoristaEditou ? "kmCalculado" : "km",
       valorAntes: motoristaEditou
         ? (viagem.kmCalculado?.toString() ?? null)
-        : viagem.km.toString(),
+        : (viagem.km?.toString() ?? null),
       valorDepois: resultado.km,
       motivo: motoristaEditou
-        ? `Km do motorista (${viagem.km.toString()}) preservado — só o calculado foi atualizado.`
+        ? `Km do motorista (${viagem.km?.toString() ?? "0"}) preservado — só o calculado foi atualizado.`
         : undefined,
       metadata: {
         kmAntes: cacheAntes?.km.toString() ?? null,
         kmDepois: resultado.km,
         motoristaEditou,
-        kmInformadoAntes: viagem.km.toString(),
-        kmInformadoDepois: motoristaEditou ? viagem.km.toString() : resultado.km,
+        kmInformadoAntes: viagem.km?.toString() ?? null,
+        kmInformadoDepois: motoristaEditou ? (viagem.km?.toString() ?? null) : resultado.km,
         kmCalculadoAntes: viagem.kmCalculado?.toString() ?? null,
         kmCalculadoDepois: resultado.km,
         tinhaGeometria: cacheAntes?.geometria != null,
@@ -755,7 +771,7 @@ export class ViagensAdminService {
 
     return {
       ok: true,
-      km: motoristaEditou ? viagem.km.toString() : resultado.km,
+      km: motoristaEditou ? (viagem.km?.toString() ?? "0") : resultado.km,
       kmCalculado: resultado.km,
       motoristaEditou,
       duracaoSegundos: resultado.duracaoSegundos,

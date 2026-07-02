@@ -249,6 +249,7 @@ export class MotoristasService {
     input: {
       podeLancarViagem?: boolean;
       podeIniciarViagem?: boolean;
+      podeViagemLifecycle?: boolean;
       podeLancarPedagio?: boolean;
       podeLancarAbastecimento?: boolean;
       podeUsarOcrTicket?: boolean;
@@ -263,6 +264,7 @@ export class MotoristasService {
         id: true,
         podeLancarViagem: true,
         podeIniciarViagem: true,
+        podeViagemLifecycle: true,
         podeLancarPedagio: true,
         podeLancarAbastecimento: true,
         podeUsarOcrTicket: true,

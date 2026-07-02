@@ -127,11 +127,12 @@ export class FechamentosService {
             ...l.viagemMatch,
             ...aplicarMinimos(
               l.viagemMatch,
+              // Viagem casada é finalizada; EM_ANDAMENTO (campos null) nunca casa.
               resolverRegraMinimo(
                 regras,
-                l.viagemMatch.cliente.empresaId,
-                l.viagemMatch.material.id,
-                l.viagemMatch.km,
+                l.viagemMatch.cliente?.empresaId ?? "",
+                l.viagemMatch.material?.id ?? null,
+                l.viagemMatch.km ?? 0,
               ) ?? undefined,
             ),
           }

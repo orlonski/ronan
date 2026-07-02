@@ -26,6 +26,11 @@ enum StatusViagem {
   DIVERGENTE
   AJUSTADA
   OK
+  /// Viagem aberta pelo lifecycle guiado ("Iniciar viagem"): motorista ainda
+  /// está rodando. Campos como material/toneladas/km/ticket/localDescarga podem
+  /// estar nulos até o finalizar. NUNCA entra em match/fechamento/KPIs/resumos
+  /// (filtrada explicitamente). Ao finalizar, transita pra ENVIADA.
+  EM_ANDAMENTO
 }
 
 enum TipoDivergencia {
@@ -200,6 +205,7 @@ model User {
   motoristasAprovados Motorista[]   @relation("AprovouMotorista")
   empresasCriadas     Empresa[]     @relation("CriouEmpresa")
   regrasMinimoCriadas RegraMinimo[] @relation("CriouRegraMinimo")
+  tiposEventoCriados  TipoEventoViagem[] @relation("CriouTipoEventoViagem")
   locaisCriados       Local[]       @relation("CriouLocal")
   usuariosCriados     User[]        @relation("CriouUser")
   criadoPor           User?         @relation("CriouUser", fields: [criadoPorId], references: [id], onDelete: SetNull)
@@ -318,6 +324,11 @@ model Motorista {
   // seguem true pra não quebrar fluxo existente.
   podeLancarViagem        Boolean   @default(true)
   podeIniciarViagem       Boolean   @default(false)
+  /// Lifecycle guiado de viagem (Iniciar → eventos → Finalizar), com viagem
+  /// criada no backend já no início (status EM_ANDAMENTO). Flag separada de
+  /// podeIniciarViagem (tracking GPS efêmero legado) pra rodar os dois modos
+  /// em paralelo durante a transição.
+  podeViagemLifecycle     Boolean   @default(false)
   podeLancarPedagio       Boolean   @default(false)
   podeLancarAbastecimento Boolean   @default(true)
   /// Quando true, o app dispara OCR via IA na foto do ticket pra sugerir
@@ -745,6 +756,7 @@ model Local {
   clientes        LocalCliente[]
   viagensCarga    Viagem[]         @relation("LocalCarga")
   viagensDescarga Viagem[]         @relation("LocalDescarga")
+  eventosViagem   EventoViagem[]
   rotasOrigem     RotaCache[]      @relation("RotaOrigem")
   rotasDestino    RotaCache[]      @relation("RotaDestino")
   evidencias      LocalEvidencia[]
@@ -821,25 +833,29 @@ model Viagem {
   motoristaId       String
   veiculo           Veiculo      @relation(fields: [veiculoId], references: [id])
   veiculoId         String
-  cliente           Cliente      @relation(fields: [clienteId], references: [id])
-  clienteId         String
-  material          Material     @relation(fields: [materialId], references: [id])
-  materialId        String
-  data              DateTime     @db.Date
-  toneladas         Decimal      @db.Decimal(10, 3)
+  cliente           Cliente?     @relation(fields: [clienteId], references: [id])
+  // Nullable: viagem EM_ANDAMENTO pode não ter cliente/material/data/etc até o
+  // finalizar. Obrigatoriedade é validada condicionalmente no service.finalizar.
+  clienteId         String?
+  material          Material?    @relation(fields: [materialId], references: [id])
+  materialId        String?
+  data              DateTime?    @db.Date
+  toneladas         Decimal?     @db.Decimal(10, 3)
   /// Null quando o material não exige ticket (ex: concreto). Ver Material.exigeTicket.
   ticket            String?
-  km                Decimal      @db.Decimal(10, 2)
+  km                Decimal?     @db.Decimal(10, 2)
   /// Snapshot do km que o OSRM calculou no momento do lançamento. Permite
   /// detectar quando motorista sobrescreveu o sugerido (km != kmCalculado).
   /// Null pra viagens antigas (pré-feature) e quando OSRM não respondeu.
   kmCalculado       Decimal?     @db.Decimal(10, 2)
   observacao        String?
   status            StatusViagem @default(ENVIADA)
-  localCarga        Local        @relation("LocalCarga", fields: [localCargaId], references: [id])
-  localCargaId      String
-  localDescarga     Local        @relation("LocalDescarga", fields: [localDescargaId], references: [id])
-  localDescargaId   String
+  // Nullable p/ lifecycle: localCarga é preenchido no evento de carga (ou no
+  // iniciar se GPS detectou), localDescarga no evento de descarga/finalizar.
+  localCarga        Local?       @relation("LocalCarga", fields: [localCargaId], references: [id])
+  localCargaId      String?
+  localDescarga     Local?       @relation("LocalDescarga", fields: [localDescargaId], references: [id])
+  localDescargaId   String?
   valorPedagioTotal Decimal?     @db.Decimal(10, 2)
   // Coordenadas GPS capturadas pelo motorista no momento do lançamento
   // (silencioso — null se permissão negada ou GPS indisponível)
@@ -890,6 +906,7 @@ model Viagem {
   pontos            ViagemPonto[]
   matchesFechamento FechamentoLinha[]
   eventos           EventoMotorista[]
+  eventosViagem     EventoViagem[]
 
   @@index([motoristaId, data])
   @@index([veiculoId, data])
@@ -898,7 +915,82 @@ model Viagem {
   @@index([status])
   @@index([localCargaId])
   @@index([localDescargaId])
+  // Partial unique index "1 viagem EM_ANDAMENTO por motorista" é criado à mão
+  // no migration.sql (Prisma não expressa índice parcial): ver migration
+  // add_viagem_lifecycle (uq_viagem_em_andamento_por_motorista).
   @@map("viagens")
+}
+
+/// Catálogo dinâmico de tipos de evento da viagem (lifecycle guiado). Admin
+/// cria/edita pelo dashboard; o app renderiza os botões a partir daqui (sem
+/// fluxo hardcoded). A "espinha" da máquina de estados = tipos obrigatorio=true
+/// ordenados por `ordem`; o próximo obrigatório não registrado vira o botão
+/// primário. Seed inicial: carga + descarga.
+model TipoEventoViagem {
+  id             String   @id @default(uuid())
+  /// Chave estável usada no código/snapshot (ex: "carga", "descarga"). Imutável.
+  slug           String   @unique
+  /// Rótulo exibido ao motorista (editável pelo admin).
+  nome           String
+  ativo          Boolean  @default(true)
+  /// Ordena a espinha e os botões no app.
+  ordem          Int      @default(0)
+  // --- máquina de estados ---
+  /// true = marco da espinha; bloqueia "Finalizar" enquanto não registrado.
+  obrigatorio    Boolean  @default(false)
+  /// true = pode registrar várias vezes na mesma viagem (parada, abastecimento).
+  repetivel      Boolean  @default(false)
+  // --- marcos que espelham campos da Viagem ---
+  /// Preenche Viagem.localCargaId + iniciadoEm/lat/lng ao registrar.
+  ehCarga        Boolean  @default(false)
+  /// Preenche Viagem.localDescargaId + descargaLat/Lng ao registrar.
+  ehDescarga     Boolean  @default(false)
+  // --- o que o evento pede ao motorista ---
+  pedeGps        Boolean  @default(true)
+  pedeFoto       Boolean  @default(false)
+  pedeToneladas  Boolean  @default(false)
+  pedeValor      Boolean  @default(false)
+  pedeTicket     Boolean  @default(false)
+  pedeObservacao Boolean  @default(true)
+  criadoEm       DateTime @default(now())
+  alteradoEm     DateTime @updatedAt
+  criadoPor      User?    @relation("CriouTipoEventoViagem", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId    String?
+
+  eventos        EventoViagem[]
+
+  @@index([ativo, ordem])
+  @@map("tipos_evento_viagem")
+}
+
+/// Evento de negócio registrado durante uma viagem em andamento (carga,
+/// descarga, parada...). Idempotente por `id` (uuid client-side). Diferente de
+/// EventoMotorista, que é telemetria (string livre, retenção curta).
+model EventoViagem {
+  id              String           @id
+  viagem          Viagem           @relation(fields: [viagemId], references: [id], onDelete: Cascade)
+  viagemId        String
+  tipoEvento      TipoEventoViagem @relation(fields: [tipoEventoId], references: [id])
+  tipoEventoId    String
+  /// Snapshot do slug do tipo — resiliente a rename/soft-delete do catálogo.
+  tipoSlug        String
+  lat             Float?
+  lng             Float?
+  precisao        Float?
+  local           Local?           @relation(fields: [localId], references: [id], onDelete: SetNull)
+  localId         String?
+  fotoKey         String?
+  toneladas       Decimal?         @db.Decimal(10, 3)
+  valor           Decimal?         @db.Decimal(10, 2)
+  ticket          String?
+  observacao      String?
+  ocorridoEm      DateTime
+  criadoOfflineEm DateTime?
+  recebidoEm      DateTime         @default(now())
+
+  @@index([viagemId, ocorridoEm])
+  @@index([tipoEventoId])
+  @@map("eventos_viagem")
 }
 
 model TicketFoto {

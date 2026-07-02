@@ -609,6 +609,8 @@ async function executarToolInterno(
       const lista = await ctx.prisma.viagem.findMany({
         where: {
           motoristaId: ctx.identidade.motoristaId,
+          // Não reporta viagem em andamento (ainda sem cliente/material/ticket).
+          status: { not: "EM_ANDAMENTO" },
           data: { gte: inicio },
         },
         select: {
@@ -638,10 +640,10 @@ async function executarToolInterno(
           data: v.data,
           toneladas: Number(v.toneladas),
           km: Number(v.km),
-          material: v.material.nome,
-          cliente: v.cliente.nome,
-          de: v.localCarga.nome,
-          para: v.localDescarga.nome,
+          material: v.material?.nome ?? null,
+          cliente: v.cliente?.nome ?? null,
+          de: v.localCarga?.nome ?? null,
+          para: v.localDescarga?.nome ?? null,
           placa: v.veiculo.placa,
           status: v.status,
         })),
@@ -662,6 +664,8 @@ async function executarToolInterno(
       const ultimaViagem = await ctx.prisma.viagem.findFirst({
         where: {
           motoristaId: ctx.identidade.motoristaId,
+          // Não anexa foto numa viagem em andamento (tem fluxo de foto próprio).
+          status: { not: "EM_ANDAMENTO" },
           sincronizadoEm: { gte: seisHorasAtras },
         },
         orderBy: { sincronizadoEm: "desc" },

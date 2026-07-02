@@ -123,11 +123,58 @@ export type PendingLocal = {
   errorIssues?: ZodIssueSaved[];
 };
 
+/** Lifecycle guiado: abertura da viagem (POST /m/viagem/iniciar). */
+export type PendingViagemIniciar = {
+  clientId: string; // clientId da viagem (idempotência)
+  payload: Record<string, unknown>;
+  status: "pending" | "syncing" | "error";
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
+};
+
+/** Lifecycle: um evento (carga/descarga/parada...) numa viagem em andamento. */
+export type PendingEventoViagem = {
+  clientId: string; // id do evento (idempotência)
+  viagemClientId: string; // clientId da viagem-mãe (gate de ordem no drain)
+  payload: Record<string, unknown>;
+  fotoUri?: string;
+  fotoMime?: string;
+  status: "pending" | "syncing" | "error";
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
+};
+
+/** Lifecycle: finalização da viagem (POST /m/viagem/:clientId/finalizar). */
+export type PendingViagemFinalizar = {
+  clientId: string; // clientId da viagem-mãe
+  payload: Record<string, unknown>;
+  fotoUri?: string;
+  fotoMime?: string;
+  status: "pending" | "syncing" | "error";
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
+};
+
 const VIAGENS_KEY = `${PREFIX}outbox.viagens`;
 const PEDAGIOS_KEY = `${PREFIX}outbox.pedagios`;
 const ABASTECIMENTOS_KEY = `${PREFIX}outbox.abastecimentos`;
 const LOCAIS_KEY = `${PREFIX}outbox.locais`;
 const FOTOS_KEY = `${PREFIX}outbox.fotos`;
+const VG_INICIAR_KEY = `${PREFIX}outbox.viagem-iniciar`;
+const VG_EVENTOS_KEY = `${PREFIX}outbox.viagem-eventos`;
+const VG_FINALIZAR_KEY = `${PREFIX}outbox.viagem-finalizar`;
 
 async function readList<T>(key: string): Promise<T[]> {
   try {
@@ -224,6 +271,53 @@ export async function deletePendingLocal(clientId: string): Promise<void> {
     LOCAIS_KEY,
     list.filter((x) => x.clientId !== clientId),
   );
+}
+
+// ---- Lifecycle: iniciar / eventos / finalizar ----
+
+export async function listPendingViagemIniciar(): Promise<PendingViagemIniciar[]> {
+  return readList<PendingViagemIniciar>(VG_INICIAR_KEY);
+}
+export async function upsertPendingViagemIniciar(item: PendingViagemIniciar): Promise<void> {
+  const list = await listPendingViagemIniciar();
+  const idx = list.findIndex((x) => x.clientId === item.clientId);
+  if (idx >= 0) list[idx] = item;
+  else list.unshift(item);
+  await writeList(VG_INICIAR_KEY, list);
+}
+export async function deletePendingViagemIniciar(clientId: string): Promise<void> {
+  const list = await listPendingViagemIniciar();
+  await writeList(VG_INICIAR_KEY, list.filter((x) => x.clientId !== clientId));
+}
+
+export async function listPendingEventosViagem(): Promise<PendingEventoViagem[]> {
+  return readList<PendingEventoViagem>(VG_EVENTOS_KEY);
+}
+export async function upsertPendingEventoViagem(item: PendingEventoViagem): Promise<void> {
+  const list = await listPendingEventosViagem();
+  const idx = list.findIndex((x) => x.clientId === item.clientId);
+  if (idx >= 0) list[idx] = item;
+  else list.push(item); // ordem de ocorrência (append)
+  await writeList(VG_EVENTOS_KEY, list);
+}
+export async function deletePendingEventoViagem(clientId: string): Promise<void> {
+  const list = await listPendingEventosViagem();
+  await writeList(VG_EVENTOS_KEY, list.filter((x) => x.clientId !== clientId));
+}
+
+export async function listPendingViagemFinalizar(): Promise<PendingViagemFinalizar[]> {
+  return readList<PendingViagemFinalizar>(VG_FINALIZAR_KEY);
+}
+export async function upsertPendingViagemFinalizar(item: PendingViagemFinalizar): Promise<void> {
+  const list = await listPendingViagemFinalizar();
+  const idx = list.findIndex((x) => x.clientId === item.clientId);
+  if (idx >= 0) list[idx] = item;
+  else list.unshift(item);
+  await writeList(VG_FINALIZAR_KEY, list);
+}
+export async function deletePendingViagemFinalizar(clientId: string): Promise<void> {
+  const list = await listPendingViagemFinalizar();
+  await writeList(VG_FINALIZAR_KEY, list.filter((x) => x.clientId !== clientId));
 }
 
 export async function listPendingFotos(): Promise<PendingFoto[]> {

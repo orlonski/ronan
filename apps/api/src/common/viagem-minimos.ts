@@ -8,9 +8,12 @@ import { Prisma } from "@prisma/client";
 
 type DecimalLike = Prisma.Decimal | string | number;
 
+// toneladas/km são nullable no banco por causa do lifecycle (viagem
+// EM_ANDAMENTO ainda não tem esses valores). Essas viagens são filtradas antes
+// de chegar aqui; coagimos null→0 por segurança de tipos.
 export type ViagemBruta = {
-  toneladas: DecimalLike;
-  km: DecimalLike;
+  toneladas: DecimalLike | null;
+  km: DecimalLike | null;
 };
 
 // Regra dinâmica de mínimo por empresa + material + faixa de km (tabela
@@ -39,7 +42,7 @@ export type MinimoOverride = {
 export function resolverRegraMinimo(
   regras: RegraMinimoRow[],
   empresaId: string,
-  materialId: string,
+  materialId: string | null,
   kmReal: DecimalLike,
 ): MinimoOverride | null {
   const km = dec(kmReal);
@@ -86,8 +89,8 @@ export function aplicarMinimos(
   // case, não há mínimo — vale o real.
   override?: MinimoOverride,
 ): CamposMinimos {
-  const tonReal = dec(viagem.toneladas);
-  const kmReal = dec(viagem.km);
+  const tonReal = dec(viagem.toneladas ?? 0);
+  const kmReal = dec(viagem.km ?? 0);
 
   const tonMin = override?.toneladasMinimo ?? null;
   const kmMin = override?.kmMinimo ?? null;
@@ -118,7 +121,7 @@ export function serializarViagemComMinimos<
   const empresaId = viagem.cliente?.empresaId;
   const materialId = viagem.material?.id;
   if (regras && regras.length > 0 && empresaId && materialId) {
-    override = resolverRegraMinimo(regras, empresaId, materialId, viagem.km) ?? undefined;
+    override = resolverRegraMinimo(regras, empresaId, materialId, viagem.km ?? 0) ?? undefined;
   }
   return { ...viagem, ...aplicarMinimos(viagem, override) };
 }

@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { MateriaisModule } from "./materiais/materiais.module";
 import { RegrasMinimoModule } from "./regras-minimo/regras-minimo.module";
+import { ViagemLifecycleAdminModule } from "./viagem-lifecycle/viagem-lifecycle.module";
 import { VeiculosModule } from "./veiculos/veiculos.module";
 import { EmpresasModule } from "./empresas/empresas.module";
 import { ClientesModule } from "./clientes/clientes.module";
@@ -27,6 +28,7 @@ import { PapeisModule } from "./papeis/papeis.module";
   imports: [
     MateriaisModule,
     RegrasMinimoModule,
+    ViagemLifecycleAdminModule,
     VeiculosModule,
     EmpresasModule,
     ClientesModule,

@@ -11,6 +11,7 @@ import { UploadsModule } from "../uploads/uploads.module";
 import { MotoristaController } from "./motorista.controller";
 import { MotoristaService } from "./motorista.service";
 import { ViagensMotoristaController } from "./viagens.controller";
+import { ViagemLifecycleController } from "./viagem-lifecycle.controller";
 import { ViagensMotoristaService } from "./viagens.service";
 import { PedagiosMotoristaController } from "./pedagios.controller";
 import { PedagiosMotoristaService } from "./pedagios.service";
@@ -42,6 +43,7 @@ import { IaTicketController } from "./ia-ticket.controller";
   controllers: [
     MotoristaController,
     ViagensMotoristaController,
+    ViagemLifecycleController,
     PedagiosMotoristaController,
     PedagiosRodoviaMotoristaController,
     AbastecimentosMotoristaController,

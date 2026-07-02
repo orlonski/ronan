@@ -5,7 +5,11 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { ExtrairTicketResult, StatusMotorista } from "@ronan/shared-types";
+import type {
+  ExtrairTicketResult,
+  StatusMotorista,
+  TipoEventoViagem as TipoEventoViagemApp,
+} from "@ronan/shared-types";
 import { cacheGet, cachePut } from "@/db/database";
 import { api, ApiError } from "./api";
 import { reportarEvento } from "./event-reporter";
@@ -78,6 +82,7 @@ export type Me = {
   ultimoLoginEm: string | null;
   podeLancarViagem: boolean;
   podeIniciarViagem: boolean;
+  podeViagemLifecycle: boolean;
   podeLancarPedagio: boolean;
   podeLancarAbastecimento: boolean;
   podeUsarOcrTicket: boolean;
@@ -212,6 +217,8 @@ function normalizarMe<T extends Record<string, unknown>>(m: T): T {
   const anyM = m as Record<string, unknown>;
   if (typeof anyM.podeLancarViagem !== "boolean") anyM.podeLancarViagem = true;
   if (typeof anyM.podeIniciarViagem !== "boolean") anyM.podeIniciarViagem = true;
+  // Lifecycle é opt-in: cache antigo sem a flag assume desligado.
+  if (typeof anyM.podeViagemLifecycle !== "boolean") anyM.podeViagemLifecycle = false;
   if (typeof anyM.podeLancarPedagio !== "boolean") anyM.podeLancarPedagio = true;
   if (typeof anyM.podeLancarAbastecimento !== "boolean") anyM.podeLancarAbastecimento = true;
   if (typeof anyM.podeUsarOcrTicket !== "boolean") anyM.podeUsarOcrTicket = true;
@@ -261,6 +268,15 @@ export function useCatalogos() {
     ...base,
     queryFn: async () => normalizarCatalogos(await base.queryFn()),
   });
+}
+
+/** Catálogo dinâmico de tipos de evento (lifecycle guiado). Cacheado offline. */
+export function useCatalogoEventos() {
+  return useQuery(
+    offlineCacheQuery<TipoEventoViagemApp[]>("tipos-evento", "/m/viagem/tipos-evento", {
+      staleTime: 5 * 60_000,
+    }),
+  );
 }
 
 export type ListaViagens = { itens: Viagem[]; nextCursor: string | null };

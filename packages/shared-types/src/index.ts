@@ -1,6 +1,7 @@
 export * from "./enums";
 export * from "./auth";
 export * from "./viagem";
+export * from "./viagem-lifecycle";
 export * from "./pedagio";
 export * from "./abastecimento";
 export * from "./cpf";

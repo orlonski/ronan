@@ -25,6 +25,7 @@ type ListMotoristasQuery = z.infer<typeof ListMotoristasQuery>;
 const AcessosInput = z.object({
   podeLancarViagem: z.boolean().optional(),
   podeIniciarViagem: z.boolean().optional(),
+  podeViagemLifecycle: z.boolean().optional(),
   podeLancarPedagio: z.boolean().optional(),
   podeLancarAbastecimento: z.boolean().optional(),
   podeUsarOcrTicket: z.boolean().optional(),

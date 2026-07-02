@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import { router } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
 import * as Updates from "expo-updates";
 import {
@@ -15,6 +15,7 @@ import {
   Plus,
   Receipt,
   RotateCw,
+  Route,
   Trash2,
   Truck,
   WifiOff,
@@ -50,6 +51,7 @@ import {
   type Viagem,
 } from "@/lib/queries";
 import { iniciarTracking, useViagemAndamento } from "@/lib/tracking";
+import { getLifecycleLocal } from "@/lib/lifecycle";
 import { startHomeTutorialIfNeeded } from "@/lib/home-tutorial";
 
 const statusVariant: Record<
@@ -82,6 +84,22 @@ export default function Home() {
   const updateReady = updates.isUpdatePending || updates.isUpdateAvailable;
   const tracking = useViagemAndamento(true);
   const trackingCfg = useTrackingConfig();
+
+  // Lifecycle guiado: existe viagem em andamento no espelho local? Reavalia
+  // sempre que a Home ganha foco (após iniciar/finalizar/descartar) pra o
+  // banner "Retomar" e o botão "Iniciar viagem" aparecerem/sumirem certo.
+  const [temLifecycle, setTemLifecycle] = useState<boolean | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      let alive = true;
+      void getLifecycleLocal().then((atual) => {
+        if (alive) setTemLifecycle(!!atual);
+      });
+      return () => {
+        alive = false;
+      };
+    }, []),
+  );
 
   // Tutorial de primeiro uso: dispara assim que o perfil carrega (precisamos
   // das permissões pra saber quais botões existem). Só uma vez por sessão;
@@ -248,6 +266,28 @@ export default function Home() {
               </Pressable>
             )}
 
+            {/* Banner: retomar viagem guiada (lifecycle) em andamento.
+                Aparece só quando há viagem no espelho local. Substitui o
+                botão "Iniciar viagem" enquanto uma está aberta. */}
+            {me.data?.podeViagemLifecycle && temLifecycle && (
+              <Pressable
+                onPress={() => router.push("/viagem-guiada")}
+                className="flex-row items-center gap-3 rounded-2xl border-2 border-primary bg-primary/15 p-4 active:opacity-75"
+              >
+                <View className="h-12 w-12 items-center justify-center rounded-full bg-primary">
+                  <Route size={22} color="white" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-base font-bold text-foreground">
+                    Retomar viagem em andamento
+                  </Text>
+                  <Text className="text-sm text-muted-foreground">
+                    Toque pra continuar de onde parou
+                  </Text>
+                </View>
+              </Pressable>
+            )}
+
             {/* Banner: convite pra ativar compartilhamento de posição.
                 Aparece enquanto config.ativada=false. Some assim que
                 motorista ativa em /perfil-posicao. */}
@@ -356,6 +396,30 @@ export default function Home() {
                 </View>
               </Pressable>
               </CoachTarget>
+            )}
+
+            {/* Botão Hero "Iniciar viagem" (lifecycle guiado). Escondido
+                enquanto há viagem em andamento (o banner "Retomar" cobre). */}
+            {me.data?.podeViagemLifecycle && temLifecycle === false && (
+              <Pressable
+                onPress={() => router.push("/iniciar-viagem")}
+                className="overflow-hidden rounded-2xl bg-primary active:opacity-85"
+              >
+                <View className="flex-row items-center gap-4 p-5">
+                  <View className="h-16 w-16 items-center justify-center rounded-2xl bg-white/20">
+                    <Route size={32} color="white" strokeWidth={2.5} />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-2xl font-extrabold text-primary-foreground">
+                      Iniciar viagem
+                    </Text>
+                    <Text className="mt-0.5 text-base font-medium text-primary-foreground/85">
+                      Passo a passo: carga, descarga e fim
+                    </Text>
+                  </View>
+                  <Play size={26} color="white" strokeWidth={2.5} fill="white" />
+                </View>
+              </Pressable>
             )}
 
             {/* Botão Iniciar viagem (tracking GPS) */}

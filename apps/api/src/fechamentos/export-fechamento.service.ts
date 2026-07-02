@@ -368,7 +368,13 @@ function comOverride(
   regras: Parameters<typeof resolverRegraMinimo>[0],
   viagem: ViagemFull,
 ): MinimoOverride | null {
-  return resolverRegraMinimo(regras, viagem.cliente.empresaId, viagem.material.id, viagem.km);
+  // Viagens exportadas são finalizadas; EM_ANDAMENTO (campos null) nunca entra.
+  return resolverRegraMinimo(
+    regras,
+    viagem.cliente?.empresaId ?? "",
+    viagem.material?.id ?? null,
+    viagem.km ?? 0,
+  );
 }
 
 async function montarXlsx(input: {
@@ -459,11 +465,12 @@ function valorParaColuna(
 ): string | number | Date | null {
   switch (coluna.campo) {
     case "data":
+      // Viagem exportada é finalizada; EM_ANDAMENTO (data null) nunca chega aqui.
       return config.formatoData === "YYYY-MM-DD"
-        ? fmtDataISO(viagem.data)
+        ? fmtDataISO(viagem.data!)
         : config.formatoData === "DD/MM/YY"
-        ? fmtDataBR(viagem.data, true)
-        : fmtDataBR(viagem.data);
+        ? fmtDataBR(viagem.data!, true)
+        : fmtDataBR(viagem.data!);
     case "placa":
       return viagem.veiculo.placa;
     case "modelo":
@@ -473,9 +480,9 @@ function valorParaColuna(
     case "ticket":
       return viagem.ticket;
     case "cliente":
-      return viagem.cliente.nome;
+      return viagem.cliente?.nome ?? "";
     case "material":
-      return viagem.material.nome;
+      return viagem.material?.nome ?? "";
     case "toneladas":
       return Number(aplicarMinimos(viagem, override ?? undefined).toneladasEfetiva);
     case "km":
@@ -485,9 +492,9 @@ function valorParaColuna(
     case "valor_total":
       return valorTotalLinha ?? 0;
     case "local_carga":
-      return `${viagem.localCarga.nome} (${viagem.localCarga.cidade}/${viagem.localCarga.uf})`;
+      return `${viagem.localCarga?.nome ?? ""} (${viagem.localCarga?.cidade ?? ""}/${viagem.localCarga?.uf ?? ""})`;
     case "local_descarga":
-      return `${viagem.localDescarga.nome} (${viagem.localDescarga.cidade}/${viagem.localDescarga.uf})`;
+      return `${viagem.localDescarga?.nome ?? ""} (${viagem.localDescarga?.cidade ?? ""}/${viagem.localDescarga?.uf ?? ""})`;
     default:
       return null;
   }

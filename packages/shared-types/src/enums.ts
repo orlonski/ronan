@@ -4,6 +4,9 @@ export const StatusViagem = {
   EM_CONFERENCIA: "EM_CONFERENCIA",
   DIVERGENTE: "DIVERGENTE",
   OK: "OK",
+  // Viagem aberta pelo lifecycle guiado ("Iniciar viagem"), ainda em curso.
+  // Nunca entra em match/fechamento/KPIs; vira ENVIADA ao finalizar.
+  EM_ANDAMENTO: "EM_ANDAMENTO",
 } as const;
 export type StatusViagem = (typeof StatusViagem)[keyof typeof StatusViagem];
 

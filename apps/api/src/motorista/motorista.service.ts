@@ -124,6 +124,7 @@ export class MotoristaService {
         ultimoLoginEm: true,
         podeLancarViagem: true,
         podeIniciarViagem: true,
+        podeViagemLifecycle: true,
         podeLancarPedagio: true,
         podeLancarAbastecimento: true,
       },

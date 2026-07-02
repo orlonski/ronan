@@ -17,10 +17,12 @@ import {
   Fuel,
   HardHat,
   LayoutDashboard,
+  ListChecks,
   LogOut,
   MapPin,
   MessageCircle,
   Package,
+  Radio,
   Ruler,
   Send,
   Settings,
@@ -56,6 +58,7 @@ const GRUPOS: Grupo[] = [
     titulo: "Operação",
     itens: [
       { href: "/viagens", label: "Viagens", icon: ClipboardCheck, perm: "viagens.ver" },
+      { href: "/viagens-andamento", label: "Viagens em andamento", icon: Radio, perm: "viagens.ver" },
       { href: "/descargas-suspeitas", label: "Descargas suspeitas", icon: MapPin, perm: "descargas-suspeitas.ver" },
       { href: "/abastecimentos", label: "Abastecimentos", icon: Fuel, perm: "abastecimentos.ver" },
       { href: "/fechamentos", label: "Fechamentos", icon: FileSpreadsheet, perm: "fechamentos.ver" },
@@ -74,6 +77,7 @@ const GRUPOS: Grupo[] = [
       { href: "/pedagios-rodovia", label: "Pedágios (rodovias)", icon: MapPin, perm: "pedagios.ver" },
       { href: "/materiais", label: "Materiais", icon: Package, perm: "materiais.ver" },
       { href: "/regras-minimo", label: "Mínimos por faixa", icon: Ruler, perm: "regras-minimo.ver" },
+      { href: "/tipos-evento-viagem", label: "Eventos da viagem", icon: ListChecks, perm: "tipos-evento-viagem.ver" },
     ],
   },
   {

@@ -140,7 +140,8 @@ export class DashboardService {
       // Conferência — universo conferível exclui rascunhos offline
       this.prisma.viagem.count({ where: { revisadoEm: { not: null } } }),
       this.prisma.viagem.count({
-        where: { revisadoEm: null, status: { not: "RASCUNHO_OFFLINE" } },
+        // EM_ANDAMENTO tem revisadoEm null mas ainda não é conferível.
+        where: { revisadoEm: null, status: { notIn: ["RASCUNHO_OFFLINE", "EM_ANDAMENTO"] } },
       }),
       this.prisma.viagem.count({ where: { revisadoEm: { gte: inicio14dInst } } }),
       // Lead time médio (segundos) das viagens conferidas nos últimos 14 dias:
@@ -154,8 +155,13 @@ export class DashboardService {
 
     // Resolve nomes dos rankings em um round adicional (ids únicos, ~15 registros)
     const motoristaIds = rankingMotoristasRaw.map((r) => r.motoristaId);
-    const clienteIds = rankingClientesRaw.map((r) => r.clienteId);
-    const materialIds = rankingMateriaisRaw.map((r) => r.materialId);
+    // EM_ANDAMENTO tem clienteId/materialId null e já foi filtrada por status/data.
+    const clienteIds = rankingClientesRaw
+      .map((r) => r.clienteId)
+      .filter((id): id is string => id !== null);
+    const materialIds = rankingMateriaisRaw
+      .map((r) => r.materialId)
+      .filter((id): id is string => id !== null);
 
     const [motoristasNomes, clientesNomes, materiaisNomes] = await Promise.all([
       motoristaIds.length
@@ -231,12 +237,12 @@ export class DashboardService {
         })),
         clientes: rankingClientesRaw.map((r) => ({
           id: r.clienteId,
-          nome: nomeCliente.get(r.clienteId) ?? "—",
+          nome: nomeCliente.get(r.clienteId ?? "") ?? "—",
           viagens: r._count._all,
         })),
         materiais: rankingMateriaisRaw.map((r) => ({
           id: r.materialId,
-          nome: nomeMaterial.get(r.materialId) ?? "—",
+          nome: nomeMaterial.get(r.materialId ?? "") ?? "—",
           toneladas: (r._sum.toneladas ?? 0).toString(),
         })),
       },
@@ -256,12 +262,14 @@ export class DashboardService {
  * construído com Date.UTC, então a chave YYYY-MM-DD bate.
  */
 function preencherDias(
-  linhas: Array<{ data: Date; _count: { _all: number } }>,
+  linhas: Array<{ data: Date | null; _count: { _all: number } }>,
   inicio: Date,
   n: number,
 ): Array<{ dia: string; total: number }> {
   const mapa = new Map<string, number>();
   for (const r of linhas) {
+    // EM_ANDAMENTO tem data null e já foi filtrada pelo where da query.
+    if (!r.data) continue;
     const k = r.data.toISOString().slice(0, 10);
     mapa.set(k, (mapa.get(k) ?? 0) + r._count._all);
   }

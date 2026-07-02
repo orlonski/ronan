@@ -35,6 +35,7 @@ export type Motorista = {
   documentos: DocumentoResumo[];
   podeLancarViagem: boolean;
   podeIniciarViagem: boolean;
+  podeViagemLifecycle: boolean;
   podeLancarPedagio: boolean;
   podeLancarAbastecimento: boolean;
   podeUsarOcrTicket: boolean;
@@ -79,6 +80,7 @@ type Props = { initial?: Motorista };
 type AcessosState = {
   podeLancarViagem: boolean;
   podeIniciarViagem: boolean;
+  podeViagemLifecycle: boolean;
   podeLancarPedagio: boolean;
   podeLancarAbastecimento: boolean;
   podeUsarOcrTicket: boolean;
@@ -92,6 +94,7 @@ export function MotoristaForm({ initial }: Props) {
   const [acessos, setAcessos] = useState<AcessosState>({
     podeLancarViagem: initial?.podeLancarViagem ?? true,
     podeIniciarViagem: initial?.podeIniciarViagem ?? true,
+    podeViagemLifecycle: initial?.podeViagemLifecycle ?? false,
     podeLancarPedagio: initial?.podeLancarPedagio ?? true,
     podeLancarAbastecimento: initial?.podeLancarAbastecimento ?? true,
     podeUsarOcrTicket: initial?.podeUsarOcrTicket ?? true,
@@ -364,6 +367,11 @@ export function MotoristaForm({ initial }: Props) {
                 label="Iniciar viagem com GPS"
                 active={acessos.podeIniciarViagem}
                 onChange={(v) => alterarAcesso("podeIniciarViagem", v)}
+              />
+              <AcessoRow
+                label="Viagem guiada (início → eventos → fim)"
+                active={acessos.podeViagemLifecycle}
+                onChange={(v) => alterarAcesso("podeViagemLifecycle", v)}
               />
               <AcessoRow
                 label="Lançar pedágio"

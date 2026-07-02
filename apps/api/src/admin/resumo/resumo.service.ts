@@ -245,12 +245,23 @@ export class ResumoService {
         select: { id: true, nome: true },
       }),
       this.prisma.cliente.findMany({
-        where: { id: { in: rankCliRaw.map((r) => r.clienteId) } },
+        // EM_ANDAMENTO tem clienteId/materialId null e já foi filtrada por data.
+        where: {
+          id: {
+            in: rankCliRaw
+              .map((r) => r.clienteId)
+              .filter((id): id is string => id !== null),
+          },
+        },
         select: { id: true, nome: true },
       }),
       this.prisma.material.findMany({
         where: {
-          id: { in: [...rankMatRaw, ...matHojeRaw].map((r) => r.materialId) },
+          id: {
+            in: [...rankMatRaw, ...matHojeRaw]
+              .map((r) => r.materialId)
+              .filter((id): id is string => id !== null),
+          },
         },
         select: { id: true, nome: true },
       }),
@@ -326,7 +337,7 @@ export class ResumoService {
     const litDe = (a: { _sum: { litros: unknown } }) => Number(a._sum.litros ?? 0);
     const pedDe = (a: { _sum: { valor: unknown } }) => Number(a._sum.valor ?? 0);
 
-    const nomeDe = (arr: { id: string; nome: string }[], id: string) =>
+    const nomeDe = (arr: { id: string; nome: string }[], id: string | null | undefined) =>
       arr.find((x) => x.id === id)?.nome ?? "?";
 
     // Bloco de períodos, um por linha (Hoje/Semana/Mês [+ Total]).
@@ -344,7 +355,7 @@ export class ResumoService {
     const ranking = (
       titulo: string,
       raw: { _count: { _all: number }; _sum: { toneladas: unknown } }[],
-      ids: string[],
+      ids: (string | null)[],
       arr: { id: string; nome: string }[],
     ) => {
       if (raw.length === 0) return `${titulo}\n_sem viagens no mês_`;
@@ -364,7 +375,7 @@ export class ResumoService {
       rotuloSing: string,
       rotuloPlur: string,
       raw: { _count: { _all: number }; _sum: { toneladas: unknown } }[],
-      ids: string[],
+      ids: (string | null)[],
       arr: { id: string; nome: string }[],
       vazio: string,
     ) => {

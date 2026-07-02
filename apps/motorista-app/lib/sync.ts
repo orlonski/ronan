@@ -4,25 +4,37 @@ import { drenar as drenarEventos, reportarEvento } from "./event-reporter";
 import { drenarPosicoes } from "./posicao-sync";
 import {
   deletePendingAbastecimento,
+  deletePendingEventoViagem,
   deletePendingFoto,
   deletePendingLocal,
   deletePendingPedagio,
   deletePendingViagem,
+  deletePendingViagemFinalizar,
+  deletePendingViagemIniciar,
   listPendingAbastecimentos,
+  listPendingEventosViagem,
   listPendingFotos,
   listPendingLocais,
   listPendingPedagios,
+  listPendingViagemFinalizar,
+  listPendingViagemIniciar,
   listPendingViagens,
   upsertPendingAbastecimento,
+  upsertPendingEventoViagem,
   upsertPendingFoto,
   upsertPendingLocal,
   upsertPendingPedagio,
   upsertPendingViagem,
+  upsertPendingViagemFinalizar,
+  upsertPendingViagemIniciar,
   type PendingAbastecimento,
+  type PendingEventoViagem,
   type PendingFoto,
   type PendingLocal,
   type PendingPedagio,
   type PendingViagem,
+  type PendingViagemFinalizar,
+  type PendingViagemIniciar,
   type ZodIssueSaved,
 } from "@/db/database";
 import { api, ApiError, humanizeApiError } from "./api";
@@ -68,6 +80,17 @@ function isErroPermanente(err: unknown): boolean {
   if (err.status >= 500) return false;
   if (err.status === 408 || err.status === 429) return false;
   return err.status >= 400 && err.status < 500;
+}
+
+/**
+ * Como isErroPermanente, mas 404 é TRANSIENTE no lifecycle: um evento ou
+ * finalizar pode chegar antes da viagem-mãe sincronizar (ordem de rede). O
+ * gate no drain já evita isso na maioria dos casos, mas o 404 é a rede de
+ * segurança — retry, não erro permanente.
+ */
+function isErroPermanenteLifecycle(err: unknown): boolean {
+  if (err instanceof ApiError && err.status === 404) return false;
+  return isErroPermanente(err);
 }
 
 let draining = false;
@@ -329,26 +352,90 @@ export async function descartarAbastecimentoPendente(clientId: string): Promise<
   notify();
 }
 
+// ---- Lifecycle guiado: iniciar / eventos / finalizar ----
+
+export async function enqueueViagemIniciar(
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const clientId = payload.clientId as string;
+  await upsertPendingViagemIniciar({
+    clientId,
+    payload,
+    status: "pending",
+    attempts: 0,
+    createdAt: Date.now(),
+  });
+  notify();
+  void drain();
+}
+
+export async function enqueueEventoViagem(
+  viagemClientId: string,
+  payload: Record<string, unknown>,
+  foto?: { uri: string; mime: string },
+): Promise<void> {
+  const clientId = payload.id as string; // id do evento = idempotência
+  await upsertPendingEventoViagem({
+    clientId,
+    viagemClientId,
+    payload,
+    fotoUri: foto?.uri,
+    fotoMime: foto?.mime,
+    status: "pending",
+    attempts: 0,
+    createdAt: Date.now(),
+  });
+  notify();
+  void drain();
+}
+
+export async function enqueueViagemFinalizar(
+  viagemClientId: string,
+  payload: Record<string, unknown>,
+  foto?: { uri: string; mime: string },
+): Promise<void> {
+  await upsertPendingViagemFinalizar({
+    clientId: viagemClientId,
+    payload,
+    fotoUri: foto?.uri,
+    fotoMime: foto?.mime,
+    status: "pending",
+    attempts: 0,
+    createdAt: Date.now(),
+  });
+  notify();
+  void drain();
+}
+
 export async function pendingCounts(): Promise<{
   viagens: number;
   pedagios: number;
   abastecimentos: number;
+  /** Itens do lifecycle guiado aguardando sync (iniciar+eventos+finalizar). */
+  lifecycle: number;
   /** Itens com erro permanente (4xx) que precisam de ação do motorista. */
   comErro: number;
 }> {
-  const [v, p, a] = await Promise.all([
+  const [v, p, a, li, ev, fi] = await Promise.all([
     listPendingViagens(),
     listPendingPedagios(),
     listPendingAbastecimentos(),
+    listPendingViagemIniciar(),
+    listPendingEventosViagem(),
+    listPendingViagemFinalizar(),
   ]);
   const comErro =
     v.filter((i) => i.attempts >= MAX_ATTEMPTS).length +
     p.filter((i) => i.attempts >= MAX_ATTEMPTS).length +
-    a.filter((i) => i.attempts >= MAX_ATTEMPTS).length;
+    a.filter((i) => i.attempts >= MAX_ATTEMPTS).length +
+    li.filter((i) => i.attempts >= MAX_ATTEMPTS).length +
+    ev.filter((i) => i.attempts >= MAX_ATTEMPTS).length +
+    fi.filter((i) => i.attempts >= MAX_ATTEMPTS).length;
   return {
     viagens: v.length,
     pedagios: p.length,
     abastecimentos: a.length,
+    lifecycle: li.length + ev.length + fi.length,
     comErro,
   };
 }
@@ -366,6 +453,11 @@ export async function drain(): Promise<void> {
     // Locais ANTES de viagens: viagens podem ter localDescargaId apontando
     // pra um local pendente. Se a viagem chegar primeiro, FK violation.
     await drainLocais();
+    // Lifecycle guiado, em ordem: iniciar (cria a viagem) → eventos → finalizar.
+    // Gates internos garantem que evento/finalizar só vão depois da viagem-mãe.
+    await drainViagemIniciar();
+    await drainEventosViagem();
+    await drainViagemFinalizar();
     await drainViagens();
     // Fotos DEPOIS de viagens: foto pode estar referenciando viagem que
     // acabou de ser sincronizada (raro mas possível).
@@ -406,6 +498,21 @@ async function rescueStaleItems(): Promise<void> {
   for (const f of await listPendingFotos()) {
     if (f.status === "syncing" && isStale(f.lastTriedAt)) {
       await upsertPendingFoto({ ...f, status: "pending" });
+    }
+  }
+  for (const i of await listPendingViagemIniciar()) {
+    if (i.status === "syncing" && isStale(i.lastTriedAt)) {
+      await upsertPendingViagemIniciar({ ...i, status: "pending" });
+    }
+  }
+  for (const e of await listPendingEventosViagem()) {
+    if (e.status === "syncing" && isStale(e.lastTriedAt)) {
+      await upsertPendingEventoViagem({ ...e, status: "pending" });
+    }
+  }
+  for (const f of await listPendingViagemFinalizar()) {
+    if (f.status === "syncing" && isStale(f.lastTriedAt)) {
+      await upsertPendingViagemFinalizar({ ...f, status: "pending" });
     }
   }
 }
@@ -475,6 +582,163 @@ async function processLocal(item: PendingLocal): Promise<void> {
     const permanente = isErroPermanente(err);
     const { msg, status, issues } = extractErrorDetails(err);
     await upsertPendingLocal({
+      ...item,
+      status: "error",
+      errorMsg: msg,
+      errorStatus: status,
+      errorIssues: issues,
+      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
+    });
+  }
+  notify();
+}
+
+// ---- Lifecycle drains (ordem: iniciar → eventos → finalizar) ----
+
+async function drainViagemIniciar(): Promise<void> {
+  const list = await listPendingViagemIniciar();
+  for (const item of list) {
+    if (item.status === "syncing") continue;
+    if (item.attempts >= MAX_ATTEMPTS) continue;
+    const net = await NetInfo.fetch();
+    if (!net.isConnected) return;
+    await processViagemIniciar(item);
+  }
+}
+
+async function processViagemIniciar(item: PendingViagemIniciar): Promise<void> {
+  await upsertPendingViagemIniciar({ ...item, status: "syncing", lastTriedAt: Date.now() });
+  notify();
+  try {
+    // Idempotente por clientId — reenvio retorna a viagem existente.
+    await api.post("/m/viagem/iniciar", item.payload);
+    await deletePendingViagemIniciar(item.clientId);
+  } catch (err) {
+    const permanente = isErroPermanente(err);
+    const { msg, status, issues } = extractErrorDetails(err);
+    await upsertPendingViagemIniciar({
+      ...item,
+      status: "error",
+      errorMsg: msg,
+      errorStatus: status,
+      errorIssues: issues,
+      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
+    });
+  }
+  notify();
+}
+
+async function drainEventosViagem(): Promise<void> {
+  const list = await listPendingEventosViagem();
+  // Gate: só envia evento cuja viagem-mãe já saiu da fila de iniciar.
+  const iniciarPendentes = new Set(
+    (await listPendingViagemIniciar()).map((i) => i.clientId),
+  );
+  for (const item of list) {
+    if (item.status === "syncing") continue;
+    if (item.attempts >= MAX_ATTEMPTS) continue;
+    if (iniciarPendentes.has(item.viagemClientId)) continue; // aguarda viagem-mãe
+    const net = await NetInfo.fetch();
+    if (!net.isConnected) return;
+    await processEventoViagem(item);
+  }
+}
+
+async function processEventoViagem(item: PendingEventoViagem): Promise<void> {
+  await upsertPendingEventoViagem({ ...item, status: "syncing", lastTriedAt: Date.now() });
+  notify();
+  try {
+    let payload = { ...item.payload };
+    if (item.fotoUri && !payload.fotoKey) {
+      const fd = new FormData();
+      const filename = `evento-${item.clientId}.${
+        item.fotoMime?.includes("png") ? "png" : "jpg"
+      }`;
+      fd.append("foto", {
+        uri: item.fotoUri,
+        type: item.fotoMime ?? "image/jpeg",
+        name: filename,
+      } as unknown as Blob);
+      const up = await api.postForm<{ storageKey: string }>("/m/uploads/ticket", fd);
+      payload = { ...payload, fotoKey: up.storageKey };
+      await upsertPendingEventoViagem({
+        ...item,
+        payload,
+        fotoUri: undefined,
+        fotoMime: undefined,
+        status: "syncing",
+      });
+    }
+    await api.post(`/m/viagem/${item.viagemClientId}/eventos`, payload);
+    await deletePendingEventoViagem(item.clientId);
+  } catch (err) {
+    // 404 = viagem-mãe ainda não sincronizou (ordem) → transiente, retry.
+    const permanente = isErroPermanenteLifecycle(err);
+    const { msg, status, issues } = extractErrorDetails(err);
+    await upsertPendingEventoViagem({
+      ...item,
+      status: "error",
+      errorMsg: msg,
+      errorStatus: status,
+      errorIssues: issues,
+      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
+    });
+  }
+  notify();
+}
+
+async function drainViagemFinalizar(): Promise<void> {
+  const list = await listPendingViagemFinalizar();
+  // Gate: só finaliza depois que a viagem-mãe E todos os eventos dela saíram.
+  const iniciarPendentes = new Set(
+    (await listPendingViagemIniciar()).map((i) => i.clientId),
+  );
+  const eventosPorViagem = new Map<string, number>();
+  for (const e of await listPendingEventosViagem()) {
+    eventosPorViagem.set(e.viagemClientId, (eventosPorViagem.get(e.viagemClientId) ?? 0) + 1);
+  }
+  for (const item of list) {
+    if (item.status === "syncing") continue;
+    if (item.attempts >= MAX_ATTEMPTS) continue;
+    if (iniciarPendentes.has(item.clientId)) continue; // aguarda iniciar
+    if ((eventosPorViagem.get(item.clientId) ?? 0) > 0) continue; // aguarda eventos
+    const net = await NetInfo.fetch();
+    if (!net.isConnected) return;
+    await processViagemFinalizar(item);
+  }
+}
+
+async function processViagemFinalizar(item: PendingViagemFinalizar): Promise<void> {
+  await upsertPendingViagemFinalizar({ ...item, status: "syncing", lastTriedAt: Date.now() });
+  notify();
+  try {
+    let payload = { ...item.payload };
+    if (item.fotoUri && !payload.fotoKey) {
+      const fd = new FormData();
+      const filename = `ticket-${item.clientId}.${
+        item.fotoMime?.includes("png") ? "png" : "jpg"
+      }`;
+      fd.append("foto", {
+        uri: item.fotoUri,
+        type: item.fotoMime ?? "image/jpeg",
+        name: filename,
+      } as unknown as Blob);
+      const up = await api.postForm<{ storageKey: string }>("/m/uploads/ticket", fd);
+      payload = { ...payload, fotoKey: up.storageKey };
+      await upsertPendingViagemFinalizar({
+        ...item,
+        payload,
+        fotoUri: undefined,
+        fotoMime: undefined,
+        status: "syncing",
+      });
+    }
+    await api.post(`/m/viagem/${item.clientId}/finalizar`, payload);
+    await deletePendingViagemFinalizar(item.clientId);
+  } catch (err) {
+    const permanente = isErroPermanenteLifecycle(err);
+    const { msg, status, issues } = extractErrorDetails(err);
+    await upsertPendingViagemFinalizar({
       ...item,
       status: "error",
       errorMsg: msg,

@@ -156,6 +156,10 @@ export class FechamentoProcessorService {
       // (declarado fora do if pra reusar nas órfãs IA)
       const viagensPeriodo = await this.prisma.viagem.findMany({
         where: {
+          // Viagem EM_ANDAMENTO (lifecycle aberto) nunca entra em match: ainda
+          // não tem cliente/material/ticket. Já excluída por cliente/data nulos,
+          // mas explícito aqui porque é o ponto mais sensível.
+          status: { not: "EM_ANDAMENTO" },
           cliente: { empresaId: fechamento.empresa.id },
           data: {
             gte: new Date(fechamento.periodoInicio.getTime() - 7 * 24 * 3600 * 1000),
@@ -730,7 +734,9 @@ export class FechamentoProcessorService {
   private async executarIaEmOrfas(
     fechamentoId: string,
     usuarioId: string,
-    viagensPeriodo: { id: string; data: Date; ticket: string | null; km: Prisma.Decimal; toneladas: Prisma.Decimal; veiculo: { placa: string } }[],
+    // km/toneladas/data podem ser null no tipo (EM_ANDAMENTO), mas o caller já
+    // filtra status: { not: "EM_ANDAMENTO" }, então aqui são sempre presentes.
+    viagensPeriodo: { id: string; data: Date | null; ticket: string | null; km: Prisma.Decimal | null; toneladas: Prisma.Decimal | null; veiculo: { placa: string } }[],
     stats: { matchIa: number; divergencia: number },
   ) {
     // Lê config dinâmica (atualizável via /configuracoes/ia no dashboard).
@@ -759,13 +765,14 @@ export class FechamentoProcessorService {
       // candidatas: mesma placa, datas em ±N dias (config), ainda não matchadas
       const candidatas = viagensPeriodo
         .filter((v) => {
+          if (!v.data) return false;
           if (v.veiculo.placa.toUpperCase() !== linha.placa) return false;
           const diff = Math.abs(v.data.getTime() - linha.data!.getTime()) / (24 * 3600 * 1000);
           return diff <= janelaDias;
         })
         .map((v) => ({
           viagemId: v.id,
-          data: v.data.toISOString().slice(0, 10),
+          data: v.data!.toISOString().slice(0, 10),
           placa: v.veiculo.placa,
           ticket: v.ticket,
           km: Number(v.km),
@@ -882,13 +889,15 @@ function matchKey(
  */
 function compararCampos(
   linha: LinhaExtraida,
-  viagem: { km: Prisma.Decimal; toneladas: Prisma.Decimal },
+  // km/toneladas podem ser null no tipo (EM_ANDAMENTO), mas viagensPeriodo já
+  // exclui esse status; Number(null) daria 0, então tratamos ?? 0 explícito.
+  viagem: { km: Prisma.Decimal | null; toneladas: Prisma.Decimal | null },
   tolKmPct: number,
   tolTonPct: number,
 ): Record<string, { motorista: unknown; empresa: unknown }> | null {
   const divergencias: Record<string, { motorista: unknown; empresa: unknown }> = {};
-  const km = Number(viagem.km);
-  const ton = Number(viagem.toneladas);
+  const km = Number(viagem.km ?? 0);
+  const ton = Number(viagem.toneladas ?? 0);
   // Mantém mínimo absoluto pra não pegar arredondamento (0.5 km, 0.05 ton)
   const tolKm = Math.max(0.5, km * (tolKmPct / 100));
   const tolTon = Math.max(0.05, ton * (tolTonPct / 100));

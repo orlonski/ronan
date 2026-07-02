@@ -7,6 +7,7 @@ export const ACESSO_KEY = "acessoMotorista";
 export type AcessoFlag =
   | "podeLancarViagem"
   | "podeIniciarViagem"
+  | "podeViagemLifecycle"
   | "podeLancarPedagio"
   | "podeLancarAbastecimento"
   | "podeUsarOcrTicket";

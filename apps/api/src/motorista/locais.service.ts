@@ -281,10 +281,10 @@ export class LocaisMotoristaService {
     });
     const contador = new Map<string, number>();
     for (const v of usos) {
-      if (ids.includes(v.localCargaId)) {
+      if (v.localCargaId && ids.includes(v.localCargaId)) {
         contador.set(v.localCargaId, (contador.get(v.localCargaId) ?? 0) + 1);
       }
-      if (ids.includes(v.localDescargaId)) {
+      if (v.localDescargaId && ids.includes(v.localDescargaId)) {
         contador.set(v.localDescargaId, (contador.get(v.localDescargaId) ?? 0) + 1);
       }
     }
