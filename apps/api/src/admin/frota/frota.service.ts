@@ -11,9 +11,13 @@ export class FrotaAdminService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Retorna a posição mais recente de cada motorista que tem alguma captura
-   * dentro da janela informada. Otimizado via DISTINCT ON pra evitar
-   * subquery N+1. Postgres-specific (já é nosso DB).
+   * Retorna a posição mais recente de cada motorista que tem contato recente:
+   * capturado OU recebido dentro da janela informada. O OR com `recebidoEm`
+   * cobre dois casos reais: (1) atraso de sync — o batch chega minutos depois
+   * da captura; (2) celular com relógio/fuso torto — o `capturadoEm` sai
+   * defasado, mas `recebidoEm` (hora do servidor) é a verdade de "ouvimos
+   * dele agora". Sem isso, motorista ativo some dos filtros curtos.
+   * Otimizado via DISTINCT ON pra evitar subquery N+1. Postgres-specific.
    */
   async mapaFrota(janelaMinutos: number): Promise<MapaFrotaItem[]> {
     const limite = new Date(Date.now() - janelaMinutos * 60_000);
@@ -42,7 +46,7 @@ export class FrotaAdminService {
       FROM motorista_posicoes mp
       JOIN motoristas m ON m.id = mp."motoristaId"
       LEFT JOIN veiculos v ON v.id = m."veiculoDefaultId"
-      WHERE mp."capturadoEm" >= ${limite}
+      WHERE mp."capturadoEm" >= ${limite} OR mp."recebidoEm" >= ${limite}
       ORDER BY mp."motoristaId", mp."capturadoEm" DESC
     `;
 

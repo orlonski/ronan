@@ -151,12 +151,26 @@ export async function getConfigLocal(): Promise<PosicaoConfigLocal | null> {
 }
 
 /**
- * Janela horária em hora LOCAL. Suporta passar madrugada (ex: 22h → 6h):
+ * Hora atual em Brasília (0-23). Ancorada em UTC-3 fixo — o Brasil acabou
+ * com o horário de verão em 2019, então o offset é estável o ano todo.
+ *
+ * NÃO usar `new Date().getHours()`: isso lê a hora no fuso do APARELHO, e
+ * já pegamos motorista com o celular num fuso errado (relógio absoluto certo,
+ * mas timezone torto) — a janela abria/fechava com 3h de defasagem. Como a
+ * spec define a janela em "hora local do Brasil", ancoramos em Brasília via
+ * `getUTCHours()` (independente do fuso do device) menos 3.
+ */
+function horaBrasilia(): number {
+  return (new Date().getUTCHours() - 3 + 24) % 24;
+}
+
+/**
+ * Janela horária em hora de Brasília. Suporta passar madrugada (ex: 22h → 6h):
  * se fim < início, considera "fim+24h" no cálculo.
  */
 export function dentroDaJanela(cfg: PosicaoConfigLocal): boolean {
   if (cfg.horarioInicio == null || cfg.horarioFim == null) return true; // 24/7
-  const h = new Date().getHours();
+  const h = horaBrasilia();
   const inicio = cfg.horarioInicio;
   const fim = cfg.horarioFim;
   if (inicio === fim) return true;
