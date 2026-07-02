@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ActivityIndicator,
@@ -67,6 +67,7 @@ export function DescargaPorGps({
   onCaptura,
   nomeSelecionadoFallback,
   localCargaCoords,
+  autoIniciar,
 }: {
   clienteId: string | null;
   value: string;
@@ -79,17 +80,31 @@ export function DescargaPorGps({
    * pra alertar quando o motorista está perto do carregamento ao tentar
    * lançar a descarga. */
   localCargaCoords?: { lat: number; lng: number; nome: string } | null;
+  /** Quando true, dispara a captura do GPS já no mount (sem esperar o botão).
+   * Usado quando o "Finalizar viagem" abre este componente num modal. */
+  autoIniciar?: boolean;
 }) {
   const [estado, setEstado] = useState<Estado>(() =>
     value && nomeSelecionadoFallback
       ? { tipo: "selecionado", local: { id: value, nome: nomeSelecionadoFallback } }
-      : { tipo: "vazio" },
+      : autoIniciar
+        ? { tipo: "capturando", precisao: null }
+        : { tipo: "vazio" },
   );
   const [erro, setErro] = useState<string | null>(null);
   const [nomeNovo, setNomeNovo] = useState("");
   const criar = useCriarLocalRapido();
   const gpsConfig = useBuscaGpsConfig();
   const qc = useQueryClient();
+  const autoDisparado = useRef(false);
+
+  // Auto-dispara a captura no mount quando pedido (modal aberto pelo Finalizar).
+  useEffect(() => {
+    if (autoIniciar && !value && !autoDisparado.current) {
+      autoDisparado.current = true;
+      void capturarEBuscar();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function capturarEBuscar() {
     setErro(null);

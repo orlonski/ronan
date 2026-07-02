@@ -58,6 +58,17 @@ export default function FinalizarViagem() {
       }
       setCiclo(atual);
       setClienteId(atual.clienteId); // cliente já escolhido no iniciar
+      // Descarga já marcada ao apertar "Finalizar viagem" na tela guiada.
+      if (atual.descarga) {
+        setLocalDescargaId(atual.descarga.localId);
+        setDescargaCaptura({
+          lat: atual.descarga.lat,
+          lng: atual.descarga.lng,
+          precisao: atual.descarga.precisao ?? null,
+          distanciaMetros: atual.descarga.distanciaMetros ?? null,
+          buscaOffline: atual.descarga.buscaOffline ?? false,
+        });
+      }
       setCarregando(false);
     });
     return () => {
@@ -88,8 +99,13 @@ export default function FinalizarViagem() {
 
   const nomeDescargaSelecionado = useMemo(() => {
     if (!localDescargaId) return undefined;
-    return cat.data?.locais.find((l) => l.id === localDescargaId)?.nome;
-  }, [localDescargaId, cat.data?.locais]);
+    // Catálogo primeiro; fallback pro nome guardado no espelho (local novo
+    // offline pode não estar no catálogo ainda).
+    return (
+      cat.data?.locais.find((l) => l.id === localDescargaId)?.nome ??
+      ciclo?.descarga?.nome
+    );
+  }, [localDescargaId, cat.data?.locais, ciclo?.descarga?.nome]);
 
   const localCargaCoords = useMemo(() => {
     if (!localCargaId) return null;

@@ -30,6 +30,17 @@ export type EventoLocal = {
   localNome?: string;
 };
 
+/** Descarga marcada (por GPS) ao apertar "Finalizar viagem" na tela guiada. */
+export type DescargaGuiada = {
+  localId: string;
+  nome?: string;
+  lat: number;
+  lng: number;
+  precisao?: number | null;
+  distanciaMetros?: number | null;
+  buscaOffline?: boolean;
+};
+
 /** Viagem em andamento no espelho local. */
 export type LifecycleLocal = {
   clientId: string;
@@ -39,6 +50,7 @@ export type LifecycleLocal = {
   iniciadoEm: string; // ISO
   localCargaId?: string;
   localCargaNome?: string;
+  descarga?: DescargaGuiada;
   eventos: EventoLocal[];
 };
 
@@ -76,6 +88,16 @@ async function setLifecycleLocal(v: LifecycleLocal): Promise<void> {
 
 export async function clearLifecycleLocal(): Promise<void> {
   await AsyncStorage.removeItem(KEY);
+}
+
+/**
+ * Marca a descarga (capturada por GPS ao apertar "Finalizar viagem" na tela
+ * guiada) no espelho local, pra a tela de finalizar já vir preenchida.
+ */
+export async function marcarDescargaGuiada(descarga: DescargaGuiada): Promise<void> {
+  const atual = await getLifecycleLocal();
+  if (!atual) return;
+  await setLifecycleLocal({ ...atual, descarga });
 }
 
 /**
