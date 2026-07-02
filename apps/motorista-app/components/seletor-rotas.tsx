@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
 import * as Haptics from "expo-haptics";
 import { Check } from "lucide-react-native";
@@ -6,16 +6,19 @@ import polyline from "@mapbox/polyline";
 import type { RotaOption } from "@/lib/queries";
 
 /**
- * Seletor de rotas alternativas no mapa. Desenha as 2-3 rotas do OSRM em cores
- * distintas e deixa o motorista TOCAR na estrada que ele pegou — ou num botão
- * grande embaixo (caminho primário pra dedão). Reusa o padrão de dynamic import
- * de react-native-maps de `map-trajeto.tsx` (top-level import quebra o boot do
- * expo-router).
+ * Seletor de rotas alternativas. Desenha as 2-3 rotas do OSRM em cores
+ * distintas (combinando com os botões) e a escolha é feita nos botões grandes
+ * embaixo do mapa — feito pra dedão de motorista.
+ *
+ * IMPORTANTE (crash iOS): o mapa fica num componente memoizado (`RotasMapa`)
+ * que só depende de `rotas` (estável). Assim ele renderiza UMA vez e não
+ * re-renderiza quando o motorista seleciona/edita — o react-native-maps no
+ * Apple Maps crasha nativo quando os overlays (Polyline) são re-mutados a cada
+ * seleção. As linhas têm cor fixa por rota; nada muda no mapa ao escolher.
  */
 
 // Paleta fixa por índice — casa a linha do mapa com o botão embaixo.
 const CORES = ["#ea580c", "#2563eb", "#16a34a"];
-const CINZA = "#94a3b8";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MapMod = any;
@@ -33,12 +36,18 @@ function corDaRota(idx: number): string {
   return CORES[idx % CORES.length]!;
 }
 
-export function SeletorRotas({
+/**
+ * Mapa isolado e memoizado. Só recebe `rotas` (referência estável do
+ * react-query) + `height`, então NÃO re-renderiza quando o pai muda estado de
+ * seleção/km. Overlays estáticos = sem mutação nativa = sem crash no iOS.
+ */
+const RotasMapa = memo(function RotasMapa({
   rotas,
-  selecionadaIdx,
-  onSelecionar,
-  height = 260,
-}: Props) {
+  height,
+}: {
+  rotas: RotaOption[];
+  height: number;
+}) {
   const [mod, setMod] = useState<MapMod | null>(null);
 
   useEffect(() => {
@@ -51,7 +60,6 @@ export function SeletorRotas({
     };
   }, []);
 
-  // Decodifica a polyline de cada rota (formato Google, precision 5) → coords.
   const rotasCoords = useMemo<LatLng[][]>(
     () =>
       rotas.map((r) => {
@@ -85,29 +93,58 @@ export function SeletorRotas({
     };
   }, [todasCoords]);
 
+  // Início/fim compartilhados entre rotas — usa a primeira rota com traçado.
+  const principal = rotasCoords.find((c) => c.length >= 2);
+  const inicio = principal?.[0];
+  const fim = principal?.[principal.length - 1];
+
+  if (!mod || !region) {
+    return <View className="rounded-xl bg-muted/40" style={{ height }} />;
+  }
+
+  const MapView = mod.default;
+  const Marker = mod.Marker;
+  const Polyline = mod.Polyline;
+  const provider = Platform.OS === "android" ? mod.PROVIDER_GOOGLE : undefined;
+
+  const mapProps: Record<string, unknown> = {
+    style: { flex: 1 },
+    initialRegion: region,
+  };
+  if (provider) mapProps.provider = provider;
+
+  return (
+    <View className="overflow-hidden rounded-xl bg-muted/40" style={{ height }}>
+      <MapView {...mapProps}>
+        {rotasCoords.map((coords, idx) =>
+          coords.length < 2 ? null : (
+            <Polyline
+              key={idx}
+              coordinates={coords}
+              strokeColor={corDaRota(idx)}
+              strokeWidth={5}
+            />
+          ),
+        )}
+        {inicio && <Marker coordinate={inicio} pinColor="green" title="Carga" />}
+        {fim && <Marker coordinate={fim} pinColor="red" title="Descarga" />}
+      </MapView>
+    </View>
+  );
+});
+
+export function SeletorRotas({
+  rotas,
+  selecionadaIdx,
+  onSelecionar,
+  height = 260,
+}: Props) {
+  const temEscolha = rotas.length > 1;
+
   function selecionar(idx: number) {
     void Haptics.selectionAsync();
     onSelecionar(idx);
   }
-
-  // Pontos de início/fim (compartilhados entre rotas) — usa a rota selecionada.
-  const coordsSel = rotasCoords[selecionadaIdx] ?? [];
-  const inicio = coordsSel[0];
-  const fim = coordsSel[coordsSel.length - 1];
-
-  const MapView = mod?.default;
-  const Marker = mod?.Marker;
-  const Polyline = mod?.Polyline;
-  const provider =
-    Platform.OS === "android" ? mod?.PROVIDER_GOOGLE : undefined;
-
-  const mapProps: Record<string, unknown> = {
-    style: { flex: 1 },
-  };
-  if (region) mapProps.initialRegion = region;
-  if (provider) mapProps.provider = provider;
-
-  const temEscolha = rotas.length > 1;
 
   return (
     <View className="gap-3">
@@ -115,46 +152,7 @@ export function SeletorRotas({
         {temEscolha ? "Qual estrada você pegou?" : "Trajeto calculado"}
       </Text>
 
-      <View
-        className="overflow-hidden rounded-xl bg-muted/40"
-        style={{ height }}
-      >
-        {MapView && region ? (
-          <MapView {...mapProps}>
-            {/* Desenha as não-selecionadas primeiro (ficam por baixo).
-                Sem `tappable`/`onPress`/`zIndex`: no Apple Maps (iOS) essas
-                props em Polyline crasham nativo. A escolha é pelos botões. */}
-            {rotasCoords.map((coords, idx) =>
-              idx === selecionadaIdx || coords.length < 2 ? null : (
-                <Polyline
-                  key={`bg-${idx}`}
-                  coordinates={coords}
-                  strokeColor={CINZA}
-                  strokeWidth={4}
-                />
-              ),
-            )}
-            {/* A selecionada por cima, grossa e colorida. */}
-            {coordsSel.length >= 2 && (
-              <Polyline
-                coordinates={coordsSel}
-                strokeColor={corDaRota(selecionadaIdx)}
-                strokeWidth={7}
-              />
-            )}
-            {inicio && (
-              <Marker
-                coordinate={inicio}
-                pinColor="green"
-                title="Carga"
-              />
-            )}
-            {fim && (
-              <Marker coordinate={fim} pinColor="red" title="Descarga" />
-            )}
-          </MapView>
-        ) : null}
-      </View>
+      <RotasMapa rotas={rotas} height={height} />
 
       {/* Botões grandes — um por rota, cor-combinando com a linha. */}
       <View className="gap-2">
