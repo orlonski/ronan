@@ -34,6 +34,8 @@ export type EventoLocal = {
 export type LifecycleLocal = {
   clientId: string;
   veiculoId: string;
+  clienteId: string;
+  clienteNome?: string;
   iniciadoEm: string; // ISO
   localCargaId?: string;
   localCargaNome?: string;
@@ -95,6 +97,8 @@ type ServerAndamento = {
   viagem: {
     clientId: string;
     veiculoId: string;
+    clienteId: string | null;
+    cliente: { id: string; nome: string } | null;
     iniciadoEm: string | null;
     localCarga: { id: string; nome: string } | null;
     eventosViagem: { id: string; tipoSlug: string; ocorridoEm: string }[];
@@ -118,6 +122,8 @@ export async function hidratarViagemDoServidor(): Promise<LifecycleLocal | null>
     const novo: LifecycleLocal = {
       clientId: v.clientId,
       veiculoId: v.veiculoId,
+      clienteId: v.clienteId ?? "",
+      clienteNome: v.cliente?.nome,
       iniciadoEm: v.iniciadoEm ?? nowIso(),
       localCargaId: v.localCarga?.id,
       localCargaNome: v.localCarga?.nome,
@@ -188,6 +194,8 @@ export function prontoParaFinalizar(
 /** Abre a viagem: cria localmente, enfileira o POST /iniciar. Retorna clientId. */
 export async function iniciarViagemGuiada(input: {
   veiculoId: string;
+  clienteId: string;
+  clienteNome?: string;
   coords?: { lat: number; lng: number; precisao?: number };
   localCarga?: { id: string; nome: string; lat?: number; lng?: number; criarOffline?: boolean };
 }): Promise<string> {
@@ -213,6 +221,7 @@ export async function iniciarViagemGuiada(input: {
   await enqueueViagemIniciar({
     clientId,
     veiculoId: input.veiculoId,
+    clienteId: input.clienteId,
     iniciadoEm,
     lat: input.coords?.lat,
     lng: input.coords?.lng,
@@ -224,6 +233,8 @@ export async function iniciarViagemGuiada(input: {
   await setLifecycleLocal({
     clientId,
     veiculoId: input.veiculoId,
+    clienteId: input.clienteId,
+    clienteNome: input.clienteNome,
     iniciadoEm,
     localCargaId: lc?.id,
     localCargaNome: lc?.nome,

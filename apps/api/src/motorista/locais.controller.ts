@@ -42,6 +42,7 @@ const ProximosQuery = z.object({
   tipoUso: z.enum(["carga", "descarga", "ambos"]).optional(),
   raioM: z.coerce.number().int().min(50).max(2000).optional(),
   limit: z.coerce.number().int().min(1).max(20).optional(),
+  clienteId: z.string().uuid().optional(),
 });
 
 const ProximosDescargaQuery = z.object({
@@ -106,6 +107,7 @@ export class LocaisMotoristaController {
       tipoUso: query.tipoUso,
       raioM: query.raioM,
       limit: query.limit,
+      clienteId: query.clienteId,
     });
   }
 

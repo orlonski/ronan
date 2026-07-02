@@ -218,6 +218,9 @@ export class LocaisMotoristaService {
     tipoUso?: "carga" | "descarga" | "ambos";
     raioM?: number;
     limit?: number;
+    /** Quando informado, só locais vinculados a esse cliente OU genéricos (sem
+     * cliente amarrado). Usado no lifecycle guiado (carga é sempre do cliente). */
+    clienteId?: string;
   }) {
     const raio = input.raioM ?? RAIO_SUGESTAO_M;
     const limit = input.limit ?? 5;
@@ -240,6 +243,15 @@ export class LocaisMotoristaService {
         tipo: { in: tiposPermitidos },
         lat: { gte: input.lat - grausLat, lte: input.lat + grausLat },
         lng: { gte: input.lng - grausLng, lte: input.lng + grausLng },
+        // Filtro por cliente: vinculados a ele OU genéricos (sem cliente).
+        ...(input.clienteId
+          ? {
+              OR: [
+                { clientes: { some: { clienteId: input.clienteId } } },
+                { clientes: { none: {} } },
+              ],
+            }
+          : {}),
       },
       select: {
         id: true,

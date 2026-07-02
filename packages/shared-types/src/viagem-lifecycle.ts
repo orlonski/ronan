@@ -71,6 +71,8 @@ export type AtualizarTipoEventoViagemInput = z.infer<typeof AtualizarTipoEventoV
 export const IniciarViagemInput = z.object({
   clientId: z.string().uuid(),
   veiculoId: z.string().uuid(),
+  // Cliente é escolhido no início (filtra os locais de carga possíveis).
+  clienteId: z.string().uuid(),
   iniciadoEm: z.coerce.date(),
   lat: z.number().min(-90).max(90).optional(),
   lng: z.number().min(-180).max(180).optional(),
@@ -107,7 +109,9 @@ export type RegistrarEventoInput = z.infer<typeof RegistrarEventoInput>;
 // ticket é opcional aqui; a obrigatoriedade depende de Material.exigeTicket e
 // é imposta no backend, igual ao fluxo de CriarViagemInput.
 export const FinalizarViagemInput = z.object({
-  clienteId: z.string().uuid(),
+  // Opcional: o cliente já foi escolhido no iniciar (backend reusa o da viagem
+  // se não vier). Mantido no schema pra compat/edição.
+  clienteId: z.string().uuid().optional(),
   materialId: z.string().uuid(),
   data: z.coerce.date(),
   toneladas: z.number().positive().max(MAX_TONELADAS),

@@ -1166,6 +1166,8 @@ export async function buscarLocaisProximos(input: {
   tipoUso?: "carga" | "descarga" | "ambos";
   raioM?: number;
   limit?: number;
+  /** Filtra por cliente (vinculados a ele + genéricos). Usado na carga guiada. */
+  clienteId?: string;
 }): Promise<LocalProximo[]> {
   const qs = new URLSearchParams({
     lat: String(input.lat),
@@ -1174,6 +1176,7 @@ export async function buscarLocaisProximos(input: {
   if (input.tipoUso) qs.set("tipoUso", input.tipoUso);
   if (input.raioM != null) qs.set("raioM", String(input.raioM));
   if (input.limit != null) qs.set("limit", String(input.limit));
+  if (input.clienteId) qs.set("clienteId", input.clienteId);
   const list = await api.get<LocalProximo[]>(`/m/locais/proximos?${qs.toString()}`);
   return list.map(normalizarLocal);
 }
@@ -1302,6 +1305,8 @@ export function buscarLocaisProximosOffline(input: {
   tipoUso?: "carga" | "descarga" | "ambos";
   raioM?: number;
   limit?: number;
+  /** Filtra por cliente (vinculados + genéricos), igual ao backend. */
+  clienteId?: string;
 }): LocalProximo[] {
   const raio = input.raioM ?? 500;
   const limit = input.limit ?? 5;
@@ -1316,6 +1321,14 @@ export function buscarLocaisProximosOffline(input: {
   for (const l of input.locais) {
     if (l.lat == null || l.lng == null) continue;
     if (!tiposPermitidos.includes(l.tipo)) continue;
+    // Cliente: vinculados a ele OU genéricos (sem cliente amarrado).
+    if (
+      input.clienteId &&
+      l.clienteIds.length > 0 &&
+      !l.clienteIds.includes(input.clienteId)
+    ) {
+      continue;
+    }
     const d = haversineMetros(input.lat, input.lng, l.lat, l.lng);
     if (d > raio) continue;
     matches.push({

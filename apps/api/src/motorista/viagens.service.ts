@@ -792,6 +792,14 @@ export class ViagensMotoristaService {
       });
     }
 
+    // Cliente é escolhido no início (filtra os locais de carga). Valida que
+    // existe antes de abrir a viagem.
+    const cliente = await this.prisma.cliente.findUnique({
+      where: { id: input.clienteId },
+      select: { id: true },
+    });
+    if (!cliente) throw new NotFoundException("Cliente não encontrado");
+
     // Local de carga é opcional no iniciar (pode ser detectado por GPS já, ou
     // só no evento de carga). Auto-recovery se o id sumiu do servidor.
     if (input.localCargaId) {
@@ -808,6 +816,7 @@ export class ViagensMotoristaService {
         clientId: input.clientId,
         motoristaId,
         veiculoId: input.veiculoId,
+        clienteId: input.clienteId,
         status: "EM_ANDAMENTO",
         iniciadoEm: input.iniciadoEm,
         lat: input.lat,
@@ -920,7 +929,7 @@ export class ViagensMotoristaService {
   async finalizar(motoristaId: string, clientId: string, input: FinalizarViagemInput) {
     const viagem = await this.prisma.viagem.findUnique({
       where: { clientId },
-      select: { id: true, motoristaId: true, status: true },
+      select: { id: true, motoristaId: true, status: true, clienteId: true },
     });
     if (!viagem) throw new NotFoundException("Viagem em andamento ainda não sincronizada.");
     if (viagem.motoristaId !== motoristaId) {
@@ -935,8 +944,12 @@ export class ViagensMotoristaService {
       return serializarViagemComMinimos(existente!, await this.regrasMinimoAtivas());
     }
 
+    // Cliente já foi escolhido no iniciar — reusa o da viagem se o app não
+    // reenviar. Compat: aceita clienteId no input (edição futura).
+    const clienteIdEfetivo = input.clienteId ?? viagem.clienteId;
+    if (!clienteIdEfetivo) throw new BadRequestException("Cliente não informado.");
     const cliente = await this.prisma.cliente.findUnique({
-      where: { id: input.clienteId },
+      where: { id: clienteIdEfetivo },
       select: { empresaId: true },
     });
     if (!cliente) throw new NotFoundException("Cliente não encontrado");
@@ -970,7 +983,7 @@ export class ViagensMotoristaService {
       where: { id: viagem.id },
       data: {
         status: "ENVIADA",
-        clienteId: input.clienteId,
+        clienteId: clienteIdEfetivo,
         materialId: input.materialId,
         data: input.data,
         toneladas: input.toneladas,

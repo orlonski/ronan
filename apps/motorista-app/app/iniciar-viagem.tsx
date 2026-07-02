@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { router, Stack } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { ArrowRight, Play } from "lucide-react-native";
@@ -29,7 +30,9 @@ import { useCatalogos, useMe } from "@/lib/queries";
 export default function IniciarViagem() {
   const me = useMe();
   const cat = useCatalogos();
+  const qc = useQueryClient();
   const [veiculoId, setVeiculoId] = useState("");
+  const [clienteId, setClienteId] = useState("");
   const [localCarga, setLocalCarga] = useState<SelecaoLocal | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -38,6 +41,8 @@ export default function IniciarViagem() {
 
   useEffect(() => {
     let alive = true;
+    // Catálogo fresco (clientes/locais atuais — evita cliente/local excluído).
+    void qc.invalidateQueries({ queryKey: ["catalogos"] });
     // Reconcilia com o servidor: se já existe viagem em andamento (local ou
     // órfã no servidor), retoma em vez de deixar abrir outra (evita o 409).
     void hidratarViagemDoServidor().then((atual) => {
@@ -51,7 +56,7 @@ export default function IniciarViagem() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pré-seleciona a placa default do motorista.
   useEffect(() => {
@@ -66,6 +71,16 @@ export default function IniciarViagem() {
     []
   ).map((v) => ({ value: v.id, label: v.placa, sublabel: v.modelo ?? undefined }));
 
+  const clienteOptions: SelectOption[] = (cat.data?.clientes ?? []).map((c) => ({
+    value: c.id,
+    label: c.nome,
+    sublabel: c.empresa?.nome ?? undefined,
+  }));
+  const clienteNome = useMemo(
+    () => cat.data?.clientes.find((c) => c.id === clienteId)?.nome,
+    [cat.data?.clientes, clienteId],
+  );
+
   async function confirmar() {
     setErro(null);
     if (!veiculoId) {
@@ -73,22 +88,32 @@ export default function IniciarViagem() {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
+    if (!clienteId) {
+      setErro("Escolha o cliente.");
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+    if (!localCarga) {
+      setErro("Marque o local de carga (pela sua posição) pra começar.");
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
     setSubmitting(true);
     try {
       await iniciarViagemGuiada({
         veiculoId,
+        clienteId,
+        clienteNome,
         coords: localCarga?.lat != null && localCarga?.lng != null
           ? { lat: localCarga.lat, lng: localCarga.lng, precisao: localCarga.precisao ?? undefined }
           : undefined,
-        localCarga: localCarga
-          ? {
-              id: localCarga.id,
-              nome: localCarga.nome,
-              lat: localCarga.lat,
-              lng: localCarga.lng,
-              criarOffline: localCarga.criarOffline,
-            }
-          : undefined,
+        localCarga: {
+          id: localCarga.id,
+          nome: localCarga.nome,
+          lat: localCarga.lat,
+          lng: localCarga.lng,
+          criarOffline: localCarga.criarOffline,
+        },
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace("/viagem-guiada");
@@ -132,20 +157,41 @@ export default function IniciarViagem() {
             />
           </View>
 
-          {/* Local de carga — detecta por GPS entre os locais cadastrados. */}
           <View className="gap-2">
-            <LocalPorGps
-              lado="carga"
-              ctaLabel="Estou no local de carga"
-              value={localCarga}
-              onSelect={setLocalCarga}
-              onLimpar={() => setLocalCarga(null)}
+            <Label>Cliente</Label>
+            <Select
+              value={clienteId}
+              onChange={(v) => {
+                setClienteId(v);
+                setLocalCarga(null); // troca de cliente reseta o local de carga
+              }}
+              options={clienteOptions}
+              placeholder="Escolha o cliente"
+              searchable
             />
-            <Text className="text-xs text-muted-foreground">
-              Toque quando estiver no pátio de carga — o app acha o local pela
-              sua posição. Marca aqui a hora que você carregou.
-            </Text>
           </View>
+
+          {/* Local de carga — só depois do cliente (busca só locais dele/perto). */}
+          {clienteId ? (
+            <View className="gap-2">
+              <LocalPorGps
+                lado="carga"
+                ctaLabel="Estou no local de carga"
+                clienteId={clienteId}
+                value={localCarga}
+                onSelect={setLocalCarga}
+                onLimpar={() => setLocalCarga(null)}
+              />
+              <Text className="text-xs text-muted-foreground">
+                Toque quando estiver no pátio de carga — o app acha o local desse
+                cliente pela sua posição. Marca aqui a hora que você carregou.
+              </Text>
+            </View>
+          ) : (
+            <Text className="text-sm text-muted-foreground">
+              Escolha o cliente pra marcar o local de carga.
+            </Text>
+          )}
 
           {erro && <Text className="text-sm text-destructive">{erro}</Text>}
 

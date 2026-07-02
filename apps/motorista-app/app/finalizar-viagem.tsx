@@ -57,22 +57,13 @@ export default function FinalizarViagem() {
         return;
       }
       setCiclo(atual);
+      setClienteId(atual.clienteId); // cliente já escolhido no iniciar
       setCarregando(false);
     });
     return () => {
       alive = false;
     };
   }, []);
-
-  const clienteOptions: SelectOption[] = useMemo(
-    () =>
-      (cat.data?.clientes ?? []).map((c) => ({
-        value: c.id,
-        label: c.nome,
-        sublabel: c.empresa.nome,
-      })),
-    [cat.data?.clientes],
-  );
 
   const materialOptions: SelectOption[] = useMemo(
     () => (cat.data?.materiais ?? []).map((m) => ({ value: m.id, label: m.nome })),
@@ -213,16 +204,14 @@ export default function FinalizarViagem() {
               localCargaCoords={localCargaCoords}
             />
 
-            {/* 2) Pra quem / o quê */}
-            <View className="gap-2">
+            {/* 2) Cliente (já escolhido no início) + material */}
+            <View className="gap-1.5">
               <Label>Cliente</Label>
-              <Select
-                value={clienteId}
-                onChange={setClienteId}
-                options={clienteOptions}
-                placeholder="Escolha o cliente"
-                searchable
-              />
+              <View className="rounded-xl border border-border bg-muted/40 px-3 py-3">
+                <Text className="text-base font-semibold text-foreground">
+                  {ciclo?.clienteNome ?? "—"}
+                </Text>
+              </View>
             </View>
 
             <View className="gap-2">
