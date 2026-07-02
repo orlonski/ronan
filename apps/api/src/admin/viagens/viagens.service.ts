@@ -783,6 +783,66 @@ export class ViagensAdminService {
     };
   }
 
+  /** Lista as rotas alternativas (OSRM) do par carga→descarga da viagem. */
+  async rotasAlternativas(id: string) {
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { id },
+      select: { localCargaId: true, localDescargaId: true },
+    });
+    if (!viagem) throw new NotFoundException("Viagem não encontrada");
+    if (!viagem.localCargaId || !viagem.localDescargaId) {
+      throw new BadRequestException("Viagem sem locais definidos.");
+    }
+    return this.roteamento.calcularAlternativas(
+      viagem.localCargaId,
+      viagem.localDescargaId,
+    );
+  }
+
+  /**
+   * Aplica manualmente uma rota escolhida no painel: define o km faturado, a
+   * geometria da rota (desenhada no painel) e o kmCalculado de referência.
+   */
+  async escolherRota(
+    id: string,
+    input: { km: number; rotaGeometria: string; kmCalculado?: number },
+    usuarioId: string,
+  ) {
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { id },
+      select: { id: true, km: true, kmCalculado: true },
+    });
+    if (!viagem) throw new NotFoundException("Viagem não encontrada");
+
+    await this.prisma.viagem.update({
+      where: { id: viagem.id },
+      data: {
+        km: input.km,
+        rotaGeometria: input.rotaGeometria,
+        ...(input.kmCalculado != null ? { kmCalculado: input.kmCalculado } : {}),
+      },
+    });
+
+    await this.auditoria.log({
+      usuarioId,
+      entidade: "Viagem",
+      entidadeId: viagem.id,
+      acao: AcaoAuditoria.RECALCULAR_TRAJETO,
+      campo: "km",
+      valorAntes: viagem.km?.toString() ?? null,
+      valorDepois: String(input.km),
+      motivo: "Rota escolhida manualmente no painel.",
+      metadata: {
+        rotaGeometriaDefinida: true,
+        kmAntes: viagem.km?.toString() ?? null,
+        kmDepois: String(input.km),
+        kmCalculado: input.kmCalculado != null ? String(input.kmCalculado) : null,
+      },
+    });
+
+    return this.detalhe(id);
+  }
+
   async historico(viagemId: string) {
     const viagem = await this.prisma.viagem.findUnique({ where: { id: viagemId } });
     if (!viagem) throw new NotFoundException("Viagem não encontrada");

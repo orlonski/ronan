@@ -112,9 +112,18 @@ export default function FinalizarViagem() {
   // KM auto via OSRM entre local de carga (se cadastrado) e descarga.
   const localCargaId = ciclo?.localCargaId ?? "";
   const rota = useCalcularRota(localCargaId, localDescargaId);
-  // Rotas alternativas pro seletor de mapa (online-only; [] offline).
+  // Rotas alternativas pro seletor de mapa (online-only; [] offline). Mostra o
+  // mapa sempre que houver ao menos 1 rota (informativo); vira seletor com 2+.
   const alternativas = useRotasAlternativas(localCargaId, localDescargaId);
-  const temSeletor = (alternativas.data?.length ?? 0) > 1;
+  const temMapa = (alternativas.data?.length ?? 0) >= 1;
+  // km da rota recomendada (routes[0]) — snapshot pra kmCalculado.
+  const kmRecomendado = useMemo(() => {
+    const rec = alternativas.data?.find((r) => r.recomendada);
+    if (rec) return parseFloat(rec.km);
+    return rota.data && "km" in rota.data && rota.data.km !== null
+      ? parseFloat(String(rota.data.km))
+      : undefined;
+  }, [alternativas.data, rota.data]);
 
   // Escolher uma rota no seletor: seta km + guarda a geometria (rota real no
   // painel) + o km da recomendada como kmCalculado. NÃO marca edição manual.
@@ -127,19 +136,19 @@ export default function FinalizarViagem() {
   }
 
   // Enquanto o seletor governa o km (rota escolhida), o auto-fill fica parado.
-  const kmGovernadoPorRota = temSeletor && rotaGeometriaEscolhida != null;
+  const kmGovernadoPorRota = temMapa && rotaGeometriaEscolhida != null;
   useEffect(() => {
     if (kmEditadoManual || kmGovernadoPorRota) return;
     if (!rota.data || rota.data.km === null) return;
     setKm((cur) => (cur === rota.data!.km ? cur : (rota.data as { km: string }).km));
   }, [rota.data, kmEditadoManual, kmGovernadoPorRota]);
 
-  // Ao carregar as alternativas (>1), pré-seleciona a recomendada — a menos que
-  // o motorista já tenha escolhido/editado (draft restaurado inclusive).
+  // Ao carregar as alternativas (1+), pré-seleciona a recomendada (guarda a
+  // geometria pro painel) — a menos que o motorista já tenha escolhido/editado.
   useEffect(() => {
     if (kmEditadoManual || rotaGeometriaEscolhida != null) return;
     const alts = alternativas.data;
-    if (!alts || alts.length <= 1) return;
+    if (!alts || alts.length < 1) return;
     const recIdx = Math.max(0, alts.findIndex((r) => r.recomendada));
     escolherRota(recIdx);
   }, [alternativas.data, kmEditadoManual, rotaGeometriaEscolhida]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -242,10 +251,7 @@ export default function FinalizarViagem() {
         data: hojeISO(),
         toneladas: parseFloat(toneladas.replace(",", ".")),
         km: parseFloat(km.replace(",", ".")),
-        kmCalculado:
-          rota.data && "km" in rota.data && rota.data.km !== null
-            ? parseFloat(String(rota.data.km))
-            : undefined,
+        kmCalculado: kmRecomendado,
         rotaGeometria: rotaGeometriaEscolhida ?? undefined,
         ticket: exigeTicket ? ticket.trim() : undefined,
         localDescargaId,
@@ -360,8 +366,8 @@ export default function FinalizarViagem() {
               ) : null}
             </View>
 
-            {/* Seletor de rota (só quando o OSRM oferece alternativas reais) */}
-            {temSeletor ? (
+            {/* Mapa da rota — informativo com 1 rota, seletor com 2+ */}
+            {temMapa ? (
               <SeletorRotas
                 rotas={alternativas.data!}
                 selecionadaIdx={rotaIdx}

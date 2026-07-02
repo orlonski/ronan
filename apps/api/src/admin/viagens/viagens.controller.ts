@@ -54,6 +54,13 @@ const CadastrarLocalDescargaInput = z.object({
   nome: z.string().min(2).max(120),
 });
 
+const EscolherRotaInput = z.object({
+  km: z.number().nonnegative().max(99999),
+  rotaGeometria: z.string().max(20000),
+  kmCalculado: z.number().nonnegative().max(99999).optional(),
+});
+type EscolherRotaInput = z.infer<typeof EscolherRotaInput>;
+
 const ListViagensQuery = paginationQuerySchema.extend({
   motoristaId: z.string().uuid().optional(),
   veiculoId: z.string().uuid().optional(),
@@ -134,6 +141,22 @@ export class ViagensAdminController {
     @CurrentUser() user: AuthAdminUser,
   ) {
     return this.service.recalcularTrajeto(id, user.id);
+  }
+
+  @RequerPermissao("viagens.editar")
+  @Get(":id/rotas-alternativas")
+  rotasAlternativas(@Param("id") id: string) {
+    return this.service.rotasAlternativas(id);
+  }
+
+  @RequerPermissao("viagens.editar")
+  @Post(":id/escolher-rota")
+  escolherRota(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(EscolherRotaInput)) body: EscolherRotaInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.escolherRota(id, body, user.id);
   }
 
   @RequerPermissao("viagens.validar")

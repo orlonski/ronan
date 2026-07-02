@@ -107,10 +107,12 @@ export function SeletorRotas({
   if (region) mapProps.initialRegion = region;
   if (provider) mapProps.provider = provider;
 
+  const temEscolha = rotas.length > 1;
+
   return (
     <View className="gap-3">
       <Text className="text-base font-semibold text-foreground">
-        Qual estrada você pegou?
+        {temEscolha ? "Qual estrada você pegou?" : "Trajeto calculado"}
       </Text>
 
       <View
@@ -185,7 +187,11 @@ export function SeletorRotas({
                     {min} min
                   </Text>
                 </Text>
-                {r.recomendada ? (
+                {!temEscolha ? (
+                  <Text className="text-xs font-medium text-muted-foreground">
+                    Calculado pelo sistema
+                  </Text>
+                ) : r.recomendada ? (
                   <Text className="text-xs font-medium text-muted-foreground">
                     Sugerida pelo sistema
                   </Text>

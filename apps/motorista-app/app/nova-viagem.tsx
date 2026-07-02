@@ -193,7 +193,16 @@ export default function NovaViagem() {
     modoEdit ? undefined : form.localCargaId,
     modoEdit ? undefined : form.localDescargaId,
   );
-  const temSeletor = !modoEdit && (alternativas.data?.length ?? 0) > 1;
+  // Mostra o mapa sempre que houver 1+ rota (informativo); seletor com 2+.
+  const temMapa = !modoEdit && (alternativas.data?.length ?? 0) >= 1;
+  // km da recomendada (routes[0]) — snapshot pra kmCalculado.
+  const kmRecomendado = useMemo(() => {
+    const rec = alternativas.data?.find((r) => r.recomendada);
+    if (rec) return parseFloat(rec.km);
+    return rota.data && "km" in rota.data && rota.data.km !== null
+      ? parseFloat(String(rota.data.km))
+      : undefined;
+  }, [alternativas.data, rota.data]);
 
   // Escolher rota: seta km + guarda a geometria escolhida. NÃO marca edição
   // manual (escolher rota ≠ digitar km na mão).
@@ -206,7 +215,7 @@ export default function NovaViagem() {
   }
 
   // Enquanto o seletor governa o km, o auto-fill fica parado.
-  const kmGovernadoPorRota = temSeletor && rotaGeometriaEscolhida != null;
+  const kmGovernadoPorRota = temMapa && rotaGeometriaEscolhida != null;
 
   // Auto-preenche KM com valor calculado pelo OSRM, se motorista nao editou
   useEffect(() => {
@@ -216,11 +225,11 @@ export default function NovaViagem() {
     setForm((f) => (f.km === novoKm ? f : { ...f, km: novoKm }));
   }, [rota.data, kmEditadoManual, kmGovernadoPorRota]);
 
-  // Pré-seleciona a recomendada quando chegam as alternativas (>1).
+  // Pré-seleciona a recomendada quando chegam as alternativas (1+).
   useEffect(() => {
     if (kmEditadoManual || rotaGeometriaEscolhida != null) return;
     const alts = alternativas.data;
-    if (!alts || alts.length <= 1) return;
+    if (!alts || alts.length < 1) return;
     const recIdx = Math.max(0, alts.findIndex((r) => r.recomendada));
     escolherRota(recIdx);
   }, [alternativas.data, kmEditadoManual, rotaGeometriaEscolhida]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -537,10 +546,7 @@ export default function NovaViagem() {
         km: parseFloat(form.km.replace(",", ".")),
         // Snapshot do km OSRM no momento do lançamento — captura mesmo que
         // motorista tenha sobrescrito. Null quando OSRM não respondeu.
-        kmCalculado:
-          rota.data && "km" in rota.data && rota.data.km !== null
-            ? parseFloat(String(rota.data.km))
-            : undefined,
+        kmCalculado: kmRecomendado,
         // Rota escolhida no seletor de mapa (rota real no painel).
         rotaGeometria: rotaGeometriaEscolhida ?? undefined,
         localCargaId: form.localCargaId,
@@ -917,7 +923,7 @@ export default function NovaViagem() {
               )}
             </View>
 
-            {temSeletor ? (
+            {temMapa ? (
               <SeletorRotas
                 rotas={alternativas.data!}
                 selecionadaIdx={rotaIdx}

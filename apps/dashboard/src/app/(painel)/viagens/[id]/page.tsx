@@ -216,6 +216,50 @@ export default function ViagemDetalhePage({
       });
     },
   });
+  // Seletor de rota alternativa (corrigir a estrada de uma viagem).
+  const [escolhendoRota, setEscolhendoRota] = useState(false);
+  const [rotaPreviewIdx, setRotaPreviewIdx] = useState<number | null>(null);
+  const rotasAlt = useQuery({
+    queryKey: ["viagem-rotas-alt", id, token],
+    enabled: !!token && escolhendoRota,
+    staleTime: 60_000,
+    queryFn: () =>
+      fetchApi<{
+        rotas: {
+          km: string;
+          duracaoSegundos: number;
+          geometria: string | null;
+          recomendada: boolean;
+        }[];
+        erro?: string;
+      }>(`/admin/viagens/${id}/rotas-alternativas`, { token }),
+  });
+  const escolherRota = useMutation({
+    mutationFn: (rota: { km: string; geometria: string | null }) => {
+      const rec = rotasAlt.data?.rotas.find((r) => r.recomendada);
+      return fetchApi<unknown>(`/admin/viagens/${id}/escolher-rota`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          km: Number(rota.km),
+          rotaGeometria: rota.geometria,
+          kmCalculado: rec ? Number(rec.km) : undefined,
+        }),
+      });
+    },
+    onSuccess: () => {
+      toast.success("Rota da viagem atualizada.");
+      setEscolhendoRota(false);
+      setRotaPreviewIdx(null);
+      void queryClient.invalidateQueries({ queryKey: ["viagem-admin", id] });
+      void queryClient.invalidateQueries({ queryKey: ["viagem-historico", id] });
+    },
+    onError: (err) => {
+      toast.error("Não foi possível aplicar a rota", {
+        description: (err as Error).message,
+      });
+    },
+  });
   const preValidar = useMutation({
     mutationFn: (body: {
       status: "OK" | "DIVERGENTE" | "DESFAZER";
@@ -660,20 +704,107 @@ export default function ViagemDetalhePage({
                   <MapPin className="h-4 w-4" /> Trajeto da viagem
                 </h3>
                 <Permitido chave="viagens.editar">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => recalcular.mutate()}
-                    disabled={recalcular.isPending}
-                    title="Reprocessa o trajeto via OSRM (atualiza polilinha e km de cache)"
-                  >
-                    <RefreshCw
-                      className={`h-4 w-4 ${recalcular.isPending ? "animate-spin" : ""}`}
-                    />
-                    {recalcular.isPending ? "Recalculando…" : "Recalcular trajeto"}
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => recalcular.mutate()}
+                      disabled={recalcular.isPending}
+                      title="Reprocessa o trajeto via OSRM (atualiza polilinha e km de cache)"
+                    >
+                      <RefreshCw
+                        className={`h-4 w-4 ${recalcular.isPending ? "animate-spin" : ""}`}
+                      />
+                      {recalcular.isPending ? "Recalculando…" : "Recalcular trajeto"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setEscolhendoRota((s) => !s);
+                        setRotaPreviewIdx(null);
+                      }}
+                      title="Escolher entre as rotas alternativas do OSRM"
+                    >
+                      <MapPin className="h-4 w-4" />
+                      {escolhendoRota ? "Fechar" : "Escolher rota"}
+                    </Button>
+                  </div>
                 </Permitido>
               </div>
+              {escolhendoRota && (
+                <div className="mb-3 rounded-lg border bg-muted/20 p-3">
+                  {rotasAlt.isLoading ? (
+                    <p className="text-sm text-muted-foreground">Buscando rotas…</p>
+                  ) : rotasAlt.data && rotasAlt.data.rotas.length > 0 ? (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">
+                        Escolha a estrada usada (clique pra ver no mapa):
+                      </p>
+                      {rotasAlt.data.rotas.map((r, idx) => {
+                        const rec = rotasAlt.data!.rotas.find((x) => x.recomendada);
+                        const diff = rec ? Number(r.km) - Number(rec.km) : 0;
+                        const sel = rotaPreviewIdx === idx;
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => setRotaPreviewIdx(idx)}
+                            className={`flex w-full items-center justify-between gap-3 rounded-md border p-2.5 text-left text-sm ${
+                              sel ? "border-primary bg-primary/5" : "hover:bg-muted"
+                            }`}
+                          >
+                            <span>
+                              <span className="font-semibold">{fmtNum(r.km, 2)} km</span>
+                              <span className="text-muted-foreground">
+                                {" · "}
+                                {Math.round(r.duracaoSegundos / 60)} min
+                              </span>
+                              {r.recomendada ? (
+                                <Badge className="ml-2 bg-muted text-muted-foreground">
+                                  Sugerida
+                                </Badge>
+                              ) : diff !== 0 ? (
+                                <span className="ml-2 text-xs text-amber-700">
+                                  {diff > 0 ? "+" : ""}
+                                  {fmtNum(String(diff), 0)} km vs. sugerida
+                                </span>
+                              ) : null}
+                            </span>
+                            {sel && <CheckCircle2 className="h-4 w-4 text-primary" />}
+                          </button>
+                        );
+                      })}
+                      <div className="flex gap-2 pt-1">
+                        <Button
+                          size="sm"
+                          disabled={rotaPreviewIdx == null || escolherRota.isPending}
+                          onClick={() => {
+                            const r = rotasAlt.data!.rotas[rotaPreviewIdx!];
+                            if (r) escolherRota.mutate({ km: r.km, geometria: r.geometria });
+                          }}
+                        >
+                          {escolherRota.isPending ? "Aplicando…" : "Aplicar esta rota"}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setEscolhendoRota(false);
+                            setRotaPreviewIdx(null);
+                          }}
+                        >
+                          Cancelar
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      {rotasAlt.data?.erro ?? "Sem rotas alternativas pra esse trajeto."}
+                    </p>
+                  )}
+                </div>
+              )}
               <MapaTrajetoViagem
                 carga={
                   v.localCarga.lat != null && v.localCarga.lng != null
@@ -692,7 +823,11 @@ export default function ViagemDetalhePage({
                 lancamento={
                   v.lat != null && v.lng != null ? { lat: v.lat, lng: v.lng } : null
                 }
-                geometria={v.rotaGeometria}
+                geometria={
+                  escolhendoRota && rotaPreviewIdx != null
+                    ? (rotasAlt.data?.rotas[rotaPreviewIdx]?.geometria ?? v.rotaGeometria)
+                    : v.rotaGeometria
+                }
                 pedagios={pedagiosNaRota.data ?? []}
               />
             </Card>
