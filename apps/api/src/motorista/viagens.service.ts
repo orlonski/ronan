@@ -992,7 +992,7 @@ export class ViagensMotoristaService {
       include: VIAGEM_INCLUDE,
     });
 
-    // Revalida locais + garante rota + notifica admin (best-effort, igual create).
+    // Revalida locais + garante rota (best-effort, igual create).
     try {
       await this.validacao.revalidarApos(finalizada.id);
     } catch {
@@ -1005,6 +1005,22 @@ export class ViagensMotoristaService {
           /* best-effort */
         });
     }
+
+    // Notifica os admins (inbox/sininho do dashboard) — mesma "Nova viagem" que
+    // o fluxo de lançamento único dispara. Só ao FINALIZAR (a viagem em
+    // andamento não notifica; aparece na tela "Viagens em andamento" ao vivo).
+    void (async () => {
+      const m = await this.prisma.motorista.findUnique({
+        where: { id: motoristaId },
+        select: { nome: true },
+      });
+      await this.notificarAdmins(
+        "nova-viagem",
+        `Nova viagem de ${m?.nome ?? "motorista"}`,
+        `${finalizada.ticket ? `Ticket ${finalizada.ticket} · ` : ""}${finalizada.cliente?.nome ?? ""} · ${finalizada.toneladas ?? 0}t`,
+        { viagemId: finalizada.id, motoristaId },
+      );
+    })();
 
     return serializarViagemComMinimos(finalizada, await this.regrasMinimoAtivas());
   }
