@@ -273,8 +273,8 @@ export default function NovaViagem() {
 
   useEffect(() => {
     let alive = true;
-    void pegarCoordsPrecisa().then((c) => {
-      if (alive && c) setCoords(c);
+    void pegarCoordsPrecisa().then((res) => {
+      if (alive && res.ok) setCoords(res.coords);
     });
     return () => {
       alive = false;

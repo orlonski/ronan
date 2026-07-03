@@ -131,8 +131,9 @@ export default function NovoAbastecimento() {
   // GPS pré-aquece em background
   useEffect(() => {
     let alive = true;
-    void pegarCoordsPrecisa().then((c) => {
-      if (alive && c) {
+    void pegarCoordsPrecisa().then((res) => {
+      if (alive && res.ok) {
+        const c = res.coords;
         setCoords({ lat: c.lat, lng: c.lng, precisao: c.precisao ?? undefined });
       }
     });

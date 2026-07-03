@@ -133,19 +133,60 @@ export async function pegarCoords(): Promise<{ lat: number; lng: number } | null
 
 export type CoordsPrecisas = { lat: number; lng: number; precisao: number | null };
 
+/** Por que a captura falhou — pra UI mostrar a mensagem certa (não só "permissão"). */
+export type GpsFalha = "permissao" | "timeout" | "hardware";
+export type GpsResultado =
+  | { ok: true; coords: CoordsPrecisas }
+  | { ok: false; motivo: GpsFalha };
+
 /**
- * Captura GPS fiel: ignora o cache (last-known) e amostra o GPS em alta
- * precisão por até `maxMs`, ficando com a leitura de melhor precisão. O 1º
- * fix de GPS costuma ser grosseiro e converge em segundos — por isso a
- * amostragem. Para cedo ao atingir `alvoMetros`. `onAmostra` recebe a
- * precisão corrente (em metros) a cada leitura, pra UI mostrar "±X m" ao vivo.
- * Permissão negada / GPS off => null.
+ * Mensagem pro motorista por motivo de falha do GPS. `ajustes: true` quando faz
+ * sentido mostrar o botão "Abrir ajustes" (Linking.openSettings) — só no caso de
+ * permissão, onde 1 toque resolve. Texto curto e direto (motorista leigo).
+ */
+export function mensagemGpsFalha(motivo: GpsFalha): { msg: string; ajustes: boolean } {
+  switch (motivo) {
+    case "permissao":
+      return {
+        msg: "A localização do app está desligada. Toque em Abrir ajustes e ligue a localização.",
+        ajustes: true,
+      };
+    case "hardware":
+      return {
+        msg: "Não consegui ligar o GPS. Confira se o GPS do celular está ligado e tente de novo.",
+        ajustes: false,
+      };
+    case "timeout":
+    default:
+      return {
+        msg: "Sinal de GPS fraco aqui. Vá para um lugar mais aberto (fora do galpão) e toque de novo.",
+        ajustes: false,
+      };
+  }
+}
+
+/**
+ * Captura GPS fiel: amostra o GPS em alta precisão por até `maxMs`, ficando com
+ * a leitura de melhor precisão. O 1º fix costuma ser grosseiro e converge em
+ * segundos — por isso a amostragem. Para cedo ao atingir `alvoMetros`.
+ * `onAmostra` recebe a precisão corrente (m) a cada leitura, pra UI mostrar
+ * "±X m" ao vivo.
+ *
+ * Se o watch de alta precisão não pegar NENHUMA amostra a tempo (sinal fraco /
+ * dentro de galpão), cai numa cadeia de fallback do mais preciso ao mais
+ * garantido: fix `Balanced` (engancha mais rápido que Highest) e, por último,
+ * `getLastKnownPositionAsync` (posição em cache do sistema — retorna na hora
+ * mesmo sem sinal, o motorista estava ao ar livre segundos atrás). O aviso
+ * "Sinal fraco" da UI cobre o caso de a leitura sair grosseira.
+ *
+ * Retorna `{ ok: false, motivo }` distinguindo permissão negada, timeout de
+ * sinal e erro de hardware — pra tela não culpar a permissão indevidamente.
  */
 export async function pegarCoordsPrecisa(opts?: {
   alvoMetros?: number;
   maxMs?: number;
   onAmostra?: (precisaoAtual: number | null) => void;
-}): Promise<CoordsPrecisas | null> {
+}): Promise<GpsResultado> {
   const alvoMetros = opts?.alvoMetros ?? 10;
   const maxMs = opts?.maxMs ?? 20_000;
   const onAmostra = opts?.onAmostra;
@@ -158,7 +199,7 @@ export async function pegarCoordsPrecisa(opts?: {
       const r = await Location.requestForegroundPermissionsAsync();
       if (r.status !== "granted") {
         void reportarEvento("gps_falhou", { motivo: "permissao" });
-        return null;
+        return { ok: false, motivo: "permissao" };
       }
     }
 
@@ -213,35 +254,63 @@ export async function pegarCoordsPrecisa(opts?: {
         precisao: ref.melhor.precisao,
         fonte: "precisa",
       });
-      return ref.melhor;
+      return { ok: true, coords: ref.melhor };
     }
 
-    // Nenhuma amostra do watch (sinal ruim / timeout) — última tentativa.
-    const result = await Promise.race([
-      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 5_000)),
+    // Nenhuma amostra do watch (sinal ruim / indoor). Fallback 1: fix Balanced,
+    // que engancha bem mais rápido que Highest/High em sinal fraco.
+    const balanced = await Promise.race([
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 8_000)),
     ]);
-    if (!result || !("coords" in result)) {
-      void reportarEvento("gps_falhou", { motivo: "timeout" });
-      return null;
+    if (balanced && "coords" in balanced) {
+      void reportarEvento("gps_capturado", {
+        lat: balanced.coords.latitude,
+        lng: balanced.coords.longitude,
+        precisao: balanced.coords.accuracy ?? null,
+        fonte: "balanced",
+      });
+      return {
+        ok: true,
+        coords: {
+          lat: balanced.coords.latitude,
+          lng: balanced.coords.longitude,
+          precisao: balanced.coords.accuracy ?? null,
+        },
+      };
     }
-    void reportarEvento("gps_capturado", {
-      lat: result.coords.latitude,
-      lng: result.coords.longitude,
-      precisao: result.coords.accuracy ?? null,
-      fonte: "precisa",
+
+    // Fallback 2: posição em cache do SO. Retorna na hora mesmo sem sinal —
+    // melhor uma posição de ~2min atrás (aqui-ish) do que travar o motorista.
+    const last = await Location.getLastKnownPositionAsync({
+      maxAge: 120_000,
+      requiredAccuracy: 150,
     });
-    return {
-      lat: result.coords.latitude,
-      lng: result.coords.longitude,
-      precisao: result.coords.accuracy ?? null,
-    };
+    if (last) {
+      void reportarEvento("gps_capturado", {
+        lat: last.coords.latitude,
+        lng: last.coords.longitude,
+        precisao: last.coords.accuracy ?? null,
+        fonte: "last_known",
+      });
+      return {
+        ok: true,
+        coords: {
+          lat: last.coords.latitude,
+          lng: last.coords.longitude,
+          precisao: last.coords.accuracy ?? null,
+        },
+      };
+    }
+
+    void reportarEvento("gps_falhou", { motivo: "timeout" });
+    return { ok: false, motivo: "timeout" };
   } catch (err) {
     void reportarEvento("gps_falhou", {
       motivo: "hardware",
       msg: (err as Error)?.message,
     });
-    return null;
+    return { ok: false, motivo: "hardware" };
   }
 }
 

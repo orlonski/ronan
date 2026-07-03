@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -15,7 +16,12 @@ import { CheckCircle2, MapPin, Plus, X } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { showConfirm } from "@/lib/alert";
-import { haversineMetros, pegarCoordsPrecisa, RAIO_ALERTA_CARGA_M } from "@/lib/geo";
+import {
+  haversineMetros,
+  mensagemGpsFalha,
+  pegarCoordsPrecisa,
+  RAIO_ALERTA_CARGA_M,
+} from "@/lib/geo";
 import {
   buscarDescargaDuasEtapas,
   buscarDescargaDuasEtapasOffline,
@@ -104,6 +110,8 @@ export function DescargaPorGps({
         : { tipo: "vazio" },
   );
   const [erro, setErro] = useState<string | null>(null);
+  // Mostra o botão "Abrir ajustes" só quando a falha é de permissão (1 toque).
+  const [erroAjustes, setErroAjustes] = useState(false);
   const [nomeNovo, setNomeNovo] = useState("");
   const criar = useCriarLocalRapido();
   const gpsConfig = useBuscaGpsConfig();
@@ -120,18 +128,22 @@ export function DescargaPorGps({
 
   async function capturarEBuscar() {
     setErro(null);
+    setErroAjustes(false);
     setEstado({ tipo: "capturando", precisao: null });
     const cfg = gpsConfig.data ?? BUSCA_GPS_CONFIG_DEFAULTS;
-    const coords = await pegarCoordsPrecisa({
+    const res = await pegarCoordsPrecisa({
       alvoMetros: cfg.gpsAlvoMetros,
       maxMs: cfg.gpsMaxSegundos * 1000,
       onAmostra: (precisao) => setEstado({ tipo: "capturando", precisao }),
     });
-    if (!coords) {
+    if (!res.ok) {
+      const { msg, ajustes } = mensagemGpsFalha(res.motivo);
       setEstado({ tipo: "vazio" });
-      setErro("Não consegui pegar o GPS. Verifique a permissão e tente de novo.");
+      setErro(msg);
+      setErroAjustes(ajustes);
       return;
     }
+    const coords = res.coords;
 
     // Sinal fraco: avisa que a posição pode não bater com o local certo e
     // deixa tentar de novo antes de seguir com a busca.
@@ -458,7 +470,16 @@ export function DescargaPorGps({
         </View>
       )}
 
-      {erro && <Text className="text-sm text-destructive">{erro}</Text>}
+      {erro && (
+        <View className="gap-2">
+          <Text className="text-sm text-destructive">{erro}</Text>
+          {erroAjustes && (
+            <Button variant="outline" onPress={() => void Linking.openSettings()}>
+              <Text className="text-sm font-semibold text-foreground">Abrir ajustes</Text>
+            </Button>
+          )}
+        </View>
+      )}
 
       {/* Modal full-screen: pedir nome quando sem match.
           Full-screen (não bottom-sheet transparent) pra Android adjustResize

@@ -14,6 +14,7 @@ import {
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   ScrollView,
@@ -31,7 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
-import { pegarCoordsPrecisa } from "@/lib/geo";
+import { mensagemGpsFalha, pegarCoordsPrecisa } from "@/lib/geo";
 import {
   descartarViagemGuiada,
   extras,
@@ -361,6 +362,8 @@ function EventoSheet({
   const [observacao, setObservacao] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  // Botão "Abrir ajustes" só quando a falha de GPS é de permissão (1 toque).
+  const [erroAjustes, setErroAjustes] = useState(false);
   const val = useValidacaoGuiada();
 
   const visivel = tipo != null;
@@ -389,13 +392,17 @@ function EventoSheet({
 
   async function capturarGpsSolto() {
     setErro(null);
+    setErroAjustes(false);
     setCapturandoGps(true);
-    const c = await pegarCoordsPrecisa();
+    const res = await pegarCoordsPrecisa();
     setCapturandoGps(false);
-    if (!c) {
-      setErro("Não consegui pegar o GPS. Verifique a permissão.");
+    if (!res.ok) {
+      const { msg, ajustes } = mensagemGpsFalha(res.motivo);
+      setErro(msg);
+      setErroAjustes(ajustes);
       return;
     }
+    const c = res.coords;
     val.limpar();
     setCoords({ lat: c.lat, lng: c.lng, precisao: c.precisao ?? undefined });
   }
@@ -403,6 +410,7 @@ function EventoSheet({
   async function salvar() {
     if (!tipo) return;
     setErro(null);
+    setErroAjustes(false);
 
     if (detectaLocal && !local)
       return void val.apontar("local", "Marque o local por GPS");
@@ -614,7 +622,21 @@ function EventoSheet({
                   </View>
                 )}
 
-                {erro ? <ErroCampo msg={erro} /> : null}
+                {erro ? (
+                  <View className="gap-2">
+                    <ErroCampo msg={erro} />
+                    {erroAjustes && (
+                      <Button
+                        variant="outline"
+                        onPress={() => void Linking.openSettings()}
+                      >
+                        <Text className="text-sm font-semibold text-foreground">
+                          Abrir ajustes
+                        </Text>
+                      </Button>
+                    )}
+                  </View>
+                ) : null}
 
                 <Button size="lg" className="h-20" onPress={salvar} loading={salvando}>
                   <Check size={24} color="white" />

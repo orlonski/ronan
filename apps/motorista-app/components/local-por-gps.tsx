@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -15,7 +16,7 @@ import { CheckCircle2, MapPin, Plus, X } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { showConfirm } from "@/lib/alert";
-import { pegarCoordsPrecisa } from "@/lib/geo";
+import { mensagemGpsFalha, pegarCoordsPrecisa } from "@/lib/geo";
 import {
   buscarDescargaDuasEtapas,
   buscarDescargaDuasEtapasOffline,
@@ -105,6 +106,8 @@ export function LocalPorGps({
     value ? { tipo: "selecionado", local: value } : { tipo: "vazio" },
   );
   const [erro, setErro] = useState<string | null>(null);
+  // Mostra o botão "Abrir ajustes" só quando a falha é de permissão (1 toque).
+  const [erroAjustes, setErroAjustes] = useState(false);
   const [nomeNovo, setNomeNovo] = useState("");
   const gpsConfig = useBuscaGpsConfig();
   const qc = useQueryClient();
@@ -115,18 +118,22 @@ export function LocalPorGps({
 
   async function capturarEBuscar() {
     setErro(null);
+    setErroAjustes(false);
     setEstado({ tipo: "capturando", precisao: null });
     const cfg = gpsConfig.data ?? BUSCA_GPS_CONFIG_DEFAULTS;
-    const coords = await pegarCoordsPrecisa({
+    const res = await pegarCoordsPrecisa({
       alvoMetros: cfg.gpsAlvoMetros,
       maxMs: cfg.gpsMaxSegundos * 1000,
       onAmostra: (precisao) => setEstado({ tipo: "capturando", precisao }),
     });
-    if (!coords) {
+    if (!res.ok) {
+      const { msg, ajustes } = mensagemGpsFalha(res.motivo);
       setEstado({ tipo: "vazio" });
-      setErro("Não consegui pegar o GPS. Verifique a permissão e tente de novo.");
+      setErro(msg);
+      setErroAjustes(ajustes);
       return;
     }
+    const coords = res.coords;
 
     if (coords.precisao != null && coords.precisao > cfg.gpsLimiteSinalFracoM) {
       const continua = await showConfirm({
@@ -416,7 +423,16 @@ export function LocalPorGps({
         </View>
       )}
 
-      {erro && <Text className="text-sm text-destructive">{erro}</Text>}
+      {erro && (
+        <View className="gap-2">
+          <Text className="text-sm text-destructive">{erro}</Text>
+          {erroAjustes && (
+            <Button variant="outline" onPress={() => void Linking.openSettings()}>
+              <Text className="text-sm font-semibold text-foreground">Abrir ajustes</Text>
+            </Button>
+          )}
+        </View>
+      )}
 
       {/* Modal full-screen: nomear lugar novo. */}
       <Modal
