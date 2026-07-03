@@ -863,6 +863,16 @@ model Viagem {
   /// detectar quando motorista sobrescreveu o sugerido (km != kmCalculado).
   /// Null pra viagens antigas (pré-feature) e quando OSRM não respondeu.
   kmCalculado       Decimal?     @db.Decimal(10, 2)
+  /// true = motorista digitou o km na mão (não aceitou o auto-calculado). O
+  /// reprocessamento de km no servidor respeita isso e NÃO sobrescreve o km.
+  /// Null pra viagens antigas / app antigo que não envia o flag.
+  kmEditadoManual   Boolean?
+  /// Reprocessamento de km: quando a viagem foi criada sem sinal (km estimado
+  /// por haversine), o backend recalcula pelo trajeto real (OSRM) ao sincronizar.
+  /// kmRecalculadoEm = quando recalculou (também trava re-processo/re-aviso);
+  /// kmAntesRecalculo = km que estava antes, pra mostrar "de X → Y" pro motorista.
+  kmRecalculadoEm   DateTime?
+  kmAntesRecalculo  Decimal?     @db.Decimal(10, 2)
   /// Polyline (formato Google, precision 5) da rota que o motorista ESCOLHEU
   /// entre as alternativas OSRM no seletor de mapa. Null = não usou o seletor
   /// (viagem antiga, rota única ou offline) → painel cai no rotaCache

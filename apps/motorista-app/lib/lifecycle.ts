@@ -381,6 +381,7 @@ export async function finalizarViagemGuiada(input: {
   toneladas: number;
   km: number;
   kmCalculado?: number;
+  kmEditadoManual?: boolean;
   rotaGeometria?: string;
   ticket?: string;
   localDescargaId: string;
@@ -406,6 +407,7 @@ export async function finalizarViagemGuiada(input: {
       toneladas: input.toneladas,
       km: input.km,
       kmCalculado: input.kmCalculado,
+      kmEditadoManual: input.kmEditadoManual,
       rotaGeometria: input.rotaGeometria,
       ticket: input.ticket,
       localDescargaId: input.localDescargaId,

@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
+import { AvisoKmEstimado } from "@/components/aviso-km-estimado";
 import { DescargaPorGps, type DescargaCaptura } from "@/components/descarga-por-gps";
 import { SeletorRotas } from "@/components/seletor-rotas";
 import { showAlert, showConfirm } from "@/lib/alert";
@@ -547,6 +548,8 @@ export default function NovaViagem() {
         // Snapshot do km OSRM no momento do lançamento — captura mesmo que
         // motorista tenha sobrescrito. Null quando OSRM não respondeu.
         kmCalculado: kmRecomendado,
+        // Motorista digitou na mão? O reprocessamento no servidor respeita isso.
+        kmEditadoManual,
         // Rota escolhida no seletor de mapa (rota real no painel).
         rotaGeometria: rotaGeometriaEscolhida ?? undefined,
         localCargaId: form.localCargaId,
@@ -1076,11 +1079,7 @@ function KmHint({
     );
   }
   if (rota.fonte === "estimado_haversine") {
-    return (
-      <Text className="text-xs font-medium text-warning-foreground">
-        ≈ {rota.km} km estimado por GPS (sem rede pra calcular preciso)
-      </Text>
-    );
+    return <AvisoKmEstimado km={rota.km} />;
   }
   if (rota.fonte === "cache_local") {
     return (

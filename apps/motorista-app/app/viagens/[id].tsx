@@ -9,6 +9,7 @@ import {
   Camera,
   ExternalLink,
   MapPin,
+  RefreshCw,
   Route,
   Trash2,
 } from "lucide-react-native";
@@ -393,6 +394,22 @@ export default function ViagemDetalheScreen() {
                 fromAi={detalhe.data.ocrCampos?.includes("ticket")}
               />
             </View>
+            {detalhe.data.kmRecalculadoEm && (
+              <View className="mt-3 flex-row items-start gap-2 rounded-xl border border-success/40 bg-success/10 px-3 py-2.5">
+                <RefreshCw size={16} color="#15803d" style={{ marginTop: 1 }} />
+                <Text className="flex-1 text-xs font-medium text-foreground">
+                  {detalhe.data.kmAntesRecalculo
+                    ? `Km acertado: essa viagem foi lançada sem sinal (${fmtNum(
+                        detalhe.data.kmAntesRecalculo,
+                        0,
+                      )} km estimado) e recalculamos pelo trajeto certo — agora ${fmtNum(
+                        detalhe.data.km,
+                        0,
+                      )} km.`
+                    : "Km conferido pelo trajeto certo depois que pegou sinal."}
+                </Text>
+              </View>
+            )}
             {detalhe.data.valorPedagioTotal && (
               <View className="mt-3 border-t-2 border-border pt-3">
                 <Stat

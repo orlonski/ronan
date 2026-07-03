@@ -44,6 +44,9 @@ export const CriarViagemInput = z.object({
   // sempre que `useCalcularRota` resolveu; null quando OSRM falhou ou
   // motorista digitou antes da resposta.
   kmCalculado: z.number().nonnegative().max(MAX_KM).optional(),
+  // true = motorista digitou o km na mão (não aceitou o auto-calculado). O
+  // reprocessamento de km no servidor respeita isso: não sobrescreve km editado.
+  kmEditadoManual: z.boolean().optional(),
   // Polyline (formato Google) da rota que o motorista escolheu no seletor de
   // mapa. Ausente quando não houve escolha (rota única, offline, tela sem
   // seletor). Backend guarda em Viagem.rotaGeometria (rota real no painel).

@@ -424,6 +424,10 @@ export type ViagemDetalhe = Viagem & {
   lng: number | null;
   iniciadoEm: string | null;
   kmReal: string | null;
+  // Reprocessamento de km (viagem criada sem sinal, recalculada pelo servidor).
+  // kmRecalculadoEm null = não recalculada; kmAntesRecalculo = km antes (pra "de X → Y").
+  kmRecalculadoEm: string | null;
+  kmAntesRecalculo: string | null;
   pontos: { lat: number; lng: number; capturadoEm: string }[];
   cliente: { id: string; nome: string; empresa?: { id: string; nome: string } };
   localCarga: Viagem["localCarga"] & { logradouro: string; lat: number | null; lng: number | null };

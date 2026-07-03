@@ -81,6 +81,8 @@ type ViagemDetalhe = {
   km: string;
   kmReal: string | null;
   kmCalculado: string | null;
+  kmRecalculadoEm: string | null;
+  kmAntesRecalculo: string | null;
   toneladasInformada: string;
   toneladasEfetiva: string;
   toneladasAjustada: boolean;
@@ -454,6 +456,17 @@ export default function ViagemDetalhePage({
                           (calculado: {fmtNum(v.kmCalculado, 2)})
                         </span>
                       ))}
+                    {v.kmRecalculadoEm && (
+                      <span
+                        className="ml-2 inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700"
+                        title="Viagem lançada sem sinal (km estimado) e recalculada pelo trajeto real quando sincronizou."
+                      >
+                        Km recalculado
+                        {v.kmAntesRecalculo
+                          ? `: de ${fmtNum(v.kmAntesRecalculo, 0)} → ${fmtNum(v.km, 0)} km`
+                          : ""}
+                      </span>
+                    )}
                   </span>
                 }
               />

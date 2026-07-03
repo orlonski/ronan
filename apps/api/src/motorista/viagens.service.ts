@@ -24,6 +24,7 @@ import { RoteamentoService } from "../roteamento/roteamento.service";
 import { UploadsService } from "../uploads/uploads.service";
 import { ValidacaoLocalService } from "./validacao-local.service";
 import { AdminInboxService } from "../admin/inbox/inbox.service";
+import { KmReprocessamentoService } from "./km-reprocessamento.service";
 
 const VIAGEM_INCLUDE = {
   veiculo: { select: { id: true, placa: true, modelo: true } },
@@ -70,6 +71,7 @@ export class ViagensMotoristaService {
     private readonly eventos: EventosService,
     private readonly roteamento: RoteamentoService,
     private readonly inbox: AdminInboxService,
+    private readonly kmReprocessamento: KmReprocessamentoService,
   ) {}
 
   /** Regras de mínimo por faixa ativas (empresa+material+faixa de km). */
@@ -625,6 +627,7 @@ export class ViagensMotoristaService {
         ticket,
         km: rest.km,
         kmCalculado: rest.kmCalculado,
+        kmEditadoManual: rest.kmEditadoManual,
         rotaGeometria: rest.rotaGeometria,
         observacao: rest.observacao,
         localCargaId: rest.localCargaId,
@@ -726,6 +729,11 @@ export class ViagensMotoristaService {
       .catch(() => {
         /* best-effort: OSRM down, fora de cobertura, etc — nao bloqueia */
       });
+
+    // Viagem criada sem sinal (km estimado, kmCalculado null): recalcula pelo
+    // trajeto real agora que o backend está online e avisa o motorista se mudou.
+    // Self-guarda (só age quando kmCalculado null) — seguro chamar sempre.
+    void this.kmReprocessamento.reprocessar(viagem.id);
 
     void (async () => {
       const m = await this.prisma.motorista.findUnique({
@@ -994,6 +1002,7 @@ export class ViagensMotoristaService {
         toneladas: input.toneladas,
         km: input.km,
         kmCalculado: input.kmCalculado,
+        kmEditadoManual: input.kmEditadoManual,
         rotaGeometria: input.rotaGeometria,
         ticket,
         localDescargaId: input.localDescargaId,
@@ -1025,6 +1034,8 @@ export class ViagensMotoristaService {
           /* best-effort */
         });
     }
+    // Finalizada sem sinal (km estimado): recalcula pelo trajeto real e avisa.
+    void this.kmReprocessamento.reprocessar(finalizada.id);
 
     // Notifica os admins (inbox/sininho do dashboard) — mesma "Nova viagem" que
     // o fluxo de lançamento único dispara. Só ao FINALIZAR (a viagem em

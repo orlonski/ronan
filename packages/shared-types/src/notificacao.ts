@@ -10,6 +10,9 @@ export const TipoNotificacao = z.enum([
   "viagem-conferida",
   "viagem-editada",
   "abastecimento-editado",
+  // Km recalculado automaticamente pelo servidor (viagem criada sem sinal, km
+  // era estimado; o backend recalculou pelo trajeto real quando sincronizou).
+  "viagem-recalculada",
 ]);
 export type TipoNotificacao = z.infer<typeof TipoNotificacao>;
 

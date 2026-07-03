@@ -3,6 +3,7 @@ import { AuditoriaModule } from "../auditoria/auditoria.module";
 import { EventosModule } from "../eventos/eventos.module";
 import { GeocodingModule } from "../geocoding/geocoding.module";
 import { RoteamentoModule } from "../roteamento/roteamento.module";
+import { PushModule } from "../push/push.module";
 import { TrackingConfigModule } from "../admin/tracking-config/tracking-config.module";
 import { BuscaLocaisConfigModule } from "../admin/busca-locais-config/busca-locais-config.module";
 import { PedagiosRodoviaModule } from "../admin/pedagios-rodovia/pedagios-rodovia.module";
@@ -27,6 +28,7 @@ import { TrackingConfigMotoristaController } from "./tracking-config.controller"
 import { BuscaLocaisConfigMotoristaController } from "./busca-locais-config.controller";
 import { ValidacaoLocalService } from "./validacao-local.service";
 import { IaTicketController } from "./ia-ticket.controller";
+import { KmReprocessamentoService } from "./km-reprocessamento.service";
 
 @Module({
   imports: [
@@ -39,6 +41,7 @@ import { IaTicketController } from "./ia-ticket.controller";
     EventosModule,
     PedagiosRodoviaModule,
     AdminInboxModule,
+    PushModule,
   ],
   controllers: [
     MotoristaController,
@@ -62,6 +65,7 @@ import { IaTicketController } from "./ia-ticket.controller";
     LocaisMotoristaService,
     ValidacaoLocalService,
     PosicaoMotoristaService,
+    KmReprocessamentoService,
   ],
   exports: [
     MotoristaService,

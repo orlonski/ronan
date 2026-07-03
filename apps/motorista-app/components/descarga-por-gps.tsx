@@ -23,6 +23,7 @@ import {
   pegarCoordsPrecisa,
   RAIO_ALERTA_CARGA_M,
 } from "@/lib/geo";
+import { AvisoLocalCache, enderecoResumido, LinhaEndereco } from "@/components/local-info";
 import {
   buscarDescargaDuasEtapas,
   buscarDescargaDuasEtapasOffline,
@@ -126,6 +127,11 @@ export function DescargaPorGps({
   const criar = useCriarLocalRapido();
   const gpsConfig = useBuscaGpsConfig();
   const qc = useQueryClient();
+  // Endereço completo não vem na busca de proximidade — cruza pelo id com o
+  // catálogo em cache (que tem logradouro/bairro/cidade/uf). Snapshot ok: o
+  // catálogo é estável durante o fluxo de seleção.
+  const localDoCatalogo = (id: string) =>
+    qc.getQueryData<Catalogos>(["catalogos"])?.locais.find((l) => l.id === id) ?? null;
   const autoDisparado = useRef(false);
 
   // Auto-dispara a captura no mount quando pedido (modal aberto pelo Finalizar).
@@ -407,6 +413,16 @@ export function DescargaPorGps({
               <Text className="text-base font-bold text-foreground" numberOfLines={2}>
                 {estado.local.nome}
               </Text>
+              {(() => {
+                const cat = localDoCatalogo(estado.local.id);
+                return (
+                  <LinhaEndereco
+                    endereco={enderecoResumido(cat)}
+                    cidade={cat?.cidade}
+                    uf={cat?.uf}
+                  />
+                );
+              })()}
               {(estado.distanciaMetros != null || estado.vezesUsado != null) && (
                 <Text
                   className="mt-0.5 text-sm text-muted-foreground"
@@ -425,6 +441,10 @@ export function DescargaPorGps({
               <Text className="text-sm font-medium text-foreground">Trocar</Text>
             </Pressable>
           </View>
+          <AvisoLocalCache
+            fonte={estado.coords?.fonte}
+            buscaOffline={estado.coords?.buscaOffline}
+          />
           {estado.coords ? (
             <Button variant="outline" onPress={verOutros}>
               <MapPin size={18} color="#0f172a" />
@@ -455,6 +475,11 @@ export function DescargaPorGps({
               Achei {estado.matches.length} perto. Qual é?
             </Text>
           )}
+          {estado.coords?.buscaOffline && (
+            <Text className="text-xs font-medium text-warning-foreground">
+              Sem sinal — mostrando só os que já estavam salvos no seu celular.
+            </Text>
+          )}
           {estado.matches.map((m, i) => (
             <Pressable
               key={m.id}
@@ -475,6 +500,14 @@ export function DescargaPorGps({
                   {m.distanciaMetros}m · {m.cidade}/{m.uf}
                   {m.vezesUsadoMotorista > 0 ? ` · usado ${m.vezesUsadoMotorista}x` : ""}
                 </Text>
+                {(() => {
+                  const end = enderecoResumido(localDoCatalogo(m.id));
+                  return end ? (
+                    <Text className="text-xs text-muted-foreground" numberOfLines={1}>
+                      {end}
+                    </Text>
+                  ) : null;
+                })()}
               </View>
             </Pressable>
           ))}

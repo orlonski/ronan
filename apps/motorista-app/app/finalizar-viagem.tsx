@@ -17,6 +17,7 @@ import { SeletorRotas } from "@/components/seletor-rotas";
 import { ErroCampo, useValidacaoGuiada } from "@/components/validacao-guiada";
 import { SemCatalogo } from "@/components/sem-catalogo";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
+import { AvisoKmEstimado } from "@/components/aviso-km-estimado";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -252,6 +253,7 @@ export default function FinalizarViagem() {
         toneladas: parseFloat(toneladas.replace(",", ".")),
         km: parseFloat(km.replace(",", ".")),
         kmCalculado: kmRecomendado,
+        kmEditadoManual,
         rotaGeometria: rotaGeometriaEscolhida ?? undefined,
         ticket: exigeTicket ? ticket.trim() : undefined,
         localDescargaId,
@@ -395,10 +397,17 @@ export default function FinalizarViagem() {
                   />
                   {rota.isFetching && !kmEditadoManual ? (
                     <Text className="text-xs text-muted-foreground">Calculando rota…</Text>
-                  ) : rota.data && "km" in rota.data && rota.data.km && !kmEditadoManual ? (
-                    <Text className="text-xs font-medium text-success">
-                      ✓ Calculado ({rota.data.km} km)
-                    </Text>
+                  ) : rota.data &&
+                    "km" in rota.data &&
+                    rota.data.km &&
+                    !kmEditadoManual ? (
+                    rota.data.fonte === "estimado_haversine" ? (
+                      <AvisoKmEstimado km={rota.data.km} />
+                    ) : (
+                      <Text className="text-xs font-medium text-success">
+                        ✓ Calculado ({rota.data.km} km)
+                      </Text>
+                    )
                   ) : null}
                 </View>
                 <View className="flex-1 gap-2">

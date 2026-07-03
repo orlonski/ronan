@@ -121,6 +121,8 @@ export const FinalizarViagemInput = z.object({
   toneladas: z.number().positive().max(MAX_TONELADAS),
   km: z.number().nonnegative().max(MAX_KM),
   kmCalculado: z.number().nonnegative().max(MAX_KM).optional(),
+  // true = motorista digitou o km na mão (reprocessamento respeita, não sobrescreve).
+  kmEditadoManual: z.boolean().optional(),
   // Polyline da rota escolhida pelo motorista no seletor de mapa (igual ao
   // CriarViagemInput). Backend guarda em Viagem.rotaGeometria.
   rotaGeometria: z.string().max(20000).optional(),

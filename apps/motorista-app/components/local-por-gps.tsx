@@ -18,6 +18,7 @@ import type { FonteGps } from "@ronan/shared-types";
 import { Label } from "@/components/ui/label";
 import { showConfirm } from "@/lib/alert";
 import { mensagemGpsFalha, pegarCoordsPrecisa } from "@/lib/geo";
+import { AvisoLocalCache, enderecoResumido, LinhaEndereco } from "@/components/local-info";
 import {
   buscarDescargaDuasEtapas,
   buscarDescargaDuasEtapasOffline,
@@ -120,6 +121,9 @@ export function LocalPorGps({
   const [nomeNovo, setNomeNovo] = useState("");
   const gpsConfig = useBuscaGpsConfig();
   const qc = useQueryClient();
+  // Endereço completo vem do catálogo em cache (a busca de proximidade não traz).
+  const localDoCatalogo = (id: string) =>
+    qc.getQueryData<Catalogos>(["catalogos"])?.locais.find((l) => l.id === id) ?? null;
 
   // Carga é sempre um cadastro existente do cliente — o motorista NUNCA cria
   // local de carga. Só descarga (obra do cliente) permite lugar novo.
@@ -337,6 +341,17 @@ export function LocalPorGps({
             <Text className="text-base font-bold text-foreground" numberOfLines={2}>
               {estado.local.nome}
             </Text>
+            {!estado.local.criarOffline &&
+              (() => {
+                const cat = localDoCatalogo(estado.local.id);
+                return (
+                  <LinhaEndereco
+                    endereco={enderecoResumido(cat)}
+                    cidade={cat?.cidade}
+                    uf={cat?.uf}
+                  />
+                );
+              })()}
             {estado.local.distanciaMetros != null && (
               <Text
                 className="mt-0.5 text-sm text-muted-foreground"
@@ -347,6 +362,10 @@ export function LocalPorGps({
                   : `${estado.local.distanciaMetros}m do GPS`}
               </Text>
             )}
+            <AvisoLocalCache
+              fonte={estado.local.fonte}
+              buscaOffline={estado.local.buscaOffline}
+            />
           </View>
           <Pressable
             onPress={trocar}
@@ -372,6 +391,11 @@ export function LocalPorGps({
               Achei {estado.matches.length} perto. Qual é?
             </Text>
           )}
+          {estado.coords.buscaOffline && (
+            <Text className="text-xs font-medium text-warning-foreground">
+              Sem sinal — mostrando só os que já estavam salvos no seu celular.
+            </Text>
+          )}
           {estado.matches.map((m, i) => (
             <Pressable
               key={m.id}
@@ -392,6 +416,14 @@ export function LocalPorGps({
                   {m.distanciaMetros}m · {m.cidade}/{m.uf}
                   {m.vezesUsadoMotorista > 0 ? ` · usado ${m.vezesUsadoMotorista}x` : ""}
                 </Text>
+                {(() => {
+                  const end = enderecoResumido(localDoCatalogo(m.id));
+                  return end ? (
+                    <Text className="text-xs text-muted-foreground" numberOfLines={1}>
+                      {end}
+                    </Text>
+                  ) : null;
+                })()}
               </View>
             </Pressable>
           ))}
