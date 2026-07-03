@@ -336,7 +336,7 @@ export async function prefetchDadosBase(qc: QueryClient): Promise<void> {
   const buscaCfg = offlineCacheQuery<BuscaGpsConfig>(
     "busca-locais-config",
     "/m/busca-locais-config",
-    { staleTime: 30 * 60_000 },
+    { staleTime: 5 * 60_000 },
   );
   await Promise.allSettled([
     qc.prefetchQuery(cat),
@@ -705,14 +705,15 @@ export const BUSCA_GPS_CONFIG_DEFAULTS: BuscaGpsConfig = {
 
 /**
  * Cacheia agressivo + offline. Falhou em buscar → usa defaults.
- * Buscado 1x quando a tela monta (não a cada clique do botão) e revalidado só
- * a cada 30min — config raramente muda, então não onera a UX. O clique de
- * "Estou no local de descarga" lê o valor já em memória, sem rede.
+ * Revalidado a cada 5min (além do cold-start via prefetchDadosBase) — os raios
+ * de busca afetam operação, então mudança no painel deve chegar rápido ao
+ * motorista sem esperar demais. O clique de "Estou no local de descarga" lê o
+ * valor já em memória, sem rede.
  */
 export function useBuscaGpsConfig() {
   return useQuery(
     offlineCacheQuery<BuscaGpsConfig>("busca-locais-config", "/m/busca-locais-config", {
-      staleTime: 30 * 60_000,
+      staleTime: 5 * 60_000,
     }),
   );
 }
