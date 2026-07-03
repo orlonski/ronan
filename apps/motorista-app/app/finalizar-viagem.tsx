@@ -121,7 +121,13 @@ export default function FinalizarViagem() {
   const kmRecomendado = useMemo(() => {
     const rec = alternativas.data?.find((r) => r.recomendada);
     if (rec) return parseFloat(rec.km);
-    return rota.data && "km" in rota.data && rota.data.km !== null
+    // Só km de rota REAL (OSRM/cache) conta como "calculado". O estimado por
+    // haversine (sem rede) NÃO vai como kmCalculado — sinaliza pro backend
+    // recalcular pelo trajeto certo quando sincronizar.
+    return rota.data &&
+      "km" in rota.data &&
+      rota.data.km !== null &&
+      rota.data.fonte !== "estimado_haversine"
       ? parseFloat(String(rota.data.km))
       : undefined;
   }, [alternativas.data, rota.data]);

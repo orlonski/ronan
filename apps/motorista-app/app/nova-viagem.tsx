@@ -200,7 +200,13 @@ export default function NovaViagem() {
   const kmRecomendado = useMemo(() => {
     const rec = alternativas.data?.find((r) => r.recomendada);
     if (rec) return parseFloat(rec.km);
-    return rota.data && "km" in rota.data && rota.data.km !== null
+    // Só um km de rota REAL (OSRM/cache) conta como "calculado". O estimado por
+    // haversine (sem rede, linha reta) NÃO vai como kmCalculado — assim o backend
+    // sabe que precisa recalcular pelo trajeto certo quando a viagem sincronizar.
+    return rota.data &&
+      "km" in rota.data &&
+      rota.data.km !== null &&
+      rota.data.fonte !== "estimado_haversine"
       ? parseFloat(String(rota.data.km))
       : undefined;
   }, [alternativas.data, rota.data]);
