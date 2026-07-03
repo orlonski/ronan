@@ -400,14 +400,11 @@ export default function FinalizarViagem() {
                   ) : rota.data &&
                     "km" in rota.data &&
                     rota.data.km &&
-                    !kmEditadoManual ? (
-                    rota.data.fonte === "estimado_haversine" ? (
-                      <AvisoKmEstimado km={rota.data.km} />
-                    ) : (
-                      <Text className="text-xs font-medium text-success">
-                        ✓ Calculado ({rota.data.km} km)
-                      </Text>
-                    )
+                    !kmEditadoManual &&
+                    rota.data.fonte !== "estimado_haversine" ? (
+                    <Text className="text-xs font-medium text-success">
+                      ✓ Calculado ({rota.data.km} km)
+                    </Text>
                   ) : null}
                 </View>
                 <View className="flex-1 gap-2">
@@ -421,6 +418,15 @@ export default function FinalizarViagem() {
                   />
                 </View>
               </View>
+              {/* Aviso de km estimado em LINHA INTEIRA (abaixo da linha km+pedágio),
+                  senão fica espremido na coluna estreita do km. */}
+              {rota.data &&
+              "km" in rota.data &&
+              rota.data.km &&
+              !kmEditadoManual &&
+              rota.data.fonte === "estimado_haversine" ? (
+                <AvisoKmEstimado km={rota.data.km} />
+              ) : null}
               {val.erroDe("km") ? <ErroCampo msg={val.erroDe("km")!} /> : null}
             </View>
 

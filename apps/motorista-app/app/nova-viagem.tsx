@@ -968,6 +968,13 @@ export default function NovaViagem() {
                   />
                 </View>
               </View>
+              {/* Aviso de km estimado em LINHA INTEIRA (abaixo da linha km+pedágio). */}
+              {rota.data &&
+              "fonte" in rota.data &&
+              rota.data.fonte === "estimado_haversine" &&
+              !kmEditadoManual ? (
+                <AvisoKmEstimado km={rota.data.km} />
+              ) : null}
               {val.erroDe("km") ? <ErroCampo msg={val.erroDe("km")!} /> : null}
             </View>
 
@@ -1079,7 +1086,9 @@ function KmHint({
     );
   }
   if (rota.fonte === "estimado_haversine") {
-    return <AvisoKmEstimado km={rota.km} />;
+    // O aviso grande é renderizado em LINHA INTEIRA fora da coluna (senão fica
+    // espremido na largura do km). Aqui, nada.
+    return null;
   }
   if (rota.fonte === "cache_local") {
     return (
