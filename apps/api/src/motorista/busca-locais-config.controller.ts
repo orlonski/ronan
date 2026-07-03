@@ -20,6 +20,10 @@ export class BuscaLocaisConfigMotoristaController {
   async get() {
     const cfg = await this.service.get();
     return {
+      // Raios da busca de locais por GPS (2 etapas). Antes só o backend usava;
+      // agora o app também precisa deles pra respeitar a config quando offline.
+      raioInicialM: cfg.raioInicialM,
+      raioAmpliadoM: cfg.raioAmpliadoM,
       gpsAlvoMetros: cfg.gpsAlvoMetros,
       gpsMaxSegundos: cfg.gpsMaxSegundos,
       gpsLimiteSinalFracoM: cfg.gpsLimiteSinalFracoM,

@@ -593,6 +593,9 @@ export default function NovaViagem() {
                 ? { descargaPrecisao: descargaCaptura.precisao }
                 : {}),
               descargaFonte: descargaCaptura.fonte,
+              ...(descargaCaptura.raioUsadoM != null
+                ? { descargaRaioUsadoM: descargaCaptura.raioUsadoM }
+                : {}),
               ...(descargaCaptura.distanciaMetros != null
                 ? { descargaDistanciaMetros: descargaCaptura.distanciaMetros }
                 : {}),

@@ -40,6 +40,7 @@ export type FinalizarDraft = {
     lng: number;
     precisao: number | null;
     fonte?: FonteGps;
+    raioUsadoM?: number;
     distanciaMetros: number | null;
     buscaOffline: boolean;
   } | null;
@@ -302,6 +303,7 @@ export async function iniciarViagemGuiada(input: {
 export async function registrarEventoGuiado(input: {
   tipo: TipoEventoViagem;
   coords?: { lat: number; lng: number; precisao?: number; fonte?: FonteGps };
+  raioUsadoM?: number;
   local?: { id: string; nome: string; lat?: number; lng?: number; criarOffline?: boolean };
   foto?: { uri: string; mime: string };
   toneladas?: number;
@@ -349,6 +351,7 @@ export async function registrarEventoGuiado(input: {
       lng: input.coords?.lng,
       precisao: input.coords?.precisao,
       fonte: input.coords?.fonte,
+      raioUsadoM: input.raioUsadoM,
       localId: input.local?.id,
       localDados,
       toneladas: input.toneladas,
@@ -390,6 +393,7 @@ export async function finalizarViagemGuiada(input: {
   descargaLng?: number;
   descargaPrecisao?: number;
   descargaFonte?: FonteGps;
+  descargaRaioUsadoM?: number;
   descargaDistanciaMetros?: number;
   valorPedagioTotal?: number;
   observacao?: string;
@@ -416,6 +420,7 @@ export async function finalizarViagemGuiada(input: {
       descargaLng: input.descargaLng,
       descargaPrecisao: input.descargaPrecisao,
       descargaFonte: input.descargaFonte,
+      descargaRaioUsadoM: input.descargaRaioUsadoM,
       descargaDistanciaMetros: input.descargaDistanciaMetros,
       valorPedagioTotal: input.valorPedagioTotal,
       observacao: input.observacao,

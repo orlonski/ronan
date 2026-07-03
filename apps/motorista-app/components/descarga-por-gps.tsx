@@ -32,7 +32,6 @@ import {
   useBuscaGpsConfig,
   useCriarLocalRapido,
   BUSCA_GPS_CONFIG_DEFAULTS,
-  DESCARGA_RAIO_AMPLIADO_PADRAO,
   type Catalogos,
   type LocalProximo,
 } from "@/lib/queries";
@@ -51,6 +50,8 @@ type CoordsCap = {
   precisao: number | null;
   fonte: FonteGps;
   buscaOffline: boolean;
+  /** Raio (m) em que o local foi achado na busca (inicial/ampliado). */
+  raioUsadoM?: number;
 };
 
 type Estado =
@@ -84,6 +85,8 @@ export type DescargaCaptura = {
   /** Fonte do sinal (PRECISA/BALANCED/CACHE) — vira Viagem.descargaFonte.
    *  Opcional: rascunho persistido antes da feature não tem. */
   fonte?: FonteGps;
+  /** Raio (m) em que o local foi achado — vira Viagem.descargaRaioUsadoM. */
+  raioUsadoM?: number;
   distanciaMetros: number | null;
   /** A busca de locais desse clique foi feita offline (catálogo em cache). */
   buscaOffline: boolean;
@@ -126,6 +129,7 @@ export function DescargaPorGps({
   const [nomeNovo, setNomeNovo] = useState("");
   const criar = useCriarLocalRapido();
   const gpsConfig = useBuscaGpsConfig();
+  const cfg = gpsConfig.data ?? BUSCA_GPS_CONFIG_DEFAULTS;
   const qc = useQueryClient();
   // Endereço completo não vem na busca de proximidade — cruza pelo id com o
   // catálogo em cache (que tem logradouro/bairro/cidade/uf). Snapshot ok: o
@@ -146,7 +150,6 @@ export function DescargaPorGps({
     setErro(null);
     setErroAjustes(false);
     setEstado({ tipo: "capturando", precisao: null });
-    const cfg = gpsConfig.data ?? BUSCA_GPS_CONFIG_DEFAULTS;
     const res = await pegarCoordsPrecisa({
       alvoMetros: cfg.gpsAlvoMetros,
       maxMs: cfg.gpsMaxSegundos * 1000,
@@ -204,6 +207,7 @@ export function DescargaPorGps({
     let matches: LocalProximo[];
     let usouRaioAmpliado: boolean;
     let raioInicialM: number;
+    let raioAmpliadoM: number;
     let buscaOffline = false;
     try {
       const res = await buscarDescargaDuasEtapas({
@@ -214,6 +218,7 @@ export function DescargaPorGps({
       matches = res.locais;
       usouRaioAmpliado = res.usouRaioAmpliado;
       raioInicialM = res.raioInicialM;
+      raioAmpliadoM = res.raioAmpliadoM;
     } catch (err) {
       if (!isNetworkError(err)) {
         setErro((err as Error).message || "Erro ao buscar locais próximos");
@@ -221,7 +226,7 @@ export function DescargaPorGps({
         return;
       }
       buscaOffline = true;
-      // Offline: busca no catálogo cacheado (2 etapas com raios padrão).
+      // Offline: busca no catálogo cacheado (2 etapas com os raios da config).
       const catalogos = qc.getQueryData<Catalogos>(["catalogos"]);
       if (!catalogos) {
         setErro(
@@ -235,21 +240,29 @@ export function DescargaPorGps({
         lng: coords.lng,
         locais: catalogos.locais,
         limit: 5,
+        raioInicialM: cfg.raioInicialM,
+        raioAmpliadoM: cfg.raioAmpliadoM,
       });
       matches = res.locais;
       usouRaioAmpliado = res.usouRaioAmpliado;
       raioInicialM = res.raioInicialM;
+      raioAmpliadoM = res.raioAmpliadoM;
       // Se nada veio do cache (lugar novo), cai no fluxo padrão de
       // sem_match abaixo — motorista digita o nome e o local entra no
       // outbox offline (pendingLocais). Não bloqueia mais.
     }
 
+    // Raio em que o local foi achado (pra exibir e auditar). Só faz sentido
+    // quando houve match; lugar novo (sem_match) não tem raio.
+    const raioUsadoM =
+      matches.length > 0 ? (usouRaioAmpliado ? raioAmpliadoM : raioInicialM) : undefined;
     const cap: CoordsCap = {
       lat: coords.lat,
       lng: coords.lng,
       precisao: coords.precisao,
       fonte: coords.fonte,
       buscaOffline,
+      raioUsadoM,
     };
     if (matches.length === 0) {
       setEstado({ tipo: "sem_match", coords: cap });
@@ -298,7 +311,7 @@ export function DescargaPorGps({
         lat: cap.lat,
         lng: cap.lng,
         tipoUso: "descarga",
-        raioM: DESCARGA_RAIO_AMPLIADO_PADRAO,
+        raioM: cfg.raioAmpliadoM,
         limit: 8,
       });
     } catch (err) {
@@ -310,14 +323,16 @@ export function DescargaPorGps({
               lng: cap.lng,
               locais: catalogos.locais,
               tipoUso: "descarga",
-              raioM: DESCARGA_RAIO_AMPLIADO_PADRAO,
+              raioM: cfg.raioAmpliadoM,
               limit: 8,
             })
           : [];
       }
     }
     if (outros.length > 0) {
-      setEstado({ tipo: "escolha", matches: outros, coords: cap, ampliado: true, raioInicialM: 0 });
+      // "Ver outros" busca no raio ampliado — registra isso pra auditoria.
+      const capAmpliado = { ...cap, raioUsadoM: cfg.raioAmpliadoM };
+      setEstado({ tipo: "escolha", matches: outros, coords: capAmpliado, ampliado: true, raioInicialM: 0 });
     } else {
       setEstado({ tipo: "sem_match", coords: cap });
       setNomeNovo("");
@@ -431,6 +446,11 @@ export function DescargaPorGps({
                   {estado.distanciaMetros != null && `${estado.distanciaMetros}m do GPS`}
                   {estado.distanciaMetros != null && estado.vezesUsado ? " · " : ""}
                   {estado.vezesUsado ? `usado ${estado.vezesUsado}x em 90d` : ""}
+                </Text>
+              )}
+              {estado.coords?.raioUsadoM != null && (
+                <Text className="mt-0.5 text-xs text-muted-foreground">
+                  Achei este dentro de {estado.coords.raioUsadoM} m de você
                 </Text>
               )}
             </View>

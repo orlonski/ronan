@@ -76,6 +76,8 @@ export const CriarViagemInput = z.object({
   // a precisão: CACHE = caiu no last-known do sistema (posição pode estar defasada).
   descargaFonte: z.nativeEnum(FonteGps).optional(),
   descargaDistanciaMetros: z.number().nonnegative().max(MAX_KM * 1000).optional(),
+  // Raio (m) em que o local foi encontrado (inicial ou ampliado, da config).
+  descargaRaioUsadoM: z.number().int().nonnegative().max(100000).optional(),
   // true = a busca de locais no clique foi servida do catálogo em cache (sem
   // internet no momento); pode ter faltado local recém-criado por outro motorista.
   descargaBuscaOffline: z.boolean().optional(),

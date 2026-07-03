@@ -639,6 +639,7 @@ export class ViagensMotoristaService {
         descargaLng: rest.descargaLng,
         descargaPrecisao: rest.descargaPrecisao,
         descargaFonte: rest.descargaFonte,
+        descargaRaioUsadoM: rest.descargaRaioUsadoM,
         descargaDistanciaMetros: rest.descargaDistanciaMetros,
         descargaBuscaOffline: rest.descargaBuscaOffline,
         iniciadoEm: rest.iniciadoEm,
@@ -928,6 +929,7 @@ export class ViagensMotoristaService {
           descargaLng: input.lng ?? undefined,
           descargaPrecisao: input.precisao ?? undefined,
           descargaFonte: input.fonte ?? undefined,
+          descargaRaioUsadoM: input.raioUsadoM ?? undefined,
         },
       });
     }
@@ -1010,6 +1012,7 @@ export class ViagensMotoristaService {
         descargaLng: input.descargaLng,
         descargaPrecisao: input.descargaPrecisao,
         descargaFonte: input.descargaFonte,
+        descargaRaioUsadoM: input.descargaRaioUsadoM,
         descargaDistanciaMetros: input.descargaDistanciaMetros,
         valorPedagioTotal: input.valorPedagioTotal,
         observacao: input.observacao,

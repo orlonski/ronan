@@ -331,10 +331,18 @@ export async function prefetchDadosBase(qc: QueryClient): Promise<void> {
     "/m/viagem/tipos-evento",
     { staleTime: 5 * 60_000 },
   );
+  // Config de busca (raios + captura de GPS): cacheada aqui pra o offline usar
+  // os raios do painel mesmo se o motorista mudou a config e perdeu o sinal.
+  const buscaCfg = offlineCacheQuery<BuscaGpsConfig>(
+    "busca-locais-config",
+    "/m/busca-locais-config",
+    { staleTime: 30 * 60_000 },
+  );
   await Promise.allSettled([
     qc.prefetchQuery(cat),
     qc.prefetchQuery(me),
     qc.prefetchQuery(tipos),
+    qc.prefetchQuery(buscaCfg),
   ]);
 }
 
@@ -678,12 +686,18 @@ export function useTrackingConfig() {
 
 /** Config da captura de GPS no "Estou no local de descarga" (editável no admin). */
 export type BuscaGpsConfig = {
+  // Raios da busca de locais por GPS (2 etapas). Cacheados offline pra a busca
+  // local respeitar a config do painel mesmo sem sinal.
+  raioInicialM: number;
+  raioAmpliadoM: number;
   gpsAlvoMetros: number;
   gpsMaxSegundos: number;
   gpsLimiteSinalFracoM: number;
 };
 
 export const BUSCA_GPS_CONFIG_DEFAULTS: BuscaGpsConfig = {
+  raioInicialM: 50,
+  raioAmpliadoM: 500,
   gpsAlvoMetros: 10,
   gpsMaxSegundos: 20,
   gpsLimiteSinalFracoM: 50,
@@ -1423,23 +1437,26 @@ export function buscarLocaisProximosOffline(input: {
 }
 
 /**
- * Versão offline da busca de descarga em 2 etapas. Usa os raios padrão (a
- * config do backend não está acessível offline) sobre o catálogo cacheado.
+ * Versão offline da busca de descarga em 2 etapas, sobre o catálogo cacheado.
+ * Os raios vêm da config do painel (cacheada via useBuscaGpsConfig) — assim o
+ * offline respeita o mesmo raio do online. As constantes são só fallback pra
+ * quando a config ainda não foi cacheada.
  */
 export function buscarDescargaDuasEtapasOffline(input: {
   lat: number;
   lng: number;
   locais: Local[];
   limit?: number;
+  raioInicialM?: number;
+  raioAmpliadoM?: number;
 }): BuscaDescargaResult {
-  const meta = {
-    raioInicialM: DESCARGA_RAIO_INICIAL_PADRAO,
-    raioAmpliadoM: DESCARGA_RAIO_AMPLIADO_PADRAO,
-  };
+  const raioInicialM = input.raioInicialM ?? DESCARGA_RAIO_INICIAL_PADRAO;
+  const raioAmpliadoM = input.raioAmpliadoM ?? DESCARGA_RAIO_AMPLIADO_PADRAO;
+  const meta = { raioInicialM, raioAmpliadoM };
   const inicial = buscarLocaisProximosOffline({
     ...input,
     tipoUso: "descarga",
-    raioM: DESCARGA_RAIO_INICIAL_PADRAO,
+    raioM: raioInicialM,
   });
   if (inicial.length > 0) {
     return { locais: inicial, usouRaioAmpliado: false, ...meta };
@@ -1447,7 +1464,7 @@ export function buscarDescargaDuasEtapasOffline(input: {
   const ampliado = buscarLocaisProximosOffline({
     ...input,
     tipoUso: "descarga",
-    raioM: DESCARGA_RAIO_AMPLIADO_PADRAO,
+    raioM: raioAmpliadoM,
   });
   return { locais: ampliado, usouRaioAmpliado: ampliado.length > 0, ...meta };
 }

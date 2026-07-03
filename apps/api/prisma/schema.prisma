@@ -904,6 +904,10 @@ model Viagem {
   // null pra viagem antiga pré-feature, sem captura fresca, ou PWA.
   descargaFonte          FonteGps?
   descargaDistanciaMetros Int?  // distância do clique até o local selecionado
+  // Raio (m) em que o local foi encontrado na busca (inicial ou ampliado, da
+  // config do painel). Auditoria: quão "solta" foi a marcação. Null pra viagem
+  // antiga, local novo cadastrado na hora (sem match), ou PWA.
+  descargaRaioUsadoM     Int?
   // true = a busca de locais no clique caiu no catálogo em cache (sem internet),
   // então pode ter faltado algum local criado por outro motorista recentemente.
   // null = não capturado (viagem antiga pré-feature ou sem captura fresca).

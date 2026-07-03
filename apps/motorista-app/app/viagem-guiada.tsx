@@ -443,6 +443,7 @@ function EventoSheet({
       await registrarEventoGuiado({
         tipo,
         coords: coordsEvento,
+        raioUsadoM: local?.raioUsadoM,
         local: local
           ? {
               id: local.id,

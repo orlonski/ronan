@@ -42,6 +42,7 @@ type CoordsCap = {
   precisao: number | null;
   fonte: FonteGps;
   buscaOffline: boolean;
+  raioUsadoM?: number;
 };
 
 type Estado =
@@ -72,6 +73,8 @@ export type SelecaoLocal = {
   precisao?: number | null;
   /** Fonte do sinal (PRECISA/BALANCED/CACHE) da captura. */
   fonte?: FonteGps;
+  /** Raio (m) em que o local foi achado na busca (só descarga). */
+  raioUsadoM?: number;
   distanciaMetros?: number | null;
   criarOffline?: boolean;
   buscaOffline?: boolean;
@@ -120,6 +123,7 @@ export function LocalPorGps({
   const [erroAjustes, setErroAjustes] = useState(false);
   const [nomeNovo, setNomeNovo] = useState("");
   const gpsConfig = useBuscaGpsConfig();
+  const cfg = gpsConfig.data ?? BUSCA_GPS_CONFIG_DEFAULTS;
   const qc = useQueryClient();
   // Endereço completo vem do catálogo em cache (a busca de proximidade não traz).
   const localDoCatalogo = (id: string) =>
@@ -133,7 +137,6 @@ export function LocalPorGps({
     setErro(null);
     setErroAjustes(false);
     setEstado({ tipo: "capturando", precisao: null });
-    const cfg = gpsConfig.data ?? BUSCA_GPS_CONFIG_DEFAULTS;
     const res = await pegarCoordsPrecisa({
       alvoMetros: cfg.gpsAlvoMetros,
       maxMs: cfg.gpsMaxSegundos * 1000,
@@ -165,6 +168,7 @@ export function LocalPorGps({
     let matches: LocalProximo[];
     let usouRaioAmpliado: boolean;
     let raioInicialM: number;
+    let raioAmpliadoM = cfg.raioAmpliadoM;
     let buscaOffline = false;
     try {
       if (lado === "descarga") {
@@ -176,6 +180,7 @@ export function LocalPorGps({
         matches = res.locais;
         usouRaioAmpliado = res.usouRaioAmpliado;
         raioInicialM = res.raioInicialM;
+        raioAmpliadoM = res.raioAmpliadoM;
       } else {
         // Carga: busca por proximidade filtrando por tipo carga E cliente
         // (vinculados a ele + genéricos). Nunca cria/lista tudo.
@@ -210,10 +215,13 @@ export function LocalPorGps({
           lng: coords.lng,
           locais: catalogos.locais,
           limit: 5,
+          raioInicialM: cfg.raioInicialM,
+          raioAmpliadoM: cfg.raioAmpliadoM,
         });
         matches = res.locais;
         usouRaioAmpliado = res.usouRaioAmpliado;
         raioInicialM = res.raioInicialM;
+        raioAmpliadoM = res.raioAmpliadoM;
       } else {
         matches = buscarLocaisProximosOffline({
           lat: coords.lat,
@@ -221,18 +229,27 @@ export function LocalPorGps({
           locais: catalogos.locais,
           tipoUso: "carga",
           clienteId: clienteId ?? undefined,
+          raioM: cfg.raioInicialM,
         });
         usouRaioAmpliado = false;
         raioInicialM = 0;
       }
     }
 
+    // Raio em que o local foi achado (descarga; carga não tem 2 etapas).
+    const raioUsadoM =
+      lado === "descarga" && matches.length > 0
+        ? usouRaioAmpliado
+          ? raioAmpliadoM
+          : raioInicialM
+        : undefined;
     const cap: CoordsCap = {
       lat: coords.lat,
       lng: coords.lng,
       precisao: coords.precisao,
       fonte: coords.fonte,
       buscaOffline,
+      raioUsadoM,
     };
     if (matches.length === 0) {
       if (permiteCriar) {
@@ -258,6 +275,7 @@ export function LocalPorGps({
       lng: m.lng ?? undefined,
       precisao: cap.precisao,
       fonte: cap.fonte,
+      raioUsadoM: cap.raioUsadoM,
       distanciaMetros: m.distanciaMetros,
       buscaOffline: cap.buscaOffline,
     };
@@ -352,6 +370,11 @@ export function LocalPorGps({
                   />
                 );
               })()}
+            {estado.local.raioUsadoM != null && !estado.local.criarOffline && (
+              <Text className="mt-0.5 text-xs text-muted-foreground">
+                Achei este dentro de {estado.local.raioUsadoM} m de você
+              </Text>
+            )}
             {estado.local.distanciaMetros != null && (
               <Text
                 className="mt-0.5 text-sm text-muted-foreground"

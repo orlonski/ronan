@@ -98,6 +98,8 @@ export const RegistrarEventoInput = z.object({
   // Fonte do sinal (PRECISA/BALANCED/CACHE). No evento de descarga espelha pra
   // Viagem.descargaFonte; nos demais fica no evento pra auditoria.
   fonte: z.nativeEnum(FonteGps).optional(),
+  // Raio (m) em que o local foi encontrado (espelha em Viagem.descargaRaioUsadoM).
+  raioUsadoM: z.number().int().nonnegative().max(100000).optional(),
   localId: z.string().uuid().optional(),
   localDados: LocalSnapshot.optional(),
   fotoKey: z.string().optional(),
@@ -136,6 +138,8 @@ export const FinalizarViagemInput = z.object({
   descargaPrecisao: z.number().nonnegative().max(MAX_PRECISAO).optional(),
   // Fonte do sinal (PRECISA/BALANCED/CACHE) da captura da descarga.
   descargaFonte: z.nativeEnum(FonteGps).optional(),
+  // Raio (m) em que o local de descarga foi encontrado na busca.
+  descargaRaioUsadoM: z.number().int().nonnegative().max(100000).optional(),
   descargaDistanciaMetros: z.number().nonnegative().max(MAX_KM * 1000).optional(),
   valorPedagioTotal: z.number().nonnegative().max(MAX_VALOR).optional(),
   observacao: z.string().max(500).optional(),

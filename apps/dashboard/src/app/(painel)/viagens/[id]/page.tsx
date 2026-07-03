@@ -107,6 +107,7 @@ type ViagemDetalhe = {
   descargaLng: number | null;
   descargaPrecisao: number | null;
   descargaFonte: FonteGps | null;
+  descargaRaioUsadoM: number | null;
   descargaDistanciaMetros: number | null;
   descargaBuscaOffline: boolean | null;
   veiculo: { id: string; placa: string; modelo: string | null };
@@ -1089,6 +1090,9 @@ function MarcacaoDescarga({
   const partes: string[] = [];
   if (dist != null) partes.push(dist === 0 ? "local criado aqui" : `${dist} m do local`);
   if (prec != null) partes.push(`precisão ±${Math.round(prec)} m`);
+  // Raio em que o local foi encontrado na busca (config do painel). Auditoria
+  // de quão "solta" foi a marcação — quanto maior o raio, mais permissiva.
+  if (viagem.descargaRaioUsadoM != null) partes.push(`raio usado ${viagem.descargaRaioUsadoM} m`);
   // Busca offline: o app procurou o local no catálogo em cache (sem internet),
   // então pode ter faltado algum local recém-criado por outro motorista.
   if (viagem.descargaBuscaOffline) partes.push("busca offline");
