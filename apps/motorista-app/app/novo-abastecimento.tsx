@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
+import { ErroCampo, useValidacaoGuiada } from "@/components/validacao-guiada";
 import { showAlert } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { fmtDataBR, hojeISO } from "@/lib/datetime";
@@ -87,6 +88,7 @@ export default function NovoAbastecimento() {
   const [foto, setFoto] = useState<CapturedPhoto | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const val = useValidacaoGuiada();
   const [coords, setCoords] = useState<{
     lat: number;
     lng: number;
@@ -200,31 +202,29 @@ export default function NovoAbastecimento() {
 
   async function salvar() {
     setErro(null);
-    function falhar(msg: string) {
-      setErro(msg);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    }
+    val.limpar();
 
-    if (!veiculoId) return falhar("Escolha a placa.");
-    if (!empresaId) return falhar("Escolha a empresa.");
+    if (!veiculoId) return void val.apontar("veiculoId", "Escolha a placa");
+    if (!empresaId) return void val.apontar("empresaId", "Escolha a empresa");
     const litrosNum = parseFloat(litros.replace(",", "."));
     if (!Number.isFinite(litrosNum) || litrosNum <= 0) {
-      return falhar("Informe os litros.");
+      return void val.apontar("litros", "Informe os litros");
     }
     const valorNum = parseFloat(valor.replace(",", "."));
     if (!emComboio && (!Number.isFinite(valorNum) || valorNum <= 0)) {
-      return falhar("Informe o valor (ou marque \"em comboio\").");
+      return void val.apontar("valor", 'Informe o valor (ou marque "em comboio")');
     }
     const odometroNum = parseInt(odometro.replace(/\D/g, ""), 10);
     if (!Number.isFinite(odometroNum) || odometroNum < 0) {
-      return falhar("Informe o odômetro.");
+      return void val.apontar("odometro", "Informe o odômetro");
     }
     if (
       ultimoOdometroDoVeiculo !== null &&
       odometroNum < ultimoOdometroDoVeiculo
     ) {
-      return falhar(
-        `Odômetro (${odometroNum} km) é menor que o último registrado pra esse veículo (${ultimoOdometroDoVeiculo} km).`,
+      return void val.apontar(
+        "odometro",
+        `Odômetro (${odometroNum} km) é menor que o último registrado pra esse veículo (${ultimoOdometroDoVeiculo} km)`,
       );
     }
 
@@ -326,30 +326,45 @@ export default function NovoAbastecimento() {
           className="flex-1"
         >
           <ScrollView
+            ref={val.scrollRef}
             contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 16 }}
             keyboardShouldPersistTaps="handled"
           >
-            <View className="gap-2">
-              <Label>Placa</Label>
+            <View className="gap-2" onLayout={val.onLayoutCampo("veiculoId")}>
+              <Label error={!!val.erroDe("veiculoId")}>Placa</Label>
               <Select
                 value={veiculoId}
-                onChange={setVeiculoId}
+                onChange={(v) => {
+                  val.limpar();
+                  setVeiculoId(v);
+                }}
                 options={veiculoOptions}
                 placeholder="Escolha a placa"
                 searchable
+                error={!!val.erroDe("veiculoId")}
               />
+              {val.erroDe("veiculoId") ? (
+                <ErroCampo msg={val.erroDe("veiculoId")!} />
+              ) : null}
             </View>
 
-            <View className="gap-2">
-              <Label>Empresa</Label>
+            <View className="gap-2" onLayout={val.onLayoutCampo("empresaId")}>
+              <Label error={!!val.erroDe("empresaId")}>Empresa</Label>
               <Select
                 value={empresaId}
-                onChange={setEmpresaId}
+                onChange={(v) => {
+                  val.limpar();
+                  setEmpresaId(v);
+                }}
                 options={empresaOptions}
                 placeholder="Escolha a empresa"
                 searchable
                 emptyMessage="Nenhuma empresa cadastrada"
+                error={!!val.erroDe("empresaId")}
               />
+              {val.erroDe("empresaId") ? (
+                <ErroCampo msg={val.erroDe("empresaId")!} />
+              ) : null}
             </View>
 
             <View className="gap-2">
@@ -367,35 +382,57 @@ export default function NovoAbastecimento() {
               />
             </View>
 
-            <View className="flex-row gap-3">
-              <View className="flex-1 gap-2">
-                <Label>Litros</Label>
-                <Input
-                  value={litros}
-                  onChangeText={setLitros}
-                  keyboardType="decimal-pad"
-                  placeholder="0,000"
-                  editable={!submitting}
-                  maxLength={8}
-                />
-                <Text className="text-xs text-muted-foreground">
-                  Em litros (máx 2000)
-                </Text>
+            <View
+              onLayout={(e) => {
+                // litros + valor dividem a mesma row → mesma posição de scroll
+                val.onLayoutCampo("litros")(e);
+                val.onLayoutCampo("valor")(e);
+              }}
+            >
+              <View className="flex-row gap-3">
+                <View className="flex-1 gap-2">
+                  <Label error={!!val.erroDe("litros")}>Litros</Label>
+                  <Input
+                    value={litros}
+                    onChangeText={(v) => {
+                      val.limpar();
+                      setLitros(v);
+                    }}
+                    keyboardType="decimal-pad"
+                    placeholder="0,000"
+                    editable={!submitting}
+                    maxLength={8}
+                    error={!!val.erroDe("litros")}
+                  />
+                  <Text className="text-xs text-muted-foreground">
+                    Em litros (máx 2000)
+                  </Text>
+                </View>
+                <View className="flex-1 gap-2">
+                  <Label error={!!val.erroDe("valor")}>Valor (R$)</Label>
+                  <Input
+                    value={emComboio ? "" : valor}
+                    onChangeText={(v) => {
+                      val.limpar();
+                      setValor(v);
+                    }}
+                    keyboardType="decimal-pad"
+                    placeholder={emComboio ? "—" : "0,00"}
+                    editable={!submitting && !emComboio}
+                    maxLength={8}
+                    error={!!val.erroDe("valor")}
+                  />
+                  <Text className="text-xs text-muted-foreground">
+                    {emComboio ? "Preenchido depois pelo escritório" : "Em R$ (máx 50000)"}
+                  </Text>
+                </View>
               </View>
-              <View className="flex-1 gap-2">
-                <Label>Valor (R$)</Label>
-                <Input
-                  value={emComboio ? "" : valor}
-                  onChangeText={setValor}
-                  keyboardType="decimal-pad"
-                  placeholder={emComboio ? "—" : "0,00"}
-                  editable={!submitting && !emComboio}
-                  maxLength={8}
-                />
-                <Text className="text-xs text-muted-foreground">
-                  {emComboio ? "Preenchido depois pelo escritório" : "Em R$ (máx 50000)"}
-                </Text>
-              </View>
+              {val.erroDe("litros") ? (
+                <ErroCampo msg={val.erroDe("litros")!} />
+              ) : null}
+              {val.erroDe("valor") ? (
+                <ErroCampo msg={val.erroDe("valor")!} />
+              ) : null}
             </View>
 
             <View className="flex-row items-start gap-3 rounded-lg border border-border bg-muted/30 p-3">
@@ -425,16 +462,23 @@ export default function NovoAbastecimento() {
               </View>
             )}
 
-            <View className="gap-2">
-              <Label>Odômetro (km)</Label>
+            <View className="gap-2" onLayout={val.onLayoutCampo("odometro")}>
+              <Label error={!!val.erroDe("odometro")}>Odômetro (km)</Label>
               <Input
                 value={odometro}
-                onChangeText={(v) => setOdometro(v.replace(/\D/g, ""))}
+                onChangeText={(v) => {
+                  val.limpar();
+                  setOdometro(v.replace(/\D/g, ""));
+                }}
                 keyboardType="number-pad"
                 placeholder="123456"
                 editable={!submitting}
                 maxLength={8}
+                error={!!val.erroDe("odometro")}
               />
+              {val.erroDe("odometro") ? (
+                <ErroCampo msg={val.erroDe("odometro")!} />
+              ) : null}
               {ultimoOdometroDoVeiculo !== null &&
                 (() => {
                   const n = parseInt(odometro.replace(/\D/g, ""), 10);
