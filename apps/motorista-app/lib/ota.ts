@@ -1,9 +1,9 @@
 import * as Updates from "expo-updates";
 
-// Timeouts pra não prender o motorista no boot quando o sinal tá ruim.
-// O check é um round-trip rápido; o download do bundle pode demorar mais, mas
-// como já mostramos a tela "Atualizando", vale esperar um pouco mais por ele.
-const CHECK_TIMEOUT_MS = 8_000;
+// Check é um round-trip rápido; 3s pra não segurar nada no boot com sinal ruim.
+const CHECK_TIMEOUT_MS = 3_000;
+// Download do bundle roda em BACKGROUND (não bloqueia a UI), mas ainda tem teto
+// pra não vazar uma promise pendurada pra sempre num link ruim.
 const FETCH_TIMEOUT_MS = 30_000;
 
 function comTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
@@ -16,22 +16,21 @@ function comTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
 }
 
 /**
- * Aplica a OTA mais recente ANTES de liberar a UI — mirando o primeiro download.
+ * Baixa a OTA mais recente em SEGUNDO PLANO no primeiro launch — sem travar a UI.
  *
- * Quando o motorista instala da Play Store, o app roda o bundle embutido (a
- * build enviada à loja) e a OTA só entraria no próximo cold start. Aqui, no
- * primeiro launch (bundle embutido), baixamos a versão mais recente e
- * recarregamos — ele já cai na versão atual sem precisar fechar/reabrir.
+ * Quando o motorista instala da Play Store, o app roda o bundle embutido e a OTA
+ * só entraria no próximo cold start. Aqui, no primeiro launch, baixamos a versão
+ * nova em background. **Não** recarregamos no meio do uso (era o que prendia o
+ * app ~38s no boot com 4G ruim): quando o download termina, `isUpdatePending`
+ * fica true e o banner "Nova versão disponível" da home convida o motorista a
+ * aplicar no momento dele.
  *
- * - Só age rodando o bundle embutido (`isEmbeddedLaunch`). Depois que uma OTA é
- *   aplicada, os launches seguintes são instantâneos e o banner da home cuida
- *   de updates futuros sem travar a abertura.
- * - Tem timeout: em sinal ruim, segue no bundle atual em vez de prender o app.
- * - Se `reloadAsync` for chamado, o JS reinicia e esta promise nunca resolve.
+ * - Só age rodando o bundle embutido (`isEmbeddedLaunch`). Depois de uma OTA
+ *   aplicada, é no-op — o banner da home cuida de updates futuros.
+ * - Best-effort: nunca bloqueia a renderização, nunca lança. Em sinal ruim
+ *   simplesmente não baixa e segue no bundle atual.
  */
-export async function aplicarUpdateNoBoot(opts?: {
-  onDownloadStart?: () => void;
-}): Promise<void> {
+export async function baixarUpdateNoBoot(): Promise<void> {
   // Dev client / Expo Go: updates desligado.
   if (!Updates.isEnabled) return;
   // Só no primeiro download (ainda rodando o bundle da loja).
@@ -43,16 +42,9 @@ export async function aplicarUpdateNoBoot(opts?: {
       CHECK_TIMEOUT_MS,
     );
     if (!check?.isAvailable) return;
-
-    opts?.onDownloadStart?.();
-
-    const fetched = await comTimeout(
-      Updates.fetchUpdateAsync(),
-      FETCH_TIMEOUT_MS,
-    );
-    if (!fetched?.isNew) return;
-
-    await Updates.reloadAsync();
+    // Baixa em background; NÃO recarrega. O banner da home aplica quando o
+    // motorista quiser.
+    await comTimeout(Updates.fetchUpdateAsync(), FETCH_TIMEOUT_MS);
   } catch {
     // Offline / erro de rede / timeout — segue no bundle atual sem travar.
   }

@@ -2,19 +2,24 @@ import "../global.css";
 
 import { useEffect, useState } from "react";
 import { AppState } from "react-native";
-import { focusManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  focusManager,
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { Redirect, router, Stack, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import * as Updates from "expo-updates";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { AlertHost } from "@/components/ui/alert-dialog";
 import { TutorialHost } from "@/components/tutorial-host";
 import { ConnectivityBanner } from "@/components/connectivity-banner";
+import { getConnected, subscribeConnected } from "@/lib/connectivity";
 import { TelaCarregando } from "@/components/tela-carregando";
-import { aplicarUpdateNoBoot } from "@/lib/ota";
+import { baixarUpdateNoBoot } from "@/lib/ota";
 import { loadTokens } from "@/lib/auth";
 import {
   getCadastroStatus,
@@ -50,13 +55,29 @@ AppState.addEventListener("change", (status) => {
   focusManager.setFocused(status === "active");
 });
 
+// onlineManager → NetInfo: sem isto o TanStack Query assume que está SEMPRE
+// online e dispara/repete queries mesmo offline, esperando o timeout à toa.
+// Ligando ao estado bruto de conexão (isConnected, via connectivity.ts), o
+// QueryClient pausa queries e retries quando não há link. Em 4G fraco (link
+// existe mas arrasta) o cache-first + timeout curto cuidam; aqui é o offline
+// total. Reaproveita o singleton do NetInfo — não abre outro listener.
+onlineManager.setOnline(getConnected());
+onlineManager.setEventListener((setOnline) => subscribeConnected(setOnline));
+
 // Instala handler global que captura crashes nao tratados (ErrorUtils).
 // Salva em AsyncStorage e tenta enviar quando user logar.
 instalarHandlersGlobais();
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { retry: 1, staleTime: 60_000 },
+    // networkMode "offlineFirst": a queryFn/mutationFn SEMPRE roda na 1ª
+    // tentativa, mesmo com o onlineManager reportando offline. Isso preserva o
+    // comportamento local-first (queries caem pro cache, mutations enfileiram no
+    // outbox) — sem isso, o onlineManager pausaria tudo offline e a UI travaria
+    // no spinner. O onlineManager então só pausa RETRIES no offline e dispara
+    // refetch ao reconectar.
+    queries: { retry: 1, staleTime: 60_000, networkMode: "offlineFirst" },
+    mutations: { networkMode: "offlineFirst" },
   },
 });
 
@@ -291,44 +312,16 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Roda ANTES do AuthGate, mirando o primeiro download da loja: enquanto o app
- * ainda está no bundle embutido, baixa a OTA mais recente e recarrega, pra o
- * motorista já cair na versão atual sem fechar/reabrir. Em launches seguintes
- * (já numa OTA aplicada) é no-op e libera o app na hora.
+ * No primeiro launch da loja, dispara o download da OTA mais recente em
+ * SEGUNDO PLANO — sem travar a abertura. Antes esta etapa bloqueava a UI até
+ * ~38s no boot com 4G ruim (check + download do bundle); agora libera o app na
+ * hora e, quando o download termina, o banner "Nova versão disponível" da home
+ * convida o motorista a aplicar. Em launches seguintes é no-op.
  */
 function BootGate({ children }: { children: React.ReactNode }) {
-  // "checking" = checando OTA (splash nativo cobre)
-  // "updating" = baixando uma OTA nova (mostra TelaCarregando)
-  // "done"     = segue pro app (AuthGate)
-  const [phase, setPhase] = useState<"checking" | "updating" | "done">(
-    Updates.isEnabled && Updates.isEmbeddedLaunch ? "checking" : "done",
-  );
-
   useEffect(() => {
-    if (phase !== "checking") return;
-    let alive = true;
-    void aplicarUpdateNoBoot({
-      onDownloadStart: () => {
-        if (alive) setPhase("updating");
-      },
-    }).finally(() => {
-      // Só é alcançado se NÃO recarregou (sem update, timeout ou erro).
-      if (alive) setPhase("done");
-    });
-    return () => {
-      alive = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    void baixarUpdateNoBoot();
   }, []);
-
-  // Ao entrar em "updating", esconde o splash nativo pra revelar a TelaCarregando.
-  useEffect(() => {
-    if (phase === "updating") SplashScreen.hideAsync().catch(() => {});
-  }, [phase]);
-
-  if (phase === "checking") return null; // splash nativo cobre
-  if (phase === "updating")
-    return <TelaCarregando mensagem="Atualizando para a versão mais recente…" />;
   return <>{children}</>;
 }
 

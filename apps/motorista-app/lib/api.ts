@@ -137,12 +137,15 @@ async function refresh(): Promise<RefreshResult> {
   return refreshing;
 }
 
-// Timeout default pra rede 3G/4G ruim. Sem isso, fetch fica pendurado
-// pra sempre se servidor n\xc3\xa3o responder. 20s cobre payloads grandes
-// (catalogos, foto upload) sem ser frustante.
-const REQUEST_TIMEOUT_MS = 20_000;
-// Uploads de foto podem demorar mais — 60s.
-const UPLOAD_TIMEOUT_MS = 60_000;
+// Timeout default pra rede 3G/4G ruim. Sem isso, fetch fica pendurado pra
+// sempre se o servidor não responder. 8s é curto de propósito: com as telas
+// cache-first (lib/queries.ts), quem tem cache nem espera a rede — esse teto
+// só vale no primeiro uso e na revalidação em background. Em 4G fraco, 8s é
+// tempo de sobra pra um GET responder, e corta a "morte" quando não há cache.
+const REQUEST_TIMEOUT_MS = 8_000;
+// Uploads de foto (multipart) precisam de mais fôlego — 45s. É background
+// (outbox), então não pesa no percebido, mas não deixamos infinito.
+const UPLOAD_TIMEOUT_MS = 45_000;
 
 async function fetchComTimeout(
   url: string,
@@ -156,6 +159,29 @@ async function fetchComTimeout(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+// Sinal de conectividade ruim: instante da última falha de rede/timeout (fetch
+// abortado ou sem conexão). O outbox (lib/sync.ts) consulta isso pra fazer
+// backoff em 4G ruim — sem ele, cada item da fila penduraria até o timeout, um
+// após o outro, roubando banda das telas que o motorista está esperando ver.
+let ultimaFalhaRedeAt = 0;
+
+export function getUltimaFalhaRedeAt(): number {
+  return ultimaFalhaRedeAt;
+}
+
+export function marcarFalhaRede(): void {
+  ultimaFalhaRedeAt = Date.now();
+}
+
+/** Converte erro do fetch em TypeError legível e registra a falha de rede. */
+function traduzirErroFetch(err: unknown): Error {
+  marcarFalhaRede();
+  const isTimeout = (err as Error).name === "AbortError";
+  return isTimeout
+    ? new TypeError("Tempo esgotado. Verifique sua conexão.")
+    : (err as Error);
 }
 
 /**
@@ -210,13 +236,10 @@ export async function request<T>(
   try {
     res = await fetchComTimeout(url, fetchInit, timeoutMs);
   } catch (err) {
-    const isTimeout = (err as Error).name === "AbortError";
-    const wrapped = isTimeout
-      ? new TypeError("Tempo esgotado. Verifique sua conexão.")
-      : (err as Error);
     // Falha de rede/timeout (status null): ruído de conectividade na estrada,
-    // não bug acionável. Não reporta; só propaga pra UI/retry enxergar.
-    throw wrapped;
+    // não bug acionável. Não reporta; marca o instante (o outbox usa pra
+    // backoff) e propaga pra UI/retry enxergar.
+    throw traduzirErroFetch(err);
   }
 
   if (res.status === 401 && auth) {
@@ -226,12 +249,8 @@ export async function request<T>(
       try {
         res = await fetchComTimeout(url, { ...fetchInit, headers }, timeoutMs);
       } catch (err) {
-        const isTimeout = (err as Error).name === "AbortError";
-        const wrapped = isTimeout
-          ? new TypeError("Tempo esgotado. Verifique sua conexão.")
-          : (err as Error);
         // Falha de rede/timeout: não reporta (ver acima), só propaga.
-        throw wrapped;
+        throw traduzirErroFetch(err);
       }
     } else if (renov.status === "invalido") {
       // Sessão acabou de verdade — desloga.
@@ -242,6 +261,7 @@ export async function request<T>(
       throw new ApiError(401, null);
     } else {
       // Transitório (rede/servidor): mantém a sessão, só falha esta request.
+      marcarFalhaRede();
       throw new TypeError("Sem conexão com o servidor. Tente de novo em instantes.");
     }
   }

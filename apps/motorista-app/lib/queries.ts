@@ -227,48 +227,90 @@ function normalizarMe<T extends Record<string, unknown>>(m: T): T {
 }
 
 /**
- * useQuery com fallback offline: tenta API, se falhar por rede tenta o cache local.
- * Cache writes em void/catch pra erro de IndexedDB nao quebrar a query.
+ * useQuery **cache-first** com revalidação em segundo plano.
+ *
+ * Por que cache-first (e não network-first como antes): em 4G fraco a conexão
+ * abre mas se arrasta — o fetch não falha rápido, ele pendura até o timeout.
+ * Se esperássemos a rede pra só então cair pro cache, o motorista ficaria
+ * ~8-40s no spinner mesmo já tendo o dado cacheado. Aqui: se há cache local,
+ * devolvemos ele NA HORA e revalidamos em background (grava o fresco no
+ * QueryClient via `qcGlobalRef.setQueryData` quando a rede responder). Só
+ * esperamos a rede no primeiro uso (sem cache ainda).
+ *
+ * `normalize` roda tanto no cache lido quanto no dado fresco — mantém a compat
+ * on-read (renames antigos, feature flags) consistente nos dois caminhos, sem
+ * precisar embrulhar a queryFn por fora (que deixaria o dado da revalidação
+ * em background entrar cru no cache do QueryClient).
+ *
+ * Cache writes em void/catch pra erro de SQLite não quebrar a query.
  */
-function offlineCacheQuery<T>(key: string, path: string, opts: { staleTime?: number } = {}) {
+/**
+ * Núcleo cache-first compartilhado. Se há cache local, devolve NA HORA e
+ * revalida em background (grava o fresco no QueryClient via setQueryData). Só
+ * espera a rede no primeiro uso (sem cache). Usado pelo `offlineCacheQuery`
+ * (dados-base) e pelas queries de lista (que têm queryKey composta e/ou
+ * transformam a resposta antes de cachear).
+ *
+ * - `buscarRede` é responsável por buscar + normalizar + cachear (cachePut).
+ * - `lerCache` reaplica a compat on-read no valor cacheado (default: identidade).
+ */
+async function cacheFirst<T>(
+  queryKey: readonly unknown[],
+  cacheKey: string,
+  buscarRede: () => Promise<T>,
+  lerCache: (bruto: T) => T = (x) => x,
+): Promise<T> {
+  let cached: T | null = null;
+  try {
+    cached = await cacheGet<T>(cacheKey);
+  } catch {
+    /* sqlite indisponivel */
+  }
+  if (cached != null) {
+    // Revalida em background — não trava a UI, a tela já tem o cache.
+    void buscarRede()
+      .then((fresh) => {
+        qcGlobalRef?.setQueryData(queryKey, fresh);
+      })
+      .catch(() => {
+        /* offline/4G ruim: fica com o cache, revalida no próximo gatilho */
+      });
+    return lerCache(cached);
+  }
+  // Primeiro uso (sem cache): precisa esperar a rede (timeout curto em api.ts).
+  return await buscarRede();
+}
+
+function offlineCacheQuery<T>(
+  key: string,
+  path: string,
+  opts: { staleTime?: number; normalize?: (raw: T) => T } = {},
+) {
   const cacheKey = `q:${key}`;
+  const normalize = opts.normalize ?? ((x: T) => x);
+  const buscarRede = async (): Promise<T> => {
+    const fresh = normalize(await api.get<T>(path));
+    void cachePut(cacheKey, fresh).catch(() => {});
+    return fresh;
+  };
   return {
     queryKey: [key],
     staleTime: opts.staleTime ?? 60_000,
-    queryFn: async (): Promise<T> => {
-      try {
-        const fresh = await api.get<T>(path);
-        void cachePut(cacheKey, fresh).catch(() => {});
-        return fresh;
-      } catch (err) {
-        if (isOfflineError(err)) {
-          try {
-            const cached = await cacheGet<T>(cacheKey);
-            if (cached) return cached;
-          } catch {
-            /* sqlite indisponivel */
-          }
-        }
-        throw err;
-      }
-    },
+    queryFn: () => cacheFirst<T>([key], cacheKey, buscarRede, normalize),
   };
 }
 
 export function useMe() {
-  const base = offlineCacheQuery<Me>("me", "/m/me");
-  return useQuery({
-    ...base,
-    queryFn: async () => normalizarMe(await base.queryFn()),
-  });
+  return useQuery(offlineCacheQuery<Me>("me", "/m/me", { normalize: normalizarMe }));
 }
 
 export function useCatalogos() {
-  const base = offlineCacheQuery<Catalogos>("catalogos", "/m/catalogos", { staleTime: 5 * 60_000 });
-  return useQuery({
-    ...base,
-    queryFn: async () => normalizarCatalogos(await base.queryFn()),
-  });
+  return useQuery(
+    offlineCacheQuery<Catalogos>("catalogos", "/m/catalogos", {
+      staleTime: 5 * 60_000,
+      normalize: normalizarCatalogos,
+    }),
+  );
 }
 
 /**
@@ -278,25 +320,20 @@ export function useCatalogos() {
  * (prefetchQuery engole o erro) e o staleTime deduplica chamadas seguidas.
  */
 export async function prefetchDadosBase(qc: QueryClient): Promise<void> {
-  const cat = offlineCacheQuery<Catalogos>("catalogos", "/m/catalogos", { staleTime: 5 * 60_000 });
-  const me = offlineCacheQuery<Me>("me", "/m/me");
+  const cat = offlineCacheQuery<Catalogos>("catalogos", "/m/catalogos", {
+    staleTime: 5 * 60_000,
+    normalize: normalizarCatalogos,
+  });
+  const me = offlineCacheQuery<Me>("me", "/m/me", { normalize: normalizarMe });
   const tipos = offlineCacheQuery<TipoEventoViagemApp[]>(
     "tipos-evento",
     "/m/viagem/tipos-evento",
     { staleTime: 5 * 60_000 },
   );
   await Promise.allSettled([
-    qc.prefetchQuery({
-      queryKey: cat.queryKey,
-      staleTime: cat.staleTime,
-      queryFn: async () => normalizarCatalogos(await cat.queryFn()),
-    }),
-    qc.prefetchQuery({
-      queryKey: me.queryKey,
-      staleTime: me.staleTime,
-      queryFn: async () => normalizarMe(await me.queryFn()),
-    }),
-    qc.prefetchQuery({ queryKey: tipos.queryKey, staleTime: tipos.staleTime, queryFn: tipos.queryFn }),
+    qc.prefetchQuery(cat),
+    qc.prefetchQuery(me),
+    qc.prefetchQuery(tipos),
   ]);
 }
 
@@ -326,52 +363,35 @@ export type ResumoMes = {
 /** Home: top 10 mais recentes, sem filtro. */
 export function useViagens() {
   const cacheKey = "q:viagens";
+  const buscarRede = async (): Promise<Viagem[]> => {
+    const fresh = await api.get<ListaViagens>("/m/viagens?limit=10");
+    const itens = fresh.itens.map(normalizarViagem);
+    void cachePut(cacheKey, itens).catch(() => {});
+    return itens;
+  };
   return useQuery({
     queryKey: ["viagens"],
     staleTime: 60_000,
-    queryFn: async (): Promise<Viagem[]> => {
-      try {
-        const fresh = await api.get<ListaViagens>("/m/viagens?limit=10");
-        void cachePut(cacheKey, fresh.itens).catch(() => {});
-        return fresh.itens.map(normalizarViagem);
-      } catch (err) {
-        if (isOfflineError(err)) {
-          try {
-            const cached = await cacheGet<Viagem[]>(cacheKey);
-            if (cached) return cached.map(normalizarViagem);
-          } catch {
-            /* sqlite indisponivel */
-          }
-        }
-        throw err;
-      }
-    },
+    queryFn: () =>
+      cacheFirst<Viagem[]>(["viagens"], cacheKey, buscarRede, (arr) =>
+        arr.map(normalizarViagem),
+      ),
   });
 }
 
 export function useResumoMes(mes?: string) {
   const path = mes ? `/m/viagens/resumo?mes=${mes}` : "/m/viagens/resumo";
   const cacheKey = `q:resumo:${mes ?? "atual"}`;
+  const queryKey = ["resumo-mes", mes ?? "atual"];
+  const buscarRede = async (): Promise<ResumoMes> => {
+    const fresh = await api.get<ResumoMes>(path);
+    void cachePut(cacheKey, fresh).catch(() => {});
+    return fresh;
+  };
   return useQuery({
-    queryKey: ["resumo-mes", mes ?? "atual"],
+    queryKey,
     staleTime: 60_000,
-    queryFn: async (): Promise<ResumoMes> => {
-      try {
-        const fresh = await api.get<ResumoMes>(path);
-        void cachePut(cacheKey, fresh).catch(() => {});
-        return fresh;
-      } catch (err) {
-        if (isOfflineError(err)) {
-          try {
-            const cached = await cacheGet<ResumoMes>(cacheKey);
-            if (cached) return cached;
-          } catch {
-            /* */
-          }
-        }
-        throw err;
-      }
-    },
+    queryFn: () => cacheFirst<ResumoMes>(queryKey, cacheKey, buscarRede),
   });
 }
 
@@ -422,26 +442,15 @@ export type ListaPedagios = { itens: Pedagio[]; nextCursor: string | null };
 
 export function usePedagios() {
   const cacheKey = "q:pedagios";
+  const buscarRede = async (): Promise<Pedagio[]> => {
+    const fresh = await api.get<ListaPedagios>("/m/pedagios?limit=10");
+    void cachePut(cacheKey, fresh.itens).catch(() => {});
+    return fresh.itens;
+  };
   return useQuery({
     queryKey: ["pedagios"],
     staleTime: 60_000,
-    queryFn: async (): Promise<Pedagio[]> => {
-      try {
-        const fresh = await api.get<ListaPedagios>("/m/pedagios?limit=10");
-        void cachePut(cacheKey, fresh.itens).catch(() => {});
-        return fresh.itens;
-      } catch (err) {
-        if (isOfflineError(err)) {
-          try {
-            const cached = await cacheGet<Pedagio[]>(cacheKey);
-            if (cached) return cached;
-          } catch {
-            /* */
-          }
-        }
-        throw err;
-      }
-    },
+    queryFn: () => cacheFirst<Pedagio[]>(["pedagios"], cacheKey, buscarRede),
   });
 }
 
@@ -547,28 +556,20 @@ export type ListaAbastecimentos = {
 export function useAbastecimentos(mes?: string) {
   const qs = mes ? `?mes=${mes}` : "";
   const cacheKey = `q:abastecimentos:${mes ?? "todos"}`;
+  const queryKey = ["abastecimentos", mes ?? "todos"];
+  const buscarRede = async (): Promise<Abastecimento[]> => {
+    const fresh = await api.get<ListaAbastecimentos>(`/m/abastecimentos${qs}`);
+    const itens = fresh.itens.map(normalizarAbastecimento);
+    void cachePut(cacheKey, itens).catch(() => {});
+    return itens;
+  };
   return useQuery({
-    queryKey: ["abastecimentos", mes ?? "todos"],
+    queryKey,
     staleTime: 60_000,
-    queryFn: async (): Promise<Abastecimento[]> => {
-      try {
-        const fresh = await api.get<ListaAbastecimentos>(
-          `/m/abastecimentos${qs}`,
-        );
-        void cachePut(cacheKey, fresh.itens).catch(() => {});
-        return fresh.itens.map(normalizarAbastecimento);
-      } catch (err) {
-        if (isOfflineError(err)) {
-          try {
-            const cached = await cacheGet<Abastecimento[]>(cacheKey);
-            if (cached) return cached.map(normalizarAbastecimento);
-          } catch {
-            /* nope */
-          }
-        }
-        throw err;
-      }
-    },
+    queryFn: () =>
+      cacheFirst<Abastecimento[]>(queryKey, cacheKey, buscarRede, (arr) =>
+        arr.map(normalizarAbastecimento),
+      ),
   });
 }
 

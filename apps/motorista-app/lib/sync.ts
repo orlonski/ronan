@@ -41,7 +41,7 @@ import {
   type PendingViagemIniciar,
   type ZodIssueSaved,
 } from "@/db/database";
-import { api, ApiError, humanizeApiError } from "./api";
+import { api, ApiError, getUltimaFalhaRedeAt, humanizeApiError } from "./api";
 
 type ApiErrorBody = { issues?: ZodIssueSaved[] };
 
@@ -483,10 +483,24 @@ export async function pendingCounts(): Promise<{
   };
 }
 
+// Backoff de 4G ruim: quando um envio falha por rede/timeout (marcado em
+// api.ts), segura os próximos envios por REDE_BACKOFF_MS. Sem isso, num link
+// ruim cada item da fila penduraria até o timeout, um após o outro, roubando
+// banda das telas que o motorista está esperando. O setInterval de 60s e o
+// listener de reconexão reagendam quando a janela passa.
+const REDE_BACKOFF_MS = 20_000;
+
+/** Pode enviar agora? Falso se offline OU numa janela de backoff de rede ruim. */
+async function podeEnviar(): Promise<boolean> {
+  const net = await NetInfo.fetch();
+  if (!net.isConnected) return false;
+  if (Date.now() - getUltimaFalhaRedeAt() < REDE_BACKOFF_MS) return false;
+  return true;
+}
+
 export async function drain(): Promise<void> {
   if (draining) return;
-  const net = await NetInfo.fetch();
-  if (!net.isConnected) return;
+  if (!(await podeEnviar())) return;
   draining = true;
   try {
     // Destrava itens com status="syncing" órfão de drain anterior morto
@@ -572,8 +586,7 @@ async function drainFotos(): Promise<void> {
   for (const item of list) {
     if (item.status === "syncing") continue;
     if (item.attempts >= MAX_ATTEMPTS) continue;
-    const net = await NetInfo.fetch();
-    if (!net.isConnected) return;
+    if (!(await podeEnviar())) return;
     await processFoto(item);
   }
 }
@@ -615,8 +628,7 @@ export async function drainLocais(): Promise<void> {
   for (const item of list) {
     if (item.status === "syncing") continue;
     if (item.attempts >= MAX_ATTEMPTS) continue;
-    const net = await NetInfo.fetch();
-    if (!net.isConnected) return;
+    if (!(await podeEnviar())) return;
     await processLocal(item);
   }
 }
@@ -650,8 +662,7 @@ async function drainViagemCancelar(): Promise<void> {
   for (const item of list) {
     if (item.status === "syncing") continue;
     if (item.attempts >= MAX_ATTEMPTS) continue;
-    const net = await NetInfo.fetch();
-    if (!net.isConnected) return;
+    if (!(await podeEnviar())) return;
     await processViagemCancelar(item);
   }
 }
@@ -685,8 +696,7 @@ async function drainViagemIniciar(): Promise<void> {
   for (const item of list) {
     if (item.status === "syncing") continue;
     if (item.attempts >= MAX_ATTEMPTS) continue;
-    const net = await NetInfo.fetch();
-    if (!net.isConnected) return;
+    if (!(await podeEnviar())) return;
     await processViagemIniciar(item);
   }
 }
@@ -723,8 +733,7 @@ async function drainEventosViagem(): Promise<void> {
     if (item.status === "syncing") continue;
     if (item.attempts >= MAX_ATTEMPTS) continue;
     if (iniciarPendentes.has(item.viagemClientId)) continue; // aguarda viagem-mãe
-    const net = await NetInfo.fetch();
-    if (!net.isConnected) return;
+    if (!(await podeEnviar())) return;
     await processEventoViagem(item);
   }
 }
@@ -787,8 +796,7 @@ async function drainViagemFinalizar(): Promise<void> {
     if (item.attempts >= MAX_ATTEMPTS) continue;
     if (iniciarPendentes.has(item.clientId)) continue; // aguarda iniciar
     if ((eventosPorViagem.get(item.clientId) ?? 0) > 0) continue; // aguarda eventos
-    const net = await NetInfo.fetch();
-    if (!net.isConnected) return;
+    if (!(await podeEnviar())) return;
     await processViagemFinalizar(item);
   }
 }
@@ -840,8 +848,7 @@ async function drainViagens(): Promise<void> {
   for (const item of list) {
     if (item.status === "syncing") continue;
     if (item.attempts >= MAX_ATTEMPTS) continue;
-    const net = await NetInfo.fetch();
-    if (!net.isConnected) return;
+    if (!(await podeEnviar())) return;
     await processViagem(item);
   }
 }
@@ -895,8 +902,7 @@ async function drainPedagios(): Promise<void> {
   for (const item of list) {
     if (item.status === "syncing") continue;
     if (item.attempts >= MAX_ATTEMPTS) continue;
-    const net = await NetInfo.fetch();
-    if (!net.isConnected) return;
+    if (!(await podeEnviar())) return;
     await processPedagio(item);
   }
 }
@@ -927,8 +933,7 @@ async function drainAbastecimentos(): Promise<void> {
   for (const item of list) {
     if (item.status === "syncing") continue;
     if (item.attempts >= MAX_ATTEMPTS) continue;
-    const net = await NetInfo.fetch();
-    if (!net.isConnected) return;
+    if (!(await podeEnviar())) return;
     await processAbastecimento(item);
   }
 }
