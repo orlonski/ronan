@@ -137,6 +137,17 @@ enum OrigemCadastroLocal {
   ADMIN_AUDITORIA
 }
 
+/// Fonte do sinal de GPS no momento da captura (viagem/local). Gravado pra
+/// auditar: PRECISA = fix de alta precisão (bom); BALANCED = fix mais leve
+/// (aceitável); CACHE = posição em cache do sistema (last-known, pode estar
+/// defasada — o motorista estava sem sinal e caiu no fallback). null = PWA
+/// (browser não distingue), admin, ou registro antigo pré-feature.
+enum FonteGps {
+  PRECISA
+  BALANCED
+  CACHE
+}
+
 /// Tipos fixos de anexo que admin guarda por motorista (CNH, CRLV, seguro,
 /// ASO, EPIs, eSocial, NR, OS, registro, comodato, laudo, plano de
 /// manutenção). 1 arquivo por tipo — reupload substitui o anterior.
@@ -733,6 +744,10 @@ model Local {
   /// estando nele ("Estou no local", fluxo rápido). null pra locais cadastrados
   /// pelo admin (endereço digitado) ou antigos pré-feature.
   latLngPrecisao       Float?
+  /// Fonte do sinal de GPS na captura (PRECISA/BALANCED/CACHE). Complementa a
+  /// precisão pra auditar: CACHE = caiu no last-known do sistema (pode estar
+  /// defasado). null pra locais do admin / antigos / PWA (não distingue fonte).
+  latLngFonte          FonteGps?
   pontoReferencia      String?
   /// Apelidos/sinônimos pra busca fuzzy do agente WhatsApp. Como o motorista
   /// chama no dia a dia (ex: "pedreira nova", "do souza", "balança 2").
@@ -874,6 +889,10 @@ model Viagem {
   descargaLat            Float?
   descargaLng            Float?
   descargaPrecisao       Float? // accuracy em metros do GPS no clique
+  // Fonte do sinal na captura da descarga (PRECISA/BALANCED/CACHE). Complementa
+  // a precisão: CACHE = last-known do sistema (posição pode estar defasada).
+  // null pra viagem antiga pré-feature, sem captura fresca, ou PWA.
+  descargaFonte          FonteGps?
   descargaDistanciaMetros Int?  // distância do clique até o local selecionado
   // true = a busca de locais no clique caiu no catálogo em cache (sem internet),
   // então pode ter faltado algum local criado por outro motorista recentemente.

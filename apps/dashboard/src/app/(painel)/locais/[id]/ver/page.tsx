@@ -5,7 +5,9 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { MapPin, Pencil, Truck, User } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
+import type { FonteGps } from "@ronan/shared-types";
 import { FormPageHeader } from "@/components/form-page-header";
+import { SinalGpsBadge } from "@/components/sinal-gps-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -52,6 +54,7 @@ type Local = {
   lat: number | null;
   lng: number | null;
   latLngPrecisao: number | null;
+  latLngFonte: FonteGps | null;
   nivelConfianca: Nivel;
   origemCadastro: Origem | null;
   totalViagens: number;
@@ -385,6 +388,15 @@ export default function VisualizarLocalPage({
                   </span>
                 )}
               </p>
+              {(l.latLngFonte != null || l.latLngPrecisao != null) && (
+                <div className="mt-2">
+                  <SinalGpsBadge
+                    precisao={l.latLngPrecisao}
+                    fonte={l.latLngFonte}
+                    limiteSinalFraco={limiteSinalFraco}
+                  />
+                </div>
+              )}
             </Card>
           )}
 

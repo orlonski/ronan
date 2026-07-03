@@ -4,6 +4,8 @@
  * durante o tracking, comparando com a lista de Locais cadastrados.
  */
 
+import type { FonteGps } from "@ronan/shared-types";
+
 const RAIO_TERRA_M = 6_371_000;
 
 /**
@@ -131,7 +133,14 @@ export async function pegarCoords(): Promise<{ lat: number; lng: number } | null
   }
 }
 
-export type CoordsPrecisas = { lat: number; lng: number; precisao: number | null };
+export type CoordsPrecisas = {
+  lat: number;
+  lng: number;
+  precisao: number | null;
+  // Fonte do sinal nesta leitura (pra gravar/auditar). PRECISA = fix Highest,
+  // BALANCED = fallback, CACHE = last-known do sistema (posição pode estar velha).
+  fonte: FonteGps;
+};
 
 /** Por que a captura falhou — pra UI mostrar a mensagem certa (não só "permissão"). */
 export type GpsFalha = "permissao" | "timeout" | "hardware";
@@ -211,7 +220,7 @@ export async function pegarCoordsPrecisa(opts?: {
     const amostrar = (lat: number, lng: number, accuracy: number | null) => {
       const acc = accuracy ?? Infinity;
       if (!ref.melhor || acc < melhorAccuracy()) {
-        ref.melhor = { lat, lng, precisao: accuracy ?? null };
+        ref.melhor = { lat, lng, precisao: accuracy ?? null, fonte: "PRECISA" };
       }
       onAmostra?.(ref.melhor.precisao);
     };
@@ -276,6 +285,7 @@ export async function pegarCoordsPrecisa(opts?: {
           lat: balanced.coords.latitude,
           lng: balanced.coords.longitude,
           precisao: balanced.coords.accuracy ?? null,
+          fonte: "BALANCED",
         },
       };
     }
@@ -299,6 +309,7 @@ export async function pegarCoordsPrecisa(opts?: {
           lat: last.coords.latitude,
           lng: last.coords.longitude,
           precisao: last.coords.accuracy ?? null,
+          fonte: "CACHE",
         },
       };
     }

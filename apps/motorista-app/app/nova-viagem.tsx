@@ -583,6 +583,7 @@ export default function NovaViagem() {
               ...(descargaCaptura.precisao != null
                 ? { descargaPrecisao: descargaCaptura.precisao }
                 : {}),
+              descargaFonte: descargaCaptura.fonte,
               ...(descargaCaptura.distanciaMetros != null
                 ? { descargaDistanciaMetros: descargaCaptura.distanciaMetros }
                 : {}),

@@ -4,8 +4,10 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { use, useState } from "react";
+import type { FonteGps } from "@ronan/shared-types";
 import { ExcluirButton } from "@/components/excluir-button";
 import { Permitido } from "@/components/requer-tela";
+import { SinalGpsBadge } from "@/components/sinal-gps-badge";
 
 // Leaflet quebra com SSR; carrega só no cliente.
 const TrajetoMapPlayer = dynamic(
@@ -102,6 +104,7 @@ type ViagemDetalhe = {
   descargaLat: number | null;
   descargaLng: number | null;
   descargaPrecisao: number | null;
+  descargaFonte: FonteGps | null;
   descargaDistanciaMetros: number | null;
   descargaBuscaOffline: boolean | null;
   veiculo: { id: string; placa: string; modelo: string | null };
@@ -1078,17 +1081,24 @@ function MarcacaoDescarga({
   if (viagem.descargaBuscaOffline) partes.push("busca offline");
   const suspeito = (dist != null && dist > 200) || (prec != null && prec > limiteSinalFraco);
   return (
-    <span
-      className={suspeito ? "text-amber-600" : ""}
-      style={{ fontVariant: "tabular-nums" }}
-      title={
-        viagem.descargaLat != null && viagem.descargaLng != null
-          ? `GPS do clique: ${viagem.descargaLat}, ${viagem.descargaLng}`
-          : undefined
-      }
-    >
-      {partes.join(" · ")}
-      {suspeito && " ⚠️"}
+    <span className="inline-flex flex-wrap items-center gap-2">
+      <span
+        className={suspeito ? "text-amber-600" : ""}
+        style={{ fontVariant: "tabular-nums" }}
+        title={
+          viagem.descargaLat != null && viagem.descargaLng != null
+            ? `GPS do clique: ${viagem.descargaLat}, ${viagem.descargaLng}`
+            : undefined
+        }
+      >
+        {partes.join(" · ")}
+        {suspeito && " ⚠️"}
+      </span>
+      <SinalGpsBadge
+        precisao={prec}
+        fonte={viagem.descargaFonte}
+        limiteSinalFraco={limiteSinalFraco}
+      />
     </span>
   );
 }

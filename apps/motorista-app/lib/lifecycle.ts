@@ -8,7 +8,7 @@
  * - Ações de alto nível: montam o payload e enfileiram no outbox (sync.ts).
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { TipoEventoViagem } from "@ronan/shared-types";
+import type { FonteGps, TipoEventoViagem } from "@ronan/shared-types";
 import { listPendingViagemCancelar } from "@/db/database";
 import { api } from "./api";
 import {
@@ -39,6 +39,7 @@ export type FinalizarDraft = {
     lat: number;
     lng: number;
     precisao: number | null;
+    fonte?: FonteGps;
     distanciaMetros: number | null;
     buscaOffline: boolean;
   } | null;
@@ -239,7 +240,7 @@ export async function iniciarViagemGuiada(input: {
   veiculoId: string;
   clienteId: string;
   clienteNome?: string;
-  coords?: { lat: number; lng: number; precisao?: number };
+  coords?: { lat: number; lng: number; precisao?: number; fonte?: FonteGps };
   localCarga?: { id: string; nome: string; lat?: number; lng?: number; criarOffline?: boolean };
 }): Promise<string> {
   const clientId = uuid();
@@ -252,7 +253,14 @@ export async function iniciarViagemGuiada(input: {
   if (lc?.criarOffline && lc.lat != null && lc.lng != null) {
     await enqueueLocal({
       clientId: lc.id,
-      payload: { nome: lc.nome, lat: lc.lat, lng: lc.lng, precisao: input.coords?.precisao, tipo: "CARGA" },
+      payload: {
+        nome: lc.nome,
+        lat: lc.lat,
+        lng: lc.lng,
+        precisao: input.coords?.precisao,
+        fonte: input.coords?.fonte,
+        tipo: "CARGA",
+      },
       status: "pending",
       attempts: 0,
       createdAt: Date.now(),
@@ -293,7 +301,7 @@ export async function iniciarViagemGuiada(input: {
  */
 export async function registrarEventoGuiado(input: {
   tipo: TipoEventoViagem;
-  coords?: { lat: number; lng: number; precisao?: number };
+  coords?: { lat: number; lng: number; precisao?: number; fonte?: FonteGps };
   local?: { id: string; nome: string; lat?: number; lng?: number; criarOffline?: boolean };
   foto?: { uri: string; mime: string };
   toneladas?: number;
@@ -317,6 +325,7 @@ export async function registrarEventoGuiado(input: {
         lat: input.local.lat,
         lng: input.local.lng,
         precisao: input.coords?.precisao,
+        fonte: input.coords?.fonte,
         tipo: input.tipo.ehDescarga ? "DESCARGA" : input.tipo.ehCarga ? "CARGA" : "AMBOS",
       },
       status: "pending",
@@ -339,6 +348,7 @@ export async function registrarEventoGuiado(input: {
       lat: input.coords?.lat,
       lng: input.coords?.lng,
       precisao: input.coords?.precisao,
+      fonte: input.coords?.fonte,
       localId: input.local?.id,
       localDados,
       toneladas: input.toneladas,
@@ -378,6 +388,7 @@ export async function finalizarViagemGuiada(input: {
   descargaLat?: number;
   descargaLng?: number;
   descargaPrecisao?: number;
+  descargaFonte?: FonteGps;
   descargaDistanciaMetros?: number;
   valorPedagioTotal?: number;
   observacao?: string;
@@ -402,6 +413,7 @@ export async function finalizarViagemGuiada(input: {
       descargaLat: input.descargaLat,
       descargaLng: input.descargaLng,
       descargaPrecisao: input.descargaPrecisao,
+      descargaFonte: input.descargaFonte,
       descargaDistanciaMetros: input.descargaDistanciaMetros,
       valorPedagioTotal: input.valorPedagioTotal,
       observacao: input.observacao,

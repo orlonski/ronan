@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-query";
 import type {
   ExtrairTicketResult,
+  FonteGps,
   StatusMotorista,
   TipoEventoViagem as TipoEventoViagemApp,
 } from "@ronan/shared-types";
@@ -1300,6 +1301,7 @@ export function useCriarLocalRapido() {
       lat: number;
       lng: number;
       precisao?: number;
+      fonte?: FonteGps;
       tipo: "CARGA" | "DESCARGA" | "AMBOS";
       clienteIds?: string[];
     }): Promise<Local> => {
@@ -1325,6 +1327,7 @@ export function useCriarLocalRapido() {
           lat: input.lat,
           lng: input.lng,
           ...(input.precisao != null ? { precisao: input.precisao } : {}),
+          ...(input.fonte != null ? { fonte: input.fonte } : {}),
           tipo: input.tipo,
           clienteIds: input.clienteIds,
         },

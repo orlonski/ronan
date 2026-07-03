@@ -98,7 +98,7 @@ export default function IniciarViagem() {
         clienteId,
         clienteNome,
         coords: localCarga?.lat != null && localCarga?.lng != null
-          ? { lat: localCarga.lat, lng: localCarga.lng, precisao: localCarga.precisao ?? undefined }
+          ? { lat: localCarga.lat, lng: localCarga.lng, precisao: localCarga.precisao ?? undefined, fonte: localCarga.fonte }
           : undefined,
         localCarga: {
           id: localCarga.id,

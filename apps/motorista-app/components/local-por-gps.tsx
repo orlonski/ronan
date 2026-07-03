@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CheckCircle2, MapPin, Plus, X } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
+import type { FonteGps } from "@ronan/shared-types";
 import { Label } from "@/components/ui/label";
 import { showConfirm } from "@/lib/alert";
 import { mensagemGpsFalha, pegarCoordsPrecisa } from "@/lib/geo";
@@ -34,7 +35,13 @@ function isNetworkError(err: unknown): boolean {
 }
 
 // Snapshot com precisão pra repassar na seleção final.
-type CoordsCap = { lat: number; lng: number; precisao: number | null; buscaOffline: boolean };
+type CoordsCap = {
+  lat: number;
+  lng: number;
+  precisao: number | null;
+  fonte: FonteGps;
+  buscaOffline: boolean;
+};
 
 type Estado =
   | { tipo: "vazio" }
@@ -62,6 +69,8 @@ export type SelecaoLocal = {
   lat?: number;
   lng?: number;
   precisao?: number | null;
+  /** Fonte do sinal (PRECISA/BALANCED/CACHE) da captura. */
+  fonte?: FonteGps;
   distanciaMetros?: number | null;
   criarOffline?: boolean;
   buscaOffline?: boolean;
@@ -218,6 +227,7 @@ export function LocalPorGps({
       lat: coords.lat,
       lng: coords.lng,
       precisao: coords.precisao,
+      fonte: coords.fonte,
       buscaOffline,
     };
     if (matches.length === 0) {
@@ -243,6 +253,7 @@ export function LocalPorGps({
       lat: m.lat ?? undefined,
       lng: m.lng ?? undefined,
       precisao: cap.precisao,
+      fonte: cap.fonte,
       distanciaMetros: m.distanciaMetros,
       buscaOffline: cap.buscaOffline,
     };
@@ -277,6 +288,7 @@ export function LocalPorGps({
       lat: estado.coords.lat,
       lng: estado.coords.lng,
       precisao: estado.coords.precisao,
+      fonte: estado.coords.fonte,
       distanciaMetros: 0,
       criarOffline: true,
       buscaOffline: estado.coords.buscaOffline,

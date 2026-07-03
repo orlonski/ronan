@@ -62,6 +62,8 @@ const CriarRapidoInput = z.object({
   lng: z.number().min(-180).max(180),
   /** Precisão (accuracy em metros) do GPS no cadastro estando no local. */
   precisao: z.number().nonnegative().max(100000).optional(),
+  /** Fonte do sinal na captura (PRECISA/BALANCED/CACHE). */
+  fonte: z.enum(["PRECISA", "BALANCED", "CACHE"]).optional(),
   tipo: z.enum(["CARGA", "DESCARGA", "AMBOS"]),
   clienteIds: z.array(z.string().uuid()).optional(),
 });

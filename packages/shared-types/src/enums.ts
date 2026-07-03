@@ -17,6 +17,19 @@ export const TipoLocal = {
 } as const;
 export type TipoLocal = (typeof TipoLocal)[keyof typeof TipoLocal];
 
+/**
+ * Fonte do sinal de GPS no momento da captura (viagem/local). Gravado pra
+ * auditar depois: PRECISA = fix de alta precisão (bom); BALANCED = fix mais
+ * leve (aceitável); CACHE = posição em cache do sistema (last-known — pode
+ * estar defasada, o motorista estava sem sinal e caiu no fallback).
+ */
+export const FonteGps = {
+  PRECISA: "PRECISA",
+  BALANCED: "BALANCED",
+  CACHE: "CACHE",
+} as const;
+export type FonteGps = (typeof FonteGps)[keyof typeof FonteGps];
+
 export const PapelEmpresa = {
   RECEBE_PLANILHA: "RECEBE_PLANILHA",
   MANDA_FECHAMENTO: "MANDA_FECHAMENTO",

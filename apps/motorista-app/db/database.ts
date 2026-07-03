@@ -111,6 +111,7 @@ export type PendingLocal = {
     lat: number;
     lng: number;
     precisao?: number;
+    fonte?: "PRECISA" | "BALANCED" | "CACHE";
     tipo: "CARGA" | "DESCARGA" | "AMBOS";
     clienteIds?: string[];
   };

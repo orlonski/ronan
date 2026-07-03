@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FonteGps } from "./enums";
 
 export const ViagemPontoInput = z.object({
   lat: z.number().min(-90).max(90),
@@ -68,6 +69,9 @@ export const CriarViagemInput = z.object({
   descargaLat: z.number().min(-90).max(90).optional(),
   descargaLng: z.number().min(-180).max(180).optional(),
   descargaPrecisao: z.number().nonnegative().max(100000).optional(),
+  // Fonte do sinal (PRECISA/BALANCED/CACHE) da captura da descarga. Complementa
+  // a precisão: CACHE = caiu no last-known do sistema (posição pode estar defasada).
+  descargaFonte: z.nativeEnum(FonteGps).optional(),
   descargaDistanciaMetros: z.number().nonnegative().max(MAX_KM * 1000).optional(),
   // true = a busca de locais no clique foi servida do catálogo em cache (sem
   // internet no momento); pode ter faltado local recém-criado por outro motorista.

@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { CheckCircle2, MapPin, Plus, X } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import type { FonteGps } from "@ronan/shared-types";
 import { showConfirm } from "@/lib/alert";
 import {
   haversineMetros,
@@ -43,7 +44,13 @@ function isNetworkError(err: unknown): boolean {
 
 // Coordenadas com precisão, carregadas pelos estados pra repassar na captura.
 // buscaOffline: a busca de locais desse clique caiu no catálogo em cache.
-type CoordsCap = { lat: number; lng: number; precisao: number | null; buscaOffline: boolean };
+type CoordsCap = {
+  lat: number;
+  lng: number;
+  precisao: number | null;
+  fonte: FonteGps;
+  buscaOffline: boolean;
+};
 
 type Estado =
   | { tipo: "vazio" }
@@ -73,6 +80,9 @@ export type DescargaCaptura = {
   lat: number;
   lng: number;
   precisao: number | null;
+  /** Fonte do sinal (PRECISA/BALANCED/CACHE) — vira Viagem.descargaFonte.
+   *  Opcional: rascunho persistido antes da feature não tem. */
+  fonte?: FonteGps;
   distanciaMetros: number | null;
   /** A busca de locais desse clique foi feita offline (catálogo em cache). */
   buscaOffline: boolean;
@@ -228,7 +238,13 @@ export function DescargaPorGps({
       // outbox offline (pendingLocais). Não bloqueia mais.
     }
 
-    const cap: CoordsCap = { lat: coords.lat, lng: coords.lng, precisao: coords.precisao, buscaOffline };
+    const cap: CoordsCap = {
+      lat: coords.lat,
+      lng: coords.lng,
+      precisao: coords.precisao,
+      fonte: coords.fonte,
+      buscaOffline,
+    };
     if (matches.length === 0) {
       setEstado({ tipo: "sem_match", coords: cap });
       setNomeNovo("");
@@ -325,6 +341,7 @@ export function DescargaPorGps({
         lat: estado.coords.lat,
         lng: estado.coords.lng,
         precisao: estado.coords.precisao ?? undefined,
+        fonte: estado.coords.fonte,
         tipo: "DESCARGA",
         clienteIds: clienteId ? [clienteId] : undefined,
       });

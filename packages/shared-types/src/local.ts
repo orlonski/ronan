@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TipoLocal } from "./enums";
+import { FonteGps, TipoLocal } from "./enums";
 
 export const CriarLocalInput = z.object({
   nome: z.string().min(2).max(120),
@@ -25,6 +25,9 @@ export const CriarLocalRapidoInput = z.object({
   // Precisão (accuracy em metros) do GPS no momento que o motorista estava no
   // local e tocou "Estou no local". Auditoria de quão confiável é a coordenada.
   precisao: z.number().nonnegative().max(100000).optional(),
+  // Fonte do sinal (PRECISA/BALANCED/CACHE) no momento da captura. Complementa
+  // a precisão pra auditar: CACHE = caiu no last-known (pode estar defasado).
+  fonte: z.nativeEnum(FonteGps).optional(),
   tipo: z.nativeEnum(TipoLocal),
   clienteIds: z.array(z.string().uuid()).default([]),
 });

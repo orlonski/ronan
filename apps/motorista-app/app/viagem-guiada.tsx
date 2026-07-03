@@ -32,6 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
+import type { FonteGps } from "@ronan/shared-types";
 import { mensagemGpsFalha, pegarCoordsPrecisa } from "@/lib/geo";
 import {
   descartarViagemGuiada,
@@ -353,7 +354,12 @@ function EventoSheet({
   onRegistrado: () => void;
 }) {
   const [local, setLocal] = useState<SelecaoLocal | null>(null);
-  const [coords, setCoords] = useState<{ lat: number; lng: number; precisao?: number } | null>(null);
+  const [coords, setCoords] = useState<{
+    lat: number;
+    lng: number;
+    precisao?: number;
+    fonte?: FonteGps;
+  } | null>(null);
   const [capturandoGps, setCapturandoGps] = useState(false);
   const [foto, setFoto] = useState<CapturedPhoto | null>(null);
   const [toneladas, setToneladas] = useState("");
@@ -404,7 +410,7 @@ function EventoSheet({
     }
     const c = res.coords;
     val.limpar();
-    setCoords({ lat: c.lat, lng: c.lng, precisao: c.precisao ?? undefined });
+    setCoords({ lat: c.lat, lng: c.lng, precisao: c.precisao ?? undefined, fonte: c.fonte });
   }
 
   async function salvar() {
@@ -431,7 +437,7 @@ function EventoSheet({
       // Coords do evento: do local detectado (carga/descarga) ou do gps solto.
       const coordsEvento =
         local?.lat != null && local?.lng != null
-          ? { lat: local.lat, lng: local.lng, precisao: local.precisao ?? undefined }
+          ? { lat: local.lat, lng: local.lng, precisao: local.precisao ?? undefined, fonte: local.fonte }
           : coords ?? undefined;
 
       await registrarEventoGuiado({

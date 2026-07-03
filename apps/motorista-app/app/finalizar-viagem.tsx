@@ -259,6 +259,7 @@ export default function FinalizarViagem() {
         descargaLat: descargaCaptura?.lat,
         descargaLng: descargaCaptura?.lng,
         descargaPrecisao: descargaCaptura?.precisao ?? undefined,
+        descargaFonte: descargaCaptura?.fonte,
         descargaDistanciaMetros: descargaCaptura?.distanciaMetros ?? undefined,
         valorPedagioTotal: valorPedagio
           ? parseFloat(valorPedagio.replace(",", "."))

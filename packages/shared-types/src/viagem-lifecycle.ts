@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FonteGps } from "./enums";
 import { LocalSnapshot } from "./viagem";
 
 // Limites espelham o schema do banco (Decimal(10,3)/Decimal(10,2)).
@@ -94,6 +95,9 @@ export const RegistrarEventoInput = z.object({
   lat: z.number().min(-90).max(90).optional(),
   lng: z.number().min(-180).max(180).optional(),
   precisao: z.number().nonnegative().max(MAX_PRECISAO).optional(),
+  // Fonte do sinal (PRECISA/BALANCED/CACHE). No evento de descarga espelha pra
+  // Viagem.descargaFonte; nos demais fica no evento pra auditoria.
+  fonte: z.nativeEnum(FonteGps).optional(),
   localId: z.string().uuid().optional(),
   localDados: LocalSnapshot.optional(),
   fotoKey: z.string().optional(),
@@ -128,6 +132,8 @@ export const FinalizarViagemInput = z.object({
   descargaLat: z.number().min(-90).max(90).optional(),
   descargaLng: z.number().min(-180).max(180).optional(),
   descargaPrecisao: z.number().nonnegative().max(MAX_PRECISAO).optional(),
+  // Fonte do sinal (PRECISA/BALANCED/CACHE) da captura da descarga.
+  descargaFonte: z.nativeEnum(FonteGps).optional(),
   descargaDistanciaMetros: z.number().nonnegative().max(MAX_KM * 1000).optional(),
   valorPedagioTotal: z.number().nonnegative().max(MAX_VALOR).optional(),
   observacao: z.string().max(500).optional(),
