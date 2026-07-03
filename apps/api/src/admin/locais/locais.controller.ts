@@ -34,6 +34,10 @@ type ListLocaisQuery = z.infer<typeof ListLocaisQuery>;
 
 const MesclarInput = z.object({ destinoId: z.string().uuid() });
 
+const DuplicatasGeoQuery = z.object({
+  raioM: z.coerce.number().int().min(20).max(5000).optional(),
+});
+
 @ApiTags("admin/locais")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
@@ -64,6 +68,19 @@ export class LocaisController {
   @Get("duplicatas")
   duplicatas() {
     return this.service.duplicatas();
+  }
+
+  /**
+   * Grupos de locais ativos GEOGRAFICAMENTE próximos (prováveis duplicados do
+   * mesmo lugar), com score de qualidade + gravidade. `raioM` = distância que
+   * considera "mesmo lugar" (ajustável no painel, default 200). Definido ANTES
+   * de :id pra Nest não tratar "duplicatas-geo" como id.
+   */
+  @Get("duplicatas-geo")
+  duplicatasGeo(
+    @Query(new ZodValidationPipe(DuplicatasGeoQuery)) query: z.infer<typeof DuplicatasGeoQuery>,
+  ) {
+    return this.service.duplicatasGeo(query.raioM);
   }
 
   @Get(":id")
@@ -123,7 +140,8 @@ export class LocaisController {
   mesclar(
     @Param("id") id: string,
     @Body(new ZodValidationPipe(MesclarInput)) body: z.infer<typeof MesclarInput>,
+    @CurrentUser() user: AuthAdminUser,
   ) {
-    return this.service.mesclar(id, body.destinoId);
+    return this.service.mesclar(id, body.destinoId, user.id);
   }
 }

@@ -88,6 +88,33 @@ type DupEntry = {
   similares: DupSimilar[];
 };
 
+// ---- Duplicados geográficos (aba Mapa) ----
+type GeoLocal = {
+  id: string;
+  nome: string;
+  lat: number | null;
+  lng: number | null;
+  tipo: Tipo;
+  endereco: string;
+  totalViagens: number;
+  latLngPrecisao: number | null;
+  latLngFonte: "PRECISA" | "BALANCED" | "CACHE" | null;
+  origemCadastro: Origem | null;
+  nivelConfianca: string;
+  motoristasDistintos: number;
+  pctDescargaForaRaio: number | null;
+  distanciaDoPrincipalM: number;
+  flags: { offline: boolean; semEndereco: boolean; rascunho: boolean; poucasViagens: boolean };
+};
+type GeoGrupo = {
+  id: string;
+  centroide: { lat: number; lng: number };
+  gravidade: number;
+  principal: GeoLocal;
+  candidatos: GeoLocal[];
+};
+type DuplicatasGeoResp = { raioM: number; raioAtualBusca: number; grupos: GeoGrupo[] };
+
 const PATH = "/admin/locais";
 const CLIENTES_PATH = "/admin/clientes";
 
@@ -158,6 +185,10 @@ export default function LocaisPage() {
   const [view, setView] = useState<"lista" | "mapa">("lista");
   const { viewMode, setViewMode } = useListViewMode("locais");
   const [mesclando, setMesclando] = useState<DupEntry | null>(null);
+  // Aba Mapa: modo "duplicados suspeitos" (geográfico) + raio de agrupamento + foco.
+  const [suspeitos, setSuspeitos] = useState(false);
+  const [raioDedup, setRaioDedup] = useState(200);
+  const [foco, setFoco] = useState<{ lat: number; lng: number } | null>(null);
 
   // Carrega só quando aba "Mapa" tá ativa. O mapa usa os MESMOS filtros da Lista
   // (mesmo tableState), então a queryKey inclui q + filtros pra refazer quando
@@ -208,6 +239,29 @@ export default function LocaisPage() {
       qc.invalidateQueries({ queryKey: [PATH] });
     },
   });
+
+  // Duplicados GEOGRÁFICOS: grupos de locais próximos entre si + score. Carrega
+  // só na aba Mapa com o modo ligado. QueryKey inclui o raio (ajustável ao vivo).
+  const geoDup = useQuery({
+    queryKey: [PATH, "duplicatas-geo", raioDedup, token],
+    enabled: view === "mapa" && suspeitos && !!token,
+    queryFn: () =>
+      fetchApi<DuplicatasGeoResp>(`/admin/locais/duplicatas-geo?raioM=${raioDedup}`, { token }),
+    staleTime: 30_000,
+  });
+  const gruposMapa = useMemo(
+    () =>
+      (geoDup.data?.grupos ?? []).map((g, i) => ({
+        id: g.id,
+        numero: i + 1,
+        centroide: g.centroide,
+        pontos: [
+          { id: g.principal.id, nome: g.principal.nome, lat: g.principal.lat, lng: g.principal.lng, papel: "principal" as const },
+          ...g.candidatos.map((c) => ({ id: c.id, nome: c.nome, lat: c.lat, lng: c.lng, papel: "candidato" as const })),
+        ],
+      })),
+    [geoDup.data],
+  );
 
   const totalGeral = list.data?.pagination.total ?? 0;
   const totalNoMapa = mapa.data?.length ?? 0;
@@ -478,7 +532,66 @@ export default function LocaisPage() {
       {view === "mapa" ? (
         <div className="space-y-3">
           {toolbar}
-          <MapaLocais locais={mapa.data ?? []} loading={mapa.isLoading} />
+          {/* Barra do modo "duplicados suspeitos" */}
+          <div className="flex flex-wrap items-center gap-3 rounded-md border bg-muted/30 px-3 py-2">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={suspeitos}
+                onChange={(e) => {
+                  setSuspeitos(e.target.checked);
+                  setFoco(null);
+                }}
+                className="h-4 w-4"
+              />
+              Duplicados suspeitos
+            </label>
+            {suspeitos && (
+              <>
+                <span className="text-sm text-muted-foreground">
+                  agrupar locais a até
+                </span>
+                <input
+                  type="number"
+                  min={20}
+                  max={5000}
+                  step={20}
+                  value={raioDedup}
+                  onChange={(e) =>
+                    setRaioDedup(Math.min(5000, Math.max(20, Number(e.target.value) || 200)))
+                  }
+                  className="w-20 rounded-md border px-2 py-1 text-sm"
+                />
+                <span className="text-sm text-muted-foreground">m um do outro</span>
+                {geoDup.data && (
+                  <span className="ml-auto text-sm text-muted-foreground">
+                    {plural(geoDup.data.grupos.length, "caso", "casos")} · raio de busca atual{" "}
+                    {geoDup.data.raioAtualBusca} m
+                  </span>
+                )}
+              </>
+            )}
+          </div>
+          {suspeitos ? (
+            <div className="grid gap-3 lg:grid-cols-[1fr_400px]">
+              <MapaLocais
+                locais={mapa.data ?? []}
+                loading={mapa.isLoading}
+                gruposSuspeitos={gruposMapa}
+                raioSuspeitoM={raioDedup}
+                foco={foco}
+              />
+              <PainelDuplicados
+                grupos={geoDup.data?.grupos ?? []}
+                loading={geoDup.isLoading}
+                onFocar={(c) => setFoco(c)}
+                onMesclar={(origemId, destinoId) => mesclar.mutate({ origemId, destinoId })}
+                mesclando={mesclar.isPending}
+              />
+            </div>
+          ) : (
+            <MapaLocais locais={mapa.data ?? []} loading={mapa.isLoading} />
+          )}
         </div>
       ) : (
       <DataTable
@@ -671,5 +784,152 @@ function MesclarDupDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function FlagChip({ label, tone }: { label: string; tone: "red" | "amber" }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+        tone === "red"
+          ? "border-red-200 bg-red-100 text-red-700"
+          : "border-amber-200 bg-amber-100 text-amber-700"
+      }`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function flagsLocal(l: GeoLocal): { label: string; tone: "red" | "amber" }[] {
+  const out: { label: string; tone: "red" | "amber" }[] = [];
+  if (l.flags.offline) out.push({ label: "sem sinal (cache)", tone: "red" });
+  if (l.flags.semEndereco) out.push({ label: "sem endereço", tone: "red" });
+  if (l.flags.rascunho) out.push({ label: "rascunho", tone: "amber" });
+  if (l.pctDescargaForaRaio != null && l.pctDescargaForaRaio >= 50) {
+    out.push({ label: `${l.pctDescargaForaRaio}% descargas fora do raio`, tone: "amber" });
+  }
+  return out;
+}
+
+/** Painel de casos ranqueados por gravidade (ao lado do mapa, modo suspeitos). */
+function PainelDuplicados({
+  grupos,
+  loading,
+  onFocar,
+  onMesclar,
+  mesclando,
+}: {
+  grupos: GeoGrupo[];
+  loading: boolean;
+  onFocar: (c: { lat: number; lng: number }) => void;
+  onMesclar: (origemId: string, destinoId: string) => void;
+  mesclando: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="rounded-lg border p-4 text-sm text-muted-foreground">
+        Analisando locais próximos entre si…
+      </div>
+    );
+  }
+  if (grupos.length === 0) {
+    return (
+      <div className="flex h-full min-h-[300px] items-center justify-center rounded-lg border p-6 text-center text-sm text-muted-foreground">
+        Nenhum grupo suspeito nesse raio. 🎉
+      </div>
+    );
+  }
+  return (
+    <div className="max-h-[calc(100vh-260px)] min-h-[500px] space-y-3 overflow-y-auto rounded-lg border p-3">
+      {grupos.map((g, i) => (
+        <Card key={g.id} className="space-y-2 p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold">
+              Caso {i + 1}{" "}
+              <span className="font-normal text-muted-foreground">
+                · {g.candidatos.length + 1} locais próximos
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => onFocar(g.centroide)}
+              className="text-xs font-medium text-blue-700 hover:underline"
+            >
+              Ver no mapa
+            </button>
+          </div>
+
+          {/* Principal recomendado (manter) */}
+          <div className="rounded-md border border-emerald-200 bg-emerald-50 p-2">
+            <div className="flex items-center gap-2">
+              <Badge className="border-emerald-300 bg-emerald-100 text-emerald-800">Manter</Badge>
+              <span className="min-w-0 truncate text-sm font-semibold text-foreground">
+                {g.principal.nome}
+              </span>
+            </div>
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+              {g.principal.endereco || "sem endereço"}
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
+              {plural(g.principal.totalViagens, "viagem", "viagens")} ·{" "}
+              {plural(g.principal.motoristasDistintos, "motorista validou", "motoristas validaram")}
+            </p>
+          </div>
+
+          {/* Candidatos a duplicado */}
+          {g.candidatos.map((c) => (
+            <div key={c.id} className="rounded-md border p-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <span className="text-sm font-medium">{c.nome}</span>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {c.endereco || "sem endereço"} · {c.distanciaDoPrincipalM} m do principal
+                  </p>
+                </div>
+                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                  {plural(c.totalViagens, "viagem", "viagens")}
+                </span>
+              </div>
+              {flagsLocal(c).length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {flagsLocal(c).map((f, k) => (
+                    <FlagChip key={k} label={f.label} tone={f.tone} />
+                  ))}
+                </div>
+              )}
+              <div className="mt-2 flex items-center gap-3">
+                <Permitido chave="locais.homologar">
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={mesclando}
+                    onClick={() => onMesclar(c.id, g.principal.id)}
+                  >
+                    <GitMerge className="h-3.5 w-3.5" />
+                    <span className="ml-1">Mesclar no principal</span>
+                  </Button>
+                </Permitido>
+                <Link
+                  href={`/locais/${c.id}`}
+                  className="text-xs font-medium text-blue-700 hover:underline"
+                >
+                  Editar
+                </Link>
+                <button
+                  type="button"
+                  onClick={() =>
+                    c.lat != null && c.lng != null && onFocar({ lat: c.lat, lng: c.lng })
+                  }
+                  className="text-xs font-medium text-blue-700 hover:underline"
+                >
+                  Focar
+                </button>
+              </div>
+            </div>
+          ))}
+        </Card>
+      ))}
+    </div>
   );
 }

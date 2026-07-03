@@ -92,6 +92,7 @@ enum AcaoAuditoria {
   MOTORISTA_SUBSTITUIU_FOTO
   PRE_VALIDAR_VIAGEM
   ADICIONAR_FOTO
+  MESCLAR_LOCAL
 }
 
 enum TipoCombustivel {

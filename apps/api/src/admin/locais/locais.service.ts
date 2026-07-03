@@ -1,5 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import {
+  AcaoAuditoria,
   FonteEvidencia,
   NivelConfiancaLocal,
   OrigemCadastroLocal,
@@ -8,6 +9,7 @@ import {
 } from "@prisma/client";
 import type { CriarLocalInput } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
+import { AuditoriaService } from "../../auditoria/auditoria.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 
 type ListLocaisParams = PaginationQuery & {
@@ -67,7 +69,10 @@ function flattenLocal<T extends LocalRaw>(local: T) {
 
 @Injectable()
 export class LocaisService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditoria: AuditoriaService,
+  ) {}
 
   async list(params: ListLocaisParams) {
     const where = montarWhereLocais(params);
@@ -320,6 +325,246 @@ export class LocaisService {
     return resultado;
   }
 
+  /** Raio inicial de busca configurado (metros). Fallback 50 (default antigo). */
+  private async raioBuscaAtual(): Promise<number> {
+    const cfg = await this.prisma.configuracaoBuscaLocais.findUnique({
+      where: { id: "default" },
+      select: { raioInicialM: true },
+    });
+    return cfg?.raioInicialM ?? 50;
+  }
+
+  private static haversineM(
+    latA: number,
+    lngA: number,
+    latB: number,
+    lngB: number,
+  ): number {
+    const R = 6_371_000;
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const dLat = toRad(latB - latA);
+    const dLng = toRad(lngB - lngA);
+    const s =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(latA)) * Math.cos(toRad(latB)) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(s));
+  }
+
+  private static readonly NIVEL_RANK: Record<NivelConfiancaLocal, number> = {
+    RASCUNHO: 0,
+    PRESENCA_PONTUAL: 1,
+    DWELL_CONFIRMADO: 2,
+    RECORRENTE: 3,
+    HUMANO: 4,
+  };
+
+  /**
+   * Grupos de locais ativos GEOGRAFICAMENTE próximos (prováveis duplicados do
+   * mesmo lugar físico), com sinais de qualidade por local. Recomenda como
+   * "principal" (a manter) quem foi cadastrado online / com endereço / mais
+   * usado; os demais viram candidatos a duplicado. Ordena os grupos por
+   * gravidade. Só IDENTIFICA — não automatiza nada. Ferramenta de limpeza do
+   * passivo criado com o raio antigo de 50m + cadastros offline.
+   */
+  async duplicatasGeo(raioM = 200) {
+    const raio = Math.min(Math.max(Math.round(raioM) || 200, 20), 5000);
+    // Margem generosa no bounding-box (pré-filtro barato); o haversine no WHERE
+    // é o corte exato. ~1 grau ≈ 111.320m; /90000 dá folga pra não excluir par.
+    const grau = raio / 90000;
+    const raioAtual = await this.raioBuscaAtual();
+
+    const pares = await this.prisma.$queryRaw<{ id_a: string; id_b: string }[]>`
+      SELECT a.id AS id_a, b.id AS id_b
+      FROM "locais" a
+      JOIN "locais" b
+        ON a.id < b.id
+       AND a.ativo = true AND b.ativo = true
+       AND a.lat IS NOT NULL AND a.lng IS NOT NULL
+       AND b.lat IS NOT NULL AND b.lng IS NOT NULL
+       AND b.lat BETWEEN a.lat - ${grau} AND a.lat + ${grau}
+       AND b.lng BETWEEN a.lng - ${grau} AND a.lng + ${grau}
+      WHERE (6371000 * 2 * asin(sqrt(
+          power(sin(radians(b.lat - a.lat) / 2), 2) +
+          cos(radians(a.lat)) * cos(radians(b.lat)) *
+          power(sin(radians(b.lng - a.lng) / 2), 2)
+        ))) <= ${raio}
+    `;
+    if (pares.length === 0) return { raioM: raio, raioAtualBusca: raioAtual, grupos: [] };
+
+    // Union-find → componentes conexos (mesmo padrão do duplicatas() por nome).
+    const parent = new Map<string, string>();
+    const find = (x: string): string => {
+      let r = x;
+      while (parent.get(r) !== r) r = parent.get(r) as string;
+      let cur = x;
+      while (parent.get(cur) !== r) {
+        const nx = parent.get(cur) as string;
+        parent.set(cur, r);
+        cur = nx;
+      }
+      return r;
+    };
+    const ensure = (x: string) => {
+      if (!parent.has(x)) parent.set(x, x);
+    };
+    const union = (a: string, b: string) => {
+      ensure(a);
+      ensure(b);
+      parent.set(find(a), find(b));
+    };
+    for (const p of pares) union(p.id_a, p.id_b);
+
+    const gruposIds = new Map<string, string[]>();
+    for (const id of parent.keys()) {
+      const raiz = find(id);
+      const arr = gruposIds.get(raiz);
+      if (arr) arr.push(id);
+      else gruposIds.set(raiz, [id]);
+    }
+    const idsCluster = [...parent.keys()];
+
+    // Sinais: dados dos locais + motoristas distintos (evidência) + descargas
+    // fora do raio de busca atual (marcação solta / centróide provavelmente errado).
+    const [locais, evid, descargas] = await Promise.all([
+      this.prisma.local.findMany({
+        where: { id: { in: idsCluster } },
+        select: {
+          id: true,
+          nome: true,
+          lat: true,
+          lng: true,
+          tipo: true,
+          logradouro: true,
+          numero: true,
+          bairro: true,
+          cidade: true,
+          uf: true,
+          apelidos: true,
+          latLngPrecisao: true,
+          latLngFonte: true,
+          origemCadastro: true,
+          nivelConfianca: true,
+          criadoEm: true,
+          criadoPorMotorista: { select: { id: true, nome: true } },
+          clientes: { select: { cliente: { select: { id: true, nome: true } } } },
+          _count: { select: { viagensCarga: true, viagensDescarga: true } },
+        },
+      }),
+      this.prisma.$queryRaw<{ localId: string; m: bigint }[]>`
+        SELECT "localId", count(DISTINCT "motoristaId") AS m
+        FROM "local_evidencia" WHERE "localId" = ANY(${idsCluster}) GROUP BY "localId"
+      `,
+      this.prisma.$queryRaw<{ localId: string; fora: bigint; total: bigint }[]>`
+        SELECT "localDescargaId" AS "localId",
+               count(*) FILTER (WHERE "descargaDistanciaMetros" > ${raioAtual}) AS fora,
+               count(*) FILTER (WHERE "descargaDistanciaMetros" IS NOT NULL) AS total
+        FROM "viagens" WHERE "localDescargaId" = ANY(${idsCluster}) GROUP BY "localDescargaId"
+      `,
+    ]);
+
+    const motoristasDe = new Map(evid.map((e) => [e.localId, Number(e.m)]));
+    const descargaDe = new Map(
+      descargas.map((d) => [d.localId, { fora: Number(d.fora), total: Number(d.total) }]),
+    );
+
+    const enriquecer = (l: (typeof locais)[number]) => {
+      const endereco = [l.logradouro, l.numero, l.bairro, l.cidade, l.uf]
+        .map((x) => (x ?? "").trim())
+        .filter(Boolean)
+        .join(", ");
+      const totalViagens = l._count.viagensCarga + l._count.viagensDescarga;
+      const offline =
+        l.origemCadastro === OrigemCadastroLocal.VIAGEM_OFFLINE || l.latLngFonte === "CACHE";
+      const semEndereco = endereco.trim().length === 0;
+      const rascunho = l.nivelConfianca === NivelConfiancaLocal.RASCUNHO;
+      const motoristasDistintos = motoristasDe.get(l.id) ?? 0;
+      const d = descargaDe.get(l.id);
+      const pctDescargaForaRaio = d && d.total > 0 ? Math.round((d.fora / d.total) * 100) : null;
+      // Qualidade (maior = melhor candidato a "principal" a manter). Prioriza
+      // online + endereço + uso + confiança.
+      const qualidade =
+        (semEndereco ? 0 : 100) +
+        (l.origemCadastro === OrigemCadastroLocal.VIAGEM_OFFLINE ? 0 : 60) +
+        (l.latLngFonte === "CACHE" ? 0 : 40) +
+        LocaisService.NIVEL_RANK[l.nivelConfianca] * 20 +
+        Math.min(totalViagens, 50) * 2 +
+        motoristasDistintos * 10 +
+        (l.latLngPrecisao != null ? Math.max(0, 30 - l.latLngPrecisao / 5) : 15);
+      return {
+        id: l.id,
+        nome: l.nome,
+        lat: l.lat,
+        lng: l.lng,
+        tipo: l.tipo,
+        endereco,
+        apelidos: l.apelidos,
+        clientes: l.clientes.map((c) => c.cliente),
+        totalViagens,
+        latLngPrecisao: l.latLngPrecisao,
+        latLngFonte: l.latLngFonte,
+        origemCadastro: l.origemCadastro,
+        nivelConfianca: l.nivelConfianca,
+        criadoEm: l.criadoEm,
+        criadoPorMotorista: l.criadoPorMotorista,
+        motoristasDistintos,
+        pctDescargaForaRaio,
+        flags: { offline, semEndereco, rascunho, poucasViagens: totalViagens <= 1 },
+        qualidade,
+      };
+    };
+
+    const porId = new Map(locais.map((l) => [l.id, enriquecer(l)]));
+
+    type Local = ReturnType<typeof enriquecer>;
+    const grupos: Array<{
+      id: string;
+      centroide: { lat: number; lng: number };
+      gravidade: number;
+      principal: Local & { distanciaDoPrincipalM: number };
+      candidatos: Array<Local & { distanciaDoPrincipalM: number }>;
+    }> = [];
+
+    for (const [grupoId, ids] of gruposIds) {
+      const membros = ids.map((id) => porId.get(id)).filter((x): x is Local => !!x);
+      if (membros.length < 2) continue;
+      // Principal = maior qualidade (desempate: mais viagens).
+      const principal = membros.reduce((a, b) =>
+        b.qualidade > a.qualidade || (b.qualidade === a.qualidade && b.totalViagens > a.totalViagens)
+          ? b
+          : a,
+      );
+      const comDist = (m: Local) => ({
+        ...m,
+        distanciaDoPrincipalM:
+          m.lat != null && m.lng != null && principal.lat != null && principal.lng != null
+            ? Math.round(LocaisService.haversineM(principal.lat, principal.lng, m.lat, m.lng))
+            : 0,
+      });
+      const candidatos = membros
+        .filter((m) => m.id !== principal.id)
+        .map(comDist)
+        .sort((a, b) => a.distanciaDoPrincipalM - b.distanciaDoPrincipalM);
+      const lats = membros.map((m) => m.lat ?? 0);
+      const lngs = membros.map((m) => m.lng ?? 0);
+      const centroide = {
+        lat: lats.reduce((s, v) => s + v, 0) / membros.length,
+        lng: lngs.reduce((s, v) => s + v, 0) / membros.length,
+      };
+      const offlineCount = candidatos.filter((c) => c.flags.offline).length;
+      const semEnderecoCount = candidatos.filter((c) => c.flags.semEndereco).length;
+      const viagensGrupo = membros.reduce((s, m) => s + m.totalViagens, 0);
+      const gravidade =
+        (membros.length - 1) * 10 +
+        offlineCount * 15 +
+        semEnderecoCount * 8 +
+        Math.min(viagensGrupo, 100);
+      grupos.push({ id: grupoId, centroide, gravidade, principal: comDist(principal), candidatos });
+    }
+
+    grupos.sort((a, b) => b.gravidade - a.gravidade);
+    return { raioM: raio, raioAtualBusca: raioAtual, grupos };
+  }
+
   /**
    * Admin homologa manualmente — sobe pra HUMANO (top da hierarquia).
    */
@@ -353,18 +598,33 @@ export class LocaisService {
    * destino e apaga o origem. Útil pra eliminar duplicatas que escaparam do
    * pre-check de 200m.
    */
-  async mesclar(origemId: string, destinoId: string) {
+  async mesclar(origemId: string, destinoId: string, usuarioId?: string) {
     if (origemId === destinoId) {
       throw new ConflictException("Origem e destino são o mesmo local");
     }
     const [origem, destino] = await Promise.all([
-      this.prisma.local.findUnique({ where: { id: origemId } }),
-      this.prisma.local.findUnique({ where: { id: destinoId } }),
+      this.prisma.local.findUnique({
+        where: { id: origemId },
+        include: { clientes: { select: { clienteId: true } } },
+      }),
+      this.prisma.local.findUnique({
+        where: { id: destinoId },
+        include: { clientes: { select: { clienteId: true } } },
+      }),
     ]);
     if (!origem) throw new NotFoundException("Local de origem não encontrado");
     if (!destino) throw new NotFoundException("Local de destino não encontrado");
 
-    await this.prisma.$transaction([
+    // Consolida no destino ANTES de apagar o origem: apelidos (importantes pro
+    // agente de WhatsApp casar o nome que o motorista usa) e clientes vinculados
+    // — hoje o merge jogava isso fora.
+    const apelidosFinais = [...new Set([...(destino.apelidos ?? []), ...(origem.apelidos ?? [])])];
+    const clientesDestino = new Set(destino.clientes.map((c) => c.clienteId));
+    const clientesFaltando = origem.clientes
+      .map((c) => c.clienteId)
+      .filter((id) => !clientesDestino.has(id));
+
+    const results = await this.prisma.$transaction([
       this.prisma.viagem.updateMany({
         where: { localCargaId: origemId },
         data: { localCargaId: destinoId },
@@ -373,12 +633,43 @@ export class LocaisService {
         where: { localDescargaId: origemId },
         data: { localDescargaId: destinoId },
       }),
+      this.prisma.local.update({
+        where: { id: destinoId },
+        data: { apelidos: apelidosFinais },
+      }),
+      ...(clientesFaltando.length
+        ? [
+            this.prisma.localCliente.createMany({
+              data: clientesFaltando.map((clienteId) => ({ localId: destinoId, clienteId })),
+            }),
+          ]
+        : []),
       this.prisma.rotaCache.deleteMany({
         where: { OR: [{ localOrigemId: origemId }, { localDestinoId: origemId }] },
       }),
       this.prisma.local.delete({ where: { id: origemId } }),
     ]);
-    return { ok: true };
+    const viagensMovidas =
+      (results[0] as { count: number }).count + (results[1] as { count: number }).count;
+
+    await this.auditoria
+      .log({
+        usuarioId: usuarioId ?? null,
+        entidade: "Local",
+        entidadeId: destinoId,
+        acao: AcaoAuditoria.MESCLAR_LOCAL,
+        valorAntes: { id: origemId, nome: origem.nome },
+        valorDepois: { id: destinoId, nome: destino.nome },
+        metadata: {
+          viagensMovidas,
+          apelidosAdicionados: apelidosFinais.length - (destino.apelidos?.length ?? 0),
+          clientesAdicionados: clientesFaltando.length,
+        },
+      })
+      .catch(() => {
+        /* auditoria best-effort não bloqueia o merge */
+      });
+    return { ok: true, viagensMovidas };
   }
 
   private async algumMotoristaId(): Promise<string> {

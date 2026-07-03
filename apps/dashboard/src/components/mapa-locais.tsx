@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo } from "react";
 import Link from "next/link";
-import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
+import { Circle, MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -20,6 +20,22 @@ export type LocalMapa = {
   lat: number | null;
   lng: number | null;
   clientes: { id: string; nome: string }[];
+};
+
+/** Ponto de um grupo suspeito no mapa (principal a manter vs candidato a duplicado). */
+export type GrupoLocalPonto = {
+  id: string;
+  nome: string;
+  lat: number | null;
+  lng: number | null;
+  papel: "principal" | "candidato";
+};
+
+export type GrupoSuspeitoMapa = {
+  id: string;
+  numero: number;
+  centroide: { lat: number; lng: number };
+  pontos: GrupoLocalPonto[];
 };
 
 // Cores por tipo. Mesmas usadas na legenda.
@@ -89,6 +105,34 @@ function FitBounds({ locais }: { locais: LocalMapa[] }) {
   return null;
 }
 
+/** Marcador de local dentro de um grupo suspeito: anel verde (principal) ou
+ *  vermelho (candidato), com o número do caso. */
+function grupoIcon(papel: "principal" | "candidato", numero: number) {
+  const cor = papel === "principal" ? "#16a34a" : "#dc2626";
+  return L.divIcon({
+    html: `<div style="
+      width:26px;height:26px;border-radius:50%;
+      background:#fff;border:3px solid ${cor};
+      box-shadow:0 2px 6px rgba(0,0,0,0.4);
+      display:flex;align-items:center;justify-content:center;
+      font:700 12px system-ui;color:${cor};
+    ">${numero}</div>`,
+    className: "",
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
+    popupAnchor: [0, -14],
+  });
+}
+
+/** Centraliza o mapa num caso quando o admin clica no painel. */
+function FocarGrupo({ foco }: { foco: { lat: number; lng: number } | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (foco) map.setView([foco.lat, foco.lng], 17, { animate: true });
+  }, [foco, map]);
+  return null;
+}
+
 function Legenda() {
   return (
     <div className="absolute right-3 top-3 z-[400] rounded-md border bg-background/95 p-2 shadow-md backdrop-blur">
@@ -113,9 +157,18 @@ function Legenda() {
 export function MapaLocais({
   locais,
   loading,
+  gruposSuspeitos,
+  raioSuspeitoM,
+  foco,
 }: {
   locais: LocalMapa[];
   loading?: boolean;
+  /** Quando presente e não-vazio, entra em "modo suspeitos": destaca os grupos. */
+  gruposSuspeitos?: GrupoSuspeitoMapa[];
+  /** Raio (m) do círculo de agrupamento desenhado por caso. */
+  raioSuspeitoM?: number;
+  /** Centro pra focar (setado ao clicar num caso no painel). */
+  foco?: { lat: number; lng: number } | null;
 }) {
   const pontos = useMemo(
     () =>
@@ -125,6 +178,32 @@ export function MapaLocais({
       ),
     [locais],
   );
+  const modoSuspeitos = !!gruposSuspeitos && gruposSuspeitos.length > 0;
+  const pontosSuspeitos = useMemo(
+    () =>
+      (gruposSuspeitos ?? []).flatMap((g) =>
+        g.pontos
+          .filter((p): p is GrupoLocalPonto & { lat: number; lng: number } => p.lat != null && p.lng != null)
+          .map((p) => ({ ...p, numero: g.numero })),
+      ),
+    [gruposSuspeitos],
+  );
+  // No modo suspeitos, enquadra nos pontos dos grupos; senão nos locais normais.
+  const pontosFit: LocalMapa[] = modoSuspeitos
+    ? pontosSuspeitos.map((p) => ({
+        id: p.id,
+        nome: p.nome,
+        logradouro: "",
+        numero: null,
+        bairro: null,
+        cidade: "",
+        uf: "",
+        tipo: "DESCARGA" as Tipo,
+        lat: p.lat,
+        lng: p.lng,
+        clientes: [],
+      }))
+    : pontos;
 
   return (
     <div className="relative h-[calc(100vh-260px)] min-h-[500px] overflow-hidden rounded-lg border">
@@ -143,8 +222,36 @@ export function MapaLocais({
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <FitBounds locais={pontos} />
-        {pontos.map((l) => (
+        {!foco && <FitBounds locais={pontosFit} />}
+        <FocarGrupo foco={foco ?? null} />
+        {/* Modo suspeitos: círculo por caso + marcadores anel verde/vermelho. */}
+        {modoSuspeitos &&
+          gruposSuspeitos!.map((g) => (
+            <Circle
+              key={`c-${g.id}`}
+              center={[g.centroide.lat, g.centroide.lng]}
+              radius={raioSuspeitoM ?? 200}
+              pathOptions={{ color: "#dc2626", weight: 1, fillColor: "#dc2626", fillOpacity: 0.06 }}
+            />
+          ))}
+        {modoSuspeitos &&
+          pontosSuspeitos.map((p) => (
+            <Marker key={`s-${p.id}`} position={[p.lat, p.lng]} icon={grupoIcon(p.papel, p.numero)}>
+              <Popup>
+                <div className="min-w-[180px] space-y-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Caso {p.numero} · {p.papel === "principal" ? "Principal (manter)" : "Candidato a duplicado"}
+                  </p>
+                  <p className="font-semibold leading-tight">{p.nome}</p>
+                  <Link href={`/locais/${p.id}`} className="text-xs font-medium text-blue-700 hover:underline">
+                    Abrir local →
+                  </Link>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+        {!modoSuspeitos &&
+          pontos.map((l) => (
           <Marker key={l.id} position={[l.lat, l.lng]} icon={ICONES[l.tipo]}>
             <Popup>
               <div className="min-w-[200px] space-y-1.5">
@@ -179,7 +286,7 @@ export function MapaLocais({
           </Marker>
         ))}
       </MapContainer>
-      <Legenda />
+      {!modoSuspeitos && <Legenda />}
     </div>
   );
 }
