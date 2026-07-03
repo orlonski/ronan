@@ -1,5 +1,5 @@
 import { Text, View } from "react-native";
-import { MapPin, Smartphone } from "lucide-react-native";
+import { MapPin, WifiOff } from "lucide-react-native";
 import type { FonteGps } from "@ronan/shared-types";
 import type { Local } from "@/lib/queries";
 
@@ -22,9 +22,35 @@ export function enderecoResumido(
 }
 
 /**
- * Selo em linguagem de motorista avisando que a posição/local veio do cache do
- * celular (sem sinal no momento). Renderiza só quando faz sentido; caso
- * contrário, null (nada aparece com sinal bom).
+ * Banner de IMPACTO "sem sinal". Pensado pro motorista de idade / cansado: ícone
+ * grande, título forte em negrito e a explicação embaixo — não um textinho que
+ * passa batido. `mt` controla o espaçamento superior conforme o contexto.
+ */
+function BannerSemSinal({
+  titulo,
+  sub,
+  mt = "mt-2",
+}: {
+  titulo: string;
+  sub: string;
+  mt?: string;
+}) {
+  return (
+    <View
+      className={`${mt} flex-row items-center gap-3 rounded-2xl border-2 border-warning/60 bg-warning/15 p-4`}
+    >
+      <WifiOff size={30} color="#b45309" strokeWidth={2.5} />
+      <View className="flex-1">
+        <Text className="text-lg font-extrabold text-foreground">{titulo}</Text>
+        <Text className="mt-0.5 text-sm font-semibold text-warning-foreground">{sub}</Text>
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Aviso (no card do local selecionado) de que a posição/local veio do cache do
+ * celular por falta de sinal. Renderiza só quando faz sentido; null com sinal bom.
  */
 export function AvisoLocalCache({
   fonte,
@@ -35,15 +61,28 @@ export function AvisoLocalCache({
 }) {
   const posicaoDoCache = fonte === "CACHE";
   if (!posicaoDoCache && !buscaOffline) return null;
-  // A posição do cache é o aviso mais forte (pode estar defasada); prioriza ele.
-  const msg = posicaoDoCache
-    ? "Você estava sem sinal — usei a última posição salva no seu celular. Confira se é aqui mesmo."
-    : "Sem sinal agora — mostrei os lugares que já estavam salvos no seu celular.";
+  // Posição do cache é o aviso mais forte (pode estar defasada); prioriza ele.
+  return posicaoDoCache ? (
+    <BannerSemSinal
+      titulo="Você estava sem internet"
+      sub="Peguei a última posição salva no seu celular. Olhe no mapa e confirme se é aqui mesmo."
+    />
+  ) : (
+    <BannerSemSinal
+      titulo="Você está sem internet"
+      sub="Mostrei os lugares que já estavam salvos no seu celular. Pode ter faltado algum novo."
+    />
+  );
+}
+
+/** Banner "sem sinal" pro topo da lista "achei X perto". */
+export function AvisoListaCache() {
   return (
-    <View className="mt-2 flex-row items-start gap-2 rounded-xl border border-warning/50 bg-warning/10 px-3 py-2">
-      <Smartphone size={16} color="#b45309" style={{ marginTop: 1 }} />
-      <Text className="flex-1 text-xs font-medium text-warning-foreground">{msg}</Text>
-    </View>
+    <BannerSemSinal
+      titulo="Você está sem internet"
+      sub="Mostrando só os lugares já salvos no seu celular. Se não achar o certo, cadastre um novo."
+      mt="mt-0"
+    />
   );
 }
 

@@ -23,7 +23,7 @@ import {
   pegarCoordsPrecisa,
   RAIO_ALERTA_CARGA_M,
 } from "@/lib/geo";
-import { AvisoLocalCache, enderecoResumido, LinhaEndereco } from "@/components/local-info";
+import { AvisoListaCache, AvisoLocalCache, enderecoResumido, LinhaEndereco } from "@/components/local-info";
 import {
   buscarDescargaDuasEtapas,
   buscarDescargaDuasEtapasOffline,
@@ -475,11 +475,7 @@ export function DescargaPorGps({
               Achei {estado.matches.length} perto. Qual é?
             </Text>
           )}
-          {estado.coords?.buscaOffline && (
-            <Text className="text-xs font-medium text-warning-foreground">
-              Sem sinal — mostrando só os que já estavam salvos no seu celular.
-            </Text>
-          )}
+          {estado.coords?.buscaOffline && <AvisoListaCache />}
           {estado.matches.map((m, i) => (
             <Pressable
               key={m.id}
