@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { showAlert } from "@/lib/alert";
-import { fmtDataBR } from "@/lib/datetime";
+import { fmtDataBR, fmtDataHoraCurta } from "@/lib/datetime";
 import { enqueueFoto } from "@/lib/sync";
 import { useCompletarPeso, useViagensAguardandoPeso } from "@/lib/queries";
 
@@ -147,6 +147,11 @@ export default function CompletarPeso() {
                     {viagem.data ? fmtDataBR(viagem.data) : ""} ·{" "}
                     {viagem.veiculo?.placa ?? ""}
                   </Text>
+                  {viagem.sincronizadoEm ? (
+                    <Text className="text-sm text-muted-foreground">
+                      Lançada {fmtDataHoraCurta(viagem.sincronizadoEm)}
+                    </Text>
+                  ) : null}
                 </View>
               </View>
 

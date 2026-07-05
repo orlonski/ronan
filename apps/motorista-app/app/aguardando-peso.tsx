@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "@/components/screen-header";
 import { EmptyState } from "@/components/empty-state";
-import { fmtDataBR } from "@/lib/datetime";
+import { fmtDataHoraCurta } from "@/lib/datetime";
 import { useViagensAguardandoPeso } from "@/lib/queries";
 
 /**
@@ -69,7 +69,10 @@ export default function AguardandoPeso() {
                     {v.localDescarga?.nome ?? ""}
                   </Text>
                   <Text className="text-sm text-muted-foreground">
-                    {v.data ? fmtDataBR(v.data) : ""} · {v.veiculo?.placa ?? ""}
+                    {v.veiculo?.placa ?? ""}
+                    {v.sincronizadoEm
+                      ? ` · lançada ${fmtDataHoraCurta(v.sincronizadoEm)}`
+                      : ""}
                   </Text>
                 </View>
                 <ChevronRight size={22} color="#94a3b8" />

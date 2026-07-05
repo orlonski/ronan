@@ -48,6 +48,17 @@ export function hojeISO(): string {
   return `${y}-${m}-${dia}`;
 }
 
+/** "06/05 14:30" — data curta + hora (horário do device). */
+export function fmtDataHoraCurta(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const dia = String(d.getDate()).padStart(2, "0");
+  const mes = String(d.getMonth() + 1).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${dia}/${mes} ${hh}:${mm}`;
+}
+
 /** "06/05/2026 14:30" */
 export function fmtDataHora(iso: string): string {
   const d = new Date(iso); // ISO com timezone explícito é OK
