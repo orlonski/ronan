@@ -13,11 +13,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "@/components/screen-header";
 import { ErroCampo, useValidacaoGuiada } from "@/components/validacao-guiada";
+import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { showAlert } from "@/lib/alert";
 import { fmtDataBR } from "@/lib/datetime";
+import { enqueueFoto } from "@/lib/sync";
 import { useCompletarPeso, useViagensAguardandoPeso } from "@/lib/queries";
 
 /**
@@ -37,6 +39,7 @@ export default function CompletarPeso() {
 
   const [toneladas, setToneladas] = useState("");
   const [ticket, setTicket] = useState("");
+  const [foto, setFoto] = useState<CapturedPhoto | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const val = useValidacaoGuiada();
@@ -65,6 +68,15 @@ export default function CompletarPeso() {
         toneladas: t,
         ticket: exigeTicket ? ticket.trim() : undefined,
       });
+      // Foto do ticket (opcional): anexa na viagem já sincronizada via outbox
+      // próprio (upload 2-step). Mesmo caminho do "adicionar foto" do detalhe.
+      if (foto) {
+        await enqueueFoto({
+          viagemId,
+          fotoUri: foto.uri,
+          fotoMime: foto.mime,
+        });
+      }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       await showAlert({
         title: "Peso registrado!",
@@ -175,6 +187,16 @@ export default function CompletarPeso() {
                   Esse material não exige ticket — pode salvar só com o peso.
                 </Text>
               )}
+
+              {/* Foto do romaneio/ticket (opcional) — anexa na viagem. */}
+              <View className="gap-2">
+                <Label>Foto do ticket (opcional)</Label>
+                <PhotoCapture value={foto} onChange={setFoto} />
+                <Text className="text-xs text-muted-foreground">
+                  Se tiver o papel do romaneio em mãos, tire uma foto pra ficar
+                  junto da viagem.
+                </Text>
+              </View>
 
               {erro ? <ErroCampo msg={erro} /> : null}
 

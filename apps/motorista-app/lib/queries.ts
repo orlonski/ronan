@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useEffect } from "react";
 import {
   useInfiniteQuery,
   useMutation,
@@ -29,6 +30,7 @@ import {
   enqueueLocal,
   enqueuePedagio,
   enqueueViagem,
+  onSyncChange,
 } from "./sync";
 
 export type Veiculo = {
@@ -525,8 +527,11 @@ export function useCriarViagem() {
     await enqueueViagem(input.payload, input.foto);
     // Invalida tudo que pode mostrar viagens recém criadas: home, histórico,
     // resumo do mês. Refetch ativo + cache fica stale pra refetch on-mount.
+    // (A viagem "aguardando peso" só entra na lista após sincronizar — a própria
+    // useViagensAguardandoPeso reavalia via onSyncChange quando o sync cai.)
     void qc.invalidateQueries({ queryKey: ["viagens"] });
     void qc.invalidateQueries({ queryKey: ["viagens-filtradas"] });
+    void qc.invalidateQueries({ queryKey: ["viagens-aguardando-peso"] });
     void qc.invalidateQueries({ queryKey: ["resumo-mes"] });
   };
 }
@@ -536,6 +541,7 @@ export function useCriarViagem() {
  * o banner da home e a tela "aguardando peso". Cache-first pra abrir na hora.
  */
 export function useViagensAguardandoPeso() {
+  const qc = useQueryClient();
   const cacheKey = "q:viagens-aguardando-peso";
   const buscarRede = async (): Promise<Viagem[]> => {
     const fresh = await api.get<Viagem[]>("/m/viagens/aguardando-peso");
@@ -543,9 +549,9 @@ export function useViagensAguardandoPeso() {
     void cachePut(cacheKey, itens).catch(() => {});
     return itens;
   };
-  return useQuery({
+  const query = useQuery({
     queryKey: ["viagens-aguardando-peso"],
-    staleTime: 60_000,
+    staleTime: 30_000,
     queryFn: () =>
       cacheFirst<Viagem[]>(
         ["viagens-aguardando-peso"],
@@ -554,6 +560,26 @@ export function useViagensAguardandoPeso() {
         (arr) => arr.map(normalizarViagem),
       ),
   });
+
+  // A viagem entra/sai dessa lista pelo SERVIDOR, mas criar/completar é
+  // offline-first (outbox → sync em background). Sem isso, o card só atualizava
+  // no staleTime (podia demorar). Aqui reavaliamos assim que o outbox sincroniza
+  // — debounce pra colapsar a rajada de notify() de um drain num refetch só.
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | null = null;
+    const off = onSyncChange(() => {
+      if (t) clearTimeout(t);
+      t = setTimeout(() => {
+        void qc.invalidateQueries({ queryKey: ["viagens-aguardando-peso"] });
+      }, 1200);
+    });
+    return () => {
+      if (t) clearTimeout(t);
+      off();
+    };
+  }, [qc]);
+
+  return query;
 }
 
 /**
@@ -563,8 +589,20 @@ export function useViagensAguardandoPeso() {
 export function useCompletarPeso() {
   const qc = useQueryClient();
   return async (input: { viagemId: string; toneladas: number; ticket?: string }) => {
+    // Some da lista/banner NA HORA (otimista). Se o envio falhar (ex: ticket
+    // duplicado), o refetch pós-sync traz de volta e o erro aparece em Pendentes.
+    const semItem = (cur?: Viagem[] | null): Viagem[] | undefined =>
+      cur ? cur.filter((v) => v.id !== input.viagemId) : undefined;
+    qc.setQueryData<Viagem[]>(["viagens-aguardando-peso"], semItem);
+    // Espelha no cache em disco: o cache-first relê do AsyncStorage no próximo
+    // refetch, senão o item "ressuscitava" até o servidor confirmar.
+    try {
+      const disk = await cacheGet<Viagem[]>("q:viagens-aguardando-peso");
+      if (disk) await cachePut("q:viagens-aguardando-peso", semItem(disk) ?? []);
+    } catch {
+      /* cache indisponível — ignora */
+    }
     await enqueueCompletarPeso(input);
-    void qc.invalidateQueries({ queryKey: ["viagens-aguardando-peso"] });
     void qc.invalidateQueries({ queryKey: ["viagens"] });
     void qc.invalidateQueries({ queryKey: ["viagens-filtradas"] });
     void qc.invalidateQueries({ queryKey: ["resumo-mes"] });
