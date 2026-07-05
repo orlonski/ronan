@@ -35,7 +35,12 @@ export class AvisoPesoService {
         select: {
           cliente: { select: { nome: true } },
           motorista: {
-            select: { expoPushToken: true, telefone: true, nome: true },
+            select: {
+              expoPushToken: true,
+              telefone: true,
+              nome: true,
+              aceitaWhatsapp: true,
+            },
           },
         },
       });
@@ -53,10 +58,12 @@ export class AvisoPesoService {
         corpo,
         { viagemId, rota: "aguardando-peso" },
       );
-      await this.enviarWhatsapp(
-        viagem.motorista?.telefone,
-        `⚖️ *Falta o peso da viagem*\n\n${corpo}`,
-      );
+      if (viagem.motorista?.aceitaWhatsapp !== false) {
+        await this.enviarWhatsapp(
+          viagem.motorista?.telefone,
+          `⚖️ *Falta o peso da viagem*\n\n${corpo}`,
+        );
+      }
     } catch (err) {
       this.log.warn(
         `avisarViagemAguardandoPeso(${viagemId}) falhou: ${(err as Error).message}`,
@@ -81,7 +88,9 @@ export class AvisoPesoService {
         motoristaId: true,
         cliente: { select: { nome: true } },
         localDescarga: { select: { nome: true } },
-        motorista: { select: { expoPushToken: true, telefone: true } },
+        motorista: {
+          select: { expoPushToken: true, telefone: true, aceitaWhatsapp: true },
+        },
       },
       orderBy: { data: "asc" },
     });
@@ -118,10 +127,12 @@ export class AvisoPesoService {
         })
         .join("\n");
       const resto = n > 10 ? `\n…e mais ${n - 10}.` : "";
-      await this.enviarWhatsapp(
-        viagens[0]?.motorista?.telefone,
-        `⚖️ *${titulo}*\n\nFalta o peso/romaneio de:\n${linhas}${resto}\n\nAbra o app e complete antes de fechar o dia.`,
-      );
+      if (viagens[0]?.motorista?.aceitaWhatsapp !== false) {
+        await this.enviarWhatsapp(
+          viagens[0]?.motorista?.telefone,
+          `⚖️ *${titulo}*\n\nFalta o peso/romaneio de:\n${linhas}${resto}\n\nAbra o app e complete antes de fechar o dia.`,
+        );
+      }
     }
   }
 

@@ -323,6 +323,12 @@ model Motorista {
   bloqueadoAte            DateTime?
   expoPushToken           String?
   pushTokenAtualizadoEm   DateTime?
+  // Preferências de recebimento (o motorista controla no app). Default true pra
+  // não silenciar ninguém sem escolha. aceitaPush gateia o PushService (choke
+  // central); aceitaWhatsapp gateia os avisos por WhatsApp (não o código de
+  // cadastro, que é de autenticação).
+  aceitaPush              Boolean   @default(true)
+  aceitaWhatsapp          Boolean   @default(true)
   // Versão do app que o motorista está rodando — capturada via headers em
   // toda request pelo AppVersionInterceptor. Como o runtimeVersion usa policy
   // "appVersion", o appVersion sozinho NÃO muda entre updates OTA; o que

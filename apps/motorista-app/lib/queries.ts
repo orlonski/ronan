@@ -91,6 +91,9 @@ export type Me = {
   podeLancarPedagio: boolean;
   podeLancarAbastecimento: boolean;
   podeUsarOcrTicket: boolean;
+  // Preferências de recebimento (controladas na tela de perfil).
+  aceitaPush: boolean;
+  aceitaWhatsapp: boolean;
 };
 
 export type Viagem = {
@@ -227,6 +230,9 @@ function normalizarMe<T extends Record<string, unknown>>(m: T): T {
   if (typeof anyM.podeLancarPedagio !== "boolean") anyM.podeLancarPedagio = true;
   if (typeof anyM.podeLancarAbastecimento !== "boolean") anyM.podeLancarAbastecimento = true;
   if (typeof anyM.podeUsarOcrTicket !== "boolean") anyM.podeUsarOcrTicket = true;
+  // Backend antigo/cache sem as prefs: assume que recebe tudo (default true).
+  if (typeof anyM.aceitaPush !== "boolean") anyM.aceitaPush = true;
+  if (typeof anyM.aceitaWhatsapp !== "boolean") anyM.aceitaWhatsapp = true;
   return m;
 }
 
@@ -306,6 +312,33 @@ function offlineCacheQuery<T>(
 
 export function useMe() {
   return useQuery(offlineCacheQuery<Me>("me", "/m/me", { normalize: normalizarMe }));
+}
+
+/**
+ * Salva as preferências de notificação (push / WhatsApp). Otimista: atualiza o
+ * cache do `me` na hora e reverte se a rede falhar.
+ */
+export function useSalvarPreferenciasNotificacao() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (prefs: { aceitaPush?: boolean; aceitaWhatsapp?: boolean }) =>
+      api.patch<Me>("/m/me/preferencias-notificacao", prefs),
+    onMutate: async (prefs) => {
+      await qc.cancelQueries({ queryKey: ["me"] });
+      const anterior = qc.getQueryData<Me>(["me"]);
+      qc.setQueryData<Me>(["me"], (cur) =>
+        cur ? { ...cur, ...prefs } : cur,
+      );
+      return { anterior };
+    },
+    onError: (_e, _prefs, ctx) => {
+      if (ctx?.anterior) qc.setQueryData(["me"], ctx.anterior);
+    },
+    onSuccess: (fresh) => {
+      qc.setQueryData(["me"], normalizarMe(fresh));
+      void cachePut("q:me", normalizarMe(fresh)).catch(() => {});
+    },
+  });
 }
 
 export function useCatalogos() {

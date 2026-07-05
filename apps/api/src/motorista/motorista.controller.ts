@@ -1,5 +1,6 @@
-import { BadRequestException, Body, Controller, Get, Post, Query, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { z } from "zod";
 import { RegistrarPushTokenInput } from "@ronan/shared-types";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
@@ -7,6 +8,16 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { AuthMotorista } from "../auth/types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { MotoristaService } from "./motorista.service";
+
+const PreferenciasNotificacaoInput = z
+  .object({
+    aceitaPush: z.boolean().optional(),
+    aceitaWhatsapp: z.boolean().optional(),
+  })
+  .refine((v) => v.aceitaPush !== undefined || v.aceitaWhatsapp !== undefined, {
+    message: "Informe ao menos uma preferência.",
+  });
+type PreferenciasNotificacaoInput = z.infer<typeof PreferenciasNotificacaoInput>;
 
 @ApiTags("motorista")
 @ApiBearerAuth()
@@ -62,5 +73,14 @@ export class MotoristaController {
   ) {
     await this.service.registrarPushToken(user.id, body.token);
     return { ok: true };
+  }
+
+  @Patch("me/preferencias-notificacao")
+  atualizarPreferencias(
+    @CurrentUser() user: AuthMotorista,
+    @Body(new ZodValidationPipe(PreferenciasNotificacaoInput))
+    body: PreferenciasNotificacaoInput,
+  ) {
+    return this.service.atualizarPreferenciasNotificacao(user.id, body);
   }
 }

@@ -127,10 +127,29 @@ export class MotoristaService {
         podeViagemLifecycle: true,
         podeLancarPedagio: true,
         podeLancarAbastecimento: true,
+        aceitaPush: true,
+        aceitaWhatsapp: true,
       },
     });
     const { veiculos, ...rest } = m;
     return { ...rest, veiculos: veiculos.map((v) => v.veiculo) };
+  }
+
+  /** Atualiza as preferências de notificação do motorista (app). */
+  async atualizarPreferenciasNotificacao(
+    id: string,
+    prefs: { aceitaPush?: boolean; aceitaWhatsapp?: boolean },
+  ) {
+    await this.prisma.motorista.update({
+      where: { id },
+      data: {
+        ...(prefs.aceitaPush !== undefined ? { aceitaPush: prefs.aceitaPush } : {}),
+        ...(prefs.aceitaWhatsapp !== undefined
+          ? { aceitaWhatsapp: prefs.aceitaWhatsapp }
+          : {}),
+      },
+    });
+    return this.me(id);
   }
 
   /**

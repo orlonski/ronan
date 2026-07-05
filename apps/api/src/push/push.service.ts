@@ -64,6 +64,21 @@ export class PushService {
       criadoPorId: args.criadoPorId ?? null,
     });
 
+    // Preferência do motorista: se ele desligou push no app, a notificação
+    // ainda fica na central in-app (registrada acima), mas NÃO manda a push do
+    // sistema. Choke central: cobre todos os callers (km, admin, aguardando peso...).
+    const pref = await this.prisma.motorista.findUnique({
+      where: { id: args.motoristaId },
+      select: { aceitaPush: true },
+    });
+    if (pref && pref.aceitaPush === false) {
+      await this.notificacoes.atualizarEntrega(notificacaoId, {
+        entregaStatus: "ERRO",
+        entregaErro: "optout_push",
+      });
+      return { enviado: false, motivo: "Motorista desativou push." };
+    }
+
     if (!Expo.isExpoPushToken(args.token)) {
       await this.notificacoes.atualizarEntrega(notificacaoId, {
         entregaStatus: "ERRO",
