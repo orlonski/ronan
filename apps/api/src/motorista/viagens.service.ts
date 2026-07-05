@@ -1089,23 +1089,18 @@ export class ViagensMotoristaService {
     });
     if (!cliente) throw new NotFoundException("Cliente não encontrado");
 
-    const material = await this.prisma.material.findUnique({
-      where: { id: input.materialId },
-      select: { exigeTicket: true },
-    });
-    const ticket = input.ticket?.trim() || null;
-    if (material?.exigeTicket !== false && !ticket) {
-      throw new BadRequestException("Informe o número do ticket.");
-    }
-    if (ticket) {
-      const dup = await this.prisma.viagem.findFirst({
-        where: { ticket, cliente: { empresaId: cliente.empresaId }, id: { not: viagem.id } },
-        select: { id: true },
-      });
-      if (dup) {
-        throw new ConflictException(`Ticket ${ticket} já foi lançado para essa empresa.`);
-      }
-    }
+    // Modo "aguardando peso": finaliza sem peso/ticket (romaneio no fim do dia).
+    // Pula a validação de ticket (fica null) e a viagem vai pra AGUARDANDO_PESO
+    // em vez de ENVIADA; peso e ticket entram depois via completarPeso/admin.
+    const aguardandoPeso = input.aguardandoPeso === true;
+    const ticket = aguardandoPeso
+      ? null
+      : await this.validarTicketParaEmpresa(
+          cliente.empresaId,
+          input.materialId,
+          input.ticket,
+          viagem.id,
+        );
 
     await this.garantirLocal({
       id: input.localDescargaId,
@@ -1117,11 +1112,11 @@ export class ViagensMotoristaService {
     const finalizada = await this.prisma.viagem.update({
       where: { id: viagem.id },
       data: {
-        status: "ENVIADA",
+        status: aguardandoPeso ? "AGUARDANDO_PESO" : "ENVIADA",
         clienteId: clienteIdEfetivo,
         materialId: input.materialId,
         data: input.data,
-        toneladas: input.toneladas,
+        toneladas: aguardandoPeso ? null : input.toneladas,
         km: input.km,
         kmCalculado: input.kmCalculado,
         kmEditadoManual: input.kmEditadoManual,
@@ -1170,11 +1165,21 @@ export class ViagensMotoristaService {
       });
       await this.notificarAdmins(
         "nova-viagem",
-        `Nova viagem de ${m?.nome ?? "motorista"}`,
-        `${finalizada.ticket ? `Ticket ${finalizada.ticket} · ` : ""}${finalizada.cliente?.nome ?? ""} · ${finalizada.toneladas ?? 0}t`,
+        aguardandoPeso
+          ? `Viagem sem peso de ${m?.nome ?? "motorista"}`
+          : `Nova viagem de ${m?.nome ?? "motorista"}`,
+        aguardandoPeso
+          ? `${finalizada.cliente?.nome ?? ""} · aguardando peso/romaneio`
+          : `${finalizada.ticket ? `Ticket ${finalizada.ticket} · ` : ""}${finalizada.cliente?.nome ?? ""} · ${finalizada.toneladas ?? 0}t`,
         { viagemId: finalizada.id, motoristaId },
       );
     })();
+
+    // Aguardando peso: avisa o motorista (push + WhatsApp) pra não esquecer de
+    // completar o romaneio, igual ao lançamento único.
+    if (aguardandoPeso) {
+      void this.avisos.avisarViagemAguardandoPeso(finalizada.id, motoristaId);
+    }
 
     return serializarViagemComMinimos(finalizada, await this.regrasMinimoAtivas());
   }

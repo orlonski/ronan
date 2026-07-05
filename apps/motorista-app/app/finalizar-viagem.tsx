@@ -213,7 +213,9 @@ export default function FinalizarViagem() {
     foto,
   ]);
 
-  function validar(): boolean {
+  // Valida tudo que NÃO é peso/ticket (esses podem ficar pra depois, no modo
+  // "aguardando peso"). Aponta o 1º campo faltando na ordem da tela.
+  function validarBase(): boolean {
     if (!localDescargaId) {
       val.apontar("descarga", "Marque o local de descarga");
       return false;
@@ -226,20 +228,41 @@ export default function FinalizarViagem() {
       val.apontar("km", "Informe os km rodados");
       return false;
     }
-    if (exigeTicket && !ticket.trim()) {
-      val.apontar("ticket", "Informe o número do ticket");
-      return false;
-    }
-    if (!toneladas.trim()) {
-      val.apontar("toneladas", "Informe as toneladas");
-      return false;
-    }
     return true;
   }
 
   async function salvar() {
     setErro(null);
-    if (!validar()) return;
+    // Primeiro valida tudo menos peso/ticket. Só quando o resto está pronto é
+    // que o peso faltando vira a pergunta (nunca no meio do preenchimento).
+    if (!validarBase()) return;
+
+    // Se falta o peso, pode ser que o romaneio só saia no fim do dia — oferece
+    // finalizar sem peso e completar depois (mesmo fluxo da nova viagem).
+    let aguardandoPeso = false;
+    if (!toneladas.trim()) {
+      const escolha = await showAlert({
+        title: "Você já tem o peso?",
+        message:
+          "Se o peso e o romaneio (ticket) só saem no fim do dia, dá pra finalizar a viagem agora e completar depois — a gente te lembra.",
+        variant: "warning",
+        buttons: [
+          { label: "Tenho o peso agora", value: "tenho", style: "default" },
+          { label: "O peso sai no fim do dia", value: "depois", style: "outline" },
+        ],
+      });
+      if (escolha === "depois") {
+        aguardandoPeso = true;
+      } else {
+        val.apontar("toneladas", "Informe as toneladas");
+        return;
+      }
+    }
+    // Peso presente e não é aguardando peso: ticket segue as regras normais.
+    if (!aguardandoPeso && exigeTicket && !ticket.trim()) {
+      val.apontar("ticket", "Informe o número do ticket");
+      return;
+    }
     val.limpar();
     setSubmitting(true);
     try {
@@ -256,12 +279,16 @@ export default function FinalizarViagem() {
         clienteId,
         materialId,
         data: hojeISO(),
-        toneladas: parseFloat(toneladas.replace(",", ".")),
+        // Aguardando peso: finaliza sem toneladas/ticket (romaneio no fim do dia).
+        toneladas: aguardandoPeso
+          ? undefined
+          : parseFloat(toneladas.replace(",", ".")),
+        aguardandoPeso,
         km: parseFloat(km.replace(",", ".")),
         kmCalculado: kmRecomendado,
         kmEditadoManual,
         rotaGeometria: rotaGeometriaEscolhida ?? undefined,
-        ticket: exigeTicket ? ticket.trim() : undefined,
+        ticket: aguardandoPeso ? undefined : exigeTicket ? ticket.trim() : undefined,
         localDescargaId,
         localDescargaDados,
         descargaLat: descargaCaptura?.lat,
@@ -278,8 +305,10 @@ export default function FinalizarViagem() {
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       await showAlert({
-        title: "Viagem finalizada!",
-        message: "Vamos enviar assim que tiver sinal. Bom trabalho.",
+        title: aguardandoPeso ? "Viagem finalizada — falta o peso" : "Viagem finalizada!",
+        message: aguardandoPeso
+          ? "Enviamos assim que tiver sinal. Quando sair o romaneio, complete o peso e o ticket — a gente te lembra."
+          : "Vamos enviar assim que tiver sinal. Bom trabalho.",
       });
       router.replace("/");
     } catch (err) {

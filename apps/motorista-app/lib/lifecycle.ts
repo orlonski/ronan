@@ -381,7 +381,9 @@ export async function finalizarViagemGuiada(input: {
   clienteId: string;
   materialId: string;
   data: string; // ISO ou YYYY-MM-DD
-  toneladas: number;
+  // Opcional no modo "aguardando peso" (romaneio no fim do dia).
+  toneladas?: number;
+  aguardandoPeso?: boolean;
   km: number;
   kmCalculado?: number;
   kmEditadoManual?: boolean;
@@ -409,6 +411,7 @@ export async function finalizarViagemGuiada(input: {
       materialId: input.materialId,
       data: input.data,
       toneladas: input.toneladas,
+      aguardandoPeso: input.aguardandoPeso,
       km: input.km,
       kmCalculado: input.kmCalculado,
       kmEditadoManual: input.kmEditadoManual,
