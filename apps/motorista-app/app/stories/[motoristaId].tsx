@@ -147,15 +147,22 @@ export default function VisualizadorStoryScreen() {
 
   return (
     <View className="flex-1 bg-black">
-      {/* Foto fullscreen */}
-      <Image
-        source={{
-          uri: fotoUri,
-          headers: token ? { authorization: `Bearer ${token}` } : undefined,
-        }}
-        style={{ flex: 1 }}
-        resizeMode="contain"
-      />
+      {/* Foto fullscreen. Renderiza SÓ com o token pronto: header custom no
+          Android (Fresco) precisa vir já na 1ª request, senão ele cacheia o
+          401 e a foto fica preta. `key` por story força request nova a cada
+          troca. Mesmo padrão da foto de ticket em viagens/[id].tsx. */}
+      {token ? (
+        <Image
+          key={atual.id}
+          source={{ uri: fotoUri, headers: { Authorization: `Bearer ${token}` } }}
+          style={{ flex: 1 }}
+          resizeMode="contain"
+        />
+      ) : (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator color="white" />
+        </View>
+      )}
 
       {/* Zonas de toque (esq = volta, dir = avança; segurar = pausa) */}
       <View className="absolute inset-0 flex-row">
