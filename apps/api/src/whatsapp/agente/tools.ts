@@ -8,6 +8,7 @@ import { ErrorsService } from "../../errors/errors.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { EvolutionClientService } from "../evolution-client.service";
 import { ymdSaoPaulo } from "../../common/timezone";
+import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
 import type { SessaoResolvida } from "../sessao.service";
 import type { AgentToolDefinition } from "./providers/agent.provider";
 
@@ -609,8 +610,8 @@ async function executarToolInterno(
       const lista = await ctx.prisma.viagem.findMany({
         where: {
           motoristaId: ctx.identidade.motoristaId,
-          // Não reporta viagem em andamento (ainda sem cliente/material/ticket).
-          status: { not: "EM_ANDAMENTO" },
+          // Não reporta viagem incompleta (em andamento ou aguardando peso/ticket).
+          status: { notIn: STATUS_FORA_FECHAMENTO },
           data: { gte: inicio },
         },
         select: {

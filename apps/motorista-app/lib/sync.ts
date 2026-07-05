@@ -4,6 +4,7 @@ import { drenar as drenarEventos, reportarEvento } from "./event-reporter";
 import { drenarPosicoes } from "./posicao-sync";
 import {
   deletePendingAbastecimento,
+  deletePendingCompletarPeso,
   deletePendingEventoViagem,
   deletePendingFoto,
   deletePendingLocal,
@@ -13,6 +14,7 @@ import {
   deletePendingViagemFinalizar,
   deletePendingViagemIniciar,
   listPendingAbastecimentos,
+  listPendingCompletarPeso,
   listPendingEventosViagem,
   listPendingFotos,
   listPendingLocais,
@@ -22,6 +24,7 @@ import {
   listPendingViagemIniciar,
   listPendingViagens,
   upsertPendingAbastecimento,
+  upsertPendingCompletarPeso,
   upsertPendingEventoViagem,
   upsertPendingFoto,
   upsertPendingLocal,
@@ -31,6 +34,7 @@ import {
   upsertPendingViagemFinalizar,
   upsertPendingViagemIniciar,
   type PendingAbastecimento,
+  type PendingCompletarPeso,
   type PendingEventoViagem,
   type PendingFoto,
   type PendingLocal,
@@ -334,6 +338,56 @@ export async function enqueueFoto(item: {
 }
 
 /**
+ * Enfileira o "completar peso" de uma viagem que está em AGUARDANDO_PESO
+ * (romaneio saiu no fim do dia). viagemId é o id real do servidor. Idempotente
+ * por viagemId: reenfileirar (ex: motorista corrigiu o ticket) substitui o
+ * item e reseta attempts/erro pra tentar de novo na hora.
+ */
+export async function enqueueCompletarPeso(item: {
+  viagemId: string;
+  toneladas: number;
+  ticket?: string;
+}): Promise<void> {
+  await upsertPendingCompletarPeso({
+    clientId: `${item.viagemId}-completar`,
+    viagemId: item.viagemId,
+    payload: { toneladas: item.toneladas, ticket: item.ticket },
+    status: "pending",
+    attempts: 0,
+    createdAt: Date.now(),
+    lastTriedAt: undefined,
+    errorMsg: undefined,
+    errorStatus: undefined,
+    errorIssues: undefined,
+  });
+  notify();
+  void drain();
+}
+
+/** Reseta o erro e tenta completar o peso de novo (após 4xx permanente). */
+export async function tentarNovamenteCompletarPeso(viagemId: string): Promise<void> {
+  const list = await listPendingCompletarPeso();
+  const item = list.find((x) => x.viagemId === viagemId);
+  if (!item) return;
+  await upsertPendingCompletarPeso({
+    ...item,
+    status: "pending",
+    attempts: 0,
+    errorMsg: undefined,
+    errorStatus: undefined,
+    errorIssues: undefined,
+  });
+  notify();
+  void drain();
+}
+
+/** Descarta a tentativa de completar peso (a viagem segue AGUARDANDO_PESO). */
+export async function descartarCompletarPesoPendente(viagemId: string): Promise<void> {
+  await deletePendingCompletarPeso(viagemId);
+  notify();
+}
+
+/**
  * Enfileira a criação de um local novo (descarga em lugar nunca visto).
  * clientId é o UUID gerado client-side, vira o id real no servidor pra
  * idempotência. A viagem que referencia esse local usa o mesmo clientId
@@ -456,16 +510,19 @@ export async function pendingCounts(): Promise<{
   abastecimentos: number;
   /** Itens do lifecycle guiado aguardando sync (iniciar+eventos+finalizar). */
   lifecycle: number;
+  /** "Completar peso" de viagens AGUARDANDO_PESO aguardando sync. */
+  completarPeso: number;
   /** Itens com erro permanente (4xx) que precisam de ação do motorista. */
   comErro: number;
 }> {
-  const [v, p, a, li, ev, fi] = await Promise.all([
+  const [v, p, a, li, ev, fi, cp] = await Promise.all([
     listPendingViagens(),
     listPendingPedagios(),
     listPendingAbastecimentos(),
     listPendingViagemIniciar(),
     listPendingEventosViagem(),
     listPendingViagemFinalizar(),
+    listPendingCompletarPeso(),
   ]);
   const comErro =
     v.filter((i) => i.attempts >= MAX_ATTEMPTS).length +
@@ -473,12 +530,14 @@ export async function pendingCounts(): Promise<{
     a.filter((i) => i.attempts >= MAX_ATTEMPTS).length +
     li.filter((i) => i.attempts >= MAX_ATTEMPTS).length +
     ev.filter((i) => i.attempts >= MAX_ATTEMPTS).length +
-    fi.filter((i) => i.attempts >= MAX_ATTEMPTS).length;
+    fi.filter((i) => i.attempts >= MAX_ATTEMPTS).length +
+    cp.filter((i) => i.attempts >= MAX_ATTEMPTS).length;
   return {
     viagens: v.length,
     pedagios: p.length,
     abastecimentos: a.length,
     lifecycle: li.length + ev.length + fi.length,
+    completarPeso: cp.length,
     comErro,
   };
 }
@@ -521,6 +580,8 @@ export async function drain(): Promise<void> {
     // Fotos DEPOIS de viagens: foto pode estar referenciando viagem que
     // acabou de ser sincronizada (raro mas possível).
     await drainFotos();
+    // Completar peso: age sobre viagem JÁ sincronizada (AGUARDANDO_PESO).
+    await drainCompletarPeso();
     await drainPedagios();
     await drainAbastecimentos();
   } finally {
@@ -557,6 +618,11 @@ async function rescueStaleItems(): Promise<void> {
   for (const f of await listPendingFotos()) {
     if (f.status === "syncing" && isStale(f.lastTriedAt)) {
       await upsertPendingFoto({ ...f, status: "pending" });
+    }
+  }
+  for (const cp of await listPendingCompletarPeso()) {
+    if (cp.status === "syncing" && isStale(cp.lastTriedAt)) {
+      await upsertPendingCompletarPeso({ ...cp, status: "pending" });
     }
   }
   for (const i of await listPendingViagemIniciar()) {
@@ -612,6 +678,38 @@ async function processFoto(item: PendingFoto): Promise<void> {
     const permanente = isErroPermanente(err);
     const { msg, status, issues } = extractErrorDetails(err);
     await upsertPendingFoto({
+      ...item,
+      status: "error",
+      errorMsg: msg,
+      errorStatus: status,
+      errorIssues: issues,
+      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
+    });
+  }
+  notify();
+}
+
+async function drainCompletarPeso(): Promise<void> {
+  const list = await listPendingCompletarPeso();
+  for (const item of list) {
+    if (item.status === "syncing") continue;
+    if (item.attempts >= MAX_ATTEMPTS) continue;
+    if (!(await podeEnviar())) return;
+    await processCompletarPeso(item);
+  }
+}
+
+async function processCompletarPeso(item: PendingCompletarPeso): Promise<void> {
+  await upsertPendingCompletarPeso({ ...item, status: "syncing", lastTriedAt: Date.now() });
+  notify();
+  try {
+    // Idempotente no backend: se já foi completada (ENVIADA), devolve a existente.
+    await api.post(`/m/viagens/${item.viagemId}/completar-peso`, item.payload);
+    await deletePendingCompletarPeso(item.viagemId);
+  } catch (err) {
+    const permanente = isErroPermanente(err);
+    const { msg, status, issues } = extractErrorDetails(err);
+    await upsertPendingCompletarPeso({
       ...item,
       status: "error",
       errorMsg: msg,

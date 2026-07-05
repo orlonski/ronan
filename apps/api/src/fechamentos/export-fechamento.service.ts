@@ -368,7 +368,8 @@ function comOverride(
   regras: Parameters<typeof resolverRegraMinimo>[0],
   viagem: ViagemFull,
 ): MinimoOverride | null {
-  // Viagens exportadas são finalizadas; EM_ANDAMENTO (campos null) nunca entra.
+  // Viagens exportadas são finalizadas; EM_ANDAMENTO/AGUARDANDO_PESO (incompletas)
+  // nunca entram no match, então nunca chegam aqui.
   return resolverRegraMinimo(
     regras,
     viagem.cliente?.empresaId ?? "",
@@ -465,7 +466,7 @@ function valorParaColuna(
 ): string | number | Date | null {
   switch (coluna.campo) {
     case "data":
-      // Viagem exportada é finalizada; EM_ANDAMENTO (data null) nunca chega aqui.
+      // Viagem exportada é finalizada; incompleta (sem data/peso) nunca chega aqui.
       return config.formatoData === "YYYY-MM-DD"
         ? fmtDataISO(viagem.data!)
         : config.formatoData === "DD/MM/YY"

@@ -8,6 +8,7 @@ import { TrackingConfigModule } from "../admin/tracking-config/tracking-config.m
 import { BuscaLocaisConfigModule } from "../admin/busca-locais-config/busca-locais-config.module";
 import { PedagiosRodoviaModule } from "../admin/pedagios-rodovia/pedagios-rodovia.module";
 import { AdminInboxModule } from "../admin/inbox/inbox.module";
+import { EvolutionModule } from "../whatsapp/evolution.module";
 import { UploadsModule } from "../uploads/uploads.module";
 import { MotoristaController } from "./motorista.controller";
 import { MotoristaService } from "./motorista.service";
@@ -29,6 +30,7 @@ import { BuscaLocaisConfigMotoristaController } from "./busca-locais-config.cont
 import { ValidacaoLocalService } from "./validacao-local.service";
 import { IaTicketController } from "./ia-ticket.controller";
 import { KmReprocessamentoService } from "./km-reprocessamento.service";
+import { AvisoPesoService } from "./aviso-peso.service";
 
 @Module({
   imports: [
@@ -42,6 +44,7 @@ import { KmReprocessamentoService } from "./km-reprocessamento.service";
     PedagiosRodoviaModule,
     AdminInboxModule,
     PushModule,
+    EvolutionModule,
   ],
   controllers: [
     MotoristaController,
@@ -66,6 +69,7 @@ import { KmReprocessamentoService } from "./km-reprocessamento.service";
     ValidacaoLocalService,
     PosicaoMotoristaService,
     KmReprocessamentoService,
+    AvisoPesoService,
   ],
   exports: [
     MotoristaService,

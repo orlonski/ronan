@@ -28,8 +28,10 @@ type Motorista = { id: string; nome: string };
 
 export type ViagemEditavel = {
   id: string;
+  // Null quando a viagem está AGUARDANDO_PESO (lançada sem o peso). Admin
+  // preenche aqui e o backend transiciona pra ENVIADA.
+  toneladas: string | null;
   data: string;
-  toneladas: string;
   ticket: string | null;
   km: string;
   kmCalculado: string | null;
@@ -89,7 +91,10 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
   const [form, setForm] = useState<FormState>({
     data: toDateInput(initial.data),
     ticket: initial.ticket ?? "",
-    toneladas: String(initial.toneladas).replace(".", ","),
+    toneladas:
+      initial.toneladas != null
+        ? String(initial.toneladas).replace(".", ",")
+        : "",
     km: String(initial.km).replace(".", ","),
     valorPedagioTotal:
       initial.valorPedagioTotal != null
@@ -232,6 +237,14 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
   return (
     <Card className="p-6">
       <form onSubmit={onSubmit} className="space-y-5">
+        {initial.status === "AGUARDANDO_PESO" && (
+          <div className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-900">
+            <strong>Aguardando peso.</strong> Essa viagem foi lançada sem o peso
+            (romaneio no fim do dia) e não entra em fechamento. Preencha as
+            toneladas (e o ticket) e salve — ela passa pra “Aguardando
+            conferência” automaticamente.
+          </div>
+        )}
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">
             <Label>Data</Label>

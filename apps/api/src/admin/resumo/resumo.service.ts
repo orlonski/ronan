@@ -13,8 +13,12 @@ import {
   inicioDoDiaInstante,
   ymdSaoPaulo,
 } from "../../common/timezone";
+import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
 
 const DIA_MS = 86_400_000;
+
+// Viagens incompletas (EM_ANDAMENTO, AGUARDANDO_PESO) não contam em KPIs/rankings.
+const FORA_FECHAMENTO = { status: { notIn: STATUS_FORA_FECHAMENTO } };
 
 function fmt(n: number): string {
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
@@ -186,10 +190,10 @@ export class ResumoService {
       // "Ambos" serve carga E descarga, então conta nos dois.
       this.prisma.local.count({ where: { tipo: { in: ["CARGA", "AMBOS"] }, ativo: true } }),
       this.prisma.local.count({ where: { tipo: { in: ["DESCARGA", "AMBOS"] }, ativo: true } }),
-      this.prisma.viagem.count({ where: { data: { gte: hoje00, lt: amanha00 } } }),
-      this.prisma.viagem.count({ where: { data: { gte: sem7, lt: amanha00 } } }),
-      this.prisma.viagem.count({ where: { data: { gte: inicioMes, lt: inicioMesQueVem } } }),
-      this.prisma.viagem.count(),
+      this.prisma.viagem.count({ where: { data: { gte: hoje00, lt: amanha00 }, ...FORA_FECHAMENTO } }),
+      this.prisma.viagem.count({ where: { data: { gte: sem7, lt: amanha00 }, ...FORA_FECHAMENTO } }),
+      this.prisma.viagem.count({ where: { data: { gte: inicioMes, lt: inicioMesQueVem }, ...FORA_FECHAMENTO } }),
+      this.prisma.viagem.count({ where: FORA_FECHAMENTO }),
       this.prisma.abastecimento.count({ where: { data: { gte: hoje00I, lt: amanha00I } } }),
       this.prisma.abastecimento.count({ where: { data: { gte: sem7I, lt: amanha00I } } }),
       this.prisma.abastecimento.count({ where: { data: { gte: inicioMesI, lt: inicioMesQueVemI } } }),
@@ -198,7 +202,7 @@ export class ResumoService {
       this.prisma.viagem.count({ where: { status: "DIVERGENTE" } }),
       this.prisma.viagem.groupBy({
         by: ["motoristaId"],
-        where: { data: { gte: inicioMes, lt: inicioMesQueVem } },
+        where: { data: { gte: inicioMes, lt: inicioMesQueVem }, ...FORA_FECHAMENTO },
         _count: { _all: true },
         _sum: { toneladas: true },
         orderBy: { _count: { motoristaId: "desc" } },
@@ -206,7 +210,7 @@ export class ResumoService {
       }),
       this.prisma.viagem.groupBy({
         by: ["clienteId"],
-        where: { data: { gte: inicioMes, lt: inicioMesQueVem } },
+        where: { data: { gte: inicioMes, lt: inicioMesQueVem }, ...FORA_FECHAMENTO },
         _count: { _all: true },
         _sum: { toneladas: true },
         orderBy: { _count: { clienteId: "desc" } },
@@ -214,7 +218,7 @@ export class ResumoService {
       }),
       this.prisma.viagem.groupBy({
         by: ["materialId"],
-        where: { data: { gte: inicioMes, lt: inicioMesQueVem } },
+        where: { data: { gte: inicioMes, lt: inicioMesQueVem }, ...FORA_FECHAMENTO },
         _count: { _all: true },
         _sum: { toneladas: true },
         orderBy: { _count: { materialId: "desc" } },
@@ -223,14 +227,14 @@ export class ResumoService {
       // Detalhe do dia atual: todos os motoristas e materiais que rodaram hoje.
       this.prisma.viagem.groupBy({
         by: ["motoristaId"],
-        where: { data: { gte: hoje00, lt: amanha00 } },
+        where: { data: { gte: hoje00, lt: amanha00 }, ...FORA_FECHAMENTO },
         _count: { _all: true },
         _sum: { toneladas: true },
         orderBy: { _count: { motoristaId: "desc" } },
       }),
       this.prisma.viagem.groupBy({
         by: ["materialId"],
-        where: { data: { gte: hoje00, lt: amanha00 } },
+        where: { data: { gte: hoje00, lt: amanha00 }, ...FORA_FECHAMENTO },
         _count: { _all: true },
         _sum: { toneladas: true },
         orderBy: { _count: { materialId: "desc" } },

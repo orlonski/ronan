@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { router, Stack } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { CloudOff, Pencil, RefreshCw, Trash2 } from "lucide-react-native";
+import { CloudOff, Pencil, RefreshCw, Scale, Trash2 } from "lucide-react-native";
 import {
   FlatList,
   Modal,
@@ -21,20 +21,24 @@ import {
   type PendingViagem,
   type PendingPedagio,
   type PendingAbastecimento,
+  type PendingCompletarPeso,
   type ZodIssueSaved,
 } from "@/db/database";
 import { usePendingViagens } from "@/hooks/use-pending-viagens";
 import { usePendingPedagios } from "@/hooks/use-pending-pedagios";
 import { usePendingAbastecimentos } from "@/hooks/use-pending-abastecimentos";
 import { usePendingLifecycle, type LifecycleTrip } from "@/hooks/use-pending-lifecycle";
+import { usePendingCompletarPeso } from "@/hooks/use-pending-completar-peso";
 import {
   descartarViagemPendente,
   descartarPedagioPendente,
   descartarAbastecimentoPendente,
+  descartarCompletarPesoPendente,
   drain,
   tentarNovamenteViagemPendente,
   tentarNovamentePedagioPendente,
   tentarNovamenteAbastecimentoPendente,
+  tentarNovamenteCompletarPeso,
   tentarNovamenteTripLifecycle,
 } from "@/lib/sync";
 import { descartarViagemGuiada } from "@/lib/lifecycle";
@@ -60,7 +64,22 @@ export default function Pendentes() {
   const pedagios = usePendingPedagios();
   const abastecimentos = usePendingAbastecimentos();
   const lifecycleTrips = usePendingLifecycle();
+  const completarPeso = usePendingCompletarPeso();
   const cat = useCatalogos();
+
+  async function descartarCompletar(item: PendingCompletarPeso) {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const ok = await showConfirm({
+      title: "Descartar este envio?",
+      message:
+        "O peso digitado não vai ser enviado. A viagem continua esperando o peso — você pode informar de novo depois.",
+      confirmLabel: "Descartar",
+      destructive: true,
+    });
+    if (!ok) return;
+    await descartarCompletarPesoPendente(item.viagemId);
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }
   const [detalheItem, setDetalheItem] = useState<PendingComum | null>(null);
 
   async function descartarTrip(trip: LifecycleTrip) {
@@ -137,14 +156,12 @@ export default function Pendentes() {
           keyExtractor={(r) => `${r.kind}-${r.item.clientId}`}
           contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }}
           ListHeaderComponent={
-            rows.length > 0 || lifecycleTrips.length > 0 ? (
+            rows.length > 0 || lifecycleTrips.length > 0 || completarPeso.length > 0 ? (
               <View className="mb-2 gap-3">
-                {(rows.length > 0 || lifecycleTrips.length > 0) && (
-                  <Text className="text-sm text-muted-foreground">
-                    Lançamentos aguardando envio. Toque em &quot;Sincronizar&quot; pra tentar
-                    enviar agora.
-                  </Text>
-                )}
+                <Text className="text-sm text-muted-foreground">
+                  Lançamentos aguardando envio. Toque em &quot;Sincronizar&quot; pra tentar
+                  enviar agora.
+                </Text>
                 <Button onPress={() => void drain()}>Sincronizar agora</Button>
                 {lifecycleTrips.map((trip) => (
                   <LifecycleTripCard
@@ -154,11 +171,22 @@ export default function Pendentes() {
                     onTentarNovamente={() => tentarNovamenteTripLifecycle(trip.clientId)}
                   />
                 ))}
+                {completarPeso.map((item) => (
+                  <CompletarPesoCard
+                    key={`cp-${item.viagemId}`}
+                    item={item}
+                    onDescartar={() => descartarCompletar(item)}
+                    onEditar={() =>
+                      router.push(`/completar-peso?viagemId=${item.viagemId}`)
+                    }
+                    onTentarNovamente={() => tentarNovamenteCompletarPeso(item.viagemId)}
+                  />
+                ))}
               </View>
             ) : null
           }
           ListEmptyComponent={
-            lifecycleTrips.length === 0 ? (
+            lifecycleTrips.length === 0 && completarPeso.length === 0 ? (
               <EmptyState
                 icon={CloudOff}
                 title="Tudo sincronizado"
@@ -249,6 +277,76 @@ function LifecycleTripCard({
             <RefreshCw size={16} color="white" />
             <Text className="ml-1 font-semibold text-primary-foreground">Tentar de novo</Text>
           </Button>
+        )}
+      </View>
+    </View>
+  );
+}
+
+function CompletarPesoCard({
+  item,
+  onDescartar,
+  onEditar,
+  onTentarNovamente,
+}: {
+  item: PendingCompletarPeso;
+  onDescartar: () => void;
+  onEditar: () => void;
+  onTentarNovamente: () => void;
+}) {
+  const temErro = item.status === "error";
+  return (
+    <View className="rounded-2xl border-2 border-amber-500/40 bg-card p-4">
+      <View className="flex-row items-start justify-between gap-3">
+        <View className="flex-1 flex-row items-start gap-2">
+          <Scale size={20} color="#d97706" />
+          <View className="flex-1">
+            <Badge variant="outline">Peso da viagem</Badge>
+            <Text className="mt-1.5 text-lg font-bold text-foreground">
+              Completar peso
+            </Text>
+            <Text className="mt-0.5 text-base font-medium text-muted-foreground">
+              {item.payload.toneladas} t
+              {item.payload.ticket ? ` · ticket ${item.payload.ticket}` : ""}
+            </Text>
+          </View>
+        </View>
+        <Badge variant={temErro ? "destructive" : "warning"}>
+          {temErro
+            ? item.errorStatus
+              ? `Erro ${item.errorStatus}`
+              : `Falhou (${item.attempts})`
+            : "Enviando"}
+        </Badge>
+      </View>
+
+      {temErro && (
+        <View className="mt-3 gap-1.5 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+          <Text className="text-xs font-semibold text-destructive">Último erro:</Text>
+          <Text className="text-xs text-destructive" numberOfLines={3}>
+            {item.errorStatus === 409
+              ? "Esse ticket já foi lançado pra essa empresa. Toque em Editar pra corrigir o número."
+              : (item.errorMsg ?? "Erro desconhecido.")}
+          </Text>
+        </View>
+      )}
+
+      <View className="mt-3 flex-row gap-2">
+        <Button variant="outline" size="sm" className="flex-1" onPress={onDescartar}>
+          <Trash2 size={16} color="#dc2626" />
+          <Text className="ml-1 font-semibold text-destructive">Descartar</Text>
+        </Button>
+        {temErro && (
+          <>
+            <Button variant="outline" size="sm" className="flex-1" onPress={onEditar}>
+              <Pencil size={16} color="#0f172a" />
+              <Text className="ml-1 font-semibold">Editar</Text>
+            </Button>
+            <Button size="sm" className="flex-1" onPress={onTentarNovamente}>
+              <RefreshCw size={16} color="white" />
+              <Text className="ml-1 font-semibold text-primary-foreground">De novo</Text>
+            </Button>
+          </>
         )}
       </View>
     </View>

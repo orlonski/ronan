@@ -7,6 +7,11 @@ export const StatusViagem = {
   // Viagem aberta pelo lifecycle guiado ("Iniciar viagem"), ainda em curso.
   // Nunca entra em match/fechamento/KPIs; vira ENVIADA ao finalizar.
   EM_ANDAMENTO: "EM_ANDAMENTO",
+  // Viagem lançada sem o peso (toneladas) e o ticket/romaneio — o motorista só
+  // vai ter o romaneio no fim do dia. Fica visível pro admin mas NUNCA entra em
+  // match/fechamento/KPIs/resumos/export enquanto incompleta; vira ENVIADA
+  // quando o motorista (app) ou o admin (dashboard) completa peso + ticket.
+  AGUARDANDO_PESO: "AGUARDANDO_PESO",
 } as const;
 export type StatusViagem = (typeof StatusViagem)[keyof typeof StatusViagem];
 

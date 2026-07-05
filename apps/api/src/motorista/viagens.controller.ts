@@ -13,7 +13,7 @@ import {
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { z } from "zod";
-import { CriarViagemInput } from "@ronan/shared-types";
+import { CriarViagemBase, CompletarPesoInput, checarPesoObrigatorio } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
@@ -23,9 +23,9 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { AuthMotorista } from "../auth/types";
 import { ViagensMotoristaService } from "./viagens.service";
 
-const CriarViagemPayload = CriarViagemInput.extend({
+const CriarViagemPayload = CriarViagemBase.extend({
   fotoKey: z.string().optional(),
-});
+}).superRefine(checarPesoObrigatorio);
 
 const AdicionarFotoInput = z.object({
   fotoKey: z.string().min(1),
@@ -88,6 +88,16 @@ export class ViagensMotoristaController {
     return this.service.resumoMes(user.id, query.mes ?? mesAtual());
   }
 
+  /**
+   * Viagens lançadas sem peso (status AGUARDANDO_PESO) — alimenta o banner e a
+   * lista "aguardando peso" do app. Precisa vir ANTES de @Get(":id") pra não
+   * colidir com a rota dinâmica.
+   */
+  @Get("aguardando-peso")
+  aguardandoPeso(@CurrentUser() user: AuthMotorista) {
+    return this.service.listarAguardandoPeso(user.id);
+  }
+
   @Post()
   @AcessoMotorista("podeLancarViagem")
   create(
@@ -95,6 +105,20 @@ export class ViagensMotoristaController {
     @Body(new ZodValidationPipe(CriarViagemPayload)) body: z.infer<typeof CriarViagemPayload>,
   ) {
     return this.service.create(user.id, body);
+  }
+
+  /**
+   * Completa peso + ticket de uma viagem lançada em AGUARDANDO_PESO (romaneio
+   * saiu no fim do dia). Transiciona pra ENVIADA e entra no fluxo normal.
+   */
+  @Post(":id/completar-peso")
+  completarPeso(
+    @CurrentUser() user: AuthMotorista,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(CompletarPesoInput))
+    body: z.infer<typeof CompletarPesoInput>,
+  ) {
+    return this.service.completarPeso(user.id, id, body);
   }
 
   @Delete(":id")

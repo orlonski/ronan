@@ -25,6 +25,7 @@ import { getRotaCache, setRotaCache } from "./rota-cache";
 import {
   drainLocais,
   enqueueAbastecimento,
+  enqueueCompletarPeso,
   enqueueLocal,
   enqueuePedagio,
   enqueueViagem,
@@ -524,6 +525,46 @@ export function useCriarViagem() {
     await enqueueViagem(input.payload, input.foto);
     // Invalida tudo que pode mostrar viagens recém criadas: home, histórico,
     // resumo do mês. Refetch ativo + cache fica stale pra refetch on-mount.
+    void qc.invalidateQueries({ queryKey: ["viagens"] });
+    void qc.invalidateQueries({ queryKey: ["viagens-filtradas"] });
+    void qc.invalidateQueries({ queryKey: ["resumo-mes"] });
+  };
+}
+
+/**
+ * Viagens lançadas sem peso (AGUARDANDO_PESO) que esperam o romaneio. Alimenta
+ * o banner da home e a tela "aguardando peso". Cache-first pra abrir na hora.
+ */
+export function useViagensAguardandoPeso() {
+  const cacheKey = "q:viagens-aguardando-peso";
+  const buscarRede = async (): Promise<Viagem[]> => {
+    const fresh = await api.get<Viagem[]>("/m/viagens/aguardando-peso");
+    const itens = fresh.map(normalizarViagem);
+    void cachePut(cacheKey, itens).catch(() => {});
+    return itens;
+  };
+  return useQuery({
+    queryKey: ["viagens-aguardando-peso"],
+    staleTime: 60_000,
+    queryFn: () =>
+      cacheFirst<Viagem[]>(
+        ["viagens-aguardando-peso"],
+        cacheKey,
+        buscarRede,
+        (arr) => arr.map(normalizarViagem),
+      ),
+  });
+}
+
+/**
+ * Offline-first: enfileira o "completar peso" (toneladas + ticket) de uma
+ * viagem AGUARDANDO_PESO. Sync real (POST) acontece em background quando online.
+ */
+export function useCompletarPeso() {
+  const qc = useQueryClient();
+  return async (input: { viagemId: string; toneladas: number; ticket?: string }) => {
+    await enqueueCompletarPeso(input);
+    void qc.invalidateQueries({ queryKey: ["viagens-aguardando-peso"] });
     void qc.invalidateQueries({ queryKey: ["viagens"] });
     void qc.invalidateQueries({ queryKey: ["viagens-filtradas"] });
     void qc.invalidateQueries({ queryKey: ["resumo-mes"] });

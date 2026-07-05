@@ -18,6 +18,7 @@ import {
   resolverRegraMinimo,
   serializarViagemComMinimos,
 } from "../common/viagem-minimos";
+import { STATUS_FORA_FECHAMENTO } from "../common/viagem-status";
 import { EventosService } from "../eventos/eventos.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { RoteamentoService } from "../roteamento/roteamento.service";
@@ -25,6 +26,7 @@ import { UploadsService } from "../uploads/uploads.service";
 import { ValidacaoLocalService } from "./validacao-local.service";
 import { AdminInboxService } from "../admin/inbox/inbox.service";
 import { KmReprocessamentoService } from "./km-reprocessamento.service";
+import { AvisoPesoService } from "./aviso-peso.service";
 
 const VIAGEM_INCLUDE = {
   veiculo: { select: { id: true, placa: true, modelo: true } },
@@ -72,6 +74,7 @@ export class ViagensMotoristaService {
     private readonly roteamento: RoteamentoService,
     private readonly inbox: AdminInboxService,
     private readonly kmReprocessamento: KmReprocessamentoService,
+    private readonly avisos: AvisoPesoService,
   ) {}
 
   /** Regras de mínimo por faixa ativas (empresa+material+faixa de km). */
@@ -225,12 +228,13 @@ export class ViagensMotoristaService {
       grupoStatus?: "AGUARDANDO" | "CONFERIDA" | "DIVERGENTE";
     },
   ): Prisma.ViagemWhereInput {
-    // Viagem EM_ANDAMENTO (lifecycle aberto) não aparece em listas nem entra em
-    // resumos — só no endpoint dedicado /andamento. grupoStatus (quando vem)
-    // substitui por um `in` que nunca inclui EM_ANDAMENTO.
+    // Viagens incompletas (EM_ANDAMENTO no lifecycle; AGUARDANDO_PESO sem
+    // peso/ticket) não aparecem no feed normal — têm endpoints dedicados
+    // (/andamento e /aguardando-peso). grupoStatus (quando vem) substitui por
+    // um `in` que nunca inclui esses status.
     const where: Prisma.ViagemWhereInput = {
       motoristaId,
-      status: { not: "EM_ANDAMENTO" },
+      status: { notIn: STATUS_FORA_FECHAMENTO },
     };
     if (filtros.mes) {
       const { inicio, fim } = mesRange(filtros.mes);
@@ -560,40 +564,24 @@ export class ViagensMotoristaService {
       return serializarViagemComMinimos(existente, await this.regrasMinimoAtivas());
     }
 
-    // Ticket é único por empresa (regra de negócio). Mas alguns materiais não
-    // exigem ticket (ex: concreto, sem ticket de pesagem) — nesses, o motorista
-    // manda vazio e a viagem fica sem ticket.
+    // Valida que o cliente existe (FK → 4xx claro em vez de 500 no create).
     const cliente = await this.prisma.cliente.findUnique({
       where: { id: input.clienteId },
       select: { empresaId: true },
     });
     if (!cliente) throw new NotFoundException("Cliente não encontrado");
 
-    const material = await this.prisma.material.findUnique({
-      where: { id: input.materialId },
-      select: { exigeTicket: true },
-    });
-    const ticket = input.ticket?.trim() || null;
-    // Backend autoritativo: exige ticket quando o material exige (default true),
-    // mesmo com o Zod relaxado (protege PWA/admin que não escondem o campo).
-    if (material?.exigeTicket !== false && !ticket) {
-      throw new BadRequestException("Informe o número do ticket.");
-    }
-
-    if (ticket) {
-      const ticketDuplicado = await this.prisma.viagem.findFirst({
-        where: {
-          ticket,
-          cliente: { empresaId: cliente.empresaId },
-        },
-        select: { id: true },
-      });
-      if (ticketDuplicado) {
-        throw new ConflictException(
-          `Ticket ${ticket} já foi lançado para essa empresa.`,
+    // Modo "aguardando peso": motorista lança sem peso/ticket porque o romaneio
+    // só sai no fim do dia. Pula a validação de ticket (fica null); peso e ticket
+    // entram depois via completarPeso (app) ou update admin (dashboard).
+    const aguardandoPeso = input.aguardandoPeso === true;
+    const ticket = aguardandoPeso
+      ? null
+      : await this.validarTicketParaEmpresa(
+          cliente.empresaId,
+          input.materialId,
+          input.ticket,
         );
-      }
-    }
 
     // Valida que os locais existem antes de inserir. Auto-recovery:
     // se o ID nao existe mas o app enviou um snapshot (nome+lat+lng), o
@@ -623,7 +611,10 @@ export class ViagensMotoristaService {
         clienteId: rest.clienteId,
         materialId: rest.materialId,
         data: rest.data,
-        toneladas: rest.toneladas,
+        // Aguardando peso: toneladas fica null até completar (romaneio no fim do
+        // dia). Status AGUARDANDO_PESO mantém a viagem fora de match/fechamento/KPIs.
+        toneladas: aguardandoPeso ? null : rest.toneladas,
+        status: aguardandoPeso ? "AGUARDANDO_PESO" : undefined,
         ticket,
         km: rest.km,
         kmCalculado: rest.kmCalculado,
@@ -743,13 +734,142 @@ export class ViagensMotoristaService {
       });
       await this.notificarAdmins(
         "nova-viagem",
-        `Nova viagem de ${m?.nome ?? "motorista"}`,
-        `${viagem.ticket ? `Ticket ${viagem.ticket} · ` : ""}${viagem.cliente?.nome ?? ""} · ${viagem.toneladas ?? 0}t`,
+        aguardandoPeso
+          ? `Viagem sem peso de ${m?.nome ?? "motorista"}`
+          : `Nova viagem de ${m?.nome ?? "motorista"}`,
+        aguardandoPeso
+          ? `${viagem.cliente?.nome ?? ""} · aguardando peso/romaneio`
+          : `${viagem.ticket ? `Ticket ${viagem.ticket} · ` : ""}${viagem.cliente?.nome ?? ""} · ${viagem.toneladas ?? 0}t`,
         { viagemId: viagem.id, motoristaId },
       );
     })();
 
+    // Aguardando peso: avisa o próprio motorista (push + WhatsApp) pra ele não
+    // esquecer de completar o romaneio no fim do dia. Best-effort em background.
+    if (aguardandoPeso) {
+      void this.avisos.avisarViagemAguardandoPeso(viagem.id, motoristaId);
+    }
+
     return serializarViagemComMinimos(viagem, await this.regrasMinimoAtivas());
+  }
+
+  /**
+   * Valida o ticket de uma viagem: exige quando o material exige (autoritativo,
+   * mesmo com o Zod relaxado) e garante unicidade por empresa. Retorna o ticket
+   * limpo (ou null quando o material não exige). Reusado no create e no
+   * completarPeso. `ignorarViagemId` exclui a própria viagem da checagem de
+   * duplicidade (ao completar peso da viagem que já existe).
+   */
+  private async validarTicketParaEmpresa(
+    empresaId: string,
+    materialId: string | null,
+    ticketRaw?: string | null,
+    ignorarViagemId?: string,
+  ): Promise<string | null> {
+    const material = materialId
+      ? await this.prisma.material.findUnique({
+          where: { id: materialId },
+          select: { exigeTicket: true },
+        })
+      : null;
+    const ticket = ticketRaw?.trim() || null;
+    if (material?.exigeTicket !== false && !ticket) {
+      throw new BadRequestException("Informe o número do ticket.");
+    }
+    if (ticket) {
+      const duplicado = await this.prisma.viagem.findFirst({
+        where: {
+          ticket,
+          cliente: { empresaId },
+          ...(ignorarViagemId ? { id: { not: ignorarViagemId } } : {}),
+        },
+        select: { id: true },
+      });
+      if (duplicado) {
+        throw new ConflictException(
+          `Ticket ${ticket} já foi lançado para essa empresa.`,
+        );
+      }
+    }
+    return ticket;
+  }
+
+  /**
+   * Lista as viagens do motorista que estão AGUARDANDO_PESO (romaneio pendente).
+   * Alimenta o banner e a tela "aguardando peso" do app. Ordena da mais antiga
+   * pra mais nova (a que está esperando há mais tempo aparece primeiro).
+   */
+  async listarAguardandoPeso(motoristaId: string) {
+    const viagens = await this.prisma.viagem.findMany({
+      where: { motoristaId, status: "AGUARDANDO_PESO" },
+      include: VIAGEM_INCLUDE,
+      orderBy: { data: "asc" },
+    });
+    const regras = await this.regrasMinimoAtivas();
+    return viagens.map((v) => serializarViagemComMinimos(v, regras));
+  }
+
+  /**
+   * Completa peso + ticket de uma viagem lançada em AGUARDANDO_PESO (o romaneio
+   * saiu no fim do dia). Valida ticket (exigeTicket + unicidade), grava
+   * toneladas/ticket, transita pra ENVIADA e roda mínimos + reprocessamento de
+   * km. Idempotente: se a viagem já foi completada (ENVIADA), devolve a
+   * existente em vez de erro — cobre retry do outbox offline.
+   */
+  async completarPeso(
+    motoristaId: string,
+    viagemId: string,
+    input: { toneladas: number; ticket?: string },
+  ) {
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { id: viagemId },
+      select: {
+        id: true,
+        motoristaId: true,
+        status: true,
+        materialId: true,
+        cliente: { select: { empresaId: true } },
+      },
+    });
+    if (!viagem) throw new NotFoundException("Viagem não encontrada.");
+    if (viagem.motoristaId !== motoristaId) {
+      throw new ForbiddenException("Esta viagem não é sua.");
+    }
+    // Idempotência: já completada (não está mais aguardando peso) → devolve.
+    if (viagem.status !== "AGUARDANDO_PESO") {
+      const atual = await this.prisma.viagem.findUnique({
+        where: { id: viagemId },
+        include: VIAGEM_INCLUDE,
+      });
+      return atual
+        ? serializarViagemComMinimos(atual, await this.regrasMinimoAtivas())
+        : null;
+    }
+
+    const ticket = await this.validarTicketParaEmpresa(
+      viagem.cliente?.empresaId ?? "",
+      viagem.materialId,
+      input.ticket,
+      viagemId,
+    );
+
+    const atualizada = await this.prisma.viagem.update({
+      where: { id: viagemId },
+      data: {
+        toneladas: input.toneladas,
+        ticket,
+        status: "ENVIADA",
+      },
+      include: VIAGEM_INCLUDE,
+    });
+
+    // Agora que virou ENVIADA e tem km, recalcula pelo trajeto real se preciso.
+    void this.kmReprocessamento.reprocessar(atualizada.id);
+
+    return serializarViagemComMinimos(
+      atualizada,
+      await this.regrasMinimoAtivas(),
+    );
   }
 
   // =========================================================================

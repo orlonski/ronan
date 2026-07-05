@@ -443,13 +443,17 @@ export default function NovaViagem() {
   // Validação guiada: aponta o 1º campo que falta na ORDEM VISUAL da tela
   // (placa → data → cliente → material → toneladas → ticket → carga →
   // descarga → km), rolando até ele e destacando em vermelho.
-  function validar(): boolean {
+  // `aguardandoPeso` = motorista escolheu lançar sem peso (romaneio no fim do
+  // dia): pula a validação de toneladas/ticket, que entram depois.
+  function validar(aguardandoPeso = false): boolean {
     if (!form.veiculoId) return void val.apontar("veiculoId", "Escolha a placa do caminhão"), false;
     if (!form.clienteId) return void val.apontar("clienteId", "Escolha o cliente"), false;
     if (!form.materialId) return void val.apontar("materialId", "Escolha o material"), false;
-    if (!form.toneladas.trim()) return void val.apontar("toneladas", "Informe as toneladas"), false;
-    if (exigeTicket && !form.ticket.trim())
-      return void val.apontar("ticket", "Informe o número do ticket"), false;
+    if (!aguardandoPeso) {
+      if (!form.toneladas.trim()) return void val.apontar("toneladas", "Informe as toneladas"), false;
+      if (exigeTicket && !form.ticket.trim())
+        return void val.apontar("ticket", "Informe o número do ticket"), false;
+    }
     if (!form.localCargaId) return void val.apontar("localCarga", "Escolha o local de carga"), false;
     if (!form.localDescargaId)
       return void val.apontar("localDescarga", "Marque o local de descarga"), false;
@@ -459,7 +463,40 @@ export default function NovaViagem() {
 
   async function salvar() {
     setErro(null);
-    if (!validar()) return;
+
+    // Campos base (antes do peso). Se faltar algum, aponta e sai — não faz
+    // sentido perguntar do peso sem placa/cliente/material escolhidos.
+    if (!form.veiculoId) return void val.apontar("veiculoId", "Escolha a placa do caminhão");
+    if (!form.clienteId) return void val.apontar("clienteId", "Escolha o cliente");
+    if (!form.materialId) return void val.apontar("materialId", "Escolha o material");
+
+    // Pergunta grande e clara: se o motorista não preencheu o peso (ou o ticket
+    // exigido), pode ser que o romaneio só saia no fim do dia. Em vez de só
+    // bloquear, deixa lançar sem o peso e completar depois.
+    let aguardandoPeso = false;
+    const faltaPeso = !form.toneladas.trim();
+    const faltaTicket = exigeTicket && !form.ticket.trim();
+    if (faltaPeso || faltaTicket) {
+      const escolha = await showAlert({
+        title: "Já está com o peso e o romaneio?",
+        message:
+          "Se o romaneio (ticket) só sai no fim do dia, dá pra lançar agora sem o peso e completar depois — a gente te lembra.",
+        variant: "warning",
+        buttons: [
+          { label: "Sim, tenho o peso", value: "tenho" },
+          { label: "Não, sai no fim do dia", value: "depois" },
+        ],
+      });
+      if (escolha === "depois") {
+        aguardandoPeso = true;
+      } else {
+        // "Sim, tenho o peso" ou fechou: fluxo normal — aponta o campo faltando.
+        validar(false);
+        return;
+      }
+    }
+
+    if (!validar(aguardandoPeso)) return;
     val.limpar();
     // Aviso quando a data não é hoje — caso o motorista tenha tocado sem
     // querer, dá chance de corrigir ou voltar pra hoje antes de salvar.
@@ -547,9 +584,12 @@ export default function NovaViagem() {
         clienteId: form.clienteId,
         materialId: form.materialId,
         data: dataFinal,
-        toneladas: parseFloat(form.toneladas.replace(",", ".")),
+        // Aguardando peso: lança sem toneladas/ticket (romaneio no fim do dia).
+        // O backend cria a viagem em AGUARDANDO_PESO e o motorista completa depois.
+        toneladas: aguardandoPeso ? undefined : parseFloat(form.toneladas.replace(",", ".")),
         // Material que não exige ticket vai sem ticket (undefined).
-        ticket: exigeTicket ? form.ticket.trim() : undefined,
+        ticket: aguardandoPeso ? undefined : exigeTicket ? form.ticket.trim() : undefined,
+        ...(aguardandoPeso ? { aguardandoPeso: true } : {}),
         km: parseFloat(form.km.replace(",", ".")),
         // Snapshot do km OSRM no momento do lançamento — captura mesmo que
         // motorista tenha sobrescrito. Null quando OSRM não respondeu.
@@ -878,6 +918,11 @@ export default function NovaViagem() {
               </View>
               {val.erroDe("toneladas") ? <ErroCampo msg={val.erroDe("toneladas")!} /> : null}
               {val.erroDe("ticket") ? <ErroCampo msg={val.erroDe("ticket")!} /> : null}
+              {!form.toneladas.trim() && !val.erroDe("toneladas") ? (
+                <Text className="text-xs text-muted-foreground">
+                  Romaneio só sai no fim do dia? Toque em salvar que a gente pergunta — dá pra lançar sem o peso e completar depois.
+                </Text>
+              ) : null}
             </View>
 
             <View className="gap-2" onLayout={val.onLayoutCampo("localCarga")}>

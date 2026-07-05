@@ -268,6 +268,15 @@ function AuthGate({ children }: { children: React.ReactNode }) {
             } else {
               router.push("/notificacoes");
             }
+          } else if (kind === "aguardando-peso") {
+            // Aviso de viagem sem peso: abre a viagem específica pra completar,
+            // ou a lista quando é o resumo do fim do dia (sem viagemId).
+            const viagemId = typeof data.viagemId === "string" ? data.viagemId : null;
+            if (viagemId) {
+              router.push(`/completar-peso?viagemId=${viagemId}`);
+            } else {
+              router.push("/aguardando-peso");
+            }
           } else if (kind === "abastecimento-editado") {
             // Não temos tela de detalhe de abastecimento no app motorista —
             // abre a central pra ver a notificação completa com o diff.

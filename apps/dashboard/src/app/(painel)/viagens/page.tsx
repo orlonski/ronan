@@ -64,6 +64,7 @@ const STATUS_VIAGEM_LABEL: Record<string, string> = {
   DIVERGENTE: "Divergente",
   AJUSTADA: "Ajustada",
   RASCUNHO_OFFLINE: "Rascunho",
+  AGUARDANDO_PESO: "Aguardando peso",
 };
 
 const STATUS_VIAGEM_COLOR: Record<string, string> = {
@@ -73,6 +74,7 @@ const STATUS_VIAGEM_COLOR: Record<string, string> = {
   DIVERGENTE: "bg-red-100 text-red-800 border-red-200",
   AJUSTADA: "bg-blue-100 text-blue-800 border-blue-200",
   RASCUNHO_OFFLINE: "bg-gray-100 text-gray-700 border-gray-200",
+  AGUARDANDO_PESO: "bg-orange-100 text-orange-900 border-orange-300",
 };
 
 export default function ViagensPage() {
@@ -291,6 +293,7 @@ export default function ViagensPage() {
                     { value: "OK", label: "OK" },
                     { value: "DIVERGENTE", label: "Divergente" },
                     { value: "AJUSTADA", label: "Ajustada" },
+                    { value: "AGUARDANDO_PESO", label: "Aguardando peso" },
                   ]}
                 />
                 <Combobox

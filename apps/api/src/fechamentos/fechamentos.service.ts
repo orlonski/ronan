@@ -127,7 +127,7 @@ export class FechamentosService {
             ...l.viagemMatch,
             ...aplicarMinimos(
               l.viagemMatch,
-              // Viagem casada é finalizada; EM_ANDAMENTO (campos null) nunca casa.
+              // Viagem casada é finalizada; incompleta (EM_ANDAMENTO/AGUARDANDO_PESO) nunca casa.
               resolverRegraMinimo(
                 regras,
                 l.viagemMatch.cliente?.empresaId ?? "",

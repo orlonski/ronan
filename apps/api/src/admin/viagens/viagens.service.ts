@@ -491,9 +491,17 @@ export class ViagensAdminService {
       }
     }
 
+    // Viagem lançada sem peso (AGUARDANDO_PESO): quando o admin preenche as
+    // toneladas pelo dashboard, ela sai de "aguardando peso" e entra no fluxo
+    // normal (ENVIADA) — passando a contar em conferência/fechamento/KPIs.
+    const dataUpdate: Prisma.ViagemUpdateInput = { ...input };
+    if (antes.status === StatusViagem.AGUARDANDO_PESO && input.toneladas != null) {
+      dataUpdate.status = StatusViagem.ENVIADA;
+    }
+
     const depois = await this.prisma.viagem.update({
       where: { id },
-      data: input,
+      data: dataUpdate,
     });
 
     // Remove o _count antes de gravar o diff — ele não é campo da entidade.

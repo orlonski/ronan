@@ -29,13 +29,22 @@ export const LocalSnapshot = z.object({
 });
 export type LocalSnapshot = z.infer<typeof LocalSnapshot>;
 
-export const CriarViagemInput = z.object({
+// Base sem o refine de peso (z.object puro) — o controller do backend precisa
+// dela pra .extend({ fotoKey }). O refine (peso obrigatório fora do modo
+// aguardando peso) é aplicado por cima, tanto aqui quanto no payload do backend.
+export const CriarViagemBase = z.object({
   clientId: z.string().uuid(),
   veiculoId: z.string().uuid(),
   clienteId: z.string().uuid(),
   materialId: z.string().uuid(),
   data: z.coerce.date(),
-  toneladas: z.number().positive().max(MAX_TONELADAS, `Toneladas acima do limite (${MAX_TONELADAS}).`),
+  // Opcional no schema por causa do modo "aguardando peso" (romaneio sai no fim
+  // do dia): quando aguardandoPeso=true o motorista lança sem peso. Fora desse
+  // modo é obrigatório — imposto pelo superRefine abaixo e pelo backend.
+  toneladas: z.number().positive().max(MAX_TONELADAS, `Toneladas acima do limite (${MAX_TONELADAS}).`).optional(),
+  // true = viagem lançada sem peso/ticket (romaneio no fim do dia). Backend cria
+  // com status AGUARDANDO_PESO; motorista/admin completa depois.
+  aguardandoPeso: z.boolean().optional(),
   // Opcional aqui: a obrigatoriedade depende de Material.exigeTicket e é imposta
   // no backend (autoritativo) e na UI do app com base no material escolhido.
   ticket: z.string().max(50).optional(),
@@ -90,7 +99,34 @@ export const CriarViagemInput = z.object({
   ocrCampos: z.array(z.string().min(1).max(40)).max(20).optional(),
   ocrConfidence: z.number().min(0).max(1).optional(),
 });
+
+// Fora do modo "aguardando peso", toneladas é obrigatório (positivo). Assim o
+// app valida localmente antes de enfileirar; o modo aguardando peso libera.
+// Reusado no payload do controller do backend (mesma regra na borda da API).
+export function checarPesoObrigatorio(
+  val: { aguardandoPeso?: boolean; toneladas?: number },
+  ctx: z.RefinementCtx,
+): void {
+  if (!val.aguardandoPeso && (val.toneladas == null || val.toneladas <= 0)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["toneladas"],
+      message: "Informe as toneladas.",
+    });
+  }
+}
+
+export const CriarViagemInput = CriarViagemBase.superRefine(checarPesoObrigatorio);
 export type CriarViagemInput = z.infer<typeof CriarViagemInput>;
+
+// Completar o peso + ticket de uma viagem que foi lançada em AGUARDANDO_PESO
+// (romaneio saiu no fim do dia). Motorista (app) ou admin (dashboard).
+export const CompletarPesoInput = z.object({
+  toneladas: z.number().positive().max(MAX_TONELADAS, `Toneladas acima do limite (${MAX_TONELADAS}).`),
+  // Segue a regra de Material.exigeTicket, imposta no backend (autoritativo).
+  ticket: z.string().max(50).optional(),
+});
+export type CompletarPesoInput = z.infer<typeof CompletarPesoInput>;
 
 // Edição admin: campos que motorista lança continuam editáveis. Imutáveis aqui:
 // id, clientId (idempotência), motoristaId, status, tracking GPS, fotos, timestamps.

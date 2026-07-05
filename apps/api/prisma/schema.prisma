@@ -31,6 +31,11 @@ enum StatusViagem {
   /// estar nulos até o finalizar. NUNCA entra em match/fechamento/KPIs/resumos
   /// (filtrada explicitamente). Ao finalizar, transita pra ENVIADA.
   EM_ANDAMENTO
+  /// Viagem lançada sem peso (toneladas) e ticket/romaneio — o motorista só terá
+  /// o romaneio no fim do dia. Visível pro admin mas NUNCA entra em
+  /// match/fechamento/KPIs/resumos/export enquanto incompleta. Vira ENVIADA
+  /// quando o motorista (app) ou o admin (dashboard) completa peso + ticket.
+  AGUARDANDO_PESO
 }
 
 enum TipoDivergencia {

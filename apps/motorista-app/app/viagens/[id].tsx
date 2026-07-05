@@ -11,6 +11,7 @@ import {
   MapPin,
   RefreshCw,
   Route,
+  Scale,
   Trash2,
 } from "lucide-react-native";
 import { MapTrajeto } from "@/components/map-trajeto";
@@ -327,6 +328,33 @@ export default function ViagemDetalheScreen() {
               </Card>
             )}
 
+          {/* Aguardando peso: viagem lançada sem o peso/romaneio. CTA grande
+              pro motorista completar quando o romaneio sair. */}
+          {detalhe.data.status === "AGUARDANDO_PESO" && (
+            <Card className="border-2 border-amber-500 bg-amber-500/10">
+              <View className="flex-row items-start gap-3">
+                <Scale size={22} color="#d97706" />
+                <View className="flex-1">
+                  <Text className="text-base font-bold text-foreground">
+                    Falta o peso dessa viagem
+                  </Text>
+                  <Text className="mt-1 text-sm text-muted-foreground">
+                    Você lançou sem o peso. Quando sair o romaneio, complete o
+                    peso e o ticket.
+                  </Text>
+                  <Button
+                    className="mt-3"
+                    onPress={() =>
+                      router.push(`/completar-peso?viagemId=${detalhe.data!.id}`)
+                    }
+                  >
+                    Completar peso e romaneio
+                  </Button>
+                </View>
+              </View>
+            </Card>
+          )}
+
           {/* Trajeto */}
           <Card>
             <Text className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -365,12 +393,18 @@ export default function ViagemDetalheScreen() {
             <View className="flex-row gap-6">
               <Stat
                 label="Toneladas"
-                value={fmtNum(detalhe.data.toneladasEfetiva, 3)}
+                value={
+                  detalhe.data.status === "AGUARDANDO_PESO"
+                    ? "—"
+                    : fmtNum(detalhe.data.toneladasEfetiva, 3)
+                }
                 fromAi={detalhe.data.ocrCampos?.includes("toneladas")}
                 subValue={
-                  detalhe.data.toneladasAjustada
-                    ? `informado ${fmtNum(detalhe.data.toneladasInformada, 3)}`
-                    : undefined
+                  detalhe.data.status === "AGUARDANDO_PESO"
+                    ? "aguardando"
+                    : detalhe.data.toneladasAjustada
+                      ? `informado ${fmtNum(detalhe.data.toneladasInformada, 3)}`
+                      : undefined
                 }
               />
               <Stat
@@ -389,7 +423,11 @@ export default function ViagemDetalheScreen() {
               />
               <Stat
                 label="Ticket"
-                value={detalhe.data.ticket}
+                value={
+                  detalhe.data.status === "AGUARDANDO_PESO"
+                    ? "—"
+                    : detalhe.data.ticket
+                }
                 mono
                 fromAi={detalhe.data.ocrCampos?.includes("ticket")}
               />

@@ -9,6 +9,7 @@ import {
 import { AuditoriaService } from "../auditoria/auditoria.service";
 import { IaService, type LayoutInferenceResult } from "../ia/ia.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { STATUS_FORA_FECHAMENTO } from "../common/viagem-status";
 import { UploadsService } from "../uploads/uploads.service";
 import { amostraParaIa, parseArquivo, type ParsedFile } from "./parsers";
 import {
@@ -156,10 +157,10 @@ export class FechamentoProcessorService {
       // (declarado fora do if pra reusar nas órfãs IA)
       const viagensPeriodo = await this.prisma.viagem.findMany({
         where: {
-          // Viagem EM_ANDAMENTO (lifecycle aberto) nunca entra em match: ainda
-          // não tem cliente/material/ticket. Já excluída por cliente/data nulos,
-          // mas explícito aqui porque é o ponto mais sensível.
-          status: { not: "EM_ANDAMENTO" },
+          // Viagem incompleta nunca entra em match. EM_ANDAMENTO não tem
+          // cliente/data; AGUARDANDO_PESO tem cliente/data mas está sem peso/ticket
+          // (só entra depois de completada). Explícito aqui: é o ponto mais sensível.
+          status: { notIn: STATUS_FORA_FECHAMENTO },
           cliente: { empresaId: fechamento.empresa.id },
           data: {
             gte: new Date(fechamento.periodoInicio.getTime() - 7 * 24 * 3600 * 1000),

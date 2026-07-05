@@ -102,6 +102,23 @@ export type PendingFoto = {
   errorIssues?: ZodIssueSaved[];
 };
 
+/** Completar peso + ticket de uma viagem JÁ sincronizada que está em
+ * AGUARDANDO_PESO (romaneio saiu no fim do dia). viagemId é o id real do
+ * servidor (POST /m/viagens/:id/completar-peso). Idempotente no backend. */
+export type PendingCompletarPeso = {
+  /** UUID client-side pra identificar essa pending. */
+  clientId: string;
+  viagemId: string;
+  payload: { toneladas: number; ticket?: string };
+  status: "pending" | "syncing" | "error";
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
+};
+
 /** Local de descarga criado offline. clientId vira id real no servidor
  * (POST /m/locais/rapido aceita id pra idempotência). */
 export type PendingLocal = {
@@ -189,6 +206,7 @@ const VG_INICIAR_KEY = `${PREFIX}outbox.viagem-iniciar`;
 const VG_EVENTOS_KEY = `${PREFIX}outbox.viagem-eventos`;
 const VG_FINALIZAR_KEY = `${PREFIX}outbox.viagem-finalizar`;
 const VG_CANCELAR_KEY = `${PREFIX}outbox.viagem-cancelar`;
+const COMPLETAR_PESO_KEY = `${PREFIX}outbox.viagem-completar-peso`;
 
 async function readList<T>(key: string): Promise<T[]> {
   try {
@@ -347,6 +365,26 @@ export async function upsertPendingViagemCancelar(item: PendingViagemCancelar): 
 export async function deletePendingViagemCancelar(clientId: string): Promise<void> {
   const list = await listPendingViagemCancelar();
   await writeList(VG_CANCELAR_KEY, list.filter((x) => x.clientId !== clientId));
+}
+
+export async function listPendingCompletarPeso(): Promise<PendingCompletarPeso[]> {
+  return readList<PendingCompletarPeso>(COMPLETAR_PESO_KEY);
+}
+
+export async function upsertPendingCompletarPeso(item: PendingCompletarPeso): Promise<void> {
+  const list = await listPendingCompletarPeso();
+  const idx = list.findIndex((x) => x.viagemId === item.viagemId);
+  if (idx >= 0) list[idx] = item;
+  else list.unshift(item);
+  await writeList(COMPLETAR_PESO_KEY, list);
+}
+
+export async function deletePendingCompletarPeso(viagemId: string): Promise<void> {
+  const list = await listPendingCompletarPeso();
+  await writeList(
+    COMPLETAR_PESO_KEY,
+    list.filter((x) => x.viagemId !== viagemId),
+  );
 }
 
 export async function listPendingFotos(): Promise<PendingFoto[]> {

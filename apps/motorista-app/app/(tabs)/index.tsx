@@ -16,6 +16,7 @@ import {
   Receipt,
   RotateCw,
   Route,
+  Scale,
   Trash2,
   Truck,
   WifiOff,
@@ -49,6 +50,7 @@ import {
   useResumoMes,
   useTrackingConfig,
   useViagens,
+  useViagensAguardandoPeso,
   type Viagem,
 } from "@/lib/queries";
 import { iniciarTracking, useViagemAndamento } from "@/lib/tracking";
@@ -79,6 +81,8 @@ export default function Home() {
   const viagens = useViagens();
   const resumo = useResumoMes();
   const pending = usePending();
+  const aguardandoPeso = useViagensAguardandoPeso();
+  const nAguardandoPeso = aguardandoPeso.data?.length ?? 0;
   const posicaoConfig = usePosicaoConfig();
   const excluir = useExcluirViagem();
   const updates = Updates.useUpdates();
@@ -381,6 +385,30 @@ export default function Home() {
                   </Text>
                   <Text className="text-sm text-muted-foreground">
                     Toque pra ver e gerenciar
+                  </Text>
+                </View>
+              </Pressable>
+            )}
+
+            {/* Banner: viagens lançadas sem peso, esperando o romaneio. Âmbar,
+                persistente enquanto houver pendência — o motorista completa o
+                peso/ticket quando o romaneio sair no fim do dia. */}
+            {nAguardandoPeso > 0 && (
+              <Pressable
+                onPress={() => router.push("/aguardando-peso")}
+                className="flex-row items-center gap-3 rounded-2xl border-2 border-amber-500/40 bg-amber-500/15 p-4 active:opacity-75"
+              >
+                <View className="h-12 w-12 items-center justify-center rounded-full bg-amber-500">
+                  <Scale size={22} color="#0f172a" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-base font-bold text-foreground">
+                    {nAguardandoPeso === 1
+                      ? "1 viagem esperando o peso"
+                      : `${nAguardandoPeso} viagens esperando o peso`}
+                  </Text>
+                  <Text className="text-sm text-muted-foreground">
+                    Toque pra completar o peso e o romaneio
                   </Text>
                 </View>
               </Pressable>

@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { ymdSaoPaulo } from "../../common/timezone";
+import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
 
 /**
  * Service do dashboard executivo. Tudo em paralelo via Promise.all —
@@ -35,6 +36,11 @@ export class DashboardService {
     const inicioMesQueVemInst = new Date(Date.UTC(y, m, 1, 3));
     const inicio14dInst = new Date(Date.UTC(y, m - 1, dia - 13, 3)); // hoje incluso = 14 dias
 
+    // Viagens incompletas (EM_ANDAMENTO, AGUARDANDO_PESO) têm data preenchida
+    // (AGUARDANDO_PESO inclusive) mas NÃO podem contar em KPIs/rankings/tendência.
+    // O filtro por `data` sozinho não basta pra AGUARDANDO_PESO — excluir por status.
+    const foraFechamento = { status: { notIn: STATUS_FORA_FECHAMENTO } };
+
     const [
       // Hoje
       viagensHoje,
@@ -67,20 +73,20 @@ export class DashboardService {
       conferidas14d,
       leadTimeRows,
     ] = await Promise.all([
-      this.prisma.viagem.count({ where: { data: { gte: hoje00, lt: amanha00 } } }),
+      this.prisma.viagem.count({ where: { data: { gte: hoje00, lt: amanha00 }, ...foraFechamento } }),
       this.prisma.viagem.aggregate({
-        where: { data: { gte: hoje00, lt: amanha00 } },
+        where: { data: { gte: hoje00, lt: amanha00 }, ...foraFechamento },
         _sum: { toneladas: true },
       }),
       this.prisma.motorista.count({ where: { ultimoLoginEm: { gte: hoje00Inst } } }),
       this.prisma.viagem.findMany({
-        where: { data: { gte: hoje00, lt: amanha00 } },
+        where: { data: { gte: hoje00, lt: amanha00 }, ...foraFechamento },
         distinct: ["veiculoId"],
         select: { veiculoId: true },
       }),
-      this.prisma.viagem.count({ where: { data: { gte: inicioMes, lt: inicioMesQueVem } } }),
+      this.prisma.viagem.count({ where: { data: { gte: inicioMes, lt: inicioMesQueVem }, ...foraFechamento } }),
       this.prisma.viagem.aggregate({
-        where: { data: { gte: inicioMes, lt: inicioMesQueVem } },
+        where: { data: { gte: inicioMes, lt: inicioMesQueVem }, ...foraFechamento },
         _sum: { toneladas: true },
       }),
       this.prisma.abastecimento.aggregate({
@@ -101,26 +107,26 @@ export class DashboardService {
       }),
       this.prisma.viagem.groupBy({
         by: ["data"],
-        where: { data: { gte: inicio14d, lt: amanha00 } },
+        where: { data: { gte: inicio14d, lt: amanha00 }, ...foraFechamento },
         _count: { _all: true },
       }),
       this.prisma.viagem.groupBy({
         by: ["motoristaId"],
-        where: { data: { gte: inicioMes, lt: inicioMesQueVem } },
+        where: { data: { gte: inicioMes, lt: inicioMesQueVem }, ...foraFechamento },
         _sum: { toneladas: true },
         orderBy: { _sum: { toneladas: "desc" } },
         take: 5,
       }),
       this.prisma.viagem.groupBy({
         by: ["clienteId"],
-        where: { data: { gte: inicioMes, lt: inicioMesQueVem } },
+        where: { data: { gte: inicioMes, lt: inicioMesQueVem }, ...foraFechamento },
         _count: { _all: true },
         orderBy: { _count: { clienteId: "desc" } },
         take: 5,
       }),
       this.prisma.viagem.groupBy({
         by: ["materialId"],
-        where: { data: { gte: inicioMes, lt: inicioMesQueVem } },
+        where: { data: { gte: inicioMes, lt: inicioMesQueVem }, ...foraFechamento },
         _sum: { toneladas: true },
         orderBy: { _sum: { toneladas: "desc" } },
         take: 5,
@@ -140,8 +146,8 @@ export class DashboardService {
       // Conferência — universo conferível exclui rascunhos offline
       this.prisma.viagem.count({ where: { revisadoEm: { not: null } } }),
       this.prisma.viagem.count({
-        // EM_ANDAMENTO tem revisadoEm null mas ainda não é conferível.
-        where: { revisadoEm: null, status: { notIn: ["RASCUNHO_OFFLINE", "EM_ANDAMENTO"] } },
+        // EM_ANDAMENTO/AGUARDANDO_PESO têm revisadoEm null mas não são conferíveis.
+        where: { revisadoEm: null, status: { notIn: ["RASCUNHO_OFFLINE", ...STATUS_FORA_FECHAMENTO] } },
       }),
       this.prisma.viagem.count({ where: { revisadoEm: { gte: inicio14dInst } } }),
       // Lead time médio (segundos) das viagens conferidas nos últimos 14 dias:
@@ -152,6 +158,12 @@ export class DashboardService {
         WHERE "revisadoEm" >= ${inicio14dInst}
       `,
     ]);
+
+    // Viagens lançadas sem peso, aguardando o romaneio. Vira badge/lista no
+    // dashboard pra ninguém esquecer de completar antes do fechamento.
+    const aguardandoPeso = await this.prisma.viagem.count({
+      where: { status: "AGUARDANDO_PESO" },
+    });
 
     // Resolve nomes dos rankings em um round adicional (ids únicos, ~15 registros)
     const motoristaIds = rankingMotoristasRaw.map((r) => r.motoristaId);
@@ -219,6 +231,7 @@ export class DashboardService {
         enviosAbertos,
         viagensDivergentes,
         errosPendentes: errosPendentesGroups.length,
+        aguardandoPeso,
       },
       conferencia: {
         total: conferidasTotal + pendentesConferencia,

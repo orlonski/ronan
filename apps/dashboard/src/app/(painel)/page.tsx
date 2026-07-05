@@ -47,6 +47,7 @@ type Snapshot = {
     enviosAbertos: number;
     viagensDivergentes: number;
     errosPendentes: number;
+    aguardandoPeso: number;
   };
   conferencia: {
     total: number;
@@ -323,7 +324,7 @@ function BlocoPendencias({ d }: { d: Snapshot }) {
       <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
         Precisa de atenção
       </h2>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-5">
         <StatCard
           icon={FileSpreadsheet}
           label="Fechamentos em revisão"
@@ -347,6 +348,14 @@ function BlocoPendencias({ d }: { d: Snapshot }) {
           info="Viagens que foram conferidas e tinham algum problema (foto ruim, valor faltando, etc). O motorista precisa corrigir."
           tone={d.pendencias.viagensDivergentes > 0 ? "danger" : "success"}
           href="/viagens"
+        />
+        <StatCard
+          icon={Weight}
+          label="Aguardando peso"
+          value={d.pendencias.aguardandoPeso}
+          info="Viagens lançadas sem o peso (romaneio no fim do dia). Não entram em fechamento até o motorista ou você completar o peso e o ticket."
+          tone={tone(d.pendencias.aguardandoPeso)}
+          href="/viagens?status=AGUARDANDO_PESO"
         />
         <StatCard
           icon={Bug}
