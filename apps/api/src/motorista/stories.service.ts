@@ -14,6 +14,7 @@ import type {
 } from "@ronan/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
+import { PushService } from "../push/push.service";
 
 const DURACAO_MS = 24 * 60 * 60 * 1000; // 24h
 
@@ -22,6 +23,7 @@ export class StoriesMotoristaService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly uploads: UploadsService,
+    private readonly push: PushService,
   ) {}
 
   /** Feed de stories ativos (expiraEm > agora) agrupados por autor. */
@@ -136,14 +138,55 @@ export class StoriesMotoristaService {
   ): Promise<void> {
     const story = await this.prisma.story.findUnique({
       where: { id: storyId },
-      select: { id: true },
+      select: { id: true, motoristaId: true },
     });
     if (!story) throw new NotFoundException("Story não encontrado.");
+    const jaReagiu = await this.prisma.storyReacao.findUnique({
+      where: { storyId_motoristaId: { storyId, motoristaId } },
+      select: { id: true },
+    });
     await this.prisma.storyReacao.upsert({
       where: { storyId_motoristaId: { storyId, motoristaId } },
       create: { storyId, motoristaId, emoji: input.emoji },
       update: { emoji: input.emoji },
     });
+    // Avisa o dono do story só na PRIMEIRA reação de alguém (não em troca) e
+    // nunca a si mesmo. Best-effort — não trava a resposta.
+    if (!jaReagiu && story.motoristaId !== motoristaId) {
+      void this.notificarReacao(story.motoristaId, motoristaId, storyId, input.emoji);
+    }
+  }
+
+  private async notificarReacao(
+    autorId: string,
+    reagenteId: string,
+    storyId: string,
+    emoji: string,
+  ): Promise<void> {
+    try {
+      const [autor, reagente] = await Promise.all([
+        this.prisma.motorista.findUnique({
+          where: { id: autorId },
+          select: { expoPushToken: true },
+        }),
+        this.prisma.motorista.findUnique({
+          where: { id: reagenteId },
+          select: { nome: true },
+        }),
+      ]);
+      const primeiroNome = reagente?.nome?.split(/\s+/)[0] ?? "Alguém";
+      await this.push.enviar({
+        motoristaId: autorId,
+        token: autor?.expoPushToken ?? "",
+        titulo: "Reação no seu story",
+        corpo: `${primeiroNome} reagiu ${emoji} ao seu story`,
+        tipo: "story-reacao",
+        dados: { storyId },
+        criadoPorId: null,
+      });
+    } catch {
+      /* best-effort — reação não depende do push */
+    }
   }
 
   async removerReacao(motoristaId: string, storyId: string): Promise<void> {
