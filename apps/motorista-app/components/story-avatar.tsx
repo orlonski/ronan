@@ -1,5 +1,5 @@
 import { Plus } from "lucide-react-native";
-import { Text, View } from "react-native";
+import { Image, Text, View } from "react-native";
 import { cn } from "@/lib/utils";
 
 /** Iniciais do nome (1ª + última palavra), tipo fallback de avatar do Instagram. */
@@ -24,11 +24,14 @@ export function StoryAvatar({
   size = 64,
   ring = "none",
   plus = false,
+  fotoUri,
 }: {
   nome: string;
   size?: number;
   ring?: Ring;
   plus?: boolean;
+  /** Se presente, mostra a foto no círculo em vez das iniciais (ex: story enviando). */
+  fotoUri?: string;
 }) {
   const anelCor =
     ring === "unseen" ? "bg-primary" : ring === "seen" ? "bg-border" : "bg-transparent";
@@ -45,17 +48,24 @@ export function StoryAvatar({
           className="items-center justify-center rounded-full bg-background"
           style={{ width: size - gap * 2, height: size - gap * 2, padding: ring === "none" ? 0 : 2 }}
         >
-          <View
-            className="items-center justify-center rounded-full bg-brand"
-            style={{ width: interno, height: interno }}
-          >
-            <Text
-              className="font-bold text-white"
-              style={{ fontSize: Math.round(interno * 0.36) }}
+          {fotoUri ? (
+            <Image
+              source={{ uri: fotoUri }}
+              style={{ width: interno, height: interno, borderRadius: interno / 2 }}
+            />
+          ) : (
+            <View
+              className="items-center justify-center rounded-full bg-brand"
+              style={{ width: interno, height: interno }}
             >
-              {iniciaisDoNome(nome)}
-            </Text>
-          </View>
+              <Text
+                className="font-bold text-white"
+                style={{ fontSize: Math.round(interno * 0.36) }}
+              >
+                {iniciaisDoNome(nome)}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
       {plus && (

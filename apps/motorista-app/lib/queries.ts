@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   useInfiniteQuery,
   useMutation,
@@ -17,7 +17,7 @@ import type {
   StoryVisualizador,
   TipoEventoViagem as TipoEventoViagemApp,
 } from "@ronan/shared-types";
-import { cacheGet, cachePut } from "@/db/database";
+import { cacheGet, cachePut, listPendingStories, type PendingStory } from "@/db/database";
 import { api, ApiError } from "./api";
 import { reportarEvento } from "./event-reporter";
 import { haversineMetros } from "./geo";
@@ -1743,6 +1743,27 @@ export function useExtrairTicket() {
 // ─── Stories (estilo Instagram) ──────────────────────────────────────────────
 
 const STORIES_FEED_KEY = ["stories-feed"];
+
+/** Stories do próprio motorista ainda no outbox (upload em andamento). Reativo
+ * via onSyncChange — pra mostrar a bolinha "enviando" na hora que posta, sem
+ * esperar o upload terminar (feel do Instagram). */
+export function usePendingStories(): PendingStory[] {
+  const [list, setList] = useState<PendingStory[]>([]);
+  useEffect(() => {
+    let vivo = true;
+    const carregar = () =>
+      listPendingStories()
+        .then((l) => vivo && setList(l))
+        .catch(() => {});
+    carregar();
+    const off = onSyncChange(carregar);
+    return () => {
+      vivo = false;
+      off();
+    };
+  }, []);
+  return list;
+}
 
 /** Feed de stories ativos agrupados por autor. staleTime curto — conteúdo
  * efêmero (24h), queremos atualizar com frequência. */
