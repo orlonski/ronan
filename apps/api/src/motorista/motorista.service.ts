@@ -127,6 +127,7 @@ export class MotoristaService {
         podeViagemLifecycle: true,
         podeLancarPedagio: true,
         podeLancarAbastecimento: true,
+        podeVerStories: true,
         aceitaPush: true,
         aceitaWhatsapp: true,
       },

@@ -10,7 +10,8 @@ export type AcessoFlag =
   | "podeViagemLifecycle"
   | "podeLancarPedagio"
   | "podeLancarAbastecimento"
-  | "podeUsarOcrTicket";
+  | "podeUsarOcrTicket"
+  | "podeVerStories";
 
 /**
  * Bloqueia endpoint do motorista quando a feature flag dele tá desligada.

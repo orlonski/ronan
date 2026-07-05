@@ -357,6 +357,9 @@ model Motorista {
   /// Quando true, o app dispara OCR via IA na foto do ticket pra sugerir
   /// preenchimento. False = motorista preenche tudo manualmente.
   podeUsarOcrTicket       Boolean   @default(false)
+  /// Stories (estilo Instagram): vê a barra na home, posta e reage. Flag de
+  /// rollout — default false, admin libera caso a caso pelo dashboard.
+  podeVerStories          Boolean   @default(false)
   criadoEm                DateTime  @default(now())
   alteradoEm              DateTime  @updatedAt
 
@@ -373,6 +376,9 @@ model Motorista {
   eventos          EventoMotorista[]
   posicaoConfig    MotoristaPosicaoConfig?
   posicoes         MotoristaPosicao[]
+  stories            Story[]
+  storyVisualizacoes StoryVisualizacao[]
+  storyReacoes       StoryReacao[]
   redefinicaoSenha RedefinicaoSenhaPendente?
   criadoPor        User?                @relation("CriouMotorista", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId      String?
@@ -1054,6 +1060,60 @@ model TicketFoto {
 
   @@index([viagemId])
   @@map("ticket_fotos")
+}
+
+/// Story do motorista (estilo Instagram): foto do trecho que todos os
+/// motoristas veem. Efêmero — expira em 24h (job de limpeza remove foto do
+/// MinIO + registro). O feed filtra por expiraEm > now, então nunca aparece
+/// expirado mesmo que a limpeza atrase. clientId dá idempotência ao outbox.
+model Story {
+  id            String              @id @default(uuid())
+  clientId      String              @unique // gerado no app (outbox)
+  motorista     Motorista           @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  motoristaId   String
+  storageKey    String // chave no MinIO
+  legenda       String?
+  lat           Float?
+  lng           Float?
+  criadoEm      DateTime            @default(now())
+  expiraEm      DateTime // = criadoEm + 24h
+  visualizacoes StoryVisualizacao[]
+  reacoes       StoryReacao[]
+
+  @@index([expiraEm])
+  @@index([motoristaId, criadoEm])
+  @@map("stories")
+}
+
+/// Registro de que um motorista viu um story (tira o anel de "não visto" e
+/// alimenta o "visto por N" do autor). Único por (story, motorista).
+model StoryVisualizacao {
+  id          String    @id @default(uuid())
+  story       Story     @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  storyId     String
+  motorista   Motorista @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  motoristaId String
+  vistoEm     DateTime  @default(now())
+
+  @@unique([storyId, motoristaId])
+  @@index([storyId])
+  @@map("story_visualizacoes")
+}
+
+/// Reação emoji de um motorista a um story. Uma por (story, motorista) — upsert
+/// troca o emoji anterior.
+model StoryReacao {
+  id          String    @id @default(uuid())
+  story       Story     @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  storyId     String
+  motorista   Motorista @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  motoristaId String
+  emoji       String
+  criadoEm    DateTime  @default(now())
+
+  @@unique([storyId, motoristaId])
+  @@index([storyId])
+  @@map("story_reacoes")
 }
 
 /// Ponto GPS capturado durante o tracking de uma viagem.

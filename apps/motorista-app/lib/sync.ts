@@ -9,6 +9,7 @@ import {
   deletePendingFoto,
   deletePendingLocal,
   deletePendingPedagio,
+  deletePendingStory,
   deletePendingViagem,
   deletePendingViagemCancelar,
   deletePendingViagemFinalizar,
@@ -19,6 +20,7 @@ import {
   listPendingFotos,
   listPendingLocais,
   listPendingPedagios,
+  listPendingStories,
   listPendingViagemCancelar,
   listPendingViagemFinalizar,
   listPendingViagemIniciar,
@@ -29,6 +31,7 @@ import {
   upsertPendingFoto,
   upsertPendingLocal,
   upsertPendingPedagio,
+  upsertPendingStory,
   upsertPendingViagem,
   upsertPendingViagemCancelar,
   upsertPendingViagemFinalizar,
@@ -39,6 +42,7 @@ import {
   type PendingFoto,
   type PendingLocal,
   type PendingPedagio,
+  type PendingStory,
   type PendingViagem,
   type PendingViagemCancelar,
   type PendingViagemFinalizar,
@@ -338,6 +342,34 @@ export async function enqueueFoto(item: {
 }
 
 /**
+ * Enfileira um story (foto do trecho, estilo Instagram). Fica no outbox pra
+ * postar mesmo sem sinal — sincroniza quando a rede voltar. clientId é o UUID
+ * já gerado pelo chamador (vira o clientId do story no backend).
+ */
+export async function enqueueStory(item: {
+  clientId: string;
+  fotoUri: string;
+  fotoMime: string;
+  legenda?: string;
+  lat?: number;
+  lng?: number;
+}): Promise<void> {
+  await upsertPendingStory({
+    clientId: item.clientId,
+    fotoUri: item.fotoUri,
+    fotoMime: item.fotoMime,
+    legenda: item.legenda,
+    lat: item.lat,
+    lng: item.lng,
+    status: "pending",
+    attempts: 0,
+    createdAt: Date.now(),
+  });
+  notify();
+  void drain();
+}
+
+/**
  * Enfileira o "completar peso" de uma viagem que está em AGUARDANDO_PESO
  * (romaneio saiu no fim do dia). viagemId é o id real do servidor. Idempotente
  * por viagemId: reenfileirar (ex: motorista corrigiu o ticket) substitui o
@@ -584,6 +616,7 @@ export async function drain(): Promise<void> {
     await drainCompletarPeso();
     await drainPedagios();
     await drainAbastecimentos();
+    await drainStories();
   } finally {
     draining = false;
     notify();
@@ -618,6 +651,11 @@ async function rescueStaleItems(): Promise<void> {
   for (const f of await listPendingFotos()) {
     if (f.status === "syncing" && isStale(f.lastTriedAt)) {
       await upsertPendingFoto({ ...f, status: "pending" });
+    }
+  }
+  for (const s of await listPendingStories()) {
+    if (s.status === "syncing" && isStale(s.lastTriedAt)) {
+      await upsertPendingStory({ ...s, status: "pending" });
     }
   }
   for (const cp of await listPendingCompletarPeso()) {
@@ -678,6 +716,54 @@ async function processFoto(item: PendingFoto): Promise<void> {
     const permanente = isErroPermanente(err);
     const { msg, status, issues } = extractErrorDetails(err);
     await upsertPendingFoto({
+      ...item,
+      status: "error",
+      errorMsg: msg,
+      errorStatus: status,
+      errorIssues: issues,
+      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
+    });
+  }
+  notify();
+}
+
+async function drainStories(): Promise<void> {
+  const list = await listPendingStories();
+  for (const item of list) {
+    if (item.status === "syncing") continue;
+    if (item.attempts >= MAX_ATTEMPTS) continue;
+    if (!(await podeEnviar())) return;
+    await processStory(item);
+  }
+}
+
+async function processStory(item: PendingStory): Promise<void> {
+  await upsertPendingStory({ ...item, status: "syncing", lastTriedAt: Date.now() });
+  notify();
+  try {
+    // 2-step: sobe a foto pro MinIO pegando storageKey, depois cria o story.
+    const fd = new FormData();
+    const filename = `story-${item.clientId}.${
+      item.fotoMime.includes("png") ? "png" : "jpg"
+    }`;
+    fd.append("foto", {
+      uri: item.fotoUri,
+      type: item.fotoMime,
+      name: filename,
+    } as unknown as Blob);
+    const up = await api.postForm<{ storageKey: string }>("/m/uploads/story", fd);
+    await api.post("/m/stories", {
+      clientId: item.clientId,
+      fotoKey: up.storageKey,
+      legenda: item.legenda,
+      lat: item.lat,
+      lng: item.lng,
+    });
+    await deletePendingStory(item.clientId);
+  } catch (err) {
+    const permanente = isErroPermanente(err);
+    const { msg, status, issues } = extractErrorDetails(err);
+    await upsertPendingStory({
       ...item,
       status: "error",
       errorMsg: msg,

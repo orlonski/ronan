@@ -37,6 +37,7 @@ import { AnuncioIniciarViagem } from "@/components/anuncio-iniciar-viagem";
 import { EmptyState } from "@/components/empty-state";
 import { NotificationBell } from "@/components/notification-bell";
 import { ViagemCardSkeleton } from "@/components/skeleton";
+import { StoriesBar } from "@/components/stories-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { usePending } from "@/hooks/use-pending";
@@ -255,6 +256,9 @@ export default function Home() {
         }
         ListHeaderComponent={
           <View className="mb-3 gap-3">
+            {/* Stories dos motoristas (estilo Instagram) */}
+            <StoriesBar />
+
             {/* Banner viagem em andamento (tracking ativo) */}
             {tracking.data && (
               <Pressable

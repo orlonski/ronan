@@ -102,6 +102,26 @@ export type PendingFoto = {
   errorIssues?: ZodIssueSaved[];
 };
 
+/** Story (foto do trecho) aguardando envio. 2-step no processStory: sobe a foto
+ * pro MinIO (/m/uploads/story) e cria o story (POST /m/stories). Idempotente
+ * por clientId no backend. Fica no outbox pra postar mesmo em zona sem sinal. */
+export type PendingStory = {
+  /** UUID client-side — vira o clientId do story (idempotência). */
+  clientId: string;
+  fotoUri: string;
+  fotoMime: string;
+  legenda?: string;
+  lat?: number;
+  lng?: number;
+  status: "pending" | "syncing" | "error";
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
+};
+
 /** Completar peso + ticket de uma viagem JÁ sincronizada que está em
  * AGUARDANDO_PESO (romaneio saiu no fim do dia). viagemId é o id real do
  * servidor (POST /m/viagens/:id/completar-peso). Idempotente no backend. */
@@ -202,6 +222,7 @@ const PEDAGIOS_KEY = `${PREFIX}outbox.pedagios`;
 const ABASTECIMENTOS_KEY = `${PREFIX}outbox.abastecimentos`;
 const LOCAIS_KEY = `${PREFIX}outbox.locais`;
 const FOTOS_KEY = `${PREFIX}outbox.fotos`;
+const STORIES_KEY = `${PREFIX}outbox.stories`;
 const VG_INICIAR_KEY = `${PREFIX}outbox.viagem-iniciar`;
 const VG_EVENTOS_KEY = `${PREFIX}outbox.viagem-eventos`;
 const VG_FINALIZAR_KEY = `${PREFIX}outbox.viagem-finalizar`;
@@ -403,6 +424,26 @@ export async function deletePendingFoto(clientId: string): Promise<void> {
   const list = await listPendingFotos();
   await writeList(
     FOTOS_KEY,
+    list.filter((x) => x.clientId !== clientId),
+  );
+}
+
+export async function listPendingStories(): Promise<PendingStory[]> {
+  return readList<PendingStory>(STORIES_KEY);
+}
+
+export async function upsertPendingStory(item: PendingStory): Promise<void> {
+  const list = await listPendingStories();
+  const idx = list.findIndex((x) => x.clientId === item.clientId);
+  if (idx >= 0) list[idx] = item;
+  else list.unshift(item);
+  await writeList(STORIES_KEY, list);
+}
+
+export async function deletePendingStory(clientId: string): Promise<void> {
+  const list = await listPendingStories();
+  await writeList(
+    STORIES_KEY,
     list.filter((x) => x.clientId !== clientId),
   );
 }

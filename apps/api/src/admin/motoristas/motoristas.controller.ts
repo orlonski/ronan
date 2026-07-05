@@ -29,6 +29,7 @@ const AcessosInput = z.object({
   podeLancarPedagio: z.boolean().optional(),
   podeLancarAbastecimento: z.boolean().optional(),
   podeUsarOcrTicket: z.boolean().optional(),
+  podeVerStories: z.boolean().optional(),
 });
 type AcessosInput = z.infer<typeof AcessosInput>;
 

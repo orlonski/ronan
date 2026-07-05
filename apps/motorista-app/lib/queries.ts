@@ -11,6 +11,10 @@ import type {
   ExtrairTicketResult,
   FonteGps,
   StatusMotorista,
+  StoryEmoji,
+  StoryFeedResponse,
+  StoryItem,
+  StoryVisualizador,
   TipoEventoViagem as TipoEventoViagemApp,
 } from "@ronan/shared-types";
 import { cacheGet, cachePut } from "@/db/database";
@@ -29,6 +33,7 @@ import {
   enqueueCompletarPeso,
   enqueueLocal,
   enqueuePedagio,
+  enqueueStory,
   enqueueViagem,
   onSyncChange,
 } from "./sync";
@@ -91,6 +96,7 @@ export type Me = {
   podeLancarPedagio: boolean;
   podeLancarAbastecimento: boolean;
   podeUsarOcrTicket: boolean;
+  podeVerStories: boolean;
   // Preferências de recebimento (controladas na tela de perfil).
   aceitaPush: boolean;
   aceitaWhatsapp: boolean;
@@ -1731,5 +1737,112 @@ export function useExtrairTicket() {
   return useMutation({
     mutationFn: async (input: { fotoBase64: string; mime: string }) =>
       api.post<ExtrairTicketResult>("/m/ia/extrair-ticket", input),
+  });
+}
+
+// ─── Stories (estilo Instagram) ──────────────────────────────────────────────
+
+const STORIES_FEED_KEY = ["stories-feed"];
+
+/** Feed de stories ativos agrupados por autor. staleTime curto — conteúdo
+ * efêmero (24h), queremos atualizar com frequência. */
+export function useStoriesFeed() {
+  const me = useMe();
+  return useQuery({
+    queryKey: STORIES_FEED_KEY,
+    queryFn: () => api.get<StoryFeedResponse>("/m/stories/feed"),
+    // Rollout por flag: só busca quando o motorista tem acesso liberado.
+    enabled: !!me.data?.podeVerStories,
+    staleTime: 30_000,
+  });
+}
+
+/** Posta um story. Vai pelo outbox (offline-first): enfileira e sincroniza
+ * quando a rede permitir; o feed re-renderiza via onSyncChange no main. */
+export function useEnviarStory() {
+  return useMutation({
+    mutationFn: async (input: {
+      clientId: string;
+      fotoUri: string;
+      fotoMime: string;
+      legenda?: string;
+      lat?: number;
+      lng?: number;
+    }) => {
+      await enqueueStory(input);
+    },
+  });
+}
+
+/** Aplica um patch a um story dentro do cache do feed (otimista). */
+function patchStoryNoFeed(
+  qc: QueryClient,
+  storyId: string,
+  patch: (s: StoryItem) => StoryItem,
+) {
+  qc.setQueryData<StoryFeedResponse>(STORIES_FEED_KEY, (cur) => {
+    if (!cur) return cur;
+    return {
+      grupos: cur.grupos.map((g) => {
+        const stories = g.stories.map((s) => (s.id === storyId ? patch(s) : s));
+        const temNaoVisto = stories.some((s) => !g.ehMeu && !s.visto);
+        return { ...g, stories, temNaoVisto };
+      }),
+    };
+  });
+}
+
+/** Marca um story como visto (tira o anel). Otimista no cache do feed. */
+export function useMarcarStoryVisto() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (storyId: string) =>
+      api.post<void>(`/m/stories/${storyId}/visto`, {}),
+    onMutate: (storyId) => {
+      patchStoryNoFeed(qc, storyId, (s) => ({ ...s, visto: true }));
+    },
+  });
+}
+
+/** Reage (ou tira a reação) a um story. Otimista no cache do feed. */
+export function useReagirStory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { storyId: string; emoji: StoryEmoji | null }) =>
+      input.emoji === null
+        ? api.delete<void>(`/m/stories/${input.storyId}/reacao`)
+        : api.post<void>(`/m/stories/${input.storyId}/reacao`, {
+            emoji: input.emoji,
+          }),
+    onMutate: (input) => {
+      patchStoryNoFeed(qc, input.storyId, (s) => ({
+        ...s,
+        minhaReacao: input.emoji,
+      }));
+    },
+  });
+}
+
+/** Apaga o próprio story. Invalida o feed. */
+export function useDeletarStory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (storyId: string) => api.delete<void>(`/m/stories/${storyId}`),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: STORIES_FEED_KEY });
+    },
+  });
+}
+
+/** "Visto por N": lista de espectadores + reações (só o autor consegue ver). */
+export function useVisualizacoesStory(storyId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ["story-visualizacoes", storyId],
+    enabled: enabled && !!storyId,
+    staleTime: 15_000,
+    queryFn: () =>
+      api.get<{ total: number; visualizadores: StoryVisualizador[] }>(
+        `/m/stories/${storyId}/visualizacoes`,
+      ),
   });
 }

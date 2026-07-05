@@ -39,6 +39,7 @@ export type Motorista = {
   podeLancarPedagio: boolean;
   podeLancarAbastecimento: boolean;
   podeUsarOcrTicket: boolean;
+  podeVerStories: boolean;
 };
 
 const PATH = "/admin/motoristas";
@@ -84,6 +85,7 @@ type AcessosState = {
   podeLancarPedagio: boolean;
   podeLancarAbastecimento: boolean;
   podeUsarOcrTicket: boolean;
+  podeVerStories: boolean;
 };
 
 export function MotoristaForm({ initial }: Props) {
@@ -98,6 +100,7 @@ export function MotoristaForm({ initial }: Props) {
     podeLancarPedagio: initial?.podeLancarPedagio ?? true,
     podeLancarAbastecimento: initial?.podeLancarAbastecimento ?? true,
     podeUsarOcrTicket: initial?.podeUsarOcrTicket ?? true,
+    podeVerStories: initial?.podeVerStories ?? false,
   });
   const token = useAuthToken();
   const qc = useQueryClient();
@@ -387,6 +390,11 @@ export function MotoristaForm({ initial }: Props) {
                 label="Ler ticket com IA (OCR da foto)"
                 active={acessos.podeUsarOcrTicket}
                 onChange={(v) => alterarAcesso("podeUsarOcrTicket", v)}
+              />
+              <AcessoRow
+                label="Stories (foto do trecho, estilo Instagram)"
+                active={acessos.podeVerStories}
+                onChange={(v) => alterarAcesso("podeVerStories", v)}
               />
             </div>
           </div>

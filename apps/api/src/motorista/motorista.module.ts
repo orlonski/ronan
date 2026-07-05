@@ -31,6 +31,9 @@ import { ValidacaoLocalService } from "./validacao-local.service";
 import { IaTicketController } from "./ia-ticket.controller";
 import { KmReprocessamentoService } from "./km-reprocessamento.service";
 import { AvisoPesoService } from "./aviso-peso.service";
+import { StoriesMotoristaController } from "./stories.controller";
+import { StoriesMotoristaService } from "./stories.service";
+import { StoriesCleanupService } from "./stories-cleanup.service";
 
 @Module({
   imports: [
@@ -59,6 +62,7 @@ import { AvisoPesoService } from "./aviso-peso.service";
     BuscaLocaisConfigMotoristaController,
     IaTicketController,
     PosicaoMotoristaController,
+    StoriesMotoristaController,
   ],
   providers: [
     MotoristaService,
@@ -70,6 +74,8 @@ import { AvisoPesoService } from "./aviso-peso.service";
     PosicaoMotoristaService,
     KmReprocessamentoService,
     AvisoPesoService,
+    StoriesMotoristaService,
+    StoriesCleanupService,
   ],
   exports: [
     MotoristaService,
