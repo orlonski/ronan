@@ -29,9 +29,18 @@ export type CapturedPhoto = { uri: string; mime: string };
 export function PhotoCapture({
   value,
   onChange,
+  autoOpen = false,
+  onCancel,
+  hidePlaceholder = false,
 }: {
   value: CapturedPhoto | null;
   onChange: (p: CapturedPhoto | null) => void;
+  /** Abre a câmera direto ao montar (estilo Instagram Stories). */
+  autoOpen?: boolean;
+  /** Chamado quando fecha a câmera sem foto (cancelou / permissão negada). */
+  onCancel?: () => void;
+  /** Esconde a caixa "Tocar para abrir a câmera" quando não há foto. */
+  hidePlaceholder?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
@@ -39,16 +48,30 @@ export function PhotoCapture({
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [cropping, setCropping] = useState(false);
   const cameraRef = useRef<CameraView>(null);
+  const jaAutoAbriu = useRef(false);
 
-  async function abrir() {
+  async function abrir(): Promise<boolean> {
     if (!permission?.granted) {
       const r = await requestPermission();
-      if (!r.granted) return;
+      if (!r.granted) return false;
     }
     setPreviewUri(null);
     setCropping(false);
     setOpen(true);
+    return true;
   }
+
+  // Auto-abre a câmera uma vez ao montar (fluxo de story). Se a permissão for
+  // negada, avisa o pai (que volta pra home) em vez de deixar a tela vazia.
+  useEffect(() => {
+    if (autoOpen && !jaAutoAbriu.current && !value) {
+      jaAutoAbriu.current = true;
+      void abrir().then((ok) => {
+        if (!ok) onCancel?.();
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function capturar() {
     if (!cameraRef.current || taking) return;
@@ -85,6 +108,7 @@ export function PhotoCapture({
     setOpen(false);
     setCropping(false);
     setPreviewUri(null);
+    if (!value) onCancel?.(); // fechou a câmera sem escolher foto
   }
 
   return (
@@ -114,7 +138,7 @@ export function PhotoCapture({
             </Button>
           </View>
         </View>
-      ) : (
+      ) : hidePlaceholder ? null : (
         <Pressable
           onPress={abrir}
           className="h-32 items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border bg-muted/30"

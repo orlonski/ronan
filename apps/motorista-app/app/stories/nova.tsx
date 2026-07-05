@@ -80,12 +80,19 @@ export default function NovaStoryScreen() {
           contentContainerStyle={{ padding: 16, gap: 16 }}
           keyboardShouldPersistTaps="handled"
         >
-          <Text className="text-base text-muted-foreground">
-            Tire uma foto do trecho pra mostrar pros outros motoristas. Some
-            sozinha em 24 horas.
-          </Text>
+          {foto && (
+            <Text className="text-base text-muted-foreground">
+              Escreva algo se quiser e publique. Some sozinha em 24 horas.
+            </Text>
+          )}
 
-          <PhotoCapture value={foto} onChange={aoEscolherFoto} />
+          <PhotoCapture
+            value={foto}
+            onChange={aoEscolherFoto}
+            autoOpen
+            hidePlaceholder
+            onCancel={() => router.back()}
+          />
 
           <View className="gap-1">
             <Input
