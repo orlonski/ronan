@@ -100,7 +100,7 @@ export function MotoristaForm({ initial }: Props) {
     podeLancarPedagio: initial?.podeLancarPedagio ?? true,
     podeLancarAbastecimento: initial?.podeLancarAbastecimento ?? true,
     podeUsarOcrTicket: initial?.podeUsarOcrTicket ?? true,
-    podeVerStories: initial?.podeVerStories ?? false,
+    podeVerStories: initial?.podeVerStories ?? true,
   });
   const token = useAuthToken();
   const qc = useQueryClient();
