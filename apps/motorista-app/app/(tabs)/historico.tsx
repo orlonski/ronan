@@ -61,6 +61,7 @@ const statusVariant: Record<
   EM_CONFERENCIA: "warning",
   DIVERGENTE: "destructive",
   AJUSTADA: "secondary",
+  AGUARDANDO_PESO: "warning",
 };
 
 const statusLabel: Record<string, string> = {
@@ -69,6 +70,7 @@ const statusLabel: Record<string, string> = {
   EM_CONFERENCIA: "Conferindo",
   DIVERGENTE: "Divergente",
   AJUSTADA: "Ajustada",
+  AGUARDANDO_PESO: "Aguardando peso",
 };
 
 const FILTROS: { key: "TODAS" | GrupoStatus; label: string }[] = [
@@ -523,6 +525,7 @@ function AbaButton({
 function ViagemCard({ v }: { v: Viagem }) {
   const variant = statusVariant[v.status] ?? "outline";
   const label = statusLabel[v.status] ?? v.status;
+  const aguardandoPeso = v.status === "AGUARDANDO_PESO";
 
   return (
     <Pressable
@@ -574,15 +577,21 @@ function ViagemCard({ v }: { v: Viagem }) {
       <View className="mt-3 flex-row gap-5 border-t-2 border-border pt-3">
         <Stat
           label="t"
-          value={fmtNum(v.toneladasEfetiva, 3)}
-          subValue={v.toneladasAjustada ? `(${fmtNum(v.toneladasInformada, 3)})` : undefined}
+          value={aguardandoPeso ? "—" : fmtNum(v.toneladasEfetiva, 3)}
+          subValue={
+            aguardandoPeso
+              ? "aguardando"
+              : v.toneladasAjustada
+                ? `(${fmtNum(v.toneladasInformada, 3)})`
+                : undefined
+          }
         />
         <Stat
           label="km"
           value={fmtNum(v.kmEfetivo, 2)}
           subValue={v.kmAjustada ? `(${fmtNum(v.kmInformado, 2)})` : undefined}
         />
-        <Stat label="ticket" value={v.ticket} />
+        <Stat label="ticket" value={aguardandoPeso ? "—" : v.ticket} />
       </View>
     </Pressable>
   );

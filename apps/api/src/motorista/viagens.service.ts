@@ -125,7 +125,12 @@ export class ViagensMotoristaService {
       limit: number;
     },
   ) {
-    const where = this.buildWhere(motoristaId, filtros);
+    // Feed mostra também as viagens "aguardando peso" (marcadas no app); o
+    // resumoMes usa buildWhere sem essa flag, então os totais seguem limpos.
+    const where = this.buildWhere(motoristaId, {
+      ...filtros,
+      incluirAguardandoPeso: true,
+    });
 
     const itens = await this.prisma.viagem.findMany({
       where,
@@ -226,21 +231,27 @@ export class ViagensMotoristaService {
     filtros: {
       mes?: string;
       grupoStatus?: "AGUARDANDO" | "CONFERIDA" | "DIVERGENTE";
+      // Feed de viagens (recentes/histórico) MOSTRA AGUARDANDO_PESO: a viagem
+      // existe e o motorista lançou, então ela aparece na lista (marcada como
+      // "aguardando peso"). Só o lançamento incompleto EM_ANDAMENTO fica de fora.
+      // Agregados (resumoMes) NÃO passam a flag → seguem excluindo os dois, pra
+      // não contar peso zero em totais/KPIs.
+      incluirAguardandoPeso?: boolean;
     },
   ): Prisma.ViagemWhereInput {
-    // Viagens incompletas (EM_ANDAMENTO no lifecycle; AGUARDANDO_PESO sem
-    // peso/ticket) não aparecem no feed normal — têm endpoints dedicados
-    // (/andamento e /aguardando-peso). grupoStatus (quando vem) substitui por
-    // um `in` que nunca inclui esses status.
     const where: Prisma.ViagemWhereInput = {
       motoristaId,
-      status: { notIn: STATUS_FORA_FECHAMENTO },
+      status: filtros.incluirAguardandoPeso
+        ? { not: "EM_ANDAMENTO" }
+        : { notIn: STATUS_FORA_FECHAMENTO },
     };
     if (filtros.mes) {
       const { inicio, fim } = mesRange(filtros.mes);
       where.data = { gte: inicio, lt: fim };
     }
     if (filtros.grupoStatus) {
+      // Filtro por grupo de conferência nunca inclui AGUARDANDO_PESO (não é
+      // conferível): o `in` do grupo já cuida disso.
       where.status = { in: grupoToStatus(filtros.grupoStatus) };
     }
     return where;

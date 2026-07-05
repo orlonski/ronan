@@ -66,6 +66,7 @@ const statusVariant: Record<
   EM_CONFERENCIA: "warning",
   DIVERGENTE: "destructive",
   AJUSTADA: "secondary",
+  AGUARDANDO_PESO: "warning",
 };
 
 const statusLabel: Record<string, string> = {
@@ -74,6 +75,7 @@ const statusLabel: Record<string, string> = {
   EM_CONFERENCIA: "Conferindo",
   DIVERGENTE: "Divergente",
   AJUSTADA: "Ajustada",
+  AGUARDANDO_PESO: "Aguardando peso",
 };
 
 export default function Home() {
@@ -655,6 +657,7 @@ function ViagemCard({ v, onExcluir }: { v: Viagem; onExcluir: () => void }) {
   const variant = statusVariant[v.status] ?? "outline";
   const label = statusLabel[v.status] ?? v.status;
   const podeExcluir = v.status === "ENVIADA";
+  const aguardandoPeso = v.status === "AGUARDANDO_PESO";
   // Arrastar pra revelar "excluir" fazia o toque de soltar navegar pro detalhe
   // (RN Pressable dentro do Swipeable dispara onPress no fim do gesto). Marcamos
   // quando o swipe abre/mexe e engolimos esse 1º toque.
@@ -710,15 +713,21 @@ function ViagemCard({ v, onExcluir }: { v: Viagem; onExcluir: () => void }) {
       <View className="mt-3 flex-row gap-5 border-t-2 border-border pt-3">
         <Stat
           label="t"
-          value={fmtNum(v.toneladasEfetiva, 3)}
-          subValue={v.toneladasAjustada ? `(${fmtNum(v.toneladasInformada, 3)})` : undefined}
+          value={aguardandoPeso ? "—" : fmtNum(v.toneladasEfetiva, 3)}
+          subValue={
+            aguardandoPeso
+              ? "aguardando"
+              : v.toneladasAjustada
+                ? `(${fmtNum(v.toneladasInformada, 3)})`
+                : undefined
+          }
         />
         <Stat
           label="km"
           value={fmtNum(v.kmEfetivo, 2)}
           subValue={v.kmAjustada ? `(${fmtNum(v.kmInformado, 2)})` : undefined}
         />
-        <Stat label="ticket" value={v.ticket} />
+        <Stat label="ticket" value={aguardandoPeso ? "—" : v.ticket} />
       </View>
     </Pressable>
   );
