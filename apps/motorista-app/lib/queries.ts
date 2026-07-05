@@ -1825,9 +1825,10 @@ export function useMarcarStoryVisto() {
   });
 }
 
-/** Reage (ou tira a reação) a um story. Otimista no cache do feed. */
+/** Reage (ou tira a reação) a um story. A UI do visualizador usa estado local
+ * pra resposta instantânea; aqui só persiste no servidor (sem re-render do feed,
+ * que engasgava o iOS competindo com o timer da barra de progresso). */
 export function useReagirStory() {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: { storyId: string; emoji: StoryEmoji | null }) =>
       input.emoji === null
@@ -1835,12 +1836,6 @@ export function useReagirStory() {
         : api.post<void>(`/m/stories/${input.storyId}/reacao`, {
             emoji: input.emoji,
           }),
-    onMutate: (input) => {
-      patchStoryNoFeed(qc, input.storyId, (s) => ({
-        ...s,
-        minhaReacao: input.emoji,
-      }));
-    },
   });
 }
 

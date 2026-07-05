@@ -12,6 +12,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Animated, { ZoomIn } from "react-native-reanimated";
 import { STORY_EMOJIS, type StoryEmoji } from "@ronan/shared-types";
 import { StoryAvatar } from "@/components/story-avatar";
 import { API_URL } from "@/lib/api-url";
@@ -54,6 +55,12 @@ export default function VisualizadorStoryScreen() {
   const [pausado, setPausado] = useState(false);
   const [verVistos, setVerVistos] = useState(false);
   const [token, setToken] = useState<string | null>(null);
+  // Reação em estado local: resposta instantânea + sem re-render do feed (que
+  // engasgava o iOS). Sincroniza com o servidor via mutation.
+  const [reacaoLocal, setReacaoLocal] = useState<StoryEmoji | null>(null);
+  // Reações feitas nesta sessão do visualizador (storyId → emoji). Trava a
+  // reação mesmo se voltar pro mesmo story antes do feed revalidar.
+  const reacoesSessao = useRef<Record<string, StoryEmoji>>({});
   const pressStart = useRef(0);
 
   const marcarVisto = useMarcarStoryVisto();
@@ -73,9 +80,12 @@ export default function VisualizadorStoryScreen() {
     if (feed.isSuccess && (!grupo || stories.length === 0)) router.back();
   }, [feed.isSuccess, grupo, stories.length]);
 
-  // Reseta a barra ao trocar de story e marca como visto.
+  // Reseta a barra ao trocar de story, sincroniza a reação local e marca visto.
   useEffect(() => {
     setProgress(0);
+    setReacaoLocal(
+      (atual && reacoesSessao.current[atual.id]) ?? atual?.minhaReacao ?? null,
+    );
     if (atual && !ehMeu) marcarVisto.mutate(atual.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [atual?.id]);
@@ -118,10 +128,11 @@ export default function VisualizadorStoryScreen() {
   }
 
   function onReagir(emoji: StoryEmoji) {
-    if (!atual) return;
-    void Haptics.selectionAsync();
-    const novo = atual.minhaReacao === emoji ? null : emoji;
-    reagir.mutate({ storyId: atual.id, emoji: novo });
+    if (!atual || reacaoLocal) return; // já reagiu — não muda mais
+    reacoesSessao.current[atual.id] = emoji;
+    setReacaoLocal(emoji); // instantâneo (estado local, sem re-render do feed)
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    reagir.mutate({ storyId: atual.id, emoji });
   }
 
   async function onDeletar() {
@@ -253,6 +264,16 @@ export default function VisualizadorStoryScreen() {
               Visto por {atual.totalVistos ?? 0}
             </Text>
           </Pressable>
+        ) : reacaoLocal ? (
+          // Já reagiu: mostra a reação (travada, não muda mais).
+          <Animated.View
+            key={reacaoLocal}
+            entering={ZoomIn.springify().damping(12)}
+            className="flex-row items-center gap-2 self-center rounded-full bg-black/50 px-5 py-3"
+          >
+            <Text style={{ fontSize: 30 }}>{reacaoLocal}</Text>
+            <Text className="text-base font-semibold text-white">Você reagiu</Text>
+          </Animated.View>
         ) : (
           <View className="flex-row justify-around rounded-full bg-black/45 px-2 py-3">
             {STORY_EMOJIS.map((e) => (
@@ -262,15 +283,7 @@ export default function VisualizadorStoryScreen() {
                 hitSlop={12}
                 className="px-2 active:opacity-60"
               >
-                <Text
-                  style={{
-                    fontSize: 30,
-                    opacity: atual.minhaReacao && atual.minhaReacao !== e ? 0.4 : 1,
-                    transform: [{ scale: atual.minhaReacao === e ? 1.25 : 1 }],
-                  }}
-                >
-                  {e}
-                </Text>
+                <Text style={{ fontSize: 30 }}>{e}</Text>
               </Pressable>
             ))}
           </View>
