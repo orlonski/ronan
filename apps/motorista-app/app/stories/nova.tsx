@@ -29,15 +29,15 @@ export default function NovaStoryScreen() {
   const enviar = useEnviarStory();
 
   // Story é só pra ver na tela do celular — comprime bem mais leve que o ticket
-  // (1080px/0.6 vs 1920/0.7) pra carregar rápido no feed. Roda ao escolher a foto,
-  // então publicar continua instantâneo.
+  // (1080px/0.55 vs 1920/0.7) pra subir e carregar rápido no feed, inclusive em
+  // 4G ruim. Roda ao escolher a foto, então publicar continua instantâneo.
   async function aoEscolherFoto(p: CapturedPhoto | null) {
     if (!p) return setFoto(null);
     try {
       const leve = await ImageManipulator.manipulateAsync(
         p.uri,
         [{ resize: { width: 1080 } }],
-        { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG },
+        { compress: 0.55, format: ImageManipulator.SaveFormat.JPEG },
       );
       setFoto({ uri: leve.uri, mime: "image/jpeg" });
     } catch {

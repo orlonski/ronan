@@ -25,13 +25,16 @@ export function StoryAvatar({
   ring = "none",
   plus = false,
   fotoUri,
+  fotoHeaders,
 }: {
   nome: string;
   size?: number;
   ring?: Ring;
   plus?: boolean;
-  /** Se presente, mostra a foto no círculo em vez das iniciais (ex: story enviando). */
+  /** Se presente, mostra a foto no círculo em vez das iniciais (prévia do story). */
   fotoUri?: string;
+  /** Headers (ex: Authorization) quando a foto é remota e protegida. */
+  fotoHeaders?: Record<string, string>;
 }) {
   const anelCor =
     ring === "unseen" ? "bg-primary" : ring === "seen" ? "bg-border" : "bg-transparent";
@@ -50,8 +53,13 @@ export function StoryAvatar({
         >
           {fotoUri ? (
             <Image
-              source={{ uri: fotoUri }}
-              style={{ width: interno, height: interno, borderRadius: interno / 2 }}
+              source={{ uri: fotoUri, headers: fotoHeaders }}
+              style={{
+                width: interno,
+                height: interno,
+                borderRadius: interno / 2,
+                backgroundColor: "#13316b",
+              }}
             />
           ) : (
             <View

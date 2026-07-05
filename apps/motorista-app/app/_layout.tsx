@@ -168,6 +168,9 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       void queryClient.invalidateQueries({ queryKey: ["pedagios"] });
       void queryClient.invalidateQueries({ queryKey: ["pedagios-filtrados"] });
       void queryClient.invalidateQueries({ queryKey: ["resumo-mes"] });
+      // Story recém-enviado: assim que o upload sincroniza, refaz o feed pra a
+      // bolinha real substituir o "Enviando…" na hora (senão parece que sumiu).
+      void queryClient.invalidateQueries({ queryKey: ["stories-feed"] });
     });
   }, []);
 

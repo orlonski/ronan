@@ -1,5 +1,8 @@
+import { useEffect, useState } from "react";
 import { router } from "expo-router";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { API_URL } from "@/lib/api-url";
+import { loadTokens } from "@/lib/auth";
 import { useMe, usePendingStories, useStoriesFeed } from "@/lib/queries";
 import { StoryAvatar } from "./story-avatar";
 
@@ -14,13 +17,25 @@ export function StoriesBar() {
   const me = useMe();
   const feed = useStoriesFeed();
   const pendentes = usePendingStories();
+  const [token, setToken] = useState<string | null>(null);
   const grupos = feed.data?.grupos ?? [];
   const primeiroNome = me.data?.nome?.split(/\s+/)[0] ?? "Você";
+
+  useEffect(() => {
+    void loadTokens().then((t) => setToken(t?.accessToken ?? null));
+  }, []);
 
   // Rollout por flag: sem liberação, a barra nem aparece.
   if (!me.data?.podeVerStories) return null;
 
   const enviando = pendentes[0]; // mostra o mais recente em upload
+  const authHeaders = token ? { Authorization: `Bearer ${token}` } : undefined;
+  // Prévia da rodinha = foto do story mais recente do grupo (só com token pronto,
+  // senão o loader do Android cacheia 401 → foto preta; cai nas iniciais até lá).
+  const capaDoGrupo = (stories: { id: string }[]) =>
+    token && stories.length > 0
+      ? `${API_URL}/m/stories/${stories[stories.length - 1].id}/foto`
+      : undefined;
 
   return (
     <View className="mb-1">
@@ -77,6 +92,8 @@ export function StoriesBar() {
             <StoryAvatar
               nome={g.autor.nome}
               ring={g.ehMeu ? "seen" : g.temNaoVisto ? "unseen" : "seen"}
+              fotoUri={capaDoGrupo(g.stories)}
+              fotoHeaders={authHeaders}
             />
             <Text className="mt-1 text-xs text-foreground" numberOfLines={1}>
               {g.ehMeu ? "Seu story" : g.autor.nome.split(/\s+/)[0]}
