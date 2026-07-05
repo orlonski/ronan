@@ -29,6 +29,7 @@ const ICON_COLOR: Record<AlertVariant, string> = {
 
 const BUTTON_STYLES = {
   default: { bg: "bg-primary", text: "text-primary-foreground" },
+  outline: { bg: "border-2 border-border bg-card", text: "text-foreground" },
   destructive: { bg: "bg-destructive", text: "text-destructive-foreground" },
   cancel: { bg: "bg-muted", text: "text-foreground" },
 } as const;
@@ -64,9 +65,11 @@ export function AlertHost() {
     press(null);
   }
 
-  // Layout dos botões: 1 ou 2 → linha lado a lado; 3+ → empilhados pra
-  // labels não cortarem.
-  const stacked = buttons.length >= 3;
+  // Layout dos botões: lado a lado quando são poucos e curtos; empilhados
+  // (full-width) quando são 3+ OU quando algum rótulo é longo — senão em tela
+  // pequena (ex: iPhone 15) o texto corta com "…".
+  const rotuloLongo = buttons.some((b) => b.label.length > 15);
+  const stacked = buttons.length >= 3 || rotuloLongo;
 
   return (
     <Modal
@@ -124,8 +127,8 @@ export function AlertHost() {
                   )}
                 >
                   <Text
-                    className={cn("text-base font-bold", style.text)}
-                    numberOfLines={1}
+                    className={cn("text-center text-base font-bold", style.text)}
+                    numberOfLines={stacked ? 2 : 1}
                   >
                     {b.label}
                   </Text>

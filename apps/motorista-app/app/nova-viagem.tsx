@@ -443,17 +443,12 @@ export default function NovaViagem() {
   // Validação guiada: aponta o 1º campo que falta na ORDEM VISUAL da tela
   // (placa → data → cliente → material → toneladas → ticket → carga →
   // descarga → km), rolando até ele e destacando em vermelho.
-  // `aguardandoPeso` = motorista escolheu lançar sem peso (romaneio no fim do
-  // dia): pula a validação de toneladas/ticket, que entram depois.
-  function validar(aguardandoPeso = false): boolean {
+  // Valida tudo que NÃO é peso/ticket (esses podem ficar pra depois, no modo
+  // "aguardando peso"). Aponta o 1º campo que falta na ordem visual da tela.
+  function validarBase(): boolean {
     if (!form.veiculoId) return void val.apontar("veiculoId", "Escolha a placa do caminhão"), false;
     if (!form.clienteId) return void val.apontar("clienteId", "Escolha o cliente"), false;
     if (!form.materialId) return void val.apontar("materialId", "Escolha o material"), false;
-    if (!aguardandoPeso) {
-      if (!form.toneladas.trim()) return void val.apontar("toneladas", "Informe as toneladas"), false;
-      if (exigeTicket && !form.ticket.trim())
-        return void val.apontar("ticket", "Informe o número do ticket"), false;
-    }
     if (!form.localCargaId) return void val.apontar("localCarga", "Escolha o local de carga"), false;
     if (!form.localDescargaId)
       return void val.apontar("localDescarga", "Marque o local de descarga"), false;
@@ -464,39 +459,38 @@ export default function NovaViagem() {
   async function salvar() {
     setErro(null);
 
-    // Campos base (antes do peso). Se faltar algum, aponta e sai — não faz
-    // sentido perguntar do peso sem placa/cliente/material escolhidos.
-    if (!form.veiculoId) return void val.apontar("veiculoId", "Escolha a placa do caminhão");
-    if (!form.clienteId) return void val.apontar("clienteId", "Escolha o cliente");
-    if (!form.materialId) return void val.apontar("materialId", "Escolha o material");
+    // Primeiro valida TUDO que não é peso/ticket. Só quando o resto do form já
+    // está completo é que o peso faltando vira a pergunta — nunca no meio do
+    // preenchimento (senão o modal aparecia com campos ainda vazios embaixo).
+    if (!validarBase()) return;
 
-    // Pergunta grande e clara: se o motorista não preencheu o peso (ou o ticket
-    // exigido), pode ser que o romaneio só saia no fim do dia. Em vez de só
-    // bloquear, deixa lançar sem o peso e completar depois.
+    // Se falta o peso, pode ser que o romaneio (peso + ticket) só saia no fim
+    // do dia. Em vez de só bloquear, oferece lançar agora e completar depois.
     let aguardandoPeso = false;
-    const faltaPeso = !form.toneladas.trim();
-    const faltaTicket = exigeTicket && !form.ticket.trim();
-    if (faltaPeso || faltaTicket) {
+    if (!form.toneladas.trim()) {
       const escolha = await showAlert({
-        title: "Já está com o peso e o romaneio?",
+        title: "Você já tem o peso?",
         message:
-          "Se o romaneio (ticket) só sai no fim do dia, dá pra lançar agora sem o peso e completar depois — a gente te lembra.",
+          "Se o peso e o romaneio (ticket) só saem no fim do dia, dá pra lançar a viagem agora e completar depois — a gente te lembra.",
         variant: "warning",
         buttons: [
-          { label: "Sim, tenho o peso", value: "tenho" },
-          { label: "Não, sai no fim do dia", value: "depois" },
+          { label: "Tenho o peso agora", value: "tenho", style: "default" },
+          { label: "O peso sai no fim do dia", value: "depois", style: "outline" },
         ],
       });
       if (escolha === "depois") {
         aguardandoPeso = true;
       } else {
-        // "Sim, tenho o peso" ou fechou: fluxo normal — aponta o campo faltando.
-        validar(false);
-        return;
+        // "Tenho o peso agora" ou fechou: aponta o campo do peso e volta.
+        return void val.apontar("toneladas", "Informe as toneladas");
       }
     }
 
-    if (!validar(aguardandoPeso)) return;
+    // Peso presente e não é aguardando peso: ticket segue as regras normais.
+    if (!aguardandoPeso && exigeTicket && !form.ticket.trim()) {
+      return void val.apontar("ticket", "Informe o número do ticket");
+    }
+
     val.limpar();
     // Aviso quando a data não é hoje — caso o motorista tenha tocado sem
     // querer, dá chance de corrigir ou voltar pra hoje antes de salvar.

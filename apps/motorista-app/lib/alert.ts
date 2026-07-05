@@ -14,8 +14,9 @@ export type AlertButton = {
   label: string;
   /** Valor resolvido pelo Promise. Se omitido, usa o label. */
   value?: string;
-  /** Estilo visual. `cancel` é cinza/outline, `destructive` vermelho. */
-  style?: "default" | "cancel" | "destructive";
+  /** Estilo visual. `default` primário (azul cheio), `outline` secundário
+   * (borda, fundo claro), `cancel` cinza, `destructive` vermelho. */
+  style?: "default" | "outline" | "cancel" | "destructive";
 };
 
 export type AlertOptions = {
