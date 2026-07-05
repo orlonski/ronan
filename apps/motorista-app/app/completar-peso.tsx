@@ -77,13 +77,22 @@ export default function CompletarPeso() {
           fotoMime: foto.mime,
         });
       }
+      // Quantas viagens ainda esperam peso depois desta? Se acabou, volta pra
+      // home (não deixa o motorista numa lista vazia); se sobrou, volta pra
+      // lista pra ele completar a próxima.
+      const restantes = (aguardando.data ?? []).filter(
+        (v) => v.id !== viagemId,
+      ).length;
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       await showAlert({
         title: "Peso registrado!",
         message:
-          "Pronto — a viagem saiu de 'aguardando peso' e entrou no fluxo normal. Se estiver sem sinal, envia sozinho quando voltar.",
+          restantes > 0
+            ? `Pronto — essa entrou no fluxo normal. Ainda ${restantes === 1 ? "falta 1 viagem" : `faltam ${restantes} viagens`} esperando o peso.`
+            : "Pronto — a viagem entrou no fluxo normal. Não sobrou nenhuma esperando o peso. Se estiver sem sinal, envia sozinho quando voltar.",
       });
-      router.back();
+      if (restantes > 0) router.back();
+      else router.replace("/");
     } catch (e) {
       setErro((e as Error).message ?? "Não deu pra salvar. Tente de novo.");
       setSubmitting(false);
