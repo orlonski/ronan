@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
+import * as Haptics from "expo-haptics";
 import { Eye, Trash2, X } from "lucide-react-native";
 import {
   ActivityIndicator,
@@ -116,8 +117,9 @@ export default function VisualizadorStoryScreen() {
     else voltar();
   }
 
-  async function onReagir(emoji: StoryEmoji) {
+  function onReagir(emoji: StoryEmoji) {
     if (!atual) return;
+    void Haptics.selectionAsync();
     const novo = atual.minhaReacao === emoji ? null : emoji;
     reagir.mutate({ storyId: atual.id, emoji: novo });
   }
@@ -164,8 +166,10 @@ export default function VisualizadorStoryScreen() {
         </View>
       )}
 
-      {/* Zonas de toque (esq = volta, dir = avança; segurar = pausa) */}
-      <View className="absolute inset-0 flex-row">
+      {/* Zonas de toque (esq = volta, dir = avança; segurar = pausa). zIndex
+          baixo: os controles (header/rodapé) ficam por cima e recebem o toque
+          primeiro no iOS (senão o tap no emoji vazava pra cá e avançava). */}
+      <View className="absolute inset-0 flex-row" style={{ zIndex: 1 }}>
         <Pressable
           style={{ width: width * 0.32 }}
           onPressIn={onPressIn}
@@ -181,7 +185,7 @@ export default function VisualizadorStoryScreen() {
       {/* Barras de progresso + header */}
       <View
         pointerEvents="box-none"
-        style={{ paddingTop: insets.top + 8 }}
+        style={{ paddingTop: insets.top + 8, zIndex: 10 }}
         className="absolute left-0 right-0 top-0 px-3"
       >
         <View className="mb-3 flex-row gap-1">
@@ -230,7 +234,7 @@ export default function VisualizadorStoryScreen() {
       {/* Legenda + rodapé (reações ou "visto por N") */}
       <View
         pointerEvents="box-none"
-        style={{ paddingBottom: insets.bottom + 12 }}
+        style={{ paddingBottom: insets.bottom + 12, zIndex: 10 }}
         className="absolute bottom-0 left-0 right-0 px-4"
       >
         {atual.legenda ? (
@@ -250,12 +254,13 @@ export default function VisualizadorStoryScreen() {
             </Text>
           </Pressable>
         ) : (
-          <View className="flex-row justify-around rounded-full bg-black/45 px-2 py-2">
+          <View className="flex-row justify-around rounded-full bg-black/45 px-2 py-3">
             {STORY_EMOJIS.map((e) => (
               <Pressable
                 key={e}
                 onPress={() => onReagir(e)}
-                className="px-1 active:opacity-60"
+                hitSlop={12}
+                className="px-2 active:opacity-60"
               >
                 <Text
                   style={{
@@ -295,7 +300,7 @@ function VistosSheet({
 }) {
   const q = useVisualizacoesStory(storyId, true);
   return (
-    <View className="absolute inset-0 justify-end bg-black/60">
+    <View className="absolute inset-0 justify-end bg-black/60" style={{ zIndex: 20 }}>
       <Pressable className="flex-1" onPress={onClose} />
       <View
         className="rounded-t-3xl bg-background px-4 pt-4"

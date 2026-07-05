@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { router } from "expo-router";
+import * as ImageManipulator from "expo-image-manipulator";
 import { KeyboardAvoidingView, ScrollView, Text, View } from "react-native";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { ScreenHeader } from "@/components/screen-header";
@@ -26,6 +27,23 @@ export default function NovaStoryScreen() {
   const [legenda, setLegenda] = useState("");
   const [enviando, setEnviando] = useState(false);
   const enviar = useEnviarStory();
+
+  // Story é só pra ver na tela do celular — comprime bem mais leve que o ticket
+  // (1080px/0.6 vs 1920/0.7) pra carregar rápido no feed. Roda ao escolher a foto,
+  // então publicar continua instantâneo.
+  async function aoEscolherFoto(p: CapturedPhoto | null) {
+    if (!p) return setFoto(null);
+    try {
+      const leve = await ImageManipulator.manipulateAsync(
+        p.uri,
+        [{ resize: { width: 1080 } }],
+        { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG },
+      );
+      setFoto({ uri: leve.uri, mime: "image/jpeg" });
+    } catch {
+      setFoto(p); // se a compressão falhar, usa a original
+    }
+  }
 
   async function publicar() {
     if (!foto || enviando) return;
@@ -67,7 +85,7 @@ export default function NovaStoryScreen() {
             sozinha em 24 horas.
           </Text>
 
-          <PhotoCapture value={foto} onChange={setFoto} />
+          <PhotoCapture value={foto} onChange={aoEscolherFoto} />
 
           <View className="gap-1">
             <Input
