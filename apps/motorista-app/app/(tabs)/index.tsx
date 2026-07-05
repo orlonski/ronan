@@ -655,10 +655,20 @@ function ViagemCard({ v, onExcluir }: { v: Viagem; onExcluir: () => void }) {
   const variant = statusVariant[v.status] ?? "outline";
   const label = statusLabel[v.status] ?? v.status;
   const podeExcluir = v.status === "ENVIADA";
+  // Arrastar pra revelar "excluir" fazia o toque de soltar navegar pro detalhe
+  // (RN Pressable dentro do Swipeable dispara onPress no fim do gesto). Marcamos
+  // quando o swipe abre/mexe e engolimos esse 1º toque.
+  const swipedRef = useRef(false);
 
   const card = (
     <Pressable
-      onPress={() => router.push(`/viagens/${v.id}`)}
+      onPress={() => {
+        if (swipedRef.current) {
+          swipedRef.current = false;
+          return;
+        }
+        router.push(`/viagens/${v.id}`);
+      }}
       className="rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
     >
       <View className="flex-row items-start justify-between gap-3">
@@ -717,6 +727,15 @@ function ViagemCard({ v, onExcluir }: { v: Viagem; onExcluir: () => void }) {
 
   return (
     <Swipeable
+      friction={2}
+      rightThreshold={40}
+      onSwipeableWillOpen={() => {
+        swipedRef.current = true;
+      }}
+      onSwipeableWillClose={() => {
+        // Fechou por gesto: também segura o toque de soltar pra não navegar.
+        swipedRef.current = true;
+      }}
       renderRightActions={() => (
         <View className="ml-2 flex-row items-stretch">
           <Button
