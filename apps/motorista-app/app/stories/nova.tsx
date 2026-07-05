@@ -1,11 +1,18 @@
 import { useState } from "react";
 import { router } from "expo-router";
 import * as ImageManipulator from "expo-image-manipulator";
-import { KeyboardAvoidingView, ScrollView, Text, View } from "react-native";
+import { Send, Type, X } from "lucide-react-native";
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
-import { ScreenHeader } from "@/components/screen-header";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { pegarCoordsRapido } from "@/lib/geo";
 import { useEnviarStory } from "@/lib/queries";
 import { showAlert } from "@/lib/alert";
@@ -23,14 +30,15 @@ function uuid(): string {
 }
 
 export default function NovaStoryScreen() {
+  const insets = useSafeAreaInsets();
   const [foto, setFoto] = useState<CapturedPhoto | null>(null);
   const [legenda, setLegenda] = useState("");
+  const [escrevendo, setEscrevendo] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const enviar = useEnviarStory();
 
   // Story é só pra ver na tela do celular — comprime bem mais leve que o ticket
-  // (1080px/0.55 vs 1920/0.7) pra subir e carregar rápido no feed, inclusive em
-  // 4G ruim. Roda ao escolher a foto, então publicar continua instantâneo.
+  // (1080px/0.55 vs 1920/0.7) pra subir e carregar rápido, inclusive em 4G ruim.
   async function aoEscolherFoto(p: CapturedPhoto | null) {
     if (!p) return setFoto(null);
     try {
@@ -41,7 +49,7 @@ export default function NovaStoryScreen() {
       );
       setFoto({ uri: leve.uri, mime: "image/jpeg" });
     } catch {
-      setFoto(p); // se a compressão falhar, usa a original
+      setFoto(p);
     }
   }
 
@@ -49,8 +57,6 @@ export default function NovaStoryScreen() {
     if (!foto || enviando) return;
     setEnviando(true);
     try {
-      // GPS silencioso (best-effort, cap 2s) — contexto do trecho. Nunca trava
-      // o post: se não tiver last-known na hora, vai sem coords.
       const coords = await pegarCoordsRapido().catch(() => null);
       await enviar.mutateAsync({
         clientId: uuid(),
@@ -71,54 +77,128 @@ export default function NovaStoryScreen() {
     }
   }
 
+  // Enquanto não tem foto: a câmera do PhotoCapture abre sozinha (autoOpen).
+  // Atrás dela, tela preta com spinner (aparece no instante entre capturar e
+  // comprimir). Cancelou a câmera → volta pra home.
+  if (!foto) {
+    return (
+      <View className="flex-1 items-center justify-center bg-black">
+        <ActivityIndicator color="white" />
+        <PhotoCapture
+          value={null}
+          onChange={aoEscolherFoto}
+          autoOpen
+          hidePlaceholder
+          onCancel={() => router.back()}
+        />
+      </View>
+    );
+  }
+
+  // Tela de compor estilo Instagram: foto em tela cheia + texto por cima.
   return (
-    <View className="flex-1 bg-background">
-      <ScreenHeader title="Postar story" />
-      <KeyboardAvoidingView className="flex-1" behavior="padding">
-        <ScrollView
-          className="flex-1"
-          contentContainerStyle={{ padding: 16, gap: 16 }}
-          keyboardShouldPersistTaps="handled"
+    <View className="flex-1 bg-black">
+      <Image source={{ uri: foto.uri }} style={StyleSheet.absoluteFill} resizeMode="contain" />
+
+      {/* Barra superior */}
+      <View
+        pointerEvents="box-none"
+        style={{ paddingTop: insets.top + 8 }}
+        className="absolute left-0 right-0 top-0 flex-row items-center justify-between px-3"
+      >
+        <Pressable
+          onPress={() => {
+            setLegenda("");
+            setFoto(null); // volta pra câmera (remonta o PhotoCapture)
+          }}
+          className="h-11 w-11 items-center justify-center rounded-full bg-black/40 active:bg-black/60"
         >
-          {foto && (
-            <Text className="text-base text-muted-foreground">
-              Escreva algo se quiser e publique. Some sozinha em 24 horas.
-            </Text>
-          )}
-
-          <PhotoCapture
-            value={foto}
-            onChange={aoEscolherFoto}
-            autoOpen
-            hidePlaceholder
-            onCancel={() => router.back()}
-          />
-
-          <View className="gap-1">
-            <Input
-              placeholder="Escreva algo (opcional)"
-              value={legenda}
-              onChangeText={(t) => setLegenda(t.slice(0, MAX_LEGENDA_STORY))}
-              maxLength={MAX_LEGENDA_STORY}
-              className="h-auto min-h-14 py-3"
-              multiline
-            />
-            <Text className="text-right text-xs text-muted-foreground">
-              {legenda.length}/{MAX_LEGENDA_STORY}
-            </Text>
-          </View>
-
-          <Button
-            variant="brand"
-            size="lg"
-            onPress={publicar}
-            disabled={!foto || enviando}
-            loading={enviando}
+          <X size={24} color="white" />
+        </Pressable>
+        {!escrevendo && (
+          <Pressable
+            onPress={() => setEscrevendo(true)}
+            className="h-11 flex-row items-center gap-2 rounded-full bg-black/40 px-4 active:bg-black/60"
           >
-            Publicar
-          </Button>
-        </ScrollView>
-      </KeyboardAvoidingView>
+            <Type size={20} color="white" />
+            <Text className="font-semibold text-white">
+              {legenda ? "Editar texto" : "Escrever"}
+            </Text>
+          </Pressable>
+        )}
+      </View>
+
+      {/* Texto sobreposto (quando não está editando) — toca pra editar */}
+      {!escrevendo && legenda ? (
+        <View
+          pointerEvents="box-none"
+          className="absolute inset-0 items-center justify-center px-8"
+        >
+          <Pressable onPress={() => setEscrevendo(true)}>
+            <Text style={styles.overlayText}>{legenda}</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {/* Editor de texto: fundo escurecido + input central com autofoco */}
+      {escrevendo && (
+        <Pressable
+          onPress={() => setEscrevendo(false)}
+          className="absolute inset-0 items-center justify-center bg-black/50 px-6"
+        >
+          <TextInput
+            autoFocus
+            multiline
+            value={legenda}
+            onChangeText={(t) => setLegenda(t.slice(0, MAX_LEGENDA_STORY))}
+            onBlur={() => setEscrevendo(false)}
+            onSubmitEditing={() => setEscrevendo(false)}
+            placeholder="Escreva algo…"
+            placeholderTextColor="rgba(255,255,255,0.6)"
+            style={styles.overlayText}
+            className="w-full"
+          />
+          <Text className="mt-4 text-xs text-white/60">
+            Toque fora pra concluir · {legenda.length}/{MAX_LEGENDA_STORY}
+          </Text>
+        </Pressable>
+      )}
+
+      {/* Botão enviar "Seu story" */}
+      {!escrevendo && (
+        <View
+          pointerEvents="box-none"
+          style={{ paddingBottom: insets.bottom + 14 }}
+          className="absolute bottom-0 left-0 right-0 flex-row justify-end px-4"
+        >
+          <Pressable
+            onPress={publicar}
+            disabled={enviando}
+            className="h-14 flex-row items-center gap-2 rounded-full bg-primary pl-5 pr-4 active:opacity-80"
+          >
+            <Text className="text-base font-bold text-white">Seu story</Text>
+            {enviando ? (
+              <ActivityIndicator color="white" size="small" />
+            ) : (
+              <View className="h-9 w-9 items-center justify-center rounded-full bg-white/25">
+                <Send size={18} color="white" />
+              </View>
+            )}
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  overlayText: {
+    color: "white",
+    fontSize: 28,
+    fontWeight: "700",
+    textAlign: "center",
+    textShadowColor: "rgba(0,0,0,0.6)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
+  },
+});
