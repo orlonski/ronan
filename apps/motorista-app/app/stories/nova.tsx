@@ -5,7 +5,7 @@ import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { ScreenHeader } from "@/components/screen-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { pegarCoords } from "@/lib/geo";
+import { pegarCoordsRapido } from "@/lib/geo";
 import { useEnviarStory } from "@/lib/queries";
 import { showAlert } from "@/lib/alert";
 import { MAX_LEGENDA_STORY } from "@ronan/shared-types";
@@ -31,8 +31,9 @@ export default function NovaStoryScreen() {
     if (!foto || enviando) return;
     setEnviando(true);
     try {
-      // GPS silencioso (best-effort) — contexto do trecho, não bloqueia o post.
-      const coords = await pegarCoords().catch(() => null);
+      // GPS silencioso (best-effort, cap 2s) — contexto do trecho. Nunca trava
+      // o post: se não tiver last-known na hora, vai sem coords.
+      const coords = await pegarCoordsRapido().catch(() => null);
       await enviar.mutateAsync({
         clientId: uuid(),
         fotoUri: foto.uri,
