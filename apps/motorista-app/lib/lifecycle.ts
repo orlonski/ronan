@@ -9,7 +9,12 @@
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { FonteGps, TipoEventoViagem } from "@ronan/shared-types";
-import { listPendingViagemCancelar } from "@/db/database";
+import {
+  listPendingEventosViagem,
+  listPendingViagemCancelar,
+  listPendingViagemFinalizar,
+  listPendingViagemIniciar,
+} from "@/db/database";
 import { api } from "./api";
 import {
   enqueueEventoViagem,
@@ -146,24 +151,59 @@ type ServerAndamento = {
 };
 
 /**
- * Reconciliação: se NÃO há espelho local mas o servidor tem uma viagem em
- * andamento (órfã — ex: descartada só no celular antes), reconstrói o espelho
- * local a partir do servidor pra o motorista poder retomar/descartar. Só
- * preenche quando o espelho está vazio — nunca sobrescreve uma viagem local
- * (que pode ser offline-pendente). Best-effort: offline, ignora.
+ * Itens desse ciclo ainda no outbox (offline OU com erro): finalizar/cancelar/
+ * iniciar/eventos. Enquanto houver qualquer um, a fonte de verdade é o
+ * LOCAL/outbox — não deixamos o servidor mandar no espelho (nem pra ressuscitar
+ * nem pra apagar). Cobre: viagem offline em curso E viagem sendo fechada (o
+ * finalize/cancel pendente NÃO pode reabrir o "Retomar").
+ */
+async function lifecycleTemPendentes(clientId: string): Promise<boolean> {
+  const [fin, can, ini, ev] = await Promise.all([
+    listPendingViagemFinalizar(),
+    listPendingViagemCancelar(),
+    listPendingViagemIniciar(),
+    listPendingEventosViagem(),
+  ]);
+  return (
+    fin.some((x) => x.clientId === clientId) ||
+    can.some((x) => x.clientId === clientId) ||
+    ini.some((x) => x.clientId === clientId) ||
+    ev.some((x) => x.viagemClientId === clientId)
+  );
+}
+
+/**
+ * Reconciliação bidirecional entre o espelho local e o servidor:
+ * - Espelho vazio + servidor tem viagem EM_ANDAMENTO (órfã) → reconstrói pra o
+ *   motorista poder retomar/descartar — a menos que haja finalize/cancel
+ *   pendente dessa viagem (ela está sendo fechada; não reabrir o "Retomar").
+ * - Espelho presente SEM pendências no outbox → valida contra o servidor: se ele
+ *   não tem mais essa viagem EM_ANDAMENTO (finalizou, virou aguardando peso ou
+ *   foi cancelada), o espelho é FANTASMA → limpa.
+ * - Espelho presente COM pendências → viagem em curso (talvez offline): mantém,
+ *   nem consulta o servidor. Best-effort: offline mantém o que tem.
  */
 export async function hidratarViagemDoServidor(): Promise<LifecycleLocal | null> {
   const atual = await getLifecycleLocal();
-  if (atual) return atual;
+
+  // Tem pendência no outbox = fonte de verdade é o local. Nem toca no servidor.
+  if (atual && (await lifecycleTemPendentes(atual.clientId))) return atual;
+
   try {
     const resp = await api.get<ServerAndamento>("/m/viagem/andamento");
-    const v = resp?.viagem;
+    const v = resp?.viagem ?? null;
+
+    // Espelho presente (e sem pendências): valida contra o servidor.
+    if (atual) {
+      if (v && v.clientId === atual.clientId) return atual; // ainda EM_ANDAMENTO
+      await clearLifecycleLocal(); // fantasma → limpa
+      return null;
+    }
+
+    // Espelho vazio: reconstrói do servidor, exceto se essa viagem está sendo
+    // fechada (finalize/cancel pendente) — senão o banner "Retomar" reabria.
     if (!v) return null;
-    // Se essa viagem está sendo descartada (cancelamento na fila, ainda não
-    // sincronizou), NÃO ressuscita — senão o "descartar" reabre o banner de
-    // retomar na home. Quando o cancelamento sincroniza, o servidor a apaga.
-    const cancelPendentes = await listPendingViagemCancelar();
-    if (cancelPendentes.some((c) => c.clientId === v.clientId)) return null;
+    if (await lifecycleTemPendentes(v.clientId)) return null;
     const novo: LifecycleLocal = {
       clientId: v.clientId,
       veiculoId: v.veiculoId,
@@ -182,7 +222,9 @@ export async function hidratarViagemDoServidor(): Promise<LifecycleLocal | null>
     await setLifecycleLocal(novo);
     return novo;
   } catch {
-    return null;
+    // Offline / erro de rede: mantém o que já tínhamos (não arrisca sumir um
+    // "Retomar" legítimo nem ressuscitar nada). Reconcilia no próximo online.
+    return atual;
   }
 }
 
