@@ -14,11 +14,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "@/components/screen-header";
 import { ErroCampo, useValidacaoGuiada } from "@/components/validacao-guiada";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
+import { ViagemAguardandoInfo } from "@/components/viagem-aguardando-info";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { showAlert } from "@/lib/alert";
-import { fmtDataBR, fmtDataHoraCurta } from "@/lib/datetime";
 import { enqueueFoto } from "@/lib/sync";
 import { useCompletarPeso, useViagensAguardandoPeso } from "@/lib/queries";
 
@@ -133,26 +133,9 @@ export default function CompletarPeso() {
           ) : (
             <>
               {/* Contexto da viagem pro motorista saber qual é. */}
-              <View className="flex-row items-center gap-3 rounded-2xl bg-amber-500/10 p-4">
-                <Scale size={26} color="#d97706" />
-                <View className="flex-1">
-                  <Text className="text-base font-bold text-foreground">
-                    {viagem.cliente?.nome ?? "Viagem"}
-                  </Text>
-                  <Text className="text-sm text-muted-foreground">
-                    {viagem.material?.nome ? `${viagem.material.nome} · ` : ""}
-                    {viagem.localDescarga?.nome ?? ""}
-                  </Text>
-                  <Text className="text-sm text-muted-foreground">
-                    {viagem.data ? fmtDataBR(viagem.data) : ""} ·{" "}
-                    {viagem.veiculo?.placa ?? ""}
-                  </Text>
-                  {viagem.sincronizadoEm ? (
-                    <Text className="text-sm text-muted-foreground">
-                      Lançada {fmtDataHoraCurta(viagem.sincronizadoEm)}
-                    </Text>
-                  ) : null}
-                </View>
+              <View className="flex-row items-start gap-3 rounded-2xl bg-amber-500/10 p-4">
+                <Scale size={24} color="#d97706" style={{ marginTop: 2 }} />
+                <ViagemAguardandoInfo viagem={viagem} />
               </View>
 
               <View onLayout={val.onLayoutCampo("toneladas")} className="gap-2">

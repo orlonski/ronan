@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "@/components/screen-header";
 import { EmptyState } from "@/components/empty-state";
-import { fmtDataHoraCurta } from "@/lib/datetime";
+import { ViagemAguardandoInfo } from "@/components/viagem-aguardando-info";
 import { useViagensAguardandoPeso } from "@/lib/queries";
 
 /**
@@ -55,27 +55,13 @@ export default function AguardandoPeso() {
               <Pressable
                 key={v.id}
                 onPress={() => router.push(`/completar-peso?viagemId=${v.id}`)}
-                className="flex-row items-center gap-3 rounded-2xl border-2 border-amber-500/30 bg-card p-4 active:opacity-75"
+                className="flex-row items-start gap-3 rounded-2xl border-2 border-amber-500/30 bg-card p-4 active:opacity-75"
               >
-                <View className="h-12 w-12 items-center justify-center rounded-full bg-amber-500/15">
-                  <Scale size={22} color="#d97706" />
+                <View className="h-10 w-10 items-center justify-center rounded-full bg-amber-500/15">
+                  <Scale size={20} color="#d97706" />
                 </View>
-                <View className="flex-1">
-                  <Text className="text-base font-bold text-foreground">
-                    {v.cliente?.nome ?? "Viagem"}
-                  </Text>
-                  <Text className="text-sm text-muted-foreground">
-                    {v.material?.nome ? `${v.material.nome} · ` : ""}
-                    {v.localDescarga?.nome ?? ""}
-                  </Text>
-                  <Text className="text-sm text-muted-foreground">
-                    {v.veiculo?.placa ?? ""}
-                    {v.sincronizadoEm
-                      ? ` · lançada ${fmtDataHoraCurta(v.sincronizadoEm)}`
-                      : ""}
-                  </Text>
-                </View>
-                <ChevronRight size={22} color="#94a3b8" />
+                <ViagemAguardandoInfo viagem={v} />
+                <ChevronRight size={22} color="#94a3b8" style={{ marginTop: 4 }} />
               </Pressable>
             ))}
           </>
