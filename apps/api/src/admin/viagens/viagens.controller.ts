@@ -18,6 +18,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { z } from "zod";
+import { StatusViagem } from "@prisma/client";
 import { AtualizarViagemInput } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { paginationQuerySchema } from "../../common/pagination";
@@ -66,9 +67,10 @@ const ListViagensQuery = paginationQuerySchema.extend({
   veiculoId: z.string().uuid().optional(),
   clienteId: z.string().uuid().optional(),
   localId: z.string().uuid().optional(),
-  status: z
-    .enum(["RASCUNHO_OFFLINE", "ENVIADA", "EM_CONFERENCIA", "DIVERGENTE", "AJUSTADA", "OK"])
-    .optional(),
+  // Derivado do enum do Prisma (fonte de verdade) pra não voltar a defasar quando
+  // surgem status novos — a lista chumbada antiga não tinha EM_ANDAMENTO nem
+  // AGUARDANDO_PESO e quebrava o filtro do painel.
+  status: z.nativeEnum(StatusViagem).optional(),
   de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
