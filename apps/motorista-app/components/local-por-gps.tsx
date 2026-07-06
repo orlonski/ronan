@@ -186,27 +186,20 @@ export function LocalPorGps({
         raioInicialM = res.raioInicialM;
         raioAmpliadoM = res.raioAmpliadoM;
       } else {
-        // Carga: escala raio inicial → ampliado → todos. O raio virou ordenação,
-        // não trava — se nada perto, lista os locais do cliente por distância.
+        // Carga: SEMPRE lista TODOS os locais de carga do cliente, ordenados por
+        // distância (mais perto primeiro). O motorista escolhe — o raio é só
+        // ordenação, não trava nem auto-seleciona.
         raioInicialM = cfg.raioInicialM;
         raioAmpliadoM = cfg.raioAmpliadoM;
-        const base = {
+        matches = await buscarLocaisProximos({
           lat: coords.lat,
           lng: coords.lng,
-          tipoUso: "carga" as const,
+          tipoUso: "carga",
           clienteId: clienteId ?? undefined,
-          limit: 5,
-        };
-        matches = await buscarLocaisProximos({ ...base, raioM: cfg.raioInicialM });
+          limit: 20,
+          todos: true,
+        });
         usouRaioAmpliado = false;
-        if (matches.length === 0) {
-          matches = await buscarLocaisProximos({ ...base, raioM: cfg.raioAmpliadoM });
-          usouRaioAmpliado = matches.length > 0;
-        }
-        if (matches.length === 0) {
-          matches = await buscarLocaisProximos({ ...base, todos: true });
-          usouRaioAmpliado = matches.length > 0;
-        }
       }
     } catch (err) {
       if (!isNetworkError(err)) {
@@ -237,37 +230,33 @@ export function LocalPorGps({
         raioInicialM = res.raioInicialM;
         raioAmpliadoM = res.raioAmpliadoM;
       } else {
-        // Mesma escala da carga online, sobre o catálogo cacheado.
+        // Carga offline: mesma ideia — todos os locais do cliente por distância.
         raioInicialM = cfg.raioInicialM;
         raioAmpliadoM = cfg.raioAmpliadoM;
-        const base = {
+        matches = buscarLocaisProximosOffline({
           lat: coords.lat,
           lng: coords.lng,
           locais: catalogos.locais,
-          tipoUso: "carga" as const,
+          tipoUso: "carga",
           clienteId: clienteId ?? undefined,
-          limit: 5,
-        };
-        matches = buscarLocaisProximosOffline({ ...base, raioM: cfg.raioInicialM });
+          limit: 20,
+          todos: true,
+        });
         usouRaioAmpliado = false;
-        if (matches.length === 0) {
-          matches = buscarLocaisProximosOffline({ ...base, raioM: cfg.raioAmpliadoM });
-          usouRaioAmpliado = matches.length > 0;
-        }
-        if (matches.length === 0) {
-          matches = buscarLocaisProximosOffline({ ...base, todos: true });
-          usouRaioAmpliado = matches.length > 0;
-        }
       }
     }
 
-    // Raio em que o local foi achado (carga e descarga usam a mesma escala).
+    // Raio usado: descarga = raio em que achou (inicial/ampliado). Carga = o raio
+    // ampliado da config como referência de "perto" (a lista traz todos; isso só
+    // define o corte do "fora do raio" no painel).
     const raioUsadoM =
-      matches.length > 0
-        ? usouRaioAmpliado
-          ? raioAmpliadoM
-          : raioInicialM
-        : undefined;
+      lado === "carga"
+        ? cfg.raioAmpliadoM
+        : matches.length > 0
+          ? usouRaioAmpliado
+            ? raioAmpliadoM
+            : raioInicialM
+          : undefined;
     const cap: CoordsCap = {
       lat: coords.lat,
       lng: coords.lng,
@@ -285,7 +274,9 @@ export function LocalPorGps({
         // de carga cadastrado (raio já não bloqueia; isso é falta de cadastro).
         setEstado({ tipo: "bloqueado" });
       }
-    } else if (matches.length === 1 && !usouRaioAmpliado) {
+    } else if (lado === "descarga" && matches.length === 1 && !usouRaioAmpliado) {
+      // Só a descarga auto-seleciona quando há 1 match no raio inicial. Carga
+      // sempre lista (o motorista escolhe entre os locais do cliente).
       const m = matches[0]!;
       selecionar(m, cap);
     } else {
@@ -398,11 +389,13 @@ export function LocalPorGps({
                   />
                 );
               })()}
-            {estado.local.raioUsadoM != null && !estado.local.criarOffline && (
-              <Text className="mt-0.5 text-xs text-muted-foreground">
-                Achei este dentro de {estado.local.raioUsadoM} m de você
-              </Text>
-            )}
+            {lado === "descarga" &&
+              estado.local.raioUsadoM != null &&
+              !estado.local.criarOffline && (
+                <Text className="mt-0.5 text-xs text-muted-foreground">
+                  Achei este dentro de {estado.local.raioUsadoM} m de você
+                </Text>
+              )}
             {estado.local.distanciaMetros != null && (
               <Text
                 className="mt-0.5 text-sm text-muted-foreground"
@@ -431,7 +424,11 @@ export function LocalPorGps({
         <View
           className={`gap-2 rounded-2xl border-2 bg-card p-3 ${estado.ampliado ? "border-warning/50" : "border-border"}`}
         >
-          {estado.ampliado ? (
+          {lado === "carga" ? (
+            <Text className="text-sm font-medium text-foreground">
+              Locais de carga desse cliente — o mais perto de você primeiro. Toque no certo.
+            </Text>
+          ) : estado.ampliado ? (
             <Text className="text-sm font-medium text-foreground">
               Não achei nada a {estado.raioInicialM}m de você. Um pouco mais longe tem{" "}
               {estado.matches.length === 1 ? "este" : `estes ${estado.matches.length}`} — é
