@@ -36,6 +36,8 @@ type Viagem = {
   ticket: string | null;
   km: string;
   status: string;
+  /** true = veio do fluxo guiado "Iniciar viagem" (lifecycle). */
+  iniciadaGuiada: boolean;
   toneladasInformada: string;
   toneladasEfetiva: string;
   toneladasAjustada: boolean;
@@ -103,9 +105,19 @@ export default function ViagensPage() {
         accessorKey: "status",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
         cell: ({ row }) => (
-          <Badge className={STATUS_VIAGEM_COLOR[row.original.status] ?? ""}>
-            {STATUS_VIAGEM_LABEL[row.original.status] ?? row.original.status}
-          </Badge>
+          <div className="flex flex-wrap items-center gap-1">
+            <Badge className={STATUS_VIAGEM_COLOR[row.original.status] ?? ""}>
+              {STATUS_VIAGEM_LABEL[row.original.status] ?? row.original.status}
+            </Badge>
+            {row.original.iniciadaGuiada && (
+              <Badge
+                className="border-indigo-200 bg-indigo-100 text-indigo-800"
+                title="Lançada pelo fluxo guiado 'Iniciar viagem'"
+              >
+                Guiada
+              </Badge>
+            )}
+          </div>
         ),
       },
       {
@@ -297,6 +309,16 @@ export default function ViagensPage() {
                   ]}
                 />
                 <Combobox
+                  value={tableState.filters.origem}
+                  onChange={(v) => tableState.setFilter("origem", v)}
+                  placeholder="Origem"
+                  showSearch={false}
+                  options={[
+                    { value: "guiada", label: "Guiada" },
+                    { value: "direta", label: "Direta" },
+                  ]}
+                />
+                <Combobox
                   value={tableState.filters.motoristaId}
                   onChange={(v) => tableState.setFilter("motoristaId", v)}
                   placeholder="Motorista"
@@ -339,6 +361,14 @@ function ViagemCard({ v }: { v: Viagem }) {
             <Badge className={STATUS_VIAGEM_COLOR[v.status] ?? ""}>
               {STATUS_VIAGEM_LABEL[v.status] ?? v.status}
             </Badge>
+            {v.iniciadaGuiada && (
+              <Badge
+                className="border-indigo-200 bg-indigo-100 text-indigo-800"
+                title="Lançada pelo fluxo guiado 'Iniciar viagem'"
+              >
+                Guiada
+              </Badge>
+            )}
             {v.temPedagioSemValor && (
               <Badge
                 className="gap-1 border-orange-200 bg-orange-100 text-orange-900"

@@ -30,6 +30,7 @@ type ListViagensParams = PaginationQuery & {
   clienteId?: string;
   localId?: string;
   status?: StatusViagem;
+  origem?: "guiada" | "direta";
   de?: string;
   ate?: string;
 };
@@ -313,6 +314,8 @@ export class ViagensAdminService {
       ];
     }
     if (params.status) where.status = params.status;
+    if (params.origem === "guiada") where.iniciadaGuiada = true;
+    else if (params.origem === "direta") where.iniciadaGuiada = false;
     if (params.de || params.ate) {
       where.data = {};
       if (params.de) where.data.gte = new Date(params.de);

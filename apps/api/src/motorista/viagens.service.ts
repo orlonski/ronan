@@ -962,6 +962,7 @@ export class ViagensMotoristaService {
         veiculoId: input.veiculoId,
         clienteId: input.clienteId,
         status: "EM_ANDAMENTO",
+        iniciadaGuiada: true,
         iniciadoEm: input.iniciadoEm,
         lat: input.lat,
         lng: input.lng,

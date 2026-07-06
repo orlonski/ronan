@@ -71,6 +71,9 @@ const ListViagensQuery = paginationQuerySchema.extend({
   // surgem status novos — a lista chumbada antiga não tinha EM_ANDAMENTO nem
   // AGUARDANDO_PESO e quebrava o filtro do painel.
   status: z.nativeEnum(StatusViagem).optional(),
+  // Origem do lançamento: "guiada" = fluxo "Iniciar viagem" (lifecycle);
+  // "direta" = "Nova viagem". Filtra por Viagem.iniciadaGuiada.
+  origem: z.enum(["guiada", "direta"]).optional(),
   de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });

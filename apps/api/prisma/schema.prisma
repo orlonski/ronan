@@ -898,6 +898,11 @@ model Viagem {
   rotaGeometria     String?
   observacao        String?
   status            StatusViagem @default(ENVIADA)
+  /// true = viagem aberta pelo fluxo guiado "Iniciar viagem" (lifecycle). Setado
+  /// no iniciar() e persiste após finalizar (ENVIADA). O "Nova viagem" direto
+  /// fica false. Marcador confiável de origem (≠ ter EventoViagem, que não é
+  /// garantido). Alimenta o selo "Guiada" + filtro de origem no painel.
+  iniciadaGuiada    Boolean      @default(false)
   // Nullable p/ lifecycle: localCarga é preenchido no evento de carga (ou no
   // iniciar se GPS detectou), localDescarga no evento de descarga/finalizar.
   localCarga        Local?       @relation("LocalCarga", fields: [localCargaId], references: [id])
