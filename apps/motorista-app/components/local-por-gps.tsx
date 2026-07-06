@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ActivityIndicator,
@@ -126,6 +126,19 @@ export function LocalPorGps({
   // Mostra o botão "Abrir ajustes" só quando a falha é de permissão (1 toque).
   const [erroAjustes, setErroAjustes] = useState(false);
   const [nomeNovo, setNomeNovo] = useState("");
+
+  // Trocar de cliente invalida a lista/seleção (eram locais do cliente anterior).
+  // O estado interno não segue `value`, então reseta ao mudar o clienteId — senão
+  // ficava mostrando os locais do cliente antigo.
+  const clienteIdRef = useRef(clienteId);
+  useEffect(() => {
+    if (clienteIdRef.current === clienteId) return;
+    clienteIdRef.current = clienteId;
+    setEstado({ tipo: "vazio" });
+    setErro(null);
+    setErroAjustes(false);
+  }, [clienteId]);
+
   const gpsConfig = useBuscaGpsConfig();
   const cfg = gpsConfig.data ?? BUSCA_GPS_CONFIG_DEFAULTS;
   const qc = useQueryClient();
