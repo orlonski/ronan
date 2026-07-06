@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { router, Stack } from "expo-router";
 import {
   Bell,
+  BellOff,
   ChevronRight,
   HelpCircle,
   KeyRound,
@@ -11,7 +12,9 @@ import {
   User as UserIcon,
 } from "lucide-react-native";
 import {
+  AppState,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -32,6 +35,12 @@ import { clearCadastroStatus } from "@/lib/cadastro-status";
 import { setAuthState } from "@/lib/auth-state";
 import { useMe, useSalvarPreferenciasNotificacao } from "@/lib/queries";
 import { replayHomeTutorial } from "@/lib/home-tutorial";
+import {
+  obterEEnviarPushToken,
+  pedirPermissaoNotificacao,
+  statusPermissaoNotificacao,
+  type StatusPermissaoNotificacao,
+} from "@/lib/notifications";
 
 export default function Perfil() {
   const me = useMe();
@@ -46,6 +55,42 @@ export default function Perfil() {
 
   const aceitaPush = me.data?.aceitaPush ?? true;
   const aceitaWhatsapp = me.data?.aceitaWhatsapp ?? true;
+
+  // Permissão de notificação do SO (≠ da flag aceitaPush do backend). Se o
+  // motorista negou o popup do iOS, o token nunca registra e o sininho do
+  // painel fica travado — aqui mostramos o caminho de recuperação. Relê ao
+  // voltar pra foreground (ex.: voltou dos Ajustes com a permissão ligada).
+  const [permNotif, setPermNotif] = useState<StatusPermissaoNotificacao | null>(
+    null,
+  );
+  useEffect(() => {
+    let alive = true;
+    const ler = () => {
+      void statusPermissaoNotificacao().then((s) => {
+        if (alive) setPermNotif(s);
+      });
+    };
+    ler();
+    const sub = AppState.addEventListener("change", (st) => {
+      if (st === "active") ler();
+    });
+    return () => {
+      alive = false;
+      sub.remove();
+    };
+  }, []);
+
+  async function ativarNotificacoes() {
+    if (permNotif === "denied") {
+      // iOS/Android já negados: o popup não reaparece, só via Ajustes do SO.
+      await Linking.openSettings();
+      return;
+    }
+    // undetermined (ou desconhecido): dispara o popup do SO e registra o token.
+    const ok = await pedirPermissaoNotificacao();
+    if (ok) await obterEEnviarPushToken();
+    setPermNotif(await statusPermissaoNotificacao());
+  }
 
   async function sair() {
     await clearTokens();
@@ -148,14 +193,18 @@ export default function Perfil() {
           <View className="gap-2">
             <SectionTitle>Avisos</SectionTitle>
             <Card className="p-0">
-              <ToggleRow
-                icon={<Bell size={20} color="#13316b" />}
-                title="Notificações no celular"
-                subtitle="Avisos do app: km recalculado, viagem editada, lembrete de peso."
-                value={aceitaPush}
-                disabled={!me.data || salvarPrefs.isPending}
-                onValueChange={(v) => salvarPrefs.mutate({ aceitaPush: v })}
-              />
+              {permNotif && permNotif !== "granted" ? (
+                <PushPermissaoRow status={permNotif} onAtivar={ativarNotificacoes} />
+              ) : (
+                <ToggleRow
+                  icon={<Bell size={20} color="#13316b" />}
+                  title="Notificações no celular"
+                  subtitle="Avisos do app: km recalculado, viagem editada, lembrete de peso."
+                  value={aceitaPush}
+                  disabled={!me.data || salvarPrefs.isPending}
+                  onValueChange={(v) => salvarPrefs.mutate({ aceitaPush: v })}
+                />
+              )}
               <View className="h-px bg-border" />
               <ToggleRow
                 icon={<MessageCircle size={20} color="#13316b" />}
@@ -275,6 +324,36 @@ function SectionTitle({ children }: { children: ReactNode }) {
     <Text className="px-1 text-xs font-bold uppercase tracking-wider text-muted-foreground">
       {children}
     </Text>
+  );
+}
+
+function PushPermissaoRow({
+  status,
+  onAtivar,
+}: {
+  status: "denied" | "undetermined";
+  onAtivar: () => void;
+}) {
+  const negado = status === "denied";
+  return (
+    <View className="flex-row items-center gap-3 p-4">
+      <View className="h-10 w-10 items-center justify-center rounded-full bg-secondary">
+        <BellOff size={20} color="#dc2626" />
+      </View>
+      <View className="flex-1">
+        <Text className="text-base font-semibold text-foreground">
+          Notificações desligadas
+        </Text>
+        <Text className="mt-0.5 text-sm text-muted-foreground">
+          {negado
+            ? "Ligue nos ajustes do celular pra receber avisos de km, viagem e lembrete de peso."
+            : "Ative pra receber avisos de km, viagem e lembrete de peso."}
+        </Text>
+      </View>
+      <Button size="sm" onPress={onAtivar}>
+        {negado ? "Abrir ajustes" : "Ativar"}
+      </Button>
+    </View>
   );
 }
 

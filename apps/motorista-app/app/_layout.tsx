@@ -182,6 +182,22 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     let alive = true;
     let sub: { remove: () => void } | null = null;
     let subRecv: { remove: () => void } | null = null;
+    let subAppState: { remove: () => void } | null = null;
+
+    // Auto-cura do push token: ao voltar pra foreground (background→active),
+    // reenvia o token. Cobre o motorista que ligou a permissão nos Ajustes do
+    // SO e voltou pro app — no iOS o popup não reaparece, então sem isso ele
+    // ficaria sem push até um cold boot. Reenvio é idempotente e barato.
+    let ultimoAppState = AppState.currentState;
+    subAppState = AppState.addEventListener("change", (proximo) => {
+      const voltou = ultimoAppState.match(/inactive|background/) && proximo === "active";
+      ultimoAppState = proximo;
+      if (!voltou) return;
+      void (async () => {
+        const { reenviarPushTokenAoVoltar } = await import("@/lib/notifications");
+        await reenviarPushTokenAoVoltar();
+      })();
+    });
 
     void (async () => {
       try {
@@ -297,6 +313,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       alive = false;
       sub?.remove();
       subRecv?.remove();
+      subAppState?.remove();
     };
   }, [loggedIn]);
 

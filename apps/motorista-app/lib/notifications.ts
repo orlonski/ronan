@@ -12,6 +12,35 @@ let canalAndroidInstalado = false;
 
 const EXPO_PROJECT_ID_FALLBACK = "33e8e936-fbac-4bb3-9f98-5de6dc84da53";
 
+export type StatusPermissaoNotificacao = "granted" | "denied" | "undetermined";
+
+/**
+ * Status bruto da permissão de notificação no SO — alimenta a tela de perfil
+ * pra distinguir "negou/nunca pediu" de "ligado". Não pede nada; só lê.
+ */
+export async function statusPermissaoNotificacao(): Promise<StatusPermissaoNotificacao> {
+  try {
+    const Notifications = await import("expo-notifications");
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status === "granted") return "granted";
+    if (status === "undetermined") return "undetermined";
+    return "denied";
+  } catch {
+    return "undetermined";
+  }
+}
+
+/**
+ * Reenvia o push token ao voltar pra foreground — cobre o motorista que ligou
+ * a permissão nos Ajustes do SO e voltou pro app sem matar/reabrir (no iOS o
+ * popup não reaparece; a recuperação é pelos Ajustes). O caller (_layout) só
+ * chama na transição background→active pra não repetir a cada foreground; o
+ * boot já registra no login. Idempotente e silencioso.
+ */
+export async function reenviarPushTokenAoVoltar(): Promise<void> {
+  await obterEEnviarPushToken();
+}
+
 export async function pedirPermissaoNotificacao(): Promise<boolean> {
   if (pediuPermissaoUmaVez) return true;
   const Notifications = await import("expo-notifications");
