@@ -1,8 +1,15 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { apiRaw } from "./api";
+import { apiRaw, ApiError } from "./api";
 
 type LoginRes = { accessToken: string; refreshToken: string };
+
+// Só 401/403 do refresh significam refresh token morto (relogar). Rede/5xx
+// (API reiniciando num deploy, blip) é transitório — mantém a sessão e tenta
+// de novo depois. Mesma regra não-destrutiva do app nativo.
+type RefreshOutcome =
+  | { ok: true; tokens: LoginRes }
+  | { ok: false; kind: "invalid" | "transient" };
 
 // Decodifica `exp` do JWT (base64url) sem verificar assinatura — só pra saber
 // quando renovar. A verificação real fica no backend a cada request.
@@ -19,11 +26,14 @@ function decodeJwtExp(token: string): number | null {
   }
 }
 
-async function refreshAccessToken(refreshToken: string): Promise<LoginRes | null> {
+async function refreshAccessToken(refreshToken: string): Promise<RefreshOutcome> {
   try {
-    return await apiRaw.post<LoginRes>("/admin/auth/refresh", { refreshToken });
-  } catch {
-    return null;
+    const tokens = await apiRaw.post<LoginRes>("/admin/auth/refresh", { refreshToken });
+    return { ok: true, tokens };
+  } catch (e) {
+    const status = e instanceof ApiError ? e.status : 0;
+    if (status === 401 || status === 403) return { ok: false, kind: "invalid" };
+    return { ok: false, kind: "transient" };
   }
 }
 
@@ -87,19 +97,24 @@ export const authOptions: NextAuthOptions = {
 
       // Access expirou ou está prestes a expirar: rotaciona via refresh token.
       const refreshed = await refreshAccessToken(token.refreshToken as string);
-      if (!refreshed) {
-        // Refresh falhou (refresh token expirou, usuário inativo, etc).
-        // Marca a sessão como inválida — chamadas API vão dar 401 e o cliente
-        // redireciona pra login.
+      if (refreshed.ok) {
+        return {
+          ...token,
+          accessToken: refreshed.tokens.accessToken,
+          refreshToken: refreshed.tokens.refreshToken,
+          accessTokenExpires: decodeJwtExp(refreshed.tokens.accessToken),
+          error: undefined,
+        };
+      }
+      if (refreshed.kind === "invalid") {
+        // Refresh token morreu de verdade (expirou 90d / usuário inativo):
+        // sessão inválida — o cliente vê o erro e manda pro login.
         return { ...token, error: "RefreshAccessTokenError" };
       }
-      return {
-        ...token,
-        accessToken: refreshed.accessToken,
-        refreshToken: refreshed.refreshToken,
-        accessTokenExpires: decodeJwtExp(refreshed.accessToken),
-        error: undefined,
-      };
+      // Transitório (API fora no deploy / rede): mantém os tokens atuais e NÃO
+      // marca erro. O access pode estar vencido, mas o cliente segura o 401 sem
+      // deslogar; quando a API volta, o próximo refresh renova.
+      return { ...token, error: undefined };
     },
     async session({ session, token }) {
       session.accessToken = token.accessToken as string;

@@ -1,10 +1,23 @@
 "use client";
 
-import { signOut, useSession } from "next-auth/react";
+import { getSession, signOut, useSession } from "next-auth/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { DataTableParams } from "@/hooks/use-data-table-state";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
+
+// Colapsa 401s concorrentes numa única renovação de sessão — quando o access
+// (15min) expira, várias queries batem 401 ao mesmo tempo; sem isso cada uma
+// dispararia um getSession/refresh. Espelha o dedup do app nativo.
+let sessaoEmVoo: ReturnType<typeof getSession> | null = null;
+function renovarSessao() {
+  if (!sessaoEmVoo) {
+    sessaoEmVoo = getSession().finally(() => {
+      sessaoEmVoo = null;
+    });
+  }
+  return sessaoEmVoo;
+}
 
 export class ApiError extends Error {
   constructor(public status: number, public body: unknown) {
@@ -36,7 +49,42 @@ export async function fetchApi<T>(
 
   const res = await fetch(`${API_URL}${path}`, { ...opts, headers });
   if (res.status === 401) {
-    if (typeof window !== "undefined") signOut({ callbackUrl: "/login" });
+    // O access token dura só 15min; um 401 quase sempre é ele vencido, não
+    // sessão morta. Renova (roda o refresh silencioso do NextAuth) e repete a
+    // request UMA vez. Só desloga se o refresh token morreu de verdade
+    // (session.error) ou se o retry com token novo também der 401. Assim deploy
+    // da API / blip de rede não derrubam a sessão — o velho signOut no 1º 401
+    // era a causa de "vive deslogando".
+    const sessao = await renovarSessao();
+    const hardError = sessao?.error === "RefreshAccessTokenError";
+    const novoToken = sessao?.accessToken;
+
+    if (!hardError && novoToken && novoToken !== opts.token) {
+      const retryHeaders = new Headers(opts.headers);
+      retryHeaders.set("authorization", `Bearer ${novoToken}`);
+      if (opts.body && !isFormData && !retryHeaders.has("content-type")) {
+        retryHeaders.set("content-type", "application/json");
+      }
+      const retry = await fetch(`${API_URL}${path}`, { ...opts, headers: retryHeaders });
+      if (retry.status !== 401) {
+        if (!retry.ok) {
+          let body: unknown;
+          try { body = await retry.json(); } catch { body = null; }
+          throw new ApiError(retry.status, body);
+        }
+        if (retry.status === 204) return undefined as T;
+        return (await retry.json()) as T;
+      }
+      // Token novo também rejeitado: sessão realmente inválida.
+      if (typeof window !== "undefined") signOut({ callbackUrl: "/login" });
+      throw new ApiError(401, null);
+    }
+
+    // Refresh token morto → desloga. Transitório (API fora, sem token novo) →
+    // NÃO desloga: deixa a query falhar e o React Query tenta de novo depois.
+    if (hardError && typeof window !== "undefined") {
+      signOut({ callbackUrl: "/login" });
+    }
     throw new ApiError(401, null);
   }
   if (!res.ok) {
