@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { UploadsModule } from "../../uploads/uploads.module";
 import { PushModule } from "../../push/push.module";
+import { ResumoMotoristaModule } from "../../motorista/resumo-motorista.module";
 import { MotoristasController } from "./motoristas.controller";
 import { MotoristasService } from "./motoristas.service";
 import { MotoristasDocumentosController } from "./documentos.controller";
@@ -10,7 +11,7 @@ import { AppUpdateNotifierService } from "./app-update-notifier.service";
 import { AppDeployController } from "./app-deploy.controller";
 
 @Module({
-  imports: [UploadsModule, PushModule],
+  imports: [UploadsModule, PushModule, ResumoMotoristaModule],
   controllers: [MotoristasController, MotoristasDocumentosController, AppDeployController],
   providers: [
     MotoristasService,

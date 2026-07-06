@@ -55,6 +55,7 @@ export default function Perfil() {
 
   const aceitaPush = me.data?.aceitaPush ?? true;
   const aceitaWhatsapp = me.data?.aceitaWhatsapp ?? true;
+  const receberResumoDiario = me.data?.receberResumoDiario ?? true;
 
   // Permissão de notificação do SO (≠ da flag aceitaPush do backend). Se o
   // motorista negou o popup do iOS, o token nunca registra e o sininho do
@@ -213,6 +214,15 @@ export default function Perfil() {
                 value={aceitaWhatsapp}
                 disabled={!me.data || salvarPrefs.isPending}
                 onValueChange={(v) => salvarPrefs.mutate({ aceitaWhatsapp: v })}
+              />
+              <View className="h-px bg-border" />
+              <ToggleRow
+                icon={<Bell size={20} color="#13316b" />}
+                title="Resumo do dia no WhatsApp"
+                subtitle="Toda noite, um resumo curto do seu dia: viagens, peso e pendências."
+                value={receberResumoDiario}
+                disabled={!me.data || salvarPrefs.isPending}
+                onValueChange={(v) => salvarPrefs.mutate({ receberResumoDiario: v })}
               />
             </Card>
             <Text className="px-1 text-xs text-muted-foreground">

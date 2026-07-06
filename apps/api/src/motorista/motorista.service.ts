@@ -130,6 +130,7 @@ export class MotoristaService {
         podeVerStories: true,
         aceitaPush: true,
         aceitaWhatsapp: true,
+        receberResumoDiario: true,
       },
     });
     const { veiculos, ...rest } = m;
@@ -139,7 +140,7 @@ export class MotoristaService {
   /** Atualiza as preferências de notificação do motorista (app). */
   async atualizarPreferenciasNotificacao(
     id: string,
-    prefs: { aceitaPush?: boolean; aceitaWhatsapp?: boolean },
+    prefs: { aceitaPush?: boolean; aceitaWhatsapp?: boolean; receberResumoDiario?: boolean },
   ) {
     await this.prisma.motorista.update({
       where: { id },
@@ -147,6 +148,9 @@ export class MotoristaService {
         ...(prefs.aceitaPush !== undefined ? { aceitaPush: prefs.aceitaPush } : {}),
         ...(prefs.aceitaWhatsapp !== undefined
           ? { aceitaWhatsapp: prefs.aceitaWhatsapp }
+          : {}),
+        ...(prefs.receberResumoDiario !== undefined
+          ? { receberResumoDiario: prefs.receberResumoDiario }
           : {}),
       },
     });

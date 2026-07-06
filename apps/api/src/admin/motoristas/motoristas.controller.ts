@@ -15,6 +15,7 @@ import { RolesGuard } from "../../auth/guards/roles.guard";
 import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import type { AuthAdminUser } from "../../auth/types";
 import { MotoristasService } from "./motoristas.service";
+import { ResumoMotoristaService } from "../../motorista/resumo-motorista.service";
 
 const ListMotoristasQuery = paginationQuerySchema.extend({
   ativo: z.enum(["true", "false"]).optional(),
@@ -30,6 +31,7 @@ const AcessosInput = z.object({
   podeLancarAbastecimento: z.boolean().optional(),
   podeUsarOcrTicket: z.boolean().optional(),
   podeVerStories: z.boolean().optional(),
+  receberResumoDiario: z.boolean().optional(),
 });
 type AcessosInput = z.infer<typeof AcessosInput>;
 
@@ -39,7 +41,10 @@ type AcessosInput = z.infer<typeof AcessosInput>;
 @Roles("ADMIN_USER")
 @Controller("admin/motoristas")
 export class MotoristasController {
-  constructor(private readonly service: MotoristasService) {}
+  constructor(
+    private readonly service: MotoristasService,
+    private readonly resumo: ResumoMotoristaService,
+  ) {}
 
   @Get()
   list(@Query(new ZodValidationPipe(ListMotoristasQuery)) query: ListMotoristasQuery) {
@@ -108,5 +113,12 @@ export class MotoristasController {
     @CurrentUser() user: AuthAdminUser,
   ) {
     return this.service.enviarPush(id, body, user.id);
+  }
+
+  /** Envia o resumo diário do motorista AGORA no WhatsApp (pra testar). */
+  @RequerPermissao("motoristas.editar")
+  @Post(":id/enviar-resumo")
+  enviarResumo(@Param("id") id: string) {
+    return this.resumo.enviarAgora(id);
   }
 }

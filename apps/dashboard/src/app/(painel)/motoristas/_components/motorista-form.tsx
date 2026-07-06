@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Send, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   cpfDigits,
@@ -40,6 +41,7 @@ export type Motorista = {
   podeLancarAbastecimento: boolean;
   podeUsarOcrTicket: boolean;
   podeVerStories: boolean;
+  receberResumoDiario: boolean;
 };
 
 const PATH = "/admin/motoristas";
@@ -86,6 +88,7 @@ type AcessosState = {
   podeLancarAbastecimento: boolean;
   podeUsarOcrTicket: boolean;
   podeVerStories: boolean;
+  receberResumoDiario: boolean;
 };
 
 export function MotoristaForm({ initial }: Props) {
@@ -101,6 +104,7 @@ export function MotoristaForm({ initial }: Props) {
     podeLancarAbastecimento: initial?.podeLancarAbastecimento ?? true,
     podeUsarOcrTicket: initial?.podeUsarOcrTicket ?? true,
     podeVerStories: initial?.podeVerStories ?? true,
+    receberResumoDiario: initial?.receberResumoDiario ?? true,
   });
   const token = useAuthToken();
   const qc = useQueryClient();
@@ -119,6 +123,25 @@ export function MotoristaForm({ initial }: Props) {
     setAcessos((a) => ({ ...a, [flag]: value }));
     if (initial) acessosMutation.mutate({ [flag]: value });
   }
+
+  const temTelefone = !!initial?.telefone;
+  const enviarResumo = useMutation({
+    mutationFn: () =>
+      fetchApi<{ enviado: boolean; motivo?: string }>(
+        `${PATH}/${initial?.id}/enviar-resumo`,
+        { method: "POST", token },
+      ),
+    onSuccess: (r) => {
+      if (r.enviado) {
+        toast.success("Resumo enviado", { description: `WhatsApp de ${initial?.nome ?? "motorista"}.` });
+      } else {
+        toast.error("Não enviado", { description: r.motivo ?? "Motivo desconhecido." });
+      }
+    },
+    onError: (err: Error) => {
+      toast.error("Falha ao enviar", { description: err.message });
+    },
+  });
 
   const [form, setForm] = useState<FormShape>(
     initial
@@ -396,6 +419,36 @@ export function MotoristaForm({ initial }: Props) {
                 active={acessos.podeVerStories}
                 onChange={(v) => alterarAcesso("podeVerStories", v)}
               />
+            </div>
+
+            <div className="border-t pt-4">
+              <Label className="text-base">Resumo diário no WhatsApp</Label>
+              <p className="text-xs text-muted-foreground">
+                Toda noite às 20h, um resumo curto do dia dele (viagens, toneladas,
+                km e pendências). Só envia se ele teve movimento ou tem pendência.
+              </p>
+              <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+                <AcessoRow
+                  label="Receber resumo diário"
+                  active={acessos.receberResumoDiario}
+                  onChange={(v) => alterarAcesso("receberResumoDiario", v)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => enviarResumo.mutate()}
+                  disabled={!temTelefone || enviarResumo.isPending}
+                  title={temTelefone ? "Enviar o resumo agora pra testar" : "Motorista sem telefone"}
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  {enviarResumo.isPending ? "Enviando…" : "Enviar resumo agora"}
+                </Button>
+              </div>
+              {!temTelefone && (
+                <p className="mt-1 text-xs text-amber-600">
+                  Cadastre um telefone pra poder enviar o resumo.
+                </p>
+              )}
             </div>
           </div>
         )}

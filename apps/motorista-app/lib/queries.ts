@@ -100,6 +100,7 @@ export type Me = {
   // Preferências de recebimento (controladas na tela de perfil).
   aceitaPush: boolean;
   aceitaWhatsapp: boolean;
+  receberResumoDiario: boolean;
 };
 
 export type Viagem = {
@@ -239,6 +240,7 @@ function normalizarMe<T extends Record<string, unknown>>(m: T): T {
   // Backend antigo/cache sem as prefs: assume que recebe tudo (default true).
   if (typeof anyM.aceitaPush !== "boolean") anyM.aceitaPush = true;
   if (typeof anyM.aceitaWhatsapp !== "boolean") anyM.aceitaWhatsapp = true;
+  if (typeof anyM.receberResumoDiario !== "boolean") anyM.receberResumoDiario = true;
   return m;
 }
 
@@ -327,8 +329,11 @@ export function useMe() {
 export function useSalvarPreferenciasNotificacao() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (prefs: { aceitaPush?: boolean; aceitaWhatsapp?: boolean }) =>
-      api.patch<Me>("/m/me/preferencias-notificacao", prefs),
+    mutationFn: (prefs: {
+      aceitaPush?: boolean;
+      aceitaWhatsapp?: boolean;
+      receberResumoDiario?: boolean;
+    }) => api.patch<Me>("/m/me/preferencias-notificacao", prefs),
     onMutate: async (prefs) => {
       await qc.cancelQueries({ queryKey: ["me"] });
       const anterior = qc.getQueryData<Me>(["me"]);

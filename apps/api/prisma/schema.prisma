@@ -329,6 +329,9 @@ model Motorista {
   // cadastro, que é de autenticação).
   aceitaPush              Boolean   @default(true)
   aceitaWhatsapp          Boolean   @default(true)
+  // Resumo diário do dia no WhatsApp (cron 20h). Gate próprio além do
+  // aceitaWhatsapp mestre — o motorista pode querer os avisos mas não o resumo.
+  receberResumoDiario     Boolean   @default(true)
   // Versão do app que o motorista está rodando — capturada via headers em
   // toda request pelo AppVersionInterceptor. Como o runtimeVersion usa policy
   // "appVersion", o appVersion sozinho NÃO muda entre updates OTA; o que

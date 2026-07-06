@@ -13,10 +13,15 @@ const PreferenciasNotificacaoInput = z
   .object({
     aceitaPush: z.boolean().optional(),
     aceitaWhatsapp: z.boolean().optional(),
+    receberResumoDiario: z.boolean().optional(),
   })
-  .refine((v) => v.aceitaPush !== undefined || v.aceitaWhatsapp !== undefined, {
-    message: "Informe ao menos uma preferência.",
-  });
+  .refine(
+    (v) =>
+      v.aceitaPush !== undefined ||
+      v.aceitaWhatsapp !== undefined ||
+      v.receberResumoDiario !== undefined,
+    { message: "Informe ao menos uma preferência." },
+  );
 type PreferenciasNotificacaoInput = z.infer<typeof PreferenciasNotificacaoInput>;
 
 @ApiTags("motorista")
