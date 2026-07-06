@@ -747,9 +747,17 @@ export class ViagensAdminService {
 
     await this.prisma.viagem.update({
       where: { id: viagem.id },
-      data: motoristaEditou
-        ? { kmCalculado: novoKm }
-        : { km: novoKm, kmCalculado: novoKm },
+      data: {
+        // Recalcular reseta pra rota recomendada: descarta a escolha antiga
+        // (motorista no app / admin via "escolher rota"). O detalhe passa a ler
+        // a geometria fresca do RotaCache, que acabou de ser reescrito com
+        // force:true acima. Sem isso, viagem.rotaGeometria tem prioridade no
+        // detalhe e a polilinha antiga (stale) continuava sendo desenhada.
+        rotaGeometria: null,
+        ...(motoristaEditou
+          ? { kmCalculado: novoKm }
+          : { km: novoKm, kmCalculado: novoKm }),
+      },
     });
 
     await this.auditoria.log({
