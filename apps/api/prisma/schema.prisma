@@ -935,6 +935,17 @@ model Viagem {
   // então pode ter faltado algum local criado por outro motorista recentemente.
   // null = não capturado (viagem antiga pré-feature ou sem captura fresca).
   descargaBuscaOffline   Boolean?
+  // Espelho da captura da descarga, mas pro LOCAL DE CARGA no "Iniciar viagem":
+  // GPS real do motorista ao escolher a carga + distância/raio até o local. Como
+  // o raio da carga virou ordenação (não trava), isso audita quão longe ele
+  // iniciou. Null pra "Nova viagem" direta, viagem antiga ou PWA.
+  cargaLat               Float?
+  cargaLng               Float?
+  cargaPrecisao          Float?
+  cargaFonte             FonteGps?
+  cargaDistanciaMetros   Int?
+  cargaRaioUsadoM        Int?
+  cargaBuscaOffline      Boolean?
   // Tracking GPS do trajeto (opcional — só preenchido se motorista usou "Iniciar viagem")
   iniciadoEm        DateTime? // quando tocou Iniciar
   kmReal            Decimal?     @db.Decimal(10, 2) // somatório das distâncias entre pontos consecutivos

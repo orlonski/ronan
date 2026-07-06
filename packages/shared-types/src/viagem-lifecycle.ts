@@ -82,6 +82,16 @@ export const IniciarViagemInput = z.object({
   // Auto-recovery: recria o local se o ID sumiu entre o cache do app e a sync.
   localCargaDados: LocalSnapshot.optional(),
   criadoOfflineEm: z.coerce.date().optional(),
+  // Captura do GPS do motorista ao escolher o local de carga (espelha os campos
+  // descarga*). Grava a posição real dele + distância até o local escolhido — o
+  // raio virou ordenação, não trava, então isso audita quão longe ele iniciou.
+  cargaLat: z.number().min(-90).max(90).optional(),
+  cargaLng: z.number().min(-180).max(180).optional(),
+  cargaPrecisao: z.number().nonnegative().max(MAX_PRECISAO).optional(),
+  cargaFonte: z.nativeEnum(FonteGps).optional(),
+  cargaDistanciaMetros: z.number().int().nonnegative().max(100000000).optional(),
+  cargaRaioUsadoM: z.number().int().nonnegative().max(100000).optional(),
+  cargaBuscaOffline: z.boolean().optional(),
 });
 export type IniciarViagemInput = z.infer<typeof IniciarViagemInput>;
 

@@ -1372,6 +1372,9 @@ export async function buscarLocaisProximos(input: {
   limit?: number;
   /** Filtra por cliente (vinculados a ele + genéricos). Usado na carga guiada. */
   clienteId?: string;
+  /** Ignora o raio: traz os locais do cliente ordenados por distância mesmo
+   * longe. Carga do "Iniciar viagem" quando nada dentro do raio. */
+  todos?: boolean;
 }): Promise<LocalProximo[]> {
   const qs = new URLSearchParams({
     lat: String(input.lat),
@@ -1381,6 +1384,7 @@ export async function buscarLocaisProximos(input: {
   if (input.raioM != null) qs.set("raioM", String(input.raioM));
   if (input.limit != null) qs.set("limit", String(input.limit));
   if (input.clienteId) qs.set("clienteId", input.clienteId);
+  if (input.todos) qs.set("todos", "true");
   const list = await api.get<LocalProximo[]>(`/m/locais/proximos?${qs.toString()}`);
   return list.map(normalizarLocal);
 }
@@ -1513,8 +1517,11 @@ export function buscarLocaisProximosOffline(input: {
   limit?: number;
   /** Filtra por cliente (vinculados + genéricos), igual ao backend. */
   clienteId?: string;
+  /** Ignora o raio (traz todos do cliente ordenados por distância). */
+  todos?: boolean;
 }): LocalProximo[] {
   const raio = input.raioM ?? 500;
+  const todos = input.todos === true;
   const limit = input.limit ?? 5;
   const tiposPermitidos: Array<Local["tipo"]> =
     input.tipoUso === "carga"
@@ -1536,7 +1543,7 @@ export function buscarLocaisProximosOffline(input: {
       continue;
     }
     const d = haversineMetros(input.lat, input.lng, l.lat, l.lng);
-    if (d > raio) continue;
+    if (!todos && d > raio) continue;
     matches.push({
       id: l.id,
       nome: l.nome,

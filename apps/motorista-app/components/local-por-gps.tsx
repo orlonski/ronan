@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import type { FonteGps } from "@ronan/shared-types";
 import { Label } from "@/components/ui/label";
 import { showConfirm } from "@/lib/alert";
-import { mensagemGpsFalha, pegarCoordsPrecisa } from "@/lib/geo";
+import { formatarDistancia, mensagemGpsFalha, pegarCoordsPrecisa } from "@/lib/geo";
 import { AvisoListaCache, AvisoLocalCache, enderecoResumido, LinhaEndereco } from "@/components/local-info";
 import {
   buscarDescargaDuasEtapas,
@@ -57,7 +57,7 @@ type Estado =
       raioInicialM: number;
     }
   | { tipo: "sem_match"; coords: CoordsCap }
-  // Carga sem match: não pode criar nem listar tudo — bloqueia (usar Nova viagem).
+  // Carga: cliente sem NENHUM local de carga cadastrado (não é mais trava de raio).
   | { tipo: "bloqueado" };
 
 /**
@@ -73,9 +73,13 @@ export type SelecaoLocal = {
   precisao?: number | null;
   /** Fonte do sinal (PRECISA/BALANCED/CACHE) da captura. */
   fonte?: FonteGps;
-  /** Raio (m) em que o local foi achado na busca (só descarga). */
+  /** Raio (m) em que o local foi achado na busca. */
   raioUsadoM?: number;
   distanciaMetros?: number | null;
+  /** GPS REAL do motorista na captura (≠ lat/lng, que são do local). Usado pra
+   * gravar cargaLat/cargaLng e alimentar o mini-mapa "você × local". */
+  gpsLat?: number;
+  gpsLng?: number;
   criarOffline?: boolean;
   buscaOffline?: boolean;
 };
@@ -182,17 +186,27 @@ export function LocalPorGps({
         raioInicialM = res.raioInicialM;
         raioAmpliadoM = res.raioAmpliadoM;
       } else {
-        // Carga: busca por proximidade filtrando por tipo carga E cliente
-        // (vinculados a ele + genéricos). Nunca cria/lista tudo.
-        matches = await buscarLocaisProximos({
+        // Carga: escala raio inicial → ampliado → todos. O raio virou ordenação,
+        // não trava — se nada perto, lista os locais do cliente por distância.
+        raioInicialM = cfg.raioInicialM;
+        raioAmpliadoM = cfg.raioAmpliadoM;
+        const base = {
           lat: coords.lat,
           lng: coords.lng,
-          tipoUso: "carga",
+          tipoUso: "carga" as const,
           clienteId: clienteId ?? undefined,
           limit: 5,
-        });
+        };
+        matches = await buscarLocaisProximos({ ...base, raioM: cfg.raioInicialM });
         usouRaioAmpliado = false;
-        raioInicialM = 0;
+        if (matches.length === 0) {
+          matches = await buscarLocaisProximos({ ...base, raioM: cfg.raioAmpliadoM });
+          usouRaioAmpliado = matches.length > 0;
+        }
+        if (matches.length === 0) {
+          matches = await buscarLocaisProximos({ ...base, todos: true });
+          usouRaioAmpliado = matches.length > 0;
+        }
       }
     } catch (err) {
       if (!isNetworkError(err)) {
@@ -223,22 +237,33 @@ export function LocalPorGps({
         raioInicialM = res.raioInicialM;
         raioAmpliadoM = res.raioAmpliadoM;
       } else {
-        matches = buscarLocaisProximosOffline({
+        // Mesma escala da carga online, sobre o catálogo cacheado.
+        raioInicialM = cfg.raioInicialM;
+        raioAmpliadoM = cfg.raioAmpliadoM;
+        const base = {
           lat: coords.lat,
           lng: coords.lng,
           locais: catalogos.locais,
-          tipoUso: "carga",
+          tipoUso: "carga" as const,
           clienteId: clienteId ?? undefined,
-          raioM: cfg.raioInicialM,
-        });
+          limit: 5,
+        };
+        matches = buscarLocaisProximosOffline({ ...base, raioM: cfg.raioInicialM });
         usouRaioAmpliado = false;
-        raioInicialM = 0;
+        if (matches.length === 0) {
+          matches = buscarLocaisProximosOffline({ ...base, raioM: cfg.raioAmpliadoM });
+          usouRaioAmpliado = matches.length > 0;
+        }
+        if (matches.length === 0) {
+          matches = buscarLocaisProximosOffline({ ...base, todos: true });
+          usouRaioAmpliado = matches.length > 0;
+        }
       }
     }
 
-    // Raio em que o local foi achado (descarga; carga não tem 2 etapas).
+    // Raio em que o local foi achado (carga e descarga usam a mesma escala).
     const raioUsadoM =
-      lado === "descarga" && matches.length > 0
+      matches.length > 0
         ? usouRaioAmpliado
           ? raioAmpliadoM
           : raioInicialM
@@ -256,7 +281,8 @@ export function LocalPorGps({
         setEstado({ tipo: "sem_match", coords: cap });
         setNomeNovo("");
       } else {
-        // Carga: nada do cliente por perto → bloqueia (usar Nova viagem).
+        // Carga: nem no modo "todos" veio nada → o cliente não tem NENHUM local
+        // de carga cadastrado (raio já não bloqueia; isso é falta de cadastro).
         setEstado({ tipo: "bloqueado" });
       }
     } else if (matches.length === 1 && !usouRaioAmpliado) {
@@ -277,6 +303,8 @@ export function LocalPorGps({
       fonte: cap.fonte,
       raioUsadoM: cap.raioUsadoM,
       distanciaMetros: m.distanciaMetros,
+      gpsLat: cap.lat,
+      gpsLng: cap.lng,
       buscaOffline: cap.buscaOffline,
     };
     onSelect(sel);
@@ -432,7 +460,7 @@ export function LocalPorGps({
                   className="text-xs text-muted-foreground"
                   style={{ fontVariant: ["tabular-nums"] }}
                 >
-                  {m.distanciaMetros}m · {m.cidade}/{m.uf}
+                  {formatarDistancia(m.distanciaMetros)} · {m.cidade}/{m.uf}
                   {m.vezesUsadoMotorista > 0 ? ` · usado ${m.vezesUsadoMotorista}x` : ""}
                 </Text>
                 {(() => {
@@ -464,15 +492,15 @@ export function LocalPorGps({
         </View>
       )}
 
-      {/* Carga sem local do cliente por perto — bloqueia (usar Nova viagem). */}
+      {/* Carga: cliente sem local de carga cadastrado (não é mais trava de raio). */}
       {estado.tipo === "bloqueado" && (
         <View className="gap-3 rounded-2xl border-2 border-warning/50 bg-warning/10 p-4">
           <Text className="text-base font-bold text-foreground">
-            Nenhum local de carga desse cliente aqui perto
+            Esse cliente não tem local de carga cadastrado
           </Text>
           <Text className="text-sm text-muted-foreground">
-            Pra iniciar essa viagem, use o menu <Text className="font-semibold">Nova viagem</Text>.
-            Aqui a carga precisa ser um local já cadastrado do cliente, achado pela sua posição.
+            A carga precisa ser um local já cadastrado do cliente. Fale com o escritório pra
+            cadastrar o local de carga, ou use o menu <Text className="font-semibold">Nova viagem</Text>.
           </Text>
           <View className="flex-row gap-2">
             <Button variant="outline" className="flex-1" onPress={() => setEstado({ tipo: "vazio" })}>

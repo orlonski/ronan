@@ -968,6 +968,15 @@ export class ViagensMotoristaService {
         lng: input.lng,
         localCargaId: input.localCargaId,
         criadoOfflineEm: input.criadoOfflineEm,
+        // Captura da escolha do local de carga (GPS real do motorista + distância
+        // até o local). Raio virou ordenação, não trava — isso audita a distância.
+        cargaLat: input.cargaLat,
+        cargaLng: input.cargaLng,
+        cargaPrecisao: input.cargaPrecisao,
+        cargaFonte: input.cargaFonte,
+        cargaDistanciaMetros: input.cargaDistanciaMetros,
+        cargaRaioUsadoM: input.cargaRaioUsadoM,
+        cargaBuscaOffline: input.cargaBuscaOffline,
       },
       include: { ...VIAGEM_INCLUDE, eventosViagem: { orderBy: { ocorridoEm: "asc" } } },
     });

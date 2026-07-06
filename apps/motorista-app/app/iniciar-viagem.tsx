@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "@/components/screen-header";
 import { LocalPorGps, type SelecaoLocal } from "@/components/local-por-gps";
+import { MiniMapaCarga } from "@/components/mini-mapa-carga";
 import { ErroCampo, useValidacaoGuiada } from "@/components/validacao-guiada";
 import { SemCatalogo } from "@/components/sem-catalogo";
 import { Button } from "@/components/ui/button";
@@ -106,6 +107,15 @@ export default function IniciarViagem() {
           lat: localCarga.lat,
           lng: localCarga.lng,
           criarOffline: localCarga.criarOffline,
+        },
+        cargaCaptura: {
+          gpsLat: localCarga.gpsLat,
+          gpsLng: localCarga.gpsLng,
+          precisao: localCarga.precisao,
+          fonte: localCarga.fonte,
+          distanciaMetros: localCarga.distanciaMetros,
+          raioUsadoM: localCarga.raioUsadoM,
+          buscaOffline: localCarga.buscaOffline,
         },
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -205,6 +215,17 @@ export default function IniciarViagem() {
                   cliente pela sua posição. Marca aqui a hora que você carregou.
                 </Text>
               )}
+              {/* Mapa "você × local" — mostra na hora se está perto ou longe. */}
+              {localCarga?.lat != null &&
+              localCarga?.lng != null &&
+              localCarga?.gpsLat != null &&
+              localCarga?.gpsLng != null ? (
+                <MiniMapaCarga
+                  motorista={{ lat: localCarga.gpsLat, lng: localCarga.gpsLng }}
+                  local={{ lat: localCarga.lat, lng: localCarga.lng }}
+                  distanciaMetros={localCarga.distanciaMetros}
+                />
+              ) : null}
             </View>
           ) : (
             <Text className="text-sm text-muted-foreground">

@@ -285,6 +285,17 @@ export async function iniciarViagemGuiada(input: {
   clienteNome?: string;
   coords?: { lat: number; lng: number; precisao?: number; fonte?: FonteGps };
   localCarga?: { id: string; nome: string; lat?: number; lng?: number; criarOffline?: boolean };
+  // Captura da escolha do local de carga: GPS REAL do motorista + distância/raio
+  // até o local. Grava cargaLat/cargaLng/etc na Viagem (raio virou ordenação).
+  cargaCaptura?: {
+    gpsLat?: number;
+    gpsLng?: number;
+    precisao?: number | null;
+    fonte?: FonteGps;
+    distanciaMetros?: number | null;
+    raioUsadoM?: number;
+    buscaOffline?: boolean;
+  };
 }): Promise<string> {
   const clientId = uuid();
   const iniciadoEm = nowIso();
@@ -323,6 +334,15 @@ export async function iniciarViagemGuiada(input: {
     localCargaId: lc?.id,
     localCargaDados,
     criadoOfflineEm: iniciadoEm,
+    // Captura do local de carga (espelha descarga*). Chaves extras no payload
+    // fluem direto pro body de /m/viagem/iniciar (IniciarViagemInput).
+    cargaLat: input.cargaCaptura?.gpsLat,
+    cargaLng: input.cargaCaptura?.gpsLng,
+    cargaPrecisao: input.cargaCaptura?.precisao ?? undefined,
+    cargaFonte: input.cargaCaptura?.fonte,
+    cargaDistanciaMetros: input.cargaCaptura?.distanciaMetros ?? undefined,
+    cargaRaioUsadoM: input.cargaCaptura?.raioUsadoM,
+    cargaBuscaOffline: input.cargaCaptura?.buscaOffline,
   });
   await setLifecycleLocal({
     clientId,

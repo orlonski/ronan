@@ -43,6 +43,10 @@ const ProximosQuery = z.object({
   raioM: z.coerce.number().int().min(50).max(2000).optional(),
   limit: z.coerce.number().int().min(1).max(20).optional(),
   clienteId: z.string().uuid().optional(),
+  // Ignora o filtro de raio: devolve os N locais do cliente ordenados por
+  // distância mesmo bem longe. Usado pela carga do "Iniciar viagem" (raio virou
+  // ordenação, não trava) quando não há nada dentro do raio.
+  todos: z.coerce.boolean().optional(),
 });
 
 const ProximosDescargaQuery = z.object({
@@ -110,6 +114,7 @@ export class LocaisMotoristaController {
       raioM: query.raioM,
       limit: query.limit,
       clienteId: query.clienteId,
+      todos: query.todos,
     });
   }
 

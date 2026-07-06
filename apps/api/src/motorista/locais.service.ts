@@ -221,8 +221,12 @@ export class LocaisMotoristaService {
     /** Quando informado, só locais vinculados a esse cliente OU genéricos (sem
      * cliente amarrado). Usado no lifecycle guiado (carga é sempre do cliente). */
     clienteId?: string;
+    /** Ignora o filtro de distância: devolve os N locais (do cliente) ordenados
+     * por distância mesmo bem longe. Carga do "Iniciar viagem" quando nada perto. */
+    todos?: boolean;
   }) {
     const raio = input.raioM ?? RAIO_SUGESTAO_M;
+    const todos = input.todos === true;
     const limit = input.limit ?? 5;
     // Bounding-box derivada do raio real (com folga de 10%) pra nao descartar
     // candidatos antes do haversine exato. Longitude encolhe com a latitude.
@@ -241,8 +245,14 @@ export class LocaisMotoristaService {
       where: {
         ativo: true,
         tipo: { in: tiposPermitidos },
-        lat: { gte: input.lat - grausLat, lte: input.lat + grausLat },
-        lng: { gte: input.lng - grausLng, lte: input.lng + grausLng },
+        // `todos` ignora a bounding-box (pega o cliente inteiro, ordena por
+        // distância); o filtro por cliente abaixo já limita o conjunto.
+        ...(todos
+          ? {}
+          : {
+              lat: { gte: input.lat - grausLat, lte: input.lat + grausLat },
+              lng: { gte: input.lng - grausLng, lte: input.lng + grausLng },
+            }),
         // Filtro por cliente: vinculados a ele OU genéricos (sem cliente).
         ...(input.clienteId
           ? {
@@ -274,7 +284,7 @@ export class LocaisMotoristaService {
             ? haversine(input.lat, input.lng, c.lat, c.lng)
             : Number.POSITIVE_INFINITY,
       }))
-      .filter((c) => c.distanciaMetros <= raio)
+      .filter((c) => (todos ? Number.isFinite(c.distanciaMetros) : c.distanciaMetros <= raio))
       .sort((a, b) => a.distanciaMetros - b.distanciaMetros)
       .slice(0, limit);
 

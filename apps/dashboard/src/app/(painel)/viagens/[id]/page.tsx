@@ -110,6 +110,15 @@ type ViagemDetalhe = {
   descargaRaioUsadoM: number | null;
   descargaDistanciaMetros: number | null;
   descargaBuscaOffline: boolean | null;
+  // Captura do GPS ao escolher o local de carga no "Iniciar viagem" (raio da
+  // carga virou ordenação, não trava — audita quão longe o motorista iniciou).
+  cargaLat: number | null;
+  cargaLng: number | null;
+  cargaPrecisao: number | null;
+  cargaFonte: FonteGps | null;
+  cargaRaioUsadoM: number | null;
+  cargaDistanciaMetros: number | null;
+  cargaBuscaOffline: boolean | null;
   veiculo: { id: string; placa: string; modelo: string | null };
   motorista: { id: string; nome: string; cpf: string };
   cliente: { id: string; nome: string; empresa: { nome: string } };
@@ -473,6 +482,12 @@ export default function ViagemDetalhePage({
               />
               {v.kmReal && (
                 <Row label="Km real (GPS)" value={fmtNum(v.kmReal, 2)} />
+              )}
+              {(v.cargaDistanciaMetros != null || v.cargaPrecisao != null) && (
+                <Row
+                  label="Marcação da carga"
+                  value={<MarcacaoCarga viagem={v} limiteSinalFraco={limiteSinalFraco} />}
+                />
               )}
               {(v.descargaDistanciaMetros != null || v.descargaPrecisao != null) && (
                 <Row
@@ -1114,6 +1129,53 @@ function MarcacaoDescarga({
       <SinalGpsBadge
         precisao={prec}
         fonte={viagem.descargaFonte}
+        limiteSinalFraco={limiteSinalFraco}
+      />
+    </span>
+  );
+}
+
+// Gêmeo do MarcacaoDescarga pro LOCAL DE CARGA no "Iniciar viagem": distância
+// do GPS do motorista até o local escolhido + precisão. Como o raio da carga
+// virou ordenação (não trava), destaca em âmbar quando ele iniciou FORA do raio
+// usado (ou com sinal fraco) — sinal de que carregou longe do local.
+function MarcacaoCarga({
+  viagem,
+  limiteSinalFraco,
+}: {
+  viagem: ViagemDetalhe;
+  limiteSinalFraco: number;
+}) {
+  const dist = viagem.cargaDistanciaMetros;
+  const prec = viagem.cargaPrecisao;
+  const raio = viagem.cargaRaioUsadoM;
+  const partes: string[] = [];
+  if (dist != null) partes.push(`${dist} m do local`);
+  if (prec != null) partes.push(`precisão ±${Math.round(prec)} m`);
+  if (raio != null) partes.push(`raio usado ${raio} m`);
+  if (viagem.cargaBuscaOffline) partes.push("busca offline");
+  // Fora do raio = distância maior que o raio em que buscou (fallback 200 m se
+  // não gravou o raio). Também marca sinal fraco.
+  const foraDoRaio = dist != null && dist > (raio ?? 200);
+  const suspeito = foraDoRaio || (prec != null && prec > limiteSinalFraco);
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2">
+      <span
+        className={suspeito ? "text-amber-600" : ""}
+        style={{ fontVariant: "tabular-nums" }}
+        title={
+          viagem.cargaLat != null && viagem.cargaLng != null
+            ? `GPS do motorista ao escolher a carga: ${viagem.cargaLat}, ${viagem.cargaLng}`
+            : undefined
+        }
+      >
+        {partes.join(" · ")}
+        {foraDoRaio && " · fora do raio"}
+        {suspeito && " ⚠️"}
+      </span>
+      <SinalGpsBadge
+        precisao={prec}
+        fonte={viagem.cargaFonte}
         limiteSinalFraco={limiteSinalFraco}
       />
     </span>
