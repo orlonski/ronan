@@ -55,6 +55,7 @@ export default function FinalizarViagem() {
   const [localDescargaId, setLocalDescargaId] = useState("");
   const [descargaCaptura, setDescargaCaptura] = useState<DescargaCaptura | null>(null);
   const [descargaNomeDraft, setDescargaNomeDraft] = useState<string | undefined>(undefined);
+  const [descargaEm, setDescargaEm] = useState<string | undefined>(undefined);
   const [valorPedagio, setValorPedagio] = useState("");
   const [observacao, setObservacao] = useState("");
   const [foto, setFoto] = useState<CapturedPhoto | null>(null);
@@ -80,6 +81,7 @@ export default function FinalizarViagem() {
         if (d.localDescargaId) setLocalDescargaId(d.localDescargaId);
         if (d.descargaCaptura) setDescargaCaptura(d.descargaCaptura);
         if (d.descargaNome) setDescargaNomeDraft(d.descargaNome);
+        if (d.descargaEm) setDescargaEm(d.descargaEm);
         if (d.materialId) setMaterialId(d.materialId);
         if (d.toneladas != null) setToneladas(d.toneladas);
         if (d.ticket != null) setTicket(d.ticket);
@@ -181,6 +183,7 @@ export default function FinalizarViagem() {
       void salvarFinalizarDraft({
         localDescargaId: localDescargaId || undefined,
         descargaNome: nomeDescargaSelecionado,
+        descargaEm,
         descargaCaptura,
         materialId: materialId || undefined,
         toneladas,
@@ -200,6 +203,7 @@ export default function FinalizarViagem() {
     hidratado,
     localDescargaId,
     nomeDescargaSelecionado,
+    descargaEm,
     descargaCaptura,
     materialId,
     toneladas,
@@ -362,6 +366,9 @@ export default function FinalizarViagem() {
                 onChange={(x) => {
                   val.limpar();
                   setLocalDescargaId(x);
+                  // Marca quando a descarga foi escolhida (pra mostrar data/hora
+                  // no espelho, igual à carga). Limpa se desmarcou.
+                  setDescargaEm(x ? new Date().toISOString() : undefined);
                   // Nova descarga = nova rota; reseta a escolha pra re-defaultar.
                   setRotaGeometriaEscolhida(null);
                   setRotaIdx(0);

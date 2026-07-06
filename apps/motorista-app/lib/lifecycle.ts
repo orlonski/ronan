@@ -40,6 +40,9 @@ export type EventoLocal = {
 export type FinalizarDraft = {
   localDescargaId?: string;
   descargaNome?: string;
+  /** Quando o motorista marcou a descarga (ISO). Pra mostrar data/hora no
+   * espelho da viagem em andamento, igual à carga. */
+  descargaEm?: string;
   descargaCaptura?: {
     lat: number;
     lng: number;

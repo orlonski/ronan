@@ -246,6 +246,14 @@ export default function ViagemGuiada() {
                 <Text className="text-base font-semibold text-foreground">
                   Descarga · {descargaNome}
                 </Text>
+                {local.finalizarDraft?.descargaEm ? (
+                  <Text
+                    className="text-xs text-muted-foreground"
+                    style={{ fontVariant: ["tabular-nums"] }}
+                  >
+                    {fmtDataHora(local.finalizarDraft.descargaEm)}
+                  </Text>
+                ) : null}
               </View>
             </View>
           ) : null}
