@@ -29,12 +29,13 @@ export function StoriesBar() {
   if (!me.data?.podeVerStories) return null;
 
   const enviando = pendentes[0]; // mostra o mais recente em upload
-  const authHeaders = token ? { Authorization: `Bearer ${token}` } : undefined;
-  // Prévia da rodinha = foto do story mais recente do grupo (só com token pronto,
-  // senão o loader do Android cacheia 401 → foto preta; cai nas iniciais até lá).
+  // Prévia da rodinha = foto do story mais recente do grupo. Auth por query param
+  // (?access_token=) em vez de header: é bem mais confiável no <Image> do RN
+  // (header custom às vezes falha e a miniatura fica em branco). Só com token
+  // pronto; até lá cai nas iniciais.
   const capaDoGrupo = (stories: { id: string }[]) =>
     token && stories.length > 0
-      ? `${API_URL}/m/stories/${stories[stories.length - 1].id}/foto`
+      ? `${API_URL}/m/stories/${stories[stories.length - 1].id}/foto?access_token=${token}`
       : undefined;
 
   return (
@@ -93,7 +94,6 @@ export function StoriesBar() {
               nome={g.autor.nome}
               ring={g.ehMeu ? "seen" : g.temNaoVisto ? "unseen" : "seen"}
               fotoUri={capaDoGrupo(g.stories)}
-              fotoHeaders={authHeaders}
             />
             <Text className="mt-1 text-xs text-foreground" numberOfLines={1}>
               {g.ehMeu ? "Seu story" : g.autor.nome.split(/\s+/)[0]}

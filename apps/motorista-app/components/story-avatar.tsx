@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Plus } from "lucide-react-native";
 import { Image, Text, View } from "react-native";
 import { cn } from "@/lib/utils";
@@ -36,6 +37,11 @@ export function StoryAvatar({
   /** Headers (ex: Authorization) quando a foto é remota e protegida. */
   fotoHeaders?: Record<string, string>;
 }) {
+  // Se a foto falhar (rede ruim, sem retry no <Image>), cai nas iniciais em vez
+  // de ficar em branco. Reseta a cada nova URL.
+  const [erroFoto, setErroFoto] = useState(false);
+  useEffect(() => setErroFoto(false), [fotoUri]);
+
   const anelCor =
     ring === "unseen" ? "bg-primary" : ring === "seen" ? "bg-border" : "bg-transparent";
   const gap = ring === "none" ? 0 : 3;
@@ -51,9 +57,10 @@ export function StoryAvatar({
           className="items-center justify-center rounded-full bg-background"
           style={{ width: size - gap * 2, height: size - gap * 2, padding: ring === "none" ? 0 : 2 }}
         >
-          {fotoUri ? (
+          {fotoUri && !erroFoto ? (
             <Image
               source={{ uri: fotoUri, headers: fotoHeaders }}
+              onError={() => setErroFoto(true)}
               style={{
                 width: interno,
                 height: interno,
