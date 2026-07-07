@@ -3,7 +3,7 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { use, useState } from "react";
+import { use, useMemo, useState } from "react";
 import type { FonteGps } from "@ronan/shared-types";
 import { ExcluirButton } from "@/components/excluir-button";
 import { Permitido } from "@/components/requer-tela";
@@ -304,6 +304,37 @@ export default function ViagemDetalhePage({
     "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "OUTRO"
   >("OUTRO");
   const [motivoFoiEditado, setMotivoFoiEditado] = useState(false);
+
+  // Props do mapa memoizadas (referência estável) pra o MapaTrajetoViagem (memo)
+  // não re-renderizar à toa quando o resto da página muda. Antes dos guards por
+  // regra de hooks — por isso referenciam viagem.data? (ainda pode estar nulo).
+  const vd = viagem.data;
+  const mapaCarga = useMemo(
+    () =>
+      vd?.localCarga.lat != null && vd?.localCarga.lng != null
+        ? { lat: vd.localCarga.lat, lng: vd.localCarga.lng, nome: vd.localCarga.nome }
+        : null,
+    [vd?.localCarga.lat, vd?.localCarga.lng, vd?.localCarga.nome],
+  );
+  const mapaDescarga = useMemo(
+    () =>
+      vd?.localDescarga.lat != null && vd?.localDescarga.lng != null
+        ? { lat: vd.localDescarga.lat, lng: vd.localDescarga.lng, nome: vd.localDescarga.nome }
+        : null,
+    [vd?.localDescarga.lat, vd?.localDescarga.lng, vd?.localDescarga.nome],
+  );
+  const mapaLancamento = useMemo(
+    () => (vd?.lat != null && vd?.lng != null ? { lat: vd.lat, lng: vd.lng } : null),
+    [vd?.lat, vd?.lng],
+  );
+  const mapaGeometria = useMemo(
+    () =>
+      escolhendoRota && rotaPreviewIdx != null
+        ? (rotasAlt.data?.rotas[rotaPreviewIdx]?.geometria ?? vd?.rotaGeometria ?? null)
+        : (vd?.rotaGeometria ?? null),
+    [escolhendoRota, rotaPreviewIdx, rotasAlt.data, vd?.rotaGeometria],
+  );
+  const mapaPedagios = useMemo(() => pedagiosNaRota.data ?? [], [pedagiosNaRota.data]);
 
   if (viagem.isLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
   if (!viagem.data) return <p className="text-sm text-red-600">Viagem não encontrada.</p>;
@@ -858,29 +889,11 @@ export default function ViagemDetalhePage({
                 </div>
               )}
               <MapaTrajetoViagem
-                carga={
-                  v.localCarga.lat != null && v.localCarga.lng != null
-                    ? { lat: v.localCarga.lat, lng: v.localCarga.lng, nome: v.localCarga.nome }
-                    : null
-                }
-                descarga={
-                  v.localDescarga.lat != null && v.localDescarga.lng != null
-                    ? {
-                        lat: v.localDescarga.lat,
-                        lng: v.localDescarga.lng,
-                        nome: v.localDescarga.nome,
-                      }
-                    : null
-                }
-                lancamento={
-                  v.lat != null && v.lng != null ? { lat: v.lat, lng: v.lng } : null
-                }
-                geometria={
-                  escolhendoRota && rotaPreviewIdx != null
-                    ? (rotasAlt.data?.rotas[rotaPreviewIdx]?.geometria ?? v.rotaGeometria)
-                    : v.rotaGeometria
-                }
-                pedagios={pedagiosNaRota.data ?? []}
+                carga={mapaCarga}
+                descarga={mapaDescarga}
+                lancamento={mapaLancamento}
+                geometria={mapaGeometria}
+                pedagios={mapaPedagios}
               />
             </Card>
           )}

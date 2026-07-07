@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
+import { memo, useMemo, useState } from "react";
+import { MapContainer, Marker, Polyline, Popup, TileLayer } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import polylineLib from "@mapbox/polyline";
@@ -62,17 +62,6 @@ export type PedagioNoTrajeto = {
   lng?: number;
 };
 
-function FitBounds({ pontos }: { pontos: [number, number][] }) {
-  const map = useMap();
-  const done = useRef(false);
-  useEffect(() => {
-    if (done.current || pontos.length === 0) return;
-    map.fitBounds(L.latLngBounds(pontos), { padding: [40, 40] });
-    done.current = true;
-  }, [pontos, map]);
-  return null;
-}
-
 type Props = {
   carga: Ponto | null;
   descarga: Ponto | null;
@@ -81,7 +70,7 @@ type Props = {
   pedagios?: PedagioNoTrajeto[];
 };
 
-export function MapaTrajetoViagem({
+function MapaTrajetoViagemBase({
   carga,
   descarga,
   lancamento,
@@ -106,9 +95,11 @@ export function MapaTrajetoViagem({
     return pts;
   }, [carga, descarga, lancamento, traçado]);
 
-  if (todosPontos.length === 0) return null;
+  // Bounds já no MapContainer: o mapa nasce enquadrado, sem a "dupla onda" de
+  // tiles (vista inicial + fitBounds depois) que gerava requisições canceladas.
+  const bounds = useMemo(() => L.latLngBounds(todosPontos), [todosPontos]);
 
-  const center: [number, number] = todosPontos[0]!;
+  if (todosPontos.length === 0) return null;
 
   const gmaps =
     carga && descarga
@@ -121,8 +112,8 @@ export function MapaTrajetoViagem({
     <div className="space-y-2">
       <div className="h-72 overflow-hidden rounded-md border">
         <MapContainer
-          center={center}
-          zoom={12}
+          bounds={bounds}
+          boundsOptions={{ padding: [40, 40], maxZoom: 15 }}
           style={{ height: "100%", width: "100%" }}
           scrollWheelZoom
         >
@@ -182,7 +173,6 @@ export function MapaTrajetoViagem({
               </Marker>
             ) : null,
           )}
-          <FitBounds pontos={todosPontos} />
         </MapContainer>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -208,6 +198,9 @@ export function MapaTrajetoViagem({
     </div>
   );
 }
+
+// memo: pula re-render quando o resto da página muda (props memoizadas no pai).
+export const MapaTrajetoViagem = memo(MapaTrajetoViagemBase);
 
 function CopiarCoord({ lat, lng }: { lat: number; lng: number }) {
   const [copiado, setCopiado] = useState(false);

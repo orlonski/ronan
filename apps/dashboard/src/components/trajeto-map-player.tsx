@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   MapContainer,
   Marker,
@@ -48,18 +48,6 @@ export type PontoPlayer = {
 
 const SPEEDS = [1, 10, 60, 300] as const;
 type Speed = (typeof SPEEDS)[number];
-
-function FitToBoundsOnMount({ pontos }: { pontos: PontoPlayer[] }) {
-  const map = useMap();
-  const fitDone = useRef(false);
-  useEffect(() => {
-    if (fitDone.current || pontos.length === 0) return;
-    const bounds = L.latLngBounds(pontos.map((p) => [p.lat, p.lng]));
-    map.fitBounds(bounds, { padding: [40, 40] });
-    fitDone.current = true;
-  }, [pontos, map]);
-  return null;
-}
 
 function PanToCurrent({
   position,
@@ -123,6 +111,12 @@ export function TrajetoMapPlayer({ pontos }: { pontos: PontoPlayer[] }) {
     setPanTrigger((n) => n + 1);
   }
 
+  // Bounds no MapContainer: nasce enquadrado (sem a dupla-onda de tiles do fit).
+  const bounds = useMemo(
+    () => L.latLngBounds(pontos.map((p) => [p.lat, p.lng] as [number, number])),
+    [pontos],
+  );
+
   const percorrida = useMemo(
     () =>
       pontos.slice(0, currentIndex + 1).map((p) => [p.lat, p.lng] as [number, number]),
@@ -146,8 +140,8 @@ export function TrajetoMapPlayer({ pontos }: { pontos: PontoPlayer[] }) {
     <div className="space-y-3">
       <div className="h-80 overflow-hidden rounded-lg border">
         <MapContainer
-          center={[inicio.lat, inicio.lng]}
-          zoom={13}
+          bounds={bounds}
+          boundsOptions={{ padding: [40, 40], maxZoom: 16 }}
           style={{ height: "100%", width: "100%" }}
           scrollWheelZoom
         >
@@ -177,7 +171,6 @@ export function TrajetoMapPlayer({ pontos }: { pontos: PontoPlayer[] }) {
           </Marker>
           {/* Marker da posição atual no playback */}
           <Marker position={[atual.lat, atual.lng]} icon={currentIcon} />
-          <FitToBoundsOnMount pontos={pontos} />
           <PanToCurrent
             position={[atual.lat, atual.lng]}
             trigger={panTrigger}
