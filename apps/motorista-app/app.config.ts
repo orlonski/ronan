@@ -101,6 +101,9 @@ const config: ExpoConfig = {
     ],
     "./plugins/with-abi-splits",
     "./plugins/with-gradle-memory",
+    // Liga a feature flag useRawPropsJsiValue (nova arquitetura) — necessária pro
+    // PreviewView do vision-camera (nitro) não crashar.
+    "./plugins/with-rawprops-jsi",
   ],
   experiments: {
     typedRoutes: false,
