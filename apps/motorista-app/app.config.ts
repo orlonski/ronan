@@ -6,7 +6,11 @@ const config: ExpoConfig = {
   name: "Schaba",
   slug: "ronan-motorista",
   scheme: "ronan",
-  version: "1.0.0",
+  // 1.1.0: build nativo com react-native-vision-camera (foco no ponto tocado).
+  // runtimeVersion usa policy "appVersion", então bumpar a versão isola este
+  // build dos OTAs antigos — sem isso, um OTA com a lib nativa nova crasharia os
+  // apps 1.0.0 que não a têm.
+  version: "1.1.0",
   orientation: "portrait",
   platforms: ["ios", "android"],
   icon: "./assets/icon.png",
@@ -22,7 +26,7 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: false,
     bundleIdentifier: "br.com.schaba.motorista",
-    buildNumber: "1",
+    buildNumber: "2",
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
       NSCameraUsageDescription:
@@ -35,7 +39,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: "br.com.schaba.motorista",
-    versionCode: 8,
+    versionCode: 9,
     // FCM v1 (push notifications): exige google-services.json do projeto Firebase
     // vinculado a este package. EAS Secret GOOGLE_SERVICES_JSON aponta pro arquivo
     // subido via `eas secret:create`; em dev local cai pro arquivo na raiz do app.

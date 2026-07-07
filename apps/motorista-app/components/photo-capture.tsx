@@ -1,10 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { CameraView, useCameraPermissions } from "expo-camera";
+import {
+  Camera as VisionCamera,
+  useCameraDevice,
+  useCameraPermission,
+  usePhotoOutput,
+  type CameraRef,
+} from "react-native-vision-camera";
 import * as ImageManipulator from "expo-image-manipulator";
 import { ImageManipulator as Manip } from "expo-image-manipulator";
 import { Camera, Crop, RotateCcw, RotateCw, X } from "lucide-react-native";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   type LayoutChangeEvent,
   Modal,
@@ -20,7 +27,6 @@ import {
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
-  withTiming,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
@@ -44,38 +50,21 @@ export function PhotoCapture({
   hidePlaceholder?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [permission, requestPermission] = useCameraPermissions();
+  const { hasPermission, requestPermission } = useCameraPermission();
   const [taking, setTaking] = useState(false);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [cropping, setCropping] = useState(false);
-  const cameraRef = useRef<CameraView>(null);
+  const cameraRef = useRef<CameraRef>(null);
   const jaAutoAbriu = useRef(false);
-  // Foco: no expo-camera o nome é ao contrário do intuitivo — "off" = autofoco
-  // CONTÍNUO (foca quando precisa) e "on" = foca uma vez e TRAVA. Então o padrão
-  // é "off" (contínuo, o preview refoca sozinho ao mover sobre o papel). Tocar
-  // ou capturar dá um "on" momentâneo pra forçar um AF fresco e voltar pro
-  // contínuo. Não é foco no ponto (a lib não tem), mas reengata o autofoco.
-  const [autofoco, setAutofoco] = useState<"on" | "off">("off");
-  const [ring, setRing] = useState<{ x: number; y: number; key: number } | null>(null);
-  const ringTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const afTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  function forcarAf(voltarDepoisMs = 500) {
-    setAutofoco("on");
-    if (afTimer.current) clearTimeout(afTimer.current);
-    afTimer.current = setTimeout(() => setAutofoco("off"), voltarDepoisMs);
-  }
-  function focarNoPonto(x: number, y: number) {
-    setRing({ x, y, key: Date.now() });
-    forcarAf(600);
-    if (ringTimer.current) clearTimeout(ringTimer.current);
-    ringTimer.current = setTimeout(() => setRing(null), 900);
-  }
+  // vision-camera: câmera traseira + saída de foto. capturePhotoToFile grava
+  // num arquivo temp. O toque-pra-focar é nativo (enableNativeTapToFocusGesture).
+  const device = useCameraDevice("back");
+  const photoOutput = usePhotoOutput({ qualityPrioritization: "quality" });
 
   async function abrir(): Promise<boolean> {
-    if (!permission?.granted) {
-      const r = await requestPermission();
-      if (!r.granted) return false;
+    if (!hasPermission) {
+      const ok = await requestPermission();
+      if (!ok) return false;
     }
     setPreviewUri(null);
     setCropping(false);
@@ -96,24 +85,25 @@ export function PhotoCapture({
   }, []);
 
   async function capturar() {
-    if (!cameraRef.current || taking) return;
+    if (taking) return;
     setTaking(true);
     try {
-      // Trava um foco fresco e espera assentar antes de bater — mata a maioria
-      // das fotos borradas (motorista aperta o botão antes do foco pegar).
-      setAutofoco("on");
-      await new Promise((r) => setTimeout(r, 700));
-      const shot = await cameraRef.current.takePictureAsync({ quality: 0.85 });
-      if (!shot?.uri) return;
+      // vision-camera captura direto num arquivo. O foco (contínuo + toque
+      // nativo) já garante nitidez; capturePhotoToFile respeita o AF atual.
+      const foto = await photoOutput.capturePhotoToFile({ flashMode: "off" }, {});
+      const uri = foto.filePath.startsWith("file://")
+        ? foto.filePath
+        : `file://${foto.filePath}`;
       // Comprime + redimensiona pra max 1920px largura (foto de ticket nao precisa mais)
       const compressed = await ImageManipulator.manipulateAsync(
-        shot.uri,
+        uri,
         [{ resize: { width: 1920 } }],
         { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
       );
       setPreviewUri(compressed.uri);
+    } catch {
+      Alert.alert("Não deu pra tirar a foto", "Tenta de novo.");
     } finally {
-      setAutofoco("off"); // volta pro contínuo
       setTaking(false);
     }
   }
@@ -207,11 +197,11 @@ export function PhotoCapture({
               taking={taking}
               onCapturar={capturar}
               onCancelar={descartar}
-              hasPermission={permission?.granted ?? false}
+              hasPermission={hasPermission}
               onRequestPermission={requestPermission}
-              autofoco={autofoco}
-              ring={ring}
-              onFocar={focarNoPonto}
+              device={device}
+              photoOutput={photoOutput}
+              active={open && !previewUri && !cropping}
             />
           )}
         </View>
@@ -227,19 +217,19 @@ function CaptureMode({
   onCancelar,
   hasPermission,
   onRequestPermission,
-  autofoco,
-  ring,
-  onFocar,
+  device,
+  photoOutput,
+  active,
 }: {
-  cameraRef: React.RefObject<CameraView | null>;
+  cameraRef: React.RefObject<CameraRef | null>;
   taking: boolean;
   onCapturar: () => void;
   onCancelar: () => void;
   hasPermission: boolean;
   onRequestPermission: () => void;
-  autofoco: "on" | "off";
-  ring: { x: number; y: number; key: number } | null;
-  onFocar: (x: number, y: number) => void;
+  device: ReturnType<typeof useCameraDevice>;
+  photoOutput: ReturnType<typeof usePhotoOutput>;
+  active: boolean;
 }) {
   if (!hasPermission) {
     return (
@@ -255,21 +245,30 @@ function CaptureMode({
     );
   }
 
+  if (device == null) {
+    return (
+      <SafeAreaView className="flex-1 items-center justify-center gap-4 bg-black px-6">
+        <Text className="text-center text-base text-white">
+          Nenhuma câmera encontrada neste aparelho.
+        </Text>
+        <Button variant="ghost" onPress={onCancelar}>
+          <Text className="text-white">Voltar</Text>
+        </Button>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <>
-      {/* Tocar em qualquer lugar da prévia reengata o autofoco (desborra papel). */}
-      <Pressable
+      {/* enableNativeTapToFocusGesture: toque no papel foca no ponto (nativo). */}
+      <VisionCamera
+        ref={cameraRef}
         style={{ flex: 1 }}
-        onPress={(e) => onFocar(e.nativeEvent.locationX, e.nativeEvent.locationY)}
-      >
-        <CameraView
-          ref={cameraRef}
-          style={{ flex: 1 }}
-          facing="back"
-          autofocus={autofoco}
-        />
-      </Pressable>
-      {ring ? <FocoRing key={ring.key} x={ring.x} y={ring.y} /> : null}
+        device={device}
+        isActive={active}
+        outputs={[photoOutput]}
+        enableNativeTapToFocusGesture
+      />
       <SafeAreaView edges={["top"]} className="absolute left-0 right-0 top-0">
         <View className="px-4 pt-2">
           <Pressable
@@ -281,7 +280,7 @@ function CaptureMode({
         </View>
         <View className="mt-2 items-center px-4">
           <Text className="rounded-full bg-black/55 px-3 py-1.5 text-center text-xs font-medium text-white">
-            Toque na tela pra focar. Se borrar, afaste um pouco o celular.
+            Toque no papel pra focar. Se borrar, afaste um pouco o celular.
           </Text>
         </View>
       </SafeAreaView>
@@ -301,39 +300,6 @@ function CaptureMode({
         </View>
       </SafeAreaView>
     </>
-  );
-}
-
-/** Anelzinho de foco onde o motorista tocou — some sozinho (feedback visual). */
-function FocoRing({ x, y }: { x: number; y: number }) {
-  const scale = useSharedValue(1.4);
-  const opacity = useSharedValue(0.95);
-  useEffect(() => {
-    scale.value = withTiming(1, { duration: 180 });
-    opacity.value = withTiming(0, { duration: 850 });
-  }, [opacity, scale]);
-  const style = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-    opacity: opacity.value,
-  }));
-  const SIZE = 78;
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[
-        {
-          position: "absolute",
-          left: x - SIZE / 2,
-          top: y - SIZE / 2,
-          width: SIZE,
-          height: SIZE,
-          borderRadius: SIZE / 2,
-          borderWidth: 2,
-          borderColor: "#fbbf24",
-        },
-        style,
-      ]}
-    />
   );
 }
 
