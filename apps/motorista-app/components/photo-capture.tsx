@@ -50,21 +50,24 @@ export function PhotoCapture({
   const [cropping, setCropping] = useState(false);
   const cameraRef = useRef<CameraView>(null);
   const jaAutoAbriu = useRef(false);
-  // Foco: o expo-camera não tem "focar no ponto", mas alternar o modo de
-  // autofoco força ele a rodar o AF de novo — é o que desborra papel. Usado no
-  // toque na tela e num "puxão" antes de capturar (motorista aperta antes do
-  // foco pegar). `ring` mostra o anelzinho onde tocou.
-  const [autofoco, setAutofoco] = useState<"on" | "off">("on");
+  // Foco: no expo-camera o nome é ao contrário do intuitivo — "off" = autofoco
+  // CONTÍNUO (foca quando precisa) e "on" = foca uma vez e TRAVA. Então o padrão
+  // é "off" (contínuo, o preview refoca sozinho ao mover sobre o papel). Tocar
+  // ou capturar dá um "on" momentâneo pra forçar um AF fresco e voltar pro
+  // contínuo. Não é foco no ponto (a lib não tem), mas reengata o autofoco.
+  const [autofoco, setAutofoco] = useState<"on" | "off">("off");
   const [ring, setRing] = useState<{ x: number; y: number; key: number } | null>(null);
   const ringTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const afTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  function pokeFoco() {
-    setAutofoco("off");
-    setTimeout(() => setAutofoco("on"), 120);
+  function forcarAf(voltarDepoisMs = 500) {
+    setAutofoco("on");
+    if (afTimer.current) clearTimeout(afTimer.current);
+    afTimer.current = setTimeout(() => setAutofoco("off"), voltarDepoisMs);
   }
   function focarNoPonto(x: number, y: number) {
     setRing({ x, y, key: Date.now() });
-    pokeFoco();
+    forcarAf(600);
     if (ringTimer.current) clearTimeout(ringTimer.current);
     ringTimer.current = setTimeout(() => setRing(null), 900);
   }
@@ -96,10 +99,10 @@ export function PhotoCapture({
     if (!cameraRef.current || taking) return;
     setTaking(true);
     try {
-      // Puxa o autofoco e espera assentar antes de bater — mata a maioria das
-      // fotos borradas (motorista aperta o botão antes do foco pegar no papel).
-      pokeFoco();
-      await new Promise((r) => setTimeout(r, 650));
+      // Trava um foco fresco e espera assentar antes de bater — mata a maioria
+      // das fotos borradas (motorista aperta o botão antes do foco pegar).
+      setAutofoco("on");
+      await new Promise((r) => setTimeout(r, 700));
       const shot = await cameraRef.current.takePictureAsync({ quality: 0.85 });
       if (!shot?.uri) return;
       // Comprime + redimensiona pra max 1920px largura (foto de ticket nao precisa mais)
@@ -110,6 +113,7 @@ export function PhotoCapture({
       );
       setPreviewUri(compressed.uri);
     } finally {
+      setAutofoco("off"); // volta pro contínuo
       setTaking(false);
     }
   }
