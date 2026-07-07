@@ -20,6 +20,7 @@ import {
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
+  withTiming,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,24 @@ export function PhotoCapture({
   const [cropping, setCropping] = useState(false);
   const cameraRef = useRef<CameraView>(null);
   const jaAutoAbriu = useRef(false);
+  // Foco: o expo-camera não tem "focar no ponto", mas alternar o modo de
+  // autofoco força ele a rodar o AF de novo — é o que desborra papel. Usado no
+  // toque na tela e num "puxão" antes de capturar (motorista aperta antes do
+  // foco pegar). `ring` mostra o anelzinho onde tocou.
+  const [autofoco, setAutofoco] = useState<"on" | "off">("on");
+  const [ring, setRing] = useState<{ x: number; y: number; key: number } | null>(null);
+  const ringTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function pokeFoco() {
+    setAutofoco("off");
+    setTimeout(() => setAutofoco("on"), 120);
+  }
+  function focarNoPonto(x: number, y: number) {
+    setRing({ x, y, key: Date.now() });
+    pokeFoco();
+    if (ringTimer.current) clearTimeout(ringTimer.current);
+    ringTimer.current = setTimeout(() => setRing(null), 900);
+  }
 
   async function abrir(): Promise<boolean> {
     if (!permission?.granted) {
@@ -77,6 +96,10 @@ export function PhotoCapture({
     if (!cameraRef.current || taking) return;
     setTaking(true);
     try {
+      // Puxa o autofoco e espera assentar antes de bater — mata a maioria das
+      // fotos borradas (motorista aperta o botão antes do foco pegar no papel).
+      pokeFoco();
+      await new Promise((r) => setTimeout(r, 650));
       const shot = await cameraRef.current.takePictureAsync({ quality: 0.85 });
       if (!shot?.uri) return;
       // Comprime + redimensiona pra max 1920px largura (foto de ticket nao precisa mais)
@@ -182,6 +205,9 @@ export function PhotoCapture({
               onCancelar={descartar}
               hasPermission={permission?.granted ?? false}
               onRequestPermission={requestPermission}
+              autofoco={autofoco}
+              ring={ring}
+              onFocar={focarNoPonto}
             />
           )}
         </View>
@@ -197,6 +223,9 @@ function CaptureMode({
   onCancelar,
   hasPermission,
   onRequestPermission,
+  autofoco,
+  ring,
+  onFocar,
 }: {
   cameraRef: React.RefObject<CameraView | null>;
   taking: boolean;
@@ -204,6 +233,9 @@ function CaptureMode({
   onCancelar: () => void;
   hasPermission: boolean;
   onRequestPermission: () => void;
+  autofoco: "on" | "off";
+  ring: { x: number; y: number; key: number } | null;
+  onFocar: (x: number, y: number) => void;
 }) {
   if (!hasPermission) {
     return (
@@ -221,11 +253,19 @@ function CaptureMode({
 
   return (
     <>
-      <CameraView
-        ref={cameraRef}
+      {/* Tocar em qualquer lugar da prévia reengata o autofoco (desborra papel). */}
+      <Pressable
         style={{ flex: 1 }}
-        facing="back"
-      />
+        onPress={(e) => onFocar(e.nativeEvent.locationX, e.nativeEvent.locationY)}
+      >
+        <CameraView
+          ref={cameraRef}
+          style={{ flex: 1 }}
+          facing="back"
+          autofocus={autofoco}
+        />
+      </Pressable>
+      {ring ? <FocoRing key={ring.key} x={ring.x} y={ring.y} /> : null}
       <SafeAreaView edges={["top"]} className="absolute left-0 right-0 top-0">
         <View className="px-4 pt-2">
           <Pressable
@@ -234,6 +274,11 @@ function CaptureMode({
           >
             <X size={20} color="white" />
           </Pressable>
+        </View>
+        <View className="mt-2 items-center px-4">
+          <Text className="rounded-full bg-black/55 px-3 py-1.5 text-center text-xs font-medium text-white">
+            Toque na tela pra focar. Se borrar, afaste um pouco o celular.
+          </Text>
         </View>
       </SafeAreaView>
       <SafeAreaView edges={["bottom"]} className="absolute bottom-0 left-0 right-0">
@@ -252,6 +297,39 @@ function CaptureMode({
         </View>
       </SafeAreaView>
     </>
+  );
+}
+
+/** Anelzinho de foco onde o motorista tocou — some sozinho (feedback visual). */
+function FocoRing({ x, y }: { x: number; y: number }) {
+  const scale = useSharedValue(1.4);
+  const opacity = useSharedValue(0.95);
+  useEffect(() => {
+    scale.value = withTiming(1, { duration: 180 });
+    opacity.value = withTiming(0, { duration: 850 });
+  }, [opacity, scale]);
+  const style = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    opacity: opacity.value,
+  }));
+  const SIZE = 78;
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        {
+          position: "absolute",
+          left: x - SIZE / 2,
+          top: y - SIZE / 2,
+          width: SIZE,
+          height: SIZE,
+          borderRadius: SIZE / 2,
+          borderWidth: 2,
+          borderColor: "#fbbf24",
+        },
+        style,
+      ]}
+    />
   );
 }
 
