@@ -16,6 +16,11 @@ const SPLITS_BLOCK = `    splits {
 `;
 
 module.exports = function withAbiSplits(config) {
+  // DISABLE_ABI_SPLITS=1 → não fatia por ABI: gera 1 APK universal instalável
+  // direto (pra testes de preview via sideload). Produção segue com splits (AAB).
+  if (process.env.DISABLE_ABI_SPLITS === "1") {
+    return config;
+  }
   return withAppBuildGradle(config, (cfg) => {
     let contents = cfg.modResults.contents;
 

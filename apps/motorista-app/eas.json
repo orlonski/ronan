@@ -24,6 +24,15 @@
         "simulator": false
       }
     },
+    "preview-universal": {
+      "extends": "preview",
+      "env": {
+        "DISABLE_ABI_SPLITS": "1"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
     "production": {
       "environment": "production",
       "android": {
