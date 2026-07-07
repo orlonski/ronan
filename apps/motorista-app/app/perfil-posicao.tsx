@@ -3,6 +3,8 @@ import { router, Stack } from "expo-router";
 import { MapPin, Shield } from "lucide-react-native";
 import {
   ActivityIndicator,
+  AppState,
+  Linking,
   ScrollView,
   Switch,
   Text,
@@ -17,6 +19,8 @@ import {
   iniciarCapturaPeriodica,
   pararCapturaPeriodica,
   setConfigLocal,
+  statusPermissaoLocalizacao,
+  type StatusPermLoc,
 } from "@/lib/posicao-periodica";
 import {
   usePosicaoConfig,
@@ -34,6 +38,28 @@ export default function PerfilPosicaoScreen() {
   const [vinteQuatroHoras, setVinteQuatroHoras] = useState(true);
   const [horarioInicio, setHorarioInicio] = useState<number>(8);
   const [horarioFim, setHorarioFim] = useState<number>(18);
+  // Reflete a permissão de localização do celular (≠ config do app). Relê ao
+  // voltar de foreground (ex: motorista mexeu nos Ajustes e voltou).
+  const [permLoc, setPermLoc] = useState<{
+    foreground: StatusPermLoc;
+    background: StatusPermLoc;
+  } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const ler = () => {
+      void statusPermissaoLocalizacao().then((s) => {
+        if (alive) setPermLoc(s);
+      });
+    };
+    ler();
+    const sub = AppState.addEventListener("change", (st) => {
+      if (st === "active") ler();
+    });
+    return () => {
+      alive = false;
+      sub.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (!cfg.data) return;
@@ -56,6 +82,22 @@ export default function PerfilPosicaoScreen() {
       setHorarioFim(18);
     }
   }, [cfg.data]);
+
+  // Desligar aplica NA HORA: para o serviço + salva. A notificação some no ato
+  // e a UI não mente (não depende de tocar em "Salvar"). Ligar segue no Salvar
+  // (precisa da permissão + janela).
+  async function alternarAtivada(v: boolean) {
+    setAtivada(v);
+    if (v) return;
+    const desativado: PosicaoConfig = { ativada: false, horarioInicio: null, horarioFim: null };
+    await pararCapturaPeriodica();
+    await setConfigLocal(desativado);
+    try {
+      await salvar.mutateAsync(desativado);
+    } catch {
+      /* offline — serviço já parado + cache local off; sincroniza depois */
+    }
+  }
 
   async function persistir() {
     const payload: PosicaoConfig = {
@@ -153,11 +195,52 @@ export default function PerfilPosicaoScreen() {
             </View>
             <Switch
               value={ativada}
-              onValueChange={setAtivada}
+              onValueChange={(v) => void alternarAtivada(v)}
               trackColor={{ false: "#cbd5e1", true: "#22c55e" }}
             />
           </View>
         </Card>
+
+        {/* Reflete o que o CELULAR liberou (≠ config do app). */}
+        {permLoc && (
+          <Card>
+            <Text className="text-sm font-semibold text-foreground">
+              Localização no celular:{" "}
+              <Text
+                className={
+                  permLoc.background === "granted"
+                    ? "text-green-700"
+                    : permLoc.foreground === "granted"
+                      ? "text-amber-600"
+                      : "text-destructive"
+                }
+              >
+                {permLoc.background === "granted"
+                  ? "o tempo todo"
+                  : permLoc.foreground === "granted"
+                    ? "só ao usar o app"
+                    : "desligada"}
+              </Text>
+            </Text>
+            {ativada && permLoc.background !== "granted" && (
+              <View className="mt-2 gap-2">
+                <Text className="text-sm text-muted-foreground">
+                  Pra compartilhar a posição de tempos em tempos, o celular
+                  precisa liberar a localização como{" "}
+                  <Text className="font-semibold text-foreground">
+                    &quot;Permitir o tempo todo&quot;
+                  </Text>
+                  . Do jeito que está, o compartilhamento não funciona direito.
+                </Text>
+                <Button variant="outline" onPress={() => void Linking.openSettings()}>
+                  <Text className="text-sm font-semibold text-foreground">
+                    Abrir ajustes do celular
+                  </Text>
+                </Button>
+              </View>
+            )}
+          </Card>
+        )}
 
         {ativada && (
           <Card>

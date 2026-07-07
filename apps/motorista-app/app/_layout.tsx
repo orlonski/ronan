@@ -220,6 +220,11 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         // reabertura do app (task pode ter sido morta pelo SO).
         const posicao = await import("@/lib/posicao-periodica");
         await posicao.registerPosicaoTask();
+        // Reconcilia JÁ pelo cache local (funciona offline) — garante que o
+        // serviço/notificação batem com a última config conhecida mesmo sem
+        // rede. Antes, o "parar" só rodava se o GET desse certo → offline
+        // deixava a notificação fantasma presa.
+        await posicao.reconciliarCapturaPeriodica();
         void (async () => {
           try {
             const { api } = await import("@/lib/api");
@@ -229,14 +234,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
               horarioFim: number | null;
             }>("/m/posicao-config");
             await posicao.setConfigLocal(cfg);
-            if (cfg.ativada) {
-              const ativa = await posicao.isCapturaPeriodicaAtiva();
-              if (!ativa) await posicao.iniciarCapturaPeriodica();
-            } else {
-              await posicao.pararCapturaPeriodica();
-            }
+            // Reconcilia de novo com a config fresca do servidor.
+            await posicao.reconciliarCapturaPeriodica();
           } catch {
-            // Offline ou erro de rede — usa cache local que já está em uso.
+            // Offline ou erro de rede — o reconcile pelo cache acima já rodou.
           }
         })();
 

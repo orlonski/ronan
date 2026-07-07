@@ -125,14 +125,60 @@ export async function iniciarCapturaPeriodica(): Promise<boolean> {
 }
 
 export async function pararCapturaPeriodica(): Promise<void> {
-  const Location = await import("expo-location");
-  const isRunning = await Location.hasStartedLocationUpdatesAsync(POSICAO_TASK);
-  if (isRunning) await Location.stopLocationUpdatesAsync(POSICAO_TASK);
+  try {
+    const Location = await import("expo-location");
+    // Defensivo: tenta parar mesmo que o estado do TaskManager divirja do
+    // serviço real (é o que mata a notificação "fantasma"). stop numa task
+    // não-rodando só lança — por isso o try/catch.
+    if (await Location.hasStartedLocationUpdatesAsync(POSICAO_TASK)) {
+      await Location.stopLocationUpdatesAsync(POSICAO_TASK);
+    }
+  } catch {
+    /* já parado / task não registrada */
+  }
+}
+
+/**
+ * Alinha o serviço com a config LOCAL (sem HTTP → funciona offline): inicia se
+ * ativada, para caso contrário. Fonte única de verdade — chamada no boot e ao
+ * mudar a config. Garante que a notificação some quando ativada=false, mesmo
+ * offline (fecha a brecha do boot que só parava com o servidor respondendo).
+ */
+export async function reconciliarCapturaPeriodica(): Promise<void> {
+  const cfg = await getConfigLocal();
+  if (cfg?.ativada) {
+    if (!(await isCapturaPeriodicaAtiva())) await iniciarCapturaPeriodica();
+  } else {
+    await pararCapturaPeriodica();
+  }
 }
 
 export async function isCapturaPeriodicaAtiva(): Promise<boolean> {
   const Location = await import("expo-location");
   return Location.hasStartedLocationUpdatesAsync(POSICAO_TASK);
+}
+
+export type StatusPermLoc = "granted" | "denied" | "undetermined";
+
+/**
+ * Status bruto da permissão de localização do SO — pra tela refletir o que o
+ * celular liberou. foreground = "ao usar o app"; background = "o tempo todo"
+ * (necessário pra captura periódica). Não pede nada, só lê.
+ */
+export async function statusPermissaoLocalizacao(): Promise<{
+  foreground: StatusPermLoc;
+  background: StatusPermLoc;
+}> {
+  try {
+    const Location = await import("expo-location");
+    const fg = await Location.getForegroundPermissionsAsync();
+    const bg = await Location.getBackgroundPermissionsAsync();
+    const map = (s: string): StatusPermLoc =>
+      s === "granted" ? "granted" : s === "undetermined" ? "undetermined" : "denied";
+    return { foreground: map(fg.status), background: map(bg.status) };
+  } catch {
+    return { foreground: "undetermined", background: "undetermined" };
+  }
 }
 
 /** Snapshot da config pra task background ler sem fazer chamada HTTP. */
