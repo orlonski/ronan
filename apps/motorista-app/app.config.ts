@@ -6,11 +6,7 @@ const config: ExpoConfig = {
   name: "Schaba",
   slug: "ronan-motorista",
   scheme: "ronan",
-  // 1.1.0: build nativo com react-native-vision-camera (foco no ponto tocado).
-  // runtimeVersion usa policy "appVersion", então bumpar a versão isola este
-  // build dos OTAs antigos — sem isso, um OTA com a lib nativa nova crasharia os
-  // apps 1.0.0 que não a têm.
-  version: "1.1.0",
+  version: "1.0.0",
   orientation: "portrait",
   platforms: ["ios", "android"],
   icon: "./assets/icon.png",

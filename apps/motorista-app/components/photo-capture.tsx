@@ -1,27 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  Camera as VisionCamera,
-  useCameraDevice,
-  useCameraPermission,
-  usePhotoOutput,
-  type CameraRef,
-} from "react-native-vision-camera";
+import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImageManipulator from "expo-image-manipulator";
 import { ImageManipulator as Manip } from "expo-image-manipulator";
-import * as ImagePicker from "expo-image-picker";
-import {
-  Camera,
-  Crop,
-  Flashlight,
-  FlashlightOff,
-  Images,
-  RotateCcw,
-  RotateCw,
-  X,
-} from "lucide-react-native";
+import { Camera, Crop, RotateCcw, RotateCw, X } from "lucide-react-native";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   type LayoutChangeEvent,
   Modal,
@@ -60,39 +43,17 @@ export function PhotoCapture({
   hidePlaceholder?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const { hasPermission, requestPermission } = useCameraPermission();
+  const [permission, requestPermission] = useCameraPermissions();
   const [taking, setTaking] = useState(false);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [cropping, setCropping] = useState(false);
-  const cameraRef = useRef<CameraRef>(null);
+  const cameraRef = useRef<CameraView>(null);
   const jaAutoAbriu = useRef(false);
-  // vision-camera: câmera traseira + saída de foto. capturePhotoToFile grava
-  // num arquivo temp. O toque-pra-focar é nativo (enableNativeTapToFocusGesture).
-  const device = useCameraDevice("back");
-  const photoOutput = usePhotoOutput({ qualityPrioritization: "quality" });
-  // Lanterna (torch): motorista liga pra iluminar o ticket no escuro.
-  const [torch, setTorch] = useState(false);
-
-  async function escolherDaGaleria() {
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      quality: 1,
-    });
-    if (res.canceled || !res.assets?.[0]) return;
-    // Mesma compressão/redimensionamento da foto tirada na câmera.
-    const compressed = await ImageManipulator.manipulateAsync(
-      res.assets[0].uri,
-      [{ resize: { width: 1920 } }],
-      { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
-    );
-    onChange({ uri: compressed.uri, mime: "image/jpeg" });
-    setOpen(false);
-  }
 
   async function abrir(): Promise<boolean> {
-    if (!hasPermission) {
-      const ok = await requestPermission();
-      if (!ok) return false;
+    if (!permission?.granted) {
+      const r = await requestPermission();
+      if (!r.granted) return false;
     }
     setPreviewUri(null);
     setCropping(false);
@@ -113,24 +74,18 @@ export function PhotoCapture({
   }, []);
 
   async function capturar() {
-    if (taking) return;
+    if (!cameraRef.current || taking) return;
     setTaking(true);
     try {
-      // vision-camera captura direto num arquivo. O foco (contínuo + toque
-      // nativo) já garante nitidez; capturePhotoToFile respeita o AF atual.
-      const foto = await photoOutput.capturePhotoToFile({ flashMode: "off" }, {});
-      const uri = foto.filePath.startsWith("file://")
-        ? foto.filePath
-        : `file://${foto.filePath}`;
+      const shot = await cameraRef.current.takePictureAsync({ quality: 0.85 });
+      if (!shot?.uri) return;
       // Comprime + redimensiona pra max 1920px largura (foto de ticket nao precisa mais)
       const compressed = await ImageManipulator.manipulateAsync(
-        uri,
+        shot.uri,
         [{ resize: { width: 1920 } }],
         { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
       );
       setPreviewUri(compressed.uri);
-    } catch {
-      Alert.alert("Não deu pra tirar a foto", "Tenta de novo.");
     } finally {
       setTaking(false);
     }
@@ -184,23 +139,15 @@ export function PhotoCapture({
           </View>
         </View>
       ) : hidePlaceholder ? null : (
-        <View className="gap-2">
-          <Pressable
-            onPress={abrir}
-            className="h-32 items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border bg-muted/30"
-          >
-            <Camera size={28} color="#64748b" />
-            <Text className="text-sm font-medium text-muted-foreground">
-              Tocar para abrir a câmera
-            </Text>
-          </Pressable>
-          <Button variant="outline" size="sm" onPress={escolherDaGaleria}>
-            <Images size={16} color="#0f172a" />
-            <Text className="text-sm font-medium text-foreground">
-              Escolher da galeria
-            </Text>
-          </Button>
-        </View>
+        <Pressable
+          onPress={abrir}
+          className="h-32 items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border bg-muted/30"
+        >
+          <Camera size={28} color="#64748b" />
+          <Text className="text-sm font-medium text-muted-foreground">
+            Tocar para abrir a câmera
+          </Text>
+        </Pressable>
       )}
 
       <Modal
@@ -233,14 +180,8 @@ export function PhotoCapture({
               taking={taking}
               onCapturar={capturar}
               onCancelar={descartar}
-              hasPermission={hasPermission}
+              hasPermission={permission?.granted ?? false}
               onRequestPermission={requestPermission}
-              device={device}
-              photoOutput={photoOutput}
-              active={open && !previewUri && !cropping}
-              torch={torch}
-              onToggleTorch={() => setTorch((t) => !t)}
-              onGaleria={escolherDaGaleria}
             />
           )}
         </View>
@@ -256,25 +197,13 @@ function CaptureMode({
   onCancelar,
   hasPermission,
   onRequestPermission,
-  device,
-  photoOutput,
-  active,
-  torch,
-  onToggleTorch,
-  onGaleria,
 }: {
-  cameraRef: React.RefObject<CameraRef | null>;
+  cameraRef: React.RefObject<CameraView | null>;
   taking: boolean;
   onCapturar: () => void;
   onCancelar: () => void;
   hasPermission: boolean;
   onRequestPermission: () => void;
-  device: ReturnType<typeof useCameraDevice>;
-  photoOutput: ReturnType<typeof usePhotoOutput>;
-  active: boolean;
-  torch: boolean;
-  onToggleTorch: () => void;
-  onGaleria: () => void;
 }) {
   if (!hasPermission) {
     return (
@@ -290,66 +219,25 @@ function CaptureMode({
     );
   }
 
-  if (device == null) {
-    return (
-      <SafeAreaView className="flex-1 items-center justify-center gap-4 bg-black px-6">
-        <Text className="text-center text-base text-white">
-          Nenhuma câmera encontrada neste aparelho.
-        </Text>
-        <Button variant="ghost" onPress={onCancelar}>
-          <Text className="text-white">Voltar</Text>
-        </Button>
-      </SafeAreaView>
-    );
-  }
-
   return (
     <>
-      {/* enableNativeTapToFocusGesture: toque no papel foca no ponto (nativo). */}
-      <VisionCamera
+      <CameraView
         ref={cameraRef}
         style={{ flex: 1 }}
-        device={device}
-        isActive={active}
-        outputs={[photoOutput]}
-        enableNativeTapToFocusGesture
-        torchMode={torch ? "on" : "off"}
+        facing="back"
       />
       <SafeAreaView edges={["top"]} className="absolute left-0 right-0 top-0">
-        <View className="flex-row items-center justify-between px-4 pt-2">
+        <View className="px-4 pt-2">
           <Pressable
             onPress={onCancelar}
             className="h-10 w-10 items-center justify-center rounded-full bg-black/50"
           >
             <X size={20} color="white" />
           </Pressable>
-          {device.hasTorch ? (
-            <Pressable
-              onPress={onToggleTorch}
-              className={`h-10 w-10 items-center justify-center rounded-full ${torch ? "bg-white" : "bg-black/50"}`}
-            >
-              {torch ? (
-                <Flashlight size={20} color="#0f172a" />
-              ) : (
-                <FlashlightOff size={20} color="white" />
-              )}
-            </Pressable>
-          ) : null}
-        </View>
-        <View className="mt-2 items-center px-4">
-          <Text className="rounded-full bg-black/55 px-3 py-1.5 text-center text-xs font-medium text-white">
-            Toque no papel pra focar. Se borrar, afaste um pouco o celular.
-          </Text>
         </View>
       </SafeAreaView>
       <SafeAreaView edges={["bottom"]} className="absolute bottom-0 left-0 right-0">
-        <View className="flex-row items-center justify-between px-10 pb-6">
-          <Pressable
-            onPress={onGaleria}
-            className="h-12 w-12 items-center justify-center rounded-full bg-black/50"
-          >
-            <Images size={22} color="white" />
-          </Pressable>
+        <View className="items-center pb-6">
           <Pressable
             onPress={onCapturar}
             disabled={taking}
@@ -361,8 +249,6 @@ function CaptureMode({
               <View className="h-16 w-16 rounded-full bg-white" />
             )}
           </Pressable>
-          {/* Espaçador pra manter o botão de captura centralizado. */}
-          <View className="h-12 w-12" />
         </View>
       </SafeAreaView>
     </>
