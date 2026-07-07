@@ -128,7 +128,7 @@ export function usePaginatedList<T>(
   const qs = buildQueryString(params);
   const url = qs ? `${path}?${qs}` : path;
   return useQuery({
-    queryKey: [path, "list", qs, token],
+    queryKey: [path, "list", qs],
     enabled: !!token && options?.enabled !== false,
     queryFn: () => fetchApi<Paginated<T>>(url, { token }),
     placeholderData: (prev) => prev ?? options?.placeholderData,
@@ -153,7 +153,7 @@ export function useResourceOptions<T>(
   }
   const url = `${path}?${params.toString()}`;
   return useQuery({
-    queryKey: [path, "options", url, token],
+    queryKey: [path, "options", url],
     enabled: !!token && options?.enabled !== false,
     queryFn: async () => {
       const res = await fetchApi<Paginated<T>>(url, { token });
@@ -169,7 +169,7 @@ export function useResourceOptions<T>(
 export function useResourceItem<T>(basePath: string, id: string | undefined) {
   const token = useAuthToken();
   return useQuery({
-    queryKey: [basePath, "item", id, token],
+    queryKey: [basePath, "item", id],
     enabled: !!token && !!id,
     queryFn: () => fetchApi<T>(`${basePath}/${id}`, { token }),
   });
@@ -184,7 +184,7 @@ export function useApiQuery<T>(
 ) {
   const token = useAuthToken();
   return useQuery({
-    queryKey: [path, "get", token],
+    queryKey: [path, "get"],
     enabled: !!token && !!path && options?.enabled !== false,
     staleTime: options?.staleTime,
     queryFn: () => fetchApi<T>(path as string, { token }),

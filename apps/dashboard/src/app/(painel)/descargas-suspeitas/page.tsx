@@ -93,7 +93,7 @@ export default function DescargasSuspeitasPage() {
   const [nomes, setNomes] = useState<Record<string, string>>({});
 
   const lista = useQuery({
-    queryKey: [PATH, token],
+    queryKey: [PATH],
     enabled: !!token,
     queryFn: () => fetchApi<Resposta>(PATH, { token }),
   });

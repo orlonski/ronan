@@ -65,7 +65,7 @@ export default function NotificacoesAdminPage() {
   const { viewMode, setViewMode } = useListViewMode("notificacoes");
 
   const q = useInfiniteQuery({
-    queryKey: ["admin-notificacoes", { motoristaId, entregaStatus, lida, token }],
+    queryKey: ["admin-notificacoes", { motoristaId, entregaStatus, lida }],
     enabled: !!token,
     initialPageParam: undefined as string | undefined,
     queryFn: async ({ pageParam }) => {

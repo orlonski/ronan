@@ -40,7 +40,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 export function useInboxLista(opts?: { somenteNaoLidas?: boolean }) {
   const token = useAuthToken();
   return useInfiniteQuery({
-    queryKey: ["admin-inbox", { somenteNaoLidas: opts?.somenteNaoLidas, token }],
+    queryKey: ["admin-inbox", { somenteNaoLidas: opts?.somenteNaoLidas }],
     enabled: !!token,
     initialPageParam: undefined as string | undefined,
     queryFn: async ({ pageParam }) => {
@@ -60,7 +60,7 @@ export function useInboxLista(opts?: { somenteNaoLidas?: boolean }) {
 export function useInboxContagem() {
   const token = useAuthToken();
   return useQuery({
-    queryKey: ["admin-inbox-contar", token],
+    queryKey: ["admin-inbox-contar"],
     enabled: !!token,
     // Sem refetchInterval — SSE invalida quando chega evento novo.
     queryFn: () => fetchApi<{ naoLidas: number }>(`${PATH}/contar`, { token }),

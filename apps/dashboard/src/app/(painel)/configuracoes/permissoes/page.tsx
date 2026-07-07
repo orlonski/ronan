@@ -52,12 +52,12 @@ function PermissoesInner() {
   const qc = useQueryClient();
 
   const catalogo = useQuery({
-    queryKey: [PATH_PERM, token],
+    queryKey: [PATH_PERM],
     enabled: !!token,
     queryFn: () => fetchApi<PermissaoRow[]>(PATH_PERM, { token }),
   });
   const papeis = useQuery({
-    queryKey: [PATH_PAPEIS, token],
+    queryKey: [PATH_PAPEIS],
     enabled: !!token,
     queryFn: () => fetchApi<Papel[]>(PATH_PAPEIS, { token }),
   });

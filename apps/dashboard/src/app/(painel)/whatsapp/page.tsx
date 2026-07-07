@@ -106,20 +106,20 @@ export default function WhatsappPage() {
   const isAdmin = temPermissao("whatsapp.gerenciar");
 
   const status = useQuery({
-    queryKey: ["whatsapp-status", token],
+    queryKey: ["whatsapp-status"],
     enabled: !!token,
     refetchInterval: 30_000,
     queryFn: () => fetchApi<Status>("/admin/whatsapp/status", { token }),
   });
 
   const sessoes = useQuery({
-    queryKey: ["whatsapp-sessoes", token],
+    queryKey: ["whatsapp-sessoes"],
     enabled: !!token,
     queryFn: () => fetchApi<Sessao[]>("/admin/whatsapp/sessoes", { token }),
   });
 
   const mensagens = useQuery({
-    queryKey: ["whatsapp-mensagens", sessaoSelecionada, token],
+    queryKey: ["whatsapp-mensagens", sessaoSelecionada],
     enabled: !!token && !!sessaoSelecionada,
     queryFn: () =>
       fetchApi<Mensagem[]>(
@@ -455,14 +455,14 @@ function AvisoGrupoCard({ isAdmin, online }: { isAdmin: boolean; online: boolean
   const qc = useQueryClient();
 
   const cfg = useQuery({
-    queryKey: ["aviso-grupo-config", token],
+    queryKey: ["aviso-grupo-config"],
     enabled: !!token,
     queryFn: () => fetchApi<ConfigAvisoGrupo>("/admin/whatsapp/aviso-grupo", { token }),
   });
 
   // Grupos só carregam quando o número está conectado (precisa do Baileys).
   const grupos = useQuery({
-    queryKey: ["whatsapp-grupos", token],
+    queryKey: ["whatsapp-grupos"],
     enabled: !!token && online,
     staleTime: 60_000,
     queryFn: () => fetchApi<Grupo[]>("/admin/whatsapp/grupos", { token }),
@@ -686,7 +686,7 @@ function QRDialog({
 }) {
   const token = useAuthToken();
   const qr = useQuery({
-    queryKey: ["whatsapp-qr", open, token],
+    queryKey: ["whatsapp-qr", open],
     enabled: open && !!token,
     refetchInterval: open ? 5_000 : false,
     queryFn: async () => {

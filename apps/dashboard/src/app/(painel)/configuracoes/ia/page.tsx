@@ -97,13 +97,13 @@ export default function IaConfigPage() {
   const qc = useQueryClient();
 
   const cfg = useQuery({
-    queryKey: [PATH, token],
+    queryKey: [PATH],
     enabled: !!token,
     queryFn: () => fetchApi<ConfigIa>(PATH, { token }),
   });
 
   const historico = useQuery({
-    queryKey: [HISTORICO_PATH, token],
+    queryKey: [HISTORICO_PATH],
     enabled: !!token,
     queryFn: () => fetchApi<{ confidence: number }[]>(HISTORICO_PATH, { token }),
   });

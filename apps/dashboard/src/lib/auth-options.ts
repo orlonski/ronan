@@ -40,8 +40,10 @@ async function refreshAccessToken(refreshToken: string): Promise<RefreshOutcome>
 // Sessão do NextAuth dura até 90d (mesmo limite do refresh token do backend).
 // Access token (15min default) é renovado transparente quando perto de expirar.
 const SESSION_MAX_AGE = 60 * 60 * 24 * 90;
-// Renova 1min antes do access expirar pra evitar corrida.
-const REFRESH_THRESHOLD_MS = 60_000;
+// Renova 5min antes do access (15min) expirar — casado com o refetchInterval de
+// 5min do SessionProvider, o token é renovado proativamente e nunca chega
+// vencido nas queries (evita a cascata de 401 + refetch).
+const REFRESH_THRESHOLD_MS = 5 * 60_000;
 
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt", maxAge: SESSION_MAX_AGE },

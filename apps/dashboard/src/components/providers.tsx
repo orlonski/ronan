@@ -33,7 +33,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
       enableSystem={false}
       disableTransitionOnChange
     >
-      <SessionProvider>
+      {/* refetchInterval mantém o access token (15min) fresco: a cada 5min o
+          NextAuth reroda o jwt callback e renova antes de vencer — evita a
+          cascata de 401 quando a aba fica parada. */}
+      <SessionProvider refetchInterval={5 * 60} refetchOnWindowFocus>
         <QueryClientProvider client={qc}>
           {children}
           <Toaster position="top-right" richColors closeButton />

@@ -152,7 +152,7 @@ export default function VisualizarLocalPage({
   // Limite de sinal fraco configurável — marca o GPS do cadastro em âmbar.
   const token = useAuthToken();
   const gpsConfig = useQuery({
-    queryKey: ["busca-locais-config", token],
+    queryKey: ["busca-locais-config"],
     enabled: !!token,
     staleTime: 30 * 60_000,
     queryFn: () =>
@@ -162,7 +162,7 @@ export default function VisualizarLocalPage({
 
   // Pontos de lançamento das viagens que descarregaram neste local.
   const lancamentos = useQuery({
-    queryKey: ["local-lancamentos", id, token],
+    queryKey: ["local-lancamentos", id],
     enabled: !!token,
     staleTime: 60_000,
     queryFn: () =>

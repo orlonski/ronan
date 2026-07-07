@@ -165,14 +165,14 @@ export default function LayoutImportPage({
   const qc = useQueryClient();
 
   const empresa = useQuery({
-    queryKey: ["empresa", empresaId, token],
+    queryKey: ["empresa", empresaId],
     enabled: !!token,
     queryFn: () => fetchApi<Empresa>(`/admin/empresas/${empresaId}`, { token }),
   });
 
   // Lista de campos vem do banco — admin pode adicionar campos novos sem dev.
   const camposLayout = useQuery({
-    queryKey: ["campos-layout", token],
+    queryKey: ["campos-layout"],
     enabled: !!token,
     queryFn: () =>
       fetchApi<CampoLayoutDef[]>(`/admin/campos-layout`, { token }),
@@ -187,7 +187,7 @@ export default function LayoutImportPage({
 
   // Lista de blocos cadastrados pra empresa (até 3: VIAGEM/PEDAGIO/COMBUSTIVEL)
   const blocos = useQuery({
-    queryKey: ["layout-import-blocos", empresaId, token],
+    queryKey: ["layout-import-blocos", empresaId],
     enabled: !!token,
     queryFn: () =>
       fetchApi<BlocoSalvo[]>(`/admin/empresas/${empresaId}/layout-import`, {
@@ -196,7 +196,7 @@ export default function LayoutImportPage({
   });
 
   const fechamentos = useQuery({
-    queryKey: ["layout-import-fechamentos", empresaId, token],
+    queryKey: ["layout-import-fechamentos", empresaId],
     enabled: !!token,
     queryFn: () =>
       fetchApi<FechamentoRecente[]>(

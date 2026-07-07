@@ -179,7 +179,7 @@ export default function ViagemDetalhePage({
   });
   // Limite de sinal fraco configurável — usado pra marcar a descarga em âmbar.
   const gpsConfig = useQuery({
-    queryKey: ["busca-locais-config", token],
+    queryKey: ["busca-locais-config"],
     enabled: !!token,
     staleTime: 30 * 60_000,
     queryFn: () =>
@@ -189,7 +189,7 @@ export default function ViagemDetalhePage({
   const localCargaId = viagem.data?.localCarga.id;
   const localDescargaId = viagem.data?.localDescarga.id;
   const pedagiosNaRota = useQuery({
-    queryKey: ["viagem-pedagios", localCargaId, localDescargaId, token],
+    queryKey: ["viagem-pedagios", localCargaId, localDescargaId],
     enabled: !!token && !!localCargaId && !!localDescargaId,
     staleTime: 60_000,
     queryFn: () =>
@@ -235,7 +235,7 @@ export default function ViagemDetalhePage({
   const [escolhendoRota, setEscolhendoRota] = useState(false);
   const [rotaPreviewIdx, setRotaPreviewIdx] = useState<number | null>(null);
   const rotasAlt = useQuery({
-    queryKey: ["viagem-rotas-alt", id, token],
+    queryKey: ["viagem-rotas-alt", id],
     enabled: !!token && escolhendoRota,
     staleTime: 60_000,
     queryFn: () =>

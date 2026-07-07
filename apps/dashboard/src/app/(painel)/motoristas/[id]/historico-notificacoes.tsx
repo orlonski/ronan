@@ -41,7 +41,7 @@ function StatusBadge({ status }: { status: string }) {
 export function HistoricoNotificacoes({ motoristaId }: { motoristaId: string }) {
   const token = useAuthToken();
   const q = useQuery({
-    queryKey: ["motorista-notificacoes", motoristaId, token],
+    queryKey: ["motorista-notificacoes", motoristaId],
     enabled: !!token,
     queryFn: () =>
       fetchApi<ListarNotificacoesAdminResponse>(

@@ -186,7 +186,7 @@ function ViagemCard({ v, agora }: { v: ViagemAndamento; agora: number }) {
 export default function ViagensAndamentoPage() {
   const token = useAuthToken();
   const list = useQuery({
-    queryKey: [PATH, "list", token],
+    queryKey: [PATH, "list"],
     enabled: !!token,
     queryFn: () => fetchApi<ViagemAndamento[]>(PATH, { token }),
     refetchInterval: POLL_MS,

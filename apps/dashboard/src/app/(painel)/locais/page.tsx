@@ -195,7 +195,7 @@ export default function LocaisPage() {
   // mudam. QueryKey começa com PATH pra invalidate de create/update/delete pegar
   // o mapa junto (TanStack faz partial match por prefixo do array).
   const mapa = useQuery({
-    queryKey: [PATH, "mapa", tableState.q, tableState.filters, token],
+    queryKey: [PATH, "mapa", tableState.q, tableState.filters],
     enabled: view === "mapa" && !!token,
     queryFn: () => {
       const usp = new URLSearchParams();
@@ -212,7 +212,7 @@ export default function LocaisPage() {
   // Grupos de locais com nome parecido (provável duplicata). Carrega na aba Lista.
   // Mesmo prefixo [PATH] → invalidate de create/update/delete/mescla revalida junto.
   const duplicatas = useQuery({
-    queryKey: [PATH, "duplicatas", token],
+    queryKey: [PATH, "duplicatas"],
     enabled: view === "lista" && !!token,
     queryFn: () => fetchApi<DupEntry[]>("/admin/locais/duplicatas", { token }),
     staleTime: 60_000,
@@ -243,7 +243,7 @@ export default function LocaisPage() {
   // Duplicados GEOGRÁFICOS: grupos de locais próximos entre si + score. Carrega
   // só na aba Mapa com o modo ligado. QueryKey inclui o raio (ajustável ao vivo).
   const geoDup = useQuery({
-    queryKey: [PATH, "duplicatas-geo", raioDedup, token],
+    queryKey: [PATH, "duplicatas-geo", raioDedup],
     enabled: view === "mapa" && suspeitos && !!token,
     queryFn: () =>
       fetchApi<DuplicatasGeoResp>(`/admin/locais/duplicatas-geo?raioM=${raioDedup}`, { token }),

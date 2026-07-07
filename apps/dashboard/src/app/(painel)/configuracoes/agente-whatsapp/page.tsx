@@ -73,7 +73,7 @@ export default function AgenteConfigPage() {
   const qc = useQueryClient();
 
   const cfg = useQuery({
-    queryKey: [PATH, token],
+    queryKey: [PATH],
     enabled: !!token,
     queryFn: () => fetchApi<ConfigAgente>(PATH, { token }),
   });

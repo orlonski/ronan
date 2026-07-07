@@ -34,7 +34,7 @@ export default function CamposLayoutPage() {
   const qc = useQueryClient();
 
   const list = useQuery({
-    queryKey: [PATH, token],
+    queryKey: [PATH],
     enabled: !!token,
     queryFn: () => fetchApi<Campo[]>(PATH, { token }),
   });

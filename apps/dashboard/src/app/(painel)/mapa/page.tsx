@@ -33,7 +33,7 @@ export default function MapaGeralPage() {
   const [showPedagios, setShowPedagios] = useState(false);
 
   const qMotoristas = useQuery({
-    queryKey: ["mapa-geral-motoristas", janela, token],
+    queryKey: ["mapa-geral-motoristas", janela],
     enabled: !!token && showMotoristas,
     refetchInterval: showMotoristas ? 60_000 : false,
     queryFn: () =>
@@ -41,14 +41,14 @@ export default function MapaGeralPage() {
   });
 
   const qLocais = useQuery({
-    queryKey: ["mapa-geral-locais", token],
+    queryKey: ["mapa-geral-locais"],
     enabled: !!token && showLocais,
     staleTime: 5 * 60_000,
     queryFn: () => fetchApi<LocalMapa[]>(`/admin/locais/mapa`, { token }),
   });
 
   const qPedagios = useQuery({
-    queryKey: ["mapa-geral-pedagios", token],
+    queryKey: ["mapa-geral-pedagios"],
     enabled: !!token && showPedagios,
     staleTime: 5 * 60_000,
     queryFn: () => fetchApi<PedagioMapa[]>(`/admin/pedagios-rodovia/mapa`, { token }),

@@ -29,7 +29,7 @@ export default function TrackingConfigPage() {
   const qc = useQueryClient();
 
   const cfg = useQuery({
-    queryKey: [PATH, token],
+    queryKey: [PATH],
     enabled: !!token,
     queryFn: () => fetchApi<ConfigTracking>(PATH, { token }),
   });

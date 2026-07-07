@@ -69,7 +69,7 @@ export default function ErrosPage() {
   const { viewMode, setViewMode } = useListViewMode("erros");
 
   const grupos = useQuery({
-    queryKey: ["errors-agrupados", origem, status, token],
+    queryKey: ["errors-agrupados", origem, status],
     enabled: !!token,
     queryFn: () => {
       const qs = new URLSearchParams();
@@ -84,7 +84,7 @@ export default function ErrosPage() {
   });
 
   const ocorrencias = useQuery({
-    queryKey: ["errors-listar", hashSelecionado, token],
+    queryKey: ["errors-listar", hashSelecionado],
     enabled: !!token && !!hashSelecionado,
     queryFn: () =>
       fetchApi<ErroDetalhe[]>(

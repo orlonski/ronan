@@ -74,7 +74,7 @@ export default function PainelHome() {
   const { data: session } = useSession();
   const token = useAuthToken();
   const { data, isLoading } = useQuery({
-    queryKey: ["dashboard", token],
+    queryKey: ["dashboard"],
     enabled: !!token,
     staleTime: 60_000,
     queryFn: () => fetchApi<Snapshot>("/admin/dashboard", { token }),
