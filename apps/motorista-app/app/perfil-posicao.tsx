@@ -223,22 +223,24 @@ export default function PerfilPosicaoScreen() {
               </Text>
             </Text>
             {ativada && permLoc.background !== "granted" && (
-              <View className="mt-2 gap-2">
-                <Text className="text-sm text-muted-foreground">
-                  Pra compartilhar a posição de tempos em tempos, o celular
-                  precisa liberar a localização como{" "}
-                  <Text className="font-semibold text-foreground">
-                    &quot;Permitir o tempo todo&quot;
-                  </Text>
-                  . Do jeito que está, o compartilhamento não funciona direito.
+              <Text className="mt-2 text-sm text-muted-foreground">
+                Pra compartilhar a posição de tempos em tempos, o celular precisa
+                liberar a localização como{" "}
+                <Text className="font-semibold text-foreground">
+                  &quot;Permitir o tempo todo&quot;
                 </Text>
-                <Button variant="outline" onPress={() => void Linking.openSettings()}>
-                  <Text className="text-sm font-semibold text-foreground">
-                    Abrir ajustes do celular
-                  </Text>
-                </Button>
-              </View>
+                . Do jeito que está, o compartilhamento não funciona direito.
+              </Text>
             )}
+            <Button
+              variant="outline"
+              className="mt-3"
+              onPress={() => void Linking.openSettings()}
+            >
+              <Text className="text-sm font-semibold text-foreground">
+                Abrir ajustes do celular
+              </Text>
+            </Button>
           </Card>
         )}
 
