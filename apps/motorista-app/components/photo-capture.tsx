@@ -8,7 +8,17 @@ import {
 } from "react-native-vision-camera";
 import * as ImageManipulator from "expo-image-manipulator";
 import { ImageManipulator as Manip } from "expo-image-manipulator";
-import { Camera, Crop, RotateCcw, RotateCw, X } from "lucide-react-native";
+import * as ImagePicker from "expo-image-picker";
+import {
+  Camera,
+  Crop,
+  Flashlight,
+  FlashlightOff,
+  Images,
+  RotateCcw,
+  RotateCw,
+  X,
+} from "lucide-react-native";
 import {
   ActivityIndicator,
   Alert,
@@ -60,6 +70,24 @@ export function PhotoCapture({
   // num arquivo temp. O toque-pra-focar é nativo (enableNativeTapToFocusGesture).
   const device = useCameraDevice("back");
   const photoOutput = usePhotoOutput({ qualityPrioritization: "quality" });
+  // Lanterna (torch): motorista liga pra iluminar o ticket no escuro.
+  const [torch, setTorch] = useState(false);
+
+  async function escolherDaGaleria() {
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      quality: 1,
+    });
+    if (res.canceled || !res.assets?.[0]) return;
+    // Mesma compressão/redimensionamento da foto tirada na câmera.
+    const compressed = await ImageManipulator.manipulateAsync(
+      res.assets[0].uri,
+      [{ resize: { width: 1920 } }],
+      { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
+    );
+    onChange({ uri: compressed.uri, mime: "image/jpeg" });
+    setOpen(false);
+  }
 
   async function abrir(): Promise<boolean> {
     if (!hasPermission) {
@@ -156,15 +184,23 @@ export function PhotoCapture({
           </View>
         </View>
       ) : hidePlaceholder ? null : (
-        <Pressable
-          onPress={abrir}
-          className="h-32 items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border bg-muted/30"
-        >
-          <Camera size={28} color="#64748b" />
-          <Text className="text-sm font-medium text-muted-foreground">
-            Tocar para abrir a câmera
-          </Text>
-        </Pressable>
+        <View className="gap-2">
+          <Pressable
+            onPress={abrir}
+            className="h-32 items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border bg-muted/30"
+          >
+            <Camera size={28} color="#64748b" />
+            <Text className="text-sm font-medium text-muted-foreground">
+              Tocar para abrir a câmera
+            </Text>
+          </Pressable>
+          <Button variant="outline" size="sm" onPress={escolherDaGaleria}>
+            <Images size={16} color="#0f172a" />
+            <Text className="text-sm font-medium text-foreground">
+              Escolher da galeria
+            </Text>
+          </Button>
+        </View>
       )}
 
       <Modal
@@ -202,6 +238,9 @@ export function PhotoCapture({
               device={device}
               photoOutput={photoOutput}
               active={open && !previewUri && !cropping}
+              torch={torch}
+              onToggleTorch={() => setTorch((t) => !t)}
+              onGaleria={escolherDaGaleria}
             />
           )}
         </View>
@@ -220,6 +259,9 @@ function CaptureMode({
   device,
   photoOutput,
   active,
+  torch,
+  onToggleTorch,
+  onGaleria,
 }: {
   cameraRef: React.RefObject<CameraRef | null>;
   taking: boolean;
@@ -230,6 +272,9 @@ function CaptureMode({
   device: ReturnType<typeof useCameraDevice>;
   photoOutput: ReturnType<typeof usePhotoOutput>;
   active: boolean;
+  torch: boolean;
+  onToggleTorch: () => void;
+  onGaleria: () => void;
 }) {
   if (!hasPermission) {
     return (
@@ -268,15 +313,28 @@ function CaptureMode({
         isActive={active}
         outputs={[photoOutput]}
         enableNativeTapToFocusGesture
+        torchMode={torch ? "on" : "off"}
       />
       <SafeAreaView edges={["top"]} className="absolute left-0 right-0 top-0">
-        <View className="px-4 pt-2">
+        <View className="flex-row items-center justify-between px-4 pt-2">
           <Pressable
             onPress={onCancelar}
             className="h-10 w-10 items-center justify-center rounded-full bg-black/50"
           >
             <X size={20} color="white" />
           </Pressable>
+          {device.hasTorch ? (
+            <Pressable
+              onPress={onToggleTorch}
+              className={`h-10 w-10 items-center justify-center rounded-full ${torch ? "bg-white" : "bg-black/50"}`}
+            >
+              {torch ? (
+                <Flashlight size={20} color="#0f172a" />
+              ) : (
+                <FlashlightOff size={20} color="white" />
+              )}
+            </Pressable>
+          ) : null}
         </View>
         <View className="mt-2 items-center px-4">
           <Text className="rounded-full bg-black/55 px-3 py-1.5 text-center text-xs font-medium text-white">
@@ -285,7 +343,13 @@ function CaptureMode({
         </View>
       </SafeAreaView>
       <SafeAreaView edges={["bottom"]} className="absolute bottom-0 left-0 right-0">
-        <View className="items-center pb-6">
+        <View className="flex-row items-center justify-between px-10 pb-6">
+          <Pressable
+            onPress={onGaleria}
+            className="h-12 w-12 items-center justify-center rounded-full bg-black/50"
+          >
+            <Images size={22} color="white" />
+          </Pressable>
           <Pressable
             onPress={onCapturar}
             disabled={taking}
@@ -297,6 +361,8 @@ function CaptureMode({
               <View className="h-16 w-16 rounded-full bg-white" />
             )}
           </Pressable>
+          {/* Espaçador pra manter o botão de captura centralizado. */}
+          <View className="h-12 w-12" />
         </View>
       </SafeAreaView>
     </>
