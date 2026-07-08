@@ -24,8 +24,10 @@ type Props = {
 };
 
 function rotulo(r: RotaOption): { titulo: string; sub: string } {
+  // Sem "sugerido pelo sistema" de propósito: o sistema não empurra o motorista
+  // pro km maior. Ele escolhe o que realmente fez.
   if (r.retorno) {
-    return { titulo: "Precisei voltar no retorno", sub: "Sugerido pelo sistema" };
+    return { titulo: "Precisei voltar no retorno", sub: "Passa e volta no retorno" };
   }
   return { titulo: "Cheguei direto", sub: "Sem retorno" };
 }

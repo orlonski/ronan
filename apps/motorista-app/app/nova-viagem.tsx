@@ -266,13 +266,16 @@ export default function NovaViagem() {
     setForm((f) => (f.km === novoKm ? f : { ...f, km: novoKm }));
   }, [rota.data, kmEditadoManual, kmGovernadoPorRota]);
 
-  // Pré-seleciona a recomendada da fonte ativa (1+). Como a fonte é sequenciada
-  // (nunca alterna entre duas listas cheias), a guarda de "já escolhida" basta.
+  // Pré-seleciona da fonte ativa (1+). No card de RETORNO o default é o
+  // conservador "Cheguei direto" (sem retorno) — o sistema não entrega km a mais
+  // de graça; quem voltou toca na opção. No seletor de estrada, a recomendada.
   useEffect(() => {
     if (kmEditadoManual || rotaGeometriaEscolhida != null) return;
     if (rotasAtivas.length < 1) return;
-    const recIdx = Math.max(0, rotasAtivas.findIndex((r) => r.recomendada));
-    escolherRota(recIdx);
+    const idx = usarRetorno
+      ? rotasAtivas.findIndex((r) => r.retorno === false)
+      : rotasAtivas.findIndex((r) => r.recomendada);
+    escolherRota(Math.max(0, idx));
   }, [rotasAtivas, kmEditadoManual, rotaGeometriaEscolhida]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-detecta local de carga/descarga a partir dos pontos GPS do tracking.
@@ -570,6 +573,19 @@ export default function NovaViagem() {
         cancelLabel: "Salvar mesmo assim",
       });
       if (ok) return;
+    }
+    // Confirmação final do km rodado — o motorista bate o olho e ASSUME o valor,
+    // como fazia no papel. Vale pra toda viagem (com escolha de rota ou não). Se
+    // não bater com o que ele rodou, ele altera na mão — tem que ser justo.
+    const kmConfirmado = await showConfirm({
+      title: `Você rodou ${form.km.replace(".", ",")} km?`,
+      message:
+        "Confira o km da viagem. Se você rodou diferente, toque em Alterar e corrija o valor.",
+      confirmLabel: "Sim, está certo",
+      cancelLabel: "Alterar o km",
+    });
+    if (!kmConfirmado) {
+      return void val.apontar("km", "Ajuste o km rodado aqui");
     }
     setSubmitting(true);
     try {

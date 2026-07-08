@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { FlatList, Modal, Pressable, Text, TextInput, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { MapPin, Search, X } from "lucide-react-native";
 import { useCatalogos, type Local } from "@/lib/queries";
 import { enderecoResumido, LinhaEndereco } from "@/components/local-info";
@@ -60,7 +60,10 @@ export function BuscarLocalModal({
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={fechar}>
-      <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
+      {/* SafeAreaProvider dentro do Modal: no iOS o inset do topo não propaga pro
+          conteúdo do Modal sem isso, e o header ficava sob a barra de status/notch. */}
+      <SafeAreaProvider>
+        <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
         <View className="flex-row items-center gap-2 border-b border-border px-4 py-3">
           <Text className="flex-1 text-lg font-bold text-foreground">Buscar local</Text>
           <Pressable
@@ -126,7 +129,8 @@ export function BuscarLocalModal({
             </Pressable>
           )}
         />
-      </SafeAreaView>
+        </SafeAreaView>
+      </SafeAreaProvider>
     </Modal>
   );
 }

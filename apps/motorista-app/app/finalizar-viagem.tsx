@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
-import { showAlert } from "@/lib/alert";
+import { showAlert, showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { hojeISO } from "@/lib/datetime";
 import {
@@ -186,14 +186,16 @@ export default function FinalizarViagem() {
     setKm((cur) => (cur === rota.data!.km ? cur : (rota.data as { km: string }).km));
   }, [rota.data, kmEditadoManual, kmGovernadoPorRota]);
 
-  // Pré-seleciona a recomendada da fonte ativa (1+). Fonte sequenciada (nunca
-  // alterna entre duas listas cheias), então a guarda de "já escolhida" basta —
-  // e preserva a escolha restaurada do rascunho (draft).
+  // Pré-seleciona da fonte ativa (1+); preserva a escolha restaurada do rascunho.
+  // No card de RETORNO o default é o conservador "Cheguei direto" — o sistema não
+  // entrega km a mais de graça; quem voltou toca na opção. Estrada: a recomendada.
   useEffect(() => {
     if (kmEditadoManual || rotaGeometriaEscolhida != null) return;
     if (rotasAtivas.length < 1) return;
-    const recIdx = Math.max(0, rotasAtivas.findIndex((r) => r.recomendada));
-    escolherRota(recIdx);
+    const idx = usarRetorno
+      ? rotasAtivas.findIndex((r) => r.retorno === false)
+      : rotasAtivas.findIndex((r) => r.recomendada);
+    escolherRota(Math.max(0, idx));
   }, [rotasAtivas, kmEditadoManual, rotaGeometriaEscolhida]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const nomeDescargaSelecionado = useMemo(() => {
@@ -302,6 +304,19 @@ export default function FinalizarViagem() {
       return;
     }
     val.limpar();
+    // Confirmação final do km rodado — o motorista bate o olho e ASSUME o valor,
+    // como fazia no papel. Se não bater, altera na mão. Tem que ser justo.
+    const kmConfirmado = await showConfirm({
+      title: `Você rodou ${km.replace(".", ",")} km?`,
+      message:
+        "Confira o km da viagem. Se você rodou diferente, toque em Alterar e corrija o valor.",
+      confirmLabel: "Sim, está certo",
+      cancelLabel: "Alterar o km",
+    });
+    if (!kmConfirmado) {
+      val.apontar("km", "Ajuste o km rodado aqui");
+      return;
+    }
     setSubmitting(true);
     try {
       const localDescargaDados =
