@@ -856,6 +856,10 @@ model RotaCache {
   /// com overview=simplified. NULL pra rotas antigas (pré-feature) — frontend
   /// renderiza reta como fallback. Decodifica com @mapbox/polyline.
   geometria       String?
+  /// Versão do algoritmo de roteamento que gerou esta linha. Quando o backend
+  /// sobe com uma versão maior (ex.: ligou approaches=curb), entradas com versão
+  /// diferente viram stale e recalculam sob demanda. Default 1 = pré-curb.
+  versaoRoteador  Int      @default(1)
   calculadoEm     DateTime @default(now())
 
   @@unique([localOrigemId, localDestinoId])

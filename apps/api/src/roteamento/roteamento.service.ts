@@ -3,7 +3,23 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 
 const CACHE_TTL_DIAS = 90;
-const HTTP_TIMEOUT_MS = 5000;
+// Timeout por-tentativa. A cascata curb→sem-curb pode fazer até 2 chamadas; com
+// 3.5s cada o pior caso (~7s) ainda cabe no lançamento. Na prática a 1ª resolve.
+const HTTP_TIMEOUT_MS = 3500;
+
+// Versão do roteador. Bumpar sempre que a forma de calcular a rota mudar (ex.:
+// ligar approaches=curb) invalida o RotaCache antigo de forma lazy: entradas de
+// versão diferente viram stale e são recomputadas no próximo acesso.
+const ROUTER_VERSION = 2;
+
+// approaches=curb;curb força o roteador a chegar/sair no lado correto da via
+// (mão-direita no Brasil), contando o retorno quando o ponto de carga/descarga
+// caiu na pista de sentido contrário. Se o build do OSRM não suportar o
+// parâmetro, definir OSRM_APPROACHES="off" desliga sem mexer no código.
+const OSRM_APPROACHES = (process.env.OSRM_APPROACHES ?? "curb;curb").trim();
+
+type OsrmRoute = { distance: number; duration: number; geometry?: string };
+type OsrmResponse = { code: string; routes?: OsrmRoute[] };
 
 type RotaResult =
   | {
@@ -45,7 +61,12 @@ export class RoteamentoService {
         localOrigemId_localDestinoId: { localOrigemId, localDestinoId },
       },
     });
-    if (!opts.force && cached && this.cacheValido(cached.calculadoEm)) {
+    if (
+      !opts.force &&
+      cached &&
+      cached.versaoRoteador === ROUTER_VERSION &&
+      this.cacheValido(cached.calculadoEm)
+    ) {
       return {
         km: cached.km.toString(),
         duracaoSegundos: cached.duracaoSegundos,
@@ -97,11 +118,13 @@ export class RoteamentoService {
           km: new Prisma.Decimal(km),
           duracaoSegundos: Math.round(route.duration),
           geometria,
+          versaoRoteador: ROUTER_VERSION,
         },
         update: {
           km: new Prisma.Decimal(km),
           duracaoSegundos: Math.round(route.duration),
           geometria,
+          versaoRoteador: ROUTER_VERSION,
           calculadoEm: new Date(),
         },
       });
@@ -186,11 +209,13 @@ export class RoteamentoService {
           km: new Prisma.Decimal(recomendada.km),
           duracaoSegundos: recomendada.duracaoSegundos,
           geometria: recomendada.geometria,
+          versaoRoteador: ROUTER_VERSION,
         },
         update: {
           km: new Prisma.Decimal(recomendada.km),
           duracaoSegundos: recomendada.duracaoSegundos,
           geometria: recomendada.geometria,
+          versaoRoteador: ROUTER_VERSION,
           calculadoEm: new Date(),
         },
       });
@@ -214,29 +239,12 @@ export class RoteamentoService {
     lng1: number,
     lat2: number,
     lng2: number,
-  ): Promise<{ distance: number; duration: number; geometry?: string }> {
+  ): Promise<OsrmRoute> {
     // overview=simplified retorna polyline encoded (precision 5) com algumas
     // dezenas de pontos — suficiente pra render no mapa. Sem custo extra de
     // requisição (mesma chamada que antes pegava só distance/duration).
-    const url = `${this.osrmUrl}/route/v1/driving/${lng1},${lat1};${lng2},${lat2}?overview=simplified&geometries=polyline`;
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
-
-    try {
-      const res = await fetch(url, { signal: controller.signal });
-      if (!res.ok) throw new Error(`OSRM HTTP ${res.status}`);
-      const data = (await res.json()) as {
-        code: string;
-        routes?: { distance: number; duration: number; geometry?: string }[];
-      };
-      if (data.code !== "Ok" || !data.routes?.[0]) {
-        throw new Error(`OSRM resposta inválida: ${data.code}`);
-      }
-      return data.routes[0];
-    } finally {
-      clearTimeout(timeout);
-    }
+    const routes = await this.rotearOsrm(`${lng1},${lat1};${lng2},${lat2}`, "");
+    return routes[0]!;
   }
 
   private async consultarOsrmAlternativas(
@@ -244,25 +252,57 @@ export class RoteamentoService {
     lng1: number,
     lat2: number,
     lng2: number,
-  ): Promise<{ distance: number; duration: number; geometry?: string }[]> {
+  ): Promise<OsrmRoute[]> {
     // alternatives=3 pede até 3 rotas distintas. OSRM pode devolver menos (ou
     // só 1) quando não há alternativa razoável. routes[0] = a recomendada.
-    const url = `${this.osrmUrl}/route/v1/driving/${lng1},${lat1};${lng2},${lat2}?overview=simplified&geometries=polyline&alternatives=3`;
+    return this.rotearOsrm(`${lng1},${lat1};${lng2},${lat2}`, "&alternatives=3");
+  }
 
+  /**
+   * Consulta o OSRM com cascata de resiliência para o approaches=curb:
+   *  1. tenta com approaches (lado correto da via, contando retorno);
+   *  2. se a resposta veio 200 mas sem rota (NoRoute/NoSegment — restrição de
+   *     lado impossível naquele trecho de OSM), degrada pra query SEM approaches
+   *     (comportamento antigo). Só aí um code != Ok vira erro pro chamador.
+   * Falha de rede/HTTP/timeout (OSRM fora do ar) propaga direto — não faz sentido
+   * repetir com outro parâmetro e gastar mais um timeout.
+   */
+  private async rotearOsrm(coords: string, extraParams: string): Promise<OsrmRoute[]> {
+    const base = `${this.osrmUrl}/route/v1/driving/${coords}?overview=simplified&geometries=polyline${extraParams}`;
+    const usarApproaches =
+      OSRM_APPROACHES !== "" && OSRM_APPROACHES.toLowerCase() !== "off";
+
+    if (usarApproaches) {
+      // encodeURIComponent no `;` (vira %3B): o proxy do Easypanel trata `;` cru
+      // na query string como separador e corrompe o parâmetro (InvalidQuery), o
+      // que silenciosamente cairia no fallback e tornaria o curb um no-op.
+      const comCurb = await this.fetchOsrm(
+        `${base}&approaches=${encodeURIComponent(OSRM_APPROACHES)}`,
+      );
+      if (comCurb.code === "Ok" && comCurb.routes?.[0]) {
+        return comCurb.routes;
+      }
+      this.logger.warn(
+        `OSRM curb sem rota (${comCurb.code}) — fallback sem approaches: ${coords}`,
+      );
+    }
+
+    const data = await this.fetchOsrm(base);
+    if (data.code !== "Ok" || !data.routes?.[0]) {
+      throw new Error(`OSRM resposta inválida: ${data.code}`);
+    }
+    return data.routes;
+  }
+
+  /** GET no OSRM com timeout. Lança em erro de rede/HTTP; devolve o JSON cru
+   * (inclusive code != Ok) pra quem chama decidir sobre fallback. */
+  private async fetchOsrm(url: string): Promise<OsrmResponse> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
-
     try {
       const res = await fetch(url, { signal: controller.signal });
       if (!res.ok) throw new Error(`OSRM HTTP ${res.status}`);
-      const data = (await res.json()) as {
-        code: string;
-        routes?: { distance: number; duration: number; geometry?: string }[];
-      };
-      if (data.code !== "Ok" || !data.routes?.[0]) {
-        throw new Error(`OSRM resposta inválida: ${data.code}`);
-      }
-      return data.routes;
+      return (await res.json()) as OsrmResponse;
     } finally {
       clearTimeout(timeout);
     }

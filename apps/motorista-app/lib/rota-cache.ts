@@ -8,7 +8,11 @@
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const PREFIX = "ronan.rota:";
+// v2: o backend passou a rotear com approaches=curb (respeita o lado correto da
+// via / conta o retorno em pista dupla). Entradas v1 têm km subestimado — bumpar
+// o prefixo as descarta; pruneExpired limpa as órfãs no boot.
+const PREFIX = "ronan.rota.v2:";
+const PREFIXES_ANTIGOS = ["ronan.rota:"];
 const TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 dias
 
 export type RotaCacheEntry = {
@@ -66,6 +70,9 @@ export async function setRotaCache(
 export async function pruneExpired(): Promise<void> {
   try {
     const keys = await AsyncStorage.getAllKeys();
+    // Descarta de vez o cache de versões anteriores do roteador (km desatualizado).
+    const orfas = keys.filter((k) => PREFIXES_ANTIGOS.some((p) => k.startsWith(p)));
+    if (orfas.length > 0) await AsyncStorage.multiRemove(orfas);
     const rotaKeys = keys.filter((k) => k.startsWith(PREFIX));
     if (rotaKeys.length === 0) return;
     const pairs = await AsyncStorage.multiGet(rotaKeys);
