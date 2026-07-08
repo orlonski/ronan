@@ -62,6 +62,7 @@ const SAFE_SELECT = {
   podeLancarAbastecimento: true,
   podeUsarOcrTicket: true,
   podeVerStories: true,
+  podeVerTodosLocais: true,
   receberResumoDiario: true,
   criadoEm: true,
   criadoPor: { select: { id: true, nome: true } },
@@ -256,6 +257,7 @@ export class MotoristasService {
       podeLancarAbastecimento?: boolean;
       podeUsarOcrTicket?: boolean;
       podeVerStories?: boolean;
+      podeVerTodosLocais?: boolean;
       receberResumoDiario?: boolean;
     },
   ) {
@@ -273,6 +275,7 @@ export class MotoristasService {
         podeLancarAbastecimento: true,
         podeUsarOcrTicket: true,
         podeVerStories: true,
+        podeVerTodosLocais: true,
         receberResumoDiario: true,
       },
     });

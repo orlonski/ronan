@@ -12,8 +12,9 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { CheckCircle2, MapPin, Plus, X } from "lucide-react-native";
+import { CheckCircle2, MapPin, Plus, Search, X } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
+import { BuscarLocalModal } from "@/components/buscar-local-modal";
 import { Label } from "@/components/ui/label";
 import type { FonteGps } from "@ronan/shared-types";
 import { showConfirm } from "@/lib/alert";
@@ -31,8 +32,10 @@ import {
   buscarLocaisProximosOffline,
   useBuscaGpsConfig,
   useCriarLocalRapido,
+  useMe,
   BUSCA_GPS_CONFIG_DEFAULTS,
   type Catalogos,
+  type Local,
   type LocalProximo,
 } from "@/lib/queries";
 
@@ -127,6 +130,10 @@ export function DescargaPorGps({
   // Mostra o botão "Abrir ajustes" só quando a falha é de permissão (1 toque).
   const [erroAjustes, setErroAjustes] = useState(false);
   const [nomeNovo, setNomeNovo] = useState("");
+  // Busca por nome (todos os locais) — liberada por flag do motorista.
+  const me = useMe();
+  const podeBuscarPorNome = me.data?.podeVerTodosLocais ?? false;
+  const [buscarAberto, setBuscarAberto] = useState(false);
   const criar = useCriarLocalRapido();
   const gpsConfig = useBuscaGpsConfig();
   const cfg = gpsConfig.data ?? BUSCA_GPS_CONFIG_DEFAULTS;
@@ -299,6 +306,15 @@ export function DescargaPorGps({
     });
   }
 
+  // Seleção manual pela busca por nome: sem GPS fresco, então onCaptura(null) —
+  // a viagem omite os campos descarga* de auditoria; o km segue do Local.lat/lng.
+  function escolherLocalManual(local: Local) {
+    onCaptura?.(null);
+    onChange(local.id);
+    setEstado({ tipo: "selecionado", local: { id: local.id, nome: local.nome } });
+    setErro(null);
+  }
+
   // "Não é esse?" — busca outros locais de descarga num raio ampliado (a partir
   // da posição já capturada) pra o motorista escolher o certo ou cadastrar novo.
   async function verOutros() {
@@ -391,12 +407,22 @@ export function DescargaPorGps({
       <Label>Local de descarga</Label>
 
       {estado.tipo === "vazio" && (
-        <Button onPress={capturarEBuscar} size="lg" className="h-16">
-          <MapPin size={22} color="white" />
-          <Text className="text-base font-bold text-primary-foreground">
-            Estou no local de descarga
-          </Text>
-        </Button>
+        <View className="gap-2">
+          <Button onPress={capturarEBuscar} size="lg" className="h-16">
+            <MapPin size={22} color="white" />
+            <Text className="text-base font-bold text-primary-foreground">
+              Estou no local de descarga
+            </Text>
+          </Button>
+          {podeBuscarPorNome && (
+            <Button variant="outline" onPress={() => setBuscarAberto(true)}>
+              <Search size={18} color="#0f172a" />
+              <Text className="text-sm font-semibold text-foreground">
+                Buscar local por nome
+              </Text>
+            </Button>
+          )}
+        </View>
       )}
 
       {estado.tipo === "capturando" && (
@@ -527,6 +553,14 @@ export function DescargaPorGps({
               </View>
             </Pressable>
           ))}
+          {podeBuscarPorNome && (
+            <Button variant="outline" onPress={() => setBuscarAberto(true)} className="mt-1">
+              <Search size={18} color="#0f172a" />
+              <Text className="text-sm font-semibold text-foreground">
+                Buscar local por nome
+              </Text>
+            </Button>
+          )}
           <Button variant="outline" onPress={abrirSemMatch} className="mt-1">
             <Plus size={18} color="#0f172a" />
             <Text className="text-sm font-semibold text-foreground">
@@ -621,6 +655,12 @@ export function DescargaPorGps({
           </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
+
+      <BuscarLocalModal
+        visible={buscarAberto}
+        onClose={() => setBuscarAberto(false)}
+        onSelecionar={escolherLocalManual}
+      />
     </View>
   );
 }

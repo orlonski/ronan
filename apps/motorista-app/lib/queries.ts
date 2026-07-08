@@ -97,6 +97,8 @@ export type Me = {
   podeLancarAbastecimento: boolean;
   podeUsarOcrTicket: boolean;
   podeVerStories: boolean;
+  // Quando true, mostra "Buscar local por nome" na descarga (todos os locais).
+  podeVerTodosLocais: boolean;
   // Preferências de recebimento (controladas na tela de perfil).
   aceitaPush: boolean;
   aceitaWhatsapp: boolean;
@@ -237,6 +239,8 @@ function normalizarMe<T extends Record<string, unknown>>(m: T): T {
   if (typeof anyM.podeLancarPedagio !== "boolean") anyM.podeLancarPedagio = true;
   if (typeof anyM.podeLancarAbastecimento !== "boolean") anyM.podeLancarAbastecimento = true;
   if (typeof anyM.podeUsarOcrTicket !== "boolean") anyM.podeUsarOcrTicket = true;
+  // Opt-in: cache antigo / motorista sem o flag NÃO vê o "buscar todos os locais".
+  if (typeof anyM.podeVerTodosLocais !== "boolean") anyM.podeVerTodosLocais = false;
   // Backend antigo/cache sem as prefs: assume que recebe tudo (default true).
   if (typeof anyM.aceitaPush !== "boolean") anyM.aceitaPush = true;
   if (typeof anyM.aceitaWhatsapp !== "boolean") anyM.aceitaWhatsapp = true;

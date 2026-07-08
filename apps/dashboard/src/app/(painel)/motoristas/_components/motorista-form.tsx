@@ -41,6 +41,7 @@ export type Motorista = {
   podeLancarAbastecimento: boolean;
   podeUsarOcrTicket: boolean;
   podeVerStories: boolean;
+  podeVerTodosLocais: boolean;
   receberResumoDiario: boolean;
 };
 
@@ -88,6 +89,7 @@ type AcessosState = {
   podeLancarAbastecimento: boolean;
   podeUsarOcrTicket: boolean;
   podeVerStories: boolean;
+  podeVerTodosLocais: boolean;
   receberResumoDiario: boolean;
 };
 
@@ -104,6 +106,7 @@ export function MotoristaForm({ initial }: Props) {
     podeLancarAbastecimento: initial?.podeLancarAbastecimento ?? true,
     podeUsarOcrTicket: initial?.podeUsarOcrTicket ?? true,
     podeVerStories: initial?.podeVerStories ?? true,
+    podeVerTodosLocais: initial?.podeVerTodosLocais ?? false,
     receberResumoDiario: initial?.receberResumoDiario ?? true,
   });
   const token = useAuthToken();
@@ -418,6 +421,11 @@ export function MotoristaForm({ initial }: Props) {
                 label="Stories (foto do trecho, estilo Instagram)"
                 active={acessos.podeVerStories}
                 onChange={(v) => alterarAcesso("podeVerStories", v)}
+              />
+              <AcessoRow
+                label="Buscar todos os locais de descarga (por nome)"
+                active={acessos.podeVerTodosLocais}
+                onChange={(v) => alterarAcesso("podeVerTodosLocais", v)}
               />
             </div>
 

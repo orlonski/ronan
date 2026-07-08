@@ -31,6 +31,7 @@ const AcessosInput = z.object({
   podeLancarAbastecimento: z.boolean().optional(),
   podeUsarOcrTicket: z.boolean().optional(),
   podeVerStories: z.boolean().optional(),
+  podeVerTodosLocais: z.boolean().optional(),
   receberResumoDiario: z.boolean().optional(),
 });
 type AcessosInput = z.infer<typeof AcessosInput>;

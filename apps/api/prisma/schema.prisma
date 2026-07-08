@@ -363,6 +363,10 @@ model Motorista {
   /// Stories (estilo Instagram): vê a barra na home, posta e reage. Liberado
   /// pra todos (default true); admin pode desligar caso a caso pelo dashboard.
   podeVerStories          Boolean   @default(true)
+  /// Quando true, o app mostra "Buscar local por nome" na descarga (lista todos
+  /// os locais, não só os do GPS por perto). Default false — admin libera caso a
+  /// caso (ex: desenvolvedor testando). Só affordance de UI: o catálogo já traz tudo.
+  podeVerTodosLocais      Boolean   @default(false)
   criadoEm                DateTime  @default(now())
   alteradoEm              DateTime  @updatedAt
 
