@@ -154,14 +154,21 @@ export default function FinalizarViagem() {
       : undefined;
   }, [rotasAtivas, rota.data]);
 
-  // Escolher uma rota no seletor: seta km + guarda a geometria (rota real no
-  // painel). NÃO marca edição manual (escolher ≠ digitar na mão).
+  // Escolher rota/variante: seta km + geometria e SAI do modo manual.
   function escolherRota(idx: number) {
     const r = rotasAtivas[idx];
     if (!r) return;
+    setKmEditadoManual(false);
     setRotaIdx(idx);
     setRotaGeometriaEscolhida(r.geometria);
     setKm(r.km);
+  }
+
+  // "Foi outro valor": modo manual (o motorista digita o km no card).
+  function ativarManual() {
+    setRotaIdx(-1);
+    setRotaGeometriaEscolhida(null);
+    setKmEditadoManual(true);
   }
 
   // Enquanto o seletor governa o km (rota escolhida), o auto-fill fica parado.
@@ -180,22 +187,22 @@ export default function FinalizarViagem() {
     usarRetorno && rotaGeometriaEscolhida != null
       ? rotasAtivas[rotaIdx]?.retorno
       : undefined;
+  // No card de RETORNO nunca auto-preenche: km só da escolha consciente.
   useEffect(() => {
-    if (kmEditadoManual || kmGovernadoPorRota) return;
+    if (usarRetorno || kmEditadoManual || kmGovernadoPorRota) return;
     if (!rota.data || rota.data.km === null) return;
     setKm((cur) => (cur === rota.data!.km ? cur : (rota.data as { km: string }).km));
-  }, [rota.data, kmEditadoManual, kmGovernadoPorRota]);
+  }, [rota.data, kmEditadoManual, kmGovernadoPorRota, usarRetorno]);
 
-  // Pré-seleciona da fonte ativa (1+); preserva a escolha restaurada do rascunho.
-  // No card de RETORNO o default é o conservador "Cheguei direto" — o sistema não
-  // entrega km a mais de graça; quem voltou toca na opção. Estrada: a recomendada.
+  // Pré-seleciona a recomendada SÓ no seletor de estrada. No card de RETORNO
+  // NENHUMA opção vem marcada — o motorista escolhe conscientemente. Preserva a
+  // escolha restaurada do rascunho.
   useEffect(() => {
+    if (usarRetorno) return;
     if (kmEditadoManual || rotaGeometriaEscolhida != null) return;
     if (rotasAtivas.length < 1) return;
-    const idx = usarRetorno
-      ? rotasAtivas.findIndex((r) => r.retorno === false)
-      : rotasAtivas.findIndex((r) => r.recomendada);
-    escolherRota(Math.max(0, idx));
+    const recIdx = Math.max(0, rotasAtivas.findIndex((r) => r.recomendada));
+    escolherRota(recIdx);
   }, [rotasAtivas, kmEditadoManual, rotaGeometriaEscolhida]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const nomeDescargaSelecionado = useMemo(() => {
@@ -423,9 +430,10 @@ export default function FinalizarViagem() {
                   // Marca quando a descarga foi escolhida (pra mostrar data/hora
                   // no espelho, igual à carga). Limpa se desmarcou.
                   setDescargaEm(x ? new Date().toISOString() : undefined);
-                  // Nova descarga = nova rota; reseta a escolha pra re-defaultar.
+                  // Nova descarga = nova rota; zera a escolha (nada marcado).
                   setRotaGeometriaEscolhida(null);
-                  setRotaIdx(0);
+                  setRotaIdx(-1);
+                  setKmEditadoManual(false);
                 }}
                 onCaptura={setDescargaCaptura}
                 nomeSelecionadoFallback={nomeDescargaSelecionado}
@@ -466,28 +474,28 @@ export default function FinalizarViagem() {
               ) : null}
             </View>
 
-            {/* Mapa da rota — escolha de retorno (2 opções) ou de estrada */}
-            {temMapa ? (
-              usarRetorno ? (
-                <SeletorRetorno
-                  opcoes={rotasAtivas}
-                  selecionadaIdx={rotaIdx}
-                  onSelecionar={escolherRota}
-                />
-              ) : (
-                <SeletorRotas
-                  rotas={rotasAtivas}
-                  selecionadaIdx={rotaIdx}
-                  onSelecionar={escolherRota}
-                />
-              )
+            {/* Seletor de estrada (quando não é caso de retorno) */}
+            {temMapa && !usarRetorno ? (
+              <SeletorRotas
+                rotas={rotasAtivas}
+                selecionadaIdx={rotaIdx}
+                onSelecionar={escolherRota}
+              />
             ) : null}
 
-            {/* 3) Km e pedágio */}
-            <View className="gap-2" onLayout={val.onLayoutCampo("km")}>
-              <View className="flex-row gap-3">
-                <View className="flex-1 gap-2">
-                  <Label error={!!val.erroDe("km")}>Km rodados</Label>
+            {usarRetorno ? (
+              /* Card de retorno É o campo de km (3ª opção = informar o valor). */
+              <View className="gap-3" onLayout={val.onLayoutCampo("km")}>
+                <SeletorRetorno
+                  opcoes={rotasAtivas}
+                  selecionadaIdx={
+                    rotaGeometriaEscolhida != null && !kmEditadoManual ? rotaIdx : -1
+                  }
+                  manualAtivo={kmEditadoManual}
+                  onSelecionar={escolherRota}
+                  onManual={ativarManual}
+                  erro={val.erroDe("km")}
+                >
                   <Input
                     value={km}
                     onChangeText={(v) => {
@@ -498,21 +506,11 @@ export default function FinalizarViagem() {
                     keyboardType="decimal-pad"
                     placeholder="0,00"
                     maxLength={8}
+                    autoFocus
                     error={!!val.erroDe("km")}
                   />
-                  {rota.isFetching && !kmEditadoManual ? (
-                    <Text className="text-xs text-muted-foreground">Calculando rota…</Text>
-                  ) : rota.data &&
-                    "km" in rota.data &&
-                    rota.data.km &&
-                    !kmEditadoManual &&
-                    rota.data.fonte !== "estimado_haversine" ? (
-                    <Text className="text-xs font-medium text-success">
-                      ✓ Calculado ({rota.data.km} km)
-                    </Text>
-                  ) : null}
-                </View>
-                <View className="flex-1 gap-2">
+                </SeletorRetorno>
+                <View className="gap-2">
                   <Label>Pedágio (R$)</Label>
                   <Input
                     value={valorPedagio}
@@ -523,17 +521,57 @@ export default function FinalizarViagem() {
                   />
                 </View>
               </View>
-              {/* Aviso de km estimado em LINHA INTEIRA (abaixo da linha km+pedágio),
-                  senão fica espremido na coluna estreita do km. */}
-              {rota.data &&
-              "km" in rota.data &&
-              rota.data.km &&
-              !kmEditadoManual &&
-              rota.data.fonte === "estimado_haversine" ? (
-                <AvisoKmEstimado km={rota.data.km} />
-              ) : null}
-              {val.erroDe("km") ? <ErroCampo msg={val.erroDe("km")!} /> : null}
-            </View>
+            ) : (
+              /* 3) Km e pedágio (fluxo normal, sem retorno) */
+              <View className="gap-2" onLayout={val.onLayoutCampo("km")}>
+                <View className="flex-row gap-3">
+                  <View className="flex-1 gap-2">
+                    <Label error={!!val.erroDe("km")}>Km rodados</Label>
+                    <Input
+                      value={km}
+                      onChangeText={(v) => {
+                        val.limpar();
+                        setKmEditadoManual(true);
+                        setKm(v);
+                      }}
+                      keyboardType="decimal-pad"
+                      placeholder="0,00"
+                      maxLength={8}
+                      error={!!val.erroDe("km")}
+                    />
+                    {rota.isFetching && !kmEditadoManual ? (
+                      <Text className="text-xs text-muted-foreground">Calculando rota…</Text>
+                    ) : rota.data &&
+                      "km" in rota.data &&
+                      rota.data.km &&
+                      !kmEditadoManual &&
+                      rota.data.fonte !== "estimado_haversine" ? (
+                      <Text className="text-xs font-medium text-success">
+                        ✓ Calculado ({rota.data.km} km)
+                      </Text>
+                    ) : null}
+                  </View>
+                  <View className="flex-1 gap-2">
+                    <Label>Pedágio (R$)</Label>
+                    <Input
+                      value={valorPedagio}
+                      onChangeText={setValorPedagio}
+                      keyboardType="decimal-pad"
+                      placeholder="opcional"
+                      maxLength={10}
+                    />
+                  </View>
+                </View>
+                {rota.data &&
+                "km" in rota.data &&
+                rota.data.km &&
+                !kmEditadoManual &&
+                rota.data.fonte === "estimado_haversine" ? (
+                  <AvisoKmEstimado km={rota.data.km} />
+                ) : null}
+                {val.erroDe("km") ? <ErroCampo msg={val.erroDe("km")!} /> : null}
+              </View>
+            )}
 
             {/* 4) Ticket (se o material exigir) + foto */}
             {exigeTicket && (
