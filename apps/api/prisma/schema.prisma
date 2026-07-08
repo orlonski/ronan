@@ -903,6 +903,11 @@ model Viagem {
   /// (viagem antiga, rota única ou offline) → painel cai no rotaCache
   /// (recomendada). Não-null também sinaliza "escolheu rota" no painel.
   rotaGeometria     String?
+  /// Escolha "voltei no retorno vs segui direto" (pista dupla): true = COM retorno
+  /// (curb), false = SEM retorno (direto), null = não perguntado (sem retorno real,
+  /// viagem antiga ou app antigo). O "Recalcular trajeto" do painel RESPEITA esse
+  /// campo em vez de sempre aplicar a variante com retorno.
+  retornoConfirmado Boolean?
   observacao        String?
   status            StatusViagem @default(ENVIADA)
   /// true = viagem aberta pelo fluxo guiado "Iniciar viagem" (lifecycle). Setado

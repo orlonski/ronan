@@ -173,6 +173,13 @@ export default function FinalizarViagem() {
     kmGovernadoPorRota && rotasAtivas[rotaIdx]
       ? parseFloat(rotasAtivas[rotaIdx]!.km)
       : kmRecomendado;
+
+  // Escolha "voltei no retorno" (true) vs "segui direto" (false); undefined quando
+  // não perguntado (backend grava null). O recalcular do painel respeita.
+  const retornoConfirmado =
+    usarRetorno && rotaGeometriaEscolhida != null
+      ? rotasAtivas[rotaIdx]?.retorno
+      : undefined;
   useEffect(() => {
     if (kmEditadoManual || kmGovernadoPorRota) return;
     if (!rota.data || rota.data.km === null) return;
@@ -320,6 +327,7 @@ export default function FinalizarViagem() {
         kmCalculado: kmCalculadoFinal,
         kmEditadoManual,
         rotaGeometria: rotaGeometriaEscolhida ?? undefined,
+        retornoConfirmado,
         ticket: aguardandoPeso ? undefined : exigeTicket ? ticket.trim() : undefined,
         localDescargaId,
         localDescargaDados,

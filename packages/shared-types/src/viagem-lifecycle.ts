@@ -144,6 +144,9 @@ export const FinalizarViagemInput = z.object({
   // Polyline da rota escolhida pelo motorista no seletor de mapa (igual ao
   // CriarViagemInput). Backend guarda em Viagem.rotaGeometria.
   rotaGeometria: z.string().max(20000).optional(),
+  // Escolha "voltei no retorno" (true) vs "segui direto" (false); ausente quando
+  // não foi perguntado. Backend guarda em Viagem.retornoConfirmado.
+  retornoConfirmado: z.boolean().optional(),
   ticket: z.string().max(50).optional(),
   localDescargaId: z.string().uuid(),
   localDescargaDados: LocalSnapshot.optional(),

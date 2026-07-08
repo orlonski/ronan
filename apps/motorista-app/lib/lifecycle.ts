@@ -453,6 +453,7 @@ export async function finalizarViagemGuiada(input: {
   kmCalculado?: number;
   kmEditadoManual?: boolean;
   rotaGeometria?: string;
+  retornoConfirmado?: boolean;
   ticket?: string;
   localDescargaId: string;
   localDescargaDados?: LocalSnapshotLifecycle;
@@ -481,6 +482,7 @@ export async function finalizarViagemGuiada(input: {
       kmCalculado: input.kmCalculado,
       kmEditadoManual: input.kmEditadoManual,
       rotaGeometria: input.rotaGeometria,
+      retornoConfirmado: input.retornoConfirmado,
       ticket: input.ticket,
       localDescargaId: input.localDescargaId,
       localDescargaDados: input.localDescargaDados,

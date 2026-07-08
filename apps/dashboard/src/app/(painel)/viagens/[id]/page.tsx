@@ -28,6 +28,7 @@ import {
   Camera,
   CheckCircle2,
   Clock,
+  CornerUpLeft,
   Crop,
   Edit3,
   Eye,
@@ -144,6 +145,8 @@ type ViagemDetalhe = {
   rotaGeometria: string | null;
   /** True quando o motorista escolheu a rota no seletor (≠ edição manual de km). */
   rotaEscolhida?: boolean;
+  /** Variante de retorno em vigor: true=com retorno, false=direto, null=não definido. */
+  retornoConfirmado?: boolean | null;
   revisadoEm: string | null;
   revisadoPor: { id: string; nome: string } | null;
   motivoStatus: string | null;
@@ -275,6 +278,50 @@ export default function ViagemDetalhePage({
       });
     },
   });
+  // Retorno na rodovia: variantes com/sem retorno (curb) do mesmo trajeto.
+  // Buscado ao abrir a viagem; a seção só aparece quando há retorno real (2 opções).
+  const [retornoPreviewIdx, setRetornoPreviewIdx] = useState<number | null>(null);
+  const opcoesRetorno = useQuery({
+    queryKey: ["viagem-opcoes-retorno", id],
+    enabled: !!token && viagem.data?.status !== "EM_ANDAMENTO",
+    staleTime: 5 * 60_000,
+    queryFn: () =>
+      fetchApi<{
+        rotas: {
+          km: string;
+          duracaoSegundos: number;
+          geometria: string | null;
+          recomendada: boolean;
+          retorno?: boolean;
+        }[];
+        erro?: string;
+      }>(`/admin/viagens/${id}/rotas-opcoes`, { token }),
+  });
+  const aplicarRetorno = useMutation({
+    mutationFn: (rota: { km: string; geometria: string | null; retorno?: boolean }) =>
+      fetchApi<unknown>(`/admin/viagens/${id}/escolher-rota`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          km: Number(rota.km),
+          rotaGeometria: rota.geometria,
+          // kmCalculado = km da variante → km == kmCalculado, não vira divergência.
+          kmCalculado: Number(rota.km),
+          retornoConfirmado: rota.retorno,
+        }),
+      }),
+    onSuccess: (_res, rota) => {
+      toast.success(
+        rota.retorno ? "Marcado: voltou no retorno." : "Marcado: seguiu direto.",
+      );
+      setRetornoPreviewIdx(null);
+      void queryClient.invalidateQueries({ queryKey: ["viagem-admin", id] });
+      void queryClient.invalidateQueries({ queryKey: ["viagem-historico", id] });
+    },
+    onError: (err) => {
+      toast.error("Não foi possível aplicar", { description: (err as Error).message });
+    },
+  });
   const preValidar = useMutation({
     mutationFn: (body: {
       status: "OK" | "DIVERGENTE" | "DESFAZER";
@@ -327,19 +374,43 @@ export default function ViagemDetalhePage({
     () => (vd?.lat != null && vd?.lng != null ? { lat: vd.lat, lng: vd.lng } : null),
     [vd?.lat, vd?.lng],
   );
-  const mapaGeometria = useMemo(
-    () =>
-      escolhendoRota && rotaPreviewIdx != null
-        ? (rotasAlt.data?.rotas[rotaPreviewIdx]?.geometria ?? vd?.rotaGeometria ?? null)
-        : (vd?.rotaGeometria ?? null),
-    [escolhendoRota, rotaPreviewIdx, rotasAlt.data, vd?.rotaGeometria],
-  );
+  const mapaGeometria = useMemo(() => {
+    // Preview do retorno tem prioridade, depois o seletor de estrada, senão a
+    // geometria salva da viagem.
+    if (retornoPreviewIdx != null) {
+      return (
+        opcoesRetorno.data?.rotas[retornoPreviewIdx]?.geometria ??
+        vd?.rotaGeometria ??
+        null
+      );
+    }
+    if (escolhendoRota && rotaPreviewIdx != null) {
+      return rotasAlt.data?.rotas[rotaPreviewIdx]?.geometria ?? vd?.rotaGeometria ?? null;
+    }
+    return vd?.rotaGeometria ?? null;
+  }, [
+    retornoPreviewIdx,
+    opcoesRetorno.data,
+    escolhendoRota,
+    rotaPreviewIdx,
+    rotasAlt.data,
+    vd?.rotaGeometria,
+  ]);
   const mapaPedagios = useMemo(() => pedagiosNaRota.data ?? [], [pedagiosNaRota.data]);
 
   if (viagem.isLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
   if (!viagem.data) return <p className="text-sm text-red-600">Viagem não encontrada.</p>;
   const v = viagem.data;
   const emFechamento = v.matchesFechamento.length > 0;
+  // Retorno na rodovia: só há escolha quando o backend devolve 2 variantes.
+  // Ordem estável [sem_retorno, com_retorno]. Seleção = preview ou a em vigor.
+  const retornoRotas = opcoesRetorno.data?.rotas ?? [];
+  const temRetornoOpcoes = retornoRotas.length === 2;
+  const retornoSelIdx =
+    retornoPreviewIdx ?? retornoRotas.findIndex((r) => r.retorno === v.retornoConfirmado);
+  const retornoEscolhida = retornoSelIdx >= 0 ? retornoRotas[retornoSelIdx] : undefined;
+  const retornoJaEhAtual =
+    retornoEscolhida != null && v.retornoConfirmado === retornoEscolhida.retorno;
   const pedagiosEncontrados = pedagiosNaRota.data ?? [];
   const semValorMasTemPedagio =
     !v.valorPedagioTotal && pedagiosEncontrados.length > 0;
@@ -886,6 +957,78 @@ export default function ViagemDetalhePage({
                       {rotasAlt.data?.erro ?? "Sem rotas alternativas pra esse trajeto."}
                     </p>
                   )}
+                </div>
+              )}
+              {temRetornoOpcoes && (
+                <div className="mb-3 rounded-lg border bg-muted/20 p-3">
+                  <div className="mb-2 flex items-center gap-2">
+                    <CornerUpLeft className="h-4 w-4 text-muted-foreground" />
+                    <p className="text-sm font-medium">Retorno na rodovia</p>
+                    <span className="text-xs text-muted-foreground">
+                      esse ponto tem retorno — confirme o que o motorista fez
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {retornoRotas.map((r, idx) => {
+                      const atual = v.retornoConfirmado === r.retorno;
+                      const sel = retornoSelIdx === idx;
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setRetornoPreviewIdx(idx)}
+                          className={`flex flex-col gap-1 rounded-md border p-3 text-left transition-colors ${
+                            sel ? "border-primary bg-primary/5" : "hover:bg-muted"
+                          }`}
+                        >
+                          <span className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-medium">
+                              {r.retorno ? "Precisou voltar no retorno" : "Cheguei direto"}
+                            </span>
+                            {sel && <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />}
+                          </span>
+                          <span className="text-lg font-semibold">{fmtNum(r.km, 1)} km</span>
+                          {atual && (
+                            <Badge className="w-fit bg-emerald-100 text-emerald-700">
+                              Em vigor
+                            </Badge>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <Permitido chave="viagens.editar">
+                    <div className="flex items-center gap-2 pt-2">
+                      <Button
+                        size="sm"
+                        disabled={
+                          !retornoEscolhida || retornoJaEhAtual || aplicarRetorno.isPending
+                        }
+                        onClick={() =>
+                          retornoEscolhida &&
+                          aplicarRetorno.mutate({
+                            km: retornoEscolhida.km,
+                            geometria: retornoEscolhida.geometria,
+                            retorno: retornoEscolhida.retorno,
+                          })
+                        }
+                      >
+                        {aplicarRetorno.isPending ? "Aplicando…" : "Aplicar"}
+                      </Button>
+                      {retornoPreviewIdx != null && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setRetornoPreviewIdx(null)}
+                        >
+                          Cancelar
+                        </Button>
+                      )}
+                      <span className="text-xs text-muted-foreground">
+                        Atualiza o km faturado e a rota do mapa. O recalcular respeita a escolha.
+                      </span>
+                    </div>
+                  </Permitido>
                 </div>
               )}
               <MapaTrajetoViagem

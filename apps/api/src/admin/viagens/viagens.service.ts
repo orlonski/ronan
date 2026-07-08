@@ -451,6 +451,8 @@ export class ViagensAdminService {
       // Sinaliza que o motorista escolheu uma rota no seletor (distingue de
       // edição manual de km no painel).
       rotaEscolhida: viagem.rotaGeometria != null,
+      // Variante de retorno em vigor (true=com, false=direto, null=não definido).
+      retornoConfirmado: viagem.retornoConfirmado ?? null,
     };
   }
 
@@ -711,6 +713,7 @@ export class ViagensAdminService {
         localDescargaId: true,
         km: true,
         kmCalculado: true,
+        retornoConfirmado: true,
       },
     });
     if (!viagem) throw new NotFoundException("Viagem não encontrada");
@@ -729,14 +732,27 @@ export class ViagensAdminService {
       select: { km: true, geometria: true },
     });
 
-    const resultado = await this.roteamento.calcularKm(
+    // Recalcula as DUAS variantes (com/sem retorno) e RESPEITA a escolha gravada:
+    // retornoConfirmado=false → aplica a variante SEM retorno; true/null → COM
+    // retorno (curb/recomendada, comportamento de sempre pra viagens antigas).
+    // Sem isso, recalcular revertia silenciosamente a escolha "cheguei direto".
+    const opcoes = await this.roteamento.calcularComSemRetorno(
       viagem.localCargaId,
       viagem.localDescargaId,
-      { force: true },
     );
-    if (resultado.km === null) {
-      throw new BadRequestException(resultado.erro);
+    if (opcoes.rotas.length === 0) {
+      throw new BadRequestException(
+        "erro" in opcoes ? opcoes.erro : "Não foi possível calcular a rota agora.",
+      );
     }
+    const querSemRetorno = viagem.retornoConfirmado === false;
+    const escolhida =
+      (querSemRetorno
+        ? opcoes.rotas.find((r) => r.retorno === false)
+        : opcoes.rotas.find((r) => r.retorno === true)) ??
+      opcoes.rotas.find((r) => r.recomendada) ??
+      opcoes.rotas[0]!;
+    const resultado = escolhida;
 
     // Recalcular sempre atualiza o kmCalculado (referência OSRM). O km de
     // faturamento só é sobrescrito quando o motorista NÃO editou na mão — se
@@ -751,12 +767,10 @@ export class ViagensAdminService {
     await this.prisma.viagem.update({
       where: { id: viagem.id },
       data: {
-        // Recalcular reseta pra rota recomendada: descarta a escolha antiga
-        // (motorista no app / admin via "escolher rota"). O detalhe passa a ler
-        // a geometria fresca do RotaCache, que acabou de ser reescrito com
-        // force:true acima. Sem isso, viagem.rotaGeometria tem prioridade no
-        // detalhe e a polilinha antiga (stale) continuava sendo desenhada.
-        rotaGeometria: null,
+        // Grava a geometria FRESCA da variante escolhida (com/sem retorno) — assim
+        // o mapa do painel mostra a rota certa, inclusive quando é "sem retorno"
+        // (o RotaCache guarda a variante com retorno, então null cairia no lado errado).
+        rotaGeometria: resultado.geometria,
         ...(motoristaEditou
           ? { kmCalculado: novoKm }
           : { km: novoKm, kmCalculado: novoKm }),
@@ -824,7 +838,12 @@ export class ViagensAdminService {
    */
   async escolherRota(
     id: string,
-    input: { km: number; rotaGeometria: string; kmCalculado?: number },
+    input: {
+      km: number;
+      rotaGeometria: string;
+      kmCalculado?: number;
+      retornoConfirmado?: boolean;
+    },
     usuarioId: string,
   ) {
     const viagem = await this.prisma.viagem.findUnique({
@@ -839,8 +858,20 @@ export class ViagensAdminService {
         km: input.km,
         rotaGeometria: input.rotaGeometria,
         ...(input.kmCalculado != null ? { kmCalculado: input.kmCalculado } : {}),
+        // Grava a variante quando o painel escolheu com/sem retorno (o seletor de
+        // estrada não manda esse campo → escolha de retorno fica intacta).
+        ...(input.retornoConfirmado != null
+          ? { retornoConfirmado: input.retornoConfirmado }
+          : {}),
       },
     });
+
+    const motivoRetorno =
+      input.retornoConfirmado === true
+        ? " (com retorno)"
+        : input.retornoConfirmado === false
+          ? " (sem retorno, seguiu direto)"
+          : "";
 
     await this.auditoria.log({
       usuarioId,
@@ -850,16 +881,37 @@ export class ViagensAdminService {
       campo: "km",
       valorAntes: viagem.km?.toString() ?? null,
       valorDepois: String(input.km),
-      motivo: "Rota escolhida manualmente no painel.",
+      motivo: `Rota escolhida manualmente no painel${motivoRetorno}.`,
       metadata: {
         rotaGeometriaDefinida: true,
         kmAntes: viagem.km?.toString() ?? null,
         kmDepois: String(input.km),
         kmCalculado: input.kmCalculado != null ? String(input.kmCalculado) : null,
+        retornoConfirmado: input.retornoConfirmado ?? null,
       },
     });
 
     return this.detalhe(id);
+  }
+
+  /**
+   * Variantes COM retorno (curb) vs SEM retorno (direto) do par carga→descarga
+   * da viagem — pro painel deixar o admin escolher/confirmar. Devolve 1 opção
+   * quando não há retorno real (dedup no RoteamentoService).
+   */
+  async opcoesRetorno(id: string) {
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { id },
+      select: { localCargaId: true, localDescargaId: true },
+    });
+    if (!viagem) throw new NotFoundException("Viagem não encontrada");
+    if (!viagem.localCargaId || !viagem.localDescargaId) {
+      throw new BadRequestException("Viagem sem locais definidos.");
+    }
+    return this.roteamento.calcularComSemRetorno(
+      viagem.localCargaId,
+      viagem.localDescargaId,
+    );
   }
 
   async historico(viagemId: string) {

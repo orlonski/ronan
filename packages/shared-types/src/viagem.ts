@@ -60,6 +60,10 @@ export const CriarViagemBase = z.object({
   // mapa. Ausente quando não houve escolha (rota única, offline, tela sem
   // seletor). Backend guarda em Viagem.rotaGeometria (rota real no painel).
   rotaGeometria: z.string().max(20000).optional(),
+  // Escolha do motorista entre "voltei no retorno" (true) e "segui direto"
+  // (false). Ausente quando não foi perguntado (sem retorno real / offline).
+  // Backend guarda em Viagem.retornoConfirmado; o recalcular do painel respeita.
+  retornoConfirmado: z.boolean().optional(),
   localCargaId: z.string().uuid(),
   localDescargaId: z.string().uuid(),
   // Fallback pra auto-recovery quando local foi excluido entre o cache

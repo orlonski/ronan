@@ -250,6 +250,14 @@ export default function NovaViagem() {
       ? parseFloat(rotasAtivas[rotaIdx]!.km)
       : kmRecomendado;
 
+  // Escolha "voltei no retorno" (true) vs "segui direto" (false) — só quando o
+  // card de retorno foi mostrado (usarRetorno) e o motorista escolheu. Senão
+  // undefined (não perguntado → backend grava null). O painel respeita no recalcular.
+  const retornoConfirmado =
+    usarRetorno && rotaGeometriaEscolhida != null
+      ? rotasAtivas[rotaIdx]?.retorno
+      : undefined;
+
   // Auto-preenche KM com valor calculado pelo OSRM, se motorista nao editou
   useEffect(() => {
     if (kmEditadoManual || kmGovernadoPorRota) return;
@@ -615,6 +623,7 @@ export default function NovaViagem() {
         // motorista tenha sobrescrito. Null quando OSRM não respondeu. Quando o
         // seletor governa, é o km da opção escolhida (== form.km) → sem divergência.
         kmCalculado: kmCalculadoFinal,
+        retornoConfirmado,
         // Motorista digitou na mão? O reprocessamento no servidor respeita isso.
         kmEditadoManual,
         // Rota escolhida no seletor de mapa (rota real no painel).
