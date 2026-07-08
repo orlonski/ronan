@@ -35,7 +35,7 @@ type Props = {
   height?: number;
 };
 
-function corDaRota(idx: number): string {
+export function corDaRota(idx: number): string {
   return CORES[idx % CORES.length]!;
 }
 
@@ -49,7 +49,7 @@ function corDaRota(idx: number): string {
  * adiciona/remove linha nem troca coordenadas (era isso que crashava o Apple
  * Maps). Sem `tappable`/`onPress`/`zIndex`.
  */
-const RotasMapa = memo(function RotasMapa({
+export const RotasMapa = memo(function RotasMapa({
   rotas,
   height,
   selecionadaIdx,

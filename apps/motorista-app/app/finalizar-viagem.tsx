@@ -14,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "@/components/screen-header";
 import { DescargaPorGps, type DescargaCaptura } from "@/components/descarga-por-gps";
 import { SeletorRotas } from "@/components/seletor-rotas";
+import { SeletorRetorno } from "@/components/seletor-retorno";
 import { ErroCampo, useValidacaoGuiada } from "@/components/validacao-guiada";
 import { SemCatalogo } from "@/components/sem-catalogo";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
@@ -31,7 +32,12 @@ import {
   salvarFinalizarDraft,
   type LifecycleLocal,
 } from "@/lib/lifecycle";
-import { useCalcularRota, useCatalogos, useRotasAlternativas } from "@/lib/queries";
+import {
+  useCalcularRota,
+  useCatalogos,
+  useRotasAlternativas,
+  useOpcoesRota,
+} from "@/lib/queries";
 
 /**
  * Passo final do lifecycle guiado: coleta os dados que faltam pra fechar a
@@ -115,13 +121,27 @@ export default function FinalizarViagem() {
   // KM auto via OSRM entre local de carga (se cadastrado) e descarga.
   const localCargaId = ciclo?.localCargaId ?? "";
   const rota = useCalcularRota(localCargaId, localDescargaId);
-  // Rotas alternativas pro seletor de mapa (online-only; [] offline). Mostra o
-  // mapa sempre que houver ao menos 1 rota (informativo); vira seletor com 2+.
-  const alternativas = useRotasAlternativas(localCargaId, localDescargaId);
-  const temMapa = (alternativas.data?.length ?? 0) >= 1;
-  // km da rota recomendada (routes[0]) — snapshot pra kmCalculado.
+  // Variantes COM retorno vs SEM retorno (curb). Se vierem 2, têm precedência
+  // sobre as alternativas de estrada: o motorista confirma se voltou no retorno.
+  const opcoesRetorno = useOpcoesRota(localCargaId, localDescargaId);
+  const usarRetorno = (opcoesRetorno.data?.length ?? 0) >= 2;
+  // Alternativas de estrada — só DEPOIS que /opcoes resolveu e não há retorno.
+  // Sequenciar evita corrida entre as fontes e mantém uma fonte única estável.
+  const buscarAlternativas = !usarRetorno && opcoesRetorno.isFetched;
+  const alternativas = useRotasAlternativas(
+    buscarAlternativas ? localCargaId : undefined,
+    buscarAlternativas ? localDescargaId : undefined,
+  );
+  // Fonte ÚNICA que governa km/geometria (retorno vence estrada). Memoizado pra
+  // referência estável (evita recomputar kmRecomendado / re-rodar o effect à toa).
+  const rotasAtivas = useMemo(
+    () => (usarRetorno ? opcoesRetorno.data! : alternativas.data ?? []),
+    [usarRetorno, opcoesRetorno.data, alternativas.data],
+  );
+  const temMapa = rotasAtivas.length >= 1;
+  // km da recomendada — snapshot pra kmCalculado quando não há escolha ativa.
   const kmRecomendado = useMemo(() => {
-    const rec = alternativas.data?.find((r) => r.recomendada);
+    const rec = rotasAtivas.find((r) => r.recomendada);
     if (rec) return parseFloat(rec.km);
     // Só km de rota REAL (OSRM/cache) conta como "calculado". O estimado por
     // haversine (sem rede) NÃO vai como kmCalculado — sinaliza pro backend
@@ -132,12 +152,12 @@ export default function FinalizarViagem() {
       rota.data.fonte !== "estimado_haversine"
       ? parseFloat(String(rota.data.km))
       : undefined;
-  }, [alternativas.data, rota.data]);
+  }, [rotasAtivas, rota.data]);
 
   // Escolher uma rota no seletor: seta km + guarda a geometria (rota real no
-  // painel) + o km da recomendada como kmCalculado. NÃO marca edição manual.
+  // painel). NÃO marca edição manual (escolher ≠ digitar na mão).
   function escolherRota(idx: number) {
-    const r = alternativas.data?.[idx];
+    const r = rotasAtivas[idx];
     if (!r) return;
     setRotaIdx(idx);
     setRotaGeometriaEscolhida(r.geometria);
@@ -146,21 +166,28 @@ export default function FinalizarViagem() {
 
   // Enquanto o seletor governa o km (rota escolhida), o auto-fill fica parado.
   const kmGovernadoPorRota = temMapa && rotaGeometriaEscolhida != null;
+
+  // INVARIANTE anti-divergência: quando o seletor governa, kmCalculado = km da
+  // opção ESCOLHIDA (não a recomendada fixa) → km == kmCalculado, nada dispara.
+  const kmCalculadoFinal =
+    kmGovernadoPorRota && rotasAtivas[rotaIdx]
+      ? parseFloat(rotasAtivas[rotaIdx]!.km)
+      : kmRecomendado;
   useEffect(() => {
     if (kmEditadoManual || kmGovernadoPorRota) return;
     if (!rota.data || rota.data.km === null) return;
     setKm((cur) => (cur === rota.data!.km ? cur : (rota.data as { km: string }).km));
   }, [rota.data, kmEditadoManual, kmGovernadoPorRota]);
 
-  // Ao carregar as alternativas (1+), pré-seleciona a recomendada (guarda a
-  // geometria pro painel) — a menos que o motorista já tenha escolhido/editado.
+  // Pré-seleciona a recomendada da fonte ativa (1+). Fonte sequenciada (nunca
+  // alterna entre duas listas cheias), então a guarda de "já escolhida" basta —
+  // e preserva a escolha restaurada do rascunho (draft).
   useEffect(() => {
     if (kmEditadoManual || rotaGeometriaEscolhida != null) return;
-    const alts = alternativas.data;
-    if (!alts || alts.length < 1) return;
-    const recIdx = Math.max(0, alts.findIndex((r) => r.recomendada));
+    if (rotasAtivas.length < 1) return;
+    const recIdx = Math.max(0, rotasAtivas.findIndex((r) => r.recomendada));
     escolherRota(recIdx);
-  }, [alternativas.data, kmEditadoManual, rotaGeometriaEscolhida]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rotasAtivas, kmEditadoManual, rotaGeometriaEscolhida]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const nomeDescargaSelecionado = useMemo(() => {
     if (!localDescargaId) return undefined;
@@ -289,7 +316,8 @@ export default function FinalizarViagem() {
           : parseFloat(toneladas.replace(",", ".")),
         aguardandoPeso,
         km: parseFloat(km.replace(",", ".")),
-        kmCalculado: kmRecomendado,
+        // Quando o seletor governa, é o km da opção escolhida (== km) → sem divergência.
+        kmCalculado: kmCalculadoFinal,
         kmEditadoManual,
         rotaGeometria: rotaGeometriaEscolhida ?? undefined,
         ticket: aguardandoPeso ? undefined : exigeTicket ? ticket.trim() : undefined,
@@ -412,13 +440,21 @@ export default function FinalizarViagem() {
               ) : null}
             </View>
 
-            {/* Mapa da rota — informativo com 1 rota, seletor com 2+ */}
+            {/* Mapa da rota — escolha de retorno (2 opções) ou de estrada */}
             {temMapa ? (
-              <SeletorRotas
-                rotas={alternativas.data!}
-                selecionadaIdx={rotaIdx}
-                onSelecionar={escolherRota}
-              />
+              usarRetorno ? (
+                <SeletorRetorno
+                  opcoes={rotasAtivas}
+                  selecionadaIdx={rotaIdx}
+                  onSelecionar={escolherRota}
+                />
+              ) : (
+                <SeletorRotas
+                  rotas={rotasAtivas}
+                  selecionadaIdx={rotaIdx}
+                  onSelecionar={escolherRota}
+                />
+              )
             ) : null}
 
             {/* 3) Km e pedágio */}

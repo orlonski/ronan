@@ -874,6 +874,8 @@ export type RotaOption = {
   duracaoSegundos: number;
   geometria: string | null;
   recomendada: boolean;
+  /** Só em /m/rotas/opcoes: true = COM retorno (curb), false = SEM retorno (direto). */
+  retorno?: boolean;
 };
 
 type AlternativasResponse = { rotas: RotaOption[] } | { rotas: []; erro: string };
@@ -992,6 +994,31 @@ export function useRotasAlternativas(origemId?: string, destinoId?: string) {
       try {
         const res = await api.get<AlternativasResponse>(
           `/m/rotas/alternativas?origem=${origemId!}&destino=${destinoId!}`,
+        );
+        return res.rotas ?? [];
+      } catch {
+        return [];
+      }
+    },
+  });
+}
+
+/**
+ * Busca as variantes COM retorno vs SEM retorno do mesmo par (endpoint
+ * /m/rotas/opcoes). Online-only, sem fallback: offline/erro → []. Devolve 2
+ * opções só quando há retorno real (o backend faz dedup); com 0 ou 1 o app não
+ * mostra escolha. `enabled` extra permite desligar (ex.: modo edição).
+ */
+export function useOpcoesRota(origemId?: string, destinoId?: string, enabled = true) {
+  return useQuery<RotaOption[]>({
+    queryKey: ["rota-opcoes", origemId, destinoId],
+    enabled: enabled && !!origemId && !!destinoId && origemId !== destinoId,
+    staleTime: Infinity,
+    retry: false,
+    queryFn: async () => {
+      try {
+        const res = await api.get<AlternativasResponse>(
+          `/m/rotas/opcoes?origem=${origemId!}&destino=${destinoId!}`,
         );
         return res.rotas ?? [];
       } catch {

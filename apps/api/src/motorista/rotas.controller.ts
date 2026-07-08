@@ -34,4 +34,17 @@ export class RotasMotoristaController {
   ) {
     return this.roteamento.calcularAlternativas(query.origem, query.destino);
   }
+
+  /**
+   * Variantes COM retorno (curb) vs SEM retorno (direto) do mesmo par, pro app
+   * deixar o motorista confirmar se voltou no retorno. Devolve 1 opção quando não
+   * há retorno real (dedup) — aí o app não mostra escolha.
+   */
+  @Get("opcoes")
+  opcoes(
+    @Query(new ZodValidationPipe(CalcularQuery))
+    query: z.infer<typeof CalcularQuery>,
+  ) {
+    return this.roteamento.calcularComSemRetorno(query.origem, query.destino);
+  }
 }

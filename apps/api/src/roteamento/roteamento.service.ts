@@ -18,6 +18,11 @@ const ROUTER_VERSION = 3;
 // parâmetro, definir OSRM_APPROACHES="off" desliga sem mexer no código.
 const OSRM_APPROACHES = (process.env.OSRM_APPROACHES ?? "curb;curb").trim();
 
+// Diferença mínima (km) entre a variante COM retorno (curb) e SEM retorno pra
+// valer a pena perguntar ao motorista. Abaixo disso, o ponto já está do lado
+// certo (sem retorno real) → devolve 1 opção só, sem escolha/fricção.
+const LIMIAR_DEDUP_KM = 0.3;
+
 type OsrmRoute = { distance: number; duration: number; geometry?: string };
 type OsrmResponse = { code: string; routes?: OsrmRoute[] };
 
@@ -36,6 +41,12 @@ export type RotaOption = {
   geometria: string | null;
   /** True pra routes[0] (a "melhor" pelo custo OSRM) — a mesma que calcularKm pega. */
   recomendada: boolean;
+  /**
+   * Só preenchido por `calcularComSemRetorno`: true = variante COM retorno
+   * (approaches=curb, conta o retorno na pista dupla), false = SEM retorno
+   * (segue direto). Ausente nas alternativas normais (eixo de estrada, não retorno).
+   */
+  retorno?: boolean;
 };
 
 export type AlternativasResult = { rotas: RotaOption[] } | { rotas: []; erro: string };
@@ -227,6 +238,147 @@ export class RoteamentoService {
       );
       return { rotas: [], erro: "Não foi possível calcular as rotas agora." };
     }
+  }
+
+  /**
+   * Duas variantes da MESMA rota carga→descarga: COM retorno (approaches=curb,
+   * conta o retorno na pista dupla) e SEM retorno (segue direto). Serve pro app
+   * deixar o motorista escolher o que aconteceu de verdade — em pista simples o
+   * curb pode "achar" um retorno que não houve.
+   *
+   * Online-only, 2 chamadas OSRM em paralelo (allSettled — timeout/erro de uma
+   * não derruba a outra). DEDUP: se as duas quase batem (delta <= LIMIAR_DEDUP_KM)
+   * → colapsa pra 1 opção (com_retorno), sem escolha no caso comum. Ordem estável
+   * [sem_retorno, com_retorno] (o app restaura a escolha por índice). Cacheia a
+   * com_retorno (curb) como default, coerente com calcularKm/reprocessamento.
+   */
+  async calcularComSemRetorno(
+    localOrigemId: string,
+    localDestinoId: string,
+  ): Promise<AlternativasResult> {
+    if (localOrigemId === localDestinoId) {
+      return {
+        rotas: [
+          { km: "0.00", duracaoSegundos: 0, geometria: null, recomendada: true, retorno: true },
+        ],
+      };
+    }
+
+    const [origem, destino] = await Promise.all([
+      this.prisma.local.findUnique({
+        where: { id: localOrigemId },
+        select: { lat: true, lng: true },
+      }),
+      this.prisma.local.findUnique({
+        where: { id: localDestinoId },
+        select: { lat: true, lng: true },
+      }),
+    ]);
+
+    if (!origem?.lat || !origem?.lng || !destino?.lat || !destino?.lng) {
+      return { rotas: [], erro: "Local sem coordenadas. Cadastre o endereço completo." };
+    }
+    if (!this.osrmUrl) {
+      return { rotas: [], erro: "Servidor de rotas não configurado." };
+    }
+
+    const coords = `${origem.lng},${origem.lat};${destino.lng},${destino.lat}`;
+    const base = `${this.osrmUrl}/route/v1/driving/${coords}?overview=full&geometries=polyline`;
+    const usarApproaches =
+      OSRM_APPROACHES !== "" && OSRM_APPROACHES.toLowerCase() !== "off";
+
+    const toOption = (route: OsrmRoute, retorno: boolean, recomendada: boolean): RotaOption => ({
+      km: (route.distance / 1000).toFixed(2),
+      duracaoSegundos: Math.round(route.duration),
+      geometria: route.geometry ?? null,
+      recomendada,
+      retorno,
+    });
+
+    try {
+      // Sem curb ligado não existe variante "com retorno" distinta: 1 rota só.
+      if (!usarApproaches) {
+        const res = await this.fetchOsrm(base);
+        if (res.code !== "Ok" || !res.routes?.[0]) {
+          return { rotas: [], erro: "Não foi possível calcular as rotas agora." };
+        }
+        const only = toOption(res.routes[0], false, true);
+        await this.upsertCache(localOrigemId, localDestinoId, only);
+        return { rotas: [only] };
+      }
+
+      const [comRes, semRes] = await Promise.allSettled([
+        this.fetchOsrm(`${base}&approaches=${encodeURIComponent(OSRM_APPROACHES)}`),
+        this.fetchOsrm(base),
+      ]);
+      const comRoute =
+        comRes.status === "fulfilled" && comRes.value.code === "Ok"
+          ? comRes.value.routes?.[0]
+          : undefined;
+      const semRoute =
+        semRes.status === "fulfilled" && semRes.value.code === "Ok"
+          ? semRes.value.routes?.[0]
+          : undefined;
+
+      if (!comRoute && !semRoute) {
+        return { rotas: [], erro: "Não foi possível calcular as rotas agora." };
+      }
+
+      let rotas: RotaOption[];
+      let paraCache: RotaOption;
+
+      if (comRoute && semRoute) {
+        const comOpt = toOption(comRoute, true, true);
+        const semOpt = toOption(semRoute, false, false);
+        const delta = parseFloat(comOpt.km) - parseFloat(semOpt.km);
+        // delta pode vir levemente negativo (curb corrige pro lado certo e encurta);
+        // só oferecemos escolha quando o retorno adiciona km de verdade.
+        rotas = delta > LIMIAR_DEDUP_KM ? [semOpt, comOpt] : [comOpt];
+        paraCache = comOpt;
+      } else {
+        // Só uma respondeu (ex.: curb deu NoRoute naquele trecho → só sem_retorno,
+        // igual ao fallback de calcularKm). Vira a única opção e o default do cache.
+        const only = comRoute
+          ? toOption(comRoute, true, true)
+          : toOption(semRoute!, false, true);
+        rotas = [only];
+        paraCache = only;
+      }
+
+      await this.upsertCache(localOrigemId, localDestinoId, paraCache);
+      return { rotas };
+    } catch (err) {
+      this.logger.warn(
+        `OSRM opções falhou ${localOrigemId}->${localDestinoId}: ${(err as Error).message}`,
+      );
+      return { rotas: [], erro: "Não foi possível calcular as rotas agora." };
+    }
+  }
+
+  /** Upsert do RotaCache com uma RotaOption como default do par (versão atual). */
+  private async upsertCache(
+    localOrigemId: string,
+    localDestinoId: string,
+    rota: RotaOption,
+  ): Promise<void> {
+    await this.prisma.rotaCache.upsert({
+      where: { localOrigemId_localDestinoId: { localOrigemId, localDestinoId } },
+      create: {
+        localOrigemId,
+        localDestinoId,
+        km: new Prisma.Decimal(rota.km),
+        duracaoSegundos: rota.duracaoSegundos,
+        geometria: rota.geometria,
+        versaoRoteador: ROUTER_VERSION,
+      },
+      update: {
+        km: new Prisma.Decimal(rota.km),
+        duracaoSegundos: rota.duracaoSegundos,
+        geometria: rota.geometria,
+        versaoRoteador: ROUTER_VERSION,
+        calculadoEm: new Date(),
+      },
+    });
   }
 
   private cacheValido(calculadoEm: Date): boolean {
