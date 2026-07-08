@@ -10,7 +10,7 @@ const HTTP_TIMEOUT_MS = 3500;
 // Versão do roteador. Bumpar sempre que a forma de calcular a rota mudar (ex.:
 // ligar approaches=curb) invalida o RotaCache antigo de forma lazy: entradas de
 // versão diferente viram stale e são recomputadas no próximo acesso.
-const ROUTER_VERSION = 2;
+const ROUTER_VERSION = 3;
 
 // approaches=curb;curb força o roteador a chegar/sair no lado correto da via
 // (mão-direita no Brasil), contando o retorno quando o ponto de carga/descarga
@@ -240,9 +240,9 @@ export class RoteamentoService {
     lat2: number,
     lng2: number,
   ): Promise<OsrmRoute> {
-    // overview=simplified retorna polyline encoded (precision 5) com algumas
-    // dezenas de pontos — suficiente pra render no mapa. Sem custo extra de
-    // requisição (mesma chamada que antes pegava só distance/duration).
+    // overview=full retorna a polyline encoded (precision 5) com todos os pontos
+    // da rota — a linha acompanha a rodovia curva a curva (simplified cortava as
+    // curvas com ~dezenas de pontos). Sem custo extra de requisição.
     const routes = await this.rotearOsrm(`${lng1},${lat1};${lng2},${lat2}`, "");
     return routes[0]!;
   }
@@ -268,7 +268,7 @@ export class RoteamentoService {
    * repetir com outro parâmetro e gastar mais um timeout.
    */
   private async rotearOsrm(coords: string, extraParams: string): Promise<OsrmRoute[]> {
-    const base = `${this.osrmUrl}/route/v1/driving/${coords}?overview=simplified&geometries=polyline${extraParams}`;
+    const base = `${this.osrmUrl}/route/v1/driving/${coords}?overview=full&geometries=polyline${extraParams}`;
     const usarApproaches =
       OSRM_APPROACHES !== "" && OSRM_APPROACHES.toLowerCase() !== "off";
 
