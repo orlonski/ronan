@@ -584,16 +584,22 @@ export default function NovaViagem() {
       });
       if (ok) return;
     }
-    // Confirmação final do km — deixa claro que o cálculo é AUTOMÁTICO (pela rota)
-    // e que o valor do motorista prevalece. Offline: avisa que é estimativa e será
-    // recalculado quando a internet voltar. Ele bate o olho e assume, como no papel.
-    const kmEstimado =
-      !!rota.data && "fonte" in rota.data && rota.data.fonte === "estimado_haversine";
+    // Confirmação final do km. Deixa claro que o cálculo é AUTOMÁTICO e que o valor
+    // do motorista prevalece. SEM INTERNET (haversine OU cache do aparelho): avisa
+    // em destaque (variant warning) que foi offline e será recalculado ao voltar.
+    const fonteRota =
+      rota.data && "fonte" in rota.data ? rota.data.fonte : null;
+    const semNet = fonteRota === "estimado_haversine" || fonteRota === "cache_local";
+    const msgKm =
+      fonteRota === "estimado_haversine"
+        ? "⚠️ Você está SEM INTERNET. Esse km é só uma ESTIMATIVA por linha reta — pode não bater com a estrada. Quando a internet voltar, o sistema recalcula pela rota certa. Se você já sabe quanto rodou, toque em Alterar e informe."
+        : fonteRota === "cache_local"
+          ? "⚠️ Você está SEM INTERNET. Esse km veio de um cálculo ANTERIOR dessa rota, salvo no aparelho (cache). Quando a internet voltar, o sistema confere pela rota certa. Se você já sabe quanto rodou, toque em Alterar e informe."
+          : "Esse km foi calculado automático pela rota. Se você rodou diferente, toque em Alterar e corrija — o que você confirmar é o que vale.";
     const kmConfirmado = await showConfirm({
       title: `Você rodou ${form.km.replace(".", ",")} km?`,
-      message: kmEstimado
-        ? "Você está sem internet, então esse km é só uma ESTIMATIVA (linha reta). Quando a internet voltar, o sistema recalcula pela rota certa. Se você já sabe quanto rodou, toque em Alterar e informe — aí vale o seu."
-        : "Esse km foi calculado automático pela rota. Se você rodou diferente, toque em Alterar e corrija — o que você confirmar é o que vale.",
+      message: msgKm,
+      variant: semNet ? "warning" : "default",
       confirmLabel: "Sim, está certo",
       cancelLabel: "Alterar o km",
     });
@@ -1122,12 +1128,14 @@ export default function NovaViagem() {
                     />
                   </View>
                 </View>
-                {/* Aviso de km estimado em LINHA INTEIRA (abaixo da linha km+pedágio). */}
+                {/* Aviso SEM INTERNET em LINHA INTEIRA (haversine OU cache local). */}
                 {rota.data &&
                 "fonte" in rota.data &&
-                rota.data.fonte === "estimado_haversine" &&
+                (rota.data.fonte === "estimado_haversine" ||
+                  rota.data.fonte === "cache_local") &&
+                rota.data.km !== null &&
                 !kmEditadoManual ? (
-                  <AvisoKmEstimado km={rota.data.km} />
+                  <AvisoKmEstimado km={rota.data.km} fonte={rota.data.fonte} />
                 ) : null}
                 {val.erroDe("km") ? <ErroCampo msg={val.erroDe("km")!} /> : null}
               </View>
@@ -1240,17 +1248,10 @@ function KmHint({
       </Text>
     );
   }
-  if (rota.fonte === "estimado_haversine") {
-    // O aviso grande é renderizado em LINHA INTEIRA fora da coluna (senão fica
-    // espremido na largura do km). Aqui, nada.
+  if (rota.fonte === "estimado_haversine" || rota.fonte === "cache_local") {
+    // Ambos são SEM INTERNET → o aviso grande âmbar é renderizado em linha
+    // inteira (fora da coluna estreita). Aqui, nada — pra não parecer "ok verde".
     return null;
-  }
-  if (rota.fonte === "cache_local") {
-    return (
-      <Text className="text-xs font-medium text-success">
-        ✓ Estimado de cálculo anterior ({rota.km} km)
-      </Text>
-    );
   }
   return (
     <Text className="text-xs font-medium text-success">

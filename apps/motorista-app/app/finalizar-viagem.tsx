@@ -311,15 +311,20 @@ export default function FinalizarViagem() {
       return;
     }
     val.limpar();
-    // Confirmação final do km — cálculo automático pela rota, valor do motorista
-    // prevalece. Offline: avisa que é estimativa e recalcula quando a internet voltar.
-    const kmEstimado =
-      !!rota.data && "fonte" in rota.data && rota.data.fonte === "estimado_haversine";
+    // Confirmação final do km. Cálculo automático, valor do motorista prevalece.
+    // SEM INTERNET (haversine OU cache do aparelho): avisa em destaque (warning).
+    const fonteRota = rota.data && "fonte" in rota.data ? rota.data.fonte : null;
+    const semNet = fonteRota === "estimado_haversine" || fonteRota === "cache_local";
+    const msgKm =
+      fonteRota === "estimado_haversine"
+        ? "⚠️ Você está SEM INTERNET. Esse km é só uma ESTIMATIVA por linha reta — pode não bater com a estrada. Quando a internet voltar, o sistema recalcula pela rota certa. Se você já sabe quanto rodou, toque em Alterar e informe."
+        : fonteRota === "cache_local"
+          ? "⚠️ Você está SEM INTERNET. Esse km veio de um cálculo ANTERIOR dessa rota, salvo no aparelho (cache). Quando a internet voltar, o sistema confere pela rota certa. Se você já sabe quanto rodou, toque em Alterar e informe."
+          : "Esse km foi calculado automático pela rota. Se você rodou diferente, toque em Alterar e corrija — o que você confirmar é o que vale.";
     const kmConfirmado = await showConfirm({
       title: `Você rodou ${km.replace(".", ",")} km?`,
-      message: kmEstimado
-        ? "Você está sem internet, então esse km é só uma ESTIMATIVA (linha reta). Quando a internet voltar, o sistema recalcula pela rota certa. Se você já sabe quanto rodou, toque em Alterar e informe — aí vale o seu."
-        : "Esse km foi calculado automático pela rota. Se você rodou diferente, toque em Alterar e corrija — o que você confirmar é o que vale.",
+      message: msgKm,
+      variant: semNet ? "warning" : "default",
       confirmLabel: "Sim, está certo",
       cancelLabel: "Alterar o km",
     });
@@ -545,7 +550,8 @@ export default function FinalizarViagem() {
                       "km" in rota.data &&
                       rota.data.km &&
                       !kmEditadoManual &&
-                      rota.data.fonte !== "estimado_haversine" ? (
+                      (rota.data.fonte === "osrm" ||
+                        rota.data.fonte === "cache_server") ? (
                       <Text className="text-xs font-medium text-success">
                         ✓ Calculado ({rota.data.km} km)
                       </Text>
@@ -566,8 +572,9 @@ export default function FinalizarViagem() {
                 "km" in rota.data &&
                 rota.data.km &&
                 !kmEditadoManual &&
-                rota.data.fonte === "estimado_haversine" ? (
-                  <AvisoKmEstimado km={rota.data.km} />
+                (rota.data.fonte === "estimado_haversine" ||
+                  rota.data.fonte === "cache_local") ? (
+                  <AvisoKmEstimado km={rota.data.km} fonte={rota.data.fonte} />
                 ) : null}
                 {val.erroDe("km") ? <ErroCampo msg={val.erroDe("km")!} /> : null}
               </View>
