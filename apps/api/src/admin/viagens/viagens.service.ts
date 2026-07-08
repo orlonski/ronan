@@ -754,26 +754,18 @@ export class ViagensAdminService {
       opcoes.rotas[0]!;
     const resultado = escolhida;
 
-    // Recalcular sempre atualiza o kmCalculado (referência OSRM). O km de
-    // faturamento só é sobrescrito quando o motorista NÃO editou na mão — se
-    // ele ajustou (km != kmCalculado), preservamos o valor dele e mexemos só
-    // na referência. kmCalculado null = viagem antiga sem auto-cálculo, tratada
-    // como "não editada" (sobrescreve o km).
+    // Recalcular NUNCA sobrescreve o km faturado: o valor que o motorista
+    // informou/confirmou prevalece sempre. Só atualiza a referência OSRM
+    // (kmCalculado) e a geometria fresca da variante (com/sem retorno) pro mapa.
+    // Pra trocar o km faturado, o admin usa "Retorno na rodovia"/escolher rota
+    // (ação explícita), não o recalcular.
     const novoKm = parseFloat(resultado.km);
-    const motoristaEditou =
-      viagem.kmCalculado != null &&
-      Math.abs(Number(viagem.km ?? 0) - Number(viagem.kmCalculado)) > 0.001;
 
     await this.prisma.viagem.update({
       where: { id: viagem.id },
       data: {
-        // Grava a geometria FRESCA da variante escolhida (com/sem retorno) — assim
-        // o mapa do painel mostra a rota certa, inclusive quando é "sem retorno"
-        // (o RotaCache guarda a variante com retorno, então null cairia no lado errado).
+        kmCalculado: novoKm,
         rotaGeometria: resultado.geometria,
-        ...(motoristaEditou
-          ? { kmCalculado: novoKm }
-          : { km: novoKm, kmCalculado: novoKm }),
       },
     });
 
@@ -782,23 +774,14 @@ export class ViagensAdminService {
       entidade: "Viagem",
       entidadeId: viagem.id,
       acao: AcaoAuditoria.RECALCULAR_TRAJETO,
-      // campo/valorAntes/valorDepois ficam visíveis na timeline (o metadata não é
-      // renderizado lá). Quando o motorista editou, o km dele foi preservado, então
-      // mostramos o diff do kmCalculado e o motivo; senão, o diff do km.
-      campo: motoristaEditou ? "kmCalculado" : "km",
-      valorAntes: motoristaEditou
-        ? (viagem.kmCalculado?.toString() ?? null)
-        : (viagem.km?.toString() ?? null),
+      campo: "kmCalculado",
+      valorAntes: viagem.kmCalculado?.toString() ?? null,
       valorDepois: resultado.km,
-      motivo: motoristaEditou
-        ? `Km do motorista (${viagem.km?.toString() ?? "0"}) preservado — só o calculado foi atualizado.`
-        : undefined,
+      motivo: `Km do motorista (${viagem.km?.toString() ?? "0"}) preservado — só a referência de cálculo foi atualizada.`,
       metadata: {
         kmAntes: cacheAntes?.km.toString() ?? null,
         kmDepois: resultado.km,
-        motoristaEditou,
-        kmInformadoAntes: viagem.km?.toString() ?? null,
-        kmInformadoDepois: motoristaEditou ? (viagem.km?.toString() ?? null) : resultado.km,
+        kmInformado: viagem.km?.toString() ?? null,
         kmCalculadoAntes: viagem.kmCalculado?.toString() ?? null,
         kmCalculadoDepois: resultado.km,
         tinhaGeometria: cacheAntes?.geometria != null,
@@ -808,9 +791,8 @@ export class ViagensAdminService {
 
     return {
       ok: true,
-      km: motoristaEditou ? (viagem.km?.toString() ?? "0") : resultado.km,
+      km: viagem.km?.toString() ?? "0", // sempre o km do motorista (preservado)
       kmCalculado: resultado.km,
-      motoristaEditou,
       duracaoSegundos: resultado.duracaoSegundos,
       geometria: resultado.geometria,
     };

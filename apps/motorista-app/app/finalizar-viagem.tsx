@@ -304,12 +304,15 @@ export default function FinalizarViagem() {
       return;
     }
     val.limpar();
-    // Confirmação final do km rodado — o motorista bate o olho e ASSUME o valor,
-    // como fazia no papel. Se não bater, altera na mão. Tem que ser justo.
+    // Confirmação final do km — cálculo automático pela rota, valor do motorista
+    // prevalece. Offline: avisa que é estimativa e recalcula quando a internet voltar.
+    const kmEstimado =
+      !!rota.data && "fonte" in rota.data && rota.data.fonte === "estimado_haversine";
     const kmConfirmado = await showConfirm({
       title: `Você rodou ${km.replace(".", ",")} km?`,
-      message:
-        "Confira o km da viagem. Se você rodou diferente, toque em Alterar e corrija o valor.",
+      message: kmEstimado
+        ? "Você está sem internet, então esse km é só uma ESTIMATIVA (linha reta). Quando a internet voltar, o sistema recalcula pela rota certa. Se você já sabe quanto rodou, toque em Alterar e informe — aí vale o seu."
+        : "Esse km foi calculado automático pela rota. Se você rodou diferente, toque em Alterar e corrija — o que você confirmar é o que vale.",
       confirmLabel: "Sim, está certo",
       cancelLabel: "Alterar o km",
     });

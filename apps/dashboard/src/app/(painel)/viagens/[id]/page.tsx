@@ -215,15 +215,13 @@ export default function ViagemDetalhePage({
   const queryClient = useQueryClient();
   const recalcular = useMutation({
     mutationFn: () =>
-      fetchApi<{ ok: true; km: string; kmCalculado: string; motoristaEditou: boolean }>(
+      fetchApi<{ ok: true; km: string; kmCalculado: string }>(
         `/admin/viagens/${id}/recalcular-trajeto`,
         { method: "POST", token },
       ),
     onSuccess: (res) => {
       toast.success("Trajeto recalculado.", {
-        description: res.motoristaEditou
-          ? `Km do motorista (${res.km}) preservado. Calculado: ${res.kmCalculado}.`
-          : `Km atualizado para ${res.km}.`,
+        description: `Km do motorista (${res.km}) preservado. Referência: ${res.kmCalculado}.`,
       });
       void queryClient.invalidateQueries({ queryKey: ["viagem-admin", id] });
       void queryClient.invalidateQueries({ queryKey: ["viagem-historico", id] });
@@ -844,7 +842,7 @@ export default function ViagemDetalhePage({
                       size="sm"
                       onClick={() => recalcular.mutate()}
                       disabled={recalcular.isPending}
-                      title="Reprocessa o trajeto via OSRM (atualiza polilinha e km de cache)"
+                      title="Atualiza a polilinha e a referência de cálculo (OSRM). NÃO altera o km do motorista — esse prevalece sempre."
                     >
                       <RefreshCw
                         className={`h-4 w-4 ${recalcular.isPending ? "animate-spin" : ""}`}
