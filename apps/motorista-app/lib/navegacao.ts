@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import * as Speech from "expo-speech";
 import polyline from "@mapbox/polyline";
 import { lineString, point } from "@turf/helpers";
 import distance from "@turf/distance";
@@ -21,6 +20,21 @@ export type PosAoVivo = {
   heading: number | null;
   speed: number | null;
 };
+
+// Voz BLINDADA: expo-speech é módulo NATIVO. Nos apps atuais (OTA sem rebuild
+// nativo) ele não existe → import dinâmico + try/catch fazem a voz falhar em
+// SILÊNCIO em vez de quebrar. Quando sair o build nativo com expo-speech, fala.
+let speechMod: typeof import("expo-speech") | null | undefined = undefined;
+async function falar(texto: string): Promise<void> {
+  try {
+    if (speechMod === undefined) speechMod = await import("expo-speech");
+    if (!speechMod) return; // já falhou antes (build sem expo-speech nativo)
+    speechMod.stop();
+    speechMod.speak(texto, { language: "pt-BR" });
+  } catch {
+    speechMod = null; // sem expo-speech nativo: segue mudo (guia visual funciona)
+  }
+}
 
 export type EstadoGuia = {
   /** Próxima manobra à frente (null = chegou/sem manobra). */
@@ -155,14 +169,10 @@ export function useGuiaNavegacao(
       }
       if (distProxM <= 130 && !faladoRef.current.pre) {
         faladoRef.current.pre = true;
-        Speech.stop();
-        Speech.speak(prox.verbalPre ?? prox.instrucao, { language: "pt-BR" });
+        void falar(prox.verbalPre ?? prox.instrucao);
       } else if (distProxM <= 400 && !faladoRef.current.alerta) {
         faladoRef.current.alerta = true;
-        Speech.stop();
-        Speech.speak(prox.verbalAlerta ?? prox.verbalPre ?? prox.instrucao, {
-          language: "pt-BR",
-        });
+        void falar(prox.verbalAlerta ?? prox.verbalPre ?? prox.instrucao);
       }
     }
 
@@ -173,8 +183,7 @@ export function useGuiaNavegacao(
         foraDesdeRef.current = agora;
       } else if (agora - foraDesdeRef.current > 5000 && onRecalcular) {
         foraDesdeRef.current = null;
-        Speech.stop();
-        Speech.speak("Recalculando a rota.", { language: "pt-BR" });
+        void falar("Recalculando a rota.");
         onRecalcular();
       }
     } else {
