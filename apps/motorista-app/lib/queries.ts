@@ -1032,6 +1032,52 @@ export function useOpcoesRota(origemId?: string, destinoId?: string, enabled = t
   });
 }
 
+// ---- Navegação ao vivo (Valhalla, guia estilo Waze) ----
+
+/** Uma manobra da navegação (Valhalla, já em pt-BR). Ver NavegacaoService no backend. */
+export type ManobraNav = {
+  instrucao: string;
+  verbalPre: string | null;
+  verbalAlerta: string | null;
+  tipo: number;
+  distanciaKm: number;
+  beginShapeIndex: number;
+  endShapeIndex: number;
+};
+
+/** Rota de navegação: shape (polyline PRECISÃO 6) + manobras. */
+export type RotaNav = {
+  shape: string;
+  maneuvers: ManobraNav[];
+  distanciaKm: number;
+  tempoSeg: number;
+};
+
+type NavResponse = RotaNav | { erro: string };
+
+/**
+ * Busca a navegação ao vivo (Valhalla) da posição ATUAL do motorista até o Local
+ * de destino. Online-only (o guia só faz sentido com internet). Retorna null em
+ * erro/offline — o app cai no botão "Navegar no Waze".
+ */
+export async function buscarNavegacao(
+  origemLat: number,
+  origemLng: number,
+  destinoId: string,
+): Promise<RotaNav | null> {
+  try {
+    const res = await api.post<NavResponse>("/m/rotas/navegar", {
+      origemLat,
+      origemLng,
+      destinoId,
+    });
+    if ("erro" in res) return null;
+    return res;
+  } catch {
+    return null;
+  }
+}
+
 export type PedagioNaRota = {
   id: string;
   nome: string;

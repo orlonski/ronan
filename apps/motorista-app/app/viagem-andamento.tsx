@@ -1,13 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { router, Stack } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { Activity, AlertTriangle, Save, Square, Trash2 } from "lucide-react-native";
+import {
+  Activity,
+  AlertTriangle,
+  Navigation,
+  Save,
+  Square,
+  Trash2,
+} from "lucide-react-native";
 import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MapTrajeto } from "@/components/map-trajeto";
+import { GuiaNavegacao } from "@/components/guia-navegacao";
+import { BuscarLocalModal } from "@/components/buscar-local-modal";
 import { ScreenHeader } from "@/components/screen-header";
 import { Button } from "@/components/ui/button";
 import { showAlert, showConfirm } from "@/lib/alert";
+import { pegarCoords } from "@/lib/geo";
+import { abrirNavegacaoExterna } from "@/lib/mapa-externo";
+import { buscarNavegacao, useMe, type Local, type RotaNav } from "@/lib/queries";
 import {
   cancelarTracking,
   isTrackingAtivo,
@@ -20,6 +32,44 @@ export default function ViagemAndamentoScreen() {
   const [parando, setParando] = useState(false);
   // null = ainda checando; false = órfão (storage tem mas task parou)
   const [taskAtiva, setTaskAtiva] = useState<boolean | null>(null);
+
+  // Guia de navegação ao vivo (só pra quem tem "Iniciar viagem com GPS").
+  const me = useMe();
+  const podeGuiar = me.data?.podeIniciarViagem ?? false;
+  const [destino, setDestino] = useState<Local | null>(null);
+  // undefined = montando o guia; null = falhou; RotaNav = pronto.
+  const [navRota, setNavRota] = useState<RotaNav | null | undefined>(null);
+  const [buscaAberta, setBuscaAberta] = useState(false);
+
+  async function escolherDestino(local: Local) {
+    setDestino(local);
+    if (local.lat == null || local.lng == null) {
+      setNavRota(null);
+      return;
+    }
+    setNavRota(undefined); // montando
+    const c = await pegarCoords().catch(() => null);
+    if (!c) {
+      setNavRota(null);
+      return;
+    }
+    const r = await buscarNavegacao(c.lat, c.lng, local.id);
+    setNavRota(r);
+  }
+
+  // Recálculo ao sair da rota (Fase 4): re-busca da posição atual. Throttle de 12s
+  // pra não spammar. Só troca a rota se conseguiu — senão mantém a atual.
+  const ultimoRecalcRef = useRef(0);
+  async function recalcularNav() {
+    if (!destino || destino.lat == null || destino.lng == null) return;
+    const agora = Date.now();
+    if (agora - ultimoRecalcRef.current < 12000) return;
+    ultimoRecalcRef.current = agora;
+    const c = await pegarCoords().catch(() => null);
+    if (!c) return;
+    const r = await buscarNavegacao(c.lat, c.lng, destino.id);
+    if (r) setNavRota(r);
+  }
 
   useEffect(() => {
     let alive = true;
@@ -166,6 +216,94 @@ export default function ViagemAndamentoScreen() {
           </View>
         </View>
 
+        {/* Guia de navegação ao vivo (só pra quem tem "Iniciar viagem com GPS") */}
+        {podeGuiar && (
+          <View className="gap-2 rounded-2xl border-2 border-border bg-card p-4">
+            <View className="flex-row items-center gap-2">
+              <Navigation size={18} color="#2563eb" />
+              <Text className="text-base font-bold text-foreground">
+                Guia até a descarga
+              </Text>
+            </View>
+
+            {!destino ? (
+              <Button variant="outline" onPress={() => setBuscaAberta(true)}>
+                <Navigation size={18} color="#2563eb" />
+                <Text className="text-sm font-semibold text-foreground">
+                  Escolher para onde você vai
+                </Text>
+              </Button>
+            ) : (
+              <View className="gap-2">
+                <View className="flex-row items-center justify-between gap-2">
+                  <Text
+                    className="flex-1 text-sm font-semibold text-foreground"
+                    numberOfLines={1}
+                  >
+                    → {destino.nome}
+                  </Text>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onPress={() => {
+                      setDestino(null);
+                      setNavRota(null);
+                    }}
+                  >
+                    <Text className="text-sm font-medium text-muted-foreground">
+                      Trocar
+                    </Text>
+                  </Button>
+                </View>
+
+                {navRota === undefined ? (
+                  <View className="h-64 items-center justify-center rounded-xl bg-muted/40">
+                    <ActivityIndicator />
+                    <Text className="mt-2 text-sm text-muted-foreground">
+                      Montando o guia…
+                    </Text>
+                  </View>
+                ) : navRota ? (
+                  <>
+                    <GuiaNavegacao
+                      rota={navRota}
+                      destino={{
+                        lat: destino.lat!,
+                        lng: destino.lng!,
+                        nome: destino.nome,
+                      }}
+                      onRecalcular={recalcularNav}
+                    />
+                    <Text className="text-sm text-muted-foreground">
+                      {navRota.distanciaKm.toFixed(1).replace(".", ",")} km ·{" "}
+                      {Math.round(navRota.tempoSeg / 60)} min
+                    </Text>
+                  </>
+                ) : (
+                  <View className="rounded-xl border-2 border-warning/50 bg-warning/10 p-3">
+                    <Text className="text-sm font-medium text-warning-foreground">
+                      Não consegui montar o guia agora. Use o Waze pra navegar.
+                    </Text>
+                  </View>
+                )}
+
+                {destino.lat != null && destino.lng != null && (
+                  <Button
+                    onPress={() =>
+                      void abrirNavegacaoExterna(destino.lat!, destino.lng!)
+                    }
+                  >
+                    <Navigation size={18} color="white" />
+                    <Text className="text-base font-bold text-primary-foreground">
+                      Navegar no Waze / Mapas
+                    </Text>
+                  </Button>
+                )}
+              </View>
+            )}
+          </View>
+        )}
+
         {/* Mini-mapa do trajeto */}
         {data.pontos.length >= 2 && (
           <MapTrajeto
@@ -208,6 +346,12 @@ export default function ViagemAndamentoScreen() {
           </Text>
         </Button>
       </ScrollView>
+
+      <BuscarLocalModal
+        visible={buscaAberta}
+        onClose={() => setBuscaAberta(false)}
+        onSelecionar={escolherDestino}
+      />
     </SafeAreaView>
   );
 }
