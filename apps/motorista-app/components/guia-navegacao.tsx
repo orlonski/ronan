@@ -35,6 +35,7 @@ export function GuiaNavegacao({
         key={rota.shape}
         shape={rota.shape}
         destino={destino}
+        pos={pos}
         height={340}
       />
     </View>

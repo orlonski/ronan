@@ -1,15 +1,18 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Platform, View } from "react-native";
 import polyline from "@mapbox/polyline";
+import type { PosAoVivo } from "@/lib/navegacao";
 
 /**
  * Mapa ao vivo do guia de navegação: desenha a ROTA (shape do Valhalla) FIXA +
  * marcador do destino + a bolinha azul nativa do motorista (showsUserLocation) e
- * a câmera seguindo (followsUserLocation, iOS).
+ * a CÂMERA estilo Waze — zoom fechado, inclinada em 3D e girada pro rumo que o
+ * motorista dirige ("nariz pra cima"), seguindo a posição ao vivo.
  *
  * Segurança iOS: a rota é montada UMA vez com coordenadas estáveis (memoizadas) e
- * nunca é re-mutada — é o padrão que evita o crash do Apple Maps. Quando a rota
- * muda (recálculo), o pai troca a `key` e REMONTA o mapa (não muta a Polyline).
+ * nunca é re-mutada — é o padrão que evita o crash do Apple Maps. Só a CÂMERA se
+ * mexe (animateCamera), que é uma operação segura. Quando a rota muda (recálculo),
+ * o pai troca a `key` e REMONTA o mapa (não muta a Polyline).
  *
  * Dynamic import do react-native-maps (top-level quebra o boot do expo-router).
  */
@@ -22,15 +25,25 @@ type Props = {
   /** Polyline encoded do Valhalla — PRECISÃO 6. */
   shape: string;
   destino: { lat: number; lng: number; nome?: string };
+  /** Posição ao vivo — dirige a chase cam. */
+  pos?: PosAoVivo | null;
   height?: number;
 };
+
+// Chase cam estilo Waze.
+const ZOOM_NAV = 17;
+const PITCH_NAV = 55;
 
 export const MapaNavegacao = memo(function MapaNavegacao({
   shape,
   destino,
+  pos,
   height = 320,
 }: Props) {
   const [mod, setMod] = useState<MapMod | null>(null);
+  const mapRef = useRef<any>(null);
+  // Guarda o último rumo VÁLIDO (heading vem -1/null parado) pra não "desvirar".
+  const headingRef = useRef(0);
 
   useEffect(() => {
     let alive = true;
@@ -41,6 +54,25 @@ export const MapaNavegacao = memo(function MapaNavegacao({
       alive = false;
     };
   }, []);
+
+  // Chase cam: a cada posição, centraliza em você com zoom fechado + 3D + rumo.
+  useEffect(() => {
+    if (!mapRef.current || !pos) return;
+    if (pos.heading != null && pos.heading >= 0) headingRef.current = pos.heading;
+    try {
+      mapRef.current.animateCamera(
+        {
+          center: { latitude: pos.lat, longitude: pos.lng },
+          heading: headingRef.current,
+          pitch: PITCH_NAV,
+          zoom: ZOOM_NAV,
+        },
+        { duration: 900 },
+      );
+    } catch {
+      /* animateCamera antes do mapa pronto: ignora */
+    }
+  }, [pos]);
 
   const coords = useMemo<LatLng[]>(() => {
     try {
@@ -79,11 +111,16 @@ export const MapaNavegacao = memo(function MapaNavegacao({
   const provider = Platform.OS === "android" ? mod.PROVIDER_GOOGLE : undefined;
 
   const mapProps: Record<string, unknown> = {
+    ref: mapRef,
     style: { flex: 1 },
+    // Nasce enquadrando a rota; a chase cam assume assim que chega a 1ª posição.
     initialRegion: region,
     showsUserLocation: true,
-    followsUserLocation: true, // segue no iOS (Android mostra a bolinha)
-    showsMyLocationButton: true,
+    // followsUserLocation OFF de propósito: a câmera é dirigida por animateCamera
+    // (com rumo + 3D), senão as duas brigam pelo controle no iOS.
+    showsCompass: true,
+    pitchEnabled: true,
+    rotateEnabled: true,
   };
   if (provider) mapProps.provider = provider;
 
