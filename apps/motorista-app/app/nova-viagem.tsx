@@ -99,6 +99,9 @@ export default function NovaViagem() {
     fromTracking?: string;
     trackingData?: string;
     editarClientId?: string;
+    // Destino escolhido na navegação (viagem-andamento) = a descarga. Vem
+    // pré-preenchido pra NÃO perguntar de novo o que o motorista já escolheu.
+    descargaId?: string;
   }>();
   const modoEdit = !!params.editarClientId;
 
@@ -113,7 +116,9 @@ export default function NovaViagem() {
   }, [params.fromTracking, params.trackingData]);
 
   const [form, setForm] = useState<FormShape>(() =>
-    tracking ? { ...empty, km: tracking.kmReal } : empty,
+    tracking
+      ? { ...empty, km: tracking.kmReal, localDescargaId: params.descargaId ?? "" }
+      : empty,
   );
   const [foto, setFoto] = useState<CapturedPhoto | null>(null);
   const [sugestoesIa, setSugestoesIa] = useState<ExtrairTicketResult | null>(null);
@@ -290,12 +295,11 @@ export default function NovaViagem() {
   }, [rotasAtivas, kmEditadoManual, rotaGeometriaEscolhida]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-detecta local de carga/descarga a partir dos pontos GPS do tracking.
-  // Procura local cadastrado dentro de 200m do primeiro/último ponto.
+  // O GPS de LARGADA (e de chegada) costuma ser impreciso (cold start, prédios),
+  // então olha os PRIMEIROS/ÚLTIMOS N pontos e pega o local mais próximo num raio
+  // folgado — evita o falso "nenhum local por perto" quando na verdade tem.
   const matchesGps = useMemo(() => {
-    if (!tracking || !cat.data || tracking.pontos.length < 2) return null;
-    const primeiro = tracking.pontos[0];
-    const ultimo = tracking.pontos[tracking.pontos.length - 1];
-    if (!primeiro || !ultimo) return null;
+    if (!tracking || !cat.data || tracking.pontos.length < 1) return null;
 
     const candidatosCarga = cat.data.locais.filter(
       (l) => l.tipo === "CARGA" || l.tipo === "AMBOS",
@@ -304,9 +308,27 @@ export default function NovaViagem() {
       (l) => l.tipo === "DESCARGA" || l.tipo === "AMBOS",
     );
 
+    const N = 12;
+    const RAIO_M = 350;
+    const primeiros = tracking.pontos.slice(0, N);
+    const ultimos = tracking.pontos.slice(-N);
+
+    // Melhor match entre vários pontos daquela ponta da viagem.
+    const melhor = (
+      pontos: typeof tracking.pontos,
+      candidatos: Local[],
+    ): { local: Local; distanciaMetros: number } | null => {
+      let best: { local: Local; distanciaMetros: number } | null = null;
+      for (const p of pontos) {
+        const m = localMaisProximo(p.lat, p.lng, candidatos, RAIO_M);
+        if (m && (!best || m.distanciaMetros < best.distanciaMetros)) best = m;
+      }
+      return best;
+    };
+
     return {
-      carga: localMaisProximo(primeiro.lat, primeiro.lng, candidatosCarga, 200),
-      descarga: localMaisProximo(ultimo.lat, ultimo.lng, candidatosDescarga, 200),
+      carga: melhor(primeiros, candidatosCarga),
+      descarga: melhor(ultimos, candidatosDescarga),
     };
   }, [tracking, cat.data]);
 
@@ -1731,10 +1753,12 @@ function GpsHint({
   selecionadoId: string;
 }) {
   if (!match) {
+    // Já tem um local escolhido (ex: descarga = destino que ele navegou)? Não
+    // mostra o alarme — só quando o campo está MESMO vazio.
+    if (selecionadoId) return null;
     return (
       <Text className="text-xs text-muted-foreground">
-        Nenhum local cadastrado num raio de 200 m do ponto GPS. Selecione
-        manualmente.
+        Não achei um local cadastrado por perto pelo GPS. Selecione manualmente.
       </Text>
     );
   }

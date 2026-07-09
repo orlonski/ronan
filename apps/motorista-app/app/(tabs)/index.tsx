@@ -55,6 +55,7 @@ import {
   type Viagem,
 } from "@/lib/queries";
 import { iniciarTracking, isTrackingAtivo, useViagemAndamento } from "@/lib/tracking";
+import { getNavDestino } from "@/lib/nav-destino-storage";
 import { getLifecycleLocal, hidratarViagemDoServidor } from "@/lib/lifecycle";
 import { startHomeTutorialIfNeeded } from "@/lib/home-tutorial";
 
@@ -172,12 +173,19 @@ export default function Home() {
   // Toque no banner de viagem: se a captura AINDA roda, abre o mapa (em
   // andamento). Se já parou (capturada, "cheguei" já foi), pula o mapa e vai
   // DIRETO pro formulário de lançar — não faz sentido voltar pro mapa.
-  function abrirViagemOuLancar() {
+  async function abrirViagemOuLancar() {
     if (trackingAtivo === false && tracking.resumo) {
+      // Leva junto a descarga (destino navegado) salva pra essa viagem, se houver.
+      const salvo = await getNavDestino().catch(() => null);
+      const descargaId =
+        salvo && salvo.viagemId === tracking.resumo.id
+          ? salvo.destino.id
+          : undefined;
       router.push({
         pathname: "/nova-viagem",
         params: {
           fromTracking: "1",
+          ...(descargaId ? { descargaId } : {}),
           trackingData: JSON.stringify({
             id: tracking.resumo.id,
             iniciadoEm: tracking.resumo.iniciadoEm,
@@ -300,7 +308,7 @@ export default function Home() {
             {/* Banner viagem em andamento (ou capturada aguardando lançamento) */}
             {tracking.data && (
               <Pressable
-                onPress={abrirViagemOuLancar}
+                onPress={() => void abrirViagemOuLancar()}
                 className="flex-row items-center gap-3 rounded-2xl border-2 border-primary bg-primary/15 p-4 active:opacity-75"
               >
                 <View className="h-12 w-12 items-center justify-center rounded-full bg-primary">

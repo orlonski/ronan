@@ -163,6 +163,9 @@ export default function ViagemAndamentoScreen() {
         pathname: "/nova-viagem",
         params: {
           fromTracking: "1",
+          // O destino que ele navegou É a descarga — leva junto pra não perguntar
+          // de novo no formulário.
+          ...(destino ? { descargaId: destino.id } : {}),
           trackingData: JSON.stringify({
             id: resumo.id,
             iniciadoEm: resumo.iniciadoEm,
