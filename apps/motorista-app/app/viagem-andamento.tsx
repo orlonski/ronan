@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { router, Stack } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
   AlertTriangle,
   ChevronLeft,
+  Flag,
   Navigation,
   Save,
   Square,
@@ -16,8 +17,8 @@ import { BannerManobra } from "@/components/banner-manobra";
 import { BuscarLocalModal } from "@/components/buscar-local-modal";
 import { Button } from "@/components/ui/button";
 import { showAlert, showConfirm } from "@/lib/alert";
-import { pegarCoords } from "@/lib/geo";
-import { buscarNavegacao, useMe, type Local, type RotaNav } from "@/lib/queries";
+import { haversineMetros, pegarCoords } from "@/lib/geo";
+import { buscarNavegacao, type Local, type RotaNav } from "@/lib/queries";
 import { anunciar, usePosicaoAoVivo, useGuiaNavegacao } from "@/lib/navegacao";
 import {
   clearNavDestino,
@@ -37,9 +38,8 @@ export default function ViagemAndamentoScreen() {
   // null = ainda checando; false = órfão (storage tem mas task parou)
   const [taskAtiva, setTaskAtiva] = useState<boolean | null>(null);
 
-  // Navegação até a descarga (só pra quem tem "Iniciar viagem com GPS").
-  const me = useMe();
-  const podeGuiar = me.data?.podeIniciarViagem ?? false;
+  // Navegação até a descarga. Todos que chegam nesta tela têm "Iniciar viagem
+  // com GPS" (o botão da Home exige a permissão), então o guia é sempre disponível.
   const [destino, setDestino] = useState<Local | null>(null);
   const [navRota, setNavRota] = useState<RotaNav | null | undefined>(null);
   const [buscaAberta, setBuscaAberta] = useState(false);
@@ -117,6 +117,30 @@ export default function ViagemAndamentoScreen() {
   }, [destino, persistir]);
 
   const guia = useGuiaNavegacao(navRota ?? null, pos, recalcular);
+
+  // "Só rastrear" — motorista optou por não escolher destino (não tem local
+  // cadastrado, etc). Libera finalizar sem passar pelo guia.
+  const [semDestino, setSemDestino] = useState(false);
+
+  // CHEGOU: posição ao vivo dentro de ~160m do destino escolhido (arrival
+  // detection estilo Waze). É local — funciona offline (GPS + rota já baixada).
+  const CHEGADA_RAIO_M = 160;
+  const chegou = useMemo(() => {
+    if (!destino || destino.lat == null || destino.lng == null || !pos) return false;
+    return haversineMetros(pos.lat, pos.lng, destino.lat, destino.lng) <= CHEGADA_RAIO_M;
+  }, [destino, pos]);
+
+  // Avisa 1x ao chegar (voz + vibração). Rearma se sair do raio (recalibrou).
+  const chegouAvisadoRef = useRef(false);
+  useEffect(() => {
+    if (chegou && !chegouAvisadoRef.current) {
+      chegouAvisadoRef.current = true;
+      anunciar("Você chegou ao destino.");
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } else if (!chegou) {
+      chegouAvisadoRef.current = false;
+    }
+  }, [chegou]);
 
   useEffect(() => {
     let alive = true;
@@ -268,22 +292,61 @@ export default function ViagemAndamentoScreen() {
             />
           </View>
 
-          {/* Destino / navegação (só pra quem tem o recurso) */}
-          {podeGuiar &&
-            (!destino ? (
-              <Button variant="outline" onPress={() => setBuscaAberta(true)}>
-                <Navigation size={18} color="#2563eb" />
-                <Text className="text-sm font-semibold text-foreground">
-                  Escolher para onde você vai
+          {/* Máquina de estados da viagem (estilo Waze) */}
+          {taskAtiva === false ? (
+            /* ÓRFÃO: a captura parou — salvar o que já foi capturado. */
+            <Button
+              variant="default"
+              size="lg"
+              onPress={finalizar}
+              loading={parando}
+              disabled={parando}
+            >
+              <Save size={20} color="white" />
+              <Text className="text-base font-bold text-primary-foreground">
+                Salvar agora
+              </Text>
+            </Button>
+          ) : chegou ? (
+            /* CHEGOU (~160m do destino): destaque de chegada + finalizar. */
+            <>
+              <View className="flex-row items-center gap-3 rounded-2xl border-2 border-success/40 bg-success/15 p-3">
+                <View className="h-10 w-10 items-center justify-center rounded-full bg-success">
+                  <Flag size={20} color="white" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-base font-extrabold text-foreground" numberOfLines={1}>
+                    Você chegou{destino ? ` em ${destino.nome}` : ""}!
+                  </Text>
+                  <Text
+                    className="text-xs text-muted-foreground"
+                    style={{ fontVariant: ["tabular-nums"] }}
+                  >
+                    {resumo?.kmReal.toFixed(1).replace(".", ",") ?? "0,0"} km ·{" "}
+                    {fmtDuracao(resumo?.duracaoMin ?? 0)} — confira e finalize
+                  </Text>
+                </View>
+              </View>
+              <Button
+                variant="default"
+                size="lg"
+                className="h-16"
+                onPress={finalizar}
+                loading={parando}
+                disabled={parando}
+              >
+                <Square size={20} color="white" />
+                <Text className="text-lg font-bold text-primary-foreground">
+                  Finalizar viagem
                 </Text>
               </Button>
-            ) : (
+            </>
+          ) : destino ? (
+            /* NAVEGANDO: destino + ETA; finalizar fica SECUNDÁRIO (fim antecipado). */
+            <>
               <View className="flex-row items-center gap-2 rounded-xl bg-muted/50 px-3 py-2">
                 <View className="flex-1">
-                  <Text
-                    className="text-sm font-bold text-foreground"
-                    numberOfLines={1}
-                  >
+                  <Text className="text-sm font-bold text-foreground" numberOfLines={1}>
                     → {destino.nome}
                   </Text>
                   {navRota === undefined ? (
@@ -310,25 +373,67 @@ export default function ViagemAndamentoScreen() {
                   </Text>
                 </Pressable>
               </View>
-            ))}
+              <Button
+                variant="outline"
+                onPress={finalizar}
+                loading={parando}
+                disabled={parando}
+              >
+                <Square size={18} color="#0f172a" />
+                <Text className="text-sm font-semibold text-foreground">
+                  Cheguei — finalizar agora
+                </Text>
+              </Button>
+            </>
+          ) : semDestino ? (
+            /* SÓ RASTREAR (sem destino escolhido): finalizar direto. */
+            <>
+              <Button
+                variant="outline"
+                onPress={() => {
+                  setSemDestino(false);
+                  setBuscaAberta(true);
+                }}
+              >
+                <Navigation size={18} color="#2563eb" />
+                <Text className="text-sm font-semibold text-foreground">
+                  Escolher destino (ligar o guia)
+                </Text>
+              </Button>
+              <Button
+                variant="default"
+                size="lg"
+                onPress={finalizar}
+                loading={parando}
+                disabled={parando}
+              >
+                <Square size={20} color="white" />
+                <Text className="text-base font-bold text-primary-foreground">
+                  Finalizar viagem
+                </Text>
+              </Button>
+            </>
+          ) : (
+            /* RECÉM-INICIADA (sem destino): 1 ação só — pra onde vai. Sem finalizar. */
+            <>
+              <Button
+                size="lg"
+                className="h-16"
+                onPress={() => setBuscaAberta(true)}
+              >
+                <Navigation size={22} color="white" />
+                <Text className="text-lg font-bold text-primary-foreground">
+                  Para onde você vai?
+                </Text>
+              </Button>
+              <Pressable onPress={() => setSemDestino(true)} className="py-1">
+                <Text className="text-center text-xs font-medium text-muted-foreground">
+                  Só rastrear o km (sem destino)
+                </Text>
+              </Pressable>
+            </>
+          )}
 
-          {/* Ações */}
-          <Button
-            variant="default"
-            size="lg"
-            onPress={finalizar}
-            loading={parando}
-            disabled={parando}
-          >
-            {taskAtiva === false ? (
-              <Save size={20} color="white" />
-            ) : (
-              <Square size={20} color="white" />
-            )}
-            <Text className="text-base font-bold text-primary-foreground">
-              {taskAtiva === false ? "Salvar agora" : "Finalizar viagem"}
-            </Text>
-          </Button>
           <Button variant="ghost" onPress={confirmarCancelar} disabled={parando}>
             <Trash2 size={16} color="#dc2626" />
             <Text className="text-sm font-medium text-destructive">

@@ -497,8 +497,10 @@ export default function Home() {
               </CoachTarget>
             )}
 
-            {/* Botão Iniciar viagem (tracking GPS) */}
-            {me.data?.podeIniciarViagem && (
+            {/* Botão Iniciar viagem (tracking GPS). ESCONDIDO enquanto há uma
+                viagem em andamento — o banner "Viagem em andamento" (acima) é o
+                caminho de volta, e reiniciar aqui apagaria os dados capturados. */}
+            {me.data?.podeIniciarViagem && !tracking.data && (
               <CoachTarget id="coach-iniciar-viagem" className="rounded-2xl">
               <Pressable
                 onPress={iniciarViagem}
@@ -512,9 +514,7 @@ export default function Home() {
                     Iniciar viagem com GPS
                   </Text>
                   <Text className="text-sm text-muted-foreground">
-                    {tracking.data
-                      ? `Em andamento · ${tracking.resumo?.kmReal.toFixed(1) ?? "0"} km`
-                      : "Rastreia o trajeto e calcula KM real"}
+                    Rastreia o trajeto e calcula KM real
                   </Text>
                 </View>
               </Pressable>
