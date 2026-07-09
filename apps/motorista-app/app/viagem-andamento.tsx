@@ -2,24 +2,24 @@ import { useCallback, useEffect, useState } from "react";
 import { router, Stack } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
-  Activity,
   AlertTriangle,
+  ChevronLeft,
   Navigation,
   Save,
   Square,
   Trash2,
 } from "lucide-react-native";
-import { ActivityIndicator, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { MapTrajeto } from "@/components/map-trajeto";
-import { GuiaNavegacao } from "@/components/guia-navegacao";
+import { MapaViagem } from "@/components/mapa-viagem";
+import { BannerManobra } from "@/components/banner-manobra";
 import { BuscarLocalModal } from "@/components/buscar-local-modal";
-import { ScreenHeader } from "@/components/screen-header";
 import { Button } from "@/components/ui/button";
 import { showAlert, showConfirm } from "@/lib/alert";
 import { pegarCoords } from "@/lib/geo";
 import { abrirNavegacaoExterna } from "@/lib/mapa-externo";
 import { buscarNavegacao, useMe, type Local, type RotaNav } from "@/lib/queries";
+import { anunciar, usePosicaoAoVivo, useGuiaNavegacao } from "@/lib/navegacao";
 import {
   cancelarTracking,
   isTrackingAtivo,
@@ -33,15 +33,15 @@ export default function ViagemAndamentoScreen() {
   // null = ainda checando; false = órfão (storage tem mas task parou)
   const [taskAtiva, setTaskAtiva] = useState<boolean | null>(null);
 
-  // Navegação até a descarga (só pra quem tem "Iniciar viagem com GPS"). Por ora
-  // via Waze/Google (navegação real com voz/recálculo). O mapa/guia in-app está
-  // guardado no código (components/guia-navegacao) até dar pra testar num build
-  // — ele crashava nativo (react-native-maps) em device e não dava pra reproduzir.
+  // Navegação até a descarga (só pra quem tem "Iniciar viagem com GPS").
   const me = useMe();
   const podeGuiar = me.data?.podeIniciarViagem ?? false;
   const [destino, setDestino] = useState<Local | null>(null);
   const [navRota, setNavRota] = useState<RotaNav | null | undefined>(null);
   const [buscaAberta, setBuscaAberta] = useState(false);
+
+  // Posição ao vivo (câmera + motor do guia). Ativa enquanto a tela está aberta.
+  const pos = usePosicaoAoVivo(true);
 
   async function escolherDestino(local: Local) {
     setDestino(local);
@@ -59,15 +59,20 @@ export default function ViagemAndamentoScreen() {
   }
 
   // Recálculo ao sair da rota: busca rota nova da posição atual. Só TROCA se veio
-  // uma (online); offline `buscarNavegacao` devolve null e a gente MANTÉM a rota
-  // atual (o guia já avisou por voz que saiu — não some com o mapa).
+  // uma (online) e aí fala "Recalculando"; offline `buscarNavegacao` devolve null
+  // e a gente MANTÉM a rota atual (o guia já avisou por voz que saiu).
   const recalcular = useCallback(async () => {
     if (!destino || destino.lat == null || destino.lng == null) return;
     const c = await pegarCoords().catch(() => null);
     if (!c) return;
     const nova = await buscarNavegacao(c.lat, c.lng, destino.id);
-    if (nova) setNavRota(nova);
+    if (nova) {
+      anunciar("Recalculando.");
+      setNavRota(nova);
+    }
   }, [destino]);
+
+  const guia = useGuiaNavegacao(navRota ?? null, pos, recalcular);
 
   useEffect(() => {
     let alive = true;
@@ -85,7 +90,6 @@ export default function ViagemAndamentoScreen() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     try {
       await pararTracking();
-      // Navega pra Nova Viagem com os dados do tracking nos params (JSON serializado)
       router.replace({
         pathname: "/nova-viagem",
         params: {
@@ -134,97 +138,93 @@ export default function ViagemAndamentoScreen() {
     );
   }
 
+  const navegando = !!navRota;
+  const destinoCoords =
+    destino && destino.lat != null && destino.lng != null
+      ? { lat: destino.lat, lng: destino.lng, nome: destino.nome }
+      : undefined;
+  const trilha = data.pontos.map((p) => ({ lat: p.lat, lng: p.lng }));
+
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
+    <View className="flex-1 bg-background">
       <Stack.Screen options={{ headerShown: false }} />
-      <ScreenHeader title="Viagem em andamento" />
 
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
-        {/* Banner: 6h+ sem novo ponto (provavelmente parou mas esqueceu) */}
-        {taskAtiva && horasSemPonto(data) >= 6 && (
-          <View className="rounded-2xl border-2 border-warning bg-warning/15 p-4">
-            <View className="flex-row items-center gap-2">
-              <AlertTriangle size={18} color="#b45309" />
-              <Text className="text-xs font-bold uppercase tracking-wider text-warning-foreground">
-                Sem GPS há {horasSemPonto(data).toFixed(0)}h
-              </Text>
-            </View>
-            <Text className="mt-2 text-base text-foreground">
-              Provavelmente você esqueceu de finalizar. Toque em
-              &quot;Finalizar viagem&quot; pra salvar agora.
-            </Text>
-          </View>
-        )}
+      {/* MAPA HERO — ocupa a tela toda; overlays ficam por cima */}
+      <View className="absolute inset-0">
+        <MapaViagem
+          trilha={trilha}
+          shape={navRota?.shape}
+          destino={destinoCoords}
+          pos={pos}
+        />
+      </View>
 
-        {/* Banner de tracking órfão — task parou mas storage tem dados */}
-        {taskAtiva === false && (
-          <View className="rounded-2xl border-2 border-warning/40 bg-warning/15 p-4">
-            <View className="flex-row items-center gap-2">
-              <AlertTriangle size={18} color="#b45309" />
-              <Text className="text-xs font-bold uppercase tracking-wider text-warning-foreground">
-                Tracking parado
-              </Text>
-            </View>
-            <Text className="mt-2 text-base text-foreground">
-              A captura GPS foi interrompida (sistema ou voce). Voce tem{" "}
-              {data.pontos.length} pontos não salvos. O que fazer?
-            </Text>
-          </View>
-        )}
-
-        {/* Card principal: KM + tempo + velocidade */}
-        <View
-          className={
-            taskAtiva === false
-              ? "rounded-2xl border-2 border-border bg-card p-5"
-              : "rounded-2xl border-2 border-primary/30 bg-primary/10 p-5"
-          }
-        >
-          <View className="flex-row items-center gap-2">
-            <Activity size={18} color={taskAtiva === false ? "#64748b" : "#ea580c"} />
-            <Text
-              className={
-                taskAtiva === false
-                  ? "text-xs font-bold uppercase tracking-wider text-muted-foreground"
-                  : "text-xs font-bold uppercase tracking-wider text-primary"
-              }
+      {/* TOPO: voltar + título, banner de manobra e avisos (flutuando) */}
+      <SafeAreaView
+        edges={["top"]}
+        pointerEvents="box-none"
+        className="absolute inset-x-0 top-0"
+      >
+        <View className="gap-2 p-3" pointerEvents="box-none">
+          <View className="flex-row items-center gap-2" pointerEvents="box-none">
+            <Pressable
+              onPress={() => router.back()}
+              className="h-11 w-11 items-center justify-center rounded-full bg-background/95 shadow-md"
             >
-              {taskAtiva === false ? "Capturado" : "Capturando GPS"}
-            </Text>
+              <ChevronLeft size={24} color="#0f172a" />
+            </Pressable>
+            <View className="rounded-full bg-background/95 px-4 py-2 shadow-md">
+              <Text className="text-sm font-bold text-foreground">
+                Viagem em andamento
+              </Text>
+            </View>
           </View>
-          <Text
-            className="mt-2 text-5xl font-extrabold text-foreground"
-            style={{ fontVariant: ["tabular-nums"] }}
-          >
-            {resumo?.kmReal.toFixed(2) ?? "0,00"} km
-          </Text>
-          <View className="mt-3 flex-row gap-6">
-            <Stat
-              label="tempo"
-              value={fmtDuracao(resumo?.duracaoMin ?? 0)}
+
+          {navegando && navRota && (
+            <BannerManobra
+              manobra={guia.manobra}
+              distProxM={guia.distProxM}
+              restanteM={guia.restanteM}
+              foraDaRota={guia.foraDaRota}
             />
-            <Stat
+          )}
+
+          {taskAtiva && horasSemPonto(data) >= 6 && (
+            <AvisoChip
+              texto={`Sem GPS há ${horasSemPonto(data).toFixed(0)}h — provavelmente esqueceu de finalizar.`}
+            />
+          )}
+          {taskAtiva === false && (
+            <AvisoChip
+              texto={`Captura GPS parada. Você tem ${data.pontos.length} pontos não salvos.`}
+            />
+          )}
+        </View>
+      </SafeAreaView>
+
+      {/* BARRA INFERIOR — números + destino/ETA + ações */}
+      <SafeAreaView
+        edges={["bottom"]}
+        pointerEvents="box-none"
+        className="absolute inset-x-0 bottom-0"
+      >
+        <View className="gap-3 rounded-t-3xl border-t-2 border-border bg-background px-4 pb-2 pt-4 shadow-2xl">
+          {/* Números da viagem */}
+          <View className="flex-row justify-between">
+            <StatBig
+              label={taskAtiva === false ? "capturado" : "distância"}
+              value={`${resumo?.kmReal.toFixed(1).replace(".", ",") ?? "0,0"} km`}
+            />
+            <StatBig label="tempo" value={fmtDuracao(resumo?.duracaoMin ?? 0)} />
+            <StatBig
               label="vel. média"
               value={`${(resumo?.velocidadeMediaKmh ?? 0).toFixed(0)} km/h`}
             />
-            <Stat
-              label="pontos"
-              value={String(data.pontos.length)}
-            />
           </View>
-        </View>
 
-        {/* Navegar até a descarga (só pra quem tem "Iniciar viagem com GPS") */}
-        {podeGuiar && (
-          <View className="gap-2 rounded-2xl border-2 border-border bg-card p-4">
-            <View className="flex-row items-center gap-2">
-              <Navigation size={18} color="#2563eb" />
-              <Text className="text-base font-bold text-foreground">
-                Navegar até a descarga
-              </Text>
-            </View>
-
-            {!destino ? (
+          {/* Destino / navegação (só pra quem tem o recurso) */}
+          {podeGuiar &&
+            (!destino ? (
               <Button variant="outline" onPress={() => setBuscaAberta(true)}>
                 <Navigation size={18} color="#2563eb" />
                 <Text className="text-sm font-semibold text-foreground">
@@ -232,135 +232,125 @@ export default function ViagemAndamentoScreen() {
                 </Text>
               </Button>
             ) : (
-              <View className="gap-2">
-                <View className="flex-row items-center justify-between gap-2">
+              <View className="flex-row items-center gap-2 rounded-xl bg-muted/50 px-3 py-2">
+                <View className="flex-1">
                   <Text
-                    className="flex-1 text-base font-semibold text-foreground"
-                    numberOfLines={2}
+                    className="text-sm font-bold text-foreground"
+                    numberOfLines={1}
                   >
                     → {destino.nome}
                   </Text>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onPress={() => {
-                      setDestino(null);
-                      setNavRota(null);
-                    }}
-                  >
-                    <Text className="text-sm font-medium text-muted-foreground">
-                      Trocar
+                  {navRota === undefined ? (
+                    <Text className="text-xs text-muted-foreground">
+                      montando o guia…
                     </Text>
-                  </Button>
+                  ) : navRota ? (
+                    <Text
+                      className="text-xs text-muted-foreground"
+                      style={{ fontVariant: ["tabular-nums"] }}
+                    >
+                      faltam {navRota.distanciaKm.toFixed(1).replace(".", ",")} km
+                      {" · "}~{Math.max(1, Math.round(navRota.tempoSeg / 60))} min
+                    </Text>
+                  ) : (
+                    <Text className="text-xs text-muted-foreground">
+                      sem rota — toque em Waze ou troque o destino
+                    </Text>
+                  )}
                 </View>
-
-                {navRota === undefined ? (
-                  <View className="h-56 items-center justify-center rounded-xl bg-muted/40">
-                    <ActivityIndicator />
-                    <Text className="mt-2 text-sm text-muted-foreground">
-                      Montando o guia…
-                    </Text>
-                  </View>
-                ) : navRota ? (
-                  <GuiaNavegacao
-                    rota={navRota}
-                    destino={{
-                      lat: destino.lat!,
-                      lng: destino.lng!,
-                      nome: destino.nome,
-                    }}
-                    onRecalcular={recalcular}
-                  />
-                ) : null}
-
-                {destino.lat != null && destino.lng != null && (
-                  <Button
-                    size="lg"
-                    className="h-16"
+                <Pressable
+                  onPress={() => {
+                    setDestino(null);
+                    setNavRota(null);
+                  }}
+                  className="px-2 py-1"
+                >
+                  <Text className="text-xs font-semibold text-muted-foreground">
+                    Trocar
+                  </Text>
+                </Pressable>
+                {destinoCoords && (
+                  <Pressable
                     onPress={() =>
-                      void abrirNavegacaoExterna(destino.lat!, destino.lng!)
+                      void abrirNavegacaoExterna(
+                        destinoCoords.lat,
+                        destinoCoords.lng,
+                      )
                     }
+                    className="h-10 w-10 items-center justify-center rounded-full bg-primary"
                   >
-                    <Navigation size={22} color="white" />
-                    <Text className="text-base font-bold text-primary-foreground">
-                      Navegar no Waze / Mapas
-                    </Text>
-                  </Button>
+                    <Navigation size={18} color="white" />
+                  </Pressable>
                 )}
               </View>
+            ))}
+
+          {/* Ações */}
+          <Button
+            variant="default"
+            size="lg"
+            onPress={finalizar}
+            loading={parando}
+            disabled={parando}
+          >
+            {taskAtiva === false ? (
+              <Save size={20} color="white" />
+            ) : (
+              <Square size={20} color="white" />
             )}
-          </View>
-        )}
-
-        {/* Mini-mapa do trajeto */}
-        {data.pontos.length >= 2 && (
-          <MapTrajeto
-            pontos={data.pontos.map((p) => ({ lat: p.lat, lng: p.lng }))}
-            height={280}
-            follow
-          />
-        )}
-
-        {data.pontos.length < 2 && (
-          <View className="rounded-2xl border-2 border-border bg-card p-4">
-            <Text className="text-base text-muted-foreground">
-              Aguardando os primeiros pontos GPS… Mantenha o app instalado e o
-              celular ligado. O mapa aparece após andar alguns metros.
+            <Text className="text-base font-bold text-primary-foreground">
+              {taskAtiva === false ? "Salvar agora" : "Finalizar viagem"}
             </Text>
-          </View>
-        )}
-
-        {/* Botões */}
-        <Button
-          variant="default"
-          size="lg"
-          onPress={finalizar}
-          loading={parando}
-          disabled={parando}
-        >
-          {taskAtiva === false ? (
-            <Save size={20} color="white" />
-          ) : (
-            <Square size={20} color="white" />
-          )}
-          <Text className="text-base font-bold text-primary-foreground">
-            {taskAtiva === false ? "Salvar agora" : "Finalizar viagem"}
-          </Text>
-        </Button>
-        <Button variant="ghost" onPress={confirmarCancelar} disabled={parando}>
-          <Trash2 size={18} color="#dc2626" />
-          <Text className="text-sm font-medium text-destructive">
-            Descartar viagem
-          </Text>
-        </Button>
-      </ScrollView>
+          </Button>
+          <Button variant="ghost" onPress={confirmarCancelar} disabled={parando}>
+            <Trash2 size={16} color="#dc2626" />
+            <Text className="text-sm font-medium text-destructive">
+              Descartar viagem
+            </Text>
+          </Button>
+        </View>
+      </SafeAreaView>
 
       <BuscarLocalModal
         visible={buscaAberta}
         onClose={() => setBuscaAberta(false)}
         onSelecionar={escolherDestino}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function StatBig({ label, value }: { label: string; value: string }) {
   return (
-    <View>
-      <Text className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        {label}
-      </Text>
+    <View className="items-center">
       <Text
-        className="mt-0.5 text-lg font-bold text-foreground"
+        className="text-xl font-extrabold text-foreground"
         style={{ fontVariant: ["tabular-nums"] }}
       >
         {value}
+      </Text>
+      <Text className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
       </Text>
     </View>
   );
 }
 
-function horasSemPonto(data: { pontos: { capturadoEm: string }[]; iniciadoEm: string }): number {
+function AvisoChip({ texto }: { texto: string }) {
+  return (
+    <View className="flex-row items-center gap-2 rounded-xl border border-warning/40 bg-warning/15 px-3 py-2 shadow">
+      <AlertTriangle size={16} color="#b45309" />
+      <Text className="flex-1 text-xs font-medium text-warning-foreground">
+        {texto}
+      </Text>
+    </View>
+  );
+}
+
+function horasSemPonto(data: {
+  pontos: { capturadoEm: string }[];
+  iniciadoEm: string;
+}): number {
   const ultimoTs =
     data.pontos.length > 0
       ? new Date(data.pontos[data.pontos.length - 1]!.capturadoEm).getTime()
@@ -372,5 +362,5 @@ function fmtDuracao(min: number): string {
   if (min < 60) return `${min.toFixed(0)} min`;
   const h = Math.floor(min / 60);
   const m = Math.round(min - h * 60);
-  return `${h}h ${m.toString().padStart(2, "0")}min`;
+  return `${h}h${m.toString().padStart(2, "0")}`;
 }

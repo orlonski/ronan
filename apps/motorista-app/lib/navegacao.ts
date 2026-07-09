@@ -35,6 +35,21 @@ async function falar(texto: string): Promise<void> {
   }
 }
 
+/** Fala um aviso avulso (ex.: "Recalculando"). Blindado igual `falar`. */
+export function anunciar(texto: string): void {
+  void falar(texto);
+}
+
+/** Distância pra locução em pt-BR: "240 metros", "1,2 quilômetros". */
+function falarDist(m: number): string {
+  if (m >= 1000) {
+    return `${(m / 1000).toFixed(1).replace(".", ",")} quilômetros`;
+  }
+  // arredonda pra soar natural (50 em 50 até 300m; 100 em 100 acima)
+  const r = m >= 300 ? Math.round(m / 100) * 100 : Math.round(m / 50) * 50;
+  return `${Math.max(50, r)} metros`;
+}
+
 export type EstadoGuia = {
   /** Próxima manobra à frente (null = chegou/sem manobra). */
   manobra: ManobraNav | null;
@@ -186,11 +201,12 @@ export function useGuiaNavegacao(
     foraDaRota: false,
   });
 
-  const faladoRef = useRef<{ idx: number; alerta: boolean; pre: boolean }>({
-    idx: -1,
-    alerta: false,
-    pre: false,
-  });
+  const faladoRef = useRef<{
+    idx: number;
+    alerta: boolean;
+    pre: boolean;
+    agora: boolean;
+  }>({ idx: -1, alerta: false, pre: false, agora: false });
   const foraDesdeRef = useRef<number | null>(null);
   const avisouForaRef = useRef(false);
 
@@ -211,17 +227,29 @@ export function useGuiaNavegacao(
 
       setEstado({ manobra: prox, distProxM, restanteM, foraDaRota });
 
-      // Voz: alerta antecipado (~400m) e instrução (~130m), 1x cada por manobra.
+      // Voz estilo Waze, 1x cada estágio por manobra:
+      //  ~450m e ~200m → "Em X metros, vire à direita na Rua Y"
+      //  ~45m          → só "Vire à direita na Rua Y" (é agora)
       if (prox) {
         if (faladoRef.current.idx !== prox.beginShapeIndex) {
-          faladoRef.current = { idx: prox.beginShapeIndex, alerta: false, pre: false };
+          faladoRef.current = {
+            idx: prox.beginShapeIndex,
+            alerta: false,
+            pre: false,
+            agora: false,
+          };
         }
-        if (distProxM <= 130 && !faladoRef.current.pre) {
-          faladoRef.current.pre = true;
-          void falar(prox.verbalPre ?? prox.instrucao);
-        } else if (distProxM <= 400 && !faladoRef.current.alerta) {
-          faladoRef.current.alerta = true;
-          void falar(prox.verbalAlerta ?? prox.verbalPre ?? prox.instrucao);
+        const st = faladoRef.current;
+        const instr = prox.verbalPre ?? prox.instrucao;
+        if (distProxM <= 45 && !st.agora) {
+          st.agora = st.pre = st.alerta = true;
+          void falar(instr);
+        } else if (distProxM <= 200 && !st.pre) {
+          st.pre = st.alerta = true;
+          void falar(`Em ${falarDist(distProxM)}, ${instr}`);
+        } else if (distProxM <= 450 && !st.alerta) {
+          st.alerta = true;
+          void falar(`Em ${falarDist(distProxM)}, ${instr}`);
         }
       }
 
