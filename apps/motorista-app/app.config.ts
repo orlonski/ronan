@@ -6,7 +6,7 @@ const config: ExpoConfig = {
   name: "Schaba",
   slug: "ronan-motorista",
   scheme: "ronan",
-  version: "1.0.1",
+  version: "1.0.2",
   orientation: "portrait",
   platforms: ["ios", "android"],
   icon: "./assets/icon.png",
@@ -22,7 +22,7 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: false,
     bundleIdentifier: "br.com.schaba.motorista",
-    buildNumber: "3",
+    buildNumber: "4",
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
       NSCameraUsageDescription:
@@ -35,7 +35,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: "br.com.schaba.motorista",
-    versionCode: 10,
+    versionCode: 11,
     // FCM v1 (push notifications): exige google-services.json do projeto Firebase
     // vinculado a este package. EAS Secret GOOGLE_SERVICES_JSON aponta pro arquivo
     // subido via `eas secret:create`; em dev local cai pro arquivo na raiz do app.
@@ -97,9 +97,6 @@ const config: ExpoConfig = {
     ],
     "./plugins/with-abi-splits",
     "./plugins/with-gradle-memory",
-    // Liga a feature flag useRawPropsJsiValue (nova arquitetura) — necessária pro
-    // PreviewView do vision-camera (nitro) não crashar.
-    "./plugins/with-rawprops-jsi",
   ],
   experiments: {
     typedRoutes: false,
