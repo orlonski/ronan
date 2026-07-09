@@ -223,9 +223,11 @@ export default function ViagemAndamentoScreen() {
       <View className="absolute inset-0">
         <MapaViagem
           trilha={trilha}
-          shape={navRota?.shape}
-          destino={destinoCoords}
-          pos={pos}
+          // Órfão (captura parada): não persegue a posição — enquadra o trajeto
+          // capturado, deixando claro que a viagem já acabou (falta só lançar).
+          shape={taskAtiva === false ? undefined : navRota?.shape}
+          destino={taskAtiva === false ? undefined : destinoCoords}
+          pos={taskAtiva === false ? null : pos}
         />
       </View>
 
@@ -264,11 +266,6 @@ export default function ViagemAndamentoScreen() {
               texto={`Sem GPS há ${horasSemPonto(data).toFixed(0)}h — provavelmente esqueceu de finalizar.`}
             />
           )}
-          {taskAtiva === false && (
-            <AvisoChip
-              texto={`Captura GPS parada. Você tem ${data.pontos.length} pontos não salvos.`}
-            />
-          )}
         </View>
       </SafeAreaView>
 
@@ -294,19 +291,38 @@ export default function ViagemAndamentoScreen() {
 
           {/* Máquina de estados da viagem (estilo Waze) */}
           {taskAtiva === false ? (
-            /* ÓRFÃO: a captura parou — salvar o que já foi capturado. */
-            <Button
-              variant="default"
-              size="lg"
-              onPress={finalizar}
-              loading={parando}
-              disabled={parando}
-            >
-              <Save size={20} color="white" />
-              <Text className="text-base font-bold text-primary-foreground">
-                Salvar agora
-              </Text>
-            </Button>
+            /* ÓRFÃO: a captura foi encerrada (você finalizou e voltou, ou o
+               sistema parou) e a viagem AINDA NÃO FOI LANÇADA. Deixa cristalino
+               o que é o "salvar" e que nada foi perdido. */
+            <>
+              <View className="gap-1 rounded-2xl border-2 border-primary/40 bg-primary/10 p-3">
+                <Text className="text-base font-extrabold text-foreground">
+                  Viagem capturada — falta lançar
+                </Text>
+                <Text
+                  className="text-xs text-muted-foreground"
+                  style={{ fontVariant: ["tabular-nums"] }}
+                >
+                  A captura terminou e você tem{" "}
+                  {resumo?.kmReal.toFixed(1).replace(".", ",") ?? "0,0"} km salvos
+                  no aparelho. Toque abaixo pra preencher cliente, peso e ticket e
+                  lançar — nada foi perdido.
+                </Text>
+              </View>
+              <Button
+                variant="default"
+                size="lg"
+                className="h-16"
+                onPress={finalizar}
+                loading={parando}
+                disabled={parando}
+              >
+                <Save size={20} color="white" />
+                <Text className="text-lg font-bold text-primary-foreground">
+                  Lançar viagem
+                </Text>
+              </Button>
+            </>
           ) : chegou ? (
             /* CHEGOU (~160m do destino): destaque de chegada + finalizar. */
             <>

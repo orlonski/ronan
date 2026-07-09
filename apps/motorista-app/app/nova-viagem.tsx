@@ -19,6 +19,7 @@ import { DateField } from "@/components/ui/date-field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
+import { SelecaoBotoes } from "@/components/ui/selecao-botoes";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { AvisoKmEstimado } from "@/components/aviso-km-estimado";
 import { DescargaPorGps, type DescargaCaptura } from "@/components/descarga-por-gps";
@@ -1150,6 +1151,74 @@ export default function NovaViagem() {
     </Button>
   );
 
+  // Versões do MODO GPS: lista curta (≤6) vira botões grandes (1 toque, dedão);
+  // lista longa mantém o dropdown com busca.
+  const secaoMaterialGps = (
+    <View className="gap-2" onLayout={val.onLayoutCampo("materialId")}>
+      <Label error={!!val.erroDe("materialId")}>Material</Label>
+      {materialOptions.length > 0 && materialOptions.length <= 6 ? (
+        <SelecaoBotoes
+          value={form.materialId}
+          onChange={(v) => {
+            val.limpar();
+            update("materialId", v);
+          }}
+          options={materialOptions}
+          error={!!val.erroDe("materialId")}
+        />
+      ) : (
+        <Select
+          value={form.materialId}
+          onChange={(v) => {
+            val.limpar();
+            update("materialId", v);
+          }}
+          options={materialOptions}
+          placeholder="Escolha o material"
+          searchable
+          error={!!val.erroDe("materialId")}
+        />
+      )}
+      {val.erroDe("materialId") ? (
+        <ErroCampo msg={val.erroDe("materialId")!} />
+      ) : !exigeTicket && form.materialId ? (
+        <Text className="text-xs text-muted-foreground">
+          Esse material não exige ticket — pode lançar sem número.
+        </Text>
+      ) : null}
+    </View>
+  );
+
+  const secaoPlacaGps = (
+    <View className="gap-2" onLayout={val.onLayoutCampo("veiculoId")}>
+      <Label error={!!val.erroDe("veiculoId")}>Placa</Label>
+      {veiculoOptions.length > 0 && veiculoOptions.length <= 6 ? (
+        <SelecaoBotoes
+          value={form.veiculoId}
+          onChange={(v) => {
+            val.limpar();
+            update("veiculoId", v);
+          }}
+          options={veiculoOptions}
+          error={!!val.erroDe("veiculoId")}
+        />
+      ) : (
+        <Select
+          value={form.veiculoId}
+          onChange={(v) => {
+            val.limpar();
+            update("veiculoId", v);
+          }}
+          options={veiculoOptions}
+          placeholder="Escolha a placa"
+          searchable
+          error={!!val.erroDe("veiculoId")}
+        />
+      )}
+      {val.erroDe("veiculoId") ? <ErroCampo msg={val.erroDe("veiculoId")!} /> : null}
+    </View>
+  );
+
   // Card "herói" do resumo da viagem capturada (só modo GPS).
   const heroTracking = tracking ? (
     <View className="rounded-2xl border-2 border-primary/30 bg-primary/10 p-5">
@@ -1217,8 +1286,8 @@ export default function NovaViagem() {
                 </Secao>
                 <Secao titulo="Dados da viagem">
                   {secaoCliente}
-                  {secaoMaterial}
-                  {secaoPlaca}
+                  {secaoMaterialGps}
+                  {secaoPlacaGps}
                   {secaoData}
                   {secaoPesoTicket}
                   {secaoFoto}

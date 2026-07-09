@@ -54,7 +54,7 @@ import {
   useViagensAguardandoPeso,
   type Viagem,
 } from "@/lib/queries";
-import { iniciarTracking, useViagemAndamento } from "@/lib/tracking";
+import { iniciarTracking, isTrackingAtivo, useViagemAndamento } from "@/lib/tracking";
 import { getLifecycleLocal, hidratarViagemDoServidor } from "@/lib/lifecycle";
 import { startHomeTutorialIfNeeded } from "@/lib/home-tutorial";
 
@@ -113,6 +113,22 @@ export default function Home() {
     }, [podeLifecycle]),
   );
 
+  // Tracking clássico: a task GPS ainda está rodando? Se o storage tem viagem
+  // mas a task parou (motorista finalizou e voltou sem lançar), é ÓRFÃO — o
+  // banner deve dizer "falta lançar", não "em andamento". Reavalia ao focar.
+  const [trackingAtivo, setTrackingAtivo] = useState<boolean | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      let alive = true;
+      void isTrackingAtivo().then((ok) => {
+        if (alive) setTrackingAtivo(ok);
+      });
+      return () => {
+        alive = false;
+      };
+    }, []),
+  );
+
   // Tutorial de primeiro uso: dispara assim que o perfil carrega (precisamos
   // das permissões pra saber quais botões existem). Só uma vez por sessão;
   // o próprio tutorial-state checa em AsyncStorage se já foi visto.
@@ -150,6 +166,28 @@ export default function Home() {
         message: (err as Error).message ?? "Falha ao iniciar.",
         variant: "destructive",
       });
+    }
+  }
+
+  // Toque no banner de viagem: se a captura AINDA roda, abre o mapa (em
+  // andamento). Se já parou (capturada, "cheguei" já foi), pula o mapa e vai
+  // DIRETO pro formulário de lançar — não faz sentido voltar pro mapa.
+  function abrirViagemOuLancar() {
+    if (trackingAtivo === false && tracking.resumo) {
+      router.push({
+        pathname: "/nova-viagem",
+        params: {
+          fromTracking: "1",
+          trackingData: JSON.stringify({
+            id: tracking.resumo.id,
+            iniciadoEm: tracking.resumo.iniciadoEm,
+            kmReal: tracking.resumo.kmReal.toFixed(2),
+            pontos: tracking.resumo.pontos,
+          }),
+        },
+      });
+    } else {
+      router.push("/viagem-andamento");
     }
   }
 
@@ -259,10 +297,10 @@ export default function Home() {
             {/* Stories dos motoristas (estilo Instagram) */}
             <StoriesBar />
 
-            {/* Banner viagem em andamento (tracking ativo) */}
+            {/* Banner viagem em andamento (ou capturada aguardando lançamento) */}
             {tracking.data && (
               <Pressable
-                onPress={() => router.push("/viagem-andamento")}
+                onPress={abrirViagemOuLancar}
                 className="flex-row items-center gap-3 rounded-2xl border-2 border-primary bg-primary/15 p-4 active:opacity-75"
               >
                 <View className="h-12 w-12 items-center justify-center rounded-full bg-primary">
@@ -270,13 +308,17 @@ export default function Home() {
                 </View>
                 <View className="flex-1">
                   <Text className="text-base font-bold text-foreground">
-                    Viagem em andamento
+                    {trackingAtivo === false
+                      ? "Viagem capturada — falta lançar"
+                      : "Viagem em andamento"}
                   </Text>
                   <Text
                     className="text-sm text-muted-foreground"
                     style={{ fontVariant: ["tabular-nums"] }}
                   >
-                    {tracking.resumo?.kmReal.toFixed(1) ?? "0,0"} km · toque pra ver
+                    {trackingAtivo === false
+                      ? `${tracking.resumo?.kmReal.toFixed(1) ?? "0,0"} km · toque pra lançar`
+                      : `${tracking.resumo?.kmReal.toFixed(1) ?? "0,0"} km · toque pra ver`}
                   </Text>
                 </View>
               </Pressable>
