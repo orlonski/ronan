@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Platform, View } from "react-native";
+import { View } from "react-native";
 import polyline from "@mapbox/polyline";
 import type { PosAoVivo } from "@/lib/navegacao";
 
@@ -139,7 +139,9 @@ export function MapaViagem({
   const MapView = mod.default;
   const Marker = mod.Marker;
   const Polyline = mod.Polyline;
-  const provider = Platform.OS === "android" ? mod.PROVIDER_GOOGLE : undefined;
+  // Google Maps nas DUAS plataformas: no iOS o Apple Maps é furado desenhando
+  // polilinha; o Google Maps desenha certo (é o mesmo do Android, que funciona).
+  const provider = mod.PROVIDER_GOOGLE;
 
   const mapProps: Record<string, unknown> = {
     ref: mapRef,
