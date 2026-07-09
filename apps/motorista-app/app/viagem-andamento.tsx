@@ -17,7 +17,6 @@ import { BuscarLocalModal } from "@/components/buscar-local-modal";
 import { Button } from "@/components/ui/button";
 import { showAlert, showConfirm } from "@/lib/alert";
 import { pegarCoords } from "@/lib/geo";
-import { abrirNavegacaoExterna } from "@/lib/mapa-externo";
 import { buscarNavegacao, useMe, type Local, type RotaNav } from "@/lib/queries";
 import { anunciar, usePosicaoAoVivo, useGuiaNavegacao } from "@/lib/navegacao";
 import {
@@ -301,7 +300,7 @@ export default function ViagemAndamentoScreen() {
                     </Text>
                   ) : (
                     <Text className="text-xs text-muted-foreground">
-                      sem rota — toque em Waze ou troque o destino
+                      sem rota — tente com sinal ou troque o destino
                     </Text>
                   )}
                 </View>
@@ -310,19 +309,6 @@ export default function ViagemAndamentoScreen() {
                     Trocar
                   </Text>
                 </Pressable>
-                {destinoCoords && (
-                  <Pressable
-                    onPress={() =>
-                      void abrirNavegacaoExterna(
-                        destinoCoords.lat,
-                        destinoCoords.lng,
-                      )
-                    }
-                    className="h-10 w-10 items-center justify-center rounded-full bg-primary"
-                  >
-                    <Navigation size={18} color="white" />
-                  </Pressable>
-                )}
               </View>
             ))}
 
