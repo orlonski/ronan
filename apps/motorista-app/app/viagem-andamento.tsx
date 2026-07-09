@@ -47,6 +47,16 @@ export default function ViagemAndamentoScreen() {
   // Posição ao vivo (câmera + motor do guia). Ativa enquanto a tela está aberta.
   const pos = usePosicaoAoVivo(true);
 
+  // Fixa a coordenada da CARGA no início (1ª posição ao vivo precisa, trava em
+  // ~1-2s). Vai pro lançamento pra casar o local de carga mesmo se o motorista
+  // finalizar rápido (tracking ainda sem pontos precisos de largada).
+  const cargaFixRef = useRef<{ lat: number; lng: number } | null>(null);
+  useEffect(() => {
+    if (pos && !cargaFixRef.current) {
+      cargaFixRef.current = { lat: pos.lat, lng: pos.lng };
+    }
+  }, [pos]);
+
   const viagemId = data?.id ?? null;
 
   // Salva o destino escolhido amarrado à viagem atual (sobrevive sair/voltar e
@@ -167,6 +177,14 @@ export default function ViagemAndamentoScreen() {
           // O destino que ele navegou É a descarga — leva junto pra não perguntar
           // de novo no formulário.
           ...(destino ? { descargaId: destino.id } : {}),
+          // Coord precisa da carga (fix do início) — casa o local de carga mesmo
+          // se finalizou rápido.
+          ...(cargaFixRef.current
+            ? {
+                cargaLat: String(cargaFixRef.current.lat),
+                cargaLng: String(cargaFixRef.current.lng),
+              }
+            : {}),
           trackingData: JSON.stringify({
             id: resumo.id,
             iniciadoEm: resumo.iniciadoEm,

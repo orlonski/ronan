@@ -103,6 +103,10 @@ export default function NovaViagem() {
     // Destino escolhido na navegação (viagem-andamento) = a descarga. Vem
     // pré-preenchido pra NÃO perguntar de novo o que o motorista já escolheu.
     descargaId?: string;
+    // Coordenada precisa da carga (fix do início) — conserta a corrida do GPS
+    // de largada quando o motorista finaliza rápido.
+    cargaLat?: string;
+    cargaLng?: string;
   }>();
   const modoEdit = !!params.editarClientId;
 
@@ -300,7 +304,7 @@ export default function NovaViagem() {
   // então olha os PRIMEIROS/ÚLTIMOS N pontos e pega o local mais próximo num raio
   // folgado — evita o falso "nenhum local por perto" quando na verdade tem.
   const matchesGps = useMemo(() => {
-    if (!tracking || !cat.data || tracking.pontos.length < 1) return null;
+    if (!tracking || !cat.data) return null;
 
     const candidatosCarga = cat.data.locais.filter(
       (l) => l.tipo === "CARGA" || l.tipo === "AMBOS",
@@ -314,9 +318,19 @@ export default function NovaViagem() {
     const primeiros = tracking.pontos.slice(0, N);
     const ultimos = tracking.pontos.slice(-N);
 
+    // Coordenada de CARGA capturada no início pela posição ao vivo (trava em
+    // ~1-2s). Mais confiável que os primeiros pontos do tracking, que podem
+    // faltar se o motorista finalizou logo após iniciar (parado na carga). É o
+    // que conserta a corrida "cliquei em cheguei rápido e a carga não puxou".
+    const cargaFix =
+      params.cargaLat && params.cargaLng
+        ? { lat: parseFloat(params.cargaLat), lng: parseFloat(params.cargaLng) }
+        : null;
+    const pontosCarga = cargaFix ? [cargaFix, ...primeiros] : primeiros;
+
     // Melhor match entre vários pontos daquela ponta da viagem.
     const melhor = (
-      pontos: typeof tracking.pontos,
+      pontos: { lat: number; lng: number }[],
       candidatos: Local[],
     ): { local: Local; distanciaMetros: number } | null => {
       let best: { local: Local; distanciaMetros: number } | null = null;
@@ -328,10 +342,10 @@ export default function NovaViagem() {
     };
 
     return {
-      carga: melhor(primeiros, candidatosCarga),
+      carga: melhor(pontosCarga, candidatosCarga),
       descarga: melhor(ultimos, candidatosDescarga),
     };
-  }, [tracking, cat.data]);
+  }, [tracking, cat.data, params.cargaLat, params.cargaLng]);
 
   // Aplica os matches no form (uma vez, depois deixa motorista editar)
   const [autoAplicado, setAutoAplicado] = useState(false);
