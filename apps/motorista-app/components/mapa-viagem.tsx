@@ -97,6 +97,20 @@ export function MapaViagem({
     };
   }, [rota, trilhaCoords, destino]);
 
+  // Enquadramento inicial NAVEGANDO: já nasce no zoom fechado perto do começo da
+  // rota (não espera o 1º GPS). Sem isso, ao reabrir o app aparecia a rota inteira
+  // afastada até o GPS chegar. Sem rota → cai no `region` (enquadra tudo).
+  const initialCamera = useMemo(() => {
+    if (!navegando || rota.length === 0) return null;
+    return {
+      center: rota[0]!,
+      heading: 0,
+      pitch: PITCH_NAV,
+      zoom: ZOOM_NAV,
+      altitude: 1000, // usado no iOS; Android usa zoom
+    };
+  }, [navegando, rota]);
+
   // Câmera segue a posição. Navegando = chase cam; senão = topo-norte afastado.
   useEffect(() => {
     if (!mapRef.current || !pos) return;
@@ -132,7 +146,9 @@ export function MapaViagem({
     rotateEnabled: true,
     mapPadding: { top: padTop, bottom: padBottom, left: 8, right: 8 },
   };
-  if (region) mapProps.initialRegion = region;
+  // Navegando: nasce no zoom da navegação; senão: enquadra o trajeto/rota.
+  if (initialCamera) mapProps.initialCamera = initialCamera;
+  else if (region) mapProps.initialRegion = region;
   if (provider) mapProps.provider = provider;
 
   return (
