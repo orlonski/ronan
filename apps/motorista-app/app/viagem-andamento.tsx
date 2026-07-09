@@ -21,6 +21,11 @@ import { abrirNavegacaoExterna } from "@/lib/mapa-externo";
 import { buscarNavegacao, useMe, type Local, type RotaNav } from "@/lib/queries";
 import { anunciar, usePosicaoAoVivo, useGuiaNavegacao } from "@/lib/navegacao";
 import {
+  clearNavDestino,
+  getNavDestino,
+  setNavDestino,
+} from "@/lib/nav-destino-storage";
+import {
   cancelarTracking,
   isTrackingAtivo,
   pararTracking,
@@ -43,19 +48,58 @@ export default function ViagemAndamentoScreen() {
   // Posição ao vivo (câmera + motor do guia). Ativa enquanto a tela está aberta.
   const pos = usePosicaoAoVivo(true);
 
+  const viagemId = data?.id ?? null;
+
+  // Salva o destino escolhido amarrado à viagem atual (sobrevive sair/voltar e
+  // fechar/reabrir o app). Best-effort — se falhar, navegação segue em memória.
+  const persistir = useCallback(
+    (local: Local, rota: RotaNav | null) => {
+      if (!viagemId) return;
+      void setNavDestino({ viagemId, destino: local, rota });
+    },
+    [viagemId],
+  );
+
   async function escolherDestino(local: Local) {
     setDestino(local);
     if (local.lat == null || local.lng == null) {
       setNavRota(null);
+      persistir(local, null);
       return;
     }
     setNavRota(undefined);
     const c = await pegarCoords().catch(() => null);
     if (!c) {
       setNavRota(null);
+      persistir(local, null);
       return;
     }
-    setNavRota(await buscarNavegacao(c.lat, c.lng, local.id));
+    const r = await buscarNavegacao(c.lat, c.lng, local.id);
+    setNavRota(r);
+    persistir(local, r);
+  }
+
+  // Restaura o destino salvo ao abrir a tela (só se for a MESMA viagem). Roda 1x
+  // por viagem; se o salvo for de outra viagem, limpa.
+  const [restaurou, setRestaurou] = useState(false);
+  useEffect(() => {
+    if (restaurou || !viagemId) return;
+    setRestaurou(true);
+    void getNavDestino().then((salvo) => {
+      if (!salvo) return;
+      if (salvo.viagemId === viagemId) {
+        setDestino(salvo.destino);
+        setNavRota(salvo.rota);
+      } else {
+        void clearNavDestino();
+      }
+    });
+  }, [viagemId, restaurou]);
+
+  function trocarDestino() {
+    setDestino(null);
+    setNavRota(null);
+    void clearNavDestino();
   }
 
   // Recálculo ao sair da rota: busca rota nova da posição atual. Só TROCA se veio
@@ -69,8 +113,9 @@ export default function ViagemAndamentoScreen() {
     if (nova) {
       anunciar("Recalculando.");
       setNavRota(nova);
+      persistir(destino, nova);
     }
-  }, [destino]);
+  }, [destino, persistir]);
 
   const guia = useGuiaNavegacao(navRota ?? null, pos, recalcular);
 
@@ -90,6 +135,7 @@ export default function ViagemAndamentoScreen() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     try {
       await pararTracking();
+      void clearNavDestino();
       router.replace({
         pathname: "/nova-viagem",
         params: {
@@ -122,6 +168,7 @@ export default function ViagemAndamentoScreen() {
     });
     if (!ok) return;
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    void clearNavDestino();
     await cancelarTracking();
     router.back();
   }
@@ -258,13 +305,7 @@ export default function ViagemAndamentoScreen() {
                     </Text>
                   )}
                 </View>
-                <Pressable
-                  onPress={() => {
-                    setDestino(null);
-                    setNavRota(null);
-                  }}
-                  className="px-2 py-1"
-                >
+                <Pressable onPress={trocarDestino} className="px-2 py-1">
                   <Text className="text-xs font-semibold text-muted-foreground">
                     Trocar
                   </Text>
