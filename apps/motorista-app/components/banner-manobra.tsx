@@ -1,5 +1,6 @@
 import { Text, View } from "react-native";
 import {
+  AlertTriangle,
   ArrowRight,
   ArrowLeft,
   ArrowUp,
@@ -40,11 +41,33 @@ export function BannerManobra({
   manobra,
   distProxM,
   restanteM,
+  foraDaRota,
 }: {
   manobra: ManobraNav | null;
   distProxM: number;
   restanteM: number;
+  foraDaRota?: boolean;
 }) {
+  // Fora da rota: aviso local (não depende de internet). A "próxima manobra" não
+  // faz sentido quando o motorista está longe da linha — mostra o alerta no lugar.
+  if (foraDaRota) {
+    return (
+      <View className="rounded-2xl border-2 border-warning bg-warning/15 p-4">
+        <View className="flex-row items-center gap-3">
+          <AlertTriangle size={30} color="#b45309" />
+          <View className="flex-1">
+            <Text className="text-lg font-bold text-foreground">
+              Você saiu da rota
+            </Text>
+            <Text className="text-sm font-medium text-muted-foreground">
+              Volte pra linha azul — ou toque em “Navegar no Waze”. Sem sinal, a
+              rota não recalcula, mas a voz continua no trecho que já baixou.
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
   if (!manobra) return null;
   return (
     <View className="rounded-2xl border-2 border-primary/30 bg-primary/10 p-4">

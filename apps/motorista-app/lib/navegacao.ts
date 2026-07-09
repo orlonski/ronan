@@ -192,6 +192,7 @@ export function useGuiaNavegacao(
     pre: false,
   });
   const foraDesdeRef = useRef<number | null>(null);
+  const avisouForaRef = useRef(false);
 
   useEffect(() => {
     if (!base || !rota || !pos) return;
@@ -224,18 +225,20 @@ export function useGuiaNavegacao(
         }
       }
 
-      // Fora da rota ~5s seguidos → recálculo (1x; reseta depois).
+      // Fora da rota ~4s seguidos: AVISA por voz (local — funciona offline) e
+      // TENTA recalcular (precisa de internet; offline vira no-op no callback).
+      // Fala 1x; rearma só quando o motorista volta pra rota (não fica nagando).
       if (foraDaRota) {
         const agora = Date.now();
-        if (foraDesdeRef.current == null) {
-          foraDesdeRef.current = agora;
-        } else if (agora - foraDesdeRef.current > 5000 && onRecalcular) {
-          foraDesdeRef.current = null;
-          void falar("Recalculando a rota.");
-          onRecalcular();
+        if (foraDesdeRef.current == null) foraDesdeRef.current = agora;
+        if (agora - foraDesdeRef.current > 4000 && !avisouForaRef.current) {
+          avisouForaRef.current = true;
+          void falar("Você saiu da rota.");
+          onRecalcular?.();
         }
       } else {
         foraDesdeRef.current = null;
+        avisouForaRef.current = false;
       }
     } catch {
       /* qualquer erro no motor: não atualiza o guia, mas NÃO derruba a tela */

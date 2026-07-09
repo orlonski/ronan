@@ -30,6 +30,7 @@ export function GuiaNavegacao({
         manobra={guia.manobra}
         distProxM={guia.distProxM}
         restanteM={guia.restanteM}
+        foraDaRota={guia.foraDaRota}
       />
       <MapaNavegacao
         key={rota.shape}

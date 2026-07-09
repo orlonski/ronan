@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { router, Stack } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
@@ -57,6 +57,17 @@ export default function ViagemAndamentoScreen() {
     }
     setNavRota(await buscarNavegacao(c.lat, c.lng, local.id));
   }
+
+  // Recálculo ao sair da rota: busca rota nova da posição atual. Só TROCA se veio
+  // uma (online); offline `buscarNavegacao` devolve null e a gente MANTÉM a rota
+  // atual (o guia já avisou por voz que saiu — não some com o mapa).
+  const recalcular = useCallback(async () => {
+    if (!destino || destino.lat == null || destino.lng == null) return;
+    const c = await pegarCoords().catch(() => null);
+    if (!c) return;
+    const nova = await buscarNavegacao(c.lat, c.lng, destino.id);
+    if (nova) setNavRota(nova);
+  }, [destino]);
 
   useEffect(() => {
     let alive = true;
@@ -258,6 +269,7 @@ export default function ViagemAndamentoScreen() {
                       lng: destino.lng!,
                       nome: destino.nome,
                     }}
+                    onRecalcular={recalcular}
                   />
                 ) : null}
 
