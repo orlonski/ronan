@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { Check } from "lucide-react-native";
+import { Check, Trash2 } from "lucide-react-native";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -26,6 +26,7 @@ import { DescargaPorGps, type DescargaCaptura } from "@/components/descarga-por-
 import { SeletorRotas } from "@/components/seletor-rotas";
 import { SeletorRetorno } from "@/components/seletor-retorno";
 import { showAlert, showConfirm } from "@/lib/alert";
+import { clearNavDestino } from "@/lib/nav-destino-storage";
 import { humanizeApiError } from "@/lib/api";
 import { fmtDataBR, hojeISO } from "@/lib/datetime";
 import { reportarEvento } from "@/lib/event-reporter";
@@ -792,6 +793,7 @@ export default function NovaViagem() {
       if (tracking && !modoEdit) {
         const { clearViagemAndamento } = await import("@/lib/tracking-storage");
         await clearViagemAndamento();
+        await clearNavDestino();
       }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
@@ -801,6 +803,25 @@ export default function NovaViagem() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // Descarta a viagem capturada por GPS (apaga pontos + destino salvos) sem
+  // lançar. Só faz sentido no modo GPS (tracking).
+  async function descartarViagem() {
+    const ok = await showConfirm({
+      title: "Descartar viagem?",
+      message:
+        "Os pontos GPS e os dados capturados serão apagados. Quer mesmo descartar?",
+      confirmLabel: "Descartar",
+      cancelLabel: "Não",
+      destructive: true,
+    });
+    if (!ok) return;
+    const { clearViagemAndamento } = await import("@/lib/tracking-storage");
+    await clearViagemAndamento();
+    await clearNavDestino();
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    router.back();
   }
 
   // Duração do trajeto (só modo GPS): do início ao último ponto capturado.
@@ -1321,6 +1342,16 @@ export default function NovaViagem() {
                 <Secao titulo="Observação">{secaoObs}</Secao>
                 {erro ? <ErroCampo msg={erro} /> : null}
                 {secaoSalvar}
+                <Button
+                  variant="ghost"
+                  onPress={descartarViagem}
+                  disabled={submitting}
+                >
+                  <Trash2 size={16} color="#dc2626" />
+                  <Text className="text-sm font-medium text-destructive">
+                    Descartar viagem
+                  </Text>
+                </Button>
               </>
             ) : (
               /* Fluxo NORMAL / EDIÇÃO: ordem original, intacta. */

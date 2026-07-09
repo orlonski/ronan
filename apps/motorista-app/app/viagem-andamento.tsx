@@ -158,7 +158,8 @@ export default function ViagemAndamentoScreen() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     try {
       await pararTracking();
-      void clearNavDestino();
+      // NÃO limpa o nav-destino aqui: o formulário (e o banner órfão da Home)
+      // ainda precisam dele pra pré-preencher a descarga. Só limpa no salvar/descartar.
       router.replace({
         pathname: "/nova-viagem",
         params: {
