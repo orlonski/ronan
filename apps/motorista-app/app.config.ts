@@ -22,7 +22,7 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: false,
     bundleIdentifier: "br.com.schaba.motorista",
-    buildNumber: "4",
+    buildNumber: "5",
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
       NSCameraUsageDescription:
