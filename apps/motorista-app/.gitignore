@@ -30,3 +30,6 @@ android/
 yarn-error.log
 npm-debug.log
 build-*.tar.gz
+
+# Chave da service account do Google Play (submit) — NUNCA commitar
+play-service-account.json
