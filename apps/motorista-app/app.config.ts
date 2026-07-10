@@ -22,7 +22,7 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: false,
     bundleIdentifier: "br.com.schaba.motorista",
-    buildNumber: "8",
+    buildNumber: "9",
     // Google Maps SDK for iOS — usa o MESMO motor do Android (que desenha a
     // polilinha perfeitamente), no lugar do Apple Maps (que é furado com linha).
     // Chave via EAS Secret GOOGLE_MAPS_IOS_KEY (precisa "Maps SDK for iOS"

@@ -244,6 +244,10 @@ export default function ViagemAndamentoScreen() {
       {/* MAPA HERO — ocupa a tela toda; overlays ficam por cima */}
       <View className="absolute inset-0">
         <MapaViagem
+          // REMONTA o mapa quando a rota aparece/muda. O Google Maps iOS não
+          // desenha polilinha adicionada DEPOIS que o mapa montou; remontando, a
+          // linha já nasce junto com o mapa e desenha. (Também cobre o recálculo.)
+          key={taskAtiva === false ? "orfao" : navRota?.shape ?? "sem-rota"}
           trilha={trilha}
           // Órfão (captura parada): não persegue a posição — enquadra o trajeto
           // capturado, deixando claro que a viagem já acabou (falta só lançar).
