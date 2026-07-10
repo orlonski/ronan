@@ -36,11 +36,13 @@ export class KeychainLockedError extends Error {
   }
 }
 
+// SÓ o sinal real de device bloqueado (errSecInteractionNotAllowed). NÃO casar
+// "getValueWithKeyAsync" — esse texto aparece em QUALQUER erro de leitura do
+// Keychain; casá-lo faria um problema real do Keychain ser engolido como
+// "transitório/travado" pra sempre, invisível. Outros erros devem aparecer.
 function ehKeychainBloqueado(err: unknown): boolean {
   const msg = (err as Error)?.message ?? String(err);
-  return /User interaction is not allowed|getValueWithKeyAsync|InteractionNotAllowed/i.test(
-    msg,
-  );
+  return /User interaction is not allowed|InteractionNotAllowed/i.test(msg);
 }
 
 export async function saveTokens(t: Tokens) {

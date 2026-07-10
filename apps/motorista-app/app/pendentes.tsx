@@ -16,7 +16,7 @@ import { ScreenHeader } from "@/components/screen-header";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { showConfirm } from "@/lib/alert";
+import { showAlert, showConfirm } from "@/lib/alert";
 import {
   type PendingViagem,
   type PendingPedagio,
@@ -66,6 +66,51 @@ export default function Pendentes() {
   const lifecycleTrips = usePendingLifecycle();
   const completarPeso = usePendingCompletarPeso();
   const cat = useCatalogos();
+  const [sincronizando, setSincronizando] = useState(false);
+
+  // "Sincronizar agora": intenção explícita do motorista. Dá feedback claro do
+  // resultado (antes era `void drain()` sem retorno nenhum — dava pra clicar
+  // várias vezes sem saber o que acontecia). force pula o backoff de rede.
+  async function onSincronizar() {
+    if (sincronizando) return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setSincronizando(true);
+    try {
+      const r = await drain({ force: true });
+      if (r.emAndamento) {
+        await showAlert({
+          title: "Sincronizando…",
+          message: "Já estou enviando seus lançamentos. Aguarde um instante.",
+        });
+      } else if (r.enviados > 0 && r.restantes === 0) {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        await showAlert({
+          title: "Tudo enviado! ✅",
+          message: `${r.enviados} lançamento(s) sincronizado(s).`,
+        });
+      } else if (r.enviados > 0) {
+        await showAlert({
+          title: "Enviei parte",
+          message:
+            `${r.enviados} enviado(s), ${r.restantes} ainda aguardando.` +
+            (r.ultimoMotivo ? `\n\nMotivo: ${r.ultimoMotivo}` : ""),
+          variant: "warning",
+        });
+      } else if (r.restantes > 0) {
+        await showAlert({
+          title: "Não consegui enviar agora",
+          message:
+            (r.ultimoMotivo ?? "Sinal instável. Vou tentar de novo sozinho quando melhorar.") +
+            "\n\nSeus lançamentos continuam salvos no celular e vão subir automaticamente.",
+          variant: "warning",
+        });
+      } else {
+        await showAlert({ title: "Tudo certo", message: "Nada aguardando envio." });
+      }
+    } finally {
+      setSincronizando(false);
+    }
+  }
 
   async function descartarCompletar(item: PendingCompletarPeso) {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -162,7 +207,12 @@ export default function Pendentes() {
                   Lançamentos aguardando envio. Toque em &quot;Sincronizar&quot; pra tentar
                   enviar agora.
                 </Text>
-                <Button onPress={() => void drain()}>Sincronizar agora</Button>
+                <Button
+                  onPress={() => void onSincronizar()}
+                  loading={sincronizando}
+                >
+                  {sincronizando ? "Enviando…" : "Sincronizar agora"}
+                </Button>
                 {lifecycleTrips.map((trip) => (
                   <LifecycleTripCard
                     key={`lc-${trip.clientId}`}
@@ -267,6 +317,15 @@ function LifecycleTripCard({
         </View>
       )}
 
+      {!temErro && trip.errorMsg && (
+        <View className="mt-3 gap-1 rounded-lg border border-border bg-muted/40 p-3">
+          <Text className="text-xs font-semibold text-muted-foreground">Última tentativa:</Text>
+          <Text className="text-xs text-muted-foreground" numberOfLines={3}>
+            {trip.errorMsg}
+          </Text>
+        </View>
+      )}
+
       <View className="mt-3 flex-row gap-2">
         <Button variant="outline" size="sm" className="flex-1" onPress={onDescartar}>
           <Trash2 size={16} color="#dc2626" />
@@ -327,6 +386,15 @@ function CompletarPesoCard({
             {item.errorStatus === 409
               ? "Esse ticket já foi lançado pra essa empresa. Toque em Editar pra corrigir o número."
               : (item.errorMsg ?? "Erro desconhecido.")}
+          </Text>
+        </View>
+      )}
+
+      {!temErro && item.errorMsg && (
+        <View className="mt-3 gap-1 rounded-lg border border-border bg-muted/40 p-3">
+          <Text className="text-xs font-semibold text-muted-foreground">Última tentativa:</Text>
+          <Text className="text-xs text-muted-foreground" numberOfLines={3}>
+            {item.errorMsg}
           </Text>
         </View>
       )}
@@ -447,6 +515,19 @@ function PendingCard({
                 {item.errorMsg ?? "Erro desconhecido."}
               </Text>
             )}
+          </View>
+        )}
+
+        {/* Pendente com causa da última tentativa (transitório: sem sinal etc.).
+            Informativo (cinza), NÃO é FALHOU — vai retentar sozinho. */}
+        {!temErro && item.errorMsg && (
+          <View className="mt-3 gap-1 rounded-lg border border-border bg-muted/40 p-3">
+            <Text className="text-xs font-semibold text-muted-foreground">
+              Última tentativa:
+            </Text>
+            <Text className="text-xs text-muted-foreground" numberOfLines={3}>
+              {item.errorMsg}
+            </Text>
           </View>
         )}
 
@@ -593,11 +674,17 @@ function DetalheModal({
           {item.errorMsg && (
             <View className="gap-1">
               <Text className="text-xs font-semibold uppercase text-muted-foreground">
-                Erro do servidor
+                {item.status === "error" ? "Último erro" : "Última tentativa"}
               </Text>
-              <View className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-                <Text className="text-sm text-destructive">{item.errorMsg}</Text>
-              </View>
+              {item.status === "error" ? (
+                <View className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+                  <Text className="text-sm text-destructive">{item.errorMsg}</Text>
+                </View>
+              ) : (
+                <View className="rounded-lg border border-border bg-muted/40 p-3">
+                  <Text className="text-sm text-muted-foreground">{item.errorMsg}</Text>
+                </View>
+              )}
             </View>
           )}
 

@@ -12,6 +12,7 @@ import { clearTokens, loadTokens, saveTokens, type Tokens } from "./auth";
 import { setAuthState } from "./auth-state";
 import { clearCadastroStatus, setCadastroStatus } from "./cadastro-status";
 import { humanizeZodIssues, type ZodIssueLite } from "./validation";
+import { marcarInternetFalha, marcarInternetOk } from "./connectivity";
 
 /** Resposta de login/confirmar-cadastro: tokens + status de aprovação. */
 export type AuthResposta = Tokens & { status: StatusMotorista };
@@ -146,6 +147,9 @@ const REQUEST_TIMEOUT_MS = 8_000;
 // Uploads de foto (multipart) precisam de mais fôlego — 45s. É background
 // (outbox), então não pesa no percebido, mas não deixamos infinito.
 const UPLOAD_TIMEOUT_MS = 45_000;
+// Envios do outbox (POST JSON de viagem/pedágio/etc no sync): 30s. O 8s do
+// foreground é curto demais pra 4G ruim e prendia o lançamento em "pending".
+const OUTBOX_TIMEOUT_MS = 30_000;
 
 async function fetchComTimeout(
   url: string,
@@ -178,6 +182,7 @@ export function marcarFalhaRede(): void {
 /** Converte erro do fetch em TypeError legível e registra a falha de rede. */
 function traduzirErroFetch(err: unknown): Error {
   marcarFalhaRede();
+  marcarInternetFalha(); // o fetch estourou de verdade → offline (a menos que houve sucesso agora)
   const isTimeout = (err as Error).name === "AbortError";
   return isTimeout
     ? new TypeError("Tempo esgotado. Verifique sua conexão.")
@@ -214,9 +219,11 @@ async function reportarSilencioso(
 export async function request<T>(
   method: string,
   path: string,
-  init: { body?: unknown; isFormData?: boolean; auth?: boolean } = { auth: true },
+  init: { body?: unknown; isFormData?: boolean; auth?: boolean; outbox?: boolean } = {
+    auth: true,
+  },
 ): Promise<T> {
-  const { body, isFormData = false, auth = true } = init;
+  const { body, isFormData = false, auth = true, outbox = false } = init;
   const headers: Record<string, string> = { ...appVersionHeaders() };
   if (body !== undefined && !isFormData) headers["content-type"] = "application/json";
   // Aceita gzip — backend agora tem compression() middleware
@@ -225,7 +232,14 @@ export async function request<T>(
   if (tokens) headers["authorization"] = `Bearer ${tokens.accessToken}`;
 
   const url = `${API_URL}${path}`;
-  const timeoutMs = isFormData ? UPLOAD_TIMEOUT_MS : REQUEST_TIMEOUT_MS;
+  // Envios do outbox (sync em background) ganham teto folgado: 4G ruim de
+  // caminhoneiro estourava o timeout curto de 8s do foreground e o lançamento
+  // ficava preso. Upload de foto (multipart) já tem os seus 45s.
+  const timeoutMs = isFormData
+    ? UPLOAD_TIMEOUT_MS
+    : outbox
+      ? OUTBOX_TIMEOUT_MS
+      : REQUEST_TIMEOUT_MS;
   const fetchInit: RequestInit = {
     method,
     headers,
@@ -235,6 +249,7 @@ export async function request<T>(
   let res: Response;
   try {
     res = await fetchComTimeout(url, fetchInit, timeoutMs);
+    marcarInternetOk(); // recebeu resposta do servidor (mesmo 4xx/5xx) = tem internet
   } catch (err) {
     // Falha de rede/timeout (status null): ruído de conectividade na estrada,
     // não bug acionável. Não reporta; marca o instante (o outbox usa pra
@@ -292,12 +307,13 @@ export async function request<T>(
 
 export const api = {
   get: <T>(path: string) => request<T>("GET", path),
-  post: <T>(path: string, body: unknown) => request<T>("POST", path, { body }),
+  post: <T>(path: string, body: unknown, opts?: { outbox?: boolean }) =>
+    request<T>("POST", path, { body, outbox: opts?.outbox }),
   put: <T>(path: string, body: unknown) => request<T>("PUT", path, { body }),
   patch: <T>(path: string, body: unknown) => request<T>("PATCH", path, { body }),
   delete: <T>(path: string) => request<T>("DELETE", path),
-  postForm: <T>(path: string, body: FormData) =>
-    request<T>("POST", path, { body, isFormData: true }),
+  postForm: <T>(path: string, body: FormData, opts?: { outbox?: boolean }) =>
+    request<T>("POST", path, { body, isFormData: true, outbox: opts?.outbox }),
   loginMotorista: async (cpf: string, senha: string) => {
     const res = await request<AuthResposta>("POST", "/m/auth/login", {
       body: { cpf, senha },

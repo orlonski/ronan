@@ -22,15 +22,35 @@ let _online = true;
 let _connected = true;
 let started = false;
 
+// Instante da última requisição REAL bem-sucedida (qualquer resposta do
+// servidor). A requisição real é a fonte da verdade: o NetInfo do iOS MENTE —
+// retorna offline (isConnected/isInternetReachable=false) com internet OK, o que
+// pintava a tarja "sem internet" e travava o sync no iPhone (no Android é ok).
+// Enquanto houver sucesso recente, ignoramos o NetInfo.
+let ultimoSucessoRede = 0;
+const SUCESSO_TTL_MS = 30_000;
+
 function emit() {
   for (const l of listeners) l();
 }
 
-// offline = sem conexão OU conectado mas sem internet alcançável.
-// isInternetReachable pode vir null enquanto o NetInfo ainda checa — nesse caso
-// NÃO considera offline, pra evitar piscada em transições.
+function temSucessoRecente(): boolean {
+  return ultimoSucessoRede !== 0 && Date.now() - ultimoSucessoRede < SUCESSO_TTL_MS;
+}
+
+// online = sucesso de rede recente (a verdade) OU (sem sinal recente) o SO diz
+// que há link. NÃO usamos mais isInternetReachable — é o probe do iOS que dá
+// falso-offline. Só isConnected===false (sem interface) conta como offline.
 function calcOnline(state: NetInfoState): boolean {
-  return state.isConnected !== false && state.isInternetReachable !== false;
+  if (temSucessoRecente()) return true;
+  return state.isConnected !== false;
+}
+
+function setConnected(next: boolean) {
+  if (next !== _connected) {
+    _connected = next;
+    for (const l of connectedListeners) l(_connected);
+  }
 }
 
 function apply(state: NetInfoState) {
@@ -39,11 +59,35 @@ function apply(state: NetInfoState) {
     _online = next;
     emit();
   }
-  const nextConnected = state.isConnected !== false;
-  if (nextConnected !== _connected) {
-    _connected = nextConnected;
-    for (const l of connectedListeners) l(_connected);
+  setConnected(temSucessoRecente() ? true : state.isConnected !== false);
+}
+
+/**
+ * A camada de rede (lib/api.ts) chama isto ao RECEBER qualquer resposta do
+ * servidor (mesmo 4xx/5xx) — prova irrefutável de que há internet, vence o
+ * NetInfo mentiroso. Marca online na hora.
+ */
+export function marcarInternetOk(): void {
+  ultimoSucessoRede = Date.now();
+  if (!_online) {
+    _online = true;
+    emit();
   }
+  setConnected(true);
+}
+
+/**
+ * A camada de rede chama isto quando o fetch ESTOURA (rede/timeout real). Aí o
+ * servidor está inalcançável de verdade → offline (a menos que tenha havido um
+ * sucesso agora há pouco, o que indica falha pontual, não queda de link).
+ */
+export function marcarInternetFalha(): void {
+  if (temSucessoRecente()) return;
+  if (_online) {
+    _online = false;
+    emit();
+  }
+  setConnected(false);
 }
 
 // Um único listener do NetInfo, iniciado na primeira inscrição. Vive pela vida
