@@ -51,10 +51,6 @@ export function MapaViagem({
   const mapRef = useRef<any>(null);
   const headingRef = useRef(0);
   const navegando = !!shape;
-  // iOS/Apple Maps: a Polyline some se for montada antes do mapa terminar de
-  // carregar (no simulador funciona, no aparelho não — "mascara"). Só desenha as
-  // linhas depois do onMapReady. No Android é inofensivo.
-  const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -151,7 +147,6 @@ export function MapaViagem({
     pitchEnabled: true,
     rotateEnabled: true,
     mapPadding: { top: padTop, bottom: padBottom, left: 8, right: 8 },
-    onMapReady: () => setMapReady(true),
   };
   // Navegando: nasce no zoom da navegação; senão: enquadra o trajeto/rota.
   if (initialCamera) mapProps.initialCamera = initialCamera;
@@ -162,14 +157,14 @@ export function MapaViagem({
     <View className="flex-1">
       <MapView {...mapProps}>
         {/* Trilha só fora da navegação (evita mutar Polyline no Apple Maps). */}
-        {mapReady && !navegando && trilhaCoords.length >= 2 && (
+        {!navegando && trilhaCoords.length >= 2 && (
           <Polyline
             coordinates={trilhaCoords}
             strokeColor="#f97316"
             strokeWidth={5}
           />
         )}
-        {mapReady && rota.length >= 2 && (
+        {rota.length >= 2 && (
           <Polyline
             key={shape}
             coordinates={rota}
