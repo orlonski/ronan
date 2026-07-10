@@ -20,7 +20,7 @@ import { ConnectivityBanner } from "@/components/connectivity-banner";
 import { getConnected, subscribeConnected } from "@/lib/connectivity";
 import { TelaCarregando } from "@/components/tela-carregando";
 import { baixarUpdateNoBoot } from "@/lib/ota";
-import { loadTokens } from "@/lib/auth";
+import { loadTokens, migrarProtecaoKeychain } from "@/lib/auth";
 import {
   getCadastroStatus,
   loadCadastroStatus,
@@ -40,7 +40,11 @@ import {
   setAuthState,
   subscribeAuth,
 } from "@/lib/auth-state";
-import { onSyncChange, startAutoSync } from "@/lib/sync";
+import {
+  onSyncChange,
+  recuperarItensPresos,
+  startAutoSync,
+} from "@/lib/sync";
 
 // Mantem o splash nativo visivel ate auth resolver. Sem isso, app
 // renderiza brevemente a tela errada antes do redirect.
@@ -122,6 +126,19 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     return () => {
       alive = false;
     };
+  }, []);
+
+  // Uma vez no boot (app em foreground, tela desbloqueada): migra a protection
+  // class do Keychain — itens gravados antes do fix ficaram com WHEN_UNLOCKED e
+  // eram ilegíveis em background ("User interaction is not allowed") — e depois
+  // destrava lançamentos que morreram em FALHOU por causa transitória (Keychain
+  // travado ou rede ruim), pra ressincronizarem sozinhos sem o motorista tocar
+  // "Tentar de novo".
+  useEffect(() => {
+    void (async () => {
+      await migrarProtecaoKeychain();
+      await recuperarItensPresos();
+    })();
   }, []);
 
   // Re-renderiza ao mudar auth (login/logout) ou status (aprovação).

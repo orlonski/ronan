@@ -8,6 +8,12 @@ import type { StatusMotorista } from "@ronan/shared-types";
 
 const KEY = "ronan.motorista.status";
 
+// Mesma protection class do token (ver lib/auth.ts): permite leitura em
+// background com a tela bloqueada, evitando o "User interaction is not allowed".
+const KEYCHAIN_OPTS: SecureStore.SecureStoreOptions = {
+  keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+};
+
 type Listener = () => void;
 const listeners = new Set<Listener>();
 
@@ -22,14 +28,14 @@ export function getCadastroStatus(): StatusMotorista | null | undefined {
 export function setCadastroStatus(v: StatusMotorista): void {
   if (_status === v) return;
   _status = v;
-  void SecureStore.setItemAsync(KEY, v).catch(() => {});
+  void SecureStore.setItemAsync(KEY, v, KEYCHAIN_OPTS).catch(() => {});
   for (const l of listeners) l();
 }
 
 /** Lê do SecureStore no boot. Retorna o status carregado (ou null). */
 export async function loadCadastroStatus(): Promise<StatusMotorista | null> {
   try {
-    const raw = await SecureStore.getItemAsync(KEY);
+    const raw = await SecureStore.getItemAsync(KEY, KEYCHAIN_OPTS);
     _status = (raw as StatusMotorista) ?? null;
   } catch {
     _status = null;

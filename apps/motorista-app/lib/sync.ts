@@ -50,6 +50,7 @@ import {
   type ZodIssueSaved,
 } from "@/db/database";
 import { api, ApiError, getUltimaFalhaRedeAt, humanizeApiError } from "./api";
+import { KeychainLockedError, loadTokens } from "./auth";
 
 type ApiErrorBody = { issues?: ZodIssueSaved[] };
 
@@ -589,9 +590,28 @@ async function podeEnviar(): Promise<boolean> {
   return true;
 }
 
+/**
+ * O Keychain está legível agora? Só é falso quando o device está bloqueado
+ * (KeychainLockedError, ver lib/auth.ts). Nesse caso o ciclo inteiro de drain
+ * seria inútil — todo item falharia igual ao ler o token — e ainda queimaria
+ * tentativas e pintaria um falso "erro do servidor" na tela de pendentes. Então
+ * abortamos o ciclo; o próximo (com a tela desbloqueada) reprocessa. Outros
+ * erros não bloqueiam: deixa o drain seguir e tratar normalmente.
+ */
+async function keychainLegivel(): Promise<boolean> {
+  try {
+    await loadTokens();
+    return true;
+  } catch (err) {
+    if (err instanceof KeychainLockedError) return false;
+    return true;
+  }
+}
+
 export async function drain(): Promise<void> {
   if (draining) return;
   if (!(await podeEnviar())) return;
+  if (!(await keychainLegivel())) return;
   draining = true;
   try {
     // Destrava itens com status="syncing" órfão de drain anterior morto
@@ -713,16 +733,7 @@ async function processFoto(item: PendingFoto): Promise<void> {
     await api.post(`/m/viagens/${item.viagemId}/fotos`, { fotoKey: up.storageKey });
     await deletePendingFoto(item.clientId);
   } catch (err) {
-    const permanente = isErroPermanente(err);
-    const { msg, status, issues } = extractErrorDetails(err);
-    await upsertPendingFoto({
-      ...item,
-      status: "error",
-      errorMsg: msg,
-      errorStatus: status,
-      errorIssues: issues,
-      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
-    });
+    await upsertPendingFoto(proximoEstadoFalha(item, err, isErroPermanente(err)));
   }
   notify();
 }
@@ -761,16 +772,7 @@ async function processStory(item: PendingStory): Promise<void> {
     });
     await deletePendingStory(item.clientId);
   } catch (err) {
-    const permanente = isErroPermanente(err);
-    const { msg, status, issues } = extractErrorDetails(err);
-    await upsertPendingStory({
-      ...item,
-      status: "error",
-      errorMsg: msg,
-      errorStatus: status,
-      errorIssues: issues,
-      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
-    });
+    await upsertPendingStory(proximoEstadoFalha(item, err, isErroPermanente(err)));
   }
   notify();
 }
@@ -793,16 +795,7 @@ async function processCompletarPeso(item: PendingCompletarPeso): Promise<void> {
     await api.post(`/m/viagens/${item.viagemId}/completar-peso`, item.payload);
     await deletePendingCompletarPeso(item.viagemId);
   } catch (err) {
-    const permanente = isErroPermanente(err);
-    const { msg, status, issues } = extractErrorDetails(err);
-    await upsertPendingCompletarPeso({
-      ...item,
-      status: "error",
-      errorMsg: msg,
-      errorStatus: status,
-      errorIssues: issues,
-      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
-    });
+    await upsertPendingCompletarPeso(proximoEstadoFalha(item, err, isErroPermanente(err)));
   }
   notify();
 }
@@ -825,16 +818,7 @@ async function processLocal(item: PendingLocal): Promise<void> {
     await api.post("/m/locais/rapido", { id: item.clientId, ...item.payload });
     await deletePendingLocal(item.clientId);
   } catch (err) {
-    const permanente = isErroPermanente(err);
-    const { msg, status, issues } = extractErrorDetails(err);
-    await upsertPendingLocal({
-      ...item,
-      status: "error",
-      errorMsg: msg,
-      errorStatus: status,
-      errorIssues: issues,
-      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
-    });
+    await upsertPendingLocal(proximoEstadoFalha(item, err, isErroPermanente(err)));
   }
   notify();
 }
@@ -893,16 +877,7 @@ async function processViagemIniciar(item: PendingViagemIniciar): Promise<void> {
     await api.post("/m/viagem/iniciar", item.payload);
     await deletePendingViagemIniciar(item.clientId);
   } catch (err) {
-    const permanente = isErroPermanente(err);
-    const { msg, status, issues } = extractErrorDetails(err);
-    await upsertPendingViagemIniciar({
-      ...item,
-      status: "error",
-      errorMsg: msg,
-      errorStatus: status,
-      errorIssues: issues,
-      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
-    });
+    await upsertPendingViagemIniciar(proximoEstadoFalha(item, err, isErroPermanente(err)));
   }
   notify();
 }
@@ -951,16 +926,7 @@ async function processEventoViagem(item: PendingEventoViagem): Promise<void> {
     await deletePendingEventoViagem(item.clientId);
   } catch (err) {
     // 404 = viagem-mãe ainda não sincronizou (ordem) → transiente, retry.
-    const permanente = isErroPermanenteLifecycle(err);
-    const { msg, status, issues } = extractErrorDetails(err);
-    await upsertPendingEventoViagem({
-      ...item,
-      status: "error",
-      errorMsg: msg,
-      errorStatus: status,
-      errorIssues: issues,
-      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
-    });
+    await upsertPendingEventoViagem(proximoEstadoFalha(item, err, isErroPermanenteLifecycle(err)));
   }
   notify();
 }
@@ -1013,16 +979,7 @@ async function processViagemFinalizar(item: PendingViagemFinalizar): Promise<voi
     await api.post(`/m/viagem/${item.clientId}/finalizar`, payload);
     await deletePendingViagemFinalizar(item.clientId);
   } catch (err) {
-    const permanente = isErroPermanenteLifecycle(err);
-    const { msg, status, issues } = extractErrorDetails(err);
-    await upsertPendingViagemFinalizar({
-      ...item,
-      status: "error",
-      errorMsg: msg,
-      errorStatus: status,
-      errorIssues: issues,
-      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
-    });
+    await upsertPendingViagemFinalizar(proximoEstadoFalha(item, err, isErroPermanenteLifecycle(err)));
   }
   notify();
 }
@@ -1066,17 +1023,7 @@ async function processViagem(item: PendingViagem): Promise<void> {
     await api.post("/m/viagens", payload);
     await deletePendingViagem(item.clientId);
   } catch (err) {
-    const permanente = isErroPermanente(err);
-    const { msg, status, issues } = extractErrorDetails(err);
-    await upsertPendingViagem({
-      ...item,
-      status: "error",
-      errorMsg: msg,
-      errorStatus: status,
-      errorIssues: issues,
-      // Erro permanente (4xx) marca como max attempts pra parar de tentar.
-      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
-    });
+    await upsertPendingViagem(proximoEstadoFalha(item, err, isErroPermanente(err)));
   }
   notify();
 }
@@ -1098,16 +1045,7 @@ async function processPedagio(item: PendingPedagio): Promise<void> {
     await api.post("/m/pedagios", item.payload);
     await deletePendingPedagio(item.clientId);
   } catch (err) {
-    const permanente = isErroPermanente(err);
-    const { msg, status, issues } = extractErrorDetails(err);
-    await upsertPendingPedagio({
-      ...item,
-      status: "error",
-      errorMsg: msg,
-      errorStatus: status,
-      errorIssues: issues,
-      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
-    });
+    await upsertPendingPedagio(proximoEstadoFalha(item, err, isErroPermanente(err)));
   }
   notify();
 }
@@ -1158,52 +1096,159 @@ async function processAbastecimento(item: PendingAbastecimento): Promise<void> {
     await api.post("/m/abastecimentos", payload);
     await deletePendingAbastecimento(item.clientId);
   } catch (err) {
-    const permanente = isErroPermanente(err);
-    const { msg, status, issues } = extractErrorDetails(err);
-    await upsertPendingAbastecimento({
-      ...item,
-      status: "error",
-      errorMsg: msg,
-      errorStatus: status,
-      errorIssues: issues,
-      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
-    });
+    await upsertPendingAbastecimento(proximoEstadoFalha(item, err, isErroPermanente(err)));
   }
   notify();
 }
 
 let autoSyncStarted = false;
 
+type ComErro = {
+  status: "pending" | "syncing" | "error";
+  attempts: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
+};
+
+/**
+ * Erro transitório de envio: NÃO deve matar o lançamento em FALHOU nem consumir
+ * tentativa — o item espera a condição passar e retenta sozinho. Cobre:
+ *  - sem sinal / timeout (TypeError de traduzirErroFetch) — realidade de 4G ruim
+ *    de caminhoneiro; um lançamento nunca deve morrer por falta de sinal;
+ *  - servidor 5xx / 408 / 429 — problema momentâneo do backend;
+ *  - Keychain travado (device bloqueado) — ver lib/auth.ts.
+ * Só 4xx real (dado inválido, precisa editar) e erros desconhecidos consomem
+ * tentativa até MAX_ATTEMPTS.
+ */
+function isErroTransitorio(err: unknown): boolean {
+  if (err instanceof KeychainLockedError) return true;
+  if (err instanceof TypeError) return true; // rede/timeout
+  if (err instanceof ApiError) {
+    return err.status >= 500 || err.status === 408 || err.status === 429;
+  }
+  return false;
+}
+
+/**
+ * Estado do item depois de uma falha de envio. Transitório → volta pra "pending"
+ * (aguardando sinal), sem tocar em attempts, pra retentar quando der. Permanente
+ * (4xx) → "error" no teto de tentativas. Desconhecido → "error" incrementando.
+ */
+function proximoEstadoFalha<T extends ComErro>(
+  item: T,
+  err: unknown,
+  permanente: boolean,
+): T {
+  if (isErroTransitorio(err)) {
+    return {
+      ...item,
+      status: "pending",
+      lastTriedAt: Date.now(),
+      errorMsg: undefined,
+      errorStatus: undefined,
+      errorIssues: undefined,
+    };
+  }
+  const { msg, status, issues } = extractErrorDetails(err);
+  return {
+    ...item,
+    status: "error",
+    errorMsg: msg,
+    errorStatus: status,
+    errorIssues: issues,
+    attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
+  };
+}
+
+function resetItem<T extends ComErro>(item: T): T {
+  return {
+    ...item,
+    status: "pending",
+    attempts: 0,
+    errorMsg: undefined,
+    errorStatus: undefined,
+    errorIssues: undefined,
+  };
+}
+
+/** Uma falha salva como "error" que na verdade era transitória (rede/keychain/
+ * 5xx) — não um 4xx de dado inválido. Esses não deviam ter morrido em FALHOU. */
+function falhaSalvaEhTransitoria(item: ComErro): boolean {
+  const s = item.errorStatus;
+  if (s === undefined) return true; // sem status HTTP: rede/keychain/desconhecido
+  if (s === 408 || s === 429) return true;
+  return s >= 500; // 4xx real fica pro motorista editar
+}
+
+/**
+ * Destrava no boot lançamentos que morreram em FALHOU por causa transitória:
+ * Keychain travado (device bloqueado) OU rede ruim que queimou as 8 tentativas.
+ * Reseta pra "pending" e ressincroniza sozinho, sem o motorista tocar "Tentar de
+ * novo". Erros 4xx reais (dado inválido) ficam como estão, pra editar.
+ */
+export async function recuperarItensPresos(): Promise<void> {
+  let mexeu = false;
+  const varrer = async <T extends ComErro & { clientId: string }>(
+    lista: T[],
+    upsert: (item: T) => Promise<void>,
+  ) => {
+    for (const item of lista) {
+      if (item.status === "error" && falhaSalvaEhTransitoria(item)) {
+        await upsert(resetItem(item));
+        mexeu = true;
+      }
+    }
+  };
+
+  await varrer(await listPendingViagens(), upsertPendingViagem);
+  await varrer(await listPendingPedagios(), upsertPendingPedagio);
+  await varrer(await listPendingAbastecimentos(), upsertPendingAbastecimento);
+  await varrer(await listPendingLocais(), upsertPendingLocal);
+  await varrer(await listPendingFotos(), upsertPendingFoto);
+  await varrer(await listPendingStories(), upsertPendingStory);
+  await varrer(await listPendingCompletarPeso(), upsertPendingCompletarPeso);
+  await varrer(await listPendingViagemIniciar(), upsertPendingViagemIniciar);
+  await varrer(await listPendingEventosViagem(), upsertPendingEventoViagem);
+  await varrer(await listPendingViagemFinalizar(), upsertPendingViagemFinalizar);
+  await varrer(await listPendingViagemCancelar(), upsertPendingViagemCancelar);
+
+  if (mexeu) {
+    notify();
+    void drain();
+  }
+}
+
+// Dispara os três drains (outbox + eventos + posições). Gate único de Keychain:
+// se o device está bloqueado, nem tenta — todos leem o mesmo token e falhariam
+// igual. drain() tem o próprio gate (cobre o botão "Sincronizar agora"), aqui
+// protege também os drains de telemetria que não passam pelo drain().
+async function drenarTudo(): Promise<void> {
+  if (!(await keychainLegivel())) return;
+  void drain();
+  void drenarEventos();
+  void drenarPosicoes();
+}
+
 export function startAutoSync(): void {
   if (autoSyncStarted) return;
   autoSyncStarted = true;
 
   NetInfo.addEventListener((state) => {
-    if (state.isConnected) {
-      void drain();
-      void drenarEventos();
-      void drenarPosicoes();
-    }
+    if (state.isConnected) void drenarTudo();
   });
 
   AppState.addEventListener("change", (s) => {
-    if (s === "active") {
-      void drain();
-      void drenarEventos();
-      void drenarPosicoes();
-    }
+    if (s === "active") void drenarTudo();
   });
 
   setInterval(() => {
-    void drain();
-    void drenarEventos();
-    void drenarPosicoes();
+    void drenarTudo();
   }, 60_000);
 
   // Boot: dispara depois de 2s pra dar tempo de tudo inicializar.
   setTimeout(() => {
-    void drain();
-    void drenarEventos();
-    void drenarPosicoes();
+    void drenarTudo();
   }, 2_000);
 }
