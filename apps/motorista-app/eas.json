@@ -47,6 +47,8 @@
     "production": {
       "android": {
         "track": "production",
+        "releaseStatus": "inProgress",
+        "rollout": 0.2,
         "serviceAccountKeyPath": "./play-service-account.json"
       },
       "ios": {
