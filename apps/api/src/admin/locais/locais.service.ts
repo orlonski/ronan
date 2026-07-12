@@ -27,6 +27,9 @@ const SEARCH_FIELDS = ["nome", "logradouro", "bairro", "cidade", "pontoReferenci
 
 const METROS_POR_GRAU_LAT = 111_320; // ~constante; longitude encolhe com cos(lat)
 
+/** Raio (m) pra tarja "provável duplicata" na LISTA (fixo; o mapa tem raio ajustável). */
+const RAIO_DUPLICATA_M = 150;
+
 /** Distância em metros entre dois pontos (haversine). */
 function haversineMetros(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6_371_000;
@@ -37,6 +40,31 @@ function haversineMetros(lat1: number, lng1: number, lat2: number, lng2: number)
     Math.sin(dLat / 2) ** 2 +
     Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+/**
+ * Extrai um "marco" (estaca N ou KM N) do nome. Serve pra distinguir pontos de
+ * rodovia/obra que são geograficamente próximos mas DIFERENTES de propósito
+ * (ex.: "PR 151 - Estaca 1742" vs "…Estaca 1743" a ~50m; "BR 277 KM 168" vs "…169").
+ */
+function extrairMarco(nome: string): { tipo: "km" | "estaca"; n: number } | null {
+  const s = nome.toLowerCase();
+  const est = s.match(/\bestaca\s*0*(\d{2,4})\b/);
+  if (est) return { tipo: "estaca", n: Number(est[1]) };
+  const km = s.match(/\bkm\s*0*(\d{1,3})\b/);
+  if (km) return { tipo: "km", n: Number(km[1]) };
+  return null;
+}
+
+/**
+ * Dois nomes têm marco CONFLITANTE (estaca/km diferentes) → não são duplicata,
+ * mesmo perto. Se algum não tem marco, não conflita (a proximidade decide).
+ */
+function marcoConflita(nomeA: string, nomeB: string): boolean {
+  const a = extrairMarco(nomeA);
+  const b = extrairMarco(nomeB);
+  if (!a || !b) return false;
+  return a.tipo !== b.tipo || a.n !== b.n;
 }
 
 /** Filtros compartilhados por list e mapa (mesma régua, pra as abas baterem). */
@@ -261,125 +289,147 @@ export class LocaisService {
   }
 
   /**
-   * Detecta grupos de locais ativos com nome parecido (provável duplicata por
-   * digitação errada ou cadastro offline). Roda global — a lista é paginada,
-   * então a detecção não pode ser por página.
+   * Locais prováveis duplicados pra TARJA da lista. Regra geo-first:
+   *  - locais COM coordenada: agrupa por PROXIMIDADE (raio {@link RAIO_DUPLICATA_M})
+   *    reusando `duplicatasGeo`, que já aplica a trava de marco (estaca/km) — então
+   *    rodovias/estacas distantes não são mais falso-positivo, e o mesmo pátio com
+   *    nomes diferentes (ex.: "KM 172 …") é fundido.
+   *  - locais SEM coordenada: fallback pelo trigram de nome (o geo não os enxerga).
    *
-   * Estratégia: trigram (pg_trgm) sobre f_normalizar(nome) — reaproveita o
-   * índice GIN `locais_nome_trgm_idx` e a função de normalização já em prod.
-   * O `%` faz o prune pelo índice (threshold ~0.3); o filtro `similarity >= LIMIAR`
-   * aperta pro nível que queremos. A partir dos pares, monta componentes conexos
-   * (várias grafias do mesmo lugar caem no mesmo grupo).
-   *
-   * Em cada grupo: o membro com mais viagens é o "forte". Um membro com 0-1
-   * viagem, quando existe um forte com >= 2 viagens, é marcado "provavel_lixo"
-   * (cadastro errado a limpar). Os demais ficam "duplicata" (neutro).
+   * Principal (a manter) = maior qualidade (de `duplicatasGeo`), desempate por
+   * viagens. `provavel_lixo` = candidato com ≤1 viagem quando o principal tem ≥2.
+   * Só IDENTIFICA — a mesclagem continua manual.
    */
   async duplicatas() {
-    const LIMIAR = 0.5;
+    type Similar = {
+      id: string;
+      nome: string;
+      totalViagens: number;
+      distanciaM: number | null;
+    };
+    type Entry = Similar & {
+      grupoId: string;
+      papel: "provavel_lixo" | "duplicata";
+      similares: Similar[];
+    };
+    const resultado: Entry[] = [];
 
-    // Viagens por local ativo (carga + descarga). Raw usa o @@map: tabela
-    // "viagens", colunas camelCase entre aspas.
-    const counts = await this.prisma.$queryRaw<
-      { id: string; nome: string; viagens: bigint }[]
-    >`
-      SELECT l.id,
-             l.nome,
-             (SELECT count(*) FROM "viagens" v WHERE v."localCargaId" = l.id)
-           + (SELECT count(*) FROM "viagens" v WHERE v."localDescargaId" = l.id) AS viagens
-      FROM "locais" l
-      WHERE l.ativo = true
-    `;
+    // 1) Geo-first: grupos por proximidade (+ trava de marco já embutida).
+    const geo = await this.duplicatasGeo(RAIO_DUPLICATA_M);
+    for (const g of geo.grupos) {
+      const membros = [g.principal, ...g.candidatos];
+      const maxViagens = Math.max(...membros.map((m) => m.totalViagens));
+      for (const m of membros) {
+        const similares: Similar[] = membros
+          .filter((o) => o.id !== m.id)
+          .map((o) => ({
+            id: o.id,
+            nome: o.nome,
+            totalViagens: o.totalViagens,
+            distanciaM:
+              m.lat != null && m.lng != null && o.lat != null && o.lng != null
+                ? Math.round(haversineMetros(m.lat, m.lng, o.lat, o.lng))
+                : null,
+          }))
+          .sort((a, b) => (a.distanciaM ?? Infinity) - (b.distanciaM ?? Infinity));
+        const ehLixo =
+          m.totalViagens <= 1 && maxViagens >= 2 && m.id !== g.principal.id;
+        resultado.push({
+          id: m.id,
+          nome: m.nome,
+          totalViagens: m.totalViagens,
+          distanciaM: null,
+          grupoId: g.id,
+          papel: ehLixo ? "provavel_lixo" : "duplicata",
+          similares,
+        });
+      }
+    }
 
-    const pares = await this.prisma.$queryRaw<
-      { id_a: string; id_b: string }[]
-    >`
+    // 2) Fallback por NOME só entre locais SEM coordenada (fora do alcance do geo).
+    const paresNome = await this.prisma.$queryRaw<{ id_a: string; id_b: string }[]>`
       SELECT a.id AS id_a, b.id AS id_b
       FROM "locais" a
       JOIN "locais" b
         ON a.id < b.id
-       AND a.ativo = true
-       AND b.ativo = true
+       AND a.ativo = true AND b.ativo = true
+       AND (a.lat IS NULL OR a.lng IS NULL)
+       AND (b.lat IS NULL OR b.lng IS NULL)
        AND public.f_normalizar(a.nome) % public.f_normalizar(b.nome)
-      WHERE similarity(public.f_normalizar(a.nome), public.f_normalizar(b.nome)) >= ${LIMIAR}
+      WHERE similarity(public.f_normalizar(a.nome), public.f_normalizar(b.nome)) >= 0.5
     `;
+    if (paresNome.length > 0) {
+      const ids = [...new Set(paresNome.flatMap((p) => [p.id_a, p.id_b]))];
+      const infos = await this.prisma.local.findMany({
+        where: { id: { in: ids } },
+        select: {
+          id: true,
+          nome: true,
+          _count: { select: { viagensCarga: true, viagensDescarga: true } },
+        },
+      });
+      const nomeDe = new Map(infos.map((l) => [l.id, l.nome]));
+      const viagensDe = new Map(
+        infos.map((l) => [l.id, l._count.viagensCarga + l._count.viagensDescarga]),
+      );
 
-    if (pares.length === 0) return [];
+      const parent = new Map<string, string>();
+      const find = (x: string): string => {
+        let r = x;
+        while (parent.get(r) !== r) r = parent.get(r) as string;
+        let cur = x;
+        while (parent.get(cur) !== r) {
+          const next = parent.get(cur) as string;
+          parent.set(cur, r);
+          cur = next;
+        }
+        return r;
+      };
+      const ensure = (x: string) => {
+        if (!parent.has(x)) parent.set(x, x);
+      };
+      const union = (a: string, b: string) => {
+        ensure(a);
+        ensure(b);
+        parent.set(find(a), find(b));
+      };
+      for (const p of paresNome) union(p.id_a, p.id_b);
 
-    const viagensDe = new Map<string, number>();
-    const nomeDe = new Map<string, string>();
-    for (const c of counts) {
-      viagensDe.set(c.id, Number(c.viagens));
-      nomeDe.set(c.id, c.nome);
-    }
-
-    // Union-find pra agrupar pares em componentes conexos.
-    const parent = new Map<string, string>();
-    const find = (x: string): string => {
-      let r = x;
-      while (parent.get(r) !== r) r = parent.get(r) as string;
-      // path compression
-      let cur = x;
-      while (parent.get(cur) !== r) {
-        const next = parent.get(cur) as string;
-        parent.set(cur, r);
-        cur = next;
+      const grupos = new Map<string, string[]>();
+      for (const id of parent.keys()) {
+        const raiz = find(id);
+        const arr = grupos.get(raiz);
+        if (arr) arr.push(id);
+        else grupos.set(raiz, [id]);
       }
-      return r;
-    };
-    const ensure = (x: string) => {
-      if (!parent.has(x)) parent.set(x, x);
-    };
-    const union = (a: string, b: string) => {
-      ensure(a);
-      ensure(b);
-      parent.set(find(a), find(b));
-    };
-    for (const p of pares) union(p.id_a, p.id_b);
-
-    // Junta os ids por raiz do componente.
-    const grupos = new Map<string, string[]>();
-    for (const id of parent.keys()) {
-      const raiz = find(id);
-      const arr = grupos.get(raiz);
-      if (arr) arr.push(id);
-      else grupos.set(raiz, [id]);
-    }
-
-    type Similar = { id: string; nome: string; totalViagens: number };
-    const resultado: Array<
-      Similar & {
-        grupoId: string;
-        papel: "provavel_lixo" | "duplicata";
-        similares: Similar[];
-      }
-    > = [];
-
-    for (const [grupoId, ids] of grupos) {
-      if (ids.length < 2) continue;
-      const membros: Similar[] = ids.map((id) => ({
-        id,
-        nome: nomeDe.get(id) ?? "",
-        totalViagens: viagensDe.get(id) ?? 0,
-      }));
-      const maxViagens = Math.max(...membros.map((m) => m.totalViagens));
-      // Forte = quem tem mais viagens (desempate por maior, depois primeiro).
-      const forteId = membros.reduce((a, b) =>
-        b.totalViagens > a.totalViagens ? b : a,
-      ).id;
-
-      for (const m of membros) {
-        const ehLixo =
-          m.totalViagens <= 1 && maxViagens >= 2 && m.id !== forteId;
-        const similares = membros
-          .filter((o) => o.id !== m.id)
-          .sort((a, b) => b.totalViagens - a.totalViagens);
-        resultado.push({
-          ...m,
-          grupoId,
-          papel: ehLixo ? "provavel_lixo" : "duplicata",
-          similares,
-        });
+      for (const [grupoId, gids] of grupos) {
+        if (gids.length < 2) continue;
+        const membros = gids.map((id) => ({
+          id,
+          nome: nomeDe.get(id) ?? "",
+          totalViagens: viagensDe.get(id) ?? 0,
+        }));
+        const maxViagens = Math.max(...membros.map((m) => m.totalViagens));
+        const forteId = membros.reduce((a, b) =>
+          b.totalViagens > a.totalViagens ? b : a,
+        ).id;
+        for (const m of membros) {
+          const ehLixo =
+            m.totalViagens <= 1 && maxViagens >= 2 && m.id !== forteId;
+          const similares: Similar[] = membros
+            .filter((o) => o.id !== m.id)
+            .map((o) => ({ ...o, distanciaM: null }))
+            .sort((a, b) => b.totalViagens - a.totalViagens);
+          resultado.push({
+            id: m.id,
+            nome: m.nome,
+            totalViagens: m.totalViagens,
+            distanciaM: null,
+            grupoId: `n-${grupoId}`,
+            papel: ehLixo ? "provavel_lixo" : "duplicata",
+            similares,
+          });
+        }
       }
     }
 
@@ -434,8 +484,10 @@ export class LocaisService {
     const grau = raio / 90000;
     const raioAtual = await this.raioBuscaAtual();
 
-    const pares = await this.prisma.$queryRaw<{ id_a: string; id_b: string }[]>`
-      SELECT a.id AS id_a, b.id AS id_b
+    const paresRaw = await this.prisma.$queryRaw<
+      { id_a: string; id_b: string; nome_a: string; nome_b: string }[]
+    >`
+      SELECT a.id AS id_a, b.id AS id_b, a.nome AS nome_a, b.nome AS nome_b
       FROM "locais" a
       JOIN "locais" b
         ON a.id < b.id
@@ -450,6 +502,9 @@ export class LocaisService {
           power(sin(radians(b.lng - a.lng) / 2), 2)
         ))) <= ${raio}
     `;
+    // Trava de marco: descarta pares perto mas com estaca/km diferentes (pontos
+    // de rodovia/obra distintos de propósito — não são duplicata).
+    const pares = paresRaw.filter((p) => !marcoConflita(p.nome_a, p.nome_b));
     if (pares.length === 0) return { raioM: raio, raioAtualBusca: raioAtual, grupos: [] };
 
     // Union-find → componentes conexos (mesmo padrão do duplicatas() por nome).

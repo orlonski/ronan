@@ -78,7 +78,13 @@ type Local = {
   criadoPorMotorista: { id: string; nome: string } | null;
 };
 
-type DupSimilar = { id: string; nome: string; totalViagens: number };
+type DupSimilar = {
+  id: string;
+  nome: string;
+  totalViagens: number;
+  /** Distância (m) ao local desta linha. null = fallback por nome (sem coordenada). */
+  distanciaM: number | null;
+};
 type DupEntry = {
   id: string;
   nome: string;
@@ -152,10 +158,18 @@ function plural(n: number, sing: string, plur: string) {
 function DuplicataTag({ dup, onClick }: { dup: DupEntry; onClick: () => void }) {
   const lixo = dup.papel === "provavel_lixo";
   const forte = dup.similares[0];
+  const descrever = (s: DupSimilar) => {
+    const dist = s.distanciaM != null ? ` a ${s.distanciaM} m` : "";
+    return `"${s.nome}"${dist} (${plural(s.totalViagens, "viagem", "viagens")})`;
+  };
   const title = lixo
-    ? `Parece "${forte?.nome}" (${plural(forte?.totalViagens ?? 0, "viagem", "viagens")}). Este tem ${dup.totalViagens}. Clique pra mesclar ou conferir.`
-    : `Nome parecido com: ${dup.similares
-        .map((s) => `${s.nome} (${plural(s.totalViagens, "viagem", "viagens")})`)
+    ? `Mesmo lugar que ${forte ? descrever(forte) : "outro"}? Este tem ${plural(
+        dup.totalViagens,
+        "viagem",
+        "viagens",
+      )}. Clique pra mesclar ou conferir.`
+    : `Local repetido? Perto de: ${dup.similares
+        .map(descrever)
         .join(", ")}. Clique pra revisar.`;
   return (
     <button
@@ -169,7 +183,7 @@ function DuplicataTag({ dup, onClick }: { dup: DupEntry; onClick: () => void }) 
       }`}
     >
       <AlertTriangle className="h-3 w-3" />
-      {lixo ? "Provável duplicata" : "Nome parecido"}
+      {lixo ? "Provável duplicata" : "Local repetido?"}
     </button>
   );
 }
