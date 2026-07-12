@@ -47,6 +47,8 @@ import {
   useUpdateResource,
 } from "@/lib/client-api";
 import type { LocalMapa } from "@/components/mapa-locais";
+import type { LocalDupMapa } from "@/components/mapa-duplicata";
+import { CORES as DUP_CORES } from "@/components/mapa-duplicata";
 
 // Leaflet quebra em SSR (acessa window). Import dinâmico igual PontoMap.
 const MapaLocais = dynamic(
@@ -56,6 +58,14 @@ const MapaLocais = dynamic(
     loading: () => (
       <div className="h-[calc(100vh-260px)] min-h-[500px] rounded-lg border bg-muted/30" />
     ),
+  },
+);
+
+const MapaDuplicata = dynamic(
+  () => import("@/components/mapa-duplicata").then((m) => m.MapaDuplicata),
+  {
+    ssr: false,
+    loading: () => <div className="h-[360px] rounded-md border bg-muted/30" />,
   },
 );
 
@@ -740,30 +750,66 @@ function MesclarDupDialog({
 }) {
   // Default: mesclar no irmão com mais viagens (o "forte"). Admin pode trocar.
   const [destinoId, setDestinoId] = useState<string>(dup.similares[0]?.id ?? "");
+  const token = useAuthToken();
+  const ids = useMemo(
+    () => [dup.id, ...dup.similares.map((s) => s.id)],
+    [dup],
+  );
+  // Mapa de conferência: pins dos locais do grupo + GPS real das descargas.
+  const mapaQ = useQuery({
+    queryKey: ["dup-mapa", ids.join(",")],
+    enabled: !!token,
+    queryFn: () =>
+      fetchApi<LocalDupMapa[]>(
+        `/admin/locais/duplicata-mapa?ids=${encodeURIComponent(ids.join(","))}`,
+        { token },
+      ),
+    staleTime: 60_000,
+  });
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Mesclar &quot;{dup.nome}&quot;</DialogTitle>
+          <DialogTitle>Revisar duplicata &quot;{dup.nome}&quot;</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            &quot;{dup.nome}&quot; tem {plural(dup.totalViagens, "viagem", "viagens")} e
-            parece duplicata. Ao mesclar, {dup.totalViagens === 0 ? "ele" : "as viagens dele"} {dup.totalViagens === 0 ? "é apagado e some da lista" : "vão pro local escolhido e ele é apagado"}.
-            Escolha o local correto:
+            Confira no mapa se é o <strong>mesmo lugar</strong>: cada cor é um local do
+            grupo (pin = cadastro; bolinhas = onde as viagens realmente descarregaram).
+            Se as manchas se sobrepõem, é duplicata.
+          </p>
+          {mapaQ.isLoading ? (
+            <div className="h-[360px] rounded-md border bg-muted/30" />
+          ) : (
+            <MapaDuplicata locais={mapaQ.data ?? []} />
+          )}
+          <p className="pt-1 text-sm text-muted-foreground">
+            Ao mesclar, {dup.totalViagens === 0 ? "este local" : "as viagens dele"}{" "}
+            {dup.totalViagens === 0
+              ? "é apagado e some da lista"
+              : "vão pro local escolhido e ele é apagado"}
+            . Escolha o local correto (a manter):
           </p>
           <div className="space-y-1 rounded-md border p-1">
-            {dup.similares.map((s) => (
+            {dup.similares.map((s, j) => (
               <button
                 key={s.id}
                 type="button"
                 onClick={() => setDestinoId(s.id)}
-                className={`block w-full rounded px-3 py-2 text-left text-sm transition-colors ${
+                className={`flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm transition-colors ${
                   destinoId === s.id ? "bg-primary/10" : "hover:bg-muted"
                 }`}
               >
-                <span className="font-medium">{s.nome}</span>
-                <span className="ml-2 text-xs text-muted-foreground tabular-nums">
+                {/* Número/cor batem com o pin no mapa (local atual = 1). */}
+                <span
+                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
+                  style={{ background: DUP_CORES[(j + 1) % DUP_CORES.length] }}
+                >
+                  {j + 2}
+                </span>
+                <span className="min-w-0 flex-1 truncate font-medium">{s.nome}</span>
+                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                  {s.distanciaM != null ? `a ${s.distanciaM} m · ` : ""}
                   {plural(s.totalViagens, "viagem", "viagens")}
                 </span>
               </button>

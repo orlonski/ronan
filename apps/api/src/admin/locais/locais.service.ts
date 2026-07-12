@@ -239,6 +239,65 @@ export class LocaisService {
   }
 
   /**
+   * Dados pro modal de REVISÃO de duplicata: cada local do grupo (pin) + os
+   * pontos de descarga das viagens de cada um (GPS real). Pra o admin bater o
+   * olho e ver se os pontos coincidem antes de mesclar. Reusa a lógica de
+   * `lancamentos()` (descarga com fallback pra abertura), pro grupo inteiro.
+   */
+  async duplicataMapa(ids: string[]) {
+    const LIMITE = 800;
+    const [locais, viagens] = await Promise.all([
+      this.prisma.local.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, nome: true, lat: true, lng: true, tipo: true },
+      }),
+      this.prisma.viagem.findMany({
+        where: {
+          localDescargaId: { in: ids },
+          OR: [
+            { descargaLat: { not: null }, descargaLng: { not: null } },
+            { lat: { not: null }, lng: { not: null } },
+          ],
+        },
+        select: {
+          localDescargaId: true,
+          lat: true,
+          lng: true,
+          descargaLat: true,
+          descargaLng: true,
+        },
+        orderBy: { data: "desc" },
+        take: LIMITE,
+      }),
+    ]);
+
+    const pontosDe = new Map<
+      string,
+      { lat: number; lng: number; origem: "descarga" | "abertura" }[]
+    >();
+    for (const v of viagens) {
+      if (!v.localDescargaId) continue;
+      const temDescarga = v.descargaLat != null && v.descargaLng != null;
+      const arr = pontosDe.get(v.localDescargaId) ?? [];
+      arr.push({
+        lat: (temDescarga ? v.descargaLat : v.lat) as number,
+        lng: (temDescarga ? v.descargaLng : v.lng) as number,
+        origem: temDescarga ? "descarga" : "abertura",
+      });
+      pontosDe.set(v.localDescargaId, arr);
+    }
+
+    return locais.map((l) => ({
+      id: l.id,
+      nome: l.nome,
+      lat: l.lat,
+      lng: l.lng,
+      tipo: l.tipo,
+      pontos: pontosDe.get(l.id) ?? [],
+    }));
+  }
+
+  /**
    * Lista enxuta pra exibição num mapa — só locais ativos com lat/lng,
    * sem paginação. Volume esperado: dezenas/centenas. Inclui clientes
    * achatado pro popup.

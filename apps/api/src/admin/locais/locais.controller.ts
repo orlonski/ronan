@@ -38,6 +38,9 @@ const DuplicatasGeoQuery = z.object({
   raioM: z.coerce.number().int().min(20).max(5000).optional(),
 });
 
+const DuplicataMapaQuery = z.object({ ids: z.string().min(1) });
+type DuplicataMapaQuery = z.infer<typeof DuplicataMapaQuery>;
+
 const ProximoQuery = z.object({
   lat: z.coerce.number().min(-90).max(90),
   lng: z.coerce.number().min(-180).max(180),
@@ -91,6 +94,20 @@ export class LocaisController {
   @Get("duplicatas")
   duplicatas() {
     return this.service.duplicatas();
+  }
+
+  /**
+   * Locais de um grupo + pontos de descarga das viagens de cada, pro modal de
+   * revisão de duplicata. Antes de :id.
+   */
+  @Get("duplicata-mapa")
+  duplicataMapa(@Query(new ZodValidationPipe(DuplicataMapaQuery)) query: DuplicataMapaQuery) {
+    const ids = query.ids
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean)
+      .slice(0, 20);
+    return this.service.duplicataMapa(ids);
   }
 
   /**
