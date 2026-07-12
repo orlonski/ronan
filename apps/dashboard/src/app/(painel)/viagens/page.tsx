@@ -406,11 +406,12 @@ function ViagemCard({ v }: { v: Viagem }) {
           {/* Coluna 3: métricas alinhadas em larguras fixas + slot reservado
               pra ícone foto (invisível quando 0). Garante alinhamento vertical
               perfeito entre cards independente de haver foto ou não. */}
-          <div className="flex items-center gap-4">
-            <div className="flex gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="grid flex-1 grid-cols-3 gap-2 sm:flex sm:flex-none sm:gap-4">
               <ListMetric
                 label="Toneladas"
-                width={100}
+                width={116}
+                fluid
                 value={
                   <ValorComMinimo
                     className="text-sm font-semibold tabular-nums"
@@ -419,12 +420,14 @@ function ViagemCard({ v }: { v: Viagem }) {
                     ajustada={v.toneladasAjustada}
                     unidade="t"
                     casas={3}
+                    annotacaoBlock
                   />
                 }
               />
               <ListMetric
                 label="Km"
-                width={90}
+                width={108}
+                fluid
                 value={
                   <ValorComMinimo
                     className="text-sm font-semibold tabular-nums"
@@ -433,12 +436,14 @@ function ViagemCard({ v }: { v: Viagem }) {
                     ajustada={v.kmAjustada}
                     unidade="km"
                     casas={2}
+                    annotacaoBlock
                   />
                 }
               />
               <ListMetric
                 label="Ticket"
                 width={90}
+                fluid
                 value={
                   <span className="font-mono text-sm font-semibold">
                     {v.ticket}
@@ -454,9 +459,9 @@ function ViagemCard({ v }: { v: Viagem }) {
                 }
               />
             </div>
-            {/* Slot fixo: icone foto (com contador) + chevron. Width fixa
-                garante alinhamento mesmo quando viagem nao tem foto. */}
-            <div className="flex w-12 shrink-0 items-center justify-end gap-1.5 text-muted-foreground">
+            {/* Slot fixo: icone foto (com contador) + chevron. Some no mobile
+                (o card inteiro ja e' um link). Width fixa alinha os cards no desktop. */}
+            <div className="hidden w-12 shrink-0 items-center justify-end gap-1.5 text-muted-foreground sm:flex">
               <span
                 className={`flex items-center gap-0.5 text-xs ${v.fotos.length > 0 ? "" : "invisible"}`}
                 title={`${v.fotos.length} foto${v.fotos.length === 1 ? "" : "s"}`}
