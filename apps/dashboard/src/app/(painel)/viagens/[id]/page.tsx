@@ -430,14 +430,14 @@ export default function ViagemDetalhePage({
 
   return (
     <div className="space-y-6">
-      <header className="flex items-start gap-3">
+      <header className="flex flex-wrap items-start gap-3">
         <Link href="/viagens">
           <span className="rounded p-2 hover:bg-muted">
             <ArrowLeft className="h-5 w-5" />
           </span>
         </Link>
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight">
               {v.ticket ? `Viagem ${v.ticket}` : "Viagem sem ticket"}
             </h1>
@@ -453,7 +453,7 @@ export default function ViagemDetalhePage({
             {fmtBR(v.data)}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {v.matchesFechamento.length === 0 ? (
             <Permitido chave="viagens.editar">
               <Link href={`/viagens/${v.id}/editar`}>
@@ -487,7 +487,7 @@ export default function ViagemDetalhePage({
         </div>
       </header>
 
-      <div className="flex gap-1 border-b">
+      <div className="flex gap-1 overflow-x-auto border-b">
         {(
           [
             ["dados", "Dados"],
@@ -498,7 +498,7 @@ export default function ViagemDetalhePage({
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm transition-colors ${
+            className={`-mb-px shrink-0 whitespace-nowrap border-b-2 px-4 py-2 text-sm transition-colors ${
               tab === key
                 ? "border-blue-600 font-medium text-blue-700"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -1227,8 +1227,8 @@ function Row({
   fromAi?: boolean;
 }) {
   return (
-    <div className="flex justify-between gap-3">
-      <dt className="text-muted-foreground">
+    <div className="flex flex-col gap-0.5 sm:flex-row sm:justify-between sm:gap-3">
+      <dt className="shrink-0 text-muted-foreground">
         {label}
         {fromAi && (
           <span
@@ -1239,7 +1239,9 @@ function Row({
           </span>
         )}
       </dt>
-      <dd className={mono ? "font-mono" : ""}>{value}</dd>
+      <dd className={`min-w-0 break-words sm:text-right ${mono ? "font-mono" : ""}`}>
+        {value}
+      </dd>
     </div>
   );
 }

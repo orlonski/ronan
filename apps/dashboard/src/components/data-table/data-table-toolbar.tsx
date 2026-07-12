@@ -28,7 +28,7 @@ export function DataTableToolbar({
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex flex-1 flex-wrap items-center gap-2">
         {!hideSearch && (
-          <div className="relative w-full max-w-xs">
+          <div className="relative w-full sm:max-w-xs">
             <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={state.qInput}
@@ -73,20 +73,22 @@ export function ToolbarFilterDateRange({
   const from = (state.filters[fromKey] as string | undefined) ?? "";
   const to = (state.filters[toKey] as string | undefined) ?? "";
   return (
-    <div className="flex h-9 items-center gap-1.5 rounded-md border bg-background px-2 text-sm">
-      {label && <span className="text-xs text-muted-foreground">{label}:</span>}
+    <div className="flex h-9 w-full items-center gap-1.5 rounded-md border bg-background px-2 text-sm sm:w-auto">
+      {label && (
+        <span className="shrink-0 text-xs text-muted-foreground">{label}:</span>
+      )}
       <input
         type="date"
         value={from}
         onChange={(e) => state.setFilter(fromKey, e.target.value || undefined)}
-        className="h-7 border-0 bg-transparent text-sm focus-visible:outline-none"
+        className="h-7 w-full min-w-0 flex-1 border-0 bg-transparent text-sm focus-visible:outline-none sm:w-auto sm:flex-none"
       />
-      <span className="text-muted-foreground">→</span>
+      <span className="shrink-0 text-muted-foreground">→</span>
       <input
         type="date"
         value={to}
         onChange={(e) => state.setFilter(toKey, e.target.value || undefined)}
-        className="h-7 border-0 bg-transparent text-sm focus-visible:outline-none"
+        className="h-7 w-full min-w-0 flex-1 border-0 bg-transparent text-sm focus-visible:outline-none sm:w-auto sm:flex-none"
       />
     </div>
   );

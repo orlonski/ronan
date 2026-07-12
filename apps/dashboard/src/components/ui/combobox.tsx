@@ -69,7 +69,7 @@ export function Combobox({
           type="button"
           className={
             triggerClassName ??
-            "flex h-10 min-w-[180px] items-center justify-between gap-2 rounded-md border bg-background px-3 text-left text-sm shadow-sm hover:bg-accent/30"
+            "flex h-9 w-full items-center justify-between gap-2 rounded-md border bg-background px-3 text-left text-sm shadow-sm hover:bg-accent/30 sm:w-auto sm:min-w-[180px]"
           }
         >
           <span className="truncate">

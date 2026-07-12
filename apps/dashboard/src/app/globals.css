@@ -2,6 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+ * Mobile / cara de app
+ * ============================================================ */
+/* Rede de segurança contra scroll horizontal (o min-w-0 no shell é a
+ * correção real; isto só evita que algum caso isolado "arraste pro lado"). */
+html,
+body {
+  overflow-x: hidden;
+}
+
+/* Safe-area (notch / home-bar do iPhone) — usadas no header sticky e na
+ * bottom-nav. env() cai pra 0px em navegadores/telas sem inset. */
+@layer utilities {
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .h-safe-bottom {
+    height: env(safe-area-inset-bottom);
+  }
+}
+
 @layer base {
   /* ============================================================
    * LIGHT — Modern Minimal (tweakcn) — default + classe explícita

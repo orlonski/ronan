@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Menu } from "lucide-react";
 import { Sidebar } from "@/components/sidebar";
+import { BottomNav } from "@/components/bottom-nav";
 import { GlobalLoadingBar } from "@/components/loading";
 import { SchabaLogo } from "@/components/schaba-logo";
 import { ThemeSwitcher } from "@/components/theme-switcher";
@@ -29,9 +30,9 @@ export function PainelShell({ children }: { children: React.ReactNode }) {
         onMobileClose={() => setMobileOpen(false)}
       />
 
-      <div className="flex flex-1 flex-col">
-        {/* Header mobile com hamburger */}
-        <header className="flex items-center justify-between border-b bg-background px-4 py-3 md:hidden">
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Header mobile com hamburger — fixo no topo ao rolar (cara de app) */}
+        <header className="sticky top-0 z-30 flex items-center justify-between border-b bg-background px-4 py-3 pt-safe md:hidden">
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
@@ -54,10 +55,13 @@ export function PainelShell({ children }: { children: React.ReactNode }) {
           <Topbar />
         </header>
 
-        <main className="flex-1 overflow-auto bg-background p-4 md:p-8">
+        <main className="flex-1 overflow-auto bg-background p-4 pb-24 md:p-8 md:pb-8">
           <TelaGuard>{children}</TelaGuard>
         </main>
       </div>
+
+      {/* Barra de navegação inferior (só mobile) */}
+      <BottomNav onOpenMenu={() => setMobileOpen(true)} />
     </div>
   );
 }
