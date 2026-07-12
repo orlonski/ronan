@@ -429,7 +429,7 @@ export default function ViagemDetalhePage({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <header className="flex flex-wrap items-start gap-3">
         <Link href="/viagens">
           <span className="rounded p-2 hover:bg-muted">
@@ -438,7 +438,7 @@ export default function ViagemDetalhePage({
         </Link>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">
+            <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
               {v.ticket ? `Viagem ${v.ticket}` : "Viagem sem ticket"}
             </h1>
             <Badge>{v.status}</Badge>
@@ -511,7 +511,7 @@ export default function ViagemDetalhePage({
 
       {tab === "dados" && (
         <div className="grid gap-4 md:grid-cols-2 md:auto-rows-min">
-          <Card className="p-5">
+          <Card className="p-4 sm:p-5">
             <h3 className="mb-3 text-base font-medium">Dados do lançamento</h3>
             <dl className="space-y-2 text-sm">
               <Row
@@ -618,7 +618,7 @@ export default function ViagemDetalhePage({
               os dados — admin confere foto + valores sem rolar. row-span-3
               estende embaixo de Trajeto + Pré-validação também (mantém
               foto longa sem deixar espaço vazio na esquerda). */}
-          <Card className="p-5 md:row-span-3">
+          <Card className="p-4 sm:p-5 md:row-span-3">
             <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
               <Camera className="h-4 w-4" /> Fotos do ticket
             </h3>
@@ -630,7 +630,7 @@ export default function ViagemDetalhePage({
             <FotosViagem viagemId={v.id} fotos={v.fotos} />
           </Card>
 
-          <Card className="p-5">
+          <Card className="p-4 sm:p-5">
             <h3 className="mb-3 text-base font-medium">Trajeto</h3>
             <div className="space-y-3 text-sm">
               <div>
@@ -670,7 +670,7 @@ export default function ViagemDetalhePage({
 
           {/* Pré-validação: coluna 1 também, logo após Trajeto, pra preencher
               o espaço embaixo (Fotos do ticket ocupa col 2 com row-span-3). */}
-          <Card className="p-5">
+          <Card className="p-4 sm:p-5">
             <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
               <ShieldCheck className="h-4 w-4" /> Pré-validação
             </h3>
@@ -814,7 +814,7 @@ export default function ViagemDetalhePage({
           </Card>
 
           {v.pontos && v.pontos.length >= 2 && (
-            <Card className="p-5 md:col-span-2">
+            <Card className="p-4 sm:p-5 md:col-span-2">
               <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
                 <MapPin className="h-4 w-4" /> Trajeto capturado por GPS
               </h3>
@@ -830,13 +830,13 @@ export default function ViagemDetalhePage({
           {(v.localCarga.lat != null ||
             v.localDescarga.lat != null ||
             v.lat != null) && (
-            <Card className="p-5 md:col-span-2">
-              <div className="mb-3 flex items-center justify-between gap-3">
+            <Card className="p-4 sm:p-5 md:col-span-2">
+              <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                 <h3 className="flex items-center gap-2 text-base font-medium">
                   <MapPin className="h-4 w-4" /> Trajeto da viagem
                 </h3>
                 <Permitido chave="viagens.editar">
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <Button
                       variant="outline"
                       size="sm"
@@ -1040,7 +1040,7 @@ export default function ViagemDetalhePage({
           )}
 
           {v.matchesFechamento.length > 0 && (
-            <Card className="p-5 md:col-span-2">
+            <Card className="p-4 sm:p-5 md:col-span-2">
               <h3 className="mb-3 text-base font-medium">Aparece em fechamentos</h3>
               <ul className="space-y-2 text-sm">
                 {v.matchesFechamento.map((m) => (
@@ -1062,7 +1062,7 @@ export default function ViagemDetalhePage({
       )}
 
       {tab === "historico" && (
-        <Card className="p-5">
+        <Card className="p-4 sm:p-5">
           <h3 className="mb-4 text-base font-medium">
             <History className="mr-2 inline h-4 w-4" />
             Linha do tempo
