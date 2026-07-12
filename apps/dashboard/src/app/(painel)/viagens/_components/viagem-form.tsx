@@ -3,27 +3,21 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
+import {
+  ClienteCombobox,
+  LocalCombobox,
+  VeiculoCombobox,
+} from "@/components/fk-comboboxes";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fetchApi, useAuthToken, useResourceOptions } from "@/lib/client-api";
-import { haversineMetros } from "@/lib/geo";
 
-type Veiculo = { id: string; placa: string; modelo: string | null };
-type Cliente = { id: string; nome: string };
 type Material = { id: string; nome: string };
-type Local = {
-  id: string;
-  nome: string;
-  cidade: string;
-  uf: string;
-  lat: number | null;
-  lng: number | null;
-};
 type Motorista = { id: string; nome: string };
 
 export type ViagemEditavel = {
@@ -83,10 +77,9 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
   const token = useAuthToken();
   const qc = useQueryClient();
 
-  const veiculos = useResourceOptions<Veiculo>("/admin/veiculos");
-  const clientes = useResourceOptions<Cliente>("/admin/clientes");
+  // Veículo, cliente e local usam autocomplete server-side (sem teto de 200).
+  // Material é catálogo pequeno — segue carregando tudo.
   const materiais = useResourceOptions<Material>("/admin/materiais");
-  const locais = useResourceOptions<Local>("/admin/locais");
 
   const [form, setForm] = useState<FormState>({
     data: toDateInput(initial.data),
@@ -108,56 +101,45 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
     localDescargaId: initial.localDescarga.id,
   });
 
-  const veiculoOptions = useMemo(
-    () =>
-      (veiculos.data ?? []).map((v) => ({
-        value: v.id,
-        label: v.placa,
-        sublabel: v.modelo ?? undefined,
-      })),
-    [veiculos.data],
-  );
-  const clienteOptions = useMemo(
-    () => (clientes.data ?? []).map((c) => ({ value: c.id, label: c.nome })),
-    [clientes.data],
-  );
   const materialOptions = useMemo(
     () => (materiais.data ?? []).map((m) => ({ value: m.id, label: m.nome })),
     [materiais.data],
   );
-  const localOptions = useMemo(
-    () =>
-      (locais.data ?? []).map((l) => ({
-        value: l.id,
-        label: l.nome,
-        sublabel: `${l.cidade}/${l.uf}`,
-      })),
-    [locais.data],
-  );
+
+  // Opções iniciais (o que já está selecionado) pra o autocomplete mostrar o
+  // nome no trigger antes de qualquer busca.
+  const veiculoInicial = {
+    value: initial.veiculo.id,
+    label: initial.veiculo.placa,
+    sublabel: initial.veiculo.modelo ?? undefined,
+  };
+  const clienteInicial = { value: initial.cliente.id, label: initial.cliente.nome };
+  const localCargaInicial = {
+    value: initial.localCarga.id,
+    label: initial.localCarga.nome,
+    sublabel: `${initial.localCarga.cidade}/${initial.localCarga.uf}`,
+  };
+  const localDescargaInicial = {
+    value: initial.localDescarga.id,
+    label: initial.localDescarga.nome,
+    sublabel: `${initial.localDescarga.cidade}/${initial.localDescarga.uf}`,
+  };
 
   // Sugere o local mais próximo do lat/lng capturado pelo motorista no
   // lançamento (raio 500m). Útil pra corrigir viagens onde motorista
-  // selecionou local errado mas o GPS estava certo.
-  const sugestaoDescarga = useMemo(() => {
-    if (initial.lat == null || initial.lng == null || !locais.data) return null;
-    const lat0 = initial.lat;
-    const lng0 = initial.lng;
-    const candidatos = locais.data
-      .filter(
-        (l) =>
-          l.lat != null &&
-          l.lng != null &&
-          l.id !== form.localDescargaId,
-      )
-      .map((l) => ({
-        id: l.id,
-        nome: l.nome,
-        dist: haversineMetros(lat0, lng0, l.lat as number, l.lng as number),
-      }))
-      .filter((l) => l.dist <= 500)
-      .sort((a, b) => a.dist - b.dist);
-    return candidatos[0] ?? null;
-  }, [initial.lat, initial.lng, locais.data, form.localDescargaId]);
+  // selecionou local errado mas o GPS estava certo. Server-side agora (antes
+  // varria a lista completa carregada, que sumiu com o autocomplete).
+  const temGps = initial.lat != null && initial.lng != null;
+  const sugestao = useQuery({
+    queryKey: ["local-proximo", initial.id, form.localDescargaId],
+    enabled: !!token && temGps,
+    queryFn: () =>
+      fetchApi<{ id: string; nome: string; cidade: string; uf: string; dist: number } | null>(
+        `/admin/locais/proximo?lat=${initial.lat}&lng=${initial.lng}&raioM=500&excluirId=${form.localDescargaId}`,
+        { token },
+      ),
+  });
+  const sugestaoDescarga = sugestao.data ?? null;
 
   const mutation = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
@@ -266,11 +248,10 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
           </div>
           <div className="space-y-2">
             <Label>Placa do veículo</Label>
-            <Combobox
+            <VeiculoCombobox
               value={form.veiculoId}
               onChange={(v) => setForm({ ...form, veiculoId: v ?? "" })}
-              options={veiculoOptions}
-              placeholder="Selecione"
+              initialOption={veiculoInicial}
             />
           </div>
         </div>
@@ -278,11 +259,10 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">
             <Label>Cliente</Label>
-            <Combobox
+            <ClienteCombobox
               value={form.clienteId}
               onChange={(v) => setForm({ ...form, clienteId: v ?? "" })}
-              options={clienteOptions}
-              placeholder="Selecione"
+              initialOption={clienteInicial}
             />
           </div>
           <div className="space-y-2">
@@ -308,11 +288,10 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">
             <Label>Local de carga</Label>
-            <Combobox
+            <LocalCombobox
               value={form.localCargaId}
               onChange={(v) => setForm({ ...form, localCargaId: v ?? "" })}
-              options={localOptions}
-              placeholder="Selecione"
+              initialOption={localCargaInicial}
             />
           </div>
           <div className="space-y-2">
@@ -331,11 +310,10 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
                 {Math.round(sugestaoDescarga.dist)}m)
               </button>
             )}
-            <Combobox
+            <LocalCombobox
               value={form.localDescargaId}
               onChange={(v) => setForm({ ...form, localDescargaId: v ?? "" })}
-              options={localOptions}
-              placeholder="Selecione"
+              initialOption={localDescargaInicial}
             />
           </div>
           <div className="space-y-2">

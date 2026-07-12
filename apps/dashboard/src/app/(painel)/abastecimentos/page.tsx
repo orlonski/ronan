@@ -13,6 +13,7 @@ import {
   ToolbarFilterDateRange,
 } from "@/components/data-table";
 import { Combobox } from "@/components/ui/combobox";
+import { MotoristaCombobox } from "@/components/fk-comboboxes";
 import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { ListMetric } from "@/components/list-metric";
 import { firstDayOfMonth, useDataTableState } from "@/hooks/use-data-table-state";
@@ -40,7 +41,6 @@ type Abastecimento = {
   _count: { fotos: number };
 };
 
-type Motorista = { id: string; nome: string };
 type Empresa = { id: string; nome: string };
 
 type ListaAbastecimentos = {
@@ -71,7 +71,6 @@ export default function AbastecimentosPage() {
     defaultSort: { field: "data", order: "desc" },
     defaultFilters: { de: firstDayOfMonth() },
   });
-  const motoristas = useResourceOptions<Motorista>("/admin/motoristas");
   const empresas = useResourceOptions<Empresa>("/admin/empresas");
   const { viewMode, setViewMode } = useListViewMode("abastecimentos");
 
@@ -82,11 +81,6 @@ export default function AbastecimentosPage() {
     queryFn: () => fetchApi<ListaAbastecimentos>(url, { token }),
     placeholderData: (prev) => prev,
   });
-
-  const motoristaOptions = useMemo(
-    () => (motoristas.data ?? []).map((m) => ({ value: m.id, label: m.nome })),
-    [motoristas.data],
-  );
 
   const empresaOptions = useMemo(
     () => [
@@ -248,11 +242,10 @@ export default function AbastecimentosPage() {
                     { value: "ETANOL", label: "Etanol" },
                   ]}
                 />
-                <Combobox
+                <MotoristaCombobox
                   value={tableState.filters.motoristaId}
                   onChange={(v) => tableState.setFilter("motoristaId", v)}
                   placeholder="Motorista"
-                  options={motoristaOptions}
                 />
                 <Combobox
                   value={tableState.filters.empresaId ?? (tableState.filters.semEmpresa === "true" ? "__sem__" : undefined)}

@@ -28,6 +28,8 @@ export function Combobox({
   className,
   triggerClassName,
   showSearch = true,
+  serverSide = false,
+  onSearchChange,
 }: {
   value: string | undefined;
   onChange: (v: string | undefined) => void;
@@ -40,6 +42,13 @@ export function Combobox({
   triggerClassName?: string;
   /** Esconde input de busca quando lista tem poucas opções fixas. Default true. */
   showSearch?: boolean;
+  /**
+   * Busca no servidor: NÃO filtra as opções no client (o pai já manda a lista
+   * filtrada por `q`) e emite o termo digitado via `onSearchChange`. Usar com
+   * AsyncCombobox pra listas grandes (sem teto de 200).
+   */
+  serverSide?: boolean;
+  onSearchChange?: (termo: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [busca, setBusca] = useState("");
@@ -47,6 +56,7 @@ export function Combobox({
   const selecionado = options.find((o) => o.value === value);
 
   const filtrados = useMemo(() => {
+    if (serverSide) return options;
     if (!busca.trim() || !showSearch) return options;
     const termo = busca.toLowerCase().trim();
     return options.filter((o) => {
@@ -54,7 +64,7 @@ export function Combobox({
       if (o.sublabel?.toLowerCase().includes(termo)) return true;
       return false;
     });
-  }, [options, busca, showSearch]);
+  }, [options, busca, showSearch, serverSide]);
 
   function selecionar(v: string | undefined) {
     onChange(v);
@@ -108,7 +118,10 @@ export function Combobox({
               <Input
                 autoFocus
                 value={busca}
-                onChange={(e) => setBusca(e.target.value)}
+                onChange={(e) => {
+                  setBusca(e.target.value);
+                  onSearchChange?.(e.target.value);
+                }}
                 placeholder={searchPlaceholder}
                 className="h-9 pl-8"
               />

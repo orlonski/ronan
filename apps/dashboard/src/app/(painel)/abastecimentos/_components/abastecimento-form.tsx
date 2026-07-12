@@ -8,11 +8,11 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
+import { VeiculoCombobox } from "@/components/fk-comboboxes";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fetchApi, useAuthToken, useResourceOptions } from "@/lib/client-api";
 
-type Veiculo = { id: string; placa: string; modelo: string | null };
 type Empresa = { id: string; nome: string };
 
 export type AbastecimentoEditavel = {
@@ -70,7 +70,6 @@ export function AbastecimentoForm({ initial }: { initial: AbastecimentoEditavel 
   const token = useAuthToken();
   const qc = useQueryClient();
 
-  const veiculos = useResourceOptions<Veiculo>("/admin/veiculos");
   const empresas = useResourceOptions<Empresa>("/admin/empresas");
 
   const [form, setForm] = useState<FormState>({
@@ -88,15 +87,11 @@ export function AbastecimentoForm({ initial }: { initial: AbastecimentoEditavel 
     empresaId: initial.empresa?.id ?? "",
   });
 
-  const veiculoOptions = useMemo(
-    () =>
-      (veiculos.data ?? []).map((v) => ({
-        value: v.id,
-        label: v.placa,
-        sublabel: v.modelo ?? undefined,
-      })),
-    [veiculos.data],
-  );
+  const veiculoInicial = {
+    value: initial.veiculo.id,
+    label: initial.veiculo.placa,
+    sublabel: initial.veiculo.modelo ?? undefined,
+  };
 
   const empresaOptions = useMemo(
     () => (empresas.data ?? []).map((e) => ({ value: e.id, label: e.nome })),
@@ -200,11 +195,10 @@ export function AbastecimentoForm({ initial }: { initial: AbastecimentoEditavel 
           </div>
           <div className="space-y-2">
             <Label>Placa</Label>
-            <Combobox
+            <VeiculoCombobox
               value={form.veiculoId}
               onChange={(v) => setForm({ ...form, veiculoId: v ?? "" })}
-              options={veiculoOptions}
-              placeholder="Selecione"
+              initialOption={veiculoInicial}
             />
           </div>
         </div>

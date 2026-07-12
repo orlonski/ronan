@@ -38,12 +38,12 @@ import {
   DataTableToolbar,
 } from "@/components/data-table";
 import { Combobox } from "@/components/ui/combobox";
+import { ClienteCombobox } from "@/components/fk-comboboxes";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import {
   fetchApi,
   useAuthToken,
   usePaginatedList,
-  useResourceOptions,
   useUpdateResource,
 } from "@/lib/client-api";
 import type { LocalMapa } from "@/components/mapa-locais";
@@ -116,7 +116,6 @@ type GeoGrupo = {
 type DuplicatasGeoResp = { raioM: number; raioAtualBusca: number; grupos: GeoGrupo[] };
 
 const PATH = "/admin/locais";
-const CLIENTES_PATH = "/admin/clientes";
 
 const TIPO_LOCAL_COLOR: Record<Tipo, string> = {
   CARGA: "border-emerald-200 bg-emerald-50 text-emerald-900",
@@ -178,7 +177,6 @@ function DuplicataTag({ dup, onClick }: { dup: DupEntry; onClick: () => void }) 
 export default function LocaisPage() {
   const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
   const list = usePaginatedList<Local>(PATH, tableState);
-  const clientes = useResourceOptions<Cliente>(CLIENTES_PATH);
   const update = useUpdateResource<Record<string, unknown>, Local>(PATH, PATH);
   const token = useAuthToken();
   const qc = useQueryClient();
@@ -267,10 +265,6 @@ export default function LocaisPage() {
   const totalNoMapa = mapa.data?.length ?? 0;
   const semCoord = view === "mapa" && mapa.data ? Math.max(totalGeral - totalNoMapa, 0) : 0;
 
-  const clienteOptions = useMemo(
-    () => (clientes.data ?? []).map((o) => ({ value: o.id, label: o.nome })),
-    [clientes.data],
-  );
 
   const columns = useMemo<ColumnDef<Local>[]>(
     () => [
@@ -438,11 +432,10 @@ export default function LocaisPage() {
           { value: "DESCARGA", label: "Descarga" },
         ]}
       />
-      <Combobox
+      <ClienteCombobox
         value={tableState.filters.clienteId}
         onChange={(v) => tableState.setFilter("clienteId", v)}
         placeholder="Cliente"
-        options={clienteOptions}
       />
       <Combobox
         value={tableState.filters.ativo}

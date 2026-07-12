@@ -25,6 +25,20 @@ type ListLocaisParams = PaginationQuery & {
 
 const SEARCH_FIELDS = ["nome", "logradouro", "bairro", "cidade", "pontoReferencia"] as const;
 
+const METROS_POR_GRAU_LAT = 111_320; // ~constante; longitude encolhe com cos(lat)
+
+/** Distância em metros entre dois pontos (haversine). */
+function haversineMetros(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6_371_000;
+  const toRad = (g: number) => (g * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
 /** Filtros compartilhados por list e mapa (mesma régua, pra as abas baterem). */
 function montarWhereLocais(params: Omit<ListLocaisParams, keyof PaginationQuery>): Prisma.LocalWhereInput {
   const where: Prisma.LocalWhereInput = {};
@@ -93,6 +107,42 @@ export class LocaisService {
       include: LOCAL_INCLUDE,
     });
     return { ...result, data: (result.data as LocalRaw[]).map(flattenLocal) };
+  }
+
+  /**
+   * Local ativo mais próximo de um ponto (lat/lng), dentro de `raioM`. Usado
+   * pelo form de editar viagem pra sugerir o local a partir do GPS que o
+   * motorista capturou no lançamento — antes isso varria a lista inteira
+   * carregada no client (que sumiu com o autocomplete server-side). Prefiltra
+   * por bounding-box e refina com haversine. Retorna null se nada dentro do raio.
+   */
+  async proximo(params: { lat: number; lng: number; raioM?: number; excluirId?: string }) {
+    const raio = params.raioM ?? 500;
+    const margem = raio * 1.1; // folga pra não descartar candidato antes do haversine
+    const grausLat = margem / METROS_POR_GRAU_LAT;
+    const grausLng =
+      margem / (METROS_POR_GRAU_LAT * Math.max(Math.cos((params.lat * Math.PI) / 180), 0.01));
+
+    const candidatos = await this.prisma.local.findMany({
+      where: {
+        ativo: true,
+        lat: { gte: params.lat - grausLat, lte: params.lat + grausLat },
+        lng: { gte: params.lng - grausLng, lte: params.lng + grausLng },
+        ...(params.excluirId ? { id: { not: params.excluirId } } : {}),
+      },
+      select: { id: true, nome: true, cidade: true, uf: true, lat: true, lng: true },
+    });
+
+    let melhor: { id: string; nome: string; cidade: string; uf: string; dist: number } | null = null;
+    for (const c of candidatos) {
+      if (c.lat == null || c.lng == null) continue;
+      const dist = haversineMetros(params.lat, params.lng, c.lat, c.lng);
+      if (dist > raio) continue;
+      if (!melhor || dist < melhor.dist) {
+        melhor = { id: c.id, nome: c.nome, cidade: c.cidade, uf: c.uf, dist };
+      }
+    }
+    return melhor;
   }
 
   async findOne(id: string) {

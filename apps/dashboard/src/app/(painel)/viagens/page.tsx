@@ -21,11 +21,12 @@ import {
   ToolbarFilterDateRange,
 } from "@/components/data-table";
 import { Combobox } from "@/components/ui/combobox";
+import { ClienteCombobox, MotoristaCombobox } from "@/components/fk-comboboxes";
 import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { ListMetric } from "@/components/list-metric";
 import { firstDayOfMonth, useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
-import { usePaginatedList, useResourceOptions } from "@/lib/client-api";
+import { usePaginatedList } from "@/lib/client-api";
 import { fmtBR, fmtNum } from "@/lib/fechamento-helpers";
 import { ValorComMinimo } from "@/components/valor-com-minimo";
 
@@ -56,8 +57,6 @@ type Viagem = {
   temPedagioSemValor: boolean;
 };
 
-type Motorista = { id: string; nome: string };
-type Cliente = { id: string; nome: string };
 
 const STATUS_VIAGEM_LABEL: Record<string, string> = {
   ENVIADA: "Aguardando",
@@ -85,18 +84,7 @@ export default function ViagensPage() {
     defaultFilters: { de: firstDayOfMonth() },
   });
   const list = usePaginatedList<Viagem>("/admin/viagens", tableState);
-  const motoristas = useResourceOptions<Motorista>("/admin/motoristas");
-  const clientes = useResourceOptions<Cliente>("/admin/clientes");
   const { viewMode, setViewMode } = useListViewMode("viagens");
-
-  const motoristaOptions = useMemo(
-    () => (motoristas.data ?? []).map((m) => ({ value: m.id, label: m.nome })),
-    [motoristas.data],
-  );
-  const clienteOptions = useMemo(
-    () => (clientes.data ?? []).map((c) => ({ value: c.id, label: c.nome })),
-    [clientes.data],
-  );
 
   const columns = useMemo<ColumnDef<Viagem>[]>(
     () => [
@@ -318,17 +306,15 @@ export default function ViagensPage() {
                     { value: "direta", label: "Direta" },
                   ]}
                 />
-                <Combobox
+                <MotoristaCombobox
                   value={tableState.filters.motoristaId}
                   onChange={(v) => tableState.setFilter("motoristaId", v)}
                   placeholder="Motorista"
-                  options={motoristaOptions}
                 />
-                <Combobox
+                <ClienteCombobox
                   value={tableState.filters.clienteId}
                   onChange={(v) => tableState.setFilter("clienteId", v)}
                   placeholder="Cliente"
-                  options={clienteOptions}
                 />
                 <ToolbarFilterDateRange state={tableState} label="Período" />
               </>

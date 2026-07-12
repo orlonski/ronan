@@ -21,6 +21,8 @@ export function ComboboxMulti({
   loading = false,
   className,
   triggerClassName,
+  serverSide = false,
+  onSearchChange,
 }: {
   value: string[];
   onChange: (values: string[]) => void;
@@ -31,6 +33,9 @@ export function ComboboxMulti({
   loading?: boolean;
   className?: string;
   triggerClassName?: string;
+  /** Busca no servidor: não filtra client-side e emite o termo digitado. */
+  serverSide?: boolean;
+  onSearchChange?: (termo: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [busca, setBusca] = useState("");
@@ -43,6 +48,7 @@ export function ComboboxMulti({
   }, [options, value]);
 
   const filtrados = useMemo(() => {
+    if (serverSide) return options;
     if (!busca.trim()) return options;
     const termo = busca.toLowerCase().trim();
     return options.filter((o) => {
@@ -50,7 +56,7 @@ export function ComboboxMulti({
       if (o.sublabel?.toLowerCase().includes(termo)) return true;
       return false;
     });
-  }, [options, busca]);
+  }, [options, busca, serverSide]);
 
   function toggle(v: string) {
     if (value.includes(v)) onChange(value.filter((x) => x !== v));
@@ -100,7 +106,10 @@ export function ComboboxMulti({
             <Input
               autoFocus
               value={busca}
-              onChange={(e) => setBusca(e.target.value)}
+              onChange={(e) => {
+                setBusca(e.target.value);
+                onSearchChange?.(e.target.value);
+              }}
               placeholder={searchPlaceholder}
               className="h-9 pl-8"
             />

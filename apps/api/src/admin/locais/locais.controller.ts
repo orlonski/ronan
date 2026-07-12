@@ -38,6 +38,14 @@ const DuplicatasGeoQuery = z.object({
   raioM: z.coerce.number().int().min(20).max(5000).optional(),
 });
 
+const ProximoQuery = z.object({
+  lat: z.coerce.number().min(-90).max(90),
+  lng: z.coerce.number().min(-180).max(180),
+  raioM: z.coerce.number().int().min(20).max(5000).optional(),
+  excluirId: z.string().uuid().optional(),
+});
+type ProximoQuery = z.infer<typeof ProximoQuery>;
+
 @ApiTags("admin/locais")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
@@ -49,6 +57,21 @@ export class LocaisController {
   @Get()
   list(@Query(new ZodValidationPipe(ListLocaisQuery)) query: ListLocaisQuery) {
     return this.service.list(query);
+  }
+
+  /**
+   * Local ativo mais próximo de um ponto GPS (pro botão "usar lugar do
+   * lançamento" no form de editar viagem). Antes de :id pra Nest não tratar
+   * "proximo" como id.
+   */
+  @Get("proximo")
+  proximo(@Query(new ZodValidationPipe(ProximoQuery)) query: ProximoQuery) {
+    return this.service.proximo({
+      lat: query.lat,
+      lng: query.lng,
+      raioM: query.raioM,
+      excluirId: query.excluirId,
+    });
   }
 
   /**

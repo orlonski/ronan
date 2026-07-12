@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { AddressAutocomplete, type SugestaoEndereco } from "@/components/ui/address-autocomplete";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ComboboxMulti } from "@/components/ui/combobox-multi";
+import { ClienteComboboxMulti } from "@/components/fk-comboboxes";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -21,7 +21,6 @@ import {
   fetchApi,
   useAuthToken,
   useCreateResource,
-  useResourceOptions,
   useUpdateResource,
 } from "@/lib/client-api";
 
@@ -56,13 +55,11 @@ type ViaCepRes = {
 };
 
 const PATH = "/admin/locais";
-const CLIENTES_PATH = "/admin/clientes";
 
 type Props = { initial?: Local };
 
 export function LocalForm({ initial }: Props) {
   const router = useRouter();
-  const clientes = useResourceOptions<Cliente>(CLIENTES_PATH);
   const create = useCreateResource<Record<string, unknown>, Local>(PATH, PATH);
   const update = useUpdateResource<Record<string, unknown>, Local>(PATH, PATH);
   const token = useAuthToken();
@@ -281,13 +278,14 @@ export function LocalForm({ initial }: Props) {
           </div>
           <div className="space-y-2">
             <Label>Clientes (opcional)</Label>
-            <ComboboxMulti
+            <ClienteComboboxMulti
               value={form.clienteIds}
               onChange={(ids) => setForm({ ...form, clienteIds: ids })}
-              options={(clientes.data ?? []).map((c) => ({ value: c.id, label: c.nome }))}
+              initialOptions={(initial?.clientes ?? []).map((c) => ({
+                value: c.id,
+                label: c.nome,
+              }))}
               placeholder="Sem cliente vinculado"
-              searchPlaceholder="Buscar cliente…"
-              loading={clientes.isLoading}
             />
             <p className="text-xs text-muted-foreground">
               Sem cliente vinculado = local genérico, aparece pra qualquer viagem.
