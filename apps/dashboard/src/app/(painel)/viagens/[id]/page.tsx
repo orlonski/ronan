@@ -430,30 +430,32 @@ export default function ViagemDetalhePage({
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <header className="flex flex-wrap items-start gap-3">
-        <Link href="/viagens">
-          <span className="rounded p-2 hover:bg-muted">
-            <ArrowLeft className="h-5 w-5" />
-          </span>
-        </Link>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
-              {v.ticket ? `Viagem ${v.ticket}` : "Viagem sem ticket"}
-            </h1>
-            <Badge>{v.status}</Badge>
-            {!v.material.exigeTicket && (
-              <Badge className="border-amber-300 bg-amber-50 text-amber-700">
-                {v.material.nome} não exige ticket
-              </Badge>
-            )}
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start">
+        <div className="flex min-w-0 flex-1 items-start gap-2 sm:gap-3">
+          <Link href="/viagens" className="shrink-0">
+            <span className="-ml-2 inline-flex rounded p-2 hover:bg-muted sm:ml-0">
+              <ArrowLeft className="h-5 w-5" />
+            </span>
+          </Link>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
+                {v.ticket ? `Viagem ${v.ticket}` : "Viagem sem ticket"}
+              </h1>
+              <Badge>{v.status}</Badge>
+              {!v.material.exigeTicket && (
+                <Badge className="border-amber-300 bg-amber-50 text-amber-700">
+                  {v.material.nome} não exige ticket
+                </Badge>
+              )}
+            </div>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              {v.motorista.nome} · placa <span className="font-mono">{v.veiculo.placa}</span> ·{" "}
+              {fmtBR(v.data)}
+            </p>
           </div>
-          <p className="text-sm text-muted-foreground">
-            {v.motorista.nome} · placa <span className="font-mono">{v.veiculo.placa}</span> ·{" "}
-            {fmtBR(v.data)}
-          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex shrink-0 flex-wrap gap-2 pl-8 sm:pl-0">
           {v.matchesFechamento.length === 0 ? (
             <Permitido chave="viagens.editar">
               <Link href={`/viagens/${v.id}/editar`}>
