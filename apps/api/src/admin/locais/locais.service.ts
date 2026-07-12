@@ -239,14 +239,25 @@ export class LocaisService {
         tipo: true,
         lat: true,
         lng: true,
+        nivelConfianca: true,
+        origemCadastro: true,
+        criadoEm: true,
         clientes: { select: { cliente: { select: { id: true, nome: true } } } },
+        criadoPor: { select: { nome: true } },
+        criadoPorMotorista: { select: { nome: true } },
+        _count: { select: { viagensCarga: true, viagensDescarga: true } },
       },
       orderBy: { nome: "asc" },
     });
-    return locais.map(({ clientes, ...l }) => ({
-      ...l,
-      clientes: clientes.map((c) => c.cliente),
-    }));
+    return locais.map(
+      ({ clientes, criadoPor, criadoPorMotorista, _count, ...l }) => ({
+        ...l,
+        clientes: clientes.map((c) => c.cliente),
+        viagensCarga: _count.viagensCarga,
+        viagensDescarga: _count.viagensDescarga,
+        criadoPorNome: criadoPor?.nome ?? criadoPorMotorista?.nome ?? null,
+      }),
+    );
   }
 
   /**

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Circle, MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { fmtBR } from "@/lib/fechamento-helpers";
 
 type Tipo = "CARGA" | "DESCARGA" | "AMBOS";
 
@@ -20,6 +21,31 @@ export type LocalMapa = {
   lat: number | null;
   lng: number | null;
   clientes: { id: string; nome: string }[];
+  // Extras exibidos no popup (só no modo normal; ausentes no modo suspeitos).
+  nivelConfianca?: string;
+  origemCadastro?: string | null;
+  criadoEm?: string;
+  criadoPorNome?: string | null;
+  viagensCarga?: number;
+  viagensDescarga?: number;
+};
+
+// Label + cor do nível de confiança (mesma régua da tela "Em validação").
+const NIVEL_LABEL: Record<string, { label: string; cls: string }> = {
+  RASCUNHO: { label: "Rascunho", cls: "bg-zinc-100 text-zinc-700" },
+  PRESENCA_PONTUAL: { label: "Presença GPS", cls: "bg-blue-100 text-blue-700" },
+  DWELL_CONFIRMADO: { label: "Dwell ≥10min", cls: "bg-amber-100 text-amber-700" },
+  RECORRENTE: { label: "Recorrente", cls: "bg-emerald-100 text-emerald-700" },
+  HUMANO: { label: "Homologado", cls: "bg-emerald-200 text-emerald-800" },
+};
+
+// Label da origem do cadastro (mesma da listagem de locais).
+const ORIGEM_LABEL: Record<string, string> = {
+  MOTORISTA_FORMULARIO: "Motorista",
+  MOTORISTA_RAPIDO: "Motorista (rápido)",
+  VIAGEM_OFFLINE: "Viagem offline",
+  ADMIN_MANUAL: "Admin",
+  ADMIN_AUDITORIA: "Admin (auditoria)",
 };
 
 /** Ponto de um grupo suspeito no mapa (principal a manter vs candidato a duplicado). */
@@ -272,6 +298,36 @@ export function MapaLocais({
                   {l.clientes.length === 0
                     ? "—"
                     : l.clientes.map((c) => c.nome).join(", ")}
+                </p>
+                <p className="text-xs">
+                  <span className="text-muted-foreground">Viagens: </span>
+                  <span className="font-medium">
+                    {(l.viagensCarga ?? 0) + (l.viagensDescarga ?? 0)}
+                  </span>
+                  {(l.viagensCarga ?? 0) + (l.viagensDescarga ?? 0) > 0 && (
+                    <span className="text-muted-foreground">
+                      {" "}
+                      ({l.viagensCarga ?? 0} carga · {l.viagensDescarga ?? 0} descarga)
+                    </span>
+                  )}
+                </p>
+                {l.nivelConfianca && NIVEL_LABEL[l.nivelConfianca] && (
+                  <p className="text-xs">
+                    <span className="text-muted-foreground">Nível: </span>
+                    <span
+                      className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${NIVEL_LABEL[l.nivelConfianca]!.cls}`}
+                    >
+                      {NIVEL_LABEL[l.nivelConfianca]!.label}
+                    </span>
+                  </p>
+                )}
+                <p className="text-xs leading-snug">
+                  <span className="text-muted-foreground">Cadastro: </span>
+                  {l.origemCadastro
+                    ? (ORIGEM_LABEL[l.origemCadastro] ?? l.origemCadastro)
+                    : "—"}
+                  {l.criadoPorNome ? ` · ${l.criadoPorNome}` : ""}
+                  {l.criadoEm ? ` · ${fmtBR(l.criadoEm)}` : ""}
                 </p>
                 <div className="pt-1">
                   <Link
