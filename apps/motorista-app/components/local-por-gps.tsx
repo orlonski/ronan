@@ -712,14 +712,16 @@ export function LocalPorGps({
                     É esse mesmo — usar este local
                   </Text>
                 </Button>
-                <Pressable
+                <Button
+                  variant="outline"
+                  className="h-14 border-2 border-amber-400 bg-amber-50"
                   onPress={() => criarLocalNovo()}
-                  className="h-12 items-center justify-center"
                 >
-                  <Text className="text-sm font-medium text-muted-foreground underline">
-                    Não é esse — criar um local NOVO assim mesmo
+                  <Plus size={20} color="#b45309" />
+                  <Text className="text-base font-bold text-amber-800">
+                    Não é esse — criar um local novo
                   </Text>
-                </Pressable>
+                </Button>
               </View>
             ) : (
               <View className="flex-row gap-3 border-t border-border p-4">
