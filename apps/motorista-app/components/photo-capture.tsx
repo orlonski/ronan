@@ -213,6 +213,7 @@ function CaptureMode({
         </Text>
         <Button onPress={onRequestPermission}>Permitir câmera</Button>
         <Button variant="ghost" onPress={onCancelar}>
+          <X size={18} color="#fff" />
           <Text className="text-white">Cancelar</Text>
         </Button>
       </SafeAreaView>
@@ -641,6 +642,7 @@ function CropMode({
             onPress={onCancelar}
             disabled={working}
           >
+            <X size={18} color="#fff" />
             <Text className="text-base font-medium text-white">Cancelar</Text>
           </Button>
           <Button className="flex-1" onPress={aplicar} loading={working} disabled={working}>

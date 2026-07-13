@@ -1,5 +1,5 @@
 import { Text, View } from "react-native";
-import { CloudOff } from "lucide-react-native";
+import { CloudOff, Download } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -25,6 +25,7 @@ export function SemCatalogo({
         internet e toque em Baixar.
       </Text>
       <Button size="lg" className="h-16" onPress={aoBaixar} loading={carregando}>
+        <Download size={20} color="#fff" />
         <Text className="text-base font-bold text-primary-foreground">
           {carregando ? "Baixando…" : "Baixar agora"}
         </Text>

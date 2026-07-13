@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { CheckCircle2, MapPin, Plus, X } from "lucide-react-native";
+import { ArrowLeft, Check, CheckCircle2, MapPin, Plus, X } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import type { FonteGps } from "@ronan/shared-types";
 import { marcoConflita } from "@ronan/shared-types";
@@ -559,6 +559,7 @@ export function LocalPorGps({
           </Text>
           <View className="flex-row gap-2">
             <Button variant="outline" className="flex-1" onPress={() => setEstado({ tipo: "vazio" })}>
+              <ArrowLeft size={18} color="#0f172a" />
               <Text className="text-sm font-medium text-foreground">Voltar</Text>
             </Button>
             <Button className="flex-1" onPress={() => void capturarEBuscar()}>
@@ -727,9 +728,11 @@ export function LocalPorGps({
                   className="flex-1"
                   onPress={() => setEstado({ tipo: "vazio" })}
                 >
+                  <X size={18} color="#0f172a" />
                   <Text className="text-base font-medium text-foreground">Cancelar</Text>
                 </Button>
                 <Button className="flex-1" onPress={salvarNomeNovo}>
+                  <Check size={20} color="#fff" />
                   <Text className="text-base font-bold text-primary-foreground">
                     Salvar local
                   </Text>

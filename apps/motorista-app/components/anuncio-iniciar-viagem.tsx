@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Modal, Text, View } from "react-native";
 import { router } from "expo-router";
-import { Check, Route } from "lucide-react-native";
+import { Check, Route, X } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { hasSeenTutorial, markTutorialSeen } from "@/lib/tutorial-state";
 
@@ -83,9 +83,11 @@ export function AnuncioIniciarViagem({ podeLifecycle }: { podeLifecycle: boolean
 
           <View className="mt-6 gap-2">
             <Button size="lg" onPress={comecar}>
+              <Route size={22} color="#fff" />
               <Text className="text-lg font-bold text-primary-foreground">Bora começar</Text>
             </Button>
             <Button variant="ghost" onPress={fechar}>
+              <X size={18} color="#0f172a" />
               <Text className="font-semibold text-foreground">Agora não</Text>
             </Button>
           </View>

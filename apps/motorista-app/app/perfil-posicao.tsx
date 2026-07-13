@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { router, Stack } from "expo-router";
-import { MapPin, Shield } from "lucide-react-native";
+import { Check, MapPin, Shield } from "lucide-react-native";
 import {
   ActivityIndicator,
   AppState,
@@ -288,6 +288,7 @@ export default function PerfilPosicaoScreen() {
         )}
 
         <Button onPress={persistir} loading={salvar.isPending} size="lg">
+          <Check size={20} color="#fff" />
           <Text className="text-base font-bold text-primary-foreground">
             Salvar configuração
           </Text>

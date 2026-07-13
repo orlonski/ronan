@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { Check, Trash2 } from "lucide-react-native";
+import { Check, Trash2, X } from "lucide-react-native";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -19,7 +19,6 @@ import { DateField } from "@/components/ui/date-field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
-import { SelecaoBotoes } from "@/components/ui/selecao-botoes";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { AvisoKmEstimado } from "@/components/aviso-km-estimado";
 import { DescargaPorGps, type DescargaCaptura } from "@/components/descarga-por-gps";
@@ -537,6 +536,18 @@ export default function NovaViagem() {
     if (!form.localCargaId) return void val.apontar("localCarga", "Escolha o local de carga"), false;
     if (!form.localDescargaId)
       return void val.apontar("localDescarga", "Marque o local de descarga"), false;
+    // Card de retorno: exige escolha CONSCIENTE (voltou / não voltou / outro
+    // valor). Sem isso o km podia vir pré-preenchido (stale de uma alternativa
+    // de estrada) e o motorista caía direto no modal de confirmação sem ter
+    // marcado nada. Aponta o card do km.
+    if (usarRetorno && rotaGeometriaEscolhida == null && !kmEditadoManual)
+      return (
+        void val.apontar(
+          "km",
+          'Marque se voltou no retorno — ou toque em "Foi outro valor" e informe o km',
+        ),
+        false
+      );
     if (!form.km.trim()) return void val.apontar("km", "Informe os km rodados"), false;
     return true;
   }
@@ -568,6 +579,26 @@ export default function NovaViagem() {
       } else {
         // "Tenho o peso agora" ou fechou: aponta o campo do peso e volta.
         return void val.apontar("toneladas", "Informe as toneladas");
+      }
+    }
+
+    // Peso presente: valida a FAIXA já apontando o campo (antes ia só cair no
+    // safeParse final e mostrar o erro genérico lá embaixo). Motorista leigo
+    // costuma digitar em quilo/sem vírgula — a mensagem lembra que é tonelada.
+    if (!aguardandoPeso) {
+      const t = parseFloat(form.toneladas.replace(",", "."));
+      if (!Number.isFinite(t) || t <= 0) {
+        return void val.apontar(
+          "toneladas",
+          "Informe o peso em toneladas. Ex.: 27,5",
+        );
+      }
+      // MAX_TONELADAS do schema (@ronan/shared-types) = 9999.
+      if (t > 9999) {
+        return void val.apontar(
+          "toneladas",
+          "Peso alto demais. É em TONELADAS, não em quilos — ex.: 27,5. Faltou a vírgula?",
+        );
       }
     }
 
@@ -905,7 +936,11 @@ export default function NovaViagem() {
   );
 
   const secaoPlaca = (
-    <View className="gap-2" onLayout={val.onLayoutCampo("veiculoId")}>
+    <View
+      className="gap-2"
+      ref={val.refCampo("veiculoId")}
+      onLayout={val.onLayoutCampo("veiculoId")}
+    >
       <Label error={!!val.erroDe("veiculoId")}>Placa</Label>
       <Select
         value={form.veiculoId}
@@ -933,7 +968,11 @@ export default function NovaViagem() {
   );
 
   const secaoCliente = (
-    <View className="gap-2" onLayout={val.onLayoutCampo("clienteId")}>
+    <View
+      className="gap-2"
+      ref={val.refCampo("clienteId")}
+      onLayout={val.onLayoutCampo("clienteId")}
+    >
       <Label error={!!val.erroDe("clienteId")}>Cliente</Label>
       <Select
         value={form.clienteId}
@@ -951,7 +990,11 @@ export default function NovaViagem() {
   );
 
   const secaoMaterial = (
-    <View className="gap-2" onLayout={val.onLayoutCampo("materialId")}>
+    <View
+      className="gap-2"
+      ref={val.refCampo("materialId")}
+      onLayout={val.onLayoutCampo("materialId")}
+    >
       <Label error={!!val.erroDe("materialId")}>Material</Label>
       <Select
         value={form.materialId}
@@ -976,8 +1019,12 @@ export default function NovaViagem() {
 
   const secaoPesoTicket = (
     <View
+      ref={(n) => {
+        // toneladas + ticket dividem a mesma row → mesmo nó pra medir
+        val.refCampo("toneladas")(n);
+        val.refCampo("ticket")(n);
+      }}
       onLayout={(e) => {
-        // toneladas + ticket dividem a mesma row → mesma posição de scroll
         val.onLayoutCampo("toneladas")(e);
         val.onLayoutCampo("ticket")(e);
       }}
@@ -1029,13 +1076,20 @@ export default function NovaViagem() {
   );
 
   const secaoCarga = (
-    <View className="gap-2" onLayout={val.onLayoutCampo("localCarga")}>
+    <View
+      className="gap-2"
+      ref={val.refCampo("localCarga")}
+      onLayout={val.onLayoutCampo("localCarga")}
+    >
       <Label error={!!val.erroDe("localCarga")}>Local de carga</Label>
       <Select
         value={form.localCargaId}
         onChange={(v) => {
           val.limpar();
           update("localCargaId", v);
+          // Já escolheu carga E descarga? Leva o motorista até o card de km
+          // (evita rolar na mão pra escolher a rota). Só no fluxo do menu.
+          if (!tracking && v && form.localDescargaId) val.rolarAte("kmCard");
         }}
         options={locaisFiltrados.carga}
         placeholder="Escolha o local"
@@ -1060,6 +1114,7 @@ export default function NovaViagem() {
           ? "rounded-2xl border-2 border-destructive bg-destructive/5 p-3"
           : undefined
       }
+      ref={val.refCampo("localDescarga")}
       onLayout={val.onLayoutCampo("localDescarga")}
     >
       <DescargaPorGps
@@ -1072,6 +1127,8 @@ export default function NovaViagem() {
           setRotaGeometriaEscolhida(null);
           setRotaIdx(-1);
           setKmEditadoManual(false);
+          // Carga já escolhida? Leva até o card de km (sem rolar na mão).
+          if (!tracking && v && form.localCargaId) val.rolarAte("kmCard");
         }}
         onCaptura={setDescargaCaptura}
         nomeSelecionadoFallback={nomeDescargaSelecionado}
@@ -1101,7 +1158,11 @@ export default function NovaViagem() {
   const secaoKm = usarRetorno ? (
     /* Card de retorno É o campo de km: escolhe uma variante OU informa
        o valor na 3ª opção. O campo "Km rodados" separado some. */
-    <View className="gap-3" onLayout={val.onLayoutCampo("km")}>
+    <View
+      className="gap-3"
+      ref={val.refCampo("km")}
+      onLayout={val.onLayoutCampo("km")}
+    >
       <SeletorRetorno
         opcoes={rotasAtivas}
         selecionadaIdx={
@@ -1138,7 +1199,7 @@ export default function NovaViagem() {
       </View>
     </View>
   ) : (
-    <View onLayout={val.onLayoutCampo("km")}>
+    <View ref={val.refCampo("km")} onLayout={val.onLayoutCampo("km")}>
       <View className="flex-row gap-3">
         <View className="flex-1 gap-2">
           <Label error={!!val.erroDe("km")}>Km rodados</Label>
@@ -1208,74 +1269,6 @@ export default function NovaViagem() {
     </Button>
   );
 
-  // Versões do MODO GPS: lista curta (≤6) vira botões grandes (1 toque, dedão);
-  // lista longa mantém o dropdown com busca.
-  const secaoMaterialGps = (
-    <View className="gap-2" onLayout={val.onLayoutCampo("materialId")}>
-      <Label error={!!val.erroDe("materialId")}>Material</Label>
-      {materialOptions.length > 0 && materialOptions.length <= 6 ? (
-        <SelecaoBotoes
-          value={form.materialId}
-          onChange={(v) => {
-            val.limpar();
-            update("materialId", v);
-          }}
-          options={materialOptions}
-          error={!!val.erroDe("materialId")}
-        />
-      ) : (
-        <Select
-          value={form.materialId}
-          onChange={(v) => {
-            val.limpar();
-            update("materialId", v);
-          }}
-          options={materialOptions}
-          placeholder="Escolha o material"
-          searchable
-          error={!!val.erroDe("materialId")}
-        />
-      )}
-      {val.erroDe("materialId") ? (
-        <ErroCampo msg={val.erroDe("materialId")!} />
-      ) : !exigeTicket && form.materialId ? (
-        <Text className="text-xs text-muted-foreground">
-          Esse material não exige ticket — pode lançar sem número.
-        </Text>
-      ) : null}
-    </View>
-  );
-
-  const secaoPlacaGps = (
-    <View className="gap-2" onLayout={val.onLayoutCampo("veiculoId")}>
-      <Label error={!!val.erroDe("veiculoId")}>Placa</Label>
-      {veiculoOptions.length > 0 && veiculoOptions.length <= 6 ? (
-        <SelecaoBotoes
-          value={form.veiculoId}
-          onChange={(v) => {
-            val.limpar();
-            update("veiculoId", v);
-          }}
-          options={veiculoOptions}
-          error={!!val.erroDe("veiculoId")}
-        />
-      ) : (
-        <Select
-          value={form.veiculoId}
-          onChange={(v) => {
-            val.limpar();
-            update("veiculoId", v);
-          }}
-          options={veiculoOptions}
-          placeholder="Escolha a placa"
-          searchable
-          error={!!val.erroDe("veiculoId")}
-        />
-      )}
-      {val.erroDe("veiculoId") ? <ErroCampo msg={val.erroDe("veiculoId")!} /> : null}
-    </View>
-  );
-
   // Card "herói" do resumo da viagem capturada (só modo GPS).
   const heroTracking = tracking ? (
     <View className="rounded-2xl border-2 border-primary/30 bg-primary/10 p-5">
@@ -1326,9 +1319,12 @@ export default function NovaViagem() {
         >
           <ScrollView
             ref={val.scrollRef}
-            contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 16 }}
+            contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
             keyboardShouldPersistTaps="handled"
           >
+            {/* Wrapper com ref pra validação guiada medir a posição real dos
+                campos (measureLayout relativo a este View) mesmo dentro de cards. */}
+            <View ref={val.conteudoRef} style={{ gap: 16 }}>
             {tracking ? (
               /* MODO GPS ("finalizar viagem"): layout guiado — resumo no topo,
                  carga/descarga (auto-detectados) primeiro, depois o resto. */
@@ -1343,8 +1339,8 @@ export default function NovaViagem() {
                 </Secao>
                 <Secao titulo="Dados da viagem">
                   {secaoCliente}
-                  {secaoMaterialGps}
-                  {secaoPlacaGps}
+                  {secaoMaterial}
+                  {secaoPlaca}
                   {secaoData}
                   {secaoPesoTicket}
                   {secaoFoto}
@@ -1368,345 +1364,33 @@ export default function NovaViagem() {
                 </Button>
               </>
             ) : (
-              /* Fluxo NORMAL / EDIÇÃO: ordem original, intacta. */
+              /* Fluxo NORMAL / EDIÇÃO: mesma ordem de sempre (familiar pra quem
+                 já usa), agora agrupada nos cards de seção — igual ao modo GPS. */
               <>
-
-            <Field label="Foto do ticket" hint="opcional, mas ajuda na conferência">
-              <PhotoCapture
-                value={foto}
-                onChange={(novaFoto) => {
-                  setFoto(novaFoto);
-                  setSugestoesIa(null);
-                  // OCR só quando há foto nova E motorista tem permissão.
-                  // Best-effort: erro silencioso (sem internet, sem IA etc).
-                  if (novaFoto && me.data?.podeUsarOcrTicket) {
-                    void (async () => {
-                      try {
-                        const fotoBase64 = await FileSystem.readAsStringAsync(
-                          novaFoto.uri,
-                          { encoding: "base64" },
-                        );
-                        const res = await extrairTicket.mutateAsync({
-                          fotoBase64,
-                          mime: novaFoto.mime,
-                        });
-                        if (res.confidence > 0.2) setSugestoesIa(res);
-                      } catch {
-                        // silencioso — motorista preenche manual
-                      }
-                    })();
-                  }
-                }}
-              />
-              {extrairTicket.isPending && (
-                <View className="mt-2 flex-row items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2">
-                  <ActivityIndicator size="small" color="#64748b" />
-                  <Text className="text-sm text-muted-foreground">
-                    Lendo dados do ticket...
-                  </Text>
+                <Secao titulo="Dados da viagem">
+                  {secaoFoto}
+                  {secaoPlaca}
+                  {secaoData}
+                  {secaoCliente}
+                  {secaoMaterial}
+                  {secaoPesoTicket}
+                </Secao>
+                <Secao titulo="Carga e descarga">
+                  {secaoCarga}
+                  {secaoDescarga}
+                </Secao>
+                <View ref={val.refCampo("kmCard")}>
+                  <Secao titulo="Km rodado">
+                    {secaoSeletorRotas}
+                    {secaoKm}
+                  </Secao>
                 </View>
-              )}
-              {sugestoesIa && (
-                <BannerSugestoesIa
-                  sugestoes={sugestoesIa}
-                  catalogos={cat.data ?? null}
-                  onUsar={() => {
-                    aplicarSugestoesIa(sugestoesIa);
-                    setSugestoesIa(null);
-                  }}
-                  onDispensar={() => setSugestoesIa(null)}
-                />
-              )}
-            </Field>
-
-            <View className="gap-2" onLayout={val.onLayoutCampo("veiculoId")}>
-              <Label error={!!val.erroDe("veiculoId")}>Placa</Label>
-              <Select
-                value={form.veiculoId}
-                onChange={(v) => {
-                  val.limpar();
-                  update("veiculoId", v);
-                }}
-                options={veiculoOptions}
-                placeholder="Escolha a placa"
-                searchable
-                error={!!val.erroDe("veiculoId")}
-              />
-              {val.erroDe("veiculoId") ? <ErroCampo msg={val.erroDe("veiculoId")!} /> : null}
-            </View>
-
-            <Field label="Data">
-              <DateField
-                value={form.data}
-                onChange={(v) => update("data", v)}
-                disabled={submitting}
-              />
-            </Field>
-
-            <View className="gap-2" onLayout={val.onLayoutCampo("clienteId")}>
-              <Label error={!!val.erroDe("clienteId")}>Cliente</Label>
-              <Select
-                value={form.clienteId}
-                onChange={(v) => {
-                  val.limpar();
-                  update("clienteId", v);
-                }}
-                options={clienteOptions}
-                placeholder="Escolha o cliente"
-                searchable
-                error={!!val.erroDe("clienteId")}
-              />
-              {val.erroDe("clienteId") ? <ErroCampo msg={val.erroDe("clienteId")!} /> : null}
-            </View>
-
-            <View className="gap-2" onLayout={val.onLayoutCampo("materialId")}>
-              <Label error={!!val.erroDe("materialId")}>Material</Label>
-              <Select
-                value={form.materialId}
-                onChange={(v) => {
-                  val.limpar();
-                  update("materialId", v);
-                }}
-                options={materialOptions}
-                placeholder="Escolha o material"
-                searchable
-                error={!!val.erroDe("materialId")}
-              />
-              {val.erroDe("materialId") ? (
-                <ErroCampo msg={val.erroDe("materialId")!} />
-              ) : !exigeTicket && form.materialId ? (
-                <Text className="text-xs text-muted-foreground">
-                  Esse material não exige ticket — pode lançar sem número.
-                </Text>
-              ) : null}
-            </View>
-
-            <View
-              onLayout={(e) => {
-                // toneladas + ticket dividem a mesma row → mesma posição de scroll
-                val.onLayoutCampo("toneladas")(e);
-                val.onLayoutCampo("ticket")(e);
-              }}
-            >
-              <View className="flex-row gap-3">
-                <View className="flex-1 gap-2">
-                  <Label error={!!val.erroDe("toneladas")}>Toneladas</Label>
-                  <Input
-                    value={form.toneladas}
-                    onChangeText={(v) => {
-                      val.limpar();
-                      update("toneladas", v);
-                    }}
-                    keyboardType="decimal-pad"
-                    placeholder="0,000"
-                    maxLength={8}
-                    error={!!val.erroDe("toneladas")}
-                  />
-                  <Text className="text-xs text-muted-foreground">
-                    Em toneladas (máx 9999)
-                  </Text>
-                </View>
-                {exigeTicket && (
-                  <View className="flex-1 gap-2">
-                    <Label error={!!val.erroDe("ticket")}>Ticket</Label>
-                    <Input
-                      value={form.ticket}
-                      onChangeText={(v) => {
-                        val.limpar();
-                        update("ticket", v.toUpperCase());
-                      }}
-                      placeholder="número"
-                      maxLength={50}
-                      autoCapitalize="characters"
-                      autoCorrect={false}
-                      error={!!val.erroDe("ticket")}
-                    />
-                  </View>
-                )}
-              </View>
-              {val.erroDe("toneladas") ? <ErroCampo msg={val.erroDe("toneladas")!} /> : null}
-              {val.erroDe("ticket") ? <ErroCampo msg={val.erroDe("ticket")!} /> : null}
-              {!form.toneladas.trim() && !val.erroDe("toneladas") ? (
-                <Text className="text-xs text-muted-foreground">
-                  Romaneio só sai no fim do dia? Toque em salvar que a gente pergunta — dá pra lançar sem o peso e completar depois.
-                </Text>
-              ) : null}
-            </View>
-
-            <View className="gap-2" onLayout={val.onLayoutCampo("localCarga")}>
-              <Label error={!!val.erroDe("localCarga")}>Local de carga</Label>
-              <Select
-                value={form.localCargaId}
-                onChange={(v) => {
-                  val.limpar();
-                  update("localCargaId", v);
-                }}
-                options={locaisFiltrados.carga}
-                placeholder="Escolha o local"
-                searchable
-                emptyMessage="Nenhum local de carga pra esse cliente"
-                error={!!val.erroDe("localCarga")}
-              />
-              {val.erroDe("localCarga") ? <ErroCampo msg={val.erroDe("localCarga")!} /> : null}
-              {tracking && (
-                <GpsHint
-                  match={matchesGps?.carga ?? null}
-                  selecionadoId={form.localCargaId}
-                />
-              )}
-            </View>
-
-            <View
-              className={
-                val.erroDe("localDescarga")
-                  ? "rounded-2xl border-2 border-destructive bg-destructive/5 p-3"
-                  : undefined
-              }
-              onLayout={val.onLayoutCampo("localDescarga")}
-            >
-              <DescargaPorGps
-                clienteId={form.clienteId || null}
-                value={form.localDescargaId}
-                onChange={(v) => {
-                  val.limpar();
-                  update("localDescargaId", v);
-                  // Nova descarga = nova rota; zera a escolha (nada marcado).
-                  setRotaGeometriaEscolhida(null);
-                  setRotaIdx(-1);
-                  setKmEditadoManual(false);
-                }}
-                onCaptura={setDescargaCaptura}
-                nomeSelecionadoFallback={nomeDescargaSelecionado}
-                localCargaCoords={localCargaCoords}
-              />
-              {val.erroDe("localDescarga") ? (
-                <ErroCampo msg={val.erroDe("localDescarga")!} />
-              ) : null}
-              {tracking && (
-                <GpsHint
-                  match={matchesGps?.descarga ?? null}
-                  selecionadoId={form.localDescargaId}
-                />
-              )}
-            </View>
-
-            {temMapa && !usarRetorno ? (
-              <SeletorRotas
-                rotas={rotasAtivas}
-                selecionadaIdx={rotaIdx}
-                onSelecionar={escolherRota}
-              />
-            ) : null}
-
-            {usarRetorno ? (
-              /* Card de retorno É o campo de km: escolhe uma variante OU informa
-                 o valor na 3ª opção. O campo "Km rodados" separado some. */
-              <View className="gap-3" onLayout={val.onLayoutCampo("km")}>
-                <SeletorRetorno
-                  opcoes={rotasAtivas}
-                  selecionadaIdx={
-                    rotaGeometriaEscolhida != null && !kmEditadoManual ? rotaIdx : -1
-                  }
-                  manualAtivo={kmEditadoManual}
-                  onSelecionar={escolherRota}
-                  onManual={ativarManual}
-                  erro={val.erroDe("km")}
-                >
-                  <Input
-                    value={form.km}
-                    onChangeText={(v) => {
-                      val.limpar();
-                      setKmEditadoManual(true);
-                      update("km", v);
-                    }}
-                    keyboardType="decimal-pad"
-                    placeholder="0,00"
-                    maxLength={8}
-                    autoFocus
-                    error={!!val.erroDe("km")}
-                  />
-                </SeletorRetorno>
-                <View className="gap-2">
-                  <Label>Pedágio (R$)</Label>
-                  <Input
-                    value={form.valorPedagio}
-                    onChangeText={(v) => update("valorPedagio", v)}
-                    keyboardType="decimal-pad"
-                    placeholder="opcional"
-                    maxLength={10}
-                  />
-                </View>
-              </View>
-            ) : (
-              <View onLayout={val.onLayoutCampo("km")}>
-                <View className="flex-row gap-3">
-                  <View className="flex-1 gap-2">
-                    <Label error={!!val.erroDe("km")}>Km rodados</Label>
-                    <Input
-                      value={form.km}
-                      onChangeText={(v) => {
-                        val.limpar();
-                        setKmEditadoManual(true);
-                        update("km", v);
-                      }}
-                      keyboardType="decimal-pad"
-                      placeholder="0,00"
-                      maxLength={8}
-                      error={!!val.erroDe("km")}
-                    />
-                    <KmHint
-                      rota={rota.data ?? null}
-                      loading={rota.isFetching}
-                      editado={kmEditadoManual}
-                    />
-                  </View>
-                  <View className="flex-1 gap-2">
-                    <Label>Pedágio (R$)</Label>
-                    <Input
-                      value={form.valorPedagio}
-                      onChangeText={(v) => update("valorPedagio", v)}
-                      keyboardType="decimal-pad"
-                      placeholder="opcional"
-                      maxLength={10}
-                    />
-                  </View>
-                </View>
-                {/* Aviso SEM INTERNET em LINHA INTEIRA (haversine OU cache local). */}
-                {rota.data &&
-                "fonte" in rota.data &&
-                (rota.data.fonte === "estimado_haversine" ||
-                  rota.data.fonte === "cache_local") &&
-                rota.data.km !== null &&
-                !kmEditadoManual ? (
-                  <AvisoKmEstimado km={rota.data.km} fonte={rota.data.fonte} />
-                ) : null}
-                {val.erroDe("km") ? <ErroCampo msg={val.erroDe("km")!} /> : null}
-              </View>
-            )}
-
-            <Field label="Observação" hint="opcional">
-              <Input
-                value={form.observacao}
-                onChangeText={(v) => update("observacao", v)}
-                placeholder="..."
-                maxLength={500}
-              />
-            </Field>
-
-            {erro ? <ErroCampo msg={erro} /> : null}
-
-            <Button size="lg" className="h-20" onPress={salvar} loading={submitting}>
-              <Check size={24} color="white" />
-              <Text className="text-xl font-bold text-primary-foreground">
-                {submitting
-                  ? "Salvando..."
-                  : modoEdit
-                  ? "Salvar alterações"
-                  : "Salvar viagem"}
-              </Text>
-            </Button>
+                <Secao titulo="Observação">{secaoObs}</Secao>
+                {erro ? <ErroCampo msg={erro} /> : null}
+                {secaoSalvar}
               </>
             )}
+            </View>
           </ScrollView>
         </KeyboardAvoidingView>
       )}
@@ -1934,12 +1618,14 @@ function BannerSugestoesIa({
       <View className="mt-3 flex-row gap-2">
         {temAlgo && (
           <Button onPress={onUsar} className="flex-1">
+            <Check size={18} color="#fff" />
             <Text className="text-sm font-bold text-primary-foreground">
               Usar sugestões
             </Text>
           </Button>
         )}
         <Button variant="outline" onPress={onDispensar} className="flex-1">
+          <X size={18} color="#0f172a" />
           <Text className="text-sm font-medium text-foreground">Dispensar</Text>
         </Button>
       </View>

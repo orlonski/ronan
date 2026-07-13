@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { CheckCircle2, MapPin, Plus, Search, X } from "lucide-react-native";
+import { Check, CheckCircle2, MapPin, Plus, Search, X } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { BuscarLocalModal } from "@/components/buscar-local-modal";
 import { Label } from "@/components/ui/label";
@@ -772,6 +772,7 @@ export function DescargaPorGps({
                   className="flex-1"
                   onPress={() => setEstado({ tipo: "vazio" })}
                 >
+                  <X size={18} color="#0f172a" />
                   <Text className="text-base font-medium text-foreground">Cancelar</Text>
                 </Button>
                 <Button
@@ -779,6 +780,7 @@ export function DescargaPorGps({
                   onPress={salvarNomeNovo}
                   loading={criar.isPending}
                 >
+                  <Check size={20} color="#fff" />
                   <Text className="text-base font-bold text-primary-foreground">
                     Salvar local
                   </Text>

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
+import { LogOut, RefreshCw } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { useMe } from "@/lib/queries";
 import { clearTokens } from "@/lib/auth";
@@ -55,11 +56,13 @@ export function EmAnalise() {
 
           <View className="gap-3">
             <Button size="lg" loading={me.isFetching} onPress={() => me.refetch()}>
+              <RefreshCw size={20} color="#fff" />
               <Text className="text-lg font-bold text-primary-foreground">
                 {me.isFetching ? "Verificando..." : "Já fui aprovado?"}
               </Text>
             </Button>
             <Button size="lg" variant="outline" onPress={sair}>
+              <LogOut size={20} color="#0f172a" />
               <Text className="text-lg font-semibold text-foreground">Sair</Text>
             </Button>
           </View>
