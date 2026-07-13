@@ -46,3 +46,32 @@ export type LocalProximo = {
   distanciaMetros: number;
   vezesUsadoMotorista: number;
 };
+
+/**
+ * Extrai um "marco" (estaca N ou KM N) do nome de um local. Serve pra
+ * distinguir pontos de rodovia/obra geograficamente próximos mas DIFERENTES de
+ * propósito (ex.: "PR 151 - Estaca 1742" vs "…Estaca 1743" a ~50m; "BR 277 KM
+ * 168" vs "…169"). Compartilhado entre o app (aviso de duplicata na criação) e
+ * o backend (dedup do dashboard).
+ */
+export function extrairMarco(
+  nome: string,
+): { tipo: "km" | "estaca"; n: number } | null {
+  const s = nome.toLowerCase();
+  const est = s.match(/\bestaca\s*0*(\d{2,4})\b/);
+  if (est) return { tipo: "estaca", n: Number(est[1]) };
+  const km = s.match(/\bkm\s*0*(\d{1,3})\b/);
+  if (km) return { tipo: "km", n: Number(km[1]) };
+  return null;
+}
+
+/**
+ * Dois nomes têm marco CONFLITANTE (estaca/km diferentes) → não são o mesmo
+ * lugar, mesmo perto. Se algum não tem marco, não conflita (proximidade decide).
+ */
+export function marcoConflita(nomeA: string, nomeB: string): boolean {
+  const a = extrairMarco(nomeA);
+  const b = extrairMarco(nomeB);
+  if (!a || !b) return false;
+  return a.tipo !== b.tipo || a.n !== b.n;
+}

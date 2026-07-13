@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { CheckCircle2, MapPin, Plus, X } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import type { FonteGps } from "@ronan/shared-types";
+import { marcoConflita } from "@ronan/shared-types";
 import { Label } from "@/components/ui/label";
 import { showConfirm } from "@/lib/alert";
 import { formatarDistancia, mensagemGpsFalha, pegarCoordsPrecisa } from "@/lib/geo";
@@ -34,6 +35,10 @@ import {
 function isNetworkError(err: unknown): boolean {
   return err instanceof TypeError;
 }
+
+// Raio (m) pro aviso "já existe um local aqui" ao cadastrar. Fixo, independente
+// da config de busca (re-scan do catálogo cacheado ao redor do GPS).
+const RAIO_AVISO_DUPLICATA_M = 150;
 
 // Snapshot com precisão pra repassar na seleção final.
 type CoordsCap = {
@@ -316,7 +321,9 @@ export function LocalPorGps({
   }
 
   function escolherMatch(m: LocalProximo) {
-    if (estado.tipo === "escolha") selecionar(m, estado.coords);
+    if (estado.tipo === "escolha" || estado.tipo === "sem_match") {
+      selecionar(m, estado.coords);
+    }
   }
 
   function abrirSemMatch() {
@@ -326,7 +333,7 @@ export function LocalPorGps({
     }
   }
 
-  function salvarNomeNovo() {
+  async function salvarNomeNovo() {
     if (estado.tipo !== "sem_match") return;
     const nome = nomeNovo.trim();
     if (nome.length < 2) {
@@ -334,6 +341,19 @@ export function LocalPorGps({
       return;
     }
     setErro(null);
+    // Trava anti-duplicata: se tem um local perto (marco-compatível), confirma.
+    const perto = matchesProximos.find((m) => !marcoConflita(nome, m.nome));
+    if (perto) {
+      const ok = await showConfirm({
+        title: "Já existe um local aqui",
+        message: `"${perto.nome}" fica a ${Math.round(
+          perto.distanciaMetros,
+        )} m daqui. Quer criar um local NOVO mesmo assim?`,
+        confirmLabel: "Criar novo",
+        cancelLabel: "Voltar",
+      });
+      if (!ok) return;
+    }
     // Local novo offline: gera id, marca criarOffline. registrarEventoGuiado
     // enfileira o Local (enqueueLocal) antes do evento.
     const sel: SelecaoLocal = {
@@ -358,6 +378,24 @@ export function LocalPorGps({
   }
 
   const labelTexto = lado === "carga" ? "Local de carga" : "Local de descarga";
+
+  // Locais já cadastrados perto do GPS (re-scan do catálogo cacheado, offline,
+  // raio próprio de 150m) — base do aviso anti-duplicata ao cadastrar novo.
+  const semMatchCoords = estado.tipo === "sem_match" ? estado.coords : null;
+  let matchesProximos: LocalProximo[] = [];
+  if (semMatchCoords) {
+    const catalogos = qc.getQueryData<Catalogos>(["catalogos"]);
+    if (catalogos) {
+      matchesProximos = buscarLocaisProximosOffline({
+        lat: semMatchCoords.lat,
+        lng: semMatchCoords.lng,
+        locais: catalogos.locais,
+        tipoUso: lado,
+        raioM: RAIO_AVISO_DUPLICATA_M,
+        limit: 5,
+      });
+    }
+  }
 
   return (
     <View className="gap-2">
@@ -561,8 +599,42 @@ export function LocalPorGps({
             </View>
 
             <View className="flex-1 gap-4 p-5">
+              {matchesProximos.length > 0 && (
+                <View className="gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
+                  <Text className="text-sm font-bold text-amber-900">
+                    ⚠️ Já tem local cadastrado bem aqui
+                  </Text>
+                  <Text className="text-xs text-amber-800">
+                    Confira se não é um destes antes de criar um novo:
+                  </Text>
+                  {matchesProximos.map((m) => (
+                    <Pressable
+                      key={m.id}
+                      onPress={() => escolherMatch(m)}
+                      className="flex-row items-center justify-between rounded-lg border border-amber-300 bg-background px-3 py-2.5"
+                    >
+                      <View className="flex-1 pr-2">
+                        <Text className="text-sm font-medium text-foreground" numberOfLines={1}>
+                          {m.nome}
+                        </Text>
+                        <Text className="text-xs text-muted-foreground">
+                          a {Math.round(m.distanciaMetros)} m daqui
+                        </Text>
+                      </View>
+                      <View className="rounded-full bg-primary px-3 py-1.5">
+                        <Text className="text-xs font-bold text-primary-foreground">
+                          É este
+                        </Text>
+                      </View>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+
               <Text className="text-sm text-muted-foreground">
-                Não conheço esse lugar aqui — me ajuda dando um nome rápido.
+                {matchesProximos.length > 0
+                  ? "Se for mesmo um lugar novo, dá um nome:"
+                  : "Não conheço esse lugar aqui — me ajuda dando um nome rápido."}
               </Text>
 
               <View className="gap-2">
