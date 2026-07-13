@@ -535,13 +535,9 @@ export function DescargaPorGps({
             buscaOffline={estado.coords?.buscaOffline}
           />
           {estado.coords ? (
-            <Button
-              variant="outline"
-              onPress={verOutros}
-              className="h-14 border-2 border-primary bg-primary/5"
-            >
-              <MapPin size={20} color="#2563eb" />
-              <Text className="text-base font-bold text-primary">
+            <Button variant="outline" onPress={verOutros} className="h-14">
+              <MapPin size={20} color="#0f172a" />
+              <Text className="text-base font-bold text-foreground">
                 Não é esse? Ver outros locais
               </Text>
             </Button>
@@ -608,13 +604,9 @@ export function DescargaPorGps({
               </Text>
             </Button>
           )}
-          <Button
-            variant="outline"
-            onPress={abrirSemMatch}
-            className="mt-1 h-14 border-2 border-amber-400 bg-amber-50"
-          >
-            <Plus size={20} color="#b45309" />
-            <Text className="text-base font-bold text-amber-800">
+          <Button variant="warning" onPress={abrirSemMatch} className="mt-1 h-14">
+            <Plus size={20} color="#0f172a" />
+            <Text className="text-base font-bold text-warning-foreground">
               Nenhum é o certo — cadastrar novo lugar
             </Text>
           </Button>
@@ -751,23 +743,24 @@ export function DescargaPorGps({
             {confirmarPerto ? (
               <View className="gap-3 border-t border-border p-4">
                 <Button
+                  variant="success"
                   size="lg"
                   className="h-16"
                   onPress={() => escolherMatch(confirmarPerto)}
                 >
-                  <CheckCircle2 size={22} color="white" />
-                  <Text className="text-base font-bold text-primary-foreground">
+                  <CheckCircle2 size={22} color="#fff" />
+                  <Text className="text-base font-bold text-success-foreground">
                     É esse mesmo — usar este local
                   </Text>
                 </Button>
                 <Button
-                  variant="outline"
-                  className="h-14 border-2 border-amber-400 bg-amber-50"
+                  variant="warning"
+                  className="h-14"
                   onPress={() => void criarLocalNovo()}
                   loading={criar.isPending}
                 >
-                  <Plus size={20} color="#b45309" />
-                  <Text className="text-base font-bold text-amber-800">
+                  <Plus size={20} color="#0f172a" />
+                  <Text className="text-base font-bold text-warning-foreground">
                     Não é esse — criar um local novo
                   </Text>
                 </Button>

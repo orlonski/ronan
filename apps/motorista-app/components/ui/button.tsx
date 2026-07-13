@@ -17,6 +17,9 @@ const buttonVariants = cva(
         ghost: "bg-transparent active:bg-muted",
         destructive: "bg-destructive",
         brand: "bg-brand",
+        // Semáforo: success=confirmar/certo, warning=cuidado/atenção.
+        success: "bg-success",
+        warning: "bg-warning",
       },
       size: {
         default: "h-14 px-5",
@@ -37,6 +40,8 @@ const buttonTextVariants = cva("font-semibold", {
       ghost: "text-foreground",
       destructive: "text-destructive-foreground",
       brand: "text-brand-foreground",
+      success: "text-success-foreground",
+      warning: "text-warning-foreground",
     },
     size: {
       default: "text-base",

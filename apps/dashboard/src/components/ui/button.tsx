@@ -12,6 +12,9 @@ const buttonVariants = cva(
         outline: "border border-border bg-background hover:bg-muted",
         ghost: "hover:bg-muted",
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        // Semáforo: success=confirmar/certo (verde), warning=cuidado (âmbar).
+        success: "bg-emerald-600 text-white hover:bg-emerald-700",
+        warning: "bg-amber-500 text-white hover:bg-amber-600",
       },
       size: {
         default: "h-10 px-4 py-2",

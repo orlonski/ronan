@@ -697,15 +697,14 @@ export default function ViagemDetalhePage({
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Button
-                    variant="outline"
+                    variant="success"
                     onClick={() => preValidar.mutate({ status: "OK" })}
                     disabled={preValidar.isPending || emFechamento}
-                    className="border-green-300 bg-green-50 text-green-900 hover:bg-green-100"
                   >
                     <ThumbsUp className="h-4 w-4" /> Aprovar correção
                   </Button>
                   <Button
-                    variant="outline"
+                    variant="destructive"
                     onClick={() => {
                       setTipoDivergencia("OUTRO");
                       setMotivoTexto("");
@@ -713,7 +712,6 @@ export default function ViagemDetalhePage({
                       setDialogDivergente(true);
                     }}
                     disabled={preValidar.isPending || emFechamento}
-                    className="border-red-300 bg-red-50 text-red-900 hover:bg-red-100"
                   >
                     <ThumbsDown className="h-4 w-4" /> Recusar de novo
                   </Button>
@@ -777,7 +775,7 @@ export default function ViagemDetalhePage({
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Button
-                    variant="outline"
+                    variant="success"
                     onClick={() => preValidar.mutate({ status: "OK" })}
                     disabled={preValidar.isPending || emFechamento}
                     title={
@@ -785,12 +783,11 @@ export default function ViagemDetalhePage({
                         ? "Viagem em fechamento — desfaça o match antes de pré-validar"
                         : undefined
                     }
-                    className="border-green-300 bg-green-50 text-green-900 hover:bg-green-100"
                   >
                     <ThumbsUp className="h-4 w-4" /> Marcar como validada
                   </Button>
                   <Button
-                    variant="outline"
+                    variant="destructive"
                     onClick={() => {
                       const tipoInicial = semValorMasTemPedagio
                         ? "PEDAGIO_SEM_VALOR"
@@ -806,7 +803,6 @@ export default function ViagemDetalhePage({
                         ? "Viagem em fechamento — desfaça o match antes de pré-validar"
                         : undefined
                     }
-                    className="border-red-300 bg-red-50 text-red-900 hover:bg-red-100"
                   >
                     <ThumbsDown className="h-4 w-4" /> Marcar como divergente
                   </Button>
@@ -1189,6 +1185,7 @@ export default function ViagemDetalhePage({
               Cancelar
             </Button>
             <Button
+              variant="destructive"
               onClick={() => {
                 preValidar.mutate(
                   {
