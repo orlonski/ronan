@@ -136,6 +136,8 @@ export function DescargaPorGps({
   // Mostra o botão "Abrir ajustes" só quando a falha é de permissão (1 toque).
   const [erroAjustes, setErroAjustes] = useState(false);
   const [nomeNovo, setNomeNovo] = useState("");
+  // Local vizinho que disparou a confirmação anti-duplicata inline (sem pop-up).
+  const [confirmarPerto, setConfirmarPerto] = useState<LocalProximo | null>(null);
   // Busca por nome (todos os locais) — liberada por flag do motorista.
   const me = useMe();
   const podeBuscarPorNome = me.data?.podeVerTodosLocais ?? false;
@@ -300,6 +302,7 @@ export function DescargaPorGps({
   }
 
   function escolherMatch(m: LocalProximo) {
+    setConfirmarPerto(null);
     const cap =
       estado.tipo === "escolha" || estado.tipo === "sem_match"
         ? estado.coords
@@ -371,31 +374,14 @@ export function DescargaPorGps({
     }
   }
 
-  async function salvarNomeNovo() {
+  // Cria o local novo de fato (offline-first). Chamado só depois de passar pela
+  // trava anti-duplicata (ou quando não há vizinho).
+  async function criarLocalNovo() {
     if (estado.tipo !== "sem_match") return;
     const nome = nomeNovo.trim();
-    if (nome.length < 2) {
-      setErro("Digite um nome de pelo menos 2 letras.");
-      return;
-    }
+    if (nome.length < 2) return;
     setErro(null);
-    // Trava anti-duplicata: se tem um local perto (marco-compatível), confirma
-    // antes de criar um novo. `matchesProximos` já vem do catálogo cacheado.
-    const perto = matchesProximos.find((m) => !marcoConflita(nome, m.nome));
-    if (perto) {
-      const ok = await showConfirm({
-        title: "Já existe um local aqui",
-        message: `"${perto.nome}" fica a ${Math.round(
-          perto.distanciaMetros,
-        )} m daqui. Quer criar um local NOVO mesmo assim?`,
-        confirmLabel: "Criar novo",
-        cancelLabel: "Voltar",
-      });
-      if (!ok) return;
-    }
     try {
-      // Offline-first: gera id local, adiciona no catalogo e enfileira no
-      // outbox. Funciona sem internet — sync envia depois com idempotência.
       const novo = await criar.mutateAsync({
         nome,
         lat: estado.coords.lat,
@@ -406,16 +392,31 @@ export function DescargaPorGps({
         clienteIds: clienteId ? [clienteId] : undefined,
       });
       onChange(novo.id);
-      // Local criado em cima da posição capturada → distância 0.
       onCaptura?.({ ...estado.coords, distanciaMetros: 0 });
-      setEstado({
-        tipo: "selecionado",
-        local: { id: novo.id, nome: novo.nome },
-      });
+      setConfirmarPerto(null);
+      setEstado({ tipo: "selecionado", local: { id: novo.id, nome: novo.nome } });
     } catch (err) {
-      // Praticamente impossível agora — enqueueLocal só falha se AsyncStorage quebrar.
       setErro((err as Error).message || "Erro ao criar o local");
     }
+  }
+
+  function salvarNomeNovo() {
+    if (estado.tipo !== "sem_match") return;
+    const nome = nomeNovo.trim();
+    if (nome.length < 2) {
+      setErro("Digite um nome de pelo menos 2 letras.");
+      return;
+    }
+    setErro(null);
+    // Trava anti-duplicata INLINE (o pop-up abria ATRÁS deste Modal de tela
+    // cheia): se tem local perto (marco-compatível), mostra a confirmação na
+    // própria tela em vez de criar direto.
+    const perto = matchesProximos.find((m) => !marcoConflita(nome, m.nome));
+    if (perto) {
+      setConfirmarPerto(perto);
+      return;
+    }
+    void criarLocalNovo();
   }
 
   function trocar() {
@@ -534,10 +535,14 @@ export function DescargaPorGps({
             buscaOffline={estado.coords?.buscaOffline}
           />
           {estado.coords ? (
-            <Button variant="outline" onPress={verOutros}>
-              <MapPin size={18} color="#0f172a" />
-              <Text className="text-sm font-semibold text-foreground">
-                Não é esse lugar? Ver outros
+            <Button
+              variant="outline"
+              onPress={verOutros}
+              className="h-14 border-2 border-primary bg-primary/5"
+            >
+              <MapPin size={20} color="#2563eb" />
+              <Text className="text-base font-bold text-primary">
+                Não é esse? Ver outros locais
               </Text>
             </Button>
           ) : null}
@@ -603,10 +608,14 @@ export function DescargaPorGps({
               </Text>
             </Button>
           )}
-          <Button variant="outline" onPress={abrirSemMatch} className="mt-1">
-            <Plus size={18} color="#0f172a" />
-            <Text className="text-sm font-semibold text-foreground">
-              Não é nenhum — cadastrar novo lugar
+          <Button
+            variant="outline"
+            onPress={abrirSemMatch}
+            className="mt-1 h-14 border-2 border-amber-400 bg-amber-50"
+          >
+            <Plus size={20} color="#b45309" />
+            <Text className="text-base font-bold text-amber-800">
+              Nenhum é o certo — cadastrar novo lugar
             </Text>
           </Button>
         </View>
@@ -630,7 +639,10 @@ export function DescargaPorGps({
         visible={estado.tipo === "sem_match"}
         animationType="slide"
         onRequestClose={() => {
-          if (estado.tipo === "sem_match") setEstado({ tipo: "vazio" });
+          if (estado.tipo === "sem_match") {
+            setConfirmarPerto(null);
+            setEstado({ tipo: "vazio" });
+          }
         }}
       >
         <SafeAreaView edges={["top", "bottom"]} className="flex-1 bg-background">
@@ -643,13 +655,38 @@ export function DescargaPorGps({
                 Como chama esse lugar?
               </Text>
               <Pressable
-                onPress={() => setEstado({ tipo: "vazio" })}
+                onPress={() => {
+                  setConfirmarPerto(null);
+                  setEstado({ tipo: "vazio" });
+                }}
                 className="h-10 w-10 items-center justify-center rounded-full bg-muted"
               >
                 <X size={20} color="#0f172a" />
               </Pressable>
             </View>
 
+            {confirmarPerto ? (
+              /* Confirmação INLINE (sem pop-up, que abriria atrás deste Modal).
+                 Nudge pro seguro: "É este" grande; "criar novo" discreto. */
+              <View className="flex-1 justify-center gap-5 p-6">
+                <Text className="text-center text-4xl">⚠️</Text>
+                <Text className="text-center text-2xl font-bold text-foreground">
+                  Opa! Já tem um local aqui
+                </Text>
+                <View className="gap-1 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4">
+                  <Text className="text-center text-lg font-bold text-amber-900">
+                    {confirmarPerto.nome}
+                  </Text>
+                  <Text className="text-center text-base text-amber-800">
+                    fica a só {Math.round(confirmarPerto.distanciaMetros)} m de você
+                  </Text>
+                </View>
+                <Text className="text-center text-base text-muted-foreground">
+                  Provavelmente é esse mesmo. Tem certeza que quer criar um local
+                  NOVO em vez de usar ele?
+                </Text>
+              </View>
+            ) : (
             <View className="flex-1 gap-4 p-5">
               {matchesProximos.length > 0 && (
                 <View className="gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
@@ -709,25 +746,50 @@ export function DescargaPorGps({
 
               {erro && <Text className="text-sm text-destructive">{erro}</Text>}
             </View>
+            )}
 
-            <View className="flex-row gap-3 border-t border-border p-4">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onPress={() => setEstado({ tipo: "vazio" })}
-              >
-                <Text className="text-base font-medium text-foreground">Cancelar</Text>
-              </Button>
-              <Button
-                className="flex-1"
-                onPress={salvarNomeNovo}
-                loading={criar.isPending}
-              >
-                <Text className="text-base font-bold text-primary-foreground">
-                  Salvar local
-                </Text>
-              </Button>
-            </View>
+            {confirmarPerto ? (
+              <View className="gap-3 border-t border-border p-4">
+                <Button
+                  size="lg"
+                  className="h-16"
+                  onPress={() => escolherMatch(confirmarPerto)}
+                >
+                  <CheckCircle2 size={22} color="white" />
+                  <Text className="text-base font-bold text-primary-foreground">
+                    É esse mesmo — usar este local
+                  </Text>
+                </Button>
+                <Pressable
+                  onPress={() => void criarLocalNovo()}
+                  disabled={criar.isPending}
+                  className="h-12 items-center justify-center"
+                >
+                  <Text className="text-sm font-medium text-muted-foreground underline">
+                    Não é esse — criar um local NOVO assim mesmo
+                  </Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View className="flex-row gap-3 border-t border-border p-4">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onPress={() => setEstado({ tipo: "vazio" })}
+                >
+                  <Text className="text-base font-medium text-foreground">Cancelar</Text>
+                </Button>
+                <Button
+                  className="flex-1"
+                  onPress={salvarNomeNovo}
+                  loading={criar.isPending}
+                >
+                  <Text className="text-base font-bold text-primary-foreground">
+                    Salvar local
+                  </Text>
+                </Button>
+              </View>
+            )}
           </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>

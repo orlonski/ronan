@@ -131,6 +131,8 @@ export function LocalPorGps({
   // Mostra o botão "Abrir ajustes" só quando a falha é de permissão (1 toque).
   const [erroAjustes, setErroAjustes] = useState(false);
   const [nomeNovo, setNomeNovo] = useState("");
+  // Local vizinho que disparou a confirmação anti-duplicata inline (sem pop-up).
+  const [confirmarPerto, setConfirmarPerto] = useState<LocalProximo | null>(null);
 
   // Trocar de cliente invalida a lista/seleção (eram locais do cliente anterior).
   // O estado interno não segue `value`, então reseta ao mudar o clienteId — senão
@@ -321,6 +323,7 @@ export function LocalPorGps({
   }
 
   function escolherMatch(m: LocalProximo) {
+    setConfirmarPerto(null);
     if (estado.tipo === "escolha" || estado.tipo === "sem_match") {
       selecionar(m, estado.coords);
     }
@@ -333,27 +336,12 @@ export function LocalPorGps({
     }
   }
 
-  async function salvarNomeNovo() {
+  // Cria o local novo de fato. Só depois de passar pela trava anti-duplicata.
+  function criarLocalNovo() {
     if (estado.tipo !== "sem_match") return;
     const nome = nomeNovo.trim();
-    if (nome.length < 2) {
-      setErro("Digite um nome de pelo menos 2 letras.");
-      return;
-    }
+    if (nome.length < 2) return;
     setErro(null);
-    // Trava anti-duplicata: se tem um local perto (marco-compatível), confirma.
-    const perto = matchesProximos.find((m) => !marcoConflita(nome, m.nome));
-    if (perto) {
-      const ok = await showConfirm({
-        title: "Já existe um local aqui",
-        message: `"${perto.nome}" fica a ${Math.round(
-          perto.distanciaMetros,
-        )} m daqui. Quer criar um local NOVO mesmo assim?`,
-        confirmLabel: "Criar novo",
-        cancelLabel: "Voltar",
-      });
-      if (!ok) return;
-    }
     // Local novo offline: gera id, marca criarOffline. registrarEventoGuiado
     // enfileira o Local (enqueueLocal) antes do evento.
     const sel: SelecaoLocal = {
@@ -367,8 +355,27 @@ export function LocalPorGps({
       criarOffline: true,
       buscaOffline: estado.coords.buscaOffline,
     };
+    setConfirmarPerto(null);
     onSelect(sel);
     setEstado({ tipo: "selecionado", local: sel });
+  }
+
+  function salvarNomeNovo() {
+    if (estado.tipo !== "sem_match") return;
+    const nome = nomeNovo.trim();
+    if (nome.length < 2) {
+      setErro("Digite um nome de pelo menos 2 letras.");
+      return;
+    }
+    setErro(null);
+    // Trava anti-duplicata INLINE (o pop-up abria ATRÁS deste Modal de tela
+    // cheia): se tem local perto (marco-compatível), confirma na própria tela.
+    const perto = matchesProximos.find((m) => !marcoConflita(nome, m.nome));
+    if (perto) {
+      setConfirmarPerto(perto);
+      return;
+    }
+    criarLocalNovo();
   }
 
   function trocar() {
@@ -523,10 +530,14 @@ export function LocalPorGps({
             </Pressable>
           ))}
           {permiteCriar ? (
-            <Button variant="outline" onPress={abrirSemMatch} className="mt-1">
-              <Plus size={18} color="#0f172a" />
-              <Text className="text-sm font-semibold text-foreground">
-                Nenhum desses — criar novo
+            <Button
+              variant="outline"
+              onPress={abrirSemMatch}
+              className="mt-1 h-14 border-2 border-amber-400 bg-amber-50"
+            >
+              <Plus size={20} color="#b45309" />
+              <Text className="text-base font-bold text-amber-800">
+                Nenhum é o certo — cadastrar novo lugar
               </Text>
             </Button>
           ) : (
@@ -578,7 +589,10 @@ export function LocalPorGps({
         visible={estado.tipo === "sem_match"}
         animationType="slide"
         onRequestClose={() => {
-          if (estado.tipo === "sem_match") setEstado({ tipo: "vazio" });
+          if (estado.tipo === "sem_match") {
+            setConfirmarPerto(null);
+            setEstado({ tipo: "vazio" });
+          }
         }}
       >
         <SafeAreaView edges={["top", "bottom"]} className="flex-1 bg-background">
@@ -591,13 +605,36 @@ export function LocalPorGps({
                 Como chama esse lugar?
               </Text>
               <Pressable
-                onPress={() => setEstado({ tipo: "vazio" })}
+                onPress={() => {
+                  setConfirmarPerto(null);
+                  setEstado({ tipo: "vazio" });
+                }}
                 className="h-10 w-10 items-center justify-center rounded-full bg-muted"
               >
                 <X size={20} color="#0f172a" />
               </Pressable>
             </View>
 
+            {confirmarPerto ? (
+              <View className="flex-1 justify-center gap-5 p-6">
+                <Text className="text-center text-4xl">⚠️</Text>
+                <Text className="text-center text-2xl font-bold text-foreground">
+                  Opa! Já tem um local aqui
+                </Text>
+                <View className="gap-1 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4">
+                  <Text className="text-center text-lg font-bold text-amber-900">
+                    {confirmarPerto.nome}
+                  </Text>
+                  <Text className="text-center text-base text-amber-800">
+                    fica a só {Math.round(confirmarPerto.distanciaMetros)} m de você
+                  </Text>
+                </View>
+                <Text className="text-center text-base text-muted-foreground">
+                  Provavelmente é esse mesmo. Tem certeza que quer criar um local
+                  NOVO em vez de usar ele?
+                </Text>
+              </View>
+            ) : (
             <View className="flex-1 gap-4 p-5">
               {matchesProximos.length > 0 && (
                 <View className="gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
@@ -661,21 +698,45 @@ export function LocalPorGps({
 
               {erro && <Text className="text-sm text-destructive">{erro}</Text>}
             </View>
+            )}
 
-            <View className="flex-row gap-3 border-t border-border p-4">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onPress={() => setEstado({ tipo: "vazio" })}
-              >
-                <Text className="text-base font-medium text-foreground">Cancelar</Text>
-              </Button>
-              <Button className="flex-1" onPress={salvarNomeNovo}>
-                <Text className="text-base font-bold text-primary-foreground">
-                  Salvar local
-                </Text>
-              </Button>
-            </View>
+            {confirmarPerto ? (
+              <View className="gap-3 border-t border-border p-4">
+                <Button
+                  size="lg"
+                  className="h-16"
+                  onPress={() => escolherMatch(confirmarPerto)}
+                >
+                  <CheckCircle2 size={22} color="white" />
+                  <Text className="text-base font-bold text-primary-foreground">
+                    É esse mesmo — usar este local
+                  </Text>
+                </Button>
+                <Pressable
+                  onPress={() => criarLocalNovo()}
+                  className="h-12 items-center justify-center"
+                >
+                  <Text className="text-sm font-medium text-muted-foreground underline">
+                    Não é esse — criar um local NOVO assim mesmo
+                  </Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View className="flex-row gap-3 border-t border-border p-4">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onPress={() => setEstado({ tipo: "vazio" })}
+                >
+                  <Text className="text-base font-medium text-foreground">Cancelar</Text>
+                </Button>
+                <Button className="flex-1" onPress={salvarNomeNovo}>
+                  <Text className="text-base font-bold text-primary-foreground">
+                    Salvar local
+                  </Text>
+                </Button>
+              </View>
+            )}
           </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
