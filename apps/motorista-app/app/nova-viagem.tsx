@@ -629,9 +629,12 @@ export default function NovaViagem() {
       }
     }
     // Aviso quando rota passa por pedágios cadastrados mas o motorista
-    // deixou o valor em branco — chance comum de esquecer de lançar.
+    // deixou o valor em branco OU digitou R$ 0 — chance comum de esquecer
+    // de lançar (0 é tão suspeito quanto vazio numa rota com pedágio).
     // Skip silencioso se a query ainda não respondeu ou veio vazia.
-    if (!form.valorPedagio.trim() && (pedagiosNaRota.data?.length ?? 0) > 0) {
+    const pedagioNum = parseFloat(form.valorPedagio.replace(",", "."));
+    const semValorPedagio = !form.valorPedagio.trim() || !(pedagioNum > 0);
+    if (semValorPedagio && (pedagiosNaRota.data?.length ?? 0) > 0) {
       const lista = pedagiosNaRota
         .data!.slice(0, 5)
         .map((p) => `• ${p.nome}`)
