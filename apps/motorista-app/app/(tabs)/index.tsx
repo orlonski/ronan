@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { router, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
 import * as Updates from "expo-updates";
+import Constants from "expo-constants";
 import {
   Activity,
   AlertTriangle,
@@ -276,6 +277,14 @@ export default function Home() {
             {me.error && (
               <Text className="mt-1 text-sm text-white/80">
                 Perfil indisponível offline
+              </Text>
+            )}
+            {/* Versão do app em letra pequena — ajuda a identificar (por print)
+                quem está com versão desatualizada. Sempre visível (é local, não
+                depende do perfil/servidor). */}
+            {Constants.expoConfig?.version && (
+              <Text className="mt-2 text-xs font-medium text-white/60">
+                Versão {Constants.expoConfig.version}
               </Text>
             )}
           </View>

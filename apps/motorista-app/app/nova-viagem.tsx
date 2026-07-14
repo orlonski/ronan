@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { Check, Trash2, X } from "lucide-react-native";
+import { Check, MapPinOff, Trash2, X } from "lucide-react-native";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -1095,9 +1095,25 @@ export default function NovaViagem() {
           if (!tracking && v && form.localDescargaId) val.rolarAte("kmCard");
         }}
         options={locaisFiltrados.carga}
-        placeholder="Escolha o local"
+        placeholder="Escolha o local de carga"
+        title="Local de carga"
         searchable
-        emptyMessage="Nenhum local de carga pra esse cliente"
+        emptyMessage={
+          <View className="mx-4 mt-8 gap-2 rounded-2xl border-2 border-amber-300 bg-amber-50 p-5">
+            <View className="flex-row items-center gap-2">
+              <MapPinOff size={22} color="#d97706" />
+              <Text className="flex-1 text-lg font-bold text-amber-900">
+                Não achamos esse local de carga
+              </Text>
+            </View>
+            <Text className="text-base leading-6 text-amber-800">
+              Os locais de carga mudam conforme o{" "}
+              <Text className="font-bold">cliente</Text> que você escolheu lá em
+              cima. Se não aparece o que procura, volte e confira se o cliente
+              certo está selecionado.
+            </Text>
+          </View>
+        }
         error={!!val.erroDe("localCarga")}
       />
       {val.erroDe("localCarga") ? <ErroCampo msg={val.erroDe("localCarga")!} /> : null}

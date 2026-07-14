@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ChevronDown, Search, X } from "lucide-react-native";
 import { FlatList, Modal, Pressable, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -29,7 +29,8 @@ export function Select({
   searchable?: boolean;
   disabled?: boolean;
   className?: string;
-  emptyMessage?: string;
+  /** Texto simples OU um nó customizado (ex: aviso colorido) pro estado vazio. */
+  emptyMessage?: ReactNode;
   title?: string;
   error?: boolean;
 }) {
@@ -130,9 +131,13 @@ export function Select({
             keyboardDismissMode="on-drag"
             contentContainerStyle={{ paddingBottom: 32 }}
             ListEmptyComponent={
-              <Text className="py-12 text-center text-base text-muted-foreground">
-                {emptyMessage ?? "Nada encontrado"}
-              </Text>
+              typeof emptyMessage === "string" || emptyMessage == null ? (
+                <Text className="py-12 text-center text-base text-muted-foreground">
+                  {emptyMessage ?? "Nada encontrado"}
+                </Text>
+              ) : (
+                <View>{emptyMessage}</View>
+              )
             }
             renderItem={({ item }) => (
               <Pressable
