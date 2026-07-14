@@ -6,7 +6,7 @@ const config: ExpoConfig = {
   name: "Schaba",
   slug: "ronan-motorista",
   scheme: "ronan",
-  version: "1.0.3",
+  version: "1.0.4",
   orientation: "portrait",
   platforms: ["ios", "android"],
   icon: "./assets/icon.png",
@@ -45,7 +45,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: "br.com.schaba.motorista",
-    versionCode: 12,
+    versionCode: 13,
     // FCM v1 (push notifications): exige google-services.json do projeto Firebase
     // vinculado a este package. EAS Secret GOOGLE_SERVICES_JSON aponta pro arquivo
     // subido via `eas secret:create`; em dev local cai pro arquivo na raiz do app.

@@ -54,6 +54,15 @@
       "ios": {
         "ascAppId": "6778807216"
       }
+    },
+    "internal": {
+      "android": {
+        "track": "internal",
+        "serviceAccountKeyPath": "./play-service-account.json"
+      },
+      "ios": {
+        "ascAppId": "6778807216"
+      }
     }
   }
 }
