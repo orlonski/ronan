@@ -6,6 +6,7 @@ import { RoteamentoModule } from "../roteamento/roteamento.module";
 import { PushModule } from "../push/push.module";
 import { TrackingConfigModule } from "../admin/tracking-config/tracking-config.module";
 import { BuscaLocaisConfigModule } from "../admin/busca-locais-config/busca-locais-config.module";
+import { ForcaAtualizacaoModule } from "../admin/forca-atualizacao/forca-atualizacao.module";
 import { PedagiosRodoviaModule } from "../admin/pedagios-rodovia/pedagios-rodovia.module";
 import { AdminInboxModule } from "../admin/inbox/inbox.module";
 import { EvolutionModule } from "../whatsapp/evolution.module";
@@ -34,6 +35,7 @@ import { AvisoPesoService } from "./aviso-peso.service";
 import { StoriesMotoristaController } from "./stories.controller";
 import { StoriesMotoristaService } from "./stories.service";
 import { StoriesCleanupService } from "./stories-cleanup.service";
+import { VersaoAppMotoristaController } from "./versao-app.controller";
 
 @Module({
   imports: [
@@ -48,6 +50,7 @@ import { StoriesCleanupService } from "./stories-cleanup.service";
     AdminInboxModule,
     PushModule,
     EvolutionModule,
+    ForcaAtualizacaoModule,
   ],
   controllers: [
     MotoristaController,
@@ -63,6 +66,7 @@ import { StoriesCleanupService } from "./stories-cleanup.service";
     IaTicketController,
     PosicaoMotoristaController,
     StoriesMotoristaController,
+    VersaoAppMotoristaController,
   ],
   providers: [
     MotoristaService,

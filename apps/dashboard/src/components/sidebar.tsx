@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import {
   Activity,
   AlertCircle,
+  ArrowUpCircle,
   Bell,
   Boxes,
   Building2,
@@ -93,6 +94,7 @@ const GRUPOS: Grupo[] = [
       { href: "/configuracoes/ia", label: "Inteligência Artificial", icon: Sparkles, perm: "config-ia.ver" },
       { href: "/configuracoes/agente-whatsapp", label: "Agente WhatsApp", icon: MessageCircle, perm: "config-agente.ver" },
       { href: "/configuracoes/campos-layout", label: "Campos do layout", icon: Sparkles, perm: "config-campos-layout.ver" },
+      { href: "/configuracoes/forca-atualizacao", label: "Força-atualização do app", icon: ArrowUpCircle, perm: "config-forca-atualizacao.ver" },
     ],
   },
 ];

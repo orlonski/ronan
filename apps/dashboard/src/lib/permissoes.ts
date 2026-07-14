@@ -39,6 +39,7 @@ const ROTA_PERM: { prefixo: string; perm: string }[] = [
   { prefixo: "/configuracoes/ia", perm: "config-ia.ver" },
   { prefixo: "/configuracoes/agente-whatsapp", perm: "config-agente.ver" },
   { prefixo: "/configuracoes/campos-layout", perm: "config-campos-layout.ver" },
+  { prefixo: "/configuracoes/forca-atualizacao", perm: "config-forca-atualizacao.ver" },
   { prefixo: "/descargas-suspeitas", perm: "descargas-suspeitas.ver" },
   { prefixo: "/pedagios-rodovia", perm: "pedagios.ver" },
   { prefixo: "/viagens-andamento", perm: "viagens.ver" },

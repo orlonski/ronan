@@ -118,6 +118,12 @@ export function ClienteComboboxMulti({
   );
 }
 
+const motoristaOption = (m: Motorista): ComboboxOption => ({
+  value: m.id,
+  label: m.nome,
+  sublabel: formatCpf(m.cpf),
+});
+
 export function MotoristaCombobox({
   value,
   onChange,
@@ -135,14 +141,35 @@ export function MotoristaCombobox({
       onChange={onChange}
       initialOption={initialOption}
       path="/admin/motoristas"
-      mapOption={(m) => ({
-        value: m.id,
-        label: m.nome,
-        sublabel: formatCpf(m.cpf),
-      })}
+      mapOption={motoristaOption}
       placeholder={placeholder}
       searchPlaceholder="Buscar por nome ou CPF…"
       emptyMessage="Nenhum motorista encontrado."
+    />
+  );
+}
+
+export function MotoristaComboboxMulti({
+  value,
+  onChange,
+  initialOptions,
+  placeholder = "Buscar por nome ou CPF…",
+}: {
+  value: string[];
+  onChange: (values: string[]) => void;
+  initialOptions?: ComboboxOption[];
+  placeholder?: string;
+}) {
+  return (
+    <AsyncComboboxMulti<Motorista>
+      value={value}
+      onChange={onChange}
+      initialOptions={initialOptions}
+      path="/admin/motoristas"
+      mapOption={motoristaOption}
+      searchPlaceholder="Buscar por nome ou CPF…"
+      emptyMessage="Nenhum motorista encontrado."
+      placeholder={placeholder}
     />
   );
 }

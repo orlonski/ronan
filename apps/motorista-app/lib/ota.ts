@@ -49,3 +49,32 @@ export async function baixarUpdateNoBoot(): Promise<void> {
     // Offline / erro de rede / timeout — segue no bundle atual sem travar.
   }
 }
+
+/**
+ * Aplica uma OTA nova AO VOLTAR PRO APP (background→active), sem depender do
+ * banner da home. Cobre o motorista que nunca toca em "Nova versão disponível":
+ * na próxima vez que ele reabre o app, se há bundle novo, baixamos e
+ * recarregamos calados. Roda só na volta pro foreground (não no meio de uma
+ * tarefa) e só recarrega quando o bundle é REALMENTE novo (`isNew`).
+ *
+ * Best-effort: offline/erro = segue no bundle atual, nunca trava, nunca lança.
+ */
+export async function aplicarOtaAoVoltar(): Promise<void> {
+  if (!Updates.isEnabled) return;
+  try {
+    const check = await comTimeout(
+      Updates.checkForUpdateAsync(),
+      CHECK_TIMEOUT_MS,
+    );
+    if (!check?.isAvailable) return;
+    const fetched = await comTimeout(
+      Updates.fetchUpdateAsync(),
+      FETCH_TIMEOUT_MS,
+    );
+    if (fetched?.isNew) {
+      await Updates.reloadAsync();
+    }
+  } catch {
+    // Offline / erro / timeout — segue no bundle atual.
+  }
+}

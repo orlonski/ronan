@@ -19,7 +19,7 @@ import { TutorialHost } from "@/components/tutorial-host";
 import { ConnectivityBanner } from "@/components/connectivity-banner";
 import { getConnected, subscribeConnected } from "@/lib/connectivity";
 import { TelaCarregando } from "@/components/tela-carregando";
-import { baixarUpdateNoBoot } from "@/lib/ota";
+import { aplicarOtaAoVoltar, baixarUpdateNoBoot } from "@/lib/ota";
 import { loadTokens, migrarProtecaoKeychain } from "@/lib/auth";
 import {
   getCadastroStatus,
@@ -27,6 +27,12 @@ import {
   subscribeCadastroStatus,
 } from "@/lib/cadastro-status";
 import { EmAnalise } from "@/components/em-analise";
+import { AtualizacaoObrigatoria } from "@/components/atualizacao-obrigatoria";
+import {
+  checarVersaoApp,
+  getVersaoApp,
+  subscribeVersaoApp,
+} from "@/lib/versao-app-state";
 import NetInfo from "@react-native-community/netinfo";
 import { drenar as drenarEventos } from "@/lib/event-reporter";
 import { prefetchDadosBase, setQueryClientGlobal } from "@/lib/queries";
@@ -144,6 +150,16 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // Re-renderiza ao mudar auth (login/logout) ou status (aprovação).
   useEffect(() => subscribeAuth(() => setVersion((v) => v + 1)), []);
   useEffect(() => subscribeCadastroStatus(() => setVersion((v) => v + 1)), []);
+  // Re-renderiza quando a decisão de força-atualização muda (pra cobrir/liberar
+  // o app com a tela de bloqueio).
+  useEffect(() => subscribeVersaoApp(() => setVersion((v) => v + 1)), []);
+
+  // Checa se esta versão precisa atualizar assim que loga/abre logado. Fail-open
+  // (erro/offline = não bloqueia). A checagem ao voltar do background fica no
+  // listener de AppState mais abaixo.
+  useEffect(() => {
+    if (loggedIn) void checarVersaoApp();
+  }, [loggedIn]);
 
   // Inicia listeners de sync (online + visibility + intervalo) uma vez.
   useEffect(() => {
@@ -214,6 +230,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         const { reenviarPushTokenAoVoltar } = await import("@/lib/notifications");
         await reenviarPushTokenAoVoltar();
       })();
+      // Ao voltar pro app: revê a decisão de força-atualização (o admin pode ter
+      // ligado o bloqueio) e aplica OTA nova calada (sem depender do banner).
+      void checarVersaoApp();
+      void aplicarOtaAoVoltar();
     });
 
     void (async () => {
@@ -354,6 +374,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // Logado mas cadastro ainda em análise: cobre o app inteiro com a tela de
   // espera (some sozinho quando o status vira APROVADO).
   if (loggedIn && pendenteAprovacao) return <EmAnalise />;
+
+  // Versão abaixo do piso exigido: bloqueio duro até atualizar (decisão do
+  // backend; some sozinho quando o app volta atualizado). Fail-open — offline
+  // não chega aqui.
+  if (loggedIn && getVersaoApp().acao === "bloquear") {
+    return <AtualizacaoObrigatoria />;
+  }
 
   return <>{children}</>;
 }

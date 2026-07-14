@@ -51,6 +51,7 @@ export class AppVersionInterceptor implements NestInterceptor {
     headers: Record<string, string | string[] | undefined>,
   ): void {
     const appVersion = header(headers, "x-app-version");
+    const appPlatform = normalizarPlatform(header(headers, "x-app-platform"));
     const appUpdateId = header(headers, "x-app-update-id");
     const builtAtRaw = header(headers, "x-app-built-at");
     const appCanal = header(headers, "x-app-channel");
@@ -71,6 +72,7 @@ export class AppVersionInterceptor implements NestInterceptor {
         where: { id: motoristaId },
         data: {
           appVersion: appVersion ?? undefined,
+          appPlatform: appPlatform ?? undefined,
           appUpdateId: appUpdateId ?? undefined,
           appBuiltAt: appBuiltAt ?? undefined,
           appCanal: appCanal ?? undefined,
@@ -83,6 +85,12 @@ export class AppVersionInterceptor implements NestInterceptor {
         this.ultimaGravacao.delete(motoristaId);
       });
   }
+}
+
+/** Só aceita "ios"/"android" (Platform.OS). Qualquer outra coisa vira undefined. */
+function normalizarPlatform(v: string | undefined): "ios" | "android" | undefined {
+  const s = v?.toLowerCase();
+  return s === "ios" || s === "android" ? s : undefined;
 }
 
 function header(

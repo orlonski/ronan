@@ -210,6 +210,7 @@ model User {
   configsAgente    ConfiguracaoAgente[]
   configsBuscaLocais ConfiguracaoBuscaLocais[]
   configsAvisoGrupo  ConfiguracaoAvisoGrupo[]
+  configsForcaAtualizacao ConfiguracaoForcaAtualizacao[]
   whatsappSessao   WhatsappSessao?
   whatsappConvites WhatsappConvite[]
 
@@ -337,6 +338,7 @@ model Motorista {
   // "appVersion", o appVersion sozinho NÃO muda entre updates OTA; o que
   // identifica o código real é o appUpdateId / appBuiltAt (bundle EAS Update).
   appVersion              String?   // ex: "1.2.0" (Constants.expoConfig.version)
+  appPlatform             String?   // "ios" | "android" (Platform.OS) — força-atualização
   appUpdateId             String?   // id do bundle OTA rodando (Updates.updateId)
   appBuiltAt              DateTime? // quando o bundle foi publicado (Updates.createdAt)
   appCanal                String?   // canal EAS Update (ex: "production")
@@ -1451,6 +1453,32 @@ model ConfiguracaoBuscaLocais {
   alteradoPorId String?
 
   @@map("configuracao_busca_locais")
+}
+
+/// Força-atualização do app nativo (motorista-app). O backend aprende sozinho
+/// a versão mais nova em circulação por plataforma (maior `Motorista.appVersion`
+/// firmada em ≥N motoristas) e, conforme o `modo`, manda o app desatualizado
+/// pra loja. `versaoMinima*` é override manual (opcional) — se setado, vence a
+/// detecção automática (pros dois lados: forçar ou segurar).
+model ConfiguracaoForcaAtualizacao {
+  id   String @id @default("default")
+  // off | observar | nudge | bloquear (ver MODOS_FORCA_ATUALIZACAO).
+  // Default "observar": ao subir a migration NÃO bloqueia ninguém; o admin
+  // liga o bloqueio no dashboard depois de conferir a versão detectada.
+  modo String @default("observar")
+  // Override manual da versão mínima exigida por plataforma. null = automático
+  // (usa a maior versão detectada). Serve tanto pra forçar quanto pra segurar.
+  versaoMinimaIos     String?
+  versaoMinimaAndroid String?
+  // Allowlist de teste: quando NÃO-vazia, só estes motoristas são avaliados
+  // (todo o resto recebe "nenhuma"). Vazia = vale pra todos. Serve pra testar
+  // o bloqueio em produção mirando só a própria conta, sem risco à frota.
+  motoristasAlvo String[] @default([])
+  alteradoEm    DateTime @updatedAt
+  alteradoPor   User?    @relation(fields: [alteradoPorId], references: [id])
+  alteradoPorId String?
+
+  @@map("configuracao_forca_atualizacao")
 }
 
 /// Campos disponíveis pra mapear no layout de importação de fechamento.

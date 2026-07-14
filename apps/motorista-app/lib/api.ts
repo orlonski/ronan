@@ -1,6 +1,7 @@
 import Constants from "expo-constants";
 import * as Updates from "expo-updates";
 import { router } from "expo-router";
+import { Platform } from "react-native";
 import type {
   CadastroMotoristaInput,
   ConfirmarCadastroInput,
@@ -75,6 +76,10 @@ let versionHeadersCache: Record<string, string> | null = null;
 function appVersionHeaders(): Record<string, string> {
   if (versionHeadersCache) return versionHeadersCache;
   const h: Record<string, string> = {};
+  // Plataforma: "ios" | "android". O backend depende disso pra decidir força-
+  // atualização (aprende a versão mais nova por plataforma). Sem isso a feature
+  // fica inerte. Platform.OS é síncrono e sempre existe.
+  h["x-app-platform"] = Platform.OS;
   const versao = Constants.expoConfig?.version;
   if (versao) h["x-app-version"] = versao;
   if (Updates.updateId) h["x-app-update-id"] = Updates.updateId;
