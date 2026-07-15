@@ -20,6 +20,8 @@ import { ResumoMotoristaService } from "../../motorista/resumo-motorista.service
 const ListMotoristasQuery = paginationQuerySchema.extend({
   ativo: z.enum(["true", "false"]).optional(),
   status: z.enum(["PENDENTE_APROVACAO", "APROVADO", "REJEITADO"]).optional(),
+  // Filtra pela versão do app reportada. "sem-versao" = nunca abriu o app.
+  appVersion: z.string().min(1).optional(),
 });
 type ListMotoristasQuery = z.infer<typeof ListMotoristasQuery>;
 
@@ -56,6 +58,12 @@ export class MotoristasController {
   @Get("versoes/resumo")
   resumoVersoes() {
     return this.service.resumoVersoes();
+  }
+
+  // Versões distintas reportadas pelos motoristas (popula o filtro do painel).
+  @Get("versoes/lista")
+  versoesDisponiveis() {
+    return this.service.versoesDisponiveis();
   }
 
   @Get(":id")

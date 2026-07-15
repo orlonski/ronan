@@ -51,6 +51,8 @@ type Motorista = AppVersaoInfo & {
   documentos: DocumentoResumo[];
   temPushToken: boolean;
   criadoPor: { id: string; nome: string } | null;
+  viagensTotal: number;
+  viagensMes: number;
 };
 type ResumoVersoes = {
   latestVersion: string | null;
@@ -58,7 +60,9 @@ type ResumoVersoes = {
   latestBuiltAt: string | null;
   fonte: "eas" | "motoristas";
 };
+type VersaoDisponivel = { versao: string | null; total: number };
 const PATH = "/admin/motoristas";
+const SEM_VERSAO = "sem-versao";
 
 export default function MotoristasPage() {
   const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
@@ -68,6 +72,17 @@ export default function MotoristasPage() {
   const resumo = useApiQuery<ResumoVersoes>(`${PATH}/versoes/resumo`, {
     staleTime: 60_000,
   });
+  const versoes = useApiQuery<VersaoDisponivel[]>(`${PATH}/versoes/lista`, {
+    staleTime: 60_000,
+  });
+  const versaoOptions = useMemo(
+    () =>
+      (versoes.data ?? []).map((v) => ({
+        value: v.versao ?? SEM_VERSAO,
+        label: `${v.versao ?? "Sem versão"} (${v.total})`,
+      })),
+    [versoes.data],
+  );
   const latest = useMemo(
     () => ({
       latestUpdateId: resumo.data?.latestUpdateId ?? null,
@@ -156,6 +171,20 @@ export default function MotoristasPage() {
         header: "Versão app",
         cell: ({ row }) => (
           <AppVersaoCell motorista={row.original} latest={latest} />
+        ),
+      },
+      {
+        id: "viagens",
+        enableSorting: false,
+        size: 88,
+        header: () => <span className="block text-center">Viagens</span>,
+        cell: ({ row }) => (
+          <div className="text-center">
+            <span className="font-medium tabular-nums">{row.original.viagensTotal}</span>
+            <span className="block text-xs text-muted-foreground tabular-nums">
+              {row.original.viagensMes} no mês
+            </span>
+          </div>
         ),
       },
       {
@@ -308,6 +337,12 @@ export default function MotoristasPage() {
                     { value: "false", label: "Inativos" },
                   ]}
                 />
+                <Combobox
+                  value={tableState.filters.appVersion}
+                  onChange={(v) => tableState.setFilter("appVersion", v)}
+                  placeholder="Versão app"
+                  options={versaoOptions}
+                />
               </>
             }
           />
@@ -367,7 +402,12 @@ export default function MotoristasPage() {
                     </>
                   )}
                 </div>
-                <AppVersaoCell motorista={m} latest={latest} />
+                <div className="flex items-center gap-3">
+                  <AppVersaoCell motorista={m} latest={latest} />
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {m.viagensTotal} viagens · {m.viagensMes} no mês
+                  </span>
+                </div>
               </div>
 
               <div className="flex shrink-0 items-center gap-1 text-muted-foreground">

@@ -13,11 +13,16 @@ import { AuthService } from "../../auth/auth.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { PushService } from "../../push/push.service";
 import { paginate, type Paginated, type PaginationQuery } from "../../common/pagination";
+import { ymdSaoPaulo } from "../../common/timezone";
 import { EasUpdateService } from "./eas-update.service";
+
+// Valor especial do filtro: motoristas que nunca reportaram versão (appVersion null).
+const SEM_VERSAO = "sem-versao";
 
 type ListMotoristasParams = PaginationQuery & {
   ativo?: "true" | "false";
   status?: StatusMotorista;
+  appVersion?: string;
 };
 
 const SAFE_SELECT = {
@@ -79,11 +84,13 @@ export class MotoristasService {
     private readonly eas: EasUpdateService,
   ) {}
 
-  async list(params: ListMotoristasParams): Promise<Paginated<ReturnType<typeof this.flatten>>> {
+  async list(params: ListMotoristasParams): Promise<Paginated<Record<string, unknown>>> {
     const where: Prisma.MotoristaWhereInput = {};
     if (params.ativo === "true") where.ativo = true;
     if (params.ativo === "false") where.ativo = false;
     if (params.status) where.status = params.status;
+    if (params.appVersion === SEM_VERSAO) where.appVersion = null;
+    else if (params.appVersion) where.appVersion = params.appVersion;
 
     const result = await paginate<Record<string, unknown>, ListMotoristasParams>(
       this.prisma.motorista,
@@ -102,12 +109,65 @@ export class MotoristasService {
         select: SAFE_SELECT as unknown as Record<string, unknown>,
       },
     );
+
+    const flat = result.data.map(
+      (m) => this.flatten(m as Parameters<typeof this.flatten>[0]) as Record<string, unknown>,
+    );
+    const contagens = await this.contarViagens(flat.map((m) => m.id as string));
     return {
-      data: result.data.map((m) =>
-        this.flatten(m as Parameters<typeof this.flatten>[0]),
-      ),
+      data: flat.map((m) => ({
+        ...m,
+        viagensTotal: contagens.total.get(m.id as string) ?? 0,
+        viagensMes: contagens.mes.get(m.id as string) ?? 0,
+      })),
       pagination: result.pagination,
     };
+  }
+
+  /**
+   * Conta viagens por motorista pra página atual (total e no mês corrente).
+   * Dois groupBy filtrados pelos ids da página — barato, não escaneia a base
+   * inteira. Conta TODAS as viagens (inclui EM_ANDAMENTO/AGUARDANDO_PESO). O mês
+   * usa a coluna `data` (@db.Date) ancorada na data civil de São Paulo.
+   */
+  private async contarViagens(ids: string[]) {
+    const total = new Map<string, number>();
+    const mes = new Map<string, number>();
+    if (ids.length === 0) return { total, mes };
+
+    const [y, m] = ymdSaoPaulo();
+    const inicioMes = new Date(Date.UTC(y, m - 1, 1));
+    const inicioMesQueVem = new Date(Date.UTC(y, m, 1));
+
+    const [totais, mensais] = await Promise.all([
+      this.prisma.viagem.groupBy({
+        by: ["motoristaId"],
+        where: { motoristaId: { in: ids } },
+        _count: { _all: true },
+      }),
+      this.prisma.viagem.groupBy({
+        by: ["motoristaId"],
+        where: { motoristaId: { in: ids }, data: { gte: inicioMes, lt: inicioMesQueVem } },
+        _count: { _all: true },
+      }),
+    ]);
+    for (const t of totais) total.set(t.motoristaId, t._count._all);
+    for (const t of mensais) mes.set(t.motoristaId, t._count._all);
+    return { total, mes };
+  }
+
+  /**
+   * Versões distintas reportadas pelos motoristas (+ contagem), pro filtro do
+   * painel. Inclui o grupo `null` (nunca abriu o app) → o front mostra como
+   * "Sem versão".
+   */
+  async versoesDisponiveis() {
+    const grupos = await this.prisma.motorista.groupBy({
+      by: ["appVersion"],
+      _count: { _all: true },
+      orderBy: { appVersion: "desc" },
+    });
+    return grupos.map((g) => ({ versao: g.appVersion, total: g._count._all }));
   }
 
   async findOne(id: string) {
