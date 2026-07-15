@@ -16,6 +16,7 @@ import { AprovacaoMotoristaButtons } from "@/components/aprovacao-motorista-butt
 import { ExcluirButton } from "@/components/excluir-button";
 import { ConviteWhatsappButton } from "@/components/convite-whatsapp-button";
 import { EnviarPushButton } from "@/components/enviar-push-button";
+import { EnviarWhatsappButton } from "@/components/enviar-whatsapp-button";
 import { EnviarResumoMotoristaButton } from "@/components/enviar-resumo-motorista-button";
 import { DocumentosBadge } from "@/components/documentos-badge";
 import { DocumentosDrawerButton } from "@/components/documentos-drawer";
@@ -258,6 +259,13 @@ export default function MotoristasPage() {
                 motoristaId={row.original.id}
                 motoristaNome={row.original.nome}
                 temPushToken={row.original.temPushToken}
+              />
+            </Permitido>
+            <Permitido chave="motoristas.editar">
+              <EnviarWhatsappButton
+                motoristaId={row.original.id}
+                motoristaNome={row.original.nome}
+                temTelefone={!!row.original.telefone}
               />
             </Permitido>
             <Permitido chave="motoristas.editar">

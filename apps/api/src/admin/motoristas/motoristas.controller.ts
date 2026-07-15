@@ -38,6 +38,11 @@ const AcessosInput = z.object({
 });
 type AcessosInput = z.infer<typeof AcessosInput>;
 
+const EnviarWhatsappInput = z.object({
+  mensagem: z.string().trim().min(1, "Escreva a mensagem.").max(4096),
+});
+type EnviarWhatsappInput = z.infer<typeof EnviarWhatsappInput>;
+
 @ApiTags("admin/motoristas")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
@@ -129,5 +134,15 @@ export class MotoristasController {
   @Post(":id/enviar-resumo")
   enviarResumo(@Param("id") id: string) {
     return this.resumo.enviarAgora(id);
+  }
+
+  /** Manda uma mensagem de WhatsApp personalizada pro motorista. */
+  @RequerPermissao("motoristas.editar")
+  @Post(":id/whatsapp")
+  enviarWhatsapp(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(EnviarWhatsappInput)) body: EnviarWhatsappInput,
+  ) {
+    return this.service.enviarWhatsapp(id, body.mensagem);
   }
 }

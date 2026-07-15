@@ -12,6 +12,8 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { AuthService } from "../../auth/auth.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { PushService } from "../../push/push.service";
+import { EvolutionClientService } from "../../whatsapp/evolution-client.service";
+import { SessaoService } from "../../whatsapp/sessao.service";
 import { paginate, type Paginated, type PaginationQuery } from "../../common/pagination";
 import { ymdSaoPaulo } from "../../common/timezone";
 import { EasUpdateService } from "./eas-update.service";
@@ -82,7 +84,37 @@ export class MotoristasService {
     private readonly uploads: UploadsService,
     private readonly push: PushService,
     private readonly eas: EasUpdateService,
+    private readonly evolution: EvolutionClientService,
   ) {}
+
+  /**
+   * Envia uma mensagem de WhatsApp personalizada pro motorista (via Evolution).
+   * Admin escreve o texto na tela de Motoristas. Reaproveita o número (SessaoService
+   * normaliza pro DDI 55). Retorna se enviou + motivo quando não dá.
+   */
+  async enviarWhatsapp(
+    motoristaId: string,
+    mensagem: string,
+  ): Promise<{ enviado: boolean; motivo?: string }> {
+    const m = await this.prisma.motorista.findUnique({
+      where: { id: motoristaId },
+      select: { id: true, nome: true, telefone: true },
+    });
+    if (!m) throw new NotFoundException("Motorista não encontrado");
+    if (!this.evolution.configurado) {
+      return { enviado: false, motivo: "WhatsApp (Evolution) não está configurado no servidor." };
+    }
+    if (!m.telefone) {
+      return { enviado: false, motivo: "Motorista sem telefone cadastrado." };
+    }
+    const numero = SessaoService.normalizar(m.telefone);
+    try {
+      await this.evolution.enviarTexto(numero, mensagem);
+    } catch (err) {
+      return { enviado: false, motivo: `Falha no envio: ${(err as Error).message}` };
+    }
+    return { enviado: true };
+  }
 
   async list(params: ListMotoristasParams): Promise<Paginated<Record<string, unknown>>> {
     const where: Prisma.MotoristaWhereInput = {};
