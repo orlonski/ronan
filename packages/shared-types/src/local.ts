@@ -47,6 +47,37 @@ export type LocalProximo = {
   vezesUsadoMotorista: number;
 };
 
+// Palavras que ficam minúsculas no meio do nome (não no início).
+const PALAVRAS_MINUSCULAS = new Set(["de", "da", "do", "das", "dos", "e", "a", "o"]);
+
+/**
+ * Padroniza a EXIBIÇÃO do nome de um local (o dado no banco fica intacto): cada
+ * palavra com inicial maiúscula, MAS preserva siglas/códigos e números como estão.
+ * "pedreira genaro" → "Pedreira Genaro"; "PEDREIRA GENARO" → "Pedreira Genaro";
+ * "BR 277 - KM 172" continua "BR 277 - KM 172". Usado nas listas de local dos apps.
+ */
+export function formatarNomeLocal(nome: string): string {
+  if (!nome) return nome;
+  return nome
+    .trim()
+    .split(/\s+/)
+    .map((palavra, i) => {
+      const minuscula = palavra.toLowerCase();
+      // Tem número (277, PR-151, KM172) → código, não mexe.
+      if (/\d/.test(palavra)) return palavra;
+      // "de/da/do…" no meio fica minúsculo.
+      if (i > 0 && PALAVRAS_MINUSCULAS.has(minuscula)) return minuscula;
+      // Sigla curta em CAIXA ALTA (BR, KM, PR, S) → mantém.
+      if (palavra.length <= 3 && palavra === palavra.toUpperCase() && /[A-ZÀ-Ú]/.test(palavra)) {
+        return palavra;
+      }
+      // Só símbolo (traço, +) → mantém.
+      if (!/[a-zà-ú]/i.test(palavra)) return palavra;
+      return palavra.charAt(0).toUpperCase() + minuscula.slice(1);
+    })
+    .join(" ");
+}
+
 /**
  * Extrai um "marco" (estaca N ou KM N) do nome de um local. Serve pra
  * distinguir pontos de rodovia/obra geograficamente próximos mas DIFERENTES de

@@ -15,7 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ArrowLeft, Check, CheckCircle2, MapPin, Plus, X } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import type { FonteGps } from "@ronan/shared-types";
-import { marcoConflita } from "@ronan/shared-types";
+import { marcoConflita, formatarNomeLocal } from "@ronan/shared-types";
 import { Label } from "@/components/ui/label";
 import { showConfirm } from "@/lib/alert";
 import { formatarDistancia, mensagemGpsFalha, pegarCoordsPrecisa } from "@/lib/geo";
@@ -266,6 +266,10 @@ export function LocalPorGps({
       }
     }
 
+    // Ordem pedida: mais perto primeiro. Backend e offline já ordenam, mas isso
+    // reforça caso alguma origem venha fora de ordem.
+    matches = [...matches].sort((a, b) => a.distanciaMetros - b.distanciaMetros);
+
     // Raio usado: descarga = raio em que achou (inicial/ampliado). Carga = o raio
     // ampliado da config como referência de "perto" (a lista traz todos; isso só
     // define o corte do "fora do raio" no painel).
@@ -434,7 +438,7 @@ export function LocalPorGps({
           </View>
           <View className="flex-1">
             <Text className="text-base font-bold text-foreground" numberOfLines={2}>
-              {estado.local.nome}
+              {formatarNomeLocal(estado.local.nome)}
             </Text>
             {!estado.local.criarOffline &&
               (() => {
@@ -509,7 +513,7 @@ export function LocalPorGps({
               </View>
               <View className="flex-1">
                 <Text className="text-base font-semibold text-foreground" numberOfLines={1}>
-                  {m.nome}
+                  {formatarNomeLocal(m.nome)}
                 </Text>
                 <Text
                   className="text-xs text-muted-foreground"
@@ -620,7 +624,7 @@ export function LocalPorGps({
                 </Text>
                 <View className="gap-1 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4">
                   <Text className="text-center text-lg font-bold text-amber-900">
-                    {confirmarPerto.nome}
+                    {formatarNomeLocal(confirmarPerto.nome)}
                   </Text>
                   <Text className="text-center text-base text-amber-800">
                     fica a só {Math.round(confirmarPerto.distanciaMetros)} m de você
@@ -649,7 +653,7 @@ export function LocalPorGps({
                     >
                       <View className="flex-1 pr-2">
                         <Text className="text-sm font-medium text-foreground" numberOfLines={1}>
-                          {m.nome}
+                          {formatarNomeLocal(m.nome)}
                         </Text>
                         <Text className="text-xs text-muted-foreground">
                           a {Math.round(m.distanciaMetros)} m daqui

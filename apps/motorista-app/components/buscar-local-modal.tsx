@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { FlatList, Modal, Pressable, Text, TextInput, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { MapPin, Search, X } from "lucide-react-native";
+import { formatarNomeLocal } from "@ronan/shared-types";
 import { useCatalogos, type Local } from "@/lib/queries";
 import { enderecoResumido, LinhaEndereco } from "@/components/local-info";
 
@@ -118,7 +119,7 @@ export function BuscarLocalModal({
                   className="text-base font-semibold text-foreground"
                   numberOfLines={2}
                 >
-                  {item.nome}
+                  {formatarNomeLocal(item.nome)}
                 </Text>
                 <LinhaEndereco
                   endereco={enderecoResumido(item)}
