@@ -691,6 +691,26 @@ export default function ViagemDetalhePage({
                   {v.localDescarga.logradouro} — {v.localDescarga.cidade}/{v.localDescarga.uf}
                 </p>
               </div>
+              {/* Trechos adicionais (retorno do bota-fora): voltou pra carga */}
+              {(v.trechos ?? []).map((t) => (
+                <div key={t.id}>
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-amber-700">
+                    <RotateCw className="h-3.5 w-3.5" /> Retorno (bota-fora)
+                  </div>
+                  <Link
+                    href={`/locais/${v.localCarga.id}/ver`}
+                    title="Ver local"
+                    className="mt-0.5 inline-flex items-center gap-1 font-medium hover:text-primary hover:underline"
+                  >
+                    Voltou pra {v.localCarga.nome}
+                    <Eye className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                  </Link>
+                  <p className="text-xs text-muted-foreground">
+                    {v.localCarga.logradouro} — {v.localCarga.cidade}/{v.localCarga.uf} · +
+                    {Number(t.km).toFixed(1).replace(".", ",")} km
+                  </p>
+                </div>
+              ))}
             </div>
           </Card>
 

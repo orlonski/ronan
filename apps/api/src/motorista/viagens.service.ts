@@ -61,6 +61,10 @@ const VIAGEM_DETALHE_INCLUDE = {
   localDescarga: {
     select: { id: true, nome: true, logradouro: true, cidade: true, uf: true, lat: true, lng: true },
   },
+  trechos: {
+    orderBy: { ordem: "asc" },
+    include: { local: { select: { id: true, nome: true, cidade: true, uf: true } } },
+  },
   fotos: { select: { id: true, storageKey: true } },
   pontos: {
     select: { lat: true, lng: true, capturadoEm: true },
