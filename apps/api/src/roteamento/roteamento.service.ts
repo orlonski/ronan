@@ -381,6 +381,28 @@ export class RoteamentoService {
     });
   }
 
+  /**
+   * Geometria cacheada do par, só quando confiável: versão atual do roteador e
+   * dentro do TTL — os mesmos critérios de `calcularKm`. Diferente dele, NUNCA
+   * chama OSRM: quem consome roda por linha de listagem e não pode pagar rede.
+   * `null` = "não sei" (sem cache, stale ou de roteador antigo); o chamador não
+   * pode ler isso como "a rota não tem nada".
+   */
+  async geometriaCacheada(
+    localOrigemId: string,
+    localDestinoId: string,
+  ): Promise<string | null> {
+    if (localOrigemId === localDestinoId) return null;
+    const cached = await this.prisma.rotaCache.findUnique({
+      where: { localOrigemId_localDestinoId: { localOrigemId, localDestinoId } },
+      select: { geometria: true, versaoRoteador: true, calculadoEm: true },
+    });
+    if (!cached?.geometria) return null;
+    if (cached.versaoRoteador !== ROUTER_VERSION) return null;
+    if (!this.cacheValido(cached.calculadoEm)) return null;
+    return cached.geometria;
+  }
+
   private cacheValido(calculadoEm: Date): boolean {
     const idadeMs = Date.now() - calculadoEm.getTime();
     return idadeMs < CACHE_TTL_DIAS * 24 * 60 * 60 * 1000;

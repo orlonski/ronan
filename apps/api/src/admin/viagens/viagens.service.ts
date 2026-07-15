@@ -228,12 +228,15 @@ export class ViagensAdminService {
   }
 
   /**
-   * Pra cada viagem da lista, marca `temPedagioSemValor=true` quando a rota
-   * (cacheada) passa por pedágio cadastrado e o motorista não preencheu o
+   * Pra cada viagem da lista, marca `temPedagioSemValor=true` quando a rota que
+   * ela percorreu passa por pedágio cadastrado e o motorista não preencheu o
    * valor. Roda em paralelo pra não somar latência. False (sem ruído) se:
    * - já tem valor preenchido
-   * - rota nunca foi calculada (sem cache de geometria)
+   * - não deu pra checar a rota (sem cache de geometria confiável)
    * - falha na consulta de pedágios
+   *
+   * `somenteCache`: a listagem é paginada e já faz 1 consulta por linha; pagar
+   * OSRM aqui multiplicaria isso por rede. O detalhe da viagem recalcula.
    */
   private async marcarPedagiosSemValor<
     T extends {
@@ -253,16 +256,20 @@ export class ViagensAdminService {
           return { ...v, temPedagioSemValor: false };
         }
         try {
-          const pedagios = await this.pedagiosConsulta.pedagiosNaRota(
-            v.localCargaId,
-            v.localDescargaId,
-          );
-          return { ...v, temPedagioSemValor: pedagios.length > 0 };
+          const { pedagios } = await this.pedagiosConsulta.pedagiosDaViagem(v.id, {
+            somenteCache: true,
+          });
+          return { ...v, temPedagioSemValor: (pedagios?.length ?? 0) > 0 };
         } catch {
           return { ...v, temPedagioSemValor: false };
         }
       }),
     );
+  }
+
+  /** Praças na rota real desta viagem. Ver PedagiosRodoviaConsultaService. */
+  async pedagiosNaRota(id: string) {
+    return this.pedagiosConsulta.pedagiosDaViagem(id);
   }
 
   /**

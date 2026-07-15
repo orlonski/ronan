@@ -1,15 +1,34 @@
 import { Injectable } from "@nestjs/common";
 import { PedagiosRodoviaService } from "./pedagios-rodovia.service";
 import { PrismaService } from "../../prisma/prisma.service";
+import { RoteamentoService } from "../../roteamento/roteamento.service";
 
 const DISTANCIA_MAX_METROS = 150; // raio em volta da polyline pra considerar "na rota"
 const ENVELOPE_PADDING_GRAUS = 0.05; // ~5.5km de folga no bbox pré-filtro
+
+export type PedagioNaRota = {
+  id: string;
+  nome: string;
+  rodovia: string | null;
+  concessionaria: string | null;
+  distanciaMetros: number;
+  lat: number;
+  lng: number;
+};
+
+/**
+ * `pedagios: null` = NÃO SEI (sem geometria confiável pra checar), que é
+ * diferente de `[]` = checei e não passa por praça nenhuma. Quem exibe não
+ * pode afirmar "sem pedágio" no primeiro caso.
+ */
+export type PedagiosDaViagem = { pedagios: PedagioNaRota[] | null };
 
 @Injectable()
 export class PedagiosRodoviaConsultaService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly pedagiosAdmin: PedagiosRodoviaService,
+    private readonly roteamento: RoteamentoService,
   ) {}
 
   /**
@@ -18,21 +37,12 @@ export class PedagiosRodoviaConsultaService {
    * Se a rota nunca foi calculada (motorista nunca abriu a viagem com
    * esses 2 locais), retorna lista vazia. App motorista calcula a rota
    * primeiro via `useCalcularRota` e depois consulta aqui.
+   *
+   * Para uma viagem que já existe use `pedagiosDaViagem`: o cache é por PAR de
+   * locais e guarda sempre a variante COM retorno, então aqui a resposta ignora
+   * tanto a rota que o motorista escolheu quanto o "cheguei direto".
    */
-  async pedagiosNaRota(
-    origemId: string,
-    destinoId: string,
-  ): Promise<
-    Array<{
-      id: string;
-      nome: string;
-      rodovia: string | null;
-      concessionaria: string | null;
-      distanciaMetros: number;
-      lat: number;
-      lng: number;
-    }>
-  > {
+  async pedagiosNaRota(origemId: string, destinoId: string): Promise<PedagioNaRota[]> {
     if (origemId === destinoId) return [];
     const cache = await this.prisma.rotaCache.findUnique({
       where: {
@@ -41,23 +51,128 @@ export class PedagiosRodoviaConsultaService {
       select: { geometria: true },
     });
     if (!cache?.geometria) return [];
+    return this.pedagiosNaGeometria(cache.geometria);
+  }
 
-    const pontos = decodePolyline(cache.geometria);
+  /**
+   * Pedágios da rota que ESTA viagem de fato percorreu, incluindo as pernas de
+   * bota-fora. Usa `opts.somenteCache` na listagem (roda por linha; não pode
+   * pagar OSRM) — no detalhe, uma viagem só vale a chamada.
+   */
+  async pedagiosDaViagem(
+    viagemId: string,
+    opts: { somenteCache?: boolean } = {},
+  ): Promise<PedagiosDaViagem> {
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { id: viagemId },
+      select: {
+        localCargaId: true,
+        localDescargaId: true,
+        rotaGeometria: true,
+        retornoConfirmado: true,
+        trechos: { select: { tipo: true, localId: true, ordem: true }, orderBy: { ordem: "asc" } },
+      },
+    });
+    // EM_ANDAMENTO ainda não tem os dois locais: nada pra rotear.
+    const { localCargaId, localDescargaId } = viagem ?? {};
+    if (!viagem || !localCargaId || !localDescargaId) return { pedagios: null };
+
+    const ida = await this.geometriaDaIda(
+      {
+        localCargaId,
+        localDescargaId,
+        rotaGeometria: viagem.rotaGeometria,
+        retornoConfirmado: viagem.retornoConfirmado,
+      },
+      opts,
+    );
+    if (!ida) return { pedagios: null };
+
+    // Perna de bota-fora: descarga→carga. Sem ela os pedágios da volta ficavam
+    // de fora, mesmo com o km dela já entrando no faturável.
+    const pernas: Array<[string, string]> = [];
+    let anterior = localDescargaId;
+    for (const t of viagem.trechos) {
+      if (t.tipo !== "RETORNO_BOTA_FORA") continue;
+      pernas.push([anterior, t.localId]);
+      anterior = t.localId;
+    }
+
+    const geometrias = [ida];
+    for (const [origem, destino] of pernas) {
+      const g = await this.geometriaDaPerna(origem, destino, opts);
+      // Perna sem geometria = subcontagem silenciosa; melhor dizer "não sei".
+      if (!g) return { pedagios: null };
+      geometrias.push(g);
+    }
+
+    const porId = new Map<string, PedagioNaRota>();
+    for (const g of geometrias) {
+      for (const p of await this.pedagiosNaGeometria(g)) {
+        // Mesma praça na ida e na volta = 1 praça na lista (o aviso conta
+        // praças distintas, não cobranças).
+        const jaVisto = porId.get(p.id);
+        if (!jaVisto || p.distanciaMetros < jaVisto.distanciaMetros) porId.set(p.id, p);
+      }
+    }
+    const pedagios = [...porId.values()].sort((a, b) => a.distanciaMetros - b.distanciaMetros);
+    return { pedagios };
+  }
+
+  /**
+   * A geometria da ida, na ordem: o que o motorista escolheu no seletor →
+   * a variante coerente com "cheguei direto" → o cache validado.
+   */
+  private async geometriaDaIda(
+    viagem: {
+      localCargaId: string;
+      localDescargaId: string;
+      rotaGeometria: string | null;
+      retornoConfirmado: boolean | null;
+    },
+    opts: { somenteCache?: boolean },
+  ): Promise<string | null> {
+    if (viagem.rotaGeometria) return viagem.rotaGeometria;
+
+    // O rotaCache guarda sempre a variante COM retorno (curb). Num "cheguei
+    // direto" ela pode passar por praça que o motorista não cruzou, então a
+    // sem-retorno é recalculada em vez de lida do cache.
+    if (viagem.retornoConfirmado === false) {
+      if (opts.somenteCache) return null;
+      const res = await this.roteamento.calcularComSemRetorno(
+        viagem.localCargaId,
+        viagem.localDescargaId,
+      );
+      const semRetorno = res.rotas.find((r) => r.retorno === false);
+      // Só a com_retorno respondeu (ou colapsaram por dedup): sem variante
+      // distinta pra checar, não dá pra afirmar nada.
+      return semRetorno?.geometria ?? null;
+    }
+
+    return this.roteamento.geometriaCacheada(viagem.localCargaId, viagem.localDescargaId);
+  }
+
+  private async geometriaDaPerna(
+    origemId: string,
+    destinoId: string,
+    opts: { somenteCache?: boolean },
+  ): Promise<string | null> {
+    const cacheada = await this.roteamento.geometriaCacheada(origemId, destinoId);
+    if (cacheada || opts.somenteCache) return cacheada;
+    const res = await this.roteamento.calcularKm(origemId, destinoId);
+    return res.km === null ? null : res.geometria;
+  }
+
+  /** Praças a até DISTANCIA_MAX_METROS da polyline, mais perto primeiro. */
+  async pedagiosNaGeometria(geometria: string): Promise<PedagioNaRota[]> {
+    const pontos = decodePolyline(geometria);
     if (pontos.length < 2) return [];
 
     const bbox = bboxComFolga(pontos);
     const candidatos = await this.pedagiosAdmin.listarNoEnvelope(bbox);
     if (candidatos.length === 0) return [];
 
-    const proximos: Array<{
-      id: string;
-      nome: string;
-      rodovia: string | null;
-      concessionaria: string | null;
-      distanciaMetros: number;
-      lat: number;
-      lng: number;
-    }> = [];
+    const proximos: PedagioNaRota[] = [];
     for (const p of candidatos) {
       const dist = menorDistanciaAteRota(p.lat, p.lng, pontos);
       if (dist <= DISTANCIA_MAX_METROS) {

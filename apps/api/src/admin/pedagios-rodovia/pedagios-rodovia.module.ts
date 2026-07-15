@@ -1,9 +1,11 @@
 import { Module } from "@nestjs/common";
+import { RoteamentoModule } from "../../roteamento/roteamento.module";
 import { PedagiosRodoviaController } from "./pedagios-rodovia.controller";
 import { PedagiosRodoviaService } from "./pedagios-rodovia.service";
 import { PedagiosRodoviaConsultaService } from "./pedagios-rodovia-consulta.service";
 
 @Module({
+  imports: [RoteamentoModule],
   controllers: [PedagiosRodoviaController],
   providers: [PedagiosRodoviaService, PedagiosRodoviaConsultaService],
   exports: [PedagiosRodoviaService, PedagiosRodoviaConsultaService],

@@ -199,13 +199,16 @@ export default function ViagemDetalhePage({
   const limiteSinalFraco = gpsConfig.data?.gpsLimiteSinalFracoM ?? 50;
   const localCargaId = viagem.data?.localCarga.id;
   const localDescargaId = viagem.data?.localDescarga.id;
+  // Por viagem, não por par de locais: o backend resolve a rota que ela de fato
+  // percorreu (rota escolhida / "cheguei direto" / bota-fora). `pedagios: null`
+  // = não deu pra checar.
   const pedagiosNaRota = useQuery({
-    queryKey: ["viagem-pedagios", localCargaId, localDescargaId],
-    enabled: !!token && !!localCargaId && !!localDescargaId,
+    queryKey: ["viagem-pedagios", id],
+    enabled: !!token && !!viagem.data,
     staleTime: 60_000,
     queryFn: () =>
-      fetchApi<
-        Array<{
+      fetchApi<{
+        pedagios: Array<{
           id: string;
           nome: string;
           rodovia: string | null;
@@ -213,11 +216,8 @@ export default function ViagemDetalhePage({
           distanciaMetros: number;
           lat: number;
           lng: number;
-        }>
-      >(
-        `/admin/pedagios-rodovia/na-rota?origem=${localCargaId}&destino=${localDescargaId}`,
-        { token },
-      ),
+        }> | null;
+      }>(`/admin/viagens/${id}/pedagios-na-rota`, { token }),
   });
   const historico = useHistoricoViagem(id);
   const queryClient = useQueryClient();
@@ -402,7 +402,10 @@ export default function ViagemDetalhePage({
     rotasAlt.data,
     vd?.rotaGeometria,
   ]);
-  const mapaPedagios = useMemo(() => pedagiosNaRota.data ?? [], [pedagiosNaRota.data]);
+  const mapaPedagios = useMemo(
+    () => pedagiosNaRota.data?.pedagios ?? [],
+    [pedagiosNaRota.data],
+  );
 
   if (viagem.isLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
   if (!viagem.data) return <p className="text-sm text-red-600">Viagem não encontrada.</p>;
@@ -417,9 +420,12 @@ export default function ViagemDetalhePage({
   const retornoEscolhida = retornoSelIdx >= 0 ? retornoRotas[retornoSelIdx] : undefined;
   const retornoJaEhAtual =
     retornoEscolhida != null && v.retornoConfirmado === retornoEscolhida.retorno;
-  const pedagiosEncontrados = pedagiosNaRota.data ?? [];
-  const semValorMasTemPedagio =
-    !v.valorPedagioTotal && pedagiosEncontrados.length > 0;
+  // null = backend não conseguiu checar a rota; sem afirmação nenhuma na tela.
+  const pedagiosEncontrados = pedagiosNaRota.data?.pedagios ?? [];
+  // Sem valor = null ou 0 (mesma regra do badge da listagem). `valorPedagioTotal`
+  // chega como string, então "0.00" é truthy — não dá pra testar por falsy.
+  const semValorPedagio = Number(v.valorPedagioTotal ?? 0) <= 0;
+  const semValorMasTemPedagio = semValorPedagio && pedagiosEncontrados.length > 0;
   const motivoSugeridoPedagio = semValorMasTemPedagio
     ? `Valor de pedágio não preenchido. Rota passa por ${pedagiosEncontrados.length} pedágio(s) cadastrado(s): ${pedagiosEncontrados
         .slice(0, 5)

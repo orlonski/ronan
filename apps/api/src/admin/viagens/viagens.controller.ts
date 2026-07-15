@@ -130,6 +130,16 @@ export class ViagensAdminController {
     return this.service.historico(id);
   }
 
+  /**
+   * Praças na rota que ESTA viagem percorreu (respeita a rota escolhida, o
+   * "cheguei direto" e as pernas de bota-fora). `pedagios: null` = não deu pra
+   * checar — não confundir com lista vazia.
+   */
+  @Get(":id/pedagios-na-rota")
+  pedagiosNaRota(@Param("id") id: string) {
+    return this.service.pedagiosNaRota(id);
+  }
+
   @RequerPermissao("viagens.editar")
   @Patch(":id")
   atualizar(
