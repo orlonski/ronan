@@ -167,6 +167,13 @@ export function usePosicaoAoVivo(ativo: boolean): PosAoVivo | null {
   return pos;
 }
 
+// Memória de locução ENTRE remontagens da tela. Guardada em módulo (não em
+// useRef): sair e voltar pra tela NÃO deve repetir a manobra que já foi falada.
+// Keyed pelo shape da rota — recalcular (shape novo) zera naturalmente.
+type FaladoState = { idx: number; alerta: boolean; pre: boolean; agora: boolean };
+let faladoShapeMem: string | null = null;
+let faladoMem: FaladoState = { idx: -1, alerta: false, pre: false, agora: false };
+
 /**
  * Guia: dada a rota Valhalla e a posição ao vivo, devolve a próxima manobra +
  * distâncias e FALA os avisos (alerta ~400m, instrução ~130m). Chama
@@ -201,12 +208,6 @@ export function useGuiaNavegacao(
     foraDaRota: false,
   });
 
-  const faladoRef = useRef<{
-    idx: number;
-    alerta: boolean;
-    pre: boolean;
-    agora: boolean;
-  }>({ idx: -1, alerta: false, pre: false, agora: false });
   const foraDesdeRef = useRef<number | null>(null);
   const avisouForaRef = useRef(false);
 
@@ -231,15 +232,21 @@ export function useGuiaNavegacao(
       //  ~450m e ~200m → "Em X metros, vire à direita na Rua Y"
       //  ~45m          → só "Vire à direita na Rua Y" (é agora)
       if (prox) {
-        if (faladoRef.current.idx !== prox.beginShapeIndex) {
-          faladoRef.current = {
+        // Zera a memória de locução quando a rota muda (shape novo) — recalcular
+        // deve reanunciar; sair/voltar na MESMA rota não.
+        if (faladoShapeMem !== rota.shape) {
+          faladoShapeMem = rota.shape;
+          faladoMem = { idx: -1, alerta: false, pre: false, agora: false };
+        }
+        if (faladoMem.idx !== prox.beginShapeIndex) {
+          faladoMem = {
             idx: prox.beginShapeIndex,
             alerta: false,
             pre: false,
             agora: false,
           };
         }
-        const st = faladoRef.current;
+        const st = faladoMem;
         const instr = prox.verbalPre ?? prox.instrucao;
         if (distProxM <= 45 && !st.agora) {
           st.agora = st.pre = st.alerta = true;
@@ -259,7 +266,7 @@ export function useGuiaNavegacao(
       if (foraDaRota) {
         const agora = Date.now();
         if (foraDesdeRef.current == null) foraDesdeRef.current = agora;
-        if (agora - foraDesdeRef.current > 4000 && !avisouForaRef.current) {
+        if (agora - foraDesdeRef.current > 3000 && !avisouForaRef.current) {
           avisouForaRef.current = true;
           void falar("Você saiu da rota.");
           onRecalcular?.();

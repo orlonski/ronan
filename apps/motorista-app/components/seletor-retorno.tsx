@@ -4,6 +4,7 @@ import * as Haptics from "expo-haptics";
 import { Check, Pencil } from "lucide-react-native";
 import type { RotaOption } from "@/lib/queries";
 import { RotasMapa, corDaRota } from "./seletor-rotas";
+import { ErroCampo } from "./validacao-guiada";
 
 /**
  * Escolha do trajeto até a descarga quando o roteador detecta retorno em rodovia:
@@ -124,9 +125,7 @@ export function SeletorRetorno({
         </View>
       </View>
 
-      {erro ? (
-        <Text className="text-sm font-semibold text-destructive">{erro}</Text>
-      ) : null}
+      {erro ? <ErroCampo msg={erro} /> : null}
     </View>
   );
 }

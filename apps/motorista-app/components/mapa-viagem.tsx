@@ -35,7 +35,7 @@ type Props = {
   padBottom?: number;
 };
 
-const ZOOM_NAV = 17;
+const ZOOM_NAV = 18;
 const PITCH_NAV = 55;
 const ZOOM_VIAGEM = 15.5;
 

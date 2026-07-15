@@ -16,6 +16,8 @@ export type NavDestinoSalvo = {
   destino: Local;
   /** Última rota calculada (pode estar levemente velha; o guia recalcula). */
   rota: RotaNav | null;
+  /** Motorista tocou em "Iniciar viagem" (liga a voz). Sobrevive sair/voltar. */
+  iniciada?: boolean;
 };
 
 export async function getNavDestino(): Promise<NavDestinoSalvo | null> {

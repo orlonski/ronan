@@ -142,6 +142,16 @@ export type CoordsPrecisas = {
   fonte: FonteGps;
 };
 
+/**
+ * Normaliza a precisão do GPS: o SO reporta accuracy -1 quando NÃO sabe (parado,
+ * sinal ruim). -1 não é null, então vaza pelo `?? null` e (a) trava o schema
+ * (descargaPrecisao nonnegative) e (b) seria tratado como a MELHOR precisão na
+ * comparação (−1 < tudo). Vira null.
+ */
+function precisaoValida(a: number | null | undefined): number | null {
+  return a != null && a >= 0 ? a : null;
+}
+
 /** Por que a captura falhou — pra UI mostrar a mensagem certa (não só "permissão"). */
 export type GpsFalha = "permissao" | "timeout" | "hardware";
 export type GpsResultado =
@@ -218,9 +228,10 @@ export async function pegarCoordsPrecisa(opts?: {
     const melhorAccuracy = () => ref.melhor?.precisao ?? Infinity;
 
     const amostrar = (lat: number, lng: number, accuracy: number | null) => {
-      const acc = accuracy ?? Infinity;
+      const prec = precisaoValida(accuracy);
+      const acc = prec ?? Infinity;
       if (!ref.melhor || acc < melhorAccuracy()) {
-        ref.melhor = { lat, lng, precisao: accuracy ?? null, fonte: "PRECISA" };
+        ref.melhor = { lat, lng, precisao: prec, fonte: "PRECISA" };
       }
       onAmostra?.(ref.melhor.precisao);
     };
@@ -284,7 +295,7 @@ export async function pegarCoordsPrecisa(opts?: {
         coords: {
           lat: balanced.coords.latitude,
           lng: balanced.coords.longitude,
-          precisao: balanced.coords.accuracy ?? null,
+          precisao: precisaoValida(balanced.coords.accuracy),
           fonte: "BALANCED",
         },
       };
@@ -308,7 +319,7 @@ export async function pegarCoordsPrecisa(opts?: {
         coords: {
           lat: last.coords.latitude,
           lng: last.coords.longitude,
-          precisao: last.coords.accuracy ?? null,
+          precisao: precisaoValida(last.coords.accuracy),
           fonte: "CACHE",
         },
       };

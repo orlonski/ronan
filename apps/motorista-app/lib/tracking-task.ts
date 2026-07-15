@@ -43,8 +43,17 @@ export async function registerTrackingTask(): Promise<void> {
         lat: l.coords.latitude,
         lng: l.coords.longitude,
         capturadoEm: new Date(l.timestamp).toISOString(),
-        velocidade: l.coords.speed ?? undefined,
-        precisao: l.coords.accuracy ?? undefined,
+        // GPS reporta -1 quando NÃO sabe (parado, 1º fix). -1 não é null, então
+        // ?? não pega. Sem esta guarda, o -1 quebra o schema (nonnegative) no
+        // salvar com "Trajeto: muito curto / abaixo do mínimo".
+        velocidade:
+          l.coords.speed != null && l.coords.speed >= 0
+            ? l.coords.speed
+            : undefined,
+        precisao:
+          l.coords.accuracy != null && l.coords.accuracy >= 0
+            ? l.coords.accuracy
+            : undefined,
       }));
 
     if (filtrados.length === 0) return;

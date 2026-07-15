@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { router, Stack } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
@@ -42,6 +42,9 @@ export default function ViagemAndamentoScreen() {
   // com GPS" (o botão da Home exige a permissão), então o guia é sempre disponível.
   const [destino, setDestino] = useState<Local | null>(null);
   const [navRota, setNavRota] = useState<RotaNav | null | undefined>(null);
+  // Guia (voz) só liga quando o motorista toca "Iniciar viagem". Escolher o
+  // destino apenas monta a rota no mapa — nada de voz antes do "vamos".
+  const [navIniciada, setNavIniciada] = useState(false);
   const [buscaAberta, setBuscaAberta] = useState(false);
 
   // Posição ao vivo (câmera + motor do guia). Ativa enquanto a tela está aberta.
@@ -62,30 +65,42 @@ export default function ViagemAndamentoScreen() {
   // Salva o destino escolhido amarrado à viagem atual (sobrevive sair/voltar e
   // fechar/reabrir o app). Best-effort — se falhar, navegação segue em memória.
   const persistir = useCallback(
-    (local: Local, rota: RotaNav | null) => {
+    (local: Local, rota: RotaNav | null, iniciada: boolean) => {
       if (!viagemId) return;
-      void setNavDestino({ viagemId, destino: local, rota });
+      void setNavDestino({ viagemId, destino: local, rota, iniciada });
     },
     [viagemId],
   );
 
   async function escolherDestino(local: Local) {
     setDestino(local);
+    // Destino novo = navegação ainda NÃO iniciada (motorista confirma no botão).
+    setNavIniciada(false);
     if (local.lat == null || local.lng == null) {
       setNavRota(null);
-      persistir(local, null);
+      persistir(local, null, false);
       return;
     }
     setNavRota(undefined);
     const c = await pegarCoords().catch(() => null);
     if (!c) {
       setNavRota(null);
-      persistir(local, null);
+      persistir(local, null, false);
       return;
     }
     const r = await buscarNavegacao(c.lat, c.lng, local.id);
     setNavRota(r);
-    persistir(local, r);
+    persistir(local, r, false);
+  }
+
+  // Motorista tocou "Iniciar viagem": liga o guia por voz. Persiste pra
+  // sobreviver a sair/voltar (não volta a pedir "iniciar" toda hora).
+  function iniciarNavegacao() {
+    if (!destino) return;
+    setNavIniciada(true);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    persistir(destino, navRota ?? null, true);
+    anunciar("Navegação iniciada.");
   }
 
   // Restaura o destino salvo ao abrir a tela (só se for a MESMA viagem). Roda 1x
@@ -99,6 +114,7 @@ export default function ViagemAndamentoScreen() {
       if (salvo.viagemId === viagemId) {
         setDestino(salvo.destino);
         setNavRota(salvo.rota);
+        setNavIniciada(!!salvo.iniciada);
       } else {
         void clearNavDestino();
       }
@@ -108,6 +124,7 @@ export default function ViagemAndamentoScreen() {
   function trocarDestino() {
     setDestino(null);
     setNavRota(null);
+    setNavIniciada(false);
     void clearNavDestino();
   }
 
@@ -122,23 +139,54 @@ export default function ViagemAndamentoScreen() {
     if (nova) {
       anunciar("Recalculando.");
       setNavRota(nova);
-      persistir(destino, nova);
+      persistir(destino, nova, true);
     }
   }, [destino, persistir]);
 
-  const guia = useGuiaNavegacao(navRota ?? null, pos, recalcular);
+  // Guia só roda (e fala) DEPOIS de iniciar. Antes disso a rota fica só no mapa.
+  const guia = useGuiaNavegacao(
+    navIniciada ? navRota ?? null : null,
+    pos,
+    recalcular,
+  );
 
   // "Só rastrear" — motorista optou por não escolher destino (não tem local
   // cadastrado, etc). Libera finalizar sem passar pelo guia.
   const [semDestino, setSemDestino] = useState(false);
 
-  // CHEGOU: posição ao vivo dentro de ~160m do destino escolhido (arrival
-  // detection estilo Waze). É local — funciona offline (GPS + rota já baixada).
-  const CHEGADA_RAIO_M = 160;
-  const chegou = useMemo(() => {
-    if (!destino || destino.lat == null || destino.lng == null || !pos) return false;
-    return haversineMetros(pos.lat, pos.lng, destino.lat, destino.lng) <= CHEGADA_RAIO_M;
-  }, [destino, pos]);
+  // CHEGOU (estilo Waze): perto do destino E freando/parado — OU perto por um
+  // tempo (permanência). Só PASSAR NA FRENTE (fly-by rápido) não conta mais —
+  // era o que disparava chegada falsa ao passar perto sem parar. Local: funciona
+  // offline (GPS + rota já baixada). Só vale depois de iniciar a navegação.
+  const CHEGADA_RAIO_M = 90;
+  const CHEGADA_VEL_MAX = 2.8; // m/s (~10 km/h): já está manobrando pra parar
+  const CHEGADA_PERMANENCIA_MS = 8000;
+  const [chegou, setChegou] = useState(false);
+  const pertoDesdeRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (
+      !navIniciada ||
+      !destino ||
+      destino.lat == null ||
+      destino.lng == null ||
+      !pos
+    ) {
+      pertoDesdeRef.current = null;
+      setChegou(false);
+      return;
+    }
+    const d = haversineMetros(pos.lat, pos.lng, destino.lat, destino.lng);
+    if (d > CHEGADA_RAIO_M) {
+      pertoDesdeRef.current = null;
+      setChegou(false);
+      return;
+    }
+    if (pertoDesdeRef.current == null) pertoDesdeRef.current = Date.now();
+    const lento =
+      pos.speed != null && pos.speed >= 0 && pos.speed < CHEGADA_VEL_MAX;
+    const permanencia = Date.now() - pertoDesdeRef.current > CHEGADA_PERMANENCIA_MS;
+    setChegou(lento || permanencia);
+  }, [navIniciada, destino, pos]);
 
   // Avisa 1x ao chegar (voz + vibração). Rearma se sair do raio (recalibrou).
   const chegouAvisadoRef = useRef(false);
@@ -230,7 +278,6 @@ export default function ViagemAndamentoScreen() {
     );
   }
 
-  const navegando = !!navRota;
   const destinoCoords =
     destino && destino.lat != null && destino.lng != null
       ? { lat: destino.lat, lng: destino.lng, nome: destino.nome }
@@ -278,7 +325,7 @@ export default function ViagemAndamentoScreen() {
             </View>
           </View>
 
-          {navegando && navRota && (
+          {navIniciada && navRota && (
             <BannerManobra
               manobra={guia.manobra}
               distProxM={guia.distProxM}
@@ -415,17 +462,34 @@ export default function ViagemAndamentoScreen() {
                   </Text>
                 </Pressable>
               </View>
-              <Button
-                variant="outline"
-                onPress={finalizar}
-                loading={parando}
-                disabled={parando}
-              >
-                <Square size={18} color="#0f172a" />
-                <Text className="text-sm font-semibold text-foreground">
-                  Cheguei — finalizar agora
-                </Text>
-              </Button>
+              {navIniciada ? (
+                /* Já iniciou: finalizar fica SECUNDÁRIO (fim antecipado). */
+                <Button
+                  variant="outline"
+                  onPress={finalizar}
+                  loading={parando}
+                  disabled={parando}
+                >
+                  <Square size={18} color="#0f172a" />
+                  <Text className="text-sm font-semibold text-foreground">
+                    Cheguei — finalizar agora
+                  </Text>
+                </Button>
+              ) : (
+                /* Ainda não iniciou: 1 ação clara. A voz só liga aqui — evita a
+                   voz falando ao só escolher o destino ou ao reabrir a tela. */
+                <Button
+                  size="lg"
+                  className="h-16"
+                  onPress={iniciarNavegacao}
+                  disabled={navRota === undefined}
+                >
+                  <Navigation size={22} color="white" />
+                  <Text className="text-lg font-bold text-primary-foreground">
+                    {navRota === undefined ? "Montando o guia…" : "Iniciar viagem"}
+                  </Text>
+                </Button>
+              )}
             </>
           ) : semDestino ? (
             /* SÓ RASTREAR (sem destino escolhido): finalizar direto. */

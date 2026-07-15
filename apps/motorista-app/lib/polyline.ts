@@ -90,15 +90,27 @@ function dpRecursivo(
 }
 
 /**
+ * GPS reporta velocidade/precisão -1 quando desconhecidas (parado, 1º fix). O
+ * schema exige nonnegative — um único ponto com -1 trava o salvar. Zera os
+ * negativos aqui (chokepoint antes do payload) pra cobrir pontos JÁ capturados.
+ */
+function normalizarMeta(p: PontoComMeta): PontoComMeta {
+  const velocidade = p.velocidade != null && p.velocidade >= 0 ? p.velocidade : undefined;
+  const precisao = p.precisao != null && p.precisao >= 0 ? p.precisao : undefined;
+  if (velocidade === p.velocidade && precisao === p.precisao) return p;
+  return { ...p, velocidade, precisao };
+}
+
+/**
  * Simplifica array de pontos. Sempre mantém o primeiro e o último.
  * Pontos com timestamp/velocidade/accuracy preservados nos pontos
- * que sobrevivem.
+ * que sobrevivem (velocidade/precisão negativas do GPS são normalizadas).
  */
 export function simplificarPontos(
   pontos: PontoComMeta[],
   toleranciaM: number = TOLERANCIA_METROS_DEFAULT,
 ): PontoComMeta[] {
-  if (pontos.length <= 2) return pontos;
+  if (pontos.length <= 2) return pontos.map(normalizarMeta);
 
   const manter = new Array<boolean>(pontos.length).fill(false);
   manter[0] = true;
@@ -106,5 +118,5 @@ export function simplificarPontos(
 
   dpRecursivo(pontos, 0, pontos.length - 1, toleranciaM, manter);
 
-  return pontos.filter((_, i) => manter[i]);
+  return pontos.filter((_, i) => manter[i]).map(normalizarMeta);
 }
