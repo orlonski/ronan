@@ -29,6 +29,27 @@ export const LocalSnapshot = z.object({
 });
 export type LocalSnapshot = z.infer<typeof LocalSnapshot>;
 
+// Tipo de trecho ADICIONAL do trajeto (além da carga→descarga base).
+// RETORNO_BOTA_FORA = volta pro local de carga pra jogar a sobra (limpeza).
+// ENTREGA = entrega adicional (múltiplas entregas — futuro).
+export const TipoTrecho = z.enum(["RETORNO_BOTA_FORA", "ENTREGA"]);
+export type TipoTrecho = z.infer<typeof TipoTrecho>;
+
+// Trecho enviado pelo app: cada perna extra do trajeto. Hoje o app manda só o
+// retorno do bota-fora; a estrutura já abre pra múltiplas entregas. O backend é
+// autoritativo (valida RETORNO_BOTA_FORA contra Material.permiteBotaFora, atribui
+// a ordem e recalcula o km quando reprocessa).
+export const TrechoViagemInput = z.object({
+  tipo: TipoTrecho,
+  // Local de destino do trecho (no bota-fora = o local de carga).
+  localId: z.string().uuid(),
+  km: z.number().nonnegative().max(MAX_KM),
+  // Futuro (múltiplas entregas): peso/ticket próprios do trecho.
+  toneladas: z.number().positive().max(MAX_TONELADAS).optional(),
+  ticket: z.string().max(50).optional(),
+});
+export type TrechoViagemInput = z.infer<typeof TrechoViagemInput>;
+
 // Base sem o refine de peso (z.object puro) — o controller do backend precisa
 // dela pra .extend({ fotoKey }). O refine (peso obrigatório fora do modo
 // aguardando peso) é aplicado por cima, tanto aqui quanto no payload do backend.
@@ -64,11 +85,10 @@ export const CriarViagemBase = z.object({
   // (false). Ausente quando não foi perguntado (sem retorno real / offline).
   // Backend guarda em Viagem.retornoConfirmado; o recalcular do painel respeita.
   retornoConfirmado: z.boolean().optional(),
-  // Motorista voltou pro bota-fora (limpeza): retornou ao local de carga pra
-  // descarregar a sobra. Só vale se Material.permiteBotaFora (backend autoritativo).
-  // Quando true, o `km` já inclui a perna descarga→carga; kmBotaFora = só essa perna.
-  teveBotaFora: z.boolean().optional(),
-  kmBotaFora: z.number().nonnegative().max(MAX_KM).optional(),
+  // Trechos ADICIONAIS do trajeto (retorno do bota-fora hoje; entregas múltiplas
+  // no futuro). O `km` acima já inclui a soma dos trechos. Backend valida e grava
+  // em TrechoViagem. Ausente/[] = viagem normal carga→descarga.
+  trechos: z.array(TrechoViagemInput).max(20).optional(),
   localCargaId: z.string().uuid(),
   localDescargaId: z.string().uuid(),
   // Fallback pra auto-recovery quando local foi excluido entre o cache

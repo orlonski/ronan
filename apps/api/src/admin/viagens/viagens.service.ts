@@ -400,6 +400,10 @@ export class ViagensAdminService {
         material: true,
         localCarga: true,
         localDescarga: true,
+        trechos: {
+          orderBy: { ordem: "asc" },
+          include: { local: { select: { id: true, nome: true, cidade: true, uf: true } } },
+        },
         fotos: true,
         pontos: {
           select: {
@@ -714,7 +718,7 @@ export class ViagensAdminService {
         km: true,
         kmCalculado: true,
         retornoConfirmado: true,
-        teveBotaFora: true,
+        trechos: { select: { id: true, localId: true }, orderBy: { ordem: "asc" } },
       },
     });
     if (!viagem) throw new NotFoundException("Viagem não encontrada");
@@ -761,27 +765,27 @@ export class ViagensAdminService {
     // Pra trocar o km faturado, o admin usa "Retorno na rodovia"/escolher rota
     // (ação explícita), não o recalcular.
     let novoKm = parseFloat(resultado.km);
-    // Bota-fora (limpeza): a viagem incluiu a volta descarga→carga no km faturado.
-    // Soma a mesma perna na referência OSRM pra kmCalculado bater com o round-trip
-    // (senão o painel acusaria "override" falso: km faturado > kmCalculado). A volta
-    // usa a MESMA variante da ida (só "com retorno"/curb se foi escolhido), pra não
-    // inflar quando a ida foi "cheguei direto".
-    let kmBotaFora: number | null = null;
-    if (viagem.teveBotaFora === true) {
-      const opcoesVolta = await this.roteamento.calcularComSemRetorno(
-        viagem.localDescargaId,
-        viagem.localCargaId,
-      );
-      if (opcoesVolta.rotas.length > 0) {
-        const voltaEscolhida =
+    // Trechos adicionais (retorno do bota-fora hoje): soma cada perna do ponto
+    // anterior (1º = descarga) até o local do trecho, na MESMA variante da ida
+    // (só "com retorno"/curb se foi escolhido — não infla quando a ida foi
+    // "cheguei direto"). Atualiza o km de cada trecho e a referência kmCalculado
+    // pra bater com o round-trip (senão o painel acusaria "override" falso).
+    const trechoUpdates: { id: string; km: number }[] = [];
+    let anterior = viagem.localDescargaId;
+    for (const t of viagem.trechos) {
+      const opc = await this.roteamento.calcularComSemRetorno(anterior, t.localId);
+      if (opc.rotas.length > 0) {
+        const esc =
           (viagem.retornoConfirmado === true
-            ? opcoesVolta.rotas.find((r) => r.retorno === true)
-            : opcoesVolta.rotas.find((r) => r.retorno === false)) ??
-          opcoesVolta.rotas.find((r) => r.recomendada) ??
-          opcoesVolta.rotas[0]!;
-        kmBotaFora = parseFloat(voltaEscolhida.km);
-        novoKm += kmBotaFora;
+            ? opc.rotas.find((r) => r.retorno === true)
+            : opc.rotas.find((r) => r.retorno === false)) ??
+          opc.rotas.find((r) => r.recomendada) ??
+          opc.rotas[0]!;
+        const kmT = parseFloat(esc.km);
+        trechoUpdates.push({ id: t.id, km: kmT });
+        novoKm += kmT;
       }
+      anterior = t.localId;
     }
 
     await this.prisma.viagem.update({
@@ -789,7 +793,16 @@ export class ViagensAdminService {
       data: {
         kmCalculado: novoKm,
         rotaGeometria: resultado.geometria,
-        ...(kmBotaFora != null ? { kmBotaFora } : {}),
+        ...(trechoUpdates.length > 0
+          ? {
+              trechos: {
+                update: trechoUpdates.map((t) => ({
+                  where: { id: t.id },
+                  data: { km: t.km },
+                })),
+              },
+            }
+          : {}),
       },
     });
 

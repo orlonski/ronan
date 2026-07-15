@@ -44,7 +44,7 @@ export class KmReprocessamentoService {
           kmCalculado: true,
           kmEditadoManual: true,
           kmRecalculadoEm: true,
-          teveBotaFora: true,
+          trechos: { select: { id: true, localId: true }, orderBy: { ordem: "asc" } },
           localCargaId: true,
           localDescargaId: true,
           material: { select: { nome: true } },
@@ -71,21 +71,31 @@ export class KmReprocessamentoService {
       if (r.km === null) return;
 
       let novoKm = parseFloat(r.km);
-      // Bota-fora (limpeza): na última carga o motorista voltou pro local de
-      // carga pra descarregar a sobra. A perna descarga→carga entra no km
-      // faturável. Se o OSRM não fechar a volta, não marca reprocessado (o @Cron
-      // tenta de novo) pra não gravar um total pela metade.
-      let kmBotaFora: number | null = null;
-      if (v.teveBotaFora === true) {
-        const rVolta = await this.roteamento.calcularKm(
-          v.localDescargaId,
-          v.localCargaId,
-          { force: true },
-        );
-        if (rVolta.km === null) return;
-        kmBotaFora = parseFloat(rVolta.km);
-        novoKm += kmBotaFora;
+      // Trechos adicionais (retorno do bota-fora hoje): cada trecho soma a perna
+      // do ponto anterior até o local dele (o 1º parte da descarga). Recalcula o
+      // km de cada trecho pelo trajeto real. Se o OSRM não fechar alguma perna,
+      // não marca reprocessado (o @Cron tenta de novo) pra não gravar pela metade.
+      const trechoUpdates: { id: string; km: number }[] = [];
+      let anterior = v.localDescargaId;
+      for (const t of v.trechos) {
+        const rt = await this.roteamento.calcularKm(anterior, t.localId, { force: true });
+        if (rt.km === null) return;
+        const kmT = parseFloat(rt.km);
+        trechoUpdates.push({ id: t.id, km: kmT });
+        novoKm += kmT;
+        anterior = t.localId;
       }
+      const atualizarTrechos =
+        trechoUpdates.length > 0
+          ? {
+              trechos: {
+                update: trechoUpdates.map((t) => ({
+                  where: { id: t.id },
+                  data: { km: t.km },
+                })),
+              },
+            }
+          : {};
       const kmAtual = Number(v.km ?? 0);
       const mudou = Math.abs(novoKm - kmAtual) > TOLERANCIA_KM;
       const agora = new Date();
@@ -97,7 +107,7 @@ export class KmReprocessamentoService {
           data: {
             kmCalculado: novoKm,
             kmRecalculadoEm: agora,
-            ...(kmBotaFora != null ? { kmBotaFora } : {}),
+            ...atualizarTrechos,
           },
         });
         if (mudou) {
@@ -119,7 +129,7 @@ export class KmReprocessamentoService {
           kmCalculado: novoKm,
           kmRecalculadoEm: agora,
           kmAntesRecalculo: mudou ? v.km : null,
-          ...(kmBotaFora != null ? { kmBotaFora } : {}),
+          ...atualizarTrechos,
         },
       });
       if (mudou) {

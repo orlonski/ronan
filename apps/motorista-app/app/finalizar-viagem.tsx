@@ -405,8 +405,11 @@ export default function FinalizarViagem() {
         kmEditadoManual,
         rotaGeometria: rotaGeometriaEscolhida ?? undefined,
         retornoConfirmado,
-        teveBotaFora: botaFora,
-        kmBotaFora: botaFora ? (kmVolta ?? undefined) : undefined,
+        // Bota-fora = 1 trecho de retorno pro local de carga (a volta que ele fez).
+        trechos:
+          botaFora && kmVolta != null && localCargaId
+            ? [{ tipo: "RETORNO_BOTA_FORA", localId: localCargaId, km: kmVolta }]
+            : undefined,
         ticket: aguardandoPeso ? undefined : exigeTicket ? ticket.trim() : undefined,
         localDescargaId,
         localDescargaDados,

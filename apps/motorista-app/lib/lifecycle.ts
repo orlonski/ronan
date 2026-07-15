@@ -8,7 +8,7 @@
  * - Ações de alto nível: montam o payload e enfileiram no outbox (sync.ts).
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { FonteGps, TipoEventoViagem } from "@ronan/shared-types";
+import type { FonteGps, TipoEventoViagem, TrechoViagemInput } from "@ronan/shared-types";
 import {
   listPendingEventosViagem,
   listPendingViagemCancelar,
@@ -456,8 +456,7 @@ export async function finalizarViagemGuiada(input: {
   kmEditadoManual?: boolean;
   rotaGeometria?: string;
   retornoConfirmado?: boolean;
-  teveBotaFora?: boolean;
-  kmBotaFora?: number;
+  trechos?: TrechoViagemInput[];
   ticket?: string;
   localDescargaId: string;
   localDescargaDados?: LocalSnapshotLifecycle;
@@ -487,8 +486,7 @@ export async function finalizarViagemGuiada(input: {
       kmEditadoManual: input.kmEditadoManual,
       rotaGeometria: input.rotaGeometria,
       retornoConfirmado: input.retornoConfirmado,
-      teveBotaFora: input.teveBotaFora,
-      kmBotaFora: input.kmBotaFora,
+      trechos: input.trechos,
       ticket: input.ticket,
       localDescargaId: input.localDescargaId,
       localDescargaDados: input.localDescargaDados,

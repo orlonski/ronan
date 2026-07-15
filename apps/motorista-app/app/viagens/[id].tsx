@@ -10,6 +10,7 @@ import {
   ExternalLink,
   MapPin,
   RefreshCw,
+  RotateCcw,
   Route,
   Scale,
   Trash2,
@@ -385,6 +386,25 @@ export default function ViagemDetalheScreen() {
                   </Text>
                 </View>
               </View>
+              {/* Trechos adicionais (retorno do bota-fora): voltou pra carga */}
+              {(detalhe.data.trechos ?? []).map((t) => (
+                <View key={t.id} className="flex-row items-start gap-3">
+                  <RotateCcw size={20} color="#d97706" />
+                  <View className="flex-1">
+                    <Text className="text-base font-semibold text-foreground">
+                      Voltou pra {detalhe.data.localCarga.nome}
+                    </Text>
+                    <Text className="text-sm text-muted-foreground">
+                      {detalhe.data.localCarga.logradouro} —{" "}
+                      {detalhe.data.localCarga.cidade}/{detalhe.data.localCarga.uf}
+                    </Text>
+                    <Text className="mt-0.5 text-xs font-semibold text-amber-700">
+                      Bota-fora (limpeza) · +
+                      {Number(t.km).toFixed(1).replace(".", ",")} km
+                    </Text>
+                  </View>
+                </View>
+              ))}
             </View>
           </Card>
 

@@ -803,6 +803,7 @@ model Local {
   clientes        LocalCliente[]
   viagensCarga    Viagem[]         @relation("LocalCarga")
   viagensDescarga Viagem[]         @relation("LocalDescarga")
+  trechosViagem   TrechoViagem[]
   eventosViagem   EventoViagem[]
   rotasOrigem     RotaCache[]      @relation("RotaOrigem")
   rotasDestino    RotaCache[]      @relation("RotaDestino")
@@ -919,14 +920,10 @@ model Viagem {
   /// viagem antiga ou app antigo). O "Recalcular trajeto" do painel RESPEITA esse
   /// campo em vez de sempre aplicar a variante com retorno.
   retornoConfirmado Boolean?
-  /// true = motorista voltou pro bota-fora (limpeza): retornou ao local de carga
-  /// pra descarregar a sobra na última carga. Só aceito quando Material.permiteBotaFora
-  /// (backend autoritativo). Quando true, o km faturável inclui a perna descarga→carga.
-  /// null/false = fluxo normal. Ver kmBotaFora.
-  teveBotaFora      Boolean?
-  /// Km da perna de volta (descarga→carga) quando teveBotaFora=true. Guardado à parte
-  /// só pra transparência no painel; o total (ida+volta) já está em `km`.
-  kmBotaFora        Decimal?     @db.Decimal(10, 2)
+  /// Trechos ADICIONAIS do trajeto além da carga→descarga base: hoje o retorno do
+  /// bota-fora (limpeza), amanhã entregas múltiplas. O km faturável (`km`) já inclui
+  /// a soma dos trechos. Ver model TrechoViagem.
+  trechos           TrechoViagem[]
   observacao        String?
   status            StatusViagem @default(ENVIADA)
   /// true = viagem aberta pelo fluxo guiado "Iniciar viagem" (lifecycle). Setado
@@ -1022,6 +1019,40 @@ model Viagem {
   // no migration.sql (Prisma não expressa índice parcial): ver migration
   // add_viagem_lifecycle (uq_viagem_em_andamento_por_motorista).
   @@map("viagens")
+}
+
+/// Tipo de um trecho adicional da viagem (além da carga→descarga base).
+enum TipoTrecho {
+  /// Volta pro local de CARGA pra descarregar a sobra na última carga ("limpeza"/
+  /// bota-fora). localId = local de carga. Só quando Material.permiteBotaFora.
+  RETORNO_BOTA_FORA
+  /// Entrega adicional (múltiplas entregas). Uso futuro.
+  ENTREGA
+}
+
+/// Trecho ADICIONAL do trajeto, além da carga→descarga base da viagem. Modela o
+/// retorno do bota-fora hoje e abre caminho pra múltiplas entregas no futuro
+/// (cada trecho com seu peso/ticket próprios, quando fizer sentido). O km faturável
+/// da Viagem (`km`) já inclui a soma dos `km` dos trechos — aqui fica o detalhamento.
+model TrechoViagem {
+  id        String     @id @default(uuid())
+  viagem    Viagem     @relation(fields: [viagemId], references: [id], onDelete: Cascade)
+  viagemId  String
+  /// Sequência do trecho (1, 2, 3...) depois da descarga base.
+  ordem     Int
+  tipo      TipoTrecho
+  /// Local de destino deste trecho (no bota-fora = o local de carga).
+  local     Local      @relation(fields: [localId], references: [id])
+  localId   String
+  /// Distância (km) do ponto anterior até o local deste trecho.
+  km        Decimal    @db.Decimal(10, 2)
+  /// Futuro (múltiplas entregas): peso/ticket próprios por entrega. Null no bota-fora.
+  toneladas Decimal?   @db.Decimal(10, 3)
+  ticket    String?
+  criadoEm  DateTime   @default(now())
+
+  @@index([viagemId, ordem])
+  @@map("trechos_viagem")
 }
 
 /// Catálogo dinâmico de tipos de evento da viagem (lifecycle guiado). Admin

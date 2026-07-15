@@ -11,6 +11,7 @@ import type {
   FinalizarViagemInput,
   IniciarViagemInput,
   RegistrarEventoInput,
+  TrechoViagemInput,
 } from "@ronan/shared-types";
 import { AuditoriaService } from "../auditoria/auditoria.service";
 import {
@@ -35,6 +36,10 @@ const VIAGEM_INCLUDE = {
   localCarga: { select: { id: true, nome: true, cidade: true, uf: true } },
   localDescarga: { select: { id: true, nome: true, cidade: true, uf: true } },
   fotos: { select: { id: true, storageKey: true } },
+  trechos: {
+    orderBy: { ordem: "asc" },
+    include: { local: { select: { id: true, nome: true, cidade: true, uf: true } } },
+  },
 } satisfies Prisma.ViagemInclude;
 
 const VIAGEM_DETALHE_INCLUDE = {
@@ -563,6 +568,31 @@ export class ViagensMotoristaService {
     });
   }
 
+  /**
+   * Sanitiza + ordena os trechos adicionais enviados pelo app (retorno do
+   * bota-fora hoje). RETORNO_BOTA_FORA só passa se o material permite
+   * (autoritativo) e usa SEMPRE o local de carga da viagem — garante a FK e a
+   * semântica "volta pro carregamento". Retorna o array pronto pro nested create.
+   */
+  private montarTrechos(
+    trechos: TrechoViagemInput[] | undefined,
+    permiteBotaFora: boolean,
+    localCargaId: string | null,
+  ) {
+    return (trechos ?? [])
+      .filter((t) =>
+        t.tipo === "RETORNO_BOTA_FORA" ? permiteBotaFora && !!localCargaId : true,
+      )
+      .map((t, i) => ({
+        ordem: i + 1,
+        tipo: t.tipo,
+        localId: t.tipo === "RETORNO_BOTA_FORA" ? localCargaId! : t.localId,
+        km: t.km,
+        toneladas: t.toneladas ?? null,
+        ticket: t.ticket ?? null,
+      }));
+  }
+
   async create(motoristaId: string, input: CriarViagemInput & { fotoKey?: string }) {
     const exists = await this.prisma.viagem.findUnique({ where: { clientId: input.clientId } });
     if (exists) {
@@ -594,15 +624,18 @@ export class ViagensMotoristaService {
           input.ticket,
         );
 
-    // Bota-fora (limpeza) só vale se o material permite (admin autoritativo,
-    // igual exigeTicket). O app só mostra a pergunta quando permite; aqui
-    // sanitiza por garantia — app antigo/material sem a regra vira false.
+    // Trechos adicionais (retorno do bota-fora hoje). RETORNO_BOTA_FORA só vale se
+    // o material permite (admin autoritativo, igual exigeTicket); o app só oferece
+    // quando permite, aqui sanitiza por garantia.
     const material = await this.prisma.material.findUnique({
       where: { id: input.materialId },
       select: { permiteBotaFora: true },
     });
-    const teveBotaFora = material?.permiteBotaFora === true && input.teveBotaFora === true;
-    const kmBotaFora = teveBotaFora ? (input.kmBotaFora ?? null) : null;
+    const trechosCreate = this.montarTrechos(
+      input.trechos,
+      material?.permiteBotaFora === true,
+      input.localCargaId,
+    );
 
     // Valida que os locais existem antes de inserir. Auto-recovery:
     // se o ID nao existe mas o app enviou um snapshot (nome+lat+lng), o
@@ -642,8 +675,7 @@ export class ViagensMotoristaService {
         kmEditadoManual: rest.kmEditadoManual,
         rotaGeometria: rest.rotaGeometria,
         retornoConfirmado: rest.retornoConfirmado,
-        teveBotaFora,
-        kmBotaFora,
+        ...(trechosCreate.length ? { trechos: { create: trechosCreate } } : {}),
         observacao: rest.observacao,
         localCargaId: rest.localCargaId,
         localDescargaId: rest.localDescargaId,
@@ -1098,7 +1130,7 @@ export class ViagensMotoristaService {
   async finalizar(motoristaId: string, clientId: string, input: FinalizarViagemInput) {
     const viagem = await this.prisma.viagem.findUnique({
       where: { clientId },
-      select: { id: true, motoristaId: true, status: true, clienteId: true },
+      select: { id: true, motoristaId: true, status: true, clienteId: true, localCargaId: true },
     });
     if (!viagem) throw new NotFoundException("Viagem em andamento ainda não sincronizada.");
     if (viagem.motoristaId !== motoristaId) {
@@ -1136,15 +1168,18 @@ export class ViagensMotoristaService {
           viagem.id,
         );
 
-    // Bota-fora (limpeza): só vale se o material permite (autoritativo). App só
-    // mostra a pergunta quando permite; sanitiza aqui. O reprocessamento soma a
-    // perna descarga→carga ao km; o app já mandou o total em `km` quando online.
+    // Trechos adicionais (retorno do bota-fora). RETORNO_BOTA_FORA só vale se o
+    // material permite (autoritativo); o app só oferece quando permite. localCarga
+    // vem da viagem (foi escolhido no iniciar).
     const materialFin = await this.prisma.material.findUnique({
       where: { id: input.materialId },
       select: { permiteBotaFora: true },
     });
-    const teveBotaFora = materialFin?.permiteBotaFora === true && input.teveBotaFora === true;
-    const kmBotaFora = teveBotaFora ? (input.kmBotaFora ?? null) : null;
+    const trechosCreate = this.montarTrechos(
+      input.trechos,
+      materialFin?.permiteBotaFora === true,
+      viagem.localCargaId,
+    );
 
     await this.garantirLocal({
       id: input.localDescargaId,
@@ -1166,8 +1201,8 @@ export class ViagensMotoristaService {
         kmEditadoManual: input.kmEditadoManual,
         rotaGeometria: input.rotaGeometria,
         retornoConfirmado: input.retornoConfirmado,
-        teveBotaFora,
-        kmBotaFora,
+        // Recria os trechos do zero (idempotente em reenvio do finalizar).
+        trechos: { deleteMany: {}, ...(trechosCreate.length ? { create: trechosCreate } : {}) },
         ticket,
         localDescargaId: input.localDescargaId,
         descargaLat: input.descargaLat,

@@ -172,6 +172,16 @@ export default function NovaViagem() {
       }
       setPendingOriginal(item);
       const p = item.payload as Record<string, unknown>;
+      // Trechos adicionais salvos (retorno do bota-fora). O campo de km guarda só
+      // a IDA; o p.km salvo é o total (ida + trechos) — subtrai a soma dos trechos.
+      const trechosSalvos = Array.isArray(p.trechos)
+        ? (p.trechos as { tipo?: string; km?: number }[])
+        : [];
+      const kmTrechos = trechosSalvos.reduce(
+        (s, t) => s + (typeof t.km === "number" ? t.km : 0),
+        0,
+      );
+      const temBotaFora = trechosSalvos.some((t) => t.tipo === "RETORNO_BOTA_FORA");
       setForm({
         veiculoId: String(p.veiculoId ?? ""),
         clienteId: String(p.clienteId ?? ""),
@@ -179,12 +189,8 @@ export default function NovaViagem() {
         data: typeof p.data === "string" ? p.data.slice(0, 10) : today(),
         toneladas: numToStr(p.toneladas),
         ticket: String(p.ticket ?? ""),
-        // O campo de km guarda só a IDA. Se a viagem original teve bota-fora, o
-        // p.km salvo é o total (ida+volta) — subtrai a volta pra restaurar a ida.
         km: numToStr(
-          typeof p.km === "number" && p.teveBotaFora && typeof p.kmBotaFora === "number"
-            ? Math.max(0, p.km - p.kmBotaFora)
-            : p.km,
+          typeof p.km === "number" ? Math.max(0, p.km - kmTrechos) : p.km,
         ),
         localCargaId: String(p.localCargaId ?? ""),
         localDescargaId: String(p.localDescargaId ?? ""),
@@ -197,7 +203,7 @@ export default function NovaViagem() {
       if (item.fotoUri && item.fotoMime) {
         setFoto({ uri: item.fotoUri, mime: item.fotoMime });
       }
-      if (p.teveBotaFora) setTeveBotaFora(true);
+      if (temBotaFora) setTeveBotaFora(true);
       // Modo edit nao deve disparar autopreencher KM via rota (motorista ja
       // tinha um valor explícito) — bloqueia o auto-fill marcando como manual.
       setKmEditadoManual(true);
@@ -779,8 +785,11 @@ export default function NovaViagem() {
             : undefined
           : kmCalculadoFinal,
         retornoConfirmado,
-        teveBotaFora: botaFora,
-        kmBotaFora: botaFora ? (kmVolta ?? undefined) : undefined,
+        // Bota-fora = 1 trecho de retorno pro local de carga (a volta que ele fez).
+        trechos:
+          botaFora && kmVolta != null && form.localCargaId
+            ? [{ tipo: "RETORNO_BOTA_FORA", localId: form.localCargaId, km: kmVolta }]
+            : undefined,
         // Motorista digitou na mão? O reprocessamento no servidor respeita isso.
         kmEditadoManual,
         // Rota escolhida no seletor de mapa (rota real no painel).

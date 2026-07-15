@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { FonteGps } from "./enums";
-import { LocalSnapshot, checarPesoObrigatorio } from "./viagem";
+import { LocalSnapshot, TrechoViagemInput, checarPesoObrigatorio } from "./viagem";
 
 // Limites espelham o schema do banco (Decimal(10,3)/Decimal(10,2)).
 const MAX_TONELADAS = 9999;
@@ -147,12 +147,10 @@ export const FinalizarViagemInput = z.object({
   // Escolha "voltei no retorno" (true) vs "segui direto" (false); ausente quando
   // não foi perguntado. Backend guarda em Viagem.retornoConfirmado.
   retornoConfirmado: z.boolean().optional(),
-  // Motorista voltou pro bota-fora (limpeza) na última carga: retornou ao local
-  // de carga pra descarregar a sobra. Só vale se Material.permiteBotaFora (backend
-  // autoritativo). Quando true, `km` já inclui a perna descarga→carga; kmBotaFora
-  // = só essa perna. Backend guarda em Viagem.teveBotaFora / Viagem.kmBotaFora.
-  teveBotaFora: z.boolean().optional(),
-  kmBotaFora: z.number().nonnegative().max(MAX_KM).optional(),
+  // Trechos ADICIONAIS do trajeto (retorno do bota-fora hoje; entregas múltiplas
+  // no futuro). O `km` acima já inclui a soma dos trechos. Backend valida e grava
+  // em TrechoViagem. Ausente/[] = viagem normal carga→descarga.
+  trechos: z.array(TrechoViagemInput).max(20).optional(),
   ticket: z.string().max(50).optional(),
   localDescargaId: z.string().uuid(),
   localDescargaDados: LocalSnapshot.optional(),

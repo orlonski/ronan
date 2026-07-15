@@ -161,6 +161,15 @@ export type Viagem = {
     lat?: number | null;
     lng?: number | null;
   };
+  // Trechos adicionais do trajeto (retorno do bota-fora hoje). Vazio na viagem
+  // normal. km já somado no `km` acima. Cache antigo não tem o campo.
+  trechos?: {
+    id: string;
+    ordem: number;
+    tipo: "RETORNO_BOTA_FORA" | "ENTREGA";
+    km: string;
+    local: { id: string; nome: string; cidade: string; uf: string };
+  }[];
   fotos: { id: string; storageKey: string }[];
 };
 

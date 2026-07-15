@@ -84,10 +84,14 @@ type ViagemDetalhe = {
   kmCalculado: string | null;
   kmRecalculadoEm: string | null;
   kmAntesRecalculo: string | null;
-  /** Bota-fora (limpeza): motorista voltou pro local de carga. O km já inclui a volta. */
-  teveBotaFora?: boolean | null;
-  /** Km só da perna de volta (descarga→carga), pra mostrar o quanto entrou. */
-  kmBotaFora?: string | null;
+  /** Trechos adicionais do trajeto (retorno do bota-fora hoje). O km já inclui a soma. */
+  trechos?: {
+    id: string;
+    ordem: number;
+    tipo: "RETORNO_BOTA_FORA" | "ENTREGA";
+    km: string;
+    local: { id: string; nome: string; cidade: string; uf: string };
+  }[];
   toneladasInformada: string;
   toneladasEfetiva: string;
   toneladasAjustada: boolean;
@@ -583,15 +587,22 @@ export default function ViagemDetalhePage({
                           : ""}
                       </span>
                     )}
-                    {v.teveBotaFora && (
-                      <span
-                        className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700"
-                        title="O motorista voltou pro local de carga pra descarregar a sobra (limpeza). A perna descarga→carga já está incluída no km faturado."
-                      >
-                        Inclui bota-fora
-                        {v.kmBotaFora ? ` (+${fmtNum(v.kmBotaFora, 0)} km)` : ""}
-                      </span>
-                    )}
+                    {(() => {
+                      const retorno = (v.trechos ?? []).filter(
+                        (t) => t.tipo === "RETORNO_BOTA_FORA",
+                      );
+                      if (retorno.length === 0) return null;
+                      const kmRet = retorno.reduce((s, t) => s + Number(t.km || 0), 0);
+                      return (
+                        <span
+                          className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700"
+                          title="O motorista voltou pro local de carga pra descarregar a sobra (limpeza). A volta já está incluída no km faturado."
+                        >
+                          Inclui bota-fora
+                          {kmRet > 0 ? ` (+${fmtNum(String(kmRet), 0)} km)` : ""}
+                        </span>
+                      );
+                    })()}
                   </span>
                 }
               />
