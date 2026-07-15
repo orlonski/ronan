@@ -5,8 +5,16 @@ export const ViagemPontoInput = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   capturadoEm: z.coerce.date(),
-  velocidade: z.number().nonnegative().optional(),
-  precisao: z.number().nonnegative().optional(),
+  // iOS/Android mandam speed/accuracy = -1 quando desconhecido — normaliza pra
+  // undefined em vez de recusar o ponto (senão derruba a viagem inteira).
+  velocidade: z
+    .number()
+    .optional()
+    .transform((v) => (v != null && v >= 0 ? v : undefined)),
+  precisao: z
+    .number()
+    .optional()
+    .transform((v) => (v != null && v >= 0 ? v : undefined)),
 });
 export type ViagemPontoInput = z.infer<typeof ViagemPontoInput>;
 

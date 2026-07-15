@@ -13,11 +13,19 @@ export const PosicaoMotoristaConfig = z.object({
 export type PosicaoMotoristaConfig = z.infer<typeof PosicaoMotoristaConfig>;
 
 /** Posição individual capturada pela task periódica. */
+// iOS/Android devolvem speed/accuracy = -1 quando o valor é desconhecido (parado,
+// sinal ruim). Normaliza qualquer negativo pra undefined em vez de RECUSAR o lote
+// inteiro — senão 1 ponto com -1 derruba as 100 posições.
+const naoNegativoOuNulo = z
+  .number()
+  .optional()
+  .transform((v) => (v != null && v >= 0 ? v : undefined));
+
 export const PosicaoItem = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
-  precisao: z.number().nonnegative().optional(),
-  velocidade: z.number().nonnegative().optional(),
+  precisao: naoNegativoOuNulo,
+  velocidade: naoNegativoOuNulo,
   /** Timestamp do device em ISO. */
   capturadoEm: z.string().datetime(),
 });
