@@ -429,21 +429,25 @@ export default function NovaViagem() {
     return m?.permiteBotaFora ?? false;
   }, [cat.data?.materiais, form.materialId]);
   const botaFora = permiteBotaFora && teveBotaFora;
-  // Perna de VOLTA (descarga→carga). Só busca quando marcado.
-  const rotaVolta = useCalcularRota(
-    botaFora ? form.localDescargaId : "",
-    botaFora ? form.localCargaId : "",
+  // Bota-fora: volta descarga→carga com as MESMAS variantes da ida (com/sem
+  // retorno). Só busca quando marcado.
+  const opcoesVolta = useOpcoesRota(
+    botaFora ? form.localDescargaId : undefined,
+    botaFora ? form.localCargaId : undefined,
   );
+  // Casa a variante com a escolha da ida: só usa "com retorno" (curb) se o
+  // motorista escolheu isso na ida; senão vai "direto". Ida e volta na mesma régua.
   const kmVolta = useMemo(() => {
     if (!botaFora) return null;
-    const d = rotaVolta.data;
-    return d && "km" in d && d.km !== null ? parseFloat(String(d.km)) : null;
-  }, [botaFora, rotaVolta.data]);
-  const kmVoltaReal = useMemo(() => {
-    if (!botaFora || kmVolta == null) return null;
-    const f = rotaVolta.data && "fonte" in rotaVolta.data ? rotaVolta.data.fonte : null;
-    return f === "osrm" || f === "cache_server" ? kmVolta : null;
-  }, [botaFora, kmVolta, rotaVolta.data]);
+    const opts = opcoesVolta.data ?? [];
+    if (opts.length === 0) return null;
+    const alvo =
+      retornoConfirmado === true
+        ? opts.find((r) => r.retorno === true)
+        : opts.find((r) => r.retorno === false);
+    const escolhida = alvo ?? opts.find((r) => r.recomendada) ?? opts[0];
+    return escolhida ? parseFloat(escolhida.km) : null;
+  }, [botaFora, opcoesVolta.data, retornoConfirmado]);
 
   const nomeDescargaSelecionado = useMemo(() => {
     if (!form.localDescargaId) return undefined;
@@ -770,8 +774,8 @@ export default function NovaViagem() {
         // Bota-fora: só manda kmCalculado (ida+volta) quando as DUAS pernas vieram
         // de rota real; senão fica undefined pro backend reprocessar.
         kmCalculado: botaFora
-          ? kmCalculadoFinal != null && kmVoltaReal != null
-            ? kmCalculadoFinal + kmVoltaReal
+          ? kmCalculadoFinal != null && kmVolta != null
+            ? kmCalculadoFinal + kmVolta
             : undefined
           : kmCalculadoFinal,
         retornoConfirmado,
@@ -1316,7 +1320,7 @@ export default function NovaViagem() {
       onMudar={setTeveBotaFora}
       kmBase={parseFloat(form.km.replace(",", ".")) || 0}
       kmVolta={kmVolta}
-      carregando={botaFora && rotaVolta.isFetching}
+      carregando={botaFora && opcoesVolta.isFetching}
     />
   ) : null;
 

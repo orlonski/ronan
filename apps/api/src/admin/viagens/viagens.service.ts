@@ -763,15 +763,23 @@ export class ViagensAdminService {
     let novoKm = parseFloat(resultado.km);
     // Bota-fora (limpeza): a viagem incluiu a volta descarga→carga no km faturado.
     // Soma a mesma perna na referência OSRM pra kmCalculado bater com o round-trip
-    // (senão o painel acusaria "override" falso: km faturado > kmCalculado).
+    // (senão o painel acusaria "override" falso: km faturado > kmCalculado). A volta
+    // usa a MESMA variante da ida (só "com retorno"/curb se foi escolhido), pra não
+    // inflar quando a ida foi "cheguei direto".
     let kmBotaFora: number | null = null;
     if (viagem.teveBotaFora === true) {
-      const rVolta = await this.roteamento.calcularKm(
+      const opcoesVolta = await this.roteamento.calcularComSemRetorno(
         viagem.localDescargaId,
         viagem.localCargaId,
       );
-      if (rVolta.km !== null) {
-        kmBotaFora = parseFloat(rVolta.km);
+      if (opcoesVolta.rotas.length > 0) {
+        const voltaEscolhida =
+          (viagem.retornoConfirmado === true
+            ? opcoesVolta.rotas.find((r) => r.retorno === true)
+            : opcoesVolta.rotas.find((r) => r.retorno === false)) ??
+          opcoesVolta.rotas.find((r) => r.recomendada) ??
+          opcoesVolta.rotas[0]!;
+        kmBotaFora = parseFloat(voltaEscolhida.km);
         novoKm += kmBotaFora;
       }
     }

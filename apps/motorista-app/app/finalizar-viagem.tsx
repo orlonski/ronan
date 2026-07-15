@@ -144,23 +144,12 @@ export default function FinalizarViagem() {
     buscarAlternativas ? localCargaId : undefined,
     buscarAlternativas ? localDescargaId : undefined,
   );
-  // Bota-fora: perna de VOLTA (descarga→carga). Só busca quando marcado.
-  const rotaVolta = useCalcularRota(
-    botaFora ? localDescargaId : "",
-    botaFora ? localCargaId : "",
+  // Bota-fora: volta descarga→carga, calculada com as MESMAS variantes da ida
+  // (com/sem retorno) pra casar com a escolha do motorista. Só busca quando marcado.
+  const opcoesVolta = useOpcoesRota(
+    botaFora ? localDescargaId : undefined,
+    botaFora ? localCargaId : undefined,
   );
-  const kmVolta = useMemo(() => {
-    if (!botaFora) return null;
-    const d = rotaVolta.data;
-    return d && "km" in d && d.km !== null ? parseFloat(String(d.km)) : null;
-  }, [botaFora, rotaVolta.data]);
-  // Só conta como "calculado" (referência OSRM) se a volta veio de rota real —
-  // haversine offline fica de fora pro backend reprocessar (igual à ida).
-  const kmVoltaReal = useMemo(() => {
-    if (!botaFora || kmVolta == null) return null;
-    const f = rotaVolta.data && "fonte" in rotaVolta.data ? rotaVolta.data.fonte : null;
-    return f === "osrm" || f === "cache_server" ? kmVolta : null;
-  }, [botaFora, kmVolta, rotaVolta.data]);
   // Fonte ÚNICA que governa km/geometria (retorno vence estrada). Memoizado pra
   // referência estável (evita recomputar kmRecomendado / re-rodar o effect à toa).
   const rotasAtivas = useMemo(
@@ -216,6 +205,20 @@ export default function FinalizarViagem() {
     usarRetorno && rotaGeometriaEscolhida != null
       ? rotasAtivas[rotaIdx]?.retorno
       : undefined;
+  // Bota-fora: km da volta casando a variante com a escolha da ida — só usa "com
+  // retorno" (curb) se o motorista escolheu isso na ida; senão vai "direto".
+  // Assim ida e volta ficam na mesma régua (sem inflar a volta com a meia-volta).
+  const kmVolta = useMemo(() => {
+    if (!botaFora) return null;
+    const opts = opcoesVolta.data ?? [];
+    if (opts.length === 0) return null;
+    const alvo =
+      retornoConfirmado === true
+        ? opts.find((r) => r.retorno === true)
+        : opts.find((r) => r.retorno === false);
+    const escolhida = alvo ?? opts.find((r) => r.recomendada) ?? opts[0];
+    return escolhida ? parseFloat(escolhida.km) : null;
+  }, [botaFora, opcoesVolta.data, retornoConfirmado]);
   // No card de RETORNO nunca auto-preenche: km só da escolha consciente.
   useEffect(() => {
     if (usarRetorno || kmEditadoManual || kmGovernadoPorRota) return;
@@ -395,8 +398,8 @@ export default function FinalizarViagem() {
         // Bota-fora: só manda kmCalculado (ida+volta) quando as DUAS pernas vieram
         // de rota real; senão fica undefined pro backend reprocessar.
         kmCalculado: botaFora
-          ? kmCalculadoFinal != null && kmVoltaReal != null
-            ? kmCalculadoFinal + kmVoltaReal
+          ? kmCalculadoFinal != null && kmVolta != null
+            ? kmCalculadoFinal + kmVolta
             : undefined
           : kmCalculadoFinal,
         kmEditadoManual,
@@ -633,7 +636,7 @@ export default function FinalizarViagem() {
                 onMudar={setTeveBotaFora}
                 kmBase={parseFloat(km.replace(",", ".")) || 0}
                 kmVolta={kmVolta}
-                carregando={botaFora && rotaVolta.isFetching}
+                carregando={botaFora && opcoesVolta.isFetching}
               />
             ) : null}
 
