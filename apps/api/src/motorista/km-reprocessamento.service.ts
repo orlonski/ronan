@@ -44,6 +44,7 @@ export class KmReprocessamentoService {
           kmCalculado: true,
           kmEditadoManual: true,
           kmRecalculadoEm: true,
+          teveBotaFora: true,
           localCargaId: true,
           localDescargaId: true,
           material: { select: { nome: true } },
@@ -69,7 +70,22 @@ export class KmReprocessamentoService {
       // (não marca kmRecalculadoEm, então continua candidata).
       if (r.km === null) return;
 
-      const novoKm = parseFloat(r.km);
+      let novoKm = parseFloat(r.km);
+      // Bota-fora (limpeza): na última carga o motorista voltou pro local de
+      // carga pra descarregar a sobra. A perna descarga→carga entra no km
+      // faturável. Se o OSRM não fechar a volta, não marca reprocessado (o @Cron
+      // tenta de novo) pra não gravar um total pela metade.
+      let kmBotaFora: number | null = null;
+      if (v.teveBotaFora === true) {
+        const rVolta = await this.roteamento.calcularKm(
+          v.localDescargaId,
+          v.localCargaId,
+          { force: true },
+        );
+        if (rVolta.km === null) return;
+        kmBotaFora = parseFloat(rVolta.km);
+        novoKm += kmBotaFora;
+      }
       const kmAtual = Number(v.km ?? 0);
       const mudou = Math.abs(novoKm - kmAtual) > TOLERANCIA_KM;
       const agora = new Date();
@@ -78,7 +94,11 @@ export class KmReprocessamentoService {
         // Respeita o km do motorista; só atualiza a referência OSRM e marca.
         await this.prisma.viagem.update({
           where: { id: v.id },
-          data: { kmCalculado: novoKm, kmRecalculadoEm: agora },
+          data: {
+            kmCalculado: novoKm,
+            kmRecalculadoEm: agora,
+            ...(kmBotaFora != null ? { kmBotaFora } : {}),
+          },
         });
         if (mudou) {
           await this.notificar(v.id, v.motoristaId, v.motorista?.expoPushToken, {
@@ -99,6 +119,7 @@ export class KmReprocessamentoService {
           kmCalculado: novoKm,
           kmRecalculadoEm: agora,
           kmAntesRecalculo: mudou ? v.km : null,
+          ...(kmBotaFora != null ? { kmBotaFora } : {}),
         },
       });
       if (mudou) {

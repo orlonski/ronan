@@ -15,6 +15,7 @@ import { ScreenHeader } from "@/components/screen-header";
 import { DescargaPorGps, type DescargaCaptura } from "@/components/descarga-por-gps";
 import { SeletorRotas } from "@/components/seletor-rotas";
 import { SeletorRetorno } from "@/components/seletor-retorno";
+import { PerguntaBotaFora } from "@/components/pergunta-bota-fora";
 import { ErroCampo, useValidacaoGuiada } from "@/components/validacao-guiada";
 import { SemCatalogo } from "@/components/sem-catalogo";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
@@ -55,6 +56,8 @@ export default function FinalizarViagem() {
   const [ticket, setTicket] = useState("");
   const [km, setKm] = useState("");
   const [kmEditadoManual, setKmEditadoManual] = useState(false);
+  // Bota-fora (limpeza): motorista voltou pro local de carga pra jogar a sobra.
+  const [teveBotaFora, setTeveBotaFora] = useState(false);
   // Rota escolhida no seletor de mapa (quando há alternativas).
   const [rotaIdx, setRotaIdx] = useState(0);
   const [rotaGeometriaEscolhida, setRotaGeometriaEscolhida] = useState<string | null>(null);
@@ -93,6 +96,7 @@ export default function FinalizarViagem() {
         if (d.ticket != null) setTicket(d.ticket);
         if (d.km != null) setKm(d.km);
         if (d.kmEditadoManual) setKmEditadoManual(true);
+        if (d.teveBotaFora) setTeveBotaFora(true);
         if (d.rotaGeometria != null) setRotaGeometriaEscolhida(d.rotaGeometria);
         if (d.rotaIdx != null) setRotaIdx(d.rotaIdx);
         if (d.valorPedagio != null) setValorPedagio(d.valorPedagio);
@@ -118,6 +122,14 @@ export default function FinalizarViagem() {
     return m?.exigeTicket ?? true;
   }, [cat.data?.materiais, materialId]);
 
+  // Material libera "voltar pro bota-fora" (limpeza)? Só então mostra a pergunta.
+  const permiteBotaFora = useMemo(() => {
+    const m = cat.data?.materiais.find((x) => x.id === materialId);
+    return m?.permiteBotaFora ?? false;
+  }, [cat.data?.materiais, materialId]);
+  // Efetivo: só conta se o material permite E o motorista marcou.
+  const botaFora = permiteBotaFora && teveBotaFora;
+
   // KM auto via OSRM entre local de carga (se cadastrado) e descarga.
   const localCargaId = ciclo?.localCargaId ?? "";
   const rota = useCalcularRota(localCargaId, localDescargaId);
@@ -132,6 +144,23 @@ export default function FinalizarViagem() {
     buscarAlternativas ? localCargaId : undefined,
     buscarAlternativas ? localDescargaId : undefined,
   );
+  // Bota-fora: perna de VOLTA (descarga→carga). Só busca quando marcado.
+  const rotaVolta = useCalcularRota(
+    botaFora ? localDescargaId : "",
+    botaFora ? localCargaId : "",
+  );
+  const kmVolta = useMemo(() => {
+    if (!botaFora) return null;
+    const d = rotaVolta.data;
+    return d && "km" in d && d.km !== null ? parseFloat(String(d.km)) : null;
+  }, [botaFora, rotaVolta.data]);
+  // Só conta como "calculado" (referência OSRM) se a volta veio de rota real —
+  // haversine offline fica de fora pro backend reprocessar (igual à ida).
+  const kmVoltaReal = useMemo(() => {
+    if (!botaFora || kmVolta == null) return null;
+    const f = rotaVolta.data && "fonte" in rotaVolta.data ? rotaVolta.data.fonte : null;
+    return f === "osrm" || f === "cache_server" ? kmVolta : null;
+  }, [botaFora, kmVolta, rotaVolta.data]);
   // Fonte ÚNICA que governa km/geometria (retorno vence estrada). Memoizado pra
   // referência estável (evita recomputar kmRecomendado / re-rodar o effect à toa).
   const rotasAtivas = useMemo(
@@ -233,6 +262,7 @@ export default function FinalizarViagem() {
         ticket,
         km,
         kmEditadoManual,
+        teveBotaFora,
         rotaGeometria: rotaGeometriaEscolhida ?? undefined,
         rotaIdx,
         valorPedagio,
@@ -253,6 +283,7 @@ export default function FinalizarViagem() {
     ticket,
     km,
     kmEditadoManual,
+    teveBotaFora,
     rotaGeometriaEscolhida,
     rotaIdx,
     valorPedagio,
@@ -311,6 +342,10 @@ export default function FinalizarViagem() {
       return;
     }
     val.limpar();
+    // Bota-fora: km faturável = ida + volta. Quando não marcou, kmVolta é null e
+    // o total colapsa na ida (comportamento de sempre).
+    const kmBaseNum = parseFloat(km.replace(",", ".")) || 0;
+    const kmTotalNum = kmBaseNum + (kmVolta ?? 0);
     // Confirmação final do km. Cálculo automático, valor do motorista prevalece.
     // SEM INTERNET (haversine OU cache do aparelho): avisa em destaque (warning).
     const fonteRota = rota.data && "fonte" in rota.data ? rota.data.fonte : null;
@@ -322,7 +357,10 @@ export default function FinalizarViagem() {
           ? "⚠️ Você está SEM INTERNET. Esse km veio de um cálculo ANTERIOR dessa rota, salvo no aparelho (cache). Quando a internet voltar, o sistema confere pela rota certa. Se você já sabe quanto rodou, toque em Alterar e informe."
           : "Esse km foi calculado automático pela rota. Se você rodou diferente, toque em Alterar e corrija — o que você confirmar é o que vale.";
     const kmConfirmado = await showConfirm({
-      title: `Você rodou ${km.replace(".", ",")} km?`,
+      title:
+        botaFora && kmVolta != null
+          ? `Você rodou ${kmTotalNum.toFixed(2).replace(".", ",")} km? (ida + volta)`
+          : `Você rodou ${km.replace(".", ",")} km?`,
       message: msgKm,
       variant: semNet ? "warning" : "default",
       confirmLabel: "Sim, está certo",
@@ -352,12 +390,20 @@ export default function FinalizarViagem() {
           ? undefined
           : parseFloat(toneladas.replace(",", ".")),
         aguardandoPeso,
-        km: parseFloat(km.replace(",", ".")),
+        km: kmTotalNum,
         // Quando o seletor governa, é o km da opção escolhida (== km) → sem divergência.
-        kmCalculado: kmCalculadoFinal,
+        // Bota-fora: só manda kmCalculado (ida+volta) quando as DUAS pernas vieram
+        // de rota real; senão fica undefined pro backend reprocessar.
+        kmCalculado: botaFora
+          ? kmCalculadoFinal != null && kmVoltaReal != null
+            ? kmCalculadoFinal + kmVoltaReal
+            : undefined
+          : kmCalculadoFinal,
         kmEditadoManual,
         rotaGeometria: rotaGeometriaEscolhida ?? undefined,
         retornoConfirmado,
+        teveBotaFora: botaFora,
+        kmBotaFora: botaFora ? (kmVolta ?? undefined) : undefined,
         ticket: aguardandoPeso ? undefined : exigeTicket ? ticket.trim() : undefined,
         localDescargaId,
         localDescargaDados,
@@ -579,6 +625,17 @@ export default function FinalizarViagem() {
                 {val.erroDe("km") ? <ErroCampo msg={val.erroDe("km")!} /> : null}
               </View>
             )}
+
+            {/* Bota-fora (limpeza): só quando o material permite */}
+            {permiteBotaFora ? (
+              <PerguntaBotaFora
+                valor={teveBotaFora}
+                onMudar={setTeveBotaFora}
+                kmBase={parseFloat(km.replace(",", ".")) || 0}
+                kmVolta={kmVolta}
+                carregando={botaFora && rotaVolta.isFetching}
+              />
+            ) : null}
 
             {/* 4) Ticket (se o material exigir) + foto */}
             {exigeTicket && (

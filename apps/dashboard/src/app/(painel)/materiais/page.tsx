@@ -25,6 +25,7 @@ type Material = {
   nome: string;
   ativo: boolean;
   exigeTicket: boolean;
+  permiteBotaFora: boolean;
   criadoPor: { id: string; nome: string } | null;
 };
 
@@ -66,6 +67,20 @@ export default function MateriaisPage() {
             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
               não exige
             </span>
+          ),
+      },
+      {
+        id: "botaFora",
+        enableSorting: false,
+        size: 120,
+        header: "Bota-fora",
+        cell: ({ row }) =>
+          row.original.permiteBotaFora ? (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+              permite
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
           ),
       },
       {

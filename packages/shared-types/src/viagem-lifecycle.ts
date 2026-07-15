@@ -147,6 +147,12 @@ export const FinalizarViagemInput = z.object({
   // Escolha "voltei no retorno" (true) vs "segui direto" (false); ausente quando
   // não foi perguntado. Backend guarda em Viagem.retornoConfirmado.
   retornoConfirmado: z.boolean().optional(),
+  // Motorista voltou pro bota-fora (limpeza) na última carga: retornou ao local
+  // de carga pra descarregar a sobra. Só vale se Material.permiteBotaFora (backend
+  // autoritativo). Quando true, `km` já inclui a perna descarga→carga; kmBotaFora
+  // = só essa perna. Backend guarda em Viagem.teveBotaFora / Viagem.kmBotaFora.
+  teveBotaFora: z.boolean().optional(),
+  kmBotaFora: z.number().nonnegative().max(MAX_KM).optional(),
   ticket: z.string().max(50).optional(),
   localDescargaId: z.string().uuid(),
   localDescargaDados: LocalSnapshot.optional(),

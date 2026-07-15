@@ -897,7 +897,7 @@ export class MotoristaService {
       }),
       this.prisma.material.findMany({
         where: { ativo: true },
-        select: { id: true, nome: true, exigeTicket: true },
+        select: { id: true, nome: true, exigeTicket: true, permiteBotaFora: true },
         orderBy: { nome: "asc" },
       }),
       this.prisma.cliente.findMany({

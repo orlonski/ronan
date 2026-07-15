@@ -718,6 +718,11 @@ model Material {
   /// Se false, viagens desse material não exigem número de ticket (ex: concreto,
   /// que não gera ticket de pesagem). Controlado pelo admin, nunca pelo motorista.
   exigeTicket Boolean @default(true)
+  /// Se true, o motorista pode marcar que precisou voltar pro bota-fora (limpeza):
+  /// na última carga ele retorna ao local de carga pra descarregar a sobra. Isso
+  /// adiciona a perna descarga→carga ao km faturável. Controlado pelo admin; o
+  /// motorista só marca o fato. Ver Viagem.teveBotaFora.
+  permiteBotaFora Boolean @default(false)
   criadoEm   DateTime @default(now())
   alteradoEm DateTime @updatedAt
 
@@ -914,6 +919,14 @@ model Viagem {
   /// viagem antiga ou app antigo). O "Recalcular trajeto" do painel RESPEITA esse
   /// campo em vez de sempre aplicar a variante com retorno.
   retornoConfirmado Boolean?
+  /// true = motorista voltou pro bota-fora (limpeza): retornou ao local de carga
+  /// pra descarregar a sobra na última carga. Só aceito quando Material.permiteBotaFora
+  /// (backend autoritativo). Quando true, o km faturável inclui a perna descarga→carga.
+  /// null/false = fluxo normal. Ver kmBotaFora.
+  teveBotaFora      Boolean?
+  /// Km da perna de volta (descarga→carga) quando teveBotaFora=true. Guardado à parte
+  /// só pra transparência no painel; o total (ida+volta) já está em `km`.
+  kmBotaFora        Decimal?     @db.Decimal(10, 2)
   observacao        String?
   status            StatusViagem @default(ENVIADA)
   /// true = viagem aberta pelo fluxo guiado "Iniciar viagem" (lifecycle). Setado

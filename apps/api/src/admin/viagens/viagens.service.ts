@@ -714,6 +714,7 @@ export class ViagensAdminService {
         km: true,
         kmCalculado: true,
         retornoConfirmado: true,
+        teveBotaFora: true,
       },
     });
     if (!viagem) throw new NotFoundException("Viagem não encontrada");
@@ -759,13 +760,28 @@ export class ViagensAdminService {
     // (kmCalculado) e a geometria fresca da variante (com/sem retorno) pro mapa.
     // Pra trocar o km faturado, o admin usa "Retorno na rodovia"/escolher rota
     // (ação explícita), não o recalcular.
-    const novoKm = parseFloat(resultado.km);
+    let novoKm = parseFloat(resultado.km);
+    // Bota-fora (limpeza): a viagem incluiu a volta descarga→carga no km faturado.
+    // Soma a mesma perna na referência OSRM pra kmCalculado bater com o round-trip
+    // (senão o painel acusaria "override" falso: km faturado > kmCalculado).
+    let kmBotaFora: number | null = null;
+    if (viagem.teveBotaFora === true) {
+      const rVolta = await this.roteamento.calcularKm(
+        viagem.localDescargaId,
+        viagem.localCargaId,
+      );
+      if (rVolta.km !== null) {
+        kmBotaFora = parseFloat(rVolta.km);
+        novoKm += kmBotaFora;
+      }
+    }
 
     await this.prisma.viagem.update({
       where: { id: viagem.id },
       data: {
         kmCalculado: novoKm,
         rotaGeometria: resultado.geometria,
+        ...(kmBotaFora != null ? { kmBotaFora } : {}),
       },
     });
 

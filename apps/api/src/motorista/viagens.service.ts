@@ -594,6 +594,16 @@ export class ViagensMotoristaService {
           input.ticket,
         );
 
+    // Bota-fora (limpeza) só vale se o material permite (admin autoritativo,
+    // igual exigeTicket). O app só mostra a pergunta quando permite; aqui
+    // sanitiza por garantia — app antigo/material sem a regra vira false.
+    const material = await this.prisma.material.findUnique({
+      where: { id: input.materialId },
+      select: { permiteBotaFora: true },
+    });
+    const teveBotaFora = material?.permiteBotaFora === true && input.teveBotaFora === true;
+    const kmBotaFora = teveBotaFora ? (input.kmBotaFora ?? null) : null;
+
     // Valida que os locais existem antes de inserir. Auto-recovery:
     // se o ID nao existe mas o app enviou um snapshot (nome+lat+lng), o
     // backend recria o local com o MESMO id. Cobre o caso do motorista
@@ -632,6 +642,8 @@ export class ViagensMotoristaService {
         kmEditadoManual: rest.kmEditadoManual,
         rotaGeometria: rest.rotaGeometria,
         retornoConfirmado: rest.retornoConfirmado,
+        teveBotaFora,
+        kmBotaFora,
         observacao: rest.observacao,
         localCargaId: rest.localCargaId,
         localDescargaId: rest.localDescargaId,
@@ -1124,6 +1136,16 @@ export class ViagensMotoristaService {
           viagem.id,
         );
 
+    // Bota-fora (limpeza): só vale se o material permite (autoritativo). App só
+    // mostra a pergunta quando permite; sanitiza aqui. O reprocessamento soma a
+    // perna descarga→carga ao km; o app já mandou o total em `km` quando online.
+    const materialFin = await this.prisma.material.findUnique({
+      where: { id: input.materialId },
+      select: { permiteBotaFora: true },
+    });
+    const teveBotaFora = materialFin?.permiteBotaFora === true && input.teveBotaFora === true;
+    const kmBotaFora = teveBotaFora ? (input.kmBotaFora ?? null) : null;
+
     await this.garantirLocal({
       id: input.localDescargaId,
       snapshot: input.localDescargaDados,
@@ -1144,6 +1166,8 @@ export class ViagensMotoristaService {
         kmEditadoManual: input.kmEditadoManual,
         rotaGeometria: input.rotaGeometria,
         retornoConfirmado: input.retornoConfirmado,
+        teveBotaFora,
+        kmBotaFora,
         ticket,
         localDescargaId: input.localDescargaId,
         descargaLat: input.descargaLat,

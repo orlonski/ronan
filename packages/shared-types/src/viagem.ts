@@ -64,6 +64,11 @@ export const CriarViagemBase = z.object({
   // (false). Ausente quando não foi perguntado (sem retorno real / offline).
   // Backend guarda em Viagem.retornoConfirmado; o recalcular do painel respeita.
   retornoConfirmado: z.boolean().optional(),
+  // Motorista voltou pro bota-fora (limpeza): retornou ao local de carga pra
+  // descarregar a sobra. Só vale se Material.permiteBotaFora (backend autoritativo).
+  // Quando true, o `km` já inclui a perna descarga→carga; kmBotaFora = só essa perna.
+  teveBotaFora: z.boolean().optional(),
+  kmBotaFora: z.number().nonnegative().max(MAX_KM).optional(),
   localCargaId: z.string().uuid(),
   localDescargaId: z.string().uuid(),
   // Fallback pra auto-recovery quando local foi excluido entre o cache

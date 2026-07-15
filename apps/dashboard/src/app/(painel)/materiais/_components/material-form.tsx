@@ -17,13 +17,19 @@ export type Material = {
   ativo: boolean;
   apelidos: string[];
   exigeTicket: boolean;
+  permiteBotaFora: boolean;
 };
 
 const PATH = "/admin/materiais";
 
 type Props = { initial?: Material };
 
-type MaterialBody = { nome: string; apelidos: string[]; exigeTicket: boolean };
+type MaterialBody = {
+  nome: string;
+  apelidos: string[];
+  exigeTicket: boolean;
+  permiteBotaFora: boolean;
+};
 
 export function MaterialForm({ initial }: Props) {
   const router = useRouter();
@@ -33,6 +39,7 @@ export function MaterialForm({ initial }: Props) {
     nome: initial?.nome ?? "",
     apelidos: initial?.apelidos ?? [],
     exigeTicket: initial?.exigeTicket ?? true,
+    permiteBotaFora: initial?.permiteBotaFora ?? false,
   });
 
   async function onSubmit(e: React.FormEvent) {
@@ -84,6 +91,21 @@ export function MaterialForm({ initial }: Props) {
             Ligado (padrão): o motorista precisa informar o número do ticket. Desligue
             pra materiais que não geram ticket (ex: concreto) — aí o campo some pro
             motorista e a viagem pode ser lançada sem ticket.
+          </p>
+        </div>
+        <div className="space-y-2 rounded-lg border p-3">
+          <div className="flex items-center justify-between gap-3">
+            <Label htmlFor="permiteBotaFora">Permite voltar pro bota-fora</Label>
+            <StatusToggle
+              active={form.permiteBotaFora}
+              onChange={(next) => setForm({ ...form, permiteBotaFora: next })}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Ligue pra materiais em que o motorista às vezes volta pro local de carga
+            pra descarregar a sobra (limpeza / bota-fora) na última carga. Aí o app
+            mostra a pergunta e soma a volta (descarga → carga) no km faturado.
+            Desligado (padrão): a pergunta nem aparece.
           </p>
         </div>
         <div className="flex justify-end gap-2 pt-2">

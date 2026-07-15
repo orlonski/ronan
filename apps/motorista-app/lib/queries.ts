@@ -47,7 +47,14 @@ export type Veiculo = {
   ultimoOdometro?: number | null;
 };
 
-export type Material = { id: string; nome: string; exigeTicket?: boolean };
+export type Material = {
+  id: string;
+  nome: string;
+  exigeTicket?: boolean;
+  // Admin liberou "voltar pro bota-fora" (limpeza) pra esse material: o app
+  // mostra a pergunta e soma a perna de volta no km. Cache antigo não tem o campo.
+  permiteBotaFora?: boolean;
+};
 
 export type Cliente = {
   id: string;

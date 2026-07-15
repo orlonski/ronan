@@ -57,6 +57,8 @@ export type FinalizarDraft = {
   ticket?: string;
   km?: string;
   kmEditadoManual?: boolean;
+  /** Bota-fora (limpeza): motorista voltou pro local de carga. */
+  teveBotaFora?: boolean;
   /** Polyline da rota escolhida no seletor de mapa (rota real p/ o painel). */
   rotaGeometria?: string;
   /** Índice da rota escolhida entre as alternativas (restaura o seletor). */
@@ -454,6 +456,8 @@ export async function finalizarViagemGuiada(input: {
   kmEditadoManual?: boolean;
   rotaGeometria?: string;
   retornoConfirmado?: boolean;
+  teveBotaFora?: boolean;
+  kmBotaFora?: number;
   ticket?: string;
   localDescargaId: string;
   localDescargaDados?: LocalSnapshotLifecycle;
@@ -483,6 +487,8 @@ export async function finalizarViagemGuiada(input: {
       kmEditadoManual: input.kmEditadoManual,
       rotaGeometria: input.rotaGeometria,
       retornoConfirmado: input.retornoConfirmado,
+      teveBotaFora: input.teveBotaFora,
+      kmBotaFora: input.kmBotaFora,
       ticket: input.ticket,
       localDescargaId: input.localDescargaId,
       localDescargaDados: input.localDescargaDados,
