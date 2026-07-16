@@ -11,6 +11,7 @@ import {
   Prisma,
   StatusViagem,
   TipoLocal,
+  TipoTrecho,
 } from "@prisma/client";
 import type { AtualizarViagemInput } from "@ronan/shared-types";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
@@ -938,6 +939,201 @@ export class ViagensAdminService {
       viagem.localCargaId,
       viagem.localDescargaId,
     );
+  }
+
+  /**
+   * Km da volta do bota-fora (descarga → carga), na MESMA régua do app
+   * (motorista-app/app/finalizar-viagem.tsx:210). Casa a variante da volta com o
+   * `retornoConfirmado` da ida: se o motorista foi direto, a volta também vai
+   * direto — senão o curb "acha" uma meia-volta que não aconteceu e infla o km.
+   *
+   * Null = não deu pra calcular (OSRM fora, local sem coordenada). Nunca zero.
+   */
+  private async calcularKmVoltaBotaFora(
+    localDescargaId: string,
+    localCargaId: string,
+    retornoConfirmado: boolean | null,
+  ): Promise<number | null> {
+    const { rotas } = await this.roteamento.calcularComSemRetorno(
+      localDescargaId,
+      localCargaId,
+    );
+    if (rotas.length === 0) return null;
+    const alvo =
+      retornoConfirmado === true
+        ? rotas.find((r) => r.retorno === true)
+        : rotas.find((r) => r.retorno === false);
+    const escolhida = alvo ?? rotas.find((r) => r.recomendada) ?? rotas[0];
+    const km = escolhida ? parseFloat(escolhida.km) : NaN;
+    return Number.isFinite(km) ? km : null;
+  }
+
+  /** Viagem + tudo que o bota-fora precisa decidir. Compartilhado GET/POST. */
+  private async carregarParaBotaFora(id: string) {
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        km: true,
+        kmCalculado: true,
+        kmEditadoManual: true,
+        retornoConfirmado: true,
+        localCargaId: true,
+        localDescargaId: true,
+        material: { select: { permiteBotaFora: true } },
+        trechos: {
+          where: { tipo: TipoTrecho.RETORNO_BOTA_FORA },
+          select: { km: true },
+        },
+        _count: { select: { matchesFechamento: true } },
+      },
+    });
+    if (!viagem) throw new NotFoundException("Viagem não encontrada");
+    const kmVoltaAtual = viagem.trechos[0] ? Number(viagem.trechos[0].km) : 0;
+    return {
+      viagem,
+      permite: viagem.material?.permiteBotaFora ?? false,
+      teveBotaFora: viagem.trechos.length > 0,
+      kmVoltaAtual,
+      // O km faturado JÁ inclui a volta quando o trecho existe (o app manda
+      // ida+volta somados). A base é o que sobra tirando o trecho.
+      kmBase: viagem.km != null ? Number(viagem.km) - kmVoltaAtual : null,
+      kmCalculadoBase:
+        viagem.kmCalculado != null ? Number(viagem.kmCalculado) - kmVoltaAtual : null,
+    };
+  }
+
+  /**
+   * Estado do bota-fora + preview do km de cada resposta, pro painel mostrar a
+   * consequência ANTES de aplicar (mesmo contrato do seletor de retorno).
+   */
+  async opcoesBotaFora(id: string) {
+    const ctx = await this.carregarParaBotaFora(id);
+    const { viagem, permite, kmBase } = ctx;
+
+    // Só chama o OSRM quando a resposta pode mudar alguma coisa.
+    const kmVolta =
+      permite && viagem.localCargaId && viagem.localDescargaId
+        ? await this.calcularKmVoltaBotaFora(
+            viagem.localDescargaId,
+            viagem.localCargaId,
+            viagem.retornoConfirmado,
+          )
+        : null;
+
+    return {
+      permiteBotaFora: permite,
+      teveBotaFora: ctx.teveBotaFora,
+      kmVolta: kmVolta != null ? kmVolta.toFixed(2) : null,
+      kmAtual: viagem.km?.toString() ?? null,
+      kmSemBotaFora: kmBase != null ? kmBase.toFixed(2) : null,
+      kmComBotaFora:
+        kmBase != null && kmVolta != null ? (kmBase + kmVolta).toFixed(2) : null,
+      // O painel avisa que aplicar sobrescreve um km digitado à mão.
+      kmEditadoManual: viagem.kmEditadoManual ?? false,
+      emFechamento: viagem._count.matchesFechamento > 0,
+    };
+  }
+
+  /**
+   * Liga/desliga o bota-fora de uma viagem pelo painel — o que o motorista
+   * responde na descarga, aqui feito pelo admin (ele recebe a correção do
+   * motorista por fora, tipo WhatsApp).
+   *
+   * Recalcula o km faturado pela rota real; nunca confia em número vindo do
+   * cliente. Mantém o bloqueio de fechamento do `atualizar`: viagem já casada
+   * não se mexe.
+   */
+  async definirBotaFora(id: string, teveBotaFora: boolean, usuarioId: string) {
+    const ctx = await this.carregarParaBotaFora(id);
+    const { viagem, permite, kmVoltaAtual, kmBase, kmCalculadoBase } = ctx;
+
+    if (viagem._count.matchesFechamento > 0) {
+      throw new ConflictException(
+        "Não é possível editar: viagem já vinculada a fechamento. Desfaça o match primeiro.",
+      );
+    }
+    if (teveBotaFora && !permite) {
+      throw new BadRequestException(
+        'O material desta viagem não permite bota-fora. Ligue "Permite voltar pro bota-fora" no cadastro do material antes.',
+      );
+    }
+    if (teveBotaFora && (!viagem.localCargaId || !viagem.localDescargaId)) {
+      throw new BadRequestException(
+        "Viagem sem local de carga ou de descarga — não dá pra calcular a volta.",
+      );
+    }
+    if (kmBase == null) {
+      throw new BadRequestException("Viagem sem km — informe o km antes.");
+    }
+
+    const kmVoltaNovo = teveBotaFora
+      ? await this.calcularKmVoltaBotaFora(
+          viagem.localDescargaId!,
+          viagem.localCargaId!,
+          viagem.retornoConfirmado,
+        )
+      : null;
+    if (teveBotaFora && kmVoltaNovo == null) {
+      throw new BadRequestException(
+        "Não foi possível calcular a volta até o local de carga agora. Tente de novo em instantes.",
+      );
+    }
+
+    const kmNovo = kmBase + (kmVoltaNovo ?? 0);
+    const kmCalculadoNovo =
+      kmCalculadoBase != null ? kmCalculadoBase + (kmVoltaNovo ?? 0) : null;
+
+    await this.prisma.$transaction(async (tx) => {
+      // Recria em vez de atualizar: idempotente e igual ao `finalizar` do app.
+      await tx.trechoViagem.deleteMany({
+        where: { viagemId: viagem.id, tipo: TipoTrecho.RETORNO_BOTA_FORA },
+      });
+      if (teveBotaFora && kmVoltaNovo != null) {
+        await tx.trechoViagem.create({
+          data: {
+            viagemId: viagem.id,
+            ordem: 1,
+            tipo: TipoTrecho.RETORNO_BOTA_FORA,
+            // Bota-fora volta SEMPRE pro local de carga — mesma regra do
+            // montarTrechos do app (motorista/viagens.service.ts:582).
+            localId: viagem.localCargaId!,
+            km: kmVoltaNovo,
+          },
+        });
+      }
+      await tx.viagem.update({
+        where: { id: viagem.id },
+        data: {
+          km: kmNovo,
+          ...(kmCalculadoNovo != null ? { kmCalculado: kmCalculadoNovo } : {}),
+        },
+      });
+    });
+
+    await this.auditoria.log({
+      usuarioId,
+      entidade: "Viagem",
+      entidadeId: viagem.id,
+      acao: AcaoAuditoria.RECALCULAR_TRAJETO,
+      campo: "km",
+      valorAntes: viagem.km?.toString() ?? null,
+      valorDepois: kmNovo.toFixed(2),
+      motivo: teveBotaFora
+        ? `Bota-fora marcado no painel: +${(kmVoltaNovo ?? 0).toFixed(2)} km de volta até o local de carga.`
+        : `Bota-fora desmarcado no painel: -${kmVoltaAtual.toFixed(2)} km da volta.`,
+      metadata: {
+        teveBotaFora,
+        kmVoltaAntes: kmVoltaAtual.toFixed(2),
+        kmVoltaDepois: kmVoltaNovo != null ? kmVoltaNovo.toFixed(2) : null,
+        kmAntes: viagem.km?.toString() ?? null,
+        kmDepois: kmNovo.toFixed(2),
+        retornoConfirmado: viagem.retornoConfirmado ?? null,
+        kmEditadoManualSobrescrito: viagem.kmEditadoManual ?? false,
+      },
+    });
+
+    return this.detalhe(id);
   }
 
   async historico(viagemId: string) {

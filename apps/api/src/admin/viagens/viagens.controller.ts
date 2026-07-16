@@ -64,6 +64,11 @@ const EscolherRotaInput = z.object({
 });
 type EscolherRotaInput = z.infer<typeof EscolherRotaInput>;
 
+const DefinirBotaForaInput = z.object({
+  teveBotaFora: z.boolean(),
+});
+type DefinirBotaForaInput = z.infer<typeof DefinirBotaForaInput>;
+
 const ListViagensQuery = paginationQuerySchema.extend({
   motoristaId: z.string().uuid().optional(),
   veiculoId: z.string().uuid().optional(),
@@ -180,6 +185,27 @@ export class ViagensAdminController {
     @CurrentUser() user: AuthAdminUser,
   ) {
     return this.service.escolherRota(id, body, user.id);
+  }
+
+  /**
+   * Estado do bota-fora + o km que cada resposta produz — pro painel mostrar a
+   * consequência antes de aplicar. `kmVolta: null` = não deu pra calcular a
+   * volta (OSRM fora, locais sem coordenada); não confundir com zero.
+   */
+  @RequerPermissao("viagens.editar")
+  @Get(":id/bota-fora")
+  opcoesBotaFora(@Param("id") id: string) {
+    return this.service.opcoesBotaFora(id);
+  }
+
+  @RequerPermissao("viagens.editar")
+  @Post(":id/bota-fora")
+  definirBotaFora(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(DefinirBotaForaInput)) body: DefinirBotaForaInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.definirBotaFora(id, body.teveBotaFora, user.id);
   }
 
   @RequerPermissao("viagens.validar")

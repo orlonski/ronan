@@ -328,6 +328,45 @@ export default function ViagemDetalhePage({
       toast.error("Não foi possível aplicar", { description: (err as Error).message });
     },
   });
+  /**
+   * Bota-fora: o que o motorista responde na descarga, aqui pelo admin (a
+   * correção chega por fora, tipo WhatsApp). O km de cada resposta vem do
+   * servidor — o painel só mostra e aplica, nunca calcula.
+   */
+  const botaFora = useQuery({
+    queryKey: ["viagem-bota-fora", id],
+    enabled: !!token,
+    queryFn: () =>
+      fetchApi<{
+        permiteBotaFora: boolean;
+        teveBotaFora: boolean;
+        kmVolta: string | null;
+        kmAtual: string | null;
+        kmSemBotaFora: string | null;
+        kmComBotaFora: string | null;
+        kmEditadoManual: boolean;
+        emFechamento: boolean;
+      }>(`/admin/viagens/${id}/bota-fora`, { token }),
+  });
+  const aplicarBotaFora = useMutation({
+    mutationFn: (teveBotaFora: boolean) =>
+      fetchApi<unknown>(`/admin/viagens/${id}/bota-fora`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({ teveBotaFora }),
+      }),
+    onSuccess: (_res, teve) => {
+      toast.success(
+        teve ? "Marcado: voltou pro bota-fora." : "Marcado: não voltou pro bota-fora.",
+      );
+      void queryClient.invalidateQueries({ queryKey: ["viagem-admin", id] });
+      void queryClient.invalidateQueries({ queryKey: ["viagem-bota-fora", id] });
+      void queryClient.invalidateQueries({ queryKey: ["viagem-historico", id] });
+    },
+    onError: (err) => {
+      toast.error("Não foi possível aplicar", { description: (err as Error).message });
+    },
+  });
   const preValidar = useMutation({
     mutationFn: (body: {
       status: "OK" | "DIVERGENTE" | "DESFAZER";
@@ -1075,6 +1114,86 @@ export default function ViagemDetalhePage({
                       </span>
                     </div>
                   </Permitido>
+                </div>
+              )}
+              {botaFora.data?.permiteBotaFora && (
+                <div className="mb-3 rounded-lg border bg-muted/20 p-3">
+                  <div className="mb-2 flex items-center gap-2">
+                    <RotateCw className="h-4 w-4 text-muted-foreground" />
+                    <p className="text-sm font-medium">Voltou pro bota-fora?</p>
+                    <span className="text-xs text-muted-foreground">
+                      a volta até o local de carga entra no km faturado
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {[
+                      {
+                        teve: true,
+                        titulo: "Voltou pro bota-fora",
+                        km: botaFora.data.kmComBotaFora,
+                      },
+                      {
+                        teve: false,
+                        titulo: "Não voltou",
+                        km: botaFora.data.kmSemBotaFora,
+                      },
+                    ].map((op) => {
+                      const atual = botaFora.data!.teveBotaFora === op.teve;
+                      return (
+                        <button
+                          key={String(op.teve)}
+                          type="button"
+                          disabled={
+                            atual ||
+                            op.km == null ||
+                            botaFora.data!.emFechamento ||
+                            aplicarBotaFora.isPending
+                          }
+                          onClick={() => aplicarBotaFora.mutate(op.teve)}
+                          className={`flex flex-col gap-1 rounded-md border p-3 text-left transition-colors ${
+                            atual
+                              ? "border-primary bg-primary/5"
+                              : "hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+                          }`}
+                        >
+                          <span className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-medium">{op.titulo}</span>
+                            {atual && (
+                              <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
+                            )}
+                          </span>
+                          <span className="text-lg font-semibold">
+                            {op.km != null ? `${fmtNum(op.km, 1)} km` : "—"}
+                          </span>
+                          {atual && (
+                            <Badge className="w-fit bg-emerald-100 text-emerald-700">
+                              Em vigor
+                            </Badge>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="pt-2 text-xs text-muted-foreground">
+                    {botaFora.data.emFechamento ? (
+                      <span className="text-amber-700">
+                        Viagem já vinculada a fechamento — não dá pra alterar.
+                      </span>
+                    ) : botaFora.data.kmVolta == null ? (
+                      <span className="text-amber-700">
+                        Não foi possível calcular a volta agora (rota indisponível ou
+                        local sem coordenada).
+                      </span>
+                    ) : botaFora.data.kmEditadoManual ? (
+                      <span className="text-amber-700">
+                        Atenção: o km desta viagem foi digitado à mão. Aplicar vai
+                        recalcular pela rota (volta de {fmtNum(botaFora.data.kmVolta, 1)}{" "}
+                        km).
+                      </span>
+                    ) : (
+                      <>A volta pela rota dá {fmtNum(botaFora.data.kmVolta, 1)} km.</>
+                    )}
+                  </div>
                 </div>
               )}
               <MapaTrajetoViagem
