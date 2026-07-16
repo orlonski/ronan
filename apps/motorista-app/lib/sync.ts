@@ -912,6 +912,22 @@ async function drainViagemIniciar(): Promise<void> {
   }
 }
 
+/**
+ * 409 do iniciar que é bloqueio por OUTRA viagem em andamento (não erro deste
+ * item). O servidor só aceita 1 EM_ANDAMENTO por motorista e devolve
+ * `clientIdEmAndamento` no corpo do 409. Se esse id não é o desta viagem, o
+ * bloqueio é temporário — libera quando a bloqueadora fecha (ou o motorista a
+ * resolve). Único 409 possível no iniciar (a idempotência por clientId já
+ * cobre o reenvio da própria viagem), então na prática todo 409 aqui é bloqueio.
+ */
+function ehBloqueioOutraViagem(clientId: string, err: unknown): boolean {
+  if (!(err instanceof ApiError) || err.status !== 409) return false;
+  const body = err.body as { clientIdEmAndamento?: unknown } | null;
+  const bloqueador =
+    body && typeof body.clientIdEmAndamento === "string" ? body.clientIdEmAndamento : null;
+  return bloqueador != null && bloqueador !== clientId;
+}
+
 async function processViagemIniciar(item: PendingViagemIniciar): Promise<void> {
   await upsertPendingViagemIniciar({ ...item, status: "syncing", lastTriedAt: Date.now() });
   notify();
@@ -920,6 +936,23 @@ async function processViagemIniciar(item: PendingViagemIniciar): Promise<void> {
     await api.post("/m/viagem/iniciar", item.payload, { outbox: true });
     await deletePendingViagemIniciar(item.clientId);
   } catch (err) {
+    if (ehBloqueioOutraViagem(item.clientId, err)) {
+      // Bloqueio temporário (outra viagem ocupa a vaga): fica "pending" SEM
+      // queimar tentativa e re-tenta quando a vaga liberar. Sem isso, um
+      // backlog de viagens guiadas morria todo em FALHOU 409 atrás de uma
+      // viagem/casca anterior presa. Guarda a mensagem real como informativo.
+      const { msg } = extractErrorDetails(err);
+      await upsertPendingViagemIniciar({
+        ...item,
+        status: "pending",
+        lastTriedAt: Date.now(),
+        errorMsg: msg,
+        errorStatus: undefined,
+        errorIssues: undefined,
+      });
+      notify();
+      return;
+    }
     await upsertPendingViagemIniciar(proximoEstadoFalha(item, err, isErroPermanente(err)));
   }
   notify();
@@ -1256,7 +1289,17 @@ export async function recuperarItensPresos(): Promise<void> {
   await varrer(await listPendingFotos(), upsertPendingFoto);
   await varrer(await listPendingStories(), upsertPendingStory);
   await varrer(await listPendingCompletarPeso(), upsertPendingCompletarPeso);
-  await varrer(await listPendingViagemIniciar(), upsertPendingViagemIniciar);
+  // viagem-iniciar: além dos transitórios, um 409 morto aqui é SEMPRE bloqueio
+  // por outra viagem em andamento (única causa de 409 no iniciar) — recuperável
+  // assim que a vaga liberar. Reseta pra retentar sozinho (não vira "pending
+  // que morre de novo" porque processViagemIniciar agora trata o bloqueio como
+  // transitório). Cobre backlogs que morreram ANTES deste fix chegar por OTA.
+  for (const item of await listPendingViagemIniciar()) {
+    if (item.status === "error" && (falhaSalvaEhTransitoria(item) || item.errorStatus === 409)) {
+      await upsertPendingViagemIniciar(resetItem(item));
+      mexeu = true;
+    }
+  }
   await varrer(await listPendingEventosViagem(), upsertPendingEventoViagem);
   await varrer(await listPendingViagemFinalizar(), upsertPendingViagemFinalizar);
   await varrer(await listPendingViagemCancelar(), upsertPendingViagemCancelar);

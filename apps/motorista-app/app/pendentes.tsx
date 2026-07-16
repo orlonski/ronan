@@ -310,9 +310,7 @@ function LifecycleTripCard({
         <View className="mt-3 gap-1.5 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
           <Text className="text-xs font-semibold text-destructive">Último erro:</Text>
           <Text className="text-xs text-destructive" numberOfLines={3}>
-            {trip.errorStatus === 409
-              ? "Você tem uma viagem começada que não foi finalizada. Descarte esta pra poder começar outra."
-              : (trip.errorMsg ?? "Erro desconhecido.")}
+            {trip.errorMsg ?? "Erro desconhecido."}
           </Text>
         </View>
       )}

@@ -16,6 +16,7 @@ import {
   listPendingViagemIniciar,
 } from "@/db/database";
 import { api } from "./api";
+import { reportarEvento } from "./event-reporter";
 import {
   enqueueEventoViagem,
   enqueueViagemCancelar,
@@ -139,6 +140,44 @@ export async function descartarViagemGuiada(clientId: string): Promise<void> {
   const atual = await getLifecycleLocal();
   if (!atual || atual.clientId === clientId) {
     await clearLifecycleLocal();
+  }
+}
+
+/**
+ * Auto-limpa a "casca órfã": uma viagem EM_ANDAMENTO no servidor que o motorista
+ * abandonou logo depois de tocar "Iniciar" — 0 eventos, e que o device não está
+ * mais tocando (não é o espelho local nem tem nada no outbox). Essa casca ocupa
+ * a vaga de "1 em andamento por motorista" e trava o envio de TODAS as viagens
+ * guiadas novas (que tomam 409). Aqui ela é cancelada no servidor (idempotente),
+ * liberando a vaga — o backlog do outbox drena sozinho depois.
+ *
+ * Só age em casca de **0 eventos** (começo abandonado, sem nada a perder). Uma
+ * viagem com eventos reais tem progresso → NÃO é apagada; segue pro "Retomar"
+ * normal via hidratarViagemDoServidor.
+ *
+ * Best-effort e silencioso: chamado ao focar a Home (com podeViagemLifecycle).
+ */
+export async function autoLimparCascaOrfa(): Promise<void> {
+  try {
+    const resp = await api.get<ServerAndamento>("/m/viagem/andamento");
+    const v = resp?.viagem ?? null;
+    if (!v) return;
+    // É a viagem que o motorista está tocando agora? Então não é órfã.
+    const atual = await getLifecycleLocal();
+    if (atual?.clientId === v.clientId) return;
+    // Tem algo dela no outbox (offline/erro)? Deixa o fluxo normal cuidar.
+    if (await lifecycleTemPendentes(v.clientId)) return;
+    // Tem evento real = progresso; não apaga (vira "Retomar").
+    if ((v.eventosViagem?.length ?? 0) > 0) return;
+    // Casca vazia bloqueando a vaga → cancela no servidor.
+    await enqueueViagemCancelar(v.clientId);
+    void reportarEvento(
+      "viagem_guiada_casca_orfa_limpa",
+      { iniciadoEm: v.iniciadoEm, localCargaId: v.localCarga?.id },
+      { viagemClientId: v.clientId },
+    );
+  } catch {
+    // Offline / erro de rede: tenta no próximo foco.
   }
 }
 
@@ -359,6 +398,17 @@ export async function iniciarViagemGuiada(input: {
     localCargaNome: lc?.nome,
     eventos: [],
   });
+  void reportarEvento(
+    "viagem_guiada_iniciada",
+    {
+      localCargaId: lc?.id,
+      cargaFonte: input.cargaCaptura?.fonte,
+      cargaPrecisao: input.cargaCaptura?.precisao,
+      cargaDistanciaMetros: input.cargaCaptura?.distanciaMetros,
+      cargaBuscaOffline: input.cargaCaptura?.buscaOffline,
+    },
+    { viagemClientId: clientId },
+  );
   return clientId;
 }
 
@@ -441,6 +491,17 @@ export async function registrarEventoGuiado(input: {
     patch.localCargaNome = input.local.nome;
   }
   await setLifecycleLocal(patch);
+  void reportarEvento(
+    "viagem_guiada_evento",
+    {
+      tipoSlug: input.tipo.slug,
+      ehCarga: input.tipo.ehCarga,
+      ehDescarga: input.tipo.ehDescarga,
+      temFoto: !!input.foto,
+      temToneladas: input.toneladas != null,
+    },
+    { viagemClientId: atual.clientId },
+  );
 }
 
 /** Finaliza: enfileira o POST /finalizar e limpa o espelho local. */
@@ -500,6 +561,17 @@ export async function finalizarViagemGuiada(input: {
       observacao: input.observacao,
     },
     input.foto,
+  );
+  void reportarEvento(
+    "viagem_guiada_finalizada",
+    {
+      km: input.km,
+      temTicket: !!input.ticket,
+      temToneladas: input.toneladas != null,
+      aguardandoPeso: !!input.aguardandoPeso,
+      nEventos: atual.eventos.length,
+    },
+    { viagemClientId: atual.clientId },
   );
   await clearLifecycleLocal();
 }

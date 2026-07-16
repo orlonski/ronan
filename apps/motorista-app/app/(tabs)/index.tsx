@@ -57,7 +57,7 @@ import {
 } from "@/lib/queries";
 import { iniciarTracking, isTrackingAtivo, useViagemAndamento } from "@/lib/tracking";
 import { getNavDestino } from "@/lib/nav-destino-storage";
-import { getLifecycleLocal, hidratarViagemDoServidor } from "@/lib/lifecycle";
+import { autoLimparCascaOrfa, getLifecycleLocal, hidratarViagemDoServidor } from "@/lib/lifecycle";
 import { startHomeTutorialIfNeeded } from "@/lib/home-tutorial";
 
 const statusVariant: Record<
@@ -103,9 +103,14 @@ export default function Home() {
   useFocusEffect(
     useCallback(() => {
       let alive = true;
-      // Com a flag ligada, reconcilia com o servidor (pega viagem órfã). Sem a
-      // flag, só checa o espelho local (barato).
-      const p = podeLifecycle ? hidratarViagemDoServidor() : getLifecycleLocal();
+      // Com a flag ligada, reconcilia com o servidor. Antes, auto-limpa a casca
+      // órfã (viagem abandonada de 0 eventos que trava o envio das novas por
+      // ocupar a vaga de "1 em andamento"): enfileira o cancel, e aí a
+      // hidratação nem a reconstrói como "Retomar". Sem a flag, só checa o
+      // espelho local (barato).
+      const p = podeLifecycle
+        ? autoLimparCascaOrfa().then(() => hidratarViagemDoServidor())
+        : getLifecycleLocal();
       void p.then((atual) => {
         if (alive) setTemLifecycle(!!atual);
       });

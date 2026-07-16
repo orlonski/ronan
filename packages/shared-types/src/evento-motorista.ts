@@ -16,6 +16,15 @@ export const TipoEvento = z.enum([
   "gps_falhou",
   "viagem_salva",
   "local_criado",
+  // Lifecycle guiado (Iniciar → eventos → Finalizar). Antes o guiado não
+  // emitia telemetria nenhuma, então um "iniciar abandonado" (viagem que fica
+  // EM_ANDAMENTO vazia travando as próximas) era invisível. Com estes dá pra
+  // reconstruir a timeline: iniciada → evento(s) → finalizada, OU iniciada →
+  // silêncio → casca_orfa_limpa (abandono).
+  "viagem_guiada_iniciada",
+  "viagem_guiada_evento",
+  "viagem_guiada_finalizada",
+  "viagem_guiada_casca_orfa_limpa",
 ]);
 export type TipoEvento = z.infer<typeof TipoEvento>;
 
