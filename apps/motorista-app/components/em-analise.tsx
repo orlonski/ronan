@@ -49,7 +49,7 @@ export function EmAnalise() {
               aprovado, o app libera pra você lançar viagens, pedágios e abastecimentos.
             </Text>
             <Text className="text-base leading-6 text-muted-foreground">
-              Isso costuma ser rápido. Você pode tocar em "Já fui aprovado?" pra
+              Isso costuma ser rápido. Você pode tocar em “Já fui aprovado?” pra
               verificar de novo.
             </Text>
           </View>

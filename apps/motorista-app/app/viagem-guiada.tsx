@@ -16,7 +16,6 @@ import {
   KeyboardAvoidingView,
   Linking,
   Modal,
-  Platform,
   ScrollView,
   Text,
   View,
@@ -491,7 +490,7 @@ function EventoSheet({
           <>
             <ScreenHeaderLike title={`Registrar ${tipo.nome}`} onBack={fechar} />
             <KeyboardAvoidingView
-              behavior={Platform.OS === "ios" ? "padding" : undefined}
+              behavior="padding"
               className="flex-1"
             >
               <ScrollView

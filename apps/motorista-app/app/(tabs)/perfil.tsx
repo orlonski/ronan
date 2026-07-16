@@ -15,7 +15,6 @@ import {
   AppState,
   KeyboardAvoidingView,
   Linking,
-  Platform,
   Pressable,
   ScrollView,
   Switch,
@@ -133,7 +132,7 @@ export default function Perfil() {
       <ScreenHeader title="Perfil" />
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior="padding"
         className="flex-1"
       >
         <ScrollView

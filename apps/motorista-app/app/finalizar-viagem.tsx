@@ -5,7 +5,6 @@ import { Flag } from "lucide-react-native";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
   ScrollView,
   Text,
   View,
@@ -459,7 +458,7 @@ export default function FinalizarViagem() {
         <SemCatalogo carregando={cat.isFetching} aoBaixar={() => void cat.refetch()} />
       ) : (
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior="padding"
           className="flex-1"
         >
           <ScrollView

@@ -6,7 +6,9 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 
-let pediuPermissaoUmaVez = false;
+let permissaoConcedida = false;
+/** Dedup de chamadas concorrentes: 2 diálogos do SO ao mesmo tempo = foco pingando. */
+let pedidoEmVoo: Promise<boolean> | null = null;
 let handlerForegroundInstalado = false;
 let canalAndroidInstalado = false;
 
@@ -41,17 +43,41 @@ export async function reenviarPushTokenAoVoltar(): Promise<void> {
   await obterEEnviarPushToken();
 }
 
+/**
+ * Só abre o popup do SO quando a permissão nunca foi decidida. Quem já negou
+ * NÃO é perguntado de novo aqui — a recuperação é pelos Ajustes (o perfil manda
+ * pra lá quando o status é "denied").
+ *
+ * Por que isso importa: `requestPermissionsAsync` lança a activity de permissão
+ * do SO, que tira o foco da janela do app — o teclado de um formulário aberto
+ * fecha. Como o listener de AppState do _layout re-chama o registro de push a
+ * cada background→active, um pedido que sempre falha se realimentava: activity
+ * abre (app→inactive, teclado fecha) → fecha na hora por já estar negada
+ * (app→active, teclado abre) → listener pede de novo → … Resultado: teclado
+ * piscando sem parar, e o motorista sem conseguir digitar. Reproduzido em 2
+ * aparelhos; autorizar a notificação "resolvia" só porque matava o ciclo.
+ */
 export async function pedirPermissaoNotificacao(): Promise<boolean> {
-  if (pediuPermissaoUmaVez) return true;
-  const Notifications = await import("expo-notifications");
-  const cur = await Notifications.getPermissionsAsync();
-  if (cur.status === "granted") {
-    pediuPermissaoUmaVez = true;
-    return true;
+  if (permissaoConcedida) return true;
+  if (pedidoEmVoo) return pedidoEmVoo;
+  pedidoEmVoo = (async () => {
+    const Notifications = await import("expo-notifications");
+    const cur = await Notifications.getPermissionsAsync();
+    if (cur.status === "granted") {
+      permissaoConcedida = true;
+      return true;
+    }
+    // "denied" (ou sem poder re-perguntar) → nem toca no SO.
+    if (cur.status !== "undetermined" || cur.canAskAgain === false) return false;
+    const r = await Notifications.requestPermissionsAsync();
+    permissaoConcedida = r.status === "granted";
+    return permissaoConcedida;
+  })();
+  try {
+    return await pedidoEmVoo;
+  } finally {
+    pedidoEmVoo = null;
   }
-  const r = await Notifications.requestPermissionsAsync();
-  pediuPermissaoUmaVez = r.status === "granted";
-  return pediuPermissaoUmaVez;
 }
 
 export async function notificarLocal(
@@ -59,8 +85,9 @@ export async function notificarLocal(
   body: string,
   data?: Record<string, unknown>,
 ): Promise<void> {
-  const ok = await pedirPermissaoNotificacao();
-  if (!ok) return;
+  // Só checa — nunca pede. Isto roda do watchdog, em hora arbitrária: abrir o
+  // popup do SO aqui cairia em cima do motorista no meio de outra coisa.
+  if ((await statusPermissaoNotificacao()) !== "granted") return;
   const Notifications = await import("expo-notifications");
   await Notifications.scheduleNotificationAsync({
     content: { title, body, data: data ?? {}, sound: "ding" },

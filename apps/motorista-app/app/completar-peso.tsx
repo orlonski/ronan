@@ -5,7 +5,6 @@ import { Scale } from "lucide-react-native";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
   ScrollView,
   Text,
   View,
@@ -105,7 +104,7 @@ export default function CompletarPeso() {
       <ScreenHeader title="Completar peso" />
       <KeyboardAvoidingView
         className="flex-1"
-        behavior={Platform.OS === "ios" ? "padding" : "padding"}
+        behavior="padding"
       >
         <ScrollView
           ref={val.scrollRef}

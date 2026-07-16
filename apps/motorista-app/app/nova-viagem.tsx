@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
-import { router, Stack, useLocalSearchParams } from "expo-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { router, Stack, useLocalSearchParams, useNavigation } from "expo-router";
+import { usePreventRemove } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import { Check, MapPinOff, Trash2, X } from "lucide-react-native";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
   ScrollView,
   Text,
   View,
@@ -903,6 +903,7 @@ export default function NovaViagem() {
         await clearNavDestino();
       }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      saindoDePropositoRef.current = true;
       router.back();
     } catch (err) {
       setErro(humanizeApiError(err));
@@ -911,6 +912,51 @@ export default function NovaViagem() {
       setSubmitting(false);
     }
   }
+
+  const saindoDePropositoRef = useRef(false);
+
+  // Tem coisa que o motorista perde se sair agora? Ignora o que já nasce
+  // preenchido (placa default e data de hoje) pra não pedir confirmação à toa.
+  const temDadosPreenchidos =
+    foto != null ||
+    descargaCaptura != null ||
+    [
+      form.toneladas,
+      form.ticket,
+      form.km,
+      form.valorPedagio,
+      form.observacao,
+      form.clienteId,
+      form.materialId,
+      form.localCargaId,
+      form.localDescargaId,
+    ].some((v) => v.trim() !== "");
+
+  // Voltar (botão do header, back do Android ou gesto) descartava o lançamento
+  // inteiro calado — foto do ticket, peso, tudo. Um toque errado e o motorista
+  // refazia do zero. Sair pelo "Descartar viagem" sempre confirmou; o back não.
+  const navigation = useNavigation();
+  usePreventRemove(temDadosPreenchidos && !submitting, ({ data }) => {
+    // Saída que o próprio código pediu (salvou, ou descartou pelo botão, que já
+    // confirmou): passa direto. Ref, não state — precisa valer no mesmo tick do
+    // router.back() que vem logo em seguida.
+    if (saindoDePropositoRef.current) {
+      navigation.dispatch(data.action);
+      return;
+    }
+    void (async () => {
+      const ok = await showConfirm({
+        title: "Sair sem lançar?",
+        message: "O que você preencheu aqui vai ser perdido, inclusive a foto do ticket.",
+        confirmLabel: "Sair e perder",
+        cancelLabel: "Continuar preenchendo",
+        destructive: true,
+      });
+      if (!ok) return;
+      saindoDePropositoRef.current = true;
+      navigation.dispatch(data.action);
+    })();
+  });
 
   // Descarta a viagem capturada por GPS (apaga pontos + destino salvos) sem
   // lançar. Só faz sentido no modo GPS (tracking).
@@ -928,6 +974,8 @@ export default function NovaViagem() {
     await clearViagemAndamento();
     await clearNavDestino();
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    // Já confirmou aqui — não pede de novo no guard do voltar.
+    saindoDePropositoRef.current = true;
     router.back();
   }
 
@@ -1402,7 +1450,7 @@ export default function NovaViagem() {
 
       {cat.data && !hidratando && (
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior="padding"
           className="flex-1"
         >
           <ScrollView

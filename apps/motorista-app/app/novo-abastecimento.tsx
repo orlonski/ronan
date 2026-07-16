@@ -5,7 +5,6 @@ import { Check } from "lucide-react-native";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   Switch,
@@ -323,7 +322,7 @@ export default function NovoAbastecimento() {
 
       {cat.data && (
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior="padding"
           className="flex-1"
         >
           <ScrollView
