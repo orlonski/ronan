@@ -218,6 +218,13 @@ export default function Pendentes() {
                     key={`lc-${trip.clientId}`}
                     trip={trip}
                     onDescartar={() => descartarTrip(trip)}
+                    onEditar={() => {
+                      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      router.push({
+                        pathname: "/editar-viagem-guiada",
+                        params: { clientId: trip.clientId },
+                      });
+                    }}
                     onTentarNovamente={() => tentarNovamenteTripLifecycle(trip.clientId)}
                   />
                 ))}
@@ -278,13 +285,18 @@ const ESTAGIO_LABEL: Record<LifecycleTrip["estagio"], string> = {
 function LifecycleTripCard({
   trip,
   onDescartar,
+  onEditar,
   onTentarNovamente,
 }: {
   trip: LifecycleTrip;
   onDescartar: () => void;
+  onEditar: () => void;
   onTentarNovamente: () => void;
 }) {
   const temErro = trip.status === "error";
+  // Editar só faz sentido no estágio de fechar (é onde o motorista digita
+  // toneladas/ticket, os campos que dão 4xx e ele pode corrigir).
+  const podeEditar = temErro && trip.estagio === "fechando";
   return (
     <View className="rounded-2xl border-2 border-border bg-card p-4">
       <View className="flex-row items-start justify-between gap-3">
@@ -329,10 +341,18 @@ function LifecycleTripCard({
           <Trash2 size={16} color="#dc2626" />
           <Text className="ml-1 font-semibold text-destructive">Descartar</Text>
         </Button>
+        {podeEditar && (
+          <Button variant="outline" size="sm" className="flex-1" onPress={onEditar}>
+            <Pencil size={16} color="#0f172a" />
+            <Text className="ml-1 font-semibold">Editar</Text>
+          </Button>
+        )}
         {temErro && (
           <Button size="sm" className="flex-1" onPress={onTentarNovamente}>
             <RefreshCw size={16} color="white" />
-            <Text className="ml-1 font-semibold text-primary-foreground">Tentar de novo</Text>
+            <Text className="ml-1 font-semibold text-primary-foreground">
+              {podeEditar ? "De novo" : "Tentar de novo"}
+            </Text>
           </Button>
         )}
       </View>

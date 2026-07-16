@@ -338,6 +338,21 @@ export default function FinalizarViagem() {
         return;
       }
     }
+    // Peso presente: valida o máximo ANTES de enfileirar. O backend recusa
+    // toneladas > 9999 com 400; sem esse guard o valor errado (ex: digitou
+    // 38230 sem vírgula em vez de 38,230) entrava no outbox e o finalize ficava
+    // preso. Pega na origem.
+    if (!aguardandoPeso) {
+      const t = parseFloat(toneladas.replace(",", "."));
+      if (Number.isNaN(t) || t <= 0) {
+        val.apontar("toneladas", "Informe as toneladas");
+        return;
+      }
+      if (t > 9999) {
+        val.apontar("toneladas", "Toneladas acima do limite (9999)");
+        return;
+      }
+    }
     // Peso presente e não é aguardando peso: ticket segue as regras normais.
     if (!aguardandoPeso && exigeTicket && !ticket.trim()) {
       val.apontar("ticket", "Informe o número do ticket");

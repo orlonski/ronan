@@ -169,6 +169,51 @@ export async function atualizarViagemPendente(input: {
 }
 
 /**
+ * Substitui campos do payload de um FINALIZAR guiado preso (mesmo clientId).
+ * Usado quando o finalize falhou com 4xx real (ex: "toneladas acima do máximo")
+ * e o motorista corrige na tela de edição. Merge no payload (preserva
+ * km/descarga/material/rota/etc), reseta status/attempts/erro e re-dispara o
+ * drain. Idempotente pelo mesmo clientId — o backend reenvia sobre a viagem
+ * que continua EM_ANDAMENTO (o 400 aborta antes do update). Se sumiu (drain
+ * entre abrir e salvar), retorna { removed: true }.
+ */
+export async function atualizarViagemFinalizarPendente(input: {
+  clientId: string;
+  patch: Record<string, unknown>;
+  foto?: { uri: string; mime: string };
+}): Promise<{ removed: boolean }> {
+  const list = await listPendingViagemFinalizar();
+  const existing = list.find((x) => x.clientId === input.clientId);
+  if (!existing) return { removed: true };
+
+  const payload = { ...existing.payload, ...input.patch };
+  let fotoUri = existing.fotoUri;
+  let fotoMime = existing.fotoMime;
+  if (input.foto) {
+    // Foto nova → re-upload: descarta a fotoKey já subida do payload antigo.
+    fotoUri = input.foto.uri;
+    fotoMime = input.foto.mime;
+    delete payload.fotoKey;
+  }
+
+  await upsertPendingViagemFinalizar({
+    ...existing,
+    payload,
+    fotoUri,
+    fotoMime,
+    status: "pending",
+    attempts: 0,
+    lastTriedAt: undefined,
+    errorMsg: undefined,
+    errorStatus: undefined,
+    errorIssues: undefined,
+  });
+  notify();
+  void drain();
+  return { removed: false };
+}
+
+/**
  * Reseta o estado de erro de uma viagem pendente e dispara nova
  * tentativa de sync. Usa quando o motorista quer tentar de novo
  * após erro 4xx permanente (que parou os retries automáticos).
