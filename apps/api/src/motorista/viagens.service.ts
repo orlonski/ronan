@@ -1232,7 +1232,13 @@ export class ViagensMotoristaService {
         toneladas: aguardandoPeso ? null : input.toneladas,
         km: input.km,
         kmCalculado: input.kmCalculado,
-        kmEditadoManual: input.kmEditadoManual,
+        // kmFonte é o dono; kmEditadoManual deriva dele (ver create). App antigo
+        // sem kmFonte cai no kmEditadoManual que ele envia.
+        kmEditadoManual:
+          input.kmFonte != null
+            ? input.kmFonte === "MANUAL" || input.kmFonte === "HISTORICO"
+            : input.kmEditadoManual,
+        kmFonte: input.kmFonte,
         rotaGeometria: input.rotaGeometria,
         retornoConfirmado: input.retornoConfirmado,
         // Recria os trechos do zero (idempotente em reenvio do finalizar).
@@ -1270,6 +1276,8 @@ export class ViagensMotoristaService {
     }
     // Finalizada sem sinal (km estimado): recalcula pelo trajeto real e avisa.
     void this.kmReprocessamento.reprocessar(finalizada.id);
+    // Carimba se o km está fora do padrão do trajeto (igual ao create).
+    void this.kmAtipico.avaliarViagem(finalizada.id);
 
     // Notifica os admins (inbox/sininho do dashboard) — mesma "Nova viagem" que
     // o fluxo de lançamento único dispara. Só ao FINALIZAR (a viagem em

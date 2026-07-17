@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { FonteGps } from "./enums";
+import { KmFonte } from "./km-atipico";
 import { LocalSnapshot, TrechoViagemInput, checarPesoObrigatorio } from "./viagem";
 
 // Limites espelham o schema do banco (Decimal(10,3)/Decimal(10,2)).
@@ -141,6 +142,9 @@ export const FinalizarViagemInput = z.object({
   kmCalculado: z.number().nonnegative().max(MAX_KM).optional(),
   // true = motorista digitou o km na mão (reprocessamento respeita, não sobrescreve).
   kmEditadoManual: z.boolean().optional(),
+  // Procedência do km (igual ao CriarViagemInput): distingue "usou o histórico
+  // da frota" de "ajustou na mão". Backend deriva kmEditadoManual disto.
+  kmFonte: KmFonte.optional(),
   // Polyline da rota escolhida pelo motorista no seletor de mapa (igual ao
   // CriarViagemInput). Backend guarda em Viagem.rotaGeometria.
   rotaGeometria: z.string().max(20000).optional(),

@@ -37,6 +37,7 @@ import NetInfo from "@react-native-community/netinfo";
 import { drenar as drenarEventos } from "@/lib/event-reporter";
 import { prefetchDadosBase, setQueryClientGlobal } from "@/lib/queries";
 import { pruneExpired as pruneRotaCache } from "@/lib/rota-cache";
+import { pruneKmReferenciaExpired } from "@/lib/km-referencia-cache";
 import {
   enviarPendentes,
   instalarHandlersGlobais,
@@ -95,8 +96,9 @@ const queryClient = new QueryClient({
 // pra calcular fallback haversine quando offline.
 setQueryClientGlobal(queryClient);
 
-// Prune entradas expiradas do cache local de rotas no boot.
+// Prune entradas expiradas dos caches locais no boot.
 void pruneRotaCache();
+void pruneKmReferenciaExpired();
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(getAuthState() !== null);

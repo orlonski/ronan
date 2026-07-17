@@ -26,6 +26,7 @@ import { Select, type SelectOption } from "@/components/ui/select";
 import { showAlert, showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { hojeISO } from "@/lib/datetime";
+import type { KmFonte } from "@ronan/shared-types";
 import {
   finalizarViagemGuiada,
   getLifecycleLocal,
@@ -35,9 +36,11 @@ import {
 import {
   useCalcularRota,
   useCatalogos,
+  useReferenciaKm,
   useRotasAlternativas,
   useOpcoesRota,
 } from "@/lib/queries";
+import { SugestaoKmHistorico } from "@/components/sugestao-km-historico";
 
 /**
  * Passo final do lifecycle guiado: coleta os dados que faltam pra fechar a
@@ -55,6 +58,9 @@ export default function FinalizarViagem() {
   const [ticket, setTicket] = useState("");
   const [km, setKm] = useState("");
   const [kmEditadoManual, setKmEditadoManual] = useState(false);
+  // Procedência do km (ver nova-viagem): distingue "usou o histórico da frota"
+  // de "ajustou na mão". null = não mexeu → resolve por contexto no payload.
+  const [kmFonte, setKmFonte] = useState<KmFonte | null>(null);
   // Bota-fora (limpeza): motorista voltou pro local de carga pra jogar a sobra.
   const [teveBotaFora, setTeveBotaFora] = useState(false);
   // Rota escolhida no seletor de mapa (quando há alternativas).
@@ -171,11 +177,39 @@ export default function FinalizarViagem() {
       : undefined;
   }, [rotasAtivas, rota.data]);
 
+  // Referência de km do trajeto (o que a frota já rodou nesse par).
+  const refKm = useReferenciaKm(localCargaId, localDescargaId);
+  const sugestaoKm = useMemo(() => {
+    const ref = refKm.data;
+    if (!ref?.efetiva || ref.efetiva.fonte !== "HISTORICO" || !ref.historico) return null;
+    return {
+      km: ref.efetiva.km,
+      amostra: ref.historico.amostra,
+      min: ref.historico.min,
+      max: ref.historico.max,
+    };
+  }, [refKm.data]);
+  const semSinal =
+    !!rota.data &&
+    "fonte" in rota.data &&
+    (rota.data.fonte === "estimado_haversine" || rota.data.fonte === "cache_local");
+  const kmAtualNum = parseFloat(km.replace(",", "."));
+  const sugestaoJaAplicada =
+    sugestaoKm != null &&
+    Number.isFinite(kmAtualNum) &&
+    Math.abs(kmAtualNum - sugestaoKm.km) < 0.5;
+  const mostrarSugestao = sugestaoKm != null && !sugestaoJaAplicada;
+
+  useEffect(() => {
+    setKmFonte(null);
+  }, [localCargaId, localDescargaId]);
+
   // Escolher rota/variante: seta km + geometria e SAI do modo manual.
   function escolherRota(idx: number) {
     const r = rotasAtivas[idx];
     if (!r) return;
     setKmEditadoManual(false);
+    setKmFonte("ROTA_ESCOLHIDA");
     setRotaIdx(idx);
     setRotaGeometriaEscolhida(r.geometria);
     setKm(r.km);
@@ -186,6 +220,16 @@ export default function FinalizarViagem() {
     setRotaIdx(-1);
     setRotaGeometriaEscolhida(null);
     setKmEditadoManual(true);
+    setKmFonte("MANUAL");
+  }
+
+  // Aceitou a sugestão do histórico da frota (mesmo comportamento da nova viagem).
+  function usarSugestaoKm(kmSugerido: number) {
+    setRotaIdx(-1);
+    setRotaGeometriaEscolhida(null);
+    setKmEditadoManual(true);
+    setKmFonte("HISTORICO");
+    setKm(formatKmInput(kmSugerido));
   }
 
   // Enquanto o seletor governa o km (rota escolhida), o auto-fill fica parado.
@@ -417,6 +461,13 @@ export default function FinalizarViagem() {
             : undefined
           : kmCalculadoFinal,
         kmEditadoManual,
+        kmFonte:
+          kmFonte ??
+          (kmEditadoManual
+            ? "MANUAL"
+            : kmGovernadoPorRota
+              ? "ROTA_ESCOLHIDA"
+              : "ROTA_OSRM"),
         rotaGeometria: rotaGeometriaEscolhida ?? undefined,
         retornoConfirmado,
         // Bota-fora = 1 trecho de retorno pro local de carga (a volta que ele fez).
@@ -545,6 +596,18 @@ export default function FinalizarViagem() {
               ) : null}
             </View>
 
+            {/* Sugestão do histórico da frota — no topo da seção de km. */}
+            {mostrarSugestao && sugestaoKm ? (
+              <SugestaoKmHistorico
+                km={sugestaoKm.km}
+                amostra={sugestaoKm.amostra}
+                min={sugestaoKm.min}
+                max={sugestaoKm.max}
+                offline={semSinal}
+                onUsar={() => usarSugestaoKm(sugestaoKm.km)}
+              />
+            ) : null}
+
             {/* Seletor de estrada (quando não é caso de retorno) */}
             {temMapa && !usarRetorno ? (
               <SeletorRotas
@@ -572,6 +635,7 @@ export default function FinalizarViagem() {
                     onChangeText={(v) => {
                       val.limpar();
                       setKmEditadoManual(true);
+                      setKmFonte("MANUAL");
                       setKm(v);
                     }}
                     keyboardType="decimal-pad"
@@ -603,6 +667,7 @@ export default function FinalizarViagem() {
                       onChangeText={(v) => {
                         val.limpar();
                         setKmEditadoManual(true);
+                        setKmFonte("MANUAL");
                         setKm(v);
                       }}
                       keyboardType="decimal-pad"
@@ -634,7 +699,8 @@ export default function FinalizarViagem() {
                     />
                   </View>
                 </View>
-                {rota.data &&
+                {!mostrarSugestao &&
+                rota.data &&
                 "km" in rota.data &&
                 rota.data.km &&
                 !kmEditadoManual &&
@@ -730,4 +796,10 @@ export default function FinalizarViagem() {
       )}
     </SafeAreaView>
   );
+}
+
+/** Km (number) → string do input: sem casas quando inteiro, 1 casa com vírgula. */
+function formatKmInput(km: number): string {
+  const arred = Math.round(km * 10) / 10;
+  return Number.isInteger(arred) ? String(arred) : arred.toFixed(1).replace(".", ",");
 }

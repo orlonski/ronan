@@ -10,6 +10,7 @@ import {
 import type {
   ExtrairTicketResult,
   FonteGps,
+  ReferenciaKmPayload,
   StatusMotorista,
   StoryEmoji,
   StoryFeedResponse,
@@ -27,6 +28,7 @@ import {
   type PedagioCadastrado,
 } from "./pedagios-offline";
 import { getRotaCache, setRotaCache } from "./rota-cache";
+import { getKmReferenciaCache, setKmReferenciaCache } from "./km-referencia-cache";
 import {
   drainLocais,
   enqueueAbastecimento,
@@ -106,6 +108,9 @@ export type Me = {
   podeVerStories: boolean;
   // Quando true, mostra "Buscar local por nome" na descarga (todos os locais).
   podeVerTodosLocais: boolean;
+  // Quando true, mostra a sugestão de km do trajeto ("já rodaram ~X km") ao
+  // escolher carga+descarga. Rollout gradual — opt-in.
+  podeReferenciaKm: boolean;
   // Preferências de recebimento (controladas na tela de perfil).
   aceitaPush: boolean;
   aceitaWhatsapp: boolean;
@@ -257,6 +262,8 @@ function normalizarMe<T extends Record<string, unknown>>(m: T): T {
   if (typeof anyM.podeUsarOcrTicket !== "boolean") anyM.podeUsarOcrTicket = true;
   // Opt-in: cache antigo / motorista sem o flag NÃO vê o "buscar todos os locais".
   if (typeof anyM.podeVerTodosLocais !== "boolean") anyM.podeVerTodosLocais = false;
+  // Opt-in: cache antigo / motorista sem o flag NÃO vê a sugestão de km.
+  if (typeof anyM.podeReferenciaKm !== "boolean") anyM.podeReferenciaKm = false;
   // Backend antigo/cache sem as prefs: assume que recebe tudo (default true).
   if (typeof anyM.aceitaPush !== "boolean") anyM.aceitaPush = true;
   if (typeof anyM.aceitaWhatsapp !== "boolean") anyM.aceitaWhatsapp = true;
@@ -410,7 +417,30 @@ export async function prefetchDadosBase(qc: QueryClient): Promise<void> {
     qc.prefetchQuery(me),
     qc.prefetchQuery(tipos),
     qc.prefetchQuery(buscaCfg),
+    prefetchKmReferencia(qc),
   ]);
+}
+
+/**
+ * Pré-baixa a referência de km dos pares que o motorista roda e semeia o cache
+ * local por par — assim a sugestão aparece offline (rota que ele repete). Só
+ * quando a flag está ligada; best-effort, nunca derruba o prefetch geral.
+ */
+async function prefetchKmReferencia(qc: QueryClient): Promise<void> {
+  try {
+    const me = qc.getQueryData<Me>(["me"]) ?? (await api.get<Me>("/m/me"));
+    if (me?.podeReferenciaKm !== true) return;
+    const { pares } = await api.get<{
+      pares: Array<ReferenciaKmPayload & { cargaId: string; descargaId: string }>;
+    }>("/m/km-referencia/meus-pares?dias=60");
+    await Promise.allSettled(
+      pares.map(({ cargaId, descargaId, ...payload }) =>
+        setKmReferenciaCache(cargaId, descargaId, payload),
+      ),
+    );
+  } catch {
+    /* offline / flag off / sem pares — silencioso */
+  }
 }
 
 /** Catálogo dinâmico de tipos de evento (lifecycle guiado). Cacheado offline. */
@@ -993,6 +1023,42 @@ export function useCalcularRota(origemId?: string, destinoId?: string) {
             ? "Sem internet e sem cálculo anterior dessa rota."
             : "Não foi possível calcular a rota agora.",
         } as RotaCalculada;
+      }
+    },
+  });
+}
+
+/**
+ * Referência de km do trajeto (o que a frota já rodou nesse par). Cache-first
+ * igual ao useCalcularRota: tenta a rede, salva no cache local e cai no cache
+ * quando offline. Gateada pela flag podeReferenciaKm — sem ela, nem busca.
+ * Devolve null (sem erro) quando não há sinal nem cache: a sugestão só some.
+ */
+export function useReferenciaKm(cargaId?: string, destinoId?: string) {
+  const me = useMe();
+  const habilitado =
+    me.data?.podeReferenciaKm === true &&
+    !!cargaId &&
+    !!destinoId &&
+    cargaId !== destinoId;
+  return useQuery<ReferenciaKmPayload | null>({
+    queryKey: ["km-referencia", cargaId, destinoId],
+    enabled: habilitado,
+    staleTime: 30 * 60_000,
+    retry: false,
+    queryFn: async () => {
+      const cid = cargaId!;
+      const did = destinoId!;
+      try {
+        const res = await api.get<ReferenciaKmPayload>(
+          `/m/km-referencia?carga=${cid}&descarga=${did}`,
+        );
+        void setKmReferenciaCache(cid, did, res);
+        return res;
+      } catch {
+        // Offline / erro: usa o cache (pré-baixado no login ou de uma consulta
+        // anterior). Sem cache → null, a sugestão simplesmente não aparece.
+        return (await getKmReferenciaCache(cid, did)) ?? null;
       }
     },
   });

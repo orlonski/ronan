@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { AvisoKmEstimado } from "@/components/aviso-km-estimado";
+import { SugestaoKmHistorico } from "@/components/sugestao-km-historico";
 import { DescargaPorGps, type DescargaCaptura } from "@/components/descarga-por-gps";
 import { SeletorRotas } from "@/components/seletor-rotas";
 import { SeletorRetorno } from "@/components/seletor-retorno";
@@ -31,7 +32,7 @@ import { humanizeApiError } from "@/lib/api";
 import { fmtDataBR, hojeISO } from "@/lib/datetime";
 import { reportarEvento } from "@/lib/event-reporter";
 import { humanizeZodError } from "@/lib/validation";
-import { CriarViagemInput } from "@ronan/shared-types";
+import { CriarViagemInput, type KmFonte } from "@ronan/shared-types";
 import { formatarDistancia, haversineMetros, localMaisProximo, pegarCoordsPrecisa, pegarCoordsRapido } from "@/lib/geo";
 import { simplificarPontos } from "@/lib/polyline";
 import { listPendingViagens, type PendingViagem } from "@/db/database";
@@ -45,6 +46,7 @@ import {
   useExtrairTicket,
   useMe,
   usePedagiosNaRota,
+  useReferenciaKm,
   useRotasAlternativas,
   useOpcoesRota,
   type Local,
@@ -69,6 +71,12 @@ const today = hojeISO;
 function numToStr(n: unknown): string {
   if (typeof n !== "number" || !Number.isFinite(n)) return "";
   return String(n).replace(".", ",");
+}
+
+/** Km (number) → string do input: sem casas quando inteiro, 1 casa com vírgula. */
+function formatKmInput(km: number): string {
+  const arred = Math.round(km * 10) / 10;
+  return Number.isInteger(arred) ? String(arred) : arred.toFixed(1).replace(".", ",");
 }
 
 const empty: FormShape = {
@@ -145,6 +153,11 @@ export default function NovaViagem() {
   const [descargaCaptura, setDescargaCaptura] = useState<DescargaCaptura | null>(null);
   // Rastreia se motorista editou KM manualmente — se sim, parou de auto-preencher
   const [kmEditadoManual, setKmEditadoManual] = useState(false);
+  // Procedência do km escolhida explicitamente pelo motorista (rota, mão ou
+  // sugestão histórica). null = não mexeu → o payload resolve pra OSRM/rota.
+  // HISTORICO precisa ser distinguido de MANUAL: usar a referência da frota NÃO
+  // é "ajustou na mão" e não pode virar alerta de divergência no painel.
+  const [kmFonte, setKmFonte] = useState<KmFonte | null>(null);
   // Bota-fora (limpeza): motorista voltou pro local de carga pra jogar a sobra.
   const [teveBotaFora, setTeveBotaFora] = useState(false);
   // Rota escolhida no seletor de mapa (quando há alternativas).
@@ -255,12 +268,45 @@ export default function NovaViagem() {
       : undefined;
   }, [rotasAtivas, rota.data]);
 
+  // Referência de km do trajeto (o que a frota já rodou nesse par). Gateada pela
+  // flag; devolve null offline sem cache (a sugestão só não aparece).
+  const refKm = useReferenciaKm(form.localCargaId, form.localDescargaId);
+  const sugestaoKm = useMemo(() => {
+    const ref = refKm.data;
+    // Só sugere com amostra suficiente (efetiva já resolvida como HISTORICO pelo
+    // backend). Sem isso, cai no fluxo normal do OSRM.
+    if (!ref?.efetiva || ref.efetiva.fonte !== "HISTORICO" || !ref.historico) return null;
+    return {
+      km: ref.efetiva.km,
+      amostra: ref.historico.amostra,
+      min: ref.historico.min,
+      max: ref.historico.max,
+    };
+  }, [refKm.data]);
+  const semSinal =
+    !!rota.data &&
+    "fonte" in rota.data &&
+    (rota.data.fonte === "estimado_haversine" || rota.data.fonte === "cache_local");
+  const kmAtualNum = parseFloat(form.km.replace(",", "."));
+  // Não repete o óbvio: some quando o km já bate com a sugestão.
+  const sugestaoJaAplicada =
+    sugestaoKm != null &&
+    Number.isFinite(kmAtualNum) &&
+    Math.abs(kmAtualNum - sugestaoKm.km) < 0.5;
+  const mostrarSugestao = sugestaoKm != null && !sugestaoJaAplicada;
+
+  // Trocar de par zera a procedência escolhida — o km será re-decidido pro par novo.
+  useEffect(() => {
+    setKmFonte(null);
+  }, [form.localCargaId, form.localDescargaId]);
+
   // Escolher rota/variante: seta km + geometria e SAI do modo manual (escolher
   // uma opção ≠ digitar na mão).
   function escolherRota(idx: number) {
     const r = rotasAtivas[idx];
     if (!r) return;
     setKmEditadoManual(false);
+    setKmFonte("ROTA_ESCOLHIDA");
     setRotaIdx(idx);
     setRotaGeometriaEscolhida(r.geometria);
     setForm((f) => ({ ...f, km: r.km }));
@@ -272,6 +318,18 @@ export default function NovaViagem() {
     setRotaIdx(-1);
     setRotaGeometriaEscolhida(null);
     setKmEditadoManual(true);
+    setKmFonte("MANUAL");
+  }
+
+  // Aceitou a sugestão do histórico da frota: preenche o km e marca a
+  // procedência HISTORICO (o backend não trata isso como "ajustou na mão").
+  // Sai do governo da rota pra o auto-fill não brigar.
+  function usarSugestaoKm(kmSugerido: number) {
+    setRotaIdx(-1);
+    setRotaGeometriaEscolhida(null);
+    setKmEditadoManual(true);
+    setKmFonte("HISTORICO");
+    setForm((f) => ({ ...f, km: formatKmInput(kmSugerido) }));
   }
 
   // Enquanto o seletor governa o km, o auto-fill fica parado.
@@ -792,6 +850,16 @@ export default function NovaViagem() {
             : undefined,
         // Motorista digitou na mão? O reprocessamento no servidor respeita isso.
         kmEditadoManual,
+        // Procedência do km. Explícita quando o motorista escolheu (rota, mão ou
+        // sugestão); senão resolve por contexto. O backend usa isto pra NÃO
+        // acusar "ajustou km" quando ele só aceitou o histórico da frota.
+        kmFonte:
+          kmFonte ??
+          (kmEditadoManual
+            ? "MANUAL"
+            : kmGovernadoPorRota
+              ? "ROTA_ESCOLHIDA"
+              : "ROTA_OSRM"),
         // Rota escolhida no seletor de mapa (rota real no painel).
         rotaGeometria: rotaGeometriaEscolhida ?? undefined,
         localCargaId: form.localCargaId,
@@ -1272,6 +1340,20 @@ export default function NovaViagem() {
     </View>
   );
 
+  // Sugestão do histórico da frota: aparece no TOPO da seção de km (é contexto
+  // pra decisão abaixo, não reação a ela). Some quando o km já bate com ela.
+  const secaoSugestaoKm =
+    mostrarSugestao && sugestaoKm ? (
+      <SugestaoKmHistorico
+        km={sugestaoKm.km}
+        amostra={sugestaoKm.amostra}
+        min={sugestaoKm.min}
+        max={sugestaoKm.max}
+        offline={semSinal}
+        onUsar={() => usarSugestaoKm(sugestaoKm.km)}
+      />
+    ) : null;
+
   const secaoSeletorRotas =
     temMapa && !usarRetorno ? (
       <SeletorRotas
@@ -1304,6 +1386,7 @@ export default function NovaViagem() {
           onChangeText={(v) => {
             val.limpar();
             setKmEditadoManual(true);
+            setKmFonte("MANUAL");
             update("km", v);
           }}
           keyboardType="decimal-pad"
@@ -1334,6 +1417,7 @@ export default function NovaViagem() {
             onChangeText={(v) => {
               val.limpar();
               setKmEditadoManual(true);
+              setKmFonte("MANUAL");
               update("km", v);
             }}
             keyboardType="decimal-pad"
@@ -1358,8 +1442,11 @@ export default function NovaViagem() {
           />
         </View>
       </View>
-      {/* Aviso SEM INTERNET em LINHA INTEIRA (haversine OU cache local). */}
-      {rota.data &&
+      {/* Aviso SEM INTERNET em LINHA INTEIRA (haversine OU cache local). Some
+          quando a sugestão do histórico está visível — ela absorve o recado de
+          offline numa linha só, pra a tela não empilhar dois banners. */}
+      {!mostrarSugestao &&
+      rota.data &&
       "fonte" in rota.data &&
       (rota.data.fonte === "estimado_haversine" ||
         rota.data.fonte === "cache_local") &&
@@ -1482,6 +1569,7 @@ export default function NovaViagem() {
                   {secaoFoto}
                 </Secao>
                 <Secao titulo="Km rodado">
+                  {secaoSugestaoKm}
                   {secaoSeletorRotas}
                   {secaoKm}
                   {secaoBotaFora}
@@ -1518,6 +1606,7 @@ export default function NovaViagem() {
                 </Secao>
                 <View ref={val.refCampo("kmCard")}>
                   <Secao titulo="Km rodado">
+                    {secaoSugestaoKm}
                     {secaoSeletorRotas}
                     {secaoKm}
                     {secaoBotaFora}
