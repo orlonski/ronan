@@ -1464,6 +1464,41 @@ export function useResponderKmDivergente() {
       void qc.invalidateQueries({ queryKey: ["viagens"] });
       void qc.invalidateQueries({ queryKey: ["viagens-filtradas"] });
       void qc.invalidateQueries({ queryKey: ["resumo-mes"] });
+      // O responder-km também posta no chat → recarrega a conversa.
+      void qc.invalidateQueries({ queryKey: ["viagem-mensagens", atualizada.id] });
+    },
+  });
+}
+
+export type MensagemViagem = {
+  id: string;
+  autor: "ADMIN" | "MOTORISTA";
+  autorNome: string;
+  texto: string;
+  acao: string | null;
+  criadoEm: string;
+};
+
+/** Chat da viagem (admin <-> motorista). Online — sem sinal, fica no cache. */
+export function useMensagensViagem(viagemId?: string) {
+  return useQuery({
+    queryKey: ["viagem-mensagens", viagemId],
+    enabled: !!viagemId,
+    staleTime: 15_000,
+    queryFn: () => api.get<MensagemViagem[]>(`/m/viagens/${viagemId}/mensagens`),
+  });
+}
+
+/** Motorista manda uma mensagem no chat da viagem. Online-only. */
+export function useEnviarMensagemViagem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { viagemId: string; texto: string }) =>
+      api.post<MensagemViagem[]>(`/m/viagens/${args.viagemId}/mensagens`, {
+        texto: args.texto,
+      }),
+    onSuccess: (lista, args) => {
+      qc.setQueryData(["viagem-mensagens", args.viagemId], lista);
     },
   });
 }

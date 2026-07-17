@@ -47,6 +47,7 @@ import {
   useViagemDetalhe,
 } from "@/lib/queries";
 import { enqueueFoto } from "@/lib/sync";
+import { ConversaViagem } from "@/components/conversa-viagem";
 
 const STATUS_VARIANT: Record<
   string,
@@ -217,11 +218,6 @@ export default function ViagemDetalheScreen() {
                     <Text className="text-base font-bold text-orange-900">
                       Falta informar o valor do pedágio
                     </Text>
-                    {detalhe.data.motivoStatus && (
-                      <Text className="mt-1 text-sm text-foreground">
-                        {detalhe.data.motivoStatus}
-                      </Text>
-                    )}
                     <View className="mt-3 flex-row items-center gap-2">
                       <Text className="text-sm text-foreground">R$</Text>
                       <TextInput
@@ -279,11 +275,6 @@ export default function ViagemDetalheScreen() {
                     <Text className="text-base font-bold text-orange-900">
                       Foto do ticket precisa ser refeita
                     </Text>
-                    {detalhe.data.motivoStatus && (
-                      <Text className="mt-1 text-sm text-foreground">
-                        {detalhe.data.motivoStatus}
-                      </Text>
-                    )}
                     <View className="mt-3">
                       <PhotoCapture
                         value={novaFotoDivergente}
@@ -332,11 +323,6 @@ export default function ViagemDetalheScreen() {
                     <Text className="text-base font-bold text-orange-900">
                       Confira o km da viagem
                     </Text>
-                    {detalhe.data.motivoStatus && (
-                      <Text className="mt-1 text-sm text-foreground">
-                        {detalhe.data.motivoStatus}
-                      </Text>
-                    )}
                     <Text className="mt-3 text-sm font-medium text-foreground">
                       Km rodados
                     </Text>
@@ -400,25 +386,9 @@ export default function ViagemDetalheScreen() {
               </Card>
             )}
 
-          {detalhe.data.status === "DIVERGENTE" &&
-            detalhe.data.tipoDivergencia !== "PEDAGIO_SEM_VALOR" &&
-            detalhe.data.tipoDivergencia !== "FOTO_ILEGIVEL" &&
-            detalhe.data.tipoDivergencia !== "KM_DIVERGENTE" &&
-            detalhe.data.motivoStatus && (
-              <Card className="border-2 border-destructive bg-destructive/10">
-                <View className="flex-row items-start gap-3">
-                  <AlertTriangle size={20} color="#dc2626" />
-                  <View className="flex-1">
-                    <Text className="text-base font-bold text-destructive">
-                      Viagem marcada como divergente
-                    </Text>
-                    <Text className="mt-1 text-sm text-foreground">
-                      {detalhe.data.motivoStatus}
-                    </Text>
-                  </View>
-                </View>
-              </Card>
-            )}
+          {/* Conversa (chat) com a operação — o pedido da divergência aparece
+              aqui, e o motorista responde por aqui ou pelos cards acima. */}
+          <ConversaViagem viagemId={detalhe.data.id} />
 
           {/* Aguardando peso: viagem lançada sem o peso/romaneio. CTA grande
               pro motorista completar quando o romaneio sair. */}
