@@ -1,6 +1,7 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, History, Info, Route } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, CheckCircle2, ChevronRight, History, Info, Route } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -220,13 +221,21 @@ export function ReferenciaKmCard({
               <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
                 Ver {data.comparaveis.length} viagens comparáveis
               </summary>
-              <ul className="mt-2 space-y-1">
+              <ul className="mt-2 space-y-0.5">
                 {data.comparaveis.map((c) => (
-                  <li key={c.id} className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">
-                      {fmtBR(c.data)} · {c.motoristaNome ?? "—"}
-                    </span>
-                    <span className="font-medium">{km(c.km)}</span>
+                  <li key={c.id}>
+                    <Link
+                      href={`/viagens/${c.id}`}
+                      className="flex items-center justify-between rounded px-1.5 py-1 text-xs transition-colors hover:bg-muted"
+                    >
+                      <span className="flex items-center gap-1 text-muted-foreground">
+                        {fmtBR(c.data)} · {c.motoristaNome ?? "—"}
+                      </span>
+                      <span className="flex items-center gap-1 font-medium">
+                        {km(c.km)}
+                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                      </span>
+                    </Link>
                   </li>
                 ))}
               </ul>
