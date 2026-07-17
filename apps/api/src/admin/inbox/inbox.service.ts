@@ -8,6 +8,7 @@ export type TipoNotificacaoAdmin =
   | "resposta-divergencia-pedagio"
   | "resposta-divergencia-km"
   | "resposta-divergencia-foto"
+  | "nova-mensagem-viagem"
   | "foto-anexada"
   | "local-em-validacao"
   | "motorista-cadastro"

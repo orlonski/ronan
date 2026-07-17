@@ -38,8 +38,12 @@ const InformarPedagioInput = z.object({
 const ResponderKmDivergenteInput = z.object({
   // Km corrigido (opcional — o motorista pode só justificar mantendo o valor).
   km: z.number().nonnegative().max(99999).optional(),
-  // Justificativa obrigatória; vai pra observação da viagem.
+  // Justificativa obrigatória; vira mensagem no chat da viagem.
   justificativa: z.string().min(5).max(500),
+});
+
+const EnviarMensagemInput = z.object({
+  texto: z.string().min(1).max(1000),
 });
 
 const MesSchema = z
@@ -215,5 +219,22 @@ export class ViagensMotoristaController {
     body: z.infer<typeof ResponderKmDivergenteInput>,
   ) {
     return this.service.responderKmDivergente(user.id, id, body);
+  }
+
+  /** Chat da viagem: histórico de mensagens. */
+  @Get(":id/mensagens")
+  listarMensagens(@CurrentUser() user: AuthMotorista, @Param("id") id: string) {
+    return this.service.listarMensagens(user.id, id);
+  }
+
+  /** Motorista manda uma mensagem no chat da viagem. */
+  @Post(":id/mensagens")
+  enviarMensagem(
+    @CurrentUser() user: AuthMotorista,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(EnviarMensagemInput))
+    body: z.infer<typeof EnviarMensagemInput>,
+  ) {
+    return this.service.enviarMensagem(user.id, id, body.texto);
   }
 }

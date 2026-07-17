@@ -33,6 +33,7 @@ import { ValidacaoLocalService } from "./validacao-local.service";
 import { IaTicketController } from "./ia-ticket.controller";
 import { KmReprocessamentoService } from "./km-reprocessamento.service";
 import { KmAtipicoModule } from "../km-atipico/km-atipico.module";
+import { ViagemMensagensModule } from "../viagem-mensagens/viagem-mensagens.module";
 import { AvisoPesoService } from "./aviso-peso.service";
 import { StoriesMotoristaController } from "./stories.controller";
 import { StoriesMotoristaService } from "./stories.service";
@@ -54,6 +55,7 @@ import { VersaoAppMotoristaController } from "./versao-app.controller";
     EvolutionModule,
     ForcaAtualizacaoModule,
     KmAtipicoModule,
+    ViagemMensagensModule,
   ],
   controllers: [
     MotoristaController,

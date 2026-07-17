@@ -28,6 +28,7 @@ import { PedagiosRodoviaConsultaService } from "../pedagios-rodovia/pedagios-rod
 import { BuscaLocaisConfigService } from "../busca-locais-config/busca-locais-config.service";
 import { GeocodingService } from "../../geocoding/geocoding.service";
 import { KmAtipicoService } from "../../km-atipico/km-atipico.service";
+import { ViagemMensagensService } from "../../viagem-mensagens/viagem-mensagens.service";
 
 type ListViagensParams = PaginationQuery & {
   motoristaId?: string;
@@ -53,6 +54,7 @@ export class ViagensAdminService {
     private readonly buscaConfig: BuscaLocaisConfigService,
     private readonly geocoding: GeocodingService,
     private readonly kmAtipico: KmAtipicoService,
+    private readonly mensagens: ViagemMensagensService,
   ) {}
 
   /**
@@ -288,7 +290,7 @@ export class ViagensAdminService {
     viagemId: string;
     titulo: string;
     corpo: string;
-    tipo: "viagem-divergente" | "viagem-conferida" | "viagem-editada";
+    tipo: "viagem-divergente" | "viagem-conferida" | "viagem-editada" | "nova-mensagem-viagem";
     dados?: Record<string, unknown>;
     criadoPorId: string;
   }): Promise<void> {
@@ -724,6 +726,24 @@ export class ViagensAdminService {
     // ENVIADA) não notifica — admin desfez a própria ação, motorista não
     // precisa ver vai-e-volta.
     if (statusNovo === StatusViagem.DIVERGENTE) {
+      // O pedido do admin também vira mensagem no chat da viagem (cada "recusar
+      // de novo" é uma linha nova, sem sobrescrever a anterior).
+      try {
+        const admin = await this.prisma.user.findUnique({
+          where: { id: usuarioId },
+          select: { nome: true },
+        });
+        await this.mensagens.criar({
+          viagemId: id,
+          autor: "ADMIN",
+          usuarioId,
+          autorNome: admin?.nome ?? "Operação",
+          texto: data.motivoStatus as string,
+          acao: "MARCOU_DIVERGENTE",
+        });
+      } catch {
+        /* best-effort — o chat não pode derrubar a pré-validação */
+      }
       void this.notificarMotorista({
         viagemId: id,
         tipo: "viagem-divergente",
@@ -743,6 +763,40 @@ export class ViagensAdminService {
     }
 
     return this.detalhe(id);
+  }
+
+  /** Chat da viagem — histórico de mensagens (admin <-> motorista). */
+  async listarMensagens(id: string) {
+    const existe = await this.prisma.viagem.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!existe) throw new NotFoundException("Viagem não encontrada");
+    return this.mensagens.listar(id);
+  }
+
+  /** Admin manda uma mensagem no chat da viagem + notifica o motorista. */
+  async enviarMensagem(id: string, usuarioId: string, usuarioNome: string, texto: string) {
+    const existe = await this.prisma.viagem.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!existe) throw new NotFoundException("Viagem não encontrada");
+    await this.mensagens.criar({
+      viagemId: id,
+      autor: "ADMIN",
+      usuarioId,
+      autorNome: usuarioNome,
+      texto: texto.trim(),
+    });
+    void this.notificarMotorista({
+      viagemId: id,
+      tipo: "nova-mensagem-viagem",
+      titulo: "Nova mensagem da operação",
+      corpo: texto.trim().slice(0, 120),
+      criadoPorId: usuarioId,
+    });
+    return this.mensagens.listar(id);
   }
 
   async recalcularTrajeto(id: string, usuarioId: string) {

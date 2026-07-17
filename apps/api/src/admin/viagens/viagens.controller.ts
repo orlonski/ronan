@@ -51,6 +51,11 @@ const PreValidarInput = z
   );
 type PreValidarInput = z.infer<typeof PreValidarInput>;
 
+const EnviarMensagemInput = z.object({
+  texto: z.string().min(1).max(1000),
+});
+type EnviarMensagemInput = z.infer<typeof EnviarMensagemInput>;
+
 const CadastrarLocalDescargaInput = z.object({
   nome: z.string().min(2).max(120),
 });
@@ -239,6 +244,22 @@ export class ViagensAdminController {
     @CurrentUser() user: AuthAdminUser,
   ) {
     return this.service.preValidar(id, body, user.id);
+  }
+
+  /** Chat da viagem: histórico de mensagens (admin <-> motorista). */
+  @Get(":id/mensagens")
+  listarMensagens(@Param("id") id: string) {
+    return this.service.listarMensagens(id);
+  }
+
+  /** Admin manda uma mensagem no chat da viagem. */
+  @Post(":id/mensagens")
+  enviarMensagem(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(EnviarMensagemInput)) body: EnviarMensagemInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.enviarMensagem(id, user.id, user.nome, body.texto);
   }
 
   @Roles("ADMIN_USER")

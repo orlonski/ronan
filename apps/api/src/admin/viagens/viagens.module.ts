@@ -6,6 +6,7 @@ import { PedagiosRodoviaModule } from "../pedagios-rodovia/pedagios-rodovia.modu
 import { BuscaLocaisConfigModule } from "../busca-locais-config/busca-locais-config.module";
 import { GeocodingModule } from "../../geocoding/geocoding.module";
 import { KmAtipicoModule } from "../../km-atipico/km-atipico.module";
+import { ViagemMensagensModule } from "../../viagem-mensagens/viagem-mensagens.module";
 import { ViagensAdminController } from "./viagens.controller";
 import { ViagensAdminService } from "./viagens.service";
 
@@ -18,6 +19,7 @@ import { ViagensAdminService } from "./viagens.service";
     BuscaLocaisConfigModule,
     GeocodingModule,
     KmAtipicoModule,
+    ViagemMensagensModule,
   ],
   controllers: [ViagensAdminController],
   providers: [ViagensAdminService],

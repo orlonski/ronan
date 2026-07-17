@@ -216,6 +216,7 @@ model User {
   configsAvisoGrupo  ConfiguracaoAvisoGrupo[]
   configsForcaAtualizacao ConfiguracaoForcaAtualizacao[]
   configsKmAtipico ConfiguracaoKmAtipico[]
+  mensagensViagem  ViagemMensagem[] @relation("MensagensViagem")
   whatsappSessao   WhatsappSessao?
   whatsappConvites WhatsappConvite[]
 
@@ -394,6 +395,7 @@ model Motorista {
   whatsappConvites WhatsappConvite[]
   notificacoes     Notificacao[]
   eventos          EventoMotorista[]
+  mensagensViagem  ViagemMensagem[] @relation("MensagensViagem")
   posicaoConfig    MotoristaPosicaoConfig?
   posicoes         MotoristaPosicao[]
   stories            Story[]
@@ -1043,6 +1045,7 @@ model Viagem {
   matchesFechamento FechamentoLinha[]
   eventos           EventoMotorista[]
   eventosViagem     EventoViagem[]
+  mensagens         ViagemMensagem[]
 
   @@index([motoristaId, data])
   @@index([veiculoId, data])
@@ -1184,6 +1187,39 @@ model EventoViagem {
   @@index([viagemId, ocorridoEm])
   @@index([tipoEventoId])
   @@map("eventos_viagem")
+}
+
+/// Autor de uma mensagem do chat da viagem. Motorista NÃO é User (entidades
+/// separadas), por isso o autor precisa dos dois lados possíveis.
+enum AutorMensagem {
+  ADMIN
+  MOTORISTA
+}
+
+/// Chat por viagem (admin <-> motorista). Substitui a "sopa" de motivoStatus
+/// (sobrescrito) + observacao (append): cada rodada de divergência, e qualquer
+/// mensagem livre, vira uma linha com autor + data/hora. motivoStatus/
+/// tipoDivergencia continuam governando os cards de resolução; o chat é o log.
+model ViagemMensagem {
+  id          String        @id @default(uuid())
+  viagem      Viagem        @relation(fields: [viagemId], references: [id], onDelete: Cascade)
+  viagemId    String
+  autor       AutorMensagem
+  /// Um dos dois preenchido conforme o autor (motorista não é User).
+  usuario     User?         @relation("MensagensViagem", fields: [usuarioId], references: [id], onDelete: SetNull)
+  usuarioId   String?
+  motorista   Motorista?    @relation("MensagensViagem", fields: [motoristaId], references: [id], onDelete: SetNull)
+  motoristaId String?
+  /// Snapshot do nome do autor — sobrevive à exclusão do User/Motorista.
+  autorNome   String
+  texto       String
+  /// null = mensagem livre. Senão ação estruturada, pra a UI dar selo/ícone:
+  /// MARCOU_DIVERGENTE | CORRIGIU_KM | INFORMOU_PEDAGIO | ENVIOU_FOTO.
+  acao        String?
+  criadoEm    DateTime      @default(now())
+
+  @@index([viagemId, criadoEm])
+  @@map("viagem_mensagens")
 }
 
 model TicketFoto {

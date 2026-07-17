@@ -28,6 +28,7 @@ import { ValidacaoLocalService } from "./validacao-local.service";
 import { AdminInboxService } from "../admin/inbox/inbox.service";
 import { KmReprocessamentoService } from "./km-reprocessamento.service";
 import { KmAtipicoService } from "../km-atipico/km-atipico.service";
+import { ViagemMensagensService } from "../viagem-mensagens/viagem-mensagens.service";
 import { AvisoPesoService } from "./aviso-peso.service";
 
 const VIAGEM_INCLUDE = {
@@ -86,6 +87,7 @@ export class ViagensMotoristaService {
     private readonly kmReprocessamento: KmReprocessamentoService,
     private readonly avisos: AvisoPesoService,
     private readonly kmAtipico: KmAtipicoService,
+    private readonly mensagens: ViagemMensagensService,
   ) {}
 
   /** Regras de mínimo por faixa ativas (empresa+material+faixa de km). */
@@ -114,6 +116,7 @@ export class ViagensMotoristaService {
       | "resposta-divergencia-pedagio"
       | "resposta-divergencia-km"
       | "resposta-divergencia-foto"
+      | "nova-mensagem-viagem"
       | "foto-anexada",
     titulo: string,
     corpo: string,
@@ -377,18 +380,26 @@ export class ViagensMotoristaService {
       // best-effort: nao quebra a resposta pro motorista se audit falhar
     }
 
-    void (async () => {
-      const m = await this.prisma.motorista.findUnique({
+    const nomePed = (
+      await this.prisma.motorista.findUnique({
         where: { id: motoristaId },
         select: { nome: true },
-      });
-      await this.notificarAdmins(
-        "resposta-divergencia-pedagio",
-        `${m?.nome ?? "Motorista"} informou pedágio`,
-        `R$ ${valor.toFixed(2)} — viagem aguardando sua revisão`,
-        { viagemId, motoristaId, valor },
-      );
-    })();
+      })
+    )?.nome;
+    await this.mensagens.criar({
+      viagemId,
+      autor: "MOTORISTA",
+      motoristaId,
+      autorNome: nomePed ?? "Motorista",
+      texto: `Informei o pedágio: R$ ${valor.toFixed(2)}.`,
+      acao: "INFORMOU_PEDAGIO",
+    });
+    void this.notificarAdmins(
+      "resposta-divergencia-pedagio",
+      `${nomePed ?? "Motorista"} informou pedágio`,
+      `R$ ${valor.toFixed(2)} — viagem aguardando sua revisão`,
+      { viagemId, motoristaId, valor },
+    );
 
     return this.detalhe(motoristaId, viagemId);
   }
@@ -427,22 +438,37 @@ export class ViagensMotoristaService {
       throw new ConflictException("Explique em poucas palavras por que o km é esse.");
     }
 
-    // Anexa a justificativa à observação (preserva a existente).
-    const obsAntes = viagem.observacao?.trim();
-    const novaObs = obsAntes ? `${obsAntes}\n${justificativa}` : justificativa;
     // Se corrigiu o km, é valor manual → não deixa o reprocessamento sobrescrever.
     const kmMudou = input.km != null && Number(viagem.km ?? 0) !== input.km;
+    const kmAntes = viagem.km?.toString() ?? "?";
+    const nomeMot = (
+      await this.prisma.motorista.findUnique({
+        where: { id: motoristaId },
+        select: { nome: true },
+      })
+    )?.nome;
 
     await this.prisma.viagem.update({
       where: { id: viagemId },
       data: {
-        observacao: novaObs.slice(0, 500),
         status: "AJUSTADA",
         tipoDivergencia: null,
         ...(kmMudou
           ? { km: input.km, kmEditadoManual: true, kmFonte: "MANUAL" as const }
           : {}),
       },
+    });
+
+    // A resposta vira mensagem no chat da viagem (não vai mais pra observação).
+    await this.mensagens.criar({
+      viagemId,
+      autor: "MOTORISTA",
+      motoristaId,
+      autorNome: nomeMot ?? "Motorista",
+      texto: kmMudou
+        ? `Corrigi o km de ${kmAntes} para ${input.km} km. ${justificativa}`
+        : justificativa,
+      acao: "CORRIGIU_KM",
     });
 
     // Km pode ter mudado → re-carimba o atípico.
@@ -454,7 +480,7 @@ export class ViagensMotoristaService {
         entidade: "Viagem",
         entidadeId: viagemId,
         acao: AcaoAuditoria.MOTORISTA_JUSTIFICOU_KM,
-        campo: "observacao",
+        campo: "km",
         valorAntes: viagem.km?.toString() ?? null,
         valorDepois: kmMudou ? String(input.km) : (viagem.km?.toString() ?? null),
         motivo: `Motorista justificou o km${kmMudou ? ` (corrigiu para ${input.km} km)` : ""}: ${justificativa}`,
@@ -464,20 +490,14 @@ export class ViagensMotoristaService {
       // best-effort
     }
 
-    void (async () => {
-      const m = await this.prisma.motorista.findUnique({
-        where: { id: motoristaId },
-        select: { nome: true },
-      });
-      await this.notificarAdmins(
-        "resposta-divergencia-km",
-        `${m?.nome ?? "Motorista"} respondeu o km`,
-        kmMudou
-          ? `Corrigiu para ${input.km} km e justificou — viagem aguardando sua revisão`
-          : `Justificou o km — viagem aguardando sua revisão`,
-        { viagemId, motoristaId, justificativa, ...(input.km != null ? { km: input.km } : {}) },
-      );
-    })();
+    void this.notificarAdmins(
+      "resposta-divergencia-km",
+      `${nomeMot ?? "Motorista"} respondeu o km`,
+      kmMudou
+        ? `Corrigiu para ${input.km} km e justificou — viagem aguardando sua revisão`
+        : `Justificou o km — viagem aguardando sua revisão`,
+      { viagemId, motoristaId, justificativa, ...(input.km != null ? { km: input.km } : {}) },
+    );
 
     return this.detalhe(motoristaId, viagemId);
   }
@@ -540,20 +560,63 @@ export class ViagensMotoristaService {
       // best-effort
     }
 
-    void (async () => {
-      const m = await this.prisma.motorista.findUnique({
+    const nomeFoto = (
+      await this.prisma.motorista.findUnique({
         where: { id: motoristaId },
         select: { nome: true },
-      });
-      await this.notificarAdmins(
-        "resposta-divergencia-foto",
-        `${m?.nome ?? "Motorista"} enviou foto nova`,
-        `Resposta à divergência de foto — viagem aguardando sua revisão`,
-        { viagemId, motoristaId },
-      );
-    })();
+      })
+    )?.nome;
+    await this.mensagens.criar({
+      viagemId,
+      autor: "MOTORISTA",
+      motoristaId,
+      autorNome: nomeFoto ?? "Motorista",
+      texto: "Enviei uma foto nova do ticket.",
+      acao: "ENVIOU_FOTO",
+    });
+    void this.notificarAdmins(
+      "resposta-divergencia-foto",
+      `${nomeFoto ?? "Motorista"} enviou foto nova`,
+      `Resposta à divergência de foto — viagem aguardando sua revisão`,
+      { viagemId, motoristaId },
+    );
 
     return this.detalhe(motoristaId, viagemId);
+  }
+
+  /** Chat da viagem: histórico de mensagens (valida que a viagem é do motorista). */
+  async listarMensagens(motoristaId: string, viagemId: string) {
+    const v = await this.prisma.viagem.findUnique({
+      where: { id: viagemId },
+      select: { motoristaId: true },
+    });
+    if (!v) throw new NotFoundException("Viagem não encontrada.");
+    if (v.motoristaId !== motoristaId) throw new ForbiddenException("Esta viagem não é sua.");
+    return this.mensagens.listar(viagemId);
+  }
+
+  /** Motorista manda uma mensagem no chat da viagem + notifica os admins. */
+  async enviarMensagem(motoristaId: string, viagemId: string, texto: string) {
+    const v = await this.prisma.viagem.findUnique({
+      where: { id: viagemId },
+      select: { motoristaId: true, motorista: { select: { nome: true } } },
+    });
+    if (!v) throw new NotFoundException("Viagem não encontrada.");
+    if (v.motoristaId !== motoristaId) throw new ForbiddenException("Esta viagem não é sua.");
+    await this.mensagens.criar({
+      viagemId,
+      autor: "MOTORISTA",
+      motoristaId,
+      autorNome: v.motorista?.nome ?? "Motorista",
+      texto: texto.trim(),
+    });
+    void this.notificarAdmins(
+      "nova-mensagem-viagem",
+      `${v.motorista?.nome ?? "Motorista"} mandou uma mensagem`,
+      texto.trim().slice(0, 120),
+      { viagemId, motoristaId },
+    );
+    return this.mensagens.listar(viagemId);
   }
 
   async adicionarFoto(motoristaId: string, viagemId: string, storageKey: string) {
