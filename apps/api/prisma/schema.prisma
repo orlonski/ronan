@@ -211,6 +211,7 @@ model User {
   configsBuscaLocais ConfiguracaoBuscaLocais[]
   configsAvisoGrupo  ConfiguracaoAvisoGrupo[]
   configsForcaAtualizacao ConfiguracaoForcaAtualizacao[]
+  configsKmAtipico ConfiguracaoKmAtipico[]
   whatsappSessao   WhatsappSessao?
   whatsappConvites WhatsappConvite[]
 
@@ -369,6 +370,12 @@ model Motorista {
   /// os locais, não só os do GPS por perto). Default false — admin libera caso a
   /// caso (ex: desenvolvedor testando). Só affordance de UI: o catálogo já traz tudo.
   podeVerTodosLocais      Boolean   @default(false)
+  /// Referência de km por trajeto: ao escolher carga+descarga, o app mostra o que
+  /// a frota já rodou nesse par ("7 viagens, quase sempre ~100 km") com um toque
+  /// pra usar o valor; e avisa/pede justificativa se o km sair fora do padrão.
+  /// Só UX do app — o backend carimba kmForaDoPadrao pra todo mundo independente
+  /// desta flag, e o lançamento nunca é bloqueado. Rollout gradual: default false.
+  podeReferenciaKm        Boolean   @default(false)
   criadoEm                DateTime  @default(now())
   alteradoEm              DateTime  @updatedAt
 
@@ -900,16 +907,41 @@ model Viagem {
   /// detectar quando motorista sobrescreveu o sugerido (km != kmCalculado).
   /// Null pra viagens antigas (pré-feature) e quando OSRM não respondeu.
   kmCalculado       Decimal?     @db.Decimal(10, 2)
-  /// true = motorista digitou o km na mão (não aceitou o auto-calculado). O
-  /// reprocessamento de km no servidor respeita isso e NÃO sobrescreve o km.
+  /// Semântica de CONTROLE: "não sobrescreva esse km no reprocessamento". true
+  /// sempre que o valor foi decidido pelo motorista — digitado na mão OU aceito
+  /// da referência histórica (kmFonte=HISTORICO). Escrito pelo backend junto com
+  /// kmFonte no create; nenhum caminho escreve os dois de forma independente.
   /// Null pra viagens antigas / app antigo que não envia o flag.
   kmEditadoManual   Boolean?
+  /// Semântica de PROCEDÊNCIA (de onde veio o número). Distingue "aceitou o
+  /// cálculo", "escolheu rota no mapa", "usou o que a frota já rodou nesse
+  /// trajeto" e "digitou na mão" — coisas que kmEditadoManual sozinho não separa
+  /// e que a timeline/painel precisam contar direito (usar a referência do
+  /// trajeto NÃO é "ajustou o km na mão"). Null = app antigo.
+  kmFonte           KmFonte?
   /// Reprocessamento de km: quando a viagem foi criada sem sinal (km estimado
   /// por haversine), o backend recalcula pelo trajeto real (OSRM) ao sincronizar.
   /// kmRecalculadoEm = quando recalculou (também trava re-processo/re-aviso);
   /// kmAntesRecalculo = km que estava antes, pra mostrar "de X → Y" pro motorista.
   kmRecalculadoEm   DateTime?
   kmAntesRecalculo  Decimal?     @db.Decimal(10, 2)
+  /// Detecção de km atípico: o backend compara o km desta viagem com o que a
+  /// frota já rodou nesse par carga→descarga (mediana) ou, sem amostra, com a
+  /// rota OSRM. Carimbo é sempre do BACKEND (o app pode estar offline/burlado).
+  /// kmForaDoPadrao null = não avaliado (viagem com trechos, sem local, etc).
+  /// Os kmReferencia* são SNAPSHOT do que a referência valia no carimbo — a
+  /// mediana anda com o tempo e o badge precisa continuar explicável depois.
+  kmForaDoPadrao      Boolean?
+  kmReferencia        Decimal?  @db.Decimal(10, 2)
+  kmReferenciaFonte   FonteReferenciaKm?
+  kmReferenciaAmostra Int?
+  kmDesvioPct         Decimal?  @db.Decimal(6, 2)
+  kmAvaliadoEm        DateTime?
+  /// Texto que o motorista escreveu ao insistir num km fora do padrão. Fato
+  /// histórico dele: o re-carimbo automático NUNCA mexe aqui. Null é estado
+  /// válido e esperado mesmo com kmForaDoPadrao=true (lançou offline, app
+  /// antigo, flag off) — o lançamento nunca é bloqueado por causa disso.
+  justificativaKm     String?
   /// Polyline (formato Google, precision 5) da rota que o motorista ESCOLHEU
   /// entre as alternativas OSRM no seletor de mapa. Null = não usou o seletor
   /// (viagem antiga, rota única ou offline) → painel cai no rotaCache
@@ -1013,12 +1045,35 @@ model Viagem {
   @@index([clienteId, data])
   @@index([veiculoId, data, ticket])
   @@index([status])
-  @@index([localCargaId])
+  // Serve tanto a busca por par (referência de km atípico) quanto o filtro só
+  // por localCargaId, que é prefixo dele — por isso não há @@index([localCargaId]).
+  @@index([localCargaId, localDescargaId, data])
   @@index([localDescargaId])
   // Partial unique index "1 viagem EM_ANDAMENTO por motorista" é criado à mão
   // no migration.sql (Prisma não expressa índice parcial): ver migration
   // add_viagem_lifecycle (uq_viagem_em_andamento_por_motorista).
   @@map("viagens")
+}
+
+/// Procedência do km faturável da viagem. Ver Viagem.kmFonte.
+enum KmFonte {
+  /// Aceitou o valor que o app auto-preencheu pelo trajeto calculado (OSRM).
+  ROTA_OSRM
+  /// Escolheu uma das rotas alternativas no seletor de mapa.
+  ROTA_ESCOLHIDA
+  /// Tocou "Usar X km" na referência do que a frota já rodou nesse trajeto.
+  HISTORICO
+  /// Digitou o número na mão.
+  MANUAL
+}
+
+/// Contra o que o km da viagem foi comparado na detecção de atípico.
+enum FonteReferenciaKm {
+  /// Mediana das viagens da frota nesse par (amostra >= amostraMinima).
+  HISTORICO
+  /// Sem amostra suficiente → caiu na rota calculada. Régua própria, mais
+  /// frouxa: o OSRM é sistematicamente baixo em trajeto interno/pedreira.
+  ROTA_OSRM
 }
 
 /// Tipo de um trecho adicional da viagem (além da carga→descarga base).
@@ -1497,6 +1552,37 @@ model ConfiguracaoBuscaLocais {
   alteradoPorId String?
 
   @@map("configuracao_busca_locais")
+}
+
+/// Singleton (id="default"): réguas da detecção de km atípico. Configurável
+/// porque o limiar certo só aparece com dado real de produção — mudar não pode
+/// exigir deploy da API nem OTA do app. O app recebe esta config embutida na
+/// resposta de referência (§/m/km-referencia) pra aplicar a MESMA régua offline.
+model ConfiguracaoKmAtipico {
+  id               String   @id @default("default")
+  /// Kill switch server-side: false = ninguém é avaliado nem avisado (o carimbo
+  /// para de acontecer e o app não mostra nada). Não precisa de deploy.
+  ativo            Boolean  @default(true)
+  /// Desvio (%) vs. a mediana do histórico acima do qual o km é atípico.
+  desvioPct        Int      @default(30)
+  /// Desvio (%) vs. a rota calculada (fallback sem amostra). Deliberadamente mais
+  /// frouxo que desvioPct: o OSRM não enxerga acesso de pedreira/portaria/estrada
+  /// interna, então a mesma régua geraria enxurrada de falso positivo.
+  desvioPctOsrm    Int      @default(50)
+  /// Viagens comparáveis necessárias pra mediana valer como referência. Abaixo
+  /// disso cai no OSRM.
+  amostraMinima    Int      @default(5)
+  /// Passado que ainda pesa na mediana. Limita o quanto uma rota que mudou de
+  /// regime fica presa no que ela era.
+  janelaDias       Int      @default(365)
+  /// Abaixo disso não avalia: em viagem curta o desvio percentual estoura por
+  /// arredondamento e não significa nada.
+  kmMinimoAvaliado Decimal  @default(3) @db.Decimal(10, 2)
+  alteradoEm       DateTime @updatedAt
+  alteradoPor      User?    @relation(fields: [alteradoPorId], references: [id])
+  alteradoPorId    String?
+
+  @@map("configuracao_km_atipico")
 }
 
 /// Força-atualização do app nativo (motorista-app). O backend aprende sozinho

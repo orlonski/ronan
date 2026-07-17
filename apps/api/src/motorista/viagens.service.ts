@@ -27,6 +27,7 @@ import { UploadsService } from "../uploads/uploads.service";
 import { ValidacaoLocalService } from "./validacao-local.service";
 import { AdminInboxService } from "../admin/inbox/inbox.service";
 import { KmReprocessamentoService } from "./km-reprocessamento.service";
+import { KmAtipicoService } from "../km-atipico/km-atipico.service";
 import { AvisoPesoService } from "./aviso-peso.service";
 
 const VIAGEM_INCLUDE = {
@@ -84,6 +85,7 @@ export class ViagensMotoristaService {
     private readonly inbox: AdminInboxService,
     private readonly kmReprocessamento: KmReprocessamentoService,
     private readonly avisos: AvisoPesoService,
+    private readonly kmAtipico: KmAtipicoService,
   ) {}
 
   /** Regras de mínimo por faixa ativas (empresa+material+faixa de km). */
@@ -661,6 +663,17 @@ export class ViagensMotoristaService {
     });
 
     const { fotoKey, clientId, pontos, ...rest } = input;
+
+    // Procedência do km e o espelho de controle. kmFonte (novo) é o dono;
+    // kmEditadoManual é derivado dele — "usou o histórico da frota" e "digitou na
+    // mão" contam como decisão do motorista (o reprocessamento respeita ambos).
+    // App antigo não manda kmFonte: aí caímos no kmEditadoManual que ele envia.
+    const kmFonte = rest.kmFonte ?? null;
+    const kmEditadoManual =
+      kmFonte != null
+        ? kmFonte === "MANUAL" || kmFonte === "HISTORICO"
+        : rest.kmEditadoManual;
+
     const viagem = await this.prisma.viagem.create({
       data: {
         clientId,
@@ -676,7 +689,9 @@ export class ViagensMotoristaService {
         ticket,
         km: rest.km,
         kmCalculado: rest.kmCalculado,
-        kmEditadoManual: rest.kmEditadoManual,
+        kmEditadoManual,
+        kmFonte,
+        justificativaKm: rest.justificativaKm,
         rotaGeometria: rest.rotaGeometria,
         retornoConfirmado: rest.retornoConfirmado,
         ...(trechosCreate.length ? { trechos: { create: trechosCreate } } : {}),
@@ -735,10 +750,18 @@ export class ViagensMotoristaService {
 
     // Se motorista sobrescreveu o km calculado pelo OSRM, registra na timeline.
     // Best-effort: falha no log não derruba a criação da viagem.
-    if (
-      rest.kmCalculado != null &&
-      Math.abs(rest.kmCalculado - rest.km) > 0.001
-    ) {
+    //
+    // kmFonte manda: só MANUAL é "ajustou o km na mão". HISTORICO (aceitou o que a
+    // frota já rodou no trajeto) diverge do OSRM de propósito e NÃO pode virar
+    // evento de "ajustou km" — seria acusar o motorista do comportamento que a
+    // própria feature pediu. Sem kmFonte (app antigo), mantém a regra velha
+    // (km != kmCalculado).
+    const houveAjusteManual =
+      kmFonte === "MANUAL" ||
+      (kmFonte == null &&
+        rest.kmCalculado != null &&
+        Math.abs(rest.kmCalculado - rest.km) > 0.001);
+    if (houveAjusteManual) {
       try {
         const motorista = await this.prisma.motorista.findUnique({
           where: { id: motoristaId },
@@ -786,6 +809,13 @@ export class ViagensMotoristaService {
     // trajeto real agora que o backend está online e avisa o motorista se mudou.
     // Self-guarda (só age quando kmCalculado null) — seguro chamar sempre.
     void this.kmReprocessamento.reprocessar(viagem.id);
+
+    // Carimba se o km está fora do padrão do trajeto (backend autoritativo, roda
+    // pra todo mundo independente da flag do app). Best-effort, nunca bloqueia.
+    // Nota: se o km ainda for haversine (sem sinal), o reprocessamento acima vai
+    // recalcular e re-chamar avaliarViagem lá dentro — este carimbo inicial é
+    // sobre o que se tem agora e será corrigido quando o km real chegar.
+    void this.kmAtipico.avaliarViagem(viagem.id);
 
     void (async () => {
       const m = await this.prisma.motorista.findUnique({

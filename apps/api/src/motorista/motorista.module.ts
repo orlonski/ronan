@@ -31,6 +31,7 @@ import { BuscaLocaisConfigMotoristaController } from "./busca-locais-config.cont
 import { ValidacaoLocalService } from "./validacao-local.service";
 import { IaTicketController } from "./ia-ticket.controller";
 import { KmReprocessamentoService } from "./km-reprocessamento.service";
+import { KmAtipicoModule } from "../km-atipico/km-atipico.module";
 import { AvisoPesoService } from "./aviso-peso.service";
 import { StoriesMotoristaController } from "./stories.controller";
 import { StoriesMotoristaService } from "./stories.service";
@@ -51,6 +52,7 @@ import { VersaoAppMotoristaController } from "./versao-app.controller";
     PushModule,
     EvolutionModule,
     ForcaAtualizacaoModule,
+    KmAtipicoModule,
   ],
   controllers: [
     MotoristaController,

@@ -3,6 +3,7 @@ import { Cron } from "@nestjs/schedule";
 import { PrismaService } from "../prisma/prisma.service";
 import { RoteamentoService } from "../roteamento/roteamento.service";
 import { PushService } from "../push/push.service";
+import { KmAtipicoService } from "../km-atipico/km-atipico.service";
 
 // Diferença mínima (km) pra considerar que o recálculo "mudou" o valor e valer
 // o aviso ao motorista. Abaixo disso, só marca como reprocessado sem incomodar.
@@ -29,6 +30,7 @@ export class KmReprocessamentoService {
     private readonly prisma: PrismaService,
     private readonly roteamento: RoteamentoService,
     private readonly push: PushService,
+    private readonly kmAtipico: KmAtipicoService,
   ) {}
 
   /** Reprocessa UMA viagem (chamado fire-and-forget após criar/finalizar). */
@@ -43,6 +45,7 @@ export class KmReprocessamentoService {
           km: true,
           kmCalculado: true,
           kmEditadoManual: true,
+          kmFonte: true,
           kmRecalculadoEm: true,
           trechos: { select: { id: true, localId: true }, orderBy: { ordem: "asc" } },
           localCargaId: true,
@@ -100,8 +103,13 @@ export class KmReprocessamentoService {
       const mudou = Math.abs(novoKm - kmAtual) > TOLERANCIA_KM;
       const agora = new Date();
 
-      if (v.kmEditadoManual === true) {
-        // Respeita o km do motorista; só atualiza a referência OSRM e marca.
+      // Respeita o km decidido pelo motorista: digitado na mão OU aceito da
+      // referência histórica da frota (kmFonte=HISTORICO). Este último é o caso
+      // do §4.3: se ele tocou "Usar X km" OFFLINE, kmCalculado chega null e sem
+      // esta guarda o reprocessador sobrescreveria o valor dele pelo OSRM,
+      // calado — justo na rota em que a sugestão mais importa. Só atualiza a
+      // referência OSRM e marca; não mexe no km faturado.
+      if (v.kmEditadoManual === true || v.kmFonte === "HISTORICO") {
         await this.prisma.viagem.update({
           where: { id: v.id },
           data: {
@@ -118,6 +126,8 @@ export class KmReprocessamentoService {
             )} km — se quiser, é só ajustar.`,
           });
         }
+        // O km real deste par agora é conhecido → re-carimba o atípico.
+        void this.kmAtipico.avaliarViagem(v.id);
         return;
       }
 
@@ -141,6 +151,9 @@ export class KmReprocessamentoService {
           )} para ${fmtKm(novoKm)} km.`,
         });
       }
+      // Km faturado mudou de haversine pro trajeto real → re-carimba o atípico
+      // (o carimbo inicial no create foi sobre um km que não existe mais).
+      void this.kmAtipico.avaliarViagem(v.id);
     } catch (err) {
       this.log.warn(`reprocessar(${viagemId}) falhou: ${(err as Error).message}`);
     }

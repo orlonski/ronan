@@ -15,6 +15,7 @@ export * from "./motorista-documento";
 export * from "./veiculo";
 export * from "./material";
 export * from "./regra-minimo";
+export * from "./km-atipico";
 export * from "./user";
 export * from "./permissoes";
 export * from "./resumo";

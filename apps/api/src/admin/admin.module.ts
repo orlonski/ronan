@@ -14,6 +14,7 @@ import { TrackingConfigModule } from "./tracking-config/tracking-config.module";
 import { IaConfigModule } from "./ia-config/ia-config.module";
 import { AgenteConfigModule } from "./agente-config/agente-config.module";
 import { BuscaLocaisConfigModule } from "./busca-locais-config/busca-locais-config.module";
+import { KmAtipicoConfigModule } from "./km-atipico-config/km-atipico-config.module";
 import { ForcaAtualizacaoModule } from "./forca-atualizacao/forca-atualizacao.module";
 import { LayoutImportModule } from "./layout-import/layout-import.module";
 import { CamposLayoutModule } from "./campos-layout/campos-layout.module";
@@ -42,6 +43,7 @@ import { PapeisModule } from "./papeis/papeis.module";
     IaConfigModule,
     AgenteConfigModule,
     BuscaLocaisConfigModule,
+    KmAtipicoConfigModule,
     ForcaAtualizacaoModule,
     LayoutImportModule,
     CamposLayoutModule,

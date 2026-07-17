@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { FonteGps } from "./enums";
+import { KmFonte } from "./km-atipico";
 
 export const ViagemPontoInput = z.object({
   lat: z.number().min(-90).max(90),
@@ -85,6 +86,11 @@ export const CriarViagemBase = z.object({
   // true = motorista digitou o km na mão (não aceitou o auto-calculado). O
   // reprocessamento de km no servidor respeita isso: não sobrescreve km editado.
   kmEditadoManual: z.boolean().optional(),
+  // Procedência do km (ROTA_OSRM | ROTA_ESCOLHIDA | HISTORICO | MANUAL). Distingue
+  // "aceitou o cálculo" de "usou o que a frota já rodou no trajeto" — que NÃO é
+  // "ajustou na mão" e não deve virar alerta de divergência no painel. Ausente =
+  // app antigo; o backend deriva kmEditadoManual disto quando presente.
+  kmFonte: KmFonte.optional(),
   // Polyline (formato Google) da rota que o motorista escolheu no seletor de
   // mapa. Ausente quando não houve escolha (rota única, offline, tela sem
   // seletor). Backend guarda em Viagem.rotaGeometria (rota real no painel).
@@ -135,6 +141,10 @@ export const CriarViagemBase = z.object({
   // quando motorista não usou OCR ou editou tudo depois.
   ocrCampos: z.array(z.string().min(1).max(40)).max(20).optional(),
   ocrConfidence: z.number().min(0).max(1).optional(),
+  // Texto que o motorista escreveu ao insistir num km fora do padrão do trajeto.
+  // Ausente é válido mesmo com km atípico (offline, app antigo, flag off): o
+  // backend carimba assim mesmo e nunca bloqueia o lançamento.
+  justificativaKm: z.string().min(10).max(500).optional(),
 });
 
 // Fora do modo "aguardando peso", toneladas é obrigatório (positivo). Assim o

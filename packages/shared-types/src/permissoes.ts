@@ -75,6 +75,7 @@ const RESOURCE_DEFS: ResourceDef[] = [
   { recurso: "config-agente", label: "Agente WhatsApp", modulo: "Sistema", acoes: ["ver", "editar"] },
   { recurso: "config-campos-layout", label: "Campos do layout", modulo: "Sistema", acoes: ["ver", "editar"] },
   { recurso: "config-forca-atualizacao", label: "Forçar atualização do app", modulo: "Sistema", acoes: ["ver", "editar"] },
+  { recurso: "config-km-atipico", label: "Km atípico", modulo: "Sistema", acoes: ["ver", "editar"] },
 ];
 
 /** Mapa recurso → rótulo amigável (usado na matriz de papéis). */

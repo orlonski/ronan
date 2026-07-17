@@ -24,6 +24,7 @@ import { paginate, type PaginationQuery } from "../../common/pagination";
 import { PedagiosRodoviaConsultaService } from "../pedagios-rodovia/pedagios-rodovia-consulta.service";
 import { BuscaLocaisConfigService } from "../busca-locais-config/busca-locais-config.service";
 import { GeocodingService } from "../../geocoding/geocoding.service";
+import { KmAtipicoService } from "../../km-atipico/km-atipico.service";
 
 type ListViagensParams = PaginationQuery & {
   motoristaId?: string;
@@ -47,6 +48,7 @@ export class ViagensAdminService {
     private readonly pedagiosConsulta: PedagiosRodoviaConsultaService,
     private readonly buscaConfig: BuscaLocaisConfigService,
     private readonly geocoding: GeocodingService,
+    private readonly kmAtipico: KmAtipicoService,
   ) {}
 
   /**
@@ -551,6 +553,16 @@ export class ViagensAdminService {
       });
     }
 
+    // Se o km ou o par de locais mudou, o carimbo de atípico ficou stale — a
+    // referência é por par carga→descarga. Re-avalia best-effort.
+    if (
+      input.km != null ||
+      input.localCargaId != null ||
+      input.localDescargaId != null
+    ) {
+      void this.kmAtipico.avaliarViagem(id);
+    }
+
     return this.detalhe(id);
   }
 
@@ -833,6 +845,10 @@ export class ViagensAdminService {
         temGeometria: resultado.geometria != null,
       },
     });
+
+    // kmCalculado mudou → o teste de base-consistente do carimbo de atípico usa
+    // |km − kmCalculado|, então re-avalia (o km faturado em si foi preservado).
+    void this.kmAtipico.avaliarViagem(viagem.id);
 
     return {
       ok: true,
