@@ -77,6 +77,7 @@ import {
   type ReferenciaKmDetalhe,
 } from "./_components/referencia-km-card";
 import { FaturamentoCard, type RegraMinimo } from "./_components/faturamento-card";
+import { ConversaViagemCard } from "./_components/conversa-viagem-card";
 
 type ViagemDetalhe = {
   id: string;
@@ -908,6 +909,9 @@ export default function ViagemDetalhePage({
             onAceitarKm={() => aceitarKm.mutate()}
             aceitando={aceitarKm.isPending}
           />
+
+          {/* Conversa (chat) com o motorista — a divergência e mensagens livres. */}
+          <ConversaViagemCard viagemId={id} />
 
           {v.pontos && v.pontos.length >= 2 && (
             <Card className="p-4 sm:p-5 md:col-span-2">
