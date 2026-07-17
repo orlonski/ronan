@@ -68,7 +68,6 @@ import {
   fmtDataHoraBR,
   fmtNum,
 } from "@/lib/fechamento-helpers";
-import { ValorComMinimo } from "@/components/valor-com-minimo";
 import { CropFotoModal } from "@/components/crop-foto-modal";
 import { useHistoricoViagem } from "@/lib/fechamentos-api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -77,6 +76,7 @@ import {
   ReferenciaKmCard,
   type ReferenciaKmDetalhe,
 } from "./_components/referencia-km-card";
+import { FaturamentoCard, type RegraMinimo } from "./_components/faturamento-card";
 
 type ViagemDetalhe = {
   id: string;
@@ -157,6 +157,8 @@ type ViagemDetalhe = {
   rotaGeometria: string | null;
   /** True quando o motorista escolheu a rota no seletor (≠ edição manual de km). */
   rotaEscolhida?: boolean;
+  /** Regra de mínimo por faixa que casou (empresa+material+faixa). Null = nenhuma. */
+  regraMinimo: RegraMinimo | null;
   /** Variante de retorno em vigor: true=com retorno, false=direto, null=não definido. */
   retornoConfirmado?: boolean | null;
   revisadoEm: string | null;
@@ -628,80 +630,6 @@ export default function ViagemDetalhePage({
                 fromAi={v.ocrCampos?.includes("clienteId")}
               />
               <Row label="Empresa" value={v.cliente.empresa.nome} />
-              <Row
-                label="Toneladas"
-                fromAi={v.ocrCampos?.includes("toneladas")}
-                value={
-                  <ValorComMinimo
-                    efetivo={v.toneladasEfetiva}
-                    real={v.toneladasInformada}
-                    ajustada={v.toneladasAjustada}
-                    unidade="t"
-                    casas={3}
-                  />
-                }
-              />
-              <Row
-                label="Km rodados"
-                fromAi={v.ocrCampos?.includes("km")}
-                value={
-                  <span>
-                    <ValorComMinimo
-                      efetivo={v.kmEfetivo}
-                      real={v.kmInformado}
-                      ajustada={v.kmAjustada}
-                      unidade="km"
-                      casas={2}
-                    />
-                    {v.kmCalculado &&
-                      Number(v.kmCalculado) !== Number(v.km) &&
-                      (v.rotaEscolhida ? (
-                        // Motorista escolheu outra rota no seletor de mapa.
-                        <span className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                          Rota alternativa:{" "}
-                          {Number(v.km) - Number(v.kmCalculado) > 0 ? "+" : ""}
-                          {fmtNum(String(Number(v.km) - Number(v.kmCalculado)), 0)} km
-                          {" "}vs. sugerida ({fmtNum(v.kmCalculado, 2)})
-                        </span>
-                      ) : (
-                        // Ajuste manual do km (sem escolha de rota).
-                        <span className="ml-1 text-xs text-muted-foreground">
-                          (calculado: {fmtNum(v.kmCalculado, 2)})
-                        </span>
-                      ))}
-                    {v.kmRecalculadoEm && (
-                      <span
-                        className="ml-2 inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700"
-                        title="Viagem lançada sem sinal (km estimado) e recalculada pelo trajeto real quando sincronizou."
-                      >
-                        Km recalculado
-                        {v.kmAntesRecalculo
-                          ? `: de ${fmtNum(v.kmAntesRecalculo, 0)} → ${fmtNum(v.km, 0)} km`
-                          : ""}
-                      </span>
-                    )}
-                    {(() => {
-                      const retorno = (v.trechos ?? []).filter(
-                        (t) => t.tipo === "RETORNO_BOTA_FORA",
-                      );
-                      if (retorno.length === 0) return null;
-                      const kmRet = retorno.reduce((s, t) => s + Number(t.km || 0), 0);
-                      return (
-                        <span
-                          className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700"
-                          title="O motorista voltou pro local de carga pra descarregar a sobra (limpeza). A volta já está incluída no km faturado."
-                        >
-                          Inclui bota-fora
-                          {kmRet > 0 ? ` (+${fmtNum(String(kmRet), 0)} km)` : ""}
-                        </span>
-                      );
-                    })()}
-                  </span>
-                }
-              />
-              {v.kmReal && (
-                <Row label="Km real (GPS)" value={fmtNum(v.kmReal, 2)} />
-              )}
               {(v.cargaDistanciaMetros != null || v.cargaPrecisao != null) && (
                 <Row
                   label="Marcação da carga"
@@ -732,6 +660,28 @@ export default function ViagemDetalhePage({
               {v.observacao && <Row label="Observação" value={v.observacao} />}
             </dl>
           </Card>
+
+          {/* Km e faturamento: a história completa do km/toneladas — calculado
+              pela rota → informado pelo motorista → faturado (após o mínimo). */}
+          <FaturamentoCard
+            kmCalculado={v.kmCalculado}
+            kmInformado={v.kmInformado}
+            kmEfetivo={v.kmEfetivo}
+            kmAjustada={v.kmAjustada}
+            kmReal={v.kmReal}
+            rotaEscolhida={v.rotaEscolhida}
+            kmRecalculadoEm={v.kmRecalculadoEm}
+            kmAntesRecalculo={v.kmAntesRecalculo}
+            temBotaFora={(v.trechos ?? []).some((t) => t.tipo === "RETORNO_BOTA_FORA")}
+            kmBotaFora={(v.trechos ?? [])
+              .filter((t) => t.tipo === "RETORNO_BOTA_FORA")
+              .reduce((s, t) => s + Number(t.km || 0), 0)}
+            toneladasInformada={v.toneladasInformada}
+            toneladasEfetiva={v.toneladasEfetiva}
+            toneladasAjustada={v.toneladasAjustada}
+            regraMinimo={v.regraMinimo}
+            materialNome={v.material.nome}
+          />
 
           {/* Fotos do ticket: na coluna direita pra ficar lado a lado com
               os dados — admin confere foto + valores sem rolar. row-span-3

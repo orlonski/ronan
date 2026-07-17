@@ -15,7 +15,10 @@ import {
 } from "@prisma/client";
 import type { AtualizarViagemInput } from "@ronan/shared-types";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
-import { serializarViagemComMinimos } from "../../common/viagem-minimos";
+import {
+  detalharRegraMinimo,
+  serializarViagemComMinimos,
+} from "../../common/viagem-minimos";
 import { PrismaService } from "../../prisma/prisma.service";
 import { PushService } from "../../push/push.service";
 import { RoteamentoService } from "../../roteamento/roteamento.service";
@@ -462,6 +465,18 @@ export class ViagensAdminService {
     const regras = await this.prisma.regraMinimo.findMany({ where: { ativo: true } });
     return {
       ...serializarViagemComMinimos(viagem, regras),
+      // Regra de mínimo por faixa que casou (empresa+material+faixa de km) — pro
+      // painel mostrar CLARAMENTE por que o faturado ficou acima do informado.
+      // Null quando nenhuma regra casa (aí o faturado = informado).
+      regraMinimo:
+        viagem.cliente?.empresaId && viagem.material?.id
+          ? detalharRegraMinimo(
+              regras,
+              viagem.cliente.empresaId,
+              viagem.material.id,
+              viagem.km ?? 0,
+            )
+          : null,
       // Rota escolhida pelo motorista (fallback: cache/recomendada).
       rotaGeometria: viagem.rotaGeometria ?? rota?.geometria ?? null,
       // Sinaliza que o motorista escolheu uma rota no seletor (distingue de

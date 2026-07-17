@@ -35,16 +35,17 @@ export type MinimoOverride = {
 };
 
 /**
- * Acha a regra que casa pra (empresa, material, km rodado) e devolve os mínimos
- * dela. Material-específico vence "qualquer" (materialId null); entre iguais, a
- * faixa mais estreita (maior kmFaixaDe) vence. Retorna null se nada casar.
+ * Acha a REGRA que casa pra (empresa, material, km rodado). Material-específico
+ * vence "qualquer" (materialId null); entre iguais, a faixa mais estreita (maior
+ * kmFaixaDe) vence. Retorna a regra inteira (pra expor a faixa no painel), ou
+ * null se nada casar.
  */
-export function resolverRegraMinimo(
+export function regraMinimoAplicada(
   regras: RegraMinimoRow[],
   empresaId: string,
   materialId: string | null,
   kmReal: DecimalLike,
-): MinimoOverride | null {
+): RegraMinimoRow | null {
   const km = dec(kmReal);
   const candidatas = regras.filter(
     (r) =>
@@ -61,10 +62,51 @@ export function resolverRegraMinimo(
     if (espA !== espB) return espB - espA; // material específico primeiro
     return Number(b.kmFaixaDe) - Number(a.kmFaixaDe); // faixa mais estreita
   });
-  const r = candidatas[0]!;
+  return candidatas[0]!;
+}
+
+/**
+ * Mínimos (km/ton) da regra que casa. Mesma resolução do `regraMinimoAplicada`.
+ * Retorna null se nada casar.
+ */
+export function resolverRegraMinimo(
+  regras: RegraMinimoRow[],
+  empresaId: string,
+  materialId: string | null,
+  kmReal: DecimalLike,
+): MinimoOverride | null {
+  const r = regraMinimoAplicada(regras, empresaId, materialId, kmReal);
+  if (!r) return null;
   return {
     kmMinimo: r.kmMinimo != null ? dec(r.kmMinimo) : null,
     toneladasMinimo: r.toneladasMinimo != null ? dec(r.toneladasMinimo) : null,
+  };
+}
+
+/** Regra aplicada já formatada pro painel (faixa + mínimos + se é do material). */
+export type RegraMinimoDetalhe = {
+  kmFaixaDe: string;
+  kmFaixaAte: string | null;
+  kmMinimo: string | null;
+  toneladasMinimo: string | null;
+  /** true = regra específica deste material; false = regra de "qualquer material". */
+  materialEspecifico: boolean;
+};
+
+export function detalharRegraMinimo(
+  regras: RegraMinimoRow[],
+  empresaId: string,
+  materialId: string | null,
+  kmReal: DecimalLike,
+): RegraMinimoDetalhe | null {
+  const r = regraMinimoAplicada(regras, empresaId, materialId, kmReal);
+  if (!r) return null;
+  return {
+    kmFaixaDe: dec(r.kmFaixaDe).toFixed(2),
+    kmFaixaAte: r.kmFaixaAte != null ? dec(r.kmFaixaAte).toFixed(2) : null,
+    kmMinimo: r.kmMinimo != null ? dec(r.kmMinimo).toFixed(2) : null,
+    toneladasMinimo: r.toneladasMinimo != null ? dec(r.toneladasMinimo).toFixed(3) : null,
+    materialEspecifico: r.materialId != null,
   };
 }
 
