@@ -42,6 +42,7 @@ export type Motorista = {
   podeUsarOcrTicket: boolean;
   podeVerStories: boolean;
   podeVerTodosLocais: boolean;
+  podeReferenciaKm: boolean;
   receberResumoDiario: boolean;
 };
 
@@ -90,6 +91,7 @@ type AcessosState = {
   podeUsarOcrTicket: boolean;
   podeVerStories: boolean;
   podeVerTodosLocais: boolean;
+  podeReferenciaKm: boolean;
   receberResumoDiario: boolean;
 };
 
@@ -107,6 +109,7 @@ export function MotoristaForm({ initial }: Props) {
     podeUsarOcrTicket: initial?.podeUsarOcrTicket ?? true,
     podeVerStories: initial?.podeVerStories ?? true,
     podeVerTodosLocais: initial?.podeVerTodosLocais ?? false,
+    podeReferenciaKm: initial?.podeReferenciaKm ?? false,
     receberResumoDiario: initial?.receberResumoDiario ?? true,
   });
   const token = useAuthToken();
@@ -426,6 +429,11 @@ export function MotoristaForm({ initial }: Props) {
                 label="Buscar todos os locais de descarga (por nome)"
                 active={acessos.podeVerTodosLocais}
                 onChange={(v) => alterarAcesso("podeVerTodosLocais", v)}
+              />
+              <AcessoRow
+                label="Sugestão de km do trajeto (o que a frota já rodou)"
+                active={acessos.podeReferenciaKm}
+                onChange={(v) => alterarAcesso("podeReferenciaKm", v)}
               />
             </div>
 
