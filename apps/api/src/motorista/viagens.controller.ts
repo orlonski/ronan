@@ -35,6 +35,13 @@ const InformarPedagioInput = z.object({
   valor: z.number().positive().max(99999.99),
 });
 
+const ResponderKmDivergenteInput = z.object({
+  // Km corrigido (opcional — o motorista pode só justificar mantendo o valor).
+  km: z.number().nonnegative().max(99999).optional(),
+  // Justificativa obrigatória; vai pra observação da viagem.
+  justificativa: z.string().min(5).max(500),
+});
+
 const MesSchema = z
   .string()
   .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "mes deve estar no formato YYYY-MM");
@@ -193,5 +200,20 @@ export class ViagensMotoristaController {
     body: z.infer<typeof AdicionarFotoInput>,
   ) {
     return this.service.responderFotoDivergente(user.id, id, body.fotoKey);
+  }
+
+  /**
+   * Motorista responde a uma divergência tipo KM_DIVERGENTE: pode corrigir o km
+   * e/ou justificar por que colocou aquele valor. A justificativa vai pra
+   * observação da viagem; a viagem vira AJUSTADA pro admin revisar.
+   */
+  @Post(":id/responder-km-divergente")
+  responderKmDivergente(
+    @CurrentUser() user: AuthMotorista,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(ResponderKmDivergenteInput))
+    body: z.infer<typeof ResponderKmDivergenteInput>,
+  ) {
+    return this.service.responderKmDivergente(user.id, id, body);
   }
 }

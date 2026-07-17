@@ -421,7 +421,7 @@ export default function ViagemDetalhePage({
     mutationFn: (body: {
       status: "OK" | "DIVERGENTE" | "DESFAZER";
       motivo?: string;
-      tipo?: "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "OUTRO";
+      tipo?: "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "KM_DIVERGENTE" | "OUTRO";
     }) =>
       fetchApi<{ ok: true }>(`/admin/viagens/${id}/pre-validar`, {
         method: "POST",
@@ -443,7 +443,7 @@ export default function ViagemDetalhePage({
   const [dialogDivergente, setDialogDivergente] = useState(false);
   const [motivoTexto, setMotivoTexto] = useState("");
   const [tipoDivergencia, setTipoDivergencia] = useState<
-    "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "OUTRO"
+    "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "KM_DIVERGENTE" | "OUTRO"
   >("OUTRO");
   const [motivoFoiEditado, setMotivoFoiEditado] = useState(false);
 
@@ -523,11 +523,13 @@ export default function ViagemDetalhePage({
     : "";
 
   function motivoSugeridoPorTipo(
-    tipo: "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "OUTRO",
+    tipo: "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "KM_DIVERGENTE" | "OUTRO",
   ): string {
     if (tipo === "PEDAGIO_SEM_VALOR") return motivoSugeridoPedagio;
     if (tipo === "FOTO_ILEGIVEL")
       return "A foto enviada não permite identificar o ticket. Por favor, tire uma foto nova com boa iluminação e foco no número e na data.";
+    if (tipo === "KM_DIVERGENTE")
+      return `O km lançado (${fmtNum(v.km, 2)} km) parece divergir do trajeto. Confira o valor e, se estiver certo, explique o porquê (desvio, obra, etc.).`;
     return "";
   }
 
@@ -1338,6 +1340,9 @@ export default function ViagemDetalhePage({
                 </option>
                 <option value="FOTO_ILEGIVEL">
                   Foto ilegível / não aparece o ticket
+                </option>
+                <option value="KM_DIVERGENTE">
+                  Km divergente (motorista corrige/justifica)
                 </option>
                 <option value="OUTRO">Outro motivo</option>
               </Select>

@@ -112,6 +112,7 @@ export class ViagensMotoristaService {
     tipo:
       | "nova-viagem"
       | "resposta-divergencia-pedagio"
+      | "resposta-divergencia-km"
       | "resposta-divergencia-foto"
       | "foto-anexada",
     titulo: string,
@@ -386,6 +387,95 @@ export class ViagensMotoristaService {
         `${m?.nome ?? "Motorista"} informou pedágio`,
         `R$ ${valor.toFixed(2)} — viagem aguardando sua revisão`,
         { viagemId, motoristaId, valor },
+      );
+    })();
+
+    return this.detalhe(motoristaId, viagemId);
+  }
+
+  /**
+   * Motorista responde divergência tipo KM_DIVERGENTE: pode corrigir o km e/ou
+   * justificar por que colocou aquele valor. A justificativa é anexada à
+   * observação (preserva o que já havia). Viagem vira AJUSTADA pro admin
+   * revisar. Se o km mudou, marca como manual e re-carimba o atípico.
+   */
+  async responderKmDivergente(
+    motoristaId: string,
+    viagemId: string,
+    input: { km?: number; justificativa: string },
+  ) {
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { id: viagemId },
+      select: {
+        id: true,
+        motoristaId: true,
+        status: true,
+        tipoDivergencia: true,
+        km: true,
+        observacao: true,
+      },
+    });
+    if (!viagem) throw new NotFoundException("Viagem não encontrada.");
+    if (viagem.motoristaId !== motoristaId) {
+      throw new ForbiddenException("Esta viagem não é sua.");
+    }
+    if (viagem.status !== "DIVERGENTE" || viagem.tipoDivergencia !== "KM_DIVERGENTE") {
+      throw new ConflictException("Essa viagem não está aguardando revisão do km.");
+    }
+    const justificativa = input.justificativa.trim();
+    if (justificativa.length < 5) {
+      throw new ConflictException("Explique em poucas palavras por que o km é esse.");
+    }
+
+    // Anexa a justificativa à observação (preserva a existente).
+    const obsAntes = viagem.observacao?.trim();
+    const novaObs = obsAntes ? `${obsAntes}\n${justificativa}` : justificativa;
+    // Se corrigiu o km, é valor manual → não deixa o reprocessamento sobrescrever.
+    const kmMudou = input.km != null && Number(viagem.km ?? 0) !== input.km;
+
+    await this.prisma.viagem.update({
+      where: { id: viagemId },
+      data: {
+        observacao: novaObs.slice(0, 500),
+        status: "AJUSTADA",
+        tipoDivergencia: null,
+        ...(kmMudou
+          ? { km: input.km, kmEditadoManual: true, kmFonte: "MANUAL" as const }
+          : {}),
+      },
+    });
+
+    // Km pode ter mudado → re-carimba o atípico.
+    void this.kmAtipico.avaliarViagem(viagemId);
+
+    try {
+      await this.auditoria.log({
+        usuarioId: null,
+        entidade: "Viagem",
+        entidadeId: viagemId,
+        acao: AcaoAuditoria.MOTORISTA_JUSTIFICOU_KM,
+        campo: "observacao",
+        valorAntes: viagem.km?.toString() ?? null,
+        valorDepois: kmMudou ? String(input.km) : (viagem.km?.toString() ?? null),
+        motivo: `Motorista justificou o km${kmMudou ? ` (corrigiu para ${input.km} km)` : ""}: ${justificativa}`,
+        metadata: { motoristaId, kmMudou, justificativa },
+      });
+    } catch {
+      // best-effort
+    }
+
+    void (async () => {
+      const m = await this.prisma.motorista.findUnique({
+        where: { id: motoristaId },
+        select: { nome: true },
+      });
+      await this.notificarAdmins(
+        "resposta-divergencia-km",
+        `${m?.nome ?? "Motorista"} respondeu o km`,
+        kmMudou
+          ? `Corrigiu para ${input.km} km e justificou — viagem aguardando sua revisão`
+          : `Justificou o km — viagem aguardando sua revisão`,
+        { viagemId, motoristaId, justificativa, ...(input.km != null ? { km: input.km } : {}) },
       );
     })();
 

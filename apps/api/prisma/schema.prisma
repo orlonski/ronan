@@ -46,6 +46,9 @@ enum TipoDivergencia {
   /// Foto do ticket nao da pra ler. App motorista mostra card com botao
   /// de tirar nova foto. Fotos antigas continuam no historico.
   FOTO_ILEGIVEL
+  /// Km lancado parece divergir do trajeto. App motorista mostra card com o
+  /// motivo do admin + campo pra corrigir o km e justificar (vai pra observacao).
+  KM_DIVERGENTE
   /// Qualquer outro motivo. Motorista corrige editando a viagem normal.
   OUTRO
 }
@@ -93,6 +96,7 @@ enum AcaoAuditoria {
   MATCH_IA
   RECALCULAR_TRAJETO
   MOTORISTA_AJUSTOU_KM
+  MOTORISTA_JUSTIFICOU_KM
   MOTORISTA_INFORMOU_PEDAGIO
   MOTORISTA_SUBSTITUIU_FOTO
   PRE_VALIDAR_VIAGEM

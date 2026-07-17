@@ -145,7 +145,12 @@ export type Viagem = {
   motivoStatus: string | null;
   /** Quando preenchido, app mostra UI dedicada pra resolver (ex: card
    * pedindo só o valor do pedágio). Limpo após motorista resolver. */
-  tipoDivergencia: "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "OUTRO" | null;
+  tipoDivergencia:
+    | "PEDAGIO_SEM_VALOR"
+    | "FOTO_ILEGIVEL"
+    | "KM_DIVERGENTE"
+    | "OUTRO"
+    | null;
   sincronizadoEm: string;
   veiculo: Veiculo;
   cliente: { id: string; nome: string };
@@ -1432,6 +1437,26 @@ export function useInformarValorPedagio() {
       return await api.post<ViagemDetalhe>(
         `/m/viagens/${args.viagemId}/informar-valor-pedagio`,
         { valor: args.valor },
+      );
+    },
+    onSuccess: (atualizada) => {
+      qc.setQueryData(["viagem-detalhe", atualizada.id], atualizada);
+      void qc.invalidateQueries({ queryKey: ["viagens"] });
+      void qc.invalidateQueries({ queryKey: ["viagens-filtradas"] });
+      void qc.invalidateQueries({ queryKey: ["resumo-mes"] });
+    },
+  });
+}
+
+/** Responde uma divergência KM_DIVERGENTE: corrige o km (opcional) e justifica
+ *  (obrigatório). A justificativa vai pra observação; a viagem vira AJUSTADA. */
+export function useResponderKmDivergente() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { viagemId: string; km?: number; justificativa: string }) => {
+      return await api.post<ViagemDetalhe>(
+        `/m/viagens/${args.viagemId}/responder-km-divergente`,
+        { km: args.km, justificativa: args.justificativa },
       );
     },
     onSuccess: (atualizada) => {

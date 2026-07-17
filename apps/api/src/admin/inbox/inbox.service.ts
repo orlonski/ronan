@@ -6,6 +6,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 export type TipoNotificacaoAdmin =
   | "nova-viagem"
   | "resposta-divergencia-pedagio"
+  | "resposta-divergencia-km"
   | "resposta-divergencia-foto"
   | "foto-anexada"
   | "local-em-validacao"

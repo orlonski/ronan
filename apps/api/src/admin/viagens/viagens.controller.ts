@@ -40,7 +40,7 @@ const PreValidarInput = z
     motivo: z.string().min(2).max(500).optional(),
     /** Tipo da divergência. Default "OUTRO". Tipos estruturados desbloqueiam
      * UI dedicada no app motorista (input de valor, botão de tirar foto, etc). */
-    tipo: z.enum(["PEDAGIO_SEM_VALOR", "FOTO_ILEGIVEL", "OUTRO"]).optional(),
+    tipo: z.enum(["PEDAGIO_SEM_VALOR", "FOTO_ILEGIVEL", "KM_DIVERGENTE", "OUTRO"]).optional(),
   })
   .refine(
     (d) => d.status !== "DIVERGENTE" || (d.motivo && d.motivo.trim().length >= 2),

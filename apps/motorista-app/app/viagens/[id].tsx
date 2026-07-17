@@ -43,6 +43,7 @@ import {
   useInformarValorPedagio,
   usePedagiosNaRota,
   useResponderFotoDivergente,
+  useResponderKmDivergente,
   useViagemDetalhe,
 } from "@/lib/queries";
 import { enqueueFoto } from "@/lib/sync";
@@ -76,15 +77,27 @@ export default function ViagemDetalheScreen() {
   const excluir = useExcluirViagem();
   const informarPedagio = useInformarValorPedagio();
   const responderFoto = useResponderFotoDivergente();
+  const responderKm = useResponderKmDivergente();
   const [valorPedagioStr, setValorPedagioStr] = useState("");
   const [novaFotoDivergente, setNovaFotoDivergente] =
     useState<CapturedPhoto | null>(null);
+  const [kmDivergenteStr, setKmDivergenteStr] = useState("");
+  const [justificativaKmStr, setJustificativaKmStr] = useState("");
   const [token, setToken] = useState<string | null>(null);
   const pendingFotos = usePendingFotosViagem(detalhe.data?.id);
 
   useEffect(() => {
     void loadTokens().then((t) => setToken(t?.accessToken ?? null));
   }, []);
+
+  // Pré-preenche o km da divergência com o valor atual, uma vez.
+  const kmAtualDivergente =
+    detalhe.data?.tipoDivergencia === "KM_DIVERGENTE" ? detalhe.data.km : null;
+  useEffect(() => {
+    if (kmAtualDivergente != null && kmDivergenteStr === "") {
+      setKmDivergenteStr(String(kmAtualDivergente).replace(".", ","));
+    }
+  }, [kmAtualDivergente, kmDivergenteStr]);
 
   async function onFotoCapturada(foto: CapturedPhoto | null) {
     // Motorista cancelou (descartou no PhotoCapture). Ignora.
@@ -311,8 +324,86 @@ export default function ViagemDetalheScreen() {
             )}
 
           {detalhe.data.status === "DIVERGENTE" &&
+            detalhe.data.tipoDivergencia === "KM_DIVERGENTE" && (
+              <Card className="border-2 border-orange-500 bg-orange-50">
+                <View className="flex-row items-start gap-3">
+                  <AlertTriangle size={20} color="#ea580c" />
+                  <View className="flex-1">
+                    <Text className="text-base font-bold text-orange-900">
+                      Confira o km da viagem
+                    </Text>
+                    {detalhe.data.motivoStatus && (
+                      <Text className="mt-1 text-sm text-foreground">
+                        {detalhe.data.motivoStatus}
+                      </Text>
+                    )}
+                    <Text className="mt-3 text-sm font-medium text-foreground">
+                      Km rodados
+                    </Text>
+                    <TextInput
+                      value={kmDivergenteStr}
+                      onChangeText={setKmDivergenteStr}
+                      keyboardType="decimal-pad"
+                      placeholder="0,00"
+                      className="mt-1 h-11 rounded-md border border-input bg-white px-3 text-base text-foreground"
+                    />
+                    <Text className="mt-3 text-sm font-medium text-foreground">
+                      Por que esse km? (obrigatório)
+                    </Text>
+                    <TextInput
+                      value={justificativaKmStr}
+                      onChangeText={setJustificativaKmStr}
+                      placeholder="Ex.: desvio por obra na rodovia"
+                      multiline
+                      maxLength={500}
+                      className="mt-1 min-h-[72px] rounded-md border border-input bg-white px-3 py-2 text-base text-foreground"
+                    />
+                    <Button
+                      className="mt-3"
+                      loading={responderKm.isPending}
+                      disabled={justificativaKmStr.trim().length < 5}
+                      onPress={async () => {
+                        if (justificativaKmStr.trim().length < 5) {
+                          void showAlert({
+                            title: "Falta explicar",
+                            message: "Escreva por que o km é esse.",
+                          });
+                          return;
+                        }
+                        const kmNum = parseFloat(
+                          kmDivergenteStr.replace(",", "."),
+                        );
+                        try {
+                          await responderKm.mutateAsync({
+                            viagemId: detalhe.data!.id,
+                            km: Number.isFinite(kmNum) ? kmNum : undefined,
+                            justificativa: justificativaKmStr.trim(),
+                          });
+                          setJustificativaKmStr("");
+                          void showAlert({
+                            title: "Obrigado!",
+                            message:
+                              "Resposta enviada — viagem foi marcada como ajustada.",
+                          });
+                        } catch (err) {
+                          void showAlert({
+                            title: "Erro",
+                            message: humanizeApiError(err),
+                          });
+                        }
+                      }}
+                    >
+                      Responder
+                    </Button>
+                  </View>
+                </View>
+              </Card>
+            )}
+
+          {detalhe.data.status === "DIVERGENTE" &&
             detalhe.data.tipoDivergencia !== "PEDAGIO_SEM_VALOR" &&
             detalhe.data.tipoDivergencia !== "FOTO_ILEGIVEL" &&
+            detalhe.data.tipoDivergencia !== "KM_DIVERGENTE" &&
             detalhe.data.motivoStatus && (
               <Card className="border-2 border-destructive bg-destructive/10">
                 <View className="flex-row items-start gap-3">
