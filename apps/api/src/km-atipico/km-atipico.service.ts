@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import {
   avaliarKm,
   type ConfigKmAtipico,
@@ -16,6 +17,43 @@ export type ReferenciaKm = ReferenciaKmPayload & {
    *  mediana. Muitas = sinal de que a mediana envelheceu (rota mudou de regime),
    *  não de que a frota piorou. Exibido no card do painel. */
   quarentena: number;
+};
+
+/** Uma viagem comparável do par, pro card do painel. */
+export type ComparavelKm = {
+  id: string;
+  data: Date | null;
+  km: number;
+  motoristaNome: string | null;
+};
+
+/** Payload completo do card de referência de km de UMA viagem. */
+export type DetalheReferenciaKm = {
+  /** false = o km desta viagem não descreve o par (troca de local sem recálculo
+   *  / km inconsistente). Nesse caso NÃO devolve números — só a explicação. */
+  baseConsistente: boolean;
+  motivoInconsistencia: string | null;
+  estaViagem: {
+    km: number | null;
+    kmCalculado: number | null;
+    kmFonte: string | null;
+    temTrechos: boolean;
+  };
+  historico: EstatisticaPar | null;
+  osrm: { km: number } | null;
+  efetiva: { km: number; fonte: FonteReferenciaKm } | null;
+  carimbo: {
+    kmForaDoPadrao: boolean | null;
+    kmReferencia: number | null;
+    kmReferenciaFonte: string | null;
+    kmReferenciaAmostra: number | null;
+    kmDesvioPct: number | null;
+    kmAvaliadoEm: Date | null;
+    justificativaKm: string | null;
+  };
+  comparaveis: ComparavelKm[];
+  quarentena: number;
+  config: ConfigKmAtipico;
 };
 
 /**
@@ -209,12 +247,37 @@ export class KmAtipicoService {
   }
 
   /**
-   * Mediana (+ quartis/faixa/amostra) das viagens COMPARÁVEIS do par. O filtro é
-   * o coração da honestidade da feature: exclui viagem com trecho (km inclui o
-   * trecho), em quarentena, e — o mais importante — a que tem km inconsistente
-   * com o par (troca de local sem recálculo), que entraria como mediana podre
-   * com cara de estatística. Ver plano §2.1.
+   * O filtro que define quem é uma viagem COMPARÁVEL do par — o coração da
+   * honestidade da feature. Fragmento único, consumido pela mediana e pela lista
+   * de comparáveis, pra os dois nunca divergirem. Exclui viagem com trecho (km
+   * inclui o trecho), em quarentena, e — o mais importante — a que tem km
+   * inconsistente com o par (troca de local sem recálculo), que entraria como
+   * mediana podre com cara de estatística. Ver plano §2.1.
    */
+  private filtroAmostra(
+    cargaId: string,
+    descargaId: string,
+    desde: Date,
+    excluirViagemId?: string,
+  ): Prisma.Sql {
+    const excluir = excluirViagemId ?? null;
+    return Prisma.sql`
+      v."localCargaId" = ${cargaId}
+      AND v."localDescargaId" = ${descargaId}
+      AND (${excluir}::text IS NULL OR v.id <> ${excluir})
+      AND v.km IS NOT NULL AND v.km > 0
+      AND v.data >= ${desde}
+      AND v.status::text NOT IN ('RASCUNHO_OFFLINE','EM_ANDAMENTO','AGUARDANDO_PESO','DIVERGENTE')
+      AND NOT EXISTS (SELECT 1 FROM trechos_viagem t WHERE t."viagemId" = v.id)
+      AND NOT (v."kmForaDoPadrao" IS TRUE AND v."revisadoEm" IS NULL)
+      AND (
+            v."kmFonte"::text IN ('MANUAL','HISTORICO') OR v."kmEditadoManual" IS TRUE
+         OR v."kmCalculado" IS NULL
+         OR abs(v.km - v."kmCalculado") <= GREATEST(1.0, 0.15 * v."kmCalculado")
+      )`;
+  }
+
+  /** Mediana (+ quartis/faixa/amostra) das viagens comparáveis do par. */
   private async estatisticaPar(
     cargaId: string,
     descargaId: string,
@@ -222,7 +285,7 @@ export class KmAtipicoService {
     excluirViagemId?: string,
   ): Promise<EstatisticaPar | null> {
     const desde = inicioDiasAtras(config.janelaDias);
-    const excluir = excluirViagemId ?? null;
+    const filtro = this.filtroAmostra(cargaId, descargaId, desde, excluirViagemId);
 
     type StatRow = {
       mediana: number | null;
@@ -242,19 +305,7 @@ export class KmAtipicoService {
         MAX(v.km)::float8 AS max,
         COUNT(*) AS amostra
       FROM viagens v
-      WHERE v."localCargaId" = ${cargaId}
-        AND v."localDescargaId" = ${descargaId}
-        AND (${excluir}::text IS NULL OR v.id <> ${excluir})
-        AND v.km IS NOT NULL AND v.km > 0
-        AND v.data >= ${desde}
-        AND v.status::text NOT IN ('RASCUNHO_OFFLINE','EM_ANDAMENTO','AGUARDANDO_PESO','DIVERGENTE')
-        AND NOT EXISTS (SELECT 1 FROM trechos_viagem t WHERE t."viagemId" = v.id)
-        AND NOT (v."kmForaDoPadrao" IS TRUE AND v."revisadoEm" IS NULL)
-        AND (
-              v."kmFonte"::text IN ('MANUAL','HISTORICO') OR v."kmEditadoManual" IS TRUE
-           OR v."kmCalculado" IS NULL
-           OR abs(v.km - v."kmCalculado") <= GREATEST(1.0, 0.15 * v."kmCalculado")
-        )
+      WHERE ${filtro}
     `;
 
     const r = rows[0];
@@ -267,6 +318,125 @@ export class KmAtipicoService {
       p75: r.p75 ?? r.mediana,
       min: r.min ?? r.mediana,
       max: r.max ?? r.mediana,
+    };
+  }
+
+  /** Últimas N viagens comparáveis do par, com nome do motorista, pro card. */
+  private async comparaveisDoPar(
+    cargaId: string,
+    descargaId: string,
+    config: ConfigKmAtipico,
+    excluirViagemId: string,
+    limite = 10,
+  ): Promise<ComparavelKm[]> {
+    const desde = inicioDiasAtras(config.janelaDias);
+    const filtro = this.filtroAmostra(cargaId, descargaId, desde, excluirViagemId);
+
+    type Row = { id: string; data: Date | null; km: number; motoristaNome: string | null };
+    const rows = await this.prisma.$queryRaw<Row[]>`
+      SELECT v.id, v.data, v.km::float8 AS km, m.nome AS "motoristaNome"
+      FROM viagens v
+      LEFT JOIN motoristas m ON m.id = v."motoristaId"
+      WHERE ${filtro}
+      ORDER BY v.data DESC NULLS LAST, v."sincronizadoEm" DESC
+      LIMIT ${limite}
+    `;
+    return rows.map((r) => ({
+      id: r.id,
+      data: r.data,
+      km: r.km,
+      motoristaNome: r.motoristaNome,
+    }));
+  }
+
+  /**
+   * Card completo de referência de UMA viagem, pro detalhe no painel. Retorna
+   * null se a viagem não existe (o caller lança o 404). Quando a base é
+   * inconsistente ou não avaliável, devolve `baseConsistente: false` e NÃO expõe
+   * números — o card recusa em vez de exibir estatística sobre km podre.
+   */
+  async detalheReferencia(viagemId: string): Promise<DetalheReferenciaKm | null> {
+    const v = await this.prisma.viagem.findUnique({
+      where: { id: viagemId },
+      select: {
+        km: true,
+        kmCalculado: true,
+        kmFonte: true,
+        kmEditadoManual: true,
+        localCargaId: true,
+        localDescargaId: true,
+        kmForaDoPadrao: true,
+        kmReferencia: true,
+        kmReferenciaFonte: true,
+        kmReferenciaAmostra: true,
+        kmDesvioPct: true,
+        kmAvaliadoEm: true,
+        justificativaKm: true,
+        _count: { select: { trechos: true } },
+      },
+    });
+    if (!v) return null;
+
+    const config = await this.config();
+    const kmNum = v.km == null ? null : Number(v.km);
+    const temTrechos = v._count.trechos > 0;
+    const estaViagem = {
+      km: kmNum,
+      kmCalculado: v.kmCalculado == null ? null : Number(v.kmCalculado),
+      kmFonte: v.kmFonte,
+      temTrechos,
+    };
+    const carimbo = {
+      kmForaDoPadrao: v.kmForaDoPadrao,
+      kmReferencia: v.kmReferencia == null ? null : Number(v.kmReferencia),
+      kmReferenciaFonte: v.kmReferenciaFonte,
+      kmReferenciaAmostra: v.kmReferenciaAmostra,
+      kmDesvioPct: v.kmDesvioPct == null ? null : Number(v.kmDesvioPct),
+      kmAvaliadoEm: v.kmAvaliadoEm,
+      justificativaKm: v.justificativaKm,
+    };
+
+    // Motivo de não ter números (mesma ordem do avaliável em avaliarViagem).
+    let motivo: string | null = null;
+    if (!v.localCargaId || !v.localDescargaId) motivo = "Viagem sem locais de carga/descarga definidos.";
+    else if (temTrechos) motivo = "Viagem com trechos extras (bota-fora): o km inclui as pernas adicionais e não descreve só o par carga→descarga.";
+    else if (kmNum == null || kmNum <= 0) motivo = "Viagem sem km.";
+    else if (!this.baseConsistente(kmNum, v.kmCalculado, v.kmFonte, v.kmEditadoManual))
+      motivo = "O km desta viagem diverge do trajeto calculado sem procedência declarada — provavelmente o local foi trocado sem recalcular. Recalcule o trajeto pra comparar.";
+
+    const base = {
+      estaViagem,
+      carimbo,
+      config,
+    };
+
+    if (motivo != null) {
+      return {
+        baseConsistente: false,
+        motivoInconsistencia: motivo,
+        historico: null,
+        osrm: null,
+        efetiva: null,
+        comparaveis: [],
+        quarentena: 0,
+        ...base,
+      };
+    }
+
+    const [ref, comparaveis] = await Promise.all([
+      this.referenciaDoPar(v.localCargaId!, v.localDescargaId!, viagemId),
+      this.comparaveisDoPar(v.localCargaId!, v.localDescargaId!, config, viagemId),
+    ]);
+
+    return {
+      baseConsistente: true,
+      motivoInconsistencia: null,
+      historico: ref.historico,
+      osrm: ref.osrm,
+      efetiva: ref.efetiva,
+      comparaveis,
+      quarentena: ref.quarentena,
+      ...base,
     };
   }
 }

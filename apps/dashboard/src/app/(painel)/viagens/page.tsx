@@ -55,7 +55,39 @@ type Viagem = {
   fotos: { id: string; storageKey: string }[];
   /** true quando rota passa por pedágio cadastrado mas motorista não pôs valor. */
   temPedagioSemValor: boolean;
+  /** true = km fora do padrão do trajeto (badge "Km atípico"). null = não avaliado. */
+  kmForaDoPadrao: boolean | null;
 };
+
+/** Badges de alerta de uma viagem (pedágio sem valor, km atípico). Usado na
+ *  coluna "Alertas" da tabela e no card do modo grade — um lugar só pra não
+ *  duplicar/defasar entre os dois. */
+function AlertasBadges({ v }: { v: Viagem }) {
+  const badges: ReactNode[] = [];
+  if (v.temPedagioSemValor) {
+    badges.push(
+      <Badge
+        key="pedagio"
+        className="gap-1 border-orange-200 bg-orange-100 text-orange-900"
+        title="Rota passa por pedágio cadastrado mas valor não foi preenchido"
+      >
+        <AlertTriangle className="h-3 w-3" /> Pedágio?
+      </Badge>,
+    );
+  }
+  if (v.kmForaDoPadrao === true) {
+    badges.push(
+      <Badge
+        key="km"
+        className="gap-1 border-amber-300 bg-amber-100 text-amber-800"
+        title="Km fora do padrão das outras viagens deste trajeto"
+      >
+        <AlertTriangle className="h-3 w-3" /> Km atípico
+      </Badge>,
+    );
+  }
+  return <>{badges}</>;
+}
 
 
 const STATUS_VIAGEM_LABEL: Record<string, string> = {
@@ -112,17 +144,17 @@ export default function ViagensPage() {
         id: "alertas",
         enableSorting: false,
         header: () => <span>Alertas</span>,
-        cell: ({ row }) =>
-          row.original.temPedagioSemValor ? (
-            <Badge
-              className="border-orange-200 bg-orange-100 text-orange-900"
-              title="Rota passa por pedágio cadastrado mas valor não foi preenchido"
-            >
-              Pedágio?
-            </Badge>
+        cell: ({ row }) => {
+          const temAlerta =
+            row.original.temPedagioSemValor || row.original.kmForaDoPadrao === true;
+          return temAlerta ? (
+            <div className="flex flex-wrap items-center gap-1">
+              <AlertasBadges v={row.original} />
+            </div>
           ) : (
             <span className="text-xs text-muted-foreground">—</span>
-          ),
+          );
+        },
       },
       {
         id: "data",
@@ -306,6 +338,13 @@ export default function ViagensPage() {
                     { value: "direta", label: "Direta" },
                   ]}
                 />
+                <Combobox
+                  value={tableState.filters.kmForaDoPadrao}
+                  onChange={(v) => tableState.setFilter("kmForaDoPadrao", v)}
+                  placeholder="Km"
+                  showSearch={false}
+                  options={[{ value: "true", label: "Só km atípico" }]}
+                />
                 <MotoristaCombobox
                   value={tableState.filters.motoristaId}
                   onChange={(v) => tableState.setFilter("motoristaId", v)}
@@ -355,14 +394,7 @@ function ViagemCard({ v }: { v: Viagem }) {
                 Guiada
               </Badge>
             )}
-            {v.temPedagioSemValor && (
-              <Badge
-                className="gap-1 border-orange-200 bg-orange-100 text-orange-900"
-                title="Rota passa por pedágio cadastrado mas valor não foi preenchido"
-              >
-                <AlertTriangle className="h-3 w-3" /> Pedágio?
-              </Badge>
-            )}
+            <AlertasBadges v={v} />
           </div>
 
           {/* Coluna 2 (principal): trajeto + cliente + motorista */}

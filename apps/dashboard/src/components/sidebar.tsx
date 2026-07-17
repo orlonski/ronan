@@ -95,6 +95,7 @@ const GRUPOS: Grupo[] = [
       { href: "/configuracoes/agente-whatsapp", label: "Agente WhatsApp", icon: MessageCircle, perm: "config-agente.ver" },
       { href: "/configuracoes/campos-layout", label: "Campos do layout", icon: Sparkles, perm: "config-campos-layout.ver" },
       { href: "/configuracoes/forca-atualizacao", label: "Força-atualização do app", icon: ArrowUpCircle, perm: "config-forca-atualizacao.ver" },
+      { href: "/configuracoes/km-atipico", label: "Km atípico", icon: Ruler, perm: "config-km-atipico.ver" },
     ],
   },
 ];

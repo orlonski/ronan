@@ -81,6 +81,8 @@ const ListViagensQuery = paginationQuerySchema.extend({
   // Origem do lançamento: "guiada" = fluxo "Iniciar viagem" (lifecycle);
   // "direta" = "Nova viagem". Filtra por Viagem.iniciadaGuiada.
   origem: z.enum(["guiada", "direta"]).optional(),
+  // Só viagens marcadas com km fora do padrão do trajeto (badge "Km atípico").
+  kmForaDoPadrao: z.coerce.boolean().optional(),
   de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
@@ -143,6 +145,27 @@ export class ViagensAdminController {
   @Get(":id/pedagios-na-rota")
   pedagiosNaRota(@Param("id") id: string) {
     return this.service.pedagiosNaRota(id);
+  }
+
+  /**
+   * Compara o km desta viagem com o histórico do par carga→descarga (mediana das
+   * comparáveis) e com a rota calculada, lado a lado. `baseConsistente: false` =
+   * o km desta viagem não descreve o par atual (não devolve números).
+   */
+  @Get(":id/referencia-km")
+  referenciaKm(@Param("id") id: string) {
+    return this.service.referenciaKm(id);
+  }
+
+  /**
+   * "Aceitar km": marca a viagem como revisada (revisadoEm) e limpa o
+   * kmForaDoPadrao, readmitindo-a na mediana do par. Saída humana da catraca
+   * da quarentena (rota que mudou de regime).
+   */
+  @RequerPermissao("viagens.editar")
+  @Post(":id/aceitar-km")
+  aceitarKm(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    return this.service.aceitarKm(id, user.id);
   }
 
   @RequerPermissao("viagens.editar")

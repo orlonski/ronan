@@ -73,6 +73,10 @@ import { CropFotoModal } from "@/components/crop-foto-modal";
 import { useHistoricoViagem } from "@/lib/fechamentos-api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DiagnosticoViagem } from "./_components/diagnostico-viagem";
+import {
+  ReferenciaKmCard,
+  type ReferenciaKmDetalhe,
+} from "./_components/referencia-km-card";
 
 type ViagemDetalhe = {
   id: string;
@@ -241,8 +245,30 @@ export default function ViagemDetalhePage({
         }> | null;
       }>(`/admin/viagens/${id}/pedagios-na-rota`, { token }),
   });
+  // Referência de km do trajeto (histórico do par + rota calculada). Query
+  // própria, no molde da de pedágios — baseConsistente=false = sem números.
+  const referenciaKm = useQuery({
+    queryKey: ["viagem-referencia-km", id],
+    enabled: !!token && !!viagem.data,
+    staleTime: 60_000,
+    queryFn: () =>
+      fetchApi<ReferenciaKmDetalhe>(`/admin/viagens/${id}/referencia-km`, { token }),
+  });
   const historico = useHistoricoViagem(id);
   const queryClient = useQueryClient();
+  const aceitarKm = useMutation({
+    mutationFn: () =>
+      fetchApi(`/admin/viagens/${id}/aceitar-km`, { method: "POST", token }),
+    onSuccess: () => {
+      toast.success("Km aceito", {
+        description: "A viagem volta a contar na referência do trajeto.",
+      });
+      void queryClient.invalidateQueries({ queryKey: ["viagem-admin", id] });
+      void queryClient.invalidateQueries({ queryKey: ["viagem-referencia-km", id] });
+    },
+    onError: (err) =>
+      toast.error("Não foi possível aceitar", { description: (err as Error).message }),
+  });
   const recalcular = useMutation({
     mutationFn: () =>
       fetchApi<{ ok: true; km: string; kmCalculado: string }>(
@@ -921,6 +947,15 @@ export default function ViagemDetalhePage({
               </div>
             )}
           </Card>
+
+          {/* Km do trajeto: histórico do par + rota calculada. Coluna 1, entre a
+              Pré-validação e os blocos de mapa em largura total. */}
+          <ReferenciaKmCard
+            data={referenciaKm.data}
+            loading={referenciaKm.isLoading}
+            onAceitarKm={() => aceitarKm.mutate()}
+            aceitando={aceitarKm.isPending}
+          />
 
           {v.pontos && v.pontos.length >= 2 && (
             <Card className="p-4 sm:p-5 md:col-span-2">

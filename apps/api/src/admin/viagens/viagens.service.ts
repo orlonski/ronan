@@ -33,6 +33,7 @@ type ListViagensParams = PaginationQuery & {
   localId?: string;
   status?: StatusViagem;
   origem?: "guiada" | "direta";
+  kmForaDoPadrao?: boolean;
   de?: string;
   ate?: string;
 };
@@ -326,6 +327,7 @@ export class ViagensAdminService {
     if (params.status) where.status = params.status;
     if (params.origem === "guiada") where.iniciadaGuiada = true;
     else if (params.origem === "direta") where.iniciadaGuiada = false;
+    if (params.kmForaDoPadrao) where.kmForaDoPadrao = true;
     if (params.de || params.ate) {
       where.data = {};
       if (params.de) where.data.gte = new Date(params.de);
@@ -857,6 +859,43 @@ export class ViagensAdminService {
       duracaoSegundos: resultado.duracaoSegundos,
       geometria: resultado.geometria,
     };
+  }
+
+  /** Card de referência de km da viagem (histórico do par + rota calculada). */
+  async referenciaKm(id: string) {
+    const detalhe = await this.kmAtipico.detalheReferencia(id);
+    if (!detalhe) throw new NotFoundException("Viagem não encontrada");
+    return detalhe;
+  }
+
+  /**
+   * "Aceitar km": marca a viagem como revisada e limpa kmForaDoPadrao,
+   * readmitindo-a na mediana do par. Saída humana da catraca da quarentena.
+   */
+  async aceitarKm(id: string, usuarioId: string) {
+    const antes = await this.prisma.viagem.findUnique({
+      where: { id },
+      select: { id: true, km: true, kmForaDoPadrao: true },
+    });
+    if (!antes) throw new NotFoundException("Viagem não encontrada");
+
+    await this.prisma.viagem.update({
+      where: { id },
+      data: { kmForaDoPadrao: false, revisadoEm: new Date(), revisadoPorId: usuarioId },
+    });
+
+    await this.auditoria.log({
+      usuarioId,
+      entidade: "Viagem",
+      entidadeId: id,
+      acao: AcaoAuditoria.UPDATE,
+      campo: "kmForaDoPadrao",
+      valorAntes: antes.kmForaDoPadrao,
+      valorDepois: false,
+      motivo: `Km ${antes.km?.toString() ?? "?"} aceito como correto — readmitido na referência do trajeto.`,
+    });
+
+    return this.detalhe(id);
   }
 
   /** Lista as rotas alternativas (OSRM) do par carga→descarga da viagem. */
