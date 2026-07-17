@@ -175,6 +175,28 @@ type ViagemDetalhe = {
 
 type Tab = "dados" | "historico" | "diagnostico";
 
+/**
+ * Card "Voltou pro bota-fora?" — DESLIGADO em 2026-07-17, mesmo dia em que subiu.
+ *
+ * Ele soma a volta em cima do `km` gravado sem checar se esse km ainda faz
+ * sentido. Numa viagem que teve o local de descarga trocado (o km ficou o da
+ * cidade antiga, 29,12, enquanto o kmCalculado já era 16,88) o card mostrou
+ * 46 km com cara de certeza — pronto pra virar faturamento.
+ *
+ * Pior: o "Aplicar" do seletor de retorno logo acima grava o km IGNORANDO os
+ * trechos. Usar os dois na mesma viagem deixou km=18,71 com um trecho de 16,83
+ * pendurado — e a base derivada (km − trecho) virou 1,88 km.
+ *
+ * Religar só quando as três estiverem prontas e testadas:
+ *   1. trocar local de carga/descarga recalcular (ou barrar) o km faturado;
+ *   2. este card RECUSAR base inconsistente (km divergindo de kmCalculado sem
+ *      escolha de rota que justifique) em vez de somar por cima e exibir número;
+ *   3. escolherRota somar os trechos, em vez de comer a volta calado.
+ *
+ * O endpoint /admin/viagens/:id/bota-fora segue de pé e testado — só a UI saiu.
+ */
+const MOSTRAR_BOTA_FORA: boolean = false;
+
 export default function ViagemDetalhePage({
   params,
 }: {
@@ -1116,7 +1138,7 @@ export default function ViagemDetalhePage({
                   </Permitido>
                 </div>
               )}
-              {botaFora.data?.permiteBotaFora && (
+              {MOSTRAR_BOTA_FORA && botaFora.data?.permiteBotaFora && (
                 <div className="mb-3 rounded-lg border bg-muted/20 p-3">
                   <div className="mb-2 flex items-center gap-2">
                     <RotateCw className="h-4 w-4 text-muted-foreground" />
