@@ -21,7 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { AvisoKmEstimado } from "@/components/aviso-km-estimado";
-import { SugestaoKmHistorico } from "@/components/sugestao-km-historico";
+import { AvisoKmForaDoPadrao, SugestaoKmHistorico } from "@/components/sugestao-km-historico";
 import { DescargaPorGps, type DescargaCaptura } from "@/components/descarga-por-gps";
 import { SeletorRotas } from "@/components/seletor-rotas";
 import { SeletorRetorno } from "@/components/seletor-retorno";
@@ -32,7 +32,7 @@ import { humanizeApiError } from "@/lib/api";
 import { fmtDataBR, hojeISO } from "@/lib/datetime";
 import { reportarEvento } from "@/lib/event-reporter";
 import { humanizeZodError } from "@/lib/validation";
-import { CriarViagemInput, type KmFonte } from "@ronan/shared-types";
+import { avaliarKm, CriarViagemInput, type KmFonte } from "@ronan/shared-types";
 import { formatarDistancia, haversineMetros, localMaisProximo, pegarCoordsPrecisa, pegarCoordsRapido } from "@/lib/geo";
 import { simplificarPontos } from "@/lib/polyline";
 import { listPendingViagens, type PendingViagem } from "@/db/database";
@@ -64,6 +64,8 @@ type FormShape = {
   localDescargaId: string;
   valorPedagio: string;
   observacao: string;
+  // Explicação do motorista quando insiste num km fora do padrão do trajeto.
+  justificativaKm: string;
 };
 
 const today = hojeISO;
@@ -91,6 +93,7 @@ const empty: FormShape = {
   localDescargaId: "",
   valorPedagio: "",
   observacao: "",
+  justificativaKm: "",
 };
 
 type TrackingPayload = {
@@ -158,6 +161,9 @@ export default function NovaViagem() {
   // HISTORICO precisa ser distinguido de MANUAL: usar a referência da frota NÃO
   // é "ajustou na mão" e não pode virar alerta de divergência no painel.
   const [kmFonte, setKmFonte] = useState<KmFonte | null>(null);
+  // Rede de segurança: quando o motorista insiste num km fora do padrão, o campo
+  // de justificativa aparece e vira obrigatório.
+  const [exigirJustificativa, setExigirJustificativa] = useState(false);
   // Bota-fora (limpeza): motorista voltou pro local de carga pra jogar a sobra.
   const [teveBotaFora, setTeveBotaFora] = useState(false);
   // Rota escolhida no seletor de mapa (quando há alternativas).
@@ -209,6 +215,7 @@ export default function NovaViagem() {
         localDescargaId: String(p.localDescargaId ?? ""),
         valorPedagio: p.valorPedagioTotal != null ? numToStr(p.valorPedagioTotal) : "",
         observacao: String(p.observacao ?? ""),
+        justificativaKm: String(p.justificativaKm ?? ""),
       });
       // Preview da foto se motorista tinha capturado uma e ela ainda nao subiu.
       // Se ja tem fotoKey, a foto ja foi pro servidor — nao mostra preview local
@@ -295,9 +302,19 @@ export default function NovaViagem() {
     Math.abs(kmAtualNum - sugestaoKm.km) < 0.5;
   const mostrarSugestao = sugestaoKm != null && !sugestaoJaAplicada;
 
-  // Trocar de par zera a procedência escolhida — o km será re-decidido pro par novo.
+  // Avaliação do km atual contra a referência (mesma fn pura do backend). null =
+  // não dá pra avaliar (sem referência, config off, km curto).
+  const avaliacao = useMemo(
+    () => avaliarKm(kmAtualNum, refKm.data ?? null),
+    [kmAtualNum, refKm.data],
+  );
+  const kmForaDoPadrao = avaliacao?.foraDoPadrao === true;
+
+  // Trocar de par zera a procedência escolhida e a exigência de justificativa —
+  // o km será re-decidido pro par novo.
   useEffect(() => {
     setKmFonte(null);
+    setExigirJustificativa(false);
   }, [form.localCargaId, form.localDescargaId]);
 
   // Escolher rota/variante: seta km + geometria e SAI do modo manual (escolher
@@ -649,6 +666,15 @@ export default function NovaViagem() {
         false
       );
     if (!form.km.trim()) return void val.apontar("km", "Informe os km rodados"), false;
+    // Km fora do padrão + motorista insistiu: a justificativa vira obrigatória.
+    if (exigirJustificativa && form.justificativaKm.trim().length < 10)
+      return (
+        void val.apontar(
+          "justificativaKm",
+          "Explique em poucas palavras por que o km ficou diferente",
+        ),
+        false
+      );
     return true;
   }
 
@@ -705,6 +731,29 @@ export default function NovaViagem() {
     // Peso presente e não é aguardando peso: ticket segue as regras normais.
     if (!aguardandoPeso && exigeTicket && !form.ticket.trim()) {
       return void val.apontar("ticket", "Informe o número do ticket");
+    }
+
+    // Km fora do padrão do trajeto: avisa uma vez; se insistir, abre e exige a
+    // justificativa (rede de segurança). No 2º passo (exigirJustificativa já
+    // ligado) pula o pop-up — a justificativa já foi validada em validarBase.
+    if (kmForaDoPadrao && avaliacao && !exigirJustificativa) {
+      const r = await showAlert({
+        title: "Km fora do padrão",
+        message: `As outras viagens desse trajeto deram ≈${formatKmInput(
+          avaliacao.referencia,
+        )} km. Você marcou ${form.km.replace(".", ",")} km.`,
+        variant: "warning",
+        buttons: [
+          { label: "Rever o km", value: "rever", style: "cancel" },
+          { label: "Está certo, seguir", value: "seguir", style: "outline" },
+        ],
+      });
+      if (r !== "seguir") return void val.apontar("km", "Confira os km rodados");
+      setExigirJustificativa(true);
+      return void val.apontar(
+        "justificativaKm",
+        "Explique por que o km ficou diferente",
+      );
     }
 
     val.limpar();
@@ -771,16 +820,20 @@ export default function NovaViagem() {
         : fonteRota === "cache_local"
           ? "⚠️ Você está SEM INTERNET. Esse km veio de um cálculo ANTERIOR dessa rota, salvo no aparelho (cache). Quando a internet voltar, o sistema confere pela rota certa. Se você já sabe quanto rodou, toque em Alterar e informe."
           : "Esse km foi calculado automático pela rota. Se você rodou diferente, toque em Alterar e corrija — o que você confirmar é o que vale.";
-    const kmConfirmado = await showConfirm({
-      title:
-        botaFora && kmVolta != null
-          ? `Você rodou ${kmTotalNum.toFixed(2).replace(".", ",")} km? (ida + volta)`
-          : `Você rodou ${form.km.replace(".", ",")} km?`,
-      message: msgKm,
-      variant: semNet ? "warning" : "default",
-      confirmLabel: "Sim, está certo",
-      cancelLabel: "Alterar o km",
-    });
+    // Km fora do padrão já passou pelo pop-up próprio (+ justificativa) acima —
+    // não repete a confirmação genérica.
+    const kmConfirmado = kmForaDoPadrao
+      ? true
+      : await showConfirm({
+          title:
+            botaFora && kmVolta != null
+              ? `Você rodou ${kmTotalNum.toFixed(2).replace(".", ",")} km? (ida + volta)`
+              : `Você rodou ${form.km.replace(".", ",")} km?`,
+          message: msgKm,
+          variant: semNet ? "warning" : "default",
+          confirmLabel: "Sim, está certo",
+          cancelLabel: "Alterar o km",
+        });
     if (!kmConfirmado) {
       return void val.apontar("km", "Ajuste o km rodado aqui");
     }
@@ -860,6 +913,11 @@ export default function NovaViagem() {
             : kmGovernadoPorRota
               ? "ROTA_ESCOLHIDA"
               : "ROTA_OSRM"),
+        // Justificativa do km fora do padrão (só quando foi exigida e preenchida).
+        justificativaKm:
+          exigirJustificativa && form.justificativaKm.trim()
+            ? form.justificativaKm.trim()
+            : undefined,
         // Rota escolhida no seletor de mapa (rota real no painel).
         rotaGeometria: rotaGeometriaEscolhida ?? undefined,
         localCargaId: form.localCargaId,
@@ -1363,6 +1421,41 @@ export default function NovaViagem() {
       />
     ) : null;
 
+  // Aviso de km fora do padrão + campo de justificativa (rede de segurança).
+  // Mesmo bloco nas duas ramificações do card de km (retorno e normal).
+  const blocoJustificativaKm = (
+    <>
+      {kmForaDoPadrao && avaliacao && !exigirJustificativa ? (
+        <AvisoKmForaDoPadrao referencia={avaliacao.referencia} />
+      ) : null}
+      {exigirJustificativa ? (
+        <View
+          className="mt-1 gap-2"
+          ref={val.refCampo("justificativaKm")}
+          onLayout={val.onLayoutCampo("justificativaKm")}
+        >
+          <Label error={!!val.erroDe("justificativaKm")}>
+            Por que o km é diferente?
+          </Label>
+          <Input
+            value={form.justificativaKm}
+            onChangeText={(v) => {
+              val.limpar();
+              update("justificativaKm", v);
+            }}
+            placeholder="Ex.: desvio por obra na rodovia"
+            maxLength={500}
+            multiline
+            error={!!val.erroDe("justificativaKm")}
+          />
+          {val.erroDe("justificativaKm") ? (
+            <ErroCampo msg={val.erroDe("justificativaKm")!} />
+          ) : null}
+        </View>
+      ) : null}
+    </>
+  );
+
   const secaoKm = usarRetorno ? (
     /* Card de retorno É o campo de km: escolhe uma variante OU informa
        o valor na 3ª opção. O campo "Km rodados" separado some. */
@@ -1406,6 +1499,7 @@ export default function NovaViagem() {
           maxLength={10}
         />
       </View>
+      {blocoJustificativaKm}
     </View>
   ) : (
     <View ref={val.refCampo("km")} onLayout={val.onLayoutCampo("km")}>
@@ -1455,6 +1549,7 @@ export default function NovaViagem() {
         <AvisoKmEstimado km={rota.data.km} fonte={rota.data.fonte} />
       ) : null}
       {val.erroDe("km") ? <ErroCampo msg={val.erroDe("km")!} /> : null}
+      {blocoJustificativaKm}
     </View>
   );
 

@@ -145,6 +145,8 @@ export const FinalizarViagemInput = z.object({
   // Procedência do km (igual ao CriarViagemInput): distingue "usou o histórico
   // da frota" de "ajustou na mão". Backend deriva kmEditadoManual disto.
   kmFonte: KmFonte.optional(),
+  // Explicação do motorista quando insiste num km fora do padrão do trajeto.
+  justificativaKm: z.string().min(10).max(500).optional(),
   // Polyline da rota escolhida pelo motorista no seletor de mapa (igual ao
   // CriarViagemInput). Backend guarda em Viagem.rotaGeometria.
   rotaGeometria: z.string().max(20000).optional(),

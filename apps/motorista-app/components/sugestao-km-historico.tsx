@@ -1,5 +1,5 @@
 import { Pressable, Text, View } from "react-native";
-import { History } from "lucide-react-native";
+import { History, TriangleAlert } from "lucide-react-native";
 
 /**
  * Sugestão de km do trajeto: mostra o que a frota já rodou nesse par de locais,
@@ -52,6 +52,28 @@ export function SugestaoKmHistorico({
       >
         <Text className="text-base font-bold text-success">Usar {kmFmt} km</Text>
       </Pressable>
+    </View>
+  );
+}
+
+/**
+ * Aviso (âmbar) quando o km digitado sai fora do padrão do trajeto. Informa,
+ * não trava — a rede de segurança (justificativa obrigatória) é acionada no
+ * salvar, não aqui. Aparece embaixo do campo de km.
+ */
+export function AvisoKmForaDoPadrao({ referencia }: { referencia: number }) {
+  return (
+    <View className="mt-1 flex-row items-start gap-3 rounded-2xl border-2 border-warning/50 bg-warning/10 p-4">
+      <TriangleAlert size={22} color="#b45309" style={{ marginTop: 1 }} />
+      <View className="flex-1">
+        <Text className="text-base font-bold text-foreground">
+          Km fora do padrão desse trajeto
+        </Text>
+        <Text className="mt-1 text-sm font-medium text-warning-foreground">
+          As outras viagens dessa rota deram ≈{formatKm(referencia)} km. Confira se
+          o valor está certo — se rodou mais mesmo, você vai poder explicar o porquê.
+        </Text>
+      </View>
     </View>
   );
 }

@@ -1239,6 +1239,7 @@ export class ViagensMotoristaService {
             ? input.kmFonte === "MANUAL" || input.kmFonte === "HISTORICO"
             : input.kmEditadoManual,
         kmFonte: input.kmFonte,
+        justificativaKm: input.justificativaKm,
         rotaGeometria: input.rotaGeometria,
         retornoConfirmado: input.retornoConfirmado,
         // Recria os trechos do zero (idempotente em reenvio do finalizar).

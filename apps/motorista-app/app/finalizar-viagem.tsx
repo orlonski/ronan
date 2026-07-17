@@ -26,7 +26,7 @@ import { Select, type SelectOption } from "@/components/ui/select";
 import { showAlert, showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { hojeISO } from "@/lib/datetime";
-import type { KmFonte } from "@ronan/shared-types";
+import { avaliarKm, type KmFonte } from "@ronan/shared-types";
 import {
   finalizarViagemGuiada,
   getLifecycleLocal,
@@ -40,7 +40,7 @@ import {
   useRotasAlternativas,
   useOpcoesRota,
 } from "@/lib/queries";
-import { SugestaoKmHistorico } from "@/components/sugestao-km-historico";
+import { AvisoKmForaDoPadrao, SugestaoKmHistorico } from "@/components/sugestao-km-historico";
 
 /**
  * Passo final do lifecycle guiado: coleta os dados que faltam pra fechar a
@@ -61,6 +61,8 @@ export default function FinalizarViagem() {
   // Procedência do km (ver nova-viagem): distingue "usou o histórico da frota"
   // de "ajustou na mão". null = não mexeu → resolve por contexto no payload.
   const [kmFonte, setKmFonte] = useState<KmFonte | null>(null);
+  const [exigirJustificativa, setExigirJustificativa] = useState(false);
+  const [justificativaKm, setJustificativaKm] = useState("");
   // Bota-fora (limpeza): motorista voltou pro local de carga pra jogar a sobra.
   const [teveBotaFora, setTeveBotaFora] = useState(false);
   // Rota escolhida no seletor de mapa (quando há alternativas).
@@ -200,8 +202,48 @@ export default function FinalizarViagem() {
     Math.abs(kmAtualNum - sugestaoKm.km) < 0.5;
   const mostrarSugestao = sugestaoKm != null && !sugestaoJaAplicada;
 
+  const avaliacao = useMemo(
+    () => avaliarKm(kmAtualNum, refKm.data ?? null),
+    [kmAtualNum, refKm.data],
+  );
+  const kmForaDoPadrao = avaliacao?.foraDoPadrao === true;
+
+  // Aviso de km fora do padrão + campo de justificativa (rede de segurança).
+  const blocoJustificativaKm = (
+    <>
+      {kmForaDoPadrao && avaliacao && !exigirJustificativa ? (
+        <AvisoKmForaDoPadrao referencia={avaliacao.referencia} />
+      ) : null}
+      {exigirJustificativa ? (
+        <View
+          className="mt-1 gap-2"
+          onLayout={val.onLayoutCampo("justificativaKm")}
+        >
+          <Label error={!!val.erroDe("justificativaKm")}>
+            Por que o km é diferente?
+          </Label>
+          <Input
+            value={justificativaKm}
+            onChangeText={(v) => {
+              val.limpar();
+              setJustificativaKm(v);
+            }}
+            placeholder="Ex.: desvio por obra na rodovia"
+            maxLength={500}
+            multiline
+            error={!!val.erroDe("justificativaKm")}
+          />
+          {val.erroDe("justificativaKm") ? (
+            <ErroCampo msg={val.erroDe("justificativaKm")!} />
+          ) : null}
+        </View>
+      ) : null}
+    </>
+  );
+
   useEffect(() => {
     setKmFonte(null);
+    setExigirJustificativa(false);
   }, [localCargaId, localDescargaId]);
 
   // Escolher rota/variante: seta km + geometria e SAI do modo manual.
@@ -352,6 +394,13 @@ export default function FinalizarViagem() {
       val.apontar("km", "Informe os km rodados");
       return false;
     }
+    if (exigirJustificativa && justificativaKm.trim().length < 10) {
+      val.apontar(
+        "justificativaKm",
+        "Explique em poucas palavras por que o km ficou diferente",
+      );
+      return false;
+    }
     return true;
   }
 
@@ -402,6 +451,29 @@ export default function FinalizarViagem() {
       val.apontar("ticket", "Informe o número do ticket");
       return;
     }
+
+    // Km fora do padrão: avisa uma vez; se insistir, exige justificativa.
+    if (kmForaDoPadrao && avaliacao && !exigirJustificativa) {
+      const r = await showAlert({
+        title: "Km fora do padrão",
+        message: `As outras viagens desse trajeto deram ≈${formatKmInput(
+          avaliacao.referencia,
+        )} km. Você marcou ${km.replace(".", ",")} km.`,
+        variant: "warning",
+        buttons: [
+          { label: "Rever o km", value: "rever", style: "cancel" },
+          { label: "Está certo, seguir", value: "seguir", style: "outline" },
+        ],
+      });
+      if (r !== "seguir") {
+        val.apontar("km", "Confira os km rodados");
+        return;
+      }
+      setExigirJustificativa(true);
+      val.apontar("justificativaKm", "Explique por que o km ficou diferente");
+      return;
+    }
+
     val.limpar();
     // Bota-fora: km faturável = ida + volta. Quando não marcou, kmVolta é null e
     // o total colapsa na ida (comportamento de sempre).
@@ -417,16 +489,20 @@ export default function FinalizarViagem() {
         : fonteRota === "cache_local"
           ? "⚠️ Você está SEM INTERNET. Esse km veio de um cálculo ANTERIOR dessa rota, salvo no aparelho (cache). Quando a internet voltar, o sistema confere pela rota certa. Se você já sabe quanto rodou, toque em Alterar e informe."
           : "Esse km foi calculado automático pela rota. Se você rodou diferente, toque em Alterar e corrija — o que você confirmar é o que vale.";
-    const kmConfirmado = await showConfirm({
-      title:
-        botaFora && kmVolta != null
-          ? `Você rodou ${kmTotalNum.toFixed(2).replace(".", ",")} km? (ida + volta)`
-          : `Você rodou ${km.replace(".", ",")} km?`,
-      message: msgKm,
-      variant: semNet ? "warning" : "default",
-      confirmLabel: "Sim, está certo",
-      cancelLabel: "Alterar o km",
-    });
+    // Km fora do padrão já passou pelo pop-up próprio (+ justificativa) — não
+    // repete a confirmação genérica.
+    const kmConfirmado = kmForaDoPadrao
+      ? true
+      : await showConfirm({
+          title:
+            botaFora && kmVolta != null
+              ? `Você rodou ${kmTotalNum.toFixed(2).replace(".", ",")} km? (ida + volta)`
+              : `Você rodou ${km.replace(".", ",")} km?`,
+          message: msgKm,
+          variant: semNet ? "warning" : "default",
+          confirmLabel: "Sim, está certo",
+          cancelLabel: "Alterar o km",
+        });
     if (!kmConfirmado) {
       val.apontar("km", "Ajuste o km rodado aqui");
       return;
@@ -468,6 +544,10 @@ export default function FinalizarViagem() {
             : kmGovernadoPorRota
               ? "ROTA_ESCOLHIDA"
               : "ROTA_OSRM"),
+        justificativaKm:
+          exigirJustificativa && justificativaKm.trim()
+            ? justificativaKm.trim()
+            : undefined,
         rotaGeometria: rotaGeometriaEscolhida ?? undefined,
         retornoConfirmado,
         // Bota-fora = 1 trecho de retorno pro local de carga (a volta que ele fez).
@@ -655,6 +735,7 @@ export default function FinalizarViagem() {
                     maxLength={10}
                   />
                 </View>
+                {blocoJustificativaKm}
               </View>
             ) : (
               /* 3) Km e pedágio (fluxo normal, sem retorno) */
@@ -709,6 +790,7 @@ export default function FinalizarViagem() {
                   <AvisoKmEstimado km={rota.data.km} fonte={rota.data.fonte} />
                 ) : null}
                 {val.erroDe("km") ? <ErroCampo msg={val.erroDe("km")!} /> : null}
+                {blocoJustificativaKm}
               </View>
             )}
 
