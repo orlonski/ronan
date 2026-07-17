@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Save } from "lucide-react";
+import { RefreshCw, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,13 @@ type ConfigKmAtipico = {
   amostraMinima: number;
   janelaDias: number;
   kmMinimoAvaliado: number;
+};
+
+type StatusReavaliacao = {
+  pendentes: number;
+  avaliadas: number;
+  atipicas: number;
+  rodando: boolean;
 };
 
 const PATH = "/admin/km-atipico-config";
@@ -49,6 +56,23 @@ export default function KmAtipicoConfigPage() {
       void qc.invalidateQueries({ queryKey: [PATH] });
     },
   });
+
+  // Backfill do histórico: enquanto houver pendentes ou estiver rodando, o
+  // status refaz sozinho (a cada 4s) pra a barra andar.
+  const status = useQuery({
+    queryKey: [PATH, "status"],
+    enabled: !!token,
+    queryFn: () => fetchApi<StatusReavaliacao>(`${PATH}/status`, { token }),
+    refetchInterval: (q) => {
+      const d = q.state.data as StatusReavaliacao | undefined;
+      return d && (d.rodando || d.pendentes > 0) ? 4000 : false;
+    },
+  });
+  const reavaliar = useMutation({
+    mutationFn: () => fetchApi(`${PATH}/reavaliar`, { method: "POST", token }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: [PATH, "status"] }),
+  });
+
   if (!form) return <p className="text-sm text-muted-foreground">Carregando…</p>;
 
   function set<K extends keyof ConfigKmAtipico>(k: K, v: ConfigKmAtipico[K]) {
@@ -165,6 +189,71 @@ export default function KmAtipicoConfigPage() {
           {update.isSuccess && <span className="text-sm text-green-600">✓ Salvo</span>}
         </div>
       </form>
+
+      <Card className="space-y-4 p-5">
+        <div>
+          <h2 className="text-base font-semibold">Avaliar o histórico</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Viagens novas são avaliadas automaticamente. Rode isto uma vez pra
+            avaliar também as viagens que já estavam no sistema — assim os números
+            e os avisos aparecem no histórico inteiro, sem esperar.
+          </p>
+        </div>
+
+        {status.data && (
+          <div className="flex flex-wrap gap-4 text-sm">
+            <Metric label="Já avaliadas" value={status.data.avaliadas} />
+            <Metric label="Faltando" value={status.data.pendentes} />
+            <Metric label="Km atípico" value={status.data.atipicas} destaque />
+          </div>
+        )}
+
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => reavaliar.mutate()}
+            disabled={
+              reavaliar.isPending ||
+              status.data?.rodando ||
+              (status.data ? status.data.pendentes === 0 : true)
+            }
+          >
+            <RefreshCw
+              className={`mr-2 h-4 w-4 ${status.data?.rodando ? "animate-spin" : ""}`}
+            />
+            {status.data?.rodando
+              ? "Avaliando…"
+              : status.data && status.data.pendentes === 0
+                ? "Tudo avaliado"
+                : `Avaliar ${status.data?.pendentes ?? ""} viagens`}
+          </Button>
+          {status.data?.rodando && (
+            <span className="text-sm text-muted-foreground">
+              rodando em segundo plano — pode sair desta tela
+            </span>
+          )}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  destaque,
+}: {
+  label: string;
+  value: number;
+  destaque?: boolean;
+}) {
+  return (
+    <div className="rounded-md border px-3 py-2">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className={`text-lg font-semibold ${destaque ? "text-amber-700" : ""}`}>
+        {value.toLocaleString("pt-BR")}
+      </p>
     </div>
   );
 }

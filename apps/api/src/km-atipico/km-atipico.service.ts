@@ -100,6 +100,67 @@ export class KmAtipicoService {
     };
   }
 
+  /** Trava anti-reentrância do backfill (in-memory; 1 processo por vez). */
+  private reavaliando = false;
+
+  /** Contadores pro painel decidir se vale rodar o backfill. */
+  async status(): Promise<{
+    pendentes: number;
+    avaliadas: number;
+    atipicas: number;
+    rodando: boolean;
+  }> {
+    const [pendentes, avaliadas, atipicas] = await Promise.all([
+      this.prisma.viagem.count({
+        where: {
+          kmAvaliadoEm: null,
+          localCargaId: { not: null },
+          localDescargaId: { not: null },
+          km: { not: null },
+        },
+      }),
+      this.prisma.viagem.count({ where: { kmAvaliadoEm: { not: null } } }),
+      this.prisma.viagem.count({ where: { kmForaDoPadrao: true } }),
+    ]);
+    return { pendentes, avaliadas, atipicas, rodando: this.reavaliando };
+  }
+
+  /**
+   * Backfill: avalia as viagens que ainda não foram carimbadas (kmAvaliadoEm
+   * null). Roda em lotes, fire-and-forget. Como avaliarViagem sempre seta
+   * kmAvaliadoEm (inclusive nas não-avaliáveis), o filtro `null` esvazia sozinho
+   * e o loop termina. Idempotente: re-rodar só pega o que sobrou. Uma execução
+   * por vez (trava in-memory).
+   */
+  async reavaliarTudo(): Promise<void> {
+    if (this.reavaliando) return;
+    this.reavaliando = true;
+    let total = 0;
+    try {
+      for (;;) {
+        const lote = await this.prisma.viagem.findMany({
+          where: {
+            kmAvaliadoEm: null,
+            localCargaId: { not: null },
+            localDescargaId: { not: null },
+            km: { not: null },
+          },
+          select: { id: true },
+          take: 200,
+        });
+        if (lote.length === 0) break;
+        for (const v of lote) await this.avaliarViagem(v.id);
+        total += lote.length;
+        if (lote.length < 200) break;
+      }
+      this.log.log(`reavaliarTudo: ${total} viagens avaliadas`);
+    } catch (err) {
+      this.log.warn(`reavaliarTudo falhou após ${total}: ${(err as Error).message}`);
+    } finally {
+      this.reavaliando = false;
+    }
+  }
+
   /**
    * Referência completa do par: histórico (mediana das comparáveis), OSRM, a
    * fonte efetiva (histórico vence quando amostra >= mínima) e a quarentena.
