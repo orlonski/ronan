@@ -38,6 +38,8 @@ export type ReferenciaKmDetalhe = {
     kmAvaliadoEm: string | null;
     justificativaKm: string | null;
   };
+  /** Observação da viagem — virou o lugar da justificativa de km (unificado). */
+  observacao: string | null;
   comparaveis: Array<{
     id: string;
     data: string | null;
@@ -171,20 +173,27 @@ export function ReferenciaKmCard({
             </div>
           </div>
 
-          {/* Justificativa do motorista (o que o admin quer ler) */}
-          {carimbo.justificativaKm && (
-            <div className="mt-3 rounded-md border border-border bg-muted/40 p-3">
-              <p className="mb-1 text-xs font-medium text-muted-foreground">
-                Justificativa do motorista
-              </p>
-              <p className="text-sm">{carimbo.justificativaKm}</p>
-            </div>
-          )}
-          {foraDoPadrao && !carimbo.justificativaKm && (
-            <p className="mt-3 text-xs text-muted-foreground">
-              Sem justificativa (lançada offline, app antigo ou fora do teste).
-            </p>
-          )}
+          {/* Explicação do motorista: hoje vem na observação (unificado); app
+              antigo pode ter mandado no justificativaKm — mostra o que houver. */}
+          {(() => {
+            const explicacao = carimbo.justificativaKm ?? data.observacao;
+            if (explicacao)
+              return (
+                <div className="mt-3 rounded-md border border-border bg-muted/40 p-3">
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">
+                    Explicação do motorista (observação)
+                  </p>
+                  <p className="text-sm">{explicacao}</p>
+                </div>
+              );
+            if (foraDoPadrao)
+              return (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Sem explicação (lançada offline, app antigo ou fora do teste).
+                </p>
+              );
+            return null;
+          })()}
 
           {/* Quarentena: sinal de que a mediana pode ter envelhecido */}
           {data.quarentena > 0 && (

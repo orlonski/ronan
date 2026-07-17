@@ -62,7 +62,6 @@ export default function FinalizarViagem() {
   // de "ajustou na mão". null = não mexeu → resolve por contexto no payload.
   const [kmFonte, setKmFonte] = useState<KmFonte | null>(null);
   const [exigirJustificativa, setExigirJustificativa] = useState(false);
-  const [justificativaKm, setJustificativaKm] = useState("");
   // Bota-fora (limpeza): motorista voltou pro local de carga pra jogar a sobra.
   const [teveBotaFora, setTeveBotaFora] = useState(false);
   // Rota escolhida no seletor de mapa (quando há alternativas).
@@ -208,38 +207,12 @@ export default function FinalizarViagem() {
   );
   const kmForaDoPadrao = avaliacao?.foraDoPadrao === true;
 
-  // Aviso de km fora do padrão + campo de justificativa (rede de segurança).
-  const blocoJustificativaKm = (
-    <>
-      {kmForaDoPadrao && avaliacao && !exigirJustificativa ? (
-        <AvisoKmForaDoPadrao referencia={avaliacao.referencia} />
-      ) : null}
-      {exigirJustificativa ? (
-        <View
-          className="mt-1 gap-2"
-          onLayout={val.onLayoutCampo("justificativaKm")}
-        >
-          <Label error={!!val.erroDe("justificativaKm")}>
-            Por que o km é diferente?
-          </Label>
-          <Input
-            value={justificativaKm}
-            onChangeText={(v) => {
-              val.limpar();
-              setJustificativaKm(v);
-            }}
-            placeholder="Ex.: desvio por obra na rodovia"
-            maxLength={500}
-            multiline
-            error={!!val.erroDe("justificativaKm")}
-          />
-          {val.erroDe("justificativaKm") ? (
-            <ErroCampo msg={val.erroDe("justificativaKm")!} />
-          ) : null}
-        </View>
-      ) : null}
-    </>
-  );
+  // Banner informativo de km fora do padrão (a explicação é exigida na
+  // observação, não aqui). Some quando o motorista já explicou na observação.
+  const bannerKmForaDoPadrao =
+    kmForaDoPadrao && avaliacao && observacao.trim().length < 5 ? (
+      <AvisoKmForaDoPadrao referencia={avaliacao.referencia} />
+    ) : null;
 
   useEffect(() => {
     setKmFonte(null);
@@ -394,10 +367,14 @@ export default function FinalizarViagem() {
       val.apontar("km", "Informe os km rodados");
       return false;
     }
-    if (exigirJustificativa && justificativaKm.trim().length < 10) {
+    // Observação obrigatória quando mexeu no km (MANUAL) ou km atípico + insistiu.
+    const kmMexido = kmFonte === "MANUAL";
+    if ((kmMexido || exigirJustificativa) && observacao.trim().length < 5) {
       val.apontar(
-        "justificativaKm",
-        "Explique em poucas palavras por que o km ficou diferente",
+        "observacao",
+        kmMexido
+          ? "Você mudou o km calculado. Explique aqui na observação por quê."
+          : "Km fora do padrão do trajeto. Explique aqui na observação.",
       );
       return false;
     }
@@ -452,8 +429,14 @@ export default function FinalizarViagem() {
       return;
     }
 
-    // Km fora do padrão: avisa uma vez; se insistir, exige justificativa.
-    if (kmForaDoPadrao && avaliacao && !exigirJustificativa) {
+    // Km fora do padrão: avisa uma vez; se insistir, exige a explicação na
+    // observação. Pula quando a observação já foi preenchida (não cobra 2x).
+    if (
+      kmForaDoPadrao &&
+      avaliacao &&
+      !exigirJustificativa &&
+      observacao.trim().length < 5
+    ) {
       const r = await showAlert({
         title: "Km fora do padrão",
         message: `As outras viagens desse trajeto deram ≈${formatKmInput(
@@ -470,7 +453,7 @@ export default function FinalizarViagem() {
         return;
       }
       setExigirJustificativa(true);
-      val.apontar("justificativaKm", "Explique por que o km ficou diferente");
+      val.apontar("observacao", "Explique aqui na observação por que o km ficou diferente");
       return;
     }
 
@@ -544,10 +527,6 @@ export default function FinalizarViagem() {
             : kmGovernadoPorRota
               ? "ROTA_ESCOLHIDA"
               : "ROTA_OSRM"),
-        justificativaKm:
-          exigirJustificativa && justificativaKm.trim()
-            ? justificativaKm.trim()
-            : undefined,
         rotaGeometria: rotaGeometriaEscolhida ?? undefined,
         retornoConfirmado,
         // Bota-fora = 1 trecho de retorno pro local de carga (a volta que ele fez).
@@ -735,7 +714,7 @@ export default function FinalizarViagem() {
                     maxLength={10}
                   />
                 </View>
-                {blocoJustificativaKm}
+                {bannerKmForaDoPadrao}
               </View>
             ) : (
               /* 3) Km e pedágio (fluxo normal, sem retorno) */
@@ -790,7 +769,7 @@ export default function FinalizarViagem() {
                   <AvisoKmEstimado km={rota.data.km} fonte={rota.data.fonte} />
                 ) : null}
                 {val.erroDe("km") ? <ErroCampo msg={val.erroDe("km")!} /> : null}
-                {blocoJustificativaKm}
+                {bannerKmForaDoPadrao}
               </View>
             )}
 
@@ -850,14 +829,37 @@ export default function FinalizarViagem() {
               {val.erroDe("toneladas") ? <ErroCampo msg={val.erroDe("toneladas")!} /> : null}
             </View>
 
-            <View className="gap-2">
-              <Label>Observação</Label>
+            <View
+              className="gap-2"
+              ref={val.refCampo("observacao")}
+              onLayout={val.onLayoutCampo("observacao")}
+            >
+              <Label error={!!val.erroDe("observacao")}>
+                Observação{" "}
+                <Text className="text-sm font-normal text-muted-foreground">
+                  {kmFonte === "MANUAL" || exigirJustificativa
+                    ? "— explique a mudança do km"
+                    : "(opcional)"}
+                </Text>
+              </Label>
               <Input
                 value={observacao}
-                onChangeText={setObservacao}
-                placeholder="opcional"
+                onChangeText={(v) => {
+                  val.limpar();
+                  setObservacao(v);
+                }}
+                placeholder={
+                  kmFonte === "MANUAL" || exigirJustificativa
+                    ? "Ex.: desvio por obra na rodovia"
+                    : "opcional"
+                }
                 maxLength={500}
+                multiline
+                error={!!val.erroDe("observacao")}
               />
+              {val.erroDe("observacao") ? (
+                <ErroCampo msg={val.erroDe("observacao")!} />
+              ) : null}
             </View>
 
             {erro ? <ErroCampo msg={erro} /> : null}

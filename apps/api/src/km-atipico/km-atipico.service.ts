@@ -51,6 +51,8 @@ export type DetalheReferenciaKm = {
     kmAvaliadoEm: Date | null;
     justificativaKm: string | null;
   };
+  /** Observação da viagem — virou o lugar da justificativa de km (unificado). */
+  observacao: string | null;
   comparaveis: ComparavelKm[];
   quarentena: number;
   config: ConfigKmAtipico;
@@ -558,6 +560,7 @@ export class KmAtipicoService {
         kmDesvioPct: true,
         kmAvaliadoEm: true,
         justificativaKm: true,
+        observacao: true,
         _count: { select: { trechos: true } },
       },
     });
@@ -594,6 +597,7 @@ export class KmAtipicoService {
       estaViagem,
       carimbo,
       config,
+      observacao: v.observacao,
     };
 
     if (motivo != null) {
