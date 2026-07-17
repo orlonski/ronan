@@ -166,17 +166,35 @@ export class KmAtipicoService {
    * fonte efetiva (histórico vence quando amostra >= mínima) e a quarentena.
    * `excluirViagemId` tira a própria viagem da amostra (senão ela se compara
    * consigo mesma / se auto-normaliza no re-carimbo).
+   *
+   * `retorno` (avaliação de UMA viagem): filtra a amostra pelo mesmo regime de
+   * retorno e usa a variante OSRM correspondente. `osrmRef` é o kmCalculado da
+   * viagem (o snapshot OSRM da rota que ela realmente fez) — quando presente,
+   * é a referência OSRM (mais fiel que recalcular). Sem `retorno` = uso genérico
+   * do app (não filtra, OSRM padrão).
    */
   async referenciaDoPar(
     cargaId: string,
     descargaId: string,
-    excluirViagemId?: string,
+    opts: {
+      excluirViagemId?: string;
+      retorno?: { valor: boolean | null };
+      osrmRef?: number | null;
+    } = {},
   ): Promise<ReferenciaKm> {
+    const { excluirViagemId, retorno, osrmRef } = opts;
     const config = await this.config();
 
+    const osrmPromise: Promise<{ km: number } | null> =
+      osrmRef != null && Number.isFinite(osrmRef)
+        ? Promise.resolve({ km: osrmRef })
+        : retorno !== undefined
+          ? this.kmOsrmVariante(cargaId, descargaId, retorno.valor)
+          : this.kmOsrm(cargaId, descargaId);
+
     const [historico, osrm, quarentena] = await Promise.all([
-      this.estatisticaPar(cargaId, descargaId, config, excluirViagemId),
-      this.kmOsrm(cargaId, descargaId),
+      this.estatisticaPar(cargaId, descargaId, config, excluirViagemId, retorno),
+      osrmPromise,
       this.prisma.viagem.count({
         where: {
           localCargaId: cargaId,
@@ -275,6 +293,7 @@ export class KmAtipicoService {
           kmCalculado: true,
           kmEditadoManual: true,
           kmFonte: true,
+          retornoConfirmado: true,
           localCargaId: true,
           localDescargaId: true,
           _count: { select: { trechos: true } },
@@ -296,7 +315,11 @@ export class KmAtipicoService {
         return;
       }
 
-      const ref = await this.referenciaDoPar(v.localCargaId!, v.localDescargaId!, v.id);
+      const ref = await this.referenciaDoPar(v.localCargaId!, v.localDescargaId!, {
+        excluirViagemId: v.id,
+        retorno: { valor: v.retornoConfirmado },
+        osrmRef: v.kmCalculado == null ? null : Number(v.kmCalculado),
+      });
       const resultado = avaliarKm(kmNum, ref);
       await this.carimbar(v.id, resultado, ref);
     } catch (err) {
@@ -368,6 +391,33 @@ export class KmAtipicoService {
   }
 
   /**
+   * Km OSRM da VARIANTE que casa com o regime de retorno da viagem. `calcularKm`
+   * devolve sempre a variante COM retorno (é o que fica no cache) — errado pra
+   * comparar contra uma viagem que foi DIRETO. Aqui escolhe direto vs. retorno.
+   * retorno null (regime desconhecido) → prefere a direta (a base, mais curta;
+   * evita inflar e marcar viagem direta como atípica).
+   */
+  private async kmOsrmVariante(
+    cargaId: string,
+    descargaId: string,
+    retorno: boolean | null,
+  ): Promise<{ km: number } | null> {
+    try {
+      const res = await this.roteamento.calcularComSemRetorno(cargaId, descargaId);
+      const rotas = res.rotas ?? [];
+      if (rotas.length === 0) return null;
+      const escolhida =
+        rotas.find((r) => r.retorno === retorno) ??
+        (retorno === null ? rotas.find((r) => r.retorno === false) : undefined) ??
+        rotas.find((r) => r.recomendada) ??
+        rotas[0];
+      return { km: parseFloat(escolhida.km) };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * O filtro que define quem é uma viagem COMPARÁVEL do par — o coração da
    * honestidade da feature. Fragmento único, consumido pela mediana e pela lista
    * de comparáveis, pra os dois nunca divergirem. Exclui viagem com trecho (km
@@ -380,8 +430,19 @@ export class KmAtipicoService {
     descargaId: string,
     desde: Date,
     excluirViagemId?: string,
+    retorno?: { valor: boolean | null },
   ): Prisma.Sql {
     const excluir = excluirViagemId ?? null;
+    // Pista dupla: "cheguei direto" e "voltei no retorno" são km legitimamente
+    // diferentes do MESMO par (ex.: 12,7 vs 27). Sem separar, a mediana fica
+    // bimodal e marca as duas populações como atípicas. Quando o regime é
+    // conhecido (avaliação de UMA viagem), compara só com viagens do mesmo
+    // regime. `IS NOT DISTINCT FROM` casa null=null (par sem retorno / viagem
+    // antiga). Ausente (uso genérico do app) = não filtra.
+    const filtroRetorno =
+      retorno !== undefined
+        ? Prisma.sql`AND v."retornoConfirmado" IS NOT DISTINCT FROM ${retorno.valor}`
+        : Prisma.empty;
     return Prisma.sql`
       v."localCargaId" = ${cargaId}
       AND v."localDescargaId" = ${descargaId}
@@ -391,6 +452,7 @@ export class KmAtipicoService {
       AND v.status::text NOT IN ('RASCUNHO_OFFLINE','EM_ANDAMENTO','AGUARDANDO_PESO','DIVERGENTE')
       AND NOT EXISTS (SELECT 1 FROM trechos_viagem t WHERE t."viagemId" = v.id)
       AND NOT (v."kmForaDoPadrao" IS TRUE AND v."revisadoEm" IS NULL)
+      ${filtroRetorno}
       AND (
             v."kmFonte"::text IN ('MANUAL','HISTORICO') OR v."kmEditadoManual" IS TRUE
          OR v."kmCalculado" IS NULL
@@ -404,9 +466,10 @@ export class KmAtipicoService {
     descargaId: string,
     config: ConfigKmAtipico,
     excluirViagemId?: string,
+    retorno?: { valor: boolean | null },
   ): Promise<EstatisticaPar | null> {
     const desde = inicioDiasAtras(config.janelaDias);
-    const filtro = this.filtroAmostra(cargaId, descargaId, desde, excluirViagemId);
+    const filtro = this.filtroAmostra(cargaId, descargaId, desde, excluirViagemId, retorno);
 
     type StatRow = {
       mediana: number | null;
@@ -448,10 +511,11 @@ export class KmAtipicoService {
     descargaId: string,
     config: ConfigKmAtipico,
     excluirViagemId: string,
+    retorno?: { valor: boolean | null },
     limite = 10,
   ): Promise<ComparavelKm[]> {
     const desde = inicioDiasAtras(config.janelaDias);
-    const filtro = this.filtroAmostra(cargaId, descargaId, desde, excluirViagemId);
+    const filtro = this.filtroAmostra(cargaId, descargaId, desde, excluirViagemId, retorno);
 
     type Row = { id: string; data: Date | null; km: number; motoristaNome: string | null };
     const rows = await this.prisma.$queryRaw<Row[]>`
@@ -484,6 +548,7 @@ export class KmAtipicoService {
         kmCalculado: true,
         kmFonte: true,
         kmEditadoManual: true,
+        retornoConfirmado: true,
         localCargaId: true,
         localDescargaId: true,
         kmForaDoPadrao: true,
@@ -544,9 +609,14 @@ export class KmAtipicoService {
       };
     }
 
+    const retorno = { valor: v.retornoConfirmado };
     const [ref, comparaveis] = await Promise.all([
-      this.referenciaDoPar(v.localCargaId!, v.localDescargaId!, viagemId),
-      this.comparaveisDoPar(v.localCargaId!, v.localDescargaId!, config, viagemId),
+      this.referenciaDoPar(v.localCargaId!, v.localDescargaId!, {
+        excluirViagemId: viagemId,
+        retorno,
+        osrmRef: v.kmCalculado == null ? null : Number(v.kmCalculado),
+      }),
+      this.comparaveisDoPar(v.localCargaId!, v.localDescargaId!, config, viagemId, retorno),
     ]);
 
     return {
