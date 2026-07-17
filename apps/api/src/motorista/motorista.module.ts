@@ -26,6 +26,7 @@ import { LocaisMotoristaService } from "./locais.service";
 import { PosicaoMotoristaController } from "./posicao.controller";
 import { PosicaoMotoristaService } from "./posicao.service";
 import { RotasMotoristaController } from "./rotas.controller";
+import { KmReferenciaMotoristaController } from "./km-referencia.controller";
 import { TrackingConfigMotoristaController } from "./tracking-config.controller";
 import { BuscaLocaisConfigMotoristaController } from "./busca-locais-config.controller";
 import { ValidacaoLocalService } from "./validacao-local.service";
@@ -63,6 +64,7 @@ import { VersaoAppMotoristaController } from "./versao-app.controller";
     AbastecimentosMotoristaController,
     LocaisMotoristaController,
     RotasMotoristaController,
+    KmReferenciaMotoristaController,
     TrackingConfigMotoristaController,
     BuscaLocaisConfigMotoristaController,
     IaTicketController,

@@ -199,6 +199,66 @@ export class KmAtipicoService {
   }
 
   /**
+   * Referência de um par pro APP (mesma forma que `avaliarKm` consome). Sem a
+   * quarentena — o app não precisa dela. Usada no endpoint on-demand.
+   */
+  async referenciaParaApp(
+    cargaId: string,
+    descargaId: string,
+  ): Promise<ReferenciaKmPayload> {
+    const ref = await this.referenciaDoPar(cargaId, descargaId);
+    return { historico: ref.historico, osrm: ref.osrm, efetiva: ref.efetiva, config: ref.config };
+  }
+
+  /**
+   * Pares que ESTE motorista roda (janela `dias`) com a mediana de cada — pro app
+   * pré-cachear ao logar/reconectar e mostrar a sugestão offline. Sem OSRM de
+   * propósito: em rota que ele repete, a amostra histórica basta pra `efetiva`, e
+   * poupa uma chamada de roteador por par. O par fora do pré-cache é resolvido
+   * on-demand (com OSRM) por `referenciaParaApp`.
+   */
+  async referenciasDoMotorista(
+    motoristaId: string,
+    dias: number,
+  ): Promise<{
+    pares: Array<ReferenciaKmPayload & { cargaId: string; descargaId: string }>;
+    config: ConfigKmAtipico;
+  }> {
+    const config = await this.config();
+    const desde = inicioDiasAtras(dias);
+
+    const distintos = await this.prisma.$queryRaw<
+      { cargaId: string; descargaId: string }[]
+    >`
+      SELECT DISTINCT v."localCargaId" AS "cargaId", v."localDescargaId" AS "descargaId"
+      FROM viagens v
+      WHERE v."motoristaId" = ${motoristaId}
+        AND v."localCargaId" IS NOT NULL
+        AND v."localDescargaId" IS NOT NULL
+        AND v.data >= ${desde}
+      LIMIT 100
+    `;
+
+    const pares = [];
+    for (const p of distintos) {
+      const historico = await this.estatisticaPar(p.cargaId, p.descargaId, config);
+      const efetiva =
+        historico && historico.amostra >= config.amostraMinima
+          ? { km: historico.mediana, fonte: "HISTORICO" as const }
+          : null;
+      pares.push({
+        cargaId: p.cargaId,
+        descargaId: p.descargaId,
+        historico,
+        osrm: null,
+        efetiva,
+        config,
+      });
+    }
+    return { pares, config };
+  }
+
+  /**
    * (Re)avalia UMA viagem e carimba kmForaDoPadrao + referência. Best-effort:
    * nunca lança (é chamado fire-and-forget no create/reprocessamento). NUNCA
    * mexe em justificativaKm (fato do motorista). Quando não dá pra avaliar
