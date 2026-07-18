@@ -34,15 +34,22 @@ type Props = {
 };
 
 /**
- * Conta a história COMPLETA do km/toneladas faturados, em camadas claras:
+ * Conta a história COMPLETA do km/toneladas faturados, em tiles claros:
  * calculado pela rota (OSRM) → informado pelo motorista → faturado (após o
- * mínimo por faixa). O admin vê de onde cada número veio sem adivinhar.
+ * mínimo por faixa). O tile "faturado" é o destaque (o que vai pra fatura) —
+ * quando o mínimo eleva, ele diverge do informado e ganha o selo.
  */
 export function FaturamentoCard(p: Props) {
   const calc = p.kmCalculado != null ? Number(p.kmCalculado) : null;
   const inf = Number(p.kmInformado);
   const diffRota = calc != null ? inf - calc : 0;
   const regra = p.regraMinimo;
+
+  const seloMinimo = (
+    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+      <TrendingUp className="h-3 w-3" /> elevado pelo mínimo
+    </span>
+  );
 
   return (
     <Card className="p-4 sm:p-5">
@@ -51,13 +58,33 @@ export function FaturamentoCard(p: Props) {
       </h3>
 
       {/* --- KM --- */}
-      <div className="space-y-2.5">
-        <Linha
+      <div className="grid grid-cols-3 gap-2">
+        <Tile
           Icon={Route}
-          label="Calculado pela rota"
-          hint="o que o roteador (OSRM) estimou"
-          valor={calc != null ? `${fmtNum(p.kmCalculado, 2)} km` : "—"}
+          label="Calculado"
+          hint="rota (OSRM)"
+          valor={calc != null ? fmtNum(p.kmCalculado, 2) : "—"}
+          unidade={calc != null ? "km" : undefined}
         />
+        <Tile
+          Icon={User}
+          label="Informado"
+          hint="motorista"
+          valor={fmtNum(p.kmInformado, 2)}
+          unidade="km"
+        />
+        <Tile
+          Icon={ArrowDown}
+          label="Faturado"
+          valor={fmtNum(p.kmEfetivo, 2)}
+          unidade="km"
+          destaque
+          selo={p.kmAjustada ? seloMinimo : undefined}
+        />
+      </div>
+
+      {/* Notas do km (explicam a diferença entre os tiles) */}
+      <div className="mt-2 space-y-1">
         {p.kmRecalculadoEm && (
           <Nota tom="esmeralda">
             Km recalculado pelo trajeto real ao sincronizar
@@ -66,12 +93,6 @@ export function FaturamentoCard(p: Props) {
               : ""}
           </Nota>
         )}
-        <Linha
-          Icon={User}
-          label="Informado pelo motorista"
-          hint="o que ele confirmou no app"
-          valor={`${fmtNum(p.kmInformado, 2)} km`}
-        />
         {/* Só quando a diferença é real (>= 0,5 km) — abaixo disso é só
             arredondamento do snapshot, não um ajuste de verdade. */}
         {calc != null && Math.abs(diffRota) >= 0.5 && (
@@ -87,51 +108,30 @@ export function FaturamentoCard(p: Props) {
             {p.kmBotaFora > 0 ? ` (+${fmtNum(String(p.kmBotaFora), 1)} km)` : ""}
           </Nota>
         )}
-
-        {/* Faturado (destaque) */}
-        <div className="mt-1 flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2.5">
-          <div className="flex items-center gap-2">
-            <ArrowDown className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Km faturado</span>
-          </div>
-          <div className="text-right">
-            <span className="text-lg font-bold">{fmtNum(p.kmEfetivo, 2)} km</span>
-            {p.kmAjustada && (
-              <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-                <TrendingUp className="h-3 w-3" /> elevado pelo mínimo
-              </span>
-            )}
-          </div>
-        </div>
         {p.kmReal && (
-          <p className="text-xs text-muted-foreground">
+          <Nota tom="cinza">
             Km real por GPS (tracking): {fmtNum(p.kmReal, 2)} km — só referência, não fatura.
-          </p>
+          </Nota>
         )}
       </div>
 
       {/* --- TONELADAS --- */}
-      <div className="mt-5 space-y-2.5 border-t pt-4">
-        <Linha
+      <div className="mt-5 grid grid-cols-2 gap-2 border-t pt-4">
+        <Tile
           Icon={Truck}
-          label="Toneladas informadas"
-          hint="o que o motorista lançou"
-          valor={`${fmtNum(p.toneladasInformada, 3)} t`}
+          label="Informadas"
+          hint="motorista"
+          valor={fmtNum(p.toneladasInformada, 3)}
+          unidade="t"
         />
-        <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2.5">
-          <div className="flex items-center gap-2">
-            <ArrowDown className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Toneladas faturadas</span>
-          </div>
-          <div className="text-right">
-            <span className="text-lg font-bold">{fmtNum(p.toneladasEfetiva, 3)} t</span>
-            {p.toneladasAjustada && (
-              <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-                <TrendingUp className="h-3 w-3" /> elevado pelo mínimo
-              </span>
-            )}
-          </div>
-        </div>
+        <Tile
+          Icon={ArrowDown}
+          label="Faturadas"
+          valor={fmtNum(p.toneladasEfetiva, 3)}
+          unidade="t"
+          destaque
+          selo={p.toneladasAjustada ? seloMinimo : undefined}
+        />
       </div>
 
       {/* --- REGRA DE MÍNIMO --- */}
@@ -165,27 +165,39 @@ export function FaturamentoCard(p: Props) {
   );
 }
 
-function Linha({
+/** Mini-card quadrado: rótulo pequeno + número grande + unidade. */
+function Tile({
   Icon,
   label,
   hint,
   valor,
+  unidade,
+  destaque,
+  selo,
 }: {
   Icon: typeof Route;
   label: string;
   hint?: string;
   valor: string;
+  unidade?: string;
+  destaque?: boolean;
+  selo?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="flex items-start gap-2">
-        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-        <div>
-          <p className="text-sm">{label}</p>
-          {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
-        </div>
+    <div
+      className={`rounded-lg border p-2.5 ${
+        destaque ? "border-primary/40 bg-primary/5" : "bg-muted/30"
+      }`}
+    >
+      <div className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        <Icon className="h-3 w-3 shrink-0" /> {label}
       </div>
-      <span className="whitespace-nowrap text-sm font-medium">{valor}</span>
+      <div className="mt-1 flex items-baseline gap-1">
+        <span className="text-lg font-bold leading-none">{valor}</span>
+        {unidade && <span className="text-xs text-muted-foreground">{unidade}</span>}
+      </div>
+      {hint && <p className="mt-0.5 text-[10px] text-muted-foreground">{hint}</p>}
+      {selo && <div className="mt-1.5">{selo}</div>}
     </div>
   );
 }
@@ -203,7 +215,7 @@ function Nota({
       : tom === "esmeralda"
         ? "text-emerald-700"
         : "text-muted-foreground";
-  return <p className={`ml-6 text-xs ${cor}`}>{children}</p>;
+  return <p className={`text-xs ${cor}`}>{children}</p>;
 }
 
 function faixaTexto(de: string, ate: string | null): string {

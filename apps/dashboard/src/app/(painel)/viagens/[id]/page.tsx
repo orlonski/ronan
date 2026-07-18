@@ -663,8 +663,10 @@ export default function ViagemDetalhePage({
 
           {/* Grid principal + trilha direita (só em telas largas). */}
           <div className="grid gap-4 lg:grid-cols-3">
-            {/* Trilha direita: Fotos do ticket sempre no topo. */}
-            <div className="space-y-4 lg:order-2">
+            {/* Trilha direita FIXA: Fotos do ticket sempre no topo. Sticky pra
+                acompanhar a rolagem. order-2 em todo breakpoint → no mobile
+                empilha DEPOIS dos números (Km e faturamento vem primeiro). */}
+            <div className="space-y-4 order-2 lg:sticky lg:top-4 lg:self-start">
               <Card className="p-4 sm:p-5">
                 <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
                   <Camera className="h-4 w-4" /> Fotos do ticket
@@ -816,10 +818,14 @@ export default function ViagemDetalhePage({
                   </div>
                 )}
               </Card>
+
+              {/* Conversa (chat) com o motorista: fecha a trilha, junto das Fotos
+                  e Pré-validação — equilibra a altura das colunas. */}
+              <ConversaViagemCard viagemId={id} />
             </div>
 
-            {/* Coluna principal. */}
-            <div className="space-y-4 lg:col-span-2 lg:order-1">
+            {/* Coluna principal. order-1 → vem primeiro no empilhado (mobile). */}
+            <div className="space-y-4 order-1 lg:col-span-2">
           {/* Km e faturamento: a história completa do km/toneladas — calculado
               pela rota → informado pelo motorista → faturado (após o mínimo). */}
           <FaturamentoCard
@@ -842,6 +848,9 @@ export default function ViagemDetalhePage({
             materialNome={v.material.nome}
           />
 
+          {/* Trajeto + Km do trajeto lado a lado: o par natural (rota + km da
+              rota) — e o Trajeto deixa de ter espaço morto à direita. */}
+          <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
           <Card className="p-4 sm:p-5">
             <h3 className="mb-3 text-base font-medium">Trajeto</h3>
             <div className="space-y-3 text-sm">
@@ -910,17 +919,13 @@ export default function ViagemDetalhePage({
             </div>
           </Card>
 
-          {/* Km do trajeto: histórico do par + rota calculada. Coluna principal,
-              após o Trajeto. */}
           <ReferenciaKmCard
             data={referenciaKm.data}
             loading={referenciaKm.isLoading}
             onAceitarKm={() => aceitarKm.mutate()}
             aceitando={aceitarKm.isPending}
           />
-
-          {/* Conversa (chat) com o motorista — a divergência e mensagens livres. */}
-          <ConversaViagemCard viagemId={id} />
+          </div>
             </div>
           </div>
 
