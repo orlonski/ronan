@@ -34,10 +34,11 @@ type Props = {
 };
 
 /**
- * Conta a história COMPLETA do km/toneladas faturados, em tiles claros:
- * calculado pela rota (OSRM) → informado pelo motorista → faturado (após o
- * mínimo por faixa). O tile "faturado" é o destaque (o que vai pra fatura) —
- * quando o mínimo eleva, ele diverge do informado e ganha o selo.
+ * Conta a história do km/toneladas em tiles claros. O normal é o motorista
+ * preencher e ser isso que fatura — então "Faturado/Faturadas" NÃO aparece
+ * quando é igual ao informado (seria redundante). Ele só surge, destacado e
+ * com o motivo, quando uma regra de mínimo por faixa ELEVOU o valor.
+ * "Calculado (OSRM)" fica sempre pra comparar o km informado com a rota.
  */
 export function FaturamentoCard(p: Props) {
   const calc = p.kmCalculado != null ? Number(p.kmCalculado) : null;
@@ -57,8 +58,8 @@ export function FaturamentoCard(p: Props) {
         <TrendingUp className="h-4 w-4" /> Km e faturamento
       </h3>
 
-      {/* --- KM --- */}
-      <div className="grid grid-cols-3 gap-2">
+      {/* --- KM --- (Faturado só quando o mínimo elevou) */}
+      <div className={`grid gap-2 ${p.kmAjustada ? "grid-cols-3" : "grid-cols-2"}`}>
         <Tile
           Icon={Route}
           label="Calculado"
@@ -68,19 +69,22 @@ export function FaturamentoCard(p: Props) {
         />
         <Tile
           Icon={User}
-          label="Informado"
+          label={p.kmAjustada ? "Informado" : "Km da viagem"}
           hint="motorista"
           valor={fmtNum(p.kmInformado, 2)}
           unidade="km"
         />
-        <Tile
-          Icon={ArrowDown}
-          label="Faturado"
-          valor={fmtNum(p.kmEfetivo, 2)}
-          unidade="km"
-          destaque
-          selo={p.kmAjustada ? seloMinimo : undefined}
-        />
+        {p.kmAjustada && (
+          <Tile
+            Icon={ArrowDown}
+            label="Faturado"
+            hint="pelo mínimo"
+            valor={fmtNum(p.kmEfetivo, 2)}
+            unidade="km"
+            destaque
+            selo={seloMinimo}
+          />
+        )}
       </div>
 
       {/* Notas do km (explicam a diferença entre os tiles) */}
@@ -115,23 +119,26 @@ export function FaturamentoCard(p: Props) {
         )}
       </div>
 
-      {/* --- TONELADAS --- */}
+      {/* --- TONELADAS --- (Faturadas só quando o mínimo elevou) */}
       <div className="mt-5 grid grid-cols-2 gap-2 border-t pt-4">
         <Tile
           Icon={Truck}
-          label="Informadas"
+          label={p.toneladasAjustada ? "Informadas" : "Toneladas"}
           hint="motorista"
           valor={fmtNum(p.toneladasInformada, 3)}
           unidade="t"
         />
-        <Tile
-          Icon={ArrowDown}
-          label="Faturadas"
-          valor={fmtNum(p.toneladasEfetiva, 3)}
-          unidade="t"
-          destaque
-          selo={p.toneladasAjustada ? seloMinimo : undefined}
-        />
+        {p.toneladasAjustada && (
+          <Tile
+            Icon={ArrowDown}
+            label="Faturadas"
+            hint="pelo mínimo"
+            valor={fmtNum(p.toneladasEfetiva, 3)}
+            unidade="t"
+            destaque
+            selo={seloMinimo}
+          />
+        )}
       </div>
 
       {/* --- REGRA DE MÍNIMO --- */}
