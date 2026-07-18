@@ -104,6 +104,12 @@ type ViagemDetalhe = {
   kmEfetivo: string;
   kmAjustada: boolean;
   iniciadoEm: string | null;
+  // Quando o motorista criou a viagem no device (offline) e quando sincronizou.
+  criadoOfflineEm: string | null;
+  sincronizadoEm: string;
+  // Versão do app que o motorista rodava ao criar a viagem (carimbo no create;
+  // null pra viagens antigas ou PWA).
+  appVersaoCriacao: string | null;
   pontos: {
     lat: number;
     lng: number;
@@ -179,6 +185,23 @@ type ViagemDetalhe = {
     };
   }>;
 };
+
+// Duplicados geográficos (reusa a varredura da aba Mapa de Locais, que já tem a
+// trava de marco de rodovia — evita falso-positivo em "PR-418 KM 12" vs "KM 5").
+type GeoLocalDup = {
+  id: string;
+  nome: string;
+  lat: number | null;
+  lng: number | null;
+  totalViagens: number;
+  distanciaDoPrincipalM: number;
+};
+type GeoGrupoDup = {
+  id: string;
+  principal: GeoLocalDup;
+  candidatos: GeoLocalDup[];
+};
+type DuplicatasGeoResp = { raioM: number; grupos: GeoGrupoDup[] };
 
 type Tab = "dados" | "historico" | "diagnostico";
 
@@ -257,6 +280,23 @@ export default function ViagemDetalhePage({
     queryFn: () =>
       fetchApi<ReferenciaKmDetalhe>(`/admin/viagens/${id}/referencia-km`, { token }),
   });
+  // Prováveis duplicatas da carga/descarga — reusa a varredura geo da aba Mapa
+  // (raio 150 m, mesma trava anti-marco-de-rodovia). Cacheada; um grupo por par.
+  const duplicatasGeo = useQuery({
+    queryKey: ["locais-duplicatas-geo", 150],
+    enabled: !!token,
+    staleTime: 5 * 60_000,
+    queryFn: () =>
+      fetchApi<DuplicatasGeoResp>(`/admin/locais/duplicatas-geo?raioM=150`, { token }),
+  });
+  const dupPorLocal = useMemo(() => {
+    const m = new Map<string, { papel: "principal" | "candidato"; grupo: GeoGrupoDup }>();
+    for (const g of duplicatasGeo.data?.grupos ?? []) {
+      m.set(g.principal.id, { papel: "principal", grupo: g });
+      for (const c of g.candidatos) m.set(c.id, { papel: "candidato", grupo: g });
+    }
+    return m;
+  }, [duplicatasGeo.data]);
   const historico = useHistoricoViagem(id);
   const queryClient = useQueryClient();
   const aceitarKm = useMutation({
@@ -501,6 +541,15 @@ export default function ViagemDetalhePage({
   if (!viagem.data) return <p className="text-sm text-red-600">Viagem não encontrada.</p>;
   const v = viagem.data;
   const emFechamento = v.matchesFechamento.length > 0;
+  // Hora em que a viagem foi criada (device offline; fallback: sincronização).
+  const tsCriacao = v.criadoOfflineEm ?? v.sincronizadoEm;
+  const horaCriacao = tsCriacao
+    ? new Date(tsCriacao).toLocaleTimeString("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
   // Retorno na rodovia: só há escolha quando o backend devolve 2 variantes.
   // Ordem estável [sem_retorno, com_retorno]. Seleção = preview ou a em vigor.
   const retornoRotas = opcoesRetorno.data?.rotas ?? [];
@@ -558,6 +607,12 @@ export default function ViagemDetalhePage({
             <p className="mt-0.5 text-sm text-muted-foreground">
               {v.motorista.nome} · placa <span className="font-mono">{v.veiculo.placa}</span> ·{" "}
               {fmtBR(v.data)}
+              {horaCriacao && ` às ${horaCriacao}`}
+              {v.appVersaoCriacao && (
+                <span className="ml-1 rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+                  app {v.appVersaoCriacao}
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -715,6 +770,14 @@ export default function ViagemDetalhePage({
                         {v.localCarga.nome}
                         <Eye className="h-3.5 w-3.5 shrink-0 opacity-70" />
                       </Link>
+                      {dupPorLocal.get(v.localCarga.id) && (
+                        <span className="ml-2 align-middle">
+                          <DuplicataLocalBadge
+                            info={dupPorLocal.get(v.localCarga.id)!}
+                            selfId={v.localCarga.id}
+                          />
+                        </span>
+                      )}
                       <p className="text-xs text-muted-foreground">
                         {v.localCarga.logradouro} — {v.localCarga.cidade}/{v.localCarga.uf}
                       </p>
@@ -736,6 +799,14 @@ export default function ViagemDetalhePage({
                         {v.localDescarga.nome}
                         <Eye className="h-3.5 w-3.5 shrink-0 opacity-70" />
                       </Link>
+                      {dupPorLocal.get(v.localDescarga.id) && (
+                        <span className="ml-2 align-middle">
+                          <DuplicataLocalBadge
+                            info={dupPorLocal.get(v.localDescarga.id)!}
+                            selfId={v.localDescarga.id}
+                          />
+                        </span>
+                      )}
                       <p className="text-xs text-muted-foreground">
                         {v.localDescarga.logradouro} — {v.localDescarga.cidade}/{v.localDescarga.uf}
                       </p>
@@ -1446,6 +1517,64 @@ function CampoTile({
         {value}
       </div>
     </div>
+  );
+}
+
+// Distância em metros (haversine) — pro tooltip da tarja de duplicata dizer quão
+// perto está o outro local.
+function distanciaM(
+  a: { lat: number | null; lng: number | null },
+  b: { lat: number | null; lng: number | null },
+): number | null {
+  if (a.lat == null || a.lng == null || b.lat == null || b.lng == null) return null;
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return Math.round(2 * R * Math.asin(Math.min(1, Math.sqrt(h))));
+}
+
+// Tarja "Provável duplicata / Local repetido?" no card Trajeto — mesma linguagem
+// da tela de Locais. candidato = provável duplicado (vermelho); principal = tem
+// repetidos por perto (âmbar). Link leva pro local pra revisar/mesclar.
+function DuplicataLocalBadge({
+  info,
+  selfId,
+}: {
+  info: { papel: "principal" | "candidato"; grupo: GeoGrupoDup };
+  selfId: string;
+}) {
+  const provavelDup = info.papel === "candidato";
+  const membros = [info.grupo.principal, ...info.grupo.candidatos];
+  const self = membros.find((l) => l.id === selfId);
+  const outros = membros.filter((l) => l.id !== selfId);
+  const desc = outros
+    .map((l) => {
+      const d = self ? distanciaM(self, l) : null;
+      const dist = d != null ? ` a ${d} m` : "";
+      const vg = `${l.totalViagens} ${l.totalViagens === 1 ? "viagem" : "viagens"}`;
+      return `"${l.nome}"${dist} (${vg})`;
+    })
+    .join(", ");
+  const title = provavelDup
+    ? `Provável duplicata de: ${desc}. Clique pra revisar/mesclar em Locais.`
+    : `Local repetido? Perto de: ${desc}. Clique pra revisar em Locais.`;
+  return (
+    <Link
+      href={`/locais/${selfId}/ver`}
+      title={title}
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium transition-colors ${
+        provavelDup
+          ? "border-red-200 bg-red-100 text-red-700 hover:bg-red-200"
+          : "border-amber-200 bg-amber-100 text-amber-700 hover:bg-amber-200"
+      }`}
+    >
+      <AlertTriangle className="h-3 w-3" />
+      {provavelDup ? "Provável duplicata" : "Local repetido?"}
+    </Link>
   );
 }
 
