@@ -730,9 +730,11 @@ export default function ViagemDetalhePage({
           )}
 
           {/* Layout em pares (bento). Row A: numeros + Trajeto na esquerda ao
-              lado das Fotos (que podem ser altas); Row B: Pre-validacao + Conversa. */}
-          <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
-            <div className="space-y-4 lg:col-span-2">
+              lado das Fotos. Colunas esticam iguais (stretch) e o par Trajeto/Km
+              cresce (flex-1) pra o fundo bater com a base da foto — mesmo quando
+              "Ver viagens comparaveis" expande. Row B: Pre-validacao + Conversa. */}
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div className="flex flex-col gap-4 lg:col-span-2">
               <FaturamentoCard
                 kmCalculado={v.kmCalculado}
                 kmInformado={v.kmInformado}
@@ -753,8 +755,9 @@ export default function ViagemDetalhePage({
                 materialNome={v.material.nome}
               />
 
-              {/* Trajeto + Km do trajeto: enchem a esquerda ao lado da foto. */}
-              <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+              {/* Trajeto + Km do trajeto: par que cresce (flex-1) pra preencher a
+                  altura da foto; os dois cards esticam iguais (stretch). */}
+              <div className="grid gap-4 lg:flex-1 lg:grid-cols-2">
                 <Card className="p-4 sm:p-5">
                   <h3 className="mb-3 text-base font-medium">Trajeto</h3>
                   <div className="space-y-3 text-sm">
@@ -847,22 +850,24 @@ export default function ViagemDetalhePage({
               </div>
             </div>
 
-            {/* Fotos do ticket: coluna a direita, agora com conteudo ao lado. */}
-            <Card className="p-4 sm:p-5">
-                            <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
-                              <Camera className="h-4 w-4" /> Fotos do ticket
-                            </h3>
-                            {v.fotos.length === 0 && (
-                              <p className="mb-2 text-sm text-muted-foreground">
-                                Nenhuma foto anexada pelo motorista.
-                              </p>
-                            )}
-                            <FotosViagem viagemId={v.id} fotos={v.fotos} />
-                          </Card>
+            {/* Fotos do ticket: coluna a direita. flex-col + botão "Anexar" no
+                rodapé (mt-auto no componente) → a base bate com o par Trajeto/Km. */}
+            <Card className="flex flex-col p-4 sm:p-5">
+              <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
+                <Camera className="h-4 w-4" /> Fotos do ticket
+              </h3>
+              {v.fotos.length === 0 && (
+                <p className="mb-2 text-sm text-muted-foreground">
+                  Nenhuma foto anexada pelo motorista.
+                </p>
+              )}
+              <FotosViagem viagemId={v.id} fotos={v.fotos} />
+            </Card>
           </div>
 
-          {/* Row B: Pre-validacao + Conversa lado a lado. */}
-          <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+          {/* Row B: Pre-validacao + Conversa lado a lado, esticando iguais
+              (stretch) pro fundo dos dois cards alinhar. */}
+          <div className="grid gap-4 lg:grid-cols-2">
             <Card className="p-4 sm:p-5">
               <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
                 <ShieldCheck className="h-4 w-4" /> Pré-validação
@@ -1860,7 +1865,9 @@ function FotosViagem({
         }}
       />
 
-      <div className="mt-3">
+      {/* mt-auto: quando o card das Fotos estica (Row A), o botão vai pro rodapé,
+          alinhando a base da foto com o par Trajeto/Km. Sem esticar, é só mt-3. */}
+      <div className="mt-auto pt-3">
         <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium hover:bg-muted">
           <input
             type="file"
