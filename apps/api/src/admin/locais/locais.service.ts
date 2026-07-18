@@ -5,7 +5,7 @@ import {
   NivelConfiancaLocal,
   OrigemCadastroLocal,
   type Prisma,
-  type TipoLocal,
+  TipoLocal,
 } from "@prisma/client";
 import type { CriarLocalInput } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -365,6 +365,7 @@ export class LocaisService {
       nome: string;
       totalViagens: number;
       distanciaM: number | null;
+      tipo: TipoLocal;
     };
     type Entry = Similar & {
       grupoId: string;
@@ -385,6 +386,7 @@ export class LocaisService {
             id: o.id,
             nome: o.nome,
             totalViagens: o.totalViagens,
+            tipo: o.tipo,
             distanciaM:
               m.lat != null && m.lng != null && o.lat != null && o.lng != null
                 ? Math.round(haversineMetros(m.lat, m.lng, o.lat, o.lng))
@@ -397,6 +399,7 @@ export class LocaisService {
           id: m.id,
           nome: m.nome,
           totalViagens: m.totalViagens,
+          tipo: m.tipo,
           distanciaM: null,
           grupoId: g.id,
           papel: ehLixo ? "provavel_lixo" : "duplicata",
@@ -424,10 +427,12 @@ export class LocaisService {
         select: {
           id: true,
           nome: true,
+          tipo: true,
           _count: { select: { viagensCarga: true, viagensDescarga: true } },
         },
       });
       const nomeDe = new Map(infos.map((l) => [l.id, l.nome]));
+      const tipoDe = new Map(infos.map((l) => [l.id, l.tipo]));
       const viagensDe = new Map(
         infos.map((l) => [l.id, l._count.viagensCarga + l._count.viagensDescarga]),
       );
@@ -467,6 +472,7 @@ export class LocaisService {
           id,
           nome: nomeDe.get(id) ?? "",
           totalViagens: viagensDe.get(id) ?? 0,
+          tipo: tipoDe.get(id) ?? TipoLocal.DESCARGA,
         }));
         const maxViagens = Math.max(...membros.map((m) => m.totalViagens));
         const forteId = membros.reduce((a, b) =>
@@ -483,6 +489,7 @@ export class LocaisService {
             id: m.id,
             nome: m.nome,
             totalViagens: m.totalViagens,
+            tipo: m.tipo,
             distanciaM: null,
             grupoId: `n-${grupoId}`,
             papel: ehLixo ? "provavel_lixo" : "duplicata",

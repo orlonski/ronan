@@ -94,6 +94,7 @@ type DupSimilar = {
   totalViagens: number;
   /** Distância (m) ao local desta linha. null = fallback por nome (sem coordenada). */
   distanciaM: number | null;
+  tipo: Tipo;
 };
 type DupEntry = {
   id: string;
@@ -102,6 +103,7 @@ type DupEntry = {
   grupoId: string;
   papel: "provavel_lixo" | "duplicata";
   similares: DupSimilar[];
+  tipo: Tipo;
 };
 
 // ---- Duplicados geográficos (aba Mapa) ----
@@ -138,6 +140,12 @@ const TIPO_LOCAL_COLOR: Record<Tipo, string> = {
   DESCARGA: "border-rose-200 bg-rose-50 text-rose-900",
   AMBOS: "border-violet-200 bg-violet-50 text-violet-900",
 };
+
+function TipoBadge({ tipo }: { tipo: Tipo }) {
+  return (
+    <Badge className={`shrink-0 text-[10px] ${TIPO_LOCAL_COLOR[tipo] ?? ""}`}>{tipo}</Badge>
+  );
+}
 
 // Rótulos curtos pra cada fluxo de cadastro. Registros antigos (pré-rastreio)
 // vêm com origemCadastro=null → exibe "—".
@@ -755,6 +763,11 @@ function MesclarDupDialog({
     () => [dup.id, ...dup.similares.map((s) => s.id)],
     [dup],
   );
+  // Avisa quando o grupo mistura carga e descarga (a detecção é só geográfica).
+  const tiposConflitantes = useMemo(() => {
+    const s = new Set<Tipo>([dup.tipo, ...dup.similares.map((x) => x.tipo)]);
+    return s.has("CARGA") && s.has("DESCARGA");
+  }, [dup]);
   // Mapa de conferência: pins dos locais do grupo + GPS real das descargas.
   const mapaQ = useQuery({
     queryKey: ["dup-mapa", ids.join(",")],
@@ -770,7 +783,10 @@ function MesclarDupDialog({
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Revisar duplicata &quot;{dup.nome}&quot;</DialogTitle>
+          <DialogTitle className="flex flex-wrap items-center gap-2">
+            <span>Revisar duplicata &quot;{dup.nome}&quot;</span>
+            <TipoBadge tipo={dup.tipo} />
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
@@ -778,6 +794,16 @@ function MesclarDupDialog({
             grupo (pin = cadastro; bolinhas = onde as viagens realmente descarregaram).
             Se as manchas se sobrepõem, é duplicata.
           </p>
+          {tiposConflitantes && (
+            <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                Este grupo tem <strong>carga e descarga</strong> juntos. A detecção é só
+                por proximidade — confirme que é o mesmo lugar físico antes de mesclar
+                (ao mesclar, o local vira o tipo do que você mantém).
+              </span>
+            </div>
+          )}
           {mapaQ.isLoading ? (
             <div className="h-[360px] rounded-md border bg-muted/30" />
           ) : (
@@ -808,6 +834,7 @@ function MesclarDupDialog({
                   {j + 2}
                 </span>
                 <span className="min-w-0 flex-1 truncate font-medium">{s.nome}</span>
+                <TipoBadge tipo={s.tipo} />
                 <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
                   {s.distanciaM != null ? `a ${s.distanciaM} m · ` : ""}
                   {plural(s.totalViagens, "viagem", "viagens")}
