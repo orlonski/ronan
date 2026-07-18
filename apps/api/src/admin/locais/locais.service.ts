@@ -808,6 +808,18 @@ export class LocaisService {
         where: { localDescargaId: origemId },
         data: { localDescargaId: destinoId },
       }),
+      // Trechos (retorno do bota-fora) apontam pro local via FK RESTRICT — sem
+      // reatribuir, o delete do origem estoura trechos_viagem_localId_fkey.
+      this.prisma.trechoViagem.updateMany({
+        where: { localId: origemId },
+        data: { localId: destinoId },
+      }),
+      // Eventos da viagem guiada (FK SetNull) — reatribui pra não perder o
+      // vínculo do local ao apagar o origem.
+      this.prisma.eventoViagem.updateMany({
+        where: { localId: origemId },
+        data: { localId: destinoId },
+      }),
       this.prisma.local.update({
         where: { id: destinoId },
         data: { apelidos: apelidosFinais },
