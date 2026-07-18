@@ -907,14 +907,19 @@ export class LocaisService {
 
   async remove(id: string) {
     await this.ensureExists(id);
-    const [carga, descarga] = await Promise.all([
+    const [carga, descarga, trechos] = await Promise.all([
       this.prisma.viagem.count({ where: { localCargaId: id } }),
       this.prisma.viagem.count({ where: { localDescargaId: id } }),
+      // Trechos (retorno do bota-fora) têm FK RESTRICT — sem contar aqui, o
+      // delete estouraria 500 em vez de um 4xx claro (raro: trecho órfão da
+      // carga trocada depois).
+      this.prisma.trechoViagem.count({ where: { localId: id } }),
     ]);
-    const total = carga + descarga;
+    const total = carga + descarga + trechos;
     if (total > 0) {
+      const trechoTxt = trechos > 0 ? `, ${trechos} de retorno` : "";
       throw new ConflictException(
-        `Não é possível excluir: vinculado a ${total} viagem${total === 1 ? "" : "s"} (${carga} de carga, ${descarga} de descarga). Use o toggle de ativar/inativar pra esconder sem perder o histórico.`,
+        `Não é possível excluir: vinculado a ${total} viagem${total === 1 ? "" : "s"} (${carga} de carga, ${descarga} de descarga${trechoTxt}). Use o toggle de ativar/inativar pra esconder sem perder o histórico.`,
       );
     }
     // RotaCache sai cascade via schema
