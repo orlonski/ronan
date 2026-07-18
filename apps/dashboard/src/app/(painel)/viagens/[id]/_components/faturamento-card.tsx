@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, Calculator, Route, TrendingUp, Truck, User } from "lucide-react";
+import { ArrowDown, Calculator, Route, TrendingUp, User } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { fmtNum } from "@/lib/fechamento-helpers";
 
@@ -119,27 +119,8 @@ export function FaturamentoCard(p: Props) {
         )}
       </div>
 
-      {/* --- TONELADAS --- (Faturadas só quando o mínimo elevou) */}
-      <div className="mt-5 grid grid-cols-2 gap-2 border-t pt-4">
-        <Tile
-          Icon={Truck}
-          label={p.toneladasAjustada ? "Informadas" : "Toneladas"}
-          hint="motorista"
-          valor={fmtNum(p.toneladasInformada, 3)}
-          unidade="t"
-        />
-        {p.toneladasAjustada && (
-          <Tile
-            Icon={ArrowDown}
-            label="Faturadas"
-            hint="pelo mínimo"
-            valor={fmtNum(p.toneladasEfetiva, 3)}
-            unidade="t"
-            destaque
-            selo={seloMinimo}
-          />
-        )}
-      </div>
+      {/* Toneladas moveu pro strip do topo (ao lado do Ticket). Aqui fica só a
+          regra de mínimo, que explica o faturado de km E de toneladas. */}
 
       {/* --- REGRA DE MÍNIMO --- */}
       {regra && (
