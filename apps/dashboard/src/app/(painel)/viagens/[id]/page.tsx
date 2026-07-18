@@ -618,52 +618,208 @@ export default function ViagemDetalhePage({
       </div>
 
       {tab === "dados" && (
-        <div className="grid gap-4 md:grid-cols-2 md:auto-rows-min">
-          <Card className="p-4 sm:p-5">
-            <h3 className="mb-3 text-base font-medium">Dados do lançamento</h3>
-            <dl className="space-y-2 text-sm">
-              <Row
-                label="Material"
-                value={v.material.nome}
-                fromAi={v.ocrCampos?.includes("materialId")}
-              />
-              <Row
-                label="Cliente"
-                value={v.cliente.nome}
-                fromAi={v.ocrCampos?.includes("clienteId")}
-              />
-              <Row label="Empresa" value={v.cliente.empresa.nome} />
-              {(v.cargaDistanciaMetros != null || v.cargaPrecisao != null) && (
-                <Row
-                  label="Marcação da carga"
-                  value={<MarcacaoCarga viagem={v} limiteSinalFraco={limiteSinalFraco} />}
-                />
-              )}
-              {(v.descargaDistanciaMetros != null || v.descargaPrecisao != null) && (
-                <Row
-                  label="Marcação da descarga"
-                  value={<MarcacaoDescarga viagem={v} limiteSinalFraco={limiteSinalFraco} />}
-                />
-              )}
-              <Row
-                label="Ticket"
-                value={
-                  v.ticket ? (
-                    v.ticket
-                  ) : (
-                    <span className="font-sans text-sm italic text-muted-foreground">
-                      {v.material.exigeTicket ? "sem ticket" : "material não exige ticket"}
-                    </span>
-                  )
-                }
-                mono
-                fromAi={v.ocrCampos?.includes("ticket")}
-              />
-              {v.valorPedagioTotal && <Row label="Pedágio" value={fmtBRL(v.valorPedagioTotal)} />}
-              {v.observacao && <Row label="Observação" value={v.observacao} />}
-            </dl>
-          </Card>
+        <div className="space-y-4">
+          {/* Faixa de tiles com os dados de identidade da viagem (substitui a
+              antiga tabela "Dados do lançamento"). Os números (km/toneladas) e a
+              marcação de GPS vivem nos cards abaixo, não aqui, pra não repetir. */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            <CampoTile
+              label="Material"
+              value={v.material.nome}
+              fromAi={v.ocrCampos?.includes("materialId")}
+            />
+            <CampoTile
+              label="Cliente"
+              value={v.cliente.nome}
+              fromAi={v.ocrCampos?.includes("clienteId")}
+            />
+            <CampoTile label="Empresa" value={v.cliente.empresa.nome} />
+            <CampoTile
+              label="Ticket"
+              mono
+              fromAi={v.ocrCampos?.includes("ticket")}
+              value={
+                v.ticket ? (
+                  v.ticket
+                ) : (
+                  <span className="text-sm font-normal italic text-muted-foreground">
+                    {v.material.exigeTicket ? "sem ticket" : "não exige"}
+                  </span>
+                )
+              }
+            />
+            {v.valorPedagioTotal && (
+              <CampoTile label="Pedágio" value={fmtBRL(v.valorPedagioTotal)} />
+            )}
+          </div>
+          {v.observacao && (
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                Observação
+              </div>
+              <p className="mt-0.5 break-words text-sm">{v.observacao}</p>
+            </div>
+          )}
 
+          {/* Grid principal + trilha direita (só em telas largas). */}
+          <div className="grid gap-4 lg:grid-cols-3">
+            {/* Trilha direita: Fotos do ticket sempre no topo. */}
+            <div className="space-y-4 lg:order-2">
+              <Card className="p-4 sm:p-5">
+                <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
+                  <Camera className="h-4 w-4" /> Fotos do ticket
+                </h3>
+                {v.fotos.length === 0 && (
+                  <p className="mb-2 text-sm text-muted-foreground">
+                    Nenhuma foto anexada pelo motorista.
+                  </p>
+                )}
+                <FotosViagem viagemId={v.id} fotos={v.fotos} />
+              </Card>
+
+              {/* Pré-validação: segunda peça da trilha direita, abaixo das Fotos. */}
+              <Card className="p-4 sm:p-5">
+                <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
+                  <ShieldCheck className="h-4 w-4" /> Pré-validação
+                </h3>
+                {v.status === "AJUSTADA" ? (
+                  <div className="space-y-3">
+                    <p className="text-sm">
+                      <Badge className="border-blue-200 bg-blue-100 text-blue-900">
+                        Aguardando sua revisão
+                      </Badge>
+                      <span className="ml-2 text-muted-foreground">
+                        motorista respondeu à divergência
+                      </span>
+                    </p>
+                    {v.motivoStatus && (
+                      <p className="rounded-md border bg-muted/30 p-3 text-sm">
+                        <span className="font-medium">Você pediu:</span>{" "}
+                        {v.motivoStatus}
+                      </p>
+                    )}
+                    <p className="text-sm text-muted-foreground">
+                      Revise a correção e aprove ou recuse de novo.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="success"
+                        onClick={() => preValidar.mutate({ status: "OK" })}
+                        disabled={preValidar.isPending || emFechamento}
+                      >
+                        <ThumbsUp className="h-4 w-4" /> Aprovar correção
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        onClick={() => {
+                          setTipoDivergencia("OUTRO");
+                          setMotivoTexto("");
+                          setMotivoFoiEditado(false);
+                          setDialogDivergente(true);
+                        }}
+                        disabled={preValidar.isPending || emFechamento}
+                      >
+                        <ThumbsDown className="h-4 w-4" /> Recusar de novo
+                      </Button>
+                    </div>
+                  </div>
+                ) : v.revisadoEm ? (
+                  <div className="space-y-2">
+                    <p className="text-sm">
+                      <Badge
+                        className={
+                          v.status === "OK"
+                            ? "bg-green-100 text-green-800 border-green-200"
+                            : "bg-red-100 text-red-800 border-red-200"
+                        }
+                      >
+                        {v.status === "OK" ? "Validada" : "Divergente"}
+                      </Badge>
+                      <span className="ml-2 text-muted-foreground">
+                        por {v.revisadoPor?.nome ?? "—"} em {fmtDataHoraBR(v.revisadoEm)}
+                      </span>
+                    </p>
+                    {v.motivoStatus && (
+                      <p className="rounded-md border bg-muted/30 p-3 text-sm">
+                        <span className="font-medium">Motivo:</span> {v.motivoStatus}
+                      </p>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => preValidar.mutate({ status: "DESFAZER" })}
+                      disabled={preValidar.isPending}
+                    >
+                      Desfazer pré-validação
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {semValorMasTemPedagio && (
+                      <div className="flex items-start gap-2 rounded-md border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <div className="space-y-1">
+                          <p className="font-medium">
+                            Sem valor de pedágio, mas rota passa por{" "}
+                            {pedagiosEncontrados.length} pedágio
+                            {pedagiosEncontrados.length === 1 ? "" : "s"}.
+                          </p>
+                          <p className="text-xs">
+                            {pedagiosEncontrados
+                              .slice(0, 5)
+                              .map((p) => p.nome + (p.rodovia ? ` (${p.rodovia})` : ""))
+                              .join(" · ")}
+                            {pedagiosEncontrados.length > 5
+                              ? ` · +${pedagiosEncontrados.length - 5}`
+                              : ""}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    <p className="text-sm text-muted-foreground">
+                      Marque como validada ou divergente antes do fechamento.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="success"
+                        onClick={() => preValidar.mutate({ status: "OK" })}
+                        disabled={preValidar.isPending || emFechamento}
+                        title={
+                          emFechamento
+                            ? "Viagem em fechamento — desfaça o match antes de pré-validar"
+                            : undefined
+                        }
+                      >
+                        <ThumbsUp className="h-4 w-4" /> Marcar como validada
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        onClick={() => {
+                          const tipoInicial = semValorMasTemPedagio
+                            ? "PEDAGIO_SEM_VALOR"
+                            : "OUTRO";
+                          setTipoDivergencia(tipoInicial);
+                          setMotivoTexto(motivoSugeridoPorTipo(tipoInicial));
+                          setMotivoFoiEditado(false);
+                          setDialogDivergente(true);
+                        }}
+                        disabled={preValidar.isPending || emFechamento}
+                        title={
+                          emFechamento
+                            ? "Viagem em fechamento — desfaça o match antes de pré-validar"
+                            : undefined
+                        }
+                      >
+                        <ThumbsDown className="h-4 w-4" /> Marcar como divergente
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            </div>
+
+            {/* Coluna principal. */}
+            <div className="space-y-4 lg:col-span-2 lg:order-1">
           {/* Km e faturamento: a história completa do km/toneladas — calculado
               pela rota → informado pelo motorista → faturado (após o mínimo). */}
           <FaturamentoCard
@@ -686,22 +842,6 @@ export default function ViagemDetalhePage({
             materialNome={v.material.nome}
           />
 
-          {/* Fotos do ticket: na coluna direita pra ficar lado a lado com
-              os dados — admin confere foto + valores sem rolar. row-span-3
-              estende embaixo de Trajeto + Pré-validação também (mantém
-              foto longa sem deixar espaço vazio na esquerda). */}
-          <Card className="p-4 sm:p-5 md:row-span-3">
-            <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
-              <Camera className="h-4 w-4" /> Fotos do ticket
-            </h3>
-            {v.fotos.length === 0 && (
-              <p className="mb-2 text-sm text-muted-foreground">
-                Nenhuma foto anexada pelo motorista.
-              </p>
-            )}
-            <FotosViagem viagemId={v.id} fotos={v.fotos} />
-          </Card>
-
           <Card className="p-4 sm:p-5">
             <h3 className="mb-3 text-base font-medium">Trajeto</h3>
             <div className="space-y-3 text-sm">
@@ -720,6 +860,11 @@ export default function ViagemDetalhePage({
                 <p className="text-xs text-muted-foreground">
                   {v.localCarga.logradouro} — {v.localCarga.cidade}/{v.localCarga.uf}
                 </p>
+                {(v.cargaDistanciaMetros != null || v.cargaPrecisao != null) && (
+                  <div className="mt-1 text-xs">
+                    <MarcacaoCarga viagem={v} limiteSinalFraco={limiteSinalFraco} />
+                  </div>
+                )}
               </div>
               <div>
                 <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
@@ -736,6 +881,11 @@ export default function ViagemDetalhePage({
                 <p className="text-xs text-muted-foreground">
                   {v.localDescarga.logradouro} — {v.localDescarga.cidade}/{v.localDescarga.uf}
                 </p>
+                {(v.descargaDistanciaMetros != null || v.descargaPrecisao != null) && (
+                  <div className="mt-1 text-xs">
+                    <MarcacaoDescarga viagem={v} limiteSinalFraco={limiteSinalFraco} />
+                  </div>
+                )}
               </div>
               {/* Trechos adicionais (retorno do bota-fora): voltou pra carga */}
               {(v.trechos ?? []).map((t) => (
@@ -760,149 +910,8 @@ export default function ViagemDetalhePage({
             </div>
           </Card>
 
-          {/* Pré-validação: coluna 1 também, logo após Trajeto, pra preencher
-              o espaço embaixo (Fotos do ticket ocupa col 2 com row-span-3). */}
-          <Card className="p-4 sm:p-5">
-            <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
-              <ShieldCheck className="h-4 w-4" /> Pré-validação
-            </h3>
-            {v.status === "AJUSTADA" ? (
-              <div className="space-y-3">
-                <p className="text-sm">
-                  <Badge className="border-blue-200 bg-blue-100 text-blue-900">
-                    Aguardando sua revisão
-                  </Badge>
-                  <span className="ml-2 text-muted-foreground">
-                    motorista respondeu à divergência
-                  </span>
-                </p>
-                {v.motivoStatus && (
-                  <p className="rounded-md border bg-muted/30 p-3 text-sm">
-                    <span className="font-medium">Você pediu:</span>{" "}
-                    {v.motivoStatus}
-                  </p>
-                )}
-                <p className="text-sm text-muted-foreground">
-                  Revise a correção e aprove ou recuse de novo.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="success"
-                    onClick={() => preValidar.mutate({ status: "OK" })}
-                    disabled={preValidar.isPending || emFechamento}
-                  >
-                    <ThumbsUp className="h-4 w-4" /> Aprovar correção
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    onClick={() => {
-                      setTipoDivergencia("OUTRO");
-                      setMotivoTexto("");
-                      setMotivoFoiEditado(false);
-                      setDialogDivergente(true);
-                    }}
-                    disabled={preValidar.isPending || emFechamento}
-                  >
-                    <ThumbsDown className="h-4 w-4" /> Recusar de novo
-                  </Button>
-                </div>
-              </div>
-            ) : v.revisadoEm ? (
-              <div className="space-y-2">
-                <p className="text-sm">
-                  <Badge
-                    className={
-                      v.status === "OK"
-                        ? "bg-green-100 text-green-800 border-green-200"
-                        : "bg-red-100 text-red-800 border-red-200"
-                    }
-                  >
-                    {v.status === "OK" ? "Validada" : "Divergente"}
-                  </Badge>
-                  <span className="ml-2 text-muted-foreground">
-                    por {v.revisadoPor?.nome ?? "—"} em {fmtDataHoraBR(v.revisadoEm)}
-                  </span>
-                </p>
-                {v.motivoStatus && (
-                  <p className="rounded-md border bg-muted/30 p-3 text-sm">
-                    <span className="font-medium">Motivo:</span> {v.motivoStatus}
-                  </p>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => preValidar.mutate({ status: "DESFAZER" })}
-                  disabled={preValidar.isPending}
-                >
-                  Desfazer pré-validação
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {semValorMasTemPedagio && (
-                  <div className="flex items-start gap-2 rounded-md border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                    <div className="space-y-1">
-                      <p className="font-medium">
-                        Sem valor de pedágio, mas rota passa por{" "}
-                        {pedagiosEncontrados.length} pedágio
-                        {pedagiosEncontrados.length === 1 ? "" : "s"}.
-                      </p>
-                      <p className="text-xs">
-                        {pedagiosEncontrados
-                          .slice(0, 5)
-                          .map((p) => p.nome + (p.rodovia ? ` (${p.rodovia})` : ""))
-                          .join(" · ")}
-                        {pedagiosEncontrados.length > 5
-                          ? ` · +${pedagiosEncontrados.length - 5}`
-                          : ""}
-                      </p>
-                    </div>
-                  </div>
-                )}
-                <p className="text-sm text-muted-foreground">
-                  Marque como validada ou divergente antes do fechamento.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="success"
-                    onClick={() => preValidar.mutate({ status: "OK" })}
-                    disabled={preValidar.isPending || emFechamento}
-                    title={
-                      emFechamento
-                        ? "Viagem em fechamento — desfaça o match antes de pré-validar"
-                        : undefined
-                    }
-                  >
-                    <ThumbsUp className="h-4 w-4" /> Marcar como validada
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    onClick={() => {
-                      const tipoInicial = semValorMasTemPedagio
-                        ? "PEDAGIO_SEM_VALOR"
-                        : "OUTRO";
-                      setTipoDivergencia(tipoInicial);
-                      setMotivoTexto(motivoSugeridoPorTipo(tipoInicial));
-                      setMotivoFoiEditado(false);
-                      setDialogDivergente(true);
-                    }}
-                    disabled={preValidar.isPending || emFechamento}
-                    title={
-                      emFechamento
-                        ? "Viagem em fechamento — desfaça o match antes de pré-validar"
-                        : undefined
-                    }
-                  >
-                    <ThumbsDown className="h-4 w-4" /> Marcar como divergente
-                  </Button>
-                </div>
-              </div>
-            )}
-          </Card>
-
-          {/* Km do trajeto: histórico do par + rota calculada. Coluna 1, entre a
-              Pré-validação e os blocos de mapa em largura total. */}
+          {/* Km do trajeto: histórico do par + rota calculada. Coluna principal,
+              após o Trajeto. */}
           <ReferenciaKmCard
             data={referenciaKm.data}
             loading={referenciaKm.isLoading}
@@ -912,9 +921,11 @@ export default function ViagemDetalhePage({
 
           {/* Conversa (chat) com o motorista — a divergência e mensagens livres. */}
           <ConversaViagemCard viagemId={id} />
+            </div>
+          </div>
 
           {v.pontos && v.pontos.length >= 2 && (
-            <Card className="p-4 sm:p-5 md:col-span-2">
+            <Card className="p-4 sm:p-5">
               <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
                 <MapPin className="h-4 w-4" /> Trajeto capturado por GPS
               </h3>
@@ -930,7 +941,7 @@ export default function ViagemDetalhePage({
           {(v.localCarga.lat != null ||
             v.localDescarga.lat != null ||
             v.lat != null) && (
-            <Card className="p-4 sm:p-5 md:col-span-2">
+            <Card className="p-4 sm:p-5">
               <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                 <h3 className="flex items-center gap-2 text-base font-medium">
                   <MapPin className="h-4 w-4" /> Trajeto da viagem
@@ -1220,7 +1231,7 @@ export default function ViagemDetalhePage({
           )}
 
           {v.matchesFechamento.length > 0 && (
-            <Card className="p-4 sm:p-5 md:col-span-2">
+            <Card className="p-4 sm:p-5">
               <h3 className="mb-3 text-base font-medium">Aparece em fechamentos</h3>
               <ul className="space-y-2 text-sm">
                 {v.matchesFechamento.map((m) => (
@@ -1399,7 +1410,9 @@ export default function ViagemDetalhePage({
   );
 }
 
-function Row({
+// Mini-card ("quadradinho") pra um dado de identidade da viagem: rótulo pequeno
+// em cima + valor embaixo, com borda. Substitui a antiga tabela label/valor.
+function CampoTile({
   label,
   value,
   mono,
@@ -1411,21 +1424,18 @@ function Row({
   fromAi?: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-0.5 sm:flex-row sm:justify-between sm:gap-3">
-      <dt className="shrink-0 text-muted-foreground">
+    <div className="rounded-lg border bg-muted/30 p-3">
+      <div className="flex items-center gap-1 text-xs uppercase tracking-wide text-muted-foreground">
         {label}
         {fromAi && (
-          <span
-            className="ml-1 text-xs text-indigo-600"
-            title="Preenchido pela IA"
-          >
+          <span className="text-indigo-600" title="Preenchido pela IA">
             ✨
           </span>
         )}
-      </dt>
-      <dd className={`min-w-0 break-words sm:text-right ${mono ? "font-mono" : ""}`}>
+      </div>
+      <div className={`mt-0.5 break-words font-medium ${mono ? "font-mono" : ""}`}>
         {value}
-      </dd>
+      </div>
     </div>
   );
 }
