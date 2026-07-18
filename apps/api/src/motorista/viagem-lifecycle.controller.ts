@@ -12,6 +12,7 @@ import { RolesGuard } from "../auth/guards/roles.guard";
 import { AcessoMotorista } from "../auth/decorators/acesso-motorista.decorator";
 import { AcessoMotoristaGuard } from "../auth/guards/acesso-motorista.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
+import { AppInfo, type AppInfoHeaders } from "../auth/decorators/app-info.decorator";
 import type { AuthMotorista } from "../auth/types";
 import { ViagensMotoristaService } from "./viagens.service";
 
@@ -49,8 +50,9 @@ export class ViagemLifecycleController {
   iniciar(
     @CurrentUser() user: AuthMotorista,
     @Body(new ZodValidationPipe(IniciarViagemInput)) body: z.infer<typeof IniciarViagemInput>,
+    @AppInfo() appInfo: AppInfoHeaders,
   ) {
-    return this.service.iniciar(user.id, body);
+    return this.service.iniciar(user.id, body, appInfo);
   }
 
   @Post(":clientId/eventos")

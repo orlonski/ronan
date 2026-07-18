@@ -20,6 +20,7 @@ import { RolesGuard } from "../auth/guards/roles.guard";
 import { AcessoMotorista } from "../auth/decorators/acesso-motorista.decorator";
 import { AcessoMotoristaGuard } from "../auth/guards/acesso-motorista.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
+import { AppInfo, type AppInfoHeaders } from "../auth/decorators/app-info.decorator";
 import type { AuthMotorista } from "../auth/types";
 import { ViagensMotoristaService } from "./viagens.service";
 
@@ -114,8 +115,9 @@ export class ViagensMotoristaController {
   create(
     @CurrentUser() user: AuthMotorista,
     @Body(new ZodValidationPipe(CriarViagemPayload)) body: z.infer<typeof CriarViagemPayload>,
+    @AppInfo() appInfo: AppInfoHeaders,
   ) {
-    return this.service.create(user.id, body);
+    return this.service.create(user.id, body, appInfo);
   }
 
   /**

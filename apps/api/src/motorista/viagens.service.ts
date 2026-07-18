@@ -13,6 +13,7 @@ import type {
   RegistrarEventoInput,
   TrechoViagemInput,
 } from "@ronan/shared-types";
+import type { AppInfoHeaders } from "../auth/decorators/app-info.decorator";
 import { AuditoriaService } from "../auditoria/auditoria.service";
 import {
   aplicarMinimos,
@@ -752,7 +753,11 @@ export class ViagensMotoristaService {
       }));
   }
 
-  async create(motoristaId: string, input: CriarViagemInput & { fotoKey?: string }) {
+  async create(
+    motoristaId: string,
+    input: CriarViagemInput & { fotoKey?: string },
+    appInfo?: AppInfoHeaders,
+  ) {
     const exists = await this.prisma.viagem.findUnique({ where: { clientId: input.clientId } });
     if (exists) {
       // Idempotência: já recebido (sync duplicado), retorna o existente
@@ -864,6 +869,8 @@ export class ViagensMotoristaService {
         iniciadoEm: rest.iniciadoEm,
         kmReal: rest.kmReal,
         criadoOfflineEm: rest.criadoOfflineEm,
+        appVersaoCriacao: appInfo?.appVersao ?? null,
+        appUpdateIdCriacao: appInfo?.appUpdateId ?? null,
         ocrCampos: rest.ocrCampos ?? [],
         ocrConfidence: rest.ocrConfidence,
         ...(fotoKey
@@ -1148,7 +1155,7 @@ export class ViagensMotoristaService {
    * Abre uma viagem EM_ANDAMENTO. Idempotente por clientId. Só permite uma
    * aberta por motorista (409 com o clientId da existente, pro app retomar).
    */
-  async iniciar(motoristaId: string, input: IniciarViagemInput) {
+  async iniciar(motoristaId: string, input: IniciarViagemInput, appInfo?: AppInfoHeaders) {
     const existente = await this.prisma.viagem.findUnique({
       where: { clientId: input.clientId },
       include: { ...VIAGEM_INCLUDE, eventosViagem: { orderBy: { ocorridoEm: "asc" } } },
@@ -1200,6 +1207,8 @@ export class ViagensMotoristaService {
         lng: input.lng,
         localCargaId: input.localCargaId,
         criadoOfflineEm: input.criadoOfflineEm,
+        appVersaoCriacao: appInfo?.appVersao ?? null,
+        appUpdateIdCriacao: appInfo?.appUpdateId ?? null,
         // Captura da escolha do local de carga (GPS real do motorista + distância
         // até o local). Raio virou ordenação, não trava — isso audita a distância.
         cargaLat: input.cargaLat,

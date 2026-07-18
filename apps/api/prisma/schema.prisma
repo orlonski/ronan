@@ -1038,6 +1038,10 @@ model Viagem {
   criadoOfflineEm   DateTime?
   sincronizadoEm    DateTime     @default(now())
   alteradoEm        DateTime     @updatedAt
+  /// Versão do app usada na CRIAÇÃO (headers x-app-version / x-app-update-id do
+  /// app nativo). Null pra viagens antigas ou PWA. Só pra auditoria/suporte.
+  appVersaoCriacao   String?
+  appUpdateIdCriacao String?
 
   fotos             TicketFoto[]
   pedagios          Pedagio[]
