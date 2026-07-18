@@ -106,6 +106,34 @@ const ICONES: Record<Tipo, L.DivIcon> = {
   AMBOS: pinIcon(COR_POR_TIPO.AMBOS),
 };
 
+// Pino em DESTAQUE (busca/foco): maior, com halo âmbar, pra saltar entre os demais.
+function pinDestaque(cor: string) {
+  return L.divIcon({
+    html: `<div style="
+      width:32px;height:32px;border-radius:50% 50% 50% 0;
+      transform:rotate(-45deg);
+      background:${cor};
+      border:3px solid #f59e0b;
+      box-shadow:0 0 0 5px rgba(245,158,11,0.35),0 3px 10px rgba(0,0,0,0.5);
+      display:flex;align-items:center;justify-content:center;
+    ">
+      <div style="width:11px;height:11px;border-radius:50%;background:#fff;transform:rotate(45deg);"></div>
+    </div>`,
+    className: "",
+    iconSize: [32, 32],
+    iconAnchor: [16, 32],
+    popupAnchor: [0, -30],
+  });
+}
+
+const ICONE_DESTAQUE: Record<Tipo, L.DivIcon> = {
+  CARGA: pinDestaque(COR_POR_TIPO.CARGA),
+  DESCARGA: pinDestaque(COR_POR_TIPO.DESCARGA),
+  AMBOS: pinDestaque(COR_POR_TIPO.AMBOS),
+};
+// Coordenada crua (busca por lat/lng, sem local casado): pino âmbar avulso.
+const ICONE_COORD = pinDestaque("#f59e0b");
+
 // Centro default = Curitiba (projeto regional do amigo). Auto-fit
 // sobrescreve isso quando há locais.
 const CENTRO_DEFAULT: [number, number] = [-25.4284, -49.2733];
@@ -186,6 +214,7 @@ export function MapaLocais({
   gruposSuspeitos,
   raioSuspeitoM,
   foco,
+  focoId,
 }: {
   locais: LocalMapa[];
   loading?: boolean;
@@ -193,8 +222,10 @@ export function MapaLocais({
   gruposSuspeitos?: GrupoSuspeitoMapa[];
   /** Raio (m) do círculo de agrupamento desenhado por caso. */
   raioSuspeitoM?: number;
-  /** Centro pra focar (setado ao clicar num caso no painel). */
-  foco?: { lat: number; lng: number } | null;
+  /** Centro pra focar (caso suspeito, local buscado ou lat/lng informado). */
+  foco?: { lat: number; lng: number; nome?: string } | null;
+  /** Id do local buscado — destaca o pino dele; null = marcador avulso no `foco`. */
+  focoId?: string | null;
 }) {
   const pontos = useMemo(
     () =>
@@ -278,7 +309,12 @@ export function MapaLocais({
           ))}
         {!modoSuspeitos &&
           pontos.map((l) => (
-          <Marker key={l.id} position={[l.lat, l.lng]} icon={ICONES[l.tipo]}>
+          <Marker
+            key={l.id}
+            position={[l.lat, l.lng]}
+            icon={focoId && l.id === focoId ? ICONE_DESTAQUE[l.tipo] : ICONES[l.tipo]}
+            zIndexOffset={focoId && l.id === focoId ? 1000 : 0}
+          >
             <Popup>
               <div className="min-w-[200px] space-y-1.5">
                 <p className="font-semibold leading-tight">{l.nome}</p>
@@ -341,6 +377,23 @@ export function MapaLocais({
             </Popup>
           </Marker>
         ))}
+        {/* Marcador avulso do foco: busca por lat/lng, ou local que não está
+            entre os pinos desenhados (filtrado / fora da view atual). */}
+        {!modoSuspeitos && foco && !focoId && (
+          <Marker position={[foco.lat, foco.lng]} icon={ICONE_COORD} zIndexOffset={1000}>
+            <Popup>
+              <div className="min-w-[160px] space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                  Em destaque
+                </p>
+                <p className="font-semibold leading-tight">{foco.nome ?? "Coordenada"}</p>
+                <p className="text-xs text-muted-foreground">
+                  {foco.lat.toFixed(5)}, {foco.lng.toFixed(5)}
+                </p>
+              </div>
+            </Popup>
+          </Marker>
+        )}
       </MapContainer>
       {!modoSuspeitos && <Legenda />}
     </div>

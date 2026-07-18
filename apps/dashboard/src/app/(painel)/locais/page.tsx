@@ -38,7 +38,8 @@ import {
   DataTableToolbar,
 } from "@/components/data-table";
 import { Combobox } from "@/components/ui/combobox";
-import { ClienteCombobox } from "@/components/fk-comboboxes";
+import { ClienteCombobox, LocalCombobox } from "@/components/fk-comboboxes";
+import { toast } from "sonner";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import {
   fetchApi,
@@ -218,7 +219,12 @@ export default function LocaisPage() {
   // Aba Mapa: modo "duplicados suspeitos" (geográfico) + raio de agrupamento + foco.
   const [suspeitos, setSuspeitos] = useState(false);
   const [raioDedup, setRaioDedup] = useState(200);
-  const [foco, setFoco] = useState<{ lat: number; lng: number } | null>(null);
+  const [foco, setFoco] = useState<{ lat: number; lng: number; nome?: string } | null>(
+    null,
+  );
+  // Local buscado pra destacar (id do pino aceso) + input de lat/lng cru.
+  const [focoId, setFocoId] = useState<string | null>(null);
+  const [coordInput, setCoordInput] = useState("");
 
   // Carrega só quando aba "Mapa" tá ativa. O mapa usa os MESMOS filtros da Lista
   // (mesmo tableState), então a queryKey inclui q + filtros pra refazer quando
@@ -292,6 +298,60 @@ export default function LocaisPage() {
       })),
     [geoDup.data],
   );
+
+  // Busca um local pra destacar: pega o lat/lng do próprio mapa (já carregado);
+  // se não estiver nele (filtrado / outra view), busca as coords do local.
+  function buscarLocalFoco(id: string | undefined) {
+    if (!id) {
+      setFoco(null);
+      setFocoId(null);
+      return;
+    }
+    const l = mapa.data?.find((x) => x.id === id);
+    if (l?.lat != null && l.lng != null) {
+      setFoco({ lat: l.lat, lng: l.lng, nome: l.nome });
+      setFocoId(id);
+      return;
+    }
+    void (async () => {
+      try {
+        const full = await fetchApi<{ nome: string; lat: number | null; lng: number | null }>(
+          `${PATH}/${id}`,
+          { token },
+        );
+        if (full.lat != null && full.lng != null) {
+          setFoco({ lat: full.lat, lng: full.lng, nome: full.nome });
+          setFocoId(null); // fora dos pinos desenhados → marcador avulso
+        } else {
+          toast.error("Local sem GPS — não dá pra localizar no mapa.");
+        }
+      } catch {
+        toast.error("Não deu pra localizar esse local.");
+      }
+    })();
+  }
+
+  function irCoord() {
+    const m = coordInput.trim().match(/^(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)$/);
+    if (!m) {
+      toast.error("Use o formato: lat, lng (ex: -25.42840, -49.27330)");
+      return;
+    }
+    const lat = Number(m[1]);
+    const lng = Number(m[2]);
+    if (Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+      toast.error("Coordenada fora de faixa (lat ±90, lng ±180).");
+      return;
+    }
+    setFoco({ lat, lng, nome: `Coordenada ${lat.toFixed(5)}, ${lng.toFixed(5)}` });
+    setFocoId(null);
+  }
+
+  function limparFoco() {
+    setFoco(null);
+    setFocoId(null);
+    setCoordInput("");
+  }
 
   const totalGeral = list.data?.pagination.total ?? 0;
   const totalNoMapa = mapa.data?.length ?? 0;
@@ -566,6 +626,7 @@ export default function LocaisPage() {
                 onChange={(e) => {
                   setSuspeitos(e.target.checked);
                   setFoco(null);
+                  setFocoId(null);
                 }}
                 className="h-4 w-4"
               />
@@ -597,6 +658,44 @@ export default function LocaisPage() {
               </>
             )}
           </div>
+          {/* Localizar um local (busca por nome/endereço) ou lat/lng: acende o
+              pino em destaque e centraliza. Só no modo normal (sem suspeitos). */}
+          {!suspeitos && (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
+              <span className="text-sm font-medium">Localizar:</span>
+              <div className="min-w-[220px] flex-1 sm:max-w-xs">
+                <LocalCombobox
+                  value={focoId ?? undefined}
+                  onChange={buscarLocalFoco}
+                  placeholder="Buscar local pra destacar…"
+                />
+              </div>
+              <span className="text-xs text-muted-foreground">ou</span>
+              <input
+                value={coordInput}
+                onChange={(e) => setCoordInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && irCoord()}
+                placeholder="lat, lng"
+                className="w-40 rounded-md border px-2 py-1 text-sm"
+              />
+              <Button size="sm" variant="outline" onClick={irCoord}>
+                Ir
+              </Button>
+              {foco && (
+                <>
+                  <Button size="sm" variant="ghost" onClick={limparFoco}>
+                    Limpar
+                  </Button>
+                  {foco.nome && (
+                    <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
+                      <MapPin className="h-3.5 w-3.5 text-amber-600" />
+                      Em destaque: <span className="font-medium">{foco.nome}</span>
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
+          )}
           {suspeitos ? (
             <div className="grid gap-3 lg:grid-cols-[1fr_400px]">
               <MapaLocais
@@ -615,7 +714,12 @@ export default function LocaisPage() {
               />
             </div>
           ) : (
-            <MapaLocais locais={mapa.data ?? []} loading={mapa.isLoading} />
+            <MapaLocais
+              locais={mapa.data ?? []}
+              loading={mapa.isLoading}
+              foco={foco}
+              focoId={focoId}
+            />
           )}
         </div>
       ) : (
