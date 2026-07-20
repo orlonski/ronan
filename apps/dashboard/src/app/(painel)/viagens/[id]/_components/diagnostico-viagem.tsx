@@ -7,7 +7,12 @@ import {
   ChevronDown,
   ChevronRight,
   MapPin,
+  MousePointerClick,
+  Pencil,
+  Route,
   Save,
+  Search,
+  Sparkles,
   WifiOff,
   XCircle,
 } from "lucide-react";
@@ -26,6 +31,13 @@ const TIPO_META: Record<
   gps_capturado: { label: "GPS capturado", Icon: MapPin, cor: "bg-blue-600" },
   gps_falhou: { label: "GPS — falhou", Icon: AlertCircle, cor: "bg-amber-600" },
   viagem_salva: { label: "Viagem salva", Icon: Save, cor: "bg-primary" },
+  // Telemetria de interação da tela "Nova viagem" (opt-in).
+  nv_campo: { label: "Campo preenchido", Icon: Pencil, cor: "bg-slate-500" },
+  nv_busca: { label: "Buscou na lista", Icon: Search, cor: "bg-slate-500" },
+  nv_selecao: { label: "Selecionou da lista", Icon: MousePointerClick, cor: "bg-blue-600" },
+  nv_descarga: { label: "Descarga (busca/escolha)", Icon: MapPin, cor: "bg-amber-600" },
+  nv_ocr: { label: "OCR preencheu campos", Icon: Sparkles, cor: "bg-indigo-600" },
+  nv_km: { label: "Escolheu o km", Icon: Route, cor: "bg-emerald-600" },
 };
 
 function metaPara(tipo: string) {

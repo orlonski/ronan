@@ -17,6 +17,13 @@ const TIPO_OPCOES: { value: string; label: string }[] = [
   { value: "gps_capturado", label: "GPS capturado" },
   { value: "gps_falhou", label: "GPS — falhou" },
   { value: "viagem_salva", label: "Viagem salva" },
+  // Telemetria de interação da tela "Nova viagem" (opt-in).
+  { value: "nv_descarga", label: "Nova viagem — descarga" },
+  { value: "nv_selecao", label: "Nova viagem — selecionou da lista" },
+  { value: "nv_busca", label: "Nova viagem — buscou na lista" },
+  { value: "nv_campo", label: "Nova viagem — campo preenchido" },
+  { value: "nv_ocr", label: "Nova viagem — OCR" },
+  { value: "nv_km", label: "Nova viagem — escolheu o km" },
 ];
 
 const ONLINE_OPCOES = [

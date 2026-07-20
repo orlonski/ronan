@@ -43,6 +43,7 @@ export type Motorista = {
   podeVerStories: boolean;
   podeVerTodosLocais: boolean;
   podeReferenciaKm: boolean;
+  podeTelemetria: boolean;
   receberResumoDiario: boolean;
 };
 
@@ -92,6 +93,7 @@ type AcessosState = {
   podeVerStories: boolean;
   podeVerTodosLocais: boolean;
   podeReferenciaKm: boolean;
+  podeTelemetria: boolean;
   receberResumoDiario: boolean;
 };
 
@@ -110,6 +112,7 @@ export function MotoristaForm({ initial }: Props) {
     podeVerStories: initial?.podeVerStories ?? true,
     podeVerTodosLocais: initial?.podeVerTodosLocais ?? false,
     podeReferenciaKm: initial?.podeReferenciaKm ?? false,
+    podeTelemetria: initial?.podeTelemetria ?? false,
     receberResumoDiario: initial?.receberResumoDiario ?? true,
   });
   const token = useAuthToken();
@@ -434,6 +437,11 @@ export function MotoristaForm({ initial }: Props) {
                 label="Sugestão de km do trajeto (o que a frota já rodou)"
                 active={acessos.podeReferenciaKm}
                 onChange={(v) => alterarAcesso("podeReferenciaKm", v)}
+              />
+              <AcessoRow
+                label="Telemetria de diagnóstico (grava o que ele buscou/selecionou na Nova viagem)"
+                active={acessos.podeTelemetria}
+                onChange={(v) => alterarAcesso("podeTelemetria", v)}
               />
             </div>
 
