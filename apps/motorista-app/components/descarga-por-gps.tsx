@@ -17,7 +17,12 @@ import { Button } from "@/components/ui/button";
 import { BuscarLocalModal } from "@/components/buscar-local-modal";
 import { Label } from "@/components/ui/label";
 import type { FonteGps } from "@ronan/shared-types";
-import { marcoConflita, formatarNomeLocal } from "@ronan/shared-types";
+import {
+  formatarNomeLocal,
+  rankearCandidatosDuplicata,
+  type CandidatoDuplicata,
+  type CandidatoRankeado,
+} from "@ronan/shared-types";
 import { showConfirm } from "@/lib/alert";
 import {
   haversineMetros,
@@ -47,10 +52,11 @@ function isNetworkError(err: unknown): boolean {
   return err instanceof TypeError;
 }
 
-// Raio (m) pro aviso "já existe um local aqui" na hora de cadastrar. Fixo e
-// independente da config de busca (que serve a outro propósito): re-escaneia o
-// catálogo cacheado ao redor do GPS. Alinha com a dedup do dashboard.
-const RAIO_AVISO_DUPLICATA_M = 150;
+// Raio (m) do scan anti-duplicata na hora de cadastrar. Amplo de propósito: o
+// ranqueador (proximidade + parecença de NOME + já-visto) decide o que é forte,
+// então varremos mais longe pra pegar o local certo mesmo além dos ~150m —
+// justamente o caso do motorista que não viu o certo na lista.
+const RAIO_SCAN_DUPLICATA_M = 500;
 
 // Coordenadas com precisão, carregadas pelos estados pra repassar na captura.
 // buscaOffline: a busca de locais desse clique caiu no catálogo em cache.
@@ -140,8 +146,12 @@ export function DescargaPorGps({
   // Mostra o botão "Abrir ajustes" só quando a falha é de permissão (1 toque).
   const [erroAjustes, setErroAjustes] = useState(false);
   const [nomeNovo, setNomeNovo] = useState("");
-  // Local vizinho que disparou a confirmação anti-duplicata inline (sem pop-up).
+  // Local candidato que disparou a confirmação anti-duplicata inline (sem pop-up).
   const [confirmarPerto, setConfirmarPerto] = useState<LocalProximo | null>(null);
+  // Confiança ALTA (GPS em cima + nome muito parecido) → empurrão mais firme:
+  // criar mesmo assim exige um 2º toque (nunca bloqueia).
+  const [confirmarAlta, setConfirmarAlta] = useState(false);
+  const [pedindoCertezaCriar, setPedindoCertezaCriar] = useState(false);
   // Busca por nome (todos os locais) — liberada por flag do motorista.
   const me = useMe();
   const podeBuscarPorNome = me.data?.podeVerTodosLocais ?? false;
@@ -156,6 +166,9 @@ export function DescargaPorGps({
   const localDoCatalogo = (id: string) =>
     qc.getQueryData<Catalogos>(["catalogos"])?.locais.find((l) => l.id === id) ?? null;
   const autoDisparado = useRef(false);
+  // Últimos locais que o motorista VIU na lista (estado `escolha`) — sobrevive à
+  // ida pro "cadastrar novo" (que hoje descarta a lista) pra reconsiderá-los.
+  const matchesVistosRef = useRef<LocalProximo[]>([]);
 
   // Auto-dispara a captura no mount quando pedido (modal aberto pelo Finalizar).
   useEffect(() => {
@@ -286,6 +299,8 @@ export function DescargaPorGps({
       buscaOffline,
       raioUsadoM,
     };
+    // Guarda o que o motorista viu — reconsiderado no "cadastrar novo".
+    matchesVistosRef.current = matches;
     // Telemetria: o que a busca por GPS trouxe (nomes + distâncias) — o insumo
     // pra diagnosticar "por que selecionou a descarga errada".
     telemetria?.descarga({
@@ -331,6 +346,8 @@ export function DescargaPorGps({
 
   function escolherMatch(m: LocalProximo) {
     setConfirmarPerto(null);
+    setConfirmarAlta(false);
+    setPedindoCertezaCriar(false);
     const cap =
       estado.tipo === "escolha" || estado.tipo === "sem_match"
         ? estado.coords
@@ -398,6 +415,7 @@ export function DescargaPorGps({
     }
     if (outros.length > 0) {
       // "Ver outros" busca no raio ampliado — registra isso pra auditoria.
+      matchesVistosRef.current = outros;
       const capAmpliado = { ...cap, raioUsadoM: cfg.raioAmpliadoM };
       setEstado({ tipo: "escolha", matches: outros, coords: capAmpliado, ampliado: true, raioInicialM: 0 });
     } else {
@@ -438,6 +456,8 @@ export function DescargaPorGps({
       onChange(novo.id);
       onCaptura?.({ ...estado.coords, distanciaMetros: 0 });
       setConfirmarPerto(null);
+      setConfirmarAlta(false);
+      setPedindoCertezaCriar(false);
       setEstado({ tipo: "selecionado", local: { id: novo.id, nome: novo.nome } });
     } catch (err) {
       setErro((err as Error).message || "Erro ao criar o local");
@@ -452,13 +472,18 @@ export function DescargaPorGps({
       return;
     }
     setErro(null);
-    // Trava anti-duplicata INLINE (o pop-up abria ATRÁS deste Modal de tela
-    // cheia): se tem local perto (marco-compatível), mostra a confirmação na
-    // própria tela em vez de criar direto.
-    const perto = matchesProximos.find((m) => !marcoConflita(nome, m.nome));
-    if (perto) {
-      setConfirmarPerto(perto);
-      return;
+    // Confirmação INLINE (o pop-up abria ATRÁS deste Modal de tela cheia): se o
+    // topo do rank é um candidato de confiança média/alta, mostra a confirmação
+    // na própria tela. Alta = empurrão mais firme (2º toque pra criar mesmo).
+    const topo = candidatosDuplicata[0];
+    if (topo && topo.confianca !== "baixa") {
+      const full = localPorId.get(topo.id);
+      if (full) {
+        setConfirmarPerto(full);
+        setConfirmarAlta(topo.confianca === "alta");
+        setPedindoCertezaCriar(false);
+        return;
+      }
     }
     void criarLocalNovo();
   }
@@ -470,23 +495,43 @@ export function DescargaPorGps({
     setErro(null);
   }
 
-  // Locais já cadastrados perto do GPS capturado (re-scan do catálogo cacheado,
-  // offline, raio próprio de 150m). Base do aviso anti-duplicata no "cadastrar
-  // novo" — independe da config de busca e do caminho até o sem_match.
+  // Candidatos a "mesmo lugar" no momento de cadastrar novo: une vizinhos GPS
+  // (raio amplo) + os que ele ACABOU de ver, e ranqueia por proximidade +
+  // PARECENÇA DE NOME + já-visto + uso (offline). Recomputa a cada tecla (o nome
+  // digitado entra na similaridade). Fecha o furo do "só olhava distância".
   const semMatchCoords = estado.tipo === "sem_match" ? estado.coords : null;
-  let matchesProximos: LocalProximo[] = [];
+  const localPorId = new Map<string, LocalProximo>();
+  let candidatosDuplicata: CandidatoRankeado[] = [];
   if (semMatchCoords) {
     const catalogos = qc.getQueryData<Catalogos>(["catalogos"]);
-    if (catalogos) {
-      matchesProximos = buscarLocaisProximosOffline({
-        lat: semMatchCoords.lat,
-        lng: semMatchCoords.lng,
-        locais: catalogos.locais,
-        tipoUso: "descarga",
-        raioM: RAIO_AVISO_DUPLICATA_M,
-        limit: 5,
-      });
+    const geo = catalogos
+      ? buscarLocaisProximosOffline({
+          lat: semMatchCoords.lat,
+          lng: semMatchCoords.lng,
+          locais: catalogos.locais,
+          tipoUso: "descarga",
+          raioM: RAIO_SCAN_DUPLICATA_M,
+          limit: 8,
+        })
+      : [];
+    for (const m of geo) localPorId.set(m.id, m);
+    for (const m of matchesVistosRef.current) {
+      if (!localPorId.has(m.id)) localPorId.set(m.id, m);
     }
+    const candidatos: CandidatoDuplicata[] = [...localPorId.values()].map((m) => ({
+      id: m.id,
+      nome: m.nome,
+      distanciaM:
+        m.lat != null && m.lng != null
+          ? Math.round(haversineMetros(semMatchCoords.lat, semMatchCoords.lng, m.lat, m.lng))
+          : (m.distanciaMetros ?? null),
+      vezesUsado: m.vezesUsadoMotorista,
+      jaVisto: matchesVistosRef.current.some((v) => v.id === m.id),
+    }));
+    candidatosDuplicata = rankearCandidatosDuplicata({
+      nomeDigitado: nomeNovo,
+      candidatos,
+    }).filter((c) => c.confianca !== "baixa");
   }
 
   return (
@@ -714,50 +759,65 @@ export function DescargaPorGps({
                     {formatarNomeLocal(confirmarPerto.nome)}
                   </Text>
                   <Text className="text-center text-base text-amber-800">
-                    fica a só {Math.round(confirmarPerto.distanciaMetros)} m de você
+                    a {Math.round(confirmarPerto.distanciaMetros)} m de você
                   </Text>
                 </View>
                 <Text className="text-center text-base text-muted-foreground">
-                  Provavelmente é esse mesmo. Tem certeza que quer criar um local
-                  NOVO em vez de usar ele?
+                  {confirmarAlta
+                    ? "Bem provável que seja esse mesmo. Confira antes de criar um novo."
+                    : "Pode ser esse. Tem certeza que quer criar um local NOVO em vez de usar ele?"}
                 </Text>
               </View>
             ) : (
             <View className="flex-1 gap-4 p-5">
-              {matchesProximos.length > 0 && (
+              {candidatosDuplicata.length > 0 && (
                 <View className="gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
                   <Text className="text-sm font-bold text-amber-900">
-                    ⚠️ Já tem local cadastrado bem aqui
+                    ⚠️ Talvez já exista — confira antes de criar
                   </Text>
                   <Text className="text-xs text-amber-800">
-                    Confira se não é um destes antes de criar um novo:
+                    Estes parecem ser aqui. É algum deles?
                   </Text>
-                  {matchesProximos.map((m) => (
-                    <Pressable
-                      key={m.id}
-                      onPress={() => escolherMatch(m)}
-                      className="flex-row items-center justify-between rounded-lg border border-amber-300 bg-background px-3 py-2.5"
-                    >
-                      <View className="flex-1 pr-2">
-                        <Text className="text-sm font-medium text-foreground" numberOfLines={1}>
-                          {formatarNomeLocal(m.nome)}
-                        </Text>
-                        <Text className="text-xs text-muted-foreground">
-                          a {Math.round(m.distanciaMetros)} m daqui
-                        </Text>
-                      </View>
-                      <View className="rounded-full bg-primary px-3 py-1.5">
-                        <Text className="text-xs font-bold text-primary-foreground">
-                          É este
-                        </Text>
-                      </View>
-                    </Pressable>
-                  ))}
+                  {candidatosDuplicata.slice(0, 4).map((c, i) => {
+                    const full = localPorId.get(c.id);
+                    if (!full) return null;
+                    return (
+                      <Pressable
+                        key={c.id}
+                        onPress={() => escolherMatch(full)}
+                        className="flex-row items-center justify-between rounded-lg border border-amber-300 bg-background px-3 py-2.5"
+                      >
+                        <View className="flex-1 pr-2">
+                          <View className="flex-row items-center gap-1.5">
+                            <Text className="flex-1 text-sm font-medium text-foreground" numberOfLines={1}>
+                              {formatarNomeLocal(c.nome)}
+                            </Text>
+                            {i === 0 && c.confianca === "alta" && (
+                              <View className="rounded-full bg-amber-200 px-2 py-0.5">
+                                <Text className="text-[10px] font-bold text-amber-900">
+                                  mais provável
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text className="text-xs text-muted-foreground">
+                            {c.distanciaM != null ? `a ${c.distanciaM} m daqui` : "perto daqui"}
+                            {c.similaridade >= 0.4 ? " · nome parecido" : ""}
+                          </Text>
+                        </View>
+                        <View className="rounded-full bg-primary px-3 py-1.5">
+                          <Text className="text-xs font-bold text-primary-foreground">
+                            É este
+                          </Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
                 </View>
               )}
 
               <Text className="text-sm text-muted-foreground">
-                {matchesProximos.length > 0
+                {candidatosDuplicata.length > 0
                   ? "Se for mesmo um lugar novo, dá um nome:"
                   : "Não conheço esse lugar aqui — me ajuda dando um nome rápido."}
               </Text>
@@ -797,15 +857,30 @@ export function DescargaPorGps({
                     É esse mesmo — usar este local
                   </Text>
                 </Button>
+                {confirmarAlta && pedindoCertezaCriar && (
+                  <Text className="text-center text-xs font-medium text-destructive">
+                    Isso cria um local NOVO mesmo tendo um bem parecido bem aqui — pode
+                    duplicar. Toque de novo só se tiver certeza.
+                  </Text>
+                )}
                 <Button
                   variant="warning"
                   className="h-14"
-                  onPress={() => void criarLocalNovo()}
+                  onPress={() => {
+                    // Confiança alta: 1º toque só pede certeza; 2º toque cria de fato.
+                    if (confirmarAlta && !pedindoCertezaCriar) {
+                      setPedindoCertezaCriar(true);
+                      return;
+                    }
+                    void criarLocalNovo();
+                  }}
                   loading={criar.isPending}
                 >
                   <Plus size={20} color="#0f172a" />
                   <Text className="text-base font-bold text-warning-foreground">
-                    Não é esse — criar um local novo
+                    {confirmarAlta && pedindoCertezaCriar
+                      ? "Tenho certeza — criar novo"
+                      : "Não é esse — criar um local novo"}
                   </Text>
                 </Button>
               </View>

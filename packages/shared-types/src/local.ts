@@ -106,3 +106,100 @@ export function marcoConflita(nomeA: string, nomeB: string): boolean {
   if (!a || !b) return false;
   return a.tipo !== b.tipo || a.n !== b.n;
 }
+
+/**
+ * Normaliza um nome pra COMPARAÇÃO (não exibição): minúsculo, sem acento (deburr
+ * manual — o Hermes não tem String.normalize confiável), sem pontuação, espaços
+ * colapsados. Base do matching fuzzy offline.
+ */
+export function normalizarNome(s: string): string {
+  return (s ?? "")
+    .toLowerCase()
+    .replace(/[áàâãä]/g, "a")
+    .replace(/[éèêë]/g, "e")
+    .replace(/[íìîï]/g, "i")
+    .replace(/[óòôõö]/g, "o")
+    .replace(/[úùûü]/g, "u")
+    .replace(/ç/g, "c")
+    .replace(/ñ/g, "n")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function trigramas(s: string): Set<string> {
+  const t = `  ${s} `;
+  const set = new Set<string>();
+  for (let i = 0; i < t.length - 2; i++) set.add(t.slice(i, i + 3));
+  return set;
+}
+
+/**
+ * Similaridade de nome 0..1 — coeficiente de Dice sobre trigramas dos nomes
+ * normalizados (mesma ideia do `similarity()` do pg_trgm, mas offline no
+ * cliente). "obra curitiba" ~ "obra curitiba centro" = alto; "pedreira a" vs
+ * "mercado b" = baixo. Sem dependência nativa; roda em qualquer aparelho.
+ */
+export function similaridadeNome(a: string, b: string): number {
+  const na = normalizarNome(a);
+  const nb = normalizarNome(b);
+  if (!na || !nb) return 0;
+  if (na === nb) return 1;
+  const ta = trigramas(na);
+  const tb = trigramas(nb);
+  let inter = 0;
+  for (const g of ta) if (tb.has(g)) inter++;
+  const denom = ta.size + tb.size;
+  return denom === 0 ? 0 : (2 * inter) / denom;
+}
+
+export type CandidatoDuplicata = {
+  id: string;
+  nome: string;
+  /** Distância (m) do GPS atual até o candidato. null = sem coordenada. */
+  distanciaM: number | null;
+  /** Quantas vezes o motorista já usou este local (últimos 90d). */
+  vezesUsado?: number;
+  /** Apareceu na lista que o motorista ACABOU de ver antes de "cadastrar novo". */
+  jaVisto?: boolean;
+};
+
+export type CandidatoRankeado = CandidatoDuplicata & {
+  similaridade: number;
+  score: number;
+  confianca: "alta" | "media" | "baixa";
+};
+
+function confiancaDe(sim: number, distanciaM: number | null, jaVisto: boolean): "alta" | "media" | "baixa" {
+  const d = distanciaM ?? Infinity;
+  if (d < 60 || sim >= 0.55 || (jaVisto && d < 200)) return "alta";
+  if (d < 150 || sim >= 0.4 || jaVisto) return "media";
+  return "baixa";
+}
+
+/**
+ * Ranqueia locais candidatos a serem "o mesmo lugar" que o motorista está prestes
+ * a cadastrar de novo — combinando proximidade GPS, parecença de nome, se ele
+ * ACABOU de ver o local na lista, e quantas vezes já usou. Descarta pares com
+ * marco de rodovia conflitante (`marcoConflita`). Puro/offline/testável.
+ *
+ * `confianca` guia a firmeza do aviso no app: alta = empurrão forte + atrito
+ * extra pra criar mesmo assim; media = confirmação normal; baixa = só informativo.
+ */
+export function rankearCandidatosDuplicata(input: {
+  nomeDigitado: string;
+  candidatos: CandidatoDuplicata[];
+}): CandidatoRankeado[] {
+  const nome = input.nomeDigitado.trim();
+  return input.candidatos
+    .filter((c) => !marcoConflita(nome, c.nome))
+    .map((c) => {
+      const sim = similaridadeNome(nome, c.nome);
+      const prox = c.distanciaM == null ? 0 : Math.max(0, 1 - c.distanciaM / 500);
+      const jaVisto = c.jaVisto ? 1 : 0;
+      const uso = Math.min((c.vezesUsado ?? 0) / 5, 1);
+      const score = 0.45 * sim + 0.4 * prox + 0.1 * jaVisto + 0.05 * uso;
+      return { ...c, similaridade: sim, score, confianca: confiancaDe(sim, c.distanciaM, !!c.jaVisto) };
+    })
+    .sort((a, b) => b.score - a.score);
+}
