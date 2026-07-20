@@ -1,8 +1,9 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { ChevronDown, Search, X } from "lucide-react-native";
 import { FlatList, Modal, Pressable, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { cn } from "@/lib/utils";
+import type { TelemetriaViagem } from "@/lib/telemetria-viagem";
 
 export type SelectOption = {
   value: string;
@@ -21,6 +22,8 @@ export function Select({
   emptyMessage,
   title,
   error,
+  telemetria,
+  campoTelemetria,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -33,9 +36,14 @@ export function Select({
   emptyMessage?: ReactNode;
   title?: string;
   error?: boolean;
+  /** Telemetria opt-in: registra a busca (texto + resultados) e a escolha. */
+  telemetria?: TelemetriaViagem;
+  /** Rótulo do campo pra telemetria (ex: "cliente", "material", "carga"). */
+  campoTelemetria?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const selecionouRef = useRef(false);
 
   const selected = options.find((o) => o.value === value);
 
@@ -48,15 +56,25 @@ export function Select({
     : options;
 
   function fechar() {
+    // Telemetria: busca "abandonada" (digitou e fechou sem escolher). A escolha
+    // com query já é registrada no onPress (evita evento duplicado).
+    if (telemetria && campoTelemetria && query.trim() && !selecionouRef.current) {
+      telemetria.busca(campoTelemetria, query.trim(), filtered.length, options.length);
+    }
     setOpen(false);
     setQuery("");
+  }
+
+  function abrir() {
+    selecionouRef.current = false;
+    setOpen(true);
   }
 
   return (
     <>
       <Pressable
         disabled={disabled}
-        onPress={() => setOpen(true)}
+        onPress={abrir}
         className={cn(
           "h-14 flex-row items-center justify-between rounded-xl border-2 bg-background px-4",
           error ? "border-destructive bg-destructive/5" : "border-border",
@@ -139,9 +157,18 @@ export function Select({
                 <View>{emptyMessage}</View>
               )
             }
-            renderItem={({ item }) => (
+            renderItem={({ item, index }) => (
               <Pressable
                 onPress={() => {
+                  if (telemetria && campoTelemetria) {
+                    selecionouRef.current = true;
+                    telemetria.selecao(campoTelemetria, {
+                      query: query.trim() || undefined,
+                      escolhido: { id: item.value, label: item.label },
+                      posicao: index,
+                      entreN: filtered.length,
+                    });
+                  }
                   onChange(item.value);
                   fechar();
                 }}

@@ -39,6 +39,7 @@ import {
   type Local,
   type LocalProximo,
 } from "@/lib/queries";
+import type { TelemetriaViagem } from "@/lib/telemetria-viagem";
 
 // `fetch` nativo do RN dispara TypeError("Network request failed") quando
 // o device está offline. Detecta esse caso pra cair no fallback local.
@@ -109,10 +110,13 @@ export function DescargaPorGps({
   nomeSelecionadoFallback,
   localCargaCoords,
   autoIniciar,
+  telemetria,
 }: {
   clienteId: string | null;
   value: string;
   onChange: (id: string) => void;
+  /** Telemetria opt-in: registra o que a busca trouxe e o que foi selecionado. */
+  telemetria?: TelemetriaViagem;
   /** Snapshot do GPS no clique (onde estava, precisão, distância até o local
    * escolhido). null quando a seleção não veio de uma captura fresca. */
   onCaptura?: (c: DescargaCaptura | null) => void;
@@ -197,6 +201,7 @@ export function DescargaPorGps({
 
     // Se motorista escolheu local de carga e o GPS atual está dentro do raio
     // dele, alerta antes de prosseguir — provável engano (lançou no carregamento).
+    let pertoDaCarga = false;
     if (localCargaCoords) {
       const distCarga = haversineMetros(
         coords.lat,
@@ -213,9 +218,11 @@ export function DescargaPorGps({
           cancelLabel: "Cancelar",
         });
         if (!continua) {
+          telemetria?.descarga({ acao: "perto_carga_cancelou", distCargaM: Math.round(distCarga) });
           setEstado({ tipo: "vazio" });
           return;
         }
+        pertoDaCarga = true;
       }
     }
 
@@ -279,12 +286,33 @@ export function DescargaPorGps({
       buscaOffline,
       raioUsadoM,
     };
+    // Telemetria: o que a busca por GPS trouxe (nomes + distâncias) — o insumo
+    // pra diagnosticar "por que selecionou a descarga errada".
+    telemetria?.descarga({
+      acao: "buscou",
+      modo: "gps",
+      raioUsadoM,
+      ampliou: usouRaioAmpliado,
+      offline: buscaOffline,
+      pertoDaCarga,
+      precisaoM: coords.precisao != null ? Math.round(coords.precisao) : null,
+      trouxe: matches.slice(0, 5).map((m) => ({
+        id: m.id,
+        nome: m.nome,
+        distanciaM: Math.round(m.distanciaMetros),
+      })),
+    });
     if (matches.length === 0) {
       setEstado({ tipo: "sem_match", coords: cap });
       setNomeNovo("");
     } else if (matches.length === 1 && !usouRaioAmpliado) {
       // 1 match dentro do raio apertado: motorista está em cima do local.
       const m = matches[0]!;
+      telemetria?.descarga({
+        acao: "auto",
+        modo: "gps",
+        escolhido: { id: m.id, nome: m.nome, distanciaM: Math.round(m.distanciaMetros) },
+      });
       onChange(m.id);
       onCaptura?.({ ...cap, distanciaMetros: m.distanciaMetros });
       setEstado({
@@ -307,6 +335,12 @@ export function DescargaPorGps({
       estado.tipo === "escolha" || estado.tipo === "sem_match"
         ? estado.coords
         : undefined;
+    telemetria?.descarga({
+      acao: "selecionou",
+      modo: "gps",
+      escolhido: { id: m.id, nome: m.nome, distanciaM: Math.round(m.distanciaMetros) },
+      entreN: estado.tipo === "escolha" ? estado.matches.length : undefined,
+    });
     if (cap) onCaptura?.({ ...cap, distanciaMetros: m.distanciaMetros });
     onChange(m.id);
     setEstado({
@@ -321,6 +355,11 @@ export function DescargaPorGps({
   // Seleção manual pela busca por nome: sem GPS fresco, então onCaptura(null) —
   // a viagem omite os campos descarga* de auditoria; o km segue do Local.lat/lng.
   function escolherLocalManual(local: Local) {
+    telemetria?.descarga({
+      acao: "manual",
+      modo: "texto",
+      escolhido: { id: local.id, nome: local.nome },
+    });
     onCaptura?.(null);
     onChange(local.id);
     setEstado({ tipo: "selecionado", local: { id: local.id, nome: local.nome } });
@@ -390,6 +429,11 @@ export function DescargaPorGps({
         fonte: estado.coords.fonte,
         tipo: "DESCARGA",
         clienteIds: clienteId ? [clienteId] : undefined,
+      });
+      telemetria?.descarga({
+        acao: "novo",
+        modo: "novo",
+        escolhido: { id: novo.id, nome: novo.nome },
       });
       onChange(novo.id);
       onCaptura?.({ ...estado.coords, distanciaMetros: 0 });
@@ -795,6 +839,7 @@ export function DescargaPorGps({
         visible={buscarAberto}
         onClose={() => setBuscarAberto(false)}
         onSelecionar={escolherLocalManual}
+        telemetria={telemetria}
       />
     </View>
   );

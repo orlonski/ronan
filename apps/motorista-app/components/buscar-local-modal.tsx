@@ -5,6 +5,7 @@ import { MapPin, Search, X } from "lucide-react-native";
 import { formatarNomeLocal } from "@ronan/shared-types";
 import { useCatalogos, type Local } from "@/lib/queries";
 import { enderecoResumido, LinhaEndereco } from "@/components/local-info";
+import type { TelemetriaViagem } from "@/lib/telemetria-viagem";
 
 /**
  * Busca de local de descarga por NOME sobre o catálogo já cacheado localmente
@@ -33,10 +34,13 @@ export function BuscarLocalModal({
   visible,
   onClose,
   onSelecionar,
+  telemetria,
 }: {
   visible: boolean;
   onClose: () => void;
   onSelecionar: (local: Local) => void;
+  /** Telemetria opt-in: registra o texto buscado + nº de resultados. */
+  telemetria?: TelemetriaViagem;
 }) {
   const [q, setQ] = useState("");
   const catalogos = useCatalogos();
@@ -55,6 +59,12 @@ export function BuscarLocalModal({
   }, [catalogos.data, q]);
 
   function fechar() {
+    if (telemetria && q.trim()) {
+      const total = (catalogos.data?.locais ?? []).filter(
+        (l) => l.tipo === "DESCARGA" || l.tipo === "AMBOS",
+      ).length;
+      telemetria.busca("descarga_nome", q.trim(), locais.length, total);
+    }
     setQ("");
     onClose();
   }

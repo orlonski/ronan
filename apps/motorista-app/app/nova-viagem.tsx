@@ -31,6 +31,7 @@ import { clearNavDestino } from "@/lib/nav-destino-storage";
 import { humanizeApiError } from "@/lib/api";
 import { fmtDataBR, hojeISO } from "@/lib/datetime";
 import { reportarEvento } from "@/lib/event-reporter";
+import { criarTelemetriaViagem } from "@/lib/telemetria-viagem";
 import { humanizeZodError } from "@/lib/validation";
 import { avaliarKm, CriarViagemInput, type KmFonte } from "@ronan/shared-types";
 import { formatarDistancia, haversineMetros, localMaisProximo, pegarCoordsPrecisa, pegarCoordsRapido } from "@/lib/geo";
@@ -134,6 +135,18 @@ export default function NovaViagem() {
       : empty,
   );
   const [foto, setFoto] = useState<CapturedPhoto | null>(null);
+  // clientId da viagem gerado JÁ no início da sessão (estável) pra:
+  // (a) taggear a telemetria de interação (viagemClientId → reconcilia no backend);
+  // (b) ser o mesmo id usado no submit (idempotência do outbox).
+  const viagemClientId = useMemo(
+    () => (modoEdit ? params.editarClientId! : makeUuid()),
+    [], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  // Telemetria opt-in (flag podeTelemetria). NO-OP quando off — custo zero.
+  const tele = useMemo(
+    () => criarTelemetriaViagem(me.data?.podeTelemetria ?? false, viagemClientId),
+    [me.data?.podeTelemetria, viagemClientId],
+  );
   const [sugestoesIa, setSugestoesIa] = useState<ExtrairTicketResult | null>(null);
   // Campos preenchidos pela IA e mantidos pelo motorista até o submit.
   const [ocrCampos, setOcrCampos] = useState<Set<string>>(new Set());
@@ -318,6 +331,7 @@ export default function NovaViagem() {
   function escolherRota(idx: number) {
     const r = rotasAtivas[idx];
     if (!r) return;
+    tele.km({ modo: "rota", km: r.km, opcao: idx });
     setKmEditadoManual(false);
     setKmFonte("ROTA_ESCOLHIDA");
     setRotaIdx(idx);
@@ -328,6 +342,7 @@ export default function NovaViagem() {
   // "Foi outro valor": entra no modo manual (o motorista digita o km no card).
   // Zera a variante escolhida; mantém o km atual como ponto de partida pra editar.
   function ativarManual() {
+    tele.km({ modo: "manual" });
     setRotaIdx(-1);
     setRotaGeometriaEscolhida(null);
     setKmEditadoManual(true);
@@ -338,6 +353,7 @@ export default function NovaViagem() {
   // procedência HISTORICO (o backend não trata isso como "ajustou na mão").
   // Sai do governo da rota pra o auto-fill não brigar.
   function usarSugestaoKm(kmSugerido: number) {
+    tele.km({ modo: "sugestao", km: formatKmInput(kmSugerido) });
     setRotaIdx(-1);
     setRotaGeometriaEscolhida(null);
     setKmEditadoManual(true);
@@ -635,6 +651,9 @@ export default function NovaViagem() {
     });
     setOcrCampos(aplicados);
     setOcrConfidence(s.confidence);
+    if (aplicados.size > 0) {
+      tele.ocr({ campos: [...aplicados], confianca: s.confidence ?? null });
+    }
   }
 
   // Validação guiada: aponta o 1º campo que falta na ORDEM VISUAL da tela
@@ -880,7 +899,7 @@ export default function NovaViagem() {
           : {};
 
       const payload = {
-        clientId: modoEdit ? params.editarClientId! : makeUuid(),
+        clientId: viagemClientId,
         veiculoId: form.veiculoId,
         clienteId: form.clienteId,
         materialId: form.materialId,
@@ -1189,6 +1208,8 @@ export default function NovaViagem() {
         options={veiculoOptions}
         placeholder="Escolha a placa"
         searchable
+        telemetria={tele}
+        campoTelemetria="placa"
         error={!!val.erroDe("veiculoId")}
       />
       {val.erroDe("veiculoId") ? <ErroCampo msg={val.erroDe("veiculoId")!} /> : null}
@@ -1199,7 +1220,10 @@ export default function NovaViagem() {
     <Field label="Data">
       <DateField
         value={form.data}
-        onChange={(v) => update("data", v)}
+        onChange={(v) => {
+          update("data", v);
+          tele.campo("data", v);
+        }}
         disabled={submitting}
       />
     </Field>
@@ -1221,6 +1245,8 @@ export default function NovaViagem() {
         options={clienteOptions}
         placeholder="Escolha o cliente"
         searchable
+        telemetria={tele}
+        campoTelemetria="cliente"
         error={!!val.erroDe("clienteId")}
       />
       {val.erroDe("clienteId") ? <ErroCampo msg={val.erroDe("clienteId")!} /> : null}
@@ -1243,6 +1269,8 @@ export default function NovaViagem() {
         options={materialOptions}
         placeholder="Escolha o material"
         searchable
+        telemetria={tele}
+        campoTelemetria="material"
         error={!!val.erroDe("materialId")}
       />
       {val.erroDe("materialId") ? (
@@ -1276,6 +1304,9 @@ export default function NovaViagem() {
               val.limpar();
               update("toneladas", v);
             }}
+            onBlur={() => {
+              if (form.toneladas.trim()) tele.campo("toneladas", form.toneladas);
+            }}
             keyboardType="decimal-pad"
             placeholder="0,000"
             maxLength={8}
@@ -1293,6 +1324,9 @@ export default function NovaViagem() {
               onChangeText={(v) => {
                 val.limpar();
                 update("ticket", v.toUpperCase());
+              }}
+              onBlur={() => {
+                if (form.ticket.trim()) tele.campo("ticket", form.ticket);
               }}
               placeholder="número"
               maxLength={50}
@@ -1333,6 +1367,8 @@ export default function NovaViagem() {
         placeholder="Escolha o local de carga"
         title="Local de carga"
         searchable
+        telemetria={tele}
+        campoTelemetria="carga"
         emptyMessage={
           <View className="mx-4 mt-8 gap-2 rounded-2xl border-2 border-amber-300 bg-amber-50 p-5">
             <View className="flex-row items-center gap-2">
@@ -1387,6 +1423,7 @@ export default function NovaViagem() {
         onCaptura={setDescargaCaptura}
         nomeSelecionadoFallback={nomeDescargaSelecionado}
         localCargaCoords={localCargaCoords}
+        telemetria={tele}
       />
       {val.erroDe("localDescarga") ? (
         <ErroCampo msg={val.erroDe("localDescarga")!} />
@@ -1558,6 +1595,9 @@ export default function NovaViagem() {
         onChangeText={(v) => {
           val.limpar();
           update("observacao", v);
+        }}
+        onBlur={() => {
+          if (form.observacao.trim()) tele.campo("observacao", form.observacao);
         }}
         placeholder={
           obsObrigatoria ? "Ex.: desvio por obra na rodovia" : "..."

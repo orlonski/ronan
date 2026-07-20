@@ -111,6 +111,9 @@ export type Me = {
   // Quando true, mostra a sugestão de km do trajeto ("já rodaram ~X km") ao
   // escolher carga+descarga. Rollout gradual — opt-in.
   podeReferenciaKm: boolean;
+  // Telemetria de interação na tela "Nova viagem" (opt-in) — captura o que o
+  // motorista buscou/selecionou pra diagnosticar. Gate client-side.
+  podeTelemetria: boolean;
   // Preferências de recebimento (controladas na tela de perfil).
   aceitaPush: boolean;
   aceitaWhatsapp: boolean;
@@ -269,6 +272,8 @@ function normalizarMe<T extends Record<string, unknown>>(m: T): T {
   if (typeof anyM.podeVerTodosLocais !== "boolean") anyM.podeVerTodosLocais = false;
   // Opt-in: cache antigo / motorista sem o flag NÃO vê a sugestão de km.
   if (typeof anyM.podeReferenciaKm !== "boolean") anyM.podeReferenciaKm = false;
+  // Opt-in: telemetria off por default (cache antigo / sem a flag).
+  if (typeof anyM.podeTelemetria !== "boolean") anyM.podeTelemetria = false;
   // Backend antigo/cache sem as prefs: assume que recebe tudo (default true).
   if (typeof anyM.aceitaPush !== "boolean") anyM.aceitaPush = true;
   if (typeof anyM.aceitaWhatsapp !== "boolean") anyM.aceitaWhatsapp = true;
