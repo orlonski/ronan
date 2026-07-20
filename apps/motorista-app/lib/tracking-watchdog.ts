@@ -78,6 +78,16 @@ async function defineWatchdogTask(): Promise<void> {
 
   TaskManager.defineTask(WATCHDOG_TASK, async () => {
     try {
+      // Piggyback: sync em background (catálogos + fila) nesta mesma task, pra
+      // não registrar uma 2ª background-fetch (iOS roda ~1 por app). Fecha o
+      // furo do motorista que só abre o app em área sem sinal.
+      try {
+        const { sincronizarEmBackground } = await import("./sync-background");
+        await sincronizarEmBackground();
+      } catch {
+        /* best-effort — não atrapalha a lógica do watchdog abaixo */
+      }
+
       const viagem = await getViagemAndamento();
       const cfg = await getCachedConfig();
       const autoFinalizarHoras =

@@ -430,10 +430,11 @@ export function useUltimaAtualizacaoDados(): number | null {
  * cache (atualiza o "há X") e atualiza a query. Lança se offline — o chamador
  * trata (ex.: aviso "sem conexão"). Pro botão de atualizar dados na home.
  */
-export async function forcarAtualizarDados(qc: QueryClient): Promise<void> {
+export async function forcarAtualizarDados(qc?: QueryClient): Promise<void> {
   const fresh = normalizarCatalogos(await api.get<Catalogos>("/m/catalogos"));
   await cachePut("q:catalogos", fresh);
-  qc.setQueryData(["catalogos"], fresh);
+  // Sem qc explícito (ex.: task de background), usa o QueryClient global.
+  (qc ?? qcGlobalRef)?.setQueryData(["catalogos"], fresh);
 }
 
 /**
