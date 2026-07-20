@@ -27,6 +27,19 @@ export async function cachePut<T>(key: string, value: T): Promise<void> {
   }
 }
 
+/** Quando o cache dessa chave foi gravado (Date.now do último cachePut). null =
+ *  nunca baixado. Usado pra mostrar "dados atualizados há X" no app. */
+export async function cacheGetAt(key: string): Promise<number | null> {
+  try {
+    const raw = await AsyncStorage.getItem(`${PREFIX}cache.${key}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { v: unknown; t: number };
+    return typeof parsed.t === "number" ? parsed.t : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function cacheDelete(key: string): Promise<void> {
   try {
     await AsyncStorage.removeItem(`${PREFIX}cache.${key}`);

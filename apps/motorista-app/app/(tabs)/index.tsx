@@ -35,6 +35,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CoachTarget } from "@/components/coach-target";
 import { AnuncioIniciarViagem } from "@/components/anuncio-iniciar-viagem";
+import { IndicadorDados } from "@/components/indicador-dados";
 import { EmptyState } from "@/components/empty-state";
 import { NotificationBell } from "@/components/notification-bell";
 import { ViagemCardSkeleton } from "@/components/skeleton";
@@ -292,6 +293,9 @@ export default function Home() {
                 Versão {Constants.expoConfig.version}
               </Text>
             )}
+            {/* Quão fresco está o catálogo (locais/clientes/materiais) usado pra
+                lançar viagem, inclusive offline. Toca pra atualizar. */}
+            <IndicadorDados />
           </View>
           <CoachTarget id="coach-sino" className="rounded-full">
             <NotificationBell />

@@ -18,7 +18,13 @@ import type {
   StoryVisualizador,
   TipoEventoViagem as TipoEventoViagemApp,
 } from "@ronan/shared-types";
-import { cacheGet, cachePut, listPendingStories, type PendingStory } from "@/db/database";
+import {
+  cacheGet,
+  cacheGetAt,
+  cachePut,
+  listPendingStories,
+  type PendingStory,
+} from "@/db/database";
 import { api, ApiError } from "./api";
 import { reportarEvento } from "./event-reporter";
 import { haversineMetros } from "./geo";
@@ -396,6 +402,38 @@ export function useCatalogos() {
       normalize: normalizarCatalogos,
     }),
   );
+}
+
+/**
+ * Quando os dados-base (catálogos: locais/clientes/materiais/veículos) foram
+ * baixados do servidor pela última vez. Lê o timestamp do cache (só muda em
+ * fetch bem-sucedido) e reavalia sempre que a query de catálogos atualiza
+ * (leitura do cache OU revalidação em background). null = nunca baixado.
+ */
+export function useUltimaAtualizacaoDados(): number | null {
+  const cat = useCatalogos();
+  const [ts, setTs] = useState<number | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    void cacheGetAt("q:catalogos").then((t) => {
+      if (vivo) setTs(t);
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [cat.dataUpdatedAt]);
+  return ts;
+}
+
+/**
+ * Força um fetch REAL dos catálogos (não o cache-first): bate na rede, grava o
+ * cache (atualiza o "há X") e atualiza a query. Lança se offline — o chamador
+ * trata (ex.: aviso "sem conexão"). Pro botão de atualizar dados na home.
+ */
+export async function forcarAtualizarDados(qc: QueryClient): Promise<void> {
+  const fresh = normalizarCatalogos(await api.get<Catalogos>("/m/catalogos"));
+  await cachePut("q:catalogos", fresh);
+  qc.setQueryData(["catalogos"], fresh);
 }
 
 /**
