@@ -381,6 +381,10 @@ model Motorista {
   /// Só UX do app — o backend carimba kmForaDoPadrao pra todo mundo independente
   /// desta flag, e o lançamento nunca é bloqueado. Rollout gradual: default false.
   podeReferenciaKm        Boolean   @default(false)
+  /// Telemetria de interação na tela "Nova viagem" (o que clicou/buscou/selecionou,
+  /// o que a lista trouxe) — pra diagnosticar ex. "descarga errada". Opt-in por
+  /// motorista; gate é client-side (só emite os eventos nv_*). Default false.
+  podeTelemetria          Boolean   @default(false)
   criadoEm                DateTime  @default(now())
   alteradoEm              DateTime  @updatedAt
 

@@ -25,6 +25,21 @@ export const TipoEvento = z.enum([
   "viagem_guiada_evento",
   "viagem_guiada_finalizada",
   "viagem_guiada_casca_orfa_limpa",
+  // Telemetria de INTERAÇÃO na tela "Nova viagem" (prefixo nv_). Opt-in por
+  // motorista (flag podeTelemetria) — reconstrói o que ele fez pra diagnosticar
+  // ex. "selecionou local de descarga errado". contexto (Json) por tipo:
+  //   nv_campo    { campo, valor }
+  //   nv_busca    { campo, query, resultados, total }
+  //   nv_selecao  { campo, query, escolhido:{id,label}, posicao, entreN }
+  //   nv_descarga { modo, raioUsadoM?, ampliou?, trouxe:[{id,nome,distanciaM}], escolhido, pertoDaCarga? }
+  //   nv_ocr      { campos, confianca? }
+  //   nv_km       { modo, km, kmRota? }
+  "nv_campo",
+  "nv_busca",
+  "nv_selecao",
+  "nv_descarga",
+  "nv_ocr",
+  "nv_km",
 ]);
 export type TipoEvento = z.infer<typeof TipoEvento>;
 
