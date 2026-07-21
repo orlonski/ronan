@@ -30,7 +30,7 @@ import {
   pegarCoordsPrecisa,
   RAIO_ALERTA_CARGA_M,
 } from "@/lib/geo";
-import { AvisoListaCache, AvisoLocalCache, enderecoResumido, LinhaEndereco } from "@/components/local-info";
+import { AvisoListaCache, AvisoLocalCache, enderecoResumido, FotoLocal, LinhaEndereco } from "@/components/local-info";
 import {
   buscarDescargaDuasEtapas,
   buscarDescargaDuasEtapasOffline,
@@ -579,9 +579,26 @@ export function DescargaPorGps({
       {estado.tipo === "selecionado" && (
         <View className="gap-2">
           <View className="flex-row items-start gap-3 rounded-2xl border-2 border-success/40 bg-success/15 p-4">
-            <View className="h-10 w-10 items-center justify-center rounded-full bg-success">
-              <CheckCircle2 size={20} color="white" strokeWidth={2.5} />
-            </View>
+            {/* Miniatura do lugar (Street View/satélite) no lugar do check — dá
+                reconhecimento visual. Sem foto/internet, volta o check normal. */}
+            {(() => {
+              const cat = localDoCatalogo(estado.local.id);
+              if (cat?.lat != null && cat.lng != null) {
+                return (
+                  <View className="relative">
+                    <FotoLocal lat={cat.lat} lng={cat.lng} altura={52} redondo />
+                    <View className="absolute -bottom-1 -right-1 h-6 w-6 items-center justify-center rounded-full border-2 border-background bg-success">
+                      <CheckCircle2 size={13} color="white" strokeWidth={3} />
+                    </View>
+                  </View>
+                );
+              }
+              return (
+                <View className="h-10 w-10 items-center justify-center rounded-full bg-success">
+                  <CheckCircle2 size={20} color="white" strokeWidth={2.5} />
+                </View>
+              );
+            })()}
             <View className="flex-1">
               <Text className="text-base font-bold text-foreground" numberOfLines={2}>
                 {formatarNomeLocal(estado.local.nome)}

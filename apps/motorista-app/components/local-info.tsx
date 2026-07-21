@@ -1,7 +1,73 @@
-import { Text, View } from "react-native";
-import { MapPin, WifiOff } from "lucide-react-native";
+import { useEffect, useState } from "react";
+import { Image, Text, View } from "react-native";
+import { ImageOff, MapPin, WifiOff } from "lucide-react-native";
 import type { FonteGps } from "@ronan/shared-types";
 import type { Local } from "@/lib/queries";
+import { API_URL } from "@/lib/api-url";
+import { loadTokens } from "@/lib/auth";
+
+/**
+ * Foto do ponto (Street View onde existe; satélite onde não há cobertura) pra o
+ * motorista RECONHECER o lugar — o nome e a distância não dizem se é ali mesmo.
+ * Vem do backend (a chave do Google não vai ao app) e é cacheada por coordenada.
+ *
+ * Precisa de rede: offline/erro cai num placeholder neutro. O `<Image>` só monta
+ * com o token pronto — sem isso o Fresco (Android) cacheia o 401 e a foto fica
+ * preta pra sempre.
+ */
+export function FotoLocal({
+  lat,
+  lng,
+  altura = 120,
+  redondo = false,
+}: {
+  lat: number | null | undefined;
+  lng: number | null | undefined;
+  altura?: number;
+  /** Miniatura quadrada (ex: no lugar do avatar do card selecionado). */
+  redondo?: boolean;
+}) {
+  const [token, setToken] = useState<string | null>(null);
+  const [falhou, setFalhou] = useState(false);
+
+  useEffect(() => {
+    void loadTokens().then((t) => setToken(t?.accessToken ?? null));
+  }, []);
+
+  if (lat == null || lng == null) return null;
+
+  const estilo = redondo
+    ? { width: altura, height: altura, borderRadius: 12 }
+    : { width: "100%" as const, height: altura, borderRadius: 12 };
+
+  if (!token || falhou) {
+    return (
+      <View
+        style={estilo}
+        className="items-center justify-center border border-dashed border-border bg-muted/40"
+      >
+        <ImageOff size={redondo ? 18 : 22} color="#94a3b8" />
+        {!redondo && (
+          <Text className="mt-1 text-xs text-muted-foreground">
+            Foto indisponível sem internet
+          </Text>
+        )}
+      </View>
+    );
+  }
+
+  return (
+    <Image
+      source={{
+        uri: `${API_URL}/m/locais/imagem?lat=${lat}&lng=${lng}`,
+        headers: { Authorization: `Bearer ${token}` },
+      }}
+      style={estilo}
+      resizeMode="cover"
+      onError={() => setFalhou(true)}
+    />
+  );
+}
 
 /**
  * Endereço resumido pra exibir embaixo do nome do local ("Rua X, 123 · Bairro").

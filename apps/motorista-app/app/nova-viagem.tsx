@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { AvisoKmEstimado } from "@/components/aviso-km-estimado";
+import { FotoLocal } from "@/components/local-info";
 import { AvisoKmForaDoPadrao, SugestaoKmHistorico } from "@/components/sugestao-km-historico";
 import { DescargaPorGps, type DescargaCaptura } from "@/components/descarga-por-gps";
 import { SeletorRotas } from "@/components/seletor-rotas";
@@ -33,7 +34,7 @@ import { fmtDataBR, hojeISO } from "@/lib/datetime";
 import { reportarEvento } from "@/lib/event-reporter";
 import { criarTelemetriaViagem } from "@/lib/telemetria-viagem";
 import { humanizeZodError } from "@/lib/validation";
-import { avaliarKm, CriarViagemInput, type KmFonte } from "@ronan/shared-types";
+import { avaliarKm, CriarViagemInput, formatarNomeLocal, type KmFonte } from "@ronan/shared-types";
 import { formatarDistancia, haversineMetros, localMaisProximo, pegarCoordsPrecisa, pegarCoordsRapido } from "@/lib/geo";
 import { simplificarPontos } from "@/lib/polyline";
 import { listPendingViagens, type PendingViagem } from "@/db/database";
@@ -1388,6 +1389,16 @@ export default function NovaViagem() {
         error={!!val.erroDe("localCarga")}
       />
       {val.erroDe("localCarga") ? <ErroCampo msg={val.erroDe("localCarga")!} /> : null}
+      {/* Confirmação visual do local escolhido: a foto do ponto responde "é
+          esse lugar mesmo?" — o nome sozinho não responde. Só com internet. */}
+      {form.localCargaId && localCargaCoords && (
+        <View className="mt-2 gap-1">
+          <FotoLocal lat={localCargaCoords.lat} lng={localCargaCoords.lng} altura={110} />
+          <Text className="text-xs text-muted-foreground" numberOfLines={1}>
+            {formatarNomeLocal(localCargaCoords.nome)}
+          </Text>
+        </View>
+      )}
       {tracking && (
         <GpsHint
           match={matchesGps?.carga ?? null}
