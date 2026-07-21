@@ -7,9 +7,11 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import type { Response } from "express";
 import { z } from "zod";
 import { CriarLocalInput } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
@@ -20,6 +22,13 @@ import { RolesGuard } from "../../auth/guards/roles.guard";
 import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import type { AuthAdminUser } from "../../auth/types";
 import { LocaisService } from "./locais.service";
+import { LocaisImagemService } from "../../locais-imagem/locais-imagem.service";
+
+/** lat/lng do ponto cuja foto queremos (Street View / satélite). */
+const ImagemQuery = z.object({
+  lat: z.coerce.number().min(-90).max(90),
+  lng: z.coerce.number().min(-180).max(180),
+});
 
 const ListLocaisQuery = paginationQuerySchema.extend({
   clienteId: z.string().uuid().optional(),
@@ -55,7 +64,10 @@ type ProximoQuery = z.infer<typeof ProximoQuery>;
 @Roles("ADMIN_USER")
 @Controller("admin/locais")
 export class LocaisController {
-  constructor(private readonly service: LocaisService) {}
+  constructor(
+    private readonly service: LocaisService,
+    private readonly imagens: LocaisImagemService,
+  ) {}
 
   @Get()
   list(@Query(new ZodValidationPipe(ListLocaisQuery)) query: ListLocaisQuery) {
@@ -121,6 +133,24 @@ export class LocaisController {
     @Query(new ZodValidationPipe(DuplicatasGeoQuery)) query: z.infer<typeof DuplicatasGeoQuery>,
   ) {
     return this.service.duplicatasGeo(query.raioM);
+  }
+
+  /**
+   * Foto do ponto (Street View, ou satélite onde não há cobertura) pra o admin
+   * conferir se o pin caiu no lugar certo. Derivada do lat/lng e cacheada por
+   * coordenada — serve tanto o detalhe quanto o preview do form (local ainda
+   * sem id). ANTES de :id pra Nest não tratar "imagem" como id.
+   */
+  @Get("imagem")
+  async imagem(
+    @Query(new ZodValidationPipe(ImagemQuery)) query: z.infer<typeof ImagemQuery>,
+    @Res() res: Response,
+  ) {
+    const { buffer, tipo } = await this.imagens.obter(query.lat, query.lng);
+    res.set("Content-Type", "image/jpeg");
+    res.set("X-Imagem-Tipo", tipo);
+    res.set("Cache-Control", "private, max-age=86400");
+    res.send(buffer);
   }
 
   @Get(":id")

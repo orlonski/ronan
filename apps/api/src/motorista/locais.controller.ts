@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Query, Res, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import type { Response } from "express";
 import { z } from "zod";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { Roles } from "../auth/decorators/roles.decorator";
@@ -7,6 +8,13 @@ import { RolesGuard } from "../auth/guards/roles.guard";
 import type { AuthMotorista } from "../auth/types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { LocaisMotoristaService } from "./locais.service";
+import { LocaisImagemService } from "../locais-imagem/locais-imagem.service";
+
+/** lat/lng do ponto cuja foto queremos (Street View / satélite). */
+const ImagemQuery = z.object({
+  lat: z.coerce.number().min(-90).max(90),
+  lng: z.coerce.number().min(-180).max(180),
+});
 
 const CriarLocalInput = z.object({
   nome: z.string().min(3).max(120),
@@ -78,7 +86,10 @@ const CriarRapidoInput = z.object({
 @Roles("MOTORISTA")
 @Controller("m/locais")
 export class LocaisMotoristaController {
-  constructor(private readonly service: LocaisMotoristaService) {}
+  constructor(
+    private readonly service: LocaisMotoristaService,
+    private readonly imagens: LocaisImagemService,
+  ) {}
 
   @Post()
   criar(
@@ -86,6 +97,23 @@ export class LocaisMotoristaController {
     @Body(new ZodValidationPipe(CriarLocalInput)) body: z.infer<typeof CriarLocalInput>,
   ) {
     return this.service.criar(user.id, body);
+  }
+
+  /**
+   * Foto do ponto (Street View, ou satélite onde não há cobertura) pra o
+   * motorista reconhecer o lugar na carga/descarga. Derivada do lat/lng e
+   * cacheada por coordenada — a chave do Google nunca vai ao app.
+   */
+  @Get("imagem")
+  async imagem(
+    @Query(new ZodValidationPipe(ImagemQuery)) query: z.infer<typeof ImagemQuery>,
+    @Res() res: Response,
+  ) {
+    const { buffer, tipo } = await this.imagens.obter(query.lat, query.lng);
+    res.set("Content-Type", "image/jpeg");
+    res.set("X-Imagem-Tipo", tipo);
+    res.set("Cache-Control", "private, max-age=86400");
+    res.send(buffer);
   }
 
   /**

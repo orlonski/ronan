@@ -104,6 +104,19 @@ export class UploadsService implements OnModuleInit {
     return key;
   }
 
+  /**
+   * Imagem do local (Street View / satélite) cacheada por COORDENADA. Chave
+   * determinística (sobrescreve, sem uuid) — o custo na API do Google vira
+   * único por ponto. `chaveCoord` já vem normalizada (ex: "-25.42840_-49.27330").
+   */
+  async putLocalImagem(buffer: Buffer, chaveCoord: string): Promise<string> {
+    const key = `locais/img/${chaveCoord}.jpg`;
+    await this.client.putObject(this.bucket, key, buffer, buffer.length, {
+      "Content-Type": "image/jpeg",
+    });
+    return key;
+  }
+
   async getObjectStream(key: string): Promise<Readable> {
     try {
       return (await this.client.getObject(this.bucket, key)) as Readable;

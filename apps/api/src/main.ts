@@ -15,7 +15,10 @@ async function bootstrap() {
     rawCors === "" || rawCors === "*"
       ? true
       : rawCors.split(",").map((s) => s.trim()).filter(Boolean);
-  app.enableCors({ origin, credentials: true });
+  // exposedHeaders: sem isso o browser não deixa o dashboard LER headers
+  // customizados cross-origin (X-Imagem-Tipo diz se a foto do local é Street
+  // View ou satélite).
+  app.enableCors({ origin, credentials: true, exposedHeaders: ["X-Imagem-Tipo"] });
 
   // Gzip nas respostas. Crítico pro app móvel em rede 3G/4G —
   // reduz /catalogos de ~300KB pra ~40KB. Threshold default ignora
