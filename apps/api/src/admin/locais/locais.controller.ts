@@ -28,6 +28,7 @@ import { LocaisImagemService } from "../../locais-imagem/locais-imagem.service";
 const ImagemQuery = z.object({
   lat: z.coerce.number().min(-90).max(90),
   lng: z.coerce.number().min(-180).max(180),
+  mini: z.enum(["1"]).optional(),
 });
 
 const ListLocaisQuery = paginationQuerySchema.extend({
@@ -146,7 +147,7 @@ export class LocaisController {
     @Query(new ZodValidationPipe(ImagemQuery)) query: z.infer<typeof ImagemQuery>,
     @Res() res: Response,
   ) {
-    const { buffer, tipo } = await this.imagens.obter(query.lat, query.lng);
+    const { buffer, tipo } = await this.imagens.obter(query.lat, query.lng, query.mini === "1");
     res.set("Content-Type", "image/jpeg");
     res.set("X-Imagem-Tipo", tipo);
     res.set("Cache-Control", "private, max-age=86400");

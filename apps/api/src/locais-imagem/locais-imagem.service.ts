@@ -7,7 +7,10 @@ export type TipoImagemLocal = "STREET_VIEW" | "SATELITE";
 type CacheImagem = { tipo: TipoImagemLocal; storageKey: string };
 
 const TIMEOUT_MS = 6000;
-const TAMANHO = "640x400";
+const TAMANHO_PADRAO = "640x400";
+/** Miniatura pra LISTAS: ~15-25KB em vez de ~90-180KB. Numa lista de dezenas de
+ *  locais isso é a diferença entre alguns KB e vários MB no 4G do motorista. */
+const TAMANHO_MINI = "200x150";
 /** Raio (m) pra achar um panorama de Street View perto do ponto. */
 const RAIO_PANORAMA_M = 80;
 
@@ -32,8 +35,17 @@ export class LocaisImagemService {
     private readonly uploads: UploadsService,
   ) {}
 
-  async obter(lat: number, lng: number): Promise<{ buffer: Buffer; tipo: TipoImagemLocal }> {
-    const chaveCoord = `${lat.toFixed(5)}_${lng.toFixed(5)}`;
+  /**
+   * `mini` = versão pequena pra listas. É uma variante SEPARADA (chave própria de
+   * cache), então também é baixada UMA única vez por coordenada e servida do
+   * nosso storage daí em diante — compartilhada por todos os motoristas.
+   */
+  async obter(
+    lat: number,
+    lng: number,
+    mini = false,
+  ): Promise<{ buffer: Buffer; tipo: TipoImagemLocal }> {
+    const chaveCoord = `${lat.toFixed(5)}_${lng.toFixed(5)}${mini ? "_mini" : ""}`;
     const cacheKey = `sv:${chaveCoord}`;
 
     const hit = await this.prisma.geocodingCache.findUnique({ where: { query: cacheKey } });
@@ -58,7 +70,7 @@ export class LocaisImagemService {
       throw new NotFoundException("Imagem do local indisponível");
     }
 
-    const achado = await this.buscarNoGoogle(lat, lng, key);
+    const achado = await this.buscarNoGoogle(lat, lng, key, mini);
     if (!achado) throw new NotFoundException("Imagem do local indisponível");
 
     const storageKey = await this.uploads.putLocalImagem(achado.buffer, chaveCoord);
@@ -78,7 +90,9 @@ export class LocaisImagemService {
     lat: number,
     lng: number,
     key: string,
+    mini: boolean,
   ): Promise<{ buffer: Buffer; tipo: TipoImagemLocal } | null> {
+    const tamanho = mini ? TAMANHO_MINI : TAMANHO_PADRAO;
     // Metadados são GRÁTIS: evita pagar por um ponto sem cobertura (e evita a
     // imagem cinza de "sem imagem" que a Static API devolveria).
     const pano = await this.metadataStreetView(lat, lng, key);
@@ -86,14 +100,14 @@ export class LocaisImagemService {
       // Sem heading a foto aponta pra um lado aleatório — mira no local.
       const heading = rumo(pano.lat, pano.lng, lat, lng).toFixed(1);
       const url =
-        `https://maps.googleapis.com/maps/api/streetview?size=${TAMANHO}` +
+        `https://maps.googleapis.com/maps/api/streetview?size=${tamanho}` +
         `&location=${pano.lat},${pano.lng}&heading=${heading}&fov=80&pitch=0&key=${key}`;
       const buffer = await this.baixar(url);
       if (buffer) return { buffer, tipo: "STREET_VIEW" };
     }
     const url =
       `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}` +
-      `&zoom=18&size=${TAMANHO}&maptype=satellite&markers=color:red%7C${lat},${lng}&key=${key}`;
+      `&zoom=18&size=${tamanho}&maptype=satellite&markers=color:red%7C${lat},${lng}&key=${key}`;
     const buffer = await this.baixar(url);
     return buffer ? { buffer, tipo: "SATELITE" } : null;
   }

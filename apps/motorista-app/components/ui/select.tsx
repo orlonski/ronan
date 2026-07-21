@@ -4,11 +4,19 @@ import { FlatList, Modal, Pressable, Text, TextInput, View } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context";
 import { cn } from "@/lib/utils";
 import type { TelemetriaViagem } from "@/lib/telemetria-viagem";
+import { FotoLocal } from "@/components/local-info";
 
 export type SelectOption = {
   value: string;
   label: string;
   sublabel?: string;
+  /**
+   * Coordenadas do ponto: quando presentes, a linha ganha uma miniatura real do
+   * lugar (Street View/satélite). Nome de pátio/pedreira diz pouco pro motorista;
+   * a foto diz. Só a variante `mini`, e o backend serve do nosso cache (uma
+   * baixada do Google por coordenada, compartilhada por todos os motoristas).
+   */
+  foto?: { lat: number; lng: number };
 };
 
 export function Select({
@@ -173,18 +181,29 @@ export function Select({
                   fechar();
                 }}
                 className={cn(
-                  "border-b border-border px-4 py-4 active:bg-muted",
+                  "flex-row items-center gap-3 border-b border-border px-4 py-4 active:bg-muted",
                   item.value === value && "bg-muted",
                 )}
               >
-                <Text className="text-lg font-semibold text-foreground">
-                  {item.label}
-                </Text>
-                {item.sublabel && (
-                  <Text className="mt-0.5 text-sm text-muted-foreground">
-                    {item.sublabel}
-                  </Text>
+                {item.foto && (
+                  <FotoLocal
+                    lat={item.foto.lat}
+                    lng={item.foto.lng}
+                    largura={72}
+                    altura={54}
+                    mini
+                  />
                 )}
+                <View className="flex-1">
+                  <Text className="text-lg font-semibold text-foreground">
+                    {item.label}
+                  </Text>
+                  {item.sublabel && (
+                    <Text className="mt-0.5 text-sm text-muted-foreground">
+                      {item.sublabel}
+                    </Text>
+                  )}
+                </View>
               </Pressable>
             )}
           />

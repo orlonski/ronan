@@ -586,7 +586,14 @@ export default function NovaViagem() {
       const sublabel = Number.isFinite(dist)
         ? `${sublabelBase} · ${formatarDistancia(dist)}`
         : sublabelBase;
-      return { value: l.id, label: l.nome, sublabel };
+      return {
+        value: l.id,
+        label: l.nome,
+        sublabel,
+        // Miniatura do lugar na lista: nome de pátio/pedreira é parecido demais,
+        // a foto é o que o motorista reconhece de fato.
+        foto: l.lat != null && l.lng != null ? { lat: l.lat, lng: l.lng } : undefined,
+      };
     };
 
     const ordenar = (arr: typeof noCliente) =>

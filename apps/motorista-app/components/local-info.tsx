@@ -7,6 +7,17 @@ import { API_URL } from "@/lib/api-url";
 import { loadTokens } from "@/lib/auth";
 
 /**
+ * Token memoizado em módulo. Numa LISTA cada linha montaria uma leitura do
+ * SecureStore (keychain) só pra montar o header — caro e desnecessário, já que
+ * o token é o mesmo pra todas. Zerado no erro de imagem pra reler se expirou.
+ */
+let tokenFotoPromise: Promise<string | null> | null = null;
+function tokenFoto(): Promise<string | null> {
+  tokenFotoPromise ??= loadTokens().then((t) => t?.accessToken ?? null);
+  return tokenFotoPromise;
+}
+
+/**
  * Foto do ponto (Street View onde existe; satélite onde não há cobertura) pra o
  * motorista RECONHECER o lugar — o nome e a distância não dizem se é ali mesmo.
  * Vem do backend (a chave do Google não vai ao app) e é cacheada por coordenada.
@@ -19,26 +30,38 @@ export function FotoLocal({
   lat,
   lng,
   altura = 120,
+  largura,
   redondo = false,
+  mini = false,
 }: {
   lat: number | null | undefined;
   lng: number | null | undefined;
   altura?: number;
+  /** Largura fixa (px). Sem isso ocupa a linha toda (ou vira quadrado no `redondo`). */
+  largura?: number;
   /** Miniatura quadrada (ex: no lugar do avatar do card selecionado). */
   redondo?: boolean;
+  /**
+   * Pede a variante pequena do backend (~20KB no lugar de ~150KB). Obrigatório
+   * em lista: dezenas de fotos grandes viram megabytes no 4G do motorista.
+   */
+  mini?: boolean;
 }) {
   const [token, setToken] = useState<string | null>(null);
   const [falhou, setFalhou] = useState(false);
+  const [tentativa, setTentativa] = useState(0);
 
   useEffect(() => {
-    void loadTokens().then((t) => setToken(t?.accessToken ?? null));
-  }, []);
+    void tokenFoto().then(setToken);
+  }, [tentativa]);
 
   if (lat == null || lng == null) return null;
 
-  const estilo = redondo
-    ? { width: altura, height: altura, borderRadius: 12 }
-    : { width: "100%" as const, height: altura, borderRadius: 12 };
+  const estilo = {
+    width: largura ?? (redondo ? altura : ("100%" as const)),
+    height: altura,
+    borderRadius: mini ? 8 : 12,
+  };
 
   if (!token || falhou) {
     return (
@@ -46,8 +69,8 @@ export function FotoLocal({
         style={estilo}
         className="items-center justify-center border border-dashed border-border bg-muted/40"
       >
-        <ImageOff size={redondo ? 18 : 22} color="#94a3b8" />
-        {!redondo && (
+        <ImageOff size={redondo || mini ? 18 : 22} color="#94a3b8" />
+        {!redondo && !mini && (
           // Neutro de propósito: a foto pode faltar por estar offline OU por não
           // haver imagem daquele ponto. Culpar a internet mentiria no 2º caso —
           // e o app já tem a tarja global avisando quando está sem sinal.
@@ -62,12 +85,21 @@ export function FotoLocal({
   return (
     <Image
       source={{
-        uri: `${API_URL}/m/locais/imagem?lat=${lat}&lng=${lng}`,
+        uri: `${API_URL}/m/locais/imagem?lat=${lat}&lng=${lng}${mini ? "&mini=1" : ""}`,
         headers: { Authorization: `Bearer ${token}` },
       }}
       style={estilo}
       resizeMode="cover"
-      onError={() => setFalhou(true)}
+      onError={() => {
+        // Pode ser token vencido (memo em módulo). Rele uma vez antes de desistir.
+        if (tentativa === 0) {
+          tokenFotoPromise = null;
+          setToken(null);
+          setTentativa(1);
+          return;
+        }
+        setFalhou(true);
+      }}
     />
   );
 }
