@@ -48,8 +48,11 @@ export function FotoLocal({
       >
         <ImageOff size={redondo ? 18 : 22} color="#94a3b8" />
         {!redondo && (
+          // Neutro de propósito: a foto pode faltar por estar offline OU por não
+          // haver imagem daquele ponto. Culpar a internet mentiria no 2º caso —
+          // e o app já tem a tarja global avisando quando está sem sinal.
           <Text className="mt-1 text-xs text-muted-foreground">
-            Foto indisponível sem internet
+            Sem foto deste ponto
           </Text>
         )}
       </View>
