@@ -14,6 +14,26 @@ import L from "leaflet";
 import Supercluster from "supercluster";
 import "leaflet/dist/leaflet.css";
 
+/**
+ * O Leaflet mede o container no mount. Dentro de grid/flex que só recebe a
+ * largura final DEPOIS (ex.: mapa lado a lado com a foto do local), o mapa nasce
+ * em branco. Revalida logo após o paint e a cada resize do container.
+ */
+function AjustarTamanho() {
+  const map = useMap();
+  useEffect(() => {
+    const revalidar = () => map.invalidateSize();
+    const t = setTimeout(revalidar, 0);
+    const ro = new ResizeObserver(revalidar);
+    ro.observe(map.getContainer());
+    return () => {
+      clearTimeout(t);
+      ro.disconnect();
+    };
+  }, [map]);
+  return null;
+}
+
 delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })
   ._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -235,6 +255,7 @@ export function PontoMap({
         style={{ height: "100%", width: "100%" }}
         scrollWheelZoom
       >
+        <AjustarTamanho />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

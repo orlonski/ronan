@@ -7,6 +7,7 @@ import { MapPin, Pencil, Truck, User } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { FonteGps } from "@ronan/shared-types";
 import { FormPageHeader } from "@/components/form-page-header";
+import { FotoLocal } from "@/components/foto-local";
 import { SinalGpsBadge } from "@/components/sinal-gps-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -336,26 +337,31 @@ export default function VisualizarLocalPage({
               <div className="flex items-center gap-2 text-sm font-medium">
                 <MapPin className="h-4 w-4 text-muted-foreground" /> Localização no mapa
               </div>
-              <PontoMap
-                lat={l.lat}
-                lng={l.lng}
-                label={l.nome}
-                precisao={l.latLngPrecisao}
-                pontos={(lancamentos.data?.pontos ?? []).map((p) => ({
-                  id: p.id,
-                  lat: p.lat,
-                  lng: p.lng,
-                  status: p.status,
-                  origem: p.origem,
-                  label: `${fmtBR(p.data)} · ${p.ticket}`,
-                  // Prefere a distância que o app calculou no clique da descarga;
-                  // senão (fallback de abertura) mede em linha reta.
-                  distanciaMetros:
-                    p.descargaDistanciaMetros ??
-                    distanciaMetros(l.lat!, l.lng!, p.lat, p.lng),
-                  href: `/viagens/${p.id}`,
-                }))}
-              />
+              {/* Foto do ponto ao lado do mapa: o pin diz ONDE, a foto diz SE é
+                  o lugar certo (portão, pátio, entrada). */}
+              <div className="grid gap-4 lg:grid-cols-2">
+                <FotoLocal lat={l.lat} lng={l.lng} />
+                <PontoMap
+                  lat={l.lat}
+                  lng={l.lng}
+                  label={l.nome}
+                  precisao={l.latLngPrecisao}
+                  pontos={(lancamentos.data?.pontos ?? []).map((p) => ({
+                    id: p.id,
+                    lat: p.lat,
+                    lng: p.lng,
+                    status: p.status,
+                    origem: p.origem,
+                    label: `${fmtBR(p.data)} · ${p.ticket}`,
+                    // Prefere a distância que o app calculou no clique da descarga;
+                    // senão (fallback de abertura) mede em linha reta.
+                    distanciaMetros:
+                      p.descargaDistanciaMetros ??
+                      distanciaMetros(l.lat!, l.lng!, p.lat, p.lng),
+                    href: `/viagens/${p.id}`,
+                  }))}
+                />
+              </div>
               <p className="text-xs text-muted-foreground">
                 Coordenadas: {l.lat.toFixed(6)}, {l.lng.toFixed(6)}.
                 {lancamentos.data && lancamentos.data.pontos.length > 0 && (() => {

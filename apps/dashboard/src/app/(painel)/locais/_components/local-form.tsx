@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { TagInput } from "@/components/ui/tag-input";
+import { FotoLocal } from "@/components/foto-local";
 
 const PontoMap = dynamic(
   () => import("@/components/ponto-map").then((m) => m.PontoMap),
@@ -298,6 +299,9 @@ export function LocalForm({ initial }: Props) {
         {temCoord && (
           <Card className="space-y-3 p-6">
             <Label>Localização no mapa</Label>
+            {/* Foto do ponto: conferência imediata de "o pin caiu no portão
+                certo?" logo depois de escolher o endereço no autocomplete. */}
+            <FotoLocal lat={form.lat!} lng={form.lng!} className="h-[200px]" />
             <PontoMap lat={form.lat!} lng={form.lng!} label={form.nome || undefined} />
             <p className="text-xs text-muted-foreground">
               Coordenadas: {form.lat!.toFixed(6)}, {form.lng!.toFixed(6)}.
