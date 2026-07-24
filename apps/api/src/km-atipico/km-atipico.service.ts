@@ -25,6 +25,7 @@ export type ComparavelKm = {
   data: Date | null;
   km: number;
   motoristaNome: string | null;
+  status: string;
 };
 
 /** Payload completo do card de referência de km de UMA viagem. */
@@ -519,9 +520,15 @@ export class KmAtipicoService {
     const desde = inicioDiasAtras(config.janelaDias);
     const filtro = this.filtroAmostra(cargaId, descargaId, desde, excluirViagemId, retorno);
 
-    type Row = { id: string; data: Date | null; km: number; motoristaNome: string | null };
+    type Row = {
+      id: string;
+      data: Date | null;
+      km: number;
+      motoristaNome: string | null;
+      status: string;
+    };
     const rows = await this.prisma.$queryRaw<Row[]>`
-      SELECT v.id, v.data, v.km::float8 AS km, m.nome AS "motoristaNome"
+      SELECT v.id, v.data, v.km::float8 AS km, v.status::text AS status, m.nome AS "motoristaNome"
       FROM viagens v
       LEFT JOIN motoristas m ON m.id = v."motoristaId"
       WHERE ${filtro}
@@ -533,6 +540,7 @@ export class KmAtipicoService {
       data: r.data,
       km: r.km,
       motoristaNome: r.motoristaNome,
+      status: r.status,
     }));
   }
 

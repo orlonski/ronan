@@ -20,6 +20,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import { fmtBR } from "@/lib/fechamento-helpers";
 import { fetchApi, useAuthToken, useResourceItem, usePaginatedList } from "@/lib/client-api";
+import { STATUS_VIAGEM_COLOR, STATUS_VIAGEM_LABEL } from "@/lib/status-viagem";
 
 const PontoMap = dynamic(
   () => import("@/components/ponto-map").then((m) => m.PontoMap),
@@ -95,24 +96,6 @@ const ORIGEM_LABEL: Record<Origem, string> = {
   VIAGEM_OFFLINE: "Viagem offline",
   ADMIN_MANUAL: "Admin",
   ADMIN_AUDITORIA: "Admin (auditoria)",
-};
-
-const STATUS_VIAGEM_LABEL: Record<string, string> = {
-  ENVIADA: "Aguardando",
-  EM_CONFERENCIA: "Em conferência",
-  OK: "OK",
-  DIVERGENTE: "Divergente",
-  AJUSTADA: "Ajustada",
-  RASCUNHO_OFFLINE: "Rascunho",
-};
-
-const STATUS_VIAGEM_COLOR: Record<string, string> = {
-  ENVIADA: "bg-amber-100 text-amber-900 border-amber-200",
-  EM_CONFERENCIA: "bg-purple-100 text-purple-800 border-purple-200",
-  OK: "bg-green-100 text-green-800 border-green-200",
-  DIVERGENTE: "bg-red-100 text-red-800 border-red-200",
-  AJUSTADA: "bg-blue-100 text-blue-800 border-blue-200",
-  RASCUNHO_OFFLINE: "bg-gray-100 text-gray-700 border-gray-200",
 };
 
 // Distância em linha reta (Haversine) em metros.

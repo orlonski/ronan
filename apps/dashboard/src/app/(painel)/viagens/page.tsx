@@ -29,6 +29,7 @@ import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePaginatedList } from "@/lib/client-api";
 import { fmtBR, fmtNum } from "@/lib/fechamento-helpers";
 import { ValorComMinimo } from "@/components/valor-com-minimo";
+import { STATUS_VIAGEM_COLOR, STATUS_VIAGEM_LABEL } from "@/lib/status-viagem";
 
 type Viagem = {
   id: string;
@@ -89,26 +90,6 @@ function AlertasBadges({ v }: { v: Viagem }) {
   return <>{badges}</>;
 }
 
-
-const STATUS_VIAGEM_LABEL: Record<string, string> = {
-  ENVIADA: "Aguardando",
-  EM_CONFERENCIA: "Em conferência",
-  OK: "OK",
-  DIVERGENTE: "Divergente",
-  AJUSTADA: "Ajustada",
-  RASCUNHO_OFFLINE: "Rascunho",
-  AGUARDANDO_PESO: "Aguardando peso",
-};
-
-const STATUS_VIAGEM_COLOR: Record<string, string> = {
-  ENVIADA: "bg-amber-100 text-amber-900 border-amber-200",
-  EM_CONFERENCIA: "bg-purple-100 text-purple-800 border-purple-200",
-  OK: "bg-green-100 text-green-800 border-green-200",
-  DIVERGENTE: "bg-red-100 text-red-800 border-red-200",
-  AJUSTADA: "bg-blue-100 text-blue-800 border-blue-200",
-  RASCUNHO_OFFLINE: "bg-gray-100 text-gray-700 border-gray-200",
-  AGUARDANDO_PESO: "bg-orange-100 text-orange-900 border-orange-300",
-};
 
 export default function ViagensPage() {
   const tableState = useDataTableState({

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Permitido } from "@/components/requer-tela";
+import { StatusViagemBadge } from "@/lib/status-viagem";
 import { fmtBR, fmtNum } from "@/lib/fechamento-helpers";
 
 type EstatisticaPar = {
@@ -45,6 +46,7 @@ export type ReferenciaKmDetalhe = {
     data: string | null;
     km: number;
     motoristaNome: string | null;
+    status: string;
   }>;
   quarentena: number;
   config: {
@@ -237,10 +239,13 @@ export function ReferenciaKmCard({
                       href={`/viagens/${c.id}`}
                       className="flex items-center justify-between rounded px-1.5 py-1 text-xs transition-colors hover:bg-muted"
                     >
-                      <span className="flex items-center gap-1 text-muted-foreground">
-                        {fmtBR(c.data)} · {c.motoristaNome ?? "—"}
+                      <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+                        <StatusViagemBadge status={c.status} className="shrink-0" />
+                        <span className="truncate">
+                          {fmtBR(c.data)} · {c.motoristaNome ?? "—"}
+                        </span>
                       </span>
-                      <span className="flex items-center gap-1 font-medium">
+                      <span className="flex shrink-0 items-center gap-1 font-medium">
                         {km(c.km)}
                         <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
                       </span>
