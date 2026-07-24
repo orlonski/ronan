@@ -13,7 +13,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "@/components/screen-header";
 import { DescargaPorGps, type DescargaCaptura } from "@/components/descarga-por-gps";
 import { SeletorRotas } from "@/components/seletor-rotas";
-import { SeletorRetorno } from "@/components/seletor-retorno";
 import { PerguntaBotaFora } from "@/components/pergunta-bota-fora";
 import { ErroCampo, useValidacaoGuiada } from "@/components/validacao-guiada";
 import { SemCatalogo } from "@/components/sem-catalogo";
@@ -139,28 +138,19 @@ export default function FinalizarViagem() {
   // KM auto via OSRM entre local de carga (se cadastrado) e descarga.
   const localCargaId = ciclo?.localCargaId ?? "";
   const rota = useCalcularRota(localCargaId, localDescargaId);
-  // Variantes COM retorno vs SEM retorno (curb). Se vierem 2, têm precedência
-  // sobre as alternativas de estrada: o motorista confirma se voltou no retorno.
-  const opcoesRetorno = useOpcoesRota(localCargaId, localDescargaId);
-  const usarRetorno = (opcoesRetorno.data?.length ?? 0) >= 2;
-  // Alternativas de estrada — só DEPOIS que /opcoes resolveu e não há retorno.
-  // Sequenciar evita corrida entre as fontes e mantém uma fonte única estável.
-  const buscarAlternativas = !usarRetorno && opcoesRetorno.isFetched;
-  const alternativas = useRotasAlternativas(
-    buscarAlternativas ? localCargaId : undefined,
-    buscarAlternativas ? localDescargaId : undefined,
-  );
-  // Bota-fora: volta descarga→carga, calculada com as MESMAS variantes da ida
-  // (com/sem retorno) pra casar com a escolha do motorista. Só busca quando marcado.
+  // Alternativas de estrada — o km sai sempre da rota direta calculada
+  // (recomendada) e o motorista pode escolher outra estrada no mapa.
+  const alternativas = useRotasAlternativas(localCargaId, localDescargaId);
+  // Bota-fora: volta descarga→carga (variante direta). Só busca quando marcado.
   const opcoesVolta = useOpcoesRota(
     botaFora ? localDescargaId : undefined,
     botaFora ? localCargaId : undefined,
   );
-  // Fonte ÚNICA que governa km/geometria (retorno vence estrada). Memoizado pra
-  // referência estável (evita recomputar kmRecomendado / re-rodar o effect à toa).
+  // Fonte ÚNICA que governa km/geometria. Memoizado pra referência estável
+  // (evita recomputar kmRecomendado / re-rodar o effect à toa).
   const rotasAtivas = useMemo(
-    () => (usarRetorno ? opcoesRetorno.data! : alternativas.data ?? []),
-    [usarRetorno, opcoesRetorno.data, alternativas.data],
+    () => alternativas.data ?? [],
+    [alternativas.data],
   );
   const temMapa = rotasAtivas.length >= 1;
   // km da recomendada — snapshot pra kmCalculado quando não há escolha ativa.
@@ -230,14 +220,6 @@ export default function FinalizarViagem() {
     setKm(r.km);
   }
 
-  // "Foi outro valor": modo manual (o motorista digita o km no card).
-  function ativarManual() {
-    setRotaIdx(-1);
-    setRotaGeometriaEscolhida(null);
-    setKmEditadoManual(true);
-    setKmFonte("MANUAL");
-  }
-
   // Aceitou a sugestão do histórico da frota (mesmo comportamento da nova viagem).
   function usarSugestaoKm(kmSugerido: number) {
     setRotaIdx(-1);
@@ -257,38 +239,26 @@ export default function FinalizarViagem() {
       ? parseFloat(rotasAtivas[rotaIdx]!.km)
       : kmRecomendado;
 
-  // Escolha "voltei no retorno" (true) vs "segui direto" (false); undefined quando
-  // não perguntado (backend grava null). O recalcular do painel respeita.
-  const retornoConfirmado =
-    usarRetorno && rotaGeometriaEscolhida != null
-      ? rotasAtivas[rotaIdx]?.retorno
-      : undefined;
-  // Bota-fora: km da volta casando a variante com a escolha da ida — só usa "com
-  // retorno" (curb) se o motorista escolheu isso na ida; senão vai "direto".
-  // Assim ida e volta ficam na mesma régua (sem inflar a volta com a meia-volta).
+  // Bota-fora: km da volta pela variante direta (sem retorno). Ida e volta na
+  // mesma régua (km direto calculado automaticamente).
   const kmVolta = useMemo(() => {
     if (!botaFora) return null;
     const opts = opcoesVolta.data ?? [];
     if (opts.length === 0) return null;
-    const alvo =
-      retornoConfirmado === true
-        ? opts.find((r) => r.retorno === true)
-        : opts.find((r) => r.retorno === false);
+    const alvo = opts.find((r) => r.retorno === false);
     const escolhida = alvo ?? opts.find((r) => r.recomendada) ?? opts[0];
     return escolhida ? parseFloat(escolhida.km) : null;
-  }, [botaFora, opcoesVolta.data, retornoConfirmado]);
-  // No card de RETORNO nunca auto-preenche: km só da escolha consciente.
+  }, [botaFora, opcoesVolta.data]);
+  // Auto-preenche o km com o valor calculado pela rota, se motorista não editou.
   useEffect(() => {
-    if (usarRetorno || kmEditadoManual || kmGovernadoPorRota) return;
+    if (kmEditadoManual || kmGovernadoPorRota) return;
     if (!rota.data || rota.data.km === null) return;
     setKm((cur) => (cur === rota.data!.km ? cur : (rota.data as { km: string }).km));
-  }, [rota.data, kmEditadoManual, kmGovernadoPorRota, usarRetorno]);
+  }, [rota.data, kmEditadoManual, kmGovernadoPorRota]);
 
-  // Pré-seleciona a recomendada SÓ no seletor de estrada. No card de RETORNO
-  // NENHUMA opção vem marcada — o motorista escolhe conscientemente. Preserva a
-  // escolha restaurada do rascunho.
+  // Pré-seleciona a recomendada no seletor de estrada. Preserva a escolha
+  // restaurada do rascunho.
   useEffect(() => {
-    if (usarRetorno) return;
     if (kmEditadoManual || rotaGeometriaEscolhida != null) return;
     if (rotasAtivas.length < 1) return;
     const recIdx = Math.max(0, rotasAtivas.findIndex((r) => r.recomendada));
@@ -528,7 +498,6 @@ export default function FinalizarViagem() {
               ? "ROTA_ESCOLHIDA"
               : "ROTA_OSRM"),
         rotaGeometria: rotaGeometriaEscolhida ?? undefined,
-        retornoConfirmado,
         // Bota-fora = 1 trecho de retorno pro local de carga (a volta que ele fez).
         trechos:
           botaFora && kmVolta != null && localCargaId
@@ -667,8 +636,8 @@ export default function FinalizarViagem() {
               />
             ) : null}
 
-            {/* Seletor de estrada (quando não é caso de retorno) */}
-            {temMapa && !usarRetorno ? (
+            {/* Seletor de estrada (escolha da rota no mapa) */}
+            {temMapa ? (
               <SeletorRotas
                 rotas={rotasAtivas}
                 selecionadaIdx={rotaIdx}
@@ -676,19 +645,11 @@ export default function FinalizarViagem() {
               />
             ) : null}
 
-            {usarRetorno ? (
-              /* Card de retorno É o campo de km (3ª opção = informar o valor). */
-              <View className="gap-3" onLayout={val.onLayoutCampo("km")}>
-                <SeletorRetorno
-                  opcoes={rotasAtivas}
-                  selecionadaIdx={
-                    rotaGeometriaEscolhida != null && !kmEditadoManual ? rotaIdx : -1
-                  }
-                  manualAtivo={kmEditadoManual}
-                  onSelecionar={escolherRota}
-                  onManual={ativarManual}
-                  erro={val.erroDe("km")}
-                >
+            {/* 3) Km e pedágio */}
+            <View className="gap-2" onLayout={val.onLayoutCampo("km")}>
+              <View className="flex-row gap-3">
+                <View className="flex-1 gap-2">
+                  <Label error={!!val.erroDe("km")}>Km rodados</Label>
                   <Input
                     value={km}
                     onChangeText={(v) => {
@@ -700,11 +661,22 @@ export default function FinalizarViagem() {
                     keyboardType="decimal-pad"
                     placeholder="0,00"
                     maxLength={8}
-                    autoFocus
                     error={!!val.erroDe("km")}
                   />
-                </SeletorRetorno>
-                <View className="gap-2">
+                  {rota.isFetching && !kmEditadoManual ? (
+                    <Text className="text-xs text-muted-foreground">Calculando rota…</Text>
+                  ) : rota.data &&
+                    "km" in rota.data &&
+                    rota.data.km &&
+                    !kmEditadoManual &&
+                    (rota.data.fonte === "osrm" ||
+                      rota.data.fonte === "cache_server") ? (
+                    <Text className="text-xs font-medium text-success">
+                      ✓ Calculado ({rota.data.km} km)
+                    </Text>
+                  ) : null}
+                </View>
+                <View className="flex-1 gap-2">
                   <Label>Pedágio (R$)</Label>
                   <Input
                     value={valorPedagio}
@@ -714,64 +686,19 @@ export default function FinalizarViagem() {
                     maxLength={10}
                   />
                 </View>
-                {bannerKmForaDoPadrao}
               </View>
-            ) : (
-              /* 3) Km e pedágio (fluxo normal, sem retorno) */
-              <View className="gap-2" onLayout={val.onLayoutCampo("km")}>
-                <View className="flex-row gap-3">
-                  <View className="flex-1 gap-2">
-                    <Label error={!!val.erroDe("km")}>Km rodados</Label>
-                    <Input
-                      value={km}
-                      onChangeText={(v) => {
-                        val.limpar();
-                        setKmEditadoManual(true);
-                        setKmFonte("MANUAL");
-                        setKm(v);
-                      }}
-                      keyboardType="decimal-pad"
-                      placeholder="0,00"
-                      maxLength={8}
-                      error={!!val.erroDe("km")}
-                    />
-                    {rota.isFetching && !kmEditadoManual ? (
-                      <Text className="text-xs text-muted-foreground">Calculando rota…</Text>
-                    ) : rota.data &&
-                      "km" in rota.data &&
-                      rota.data.km &&
-                      !kmEditadoManual &&
-                      (rota.data.fonte === "osrm" ||
-                        rota.data.fonte === "cache_server") ? (
-                      <Text className="text-xs font-medium text-success">
-                        ✓ Calculado ({rota.data.km} km)
-                      </Text>
-                    ) : null}
-                  </View>
-                  <View className="flex-1 gap-2">
-                    <Label>Pedágio (R$)</Label>
-                    <Input
-                      value={valorPedagio}
-                      onChangeText={setValorPedagio}
-                      keyboardType="decimal-pad"
-                      placeholder="opcional"
-                      maxLength={10}
-                    />
-                  </View>
-                </View>
-                {!mostrarSugestao &&
-                rota.data &&
-                "km" in rota.data &&
-                rota.data.km &&
-                !kmEditadoManual &&
-                (rota.data.fonte === "estimado_haversine" ||
-                  rota.data.fonte === "cache_local") ? (
-                  <AvisoKmEstimado km={rota.data.km} fonte={rota.data.fonte} />
-                ) : null}
-                {val.erroDe("km") ? <ErroCampo msg={val.erroDe("km")!} /> : null}
-                {bannerKmForaDoPadrao}
-              </View>
-            )}
+              {!mostrarSugestao &&
+              rota.data &&
+              "km" in rota.data &&
+              rota.data.km &&
+              !kmEditadoManual &&
+              (rota.data.fonte === "estimado_haversine" ||
+                rota.data.fonte === "cache_local") ? (
+                <AvisoKmEstimado km={rota.data.km} fonte={rota.data.fonte} />
+              ) : null}
+              {val.erroDe("km") ? <ErroCampo msg={val.erroDe("km")!} /> : null}
+              {bannerKmForaDoPadrao}
+            </View>
 
             {/* Bota-fora (limpeza): só quando o material permite */}
             {permiteBotaFora ? (

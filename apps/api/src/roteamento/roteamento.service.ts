@@ -8,15 +8,18 @@ const CACHE_TTL_DIAS = 90;
 const HTTP_TIMEOUT_MS = 3500;
 
 // Versão do roteador. Bumpar sempre que a forma de calcular a rota mudar (ex.:
-// ligar approaches=curb) invalida o RotaCache antigo de forma lazy: entradas de
-// versão diferente viram stale e são recomputadas no próximo acesso.
-const ROUTER_VERSION = 3;
+// desligar approaches=curb) invalida o RotaCache antigo de forma lazy: entradas
+// de versão diferente viram stale e são recomputadas no próximo acesso.
+// v4: rota DIRETA (mais curta) é o padrão — o roteador não força mais o retorno
+// de pista dupla (removemos a escolha "cheguei direto / precisei voltar").
+const ROUTER_VERSION = 4;
 
-// approaches=curb;curb força o roteador a chegar/sair no lado correto da via
-// (mão-direita no Brasil), contando o retorno quando o ponto de carga/descarga
-// caiu na pista de sentido contrário. Se o build do OSRM não suportar o
-// parâmetro, definir OSRM_APPROACHES="off" desliga sem mexer no código.
-const OSRM_APPROACHES = (process.env.OSRM_APPROACHES ?? "curb;curb").trim();
+// approaches=curb;curb forçava o roteador a chegar/sair no lado correto da via
+// (mão-direita no Brasil), contando o retorno quando o ponto caía na pista de
+// sentido contrário. Removemos a escolha manual de retorno: o padrão agora é a
+// rota DIRETA (sem curb), estilo mapa comum. Se algum dia quiser reativar o
+// curb, basta OSRM_APPROACHES="curb;curb" no ambiente (e bumpar ROUTER_VERSION).
+const OSRM_APPROACHES = (process.env.OSRM_APPROACHES ?? "off").trim();
 
 // Diferença mínima (km) entre a variante COM retorno (curb) e SEM retorno pra
 // valer a pena perguntar ao motorista. Abaixo disso, o ponto já está do lado

@@ -95,10 +95,6 @@ export const CriarViagemBase = z.object({
   // mapa. Ausente quando não houve escolha (rota única, offline, tela sem
   // seletor). Backend guarda em Viagem.rotaGeometria (rota real no painel).
   rotaGeometria: z.string().max(20000).optional(),
-  // Escolha do motorista entre "voltei no retorno" (true) e "segui direto"
-  // (false). Ausente quando não foi perguntado (sem retorno real / offline).
-  // Backend guarda em Viagem.retornoConfirmado; o recalcular do painel respeita.
-  retornoConfirmado: z.boolean().optional(),
   // Trechos ADICIONAIS do trajeto (retorno do bota-fora hoje; entregas múltiplas
   // no futuro). O `km` acima já inclui a soma dos trechos. Backend valida e grava
   // em TrechoViagem. Ausente/[] = viagem normal carga→descarga.

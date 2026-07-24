@@ -851,7 +851,6 @@ export class ViagensMotoristaService {
         kmFonte,
         justificativaKm: rest.justificativaKm,
         rotaGeometria: rest.rotaGeometria,
-        retornoConfirmado: rest.retornoConfirmado,
         ...(trechosCreate.length ? { trechos: { create: trechosCreate } } : {}),
         observacao: rest.observacao,
         localCargaId: rest.localCargaId,
@@ -1403,7 +1402,6 @@ export class ViagensMotoristaService {
         kmFonte: input.kmFonte,
         justificativaKm: input.justificativaKm,
         rotaGeometria: input.rotaGeometria,
-        retornoConfirmado: input.retornoConfirmado,
         // Recria os trechos do zero (idempotente em reenvio do finalizar).
         trechos: { deleteMany: {}, ...(trechosCreate.length ? { create: trechosCreate } : {}) },
         ticket,

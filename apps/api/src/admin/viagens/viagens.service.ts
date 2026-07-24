@@ -808,7 +808,6 @@ export class ViagensAdminService {
         localDescargaId: true,
         km: true,
         kmCalculado: true,
-        retornoConfirmado: true,
         trechos: { select: { id: true, localId: true }, orderBy: { ordem: "asc" } },
       },
     });
@@ -828,51 +827,31 @@ export class ViagensAdminService {
       select: { km: true, geometria: true },
     });
 
-    // Recalcula as DUAS variantes (com/sem retorno) e RESPEITA a escolha gravada:
-    // retornoConfirmado=false → aplica a variante SEM retorno; true/null → COM
-    // retorno (curb/recomendada, comportamento de sempre pra viagens antigas).
-    // Sem isso, recalcular revertia silenciosamente a escolha "cheguei direto".
-    const opcoes = await this.roteamento.calcularComSemRetorno(
+    // Recalcula a rota direta (mais curta) do par carga→descarga.
+    const resultado = await this.roteamento.calcularKm(
       viagem.localCargaId,
       viagem.localDescargaId,
+      { force: true },
     );
-    if (opcoes.rotas.length === 0) {
-      throw new BadRequestException(
-        "erro" in opcoes ? opcoes.erro : "Não foi possível calcular a rota agora.",
-      );
+    if (resultado.km == null) {
+      throw new BadRequestException(resultado.erro);
     }
-    const querSemRetorno = viagem.retornoConfirmado === false;
-    const escolhida =
-      (querSemRetorno
-        ? opcoes.rotas.find((r) => r.retorno === false)
-        : opcoes.rotas.find((r) => r.retorno === true)) ??
-      opcoes.rotas.find((r) => r.recomendada) ??
-      opcoes.rotas[0]!;
-    const resultado = escolhida;
 
     // Recalcular NUNCA sobrescreve o km faturado: o valor que o motorista
     // informou/confirmou prevalece sempre. Só atualiza a referência OSRM
-    // (kmCalculado) e a geometria fresca da variante (com/sem retorno) pro mapa.
-    // Pra trocar o km faturado, o admin usa "Retorno na rodovia"/escolher rota
-    // (ação explícita), não o recalcular.
+    // (kmCalculado) e a geometria fresca pro mapa. Pra trocar o km faturado, o
+    // admin usa "escolher rota" (ação explícita), não o recalcular.
     let novoKm = parseFloat(resultado.km);
     // Trechos adicionais (retorno do bota-fora hoje): soma cada perna do ponto
-    // anterior (1º = descarga) até o local do trecho, na MESMA variante da ida
-    // (só "com retorno"/curb se foi escolhido — não infla quando a ida foi
-    // "cheguei direto"). Atualiza o km de cada trecho e a referência kmCalculado
-    // pra bater com o round-trip (senão o painel acusaria "override" falso).
+    // anterior (1º = descarga) até o local do trecho pela rota direta. Atualiza o
+    // km de cada trecho e a referência kmCalculado pra bater com o round-trip
+    // (senão o painel acusaria "override" falso).
     const trechoUpdates: { id: string; km: number }[] = [];
     let anterior = viagem.localDescargaId;
     for (const t of viagem.trechos) {
-      const opc = await this.roteamento.calcularComSemRetorno(anterior, t.localId);
-      if (opc.rotas.length > 0) {
-        const esc =
-          (viagem.retornoConfirmado === true
-            ? opc.rotas.find((r) => r.retorno === true)
-            : opc.rotas.find((r) => r.retorno === false)) ??
-          opc.rotas.find((r) => r.recomendada) ??
-          opc.rotas[0]!;
-        const kmT = parseFloat(esc.km);
+      const rt = await this.roteamento.calcularKm(anterior, t.localId, { force: true });
+      if (rt.km != null) {
+        const kmT = parseFloat(rt.km);
         trechoUpdates.push({ id: t.id, km: kmT });
         novoKm += kmT;
       }
@@ -993,7 +972,6 @@ export class ViagensAdminService {
       km: number;
       rotaGeometria: string;
       kmCalculado?: number;
-      retornoConfirmado?: boolean;
     },
     usuarioId: string,
   ) {
@@ -1009,20 +987,8 @@ export class ViagensAdminService {
         km: input.km,
         rotaGeometria: input.rotaGeometria,
         ...(input.kmCalculado != null ? { kmCalculado: input.kmCalculado } : {}),
-        // Grava a variante quando o painel escolheu com/sem retorno (o seletor de
-        // estrada não manda esse campo → escolha de retorno fica intacta).
-        ...(input.retornoConfirmado != null
-          ? { retornoConfirmado: input.retornoConfirmado }
-          : {}),
       },
     });
-
-    const motivoRetorno =
-      input.retornoConfirmado === true
-        ? " (com retorno)"
-        : input.retornoConfirmado === false
-          ? " (sem retorno, seguiu direto)"
-          : "";
 
     await this.auditoria.log({
       usuarioId,
@@ -1032,13 +998,12 @@ export class ViagensAdminService {
       campo: "km",
       valorAntes: viagem.km?.toString() ?? null,
       valorDepois: String(input.km),
-      motivo: `Rota escolhida manualmente no painel${motivoRetorno}.`,
+      motivo: `Rota escolhida manualmente no painel.`,
       metadata: {
         rotaGeometriaDefinida: true,
         kmAntes: viagem.km?.toString() ?? null,
         kmDepois: String(input.km),
         kmCalculado: input.kmCalculado != null ? String(input.kmCalculado) : null,
-        retornoConfirmado: input.retornoConfirmado ?? null,
       },
     });
 
@@ -1046,49 +1011,18 @@ export class ViagensAdminService {
   }
 
   /**
-   * Variantes COM retorno (curb) vs SEM retorno (direto) do par carga→descarga
-   * da viagem — pro painel deixar o admin escolher/confirmar. Devolve 1 opção
-   * quando não há retorno real (dedup no RoteamentoService).
-   */
-  async opcoesRetorno(id: string) {
-    const viagem = await this.prisma.viagem.findUnique({
-      where: { id },
-      select: { localCargaId: true, localDescargaId: true },
-    });
-    if (!viagem) throw new NotFoundException("Viagem não encontrada");
-    if (!viagem.localCargaId || !viagem.localDescargaId) {
-      throw new BadRequestException("Viagem sem locais definidos.");
-    }
-    return this.roteamento.calcularComSemRetorno(
-      viagem.localCargaId,
-      viagem.localDescargaId,
-    );
-  }
-
-  /**
-   * Km da volta do bota-fora (descarga → carga), na MESMA régua do app
-   * (motorista-app/app/finalizar-viagem.tsx:210). Casa a variante da volta com o
-   * `retornoConfirmado` da ida: se o motorista foi direto, a volta também vai
-   * direto — senão o curb "acha" uma meia-volta que não aconteceu e infla o km.
+   * Km da volta do bota-fora (descarga → carga), na MESMA régua do app. Usa a
+   * rota direta (mais curta) — o roteador não força mais o retorno de pista dupla.
    *
    * Null = não deu pra calcular (OSRM fora, local sem coordenada). Nunca zero.
    */
   private async calcularKmVoltaBotaFora(
     localDescargaId: string,
     localCargaId: string,
-    retornoConfirmado: boolean | null,
   ): Promise<number | null> {
-    const { rotas } = await this.roteamento.calcularComSemRetorno(
-      localDescargaId,
-      localCargaId,
-    );
-    if (rotas.length === 0) return null;
-    const alvo =
-      retornoConfirmado === true
-        ? rotas.find((r) => r.retorno === true)
-        : rotas.find((r) => r.retorno === false);
-    const escolhida = alvo ?? rotas.find((r) => r.recomendada) ?? rotas[0];
-    const km = escolhida ? parseFloat(escolhida.km) : NaN;
+    const r = await this.roteamento.calcularKm(localDescargaId, localCargaId);
+    if (r.km == null) return null;
+    const km = parseFloat(r.km);
     return Number.isFinite(km) ? km : null;
   }
 
@@ -1141,7 +1075,6 @@ export class ViagensAdminService {
         ? await this.calcularKmVoltaBotaFora(
             viagem.localDescargaId,
             viagem.localCargaId,
-            viagem.retornoConfirmado,
           )
         : null;
 
@@ -1195,7 +1128,6 @@ export class ViagensAdminService {
       ? await this.calcularKmVoltaBotaFora(
           viagem.localDescargaId!,
           viagem.localCargaId!,
-          viagem.retornoConfirmado,
         )
       : null;
     if (teveBotaFora && kmVoltaNovo == null) {

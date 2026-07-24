@@ -69,7 +69,6 @@ export class PedagiosRodoviaConsultaService {
         localCargaId: true,
         localDescargaId: true,
         rotaGeometria: true,
-        retornoConfirmado: true,
         trechos: { select: { tipo: true, localId: true, ordem: true }, orderBy: { ordem: "asc" } },
       },
     });
@@ -82,7 +81,6 @@ export class PedagiosRodoviaConsultaService {
         localCargaId,
         localDescargaId,
         rotaGeometria: viagem.rotaGeometria,
-        retornoConfirmado: viagem.retornoConfirmado,
       },
       opts,
     );
@@ -120,35 +118,18 @@ export class PedagiosRodoviaConsultaService {
   }
 
   /**
-   * A geometria da ida, na ordem: o que o motorista escolheu no seletor →
-   * a variante coerente com "cheguei direto" → o cache validado.
+   * A geometria da ida: o que o motorista escolheu no seletor de rota →
+   * senão o cache validado (rota direta, coerente com o roteador atual).
    */
   private async geometriaDaIda(
     viagem: {
       localCargaId: string;
       localDescargaId: string;
       rotaGeometria: string | null;
-      retornoConfirmado: boolean | null;
     },
-    opts: { somenteCache?: boolean },
+    _opts: { somenteCache?: boolean },
   ): Promise<string | null> {
     if (viagem.rotaGeometria) return viagem.rotaGeometria;
-
-    // O rotaCache guarda sempre a variante COM retorno (curb). Num "cheguei
-    // direto" ela pode passar por praça que o motorista não cruzou, então a
-    // sem-retorno é recalculada em vez de lida do cache.
-    if (viagem.retornoConfirmado === false) {
-      if (opts.somenteCache) return null;
-      const res = await this.roteamento.calcularComSemRetorno(
-        viagem.localCargaId,
-        viagem.localDescargaId,
-      );
-      const semRetorno = res.rotas.find((r) => r.retorno === false);
-      // Só a com_retorno respondeu (ou colapsaram por dedup): sem variante
-      // distinta pra checar, não dá pra afirmar nada.
-      return semRetorno?.geometria ?? null;
-    }
-
     return this.roteamento.geometriaCacheada(viagem.localCargaId, viagem.localDescargaId);
   }
 

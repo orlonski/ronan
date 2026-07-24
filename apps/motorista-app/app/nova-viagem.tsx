@@ -25,7 +25,6 @@ import { FotoLocal } from "@/components/local-info";
 import { AvisoKmForaDoPadrao, SugestaoKmHistorico } from "@/components/sugestao-km-historico";
 import { DescargaPorGps, type DescargaCaptura } from "@/components/descarga-por-gps";
 import { SeletorRotas } from "@/components/seletor-rotas";
-import { SeletorRetorno } from "@/components/seletor-retorno";
 import { PerguntaBotaFora } from "@/components/pergunta-bota-fora";
 import { showAlert, showConfirm } from "@/lib/alert";
 import { clearNavDestino } from "@/lib/nav-destino-storage";
@@ -246,27 +245,17 @@ export default function NovaViagem() {
 
   const rota = useCalcularRota(form.localCargaId, form.localDescargaId);
   const pedagiosNaRota = usePedagiosNaRota(form.localCargaId, form.localDescargaId);
-  // Variantes COM retorno vs SEM retorno (curb). Se vierem 2, têm precedência
-  // sobre as alternativas de estrada: o motorista confirma se voltou no retorno.
-  const opcoesRetorno = useOpcoesRota(
+  // Alternativas de estrada — o km sai sempre da rota direta calculada
+  // (recomendada) e o motorista pode escolher outra estrada no mapa.
+  const alternativas = useRotasAlternativas(
     modoEdit ? undefined : form.localCargaId,
     modoEdit ? undefined : form.localDescargaId,
   );
-  const usarRetorno = !modoEdit && (opcoesRetorno.data?.length ?? 0) >= 2;
-  // Alternativas de estrada — só DEPOIS que /opcoes resolveu e não há retorno.
-  // Sequenciar (em vez de disparar em paralelo) evita corrida entre as duas
-  // fontes deixarem seleção velha, e mantém uma fonte única estável.
-  const buscarAlternativas =
-    !modoEdit && !usarRetorno && opcoesRetorno.isFetched;
-  const alternativas = useRotasAlternativas(
-    buscarAlternativas ? form.localCargaId : undefined,
-    buscarAlternativas ? form.localDescargaId : undefined,
-  );
-  // Fonte ÚNICA que governa km/geometria (retorno vence estrada). Memoizado pra
-  // referência estável (evita recomputar kmRecomendado / re-rodar o effect à toa).
+  // Fonte ÚNICA que governa km/geometria. Memoizado pra referência estável
+  // (evita recomputar kmRecomendado / re-rodar o effect à toa).
   const rotasAtivas = useMemo(
-    () => (usarRetorno ? opcoesRetorno.data! : alternativas.data ?? []),
-    [usarRetorno, opcoesRetorno.data, alternativas.data],
+    () => alternativas.data ?? [],
+    [alternativas.data],
   );
   // Mostra o mapa sempre que houver 1+ rota (informativo); seletor com 2+.
   const temMapa = !modoEdit && rotasAtivas.length >= 1;
@@ -340,16 +329,6 @@ export default function NovaViagem() {
     setForm((f) => ({ ...f, km: r.km }));
   }
 
-  // "Foi outro valor": entra no modo manual (o motorista digita o km no card).
-  // Zera a variante escolhida; mantém o km atual como ponto de partida pra editar.
-  function ativarManual() {
-    tele.km({ modo: "manual" });
-    setRotaIdx(-1);
-    setRotaGeometriaEscolhida(null);
-    setKmEditadoManual(true);
-    setKmFonte("MANUAL");
-  }
-
   // Aceitou a sugestão do histórico da frota: preenche o km e marca a
   // procedência HISTORICO (o backend não trata isso como "ajustou na mão").
   // Sai do governo da rota pra o auto-fill não brigar.
@@ -373,29 +352,16 @@ export default function NovaViagem() {
       ? parseFloat(rotasAtivas[rotaIdx]!.km)
       : kmRecomendado;
 
-  // Escolha "voltei no retorno" (true) vs "segui direto" (false) — só quando o
-  // card de retorno foi mostrado (usarRetorno) e o motorista escolheu. Senão
-  // undefined (não perguntado → backend grava null). O painel respeita no recalcular.
-  const retornoConfirmado =
-    usarRetorno && rotaGeometriaEscolhida != null
-      ? rotasAtivas[rotaIdx]?.retorno
-      : undefined;
-
   // Auto-preenche KM com valor calculado pelo OSRM, se motorista nao editou.
-  // No card de RETORNO nunca auto-preenche: o km só vem da escolha consciente
-  // (nenhuma opção vem marcada), senão o preguiçoso passaria batido.
   useEffect(() => {
-    if (usarRetorno || kmEditadoManual || kmGovernadoPorRota) return;
+    if (kmEditadoManual || kmGovernadoPorRota) return;
     if (!rota.data || rota.data.km === null) return;
     const novoKm = rota.data.km;
     setForm((f) => (f.km === novoKm ? f : { ...f, km: novoKm }));
-  }, [rota.data, kmEditadoManual, kmGovernadoPorRota, usarRetorno]);
+  }, [rota.data, kmEditadoManual, kmGovernadoPorRota]);
 
-  // Pré-seleciona a recomendada SÓ no seletor de estrada. No card de RETORNO
-  // NENHUMA opção vem marcada — o motorista escolhe conscientemente (não empurra
-  // pro km maior nem deixa o preguiçoso passar batido).
+  // Pré-seleciona a recomendada no seletor de estrada.
   useEffect(() => {
-    if (usarRetorno) return;
     if (kmEditadoManual || rotaGeometriaEscolhida != null) return;
     if (rotasAtivas.length < 1) return;
     const recIdx = Math.max(0, rotasAtivas.findIndex((r) => r.recomendada));
@@ -529,19 +495,16 @@ export default function NovaViagem() {
     botaFora ? form.localDescargaId : undefined,
     botaFora ? form.localCargaId : undefined,
   );
-  // Casa a variante com a escolha da ida: só usa "com retorno" (curb) se o
-  // motorista escolheu isso na ida; senão vai "direto". Ida e volta na mesma régua.
+  // Volta descarga→carga: usa sempre a variante direta (sem retorno). Ida e
+  // volta na mesma régua (km direto calculado automaticamente).
   const kmVolta = useMemo(() => {
     if (!botaFora) return null;
     const opts = opcoesVolta.data ?? [];
     if (opts.length === 0) return null;
-    const alvo =
-      retornoConfirmado === true
-        ? opts.find((r) => r.retorno === true)
-        : opts.find((r) => r.retorno === false);
+    const alvo = opts.find((r) => r.retorno === false);
     const escolhida = alvo ?? opts.find((r) => r.recomendada) ?? opts[0];
     return escolhida ? parseFloat(escolhida.km) : null;
-  }, [botaFora, opcoesVolta.data, retornoConfirmado]);
+  }, [botaFora, opcoesVolta.data]);
 
   const nomeDescargaSelecionado = useMemo(() => {
     if (!form.localDescargaId) return undefined;
@@ -676,18 +639,6 @@ export default function NovaViagem() {
     if (!form.localCargaId) return void val.apontar("localCarga", "Escolha o local de carga"), false;
     if (!form.localDescargaId)
       return void val.apontar("localDescarga", "Marque o local de descarga"), false;
-    // Card de retorno: exige escolha CONSCIENTE (voltou / não voltou / outro
-    // valor). Sem isso o km podia vir pré-preenchido (stale de uma alternativa
-    // de estrada) e o motorista caía direto no modal de confirmação sem ter
-    // marcado nada. Aponta o card do km.
-    if (usarRetorno && rotaGeometriaEscolhida == null && !kmEditadoManual)
-      return (
-        void val.apontar(
-          "km",
-          'Marque se voltou no retorno — ou toque em "Foi outro valor" e informe o km',
-        ),
-        false
-      );
     if (!form.km.trim()) return void val.apontar("km", "Informe os km rodados"), false;
     // Observação obrigatória quando o motorista MEXEU no km calculado (digitou
     // outro valor ou tocou "Foi outro valor" → kmFonte=MANUAL) OU quando o km é
@@ -929,7 +880,6 @@ export default function NovaViagem() {
             ? kmCalculadoFinal + kmVolta
             : undefined
           : kmCalculadoFinal,
-        retornoConfirmado,
         // Bota-fora = 1 trecho de retorno pro local de carga (a volta que ele fez).
         trechos:
           botaFora && kmVolta != null && form.localCargaId
@@ -1469,14 +1419,13 @@ export default function NovaViagem() {
       />
     ) : null;
 
-  const secaoSeletorRotas =
-    temMapa && !usarRetorno ? (
-      <SeletorRotas
-        rotas={rotasAtivas}
-        selecionadaIdx={rotaIdx}
-        onSelecionar={escolherRota}
-      />
-    ) : null;
+  const secaoSeletorRotas = temMapa ? (
+    <SeletorRotas
+      rotas={rotasAtivas}
+      selecionadaIdx={rotaIdx}
+      onSelecionar={escolherRota}
+    />
+  ) : null;
 
   // Banner informativo de km fora do padrão (a explicação é exigida na
   // observação, não aqui). Mostrado no card de km enquanto a observação não foi
@@ -1486,52 +1435,7 @@ export default function NovaViagem() {
       <AvisoKmForaDoPadrao referencia={avaliacao.referencia} />
     ) : null;
 
-  const secaoKm = usarRetorno ? (
-    /* Card de retorno É o campo de km: escolhe uma variante OU informa
-       o valor na 3ª opção. O campo "Km rodados" separado some. */
-    <View
-      className="gap-3"
-      ref={val.refCampo("km")}
-      onLayout={val.onLayoutCampo("km")}
-    >
-      <SeletorRetorno
-        opcoes={rotasAtivas}
-        selecionadaIdx={
-          rotaGeometriaEscolhida != null && !kmEditadoManual ? rotaIdx : -1
-        }
-        manualAtivo={kmEditadoManual}
-        onSelecionar={escolherRota}
-        onManual={ativarManual}
-        erro={val.erroDe("km")}
-      >
-        <Input
-          value={form.km}
-          onChangeText={(v) => {
-            val.limpar();
-            setKmEditadoManual(true);
-            setKmFonte("MANUAL");
-            update("km", v);
-          }}
-          keyboardType="decimal-pad"
-          placeholder="0,00"
-          maxLength={8}
-          autoFocus
-          error={!!val.erroDe("km")}
-        />
-      </SeletorRetorno>
-      <View className="gap-2">
-        <Label>Pedágio (R$)</Label>
-        <Input
-          value={form.valorPedagio}
-          onChangeText={(v) => update("valorPedagio", v)}
-          keyboardType="decimal-pad"
-          placeholder="opcional"
-          maxLength={10}
-        />
-      </View>
-      {bannerKmForaDoPadrao}
-    </View>
-  ) : (
+  const secaoKm = (
     <View ref={val.refCampo("km")} onLayout={val.onLayoutCampo("km")}>
       <View className="flex-row gap-3">
         <View className="flex-1 gap-2">

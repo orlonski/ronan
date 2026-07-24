@@ -518,7 +518,6 @@ export async function finalizarViagemGuiada(input: {
   kmFonte?: KmFonte;
   justificativaKm?: string;
   rotaGeometria?: string;
-  retornoConfirmado?: boolean;
   trechos?: TrechoViagemInput[];
   ticket?: string;
   localDescargaId: string;
@@ -550,7 +549,6 @@ export async function finalizarViagemGuiada(input: {
       kmFonte: input.kmFonte,
       justificativaKm: input.justificativaKm,
       rotaGeometria: input.rotaGeometria,
-      retornoConfirmado: input.retornoConfirmado,
       trechos: input.trechos,
       ticket: input.ticket,
       localDescargaId: input.localDescargaId,

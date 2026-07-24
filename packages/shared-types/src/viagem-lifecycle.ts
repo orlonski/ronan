@@ -150,9 +150,6 @@ export const FinalizarViagemInput = z.object({
   // Polyline da rota escolhida pelo motorista no seletor de mapa (igual ao
   // CriarViagemInput). Backend guarda em Viagem.rotaGeometria.
   rotaGeometria: z.string().max(20000).optional(),
-  // Escolha "voltei no retorno" (true) vs "segui direto" (false); ausente quando
-  // não foi perguntado. Backend guarda em Viagem.retornoConfirmado.
-  retornoConfirmado: z.boolean().optional(),
   // Trechos ADICIONAIS do trajeto (retorno do bota-fora hoje; entregas múltiplas
   // no futuro). O `km` acima já inclui a soma dos trechos. Backend valida e grava
   // em TrechoViagem. Ausente/[] = viagem normal carga→descarga.

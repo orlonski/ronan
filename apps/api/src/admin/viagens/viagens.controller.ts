@@ -64,8 +64,6 @@ const EscolherRotaInput = z.object({
   km: z.number().nonnegative().max(99999),
   rotaGeometria: z.string().max(20000),
   kmCalculado: z.number().nonnegative().max(99999).optional(),
-  // true = com retorno, false = sem retorno (direto); ausente = escolha de estrada.
-  retornoConfirmado: z.boolean().optional(),
 });
 type EscolherRotaInput = z.infer<typeof EscolherRotaInput>;
 
@@ -197,12 +195,6 @@ export class ViagensAdminController {
   @Get(":id/rotas-alternativas")
   rotasAlternativas(@Param("id") id: string) {
     return this.service.rotasAlternativas(id);
-  }
-
-  @RequerPermissao("viagens.editar")
-  @Get(":id/rotas-opcoes")
-  opcoesRetorno(@Param("id") id: string) {
-    return this.service.opcoesRetorno(id);
   }
 
   @RequerPermissao("viagens.editar")
