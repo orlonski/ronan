@@ -299,7 +299,9 @@ export default function NovaViagem() {
     sugestaoKm != null &&
     Number.isFinite(kmAtualNum) &&
     Math.abs(kmAtualNum - sugestaoKm.km) < 0.5;
-  const mostrarSugestao = sugestaoKm != null && !sugestaoJaAplicada;
+  // Renderiza sempre que há amostra. Quando o km já bate (`sugestaoJaAplicada`),
+  // o card vira a confirmação compacta em vez de sumir.
+  const mostrarSugestao = sugestaoKm != null;
 
   // Avaliação do km atual contra a referência (mesma fn pura do backend). null =
   // não dá pra avaliar (sem referência, config off, km curto).
@@ -1415,6 +1417,7 @@ export default function NovaViagem() {
         min={sugestaoKm.min}
         max={sugestaoKm.max}
         offline={semSinal}
+        confirmado={sugestaoJaAplicada}
         onUsar={() => usarSugestaoKm(sugestaoKm.km)}
       />
     ) : null;

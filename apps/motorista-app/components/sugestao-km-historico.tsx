@@ -1,5 +1,5 @@
 import { Pressable, Text, View } from "react-native";
-import { History, TriangleAlert } from "lucide-react-native";
+import { Check, History, TriangleAlert } from "lucide-react-native";
 
 /**
  * Sugestão de km do trajeto: mostra o que a frota já rodou nesse par de locais,
@@ -7,9 +7,10 @@ import { History, TriangleAlert } from "lucide-react-native";
  * estrada), não alerta — por isso superfície neutra/positiva, nunca âmbar de
  * problema. O CTA "Usar X km" preenche o campo num toque.
  *
- * Aparece só quando há amostra suficiente (o backend já resolveu a `efetiva`
- * como HISTORICO). Some quando o km atual já bate com a sugestão (não repete o
- * óbvio) — controlado pela tela.
+ * Aparece quando há amostra suficiente (o backend já resolveu a `efetiva` como
+ * HISTORICO). Quando o km atual JÁ BATE com a sugestão (`confirmado`), não some:
+ * vira uma linha compacta de confirmação ("rota já rodada N vezes"), sem o botão
+ * — o sinal de "essa rota é conhecida" vale mesmo sem nada a corrigir.
  */
 export function SugestaoKmHistorico({
   km,
@@ -17,6 +18,7 @@ export function SugestaoKmHistorico({
   min,
   max,
   offline,
+  confirmado,
   onUsar,
 }: {
   km: number;
@@ -26,10 +28,26 @@ export function SugestaoKmHistorico({
   max?: number;
   /** Sem sinal agora: o número vem do cache do que a frota já rodou. */
   offline?: boolean;
+  /** O km atual já bate com a sugestão: mostra só a confirmação compacta. */
+  confirmado?: boolean;
   onUsar: () => void;
 }) {
   const kmFmt = formatKm(km);
   const temFaixa = min != null && max != null && Math.round(max) - Math.round(min) >= 1;
+
+  // Km já bate: confirmação enxuta (uma linha), sem CTA. Só diz que a rota é
+  // conhecida — o motorista vê que não está inventando um trajeto novo.
+  if (confirmado) {
+    return (
+      <View className="mt-1 flex-row items-center gap-2 rounded-xl border border-success/30 bg-success/5 px-3 py-2">
+        <Check size={16} color="#15803d" />
+        <Text className="flex-1 text-sm font-medium text-foreground/80">
+          Rota já rodada {amostra} {amostra === 1 ? "vez" : "vezes"} · ~{kmFmt} km
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View className="mt-1 rounded-2xl border-2 border-success/40 bg-success/10 p-4">
       <View className="flex-row items-start gap-3">

@@ -189,7 +189,8 @@ export default function FinalizarViagem() {
     sugestaoKm != null &&
     Number.isFinite(kmAtualNum) &&
     Math.abs(kmAtualNum - sugestaoKm.km) < 0.5;
-  const mostrarSugestao = sugestaoKm != null && !sugestaoJaAplicada;
+  // Renderiza sempre que há amostra; km já batendo vira confirmação compacta.
+  const mostrarSugestao = sugestaoKm != null;
 
   const avaliacao = useMemo(
     () => avaliarKm(kmAtualNum, refKm.data ?? null),
@@ -632,6 +633,7 @@ export default function FinalizarViagem() {
                 min={sugestaoKm.min}
                 max={sugestaoKm.max}
                 offline={semSinal}
+                confirmado={sugestaoJaAplicada}
                 onUsar={() => usarSugestaoKm(sugestaoKm.km)}
               />
             ) : null}
