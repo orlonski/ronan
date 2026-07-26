@@ -73,6 +73,9 @@ pnpm --filter @ronan/motorista-app build:android    # build EAS local
 - `admin/*` — painel. `@Roles("ADMIN_USER")` + `RolesGuard`, mais RBAC granular via `@RequerPermissao("recurso.acao")` + `PermissaoGuard`.
 - `m/*` — apps do motorista. `@Roles("MOTORISTA")` + feature flag por motorista.
 - `health`, `geocoding`, `errors`, `app/deploy` — utilitários.
+- `clickup/task-ready` — webhook de Automation do ClickUp (fila de execução de agente). Autentica por segredo compartilhado, não por JWT — ver `docs/clickup-runner.md`.
+
+**`JwtAuthGuard` é global (`APP_GUARD` no `AuthModule`)**: rota nova sem `@Public()` responde 401 antes de qualquer guard próprio. Endpoint que se autentica de outro jeito (webhook com segredo) precisa de `@Public()` + guard próprio.
 
 ### Guards do motorista (fácil de errar)
 

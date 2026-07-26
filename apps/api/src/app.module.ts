@@ -17,6 +17,7 @@ import { ErrorsExceptionFilter } from "./errors/errors.filter";
 import { EventosModule } from "./eventos/eventos.module";
 import { WhatsappModule } from "./whatsapp/whatsapp.module";
 import { NotificacoesModule } from "./notificacoes/notificacoes.module";
+import { ClickupRunnerModule } from "./clickup-runner/clickup-runner.module";
 import { AppVersionInterceptor } from "./common/app-version.interceptor";
 
 @Module({
@@ -37,6 +38,7 @@ import { AppVersionInterceptor } from "./common/app-version.interceptor";
     EventosModule,
     WhatsappModule,
     NotificacoesModule,
+    ClickupRunnerModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: ErrorsExceptionFilter },

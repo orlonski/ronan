@@ -1838,3 +1838,58 @@ model Notificacao {
   @@index([motoristaId, lida])
   @@map("notificacoes")
 }
+
+/// Execução do agente (Claude Code headless) sobre uma task do ClickUp,
+/// disparada por webhook de Automation. É a FILA: persistida no banco de
+/// propósito, pra reinício do serviço não perder item e pra dedupe/concorrência
+/// valerem entre réplicas (memória do processo não serviria).
+enum StatusExecucaoAgente {
+  PENDENTE
+  EXECUTANDO
+  CONCLUIDA
+  FALHOU
+  EXCEDEU_LIMITE
+}
+
+model ExecucaoAgente {
+  id        String               @id @default(uuid())
+  /// Id da task no ClickUp (ex.: "86bb3pm4w").
+  taskId    String
+  /// Espelha taskId enquanto a execução está viva e vira null ao terminar. O
+  /// @unique aqui é o que garante NO BANCO "uma execução ativa por task" — dois
+  /// webhooks simultâneos brigam no índice, não numa checagem em memória.
+  taskAtiva String?              @unique
+  status    StatusExecucaoAgente @default(PENDENTE)
+  /// Payload cru da Automation, pra auditoria e replay.
+  payload   Json
+  origemIp  String?
+
+  tentativas         Int       @default(0)
+  /// Só falha de INFRA reagenda (backoff). Falha do agente não retenta.
+  proximaTentativaEm DateTime?
+  /// Posse do worker: EXECUTANDO com reivindicadoEm velho volta pra fila
+  /// (stale-recovery), senão processo morto no meio trava o item pra sempre.
+  workerId           String?
+  reivindicadoEm     DateTime?
+
+  iniciadoEm        DateTime?
+  finalizadoEm      DateTime?
+  duracaoMs         Int?
+  custoUsd          Decimal?  @db.Decimal(10, 4)
+  exitCode          Int?
+  branch            String?
+  arquivosAlterados String[]  @default([])
+  resumo            String?   @db.Text
+  erro              String?   @db.Text
+  /// Quando o comentário de volta na task foi publicado. Null com execução
+  /// finalizada = ninguém foi avisado; é o pior resultado possível, então o
+  /// worker loga como erro.
+  comentadoEm       DateTime?
+
+  criadoEm   DateTime @default(now())
+  alteradoEm DateTime @updatedAt
+
+  @@index([status, proximaTentativaEm])
+  @@index([taskId, criadoEm(sort: Desc)])
+  @@map("execucoes_agente")
+}
