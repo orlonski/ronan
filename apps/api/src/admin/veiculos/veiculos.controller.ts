@@ -29,6 +29,11 @@ export class VeiculosController {
     return this.service.list(query);
   }
 
+  @Get(":id")
+  findOne(@Param("id") id: string) {
+    return this.service.findOne(id);
+  }
+
   @RequerPermissao("veiculos.criar")
   @Post()
   create(

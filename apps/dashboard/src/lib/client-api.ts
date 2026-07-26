@@ -180,13 +180,14 @@ export function useResourceItem<T>(basePath: string, id: string | undefined) {
  */
 export function useApiQuery<T>(
   path: string | undefined,
-  options?: { enabled?: boolean; staleTime?: number },
+  options?: { enabled?: boolean; staleTime?: number; retry?: boolean | number },
 ) {
   const token = useAuthToken();
   return useQuery({
     queryKey: [path, "get"],
     enabled: !!token && !!path && options?.enabled !== false,
     staleTime: options?.staleTime,
+    retry: options?.retry,
     queryFn: () => fetchApi<T>(path as string, { token }),
   });
 }

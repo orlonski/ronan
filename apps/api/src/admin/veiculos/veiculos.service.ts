@@ -24,6 +24,12 @@ export class VeiculosService {
     });
   }
 
+  /** Item por id — usado pelo combobox do painel pra resolver o label de um
+   *  veículo já selecionado que não caiu na página atual da busca. */
+  async findOne(id: string) {
+    return this.ensureExists(id);
+  }
+
   async create(data: CriarVeiculoInput, usuarioId: string) {
     const exists = await this.prisma.veiculo.findUnique({ where: { placa: data.placa } });
     if (exists) throw new ConflictException("Placa já cadastrada");
