@@ -50,6 +50,7 @@ de worker. `DATABASE_URL` e `CLICKUP_RUNNER_TOKEN` vão nos dois.
 | `CLAUDE_CODE_OAUTH_TOKEN` | — | Autenticação do Claude Code (assinatura). |
 | `GITHUB_TOKEN` | — | Credencial de git (o entrypoint monta o `credential.helper`). |
 | `EXECUTOR_AGENTE` | `stub` | Qual executor registrar. Valor desconhecido **derruba o boot** de propósito. |
+| `FONTE_DEMANDA` | `clickup` | De onde vem a demanda: `clickup` (lê a task na API v2 e relata por comentário) ou `payload` (lê do corpo do webhook e relata no log — pra testar por Postman, sem token). Valor desconhecido derruba o boot. |
 | `RUNNER_WORKER_NOME` | `agente@<hostname>` | Prefixo do `workerId` gravado na fila. |
 | `AGENTE_DIR_TRABALHO` | `/trabalho` | Onde os worktrees por task vão morar. |
 
@@ -116,6 +117,32 @@ o git chama.
 - **Retentativa só em falha de infra**, com backoff 30s → 60s → 120s (teto 15 min). Falha do
   próprio agente é resultado, não defeito: não retenta, só comenta.
 - **Sempre comenta** no fim — sucesso, falha ou estouro de limite. Silêncio é o pior desfecho.
+
+## Fonte da demanda (trocar de ferramenta)
+
+A ferramenta de gestão ainda está em avaliação, então de onde vem a demanda e pra onde volta o
+resultado ficam atrás de uma interface (`fonte/fonte-demanda.ts`):
+
+```ts
+interface FonteDemanda {
+  ler(taskId, payload): Promise<{ titulo, descricao, url? }>   // enunciado do trabalho
+  reportar(taskId, resultado, contexto): Promise<boolean>      // desfecho de volta
+}
+```
+
+- **`clickup`** (default) — `GET /api/v2/task/{id}` pra ler, comentário pra reportar.
+- **`payload`** — lê `{ "titulo": "…", "descricao": "…" }` do corpo do webhook e reporta no log.
+  É como se testa o caminho inteiro pelo Postman, sem token e sem ferramenta externa. Aceita
+  também `title`/`description` e as variantes aninhadas em `task`.
+
+Trocar de ferramenta = implementar a interface e registrar em `criarFonte`
+(`agente-worker.module.ts`), sem tocar em webhook, fila ou worker.
+
+`ler` recebe o payload além do id (a assinatura no plano era só `taskId`) porque o provider
+`payload` vive exatamente dele — sem isso não dá pra testar sem a ferramenta no meio.
+
+Falha ao **ler** é falha de infra: reagenda com backoff. Falha ao **reportar** não retenta a
+execução (o trabalho já foi feito; repetir sairia caro), só registra.
 
 ## Ligar a execução de verdade
 

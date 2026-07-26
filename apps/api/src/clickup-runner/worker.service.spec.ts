@@ -1,9 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { WorkerExecucoesService, branchDaTask } from "./worker.service";
 import type { FilaExecucoesService } from "./fila.service";
-import type { ClickupComentarioService } from "./clickup-comentario.service";
+import type { FonteDemanda } from "./fonte/fonte-demanda";
 import type { RunnerConfig } from "./runner.config";
-import type { ExecutorAgente, ResultadoExecucao } from "./executor/executor-agente";
+import type {
+  ContextoExecucao,
+  ExecutorAgente,
+  ResultadoExecucao,
+} from "./executor/executor-agente";
 
 const job = {
   id: "job-1",
@@ -15,7 +19,7 @@ const job = {
 } as never;
 
 function montarWorker(
-  executar: () => Promise<ResultadoExecucao>,
+  executar: (ctx: ContextoExecucao) => Promise<ResultadoExecucao>,
   overConfig: Partial<RunnerConfig> = {},
 ) {
   // Os espiões ficam em variáveis próprias: o cast pro tipo do serviço esconde
@@ -25,7 +29,8 @@ function montarWorker(
     .mockImplementation((j: object, r: object) => Promise.resolve({ ...j, ...r }));
   const reagendar = vi.fn().mockResolvedValue({ tentativas: 1, proximaTentativaEm: new Date() });
   const marcarComentado = vi.fn().mockResolvedValue(undefined);
-  const comentar = vi.fn().mockResolvedValue(true);
+  const reportar = vi.fn().mockResolvedValue(true);
+  const ler = vi.fn().mockResolvedValue({ titulo: "Titulo da task", descricao: "descrição" });
 
   const fila = {
     finalizar,
@@ -35,7 +40,7 @@ function montarWorker(
     reivindicar: vi.fn().mockResolvedValue([]),
   } as unknown as FilaExecucoesService;
 
-  const comentarios = { comentar } as unknown as ClickupComentarioService;
+  const fonte = { nome: "fake", ler, reportar } as unknown as FonteDemanda;
 
   const config = {
     habilitado: true,
@@ -48,8 +53,14 @@ function montarWorker(
   } as RunnerConfig;
 
   const executor: ExecutorAgente = { nome: "fake", executar };
-  const worker = new WorkerExecucoesService(fila, config, comentarios, executor);
-  return { worker, finalizar, reagendar, marcarComentado, comentar };
+  const worker = new WorkerExecucoesService(fila, config, fonte, executor);
+  return { worker, finalizar, reagendar, marcarComentado, reportar, ler };
+}
+
+/** Texto que o provider receberia: o worker entrega o resultado, não a string. */
+function reportarTexto(reportar: { mock: { calls: unknown[][] } }): string {
+  const chamada = reportar.mock.calls[0] as [string, { status: string; resumo: string }, unknown];
+  return `${chamada[1].status} ${chamada[1].resumo}`;
 }
 
 /** `processar` é privado; o teste chama por dentro de propósito — é o miolo. */
@@ -76,7 +87,7 @@ describe("branchDaTask", () => {
 
 describe("WorkerExecucoesService.processar", () => {
   it("conclui, finaliza e comenta na task", async () => {
-    const { worker, finalizar, reagendar, marcarComentado, comentar } = montarWorker(async () => ({
+    const { worker, finalizar, reagendar, marcarComentado, reportar, ler } = montarWorker(async () => ({
       status: "CONCLUIDA",
       resumo: "implementei X",
       arquivosAlterados: ["src/a.ts"],
@@ -86,14 +97,14 @@ describe("WorkerExecucoesService.processar", () => {
     await processar(worker);
 
     expect(finalizar).toHaveBeenCalledOnce();
-    expect(comentar).toHaveBeenCalledOnce();
-    expect(comentar.mock.calls[0]![0]).toBe("86bb3pm4w");
-    expect(comentar.mock.calls[0]![1]).toContain("implementei X");
+    expect(reportar).toHaveBeenCalledOnce();
+    expect(reportar.mock.calls[0]![0]).toBe("86bb3pm4w");
+    expect(reportarTexto(reportar)).toContain("implementei X");
     expect(marcarComentado).toHaveBeenCalledOnce();
   });
 
   it("comenta também quando o agente falha (silêncio é o pior resultado)", async () => {
-    const { worker, finalizar, reagendar, marcarComentado, comentar } = montarWorker(async () => ({
+    const { worker, finalizar, reagendar, marcarComentado, reportar, ler } = montarWorker(async () => ({
       status: "FALHOU",
       resumo: "o agente não conseguiu",
     }));
@@ -102,11 +113,11 @@ describe("WorkerExecucoesService.processar", () => {
 
     expect(finalizar).toHaveBeenCalledOnce();
     expect(reagendar).not.toHaveBeenCalled(); // falha do agente NÃO retenta
-    expect(comentar.mock.calls[0]![1]).toContain("Falhou");
+    expect(reportarTexto(reportar)).toContain("FALHOU");
   });
 
   it("comenta quando o executor explode (erro não engolido)", async () => {
-    const { worker, finalizar, reagendar, marcarComentado, comentar } = montarWorker(
+    const { worker, finalizar, reagendar, marcarComentado, reportar, ler } = montarWorker(
       async () => {
         throw new Error("container sumiu");
       },
@@ -116,11 +127,11 @@ describe("WorkerExecucoesService.processar", () => {
     await processar(worker);
 
     expect(finalizar).toHaveBeenCalledOnce();
-    expect(comentar.mock.calls[0]![1]).toContain("container sumiu");
+    expect(reportarTexto(reportar)).toContain("container sumiu");
   });
 
   it("reagenda com backoff em falha de INFRA, sem comentar ainda", async () => {
-    const { worker, finalizar, reagendar, marcarComentado, comentar } = montarWorker(async () => ({
+    const { worker, finalizar, reagendar, marcarComentado, reportar, ler } = montarWorker(async () => ({
       status: "FALHOU",
       resumo: "rede caiu",
       falhaInfra: true,
@@ -130,11 +141,11 @@ describe("WorkerExecucoesService.processar", () => {
 
     expect(reagendar).toHaveBeenCalledOnce();
     expect(finalizar).not.toHaveBeenCalled();
-    expect(comentar).not.toHaveBeenCalled();
+    expect(reportar).not.toHaveBeenCalled();
   });
 
   it("desiste e comenta quando a falha de infra esgota as tentativas", async () => {
-    const { worker, finalizar, reagendar, marcarComentado, comentar } = montarWorker(
+    const { worker, finalizar, reagendar, marcarComentado, reportar, ler } = montarWorker(
       async () => ({ status: "FALHOU", resumo: "rede caiu de novo", falhaInfra: true }),
       { tentativasMax: 2 },
     );
@@ -143,11 +154,11 @@ describe("WorkerExecucoesService.processar", () => {
 
     expect(reagendar).not.toHaveBeenCalled();
     expect(finalizar).toHaveBeenCalledOnce();
-    expect(comentar).toHaveBeenCalledOnce();
+    expect(reportar).toHaveBeenCalledOnce();
   });
 
   it("corta no teto de tempo e reporta EXCEDEU_LIMITE", async () => {
-    const { worker, finalizar, reagendar, marcarComentado, comentar } = montarWorker(
+    const { worker, finalizar, reagendar, marcarComentado, reportar, ler } = montarWorker(
       () => new Promise(() => {}), // nunca resolve
       { timeoutExecucaoMs: 20 },
     );
@@ -156,15 +167,42 @@ describe("WorkerExecucoesService.processar", () => {
 
     const [, resultado] = finalizar.mock.calls[0]! as [unknown, ResultadoExecucao];
     expect(resultado.status).toBe("EXCEDEU_LIMITE");
-    expect(comentar.mock.calls[0]![1]).toContain("Excedeu o limite");
+    expect(reportarTexto(reportar)).toContain("EXCEDEU_LIMITE");
+  });
+
+  it("entrega a demanda lida pro executor (é o enunciado do trabalho)", async () => {
+    let recebido: ContextoExecucao | undefined;
+    const { worker } = montarWorker(async (ctx) => {
+      recebido = ctx;
+      return { status: "CONCLUIDA", resumo: "ok" };
+    });
+
+    await processar(worker);
+
+    expect(recebido?.demanda).toEqual({ titulo: "Titulo da task", descricao: "descrição" });
+    expect(recebido?.branch).toBe("feat/86bb3pm4w");
+  });
+
+  it("reagenda quando não consegue LER a demanda (ferramenta fora do ar)", async () => {
+    const { worker, reagendar, finalizar, reportar, ler } = montarWorker(async () => ({
+      status: "CONCLUIDA",
+      resumo: "não deveria chegar aqui",
+    }));
+    ler.mockRejectedValue(new Error("ClickUp devolveu 500"));
+
+    await processar(worker);
+
+    expect(reagendar).toHaveBeenCalledOnce();
+    expect(finalizar).not.toHaveBeenCalled();
+    expect(reportar).not.toHaveBeenCalled();
   });
 
   it("não marca como comentado quando o ClickUp recusou o comentário", async () => {
-    const { worker, finalizar, reagendar, marcarComentado, comentar } = montarWorker(async () => ({
+    const { worker, finalizar, reagendar, marcarComentado, reportar, ler } = montarWorker(async () => ({
       status: "CONCLUIDA",
       resumo: "ok",
     }));
-    comentar.mockResolvedValue(false);
+    reportar.mockResolvedValue(false);
 
     await processar(worker);
 

@@ -1,3 +1,5 @@
+import type { Demanda } from "../fonte/fonte-demanda";
+
 /**
  * Contrato de execução do agente sobre uma task.
  *
@@ -13,6 +15,8 @@
 export type ContextoExecucao = {
   jobId: string;
   taskId: string;
+  /** Título e descrição, já lidos pela FonteDemanda — é o enunciado do trabalho. */
+  demanda: Demanda;
   /** Payload cru da Automation do ClickUp. */
   payload: unknown;
   /** Branch que a execução deve usar (nunca a principal). */

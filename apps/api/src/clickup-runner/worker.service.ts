@@ -4,12 +4,12 @@ import { hostname } from "node:os";
 import type { ExecucaoAgente } from "@prisma/client";
 import { FilaExecucoesService } from "./fila.service";
 import { RunnerConfig } from "./runner.config";
-import { ClickupComentarioService, montarComentario } from "./clickup-comentario.service";
 import {
   EXECUTOR_AGENTE,
   type ExecutorAgente,
   type ResultadoExecucao,
 } from "./executor/executor-agente";
+import { FONTE_DEMANDA, type Demanda, type FonteDemanda } from "./fonte/fonte-demanda";
 
 /**
  * Branch de trabalho da task. Nunca a principal — regra do próprio escopo.
@@ -56,7 +56,7 @@ export class WorkerExecucoesService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly fila: FilaExecucoesService,
     private readonly config: RunnerConfig,
-    private readonly comentarios: ClickupComentarioService,
+    @Inject(FONTE_DEMANDA) private readonly fonte: FonteDemanda,
     @Inject(EXECUTOR_AGENTE) private readonly executor: ExecutorAgente,
   ) {}
 
@@ -64,7 +64,12 @@ export class WorkerExecucoesService implements OnModuleInit, OnModuleDestroy {
     this.config.descreverNoBoot("worker");
     if (!this.config.habilitado) return;
     this.logger.log(
-      JSON.stringify({ evento: "worker-iniciado", workerId: this.workerId, executor: this.executor.nome }),
+      JSON.stringify({
+        evento: "worker-iniciado",
+        workerId: this.workerId,
+        executor: this.executor.nome,
+        fonte: this.fonte.nome,
+      }),
     );
     // Timer com ref de propósito: no processo do agente NÃO há servidor HTTP
     // segurando o event loop, então um setInterval unref'd deixaria o processo
@@ -103,11 +108,19 @@ export class WorkerExecucoesService implements OnModuleInit, OnModuleDestroy {
   private async processar(job: ExecucaoAgente): Promise<void> {
     const inicio = Date.now();
     const branch = branchDaTask(job.taskId);
-    this.log("iniciado", job, { executor: this.executor.nome, branch, tentativa: job.tentativas + 1 });
+    this.log("iniciado", job, {
+      executor: this.executor.nome,
+      fonte: this.fonte.nome,
+      branch,
+      tentativa: job.tentativas + 1,
+    });
 
     let resultado: ResultadoExecucao;
     try {
-      resultado = await this.comTimeout(job, branch);
+      // Ler a demanda vem antes de executar: sem título/descrição o agente não
+      // tem o que fazer. Ferramenta fora do ar é falha de INFRA — reagenda.
+      const demanda = await this.fonte.ler(job.taskId, job.payload);
+      resultado = await this.comTimeout(job, branch, demanda);
     } catch (err) {
       // Estouro do executor = falha de INFRA (o agente nem devolveu resultado).
       resultado = {
@@ -140,17 +153,24 @@ export class WorkerExecucoesService implements OnModuleInit, OnModuleDestroy {
       arquivos: resultado.arquivosAlterados?.length ?? 0,
     });
 
-    const texto = montarComentario(finalizado, resultado, duracaoMs);
-    const comentou = await this.comentarios.comentar(job.taskId, texto);
-    if (comentou) await this.fila.marcarComentado(job.id);
+    const relatou = await this.fonte.reportar(job.taskId, resultado, {
+      job: finalizado,
+      duracaoMs,
+    });
+    if (relatou) await this.fila.marcarComentado(job.id);
   }
 
   /** Teto duro de tempo. Estourar vira EXCEDEU_LIMITE (não retenta). */
-  private async comTimeout(job: ExecucaoAgente, branch: string): Promise<ResultadoExecucao> {
+  private async comTimeout(
+    job: ExecucaoAgente,
+    branch: string,
+    demanda: Demanda,
+  ): Promise<ResultadoExecucao> {
     const ctx = {
       jobId: job.id,
       taskId: job.taskId,
       payload: job.payload,
+      demanda,
       branch,
       timeoutMs: this.config.timeoutExecucaoMs,
       orcamentoUsd: this.config.orcamentoUsd,

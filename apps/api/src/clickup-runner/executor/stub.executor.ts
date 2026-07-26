@@ -20,7 +20,9 @@ export class StubExecutorAgente implements ExecutorAgente {
       status: "FALHOU",
       resumo:
         "A execução automática ainda não está plugada neste ambiente (executor=stub). " +
-        "O webhook foi recebido, autenticado e enfileirado corretamente, e esta task " +
+        `Demanda lida: **${ctx.demanda.titulo}**` +
+        (ctx.demanda.descricao ? ` (${ctx.demanda.descricao.length} caracteres de descrição).` : " (sem descrição).") +
+        " O webhook foi recebido, autenticado e enfileirado corretamente, e esta task " +
         `seria trabalhada na branch \`${ctx.branch}\` com teto de ` +
         `${Math.round(ctx.timeoutMs / 60_000)} min e US$ ${ctx.orcamentoUsd.toFixed(2)}. ` +
         "Pra ligar de verdade, registre um ExecutorAgente real no token EXECUTOR_AGENTE.",

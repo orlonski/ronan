@@ -37,6 +37,8 @@ export class RunnerConfig {
   readonly intervaloWorkerMs: number;
   /** Qual executor o agente registra ("stub" hoje). */
   readonly executor: string;
+  /** De onde vem a demanda ("clickup" ou "payload"). */
+  readonly fonte: string;
 
   constructor(private readonly config: ConfigService) {
     this.token = this.config.get<string>("CLICKUP_RUNNER_TOKEN") ?? "";
@@ -58,6 +60,7 @@ export class RunnerConfig {
     this.rateLimitPorMinuto = this.numero("CLICKUP_RUNNER_RATE_LIMIT", 30, 1, 1000);
     this.intervaloWorkerMs = this.numero("CLICKUP_RUNNER_INTERVALO_MS", 5_000, 1_000, 300_000);
     this.executor = (this.config.get<string>("EXECUTOR_AGENTE") ?? "stub").trim().toLowerCase();
+    this.fonte = (this.config.get<string>("FONTE_DEMANDA") ?? "clickup").trim().toLowerCase();
   }
 
   /** Runner ligado? Sem segredo compartilhado não há webhook nem worker. */
@@ -87,7 +90,8 @@ export class RunnerConfig {
       return;
     }
     this.logger.log(
-      `Worker do agente ligado (executor=${this.executor}, concorrência=${this.concorrencia}, ` +
+      `Worker do agente ligado (executor=${this.executor}, fonte=${this.fonte}, ` +
+        `concorrência=${this.concorrencia}, ` +
         `tentativas=${this.tentativasMax}, timeout=${Math.round(this.timeoutExecucaoMs / 60_000)}min, ` +
         `orçamento=US$ ${this.orcamentoUsd}, ` +
         `comentário=${this.clickupToken ? "configurado" : "SEM TOKEN (não vai comentar)"})`,
