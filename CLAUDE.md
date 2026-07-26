@@ -75,6 +75,8 @@ pnpm --filter @ronan/motorista-app build:android    # build EAS local
 - `health`, `geocoding`, `errors`, `app/deploy` — utilitários.
 - `clickup/task-ready` — webhook de Automation do ClickUp (fila de execução de agente). Autentica por segredo compartilhado, não por JWT — ver `docs/clickup-runner.md`.
 
+O código do `apps/api` roda em **dois processos**: `dist/main.js` (a API) e `dist/agente-main.js` (o serviço `ronan_agente`, que consome a fila de execuções e não sobe HTTP; imagem em `apps/agente/Dockerfile`). A API só enfileira.
+
 **`JwtAuthGuard` é global (`APP_GUARD` no `AuthModule`)**: rota nova sem `@Public()` responde 401 antes de qualquer guard próprio. Endpoint que se autentica de outro jeito (webhook com segredo) precisa de `@Public()` + guard próprio.
 
 ### Guards do motorista (fácil de errar)
@@ -181,6 +183,7 @@ Easypanel (Contabo, slug `2azr6q`) — push na `main` dispara build de api + das
 - `ronan-api` — `ronan-api.2azr6q.easypanel.host` (alias `api.schaba.com.br`)
 - `ronan-dashboard` — `app.schaba.com.br`
 - `ronan-motorista` — `motorista.schaba.com.br`
+- `ronan_agente` — worker da fila de execuções (`apps/agente/Dockerfile`, sem domínio público)
 
 App nativo: **EAS Update OTA** (canal `production`), fora do Easypanel. OTA não muda a versão nativa.
 

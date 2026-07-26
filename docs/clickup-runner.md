@@ -2,8 +2,20 @@
 
 Webhook de Automation do ClickUp → fila no Postgres → worker → comentário de volta na task.
 
-Mora em `apps/api/src/clickup-runner/`. **Nasce desligado**: sem `CLICKUP_RUNNER_TOKEN`, o
-endpoint responde 401 e o worker nem inicia o loop. Subir o código não liga nada.
+**São dois processos**, compartilhando código (`apps/api/src/clickup-runner/`) e banco:
+
+| Processo | Entrypoint | Papel |
+|---|---|---|
+| `ronan-api` | `dist/main.js` | recebe o webhook, autentica, deduplica e **enfileira**. Não processa nada. |
+| `ronan_agente` | `dist/agente-main.js` (`apps/agente/Dockerfile`) | **consome a fila** e executa. Sem HTTP. |
+
+A separação é o ponto: reiniciar ou deployar a API não interrompe execução em andamento, e a
+capacidade de executar código e mexer no repositório fica isolada num serviço que não atende
+motorista nem painel. Quem processou cada job fica gravado em `execucoes_agente.workerId`
+(ex.: `ronan_agente#3b539bd4`).
+
+**Nasce desligado** dos dois lados: sem `CLICKUP_RUNNER_TOKEN`, o endpoint responde 401 e o
+worker nem inicia o loop. Subir o código não liga nada.
 
 ## Contrato
 
@@ -28,9 +40,29 @@ quanto o agente demore depois.
 
 ## Variáveis de ambiente
 
+Divisão por serviço: `ronan-api` precisa do bloco de webhook; `ronan_agente` precisa do bloco
+de worker. `DATABASE_URL` e `CLICKUP_RUNNER_TOKEN` vão nos dois.
+
+**Só no `ronan_agente`:**
+
 | Var | Default | Pra que |
 |---|---|---|
-| `CLICKUP_RUNNER_TOKEN` | — | Segredo do header. **Vazio = runner desligado.** |
+| `CLAUDE_CODE_OAUTH_TOKEN` | — | Autenticação do Claude Code (assinatura). |
+| `GITHUB_TOKEN` | — | Credencial de git (o entrypoint monta o `credential.helper`). |
+| `EXECUTOR_AGENTE` | `stub` | Qual executor registrar. Valor desconhecido **derruba o boot** de propósito. |
+| `RUNNER_WORKER_NOME` | `agente@<hostname>` | Prefixo do `workerId` gravado na fila. |
+| `AGENTE_DIR_TRABALHO` | `/trabalho` | Onde os worktrees por task vão morar. |
+
+⚠️ **`ANTHROPIC_API_KEY` não pode existir** neste serviço: com ela presente o Claude Code
+usaria a chave de API (outra conta, outra cobrança) em vez do token de assinatura, sem avisar.
+O entrypoint dá `unset` e o `agente-main.ts` remove do processo com aviso no log — mas o certo
+é não configurar.
+
+**Comuns aos dois:**
+
+| Var | Default | Pra que |
+|---|---|---|
+| `CLICKUP_RUNNER_TOKEN` | — | Segredo do header. **Vazio = runner desligado** (webhook 401, worker parado). |
 | `CLICKUP_RUNNER_PATH_SEGREDO` | — | Segmento secreto no path: `/<segredo>/clickup/task-ready`. Quando setado, a rota sem o segmento para de valer. |
 | `CLICKUP_API_TOKEN` | — | Token pessoal do ClickUp pra comentar. Sem ele, a execução roda e o comentário vira log de aviso. |
 | `CLICKUP_API_URL` | `https://api.clickup.com/api/v2` | Útil pra apontar pra um servidor falso em teste. |
@@ -42,7 +74,22 @@ quanto o agente demore depois.
 | `CLICKUP_RUNNER_RATE_LIMIT` | `30` | Requisições por minuto por IP. |
 | `CLICKUP_RUNNER_INTERVALO_MS` | `5000` | Intervalo do loop do worker. |
 
-Segredo nenhum aparece em log — nem em erro de autenticação.
+Segredo nenhum aparece em log — nem em erro de autenticação. O `GITHUB_TOKEN` também não entra
+no `~/.gitconfig`: o `credential.helper` é gravado com aspas simples e só lê a env na hora que
+o git chama.
+
+## O serviço `ronan_agente` no Easypanel
+
+- **Build**: Dockerfile `apps/agente/Dockerfile`, contexto `.` (raiz do repo).
+- **Sem domínio público** — o agente não escuta porta nenhuma.
+- **Volume** em `/trabalho` (worktrees por task, fase 2).
+- **Não roda migration**: quem versiona o banco é a API. Dois processos aplicando migration no
+  boot brigariam por lock à toa.
+- Rodar localmente:
+  ```bash
+  cd apps/api && pnpm build
+  CLICKUP_RUNNER_TOKEN=… RUNNER_WORKER_NOME=ronan_agente pnpm start:agente
+  ```
 
 ## Configurar a Automation no ClickUp
 

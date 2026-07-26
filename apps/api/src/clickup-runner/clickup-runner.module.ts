@@ -1,34 +1,30 @@
-import { Module } from "@nestjs/common";
+import { Module, OnModuleInit } from "@nestjs/common";
 import { PrismaModule } from "../prisma/prisma.module";
 import { ClickupWebhookController } from "./webhook.controller";
 import { FilaExecucoesService } from "./fila.service";
-import { WorkerExecucoesService } from "./worker.service";
-import { ClickupComentarioService } from "./clickup-comentario.service";
 import { RunnerConfig } from "./runner.config";
 import { RunnerTokenGuard } from "./runner-token.guard";
 import { RateLimitIpGuard } from "./rate-limit-ip.guard";
-import { EXECUTOR_AGENTE } from "./executor/executor-agente";
-import { StubExecutorAgente } from "./executor/stub.executor";
 
 /**
- * Runner de tasks do ClickUp: webhook → fila no Postgres → worker → comentário
- * de volta na task.
+ * Lado WEBHOOK do runner, que roda dentro da API: recebe a chamada da
+ * Automation, autentica, deduplica e **enfileira**. Só isso.
  *
- * A execução do agente fica atrás do token EXECUTOR_AGENTE. Trocar o
- * {@link StubExecutorAgente} por um executor real é a única mudança necessária
- * aqui — webhook, fila, retry e callback não mudam.
+ * Quem consome a fila é o serviço do agente (`agente-main.ts` +
+ * {@link AgenteWorkerModule}), num container separado. A API não registra o
+ * worker de propósito: deploy/reinício dela não pode interromper execução em
+ * andamento, e o container que atende motorista e painel não deve ganhar a
+ * capacidade de executar código e mexer no repositório.
  */
 @Module({
   imports: [PrismaModule],
   controllers: [ClickupWebhookController],
-  providers: [
-    RunnerConfig,
-    RunnerTokenGuard,
-    RateLimitIpGuard,
-    FilaExecucoesService,
-    ClickupComentarioService,
-    WorkerExecucoesService,
-    { provide: EXECUTOR_AGENTE, useClass: StubExecutorAgente },
-  ],
+  providers: [RunnerConfig, RunnerTokenGuard, RateLimitIpGuard, FilaExecucoesService],
 })
-export class ClickupRunnerModule {}
+export class ClickupRunnerModule implements OnModuleInit {
+  constructor(private readonly config: RunnerConfig) {}
+
+  onModuleInit(): void {
+    this.config.descreverNoBoot("webhook");
+  }
+}

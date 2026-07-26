@@ -35,6 +35,8 @@ export class RunnerConfig {
   readonly rateLimitPorMinuto: number;
   /** Intervalo do loop do worker. */
   readonly intervaloWorkerMs: number;
+  /** Qual executor o agente registra ("stub" hoje). */
+  readonly executor: string;
 
   constructor(private readonly config: ConfigService) {
     this.token = this.config.get<string>("CLICKUP_RUNNER_TOKEN") ?? "";
@@ -55,6 +57,7 @@ export class RunnerConfig {
     this.orcamentoUsd = this.numero("CLICKUP_RUNNER_ORCAMENTO_USD", 5, 0.1, 200);
     this.rateLimitPorMinuto = this.numero("CLICKUP_RUNNER_RATE_LIMIT", 30, 1, 1000);
     this.intervaloWorkerMs = this.numero("CLICKUP_RUNNER_INTERVALO_MS", 5_000, 1_000, 300_000);
+    this.executor = (this.config.get<string>("EXECUTOR_AGENTE") ?? "stub").trim().toLowerCase();
   }
 
   /** Runner ligado? Sem segredo compartilhado não há webhook nem worker. */
@@ -62,18 +65,31 @@ export class RunnerConfig {
     return this.token.length > 0;
   }
 
-  /** Loga o estado SEM vazar segredo (só o que está setado, nunca o valor). */
-  descreverNoBoot(): void {
+  /**
+   * Loga o estado SEM vazar segredo (só o que está setado, nunca o valor).
+   * O papel distingue os dois processos: a API só enfileira, o agente processa.
+   */
+  descreverNoBoot(papel: "webhook" | "worker"): void {
     if (!this.habilitado) {
       this.logger.log(
-        "Runner de tasks do ClickUp DESLIGADO (falta CLICKUP_RUNNER_TOKEN). Webhook responde 401.",
+        papel === "webhook"
+          ? "Webhook do ClickUp DESLIGADO (falta CLICKUP_RUNNER_TOKEN): responde 401."
+          : "Worker do agente DESLIGADO (falta CLICKUP_RUNNER_TOKEN): não consome a fila.",
+      );
+      return;
+    }
+    if (papel === "webhook") {
+      this.logger.log(
+        `Webhook do ClickUp ligado (dedupe=${Math.round(this.janelaDedupeMs / 1000)}s, ` +
+          `pathSecreto=${this.segredoPath ? "sim" : "não"}). ` +
+          "O processamento é do serviço do agente — esta API só enfileira.",
       );
       return;
     }
     this.logger.log(
-      `Runner de tasks do ClickUp ligado (concorrência=${this.concorrencia}, ` +
-        `dedupe=${Math.round(this.janelaDedupeMs / 1000)}s, tentativas=${this.tentativasMax}, ` +
-        `pathSecreto=${this.segredoPath ? "sim" : "não"}, ` +
+      `Worker do agente ligado (executor=${this.executor}, concorrência=${this.concorrencia}, ` +
+        `tentativas=${this.tentativasMax}, timeout=${Math.round(this.timeoutExecucaoMs / 60_000)}min, ` +
+        `orçamento=US$ ${this.orcamentoUsd}, ` +
         `comentário=${this.clickupToken ? "configurado" : "SEM TOKEN (não vai comentar)"})`,
     );
   }

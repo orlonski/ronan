@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
+import { hostname } from "node:os";
 import type { ExecucaoAgente } from "@prisma/client";
 import { FilaExecucoesService } from "./fila.service";
 import { RunnerConfig } from "./runner.config";
@@ -27,17 +28,27 @@ export function branchDaTask(taskId: string): string {
 }
 
 /**
+ * Identidade deste worker na fila. Vai pra coluna `workerId` de cada execução
+ * reivindicada, então é por ela que se enxerga QUEM processou — e o que a API
+ * (que só enfileira) nunca deveria escrever.
+ */
+export function identidadeWorker(): string {
+  const nome = process.env.RUNNER_WORKER_NOME?.trim() || `agente@${hostname()}`;
+  return `${nome}#${randomUUID().slice(0, 8)}`;
+}
+
+/**
  * Consome a fila: reivindica pendentes, chama o executor com teto de tempo e
  * comenta o desfecho na task — inclusive quando dá errado.
  *
- * Roda no mesmo processo da API porque a fila é pequena e serializada
- * (concorrência default 1). O trabalho pesado de verdade mora no executor, que
- * hoje é o stub.
+ * Roda no processo do **agente** (`agente-main.ts`), não na API: quem recebe o
+ * webhook só enfileira. Assim reiniciar/deployar a API não interrompe execução
+ * nenhuma, e a capacidade de executar código fica isolada num serviço só dela.
  */
 @Injectable()
 export class WorkerExecucoesService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger("ClickupRunner");
-  private readonly workerId = randomUUID();
+  private readonly workerId = identidadeWorker();
   private emVoo = 0;
   private tickRodando = false;
   private laco?: NodeJS.Timeout;
@@ -50,11 +61,16 @@ export class WorkerExecucoesService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit(): void {
-    this.config.descreverNoBoot();
+    this.config.descreverNoBoot("worker");
     if (!this.config.habilitado) return;
+    this.logger.log(
+      JSON.stringify({ evento: "worker-iniciado", workerId: this.workerId, executor: this.executor.nome }),
+    );
+    // Timer com ref de propósito: no processo do agente NÃO há servidor HTTP
+    // segurando o event loop, então um setInterval unref'd deixaria o processo
+    // terminar logo depois do boot. Quem encerra é o onModuleDestroy (Nest
+    // chama no SIGTERM), não a falta de referência.
     this.laco = setInterval(() => void this.tick(), this.config.intervaloWorkerMs);
-    // unref: um loop de fila não pode segurar o processo no shutdown.
-    this.laco.unref?.();
   }
 
   onModuleDestroy(): void {
