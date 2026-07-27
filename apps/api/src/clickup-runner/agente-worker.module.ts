@@ -6,6 +6,7 @@ import { WorkerExecucoesService } from "./worker.service";
 import { RunnerConfig } from "./runner.config";
 import { EXECUTOR_AGENTE, type ExecutorAgente } from "./executor/executor-agente";
 import { StubExecutorAgente } from "./executor/stub.executor";
+import { ClaudeCodeExecutor } from "./executor/claude-code.executor";
 import { FONTE_DEMANDA, type FonteDemanda } from "./fonte/fonte-demanda";
 import { ClickupFonteDemanda } from "./fonte/clickup.fonte";
 import { PayloadFonteDemanda } from "./fonte/payload.fonte";
@@ -19,9 +20,11 @@ export function criarExecutor(config: RunnerConfig): ExecutorAgente {
   switch (config.executor) {
     case "stub":
       return new StubExecutorAgente();
+    case "claude-code":
+      return new ClaudeCodeExecutor(config);
     default:
       throw new Error(
-        `EXECUTOR_AGENTE="${config.executor}" desconhecido. Valores aceitos: stub.`,
+        `EXECUTOR_AGENTE="${config.executor}" desconhecido. Valores aceitos: stub, claude-code.`,
       );
   }
 }

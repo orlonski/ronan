@@ -167,6 +167,15 @@ export class FilaExecucoesService {
     });
   }
 
+  /**
+   * Quantas execuções foram INICIADAS desde `desde`. Base do teto por janela:
+   * conta tentativa que rodou, não só a que deu certo — quem gasta cota é a
+   * execução, com qualquer desfecho.
+   */
+  contarIniciadasDesde(desde: Date): Promise<number> {
+    return this.prisma.execucaoAgente.count({ where: { iniciadoEm: { gte: desde } } });
+  }
+
   contarEmExecucao(): Promise<number> {
     return this.prisma.execucaoAgente.count({
       where: { status: StatusExecucaoAgente.EXECUTANDO },

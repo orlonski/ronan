@@ -52,6 +52,7 @@ export class WorkerExecucoesService implements OnModuleInit, OnModuleDestroy {
   private emVoo = 0;
   private tickRodando = false;
   private laco?: NodeJS.Timeout;
+  private ultimoAvisoTeto = 0;
 
   constructor(
     private readonly fila: FilaExecucoesService,
@@ -87,6 +88,16 @@ export class WorkerExecucoesService implements OnModuleInit, OnModuleDestroy {
     this.tickRodando = true;
     try {
       await this.fila.recuperarPresas();
+
+      // Teto por janela ANTES de reivindicar: item barrado continua PENDENTE e
+      // roda quando a janela abrir. É o que impede "mexeram em 40 tasks de uma
+      // vez e o agente saiu executando as 40".
+      const excedido = await this.tetoExcedido();
+      if (excedido) {
+        this.avisarTeto(excedido);
+        return;
+      }
+
       const vagas = this.config.concorrencia - this.emVoo;
       const jobs = await this.fila.reivindicar(this.workerId, vagas);
       for (const job of jobs) {
@@ -103,6 +114,29 @@ export class WorkerExecucoesService implements OnModuleInit, OnModuleDestroy {
     } finally {
       this.tickRodando = false;
     }
+  }
+
+  /** Qual teto estourou (se algum). Conta execuções INICIADAS na janela. */
+  private async tetoExcedido(): Promise<{ janela: "hora" | "dia"; feitas: number; teto: number } | null> {
+    const agora = Date.now();
+    const naHora = await this.fila.contarIniciadasDesde(new Date(agora - 3_600_000));
+    if (naHora >= this.config.maxPorHora) {
+      return { janela: "hora", feitas: naHora, teto: this.config.maxPorHora };
+    }
+    const noDia = await this.fila.contarIniciadasDesde(new Date(agora - 24 * 3_600_000));
+    if (noDia >= this.config.maxPorDia) {
+      return { janela: "dia", feitas: noDia, teto: this.config.maxPorDia };
+    }
+    return null;
+  }
+
+  /** Avisa no máximo uma vez por minuto — o tick roda a cada 5s. */
+  private avisarTeto(info: { janela: string; feitas: number; teto: number }): void {
+    if (Date.now() - this.ultimoAvisoTeto < 60_000) return;
+    this.ultimoAvisoTeto = Date.now();
+    this.logger.warn(
+      JSON.stringify({ evento: "teto-atingido", ...info, acao: "fila segue parada até a janela abrir" }),
+    );
   }
 
   private async processar(job: ExecucaoAgente): Promise<void> {

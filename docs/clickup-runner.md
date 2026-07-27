@@ -144,6 +144,42 @@ Trocar de ferramenta = implementar a interface e registrar em `criarFonte`
 Falha ao **ler** é falha de infra: reagenda com backoff. Falha ao **reportar** não retenta a
 execução (o trabalho já foi feito; repetir sairia caro), só registra.
 
+## Executor real (`EXECUTOR_AGENTE=claude-code`)
+
+Prepara um `git worktree` por task, a partir da base atualizada, e roda o **Claude Code
+headless** dentro dele. Autentica por `CLAUDE_CODE_OAUTH_TOKEN` — é a sua assinatura, o mesmo
+CLI do terminal. **Não usa a API da Anthropic**, e três coisas garantem isso: o entrypoint dá
+`unset ANTHROPIC_API_KEY`, o `agente-main.ts` remove a variável do processo, e o executor nunca
+usa `--bare` (a flag que forçaria chave de API).
+
+O `total_cost_usd` que aparece no relato é **estimativa do CLI** do que aqueles tokens
+custariam na API — não é cobrança. Por isso `--max-budget-usd` não é passado por padrão
+(`CLICKUP_RUNNER_ORCAMENTO_USD=0`); ligue só se estiver usando chave de API.
+
+### Travas
+
+| Trava | Onde |
+|---|---|
+| Timeout duro por execução (15 min) | worker mata a execução |
+| Teto de execuções por janela (5/h, 20/dia) | worker nem reivindica; o item espera |
+| Uma execução por vez, uma por task | concorrência + índice único |
+| **Agente sem credencial de git** | o subprocesso do `claude` roda com `GITHUB_TOKEN` removido: qualquer `git push` que ele tente falha na autenticação. Quem publica é o worker, e só a branch da task |
+| Allowlist de ferramentas | git só de leitura (`status`, `diff`, `log`) |
+| Push desligado por padrão | `AGENTE_PUSH=true` liga; até lá o commit fica na branch local e o relato traz o `diff --stat` |
+| Limite da assinatura | vira `EXCEDEU_LIMITE`, relata e **não** retenta |
+
+### Envs do executor
+
+| Var | Default |
+|---|---|
+| `AGENTE_REPO_URL` | `https://github.com/orlonski/ronan.git` |
+| `AGENTE_BRANCH_BASE` | `main` |
+| `AGENTE_PUSH` | *(vazio = desligado)* |
+| `AGENTE_MAX_POR_HORA` / `AGENTE_MAX_POR_DIA` | `5` / `20` |
+| `AGENTE_FERRAMENTAS` | `Read,Edit,Write,Grep,Glob,Bash(git status*),Bash(git diff*),Bash(git log*),Bash(pnpm *),Bash(node *),Bash(npx *)` |
+| `AGENTE_MODELO` | *(vazio = default do CLI)* |
+| `CLICKUP_RUNNER_TIMEOUT_MS` | `900000` (15 min) |
+
 ## Ligar a execução de verdade
 
 Hoje o provider registrado no token `EXECUTOR_AGENTE` é o `StubExecutorAgente`: ele **não roda

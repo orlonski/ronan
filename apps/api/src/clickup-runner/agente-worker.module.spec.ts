@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { criarExecutor } from "./agente-worker.module";
 import { StubExecutorAgente } from "./executor/stub.executor";
+import { ClaudeCodeExecutor } from "./executor/claude-code.executor";
 import { identidadeWorker } from "./worker.service";
 import type { RunnerConfig } from "./runner.config";
 
@@ -9,10 +10,18 @@ describe("criarExecutor", () => {
     expect(criarExecutor({ executor: "stub" } as RunnerConfig)).toBeInstanceOf(StubExecutorAgente);
   });
 
+  it("registra o executor real quando pedido", () => {
+    const config = {
+      executor: "claude-code",
+      dirTrabalho: "/trabalho",
+      repoUrl: "https://exemplo/repo.git",
+      branchBase: "main",
+    } as RunnerConfig;
+    expect(criarExecutor(config)).toBeInstanceOf(ClaudeCodeExecutor);
+  });
+
   it("explode no boot com executor desconhecido (não cai em fallback silencioso)", () => {
-    expect(() => criarExecutor({ executor: "claude-code" } as RunnerConfig)).toThrow(
-      /desconhecido/,
-    );
+    expect(() => criarExecutor({ executor: "gpt" } as RunnerConfig)).toThrow(/desconhecido/);
   });
 });
 

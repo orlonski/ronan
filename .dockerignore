@@ -1,0 +1,31 @@
+# Nenhum build precisa disso — e sem esta lista, qualquer `COPY . .` futuro
+# assa segredo de produção dentro da imagem (apps/api/.env tem JWT, DATABASE_URL
+# e credencial do MinIO). Já aconteceu de um Dockerfile de serviço fazer isso.
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+.git
+.gitignore
+**/node_modules
+**/dist
+**/build
+**/.next
+**/.turbo
+**/.expo
+
+# Artefatos pesados e locais que não entram em imagem nenhuma
+apps/motorista-app/android
+apps/motorista-app/ios
+apps/motorista-app/apk
+apps/motorista-app/*.tar.gz
+apps/motorista-app/google-services.json
+apps/motorista-app/play-service-account.json
+playwright-report
+test-results
+tests
+proposta-imagens
+*.pdf
