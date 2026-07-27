@@ -6,7 +6,7 @@ export function repoDaUrl(url: string): { dono: string; repo: string } | null {
   return { dono: https[1]!, repo: https[2]! };
 }
 
-export type ResultadoPr = { url: string; jaExistia: boolean };
+export type ResultadoPr = { url: string; numero: number; jaExistia: boolean };
 
 /**
  * Abre o PR da branch da task contra a base. Idempotente: se já existe PR
@@ -50,9 +50,11 @@ export async function abrirPullRequest(entrada: {
   });
 
   if (res.ok) {
-    const pr = (await res.json()) as { html_url?: string };
-    if (!pr.html_url) throw new Error("GitHub aceitou mas não devolveu a URL do PR");
-    return { url: pr.html_url, jaExistia: false };
+    const pr = (await res.json()) as { html_url?: string; number?: number };
+    if (!pr.html_url || !pr.number) {
+      throw new Error("GitHub aceitou mas não devolveu URL/número do PR");
+    }
+    return { url: pr.html_url, numero: pr.number, jaExistia: false };
   }
 
   // 422 costuma ser "já existe PR pra essa head" — procura e devolve o mesmo.
@@ -62,12 +64,75 @@ export async function abrirPullRequest(entrada: {
       { headers },
     );
     if (busca.ok) {
-      const lista = (await busca.json()) as { html_url?: string }[];
-      const existente = lista.find((p) => p.html_url);
-      if (existente?.html_url) return { url: existente.html_url, jaExistia: true };
+      const lista = (await busca.json()) as { html_url?: string; number?: number }[];
+      const existente = lista.find((p) => p.html_url && p.number);
+      if (existente?.html_url && existente.number) {
+        return { url: existente.html_url, numero: existente.number, jaExistia: true };
+      }
     }
   }
 
   const corpo = await res.text().catch(() => "");
   throw new Error(`GitHub recusou o PR (${res.status}): ${corpo.slice(0, 300)}`);
+}
+
+/**
+ * Mescla o PR na base e apaga a branch.
+ *
+ * Tenta mais de uma vez de propósito: recém-criado, o PR ainda está com a
+ * mesclabilidade sendo calculada e o GitHub responde 405 nesse meio-tempo —
+ * desistir na primeira daria "não consegui mesclar" num PR perfeitamente
+ * mesclável. Conflito de verdade também é 405, então quem separa os dois é o
+ * tempo: depois das tentativas, o PR fica aberto e o relato diz o motivo.
+ */
+export async function mesclarPullRequest(entrada: {
+  repoUrl: string;
+  token: string;
+  numero: number;
+  branch: string;
+  metodo: "squash" | "merge" | "rebase";
+  titulo: string;
+  apiUrl?: string;
+  esperarMs?: number;
+}): Promise<{ sha: string }> {
+  const alvo = repoDaUrl(entrada.repoUrl);
+  if (!alvo) throw new Error(`Não reconheci dono/repo em "${entrada.repoUrl}"`);
+
+  const api = entrada.apiUrl ?? "https://api.github.com";
+  const base = `${api}/repos/${alvo.dono}/${alvo.repo}`;
+  const headers = {
+    authorization: `Bearer ${entrada.token}`,
+    accept: "application/vnd.github+json",
+    "x-github-api-version": "2022-11-28",
+    "content-type": "application/json",
+  };
+
+  let ultimoErro = "";
+  for (let tentativa = 1; tentativa <= 3; tentativa++) {
+    const res = await fetch(`${base}/pulls/${entrada.numero}/merge`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        merge_method: entrada.metodo,
+        commit_title: `${entrada.titulo} (#${entrada.numero})`,
+      }),
+    });
+
+    if (res.ok) {
+      const corpo = (await res.json()) as { sha?: string };
+      // Branch mesclada não serve mais pra nada: deixá-la acumula lixo no
+      // remoto e faz o próximo disparo da mesma task colidir com ela.
+      await fetch(`${base}/git/refs/heads/${encodeURIComponent(entrada.branch)}`, {
+        method: "DELETE",
+        headers,
+      }).catch(() => undefined);
+      return { sha: corpo.sha ?? "" };
+    }
+
+    ultimoErro = `${res.status}: ${(await res.text().catch(() => "")).slice(0, 200)}`;
+    if (res.status !== 405 || tentativa === 3) break;
+    await new Promise((r) => setTimeout(r, entrada.esperarMs ?? 4_000));
+  }
+
+  throw new Error(`GitHub recusou o merge (${ultimoErro})`);
 }

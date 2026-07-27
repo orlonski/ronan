@@ -2,7 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { execFile } from "node:child_process";
 import { RunnerConfig } from "../runner.config";
 import { WorkspaceGit } from "./git-workspace";
-import { abrirPullRequest } from "./github-pr";
+import { abrirPullRequest, mesclarPullRequest } from "./github-pr";
 import type { ContextoExecucao, ExecutorAgente, ResultadoExecucao } from "./executor-agente";
 
 /** Saída do `claude -p --output-format json` que nos interessa. */
@@ -125,8 +125,10 @@ export class ClaudeCodeExecutor implements ExecutorAgente {
     let commit: string | null = null;
     let diff = "";
     let publicado = false;
-    let pr: { url: string; jaExistia: boolean } | null = null;
+    let pr: { url: string; numero: number; jaExistia: boolean } | null = null;
     let erroPr: string | null = null;
+    let mesclado = false;
+    let erroMerge: string | null = null;
     try {
       commit = await this.workspace.commitar(
         dir,
@@ -169,15 +171,42 @@ export class ClaudeCodeExecutor implements ExecutorAgente {
           JSON.stringify({ evento: "pr-falhou", taskId: ctx.taskId, erro: erroPr }),
         );
       }
+
+      // Merge automático: só com PR aberto e com a chave ligada de propósito.
+      // Falhar aqui deixa o PR aberto pra decisão humana — que é o desfecho
+      // seguro, não um erro a esconder.
+      if (pr && this.config.mergeAuto) {
+        try {
+          const { sha } = await mesclarPullRequest({
+            repoUrl: this.config.repoUrl,
+            token: this.config.githubToken,
+            numero: pr.numero,
+            branch: ctx.branch,
+            metodo: this.config.mergeMetodo,
+            titulo: ctx.demanda.titulo,
+          });
+          mesclado = true;
+          this.logger.log(
+            JSON.stringify({ evento: "pr-mesclado", taskId: ctx.taskId, pr: pr.numero, sha }),
+          );
+        } catch (err) {
+          erroMerge = (err as Error).message;
+          this.logger.warn(
+            JSON.stringify({ evento: "merge-falhou", taskId: ctx.taskId, erro: erroMerge }),
+          );
+        }
+      }
     }
 
-    const destino = !publicado
-      ? `Commit \`${commit}\` feito na branch local \`${ctx.branch}\` — **push desligado**, nada foi pro GitHub.`
-      : pr
-        ? `${pr.jaExistia ? "PR já aberto" : "PR aberto"}: ${pr.url} (branch \`${ctx.branch}\`, commit \`${commit}\`).`
-        : erroPr
-          ? `Branch \`${ctx.branch}\` publicada (commit \`${commit}\`), mas **não consegui abrir o PR**: ${erroPr}`
-          : `Branch \`${ctx.branch}\` publicada (commit \`${commit}\`).`;
+    const destino = this.descreverDestino({
+      branch: ctx.branch,
+      commit,
+      publicado,
+      pr,
+      erroPr,
+      mesclado,
+      erroMerge,
+    });
 
     return {
       status: falhou ? "FALHOU" : "CONCLUIDA",
@@ -261,6 +290,44 @@ export class ClaudeCodeExecutor implements ExecutorAgente {
       );
       filho.stdin?.end();
     });
+  }
+
+  /**
+   * Onde o trabalho parou: branch local, branch publicada, PR aberto ou já
+   * mesclado. Cada caso diz explicitamente o que aconteceu e o que falta — é
+   * essa frase que a pessoa lê pra saber se precisa agir.
+   */
+  private descreverDestino(e: {
+    branch: string;
+    commit: string | null;
+    publicado: boolean;
+    pr: { url: string; jaExistia: boolean } | null;
+    erroPr: string | null;
+    mesclado: boolean;
+    erroMerge: string | null;
+  }): string {
+    const local = `commit \`${e.commit}\` na branch \`${e.branch}\``;
+
+    if (!e.publicado) {
+      return `Commit \`${e.commit}\` feito na branch local \`${e.branch}\` — **push desligado**, nada foi pro GitHub.`;
+    }
+    if (e.erroPr) {
+      return `Branch \`${e.branch}\` publicada (${local}), mas **não consegui abrir o PR**: ${e.erroPr}`;
+    }
+    if (!e.pr) return `Branch \`${e.branch}\` publicada (${local}).`;
+    if (e.mesclado) {
+      return (
+        `**Mesclado na \`${this.config.branchBase}\`** — ${e.pr.url} (${local}). ` +
+        "O deploy dispara a partir daí."
+      );
+    }
+    if (e.erroMerge) {
+      return (
+        `PR aberto: ${e.pr.url} — **não consegui mesclar automaticamente**: ${e.erroMerge}. ` +
+        "Ficou esperando você."
+      );
+    }
+    return `${e.pr.jaExistia ? "PR já aberto" : "PR aberto"}: ${e.pr.url} (${local}).`;
   }
 
   /** Corpo do PR: o que o agente relatou + o diff, com a origem da demanda. */

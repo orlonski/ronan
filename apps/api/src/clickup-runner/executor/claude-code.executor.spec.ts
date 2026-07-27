@@ -113,7 +113,7 @@ describe("ClaudeCodeExecutor", () => {
   it("abre o PR depois do push e leva o link no relato", async () => {
     const fetchFake = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ html_url: "https://github.com/o/r/pull/9" }),
+      json: async () => ({ html_url: "https://github.com/o/r/pull/9", number: 9 }),
     });
     vi.stubGlobal("fetch", fetchFake);
 
@@ -132,6 +132,66 @@ describe("ClaudeCodeExecutor", () => {
     expect(r.resumo).toContain("https://github.com/o/r/pull/9");
     vi.unstubAllGlobals();
   });
+
+  it("mescla sozinho quando AGENTE_MERGE_AUTO está ligado", async () => {
+    const fetchFake = vi
+      .fn()
+      // abre o PR
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ html_url: "https://github.com/o/r/pull/9", number: 9 }),
+      })
+      // mescla
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ sha: "cafe123" }) })
+      // apaga a branch
+      .mockResolvedValueOnce({ ok: true });
+    vi.stubGlobal("fetch", fetchFake);
+
+    const r = await new ExecutorFalso(
+      config({
+        publicarBranch: true,
+        abrirPr: true,
+        mergeAuto: true,
+        mergeMetodo: "squash",
+        githubToken: "ghp_x",
+        repoUrl: "https://github.com/o/r.git",
+      }),
+      workspaceFalso(),
+      sucesso,
+    ).executar(ctx);
+
+    expect(r.resumo).toContain("Mesclado na `main`");
+    vi.unstubAllGlobals();
+  });
+
+  it("merge que falha deixa o PR aberto e diz o motivo", async () => {
+    const fetchFake = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ html_url: "https://github.com/o/r/pull/9", number: 9 }),
+      })
+      .mockResolvedValue({ ok: false, status: 405, text: async () => "conflito" });
+    vi.stubGlobal("fetch", fetchFake);
+
+    const r = await new ExecutorFalso(
+      config({
+        publicarBranch: true,
+        abrirPr: true,
+        mergeAuto: true,
+        mergeMetodo: "squash",
+        githubToken: "ghp_x",
+        repoUrl: "https://github.com/o/r.git",
+      }),
+      workspaceFalso(),
+      sucesso,
+    ).executar(ctx);
+
+    expect(r.status).toBe("CONCLUIDA");
+    expect(r.resumo).toContain("não consegui mesclar");
+    expect(r.resumo).toContain("https://github.com/o/r/pull/9");
+    vi.unstubAllGlobals();
+  }, 20_000);
 
   it("PR que falha não invalida o trabalho já publicado", async () => {
     vi.stubGlobal(

@@ -166,15 +166,25 @@ custariam na API — não é cobrança. Por isso `--max-budget-usd` não é pass
 | **Agente sem credencial de git** | o subprocesso do `claude` roda com `GITHUB_TOKEN` removido: qualquer `git push` que ele tente falha na autenticação. Quem publica é o worker, e só a branch da task |
 | Allowlist de ferramentas | git só de leitura (`status`, `diff`, `log`) |
 | Push desligado por padrão | `AGENTE_PUSH=true` liga; até lá o commit fica na branch local e o relato traz o `diff --stat` |
-| PR nunca é mesclado | com push ligado, o agente abre o PR contra a base e para aí. O merge (e o deploy que ele dispara) continua sendo decisão sua |
+| Merge desligado por padrão | com push ligado, o agente abre o PR e para aí. `AGENTE_MERGE_AUTO=true` faz ele mesclar sozinho — aí **cada execução vira deploy de produção sem revisão humana**. Ligue sabendo disso |
 | Limite da assinatura | vira `EXCEDEU_LIMITE`, relata e **não** retenta |
 
 ### Fluxo com push ligado
 
 `worktree` → agente trabalha → commit em `feat/{taskId}` → push da branch → **PR aberto contra
-`main`** → relato com o link. Reprocessar a mesma task reaproveita o PR aberto em vez de
-duplicar. Falha ao abrir o PR não invalida nada: a branch já está publicada e o relato explica
-o motivo.
+`main`** → (opcional) **merge automático + branch apagada** → relato com o link. Reprocessar a
+mesma task reaproveita o PR aberto em vez de duplicar. Falha ao abrir o PR não invalida nada: a
+branch já está publicada e o relato explica o motivo.
+
+Com `AGENTE_MERGE_AUTO=true`, o merge é tentado 3 vezes: logo após criar o PR o GitHub ainda
+está calculando a mesclabilidade e responde 405, que é indistinguível de conflito real na
+primeira tentativa. Conflito de verdade deixa o PR **aberto**, e o relato diz isso — o desfecho
+seguro é esperar gente, não forçar.
+
+> ⚠️ Com merge automático, **cada execução do agente vai pra produção sem revisão**. Typecheck
+> e testes não pegam erro de escopo: uma troca de coluna por outra compila perfeitamente. Foi
+> o que aconteceu no PR #2 deste repo (a coluna "Data" da viagem foi substituída em vez de
+> somada). Ligue com essa informação na mão.
 
 O `GITHUB_TOKEN` precisa de **Contents: read and write** (push) e **Pull requests: read and
 write** (abrir PR). Sem a segunda permissão a branch sobe e o PR falha com 403 — aparece no
@@ -188,6 +198,8 @@ relato.
 | `AGENTE_BRANCH_BASE` | `main` |
 | `AGENTE_PUSH` | *(vazio = desligado)* |
 | `AGENTE_ABRIR_PR` | `true` — abre PR automaticamente **quando o push está ligado**. `false` deixa só a branch |
+| `AGENTE_MERGE_AUTO` | *(vazio = desligado)*. `true` mescla o PR sozinho e apaga a branch — **e o merge na `main` dispara o deploy de produção** |
+| `AGENTE_MERGE_METODO` | `squash` \| `merge` \| `rebase` |
 | `AGENTE_MAX_POR_HORA` / `AGENTE_MAX_POR_DIA` | `5` / `20` |
 | `AGENTE_FERRAMENTAS` | `Read,Edit,Write,Grep,Glob,Bash(git status*),Bash(git diff*),Bash(git log*),Bash(pnpm *),Bash(node *),Bash(npx *)` |
 | `AGENTE_MODELO` | *(vazio = default do CLI)* |

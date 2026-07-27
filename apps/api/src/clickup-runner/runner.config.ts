@@ -56,6 +56,13 @@ export class RunnerConfig {
   readonly publicarBranch: boolean;
   /** Abrir PR da branch contra a base ao publicar. Só vale com push ligado. */
   readonly abrirPr: boolean;
+  /**
+   * Mesclar o PR sozinho. Default DESLIGADO: merge na base dispara o deploy de
+   * produção, então ligar isso é decisão explícita de quem opera — não efeito
+   * colateral de subir código novo.
+   */
+  readonly mergeAuto: boolean;
+  readonly mergeMetodo: "squash" | "merge" | "rebase";
   /** Token do GitHub (mesmo do git). Necessário pra API de PR. */
   readonly githubToken: string;
   /** Tetos de quantas execuções podem rodar por janela. */
@@ -110,6 +117,10 @@ export class RunnerConfig {
     // largada no remoto não ajuda ninguém.
     this.abrirPr = (this.config.get<string>("AGENTE_ABRIR_PR") ?? "true").trim() !== "false";
     this.githubToken = this.config.get<string>("GITHUB_TOKEN") ?? "";
+    this.mergeAuto = (this.config.get<string>("AGENTE_MERGE_AUTO") ?? "").trim() === "true";
+    const metodo = (this.config.get<string>("AGENTE_MERGE_METODO") ?? "squash").trim();
+    this.mergeMetodo =
+      metodo === "merge" || metodo === "rebase" ? metodo : ("squash" as const);
     this.maxPorHora = this.numero("AGENTE_MAX_POR_HORA", 5, 1, 200);
     this.maxPorDia = this.numero("AGENTE_MAX_POR_DIA", 20, 1, 1000);
   }
@@ -148,6 +159,9 @@ export class RunnerConfig {
         `tetos=${this.maxPorHora}/h ${this.maxPorDia}/dia, ` +
         `push=${this.publicarBranch ? "LIGADO" : "desligado"}` +
         (this.publicarBranch ? `, PR=${this.abrirPr ? "automático" : "manual"}` : "") +
+        (this.publicarBranch && this.abrirPr
+          ? `, merge=${this.mergeAuto ? `AUTOMÁTICO (${this.mergeMetodo})` : "manual"}`
+          : "") +
         (this.fonte === "clickup"
           ? `, comentário=${this.clickupToken ? "configurado" : "SEM TOKEN (não vai comentar)"})`
           : ")"),
