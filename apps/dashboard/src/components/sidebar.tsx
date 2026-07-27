@@ -100,6 +100,15 @@ const GRUPOS: Grupo[] = [
   },
 ];
 
+/**
+ * Item do menu está ativo? Prefixo cru não serve: `/viagens-andamento` começa
+ * com `/viagens`, então "Viagens" acendia junto de "Viagens em andamento".
+ * Ativo é a rota exata ou algo abaixo dela (`/viagens/123`).
+ */
+export function isRotaAtiva(pathname: string, href: string): boolean {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 export function Sidebar({
   mobileOpen = false,
   onMobileClose,
@@ -119,6 +128,7 @@ export function Sidebar({
 
   // Accordion: só um grupo aberto por vez. Operação é o default ao abrir
   // a plataforma. Ao mudar de rota, abre o grupo correspondente.
+
   const [grupoAberto, setGrupoAberto] = useState<string>("Operação");
 
   function toggleGrupo(titulo: string) {
@@ -128,7 +138,7 @@ export function Sidebar({
   // Se a rota atual pertence a outro grupo, abre esse grupo
   useEffect(() => {
     for (const grupo of GRUPOS) {
-      if (grupo.itens.some((i) => pathname.startsWith(i.href))) {
+      if (grupo.itens.some((i) => isRotaAtiva(pathname, i.href))) {
         if (grupoAberto !== grupo.titulo) setGrupoAberto(grupo.titulo);
         return;
       }
@@ -214,7 +224,7 @@ export function Sidebar({
                 </button>
                 {aberto &&
                   grupo.itens.map(({ href, label, icon: Icon }) => {
-                    const active = pathname.startsWith(href);
+                    const active = isRotaAtiva(pathname, href);
                     return (
                       <Link
                         key={href}
