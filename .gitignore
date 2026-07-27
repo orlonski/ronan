@@ -29,3 +29,7 @@ apps/motorista-app/expo-env.d.ts
 *.mobileprovision
 *.p8
 *.p12
+
+# Artefatos incrementais do tsc: são build, não código. Estavam rastreados e
+# sujavam todo commit de quem rodasse typecheck (inclusive o agente).
+*.tsbuildinfo
