@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  ForbiddenException,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
 import { AtualizarUserInput, CriarUserInput } from "@ronan/shared-types";
@@ -50,6 +61,7 @@ export class UsersController {
     @Body(new ZodValidationPipe(CriarUserInput)) body: CriarUserInput,
     @CurrentUser() user: AuthAdminUser,
   ) {
+    this.ensurePodeAtribuirPapel(body.papelId, user);
     return this.service.create(body, user.id);
   }
 
@@ -59,8 +71,28 @@ export class UsersController {
   update(
     @Param("id") id: string,
     @Body(new ZodValidationPipe(AtualizarUserInput)) body: AtualizarUserInput,
+    @CurrentUser() user: AuthAdminUser,
   ) {
+    this.ensurePodeAtribuirPapel(body.papelId, user);
     return this.service.update(id, body);
+  }
+
+  /**
+   * "usuarios.editar/criar" só cobre os dados do usuário. Atribuir papel é uma
+   * ação de RBAC (pode dar acesso total via papel Administrador) e exige
+   * "permissoes.gerenciar" — senão qualquer papel com edição de usuário vira
+   * escalonamento de privilégio.
+   */
+  private ensurePodeAtribuirPapel(
+    papelId: string | null | undefined,
+    user: AuthAdminUser,
+  ) {
+    if (papelId === undefined) return;
+    if (!user.permissoes.includes("permissoes.gerenciar")) {
+      throw new ForbiddenException(
+        "Você não tem permissão para atribuir papel a um usuário.",
+      );
+    }
   }
 
   @Roles("ADMIN_USER")
