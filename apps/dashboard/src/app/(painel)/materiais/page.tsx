@@ -19,6 +19,7 @@ import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePaginatedList, useUpdateResource } from "@/lib/client-api";
+import { fmtDataHoraSP } from "@/lib/datetime-br";
 
 type Material = {
   id: string;
@@ -26,6 +27,7 @@ type Material = {
   ativo: boolean;
   exigeTicket: boolean;
   permiteBotaFora: boolean;
+  criadoEm: string;
   criadoPor: { id: string; nome: string } | null;
 };
 
@@ -52,6 +54,16 @@ export default function MateriaisPage() {
         cell: ({ row }) => (
           <span className="text-sm text-muted-foreground">
             {row.original.criadoPor?.nome ?? "—"}
+          </span>
+        ),
+      },
+      {
+        id: "criadoEm",
+        accessorKey: "criadoEm",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Criado em" />,
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground tabular-nums">
+            {fmtDataHoraSP(row.original.criadoEm)}
           </span>
         ),
       },
@@ -181,7 +193,12 @@ export default function MateriaisPage() {
                 </div>
                 {m.criadoPor && (
                   <div className="text-xs text-muted-foreground">
-                    Criado por {m.criadoPor.nome}
+                    Criado por {m.criadoPor.nome} em {fmtDataHoraSP(m.criadoEm)}
+                  </div>
+                )}
+                {!m.criadoPor && (
+                  <div className="text-xs text-muted-foreground">
+                    Criado em {fmtDataHoraSP(m.criadoEm)}
                   </div>
                 )}
               </div>
