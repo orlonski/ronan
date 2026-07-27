@@ -204,6 +204,9 @@ export function rotaParaNotificacao(n: AdminNotificacao): string | null {
   if (n.tipo === "foto-anexada" && dados.viagemId) {
     return `/viagens/${dados.viagemId}`;
   }
+  if (n.tipo === "nova-mensagem-viagem" && dados.viagemId) {
+    return `/viagens/${dados.viagemId}`;
+  }
   if (n.tipo === "local-em-validacao") {
     return `/locais/em-validacao`;
   }
