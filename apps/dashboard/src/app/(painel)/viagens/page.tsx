@@ -27,7 +27,7 @@ import { ListMetric } from "@/components/list-metric";
 import { firstDayOfMonth, useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePaginatedList } from "@/lib/client-api";
-import { fmtDataHoraBR, fmtNum } from "@/lib/fechamento-helpers";
+import { fmtBR, fmtDataHoraBR, fmtNum } from "@/lib/fechamento-helpers";
 import { ValorComMinimo } from "@/components/valor-com-minimo";
 import { STATUS_VIAGEM_COLOR, STATUS_VIAGEM_LABEL } from "@/lib/status-viagem";
 
@@ -147,11 +147,21 @@ export default function ViagensPage() {
         },
       },
       {
+        // Data DA VIAGEM: é a que fecha com a empresa e a que ordena a lista.
+        // Não confundir com "Criada em" (quando o lançamento entrou no sistema).
         id: "data",
         accessorKey: "data",
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Criada em" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Data" />,
+        cell: ({ row }) => <span className="text-sm tabular-nums">{fmtBR(row.original.data)}</span>,
+      },
+      {
+        id: "criadaEm",
+        enableSorting: false,
+        header: () => <span className="text-xs">Criada em</span>,
         cell: ({ row }) => (
-          <span className="text-sm tabular-nums">{criadoEm(row.original)}</span>
+          <span className="text-sm tabular-nums text-muted-foreground">
+            {criadoEm(row.original)}
+          </span>
         ),
       },
       {
@@ -401,7 +411,11 @@ function ViagemCard({ v }: { v: Viagem }) {
             </div>
             {/* Detalhes secundários separados por bullet */}
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-              <span className="tabular-nums">{criadoEm(v)}</span>
+              {/* Data da viagem primeiro (é a que o admin procura); a de criação
+                  vem ao lado, rotulada, pra ninguém confundir as duas. */}
+              <span className="tabular-nums">{fmtBR(v.data)}</span>
+              <span>·</span>
+              <span className="tabular-nums">criada em {criadoEm(v)}</span>
               <span>·</span>
               <span>{v.motorista.nome}</span>
               <span>·</span>
