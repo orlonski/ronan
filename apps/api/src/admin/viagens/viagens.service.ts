@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import {
   AcaoAuditoria,
+  KmFonte,
   NivelConfiancaLocal,
   OrigemCadastroLocal,
   Prisma,
@@ -969,6 +970,13 @@ export class ViagensAdminService {
   /**
    * Aplica manualmente uma rota escolhida no painel: define o km faturado, a
    * geometria da rota (desenhada no painel) e o kmCalculado de referência.
+   *
+   * Grava kmFonte=ROTA_ESCOLHIDA (mesmo valor que o app usa quando o motorista
+   * escolhe rota no seletor dele) — é a procedência declarada que o
+   * KmAtipicoService.baseConsistente exige. Sem isso, um "Recalcular trajeto"
+   * posterior (que só atualiza kmCalculado pra rota mais curta) acusava a
+   * viagem de "km sem procedência" mesmo tendo sido corrigida aqui — e ela
+   * sumia de "viagens comparáveis" sem ninguém ter mexido nela de novo.
    */
   async escolherRota(
     id: string,
@@ -990,6 +998,7 @@ export class ViagensAdminService {
       data: {
         km: input.km,
         rotaGeometria: input.rotaGeometria,
+        kmFonte: KmFonte.ROTA_ESCOLHIDA,
         ...(input.kmCalculado != null ? { kmCalculado: input.kmCalculado } : {}),
       },
     });
@@ -1010,6 +1019,9 @@ export class ViagensAdminService {
         kmCalculado: input.kmCalculado != null ? String(input.kmCalculado) : null,
       },
     });
+
+    // km e kmFonte mudaram → re-carimba o atípico (mesmo motivo do recalcular).
+    void this.kmAtipico.avaliarViagem(viagem.id);
 
     return this.detalhe(id);
   }
