@@ -27,7 +27,7 @@ import { ListMetric } from "@/components/list-metric";
 import { firstDayOfMonth, useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePaginatedList } from "@/lib/client-api";
-import { fmtBR, fmtNum } from "@/lib/fechamento-helpers";
+import { fmtDataHoraBR, fmtNum } from "@/lib/fechamento-helpers";
 import { ValorComMinimo } from "@/components/valor-com-minimo";
 import { STATUS_VIAGEM_COLOR, STATUS_VIAGEM_LABEL } from "@/lib/status-viagem";
 
@@ -58,7 +58,16 @@ type Viagem = {
   temPedagioSemValor: boolean;
   /** true = km fora do padrão do trajeto (badge "Km atípico"). null = não avaliado. */
   kmForaDoPadrao: boolean | null;
+  /** Preenchido quando a viagem foi criada com o app offline (momento real da criação no device). */
+  criadoOfflineEm: string | null;
+  /** Quando o registro chegou/sincronizou no backend — fallback de criadoOfflineEm. */
+  sincronizadoEm: string;
 };
+
+/** Instante em que a viagem foi criada: offline (device) tem prioridade sobre a sincronização. */
+function criadoEm(v: Viagem): string {
+  return fmtDataHoraBR(v.criadoOfflineEm ?? v.sincronizadoEm);
+}
 
 /** Badges de alerta de uma viagem (pedágio sem valor, km atípico). Usado na
  *  coluna "Alertas" da tabela e no card do modo grade — um lugar só pra não
@@ -140,8 +149,10 @@ export default function ViagensPage() {
       {
         id: "data",
         accessorKey: "data",
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Data" />,
-        cell: ({ row }) => <span className="text-sm">{fmtBR(row.original.data)}</span>,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Criada em" />,
+        cell: ({ row }) => (
+          <span className="text-sm tabular-nums">{criadoEm(row.original)}</span>
+        ),
       },
       {
         id: "placa",
@@ -390,7 +401,7 @@ function ViagemCard({ v }: { v: Viagem }) {
             </div>
             {/* Detalhes secundários separados por bullet */}
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-              <span>{fmtBR(v.data)}</span>
+              <span className="tabular-nums">{criadoEm(v)}</span>
               <span>·</span>
               <span>{v.motorista.nome}</span>
               <span>·</span>
