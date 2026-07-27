@@ -54,6 +54,10 @@ export class RunnerConfig {
    * trabalhando sem poder mandar nada pra fora, e o relato leva o diff.
    */
   readonly publicarBranch: boolean;
+  /** Abrir PR da branch contra a base ao publicar. Só vale com push ligado. */
+  readonly abrirPr: boolean;
+  /** Token do GitHub (mesmo do git). Necessário pra API de PR. */
+  readonly githubToken: string;
   /** Tetos de quantas execuções podem rodar por janela. */
   readonly maxPorHora: number;
   readonly maxPorDia: number;
@@ -102,6 +106,10 @@ export class RunnerConfig {
       .filter(Boolean);
     this.modelo = this.config.get<string>("AGENTE_MODELO") ?? "";
     this.publicarBranch = (this.config.get<string>("AGENTE_PUSH") ?? "").trim() === "true";
+    // Default LIGADO, mas só tem efeito com push ligado: branch publicada e
+    // largada no remoto não ajuda ninguém.
+    this.abrirPr = (this.config.get<string>("AGENTE_ABRIR_PR") ?? "true").trim() !== "false";
+    this.githubToken = this.config.get<string>("GITHUB_TOKEN") ?? "";
     this.maxPorHora = this.numero("AGENTE_MAX_POR_HORA", 5, 1, 200);
     this.maxPorDia = this.numero("AGENTE_MAX_POR_DIA", 20, 1, 1000);
   }
@@ -139,6 +147,7 @@ export class RunnerConfig {
         (this.orcamentoUsd > 0 ? `orçamento=US$ ${this.orcamentoUsd}, ` : "") +
         `tetos=${this.maxPorHora}/h ${this.maxPorDia}/dia, ` +
         `push=${this.publicarBranch ? "LIGADO" : "desligado"}` +
+        (this.publicarBranch ? `, PR=${this.abrirPr ? "automático" : "manual"}` : "") +
         (this.fonte === "clickup"
           ? `, comentário=${this.clickupToken ? "configurado" : "SEM TOKEN (não vai comentar)"})`
           : ")"),

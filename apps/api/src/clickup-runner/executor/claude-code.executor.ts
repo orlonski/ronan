@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { execFile } from "node:child_process";
 import { RunnerConfig } from "../runner.config";
 import { WorkspaceGit } from "./git-workspace";
+import { abrirPullRequest } from "./github-pr";
 import type { ContextoExecucao, ExecutorAgente, ResultadoExecucao } from "./executor-agente";
 
 /** Saída do `claude -p --output-format json` que nos interessa. */
@@ -124,6 +125,8 @@ export class ClaudeCodeExecutor implements ExecutorAgente {
     let commit: string | null = null;
     let diff = "";
     let publicado = false;
+    let pr: { url: string; jaExistia: boolean } | null = null;
+    let erroPr: string | null = null;
     try {
       commit = await this.workspace.commitar(
         dir,
@@ -148,9 +151,33 @@ export class ClaudeCodeExecutor implements ExecutorAgente {
       };
     }
 
-    const destino = publicado
-      ? `Branch \`${ctx.branch}\` publicada (commit \`${commit}\`).`
-      : `Commit \`${commit}\` feito na branch local \`${ctx.branch}\` — **push desligado**, nada foi pro GitHub.`;
+    // PR depois do push e FORA do try acima: falhar aqui não desfaz o trabalho
+    // nem invalida a branch já publicada — vira aviso no relato.
+    if (publicado && this.config.abrirPr) {
+      try {
+        pr = await abrirPullRequest({
+          repoUrl: this.config.repoUrl,
+          token: this.config.githubToken,
+          branch: ctx.branch,
+          base: this.config.branchBase,
+          titulo: ctx.demanda.titulo,
+          corpo: this.corpoDoPr(ctx, saida, diff),
+        });
+      } catch (err) {
+        erroPr = (err as Error).message;
+        this.logger.warn(
+          JSON.stringify({ evento: "pr-falhou", taskId: ctx.taskId, erro: erroPr }),
+        );
+      }
+    }
+
+    const destino = !publicado
+      ? `Commit \`${commit}\` feito na branch local \`${ctx.branch}\` — **push desligado**, nada foi pro GitHub.`
+      : pr
+        ? `${pr.jaExistia ? "PR já aberto" : "PR aberto"}: ${pr.url} (branch \`${ctx.branch}\`, commit \`${commit}\`).`
+        : erroPr
+          ? `Branch \`${ctx.branch}\` publicada (commit \`${commit}\`), mas **não consegui abrir o PR**: ${erroPr}`
+          : `Branch \`${ctx.branch}\` publicada (commit \`${commit}\`).`;
 
     return {
       status: falhou ? "FALHOU" : "CONCLUIDA",
@@ -234,6 +261,24 @@ export class ClaudeCodeExecutor implements ExecutorAgente {
       );
       filho.stdin?.end();
     });
+  }
+
+  /** Corpo do PR: o que o agente relatou + o diff, com a origem da demanda. */
+  private corpoDoPr(ctx: ContextoExecucao, saida: SaidaClaude, diff: string): string {
+    return [
+      `Execução automática da task \`${ctx.taskId}\`.`,
+      "",
+      `**Demanda:** ${ctx.demanda.titulo}`,
+      ctx.demanda.descricao ? `\n${ctx.demanda.descricao}\n` : "",
+      "---",
+      "",
+      (saida.result ?? "").trim().slice(0, 20_000),
+      diff ? `\n\`\`\`\n${diff}\n\`\`\`` : "",
+      "",
+      "_Gerado pelo agente. Revise antes de mesclar._",
+    ]
+      .filter(Boolean)
+      .join("\n");
   }
 
   private resumir(saida: SaidaClaude, textoBruto: string, rodape: string): string {

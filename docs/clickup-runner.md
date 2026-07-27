@@ -52,7 +52,7 @@ de worker. `DATABASE_URL` e `CLICKUP_RUNNER_TOKEN` vão nos dois.
 | `EXECUTOR_AGENTE` | `stub` | Qual executor registrar. Valor desconhecido **derruba o boot** de propósito. |
 | `FONTE_DEMANDA` | `clickup` | De onde vem a demanda: `clickup` (lê a task na API v2 e relata por comentário) ou `payload` (lê do corpo do webhook e relata no log — pra testar por Postman, sem token). Valor desconhecido derruba o boot. |
 | `RUNNER_WORKER_NOME` | `agente@<hostname>` | Prefixo do `workerId` gravado na fila. |
-| `AGENTE_DIR_TRABALHO` | `/trabalho` | Onde os worktrees por task vão morar. |
+| `AGENTE_DIR_TRABALHO` | `/trabalho` | Volume onde ficam o clone base e os worktrees. |
 
 ⚠️ **`ANTHROPIC_API_KEY` não pode existir** neste serviço: com ela presente o Claude Code
 usaria a chave de API (outra conta, outra cobrança) em vez do token de assinatura, sem avisar.
@@ -70,8 +70,8 @@ O entrypoint dá `unset` e o `agente-main.ts` remove do processo com aviso no lo
 | `CLICKUP_RUNNER_CONCORRENCIA` | `1` | Execuções simultâneas no total (por task é sempre 1). |
 | `CLICKUP_RUNNER_JANELA_DEDUPE_MS` | `600000` | Reenvio da mesma task dentro da janela é recusado. |
 | `CLICKUP_RUNNER_TENTATIVAS_MAX` | `3` | Só conta pra falha de **infra**. |
-| `CLICKUP_RUNNER_TIMEOUT_MS` | `1800000` | Teto duro por execução. |
-| `CLICKUP_RUNNER_ORCAMENTO_USD` | `5` | Teto de gasto, repassado ao executor. |
+| `CLICKUP_RUNNER_TIMEOUT_MS` | `900000` | Teto duro por execução (15 min). |
+| `CLICKUP_RUNNER_ORCAMENTO_USD` | `0` | 0 = não passa `--max-budget-usd`. Na assinatura não há cobrança por execução; ligue só com chave de API. |
 | `CLICKUP_RUNNER_RATE_LIMIT` | `30` | Requisições por minuto por IP. |
 | `CLICKUP_RUNNER_INTERVALO_MS` | `5000` | Intervalo do loop do worker. |
 
@@ -166,7 +166,19 @@ custariam na API — não é cobrança. Por isso `--max-budget-usd` não é pass
 | **Agente sem credencial de git** | o subprocesso do `claude` roda com `GITHUB_TOKEN` removido: qualquer `git push` que ele tente falha na autenticação. Quem publica é o worker, e só a branch da task |
 | Allowlist de ferramentas | git só de leitura (`status`, `diff`, `log`) |
 | Push desligado por padrão | `AGENTE_PUSH=true` liga; até lá o commit fica na branch local e o relato traz o `diff --stat` |
+| PR nunca é mesclado | com push ligado, o agente abre o PR contra a base e para aí. O merge (e o deploy que ele dispara) continua sendo decisão sua |
 | Limite da assinatura | vira `EXCEDEU_LIMITE`, relata e **não** retenta |
+
+### Fluxo com push ligado
+
+`worktree` → agente trabalha → commit em `feat/{taskId}` → push da branch → **PR aberto contra
+`main`** → relato com o link. Reprocessar a mesma task reaproveita o PR aberto em vez de
+duplicar. Falha ao abrir o PR não invalida nada: a branch já está publicada e o relato explica
+o motivo.
+
+O `GITHUB_TOKEN` precisa de **Contents: read and write** (push) e **Pull requests: read and
+write** (abrir PR). Sem a segunda permissão a branch sobe e o PR falha com 403 — aparece no
+relato.
 
 ### Envs do executor
 
@@ -175,6 +187,7 @@ custariam na API — não é cobrança. Por isso `--max-budget-usd` não é pass
 | `AGENTE_REPO_URL` | `https://github.com/orlonski/ronan.git` |
 | `AGENTE_BRANCH_BASE` | `main` |
 | `AGENTE_PUSH` | *(vazio = desligado)* |
+| `AGENTE_ABRIR_PR` | `true` — abre PR automaticamente **quando o push está ligado**. `false` deixa só a branch |
 | `AGENTE_MAX_POR_HORA` / `AGENTE_MAX_POR_DIA` | `5` / `20` |
 | `AGENTE_FERRAMENTAS` | `Read,Edit,Write,Grep,Glob,Bash(git status*),Bash(git diff*),Bash(git log*),Bash(pnpm *),Bash(node *),Bash(npx *)` |
 | `AGENTE_MODELO` | *(vazio = default do CLI)* |

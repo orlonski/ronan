@@ -24,6 +24,8 @@ function config(over: Partial<RunnerConfig> = {}): RunnerConfig {
     ferramentas: ["Read", "Edit"],
     modelo: "",
     publicarBranch: false,
+    abrirPr: false,
+    githubToken: "",
     orcamentoUsd: 0,
     ...over,
   } as RunnerConfig;
@@ -106,6 +108,51 @@ describe("ClaudeCodeExecutor", () => {
 
     expect(ws.publicar).toHaveBeenCalledWith("/trabalho/wt/feat__86bb3pm4w", "feat/86bb3pm4w");
     expect(r.resumo).toContain("publicada");
+  });
+
+  it("abre o PR depois do push e leva o link no relato", async () => {
+    const fetchFake = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ html_url: "https://github.com/o/r/pull/9" }),
+    });
+    vi.stubGlobal("fetch", fetchFake);
+
+    const r = await new ExecutorFalso(
+      config({
+        publicarBranch: true,
+        abrirPr: true,
+        githubToken: "ghp_x",
+        repoUrl: "https://github.com/o/r.git",
+      }),
+      workspaceFalso(),
+      sucesso,
+    ).executar(ctx);
+
+    expect(r.status).toBe("CONCLUIDA");
+    expect(r.resumo).toContain("https://github.com/o/r/pull/9");
+    vi.unstubAllGlobals();
+  });
+
+  it("PR que falha não invalida o trabalho já publicado", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 403, text: async () => "sem permissão" }),
+    );
+
+    const r = await new ExecutorFalso(
+      config({
+        publicarBranch: true,
+        abrirPr: true,
+        githubToken: "ghp_x",
+        repoUrl: "https://github.com/o/r.git",
+      }),
+      workspaceFalso(),
+      sucesso,
+    ).executar(ctx);
+
+    expect(r.status).toBe("CONCLUIDA"); // a branch subiu; o PR é o que faltou
+    expect(r.resumo).toContain("não consegui abrir o PR");
+    vi.unstubAllGlobals();
   });
 
   it("conclui sem commitar quando o agente não mexeu em nada", async () => {
