@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { DemandasModule } from "./demandas/demandas.module";
 import { MateriaisModule } from "./materiais/materiais.module";
 import { RegrasMinimoModule } from "./regras-minimo/regras-minimo.module";
 import { ViagemLifecycleAdminModule } from "./viagem-lifecycle/viagem-lifecycle.module";
@@ -54,6 +55,7 @@ import { PapeisModule } from "./papeis/papeis.module";
     ResumoModule,
     PermissoesModule,
     PapeisModule,
+    DemandasModule,
   ],
 })
 export class AdminModule {}

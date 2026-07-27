@@ -9,6 +9,7 @@ import {
   AlertCircle,
   ArrowUpCircle,
   Bell,
+  Bot,
   Boxes,
   Building2,
   ChevronDown,
@@ -65,6 +66,7 @@ const GRUPOS: Grupo[] = [
       { href: "/fechamentos", label: "Fechamentos", icon: FileSpreadsheet, perm: "fechamentos.ver" },
       { href: "/envios", label: "Envios", icon: Send, perm: "envios.ver" },
       { href: "/notificacoes", label: "Notificações", icon: Bell, perm: "notificacoes.ver" },
+      { href: "/demandas", label: "Demandas do agente", icon: Bot, perm: "demandas.ver" },
     ],
   },
   {

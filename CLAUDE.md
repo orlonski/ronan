@@ -73,7 +73,8 @@ pnpm --filter @ronan/motorista-app build:android    # build EAS local
 - `admin/*` — painel. `@Roles("ADMIN_USER")` + `RolesGuard`, mais RBAC granular via `@RequerPermissao("recurso.acao")` + `PermissaoGuard`.
 - `m/*` — apps do motorista. `@Roles("MOTORISTA")` + feature flag por motorista.
 - `health`, `geocoding`, `errors`, `app/deploy` — utilitários.
-- `clickup/task-ready` — webhook de Automation do ClickUp (fila de execução de agente). Autentica por segredo compartilhado, não por JWT — ver `docs/clickup-runner.md`.
+- `admin/demandas` — demandas pro agente criadas pelo painel (tela `/demandas`). É a porta de entrada padrão; grava na mesma fila do webhook.
+- `clickup/task-ready` — webhook equivalente pra ferramenta externa. Autentica por segredo compartilhado, não por JWT — ver `docs/clickup-runner.md`.
 
 O código do `apps/api` roda em **dois processos**: `dist/main.js` (a API) e `dist/agente-main.js` (o serviço `ronan_agente`, que consome a fila de execuções e não sobe HTTP; imagem em `apps/agente/Dockerfile`). A API só enfileira.
 

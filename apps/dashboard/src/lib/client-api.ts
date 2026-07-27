@@ -122,7 +122,7 @@ export type Paginated<T> = {
 export function usePaginatedList<T>(
   path: string,
   params: Partial<DataTableParams>,
-  options?: { enabled?: boolean; placeholderData?: Paginated<T> },
+  options?: { enabled?: boolean; placeholderData?: Paginated<T>; refetchInterval?: number | false },
 ) {
   const token = useAuthToken();
   const qs = buildQueryString(params);
@@ -132,6 +132,9 @@ export function usePaginatedList<T>(
     enabled: !!token && options?.enabled !== false,
     queryFn: () => fetchApi<Paginated<T>>(url, { token }),
     placeholderData: (prev) => prev ?? options?.placeholderData,
+    // Listagem que acompanha algo em andamento (ex.: demandas do agente) liga
+    // isso; `false` (default) mantém o comportamento de buscar só quando pedem.
+    refetchInterval: options?.refetchInterval ?? false,
   });
 }
 
@@ -180,7 +183,12 @@ export function useResourceItem<T>(basePath: string, id: string | undefined) {
  */
 export function useApiQuery<T>(
   path: string | undefined,
-  options?: { enabled?: boolean; staleTime?: number; retry?: boolean | number },
+  options?: {
+    enabled?: boolean;
+    staleTime?: number;
+    retry?: boolean | number;
+    refetchInterval?: number | false;
+  },
 ) {
   const token = useAuthToken();
   return useQuery({
@@ -188,6 +196,7 @@ export function useApiQuery<T>(
     enabled: !!token && !!path && options?.enabled !== false,
     staleTime: options?.staleTime,
     retry: options?.retry,
+    refetchInterval: options?.refetchInterval ?? false,
     queryFn: () => fetchApi<T>(path as string, { token }),
   });
 }

@@ -1,6 +1,20 @@
-# Runner de tasks do ClickUp
+# Runner de demandas do agente
 
-Webhook de Automation do ClickUp → fila no Postgres → worker → comentário de volta na task.
+Demanda → fila no Postgres → worker → relato de volta.
+
+**A porta de entrada padrão é a tela `/demandas` do painel** — a Automation do ClickUp é
+recurso pago e não é necessária: a tela grava na mesma fila, no mesmo formato que a fonte
+`payload` já lê. O webhook continua existindo pra quem quiser plugar ferramenta externa.
+
+| Entrada | Como | Fonte |
+|---|---|---|
+| **Painel** (`/demandas`) | `POST /admin/demandas` com título + descrição, autenticado com o JWT do admin | `payload` |
+| Webhook | `POST /clickup/task-ready` com segredo compartilhado | `payload` ou `clickup` |
+
+Na tela: formulário com dicas de como escrever, painel ao vivo (na fila / trabalhando / tempo
+médio / “agente visto há X”), histórico com status, e detalhe com o relato do agente, arquivos
+alterados, branch e link do PR. Enquanto houver demanda viva a página se atualiza sozinha; sem
+nada em andamento ela para de recarregar.
 
 **São dois processos**, compartilhando código (`apps/api/src/clickup-runner/`) e banco:
 
