@@ -917,8 +917,12 @@ export class ViagensAdminService {
   }
 
   /**
-   * "Aceitar km": marca a viagem como revisada e limpa kmForaDoPadrao,
-   * readmitindo-a na mediana do par. Saída humana da catraca da quarentena.
+   * "Aceitar km": marca o km atípico como revisado (kmAceitoEm) e limpa
+   * kmForaDoPadrao, readmitindo a viagem na mediana do par. Saída humana da
+   * catraca da quarentena. NÃO mexe em `revisadoEm`/`status` — aceitar km é
+   * uma decisão diferente de pré-validar a viagem (ver comentário no schema);
+   * confundir os dois campos fazia o card de Pré-validação exibir "Divergente"
+   * sozinho, sem ninguém ter marcado a viagem como divergente.
    */
   async aceitarKm(id: string, usuarioId: string) {
     const antes = await this.prisma.viagem.findUnique({
@@ -929,7 +933,7 @@ export class ViagensAdminService {
 
     await this.prisma.viagem.update({
       where: { id },
-      data: { kmForaDoPadrao: false, revisadoEm: new Date(), revisadoPorId: usuarioId },
+      data: { kmForaDoPadrao: false, kmAceitoEm: new Date() },
     });
 
     await this.auditoria.log({

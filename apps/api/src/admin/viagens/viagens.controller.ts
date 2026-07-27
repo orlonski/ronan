@@ -161,9 +161,10 @@ export class ViagensAdminController {
   }
 
   /**
-   * "Aceitar km": marca a viagem como revisada (revisadoEm) e limpa o
+   * "Aceitar km": marca o km atípico como revisado (kmAceitoEm) e limpa o
    * kmForaDoPadrao, readmitindo-a na mediana do par. Saída humana da catraca
-   * da quarentena (rota que mudou de regime).
+   * da quarentena (rota que mudou de regime). Não é pré-validação — não mexe
+   * em revisadoEm/status.
    */
   @RequerPermissao("viagens.editar")
   @Post(":id/aceitar-km")
