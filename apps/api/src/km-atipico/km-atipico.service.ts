@@ -74,8 +74,8 @@ export type DetalheReferenciaKm = {
  * verdade (acesso novo, +km permanentes), toda viagem nova é marcada e a
  * mediana congela no passado. Não auto-corrigimos — mudança de regime é
  * indistinguível de erro coletivo. A saída é humana: "Aceitar km" no painel
- * (revisadoEm) readmite a viagem na mediana. O contador de quarentena no card
- * torna a deriva visível.
+ * (kmAceitoEm — dedicado, NÃO é o revisadoEm da pré-validação) readmite a
+ * viagem na mediana. O contador de quarentena no card torna a deriva visível.
  */
 @Injectable()
 export class KmAtipicoService {
@@ -198,7 +198,7 @@ export class KmAtipicoService {
           localCargaId: cargaId,
           localDescargaId: descargaId,
           kmForaDoPadrao: true,
-          revisadoEm: null,
+          kmAceitoEm: null,
           ...(excluirViagemId ? { id: { not: excluirViagemId } } : {}),
         },
       }),
@@ -409,7 +409,7 @@ export class KmAtipicoService {
       AND v.data >= ${desde}
       AND v.status::text NOT IN ('RASCUNHO_OFFLINE','EM_ANDAMENTO','AGUARDANDO_PESO','DIVERGENTE')
       AND NOT EXISTS (SELECT 1 FROM trechos_viagem t WHERE t."viagemId" = v.id)
-      AND NOT (v."kmForaDoPadrao" IS TRUE AND v."revisadoEm" IS NULL)
+      AND NOT (v."kmForaDoPadrao" IS TRUE AND v."kmAceitoEm" IS NULL)
       AND (
             v."kmFonte"::text IN ('MANUAL','HISTORICO') OR v."kmEditadoManual" IS TRUE
          OR v."kmCalculado" IS NULL
