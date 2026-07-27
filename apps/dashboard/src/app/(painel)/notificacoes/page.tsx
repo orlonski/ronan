@@ -2,9 +2,10 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import type { Route } from "next";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { Bell, Check, Loader2, X } from "lucide-react";
+import { Bell, Check, ChevronRight, Loader2, X } from "lucide-react";
 import type {
   ListarNotificacoesAdminResponse,
   NotificacaoAdminItem,
@@ -40,6 +41,16 @@ const statusLabel: Record<string, string> = {
   ENTREGUE: "Entregue",
   ERRO: "Erro",
 };
+
+/**
+ * Notificações de viagem (`viagem-*`) trazem `dados.viagemId` — a de
+ * abastecimento e a de mensagem-admin não referenciam uma viagem, por isso
+ * não têm destino.
+ */
+function rotaDaNotificacao(n: NotificacaoAdminItem): string | null {
+  const viagemId = n.dados?.viagemId;
+  return typeof viagemId === "string" ? `/viagens/${viagemId}` : null;
+}
 
 function StatusBadge({ status }: { status: string }) {
   const cls = statusClasses[status] ?? "bg-muted text-muted-foreground border";
@@ -220,8 +231,20 @@ export default function NotificacoesAdminPage() {
 }
 
 function NotificacaoCard({ n }: { n: NotificacaoAdminItem }) {
+  const router = useRouter();
+  const destino = rotaDaNotificacao(n);
+
+  function onClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (!destino) return;
+    if ((e.target as HTMLElement).closest("a, button")) return;
+    router.push(destino as Route);
+  }
+
   return (
-    <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">
+    <Card
+      onClick={onClick}
+      className={`overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md ${destino ? "cursor-pointer" : ""}`}
+    >
       <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-start sm:gap-6">
         <div className="flex flex-col items-start gap-1.5">
           <StatusBadge status={n.entregaStatus} />
@@ -234,7 +257,13 @@ function NotificacaoCard({ n }: { n: NotificacaoAdminItem }) {
 
         <div className="min-w-0 space-y-1.5">
           <div className="flex flex-wrap items-baseline gap-x-2">
-            <span className="text-sm font-medium">{n.titulo}</span>
+            {destino ? (
+              <Link href={destino as Route} className="text-sm font-medium hover:underline">
+                {n.titulo}
+              </Link>
+            ) : (
+              <span className="text-sm font-medium">{n.titulo}</span>
+            )}
             <Link
               href={`/motoristas/${n.motorista.id}`}
               className="text-xs text-muted-foreground hover:underline"
@@ -263,6 +292,7 @@ function NotificacaoCard({ n }: { n: NotificacaoAdminItem }) {
         </div>
 
         <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
+          {destino && <ChevronRight className="h-4 w-4" />}
           <ExcluirButton perm="notificacoes.excluir"
             path="/admin/notificacoes"
             id={n.id}
@@ -276,8 +306,17 @@ function NotificacaoCard({ n }: { n: NotificacaoAdminItem }) {
 }
 
 function NotificacaoRow({ n }: { n: NotificacaoAdminItem }) {
+  const router = useRouter();
+  const destino = rotaDaNotificacao(n);
+
+  function onClick(e: React.MouseEvent<HTMLTableRowElement>) {
+    if (!destino) return;
+    if ((e.target as HTMLElement).closest("a, button")) return;
+    router.push(destino as Route);
+  }
+
   return (
-    <TableRow>
+    <TableRow onClick={onClick} className={destino ? "cursor-pointer" : undefined}>
       <TableCell
         className="font-mono text-xs text-muted-foreground"
         style={{ fontVariant: "tabular-nums" }}
@@ -295,7 +334,15 @@ function NotificacaoRow({ n }: { n: NotificacaoAdminItem }) {
           {formatCpf(n.motorista.cpf)}
         </p>
       </TableCell>
-      <TableCell className="font-medium">{n.titulo}</TableCell>
+      <TableCell className="font-medium">
+        {destino ? (
+          <Link href={destino as Route} className="hover:underline">
+            {n.titulo}
+          </Link>
+        ) : (
+          n.titulo
+        )}
+      </TableCell>
       <TableCell className="max-w-md text-sm text-muted-foreground">
         <span className="line-clamp-2">{n.corpo}</span>
       </TableCell>
@@ -323,12 +370,15 @@ function NotificacaoRow({ n }: { n: NotificacaoAdminItem }) {
         )}
       </TableCell>
       <TableCell>
-        <ExcluirButton perm="notificacoes.excluir"
-          path="/admin/notificacoes"
-          id={n.id}
-          nomeRecurso="esta notificação"
-          invalidateKeys={[["admin-notificacoes"]]}
-        />
+        <div className="flex items-center gap-1">
+          {destino && <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+          <ExcluirButton perm="notificacoes.excluir"
+            path="/admin/notificacoes"
+            id={n.id}
+            nomeRecurso="esta notificação"
+            invalidateKeys={[["admin-notificacoes"]]}
+          />
+        </div>
       </TableCell>
     </TableRow>
   );
