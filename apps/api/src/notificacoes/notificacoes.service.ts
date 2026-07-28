@@ -9,6 +9,7 @@ import type {
   NotificacaoItem,
 } from "@ronan/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
+import { filtroEscopoPorMotorista, type EscopoAdmin } from "../common/escopo/escopo";
 
 type EntregaStatus = "PENDENTE" | "ENTREGUE" | "ERRO";
 
@@ -105,8 +106,13 @@ export class NotificacoesService {
    * Inclui motorista (id, nome, cpf), entregaStatus, entregaErro, expoTicketId
    * — campos que o motorista não recebe, mas admin precisa pra auditoria.
    */
-  async listarAdmin(q: ListarNotificacoesAdminQuery): Promise<ListarNotificacoesAdminResponse> {
-    const where: Prisma.NotificacaoWhereInput = {};
+  async listarAdmin(
+    q: ListarNotificacoesAdminQuery,
+    escopo: EscopoAdmin,
+  ): Promise<ListarNotificacoesAdminResponse> {
+    // Notificação não carrega carimbo de frota: filtra pelo cadastro atual do
+    // motorista (ver filtroEscopoPorMotorista).
+    const where: Prisma.NotificacaoWhereInput = { ...filtroEscopoPorMotorista(escopo) };
     if (q.motoristaId) where.motoristaId = q.motoristaId;
     if (q.entregaStatus) where.entregaStatus = q.entregaStatus;
     if (q.lida !== undefined) where.lida = q.lida;

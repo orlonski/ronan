@@ -964,7 +964,7 @@ export class ViagensAdminService {
   /** Card de referência de km da viagem (histórico do par + rota calculada). */
   async referenciaKm(id: string, escopo: EscopoAdmin) {
     await this.ensureNoEscopo(id, escopo);
-    const detalhe = await this.kmAtipico.detalheReferencia(id);
+    const detalhe = await this.kmAtipico.detalheReferencia(id, escopo);
     if (!detalhe) throw new NotFoundException("Viagem não encontrada");
     return detalhe;
   }

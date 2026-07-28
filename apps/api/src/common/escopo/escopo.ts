@@ -47,6 +47,22 @@ export function filtroEscopo(escopo: EscopoAdmin): { transportadoraId?: { in: st
 }
 
 /**
+ * Escopo para models que NÃO carregam o carimbo e pendem de um motorista
+ * (notificação, posição de GPS…). Filtra pela frota atual do cadastro.
+ *
+ * Diferente do carimbo de propósito: aqui não há histórico faturável a
+ * preservar — a notificação é efêmera e o que importa é "é motorista meu
+ * hoje?". Não usar isso em Viagem/Pedagio/Abastecimento, que têm
+ * `transportadoraId` justamente pra o passado não ser reescrito.
+ */
+export function filtroEscopoPorMotorista(
+  escopo: EscopoAdmin,
+): { motorista?: { transportadoraId: { in: string[] } } } {
+  if (!escopo) return {};
+  return { motorista: { transportadoraId: { in: escopo.transportadoraIds } } };
+}
+
+/**
  * Combina o `where` do endpoint com o do escopo em `AND`.
  *
  * Nunca mesclar por spread: a listagem de viagens já usa `where.OR` pro filtro

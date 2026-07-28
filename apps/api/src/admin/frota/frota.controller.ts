@@ -4,6 +4,10 @@ import { z } from "zod";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
+import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
+import { EscopoPor } from "../../common/escopo/escopo.decorator";
+import { CurrentUser } from "../../auth/decorators/current-user.decorator";
+import type { AuthAdminUser } from "../../auth/types";
 import { FrotaAdminService } from "./frota.service";
 
 const MapaQuery = z.object({
@@ -19,15 +23,21 @@ const MapaQuery = z.object({
 export class FrotaAdminController {
   constructor(private readonly service: FrotaAdminService) {}
 
+  @EscopoPor("motorista")
+  @RequerPermissao("mapa.ver")
   @Get("mapa")
-  mapa(@Query(new ZodValidationPipe(MapaQuery)) query: z.infer<typeof MapaQuery>) {
-    return this.service.mapaFrota(query.janelaMinutos);
+  mapa(
+    @Query(new ZodValidationPipe(MapaQuery)) query: z.infer<typeof MapaQuery>,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.mapaFrota(query.janelaMinutos, user.escopo);
   }
 
   /**
    * Expurga posições > 90 dias. Idempotente. Pode ser chamado por cron
    * externo (Easypanel) ou manualmente pelo admin.
    */
+  @RequerPermissao("mapa.ver")
   @Post("expurgar-posicoes")
   @HttpCode(200)
   expurgar() {

@@ -8,6 +8,7 @@ import {
   type ReferenciaKmPayload,
 } from "@ronan/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
+import type { EscopoAdmin } from "../common/escopo/escopo";
 import { RoteamentoService } from "../roteamento/roteamento.service";
 import { inicioDiasAtras } from "../common/timezone";
 
@@ -21,7 +22,8 @@ export type ReferenciaKm = ReferenciaKmPayload & {
 
 /** Uma viagem comparável do par, pro card do painel. */
 export type ComparavelKm = {
-  id: string;
+  /** Null quando a viagem é de outra frota: serve de referência, mas não abre. */
+  id: string | null;
   data: Date | null;
   km: number;
   motoristaNome: string | null;
@@ -467,6 +469,7 @@ export class KmAtipicoService {
     descargaId: string,
     config: ConfigKmAtipico,
     excluirViagemId: string,
+    escopo: EscopoAdmin,
     limite = 10,
   ): Promise<ComparavelKm[]> {
     const desde = inicioDiasAtras(config.janelaDias);
@@ -478,22 +481,34 @@ export class KmAtipicoService {
       km: number;
       motoristaNome: string | null;
       status: string;
+      transportadoraId: string | null;
     };
     const rows = await this.prisma.$queryRaw<Row[]>`
-      SELECT v.id, v.data, v.km::float8 AS km, v.status::text AS status, m.nome AS "motoristaNome"
+      SELECT v.id, v.data, v.km::float8 AS km, v.status::text AS status, m.nome AS "motoristaNome",
+             v."transportadoraId"
       FROM viagens v
       LEFT JOIN motoristas m ON m.id = v."motoristaId"
       WHERE ${filtro}
       ORDER BY v.data DESC NULLS LAST, v."sincronizadoEm" DESC
       LIMIT ${limite}
     `;
-    return rows.map((r) => ({
-      id: r.id,
-      data: r.data,
-      km: r.km,
-      motoristaNome: r.motoristaNome,
-      status: r.status,
-    }));
+    // A referência de km vale justamente por comparar com o que a FROTA INTEIRA
+    // já rodou no mesmo par — recortar a amostra pelo escopo destruiria a
+    // estatística. Então mantém o número e tira a identificação: sem `id` o
+    // painel não monta o link (o gestor não abre viagem de outra frota, que de
+    // todo jeito responderia 404), e sem `motoristaNome` não descobre quem é.
+    const daFrota = (t: string | null) =>
+      !escopo || (t != null && escopo.transportadoraIds.includes(t));
+    return rows.map((r) => {
+      const minha = daFrota(r.transportadoraId);
+      return {
+        id: minha ? r.id : null,
+        data: r.data,
+        km: r.km,
+        motoristaNome: minha ? r.motoristaNome : null,
+        status: r.status,
+      };
+    });
   }
 
   /**
@@ -502,7 +517,10 @@ export class KmAtipicoService {
    * inconsistente ou não avaliável, devolve `baseConsistente: false` e NÃO expõe
    * números — o card recusa em vez de exibir estatística sobre km podre.
    */
-  async detalheReferencia(viagemId: string): Promise<DetalheReferenciaKm | null> {
+  async detalheReferencia(
+    viagemId: string,
+    escopo: EscopoAdmin,
+  ): Promise<DetalheReferenciaKm | null> {
     const v = await this.prisma.viagem.findUnique({
       where: { id: viagemId },
       select: {
@@ -577,7 +595,7 @@ export class KmAtipicoService {
         excluirViagemId: viagemId,
         osrmRef: v.kmCalculado == null ? null : Number(v.kmCalculado),
       }),
-      this.comparaveisDoPar(v.localCargaId!, v.localDescargaId!, config, viagemId),
+      this.comparaveisDoPar(v.localCargaId!, v.localDescargaId!, config, viagemId, escopo),
     ]);
 
     return {

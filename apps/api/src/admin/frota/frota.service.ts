@@ -1,6 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { MapaFrotaItem } from "@ronan/shared-types";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
+import type { EscopoAdmin } from "../../common/escopo/escopo";
 
 const RETENCAO_DIAS = 90;
 
@@ -19,8 +21,13 @@ export class FrotaAdminService {
    * dele agora". Sem isso, motorista ativo some dos filtros curtos.
    * Otimizado via DISTINCT ON pra evitar subquery N+1. Postgres-specific.
    */
-  async mapaFrota(janelaMinutos: number): Promise<MapaFrotaItem[]> {
+  async mapaFrota(janelaMinutos: number, escopo: EscopoAdmin): Promise<MapaFrotaItem[]> {
     const limite = new Date(Date.now() - janelaMinutos * 60_000);
+    // SQL cru não passa por helper de escopo: o filtro entra na cláusula. Como
+    // posição não carrega carimbo, recorta pela frota atual do motorista.
+    const filtroFrota = escopo
+      ? Prisma.sql`AND m."transportadoraId" = ANY(${escopo.transportadoraIds}::text[])`
+      : Prisma.empty;
 
     const rows = await this.prisma.$queryRaw<
       Array<{
@@ -46,7 +53,8 @@ export class FrotaAdminService {
       FROM motorista_posicoes mp
       JOIN motoristas m ON m.id = mp."motoristaId"
       LEFT JOIN veiculos v ON v.id = m."veiculoDefaultId"
-      WHERE mp."capturadoEm" >= ${limite} OR mp."recebidoEm" >= ${limite}
+      WHERE (mp."capturadoEm" >= ${limite} OR mp."recebidoEm" >= ${limite})
+      ${filtroFrota}
       ORDER BY mp."motoristaId", mp."capturadoEm" DESC
     `;
 

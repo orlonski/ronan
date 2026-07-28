@@ -11,7 +11,7 @@ import type { CriarLocalInput } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
-import { SEM_ESCOPO } from "../../common/escopo/escopo";
+import { SEM_ESCOPO, filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
 
 type ListLocaisParams = PaginationQuery & {
   clienteId?: string;
@@ -193,7 +193,7 @@ export class LocaisService {
    * onde o motorista começou a preencher (balança/carga). Mais recentes primeiro,
    * limitado a 500 pra não pesar o mapa.
    */
-  async lancamentos(id: string) {
+  async lancamentos(id: string, escopo: EscopoAdmin) {
     const LIMITE = 500;
     // Aceita viagem com GPS de descarga OU de abertura — antes filtrava só
     // lat/lng, o que excluía todo o PWA (que não envia lat/lng) e viagens só
@@ -204,6 +204,9 @@ export class LocaisService {
         { descargaLat: { not: null }, descargaLng: { not: null } },
         { lat: { not: null }, lng: { not: null } },
       ],
+      // O local é catálogo compartilhado, mas o que descarregou nele são
+      // VIAGENS — com ticket e GPS. Só as da frota do usuário.
+      ...filtroEscopo(escopo),
     };
     const total = await this.prisma.viagem.count({ where });
     const viagens = await this.prisma.viagem.findMany({

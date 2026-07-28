@@ -42,7 +42,8 @@ export type ReferenciaKmDetalhe = {
   /** Observação da viagem — virou o lugar da justificativa de km (unificado). */
   observacao: string | null;
   comparaveis: Array<{
-    id: string;
+    /** Null = viagem de outra frota: entra na amostra, mas não abre nem identifica. */
+    id: string | null;
     data: string | null;
     km: number;
     motoristaNome: string | null;
@@ -233,25 +234,41 @@ export function ReferenciaKmCard({
                 Ver {data.comparaveis.length} viagens comparáveis
               </summary>
               <ul className="mt-2 space-y-0.5">
-                {data.comparaveis.map((c) => (
-                  <li key={c.id}>
-                    <Link
-                      href={`/viagens/${c.id}`}
-                      className="flex items-center justify-between rounded px-1.5 py-1 text-xs transition-colors hover:bg-muted"
-                    >
+                {data.comparaveis.map((c, i) => {
+                  const linha = (
+                    <>
                       <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
                         <StatusViagemBadge status={c.status} className="shrink-0" />
                         <span className="truncate">
-                          {fmtBR(c.data)} · {c.motoristaNome ?? "—"}
+                          {fmtBR(c.data)}
+                          {c.motoristaNome ? ` · ${c.motoristaNome}` : " · outra frota"}
                         </span>
                       </span>
                       <span className="flex shrink-0 items-center gap-1 font-medium">
                         {km(c.km)}
-                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                        {c.id && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
                       </span>
-                    </Link>
-                  </li>
-                ))}
+                    </>
+                  );
+                  // Sem `id` a viagem é de outra frota: conta como referência,
+                  // mas não vira link nem diz de quem é.
+                  return (
+                    <li key={c.id ?? `outra-${i}`}>
+                      {c.id ? (
+                        <Link
+                          href={`/viagens/${c.id}`}
+                          className="flex items-center justify-between rounded px-1.5 py-1 text-xs transition-colors hover:bg-muted"
+                        >
+                          {linha}
+                        </Link>
+                      ) : (
+                        <div className="flex items-center justify-between px-1.5 py-1 text-xs">
+                          {linha}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </details>
           )}

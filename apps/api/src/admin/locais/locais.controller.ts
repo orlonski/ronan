@@ -20,6 +20,7 @@ import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
+import { EscopoPor, IgnoraEscopo } from "../../common/escopo/escopo.decorator";
 import type { AuthAdminUser } from "../../auth/types";
 import { LocaisService } from "./locais.service";
 import { LocaisImagemService } from "../../locais-imagem/locais-imagem.service";
@@ -70,6 +71,8 @@ export class LocaisController {
     private readonly imagens: LocaisImagemService,
   ) {}
 
+  @IgnoraEscopo()
+  @RequerPermissao("locais.ver")
   @Get()
   list(@Query(new ZodValidationPipe(ListLocaisQuery)) query: ListLocaisQuery) {
     return this.service.list(query);
@@ -80,6 +83,8 @@ export class LocaisController {
    * lançamento" no form de editar viagem). Antes de :id pra Nest não tratar
    * "proximo" como id.
    */
+  @IgnoraEscopo()
+  @RequerPermissao("locais.ver")
   @Get("proximo")
   proximo(@Query(new ZodValidationPipe(ProximoQuery)) query: ProximoQuery) {
     return this.service.proximo({
@@ -142,6 +147,8 @@ export class LocaisController {
    * coordenada — serve tanto o detalhe quanto o preview do form (local ainda
    * sem id). ANTES de :id pra Nest não tratar "imagem" como id.
    */
+  @IgnoraEscopo()
+  @RequerPermissao("locais.ver")
   @Get("imagem")
   async imagem(
     @Query(new ZodValidationPipe(ImagemQuery)) query: z.infer<typeof ImagemQuery>,
@@ -154,6 +161,8 @@ export class LocaisController {
     res.send(buffer);
   }
 
+  @IgnoraEscopo()
+  @RequerPermissao("locais.ver")
   @Get(":id")
   findOne(@Param("id") id: string) {
     return this.service.findOne(id);
@@ -163,9 +172,11 @@ export class LocaisController {
    * Pontos de lançamento (lat/lng da viagem) das viagens deste local — pra
    * plotar no mapa do "ver local". Mais recentes primeiro, limitado.
    */
+  @EscopoPor("viagem")
+  @RequerPermissao("locais.ver")
   @Get(":id/lancamentos")
-  lancamentos(@Param("id") id: string) {
-    return this.service.lancamentos(id);
+  lancamentos(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    return this.service.lancamentos(id, user.escopo);
   }
 
   @RequerPermissao("locais.criar")
