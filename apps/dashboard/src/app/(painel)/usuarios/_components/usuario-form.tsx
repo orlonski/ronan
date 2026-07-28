@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -12,11 +12,12 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { ASSUNTOS_RESUMO } from "@ronan/shared-types";
+import { ASSUNTOS_RESUMO, RECURSOS_LABEL } from "@ronan/shared-types";
 import { useApiQuery, useCreateResource, useUpdateResource } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
 
-type Papel = { id: string; nome: string };
+type Papel = { id: string; nome: string; permissoes: string[] };
+type PermissaoRow = { chave: string; titulo: string; escopavel?: boolean };
 export type User = {
   id: string;
   nome: string;
@@ -59,6 +60,12 @@ export function UsuarioForm({ initial }: Props) {
   // GET /admin/papeis também exige "permissoes.gerenciar" — nem tenta buscar
   // sem a permissão.
   const papeis = useApiQuery<Papel[]>("/admin/papeis", { enabled: podeAtribuirPapel });
+  // Catálogo com o marcador `escopavel` (derivado dos endpoints que sabem
+  // filtrar por frota) — pra dizer, ANTES de salvar, o que o papel escolhido
+  // realmente vai render pra um usuário restrito.
+  const catalogo = useApiQuery<PermissaoRow[]>("/admin/permissoes", {
+    enabled: podeAtribuirPapel,
+  });
 
   const [form, setForm] = useState({
     nome: initial?.nome ?? "",
@@ -124,6 +131,22 @@ export function UsuarioForm({ initial }: Props) {
   }
 
   const saving = create.isPending || update.isPending;
+
+  // Prévia do acesso restrito: das permissões do papel, quais sobrevivem ao
+  // escopo. Um papel de uso interno (ex.: Operador) tem dezenas de chaves e
+  // quase nenhuma vale pra frota terceira — melhor mostrar isso aqui do que
+  // deixar quem configurou descobrir pelo menu vazio do gestor.
+  const previaEscopo = useMemo(() => {
+    const papel = (papeis.data ?? []).find((p) => p.id === form.papelId);
+    const rows = catalogo.data ?? [];
+    if (!papel || rows.length === 0) return null;
+    const escopaveis = new Set(rows.filter((r) => r.escopavel).map((r) => r.chave));
+    const valem = papel.permissoes.filter((c) => escopaveis.has(c));
+    const titulo = (c: string) =>
+      RECURSOS_LABEL[c.split(".")[0]!] ?? c.split(".")[0]!;
+    const telas = [...new Set(valem.filter((c) => c.endsWith(".ver")).map(titulo))];
+    return { total: papel.permissoes.length, valem: valem.length, telas, papel: papel.nome };
+  }, [papeis.data, catalogo.data, form.papelId]);
   // Restrito sem nenhuma transportadora = usuário que não vê nada. O backend
   // recusa (Zod), mas travar o botão evita o ida-e-volta.
   const escopoIncompleto =
@@ -245,6 +268,40 @@ export function UsuarioForm({ initial }: Props) {
                   <p className="text-xs font-medium text-amber-700 dark:text-amber-500">
                     Escolha pelo menos uma — sem nenhuma, ele não enxerga nada.
                   </p>
+                )}
+
+                {previaEscopo && (
+                  <div className="rounded-md border bg-muted/40 p-3 text-xs">
+                    <p className="font-medium">
+                      Com o papel {previaEscopo.papel}, ele vai ver{" "}
+                      {previaEscopo.telas.length === 0
+                        ? "nenhuma tela"
+                        : previaEscopo.telas.join(", ")}
+                      .
+                    </p>
+                    <p className="mt-1 text-muted-foreground">
+                      {previaEscopo.valem} de {previaEscopo.total} permissões do papel
+                      funcionam com acesso restrito
+                      {previaEscopo.valem < previaEscopo.total && (
+                        <>
+                          {" "}— as outras {previaEscopo.total - previaEscopo.valem} são de
+                          telas que mostram a operação inteira (fechamentos, clientes,
+                          locais…) e por isso ficam fora
+                        </>
+                      )}
+                      .
+                    </p>
+                    {previaEscopo.valem < 3 && (
+                      <p className="mt-1 text-amber-700 dark:text-amber-500">
+                        Papéis de uso interno rendem pouco aqui. Para um gestor de frota,
+                        vale criar um papel só dele com as chaves marcadas{" "}
+                        <span className="rounded-full bg-emerald-100 px-1.5 font-medium text-emerald-800">
+                          frota
+                        </span>
+                        .
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             )}
