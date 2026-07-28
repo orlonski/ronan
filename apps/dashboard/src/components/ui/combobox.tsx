@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Check, ChevronsUpDown, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 export type ComboboxOption = {
   value: string;
@@ -77,10 +78,13 @@ export function Combobox({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={
-            triggerClassName ??
-            "flex h-9 w-full items-center justify-between gap-2 rounded-md border bg-background px-3 text-left text-sm shadow-sm hover:bg-accent/30 sm:w-auto sm:min-w-[180px]"
-          }
+          // triggerClassName ACRESCENTA (cn resolve o conflito de Tailwind, o
+          // último vence). Antes substituía a classe inteira, então passar só
+          // "w-full" apagava borda/altura/padding e o trigger virava um ícone solto.
+          className={cn(
+            "flex h-9 w-full items-center justify-between gap-2 rounded-md border bg-background px-3 text-left text-sm shadow-sm hover:bg-accent/30 sm:w-auto sm:min-w-[180px]",
+            triggerClassName,
+          )}
         >
           <span className="truncate">
             {selecionado ? (

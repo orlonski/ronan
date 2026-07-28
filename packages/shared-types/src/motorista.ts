@@ -90,6 +90,8 @@ export const CriarMotoristaInput = z
     telefone: TelefoneOpcionalSchema,
     email: EmailOpcionalSchema,
     placas: z.array(PlacaInput).default([]),
+    /** Frota dona do motorista. Null = não classificado. */
+    transportadoraId: z.string().uuid().nullish(),
     /** Placa default — string (não id). Backend resolve pro id após upsert. */
     placaDefault: z
       .string()
@@ -118,6 +120,7 @@ export const AtualizarMotoristaInput = z
     telefone: TelefoneOpcionalSchema,
     email: EmailOpcionalSchema,
     placas: z.array(PlacaInput).optional(),
+    transportadoraId: z.string().uuid().nullish(),
     placaDefault: z
       .string()
       .trim()

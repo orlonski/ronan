@@ -5,6 +5,7 @@ import { RegrasMinimoModule } from "./regras-minimo/regras-minimo.module";
 import { ViagemLifecycleAdminModule } from "./viagem-lifecycle/viagem-lifecycle.module";
 import { VeiculosModule } from "./veiculos/veiculos.module";
 import { EmpresasModule } from "./empresas/empresas.module";
+import { TransportadorasModule } from "./transportadoras/transportadoras.module";
 import { ClientesModule } from "./clientes/clientes.module";
 import { MotoristasModule } from "./motoristas/motoristas.module";
 import { UsersModule } from "./users/users.module";
@@ -34,6 +35,7 @@ import { PapeisModule } from "./papeis/papeis.module";
     ViagemLifecycleAdminModule,
     VeiculosModule,
     EmpresasModule,
+    TransportadorasModule,
     ClientesModule,
     MotoristasModule,
     UsersModule,

@@ -5,6 +5,7 @@ import {
 } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type { CriarPedagioInput } from "@ronan/shared-types";
+import { resolverTransportadora } from "../common/transportadora";
 import { PrismaService } from "../prisma/prisma.service";
 import { mesRange } from "./viagens.service";
 
@@ -66,11 +67,18 @@ export class PedagiosMotoristaService {
         include: PEDAGIO_INCLUDE,
       });
     }
+    // Frota dona do lançamento, carimbada na criação (ver common/transportadora.ts).
+    const transportadoraId = await resolverTransportadora(
+      this.prisma,
+      motoristaId,
+      input.veiculoId,
+    );
     return this.prisma.pedagio.create({
       data: {
         clientId: input.clientId,
         motoristaId,
         veiculoId: input.veiculoId,
+        transportadoraId,
         data: input.data,
         pracaPedagio: input.pracaPedagio,
         valor: input.valor,

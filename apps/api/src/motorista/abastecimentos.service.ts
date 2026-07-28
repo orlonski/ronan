@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type { CriarAbastecimentoInput } from "@ronan/shared-types";
+import { resolverTransportadora } from "../common/transportadora";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
 import { mesRange } from "./viagens.service";
@@ -136,11 +137,19 @@ export class AbastecimentosMotoristaService {
         : null;
 
     const { fotoKey, clientId, ...rest } = input;
+    // Frota dona do lançamento, carimbada na criação (ver common/transportadora.ts).
+    // Não confundir com empresaId, que é o tomador que paga o abastecimento.
+    const transportadoraId = await resolverTransportadora(
+      this.prisma,
+      motoristaId,
+      rest.veiculoId,
+    );
     return this.prisma.abastecimento.create({
       data: {
         clientId,
         motoristaId,
         veiculoId: rest.veiculoId,
+        transportadoraId,
         empresaId: rest.empresaId,
         data: rest.data,
         tipo: rest.tipo,

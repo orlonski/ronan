@@ -15,6 +15,7 @@ import type {
 } from "@ronan/shared-types";
 import type { AppInfoHeaders } from "../auth/decorators/app-info.decorator";
 import { AuditoriaService } from "../auditoria/auditoria.service";
+import { resolverTransportadora } from "../common/transportadora";
 import {
   aplicarMinimos,
   resolverRegraMinimo,
@@ -832,12 +833,21 @@ export class ViagensMotoristaService {
         ? kmFonte === "MANUAL" || kmFonte === "HISTORICO"
         : rest.kmEditadoManual;
 
+    // Frota dona do lançamento, carimbada agora — reclassificar o motorista
+    // depois não pode mover esta viagem de frota. Ver common/transportadora.ts.
+    const transportadoraId = await resolverTransportadora(
+      this.prisma,
+      motoristaId,
+      rest.veiculoId,
+    );
+
     const viagem = await this.prisma.viagem.create({
       data: {
         clientId,
         motoristaId,
         veiculoId: rest.veiculoId,
         clienteId: rest.clienteId,
+        transportadoraId,
         materialId: rest.materialId,
         data: rest.data,
         // Aguardando peso: toneladas fica null até completar (romaneio no fim do
@@ -1193,12 +1203,19 @@ export class ViagensMotoristaService {
       });
     }
 
+    const transportadoraId = await resolverTransportadora(
+      this.prisma,
+      motoristaId,
+      input.veiculoId,
+    );
+
     const viagem = await this.prisma.viagem.create({
       data: {
         clientId: input.clientId,
         motoristaId,
         veiculoId: input.veiculoId,
         clienteId: input.clienteId,
+        transportadoraId,
         status: "EM_ANDAMENTO",
         iniciadaGuiada: true,
         iniciadoEm: input.iniciadoEm,

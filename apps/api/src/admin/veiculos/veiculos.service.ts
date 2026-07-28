@@ -3,8 +3,15 @@ import type { Prisma } from "@prisma/client";
 import type { CriarVeiculoInput, AtualizarVeiculoInput } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
+import { adotarLancamentosOrfaos } from "../../common/transportadora";
 
-type ListVeiculosParams = PaginationQuery & { ativo?: "true" | "false" };
+type ListVeiculosParams = PaginationQuery & {
+  ativo?: "true" | "false";
+  transportadoraId?: string;
+  semTransportadora?: "true";
+};
+
+const TRANSPORTADORA_SELECT = { select: { id: true, nome: true } };
 
 @Injectable()
 export class VeiculosService {
@@ -14,20 +21,35 @@ export class VeiculosService {
     const where: Prisma.VeiculoWhereInput = {};
     if (params.ativo === "true") where.ativo = true;
     if (params.ativo === "false") where.ativo = false;
+    if (params.transportadoraId) where.transportadoraId = params.transportadoraId;
+    if (params.semTransportadora === "true") where.transportadoraId = null;
     return paginate(this.prisma.veiculo, {
       params,
       where: where as Record<string, unknown>,
       searchFields: ["placa", "modelo"],
-      sortable: { placa: "placa", modelo: "modelo", criadoEm: "criadoEm", ativo: "ativo" },
+      sortable: {
+        placa: "placa",
+        modelo: "modelo",
+        criadoEm: "criadoEm",
+        ativo: "ativo",
+        transportadora: "transportadora.nome",
+      },
       defaultSort: { field: "placa", order: "asc" },
-      include: { criadoPor: { select: { id: true, nome: true } } },
+      include: {
+        criadoPor: { select: { id: true, nome: true } },
+        transportadora: TRANSPORTADORA_SELECT,
+      },
     });
   }
 
   /** Item por id — usado pelo combobox do painel pra resolver o label de um
    *  veículo já selecionado que não caiu na página atual da busca. */
   async findOne(id: string) {
-    return this.ensureExists(id);
+    await this.ensureExists(id);
+    return this.prisma.veiculo.findUniqueOrThrow({
+      where: { id },
+      include: { transportadora: TRANSPORTADORA_SELECT },
+    });
   }
 
   async create(data: CriarVeiculoInput, usuarioId: string) {
@@ -37,8 +59,18 @@ export class VeiculosService {
   }
 
   async update(id: string, data: AtualizarVeiculoInput) {
-    await this.ensureExists(id);
-    return this.prisma.veiculo.update({ where: { id }, data });
+    const antes = await this.ensureExists(id);
+    const veiculo = await this.prisma.veiculo.update({ where: { id }, data });
+    // Classificou uma placa que ainda não tinha frota: adota o histórico dela
+    // que está sem dono, senão o gestor loga e não vê nada do que já rodou.
+    if (!antes.transportadoraId && veiculo.transportadoraId) {
+      await adotarLancamentosOrfaos(
+        this.prisma,
+        { veiculoId: id },
+        veiculo.transportadoraId,
+      );
+    }
+    return veiculo;
   }
 
   async remove(id: string) {

@@ -14,6 +14,7 @@ import {
   telefoneDigits,
   type TipoDocumentoMotorista,
 } from "@ronan/shared-types";
+import { TransportadoraCombobox, transportadoraOption } from "@/components/fk-comboboxes";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -30,6 +31,8 @@ export type Motorista = {
   telefone: string | null;
   email: string | null;
   ativo: boolean;
+  transportadoraId: string | null;
+  transportadora: { id: string; nome: string } | null;
   veiculoDefaultId: string | null;
   veiculoDefault: Veiculo | null;
   veiculos: Veiculo[];
@@ -57,6 +60,7 @@ type FormShape = {
   telefone: string;
   email: string;
   placas: PlacaRow[];
+  transportadoraId: string | undefined;
   /** Placa string (não id). Backend resolve. */
   placaDefault: string | null;
 };
@@ -68,6 +72,7 @@ const empty: FormShape = {
   telefone: "",
   email: "",
   placas: [],
+  transportadoraId: undefined,
   placaDefault: null,
 };
 
@@ -161,6 +166,7 @@ export function MotoristaForm({ initial }: Props) {
           telefone: maskTelefone(initial.telefone ?? ""),
           email: initial.email ?? "",
           placas: initial.veiculos.map((v) => ({ placa: v.placa, modelo: v.modelo ?? "" })),
+          transportadoraId: initial.transportadoraId ?? undefined,
           placaDefault: initial.veiculoDefault?.placa ?? null,
         }
       : empty,
@@ -241,6 +247,7 @@ export function MotoristaForm({ initial }: Props) {
         telefone: telDigitos || undefined,
         email: emailTrim || undefined,
         placas: placasPayload,
+        transportadoraId: form.transportadoraId ?? null,
         placaDefault,
       };
       if (form.senha) body.novaSenha = form.senha;
@@ -253,6 +260,7 @@ export function MotoristaForm({ initial }: Props) {
         telefone: telDigitos || undefined,
         email: emailTrim || undefined,
         placas: placasPayload,
+        transportadoraId: form.transportadoraId ?? null,
         placaDefault,
       });
     }
@@ -311,6 +319,26 @@ export function MotoristaForm({ initial }: Props) {
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
             />
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label>Transportadora</Label>
+            <TransportadoraCombobox
+              value={form.transportadoraId}
+              onChange={(v) => setForm({ ...form, transportadoraId: v })}
+              triggerClassName="sm:w-full"
+              initialOption={
+                initial?.transportadora
+                  ? transportadoraOption(initial.transportadora)
+                  : undefined
+              }
+            />
+            <p className="text-xs text-muted-foreground">
+              Frota dona do motorista — é ela que carimba cada viagem, pedágio e
+              abastecimento que ele lança.{" "}
+              {initial && !initial.transportadoraId
+                ? "Ao definir agora, o histórico dele que ainda está sem dono é adotado."
+                : "Trocar depois não muda o que ele já lançou."}
+            </p>
           </div>
         </div>
 

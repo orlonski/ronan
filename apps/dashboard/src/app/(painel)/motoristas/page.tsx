@@ -21,6 +21,8 @@ import { EnviarResumoMotoristaButton } from "@/components/enviar-resumo-motorist
 import { DocumentosBadge } from "@/components/documentos-badge";
 import { DocumentosDrawerButton } from "@/components/documentos-drawer";
 import { Permitido } from "@/components/requer-tela";
+import { TransportadoraCombobox } from "@/components/fk-comboboxes";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -46,6 +48,8 @@ type Motorista = AppVersaoInfo & {
   ativo: boolean;
   status: StatusMotorista;
   aprovadoEm: string | null;
+  transportadoraId: string | null;
+  transportadora: { id: string; nome: string } | null;
   veiculoDefaultId: string | null;
   veiculoDefault: Veiculo | null;
   veiculos: Veiculo[];
@@ -149,6 +153,21 @@ export default function MotoristasPage() {
                 </span>
               ))}
             </div>
+          ),
+      },
+      {
+        id: "transportadora",
+        accessorKey: "transportadora",
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Transportadora" />
+        ),
+        cell: ({ row }) =>
+          row.original.transportadora ? (
+            <span className="text-sm">{row.original.transportadora.nome}</span>
+          ) : (
+            <Badge className="border-amber-200 bg-amber-50 text-amber-800">
+              Sem transportadora
+            </Badge>
           ),
       },
       {
@@ -344,6 +363,18 @@ export default function MotoristasPage() {
                     { value: "true", label: "Ativos" },
                     { value: "false", label: "Inativos" },
                   ]}
+                />
+                <TransportadoraCombobox
+                  value={tableState.filters.transportadoraId}
+                  onChange={(v) => tableState.setFilter("transportadoraId", v)}
+                  placeholder="Transportadora"
+                />
+                <Combobox
+                  value={tableState.filters.semTransportadora}
+                  onChange={(v) => tableState.setFilter("semTransportadora", v)}
+                  placeholder="Classificação"
+                  showSearch={false}
+                  options={[{ value: "true", label: "Sem transportadora" }]}
                 />
                 <Combobox
                   value={tableState.filters.appVersion}

@@ -56,6 +56,11 @@ const RESOURCE_DEFS: ResourceDef[] = [
   { recurso: "demandas", label: "Demandas do agente", modulo: "Operação", acoes: ["ver", "criar"] },
   // ---- Cadastros ----
   { recurso: "motoristas", label: "Motoristas", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir", "aprovar", "documentos"] },
+  // O controller de veículos já exigia veiculos.criar/editar/excluir, mas o
+  // recurso nunca existiu aqui — o seed podava as chaves órfãs e ninguém
+  // conseguia mexer em veículo pelo painel. Declarado agora.
+  { recurso: "veiculos", label: "Veículos", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
+  { recurso: "transportadoras", label: "Transportadoras (frotas)", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "mapa", label: "Mapa", modulo: "Cadastros", acoes: ["ver"] },
   { recurso: "empresas", label: "Empresas", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir", "layouts"] },
   { recurso: "clientes", label: "Clientes", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },

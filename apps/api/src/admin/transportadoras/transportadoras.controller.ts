@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
-import { AtualizarVeiculoInput, CriarVeiculoInput } from "@ronan/shared-types";
+import { AtualizarTransportadoraInput, CriarTransportadoraInput } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { paginationQuerySchema } from "../../common/pagination";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
@@ -9,26 +9,30 @@ import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import type { AuthAdminUser } from "../../auth/types";
-import { VeiculosService } from "./veiculos.service";
+import { TransportadorasService } from "./transportadoras.service";
 
-const ListVeiculosQuery = paginationQuerySchema.extend({
-  ativo: z.enum(["true", "false"]).optional(),
-  transportadoraId: z.string().uuid().optional(),
-  semTransportadora: z.enum(["true"]).optional(),
+const ListTransportadorasQuery = paginationQuerySchema.extend({
+  ativa: z.enum(["true", "false"]).optional(),
 });
-type ListVeiculosQuery = z.infer<typeof ListVeiculosQuery>;
+type ListTransportadorasQuery = z.infer<typeof ListTransportadorasQuery>;
 
-@ApiTags("admin/veiculos")
+@ApiTags("admin/transportadoras")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
 @Roles("ADMIN_USER")
-@Controller("admin/veiculos")
-export class VeiculosController {
-  constructor(private readonly service: VeiculosService) {}
+@RequerPermissao("transportadoras.ver")
+@Controller("admin/transportadoras")
+export class TransportadorasController {
+  constructor(private readonly service: TransportadorasService) {}
 
   @Get()
-  list(@Query(new ZodValidationPipe(ListVeiculosQuery)) query: ListVeiculosQuery) {
+  list(@Query(new ZodValidationPipe(ListTransportadorasQuery)) query: ListTransportadorasQuery) {
     return this.service.list(query);
+  }
+
+  @Get("nao-classificados")
+  naoClassificados() {
+    return this.service.naoClassificados();
   }
 
   @Get(":id")
@@ -36,25 +40,25 @@ export class VeiculosController {
     return this.service.findOne(id);
   }
 
-  @RequerPermissao("veiculos.criar")
+  @RequerPermissao("transportadoras.criar")
   @Post()
   create(
-    @Body(new ZodValidationPipe(CriarVeiculoInput)) body: CriarVeiculoInput,
+    @Body(new ZodValidationPipe(CriarTransportadoraInput)) body: CriarTransportadoraInput,
     @CurrentUser() user: AuthAdminUser,
   ) {
     return this.service.create(body, user.id);
   }
 
-  @RequerPermissao("veiculos.editar")
+  @RequerPermissao("transportadoras.editar")
   @Patch(":id")
   update(
     @Param("id") id: string,
-    @Body(new ZodValidationPipe(AtualizarVeiculoInput)) body: AtualizarVeiculoInput,
+    @Body(new ZodValidationPipe(AtualizarTransportadoraInput)) body: AtualizarTransportadoraInput,
   ) {
     return this.service.update(id, body);
   }
 
-  @RequerPermissao("veiculos.excluir")
+  @RequerPermissao("transportadoras.excluir")
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.service.remove(id);

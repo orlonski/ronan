@@ -16,6 +16,7 @@ import { EvolutionClientService } from "../../whatsapp/evolution-client.service"
 import { SessaoService } from "../../whatsapp/sessao.service";
 import { paginate, type Paginated, type PaginationQuery } from "../../common/pagination";
 import { ymdSaoPaulo } from "../../common/timezone";
+import { adotarLancamentosOrfaos } from "../../common/transportadora";
 import { EasUpdateService } from "./eas-update.service";
 
 // Valor especial do filtro: motoristas que nunca reportaram versão (appVersion null).
@@ -25,6 +26,8 @@ type ListMotoristasParams = PaginationQuery & {
   ativo?: "true" | "false";
   status?: StatusMotorista;
   appVersion?: string;
+  transportadoraId?: string;
+  semTransportadora?: "true";
 };
 
 const SAFE_SELECT = {
@@ -52,6 +55,8 @@ const SAFE_SELECT = {
     },
     orderBy: { tipo: "asc" },
   },
+  transportadoraId: true,
+  transportadora: { select: { id: true, nome: true } },
   ativo: true,
   status: true,
   aprovadoEm: true,
@@ -125,6 +130,8 @@ export class MotoristasService {
     if (params.status) where.status = params.status;
     if (params.appVersion === SEM_VERSAO) where.appVersion = null;
     else if (params.appVersion) where.appVersion = params.appVersion;
+    if (params.transportadoraId) where.transportadoraId = params.transportadoraId;
+    if (params.semTransportadora === "true") where.transportadoraId = null;
 
     const result = await paginate<Record<string, unknown>, ListMotoristasParams>(
       this.prisma.motorista,
@@ -138,6 +145,7 @@ export class MotoristasService {
           criadoEm: "criadoEm",
           ultimoLoginEm: "ultimoLoginEm",
           ativo: "ativo",
+          transportadora: "transportadora.nome",
         },
         defaultSort: { field: "nome", order: "asc" },
         select: SAFE_SELECT as unknown as Record<string, unknown>,
@@ -261,6 +269,7 @@ export class MotoristasService {
           senhaHash,
           telefone: data.telefone,
           email: data.email,
+          transportadoraId: data.transportadoraId ?? null,
           criadoPorId: usuarioId,
         },
       });
@@ -338,6 +347,17 @@ export class MotoristasService {
 
       return tx.motorista.update({ where: { id }, data: updateData, select: SAFE_SELECT });
     });
+
+    // Classificou um motorista que ainda não tinha frota: adota o histórico dele
+    // que está sem dono, senão o gestor loga e não vê nada do que já rodou.
+    // Reclassificar de uma frota pra outra não move nada — só adota órfão.
+    if (!atual.transportadoraId && updated.transportadoraId) {
+      await adotarLancamentosOrfaos(
+        this.prisma,
+        { motoristaId: id },
+        updated.transportadoraId,
+      );
+    }
     return this.flatten(updated);
   }
 

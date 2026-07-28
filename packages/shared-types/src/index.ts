@@ -10,6 +10,7 @@ export * from "./telefone";
 export * from "./local";
 export * from "./cliente";
 export * from "./empresa";
+export * from "./transportadora";
 export * from "./motorista";
 export * from "./motorista-documento";
 export * from "./veiculo";

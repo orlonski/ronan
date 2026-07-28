@@ -22,6 +22,8 @@ const ListMotoristasQuery = paginationQuerySchema.extend({
   status: z.enum(["PENDENTE_APROVACAO", "APROVADO", "REJEITADO"]).optional(),
   // Filtra pela versão do app reportada. "sem-versao" = nunca abriu o app.
   appVersion: z.string().min(1).optional(),
+  transportadoraId: z.string().uuid().optional(),
+  semTransportadora: z.enum(["true"]).optional(),
 });
 type ListMotoristasQuery = z.infer<typeof ListMotoristasQuery>;
 

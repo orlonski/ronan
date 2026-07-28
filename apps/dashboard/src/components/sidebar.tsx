@@ -30,6 +30,7 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  Truck,
   UserCircle,
   Users2,
   X,
@@ -73,6 +74,8 @@ const GRUPOS: Grupo[] = [
     titulo: "Cadastros",
     itens: [
       { href: "/motoristas", label: "Motoristas", icon: HardHat, perm: "motoristas.ver" },
+      { href: "/veiculos", label: "Veículos", icon: Truck, perm: "veiculos.ver" },
+      { href: "/transportadoras", label: "Transportadoras", icon: Truck, perm: "transportadoras.ver" },
       { href: "/mapa", label: "Mapa", icon: MapPin, perm: "mapa.ver" },
       { href: "/empresas", label: "Empresas", icon: Building2, perm: "empresas.ver" },
       { href: "/clientes", label: "Clientes", icon: Boxes, perm: "clientes.ver" },

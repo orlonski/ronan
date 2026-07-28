@@ -18,6 +18,7 @@ type Local = { id: string; nome: string; cidade: string; uf: string };
 type Veiculo = { id: string; placa: string; modelo: string | null };
 type Cliente = { id: string; nome: string };
 type Motorista = { id: string; nome: string; cpf: string };
+type Transportadora = { id: string; nome: string; cnpj: string | null };
 
 export const localOption = (l: {
   id: string;
@@ -44,6 +45,16 @@ export const clienteOption = (c: {
   id: string;
   nome: string;
 }): ComboboxOption => ({ value: c.id, label: c.nome });
+
+export const transportadoraOption = (t: {
+  id: string;
+  nome: string;
+  cnpj?: string | null;
+}): ComboboxOption => ({
+  value: t.id,
+  label: t.nome,
+  sublabel: t.cnpj ?? undefined,
+});
 
 type SingleProps = {
   value: string | undefined;
@@ -76,6 +87,19 @@ export function VeiculoCombobox(props: SingleProps) {
       searchPlaceholder="Buscar por placa…"
       emptyMessage="Nenhum veículo encontrado."
       placeholder={props.placeholder ?? "Selecione"}
+    />
+  );
+}
+
+export function TransportadoraCombobox(props: SingleProps) {
+  return (
+    <AsyncCombobox<Transportadora>
+      {...props}
+      path="/admin/transportadoras"
+      mapOption={transportadoraOption}
+      searchPlaceholder="Buscar por nome ou CNPJ…"
+      emptyMessage="Nenhuma transportadora encontrada."
+      placeholder={props.placeholder ?? "Sem transportadora"}
     />
   );
 }

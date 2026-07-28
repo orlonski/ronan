@@ -199,9 +199,15 @@ model User {
   // Vazio = trata como "todos" no envio. Ids em @ronan/shared-types ASSUNTOS_RESUMO.
   resumoAssuntos      String[] @default([])
   // Papel (RBAC): define as permissões granulares (telas, assuntos do resumo).
-  // perfil continua como gate grosso (login, @Roles); o papel é a camada fina.
+  // O papel diz O QUE o usuário pode fazer; o escopo abaixo diz QUAIS registros
+  // ele enxerga. São dimensões independentes.
   papel         Papel?        @relation(fields: [papelId], references: [id], onDelete: SetNull)
   papelId       String?
+  /// True = enxerga todos os registros (comportamento histórico; migration seta
+  /// true pra todo mundo que já existia). False = restrito às transportadoras
+  /// vinculadas em `transportadoras` — e restrito SEM vínculo nenhum não vê
+  /// nada, nunca tudo. Fail-open aqui liberaria a base inteira por esquecimento.
+  acessoGlobal  Boolean       @default(true)
   criadoEm      DateTime      @default(now())
   alteradoEm    DateTime      @updatedAt
 
@@ -222,9 +228,13 @@ model User {
 
   // Backreferences pra rastreamento "Cadastrado por": cada recurso admin
   // tem `criadoPorId` opcional → User. Listas inversas necessárias pelo Prisma.
+  // Escopo de acesso (ver acessoGlobal). Vazio + acessoGlobal=false = vê nada.
+  transportadoras     UsuarioTransportadora[]
+
   clientesCriados     Cliente[]     @relation("CriouCliente")
   materiaisCriados    Material[]    @relation("CriouMaterial")
   veiculosCriados     Veiculo[]     @relation("CriouVeiculo")
+  transportadorasCriadas Transportadora[] @relation("CriouTransportadora")
   motoristasCriados   Motorista[]   @relation("CriouMotorista")
   motoristasAprovados Motorista[]   @relation("AprovouMotorista")
   empresasCriadas     Empresa[]     @relation("CriouEmpresa")
@@ -385,6 +395,11 @@ model Motorista {
   /// o que a lista trouxe) — pra diagnosticar ex. "descarga errada". Opt-in por
   /// motorista; gate é client-side (só emite os eventos nv_*). Default false.
   podeTelemetria          Boolean   @default(false)
+  /// Frota dona do motorista. Null = não classificado (invisível pros usuários
+  /// restritos). Usado pra carimbar Viagem/Pedagio/Abastecimento na criação —
+  /// mudar aqui NÃO reescreve o histórico já carimbado, de propósito.
+  transportadora          Transportadora? @relation(fields: [transportadoraId], references: [id], onDelete: SetNull)
+  transportadoraId        String?
   criadoEm                DateTime  @default(now())
   alteradoEm              DateTime  @updatedAt
 
@@ -411,6 +426,7 @@ model Motorista {
 
   @@index([ativo])
   @@index([status])
+  @@index([transportadoraId])
   @@map("motoristas")
 }
 
@@ -630,6 +646,10 @@ model Veiculo {
   placa      String   @unique
   modelo     String?
   ativo      Boolean  @default(true)
+  /// Frota dona do caminhão. Null = não classificado. Serve de fallback quando
+  /// o motorista não tem transportadora no momento do lançamento.
+  transportadora   Transportadora? @relation(fields: [transportadoraId], references: [id], onDelete: SetNull)
+  transportadoraId String?
   criadoEm   DateTime @default(now())
   alteradoEm DateTime @updatedAt
 
@@ -642,7 +662,51 @@ model Veiculo {
   criadoPorId           String?
 
   @@index([ativo])
+  @@index([transportadoraId])
   @@map("veiculos")
+}
+
+/// Dona dos caminhões e dos motoristas — a frota. A Schaba é uma; as frotas
+/// terceiras que rodam pra ela são outras. NÃO confundir com Empresa, que é o
+/// tomador de serviço (quem manda planilha de fechamento / recebe viagem).
+///
+/// Existe pra dar escopo de acesso no painel: um usuário restrito a uma
+/// transportadora só enxerga os lançamentos dela (ver UsuarioTransportadora).
+model Transportadora {
+  id         String   @id @default(uuid())
+  nome       String
+  cnpj       String?  @unique
+  contato    String?
+  ativa      Boolean  @default(true)
+  criadoEm   DateTime @default(now())
+  alteradoEm DateTime @updatedAt
+
+  motoristas     Motorista[]
+  veiculos       Veiculo[]
+  viagens        Viagem[]
+  pedagios       Pedagio[]
+  abastecimentos Abastecimento[]
+  usuarios       UsuarioTransportadora[]
+  criadoPor      User?                   @relation("CriouTransportadora", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId    String?
+
+  @@index([ativa])
+  @@map("transportadoras")
+}
+
+/// Vínculo de escopo: quais transportadoras um usuário restrito enxerga.
+/// Só tem efeito quando `User.acessoGlobal = false`. Editar exige a permissão
+/// `permissoes.gerenciar` (é RBAC, não dado cadastral) — ver UsersService.
+model UsuarioTransportadora {
+  usuario          User           @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId        String
+  transportadora   Transportadora @relation(fields: [transportadoraId], references: [id], onDelete: Cascade)
+  transportadoraId String
+  criadoEm         DateTime       @default(now())
+
+  @@id([usuarioId, transportadoraId])
+  @@index([transportadoraId])
+  @@map("usuario_transportadoras")
 }
 
 model Empresa {
@@ -1053,6 +1117,12 @@ model Viagem {
   /// app nativo). Null pra viagens antigas ou PWA. Só pra auditoria/suporte.
   appVersaoCriacao   String?
   appUpdateIdCriacao String?
+  /// Frota dona da viagem, CARIMBADA na criação (motorista.transportadoraId ??
+  /// veiculo.transportadoraId). Desnormalizado de propósito: reclassificar um
+  /// motorista não pode mover o histórico dele de uma frota pra outra. Também
+  /// evita JOIN em toda listagem/count e deixa o filtro trivial no SQL cru.
+  transportadora    Transportadora? @relation(fields: [transportadoraId], references: [id], onDelete: SetNull)
+  transportadoraId  String?
 
   fotos             TicketFoto[]
   pedagios          Pedagio[]
@@ -1062,6 +1132,7 @@ model Viagem {
   eventosViagem     EventoViagem[]
   mensagens         ViagemMensagem[]
 
+  @@index([transportadoraId, data])
   @@index([motoristaId, data])
   @@index([veiculoId, data])
   @@index([clienteId, data])
@@ -1337,11 +1408,15 @@ model Pedagio {
   viagemId        String?
   criadoOfflineEm DateTime?
   sincronizadoEm  DateTime  @default(now())
+  /// Carimbada na criação — ver Viagem.transportadoraId.
+  transportadora   Transportadora? @relation(fields: [transportadoraId], references: [id], onDelete: SetNull)
+  transportadoraId String?
 
   fechamentoLinhas FechamentoLinha[]
 
   @@index([veiculoId, data])
   @@index([viagemId])
+  @@index([transportadoraId, data])
   @@map("pedagios")
 }
 
@@ -1790,6 +1865,10 @@ model Abastecimento {
   criadoOfflineEm DateTime?
   sincronizadoEm  DateTime        @default(now())
   alteradoEm      DateTime        @updatedAt
+  /// Carimbada na criação — ver Viagem.transportadoraId. Não confundir com
+  /// `empresaId` acima, que é o tomador que paga o abastecimento.
+  transportadora   Transportadora? @relation(fields: [transportadoraId], references: [id], onDelete: SetNull)
+  transportadoraId String?
 
   fotos            AbastecimentoFoto[]
   fechamentoLinhas FechamentoLinha[]
@@ -1798,6 +1877,7 @@ model Abastecimento {
   @@index([motoristaId, data])
   @@index([empresaId, data])
   @@index([data])
+  @@index([transportadoraId, data])
   @@map("abastecimentos")
 }
 
