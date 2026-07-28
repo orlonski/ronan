@@ -18,6 +18,7 @@ import { paginationQuerySchema } from "../../common/pagination";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
+import { IgnoraEscopo } from "../../common/escopo/escopo.decorator";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import type { AuthAdminUser } from "../../auth/types";
 import { UsersService } from "./users.service";
@@ -34,6 +35,11 @@ type ListUsersQuery = z.infer<typeof ListUsersQuery>;
 export class UsersController {
   constructor(private readonly service: UsersService) {}
 
+  // Sem @RequerPermissao de propósito (todo mundo precisa ler as próprias
+  // permissões pra montar a sidebar) e sem escopo: o id vem do token, então só
+  // devolve o próprio usuário. É a exceção à regra "todo @IgnoraEscopo exige
+  // @RequerPermissao" — aqui não há dado de outra frota pra vazar.
+  @IgnoraEscopo()
   @Roles("ADMIN_USER")
   @Get("me")
   me(@CurrentUser() user: AuthAdminUser) {
@@ -62,6 +68,7 @@ export class UsersController {
     @CurrentUser() user: AuthAdminUser,
   ) {
     this.ensurePodeAtribuirPapel(body.papelId, user);
+    this.ensurePodeDefinirEscopo(body, user);
     return this.service.create(body, user.id);
   }
 
@@ -74,6 +81,7 @@ export class UsersController {
     @CurrentUser() user: AuthAdminUser,
   ) {
     this.ensurePodeAtribuirPapel(body.papelId, user);
+    this.ensurePodeDefinirEscopo(body, user);
     return this.service.update(id, body);
   }
 
@@ -91,6 +99,24 @@ export class UsersController {
     if (!user.permissoes.includes("permissoes.gerenciar")) {
       throw new ForbiddenException(
         "Você não tem permissão para atribuir papel a um usuário.",
+      );
+    }
+  }
+
+  /**
+   * Mesmo raciocínio do papel: definir escopo é ação de RBAC, não dado
+   * cadastral. Sem esta trava, quem tem "usuarios.editar" — inclusive um gestor
+   * restrito editando o PRÓPRIO usuário — liga `acessoGlobal` e passa a ver a
+   * base inteira. Escalonamento de privilégio em um PATCH.
+   */
+  private ensurePodeDefinirEscopo(
+    body: { acessoGlobal?: boolean; transportadoraIds?: string[] },
+    user: AuthAdminUser,
+  ) {
+    if (body.acessoGlobal === undefined && body.transportadoraIds === undefined) return;
+    if (!user.permissoes.includes("permissoes.gerenciar")) {
+      throw new ForbiddenException(
+        "Você não tem permissão para definir o acesso por transportadora.",
       );
     }
   }

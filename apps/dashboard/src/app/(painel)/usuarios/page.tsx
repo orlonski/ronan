@@ -32,6 +32,8 @@ type User = {
   whatsappResumo: string | null;
   receberResumoDiario: boolean;
   papel: { id: string; nome: string } | null;
+  acessoGlobal: boolean;
+  transportadoras: { id: string; nome: string }[];
   criadoPor: { id: string; nome: string } | null;
 };
 const PATH = "/admin/users";
@@ -79,6 +81,25 @@ export default function UsuariosPage() {
         cell: ({ row }) => (
           <span className="text-sm">{row.original.papel?.nome ?? "—"}</span>
         ),
+      },
+      {
+        id: "acesso",
+        enableSorting: false,
+        header: () => <span>Acesso</span>,
+        cell: ({ row }) => {
+          const u = row.original;
+          if (u.acessoGlobal) return <span className="text-sm">Vê tudo</span>;
+          return (
+            <Badge
+              className="border-amber-200 bg-amber-50 text-amber-800"
+              title={u.transportadoras.map((t) => t.nome).join(", ")}
+            >
+              {u.transportadoras.length === 1
+                ? u.transportadoras[0]!.nome
+                : `${u.transportadoras.length} transportadoras`}
+            </Badge>
+          );
+        },
       },
       {
         id: "ultimoLoginEm",
@@ -216,6 +237,17 @@ export default function UsuariosPage() {
                   <span>·</span>
                   <span>Último login: {fmtUltimoLogin(u.ultimoLoginEm)}</span>
                 </div>
+                {!u.acessoGlobal && (
+                  <Badge
+                    className="border-amber-200 bg-amber-50 text-amber-800"
+                    title={u.transportadoras.map((t) => t.nome).join(", ")}
+                  >
+                    Só{" "}
+                    {u.transportadoras.length === 1
+                      ? u.transportadoras[0]!.nome
+                      : `${u.transportadoras.length} transportadoras`}
+                  </Badge>
+                )}
               </div>
 
               <div className="flex shrink-0 items-center gap-1 text-muted-foreground">

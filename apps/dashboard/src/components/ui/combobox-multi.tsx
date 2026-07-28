@@ -5,6 +5,7 @@ import { Check, ChevronsUpDown, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { ComboboxOption } from "@/components/ui/combobox";
+import { cn } from "@/lib/utils";
 
 /**
  * Combobox searchable multi-select. Trigger mostra chips dos selecionados com
@@ -73,10 +74,12 @@ export function ComboboxMulti({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={
-            triggerClassName ??
-            "flex min-h-10 w-full items-center justify-between gap-2 rounded-md border bg-background px-2 py-1.5 text-left text-sm shadow-sm hover:bg-accent/30"
-          }
+          // Acrescenta, não substitui (mesma armadilha do Combobox single:
+          // passar só "w-full" apagava borda/padding e soltava o trigger).
+          className={cn(
+            "flex min-h-10 w-full items-center justify-between gap-2 rounded-md border bg-background px-2 py-1.5 text-left text-sm shadow-sm hover:bg-accent/30",
+            triggerClassName,
+          )}
         >
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
             {selecionados.length === 0 ? (

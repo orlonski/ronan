@@ -104,6 +104,31 @@ export function TransportadoraCombobox(props: SingleProps) {
   );
 }
 
+export function TransportadoraComboboxMulti({
+  value,
+  onChange,
+  initialOptions,
+  placeholder = "Escolha as transportadoras…",
+}: {
+  value: string[];
+  onChange: (values: string[]) => void;
+  initialOptions?: ComboboxOption[];
+  placeholder?: string;
+}) {
+  return (
+    <AsyncComboboxMulti<Transportadora>
+      value={value}
+      onChange={onChange}
+      initialOptions={initialOptions}
+      path="/admin/transportadoras"
+      mapOption={transportadoraOption}
+      searchPlaceholder="Buscar por nome ou CNPJ…"
+      emptyMessage="Nenhuma transportadora encontrada."
+      placeholder={placeholder}
+    />
+  );
+}
+
 export function ClienteCombobox(props: SingleProps) {
   return (
     <AsyncCombobox<Cliente>

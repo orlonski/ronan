@@ -3,6 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import {
+  TransportadoraComboboxMulti,
+  transportadoraOption,
+} from "@/components/fk-comboboxes";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -24,6 +28,8 @@ export type User = {
   resumoAssuntos: string[];
   papelId: string | null;
   papel: { id: string; nome: string } | null;
+  acessoGlobal: boolean;
+  transportadoras: { id: string; nome: string }[];
 };
 
 type UserBody = {
@@ -34,6 +40,8 @@ type UserBody = {
   receberResumoDiario?: boolean;
   resumoAssuntos?: string[];
   papelId?: string | null;
+  acessoGlobal?: boolean;
+  transportadoraIds?: string[];
 };
 
 const PATH = "/admin/users";
@@ -63,6 +71,10 @@ export function UsuarioForm({ initial }: Props) {
       initial?.resumoAssuntos ?? ASSUNTOS_RESUMO.map((a) => a.id),
     ),
     papelId: initial?.papelId ?? "",
+    // Novo usuário nasce com acesso global — o restrito é a exceção, marcada
+    // conscientemente. Mesma trava do papel: só com "permissoes.gerenciar".
+    acessoGlobal: initial?.acessoGlobal ?? true,
+    transportadoraIds: (initial?.transportadoras ?? []).map((t) => t.id),
   });
 
   function toggleAssunto(id: string) {
@@ -85,7 +97,11 @@ export function UsuarioForm({ initial }: Props) {
       };
       // Só manda papelId se o campo estiver habilitado — quem não pode gerenciar
       // permissões não deve nem tentar (o backend também recusa).
-      if (podeAtribuirPapel) body.papelId = form.papelId || null;
+      if (podeAtribuirPapel) {
+        body.papelId = form.papelId || null;
+        body.acessoGlobal = form.acessoGlobal;
+        if (!form.acessoGlobal) body.transportadoraIds = form.transportadoraIds;
+      }
       if (form.senha) body.senha = form.senha;
       await update.mutateAsync({ id: initial.id, body });
     } else {
@@ -97,13 +113,21 @@ export function UsuarioForm({ initial }: Props) {
         receberResumoDiario: form.receberResumoDiario,
         resumoAssuntos: [...form.resumoAssuntos],
       };
-      if (podeAtribuirPapel) body.papelId = form.papelId || null;
+      if (podeAtribuirPapel) {
+        body.papelId = form.papelId || null;
+        body.acessoGlobal = form.acessoGlobal;
+        if (!form.acessoGlobal) body.transportadoraIds = form.transportadoraIds;
+      }
       await create.mutateAsync(body);
     }
     router.push("/usuarios");
   }
 
   const saving = create.isPending || update.isPending;
+  // Restrito sem nenhuma transportadora = usuário que não vê nada. O backend
+  // recusa (Zod), mas travar o botão evita o ida-e-volta.
+  const escopoIncompleto =
+    podeAtribuirPapel && !form.acessoGlobal && form.transportadoraIds.length === 0;
 
   return (
     <Card className="p-6">
@@ -168,6 +192,63 @@ export function UsuarioForm({ initial }: Props) {
           )}
         </div>
 
+        {podeAtribuirPapel && (
+          <div className="space-y-3 rounded-md border p-4">
+            <Label>Acesso aos dados</Label>
+            <label className="flex cursor-pointer items-start gap-2">
+              <input
+                type="radio"
+                className="mt-1"
+                checked={form.acessoGlobal}
+                onChange={() => setForm({ ...form, acessoGlobal: true })}
+              />
+              <span className="text-sm">
+                <span className="font-medium">Vê tudo</span>
+                <span className="block text-xs text-muted-foreground">
+                  Todas as viagens, motoristas e placas — como qualquer usuário da
+                  Schaba.
+                </span>
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-2">
+              <input
+                type="radio"
+                className="mt-1"
+                checked={!form.acessoGlobal}
+                onChange={() => setForm({ ...form, acessoGlobal: false })}
+              />
+              <span className="text-sm">
+                <span className="font-medium">Restrito a transportadoras</span>
+                <span className="block text-xs text-muted-foreground">
+                  Só enxerga o que foi lançado pelas frotas escolhidas. Para o gestor
+                  de uma transportadora que roda pra gente.
+                </span>
+              </span>
+            </label>
+
+            {!form.acessoGlobal && (
+              <div className="space-y-2 border-t pt-3">
+                <Label>Transportadoras que ele enxerga</Label>
+                <TransportadoraComboboxMulti
+                  value={form.transportadoraIds}
+                  onChange={(v) => setForm({ ...form, transportadoraIds: v })}
+                  initialOptions={(initial?.transportadoras ?? []).map(transportadoraOption)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Ele só vê lançamentos carimbados com estas frotas — e as telas que o
+                  papel dele liberar. As áreas que não foram preparadas pra acesso
+                  restrito ficam bloqueadas.
+                </p>
+                {form.transportadoraIds.length === 0 && (
+                  <p className="text-xs font-medium text-amber-700 dark:text-amber-500">
+                    Escolha pelo menos uma — sem nenhuma, ele não enxerga nada.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="space-y-3 rounded-md border p-4">
           <Label>Resumo diário no WhatsApp</Label>
           <Input
@@ -224,7 +305,7 @@ export function UsuarioForm({ initial }: Props) {
               Cancelar
             </Button>
           </Link>
-          <Button type="submit" disabled={saving}>
+          <Button type="submit" disabled={saving || escopoIncompleto}>
             Salvar
           </Button>
         </div>

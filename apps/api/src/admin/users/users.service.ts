@@ -21,19 +21,34 @@ const SAFE_SELECT = {
   resumoAssuntos: true,
   papelId: true,
   papel: { select: { id: true, nome: true, permissoes: true } },
+  acessoGlobal: true,
+  transportadoras: {
+    select: { transportadora: { select: { id: true, nome: true } } },
+    orderBy: { transportadora: { nome: "asc" } },
+  },
   criadoEm: true,
   criadoPor: { select: { id: true, nome: true } },
 } as const;
+
+/** Achata o N:N pro frontend: `transportadoras: [{id, nome}]`. */
+function serializar<T extends { transportadoras: { transportadora: { id: string; nome: string } }[] }>(
+  u: T,
+) {
+  return { ...u, transportadoras: u.transportadoras.map((t) => t.transportadora) };
+}
 
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list(params: ListUsersParams) {
+  async list(params: ListUsersParams) {
     const where: Prisma.UserWhereInput = {};
     if (params.ativo === "true") where.ativo = true;
     if (params.ativo === "false") where.ativo = false;
-    return paginate(this.prisma.user, {
+    const result = await paginate<
+      { transportadoras: { transportadora: { id: string; nome: string } }[] },
+      ListUsersParams
+    >(this.prisma.user, {
       params,
       where: where as Record<string, unknown>,
       searchFields: ["nome", "email"],
@@ -47,10 +62,13 @@ export class UsersService {
       defaultSort: { field: "nome", order: "asc" },
       select: SAFE_SELECT as unknown as Record<string, unknown>,
     });
+    return { ...result, data: result.data.map(serializar) };
   }
 
-  findOne(id: string) {
-    return this.prisma.user.findUniqueOrThrow({ where: { id }, select: SAFE_SELECT });
+  async findOne(id: string) {
+    return serializar(
+      await this.prisma.user.findUniqueOrThrow({ where: { id }, select: SAFE_SELECT }),
+    );
   }
 
   async create(data: CriarUserInput, usuarioId: string) {
@@ -65,45 +83,86 @@ export class UsersService {
       });
       papelId = papel?.id ?? null;
     }
-    return this.prisma.user.create({
-      data: {
-        nome: data.nome,
-        email: data.email,
-        senhaHash: await AuthService.hashPassword(data.senha),
-        whatsappResumo: data.whatsappResumo || null,
-        receberResumoDiario: data.receberResumoDiario ?? false,
-        // Novo usuário recebe todos os assuntos por padrão (até personalizar).
-        resumoAssuntos: data.resumoAssuntos ?? ASSUNTOS_RESUMO_IDS,
-        papelId,
-        criadoPorId: usuarioId,
-      },
-      select: SAFE_SELECT,
-    });
+    const acessoGlobal = data.acessoGlobal ?? true;
+    await this.validarTransportadoras(data.transportadoraIds);
+    return serializar(
+      await this.prisma.user.create({
+        data: {
+          nome: data.nome,
+          email: data.email,
+          senhaHash: await AuthService.hashPassword(data.senha),
+          whatsappResumo: data.whatsappResumo || null,
+          receberResumoDiario: data.receberResumoDiario ?? false,
+          // Novo usuário recebe todos os assuntos por padrão (até personalizar).
+          resumoAssuntos: data.resumoAssuntos ?? ASSUNTOS_RESUMO_IDS,
+          papelId,
+          acessoGlobal,
+          ...(acessoGlobal
+            ? {}
+            : {
+                transportadoras: {
+                  create: (data.transportadoraIds ?? []).map((transportadoraId) => ({
+                    transportadoraId,
+                  })),
+                },
+              }),
+          criadoPorId: usuarioId,
+        },
+        select: SAFE_SELECT,
+      }),
+    );
   }
 
   async update(id: string, data: AtualizarUserInput) {
     await this.ensureExists(id);
-    const { senha, ...rest } = data;
+    const { senha, acessoGlobal, transportadoraIds, ...rest } = data;
     const update: Record<string, unknown> = { ...rest };
     if (senha) update.senhaHash = await AuthService.hashPassword(senha);
     // String vazia limpa o número (vira null).
     if ("whatsappResumo" in rest) update.whatsappResumo = rest.whatsappResumo || null;
-    return this.prisma.user.update({ where: { id }, data: update, select: SAFE_SELECT });
+
+    if (acessoGlobal !== undefined) update.acessoGlobal = acessoGlobal;
+    // Vínculos: devolver o acesso global limpa a lista (senão sobraria escopo
+    // fantasma que voltaria a valer se alguém restringisse o usuário de novo).
+    if (acessoGlobal === true) {
+      update.transportadoras = { deleteMany: {} };
+    } else if (transportadoraIds !== undefined) {
+      await this.validarTransportadoras(transportadoraIds);
+      update.transportadoras = {
+        deleteMany: {},
+        create: transportadoraIds.map((transportadoraId) => ({ transportadoraId })),
+      };
+    }
+
+    return serializar(
+      await this.prisma.user.update({ where: { id }, data: update, select: SAFE_SELECT }),
+    );
+  }
+
+  /** FK inválida vira 4xx claro em vez de 500 no nested create. */
+  private async validarTransportadoras(ids: string[] | undefined) {
+    if (!ids || ids.length === 0) return;
+    const achadas = await this.prisma.transportadora.count({ where: { id: { in: ids } } });
+    if (achadas !== new Set(ids).size) {
+      throw new NotFoundException("Transportadora não encontrada");
+    }
   }
 
   async remove(id: string) {
     await this.ensureExists(id);
-    return this.prisma.user.update({
-      where: { id },
-      data: { ativo: false },
-      select: SAFE_SELECT,
-    });
+    return serializar(
+      await this.prisma.user.update({
+        where: { id },
+        data: { ativo: false },
+        select: SAFE_SELECT,
+      }),
+    );
   }
 
   async me(id: string) {
     const u = await this.prisma.user.findUniqueOrThrow({ where: { id }, select: SAFE_SELECT });
     // `permissoes` no topo facilita o frontend (sidebar/guards) checar acesso.
-    return { ...u, permissoes: u.papel?.permissoes ?? [] };
+    return { ...serializar(u), permissoes: u.papel?.permissoes ?? [] };
   }
 
   private async ensureExists(id: string) {

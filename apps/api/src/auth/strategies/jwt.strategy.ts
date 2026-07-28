@@ -32,7 +32,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (payload.kind === "ADMIN_USER") {
       const user = await this.prisma.user.findUnique({
         where: { id: payload.sub },
-        include: { papel: { select: { permissoes: true } } },
+        include: {
+          papel: { select: { permissoes: true } },
+          // Escopo entra no mesmo findUnique: sem query extra por request, e a
+          // revogação continua imediata (nada disso vive no token).
+          transportadoras: { select: { transportadoraId: true } },
+        },
       });
       if (!user || !user.ativo) throw new UnauthorizedException("Usuário inativo");
       return {
@@ -41,6 +46,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         nome: user.nome,
         email: user.email,
         permissoes: user.papel?.permissoes ?? [],
+        escopo: user.acessoGlobal
+          ? null
+          : { transportadoraIds: user.transportadoras.map((t) => t.transportadoraId) },
       };
     }
 
