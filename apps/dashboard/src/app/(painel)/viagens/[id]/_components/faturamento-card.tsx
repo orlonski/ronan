@@ -16,8 +16,10 @@ type Props = {
   // Km
   kmCalculado: string | null; // OSRM (rota)
   kmInformado: string; // o que o motorista lançou
-  kmEfetivo: string; // faturado (após mínimo)
-  kmAjustada: boolean; // mínimo elevou o km?
+  // Faturado (após mínimo) — opcionais: o backend omite do payload pra quem
+  // não tem `viagens.ver-comercial`, e aí o card mostra só calculado+informado.
+  kmEfetivo?: string;
+  kmAjustada?: boolean;
   kmReal: string | null; // GPS (tracking)
   rotaEscolhida?: boolean; // motorista escolheu outra rota no seletor
   kmRecalculadoEm: string | null;
@@ -26,10 +28,10 @@ type Props = {
   kmBotaFora: number;
   // Toneladas
   toneladasInformada: string;
-  toneladasEfetiva: string;
-  toneladasAjustada: boolean;
+  toneladasEfetiva?: string;
+  toneladasAjustada?: boolean;
   // Regra de mínimo que casou
-  regraMinimo: RegraMinimo | null;
+  regraMinimo?: RegraMinimo | null;
   materialNome: string;
 };
 

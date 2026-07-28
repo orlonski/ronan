@@ -26,6 +26,14 @@ import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import { EscopoPor } from "../../common/escopo/escopo.decorator";
+
+/**
+ * Dados da relação comercial Schaba↔cliente (cliente/empresa, mínimo aplicado,
+ * km e toneladas faturados, fechamento) só saem no payload com esta chave — ver
+ * admin/viagens/comercial.ts.
+ */
+const podeVerComercial = (user: AuthAdminUser) =>
+  user.permissoes.includes("viagens.ver-comercial");
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import type { AuthAdminUser } from "../../auth/types";
 import { ViagensAdminService } from "./viagens.service";
@@ -107,7 +115,7 @@ export class ViagensAdminController {
     @Query(new ZodValidationPipe(ListViagensQuery)) query: ListViagensQuery,
     @CurrentUser() user: AuthAdminUser,
   ) {
-    return this.service.list(query, user.escopo);
+    return this.service.list(query, user.escopo, podeVerComercial(user));
   }
 
   /**
@@ -140,7 +148,7 @@ export class ViagensAdminController {
   @RequerPermissao("viagens.ver")
   @Get(":id")
   detalhe(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
-    return this.service.detalhe(id, user.escopo);
+    return this.service.detalhe(id, user.escopo, podeVerComercial(user));
   }
 
   @EscopoPor("viagem")
@@ -191,7 +199,7 @@ export class ViagensAdminController {
     body: AtualizarViagemInput,
     @CurrentUser() user: AuthAdminUser,
   ) {
-    return this.service.atualizar(id, body, user.id, user.escopo);
+    return this.service.atualizar(id, body, user.id, user.escopo, podeVerComercial(user));
   }
 
   @RequerPermissao("viagens.editar")

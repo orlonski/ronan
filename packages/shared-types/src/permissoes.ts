@@ -26,6 +26,7 @@ export type PermissaoCatalogo = {
 // Rótulo amigável de cada ação (usado como label da checkbox na matriz).
 const ACAO_TITULO: Record<string, string> = {
   ver: "Ver / acessar",
+  "ver-comercial": "Ver dados comerciais",
   criar: "Criar",
   editar: "Editar",
   excluir: "Excluir",
@@ -47,7 +48,11 @@ type ResourceDef = { recurso: string; label: string; modulo: string; acoes: stri
 // Ordem aqui = ordem na matriz. `acoes` em ordem de exibição.
 const RESOURCE_DEFS: ResourceDef[] = [
   // ---- Operação ----
-  { recurso: "viagens", label: "Viagens", modulo: "Operação", acoes: ["ver", "editar", "excluir", "validar"] },
+  // "ver-comercial" libera o que é da relação Schaba↔cliente dentro da viagem:
+  // cliente/empresa, mínimo aplicado, km e toneladas faturados, fechamento.
+  // Sem ela o backend OMITE esses campos do payload — quem não precisa (gestor
+  // de frota terceira) vê só o operacional.
+  { recurso: "viagens", label: "Viagens", modulo: "Operação", acoes: ["ver", "ver-comercial", "editar", "excluir", "validar"] },
   { recurso: "descargas-suspeitas", label: "Descargas suspeitas", modulo: "Operação", acoes: ["ver", "corrigir"] },
   { recurso: "abastecimentos", label: "Abastecimentos", modulo: "Operação", acoes: ["ver", "editar", "excluir"] },
   { recurso: "fechamentos", label: "Fechamentos", modulo: "Operação", acoes: ["ver", "criar", "conferir", "exportar", "excluir"] },

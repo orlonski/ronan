@@ -26,6 +26,7 @@ import { RoteamentoService } from "../../roteamento/roteamento.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
+import { filtrarComercial, omitirComercial } from "./comercial";
 import { PedagiosRodoviaConsultaService } from "../pedagios-rodovia/pedagios-rodovia-consulta.service";
 import { BuscaLocaisConfigService } from "../busca-locais-config/busca-locais-config.service";
 import { GeocodingService } from "../../geocoding/geocoding.service";
@@ -235,7 +236,15 @@ export class ViagensAdminService {
 
     // Atribui à viagem reusando atualizar (valida fechamento, audita o diff
     // localDescarga antes→depois e notifica o motorista da troca de local).
-    return this.atualizar(id, { localDescargaId: local.id }, usuarioId, null /* handler não escopado: o EscopoGuard já barra o usuário restrito antes de chegar aqui (sem @EscopoPor) */);
+    return this.atualizar(
+      id,
+      { localDescargaId: local.id },
+      usuarioId,
+      // Tela de descargas suspeitas: handler sem @EscopoPor, então o
+      // EscopoGuard já barrou o restrito antes de chegar aqui.
+      null,
+      true,
+    );
   }
 
   /**
@@ -334,7 +343,11 @@ export class ViagensAdminService {
     if (!ok) throw new NotFoundException("Viagem não encontrada");
   }
 
-  async list(params: ListViagensParams, escopo: EscopoAdmin) {
+  async list(
+    params: ListViagensParams,
+    escopo: EscopoAdmin,
+    podeVerComercial: boolean,
+  ) {
     const where: Prisma.ViagemWhereInput = {};
     if (params.motoristaId) where.motoristaId = params.motoristaId;
     if (params.veiculoId) where.veiculoId = params.veiculoId;
@@ -408,14 +421,17 @@ export class ViagensAdminService {
     const regras = await this.prisma.regraMinimo.findMany({ where: { ativo: true } });
     return {
       ...result,
-      data: comAlertaPedagio.map((v) => ({
-        ...serializarViagemComMinimos(v, regras),
-        temPedagioSemValor: v.temPedagioSemValor,
-      })),
+      data: filtrarComercial(
+        comAlertaPedagio.map((v) => ({
+          ...serializarViagemComMinimos(v, regras),
+          temPedagioSemValor: v.temPedagioSemValor,
+        })),
+        podeVerComercial,
+      ),
     };
   }
 
-  async detalhe(id: string, escopo: EscopoAdmin) {
+  async detalhe(id: string, escopo: EscopoAdmin, podeVerComercial: boolean) {
     // findFirst (não findUnique) porque o escopo entra no where — findUnique só
     // aceita campo único.
     const viagem = await this.prisma.viagem.findFirst({
@@ -484,7 +500,7 @@ export class ViagensAdminService {
         : null;
 
     const regras = await this.prisma.regraMinimo.findMany({ where: { ativo: true } });
-    return {
+    const payload = {
       ...serializarViagemComMinimos(viagem, regras),
       // Regra de mínimo por faixa que casou (empresa+material+faixa de km) — pro
       // painel mostrar CLARAMENTE por que o faturado ficou acima do informado.
@@ -506,6 +522,7 @@ export class ViagensAdminService {
       // Variante de retorno em vigor (true=com, false=direto, null=não definido).
       retornoConfirmado: viagem.retornoConfirmado ?? null,
     };
+    return podeVerComercial ? payload : omitirComercial(payload);
   }
 
   async atualizar(
@@ -513,6 +530,7 @@ export class ViagensAdminService {
     input: AtualizarViagemInput,
     usuarioId: string,
     escopo: EscopoAdmin,
+    podeVerComercial: boolean,
   ) {
     await this.ensureNoEscopo(id, escopo);
     const antes = await this.prisma.viagem.findUnique({
@@ -607,7 +625,7 @@ export class ViagensAdminService {
       void this.kmAtipico.avaliarViagem(id);
     }
 
-    return this.detalhe(id, null /* handler não escopado: o EscopoGuard já barra o usuário restrito antes de chegar aqui (sem @EscopoPor) */);
+    return this.detalhe(id, null /* handler não escopado: o EscopoGuard já barra o usuário restrito antes de chegar aqui (sem @EscopoPor) */, true /* admin */);
   }
 
   /**
@@ -787,7 +805,7 @@ export class ViagensAdminService {
       });
     }
 
-    return this.detalhe(id, null /* handler não escopado: o EscopoGuard já barra o usuário restrito antes de chegar aqui (sem @EscopoPor) */);
+    return this.detalhe(id, null /* handler não escopado: o EscopoGuard já barra o usuário restrito antes de chegar aqui (sem @EscopoPor) */, true /* admin */);
   }
 
   /** Chat da viagem — histórico de mensagens (admin <-> motorista). */
@@ -972,7 +990,7 @@ export class ViagensAdminService {
       motivo: `Km ${antes.km?.toString() ?? "?"} aceito como correto — readmitido na referência do trajeto.`,
     });
 
-    return this.detalhe(id, null /* handler não escopado: o EscopoGuard já barra o usuário restrito antes de chegar aqui (sem @EscopoPor) */);
+    return this.detalhe(id, null /* handler não escopado: o EscopoGuard já barra o usuário restrito antes de chegar aqui (sem @EscopoPor) */, true /* admin */);
   }
 
   /** Lista as rotas alternativas (OSRM) do par carga→descarga da viagem. */
@@ -1047,7 +1065,7 @@ export class ViagensAdminService {
     // km e kmFonte mudaram → re-carimba o atípico (mesmo motivo do recalcular).
     void this.kmAtipico.avaliarViagem(viagem.id);
 
-    return this.detalhe(id, null /* handler não escopado: o EscopoGuard já barra o usuário restrito antes de chegar aqui (sem @EscopoPor) */);
+    return this.detalhe(id, null /* handler não escopado: o EscopoGuard já barra o usuário restrito antes de chegar aqui (sem @EscopoPor) */, true /* admin */);
   }
 
   /**
@@ -1229,7 +1247,7 @@ export class ViagensAdminService {
       },
     });
 
-    return this.detalhe(id, null /* handler não escopado: o EscopoGuard já barra o usuário restrito antes de chegar aqui (sem @EscopoPor) */);
+    return this.detalhe(id, null /* handler não escopado: o EscopoGuard já barra o usuário restrito antes de chegar aqui (sem @EscopoPor) */, true /* admin */);
   }
 
   async historico(viagemId: string, escopo: EscopoAdmin) {

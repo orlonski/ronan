@@ -26,6 +26,7 @@ import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { ListMetric } from "@/components/list-metric";
 import { firstDayOfMonth, useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
+import { usePermissoes } from "@/lib/permissoes";
 import { usePaginatedList } from "@/lib/client-api";
 import { fmtBR, fmtDataHoraBR, fmtNum } from "@/lib/fechamento-helpers";
 import { ValorComMinimo } from "@/components/valor-com-minimo";
@@ -49,7 +50,8 @@ type Viagem = {
   ocrCampos: string[];
   veiculo: { id: string; placa: string };
   motorista: { id: string; nome: string };
-  cliente: { id: string; nome: string };
+  // Omitidos pelo backend pra quem não tem `viagens.ver-comercial`.
+  cliente?: { id: string; nome: string } | null;
   material: { id: string; nome: string; exigeTicket: boolean };
   localCarga: { id: string; nome: string; cidade: string; uf: string };
   localDescarga: { id: string; nome: string; cidade: string; uf: string };
@@ -107,6 +109,10 @@ export default function ViagensPage() {
   });
   const list = usePaginatedList<Viagem>("/admin/viagens", tableState);
   const { viewMode, setViewMode } = useListViewMode("viagens");
+  // Cliente/empresa e valores faturados só aparecem com `viagens.ver-comercial`
+  // — o backend já omite do payload, isto só evita coluna e filtro vazios.
+  const { temPermissao } = usePermissoes();
+  const verComercial = temPermissao("viagens.ver-comercial");
 
   const columns = useMemo<ColumnDef<Viagem>[]>(
     () => [
@@ -182,11 +188,13 @@ export default function ViagensPage() {
         id: "cliente",
         accessorKey: "cliente.nome",
         enableSorting: false,
-        header: "Material / Cliente",
+        header: verComercial ? "Material / Cliente" : "Material",
         cell: ({ row }) => (
           <div className="text-sm">
             <div className="font-medium">{row.original.material.nome}</div>
-            <div className="text-xs text-muted-foreground">{row.original.cliente.nome}</div>
+            {row.original.cliente && (
+              <div className="text-xs text-muted-foreground">{row.original.cliente.nome}</div>
+            )}
           </div>
         ),
       },
@@ -313,7 +321,11 @@ export default function ViagensPage() {
         toolbar={
           <DataTableToolbar
             state={tableState}
-            searchPlaceholder="Buscar por ticket, motorista, placa, cliente…"
+            searchPlaceholder={
+              verComercial
+                ? "Buscar por ticket, motorista, placa, cliente…"
+                : "Buscar por ticket, motorista, placa…"
+            }
             filters={
               <>
                 <Combobox
@@ -352,11 +364,13 @@ export default function ViagensPage() {
                   onChange={(v) => tableState.setFilter("motoristaId", v)}
                   placeholder="Motorista"
                 />
-                <ClienteCombobox
-                  value={tableState.filters.clienteId}
-                  onChange={(v) => tableState.setFilter("clienteId", v)}
-                  placeholder="Cliente"
-                />
+                {verComercial && (
+                  <ClienteCombobox
+                    value={tableState.filters.clienteId}
+                    onChange={(v) => tableState.setFilter("clienteId", v)}
+                    placeholder="Cliente"
+                  />
+                )}
                 <ToolbarFilterDateRange state={tableState} label="Período" />
               </>
             }
@@ -422,8 +436,12 @@ function ViagemCard({ v }: { v: Viagem }) {
               <span className="font-mono">{v.veiculo.placa}</span>
               <span>·</span>
               <span>{v.material.nome}</span>
-              <span>·</span>
-              <span className="text-foreground/70">{v.cliente.nome}</span>
+              {v.cliente && (
+                <>
+                  <span>·</span>
+                  <span className="text-foreground/70">{v.cliente.nome}</span>
+                </>
+              )}
             </div>
           </div>
 

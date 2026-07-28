@@ -97,11 +97,11 @@ type ViagemDetalhe = {
     local: { id: string; nome: string; cidade: string; uf: string };
   }[];
   toneladasInformada: string;
-  toneladasEfetiva: string;
-  toneladasAjustada: boolean;
+  toneladasEfetiva?: string;
+  toneladasAjustada?: boolean;
   kmInformado: string;
-  kmEfetivo: string;
-  kmAjustada: boolean;
+  kmEfetivo?: string;
+  kmAjustada?: boolean;
   iniciadoEm: string | null;
   // Quando o motorista criou a viagem no device (offline) e quando sincronizou.
   criadoOfflineEm: string | null;
@@ -140,7 +140,8 @@ type ViagemDetalhe = {
   cargaBuscaOffline: boolean | null;
   veiculo: { id: string; placa: string; modelo: string | null };
   motorista: { id: string; nome: string; cpf: string };
-  cliente: { id: string; nome: string; empresa: { nome: string } };
+  // Omitidos pelo backend pra quem não tem `viagens.ver-comercial`.
+  cliente?: { id: string; nome: string; empresa: { nome: string } } | null;
   material: { id: string; nome: string; exigeTicket: boolean };
   localCarga: {
     id: string;
@@ -164,14 +165,14 @@ type ViagemDetalhe = {
   /** True quando o motorista escolheu a rota no seletor (≠ edição manual de km). */
   rotaEscolhida?: boolean;
   /** Regra de mínimo por faixa que casou (empresa+material+faixa). Null = nenhuma. */
-  regraMinimo: RegraMinimo | null;
+  regraMinimo?: RegraMinimo | null;
   revisadoEm: string | null;
   revisadoPor: { id: string; nome: string } | null;
   motivoStatus: string | null;
   ocrCampos: string[];
   ocrConfidence: number | null;
   fotos: { id: string; storageKey: string; rotacao: number }[];
-  matchesFechamento: Array<{
+  matchesFechamento?: Array<{
     id: string;
     fechamento: {
       id: string;
@@ -478,7 +479,7 @@ export default function ViagemDetalhePage({
   if (viagem.isLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
   if (!viagem.data) return <p className="text-sm text-red-600">Viagem não encontrada.</p>;
   const v = viagem.data;
-  const emFechamento = v.matchesFechamento.length > 0;
+  const emFechamento = (v.matchesFechamento?.length ?? 0) > 0;
   // Hora em que a viagem foi criada (device offline; fallback: sincronização).
   const tsCriacao = v.criadoOfflineEm ?? v.sincronizadoEm;
   const horaCriacao = tsCriacao
@@ -546,7 +547,7 @@ export default function ViagemDetalhePage({
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2 pl-8 sm:pl-0">
-          {v.matchesFechamento.length === 0 ? (
+          {(v.matchesFechamento?.length ?? 0) === 0 ? (
             <Permitido chave="viagens.editar">
               <Link href={`/viagens/${v.id}/editar`}>
                 <Button variant="outline" size="sm">
@@ -612,12 +613,18 @@ export default function ViagemDetalhePage({
               value={v.material.nome}
               fromAi={v.ocrCampos?.includes("materialId")}
             />
-            <CampoTile
-              label="Cliente"
-              value={v.cliente.nome}
-              fromAi={v.ocrCampos?.includes("clienteId")}
-            />
-            <CampoTile label="Empresa" value={v.cliente.empresa.nome} />
+            {/* Cliente/Empresa são da relação comercial Schaba↔cliente: o
+                backend omite do payload sem `viagens.ver-comercial`. */}
+            {v.cliente && (
+              <>
+                <CampoTile
+                  label="Cliente"
+                  value={v.cliente.nome}
+                  fromAi={v.ocrCampos?.includes("clienteId")}
+                />
+                <CampoTile label="Empresa" value={v.cliente.empresa.nome} />
+              </>
+            )}
             <CampoTile
               label="Ticket"
               mono
@@ -636,7 +643,9 @@ export default function ViagemDetalhePage({
               label="Toneladas"
               value={
                 <span className="inline-flex flex-wrap items-baseline gap-x-1">
-                  {fmtNum(v.toneladasEfetiva, 3)} t
+                  {/* Sem `viagens.ver-comercial` não vem o faturado — mostra o
+                      que o motorista lançou, que é operacional. */}
+                  {fmtNum(v.toneladasEfetiva ?? v.toneladasInformada, 3)} t
                   {v.toneladasAjustada && (
                     <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
                       ↑ mínimo
@@ -1172,11 +1181,11 @@ export default function ViagemDetalhePage({
             </Card>
           )}
 
-          {v.matchesFechamento.length > 0 && (
+          {(v.matchesFechamento?.length ?? 0) > 0 && (
             <Card className="p-4 sm:p-5">
               <h3 className="mb-3 text-base font-medium">Aparece em fechamentos</h3>
               <ul className="space-y-2 text-sm">
-                {v.matchesFechamento.map((m) => (
+                {v.matchesFechamento?.map((m) => (
                   <li key={m.id} className="flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-600" />
                     <Link
