@@ -13,6 +13,7 @@ import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
+import { EscopoPor } from "../../common/escopo/escopo.decorator";
 import type { AuthAdminUser } from "../../auth/types";
 import { MotoristasService } from "./motoristas.service";
 import { ResumoMotoristaService } from "../../motorista/resumo-motorista.service";
@@ -58,9 +59,14 @@ export class MotoristasController {
     private readonly resumo: ResumoMotoristaService,
   ) {}
 
+  @EscopoPor("motorista")
+  @RequerPermissao("motoristas.ver")
   @Get()
-  list(@Query(new ZodValidationPipe(ListMotoristasQuery)) query: ListMotoristasQuery) {
-    return this.service.list(query);
+  list(
+    @Query(new ZodValidationPipe(ListMotoristasQuery)) query: ListMotoristasQuery,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.list(query, user.escopo);
   }
 
   // Antes do :id pra não ser capturado como id="versoes".
@@ -75,9 +81,11 @@ export class MotoristasController {
     return this.service.versoesDisponiveis();
   }
 
+  @EscopoPor("motorista")
+  @RequerPermissao("motoristas.ver")
   @Get(":id")
-  findOne(@Param("id") id: string) {
-    return this.service.findOne(id);
+  findOne(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    return this.service.findOne(id, user.escopo);
   }
 
   @RequerPermissao("motoristas.criar")

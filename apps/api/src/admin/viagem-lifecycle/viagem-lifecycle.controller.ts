@@ -9,6 +9,7 @@ import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
+import { EscopoPor } from "../../common/escopo/escopo.decorator";
 import type { AuthAdminUser } from "../../auth/types";
 import { ViagemLifecycleAdminService } from "./viagem-lifecycle.service";
 
@@ -63,13 +64,18 @@ export class TiposEventoViagemController {
 export class ViagensAndamentoAdminController {
   constructor(private readonly service: ViagemLifecycleAdminService) {}
 
+  @EscopoPor("viagem")
   @RequerPermissao("viagens.ver")
   @Get()
-  list() {
-    return this.service.viagensEmAndamento();
+  list(@CurrentUser() user: AuthAdminUser) {
+    return this.service.viagensEmAndamento(user.escopo);
   }
 
-  /** Cancela (apaga) uma viagem em andamento presa. */
+  /**
+   * Cancela (apaga) uma viagem em andamento presa. Sem @EscopoPor de propósito:
+   * é rescue de admin (o gestor restrito é só leitura e nem tem viagens.editar),
+   * então o EscopoGuard barra antes de chegar aqui.
+   */
   @RequerPermissao("viagens.editar")
   @Delete(":id")
   cancelar(@Param("id") id: string) {

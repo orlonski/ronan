@@ -16,6 +16,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
 import { FechamentoProcessorService } from "./fechamento-processor.service";
 import { paginate, type PaginationQuery } from "../common/pagination";
+import { SEM_ESCOPO } from "../common/escopo/escopo";
 
 type ListFechamentosParams = PaginationQuery & {
   empresaId?: string;
@@ -76,6 +77,8 @@ export class FechamentosService {
     return paginate(this.prisma.fechamento, {
       params,
       where: where as Record<string, unknown>,
+      // Model sem coluna de frota: quem barra o usuário restrito é o EscopoGuard.
+      escopo: SEM_ESCOPO,
       searchFields: ["arquivoOriginalNome", "empresa.nome"],
       sortable: {
         criadoEm: "criadoEm",

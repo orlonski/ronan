@@ -4,6 +4,7 @@ import type { CriarVeiculoInput, AtualizarVeiculoInput } from "@ronan/shared-typ
 import { PrismaService } from "../../prisma/prisma.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { adotarLancamentosOrfaos } from "../../common/transportadora";
+import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
 
 type ListVeiculosParams = PaginationQuery & {
   ativo?: "true" | "false";
@@ -17,7 +18,7 @@ const TRANSPORTADORA_SELECT = { select: { id: true, nome: true } };
 export class VeiculosService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list(params: ListVeiculosParams) {
+  list(params: ListVeiculosParams, escopo: EscopoAdmin) {
     const where: Prisma.VeiculoWhereInput = {};
     if (params.ativo === "true") where.ativo = true;
     if (params.ativo === "false") where.ativo = false;
@@ -26,6 +27,7 @@ export class VeiculosService {
     return paginate(this.prisma.veiculo, {
       params,
       where: where as Record<string, unknown>,
+      escopo,
       searchFields: ["placa", "modelo"],
       sortable: {
         placa: "placa",
@@ -44,12 +46,14 @@ export class VeiculosService {
 
   /** Item por id — usado pelo combobox do painel pra resolver o label de um
    *  veículo já selecionado que não caiu na página atual da busca. */
-  async findOne(id: string) {
-    await this.ensureExists(id);
-    return this.prisma.veiculo.findUniqueOrThrow({
-      where: { id },
+  async findOne(id: string, escopo: EscopoAdmin) {
+    // findFirst + 404 (não 403): não confirma existência de placa de outra frota.
+    const v = await this.prisma.veiculo.findFirst({
+      where: { id, ...filtroEscopo(escopo) },
       include: { transportadora: TRANSPORTADORA_SELECT },
     });
+    if (!v) throw new NotFoundException("Veículo não encontrado");
+    return v;
   }
 
   async create(data: CriarVeiculoInput, usuarioId: string) {

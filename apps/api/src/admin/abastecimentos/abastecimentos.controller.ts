@@ -20,6 +20,7 @@ import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
+import { EscopoPor } from "../../common/escopo/escopo.decorator";
 import type { AuthAdminUser } from "../../auth/types";
 import { AbastecimentosAdminService } from "./abastecimentos.service";
 
@@ -47,9 +48,14 @@ type ListAbastecimentosQuery = z.infer<typeof ListAbastecimentosQuery>;
 export class AbastecimentosAdminController {
   constructor(private readonly service: AbastecimentosAdminService) {}
 
+  @EscopoPor("abastecimento")
+  @RequerPermissao("abastecimentos.ver")
   @Get()
-  list(@Query(new ZodValidationPipe(ListAbastecimentosQuery)) query: ListAbastecimentosQuery) {
-    return this.service.list(query);
+  list(
+    @Query(new ZodValidationPipe(ListAbastecimentosQuery)) query: ListAbastecimentosQuery,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.list(query, user.escopo);
   }
 
   @Get(":id")

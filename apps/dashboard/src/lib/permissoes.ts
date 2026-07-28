@@ -8,6 +8,8 @@ type MePayload = {
   nome: string;
   permissoes: string[];
   papel: { id: string; nome: string } | null;
+  acessoGlobal: boolean;
+  transportadoras: { id: string; nome: string }[];
 };
 
 /**
@@ -24,6 +26,9 @@ export function usePermissoes() {
     isLoading,
     papelNome: data?.papel?.nome ?? null,
     temPermissao: (chave: string) => set.has(chave),
+    /** false = usuário restrito a transportadora (o backend filtra o que ele lê). */
+    acessoGlobal: data?.acessoGlobal ?? true,
+    transportadoras: data?.transportadoras ?? [],
   };
 }
 

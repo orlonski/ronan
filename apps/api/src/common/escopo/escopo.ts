@@ -27,6 +27,20 @@ export type RecursoEscopado =
  * linhas. É o comportamento certo e não pode virar "sem filtro": fail-open aqui
  * entregaria a base inteira.
  */
+/**
+ * Sentinela pra model que NÃO tem `transportadoraId` (Empresa, Cliente,
+ * Material, Local, Papel…). Não dá pra filtrar por frota, e quem protege é o
+ * `EscopoGuard`, que barra o usuário restrito na porta.
+ *
+ * Existe pra `escopo` ser um parâmetro REQUERIDO em `paginate` sem virar
+ * `undefined` silencioso: quem adiciona uma listagem nova tem que escolher
+ * conscientemente entre filtrar e declarar que não há o que filtrar. O
+ * `tsc` cobra — não há lint configurado no repo pra cobrar por nós.
+ */
+export const SEM_ESCOPO = Symbol("sem-escopo");
+
+export type EscopoParaListagem = EscopoAdmin | typeof SEM_ESCOPO;
+
 export function filtroEscopo(escopo: EscopoAdmin): { transportadoraId?: { in: string[] } } {
   if (!escopo) return {};
   return { transportadoraId: { in: escopo.transportadoraIds } };

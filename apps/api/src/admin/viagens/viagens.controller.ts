@@ -25,6 +25,7 @@ import { paginationQuerySchema } from "../../common/pagination";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
+import { EscopoPor } from "../../common/escopo/escopo.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import type { AuthAdminUser } from "../../auth/types";
 import { ViagensAdminService } from "./viagens.service";
@@ -99,9 +100,14 @@ type ListViagensQuery = z.infer<typeof ListViagensQuery>;
 export class ViagensAdminController {
   constructor(private readonly service: ViagensAdminService) {}
 
+  @EscopoPor("viagem")
+  @RequerPermissao("viagens.ver")
   @Get()
-  list(@Query(new ZodValidationPipe(ListViagensQuery)) query: ListViagensQuery) {
-    return this.service.list(query);
+  list(
+    @Query(new ZodValidationPipe(ListViagensQuery)) query: ListViagensQuery,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.list(query, user.escopo);
   }
 
   /**
@@ -130,14 +136,18 @@ export class ViagensAdminController {
     return this.service.cadastrarLocalDescarga(id, body.nome, user.id);
   }
 
+  @EscopoPor("viagem")
+  @RequerPermissao("viagens.ver")
   @Get(":id")
-  detalhe(@Param("id") id: string) {
-    return this.service.detalhe(id);
+  detalhe(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    return this.service.detalhe(id, user.escopo);
   }
 
+  @EscopoPor("viagem")
+  @RequerPermissao("viagens.ver")
   @Get(":id/historico")
-  historico(@Param("id") id: string) {
-    return this.service.historico(id);
+  historico(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    return this.service.historico(id, user.escopo);
   }
 
   /**
@@ -172,6 +182,7 @@ export class ViagensAdminController {
     return this.service.aceitarKm(id, user.id);
   }
 
+  @EscopoPor("viagem")
   @RequerPermissao("viagens.editar")
   @Patch(":id")
   atualizar(
@@ -180,7 +191,7 @@ export class ViagensAdminController {
     body: AtualizarViagemInput,
     @CurrentUser() user: AuthAdminUser,
   ) {
-    return this.service.atualizar(id, body, user.id);
+    return this.service.atualizar(id, body, user.id, user.escopo);
   }
 
   @RequerPermissao("viagens.editar")
@@ -256,20 +267,24 @@ export class ViagensAdminController {
   }
 
   @Roles("ADMIN_USER")
+  @EscopoPor("viagem")
   @RequerPermissao("viagens.excluir")
   @Delete(":id")
   @HttpCode(204)
-  async excluir(@Param("id") id: string) {
-    await this.service.excluir(id);
+  async excluir(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    await this.service.excluir(id, user.escopo);
   }
 
+  @EscopoPor("viagem")
+  @RequerPermissao("viagens.ver")
   @Get(":id/fotos/:fotoId")
   async foto(
     @Param("id") id: string,
     @Param("fotoId") fotoId: string,
+    @CurrentUser() user: AuthAdminUser,
     @Res() res: Response,
   ) {
-    const { buffer, contentType } = await this.service.fotoBuffer(id, fotoId);
+    const { buffer, contentType } = await this.service.fotoBuffer(id, fotoId, user.escopo);
     res.set("Content-Type", contentType);
     res.set("Cache-Control", "private, max-age=3600");
     res.send(buffer);

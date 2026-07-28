@@ -3,6 +3,7 @@ import { StatusExecucaoAgente, type Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
+import { SEM_ESCOPO } from "../../common/escopo/escopo";
 import { FilaExecucoesService } from "../../clickup-runner/fila.service";
 
 export type ListDemandasParams = PaginationQuery & { status?: string };
@@ -71,6 +72,8 @@ export class DemandasService {
       {
         params,
         where: where as Record<string, unknown>,
+      // Model sem coluna de frota: quem barra o usuário restrito é o EscopoGuard.
+      escopo: SEM_ESCOPO,
         sortable: { criadoEm: "criadoEm", status: "status", duracaoMs: "duracaoMs" },
         defaultSort: { field: "criadoEm", order: "desc" },
       },

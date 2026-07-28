@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
 import {
@@ -27,6 +29,7 @@ import { LoadingCard } from "@/components/loading";
 import { TendenciaChart } from "@/components/tendencia-chart";
 import { StatCard } from "@/components/stat-card";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { usePermissoes } from "@/lib/permissoes";
 import { fmtBRL, fmtNum } from "@/lib/fechamento-helpers";
 
 type Snapshot = {
@@ -73,9 +76,20 @@ type Snapshot = {
 export default function PainelHome() {
   const { data: session } = useSession();
   const token = useAuthToken();
+  const router = useRouter();
+  const { isLoading: carregandoPerm, acessoGlobal, temPermissao } = usePermissoes();
+
+  // O dashboard agrega a operação inteira e ainda não é filtrado por frota, então
+  // o EscopoGuard barra quem tem acesso restrito. Mandar pra lista de viagens em
+  // vez de deixar o gestor cair num erro logo no primeiro login.
+  useEffect(() => {
+    if (carregandoPerm || acessoGlobal) return;
+    router.replace(temPermissao("viagens.ver") ? "/viagens" : "/inbox");
+  }, [carregandoPerm, acessoGlobal, temPermissao, router]);
+
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard"],
-    enabled: !!token,
+    enabled: !!token && !carregandoPerm && acessoGlobal,
     staleTime: 60_000,
     queryFn: () => fetchApi<Snapshot>("/admin/dashboard", { token }),
   });

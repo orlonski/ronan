@@ -25,6 +25,7 @@ import { PushService } from "../../push/push.service";
 import { RoteamentoService } from "../../roteamento/roteamento.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
+import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
 import { PedagiosRodoviaConsultaService } from "../pedagios-rodovia/pedagios-rodovia-consulta.service";
 import { BuscaLocaisConfigService } from "../busca-locais-config/busca-locais-config.service";
 import { GeocodingService } from "../../geocoding/geocoding.service";
@@ -234,7 +235,7 @@ export class ViagensAdminService {
 
     // Atribui à viagem reusando atualizar (valida fechamento, audita o diff
     // localDescarga antes→depois e notifica o motorista da troca de local).
-    return this.atualizar(id, { localDescargaId: local.id }, usuarioId);
+    return this.atualizar(id, { localDescargaId: local.id }, usuarioId, null /* handler não escopado: o EscopoGuard já barra o usuário restrito antes de chegar aqui (sem @EscopoPor) */);
   }
 
   /**
@@ -319,7 +320,21 @@ export class ViagensAdminService {
     }
   }
 
-  async list(params: ListViagensParams) {
+  /**
+   * Barra viagem fora do escopo do usuário com 404 — não 403. Um 403 aqui
+   * confirmaria que o id existe, virando oráculo pro gestor mapear a operação
+   * das outras frotas. Mesmo padrão do inbox.
+   */
+  private async ensureNoEscopo(id: string, escopo: EscopoAdmin) {
+    if (!escopo) return;
+    const ok = await this.prisma.viagem.findFirst({
+      where: { id, ...filtroEscopo(escopo) },
+      select: { id: true },
+    });
+    if (!ok) throw new NotFoundException("Viagem não encontrada");
+  }
+
+  async list(params: ListViagensParams, escopo: EscopoAdmin) {
     const where: Prisma.ViagemWhereInput = {};
     if (params.motoristaId) where.motoristaId = params.motoristaId;
     if (params.veiculoId) where.veiculoId = params.veiculoId;
@@ -357,6 +372,7 @@ export class ViagensAdminService {
     >(this.prisma.viagem, {
       params,
       where: where as Record<string, unknown>,
+      escopo,
       searchFields: [
         "ticket",
         "observacao",
@@ -399,9 +415,11 @@ export class ViagensAdminService {
     };
   }
 
-  async detalhe(id: string) {
-    const viagem = await this.prisma.viagem.findUnique({
-      where: { id },
+  async detalhe(id: string, escopo: EscopoAdmin) {
+    // findFirst (não findUnique) porque o escopo entra no where — findUnique só
+    // aceita campo único.
+    const viagem = await this.prisma.viagem.findFirst({
+      where: { id, ...filtroEscopo(escopo) },
       include: {
         veiculo: true,
         motorista: { select: { id: true, nome: true, cpf: true } },
@@ -490,7 +508,13 @@ export class ViagensAdminService {
     };
   }
 
-  async atualizar(id: string, input: AtualizarViagemInput, usuarioId: string) {
+  async atualizar(
+    id: string,
+    input: AtualizarViagemInput,
+    usuarioId: string,
+    escopo: EscopoAdmin,
+  ) {
+    await this.ensureNoEscopo(id, escopo);
     const antes = await this.prisma.viagem.findUnique({
       where: { id },
       include: { _count: { select: { matchesFechamento: true } } },
@@ -583,7 +607,7 @@ export class ViagensAdminService {
       void this.kmAtipico.avaliarViagem(id);
     }
 
-    return this.detalhe(id);
+    return this.detalhe(id, null /* handler não escopado: o EscopoGuard já barra o usuário restrito antes de chegar aqui (sem @EscopoPor) */);
   }
 
   /**
@@ -763,7 +787,7 @@ export class ViagensAdminService {
       });
     }
 
-    return this.detalhe(id);
+    return this.detalhe(id, null /* handler não escopado: o EscopoGuard já barra o usuário restrito antes de chegar aqui (sem @EscopoPor) */);
   }
 
   /** Chat da viagem — histórico de mensagens (admin <-> motorista). */
@@ -948,7 +972,7 @@ export class ViagensAdminService {
       motivo: `Km ${antes.km?.toString() ?? "?"} aceito como correto — readmitido na referência do trajeto.`,
     });
 
-    return this.detalhe(id);
+    return this.detalhe(id, null /* handler não escopado: o EscopoGuard já barra o usuário restrito antes de chegar aqui (sem @EscopoPor) */);
   }
 
   /** Lista as rotas alternativas (OSRM) do par carga→descarga da viagem. */
@@ -1023,7 +1047,7 @@ export class ViagensAdminService {
     // km e kmFonte mudaram → re-carimba o atípico (mesmo motivo do recalcular).
     void this.kmAtipico.avaliarViagem(viagem.id);
 
-    return this.detalhe(id);
+    return this.detalhe(id, null /* handler não escopado: o EscopoGuard já barra o usuário restrito antes de chegar aqui (sem @EscopoPor) */);
   }
 
   /**
@@ -1205,10 +1229,11 @@ export class ViagensAdminService {
       },
     });
 
-    return this.detalhe(id);
+    return this.detalhe(id, null /* handler não escopado: o EscopoGuard já barra o usuário restrito antes de chegar aqui (sem @EscopoPor) */);
   }
 
-  async historico(viagemId: string) {
+  async historico(viagemId: string, escopo: EscopoAdmin) {
+    await this.ensureNoEscopo(viagemId, escopo);
     const viagem = await this.prisma.viagem.findUnique({ where: { id: viagemId } });
     if (!viagem) throw new NotFoundException("Viagem não encontrada");
     return this.auditoria.historicoDe("Viagem", viagemId);
@@ -1219,7 +1244,8 @@ export class ViagensAdminService {
    * fechamento usando viagemMatchId. TicketFoto e ViagemPonto saem cascade.
    * Apaga fotos do MinIO antes de deletar a viagem.
    */
-  async excluir(id: string) {
+  async excluir(id: string, escopo: EscopoAdmin) {
+    await this.ensureNoEscopo(id, escopo);
     const viagem = await this.prisma.viagem.findUnique({
       where: { id },
       select: {
@@ -1275,7 +1301,8 @@ export class ViagensAdminService {
     });
   }
 
-  async fotoBuffer(viagemId: string, fotoId: string) {
+  async fotoBuffer(viagemId: string, fotoId: string, escopo: EscopoAdmin) {
+    await this.ensureNoEscopo(viagemId, escopo);
     const foto = await this.prisma.ticketFoto.findFirst({
       where: { id: fotoId, viagemId },
       select: { storageKey: true },

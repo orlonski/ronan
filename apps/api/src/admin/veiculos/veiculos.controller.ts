@@ -8,6 +8,7 @@ import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
+import { EscopoPor } from "../../common/escopo/escopo.decorator";
 import type { AuthAdminUser } from "../../auth/types";
 import { VeiculosService } from "./veiculos.service";
 
@@ -26,14 +27,21 @@ type ListVeiculosQuery = z.infer<typeof ListVeiculosQuery>;
 export class VeiculosController {
   constructor(private readonly service: VeiculosService) {}
 
+  @EscopoPor("veiculo")
+  @RequerPermissao("veiculos.ver")
   @Get()
-  list(@Query(new ZodValidationPipe(ListVeiculosQuery)) query: ListVeiculosQuery) {
-    return this.service.list(query);
+  list(
+    @Query(new ZodValidationPipe(ListVeiculosQuery)) query: ListVeiculosQuery,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.list(query, user.escopo);
   }
 
+  @EscopoPor("veiculo")
+  @RequerPermissao("veiculos.ver")
   @Get(":id")
-  findOne(@Param("id") id: string) {
-    return this.service.findOne(id);
+  findOne(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    return this.service.findOne(id, user.escopo);
   }
 
   @RequerPermissao("veiculos.criar")

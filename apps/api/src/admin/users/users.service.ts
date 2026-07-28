@@ -5,6 +5,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { AuthService } from "../../auth/auth.service";
 import { PAPEL_OPERADOR } from "../permissoes/permissoes.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
+import { SEM_ESCOPO } from "../../common/escopo/escopo";
 
 type ListUsersParams = PaginationQuery & {
   ativo?: "true" | "false";
@@ -51,6 +52,8 @@ export class UsersService {
     >(this.prisma.user, {
       params,
       where: where as Record<string, unknown>,
+      // Model sem coluna de frota: quem barra o usuário restrito é o EscopoGuard.
+      escopo: SEM_ESCOPO,
       searchFields: ["nome", "email"],
       sortable: {
         nome: "nome",

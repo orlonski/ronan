@@ -17,6 +17,7 @@ import { SessaoService } from "../../whatsapp/sessao.service";
 import { paginate, type Paginated, type PaginationQuery } from "../../common/pagination";
 import { ymdSaoPaulo } from "../../common/timezone";
 import { adotarLancamentosOrfaos } from "../../common/transportadora";
+import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
 import { EasUpdateService } from "./eas-update.service";
 
 // Valor especial do filtro: motoristas que nunca reportaram versão (appVersion null).
@@ -123,7 +124,10 @@ export class MotoristasService {
     return { enviado: true };
   }
 
-  async list(params: ListMotoristasParams): Promise<Paginated<Record<string, unknown>>> {
+  async list(
+    params: ListMotoristasParams,
+    escopo: EscopoAdmin,
+  ): Promise<Paginated<Record<string, unknown>>> {
     const where: Prisma.MotoristaWhereInput = {};
     if (params.ativo === "true") where.ativo = true;
     if (params.ativo === "false") where.ativo = false;
@@ -138,6 +142,7 @@ export class MotoristasService {
       {
         params,
         where: where as Record<string, unknown>,
+        escopo,
         searchFields: ["nome", "cpf", "telefone", "email"],
         sortable: {
           nome: "nome",
@@ -155,7 +160,7 @@ export class MotoristasService {
     const flat = result.data.map(
       (m) => this.flatten(m as Parameters<typeof this.flatten>[0]) as Record<string, unknown>,
     );
-    const contagens = await this.contarViagens(flat.map((m) => m.id as string));
+    const contagens = await this.contarViagens(flat.map((m) => m.id as string), escopo);
     return {
       data: flat.map((m) => ({
         ...m,
@@ -172,7 +177,7 @@ export class MotoristasService {
    * inteira. Conta TODAS as viagens (inclui EM_ANDAMENTO/AGUARDANDO_PESO). O mês
    * usa a coluna `data` (@db.Date) ancorada na data civil de São Paulo.
    */
-  private async contarViagens(ids: string[]) {
+  private async contarViagens(ids: string[], escopo: EscopoAdmin) {
     const total = new Map<string, number>();
     const mes = new Map<string, number>();
     if (ids.length === 0) return { total, mes };
@@ -184,12 +189,18 @@ export class MotoristasService {
     const [totais, mensais] = await Promise.all([
       this.prisma.viagem.groupBy({
         by: ["motoristaId"],
-        where: { motoristaId: { in: ids } },
+        // Escopo aqui também: sem isso o gestor veria o total geral do
+        // motorista, incluindo o que ele rodou por outra frota.
+        where: { motoristaId: { in: ids }, ...filtroEscopo(escopo) },
         _count: { _all: true },
       }),
       this.prisma.viagem.groupBy({
         by: ["motoristaId"],
-        where: { motoristaId: { in: ids }, data: { gte: inicioMes, lt: inicioMesQueVem } },
+        where: {
+          motoristaId: { in: ids },
+          data: { gte: inicioMes, lt: inicioMesQueVem },
+          ...filtroEscopo(escopo),
+        },
         _count: { _all: true },
       }),
     ]);
@@ -212,8 +223,12 @@ export class MotoristasService {
     return grupos.map((g) => ({ versao: g.appVersion, total: g._count._all }));
   }
 
-  async findOne(id: string) {
-    const m = await this.prisma.motorista.findUnique({ where: { id }, select: SAFE_SELECT });
+  async findOne(id: string, escopo: EscopoAdmin) {
+    // findFirst + 404 (não 403): não confirma existência de motorista de outra frota.
+    const m = await this.prisma.motorista.findFirst({
+      where: { id, ...filtroEscopo(escopo) },
+      select: SAFE_SELECT,
+    });
     if (!m) throw new NotFoundException("Motorista não encontrado");
     return this.flatten(m);
   }

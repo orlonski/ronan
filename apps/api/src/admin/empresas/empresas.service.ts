@@ -3,6 +3,7 @@ import type { PapelEmpresa, Prisma } from "@prisma/client";
 import type { CriarEmpresaInput, AtualizarEmpresaInput } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
+import { SEM_ESCOPO } from "../../common/escopo/escopo";
 
 type ListEmpresasParams = PaginationQuery & {
   ativa?: "true" | "false";
@@ -21,6 +22,8 @@ export class EmpresasService {
     return paginate(this.prisma.empresa, {
       params,
       where: where as Record<string, unknown>,
+      // Model sem coluna de frota: quem barra o usuário restrito é o EscopoGuard.
+      escopo: SEM_ESCOPO,
       searchFields: ["nome", "cnpj", "contato"],
       sortable: { nome: "nome", cnpj: "cnpj", papel: "papel", ativa: "ativa", criadoEm: "criadoEm" },
       defaultSort: { field: "nome", order: "asc" },

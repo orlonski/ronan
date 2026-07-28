@@ -4,6 +4,7 @@ import type {
   CriarTipoEventoViagemInput,
 } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
+import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
 
 @Injectable()
 export class ViagemLifecycleAdminService {
@@ -55,9 +56,9 @@ export class ViagemLifecycleAdminService {
 
   // ---- Viagens em andamento (ao vivo) ----
 
-  viagensEmAndamento() {
+  viagensEmAndamento(escopo: EscopoAdmin) {
     return this.prisma.viagem.findMany({
-      where: { status: "EM_ANDAMENTO" },
+      where: { status: "EM_ANDAMENTO", ...filtroEscopo(escopo) },
       orderBy: { iniciadoEm: "asc" },
       select: {
         id: true,

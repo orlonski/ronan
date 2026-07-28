@@ -1,5 +1,6 @@
 import type { PaginationQuery, Paginated } from "./pagination.schema";
 import { buildPaginationMeta } from "./pagination.schema";
+import { SEM_ESCOPO, type EscopoParaListagem } from "../escopo/escopo";
 
 /**
  * Delegate genérico do Prisma. Compatível com qualquer model (motorista, viagem, etc).
@@ -37,6 +38,14 @@ export type PaginateOptions<TParams extends PaginationQuery> = {
   defaultSort?: { field: string; order?: "asc" | "desc" };
   /** `where` base do endpoint (filtros específicos já montados). */
   where?: Record<string, unknown>;
+  /**
+   * Escopo de acesso do usuário — REQUERIDO de propósito.
+   *
+   * `null` = acesso global, `{transportadoraIds}` = restrito, `SEM_ESCOPO` =
+   * model sem coluna de frota. Não é opcional pra que uma listagem nova não
+   * nasça vazando por omissão: o `tsc` quebra até alguém decidir.
+   */
+  escopo: EscopoParaListagem;
   /** Prisma `select` ou `include` (mutuamente exclusivos). */
   select?: Record<string, unknown>;
   include?: Record<string, unknown>;
@@ -53,9 +62,10 @@ export async function paginate<TRow, TParams extends PaginationQuery>(
   model: PrismaDelegate,
   options: PaginateOptions<TParams>,
 ): Promise<Paginated<TRow>> {
-  const { params, where, searchFields, sortable, defaultSort, select, include } = options;
+  const { params, where, escopo, searchFields, sortable, defaultSort, select, include } =
+    options;
 
-  const finalWhere = buildWhere(where, params.q, searchFields);
+  const finalWhere = buildWhere(where, params.q, searchFields, escopo);
   const orderBy = buildOrderBy(params.sort, params.order, sortable, defaultSort);
 
   const findArgs: Record<string, unknown> = {
@@ -79,19 +89,31 @@ function buildWhere(
   base: Record<string, unknown> | undefined,
   q: string | undefined,
   searchFields: SearchField[] | undefined,
+  escopo: EscopoParaListagem,
 ): Record<string, unknown> | undefined {
-  if (!q || !searchFields || searchFields.length === 0) return base;
+  // Tudo entra em AND — nunca por spread. O `where` do endpoint e a busca
+  // global podem trazer `OR` cada um (ex.: o filtro de local em viagens), e
+  // dois `OR` no mesmo nível fazem um apagar o outro em silêncio.
+  const partes: Record<string, unknown>[] = [];
+  if (base && Object.keys(base).length > 0) partes.push(base);
 
-  const OR = searchFields.map((field) => {
-    const path = typeof field === "string" ? field : field.path;
-    const mode =
-      (typeof field === "object" && field.mode) || "insensitive";
-    return setNested({}, path, { contains: q, mode });
-  });
+  if (q && searchFields && searchFields.length > 0) {
+    const OR = searchFields.map((field) => {
+      const path = typeof field === "string" ? field : field.path;
+      const mode = (typeof field === "object" && field.mode) || "insensitive";
+      return setNested({}, path, { contains: q, mode });
+    });
+    partes.push({ OR });
+  }
 
-  if (!base) return { OR };
-  // Combina filtros existentes com a busca global em AND
-  return { AND: [base, { OR }] };
+  // `in: []` (restrito sem vínculo) devolve zero linhas, que é o correto.
+  if (escopo !== SEM_ESCOPO && escopo !== null) {
+    partes.push({ transportadoraId: { in: escopo.transportadoraIds } });
+  }
+
+  if (partes.length === 0) return undefined;
+  if (partes.length === 1) return partes[0];
+  return { AND: partes };
 }
 
 function buildOrderBy(

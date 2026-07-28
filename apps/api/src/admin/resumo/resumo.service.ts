@@ -79,6 +79,11 @@ export class ResumoService {
         receberResumoDiario: true,
         ativo: true,
         whatsappResumo: { not: null },
+        // A mensagem é agregada da operação INTEIRA (ranking de motoristas por
+        // nome, toneladas, km, combustível). Sai por WhatsApp, fora de qualquer
+        // guard — então usuário restrito a frota não entra na lista até o
+        // resumo saber se escopar (Fase 5).
+        acessoGlobal: true,
       },
       select: {
         id: true,
@@ -111,9 +116,15 @@ export class ResumoService {
   async enviarAgora(userId: string): Promise<{ ok: true }> {
     const u = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { whatsappResumo: true, resumoAssuntos: true },
+      select: { whatsappResumo: true, resumoAssuntos: true, acessoGlobal: true },
     });
     if (!u) throw new NotFoundException("Usuário não encontrado");
+    if (!u.acessoGlobal) {
+      // Mesmo motivo do cron: o resumo ainda não sabe se escopar por frota.
+      throw new BadRequestException(
+        "Este usuário tem acesso restrito a transportadora e o resumo diário ainda não é filtrado por frota.",
+      );
+    }
     if (!u.whatsappResumo) {
       throw new BadRequestException(
         "Usuário sem número de WhatsApp configurado. Edite o usuário e informe o número.",

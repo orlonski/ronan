@@ -6,6 +6,7 @@ import type {
 } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
+import { SEM_ESCOPO } from "../../common/escopo/escopo";
 
 type ListTransportadorasParams = PaginationQuery & {
   ativa?: "true" | "false";
@@ -22,6 +23,8 @@ export class TransportadorasService {
     return paginate(this.prisma.transportadora, {
       params,
       where: where as Record<string, unknown>,
+      // Model sem coluna de frota: quem barra o usuário restrito é o EscopoGuard.
+      escopo: SEM_ESCOPO,
       searchFields: ["nome", "cnpj", "contato"],
       sortable: { nome: "nome", cnpj: "cnpj", ativa: "ativa", criadoEm: "criadoEm" },
       defaultSort: { field: "nome", order: "asc" },

@@ -49,8 +49,24 @@ export class AdminInboxService implements OnModuleDestroy {
    * sempre envolve em try/catch).
    */
   async disparar(input: DispararNotificacaoInput): Promise<void> {
+    // Filtrar o fan-out NA ORIGEM é obrigatório: as linhas nascem pertencendo
+    // ao usuário (`where: { usuarioId }` na leitura), então escopar o GET não
+    // adiantaria nada — o sininho e o SSE já teriam entregue nome de motorista,
+    // ticket e valor de outra frota em tempo real.
+    const transportadoraId = await this.transportadoraDoEvento(input.dados);
     const destinos = await this.prisma.user.findMany({
-      where: { ativo: true },
+      where: {
+        ativo: true,
+        OR: [
+          { acessoGlobal: true },
+          // Usuário restrito só recebe evento de frota que ele enxerga. Evento
+          // sem frota resolvida (lançamento de cadastro ainda não classificado)
+          // fica só com quem tem acesso global — fail-closed.
+          ...(transportadoraId
+            ? [{ transportadoras: { some: { transportadoraId } } }]
+            : []),
+        ],
+      },
       select: { id: true },
     });
     if (destinos.length === 0) return;
@@ -72,6 +88,37 @@ export class AdminInboxService implements OnModuleDestroy {
         if (subj) subj.next(notif);
       }),
     );
+  }
+
+  /**
+   * De qual frota é o evento, deduzido dos `dados` que o caller já manda
+   * (`viagemId` ou `motoristaId`).
+   *
+   * Resolvido AQUI, e não em cada caller, de propósito: são 4 pontos de
+   * disparo hoje e nenhum deles pode virar vazamento por esquecimento. Custa
+   * uma query num caminho que já é fire-and-forget.
+   */
+  private async transportadoraDoEvento(
+    dados: Prisma.InputJsonValue | undefined,
+  ): Promise<string | null> {
+    if (!dados || typeof dados !== "object" || Array.isArray(dados)) return null;
+    const d = dados as Record<string, unknown>;
+
+    if (typeof d.viagemId === "string") {
+      const v = await this.prisma.viagem.findUnique({
+        where: { id: d.viagemId },
+        select: { transportadoraId: true },
+      });
+      if (v?.transportadoraId) return v.transportadoraId;
+    }
+    if (typeof d.motoristaId === "string") {
+      const m = await this.prisma.motorista.findUnique({
+        where: { id: d.motoristaId },
+        select: { transportadoraId: true },
+      });
+      if (m?.transportadoraId) return m.transportadoraId;
+    }
+    return null;
   }
 
   /**

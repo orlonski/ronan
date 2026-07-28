@@ -6,6 +6,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { PushService } from "../../push/push.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
+import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
 import { inicioDoDiaBR } from "../../common/timezone";
 
 type ListAbastecimentosParams = PaginationQuery & {
@@ -27,7 +28,7 @@ export class AbastecimentosAdminService {
     private readonly push: PushService,
   ) {}
 
-  async list(params: ListAbastecimentosParams) {
+  async list(params: ListAbastecimentosParams, escopo: EscopoAdmin) {
     const where: Prisma.AbastecimentoWhereInput = {};
     if (params.motoristaId) where.motoristaId = params.motoristaId;
     if (params.veiculoId) where.veiculoId = params.veiculoId;
@@ -46,6 +47,7 @@ export class AbastecimentosAdminService {
       paginate(this.prisma.abastecimento, {
         params,
         where: where as Record<string, unknown>,
+        escopo,
         searchFields: ["postoNome", "observacao", "motorista.nome", "veiculo.placa", "empresa.nome"],
         sortable: {
           data: "data",
@@ -66,7 +68,9 @@ export class AbastecimentosAdminService {
         },
       }),
       this.prisma.abastecimento.aggregate({
-        where,
+        // Os totais precisam do MESMO escopo do paginate — senão viriam da base
+        // inteira ao lado dos dados filtrados, na mesma resposta HTTP.
+        where: { ...where, ...filtroEscopo(escopo) },
         _count: { _all: true },
         _sum: { litros: true, valorTotal: true },
       }),

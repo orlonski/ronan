@@ -20,6 +20,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
 import { paginate, type PaginationQuery } from "../common/pagination";
+import { SEM_ESCOPO } from "../common/escopo/escopo";
 import type { ColunaLayout, ConfigLayout } from "./layout-envio.service";
 
 type ListEnviosParams = PaginationQuery & {
@@ -260,6 +261,8 @@ export class ExportFechamentoService {
     return paginate(this.prisma.envioFechamento, {
       params,
       where: where as Record<string, unknown>,
+      // Model sem coluna de frota: quem barra o usuário restrito é o EscopoGuard.
+      escopo: SEM_ESCOPO,
       searchFields: ["arquivoNome", "canalEnvio", "empresa.nome"],
       sortable: {
         geradoEm: "geradoEm",

@@ -30,9 +30,13 @@ const ITENS: NavItem[] = [
  */
 export function BottomNav({ onOpenMenu }: { onOpenMenu: () => void }) {
   const pathname = usePathname();
-  const { temPermissao } = usePermissoes();
+  const { temPermissao, acessoGlobal } = usePermissoes();
 
-  const visiveis = ITENS.filter((i) => !i.perm || temPermissao(i.perm));
+  // "Início" é o dashboard, que agrega a operação inteira e responde 403 pra
+  // acesso restrito — some pro gestor de frota, igual na sidebar.
+  const visiveis = ITENS.filter(
+    (i) => (i.href !== "/" || acessoGlobal) && (!i.perm || temPermissao(i.perm)),
+  );
 
   function ativo(item: NavItem) {
     return item.exact ? pathname === item.href : pathname.startsWith(item.href);

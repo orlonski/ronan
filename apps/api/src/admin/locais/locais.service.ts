@@ -11,6 +11,7 @@ import type { CriarLocalInput } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
+import { SEM_ESCOPO } from "../../common/escopo/escopo";
 
 type ListLocaisParams = PaginationQuery & {
   clienteId?: string;
@@ -121,6 +122,8 @@ export class LocaisService {
     const result = await paginate(this.prisma.local, {
       params,
       where: where as Record<string, unknown>,
+      // Model sem coluna de frota: quem barra o usuário restrito é o EscopoGuard.
+      escopo: SEM_ESCOPO,
       searchFields: [...SEARCH_FIELDS],
       sortable: {
         nome: "nome",
