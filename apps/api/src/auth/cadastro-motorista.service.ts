@@ -232,8 +232,20 @@ export class CadastroMotoristaService {
     }
 
     for (const p of placas) {
-      const veiculo = await db.veiculo.findUnique({ where: { placa: p.placa }, select: { id: true } });
-      if (veiculo) {
+      const veiculo = await db.veiculo.findUnique({
+        where: { placa: p.placa },
+        select: {
+          _count: { select: { motoristas: true } },
+          motoristasComoDefault: { select: { id: true }, take: 1 },
+        },
+      });
+      // Só barra se a placa estiver COM algum motorista. Placa que não existe,
+      // ou que existe mas ninguém tem (o admin desvinculou e o veículo ficou
+      // preservado por causa do histórico de viagens), é livre — upsertPlacas
+      // reaproveita o veículo e as viagens antigas seguem com quem as rodou.
+      if (!veiculo) continue;
+      const emUso = veiculo._count.motoristas > 0 || veiculo.motoristasComoDefault.length > 0;
+      if (emUso) {
         throw new ConflictException({
           code: "PLACA_EM_USO",
           message: `A placa ${p.placa} já está cadastrada em outro cadastro. Se você trocou de placa, fale com o pessoal do administrativo pra atualizar.`,
@@ -270,9 +282,11 @@ function gerarCodigo(): string {
 }
 
 /**
- * Upsert de placas → veículos (espelha MotoristasService.upsertPlacas, mas o
- * auto-cadastro só cai aqui depois de checarDuplicados garantir que nenhuma
- * placa existe; na prática sempre cria veículo novo).
+ * Upsert de placas → veículos (espelha MotoristasService.upsertPlacas). O
+ * auto-cadastro chega aqui depois de checarDuplicados garantir que nenhuma
+ * placa está com outro motorista — mas o veículo pode existir e estar livre
+ * (desvinculado pelo admin e preservado pelo histórico), e nesse caso a gente
+ * reaproveita ele em vez de criar outro.
  */
 async function upsertPlacas(
   tx: PrismaTx,
@@ -282,6 +296,12 @@ async function upsertPlacas(
   for (const p of placas) {
     const existente = await tx.veiculo.findUnique({ where: { placa: p.placa } });
     if (existente) {
+      // Veículo que estava inativo volta a rodar — senão ele fica de fora dos
+      // selects e relatórios do painel apesar de ter motorista. O modelo não é
+      // sobrescrito: o que o admin cadastrou vale mais.
+      if (!existente.ativo) {
+        await tx.veiculo.update({ where: { id: existente.id }, data: { ativo: true } });
+      }
       resolvidos.push({ id: existente.id, placa: existente.placa });
     } else {
       const novo = await tx.veiculo.create({ data: { placa: p.placa, modelo: p.modelo } });
