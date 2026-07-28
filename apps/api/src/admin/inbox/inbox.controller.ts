@@ -17,6 +17,7 @@ import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import type { AuthAdminUser } from "../../auth/types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
+import { IgnoraEscopo } from "../../common/escopo/escopo.decorator";
 import { AdminInboxService } from "./inbox.service";
 
 const ListarQuery = z.object({
@@ -25,10 +26,21 @@ const ListarQuery = z.object({
   naoLidas: z.enum(["true", "false"]).optional(),
 });
 
+/**
+ * Caixa PESSOAL: todo handler aqui opera sobre `user.id`, então não existe dado
+ * de outra frota pra vazar — o recorte por transportadora já acontece no
+ * fan-out, quando a notificação é criada (ver AdminInboxService.disparar).
+ *
+ * Precisa de @IgnoraEscopo explícito porque o EscopoGuard é fail-closed. Sem
+ * isso o usuário restrito leva 403 no sininho de TODA tela, e o /stream (SSE)
+ * vira loop de reconexão — o EventSource do browser reconecta sozinho a cada
+ * falha, o que gerava dezenas de requisições por minuto.
+ */
 @ApiTags("admin/inbox")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
 @Roles("ADMIN_USER")
+@IgnoraEscopo()
 @Controller("admin/inbox")
 export class AdminInboxController {
   constructor(private readonly service: AdminInboxService) {}

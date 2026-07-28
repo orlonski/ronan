@@ -288,7 +288,8 @@ export class ViagensAdminService {
   }
 
   /** Praças na rota real desta viagem. Ver PedagiosRodoviaConsultaService. */
-  async pedagiosNaRota(id: string) {
+  async pedagiosNaRota(id: string, escopo: EscopoAdmin) {
+    await this.ensureNoEscopo(id, escopo);
     return this.pedagiosConsulta.pedagiosDaViagem(id);
   }
 
@@ -809,7 +810,8 @@ export class ViagensAdminService {
   }
 
   /** Chat da viagem — histórico de mensagens (admin <-> motorista). */
-  async listarMensagens(id: string) {
+  async listarMensagens(id: string, escopo: EscopoAdmin) {
+    await this.ensureNoEscopo(id, escopo);
     const existe = await this.prisma.viagem.findUnique({
       where: { id },
       select: { id: true },
@@ -819,7 +821,14 @@ export class ViagensAdminService {
   }
 
   /** Admin manda uma mensagem no chat da viagem + notifica o motorista. */
-  async enviarMensagem(id: string, usuarioId: string, usuarioNome: string, texto: string) {
+  async enviarMensagem(
+    id: string,
+    usuarioId: string,
+    usuarioNome: string,
+    texto: string,
+    escopo: EscopoAdmin,
+  ) {
+    await this.ensureNoEscopo(id, escopo);
     const existe = await this.prisma.viagem.findUnique({
       where: { id },
       select: { id: true },
@@ -953,7 +962,8 @@ export class ViagensAdminService {
   }
 
   /** Card de referência de km da viagem (histórico do par + rota calculada). */
-  async referenciaKm(id: string) {
+  async referenciaKm(id: string, escopo: EscopoAdmin) {
+    await this.ensureNoEscopo(id, escopo);
     const detalhe = await this.kmAtipico.detalheReferencia(id);
     if (!detalhe) throw new NotFoundException("Viagem não encontrada");
     return detalhe;
@@ -1123,7 +1133,8 @@ export class ViagensAdminService {
    * Estado do bota-fora + preview do km de cada resposta, pro painel mostrar a
    * consequência ANTES de aplicar (mesmo contrato do seletor de retorno).
    */
-  async opcoesBotaFora(id: string) {
+  async opcoesBotaFora(id: string, escopo: EscopoAdmin) {
+    await this.ensureNoEscopo(id, escopo);
     const ctx = await this.carregarParaBotaFora(id);
     const { viagem, permite, kmBase } = ctx;
 
@@ -1159,7 +1170,13 @@ export class ViagensAdminService {
    * cliente. Mantém o bloqueio de fechamento do `atualizar`: viagem já casada
    * não se mexe.
    */
-  async definirBotaFora(id: string, teveBotaFora: boolean, usuarioId: string) {
+  async definirBotaFora(
+    id: string,
+    teveBotaFora: boolean,
+    usuarioId: string,
+    escopo: EscopoAdmin,
+  ) {
+    await this.ensureNoEscopo(id, escopo);
     const ctx = await this.carregarParaBotaFora(id);
     const { viagem, permite, kmVoltaAtual, kmBase, kmCalculadoBase } = ctx;
 

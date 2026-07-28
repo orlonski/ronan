@@ -21,6 +21,7 @@ import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePaginatedList, useUpdateResource } from "@/lib/client-api";
+import { usePermissoes } from "@/lib/permissoes";
 
 type Veiculo = {
   id: string;
@@ -49,6 +50,7 @@ export default function VeiculosPage() {
   const list = usePaginatedList<Veiculo>(PATH, tableState);
   const update = useUpdateResource<Partial<Veiculo>, Veiculo>(PATH, PATH);
   const { viewMode, setViewMode } = useListViewMode("veiculos");
+  const { acessoGlobal } = usePermissoes();
 
   const columns = useMemo<ColumnDef<Veiculo>[]>(
     () => [
@@ -154,18 +156,22 @@ export default function VeiculosPage() {
             searchPlaceholder="Buscar por placa ou modelo…"
             filters={
               <>
-                <TransportadoraCombobox
-                  value={tableState.filters.transportadoraId}
-                  onChange={(v) => tableState.setFilter("transportadoraId", v)}
-                  placeholder="Transportadora"
-                />
-                <Combobox
-                  value={tableState.filters.semTransportadora}
-                  onChange={(v) => tableState.setFilter("semTransportadora", v)}
-                  placeholder="Classificação"
-                  showSearch={false}
-                  options={[{ value: "true", label: "Sem transportadora" }]}
-                />
+                {acessoGlobal && (
+                  <TransportadoraCombobox
+                    value={tableState.filters.transportadoraId}
+                    onChange={(v) => tableState.setFilter("transportadoraId", v)}
+                    placeholder="Transportadora"
+                  />
+                )}
+                {acessoGlobal && (
+                  <Combobox
+                    value={tableState.filters.semTransportadora}
+                    onChange={(v) => tableState.setFilter("semTransportadora", v)}
+                    placeholder="Classificação"
+                    showSearch={false}
+                    options={[{ value: "true", label: "Sem transportadora" }]}
+                  />
+                )}
                 <Combobox
                   value={tableState.filters.ativo}
                   onChange={(v) => tableState.setFilter("ativo", v)}

@@ -163,9 +163,11 @@ export class ViagensAdminController {
    * "cheguei direto" e as pernas de bota-fora). `pedagios: null` = não deu pra
    * checar — não confundir com lista vazia.
    */
+  @EscopoPor("viagem")
+  @RequerPermissao("viagens.ver")
   @Get(":id/pedagios-na-rota")
-  pedagiosNaRota(@Param("id") id: string) {
-    return this.service.pedagiosNaRota(id);
+  pedagiosNaRota(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    return this.service.pedagiosNaRota(id, user.escopo);
   }
 
   /**
@@ -173,9 +175,11 @@ export class ViagensAdminController {
    * comparáveis) e com a rota calculada, lado a lado. `baseConsistente: false` =
    * o km desta viagem não descreve o par atual (não devolve números).
    */
+  @EscopoPor("viagem")
+  @RequerPermissao("viagens.ver")
   @Get(":id/referencia-km")
-  referenciaKm(@Param("id") id: string) {
-    return this.service.referenciaKm(id);
+  referenciaKm(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    return this.service.referenciaKm(id, user.escopo);
   }
 
   /**
@@ -232,12 +236,14 @@ export class ViagensAdminController {
    * consequência antes de aplicar. `kmVolta: null` = não deu pra calcular a
    * volta (OSRM fora, locais sem coordenada); não confundir com zero.
    */
+  @EscopoPor("viagem")
   @RequerPermissao("viagens.editar")
   @Get(":id/bota-fora")
-  opcoesBotaFora(@Param("id") id: string) {
-    return this.service.opcoesBotaFora(id);
+  opcoesBotaFora(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    return this.service.opcoesBotaFora(id, user.escopo);
   }
 
+  @EscopoPor("viagem")
   @RequerPermissao("viagens.editar")
   @Post(":id/bota-fora")
   definirBotaFora(
@@ -245,7 +251,7 @@ export class ViagensAdminController {
     @Body(new ZodValidationPipe(DefinirBotaForaInput)) body: DefinirBotaForaInput,
     @CurrentUser() user: AuthAdminUser,
   ) {
-    return this.service.definirBotaFora(id, body.teveBotaFora, user.id);
+    return this.service.definirBotaFora(id, body.teveBotaFora, user.id, user.escopo);
   }
 
   @RequerPermissao("viagens.validar")
@@ -259,19 +265,23 @@ export class ViagensAdminController {
   }
 
   /** Chat da viagem: histórico de mensagens (admin <-> motorista). */
+  @EscopoPor("viagem")
+  @RequerPermissao("viagens.ver")
   @Get(":id/mensagens")
-  listarMensagens(@Param("id") id: string) {
-    return this.service.listarMensagens(id);
+  listarMensagens(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    return this.service.listarMensagens(id, user.escopo);
   }
 
   /** Admin manda uma mensagem no chat da viagem. */
+  @EscopoPor("viagem")
+  @RequerPermissao("viagens.editar")
   @Post(":id/mensagens")
   enviarMensagem(
     @Param("id") id: string,
     @Body(new ZodValidationPipe(EnviarMensagemInput)) body: EnviarMensagemInput,
     @CurrentUser() user: AuthAdminUser,
   ) {
-    return this.service.enviarMensagem(id, user.id, user.nome, body.texto);
+    return this.service.enviarMensagem(id, user.id, user.nome, body.texto, user.escopo);
   }
 
   @Roles("ADMIN_USER")

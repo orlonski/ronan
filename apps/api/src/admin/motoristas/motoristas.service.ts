@@ -214,9 +214,11 @@ export class MotoristasService {
    * painel. Inclui o grupo `null` (nunca abriu o app) → o front mostra como
    * "Sem versão".
    */
-  async versoesDisponiveis() {
+  async versoesDisponiveis(escopo: EscopoAdmin) {
     const grupos = await this.prisma.motorista.groupBy({
       by: ["appVersion"],
+      // Conta motorista: sem escopo, o gestor veria a contagem da frota inteira.
+      where: filtroEscopo(escopo),
       _count: { _all: true },
       orderBy: { appVersion: "desc" },
     });
@@ -242,9 +244,9 @@ export class MotoristasService {
    * `fonte` indica qual referência venceu, pro dashboard poder sinalizar quando
    * está em modo degradado.
    */
-  async resumoVersoes() {
+  async resumoVersoes(escopo: EscopoAdmin) {
     const maisNovo = await this.prisma.motorista.findFirst({
-      where: { appBuiltAt: { not: null } },
+      where: { appBuiltAt: { not: null }, ...filtroEscopo(escopo) },
       orderBy: { appBuiltAt: "desc" },
       select: { appVersion: true, appUpdateId: true, appBuiltAt: true },
     });

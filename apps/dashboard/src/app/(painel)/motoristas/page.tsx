@@ -36,6 +36,7 @@ import { AppVersaoCell, type AppVersaoInfo } from "@/components/app-versao-badge
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePaginatedList, useUpdateResource, useApiQuery } from "@/lib/client-api";
+import { usePermissoes } from "@/lib/permissoes";
 
 type Veiculo = { id: string; placa: string; modelo: string | null };
 type DocumentoResumo = { tipo: TipoDocumentoMotorista; validade: string | null };
@@ -74,6 +75,9 @@ export default function MotoristasPage() {
   const list = usePaginatedList<Motorista>(PATH, tableState);
   const update = useUpdateResource<{ ativo?: boolean }, Motorista>(PATH, PATH);
   const { viewMode, setViewMode } = useListViewMode("motoristas");
+  // Quem é restrito a uma frota não filtra por frota (só tem a dele) nem vê a
+  // coluna — e a chamada do combobox daria 403.
+  const { acessoGlobal } = usePermissoes();
   const resumo = useApiQuery<ResumoVersoes>(`${PATH}/versoes/resumo`, {
     staleTime: 60_000,
   });
@@ -155,21 +159,25 @@ export default function MotoristasPage() {
             </div>
           ),
       },
-      {
-        id: "transportadora",
-        accessorKey: "transportadora",
-        header: ({ column }) => (
-          <DataTableColumnHeader column={column} title="Transportadora" />
-        ),
-        cell: ({ row }) =>
-          row.original.transportadora ? (
-            <span className="text-sm">{row.original.transportadora.nome}</span>
-          ) : (
-            <Badge className="border-amber-200 bg-amber-50 text-amber-800">
-              Sem transportadora
-            </Badge>
-          ),
-      },
+      ...(acessoGlobal
+        ? [
+            {
+              id: "transportadora",
+              accessorKey: "transportadora",
+              header: ({ column }) => (
+                <DataTableColumnHeader column={column} title="Transportadora" />
+              ),
+              cell: ({ row }) =>
+                row.original.transportadora ? (
+                  <span className="text-sm">{row.original.transportadora.nome}</span>
+                ) : (
+                  <Badge className="border-amber-200 bg-amber-50 text-amber-800">
+                    Sem transportadora
+                  </Badge>
+                ),
+            } satisfies ColumnDef<Motorista>,
+          ]
+        : []),
       {
         id: "documentos",
         enableSorting: false,
@@ -306,7 +314,7 @@ export default function MotoristasPage() {
         ),
       },
     ],
-    [update, latest],
+    [update, latest, acessoGlobal],
   );
 
   return (
@@ -364,18 +372,22 @@ export default function MotoristasPage() {
                     { value: "false", label: "Inativos" },
                   ]}
                 />
-                <TransportadoraCombobox
-                  value={tableState.filters.transportadoraId}
-                  onChange={(v) => tableState.setFilter("transportadoraId", v)}
-                  placeholder="Transportadora"
-                />
-                <Combobox
-                  value={tableState.filters.semTransportadora}
-                  onChange={(v) => tableState.setFilter("semTransportadora", v)}
-                  placeholder="Classificação"
-                  showSearch={false}
-                  options={[{ value: "true", label: "Sem transportadora" }]}
-                />
+                {acessoGlobal && (
+                  <TransportadoraCombobox
+                    value={tableState.filters.transportadoraId}
+                    onChange={(v) => tableState.setFilter("transportadoraId", v)}
+                    placeholder="Transportadora"
+                  />
+                )}
+                {acessoGlobal && (
+                  <Combobox
+                    value={tableState.filters.semTransportadora}
+                    onChange={(v) => tableState.setFilter("semTransportadora", v)}
+                    placeholder="Classificação"
+                    showSearch={false}
+                    options={[{ value: "true", label: "Sem transportadora" }]}
+                  />
+                )}
                 <Combobox
                   value={tableState.filters.appVersion}
                   onChange={(v) => tableState.setFilter("appVersion", v)}

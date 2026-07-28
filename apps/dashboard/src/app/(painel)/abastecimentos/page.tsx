@@ -19,6 +19,7 @@ import { ListMetric } from "@/components/list-metric";
 import { firstDayOfMonth, useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { useAuthToken, fetchApi, useResourceOptions } from "@/lib/client-api";
+import { usePermissoes } from "@/lib/permissoes";
 import type { Pagination } from "@/lib/client-api";
 import type { DataTableParams } from "@/hooks/use-data-table-state";
 import { fmtNum } from "@/lib/fechamento-helpers";
@@ -71,7 +72,12 @@ export default function AbastecimentosPage() {
     defaultSort: { field: "data", order: "desc" },
     defaultFilters: { de: firstDayOfMonth() },
   });
-  const empresas = useResourceOptions<Empresa>("/admin/empresas");
+  // Empresa (tomador que paga o abastecimento) é dado comercial da Schaba:
+  // /admin/empresas responde 403 pra quem é restrito a frota.
+  const { acessoGlobal } = usePermissoes();
+  const empresas = useResourceOptions<Empresa>("/admin/empresas", {
+    enabled: acessoGlobal,
+  });
   const { viewMode, setViewMode } = useListViewMode("abastecimentos");
 
   const url = buildUrl("/admin/abastecimentos", tableState);
@@ -247,6 +253,7 @@ export default function AbastecimentosPage() {
                   onChange={(v) => tableState.setFilter("motoristaId", v)}
                   placeholder="Motorista"
                 />
+                {acessoGlobal && (
                 <Combobox
                   value={tableState.filters.empresaId ?? (tableState.filters.semEmpresa === "true" ? "__sem__" : undefined)}
                   onChange={(v) => {
@@ -261,6 +268,7 @@ export default function AbastecimentosPage() {
                   placeholder="Empresa"
                   options={empresaOptions}
                 />
+                )}
                 <ToolbarFilterDateRange state={tableState} label="Período" />
               </>
             }

@@ -5,6 +5,7 @@ import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
+import { IgnoraEscopo } from "../../common/escopo/escopo.decorator";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import type { AuthAdminUser } from "../../auth/types";
 import { BuscaLocaisConfigService } from "./busca-locais-config.service";
@@ -32,6 +33,12 @@ const AtualizarSchema = z
 export class BuscaLocaisConfigController {
   constructor(private readonly service: BuscaLocaisConfigService) {}
 
+  /**
+   * Config global de raio/GPS. Sem escopo porque não há linha de frota aqui —
+   * são números de calibragem. O detalhe da viagem lê pra saber se o sinal do
+   * GPS foi fraco, então precisa responder também pro usuário restrito.
+   */
+  @IgnoraEscopo()
   @Roles("ADMIN_USER")
   @Get()
   get() {

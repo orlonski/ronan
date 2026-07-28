@@ -61,6 +61,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { usePermissoes } from "@/lib/permissoes";
 import {
   fmtBR,
   fmtBRL,
@@ -233,6 +234,9 @@ export default function ViagemDetalhePage({
   const { id } = use(params);
   const router = useRouter();
   const token = useAuthToken();
+  // Ferramentas de curadoria de cadastro (duplicatas de local) varrem a base
+  // toda — só pra quem enxerga a base toda.
+  const { acessoGlobal: podeCurarLocais } = usePermissoes();
   const viagem = useQuery({
     queryKey: ["viagem-admin", id],
     enabled: !!token,
@@ -282,7 +286,10 @@ export default function ViagemDetalhePage({
   // (raio 150 m, mesma trava anti-marco-de-rodovia). Cacheada; um grupo por par.
   const duplicatasGeo = useQuery({
     queryKey: ["locais-duplicatas-geo", 150],
-    enabled: !!token,
+    // Varre TODOS os locais da base — é ferramenta de curadoria de cadastro,
+    // não da viagem. Usuário restrito a frota não tem acesso (403), então nem
+    // chama: senão é requisição garantida a falhar em toda abertura de viagem.
+    enabled: !!token && podeCurarLocais,
     staleTime: 5 * 60_000,
     queryFn: () =>
       fetchApi<DuplicatasGeoResp>(`/admin/locais/duplicatas-geo?raioM=150`, { token }),
@@ -380,7 +387,10 @@ export default function ViagemDetalhePage({
    */
   const botaFora = useQuery({
     queryKey: ["viagem-bota-fora", id],
-    enabled: !!token,
+    // O card está desligado desde 2026-07-17 (MOSTRAR_BOTA_FORA), mas a query
+    // continuava rodando em toda abertura de viagem — requisição inútil pra
+    // todo mundo, e 403 pra quem não tem viagens.editar.
+    enabled: !!token && MOSTRAR_BOTA_FORA,
     queryFn: () =>
       fetchApi<{
         permiteBotaFora: boolean;

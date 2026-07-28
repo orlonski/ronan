@@ -70,15 +70,19 @@ export class MotoristasController {
   }
 
   // Antes do :id pra não ser capturado como id="versoes".
+  @EscopoPor("motorista")
+  @RequerPermissao("motoristas.ver")
   @Get("versoes/resumo")
-  resumoVersoes() {
-    return this.service.resumoVersoes();
+  resumoVersoes(@CurrentUser() user: AuthAdminUser) {
+    return this.service.resumoVersoes(user.escopo);
   }
 
   // Versões distintas reportadas pelos motoristas (popula o filtro do painel).
+  @EscopoPor("motorista")
+  @RequerPermissao("motoristas.ver")
   @Get("versoes/lista")
-  versoesDisponiveis() {
-    return this.service.versoesDisponiveis();
+  versoesDisponiveis(@CurrentUser() user: AuthAdminUser) {
+    return this.service.versoesDisponiveis(user.escopo);
   }
 
   @EscopoPor("motorista")
