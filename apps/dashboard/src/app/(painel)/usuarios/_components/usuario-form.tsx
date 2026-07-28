@@ -235,9 +235,11 @@ export function UsuarioForm({ initial }: Props) {
                   initialOptions={(initial?.transportadoras ?? []).map(transportadoraOption)}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Ele só vê lançamentos carimbados com estas frotas — e as telas que o
-                  papel dele liberar. As áreas que não foram preparadas pra acesso
-                  restrito ficam bloqueadas.
+                  Ele só vê lançamentos carimbados com estas frotas. Nem toda tela
+                  funciona com acesso restrito — as que funcionam estão marcadas com o
+                  selo <span className="rounded-full bg-emerald-100 px-1.5 text-[10px] font-medium text-emerald-800">frota</span>{" "}
+                  em Papéis e permissões. Marcar as outras no papel dele não adianta:
+                  elas continuam fora do menu.
                 </p>
                 {form.transportadoraIds.length === 0 && (
                   <p className="text-xs font-medium text-amber-700 dark:text-amber-500">

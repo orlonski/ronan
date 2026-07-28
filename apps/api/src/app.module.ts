@@ -3,6 +3,7 @@ import { ConfigModule } from "@nestjs/config";
 import { ScheduleModule } from "@nestjs/schedule";
 import { APP_FILTER, APP_INTERCEPTOR } from "@nestjs/core";
 import { PrismaModule } from "./prisma/prisma.module";
+import { EscopoModule } from "./common/escopo/escopo.module";
 import { HealthModule } from "./health/health.module";
 import { AuthModule } from "./auth/auth.module";
 import { AdminModule } from "./admin/admin.module";
@@ -25,6 +26,7 @@ import { AppVersionInterceptor } from "./common/app-version.interceptor";
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
     PrismaModule,
+    EscopoModule,
     AuditoriaModule,
     IaModule,
     AuthModule,

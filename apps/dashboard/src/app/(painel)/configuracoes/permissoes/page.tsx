@@ -13,7 +13,18 @@ import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { RequerTela } from "@/components/requer-tela";
 import { cn } from "@/lib/utils";
 
-type PermissaoRow = { chave: string; modulo: string; titulo: string; descricao: string | null };
+type PermissaoRow = {
+  chave: string;
+  modulo: string;
+  titulo: string;
+  descricao: string | null;
+  /**
+   * A chave vale pra usuário RESTRITO a transportadora? Vem do backend, que
+   * deriva dos endpoints preparados pra filtrar por frota. Marcar uma chave
+   * não-escopável num papel de gestor de frota não libera a tela pra ele.
+   */
+  escopavel?: boolean;
+};
 type Papel = {
   id: string;
   nome: string;
@@ -279,6 +290,14 @@ function PermissoesInner() {
                                 onChange={() => toggle(it.chave)}
                               />
                               <span>{it.titulo}</span>
+                              {it.escopavel && (
+                                <span
+                                  title="Também funciona para usuário com acesso restrito a transportadora"
+                                  className="rounded-full bg-emerald-100 px-1.5 text-[10px] font-medium text-emerald-800"
+                                >
+                                  frota
+                                </span>
+                              )}
                             </label>
                           ))}
                         </div>

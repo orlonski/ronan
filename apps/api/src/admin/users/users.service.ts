@@ -6,6 +6,7 @@ import { AuthService } from "../../auth/auth.service";
 import { PAPEL_OPERADOR } from "../permissoes/permissoes.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { SEM_ESCOPO } from "../../common/escopo/escopo";
+import { EscopoRegistryService } from "../../common/escopo/escopo-registry.service";
 
 type ListUsersParams = PaginationQuery & {
   ativo?: "true" | "false";
@@ -40,7 +41,10 @@ function serializar<T extends { transportadoras: { transportadora: { id: string;
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly escopoRegistry: EscopoRegistryService,
+  ) {}
 
   async list(params: ListUsersParams) {
     const where: Prisma.UserWhereInput = {};
@@ -165,7 +169,17 @@ export class UsersService {
   async me(id: string) {
     const u = await this.prisma.user.findUniqueOrThrow({ where: { id }, select: SAFE_SELECT });
     // `permissoes` no topo facilita o frontend (sidebar/guards) checar acesso.
-    return { ...serializar(u), permissoes: u.papel?.permissoes ?? [] };
+    //
+    // Pro usuário RESTRITO, corta as chaves cujo endpoint ainda não sabe filtrar
+    // por frota. É o que mantém menu e telas alinhados ao que o backend aceita:
+    // o painel inteiro decide visibilidade por `temPermissao`, então filtrar
+    // aqui, na origem, conserta sidebar, guards de tela e botões de uma vez —
+    // sem lista paralela pra manter (ver EscopoRegistryService).
+    const permissoes = this.escopoRegistry.filtrarParaRestrito(
+      u.papel?.permissoes ?? [],
+      u.acessoGlobal,
+    );
+    return { ...serializar(u), permissoes };
   }
 
   private async ensureExists(id: string) {
