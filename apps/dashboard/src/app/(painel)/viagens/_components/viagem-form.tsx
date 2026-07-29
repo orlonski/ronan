@@ -38,11 +38,12 @@ export type ViagemEditavel = {
   lng: number | null;
   veiculo: { id: string; placa: string; modelo: string | null };
   motorista: Motorista;
-  cliente: { id: string; nome: string };
+  // Ausentes pra quem não tem `viagens.ver-comercial` — o backend omite.
+  cliente?: { id: string; nome: string } | null;
   material: { id: string; nome: string };
   localCarga: { id: string; nome: string; cidade: string; uf: string };
   localDescarga: { id: string; nome: string; cidade: string; uf: string };
-  matchesFechamento: { id: string }[];
+  matchesFechamento?: { id: string }[];
 };
 
 type FormState = {
@@ -95,7 +96,7 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
         : "",
     observacao: initial.observacao ?? "",
     veiculoId: initial.veiculo.id,
-    clienteId: initial.cliente.id,
+    clienteId: initial.cliente?.id ?? "",
     materialId: initial.material.id,
     localCargaId: initial.localCarga.id,
     localDescargaId: initial.localDescarga.id,
@@ -113,7 +114,9 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
     label: initial.veiculo.placa,
     sublabel: initial.veiculo.modelo ?? undefined,
   };
-  const clienteInicial = { value: initial.cliente.id, label: initial.cliente.nome };
+  const clienteInicial = initial.cliente
+    ? { value: initial.cliente.id, label: initial.cliente.nome }
+    : undefined;
   const localCargaInicial = {
     value: initial.localCarga.id,
     label: initial.localCarga.nome,
@@ -172,7 +175,7 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
     const ticketNorm = form.ticket.trim() || null;
     if (ticketNorm !== (initial.ticket ?? null)) diff.ticket = ticketNorm;
     if (form.veiculoId !== initial.veiculo.id) diff.veiculoId = form.veiculoId;
-    if (form.clienteId !== initial.cliente.id) diff.clienteId = form.clienteId;
+    if (form.clienteId !== (initial.cliente?.id ?? "")) diff.clienteId = form.clienteId;
     if (form.materialId !== initial.material.id) diff.materialId = form.materialId;
     if (form.localCargaId !== initial.localCarga.id)
       diff.localCargaId = form.localCargaId;

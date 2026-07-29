@@ -22,13 +22,13 @@ export default function EditarViagemPage({
       {item.isLoading && (
         <p className="text-sm text-muted-foreground">Carregando…</p>
       )}
-      {item.data && item.data.matchesFechamento.length > 0 && (
+      {item.data && (item.data.matchesFechamento?.length ?? 0) > 0 && (
         <p className="text-sm text-destructive">
           Esta viagem está vinculada a fechamento e não pode ser editada. Desfaça o
           match primeiro.
         </p>
       )}
-      {item.data && item.data.matchesFechamento.length === 0 && (
+      {item.data && (item.data.matchesFechamento?.length ?? 0) === 0 && (
         <ViagemForm initial={item.data} />
       )}
     </div>

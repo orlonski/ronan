@@ -71,7 +71,7 @@ type Viagem = {
   ticket: string;
   status: string;
   motorista: { id: string; nome: string };
-  cliente: { id: string; nome: string };
+  cliente?: { id: string; nome: string } | null;
   localCarga: { id: string; nome: string };
   localDescarga: { id: string; nome: string };
 };
@@ -214,7 +214,9 @@ export default function VisualizarLocalPage({
         id: "cliente",
         accessorKey: "cliente.nome",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Cliente" />,
-        cell: ({ row }) => <span className="text-sm">{row.original.cliente.nome}</span>,
+        cell: ({ row }) => (
+          <span className="text-sm">{row.original.cliente?.nome ?? "—"}</span>
+        ),
       },
       {
         id: "status",
