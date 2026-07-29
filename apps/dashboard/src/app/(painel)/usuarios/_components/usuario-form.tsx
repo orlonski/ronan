@@ -258,11 +258,12 @@ export function UsuarioForm({ initial }: Props) {
                   initialOptions={(initial?.transportadoras ?? []).map(transportadoraOption)}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Ele só vê lançamentos carimbados com estas frotas. Nem toda tela
-                  funciona com acesso restrito — as que funcionam estão marcadas com o
-                  selo <span className="rounded-full bg-emerald-100 px-1.5 text-[10px] font-medium text-emerald-800">frota</span>{" "}
-                  em Papéis e permissões. Marcar as outras no papel dele não adianta:
-                  elas continuam fora do menu.
+                  Quais telas ele acessa é o papel que decide — o escopo só filtra os
+                  dados. As telas marcadas com o selo{" "}
+                  <span className="rounded-full bg-emerald-100 px-1.5 text-[10px] font-medium text-emerald-800">frota</span>{" "}
+                  em Papéis e permissões filtram pela transportadora dele; as demais
+                  mostram a operação inteira, então libere no papel só o que quiser
+                  que ele veja.
                 </p>
                 {form.transportadoraIds.length === 0 && (
                   <p className="text-xs font-medium text-amber-700 dark:text-amber-500">
@@ -273,7 +274,7 @@ export function UsuarioForm({ initial }: Props) {
                 {previaEscopo && (
                   <div className="rounded-md border bg-muted/40 p-3 text-xs">
                     <p className="font-medium">
-                      Com o papel {previaEscopo.papel}, ele vai ver{" "}
+                      Com o papel {previaEscopo.papel}, filtram pela frota dele:{" "}
                       {previaEscopo.telas.length === 0
                         ? "nenhuma tela"
                         : previaEscopo.telas.join(", ")}
@@ -281,24 +282,19 @@ export function UsuarioForm({ initial }: Props) {
                     </p>
                     <p className="mt-1 text-muted-foreground">
                       {previaEscopo.valem} de {previaEscopo.total} permissões do papel
-                      funcionam com acesso restrito
+                      filtram pela transportadora
                       {previaEscopo.valem < previaEscopo.total && (
                         <>
-                          {" "}— as outras {previaEscopo.total - previaEscopo.valem} são de
-                          telas que mostram a operação inteira (fechamentos, clientes,
-                          locais…) e por isso ficam fora
+                          {" "}— nas outras {previaEscopo.total - previaEscopo.valem} ele
+                          enxerga a operação inteira (fechamentos, clientes, locais…)
                         </>
                       )}
                       .
                     </p>
-                    {previaEscopo.valem < 3 && (
+                    {previaEscopo.valem < previaEscopo.total && (
                       <p className="mt-1 text-amber-700 dark:text-amber-500">
-                        Papéis de uso interno rendem pouco aqui. Para um gestor de frota,
-                        vale criar um papel só dele com as chaves marcadas{" "}
-                        <span className="rounded-full bg-emerald-100 px-1.5 font-medium text-emerald-800">
-                          frota
-                        </span>
-                        .
+                        Reaproveitar papel de uso interno costuma liberar mais do que se
+                        quer. Para um gestor de frota, vale um papel só dele.
                       </p>
                     )}
                   </div>

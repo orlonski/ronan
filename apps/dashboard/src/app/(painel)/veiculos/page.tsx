@@ -50,7 +50,8 @@ export default function VeiculosPage() {
   const list = usePaginatedList<Veiculo>(PATH, tableState);
   const update = useUpdateResource<Partial<Veiculo>, Veiculo>(PATH, PATH);
   const { viewMode, setViewMode } = useListViewMode("veiculos");
-  const { acessoGlobal } = usePermissoes();
+  const { temPermissao } = usePermissoes();
+  const podeVerTransportadora = temPermissao("transportadoras.ver");
 
   const columns = useMemo<ColumnDef<Veiculo>[]>(
     () => [
@@ -156,14 +157,14 @@ export default function VeiculosPage() {
             searchPlaceholder="Buscar por placa ou modelo…"
             filters={
               <>
-                {acessoGlobal && (
+                {podeVerTransportadora && (
                   <TransportadoraCombobox
                     value={tableState.filters.transportadoraId}
                     onChange={(v) => tableState.setFilter("transportadoraId", v)}
                     placeholder="Transportadora"
                   />
                 )}
-                {acessoGlobal && (
+                {podeVerTransportadora && (
                   <Combobox
                     value={tableState.filters.semTransportadora}
                     onChange={(v) => tableState.setFilter("semTransportadora", v)}

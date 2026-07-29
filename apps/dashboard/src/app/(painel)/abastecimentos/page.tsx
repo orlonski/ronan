@@ -72,11 +72,11 @@ export default function AbastecimentosPage() {
     defaultSort: { field: "data", order: "desc" },
     defaultFilters: { de: firstDayOfMonth() },
   });
-  // Empresa (tomador que paga o abastecimento) é dado comercial da Schaba:
-  // /admin/empresas responde 403 pra quem é restrito a frota.
-  const { acessoGlobal } = usePermissoes();
+  // O filtro por empresa depende da permissão do recurso, não do escopo.
+  const { temPermissao } = usePermissoes();
+  const podeVerEmpresa = temPermissao("empresas.ver");
   const empresas = useResourceOptions<Empresa>("/admin/empresas", {
-    enabled: acessoGlobal,
+    enabled: podeVerEmpresa,
   });
   const { viewMode, setViewMode } = useListViewMode("abastecimentos");
 
@@ -253,7 +253,7 @@ export default function AbastecimentosPage() {
                   onChange={(v) => tableState.setFilter("motoristaId", v)}
                   placeholder="Motorista"
                 />
-                {acessoGlobal && (
+                {podeVerEmpresa && (
                 <Combobox
                   value={tableState.filters.empresaId ?? (tableState.filters.semEmpresa === "true" ? "__sem__" : undefined)}
                   onChange={(v) => {

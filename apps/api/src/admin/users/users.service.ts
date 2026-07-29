@@ -6,7 +6,6 @@ import { AuthService } from "../../auth/auth.service";
 import { PAPEL_OPERADOR } from "../permissoes/permissoes.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { SEM_ESCOPO } from "../../common/escopo/escopo";
-import { EscopoRegistryService } from "../../common/escopo/escopo-registry.service";
 
 type ListUsersParams = PaginationQuery & {
   ativo?: "true" | "false";
@@ -41,10 +40,7 @@ function serializar<T extends { transportadoras: { transportadora: { id: string;
 
 @Injectable()
 export class UsersService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly escopoRegistry: EscopoRegistryService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async list(params: ListUsersParams) {
     const where: Prisma.UserWhereInput = {};
@@ -169,17 +165,11 @@ export class UsersService {
   async me(id: string) {
     const u = await this.prisma.user.findUniqueOrThrow({ where: { id }, select: SAFE_SELECT });
     // `permissoes` no topo facilita o frontend (sidebar/guards) checar acesso.
-    //
-    // Pro usuário RESTRITO, corta as chaves cujo endpoint ainda não sabe filtrar
-    // por frota. É o que mantém menu e telas alinhados ao que o backend aceita:
-    // o painel inteiro decide visibilidade por `temPermissao`, então filtrar
-    // aqui, na origem, conserta sidebar, guards de tela e botões de uma vez —
-    // sem lista paralela pra manter (ver EscopoRegistryService).
-    const permissoes = this.escopoRegistry.filtrarParaRestrito(
-      u.papel?.permissoes ?? [],
-      u.acessoGlobal,
-    );
-    return { ...serializar(u), permissoes };
+    // Vai ÍNTEGRO, inclusive pra usuário restrito a transportadora: quem decide
+    // quais telas ele acessa é a matriz de papéis, não o backend cortando por
+    // conta própria. Telas que não filtram por frota mostram tudo — a matriz
+    // sinaliza quais são (selo "frota", ver EscopoRegistryService).
+    return { ...serializar(u), permissoes: u.papel?.permissoes ?? [] };
   }
 
   private async ensureExists(id: string) {

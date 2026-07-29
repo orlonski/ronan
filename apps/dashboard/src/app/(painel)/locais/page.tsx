@@ -209,9 +209,9 @@ function DuplicataTag({ dup, onClick }: { dup: DupEntry; onClick: () => void }) 
 }
 
 export default function LocaisPage() {
-  // Curadoria de cadastro (duplicatas) e filtro por cliente varrem/expõem a base
-  // toda — não valem pra quem tem acesso restrito a frota.
-  const { acessoGlobal } = usePermissoes();
+  const { temPermissao } = usePermissoes();
+  const podeHomologar = temPermissao("locais.homologar");
+  const podeVerCliente = temPermissao("clientes.ver");
   const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
   const list = usePaginatedList<Local>(PATH, tableState);
   const update = useUpdateResource<Record<string, unknown>, Local>(PATH, PATH);
@@ -253,9 +253,8 @@ export default function LocaisPage() {
   // Mesmo prefixo [PATH] → invalidate de create/update/delete/mescla revalida junto.
   const duplicatas = useQuery({
     queryKey: [PATH, "duplicatas"],
-    // Curadoria de cadastro: varre TODOS os locais e compara nomes. Não é
-    // dado da frota do usuário — some pra quem tem acesso restrito.
-    enabled: view === "lista" && !!token && acessoGlobal,
+    // Curadoria de cadastro: quem mescla duplicata é quem tem locais.homologar.
+    enabled: view === "lista" && !!token && podeHomologar,
     queryFn: () => fetchApi<DupEntry[]>("/admin/locais/duplicatas", { token }),
     staleTime: 60_000,
   });
@@ -286,7 +285,7 @@ export default function LocaisPage() {
   // só na aba Mapa com o modo ligado. QueryKey inclui o raio (ajustável ao vivo).
   const geoDup = useQuery({
     queryKey: [PATH, "duplicatas-geo", raioDedup],
-    enabled: view === "mapa" && suspeitos && !!token && acessoGlobal,
+    enabled: view === "mapa" && suspeitos && !!token && podeHomologar,
     queryFn: () =>
       fetchApi<DuplicatasGeoResp>(`/admin/locais/duplicatas-geo?raioM=${raioDedup}`, { token }),
     staleTime: 30_000,
@@ -530,7 +529,7 @@ export default function LocaisPage() {
           { value: "DESCARGA", label: "Descarga" },
         ]}
       />
-      {acessoGlobal && (
+      {podeVerCliente && (
         <ClienteCombobox
           value={tableState.filters.clienteId}
           onChange={(v) => tableState.setFilter("clienteId", v)}

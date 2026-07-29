@@ -77,7 +77,10 @@ export default function MotoristasPage() {
   const { viewMode, setViewMode } = useListViewMode("motoristas");
   // Quem é restrito a uma frota não filtra por frota (só tem a dele) nem vê a
   // coluna — e a chamada do combobox daria 403.
-  const { acessoGlobal } = usePermissoes();
+  // Filtro e coluna de transportadora seguem a permissão do recurso — quem não
+  // pode ver transportadoras não filtra por elas (e o endpoint recusaria).
+  const { temPermissao } = usePermissoes();
+  const podeVerTransportadora = temPermissao("transportadoras.ver");
   const resumo = useApiQuery<ResumoVersoes>(`${PATH}/versoes/resumo`, {
     staleTime: 60_000,
   });
@@ -159,7 +162,7 @@ export default function MotoristasPage() {
             </div>
           ),
       },
-      ...(acessoGlobal
+      ...(podeVerTransportadora
         ? [
             {
               id: "transportadora",
@@ -314,7 +317,7 @@ export default function MotoristasPage() {
         ),
       },
     ],
-    [update, latest, acessoGlobal],
+    [update, latest, podeVerTransportadora],
   );
 
   return (
@@ -372,14 +375,14 @@ export default function MotoristasPage() {
                     { value: "false", label: "Inativos" },
                   ]}
                 />
-                {acessoGlobal && (
+                {podeVerTransportadora && (
                   <TransportadoraCombobox
                     value={tableState.filters.transportadoraId}
                     onChange={(v) => tableState.setFilter("transportadoraId", v)}
                     placeholder="Transportadora"
                   />
                 )}
-                {acessoGlobal && (
+                {podeVerTransportadora && (
                   <Combobox
                     value={tableState.filters.semTransportadora}
                     onChange={(v) => tableState.setFilter("semTransportadora", v)}

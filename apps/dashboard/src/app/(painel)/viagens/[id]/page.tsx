@@ -234,9 +234,9 @@ export default function ViagemDetalhePage({
   const { id } = use(params);
   const router = useRouter();
   const token = useAuthToken();
-  // Ferramentas de curadoria de cadastro (duplicatas de local) varrem a base
-  // toda — só pra quem enxerga a base toda.
-  const { acessoGlobal: podeCurarLocais } = usePermissoes();
+  // Curadoria de duplicata de local: mesma permissão de quem mescla.
+  const { temPermissao } = usePermissoes();
+  const podeCurarLocais = temPermissao("locais.homologar");
   const viagem = useQuery({
     queryKey: ["viagem-admin", id],
     enabled: !!token,

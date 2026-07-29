@@ -123,7 +123,7 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const { data: session } = useSession();
-  const { temPermissao, papelNome, acessoGlobal } = usePermissoes();
+  const { temPermissao, papelNome } = usePermissoes();
 
   // Itens visíveis por permissão; grupo só aparece se sobrar algum item.
   const gruposVisiveis = GRUPOS.map((g) => ({
@@ -191,11 +191,8 @@ export function Sidebar({
         </div>
 
         <nav className="flex-1 space-y-2 overflow-y-auto">
-          {/* Dashboard fora dos grupos. Escondido pra quem tem acesso restrito
-              a transportadora: os KPIs agregam a operação inteira e o backend
-              responde 403 — um link que só leva a erro não pode ficar no menu. */}
-          {acessoGlobal &&
-            (() => {
+          {/* Dashboard fora dos grupos — sempre visível */}
+          {(() => {
             const Icon = DASHBOARD_ITEM.icon;
             const active = pathname === DASHBOARD_ITEM.href;
             return (

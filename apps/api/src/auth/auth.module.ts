@@ -9,7 +9,6 @@ import { RedefinicaoSenhaService } from "./redefinicao-senha.service";
 import { JwtStrategy } from "./strategies/jwt.strategy";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { PermissaoGuard } from "./guards/permissao.guard";
-import { EscopoGuard } from "./guards/escopo.guard";
 import { EvolutionModule } from "../whatsapp/evolution.module";
 import { AdminInboxModule } from "../admin/inbox/inbox.module";
 
@@ -29,10 +28,6 @@ import { AdminInboxModule } from "../admin/inbox/inbox.module";
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     // Roda global; só bloqueia onde houver @RequerPermissao (senão libera).
     { provide: APP_GUARD, useClass: PermissaoGuard },
-    // Roda global e é FAIL-CLOSED, ao contrário do de cima: usuário restrito a
-    // transportadora só passa onde houver @EscopoPor/@IgnoraEscopo. Não afeta
-    // quem tem acesso global — ou seja, todo mundo hoje.
-    { provide: APP_GUARD, useClass: EscopoGuard },
   ],
   exports: [AuthService],
 })
