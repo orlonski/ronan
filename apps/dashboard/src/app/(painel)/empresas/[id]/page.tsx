@@ -1,6 +1,7 @@
 "use client";
 
 import { use } from "react";
+import { RequerTela } from "@/components/requer-tela";
 import { FormPageHeader } from "@/components/form-page-header";
 import { useResourceItem } from "@/lib/client-api";
 import { EmpresaForm, type Empresa } from "../_components/empresa-form";
@@ -14,15 +15,17 @@ export default function EditarEmpresaPage({
   const item = useResourceItem<Empresa>("/admin/empresas", id);
 
   return (
-    <div className="space-y-6">
-      <FormPageHeader
-        title={item.data ? `Editar ${item.data.nome}` : "Editar empresa"}
-        backHref="/empresas"
-      />
-      {item.isLoading && (
-        <p className="text-sm text-muted-foreground">Carregando…</p>
-      )}
-      {item.data && <EmpresaForm initial={item.data} />}
-    </div>
+    <RequerTela chave="empresas.editar">
+      <div className="space-y-6">
+        <FormPageHeader
+          title={item.data ? `Editar ${item.data.nome}` : "Editar empresa"}
+          backHref="/empresas"
+        />
+        {item.isLoading && (
+          <p className="text-sm text-muted-foreground">Carregando…</p>
+        )}
+        {item.data && <EmpresaForm initial={item.data} />}
+      </div>
+    </RequerTela>
   );
 }

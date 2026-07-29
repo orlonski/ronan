@@ -37,7 +37,7 @@ export class FrotaAdminController {
    * Expurga posições > 90 dias. Idempotente. Pode ser chamado por cron
    * externo (Easypanel) ou manualmente pelo admin.
    */
-  @RequerPermissao("mapa.ver")
+  @RequerPermissao("mapa.expurgar")
   @Post("expurgar-posicoes")
   @HttpCode(200)
   expurgar() {

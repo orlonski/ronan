@@ -41,6 +41,7 @@ const ACAO_TITULO: Record<string, string> = {
   importar: "Importar (OSM)",
   resolver: "Resolver",
   gerenciar: "Gerenciar",
+  expurgar: "Expurgar histórico",
 };
 
 type ResourceDef = { recurso: string; label: string; modulo: string; acoes: string[] };
@@ -66,7 +67,9 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // conseguia mexer em veículo pelo painel. Declarado agora.
   { recurso: "veiculos", label: "Veículos", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "transportadoras", label: "Transportadoras (frotas)", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
-  { recurso: "mapa", label: "Mapa", modulo: "Cadastros", acoes: ["ver"] },
+  // `expurgar` apaga posições de GPS com mais de 90 dias — é destrutivo, então
+  // não pode viver sob a chave de leitura (foi o que aconteceu e virou furo).
+  { recurso: "mapa", label: "Mapa", modulo: "Cadastros", acoes: ["ver", "expurgar"] },
   { recurso: "empresas", label: "Empresas", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir", "layouts"] },
   { recurso: "clientes", label: "Clientes", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "locais", label: "Locais", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir", "homologar"] },
