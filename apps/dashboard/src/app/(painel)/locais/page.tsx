@@ -1101,12 +1101,14 @@ function PainelDuplicados({
                     <span className="ml-1">Mesclar no principal</span>
                   </Button>
                 </Permitido>
-                <Link
-                  href={`/locais/${c.id}`}
-                  className="text-xs font-medium text-blue-700 hover:underline"
-                >
-                  Editar
-                </Link>
+                <Permitido chave="locais.editar">
+                  <Link
+                    href={`/locais/${c.id}`}
+                    className="text-xs font-medium text-blue-700 hover:underline"
+                  >
+                    Editar
+                  </Link>
+                </Permitido>
                 <button
                   type="button"
                   onClick={() =>

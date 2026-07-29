@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Permitido } from "@/components/requer-tela";
 import { useEffect, useRef } from "react";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
@@ -203,12 +204,14 @@ export function MapaGeral({
                     {LABEL_LOCAL[l.tipo as TipoLocal] ?? l.tipo}
                   </span>
                 </p>
-                <Link
-                  href={`/locais/${l.id}`}
-                  className="text-xs font-medium text-blue-700 hover:underline"
-                >
-                  Editar →
-                </Link>
+                <Permitido chave="locais.editar">
+                  <Link
+                    href={`/locais/${l.id}`}
+                    className="text-xs font-medium text-blue-700 hover:underline"
+                  >
+                    Editar →
+                  </Link>
+                </Permitido>
               </div>
             </Popup>
           </Marker>
@@ -223,12 +226,14 @@ export function MapaGeral({
                 {p.concessionaria && (
                   <p className="text-xs text-muted-foreground">{p.concessionaria}</p>
                 )}
-                <Link
-                  href={`/pedagios-rodovia/${p.id}`}
-                  className="text-xs font-medium text-blue-700 hover:underline"
-                >
-                  Ver / editar →
-                </Link>
+                <Permitido chave="pedagios.editar">
+                  <Link
+                    href={`/pedagios-rodovia/${p.id}`}
+                    className="text-xs font-medium text-blue-700 hover:underline"
+                  >
+                    Ver / editar →
+                  </Link>
+                </Permitido>
               </div>
             </Popup>
           </Marker>

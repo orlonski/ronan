@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo } from "react";
 import Link from "next/link";
+import { Permitido } from "@/components/requer-tela";
 import { Circle, MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -300,9 +301,11 @@ export function MapaLocais({
                     Caso {p.numero} · {p.papel === "principal" ? "Principal (manter)" : "Candidato a duplicado"}
                   </p>
                   <p className="font-semibold leading-tight">{p.nome}</p>
-                  <Link href={`/locais/${p.id}`} className="text-xs font-medium text-blue-700 hover:underline">
-                    Abrir local →
-                  </Link>
+                  <Permitido chave="locais.editar">
+                    <Link href={`/locais/${p.id}`} className="text-xs font-medium text-blue-700 hover:underline">
+                      Abrir local →
+                    </Link>
+                  </Permitido>
                 </div>
               </Popup>
             </Marker>
@@ -366,12 +369,14 @@ export function MapaLocais({
                   {l.criadoEm ? ` · ${fmtBR(l.criadoEm)}` : ""}
                 </p>
                 <div className="pt-1">
-                  <Link
-                    href={`/locais/${l.id}`}
-                    className="text-xs font-medium text-blue-700 hover:underline"
-                  >
-                    Editar →
-                  </Link>
+                  <Permitido chave="locais.editar">
+                    <Link
+                      href={`/locais/${l.id}`}
+                      className="text-xs font-medium text-blue-700 hover:underline"
+                    >
+                      Editar →
+                    </Link>
+                  </Permitido>
                 </div>
               </div>
             </Popup>
