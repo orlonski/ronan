@@ -7,6 +7,7 @@ import { MapPin, Pencil, Truck, User } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { FonteGps } from "@ronan/shared-types";
 import { FormPageHeader } from "@/components/form-page-header";
+import { Permitido } from "@/components/requer-tela";
 import { FotoLocal } from "@/components/foto-local";
 import { SinalGpsBadge } from "@/components/sinal-gps-badge";
 import { Badge } from "@/components/ui/badge";
@@ -255,11 +256,13 @@ export default function VisualizarLocalPage({
         backHref="/locais"
         right={
           l ? (
-            <Link href={`/locais/${l.id}`}>
-              <Button variant="outline">
-                <Pencil className="h-4 w-4" /> Editar
-              </Button>
-            </Link>
+            <Permitido chave="locais.editar">
+              <Link href={`/locais/${l.id}`}>
+                <Button variant="outline">
+                  <Pencil className="h-4 w-4" /> Editar
+                </Button>
+              </Link>
+            </Permitido>
           ) : undefined
         }
       />

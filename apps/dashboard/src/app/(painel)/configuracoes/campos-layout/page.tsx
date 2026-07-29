@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Lock, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Permitido } from "@/components/requer-tela";
 import { Card } from "@/components/ui/card";
 import { StatusToggle } from "@/components/status-toggle";
 import {
@@ -120,11 +121,13 @@ export default function CamposLayoutPage() {
                   />
                 </TableCell>
                 <TableCell className="text-right">
-                  <Link href={`/configuracoes/campos-layout/${c.id}`}>
-                    <Button variant="ghost" size="icon" title="Editar">
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  </Link>
+                  <Permitido chave="config-campos-layout.editar">
+                    <Link href={`/configuracoes/campos-layout/${c.id}`}>
+                      <Button variant="ghost" size="icon" title="Editar">
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </Link>
+                  </Permitido>
                   {!c.sistema && (
                     <Button
                       variant="ghost"

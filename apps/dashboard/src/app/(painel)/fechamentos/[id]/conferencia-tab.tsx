@@ -10,6 +10,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { usePermissoes } from "@/lib/permissoes";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -164,6 +165,9 @@ function LinhaViagemCard({
   onResolver: ResolverFn;
   pending: boolean;
 }) {
+  // Resolver divergência grava no fechamento — segue `fechamentos.conferir`.
+  const { temPermissao } = usePermissoes();
+  const podeConferir = temPermissao("fechamentos.conferir");
   const sug = linha.sugestaoIa;
   return (
     <Card className="p-5">
@@ -220,14 +224,14 @@ function LinhaViagemCard({
 
       <div className="mt-4 flex flex-wrap gap-2">
         {sug?.viagemId && (
-          <Button size="sm" onClick={() => onResolver("aceitar_sugestao")} disabled={pending}>
+          <Button size="sm" onClick={() => onResolver("aceitar_sugestao")} disabled={pending || !podeConferir}>
             <Sparkles className="h-3.5 w-3.5" /> Aceitar sugestão da IA
           </Button>
         )}
         <Button
           size="sm"
           variant="outline"
-          disabled={pending}
+          disabled={pending || !podeConferir}
           onClick={() => {
             const viagemId = window.prompt("ID da viagem correta:");
             if (viagemId) onResolver("escolher_viagem", viagemId);
@@ -238,7 +242,7 @@ function LinhaViagemCard({
         <Button
           size="sm"
           variant="outline"
-          disabled={pending}
+          disabled={pending || !podeConferir}
           onClick={() => onResolver("erro_cliente")}
         >
           <XCircle className="h-3.5 w-3.5" /> Erro do cliente
@@ -246,7 +250,7 @@ function LinhaViagemCard({
         <Button
           size="sm"
           variant="outline"
-          disabled={pending}
+          disabled={pending || !podeConferir}
           onClick={() => onResolver("criar_retroativa")}
         >
           <PlusCircle className="h-3.5 w-3.5" /> Criar viagem retroativa
@@ -269,6 +273,9 @@ function LinhaPedagioCard({
   onResolver: ResolverFn;
   pending: boolean;
 }) {
+  // Resolver divergência grava no fechamento — segue `fechamentos.conferir`.
+  const { temPermissao } = usePermissoes();
+  const podeConferir = temPermissao("fechamentos.conferir");
   const praca =
     (linha.rawData as { _custom?: { praca_pedagio?: string } } | null)?._custom
       ?.praca_pedagio ?? null;
@@ -312,7 +319,7 @@ function LinhaPedagioCard({
         <Button
           size="sm"
           variant="outline"
-          disabled={pending}
+          disabled={pending || !podeConferir}
           onClick={() => onResolver("erro_cliente")}
         >
           <XCircle className="h-3.5 w-3.5" /> Cobrança indevida (erro do cliente)
@@ -320,7 +327,7 @@ function LinhaPedagioCard({
         <Button
           size="sm"
           variant="outline"
-          disabled={pending}
+          disabled={pending || !podeConferir}
           onClick={() => onResolver("erro_cliente")}
           title="Marca como resolvido — motorista esqueceu de lançar mas a cobrança procede"
         >
@@ -344,6 +351,9 @@ function LinhaCombustivelCard({
   onResolver: ResolverFn;
   pending: boolean;
 }) {
+  // Resolver divergência grava no fechamento — segue `fechamentos.conferir`.
+  const { temPermissao } = usePermissoes();
+  const podeConferir = temPermissao("fechamentos.conferir");
   const litros =
     (linha.rawData as { _custom?: { litros?: number } } | null)?._custom
       ?.litros ?? null;
@@ -388,7 +398,7 @@ function LinhaCombustivelCard({
         <Button
           size="sm"
           variant="outline"
-          disabled={pending}
+          disabled={pending || !podeConferir}
           onClick={() => onResolver("erro_cliente")}
         >
           <XCircle className="h-3.5 w-3.5" /> Erro do cliente
@@ -396,7 +406,7 @@ function LinhaCombustivelCard({
         <Button
           size="sm"
           variant="outline"
-          disabled={pending}
+          disabled={pending || !podeConferir}
           onClick={() => onResolver("erro_cliente")}
           title="Aceita o lançamento mesmo sem o motorista ter registrado"
         >

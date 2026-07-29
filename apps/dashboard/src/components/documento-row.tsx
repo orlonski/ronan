@@ -8,6 +8,7 @@ import {
   type TipoDocumentoMotorista,
 } from "@ronan/shared-types";
 import { Button } from "@/components/ui/button";
+import { usePermissoes } from "@/lib/permissoes";
 import { Input } from "@/components/ui/input";
 import { PreviewDocumentoModal } from "@/components/preview-documento-modal";
 import { useAuthToken } from "@/lib/client-api";
@@ -31,6 +32,10 @@ type Props = {
 };
 
 export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
+  // Anexar/remover documento do motorista (CNH, CRLV) segue
+  // `motoristas.documentos` — é PII, não é leitura.
+  const { temPermissao } = usePermissoes();
+  const podeGerenciar = temPermissao("motoristas.documentos");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState(false);
@@ -143,7 +148,7 @@ export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
                 variant="outline"
                 size="sm"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={busy}
+                disabled={busy || !podeGerenciar}
               >
                 {busy ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -158,7 +163,7 @@ export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
                   variant="ghost"
                   size="icon"
                   onClick={onRemover}
-                  disabled={remover.isPending}
+                  disabled={remover.isPending || !podeGerenciar}
                   title="Remover"
                 >
                   <Trash2 className="h-3.5 w-3.5 text-destructive" />

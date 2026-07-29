@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Lightbulb, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { usePermissoes } from "@/lib/permissoes";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,6 +31,9 @@ const EXEMPLO = {
 };
 
 export function NovaDemanda({ onCriada }: { onCriada: () => void }) {
+  // Criar demanda enfileira execução do agente — segue `demandas.criar`.
+  const { temPermissao } = usePermissoes();
+  const podeCriar = temPermissao("demandas.criar");
   const [titulo, setTitulo] = useState("");
   const [descricao, setDescricao] = useState("");
   const criar = useCreateResource<

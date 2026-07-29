@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Permitido } from "@/components/requer-tela";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
@@ -216,27 +217,29 @@ export default function ErrosPage() {
                   className="flex shrink-0 items-center"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {g.resolvido ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={reabrir.isPending}
-                      onClick={() => reabrir.mutate(g.hash)}
-                    >
-                      {reabrir.isPending ? <Spinner /> : <RotateCcw className="h-4 w-4" />}
-                      Reabrir
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={resolver.isPending}
-                      onClick={() => resolver.mutate(g.hash)}
-                    >
-                      {resolver.isPending ? <Spinner /> : <CheckCircle2 className="h-4 w-4" />}
-                      Marcar como corrigido
-                    </Button>
-                  )}
+                  <Permitido chave="erros.resolver">
+                    {g.resolvido ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={reabrir.isPending}
+                        onClick={() => reabrir.mutate(g.hash)}
+                      >
+                        {reabrir.isPending ? <Spinner /> : <RotateCcw className="h-4 w-4" />}
+                        Reabrir
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={resolver.isPending}
+                        onClick={() => resolver.mutate(g.hash)}
+                      >
+                        {resolver.isPending ? <Spinner /> : <CheckCircle2 className="h-4 w-4" />}
+                        Marcar como corrigido
+                      </Button>
+                    )}
+                  </Permitido>
                 </div>
               </div>
             </Card>
@@ -294,27 +297,29 @@ export default function ErrosPage() {
                   )}
                 </TableCell>
                 <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                  {g.resolvido ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={reabrir.isPending}
-                      onClick={() => reabrir.mutate(g.hash)}
-                      title="Reabrir"
-                    >
-                      {reabrir.isPending ? <Spinner /> : <RotateCcw className="h-4 w-4" />}
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={resolver.isPending}
-                      onClick={() => resolver.mutate(g.hash)}
-                      title="Marcar como corrigido"
-                    >
-                      {resolver.isPending ? <Spinner /> : <CheckCircle2 className="h-4 w-4" />}
-                    </Button>
-                  )}
+                  <Permitido chave="erros.resolver">
+                    {g.resolvido ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={reabrir.isPending}
+                        onClick={() => reabrir.mutate(g.hash)}
+                        title="Reabrir"
+                      >
+                        {reabrir.isPending ? <Spinner /> : <RotateCcw className="h-4 w-4" />}
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={resolver.isPending}
+                        onClick={() => resolver.mutate(g.hash)}
+                        title="Marcar como corrigido"
+                      >
+                        {resolver.isPending ? <Spinner /> : <CheckCircle2 className="h-4 w-4" />}
+                      </Button>
+                    )}
+                  </Permitido>
                 </TableCell>
               </TableRow>
             ))}
@@ -370,17 +375,19 @@ function DetalheErro({
             hash: {hash} · {ocorrencias.length} ocorrências
           </p>
         </div>
-        {resolvido ? (
-          <Button variant="outline" size="sm" disabled={resolvendo} onClick={onReabrir}>
-            {resolvendo ? <Spinner /> : <RotateCcw className="h-4 w-4" />}
-            Reabrir
-          </Button>
-        ) : (
-          <Button size="sm" disabled={resolvendo} onClick={onResolver}>
-            {resolvendo ? <Spinner /> : <CheckCircle2 className="h-4 w-4" />}
-            Marcar como corrigido
-          </Button>
-        )}
+        <Permitido chave="erros.resolver">
+          {resolvido ? (
+            <Button variant="outline" size="sm" disabled={resolvendo} onClick={onReabrir}>
+              {resolvendo ? <Spinner /> : <RotateCcw className="h-4 w-4" />}
+              Reabrir
+            </Button>
+          ) : (
+            <Button size="sm" disabled={resolvendo} onClick={onResolver}>
+              {resolvendo ? <Spinner /> : <CheckCircle2 className="h-4 w-4" />}
+              Marcar como corrigido
+            </Button>
+          )}
+        </Permitido>
       </header>
 
       {loading && <LoadingCard />}
