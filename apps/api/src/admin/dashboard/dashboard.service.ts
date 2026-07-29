@@ -1,7 +1,9 @@
+import { Prisma } from "@prisma/client";
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { ymdSaoPaulo } from "../../common/timezone";
 import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
+import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
 
 /**
  * Service do dashboard executivo. Tudo em paralelo via Promise.all —
@@ -19,7 +21,12 @@ import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
 export class DashboardService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async snapshot() {
+  async snapshot(escopo: EscopoAdmin) {
+    // Todo KPI de viagem/motorista/abastecimento/pedágio carrega o recorte por
+    // frota. Os que não têm dono de frota (fechamento, envio, erro) são da
+    // Schaba e ficam zerados pra quem é restrito — não são pendência dele.
+    const frota = filtroEscopo(escopo);
+    const restrito = escopo != null;
     const agora = new Date();
     const [y, m, dia] = ymdSaoPaulo(agora); // data civil em SP (m = 1-12)
 
@@ -73,96 +80,107 @@ export class DashboardService {
       conferidas14d,
       leadTimeRows,
     ] = await Promise.all([
-      this.prisma.viagem.count({ where: { data: { gte: hoje00, lt: amanha00 }, ...foraFechamento } }),
+      this.prisma.viagem.count({ where: { data: { gte: hoje00, lt: amanha00 }, ...foraFechamento, ...frota } }),
       this.prisma.viagem.aggregate({
-        where: { data: { gte: hoje00, lt: amanha00 }, ...foraFechamento },
+        where: { data: { gte: hoje00, lt: amanha00 }, ...foraFechamento, ...frota },
         _sum: { toneladas: true },
       }),
-      this.prisma.motorista.count({ where: { ultimoLoginEm: { gte: hoje00Inst } } }),
+      this.prisma.motorista.count({ where: { ultimoLoginEm: { gte: hoje00Inst }, ...frota } }),
       this.prisma.viagem.findMany({
-        where: { data: { gte: hoje00, lt: amanha00 }, ...foraFechamento },
+        where: { data: { gte: hoje00, lt: amanha00 }, ...foraFechamento, ...frota },
         distinct: ["veiculoId"],
         select: { veiculoId: true },
       }),
-      this.prisma.viagem.count({ where: { data: { gte: inicioMes, lt: inicioMesQueVem }, ...foraFechamento } }),
+      this.prisma.viagem.count({ where: { data: { gte: inicioMes, lt: inicioMesQueVem }, ...foraFechamento, ...frota } }),
       this.prisma.viagem.aggregate({
-        where: { data: { gte: inicioMes, lt: inicioMesQueVem }, ...foraFechamento },
+        where: { data: { gte: inicioMes, lt: inicioMesQueVem }, ...foraFechamento, ...frota },
         _sum: { toneladas: true },
       }),
       this.prisma.abastecimento.aggregate({
-        where: { data: { gte: inicioMesInst, lt: inicioMesQueVemInst } },
+        where: { data: { gte: inicioMesInst, lt: inicioMesQueVemInst }, ...frota },
         _sum: { valorTotal: true },
       }),
       this.prisma.pedagio.aggregate({
-        where: { data: { gte: inicioMes, lt: inicioMesQueVem } },
+        where: { data: { gte: inicioMes, lt: inicioMesQueVem }, ...frota },
         _sum: { valor: true },
       }),
-      this.prisma.fechamento.count({ where: { status: "AGUARDANDO_REVISAO" } }),
-      this.prisma.envioFechamento.count({ where: { status: "GERADO" } }),
-      this.prisma.viagem.count({ where: { status: "DIVERGENTE" } }),
-      this.prisma.errorLog.groupBy({
-        by: ["hash"],
-        where: { resolvido: false },
-        _count: { _all: true },
-      }),
+      restrito ? 0 : this.prisma.fechamento.count({ where: { status: "AGUARDANDO_REVISAO" } }),
+      restrito ? 0 : this.prisma.envioFechamento.count({ where: { status: "GERADO" } }),
+      this.prisma.viagem.count({ where: { status: "DIVERGENTE", ...frota } }),
+      restrito
+        ? []
+        : this.prisma.errorLog.groupBy({
+            by: ["hash"],
+            where: { resolvido: false },
+            _count: { _all: true },
+          }),
       this.prisma.viagem.groupBy({
         by: ["data"],
-        where: { data: { gte: inicio14d, lt: amanha00 }, ...foraFechamento },
+        where: { data: { gte: inicio14d, lt: amanha00 }, ...foraFechamento, ...frota },
         _count: { _all: true },
       }),
       this.prisma.viagem.groupBy({
         by: ["motoristaId"],
-        where: { data: { gte: inicioMes, lt: inicioMesQueVem }, ...foraFechamento },
+        where: { data: { gte: inicioMes, lt: inicioMesQueVem }, ...foraFechamento, ...frota },
         _sum: { toneladas: true },
         orderBy: { _sum: { toneladas: "desc" } },
         take: 5,
       }),
       this.prisma.viagem.groupBy({
         by: ["clienteId"],
-        where: { data: { gte: inicioMes, lt: inicioMesQueVem }, ...foraFechamento },
+        where: { data: { gte: inicioMes, lt: inicioMesQueVem }, ...foraFechamento, ...frota },
         _count: { _all: true },
         orderBy: { _count: { clienteId: "desc" } },
         take: 5,
       }),
       this.prisma.viagem.groupBy({
         by: ["materialId"],
-        where: { data: { gte: inicioMes, lt: inicioMesQueVem }, ...foraFechamento },
+        where: { data: { gte: inicioMes, lt: inicioMesQueVem }, ...foraFechamento, ...frota },
         _sum: { toneladas: true },
         orderBy: { _sum: { toneladas: "desc" } },
         take: 5,
       }),
       this.prisma.viagem.findFirst({
+        where: frota,
         orderBy: { sincronizadoEm: "desc" },
         select: { sincronizadoEm: true },
       }),
       this.prisma.abastecimento.findFirst({
+        where: frota,
         orderBy: { sincronizadoEm: "desc" },
         select: { sincronizadoEm: true },
       }),
-      this.prisma.fechamento.findFirst({
-        orderBy: { criadoEm: "desc" },
-        select: { criadoEm: true },
-      }),
+      restrito
+        ? null
+        : this.prisma.fechamento.findFirst({
+            orderBy: { criadoEm: "desc" },
+            select: { criadoEm: true },
+          }),
       // Conferência — universo conferível exclui rascunhos offline
-      this.prisma.viagem.count({ where: { revisadoEm: { not: null } } }),
+      this.prisma.viagem.count({ where: { revisadoEm: { not: null }, ...frota } }),
       this.prisma.viagem.count({
         // EM_ANDAMENTO/AGUARDANDO_PESO têm revisadoEm null mas não são conferíveis.
-        where: { revisadoEm: null, status: { notIn: ["RASCUNHO_OFFLINE", ...STATUS_FORA_FECHAMENTO] } },
+        where: {
+          revisadoEm: null,
+          status: { notIn: ["RASCUNHO_OFFLINE", ...STATUS_FORA_FECHAMENTO] },
+          ...frota,
+        },
       }),
-      this.prisma.viagem.count({ where: { revisadoEm: { gte: inicio14dInst } } }),
+      this.prisma.viagem.count({ where: { revisadoEm: { gte: inicio14dInst }, ...frota } }),
       // Lead time médio (segundos) das viagens conferidas nos últimos 14 dias:
       // do momento que chegou no servidor (sincronizadoEm) até a conferência (revisadoEm).
       this.prisma.$queryRaw<Array<{ avg_secs: number | null }>>`
         SELECT AVG(EXTRACT(EPOCH FROM ("revisadoEm" - "sincronizadoEm")))::float8 AS avg_secs
         FROM "viagens"
         WHERE "revisadoEm" >= ${inicio14dInst}
+        ${escopo ? Prisma.sql`AND "transportadoraId" = ANY(${escopo.transportadoraIds}::text[])` : Prisma.empty}
       `,
     ]);
 
     // Viagens lançadas sem peso, aguardando o romaneio. Vira badge/lista no
     // dashboard pra ninguém esquecer de completar antes do fechamento.
     const aguardandoPeso = await this.prisma.viagem.count({
-      where: { status: "AGUARDANDO_PESO" },
+      where: { status: "AGUARDANDO_PESO", ...frota },
     });
 
     // Resolve nomes dos rankings em um round adicional (ids únicos, ~15 registros)

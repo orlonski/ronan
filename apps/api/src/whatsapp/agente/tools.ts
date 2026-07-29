@@ -702,7 +702,9 @@ async function executarToolInterno(
 
     case "dashboard_snapshot": {
       if (ctx.identidade.tipo !== "ADMIN") throw new Error("tool não disponível pra esse perfil");
-      return ctx.dashboard.snapshot();
+      // Agente do WhatsApp fala com admin da Schaba, não com gestor de frota:
+      // sem recorte por transportadora.
+      return ctx.dashboard.snapshot(null);
     }
 
     case "consultar_erros_pendentes": {
