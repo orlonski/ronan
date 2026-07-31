@@ -6,7 +6,6 @@ import { Sidebar } from "@/components/sidebar";
 import { BottomNav } from "@/components/bottom-nav";
 import { GlobalLoadingBar } from "@/components/loading";
 import { SchabaLogo } from "@/components/schaba-logo";
-import { ThemeSwitcher } from "@/components/theme-switcher";
 import { Topbar } from "@/components/topbar";
 import { TelaGuard } from "@/components/requer-tela";
 import { useInboxStream } from "@/lib/inbox";
@@ -46,7 +45,6 @@ export function PainelShell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="flex items-center gap-1">
             <Topbar />
-            <ThemeSwitcher compact />
           </div>
         </header>
 
