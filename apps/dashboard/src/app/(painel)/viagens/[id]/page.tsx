@@ -110,6 +110,7 @@ type ViagemDetalhe = {
   // Versão do app que o motorista rodava ao criar a viagem (carimbo no create;
   // null pra viagens antigas ou PWA).
   appVersaoCriacao: string | null;
+  appUpdateIdCriacao: string | null;
   pontos: {
     lat: number;
     lng: number;
@@ -237,10 +238,24 @@ export default function ViagemDetalhePage({
   // Curadoria de duplicata de local: mesma permissão de quem mescla.
   const { temPermissao } = usePermissoes();
   const podeCurarLocais = temPermissao("locais.homologar");
+  // Cor do badge de versão do app exige saber qual é a última publicada —
+  // mesma permissão da tela de motoristas. Sem ela, o badge fica neutro.
+  const podeVerVersaoApp = temPermissao("motoristas.ver");
   const viagem = useQuery({
     queryKey: ["viagem-admin", id],
     enabled: !!token,
     queryFn: () => fetchApi<ViagemDetalhe>(`/admin/viagens/${id}`, { token }),
+  });
+  const versoesResumo = useQuery({
+    queryKey: ["motoristas-versoes-resumo"],
+    enabled: !!token && podeVerVersaoApp,
+    staleTime: 60_000,
+    queryFn: () =>
+      fetchApi<{
+        latestUpdateId: string | null;
+        latestBuiltAt: string | null;
+        fonte: "eas" | "motoristas";
+      }>("/admin/motoristas/versoes/resumo", { token }),
   });
   // Limite de sinal fraco configurável — usado pra marcar a descarga em âmbar.
   const gpsConfig = useQuery({
@@ -489,6 +504,16 @@ export default function ViagemDetalhePage({
   if (viagem.isLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
   if (!viagem.data) return <p className="text-sm text-red-600">Viagem não encontrada.</p>;
   const v = viagem.data;
+  // Compara o bundle rodado na criação da viagem com o último publicado — só
+  // dá pra afirmar quando os dois updateId existem (mesma comparação da tela
+  // de motoristas). Sem referência, o badge fica neutro em vez de mentir.
+  const latestUpdateId = versoesResumo.data?.latestUpdateId ?? null;
+  const statusVersaoCriacao: "atualizado" | "desatualizado" | "sem-dados" =
+    !v.appUpdateIdCriacao || !latestUpdateId
+      ? "sem-dados"
+      : v.appUpdateIdCriacao === latestUpdateId
+        ? "atualizado"
+        : "desatualizado";
   const emFechamento = (v.matchesFechamento?.length ?? 0) > 0;
   // Hora em que a viagem foi criada (device offline; fallback: sincronização).
   const tsCriacao = v.criadoOfflineEm ?? v.sincronizadoEm;
@@ -549,7 +574,22 @@ export default function ViagemDetalhePage({
               {fmtBR(v.data)}
               {horaCriacao && ` às ${horaCriacao}`}
               {v.appVersaoCriacao && (
-                <span className="ml-1 rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+                <span
+                  className={`ml-1 rounded px-1.5 py-0.5 font-mono text-xs ${
+                    statusVersaoCriacao === "atualizado"
+                      ? "bg-green-100 text-green-700"
+                      : statusVersaoCriacao === "desatualizado"
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-muted"
+                  }`}
+                  title={
+                    statusVersaoCriacao === "desatualizado"
+                      ? "Motorista estava com o app desatualizado ao lançar esta viagem"
+                      : statusVersaoCriacao === "atualizado"
+                        ? "Motorista estava com a última versão publicada"
+                        : undefined
+                  }
+                >
                   app {v.appVersaoCriacao}
                 </span>
               )}
