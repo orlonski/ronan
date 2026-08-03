@@ -66,13 +66,6 @@ export function TendenciaChart({
               onPointerEnter={() => setHoverIdx(i)}
               onPointerLeave={() => setHoverIdx((prev) => (prev === i ? null : prev))}
             >
-              {/* Valor do pico acima da barra */}
-              {pico && (
-                <span className="mb-1 text-center text-xs font-bold tabular-nums text-foreground">
-                  {d.total}
-                </span>
-              )}
-
               {/* Tooltip no hover */}
               {hover && (
                 <div className="pointer-events-none absolute -top-1 left-1/2 z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-xs shadow-md">
