@@ -115,7 +115,7 @@ export class DashboardService {
             _count: { _all: true },
           }),
       this.prisma.viagem.groupBy({
-        by: ["data"],
+        by: ["data", "status"],
         where: { data: { gte: inicio14d, lt: amanha00 }, ...foraFechamento, ...frota },
         _count: { _all: true },
       }),
@@ -287,28 +287,33 @@ export class DashboardService {
 }
 
 /**
- * Recebe linhas { data, _count } com furos e devolve array completo de N dias
- * a partir de `inicio`, ordenado asc, com 0 nos dias sem viagem.
+ * Recebe linhas { data, status, _count } com furos e devolve array completo
+ * de N dias a partir de `inicio`, ordenado asc, com 0 nos dias sem viagem e a
+ * quebra por status (pra colorir a tendência por status no painel).
  * Tudo em UTC: `data` vem de coluna @db.Date (meia-noite UTC) e `inicio` é
  * construído com Date.UTC, então a chave YYYY-MM-DD bate.
  */
 function preencherDias(
-  linhas: Array<{ data: Date | null; _count: { _all: number } }>,
+  linhas: Array<{ data: Date | null; status: string; _count: { _all: number } }>,
   inicio: Date,
   n: number,
-): Array<{ dia: string; total: number }> {
-  const mapa = new Map<string, number>();
+): Array<{ dia: string; total: number; porStatus: Record<string, number> }> {
+  const mapa = new Map<string, Record<string, number>>();
   for (const r of linhas) {
     // EM_ANDAMENTO tem data null e já foi filtrada pelo where da query.
     if (!r.data) continue;
     const k = r.data.toISOString().slice(0, 10);
-    mapa.set(k, (mapa.get(k) ?? 0) + r._count._all);
+    const porStatus = mapa.get(k) ?? {};
+    porStatus[r.status] = (porStatus[r.status] ?? 0) + r._count._all;
+    mapa.set(k, porStatus);
   }
-  const out: Array<{ dia: string; total: number }> = [];
+  const out: Array<{ dia: string; total: number; porStatus: Record<string, number> }> = [];
   for (let i = 0; i < n; i++) {
     const d = new Date(inicio.getTime() + i * 86400000);
     const k = d.toISOString().slice(0, 10);
-    out.push({ dia: k, total: mapa.get(k) ?? 0 });
+    const porStatus = mapa.get(k) ?? {};
+    const total = Object.values(porStatus).reduce((a, b) => a + b, 0);
+    out.push({ dia: k, total, porStatus });
   }
   return out;
 }

@@ -1,18 +1,27 @@
 "use client";
 
 import { useState } from "react";
+import {
+  STATUS_VIAGEM_CHART_COLOR,
+  STATUS_VIAGEM_LABEL,
+  STATUS_VIAGEM_TENDENCIA_ORDEM,
+} from "@/lib/status-viagem";
+
+type DiaTendencia = { dia: string; total: number; porStatus: Record<string, number> };
 
 /**
  * Gráfico de barras (viagens por dia) sem dependência de lib de charts —
- * CSS/flex puro, crisp e responsivo. Cor segue o tema (`--chart-1`), destaca o
- * dia de pico, mostra linha de média e tooltip no hover. Trata dados vazios /
- * tudo-zero sem quebrar (barras viram slivers, média fica no chão).
+ * CSS/flex puro, crisp e responsivo. Cada barra é empilhada por status da
+ * viagem (mesma cor do badge de status em `lib/status-viagem.tsx`), destaca o
+ * dia de pico, mostra linha de média, legenda e tooltip com a quebra por
+ * status no hover. Trata dados vazios / tudo-zero sem quebrar (barras viram
+ * slivers, média fica no chão).
  */
 export function TendenciaChart({
   data,
   height = 140,
 }: {
-  data: Array<{ dia: string; total: number }>;
+  data: Array<DiaTendencia>;
   height?: number;
 }) {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
@@ -25,6 +34,9 @@ export function TendenciaChart({
   const media = soma / totais.length;
   const maxIdx = totais.indexOf(Math.max(...totais));
   const ultimoIdx = data.length - 1;
+  const statusPresentes = STATUS_VIAGEM_TENDENCIA_ORDEM.filter((s) =>
+    data.some((d) => (d.porStatus[s] ?? 0) > 0),
+  );
 
   return (
     <div>
@@ -67,19 +79,55 @@ export function TendenciaChart({
                   <span className="font-semibold">{d.total}</span>{" "}
                   {d.total === 1 ? "viagem" : "viagens"}
                   <span className="text-muted-foreground"> · {fmtDiaCompleto(d.dia)}</span>
+                  {d.total > 0 && (
+                    <div className="mt-1 space-y-0.5 border-t border-border pt-1">
+                      {STATUS_VIAGEM_TENDENCIA_ORDEM.filter((s) => (d.porStatus[s] ?? 0) > 0).map(
+                        (status) => (
+                          <div key={status} className="flex items-center gap-1.5">
+                            <span
+                              className="h-2 w-2 shrink-0 rounded-sm"
+                              style={{ backgroundColor: STATUS_VIAGEM_CHART_COLOR[status] }}
+                            />
+                            <span className="text-muted-foreground">
+                              {STATUS_VIAGEM_LABEL[status] ?? status}
+                            </span>
+                            <span className="ml-auto font-medium tabular-nums">
+                              {d.porStatus[status]}
+                            </span>
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Barra */}
+              {/* Barra empilhada por status */}
               <div
-                className="w-full rounded-t transition-[height,opacity] duration-300"
+                className="flex w-full flex-col-reverse overflow-hidden rounded-t transition-[height,opacity] duration-300"
                 style={{
                   height: `${alturaPct}%`,
                   minHeight: 3,
-                  backgroundColor: "var(--chart-1)",
                   opacity: hover ? 1 : pico ? 0.95 : fds ? 0.4 : 0.7,
                 }}
-              />
+              >
+                {d.total === 0 ? (
+                  <div className="h-full w-full bg-muted-foreground/30" />
+                ) : (
+                  STATUS_VIAGEM_TENDENCIA_ORDEM.filter((s) => (d.porStatus[s] ?? 0) > 0).map(
+                    (status) => (
+                      <div
+                        key={status}
+                        style={{
+                          flexGrow: d.porStatus[status],
+                          flexBasis: 0,
+                          backgroundColor: STATUS_VIAGEM_CHART_COLOR[status],
+                        }}
+                      />
+                    ),
+                  )
+                )}
+              </div>
             </div>
           );
         })}
@@ -100,6 +148,21 @@ export function TendenciaChart({
           </div>
         ))}
       </div>
+
+      {/* Legenda dos status presentes no período */}
+      {statusPresentes.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
+          {statusPresentes.map((status) => (
+            <div key={status} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <span
+                className="h-2 w-2 shrink-0 rounded-sm"
+                style={{ backgroundColor: STATUS_VIAGEM_CHART_COLOR[status] }}
+              />
+              {STATUS_VIAGEM_LABEL[status] ?? status}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

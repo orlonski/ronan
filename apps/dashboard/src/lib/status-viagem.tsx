@@ -28,6 +28,33 @@ export const STATUS_VIAGEM_COLOR: Record<string, string> = {
   OK: "bg-green-100 text-green-800 border-green-200",
 };
 
+/**
+ * Cor sólida por status, pra uso em gráficos (barra empilhada, legenda) onde
+ * as classes `bg-*-100` do badge não têm contraste suficiente. Mesma família
+ * de cor do badge acima, só que no tom 500 — mantém a associação status→cor
+ * consistente em toda a tela.
+ */
+export const STATUS_VIAGEM_CHART_COLOR: Record<string, string> = {
+  RASCUNHO_OFFLINE: "#9ca3af",
+  ENVIADA: "#f59e0b",
+  EM_ANDAMENTO: "#0ea5e9",
+  EM_CONFERENCIA: "#a855f7",
+  AGUARDANDO_PESO: "#f97316",
+  DIVERGENTE: "#ef4444",
+  AJUSTADA: "#3b82f6",
+  OK: "#22c55e",
+};
+
+/** Ordem de empilhamento/legenda dos status na tendência (fluxo natural da viagem). */
+export const STATUS_VIAGEM_TENDENCIA_ORDEM = [
+  "OK",
+  "AJUSTADA",
+  "DIVERGENTE",
+  "EM_CONFERENCIA",
+  "ENVIADA",
+  "RASCUNHO_OFFLINE",
+] as const;
+
 export function statusViagemLabel(status: string): string {
   return STATUS_VIAGEM_LABEL[status] ?? status;
 }
