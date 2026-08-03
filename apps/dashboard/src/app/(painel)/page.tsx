@@ -57,7 +57,7 @@ type Snapshot = {
     etaDias: number | null;
     tempoMedioDias: number | null;
   };
-  tendenciaViagens: Array<{ dia: string; total: number }>;
+  tendenciaViagens: Array<{ dia: string; total: number; porStatus: Record<string, number> }>;
   rankings: {
     motoristas: Array<{ id: string; nome: string; toneladas: string }>;
     clientes: Array<{ id: string; nome: string; viagens: number }>;
@@ -173,7 +173,7 @@ function BlocoTendencia({ d }: { d: Snapshot }) {
           <div>
             <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
               Viagens — últimos 14 dias
-              <InfoHint text="Cada barra é um dia dos últimos 14 dias: mais alta = mais viagens naquele dia. A barra destacada é o dia de pico e a linha pontilhada é a média diária. O número grande é o total das duas semanas." />
+              <InfoHint text="Cada barra é um dia dos últimos 14 dias: mais alta = mais viagens naquele dia. As cores dentro da barra mostram o status das viagens daquele dia (veja a legenda abaixo). A barra destacada é o dia de pico e a linha pontilhada é a média diária. O número grande é o total das duas semanas." />
             </p>
             <p className="text-3xl font-bold tracking-tight tabular-nums">{total14d}</p>
           </div>
