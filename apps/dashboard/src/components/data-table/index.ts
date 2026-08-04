@@ -5,4 +5,5 @@ export { DataTablePagination } from "./data-table-pagination";
 export {
   DataTableToolbar,
   ToolbarFilterDateRange,
+  DataTableSortSelect,
 } from "./data-table-toolbar";

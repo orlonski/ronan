@@ -26,7 +26,6 @@ import { RoteamentoService } from "../../roteamento/roteamento.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
-import { inicioDoDiaBR } from "../../common/timezone";
 import { filtrarComercial, omitirComercial } from "./comercial";
 import { PedagiosRodoviaConsultaService } from "../pedagios-rodovia/pedagios-rodovia-consulta.service";
 import { BuscaLocaisConfigService } from "../busca-locais-config/busca-locais-config.service";
@@ -44,8 +43,6 @@ type ListViagensParams = PaginationQuery & {
   kmForaDoPadrao?: boolean;
   de?: string;
   ate?: string;
-  criadaDe?: string;
-  criadaAte?: string;
 };
 
 @Injectable()
@@ -371,21 +368,6 @@ export class ViagensAdminService {
       if (params.de) where.data.gte = new Date(params.de);
       if (params.ate) where.data.lte = new Date(params.ate);
     }
-    if (params.criadaDe || params.criadaAte) {
-      // "Criada em" no painel exibe criadoOfflineEm (momento real no device)
-      // com fallback pra sincronizadoEm — mas pra filtrar/ordenar usamos só
-      // sincronizadoEm: é timestamp sempre preenchido (quando o lançamento
-      // efetivamente entrou no sistema), sem precisar de COALESCE no Prisma.
-      // Diverge do exibido só pra viagem que ficou muito tempo presa no
-      // outbox antes de sincronizar — caso raro.
-      where.sincronizadoEm = {};
-      if (params.criadaDe) where.sincronizadoEm.gte = inicioDoDiaBR(params.criadaDe);
-      if (params.criadaAte) {
-        where.sincronizadoEm.lt = new Date(
-          inicioDoDiaBR(params.criadaAte).getTime() + 86_400_000,
-        );
-      }
-    }
 
     const result = await paginate<
       Prisma.ViagemGetPayload<{
@@ -422,8 +404,8 @@ export class ViagensAdminService {
         motorista: "motorista.nome",
         placa: "veiculo.placa",
         cliente: "cliente.nome",
-        // Mesma ressalva do filtro acima: ordena por sincronizadoEm, não pelo
-        // criadoOfflineEm eventualmente exibido na coluna.
+        // Ordena por sincronizadoEm (timestamp sempre preenchido), não pelo
+        // criadoOfflineEm eventualmente exibido na coluna "Criada em".
         criadaEm: "sincronizadoEm",
       },
       defaultSort: { field: "data", order: "desc" },

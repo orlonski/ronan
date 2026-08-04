@@ -17,6 +17,7 @@ import { Card } from "@/components/ui/card";
 import {
   DataTable,
   DataTableColumnHeader,
+  DataTableSortSelect,
   DataTableToolbar,
   ToolbarFilterDateRange,
 } from "@/components/data-table";
@@ -377,12 +378,22 @@ export default function ViagensPage() {
                   />
                 )}
                 <ToolbarFilterDateRange state={tableState} label="Período" />
-                <ToolbarFilterDateRange
-                  state={tableState}
-                  label="Criada em"
-                  fromKey="criadaDe"
-                  toKey="criadaAte"
-                />
+                {viewMode === "cards" && (
+                  <DataTableSortSelect
+                    state={tableState}
+                    options={[
+                      { value: "criadaEm", label: "Criada em" },
+                      { value: "data", label: "Data" },
+                      { value: "status", label: "Status" },
+                      { value: "motorista", label: "Motorista" },
+                      { value: "placa", label: "Placa" },
+                      ...(verComercial ? [{ value: "cliente", label: "Cliente" }] : []),
+                      { value: "toneladas", label: "Toneladas" },
+                      { value: "km", label: "Km" },
+                      { value: "ticket", label: "Ticket" },
+                    ]}
+                  />
+                )}
               </>
             }
           />
