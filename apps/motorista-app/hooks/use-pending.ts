@@ -7,6 +7,8 @@ export function usePending() {
     pedagios: 0,
     abastecimentos: 0,
     lifecycle: 0,
+    completarPeso: 0,
+    outros: 0,
     comErro: 0,
   });
 

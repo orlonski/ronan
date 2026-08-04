@@ -178,27 +178,44 @@ export default function NovoAbastecimento() {
   // abastecimentos já sincronizados em cache, e os PENDENTES no outbox (fecha
   // o caso de 2 seguidos offline). Editando, ignora o próprio item pra não
   // comparar consigo mesmo.
+  //
+  // Só conta registro ANTERIOR OU IGUAL à data do lançamento — mesma janela do
+  // servidor (abastecimentos.service.ts). Sem isso, lançar um abastecimento
+  // retroativo era barrado por um registro posterior do mesmo caminhão.
   const ultimoOdometroDoVeiculo = useMemo<number | null>(() => {
     if (!veiculoId) return null;
     const candidatos: number[] = [];
 
+    // O catálogo traz o odômetro mais recente do veículo, sem data junto — só
+    // serve de referência quando o lançamento é de hoje.
     const doCatalogo = cat.data?.veiculos.find((v) => v.id === veiculoId)?.ultimoOdometro;
-    if (typeof doCatalogo === "number") candidatos.push(doCatalogo);
+    if (typeof doCatalogo === "number" && data >= hojeISO()) candidatos.push(doCatalogo);
 
     for (const a of recentes.data ?? []) {
-      if (a.veiculo.id === veiculoId) candidatos.push(a.odometro);
+      if (a.veiculo.id === veiculoId && a.data.slice(0, 10) <= data) {
+        candidatos.push(a.odometro);
+      }
     }
 
     for (const p of pendentes) {
       if (p.clientId === editarClientId) continue;
-      const pl = p.payload as { veiculoId?: unknown; odometro?: unknown };
-      if (String(pl.veiculoId) === veiculoId && typeof pl.odometro === "number") {
+      const pl = p.payload as {
+        veiculoId?: unknown;
+        odometro?: unknown;
+        data?: unknown;
+      };
+      const dataPendente = String(pl.data ?? "").slice(0, 10);
+      if (
+        String(pl.veiculoId) === veiculoId &&
+        typeof pl.odometro === "number" &&
+        (!dataPendente || dataPendente <= data)
+      ) {
         candidatos.push(pl.odometro);
       }
     }
 
     return candidatos.length > 0 ? Math.max(...candidatos) : null;
-  }, [veiculoId, cat.data, recentes.data, pendentes, editarClientId]);
+  }, [veiculoId, cat.data, recentes.data, pendentes, editarClientId, data]);
 
   async function salvar() {
     setErro(null);

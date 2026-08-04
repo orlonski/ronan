@@ -437,10 +437,17 @@ export default function Home() {
 
             {/* Banner: itens só aguardando sincronizar (sem erro). Amarelo — informativo.
                 Inclui abastecimentos (antes só contava viagens+pedágios, e o
-                abastecimento sumia dessa conta). */}
+                abastecimento sumia dessa conta; depois foi a vez de foto/local/story,
+                que travavam a fila inteira sem aparecer em lugar nenhum). */}
             {Math.max(
               0,
-              pending.viagens + pending.pedagios + pending.abastecimentos + pending.lifecycle - pending.comErro,
+              pending.viagens +
+                pending.pedagios +
+                pending.abastecimentos +
+                pending.lifecycle +
+                pending.completarPeso +
+                pending.outros -
+                pending.comErro,
             ) > 0 && (
               <Pressable
                 onPress={() => router.push("/pendentes")}
@@ -453,7 +460,13 @@ export default function Home() {
                   <Text className="text-base font-bold text-foreground">
                     {Math.max(
                       0,
-                      pending.viagens + pending.pedagios + pending.abastecimentos + pending.lifecycle - pending.comErro,
+                      pending.viagens +
+                pending.pedagios +
+                pending.abastecimentos +
+                pending.lifecycle +
+                pending.completarPeso +
+                pending.outros -
+                pending.comErro,
                     )}{" "}
                     aguardando sincronizar
                   </Text>

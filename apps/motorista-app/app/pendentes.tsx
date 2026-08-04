@@ -22,6 +22,9 @@ import {
   type PendingPedagio,
   type PendingAbastecimento,
   type PendingCompletarPeso,
+  type PendingFoto,
+  type PendingLocal,
+  type PendingStory,
   type ZodIssueSaved,
 } from "@/db/database";
 import { usePendingViagens } from "@/hooks/use-pending-viagens";
@@ -29,27 +32,43 @@ import { usePendingPedagios } from "@/hooks/use-pending-pedagios";
 import { usePendingAbastecimentos } from "@/hooks/use-pending-abastecimentos";
 import { usePendingLifecycle, type LifecycleTrip } from "@/hooks/use-pending-lifecycle";
 import { usePendingCompletarPeso } from "@/hooks/use-pending-completar-peso";
+import { usePendingOutros } from "@/hooks/use-pending-outros";
 import {
   descartarViagemPendente,
   descartarPedagioPendente,
   descartarAbastecimentoPendente,
   descartarCompletarPesoPendente,
+  descartarFotoPendente,
+  descartarLocalPendente,
+  descartarStoryPendente,
   drain,
   tentarNovamenteViagemPendente,
   tentarNovamentePedagioPendente,
   tentarNovamenteAbastecimentoPendente,
   tentarNovamenteCompletarPeso,
   tentarNovamenteTripLifecycle,
+  tentarNovamenteFotoPendente,
+  tentarNovamenteLocalPendente,
+  tentarNovamenteStoryPendente,
 } from "@/lib/sync";
 import { descartarViagemGuiada } from "@/lib/lifecycle";
 import { useCatalogos } from "@/lib/queries";
 import { frasePorCodigo, labelDoCampo } from "@/lib/validation";
 
-/** Item do outbox de qualquer tipo, pra listar tudo junto. */
+/**
+ * Item do outbox de qualquer tipo, pra listar tudo junto.
+ *
+ * foto/local/story entraram depois: eles já existiam na fila mas não apareciam
+ * em tela nenhuma, então um item travado desses ficava invisível — sem jeito de
+ * tentar de novo nem descartar — e ainda segurava a fila inteira.
+ */
 type PendingRow =
   | { kind: "viagem"; item: PendingViagem }
   | { kind: "pedagio"; item: PendingPedagio }
-  | { kind: "abastecimento"; item: PendingAbastecimento };
+  | { kind: "abastecimento"; item: PendingAbastecimento }
+  | { kind: "foto"; item: PendingFoto }
+  | { kind: "local"; item: PendingLocal }
+  | { kind: "story"; item: PendingStory };
 
 const TIPO_COMBUSTIVEL_LABEL: Record<string, string> = {
   DIESEL_S10: "Diesel S10",
@@ -65,6 +84,7 @@ export default function Pendentes() {
   const abastecimentos = usePendingAbastecimentos();
   const lifecycleTrips = usePendingLifecycle();
   const completarPeso = usePendingCompletarPeso();
+  const outros = usePendingOutros();
   const cat = useCatalogos();
   const [sincronizando, setSincronizando] = useState(false);
 
@@ -147,9 +167,12 @@ export default function Pendentes() {
       ...viagens.map((item) => ({ kind: "viagem" as const, item })),
       ...pedagios.map((item) => ({ kind: "pedagio" as const, item })),
       ...abastecimentos.map((item) => ({ kind: "abastecimento" as const, item })),
+      ...outros.fotos.map((item) => ({ kind: "foto" as const, item })),
+      ...outros.locais.map((item) => ({ kind: "local" as const, item })),
+      ...outros.stories.map((item) => ({ kind: "story" as const, item })),
     ];
     return all.sort((a, b) => a.item.createdAt - b.item.createdAt);
-  }, [viagens, pedagios, abastecimentos]);
+  }, [viagens, pedagios, abastecimentos, outros]);
 
   // Helpers de lookup por id no catalogo
   const lookups = useMemo(() => {
@@ -162,32 +185,43 @@ export default function Pendentes() {
     return { v, o, m, l, e };
   }, [cat.data]);
 
+  const NOME_DO_TIPO: Record<PendingRow["kind"], string> = {
+    viagem: "esta viagem",
+    pedagio: "este pedágio",
+    abastecimento: "este abastecimento",
+    foto: "esta foto",
+    local: "este local",
+    story: "este story",
+  };
+
   async function confirmarExcluir(row: PendingRow) {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const nome =
-      row.kind === "viagem"
-        ? "esta viagem"
-        : row.kind === "pedagio"
-          ? "este pedágio"
-          : "este abastecimento";
     const ok = await showConfirm({
-      title: `Excluir ${nome}?`,
+      title: `Excluir ${NOME_DO_TIPO[row.kind]}?`,
       message: "Ainda não foi enviado. Apagar agora não pode ser desfeito.",
       confirmLabel: "Excluir",
       destructive: true,
     });
     if (!ok) return;
-    if (row.kind === "viagem") await descartarViagemPendente(row.item.clientId);
-    else if (row.kind === "pedagio") await descartarPedagioPendente(row.item.clientId);
-    else await descartarAbastecimentoPendente(row.item.clientId);
+    const id = row.item.clientId;
+    if (row.kind === "viagem") await descartarViagemPendente(id);
+    else if (row.kind === "pedagio") await descartarPedagioPendente(id);
+    else if (row.kind === "abastecimento") await descartarAbastecimentoPendente(id);
+    else if (row.kind === "foto") await descartarFotoPendente(id);
+    else if (row.kind === "local") await descartarLocalPendente(id);
+    else await descartarStoryPendente(id);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
 
   async function onTentarNovamente(row: PendingRow) {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (row.kind === "viagem") await tentarNovamenteViagemPendente(row.item.clientId);
-    else if (row.kind === "pedagio") await tentarNovamentePedagioPendente(row.item.clientId);
-    else await tentarNovamenteAbastecimentoPendente(row.item.clientId);
+    const id = row.item.clientId;
+    if (row.kind === "viagem") await tentarNovamenteViagemPendente(id);
+    else if (row.kind === "pedagio") await tentarNovamentePedagioPendente(id);
+    else if (row.kind === "abastecimento") await tentarNovamenteAbastecimentoPendente(id);
+    else if (row.kind === "foto") await tentarNovamenteFotoPendente(id);
+    else if (row.kind === "local") await tentarNovamenteLocalPendente(id);
+    else await tentarNovamenteStoryPendente(id);
   }
 
   return (
@@ -549,6 +583,18 @@ function PendingCard({
           </View>
         )}
 
+        {/* Nunca foi tentado ainda. Distinguir isso de "tentei e falhou" é o que
+            faltava pra diagnosticar fila travada: um item que nunca chega a ser
+            enviado não tem erro nenhum pra mostrar, e ficava idêntico a um que
+            está tentando sem sinal. */}
+        {!temErro && !item.errorMsg && !item.lastTriedAt && (
+          <View className="mt-3 rounded-lg border border-border bg-muted/40 p-3">
+            <Text className="text-xs text-muted-foreground">
+              Ainda não tentei enviar. Vai subir sozinho quando pegar sinal.
+            </Text>
+          </View>
+        )}
+
         <View className="mt-3 gap-2">
           <Button variant="outline" size="sm" onPress={onVerDetalhes}>
             Ver detalhes
@@ -591,6 +637,31 @@ function resumoCard(
   row: PendingRow,
   lookups: Lookups,
 ): { tipoLabel: string; titulo: string; subtitulo: string; linha3?: string } {
+  // Foto e story não têm payload — o conteúdo É o arquivo local.
+  if (row.kind === "foto") {
+    return {
+      tipoLabel: "Foto do ticket",
+      titulo: "Foto de uma viagem já enviada",
+      subtitulo: fmtData(new Date(row.item.createdAt).toISOString()),
+      linha3: "Falta anexar a foto na viagem.",
+    };
+  }
+  if (row.kind === "story") {
+    return {
+      tipoLabel: "Story",
+      titulo: row.item.legenda?.trim() || "Foto do trecho",
+      subtitulo: fmtData(new Date(row.item.createdAt).toISOString()),
+    };
+  }
+  if (row.kind === "local") {
+    return {
+      tipoLabel: "Local novo",
+      titulo: row.item.payload.nome || "Local sem nome",
+      subtitulo: fmtData(new Date(row.item.createdAt).toISOString()),
+      linha3: `Cadastrado no GPS · ${row.item.payload.tipo.toLowerCase()}`,
+    };
+  }
+
   const p = row.item.payload as Record<string, string | number | undefined>;
   const placa = lookups?.v.get(String(p.veiculoId))?.placa;
 
@@ -629,7 +700,8 @@ function resumoCard(
 
 /** Campos comuns a todo item do outbox, pro modal de detalhe. */
 type PendingComum = {
-  payload: Record<string, unknown>;
+  /** Foto avulsa e story não têm payload — o conteúdo é o arquivo local. */
+  payload?: Record<string, unknown>;
   status: string;
   attempts: number;
   lastTriedAt?: number;
@@ -647,7 +719,7 @@ function DetalheModal({
   onClose: () => void;
 }) {
   if (!item) return null;
-  const payloadJson = JSON.stringify(item.payload, null, 2);
+  const payloadJson = item.payload ? JSON.stringify(item.payload, null, 2) : null;
   const temIssues = !!item.errorIssues && item.errorIssues.length > 0;
 
   return (
@@ -730,20 +802,22 @@ function DetalheModal({
             </View>
           )}
 
-          <View className="gap-1">
-            <Text className="text-xs font-semibold uppercase text-muted-foreground">
-              Payload enviado
-            </Text>
-            <View className="rounded-lg border border-border bg-muted/30 p-3">
-              <Text
-                className="font-mono text-xs"
-                style={{ fontFamily: "Courier" }}
-                selectable
-              >
-                {payloadJson}
+          {payloadJson && (
+            <View className="gap-1">
+              <Text className="text-xs font-semibold uppercase text-muted-foreground">
+                Payload enviado
               </Text>
+              <View className="rounded-lg border border-border bg-muted/30 p-3">
+                <Text
+                  className="font-mono text-xs"
+                  style={{ fontFamily: "Courier" }}
+                  selectable
+                >
+                  {payloadJson}
+                </Text>
+              </View>
             </View>
-          </View>
+          )}
 
           {item.fotoUri && (
             <View className="gap-1">

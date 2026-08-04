@@ -118,9 +118,18 @@ export class AbastecimentosMotoristaService {
       }
     }
 
-    // Valida odômetro: deve ser >= último registrado pro mesmo veículo.
+    // Valida odômetro: deve ser >= o último registrado ANTES deste lançamento.
+    //
+    // A janela `data <= input.data` é essencial pro offline: o app é
+    // offline-first e um abastecimento feito na terça pode só sincronizar na
+    // sexta. Comparando com o registro mais recente do veículo em termos
+    // absolutos, esse lançamento atrasado era recusado por causa de um
+    // abastecimento de quinta (de qualquer motorista do mesmo caminhão) — 422 é
+    // erro permanente no app, então o lançamento morria preso na tela de
+    // Pendentes sem nunca subir. A proteção contra odômetro regressivo continua
+    // valendo, só que na ordem cronológica real.
     const ultimo = await this.prisma.abastecimento.findFirst({
-      where: { veiculoId: input.veiculoId },
+      where: { veiculoId: input.veiculoId, data: { lte: input.data } },
       orderBy: { data: "desc" },
       select: { odometro: true, data: true },
     });

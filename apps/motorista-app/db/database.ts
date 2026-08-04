@@ -69,6 +69,10 @@ export type PendingViagem = {
   errorMsg?: string;
   errorStatus?: number;
   errorIssues?: ZodIssueSaved[];
+  /** Falha que o PRÓPRIO app sabe que é definitiva (ex: a foto sumiu do
+   * aparelho). Sem isso o rescue de boot, que só olha errorStatus, trataria
+   * como transitória e ressuscitaria o item pra sempre. */
+  errorPermanenteLocal?: boolean;
 };
 
 export type PendingPedagio = {
@@ -81,6 +85,10 @@ export type PendingPedagio = {
   errorMsg?: string;
   errorStatus?: number;
   errorIssues?: ZodIssueSaved[];
+  /** Falha que o PRÓPRIO app sabe que é definitiva (ex: a foto sumiu do
+   * aparelho). Sem isso o rescue de boot, que só olha errorStatus, trataria
+   * como transitória e ressuscitaria o item pra sempre. */
+  errorPermanenteLocal?: boolean;
 };
 
 export type PendingAbastecimento = {
@@ -95,6 +103,10 @@ export type PendingAbastecimento = {
   errorMsg?: string;
   errorStatus?: number;
   errorIssues?: ZodIssueSaved[];
+  /** Falha que o PRÓPRIO app sabe que é definitiva (ex: a foto sumiu do
+   * aparelho). Sem isso o rescue de boot, que só olha errorStatus, trataria
+   * como transitória e ressuscitaria o item pra sempre. */
+  errorPermanenteLocal?: boolean;
 };
 
 /** Foto a anexar em viagem JÁ sincronizada. Motorista esqueceu de anexar
@@ -113,6 +125,10 @@ export type PendingFoto = {
   errorMsg?: string;
   errorStatus?: number;
   errorIssues?: ZodIssueSaved[];
+  /** Falha que o PRÓPRIO app sabe que é definitiva (ex: a foto sumiu do
+   * aparelho). Sem isso o rescue de boot, que só olha errorStatus, trataria
+   * como transitória e ressuscitaria o item pra sempre. */
+  errorPermanenteLocal?: boolean;
 };
 
 /** Story (foto do trecho) aguardando envio. 2-step no processStory: sobe a foto
@@ -133,6 +149,10 @@ export type PendingStory = {
   errorMsg?: string;
   errorStatus?: number;
   errorIssues?: ZodIssueSaved[];
+  /** Falha que o PRÓPRIO app sabe que é definitiva (ex: a foto sumiu do
+   * aparelho). Sem isso o rescue de boot, que só olha errorStatus, trataria
+   * como transitória e ressuscitaria o item pra sempre. */
+  errorPermanenteLocal?: boolean;
 };
 
 /** Completar peso + ticket de uma viagem JÁ sincronizada que está em
@@ -150,6 +170,10 @@ export type PendingCompletarPeso = {
   errorMsg?: string;
   errorStatus?: number;
   errorIssues?: ZodIssueSaved[];
+  /** Falha que o PRÓPRIO app sabe que é definitiva (ex: a foto sumiu do
+   * aparelho). Sem isso o rescue de boot, que só olha errorStatus, trataria
+   * como transitória e ressuscitaria o item pra sempre. */
+  errorPermanenteLocal?: boolean;
 };
 
 /** Local de descarga criado offline. clientId vira id real no servidor
@@ -172,6 +196,10 @@ export type PendingLocal = {
   errorMsg?: string;
   errorStatus?: number;
   errorIssues?: ZodIssueSaved[];
+  /** Falha que o PRÓPRIO app sabe que é definitiva (ex: a foto sumiu do
+   * aparelho). Sem isso o rescue de boot, que só olha errorStatus, trataria
+   * como transitória e ressuscitaria o item pra sempre. */
+  errorPermanenteLocal?: boolean;
 };
 
 /** Lifecycle guiado: abertura da viagem (POST /m/viagem/iniciar). */
@@ -185,6 +213,10 @@ export type PendingViagemIniciar = {
   errorMsg?: string;
   errorStatus?: number;
   errorIssues?: ZodIssueSaved[];
+  /** Falha que o PRÓPRIO app sabe que é definitiva (ex: a foto sumiu do
+   * aparelho). Sem isso o rescue de boot, que só olha errorStatus, trataria
+   * como transitória e ressuscitaria o item pra sempre. */
+  errorPermanenteLocal?: boolean;
 };
 
 /** Lifecycle: um evento (carga/descarga/parada...) numa viagem em andamento. */
@@ -201,6 +233,10 @@ export type PendingEventoViagem = {
   errorMsg?: string;
   errorStatus?: number;
   errorIssues?: ZodIssueSaved[];
+  /** Falha que o PRÓPRIO app sabe que é definitiva (ex: a foto sumiu do
+   * aparelho). Sem isso o rescue de boot, que só olha errorStatus, trataria
+   * como transitória e ressuscitaria o item pra sempre. */
+  errorPermanenteLocal?: boolean;
 };
 
 /** Lifecycle: cancelamento/descarte de uma viagem em andamento. */
@@ -213,6 +249,10 @@ export type PendingViagemCancelar = {
   errorMsg?: string;
   errorStatus?: number;
   errorIssues?: ZodIssueSaved[];
+  /** Falha que o PRÓPRIO app sabe que é definitiva (ex: a foto sumiu do
+   * aparelho). Sem isso o rescue de boot, que só olha errorStatus, trataria
+   * como transitória e ressuscitaria o item pra sempre. */
+  errorPermanenteLocal?: boolean;
 };
 
 /** Lifecycle: finalização da viagem (POST /m/viagem/:clientId/finalizar). */
@@ -228,6 +268,10 @@ export type PendingViagemFinalizar = {
   errorMsg?: string;
   errorStatus?: number;
   errorIssues?: ZodIssueSaved[];
+  /** Falha que o PRÓPRIO app sabe que é definitiva (ex: a foto sumiu do
+   * aparelho). Sem isso o rescue de boot, que só olha errorStatus, trataria
+   * como transitória e ressuscitaria o item pra sempre. */
+  errorPermanenteLocal?: boolean;
 };
 
 const VIAGENS_KEY = `${PREFIX}outbox.viagens`;

@@ -1,6 +1,8 @@
 import { AppState } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
+import * as FileSystem from "expo-file-system/legacy";
 import { drenar as drenarEventos, reportarEvento } from "./event-reporter";
+import { reportarErro } from "./error-reporter";
 import { drenarPosicoes } from "./posicao-sync";
 import {
   deletePendingAbastecimento,
@@ -162,6 +164,7 @@ export async function atualizarViagemPendente(input: {
     errorMsg: undefined,
     errorStatus: undefined,
     errorIssues: undefined,
+    errorPermanenteLocal: undefined,
   });
   notify();
   void drain();
@@ -207,6 +210,7 @@ export async function atualizarViagemFinalizarPendente(input: {
     errorMsg: undefined,
     errorStatus: undefined,
     errorIssues: undefined,
+    errorPermanenteLocal: undefined,
   });
   notify();
   void drain();
@@ -231,6 +235,7 @@ export async function tentarNovamenteViagemPendente(
     errorMsg: undefined,
     errorStatus: undefined,
     errorIssues: undefined,
+    errorPermanenteLocal: undefined,
   });
   notify();
   void drain();
@@ -267,6 +272,7 @@ export async function atualizarAbastecimentoPendente(input: {
     errorMsg: undefined,
     errorStatus: undefined,
     errorIssues: undefined,
+    errorPermanenteLocal: undefined,
   });
   notify();
   void drain();
@@ -291,7 +297,52 @@ export async function tentarNovamentePedagioPendente(
     errorMsg: undefined,
     errorStatus: undefined,
     errorIssues: undefined,
+    errorPermanenteLocal: undefined,
   });
+  notify();
+  void drain();
+}
+
+/**
+ * Descartar / tentar de novo os tipos que a tela de Pendentes passou a mostrar
+ * (foto avulsa, local criado offline, story). Antes eles não tinham nenhuma
+ * ação de UI: um item travado desses ficava preso pra sempre, invisível.
+ */
+export async function descartarFotoPendente(clientId: string): Promise<void> {
+  await deletePendingFoto(clientId);
+  notify();
+}
+
+export async function tentarNovamenteFotoPendente(clientId: string): Promise<void> {
+  const item = (await listPendingFotos()).find((x) => x.clientId === clientId);
+  if (!item) return;
+  await upsertPendingFoto(resetItem(item));
+  notify();
+  void drain();
+}
+
+export async function descartarLocalPendente(clientId: string): Promise<void> {
+  await deletePendingLocal(clientId);
+  notify();
+}
+
+export async function tentarNovamenteLocalPendente(clientId: string): Promise<void> {
+  const item = (await listPendingLocais()).find((x) => x.clientId === clientId);
+  if (!item) return;
+  await upsertPendingLocal(resetItem(item));
+  notify();
+  void drain();
+}
+
+export async function descartarStoryPendente(clientId: string): Promise<void> {
+  await deletePendingStory(clientId);
+  notify();
+}
+
+export async function tentarNovamenteStoryPendente(clientId: string): Promise<void> {
+  const item = (await listPendingStories()).find((x) => x.clientId === clientId);
+  if (!item) return;
+  await upsertPendingStory(resetItem(item));
   notify();
   void drain();
 }
@@ -309,6 +360,7 @@ export async function tentarNovamenteAbastecimentoPendente(
     errorMsg: undefined,
     errorStatus: undefined,
     errorIssues: undefined,
+    errorPermanenteLocal: undefined,
   });
   notify();
   void drain();
@@ -437,6 +489,7 @@ export async function enqueueCompletarPeso(item: {
     errorMsg: undefined,
     errorStatus: undefined,
     errorIssues: undefined,
+    errorPermanenteLocal: undefined,
   });
   notify();
   void drain();
@@ -454,6 +507,7 @@ export async function tentarNovamenteCompletarPeso(viagemId: string): Promise<vo
     errorMsg: undefined,
     errorStatus: undefined,
     errorIssues: undefined,
+    errorPermanenteLocal: undefined,
   });
   notify();
   void drain();
@@ -590,10 +644,12 @@ export async function pendingCounts(): Promise<{
   lifecycle: number;
   /** "Completar peso" de viagens AGUARDANDO_PESO aguardando sync. */
   completarPeso: number;
+  /** Foto avulsa, local criado offline e story aguardando sync. */
+  outros: number;
   /** Itens com erro permanente (4xx) que precisam de ação do motorista. */
   comErro: number;
 }> {
-  const [v, p, a, li, ev, fi, cp] = await Promise.all([
+  const [v, p, a, li, ev, fi, cp, fo, lo, st] = await Promise.all([
     listPendingViagens(),
     listPendingPedagios(),
     listPendingAbastecimentos(),
@@ -601,21 +657,23 @@ export async function pendingCounts(): Promise<{
     listPendingEventosViagem(),
     listPendingViagemFinalizar(),
     listPendingCompletarPeso(),
+    listPendingFotos(),
+    listPendingLocais(),
+    listPendingStories(),
   ]);
-  const comErro =
-    v.filter((i) => i.attempts >= MAX_ATTEMPTS).length +
-    p.filter((i) => i.attempts >= MAX_ATTEMPTS).length +
-    a.filter((i) => i.attempts >= MAX_ATTEMPTS).length +
-    li.filter((i) => i.attempts >= MAX_ATTEMPTS).length +
-    ev.filter((i) => i.attempts >= MAX_ATTEMPTS).length +
-    fi.filter((i) => i.attempts >= MAX_ATTEMPTS).length +
-    cp.filter((i) => i.attempts >= MAX_ATTEMPTS).length;
+  // foto/local/story ficavam de fora da contagem: item travado desses não
+  // aparecia em lugar nenhum, nem no badge da home nem na tela de Pendentes.
+  const comErro = [v, p, a, li, ev, fi, cp, fo, lo, st].reduce(
+    (acc, lista) => acc + lista.filter((i) => i.attempts >= MAX_ATTEMPTS).length,
+    0,
+  );
   return {
     viagens: v.length,
     pedagios: p.length,
     abastecimentos: a.length,
     lifecycle: li.length + ev.length + fi.length,
     completarPeso: cp.length,
+    outros: fo.length + lo.length + st.length,
     comErro,
   };
 }
@@ -644,6 +702,99 @@ async function podeEnviar(): Promise<boolean> {
   if (!forcandoSync && Date.now() - getUltimaFalhaRedeAt() < REDE_BACKOFF_MS)
     return false;
   return true;
+}
+
+/**
+ * Teto de fome: tempo máximo que um TIPO do outbox pode ficar sem sequer ser
+ * tentado por causa do backoff de rede.
+ *
+ * Existe porque o backoff é global (um timestamp só, marcado por qualquer envio
+ * que falha) e a ordem dos drains é fixa. Um item que falha SEMPRE por rede —
+ * caso real: foto cujo arquivo o iOS apagou do diretório de cache, que falha na
+ * leitura e vira "sem sinal" — remarcava o backoff em toda passada e fazia todo
+ * mundo atrás dele passar fome pra sempre. Como abastecimento é o 10º de 11, o
+ * motorista via as viagens (6ª) subindo normalmente e os abastecimentos parados
+ * em "Pendente" sem erro nenhum: eles nunca chegavam a ser tentados.
+ */
+const ANTI_FOME_MS = 5 * 60 * 1000;
+
+/** Quando cada tipo teve a última tentativa de envio (só nesta sessão). */
+const ultimaTentativaPorTipo: Record<string, number> = {};
+
+/**
+ * Gate de envio de um tipo do outbox. Respeita o backoff de rede, mas nunca
+ * deixa um tipo ficar mais de ANTI_FOME_MS sem uma tentativa — no pior caso
+ * cada tipo gasta um envio a cada 5 min, em vez de nunca rodar.
+ */
+async function podeTentar(tipo: string): Promise<boolean> {
+  const ok =
+    (await podeEnviar()) ||
+    Date.now() - (ultimaTentativaPorTipo[tipo] ?? 0) > ANTI_FOME_MS;
+  if (ok) ultimaTentativaPorTipo[tipo] = Date.now();
+  return ok;
+}
+
+/**
+ * Manda pro backend (vira linha em /erros no painel) uma falha do outbox que o
+ * escritório não teria como enxergar de outro jeito.
+ *
+ * Existe porque erro 4xx não é registrado em lugar nenhum do servidor: o filtro
+ * global da API só grava error_logs pra 5xx, e o reporter do app pula 4xx por
+ * ser "esperado". Resultado: um lançamento que morre preso fica visível SÓ
+ * dentro do celular do motorista — foi exatamente por isso que abastecimento
+ * travado virou um caso impossível de diagnosticar à distância.
+ */
+function reportarFalhaOutbox(
+  tipo: string,
+  clientId: string | undefined,
+  msg: string,
+  status?: number,
+  issues?: ZodIssueSaved[],
+): void {
+  void reportarErro(new Error(`Outbox travado (${tipo}): ${msg}`), {
+    url: `outbox/${tipo}`,
+    extra: { clientId, status, issues },
+  });
+}
+
+/** Idem, pra foto que sumiu do aparelho antes de conseguir subir. */
+function reportarFotoPerdida(tipo: string, clientId: string, uri?: string): void {
+  void reportarErro(new Error(`Foto do outbox sumiu do aparelho (${tipo})`), {
+    url: `outbox/${tipo}/foto-perdida`,
+    extra: { clientId, uri },
+  });
+}
+
+/**
+ * A foto local ainda existe no aparelho?
+ *
+ * O `ImageManipulator` grava em `Caches/`, e o iOS esvazia esse diretório sob
+ * pressão de armazenamento — um item do outbox pode passar dias esperando sinal.
+ * Quando o arquivo some, o upload falha na LEITURA e o erro chega como
+ * `TypeError`, que o outbox trata como "sem sinal" e retenta pra sempre, sem
+ * nunca virar erro visível. Pior: a falha remarca o backoff de rede em toda
+ * passada, o que fazia o resto da fila passar fome.
+ *
+ * Na dúvida devolve true — é melhor tentar subir e falhar do que descartar foto
+ * boa.
+ */
+async function fotoAindaExiste(uri: string | undefined): Promise<boolean> {
+  if (!uri) return false;
+  if (!uri.startsWith("file:")) return true; // content://, ph:// — deixa o upload decidir
+  try {
+    const info = await FileSystem.getInfoAsync(uri);
+    return info.exists;
+  } catch {
+    return true;
+  }
+}
+
+/** Espera a passada em andamento terminar (teto pra não pendurar a UI). */
+async function esperarDrainAtual(tetoMs = 15_000): Promise<void> {
+  const limite = Date.now() + tetoMs;
+  while (draining && Date.now() < limite) {
+    await new Promise((r) => setTimeout(r, 300));
+  }
 }
 
 export type DrainResumo = {
@@ -677,18 +828,31 @@ async function snapshotPendentes(): Promise<{ total: number; motivo?: string }> 
 
 export async function drain(opts?: { force?: boolean }): Promise<DrainResumo> {
   if (draining) {
-    const { total, motivo } = await snapshotPendentes();
-    return { enviados: 0, restantes: total, ultimoMotivo: motivo, emAndamento: true };
+    // Sync manual caindo em cima de uma passada em andamento: em vez de mentir
+    // ("já estou enviando") e não fazer nada, espera a passada terminar e roda
+    // uma forçada de verdade — é o que o motorista pediu ao tocar no botão.
+    if (opts?.force) {
+      await esperarDrainAtual();
+      if (draining) {
+        const { total, motivo } = await snapshotPendentes();
+        return { enviados: 0, restantes: total, ultimoMotivo: motivo, emAndamento: true };
+      }
+    } else {
+      const { total, motivo } = await snapshotPendentes();
+      return { enviados: 0, restantes: total, ultimoMotivo: motivo, emAndamento: true };
+    }
   }
+  // Trava ANTES de qualquer await: entre o teste acima e o `draining = true`
+  // havia awaits, e duas chamadas concorrentes (timer + botão) podiam entrar
+  // as duas e drenar o mesmo item em paralelo.
+  draining = true;
   if (opts?.force) forcandoSync = true;
   try {
-    if (!(await podeEnviar())) {
-      const { total, motivo } = await snapshotPendentes();
-      return { enviados: 0, restantes: total, ultimoMotivo: motivo };
-    }
+    // Sem gate de backoff aqui: quem decide é o `podeTentar` de cada tipo, que
+    // respeita o backoff MAS garante o teto de fome. Um gate de passada inteira
+    // anularia essa garantia — e o custo de entrar na passada durante o backoff
+    // é só leitura de AsyncStorage, nenhuma requisição.
     const antes = await snapshotPendentes();
-    draining = true;
-    try {
     // Destrava itens com status="syncing" órfão de drain anterior morto
     // no meio do envio. Backend é idempotente (clientId @unique), retry
     // seguro — retorna existente em vez de duplicar.
@@ -712,10 +876,6 @@ export async function drain(opts?: { force?: boolean }): Promise<DrainResumo> {
     await drainPedagios();
     await drainAbastecimentos();
     await drainStories();
-    } finally {
-      draining = false;
-      notify();
-    }
     const depois = await snapshotPendentes();
     return {
       enviados: Math.max(0, antes.total - depois.total),
@@ -723,7 +883,9 @@ export async function drain(opts?: { force?: boolean }): Promise<DrainResumo> {
       ultimoMotivo: depois.motivo,
     };
   } finally {
+    draining = false;
     forcandoSync = false;
+    notify();
   }
 }
 
@@ -794,7 +956,7 @@ async function drainFotos(): Promise<void> {
   for (const item of list) {
     if (item.status === "syncing") continue;
     if (item.attempts >= MAX_ATTEMPTS) continue;
-    if (!(await podeEnviar())) return;
+    if (!(await podeTentar("fotos"))) return;
     await processFoto(item);
   }
 }
@@ -803,6 +965,14 @@ async function processFoto(item: PendingFoto): Promise<void> {
   await upsertPendingFoto({ ...item, status: "syncing", lastTriedAt: Date.now() });
   notify();
   try {
+    // Aqui a foto É o conteúdo — sem arquivo não há o que enviar. Vira erro
+    // REAL (visível e descartável) em vez de "aguardando sinal" pra sempre.
+    if (!(await fotoAindaExiste(item.fotoUri))) {
+      reportarFotoPerdida("foto", item.clientId, item.fotoUri);
+      throw new FotoPerdidaError(
+        "A foto não está mais no aparelho. Tire a foto de novo.",
+      );
+    }
     // 2-step: sobe a foto pro MinIO pegando storageKey, depois associa à viagem.
     const fd = new FormData();
     const filename = `ticket-${item.clientId}.${
@@ -817,7 +987,7 @@ async function processFoto(item: PendingFoto): Promise<void> {
     await api.post(`/m/viagens/${item.viagemId}/fotos`, { fotoKey: up.storageKey }, { outbox: true });
     await deletePendingFoto(item.clientId);
   } catch (err) {
-    await upsertPendingFoto(proximoEstadoFalha(item, err, isErroPermanente(err)));
+    await upsertPendingFoto(proximoEstadoFalha(item, err, isErroPermanente(err), "foto"));
   }
   notify();
 }
@@ -827,7 +997,7 @@ async function drainStories(): Promise<void> {
   for (const item of list) {
     if (item.status === "syncing") continue;
     if (item.attempts >= MAX_ATTEMPTS) continue;
-    if (!(await podeEnviar())) return;
+    if (!(await podeTentar("stories"))) return;
     await processStory(item);
   }
 }
@@ -836,6 +1006,10 @@ async function processStory(item: PendingStory): Promise<void> {
   await upsertPendingStory({ ...item, status: "syncing", lastTriedAt: Date.now() });
   notify();
   try {
+    if (!(await fotoAindaExiste(item.fotoUri))) {
+      reportarFotoPerdida("story", item.clientId, item.fotoUri);
+      throw new FotoPerdidaError("A foto não está mais no aparelho. Poste de novo.");
+    }
     // 2-step: sobe a foto pro MinIO pegando storageKey, depois cria o story.
     const fd = new FormData();
     const filename = `story-${item.clientId}.${
@@ -860,7 +1034,7 @@ async function processStory(item: PendingStory): Promise<void> {
     );
     await deletePendingStory(item.clientId);
   } catch (err) {
-    await upsertPendingStory(proximoEstadoFalha(item, err, isErroPermanente(err)));
+    await upsertPendingStory(proximoEstadoFalha(item, err, isErroPermanente(err), "story"));
   }
   notify();
 }
@@ -870,7 +1044,7 @@ async function drainCompletarPeso(): Promise<void> {
   for (const item of list) {
     if (item.status === "syncing") continue;
     if (item.attempts >= MAX_ATTEMPTS) continue;
-    if (!(await podeEnviar())) return;
+    if (!(await podeTentar("completar-peso"))) return;
     await processCompletarPeso(item);
   }
 }
@@ -883,7 +1057,9 @@ async function processCompletarPeso(item: PendingCompletarPeso): Promise<void> {
     await api.post(`/m/viagens/${item.viagemId}/completar-peso`, item.payload, { outbox: true });
     await deletePendingCompletarPeso(item.viagemId);
   } catch (err) {
-    await upsertPendingCompletarPeso(proximoEstadoFalha(item, err, isErroPermanente(err)));
+    await upsertPendingCompletarPeso(
+      proximoEstadoFalha(item, err, isErroPermanente(err), "completar-peso"),
+    );
   }
   notify();
 }
@@ -893,7 +1069,7 @@ export async function drainLocais(): Promise<void> {
   for (const item of list) {
     if (item.status === "syncing") continue;
     if (item.attempts >= MAX_ATTEMPTS) continue;
-    if (!(await podeEnviar())) return;
+    if (!(await podeTentar("locais"))) return;
     await processLocal(item);
   }
 }
@@ -906,7 +1082,7 @@ async function processLocal(item: PendingLocal): Promise<void> {
     await api.post("/m/locais/rapido", { id: item.clientId, ...item.payload }, { outbox: true });
     await deletePendingLocal(item.clientId);
   } catch (err) {
-    await upsertPendingLocal(proximoEstadoFalha(item, err, isErroPermanente(err)));
+    await upsertPendingLocal(proximoEstadoFalha(item, err, isErroPermanente(err), "local"));
   }
   notify();
 }
@@ -918,7 +1094,7 @@ async function drainViagemCancelar(): Promise<void> {
   for (const item of list) {
     if (item.status === "syncing") continue;
     if (item.attempts >= MAX_ATTEMPTS) continue;
-    if (!(await podeEnviar())) return;
+    if (!(await podeTentar("viagem-cancelar"))) return;
     await processViagemCancelar(item);
   }
 }
@@ -952,7 +1128,7 @@ async function drainViagemIniciar(): Promise<void> {
   for (const item of list) {
     if (item.status === "syncing") continue;
     if (item.attempts >= MAX_ATTEMPTS) continue;
-    if (!(await podeEnviar())) return;
+    if (!(await podeTentar("viagem-iniciar"))) return;
     await processViagemIniciar(item);
   }
 }
@@ -998,7 +1174,9 @@ async function processViagemIniciar(item: PendingViagemIniciar): Promise<void> {
       notify();
       return;
     }
-    await upsertPendingViagemIniciar(proximoEstadoFalha(item, err, isErroPermanente(err)));
+    await upsertPendingViagemIniciar(
+      proximoEstadoFalha(item, err, isErroPermanente(err), "viagem-iniciar"),
+    );
   }
   notify();
 }
@@ -1013,7 +1191,7 @@ async function drainEventosViagem(): Promise<void> {
     if (item.status === "syncing") continue;
     if (item.attempts >= MAX_ATTEMPTS) continue;
     if (iniciarPendentes.has(item.viagemClientId)) continue; // aguarda viagem-mãe
-    if (!(await podeEnviar())) return;
+    if (!(await podeTentar("eventos"))) return;
     await processEventoViagem(item);
   }
 }
@@ -1047,7 +1225,9 @@ async function processEventoViagem(item: PendingEventoViagem): Promise<void> {
     await deletePendingEventoViagem(item.clientId);
   } catch (err) {
     // 404 = viagem-mãe ainda não sincronizou (ordem) → transiente, retry.
-    await upsertPendingEventoViagem(proximoEstadoFalha(item, err, isErroPermanenteLifecycle(err)));
+    await upsertPendingEventoViagem(
+      proximoEstadoFalha(item, err, isErroPermanenteLifecycle(err), "evento-viagem"),
+    );
   }
   notify();
 }
@@ -1067,40 +1247,46 @@ async function drainViagemFinalizar(): Promise<void> {
     if (item.attempts >= MAX_ATTEMPTS) continue;
     if (iniciarPendentes.has(item.clientId)) continue; // aguarda iniciar
     if ((eventosPorViagem.get(item.clientId) ?? 0) > 0) continue; // aguarda eventos
-    if (!(await podeEnviar())) return;
+    if (!(await podeTentar("viagem-finalizar"))) return;
     await processViagemFinalizar(item);
   }
 }
 
 async function processViagemFinalizar(item: PendingViagemFinalizar): Promise<void> {
-  await upsertPendingViagemFinalizar({ ...item, status: "syncing", lastTriedAt: Date.now() });
+  let atual: PendingViagemFinalizar = {
+    ...item,
+    status: "syncing",
+    lastTriedAt: Date.now(),
+  };
+  await upsertPendingViagemFinalizar(atual);
   notify();
   try {
-    let payload = { ...item.payload };
-    if (item.fotoUri && !payload.fotoKey) {
-      const fd = new FormData();
-      const filename = `ticket-${item.clientId}.${
-        item.fotoMime?.includes("png") ? "png" : "jpg"
-      }`;
-      fd.append("foto", {
-        uri: item.fotoUri,
-        type: item.fotoMime ?? "image/jpeg",
-        name: filename,
-      } as unknown as Blob);
-      const up = await api.postForm<{ storageKey: string }>("/m/uploads/ticket", fd);
-      payload = { ...payload, fotoKey: up.storageKey };
-      await upsertPendingViagemFinalizar({
-        ...item,
-        payload,
-        fotoUri: undefined,
-        fotoMime: undefined,
-        status: "syncing",
-      });
+    let payload = { ...atual.payload };
+    if (atual.fotoUri && !payload.fotoKey) {
+      if (await fotoAindaExiste(atual.fotoUri)) {
+        const fd = new FormData();
+        const filename = `ticket-${atual.clientId}.${
+          atual.fotoMime?.includes("png") ? "png" : "jpg"
+        }`;
+        fd.append("foto", {
+          uri: atual.fotoUri,
+          type: atual.fotoMime ?? "image/jpeg",
+          name: filename,
+        } as unknown as Blob);
+        const up = await api.postForm<{ storageKey: string }>("/m/uploads/ticket", fd);
+        payload = { ...payload, fotoKey: up.storageKey };
+      } else {
+        reportarFotoPerdida("viagem-finalizar", atual.clientId, atual.fotoUri);
+      }
+      atual = { ...atual, payload, fotoUri: undefined, fotoMime: undefined };
+      await upsertPendingViagemFinalizar(atual);
     }
-    await api.post(`/m/viagem/${item.clientId}/finalizar`, payload, { outbox: true });
-    await deletePendingViagemFinalizar(item.clientId);
+    await api.post(`/m/viagem/${atual.clientId}/finalizar`, payload, { outbox: true });
+    await deletePendingViagemFinalizar(atual.clientId);
   } catch (err) {
-    await upsertPendingViagemFinalizar(proximoEstadoFalha(item, err, isErroPermanenteLifecycle(err)));
+    await upsertPendingViagemFinalizar(
+      proximoEstadoFalha(atual, err, isErroPermanenteLifecycle(err), "viagem-finalizar"),
+    );
   }
   notify();
 }
@@ -1110,41 +1296,44 @@ async function drainViagens(): Promise<void> {
   for (const item of list) {
     if (item.status === "syncing") continue;
     if (item.attempts >= MAX_ATTEMPTS) continue;
-    if (!(await podeEnviar())) return;
+    if (!(await podeTentar("viagens"))) return;
     await processViagem(item);
   }
 }
 
 async function processViagem(item: PendingViagem): Promise<void> {
-  await upsertPendingViagem({ ...item, status: "syncing", lastTriedAt: Date.now() });
+  let atual: PendingViagem = { ...item, status: "syncing", lastTriedAt: Date.now() };
+  await upsertPendingViagem(atual);
   notify();
   try {
-    let payload = { ...item.payload };
-    if (item.fotoUri && !payload.fotoKey) {
-      const fd = new FormData();
-      const filename = `ticket-${item.clientId}.${
-        item.fotoMime?.includes("png") ? "png" : "jpg"
-      }`;
-      fd.append("foto", {
-        uri: item.fotoUri,
-        type: item.fotoMime ?? "image/jpeg",
-        name: filename,
-      } as unknown as Blob);
-      const up = await api.postForm<{ storageKey: string }>("/m/uploads/ticket", fd);
-      payload = { ...payload, fotoKey: up.storageKey };
-      // Marca foto como já subida pra não tentar de novo se viagem falhar depois
-      await upsertPendingViagem({
-        ...item,
-        payload,
-        fotoUri: undefined,
-        fotoMime: undefined,
-        status: "syncing",
-      });
+    let payload = { ...atual.payload };
+    if (atual.fotoUri && !payload.fotoKey) {
+      if (await fotoAindaExiste(atual.fotoUri)) {
+        const fd = new FormData();
+        const filename = `ticket-${atual.clientId}.${
+          atual.fotoMime?.includes("png") ? "png" : "jpg"
+        }`;
+        fd.append("foto", {
+          uri: atual.fotoUri,
+          type: atual.fotoMime ?? "image/jpeg",
+          name: filename,
+        } as unknown as Blob);
+        const up = await api.postForm<{ storageKey: string }>("/m/uploads/ticket", fd);
+        payload = { ...payload, fotoKey: up.storageKey };
+      } else {
+        // Arquivo purgado pelo SO. Melhor a viagem subir sem a foto do que ficar
+        // presa pra sempre — a foto pode ser anexada depois pela tela da viagem.
+        reportarFotoPerdida("viagem", atual.clientId, atual.fotoUri);
+      }
+      // Persiste o resultado do passo da foto pra não repetir o upload se o
+      // POST abaixo falhar (antes, o catch usava o `item` original e desfazia).
+      atual = { ...atual, payload, fotoUri: undefined, fotoMime: undefined };
+      await upsertPendingViagem(atual);
     }
     await api.post("/m/viagens", payload, { outbox: true });
-    await deletePendingViagem(item.clientId);
+    await deletePendingViagem(atual.clientId);
   } catch (err) {
-    await upsertPendingViagem(proximoEstadoFalha(item, err, isErroPermanente(err)));
+    await upsertPendingViagem(proximoEstadoFalha(atual, err, isErroPermanente(err), "viagem"));
   }
   notify();
 }
@@ -1154,7 +1343,7 @@ async function drainPedagios(): Promise<void> {
   for (const item of list) {
     if (item.status === "syncing") continue;
     if (item.attempts >= MAX_ATTEMPTS) continue;
-    if (!(await podeEnviar())) return;
+    if (!(await podeTentar("pedagios"))) return;
     await processPedagio(item);
   }
 }
@@ -1166,7 +1355,7 @@ async function processPedagio(item: PendingPedagio): Promise<void> {
     await api.post("/m/pedagios", item.payload, { outbox: true });
     await deletePendingPedagio(item.clientId);
   } catch (err) {
-    await upsertPendingPedagio(proximoEstadoFalha(item, err, isErroPermanente(err)));
+    await upsertPendingPedagio(proximoEstadoFalha(item, err, isErroPermanente(err), "pedagio"));
   }
   notify();
 }
@@ -1176,48 +1365,53 @@ async function drainAbastecimentos(): Promise<void> {
   for (const item of list) {
     if (item.status === "syncing") continue;
     if (item.attempts >= MAX_ATTEMPTS) continue;
-    if (!(await podeEnviar())) return;
+    if (!(await podeTentar("abastecimentos"))) return;
     await processAbastecimento(item);
   }
 }
 
 async function processAbastecimento(item: PendingAbastecimento): Promise<void> {
-  await upsertPendingAbastecimento({
-    ...item,
-    status: "syncing",
-    lastTriedAt: Date.now(),
-  });
+  // `atual` acompanha o que já foi persistido: se a foto subir e o POST falhar,
+  // o catch precisa salvar o item COM a fotoKey. Usar o `item` do parâmetro
+  // desfazia o upsert do meio e re-uploadava a foto em toda tentativa.
+  let atual: PendingAbastecimento = { ...item, status: "syncing", lastTriedAt: Date.now() };
+  await upsertPendingAbastecimento(atual);
   notify();
   try {
-    let payload = { ...item.payload };
-    if (item.fotoUri && !payload.fotoKey) {
-      const fd = new FormData();
-      const filename = `abast-${item.clientId}.${
-        item.fotoMime?.includes("png") ? "png" : "jpg"
-      }`;
-      fd.append("foto", {
-        uri: item.fotoUri,
-        type: item.fotoMime ?? "image/jpeg",
-        name: filename,
-      } as unknown as Blob);
-      const up = await api.postForm<{ storageKey: string }>(
-        "/m/uploads/abastecimento",
-        fd,
-      );
-      payload = { ...payload, fotoKey: up.storageKey };
-      // Marca foto como já subida pra não tentar de novo se abast falhar depois
-      await upsertPendingAbastecimento({
-        ...item,
-        payload,
-        fotoUri: undefined,
-        fotoMime: undefined,
-        status: "syncing",
-      });
+    let payload = { ...atual.payload };
+    if (atual.fotoUri && !payload.fotoKey) {
+      if (await fotoAindaExiste(atual.fotoUri)) {
+        const fd = new FormData();
+        const filename = `abast-${atual.clientId}.${
+          atual.fotoMime?.includes("png") ? "png" : "jpg"
+        }`;
+        fd.append("foto", {
+          uri: atual.fotoUri,
+          type: atual.fotoMime ?? "image/jpeg",
+          name: filename,
+        } as unknown as Blob);
+        const up = await api.postForm<{ storageKey: string }>(
+          "/m/uploads/abastecimento",
+          fd,
+        );
+        payload = { ...payload, fotoKey: up.storageKey };
+      } else {
+        // Arquivo sumiu do aparelho (cache purgado pelo SO). A foto é opcional
+        // no abastecimento — o lançamento vale mais que ela. Segue sem foto em
+        // vez de ficar preso pra sempre "aguardando sinal".
+        reportarFotoPerdida("abastecimento", atual.clientId, atual.fotoUri);
+      }
+      // Persiste o resultado do passo da foto (subida ou perdida) pra não
+      // repetir o upload se o POST abaixo falhar.
+      atual = { ...atual, payload, fotoUri: undefined, fotoMime: undefined };
+      await upsertPendingAbastecimento(atual);
     }
     await api.post("/m/abastecimentos", payload, { outbox: true });
-    await deletePendingAbastecimento(item.clientId);
+    await deletePendingAbastecimento(atual.clientId);
   } catch (err) {
-    await upsertPendingAbastecimento(proximoEstadoFalha(item, err, isErroPermanente(err)));
+    await upsertPendingAbastecimento(
+      proximoEstadoFalha(atual, err, isErroPermanente(err), "abastecimento"),
+    );
   }
   notify();
 }
@@ -1231,7 +1425,15 @@ type ComErro = {
   errorMsg?: string;
   errorStatus?: number;
   errorIssues?: ZodIssueSaved[];
+  errorPermanenteLocal?: boolean;
 };
+
+/**
+ * A foto local sumiu antes de conseguir subir (cache purgado pelo SO). Não
+ * adianta retentar — só o motorista pode resolver, tirando outra ou
+ * descartando. Classe própria pra não se confundir com falha de rede.
+ */
+class FotoPerdidaError extends Error {}
 
 /**
  * Erro transitório de envio: NÃO deve matar o lançamento em FALHOU nem consumir
@@ -1256,11 +1458,15 @@ function isErroTransitorio(err: unknown): boolean {
  * Estado do item depois de uma falha de envio. Transitório → volta pra "pending"
  * (aguardando sinal), sem tocar em attempts, pra retentar quando der. Permanente
  * (4xx) → "error" no teto de tentativas. Desconhecido → "error" incrementando.
+ *
+ * `tipo` só serve pra telemetria: quando o item MORRE (chega ao teto), a falha é
+ * reportada pro backend, senão ela existe só dentro do celular do motorista.
  */
-function proximoEstadoFalha<T extends ComErro>(
+function proximoEstadoFalha<T extends ComErro & { clientId?: string }>(
   item: T,
   err: unknown,
   permanente: boolean,
+  tipo?: string,
 ): T {
   if (isErroTransitorio(err)) {
     // Preserva a causa (informativo, NÃO vira FALHOU vermelho): o item fica
@@ -1274,16 +1480,26 @@ function proximoEstadoFalha<T extends ComErro>(
       errorMsg: msg,
       errorStatus: undefined,
       errorIssues: undefined,
+      errorPermanenteLocal: undefined,
     };
   }
   const { msg, status, issues } = extractErrorDetails(err);
+  // Foto sumida é definitiva mesmo sem status HTTP: não há o que retentar.
+  const fotoPerdida = err instanceof FotoPerdidaError;
+  const attempts = permanente || fotoPerdida ? MAX_ATTEMPTS : item.attempts + 1;
+  // Só no momento em que o item para de retentar sozinho — uma vez por item,
+  // não a cada passada.
+  if (tipo && attempts >= MAX_ATTEMPTS) {
+    reportarFalhaOutbox(tipo, item.clientId, msg, status, issues);
+  }
   return {
     ...item,
     status: "error",
     errorMsg: msg,
     errorStatus: status,
     errorIssues: issues,
-    attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
+    errorPermanenteLocal: fotoPerdida || undefined,
+    attempts,
   };
 }
 
@@ -1295,12 +1511,15 @@ function resetItem<T extends ComErro>(item: T): T {
     errorMsg: undefined,
     errorStatus: undefined,
     errorIssues: undefined,
+    errorPermanenteLocal: undefined,
   };
 }
 
 /** Uma falha salva como "error" que na verdade era transitória (rede/keychain/
  * 5xx) — não um 4xx de dado inválido. Esses não deviam ter morrido em FALHOU. */
 function falhaSalvaEhTransitoria(item: ComErro): boolean {
+  // O app já concluiu que é definitiva (ex: foto sumiu) — não ressuscita.
+  if (item.errorPermanenteLocal) return false;
   const s = item.errorStatus;
   if (s === undefined) return true; // sem status HTTP: rede/keychain/desconhecido
   if (s === 408 || s === 429) return true;
