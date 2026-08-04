@@ -104,7 +104,7 @@ function AlertasBadges({ v }: { v: Viagem }) {
 
 export default function ViagensPage() {
   const tableState = useDataTableState({
-    defaultSort: { field: "data", order: "desc" },
+    defaultSort: { field: "criadaEm", order: "desc" },
     defaultFilters: { de: firstDayOfMonth() },
   });
   const list = usePaginatedList<Viagem>("/admin/viagens", tableState);
@@ -153,17 +153,22 @@ export default function ViagensPage() {
         },
       },
       {
-        // Data DA VIAGEM: é a que fecha com a empresa e a que ordena a lista.
-        // Não confundir com "Criada em" (quando o lançamento entrou no sistema).
+        // Data DA VIAGEM: é a que fecha com a empresa.
+        // Não confundir com "Criada em" (quando o lançamento entrou no sistema,
+        // ordenação padrão da lista).
         id: "data",
         accessorKey: "data",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Data" />,
         cell: ({ row }) => <span className="text-sm tabular-nums">{fmtBR(row.original.data)}</span>,
       },
       {
+        // accessorKey só pra habilitar sort no react-table (getCanSort exige
+        // accessorFn) — a célula ignora e usa criadoEm() pra exibir.
         id: "criadaEm",
-        enableSorting: false,
-        header: () => <span className="text-xs">Criada em</span>,
+        accessorKey: "sincronizadoEm",
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Criada em" className="text-xs" />
+        ),
         cell: ({ row }) => (
           <span className="text-sm tabular-nums text-muted-foreground">
             {criadoEm(row.original)}
@@ -372,6 +377,12 @@ export default function ViagensPage() {
                   />
                 )}
                 <ToolbarFilterDateRange state={tableState} label="Período" />
+                <ToolbarFilterDateRange
+                  state={tableState}
+                  label="Criada em"
+                  fromKey="criadaDe"
+                  toKey="criadaAte"
+                />
               </>
             }
           />
