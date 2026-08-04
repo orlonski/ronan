@@ -97,6 +97,10 @@ const ListViagensQuery = paginationQuerySchema.extend({
   kmForaDoPadrao: z.coerce.boolean().optional(),
   de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  // Range de datas pra "Criada em" (ver ViagensAdminService.list) — chave
+  // separada de de/ate pra não colidir com o filtro de Período por Data.
+  criadaDe: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  criadaAte: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 type ListViagensQuery = z.infer<typeof ListViagensQuery>;
 
