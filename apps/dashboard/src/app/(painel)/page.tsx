@@ -236,7 +236,7 @@ function BlocoConferencia({ d }: { d: Snapshot }) {
             subtitle="aguardando conferência"
             info="Viagens que ainda ninguém conferiu. Estão na fila esperando alguém olhar e marcar como OK ou divergente. Clique pra ver a lista."
             tone={pendentes > 0 ? "warning" : "success"}
-            href="/viagens"
+            href="/viagens?status=ENVIADA"
           />
           <StatCard
             icon={Gauge}
@@ -331,7 +331,7 @@ function BlocoPendencias({ d }: { d: Snapshot }) {
           value={d.pendencias.fechamentosRevisao}
           info="Fechamentos esperando alguém revisar antes de mandar pro cliente. Clique pra abrir."
           tone={tone(d.pendencias.fechamentosRevisao)}
-          href="/fechamentos"
+          href="/fechamentos?status=AGUARDANDO_REVISAO"
         />
         <StatCard
           icon={Send}
@@ -339,7 +339,7 @@ function BlocoPendencias({ d }: { d: Snapshot }) {
           value={d.pendencias.enviosAbertos}
           info="Arquivos de fechamento já gerados e prontos pra enviar ao cliente."
           tone={tone(d.pendencias.enviosAbertos)}
-          href="/envios"
+          href="/envios?status=GERADO"
         />
         <StatCard
           icon={AlertTriangle}
@@ -347,7 +347,7 @@ function BlocoPendencias({ d }: { d: Snapshot }) {
           value={d.pendencias.viagensDivergentes}
           info="Viagens que foram conferidas e tinham algum problema (foto ruim, valor faltando, etc). O motorista precisa corrigir."
           tone={d.pendencias.viagensDivergentes > 0 ? "danger" : "success"}
-          href="/viagens"
+          href="/viagens?status=DIVERGENTE"
         />
         <StatCard
           icon={Weight}
