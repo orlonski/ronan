@@ -5,11 +5,18 @@ import Link from "next/link";
 import {
   AlertTriangle,
   ArrowDown,
-  ArrowRight,
   ArrowUp,
+  Building2,
   Camera,
   ChevronRight,
+  Clock,
   ExternalLink,
+  Package,
+  Route,
+  Ticket,
+  Truck,
+  User,
+  Weight,
 } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
@@ -24,12 +31,11 @@ import {
 import { Combobox } from "@/components/ui/combobox";
 import { ClienteCombobox, MotoristaCombobox } from "@/components/fk-comboboxes";
 import { ViewModeToggle } from "@/components/view-mode-toggle";
-import { ListMetric } from "@/components/list-metric";
 import { firstDayOfMonth, useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePermissoes } from "@/lib/permissoes";
 import { usePaginatedList } from "@/lib/client-api";
-import { fmtBR, fmtDataHoraBR, fmtNum } from "@/lib/fechamento-helpers";
+import { fmtBR, fmtDataHoraBR } from "@/lib/fechamento-helpers";
 import { ValorComMinimo } from "@/components/valor-com-minimo";
 import { STATUS_VIAGEM_COLOR, STATUS_VIAGEM_LABEL } from "@/lib/status-viagem";
 
@@ -406,110 +412,131 @@ export default function ViagensPage() {
   );
 }
 
+/** Um dado do card: ícone + conteúdo, alinhados. Mantém o espaçamento igual
+ *  entre todas as linhas de informação. */
+function InfoCard({
+  icon: Icon,
+  children,
+  className,
+}: {
+  icon: typeof Truck;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <span className={`flex min-w-0 items-center gap-1.5 ${className ?? ""}`}>
+      <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      <span className="truncate">{children}</span>
+    </span>
+  );
+}
+
 /**
- * Card horizontal moderno pra cada viagem. Layout adapta:
- * - Mobile/notebook estreito: tudo empilhado
- * - Notebook/desktop: grid horizontal com colunas (status, info, trajeto, métricas)
+ * Card de viagem (celular e modo grade). Leitura de cima pra baixo, uma
+ * informação por linha, cada uma com seu ícone:
+ *   status/alertas · quando foi criada
+ *   carga  ↑
+ *   descarga ↓
+ *   motorista
+ *   placa · material · cliente
+ *   toneladas · km · ticket
  *
- * Estética: borda sutil, hover com sombra leve, hierarquia clara (status colorido
- * no canto, motorista e ticket em destaque, cliente em cinza, métricas alinhadas).
+ * O "(informado X)" do mínimo fica só no detalhe da viagem (`semAnotacao`) —
+ * no card ele quebrava a linha das métricas.
  */
 function ViagemCard({ v }: { v: Viagem }) {
   return (
     <Link href={`/viagens/${v.id}`} className="block group">
       <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">
-        <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-6">
-          {/* Coluna 1: status + alertas (compacta, sempre alinhada à esquerda) */}
-          <div className="flex flex-row items-center gap-2 sm:flex-col sm:items-start">
-            <Badge className={STATUS_VIAGEM_COLOR[v.status] ?? ""}>
-              {STATUS_VIAGEM_LABEL[v.status] ?? v.status}
-            </Badge>
-            {v.iniciadaGuiada && (
-              <Badge
-                className="border-indigo-200 bg-indigo-100 text-indigo-800"
-                title="Lançada pelo fluxo guiado 'Iniciar viagem'"
-              >
-                Guiada
+        <div className="flex flex-col gap-3 p-4">
+          {/* Cabeçalho: status/alertas de um lado, quando a viagem foi criada do
+              outro (sem rótulo — o relógio já diz o que é). */}
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+              <Badge className={STATUS_VIAGEM_COLOR[v.status] ?? ""}>
+                {STATUS_VIAGEM_LABEL[v.status] ?? v.status}
               </Badge>
-            )}
-            <AlertasBadges v={v} />
-          </div>
-
-          {/* Coluna 2 (principal): trajeto + cliente + motorista */}
-          <div className="min-w-0 space-y-2">
-            {/* Trajeto inline com seta */}
-            <div className="flex items-center gap-2 text-sm">
-              <ArrowUp className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
-              <span className="truncate font-medium">{v.localCarga.nome}</span>
-              <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <ArrowDown className="h-3.5 w-3.5 shrink-0 text-rose-600" />
-              <span className="truncate font-medium">{v.localDescarga.nome}</span>
-            </div>
-            {/* Detalhes secundários separados por bullet */}
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-              {/* Data da viagem primeiro (é a que o admin procura); a de criação
-                  vem ao lado, rotulada, pra ninguém confundir as duas. */}
-              <span className="tabular-nums">{fmtBR(v.data)}</span>
-              <span>·</span>
-              <span className="tabular-nums">criada em {criadoEm(v)}</span>
-              <span>·</span>
-              <span>{v.motorista.nome}</span>
-              <span>·</span>
-              <span className="font-mono">{v.veiculo.placa}</span>
-              <span>·</span>
-              <span>{v.material.nome}</span>
-              {v.cliente && (
-                <>
-                  <span>·</span>
-                  <span className="text-foreground/70">{v.cliente.nome}</span>
-                </>
+              {v.iniciadaGuiada && (
+                <Badge
+                  className="border-indigo-200 bg-indigo-100 text-indigo-800"
+                  title="Lançada pelo fluxo guiado 'Iniciar viagem'"
+                >
+                  Guiada
+                </Badge>
               )}
+              <AlertasBadges v={v} />
+            </div>
+            <span className="flex shrink-0 items-center gap-2 text-xs tabular-nums text-muted-foreground">
+              {v.fotos.length > 0 && (
+                <span
+                  className="flex items-center gap-0.5"
+                  title={`${v.fotos.length} foto${v.fotos.length === 1 ? "" : "s"}`}
+                >
+                  <Camera className="h-3.5 w-3.5" /> {v.fotos.length}
+                </span>
+              )}
+              <span className="flex items-center gap-1" title="Quando a viagem foi criada">
+                <Clock className="h-3.5 w-3.5" />
+                {criadoEm(v)}
+              </span>
+            </span>
+          </div>
+
+          {/* Trajeto: carga em cima, descarga embaixo (uma por linha) */}
+          <div className="space-y-1 text-sm font-medium">
+            <span className="flex min-w-0 items-center gap-1.5">
+              <ArrowUp className="h-4 w-4 shrink-0 text-emerald-600" />
+              <span className="truncate">{v.localCarga.nome}</span>
+            </span>
+            <span className="flex min-w-0 items-center gap-1.5">
+              <ArrowDown className="h-4 w-4 shrink-0 text-rose-600" />
+              <span className="truncate">{v.localDescarga.nome}</span>
+            </span>
+          </div>
+
+          {/* Motorista sozinho na linha; placa, material e cliente na de baixo */}
+          <div className="space-y-1">
+            <InfoCard icon={User} className="text-sm">
+              {v.motorista.nome}
+            </InfoCard>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <InfoCard icon={Truck}>
+                <span className="font-mono">{v.veiculo.placa}</span>
+              </InfoCard>
+              <InfoCard icon={Package}>{v.material.nome}</InfoCard>
+              {v.cliente && <InfoCard icon={Building2}>{v.cliente.nome}</InfoCard>}
             </div>
           </div>
 
-          {/* Coluna 3: métricas alinhadas em larguras fixas + slot reservado
-              pra ícone foto (invisível quando 0). Garante alinhamento vertical
-              perfeito entre cards independente de haver foto ou não. */}
-          <div className="flex items-center gap-3 sm:gap-4">
-            <div className="grid flex-1 grid-cols-3 gap-2 sm:flex sm:flex-none sm:gap-4">
-              <ListMetric
-                label="Toneladas"
-                width={116}
-                fluid
-                value={
-                  <ValorComMinimo
-                    className="text-sm font-semibold tabular-nums"
-                    efetivo={v.toneladasEfetiva}
-                    real={v.toneladasInformada}
-                    ajustada={v.toneladasAjustada}
-                    unidade="t"
-                    casas={3}
-                    annotacaoBlock
-                  />
-                }
-              />
-              <ListMetric
-                label="Km"
-                width={108}
-                fluid
-                value={
-                  <ValorComMinimo
-                    className="text-sm font-semibold tabular-nums"
-                    efetivo={v.kmEfetivo}
-                    real={v.kmInformado}
-                    ajustada={v.kmAjustada}
-                    unidade="km"
-                    casas={2}
-                    annotacaoBlock
-                  />
-                }
-              />
-              <ListMetric
-                label="Ticket"
-                width={90}
-                fluid
-                value={
-                  <span className="font-mono text-sm font-semibold">
+          {/* Métricas numa linha só, separadas por uma régua. Foto e "criada em"
+              ficam no cabeçalho pra sobrar largura pras três aqui no celular. */}
+          <div className="flex items-center gap-2 border-t border-border/60 pt-3">
+            {/* nowrap: as três métricas ficam sempre na mesma linha; quem
+                encolhe é o ticket (o mais longo e o menos crítico de ler) */}
+            <div className="flex min-w-0 flex-1 items-center justify-between gap-x-3 overflow-hidden text-sm font-semibold tabular-nums sm:justify-start sm:gap-x-8">
+              <InfoCard icon={Weight} className="shrink-0">
+                <ValorComMinimo
+                  efetivo={v.toneladasEfetiva}
+                  real={v.toneladasInformada}
+                  ajustada={v.toneladasAjustada}
+                  unidade="t"
+                  casas={3}
+                  semAnotacao
+                />
+              </InfoCard>
+              <InfoCard icon={Route} className="shrink-0">
+                <ValorComMinimo
+                  efetivo={v.kmEfetivo}
+                  real={v.kmInformado}
+                  ajustada={v.kmAjustada}
+                  unidade="km"
+                  casas={2}
+                  semAnotacao
+                />
+              </InfoCard>
+              <InfoCard icon={Ticket}>
+                {v.ticket ? (
+                  <span className="font-mono">
                     {v.ticket}
                     {v.ocrCampos && v.ocrCampos.length > 0 && (
                       <span
@@ -520,20 +547,14 @@ function ViagemCard({ v }: { v: Viagem }) {
                       </span>
                     )}
                   </span>
-                }
-              />
+                ) : (
+                  <span className="text-xs font-normal italic text-muted-foreground">
+                    {v.material.exigeTicket ? "sem ticket" : "não exige"}
+                  </span>
+                )}
+              </InfoCard>
             </div>
-            {/* Slot fixo: icone foto (com contador) + chevron. Some no mobile
-                (o card inteiro ja e' um link). Width fixa alinha os cards no desktop. */}
-            <div className="hidden w-12 shrink-0 items-center justify-end gap-1.5 text-muted-foreground sm:flex">
-              <span
-                className={`flex items-center gap-0.5 text-xs ${v.fotos.length > 0 ? "" : "invisible"}`}
-                title={`${v.fotos.length} foto${v.fotos.length === 1 ? "" : "s"}`}
-              >
-                <Camera className="h-3.5 w-3.5" /> {v.fotos.length || ""}
-              </span>
-              <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-            </div>
+            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
           </div>
         </div>
       </Card>
