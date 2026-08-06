@@ -2,7 +2,20 @@
 
 import { useMemo, type ReactNode } from "react";
 import Link from "next/link";
-import { Camera, ChevronRight, ExternalLink, Fuel } from "lucide-react";
+import {
+  Banknote,
+  Building2,
+  Camera,
+  ChevronRight,
+  Clock,
+  Droplet,
+  ExternalLink,
+  Fuel,
+  Gauge,
+  ListChecks,
+  Truck,
+  User,
+} from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -15,7 +28,7 @@ import {
 import { Combobox } from "@/components/ui/combobox";
 import { MotoristaCombobox } from "@/components/fk-comboboxes";
 import { ViewModeToggle } from "@/components/view-mode-toggle";
-import { ListMetric } from "@/components/list-metric";
+import { InfoIcone } from "@/components/info-icone";
 import { firstDayOfMonth, useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { useAuthToken, fetchApi, useResourceOptions } from "@/lib/client-api";
@@ -215,10 +228,25 @@ export default function AbastecimentosPage() {
       </header>
 
       {list.data && list.data.totais.count > 0 && (
-        <Card className="grid grid-cols-3 gap-4 p-4">
-          <Resumo label="Abastecimentos" value={list.data.totais.count.toLocaleString("pt-BR")} />
-          <Resumo label="Litros" value={`${fmtNum(list.data.totais.litros, 2)} L`} />
-          <Resumo label="Valor total" value={`R$ ${fmtNum(list.data.totais.valor, 2)}`} />
+        // No celular vira lista (rótulo à esquerda, número à direita) — em 3
+        // colunas o "R$ 123.456,78" quebrava no meio. A partir de sm volta pras
+        // três colunas lado a lado.
+        <Card className="divide-y sm:grid sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          <Resumo
+            icon={ListChecks}
+            label="Abastecimentos"
+            value={list.data.totais.count.toLocaleString("pt-BR")}
+          />
+          <Resumo
+            icon={Droplet}
+            label="Litros"
+            value={`${fmtNum(list.data.totais.litros, 2)} L`}
+          />
+          <Resumo
+            icon={Banknote}
+            label="Valor total"
+            value={`R$ ${fmtNum(list.data.totais.valor, 2)}`}
+          />
         </Card>
       )}
 
@@ -298,77 +326,84 @@ function buildUrl(path: string, params: Partial<DataTableParams>): string {
   return qs ? `${path}?${qs}` : path;
 }
 
+/**
+ * Card de abastecimento (celular e modo grade). Mesma receita do card de
+ * viagens: uma informação por linha, cada uma com seu ícone, e as três
+ * métricas juntas embaixo depois de uma régua.
+ */
 function AbastecimentoCard({ a }: { a: Abastecimento }) {
   return (
     <Link href={`/abastecimentos/${a.id}`} className="group block">
       <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">
-        <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-6">
-          <div className="flex flex-row items-center gap-2 sm:flex-col sm:items-start">
-            <Badge className={TIPO_COLOR[a.tipo] ?? ""}>
-              {TIPO_LABEL[a.tipo] ?? a.tipo}
-            </Badge>
-            {a.emComboio && (
-              <Badge className="border-amber-200 bg-amber-100 text-amber-900">
-                Comboio
+        <div className="flex flex-col gap-3 p-4">
+          {/* Cabeçalho: tipo/comboio à esquerda, fotos e data à direita */}
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+              <Badge className={TIPO_COLOR[a.tipo] ?? ""}>
+                {TIPO_LABEL[a.tipo] ?? a.tipo}
               </Badge>
-            )}
-          </div>
-
-          <div className="min-w-0 space-y-2">
-            <div className="flex items-center gap-2 text-sm">
-              <Fuel className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <span className="truncate font-medium">
-                {a.postoNome ?? "Posto não informado"}
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-              <span>{fmtData(a.data)}</span>
-              <span>·</span>
-              <span>{a.motorista.nome}</span>
-              <span>·</span>
-              <span className="font-mono">{a.veiculo.placa}</span>
-              {a.empresa && (
-                <>
-                  <span>·</span>
-                  <span className="text-foreground/70">{a.empresa.nome}</span>
-                </>
+              {a.emComboio && (
+                <Badge className="border-amber-200 bg-amber-100 text-amber-900">
+                  Comboio
+                </Badge>
               )}
             </div>
+            <span className="flex shrink-0 items-center gap-2 text-xs tabular-nums text-muted-foreground">
+              {a._count.fotos > 0 && (
+                <span
+                  className="flex items-center gap-0.5"
+                  title={`${a._count.fotos} foto${a._count.fotos === 1 ? "" : "s"}`}
+                >
+                  <Camera className="h-3.5 w-3.5" /> {a._count.fotos}
+                </span>
+              )}
+              <span className="flex items-center gap-1" title="Data do abastecimento">
+                <Clock className="h-3.5 w-3.5" />
+                {fmtData(a.data)}
+              </span>
+            </span>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="flex gap-4">
-              <ListMetric label="Litros" width={90} value={`${fmtNum(a.litros, 2)} L`} />
-              <ListMetric
-                label="Total"
-                width={100}
-                value={
-                  a.valorTotal != null ? (
-                    `R$ ${fmtNum(a.valorTotal, 2)}`
-                  ) : (
-                    <span className="text-xs italic text-amber-700">—</span>
-                  )
-                }
-              />
-              <ListMetric
-                label="Odômetro"
-                width={90}
-                value={
-                  <span className="font-mono">
-                    {a.odometro.toLocaleString("pt-BR")}
+          {/* Posto em destaque, depois motorista, depois placa e empresa */}
+          <div className="space-y-1">
+            <InfoIcone icon={Fuel} className="text-sm font-medium">
+              {a.postoNome ?? "Posto não informado"}
+            </InfoIcone>
+            <InfoIcone icon={User} className="text-sm">
+              {a.motorista.nome}
+            </InfoIcone>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <InfoIcone icon={Truck}>
+                <span className="font-mono">{a.veiculo.placa}</span>
+              </InfoIcone>
+              {a.empresa && <InfoIcone icon={Building2}>{a.empresa.nome}</InfoIcone>}
+            </div>
+          </div>
+
+          {/* Litros, valor e odômetro sempre na mesma linha */}
+          <div className="flex items-center gap-2 border-t border-border/60 pt-3">
+            {/* text menor no celular: odômetro de 7 dígitos + valor alto não
+                cabiam junto com os litros em 390px */}
+            <div className="flex min-w-0 flex-1 items-center justify-between gap-x-2 overflow-hidden text-[13px] font-semibold tabular-nums sm:gap-x-8 sm:justify-start sm:text-sm">
+              <InfoIcone icon={Droplet} className="shrink-0">
+                {fmtNum(a.litros, 2)} L
+              </InfoIcone>
+              <InfoIcone icon={Banknote} className="shrink-0">
+                {a.valorTotal != null ? (
+                  `R$ ${fmtNum(a.valorTotal, 2)}`
+                ) : (
+                  <span className="text-xs font-normal italic text-amber-700">
+                    sem valor
                   </span>
-                }
-              />
+                )}
+              </InfoIcone>
+              <InfoIcone icon={Gauge} className="shrink-0">
+                <span className="font-mono" title="Odômetro">
+                  {a.odometro.toLocaleString("pt-BR")}
+                </span>
+              </InfoIcone>
             </div>
-            <div className="flex w-12 shrink-0 items-center justify-end gap-1.5 text-muted-foreground">
-              <span
-                className={`flex items-center gap-0.5 text-xs ${a._count.fotos > 0 ? "" : "invisible"}`}
-                title={`${a._count.fotos} foto${a._count.fotos === 1 ? "" : "s"}`}
-              >
-                <Camera className="h-3.5 w-3.5" /> {a._count.fotos || ""}
-              </span>
-              <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-            </div>
+            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
           </div>
         </div>
       </Card>
@@ -376,11 +411,24 @@ function AbastecimentoCard({ a }: { a: Abastecimento }) {
   );
 }
 
-function Resumo({ label, value }: { label: string; value: string }) {
+function Resumo({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+}) {
   return (
-    <div>
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="text-xl font-bold">{value}</p>
+    <div className="flex items-center justify-between gap-3 p-4 sm:block">
+      <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
+        <Icon className="h-3.5 w-3.5" />
+        {label}
+      </p>
+      <p className="whitespace-nowrap text-lg font-bold tabular-nums sm:mt-1 sm:text-xl">
+        {value}
+      </p>
     </div>
   );
 }

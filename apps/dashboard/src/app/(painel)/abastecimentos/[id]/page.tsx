@@ -7,13 +7,18 @@ import { use, useState } from "react";
 import { ExcluirButton } from "@/components/excluir-button";
 import {
   ArrowLeft,
+  Banknote,
   Camera,
+  CheckCircle2,
+  CircleDashed,
+  Droplet,
   Edit3,
   Fuel,
   Gauge,
   ImageOff,
   MapPin,
   RotateCw,
+  Tag,
   User as UserIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -104,43 +109,55 @@ export default function AbastecimentoDetalhePage({
   const x = a.data;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Link
-          href="/abastecimentos"
-          className="rounded p-1 hover:bg-muted"
-          aria-label="Voltar"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <div className="flex-1">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Abastecimento
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {fmtDataHora(x.data)} · {x.veiculo.placa} · {x.motorista.nome}
-          </p>
+    <div className="space-y-4 sm:space-y-6">
+      {/* No celular o cabeçalho empilha: título+dados em cima, botões numa
+          linha própria — em linha única o "Excluir" saía da tela. */}
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start">
+        <div className="flex min-w-0 flex-1 items-start gap-2 sm:gap-3">
+          <Link href="/abastecimentos" className="shrink-0" aria-label="Voltar">
+            <span className="-ml-2 inline-flex rounded p-2 hover:bg-muted sm:ml-0">
+              <ArrowLeft className="h-5 w-5" />
+            </span>
+          </Link>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
+                Abastecimento
+              </h1>
+              <Badge>{TIPO_LABEL[x.tipo] ?? x.tipo}</Badge>
+              {x.emComboio && (
+                <Badge className="border-amber-200 bg-amber-100 text-amber-900">
+                  Comboio
+                </Badge>
+              )}
+            </div>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              {fmtDataHora(x.data)} · placa{" "}
+              <span className="font-mono">{x.veiculo.placa}</span> · {x.motorista.nome}
+            </p>
+          </div>
         </div>
-        <Badge>{TIPO_LABEL[x.tipo] ?? x.tipo}</Badge>
-        <Link href={`/abastecimentos/${x.id}/editar`}>
-          <Button variant="outline" size="sm">
-            <Edit3 className="h-4 w-4" />
-            Editar
-          </Button>
-        </Link>
-        <ExcluirButton perm="abastecimentos.excluir"
-          path="/admin/abastecimentos"
-          id={x.id}
-          nomeRecurso={`o abastecimento de ${fmtNum(x.litros, 3)}L`}
-          size="sm"
-          variant="outline"
-          label="Excluir"
-          invalidateKeys={[["abastecimento-admin", x.id], "/admin/abastecimentos"]}
-          onSuccess={() => router.push("/abastecimentos")}
-        />
-      </div>
+        <div className="flex shrink-0 flex-wrap gap-2 pl-8 sm:pl-0">
+          <Link href={`/abastecimentos/${x.id}/editar`}>
+            <Button variant="outline" size="sm">
+              <Edit3 className="h-4 w-4" />
+              Editar
+            </Button>
+          </Link>
+          <ExcluirButton perm="abastecimentos.excluir"
+            path="/admin/abastecimentos"
+            id={x.id}
+            nomeRecurso={`o abastecimento de ${fmtNum(x.litros, 3)}L`}
+            size="sm"
+            variant="outline"
+            label="Excluir"
+            invalidateKeys={[["abastecimento-admin", x.id], "/admin/abastecimentos"]}
+            onSuccess={() => router.push("/abastecimentos")}
+          />
+        </div>
+      </header>
 
-      <div className="flex gap-1 border-b">
+      <div className="flex gap-1 overflow-x-auto border-b">
         {(
           [
             ["dados", "Dados"],
@@ -153,8 +170,8 @@ export default function AbastecimentoDetalhePage({
             onClick={() => setTab(key)}
             className={
               tab === key
-                ? "border-b-2 border-primary px-3 py-2 text-sm font-medium text-primary"
-                : "border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+                ? "shrink-0 whitespace-nowrap border-b-2 border-primary px-3 py-2 text-sm font-medium text-primary"
+                : "shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
             }
           >
             {label}
@@ -176,13 +193,14 @@ export default function AbastecimentoDetalhePage({
           <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
             Dados do abastecimento
           </h2>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-5">
             <Info
-              icon={Fuel}
+              icon={Droplet}
               label="Litros"
               value={`${fmtNum(x.litros, 3)} L`}
             />
             <Info
+              icon={Banknote}
               label="Valor total"
               value={
                 x.valorTotal != null
@@ -193,6 +211,7 @@ export default function AbastecimentoDetalhePage({
               }
             />
             <Info
+              icon={Tag}
               label="Preço por litro"
               value={x.precoLitro ? `R$ ${fmtNum(x.precoLitro, 3)}/L` : "—"}
             />
@@ -202,10 +221,11 @@ export default function AbastecimentoDetalhePage({
               value={`${x.odometro.toLocaleString("pt-BR")} km`}
             />
             <Info
+              icon={x.tanqueCheio ? CheckCircle2 : CircleDashed}
               label="Tanque cheio"
               value={x.tanqueCheio ? "Sim" : "Não"}
             />
-            <Info label="Tipo" value={TIPO_LABEL[x.tipo] ?? x.tipo} />
+            <Info icon={Fuel} label="Tipo" value={TIPO_LABEL[x.tipo] ?? x.tipo} />
           </div>
 
           <div className="border-t pt-4">

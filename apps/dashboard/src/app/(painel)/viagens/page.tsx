@@ -37,6 +37,7 @@ import { usePermissoes } from "@/lib/permissoes";
 import { usePaginatedList } from "@/lib/client-api";
 import { fmtBR, fmtDataHoraBR } from "@/lib/fechamento-helpers";
 import { ValorComMinimo } from "@/components/valor-com-minimo";
+import { InfoIcone } from "@/components/info-icone";
 import { STATUS_VIAGEM_COLOR, STATUS_VIAGEM_LABEL } from "@/lib/status-viagem";
 
 type Viagem = {
@@ -412,25 +413,6 @@ export default function ViagensPage() {
   );
 }
 
-/** Um dado do card: ícone + conteúdo, alinhados. Mantém o espaçamento igual
- *  entre todas as linhas de informação. */
-function InfoCard({
-  icon: Icon,
-  children,
-  className,
-}: {
-  icon: typeof Truck;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <span className={`flex min-w-0 items-center gap-1.5 ${className ?? ""}`}>
-      <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-      <span className="truncate">{children}</span>
-    </span>
-  );
-}
-
 /**
  * Card de viagem (celular e modo grade). Leitura de cima pra baixo, uma
  * informação por linha, cada uma com seu ícone:
@@ -496,15 +478,15 @@ function ViagemCard({ v }: { v: Viagem }) {
 
           {/* Motorista sozinho na linha; placa, material e cliente na de baixo */}
           <div className="space-y-1">
-            <InfoCard icon={User} className="text-sm">
+            <InfoIcone icon={User} className="text-sm">
               {v.motorista.nome}
-            </InfoCard>
+            </InfoIcone>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-              <InfoCard icon={Truck}>
+              <InfoIcone icon={Truck}>
                 <span className="font-mono">{v.veiculo.placa}</span>
-              </InfoCard>
-              <InfoCard icon={Package}>{v.material.nome}</InfoCard>
-              {v.cliente && <InfoCard icon={Building2}>{v.cliente.nome}</InfoCard>}
+              </InfoIcone>
+              <InfoIcone icon={Package}>{v.material.nome}</InfoIcone>
+              {v.cliente && <InfoIcone icon={Building2}>{v.cliente.nome}</InfoIcone>}
             </div>
           </div>
 
@@ -514,7 +496,7 @@ function ViagemCard({ v }: { v: Viagem }) {
             {/* nowrap: as três métricas ficam sempre na mesma linha; quem
                 encolhe é o ticket (o mais longo e o menos crítico de ler) */}
             <div className="flex min-w-0 flex-1 items-center justify-between gap-x-3 overflow-hidden text-sm font-semibold tabular-nums sm:justify-start sm:gap-x-8">
-              <InfoCard icon={Weight} className="shrink-0">
+              <InfoIcone icon={Weight} className="shrink-0">
                 <ValorComMinimo
                   efetivo={v.toneladasEfetiva}
                   real={v.toneladasInformada}
@@ -523,8 +505,8 @@ function ViagemCard({ v }: { v: Viagem }) {
                   casas={3}
                   semAnotacao
                 />
-              </InfoCard>
-              <InfoCard icon={Route} className="shrink-0">
+              </InfoIcone>
+              <InfoIcone icon={Route} className="shrink-0">
                 <ValorComMinimo
                   efetivo={v.kmEfetivo}
                   real={v.kmInformado}
@@ -533,8 +515,8 @@ function ViagemCard({ v }: { v: Viagem }) {
                   casas={2}
                   semAnotacao
                 />
-              </InfoCard>
-              <InfoCard icon={Ticket}>
+              </InfoIcone>
+              <InfoIcone icon={Ticket}>
                 {v.ticket ? (
                   <span className="font-mono">
                     {v.ticket}
@@ -552,7 +534,7 @@ function ViagemCard({ v }: { v: Viagem }) {
                     {v.material.exigeTicket ? "sem ticket" : "não exige"}
                   </span>
                 )}
-              </InfoCard>
+              </InfoIcone>
             </div>
             <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
           </div>
