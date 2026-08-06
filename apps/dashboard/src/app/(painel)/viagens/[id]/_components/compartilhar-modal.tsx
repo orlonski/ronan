@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { isTelefoneValid, maskTelefone } from "@ronan/shared-types";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
 import { fmtDataHoraBR } from "@/lib/fechamento-helpers";
@@ -143,7 +144,13 @@ export function CompartilharViagemModal({ viagemId }: { viagemId: string }) {
         </Button>
       </DialogTrigger>
 
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      {/* Sem isso o Radix foca o primeiro elemento focável ao abrir — que aqui é
+          o <select> de validade. No iOS, focar um select já abre o picker de
+          roda: o modal nascia com o seletor "aberto" na cara do usuário. */}
+      <DialogContent
+        className="max-h-[90vh] overflow-y-auto sm:max-w-lg"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Compartilhar comprovante</DialogTitle>
         </DialogHeader>
@@ -212,7 +219,7 @@ export function CompartilharViagemModal({ viagemId }: { viagemId: string }) {
                   inputMode="tel"
                   placeholder="(44) 99999-9999"
                   value={telefone}
-                  onChange={(e) => setTelefone(e.target.value)}
+                  onChange={(e) => setTelefone(maskTelefone(e.target.value))}
                 />
                 <p className="text-xs text-muted-foreground">Com DDD — o 55 entra sozinho.</p>
               </div>
@@ -232,7 +239,7 @@ export function CompartilharViagemModal({ viagemId }: { viagemId: string }) {
               <Button
                 className="w-full"
                 onClick={() => enviar.mutate(ativo.id)}
-                disabled={telefone.replace(/\D/g, "").length < 10 || enviar.isPending}
+                disabled={!isTelefoneValid(telefone) || enviar.isPending}
               >
                 {enviar.isPending ? "Enviando…" : "Enviar no WhatsApp"}
               </Button>
