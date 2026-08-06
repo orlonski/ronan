@@ -19,6 +19,7 @@ import { EventosModule } from "./eventos/eventos.module";
 import { WhatsappModule } from "./whatsapp/whatsapp.module";
 import { NotificacoesModule } from "./notificacoes/notificacoes.module";
 import { ClickupRunnerModule } from "./clickup-runner/clickup-runner.module";
+import { CompartilhamentoModule } from "./compartilhamento/compartilhamento.module";
 import { AppVersionInterceptor } from "./common/app-version.interceptor";
 
 @Module({
@@ -41,6 +42,7 @@ import { AppVersionInterceptor } from "./common/app-version.interceptor";
     WhatsappModule,
     NotificacoesModule,
     ClickupRunnerModule,
+    CompartilhamentoModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: ErrorsExceptionFilter },

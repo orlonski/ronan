@@ -102,6 +102,9 @@ enum AcaoAuditoria {
   PRE_VALIDAR_VIAGEM
   ADICIONAR_FOTO
   MESCLAR_LOCAL
+  COMPARTILHAR_VIAGEM
+  REVOGAR_COMPARTILHAMENTO
+  ENVIAR_COMPARTILHAMENTO
 }
 
 enum TipoCombustivel {
@@ -225,6 +228,8 @@ model User {
   mensagensViagem  ViagemMensagem[] @relation("MensagensViagem")
   whatsappSessao   WhatsappSessao?
   whatsappConvites WhatsappConvite[]
+  compartilhamentosCriados   ViagemCompartilhamento[] @relation("CompartilhouViagem")
+  compartilhamentosRevogados ViagemCompartilhamento[] @relation("RevogouCompartilhamento")
 
   // Backreferences pra rastreamento "Cadastrado por": cada recurso admin
   // tem `criadoPorId` opcional → User. Listas inversas necessárias pelo Prisma.
@@ -1131,6 +1136,7 @@ model Viagem {
   eventos           EventoMotorista[]
   eventosViagem     EventoViagem[]
   mensagens         ViagemMensagem[]
+  compartilhamentos ViagemCompartilhamento[]
 
   @@index([transportadoraId, data])
   @@index([motoristaId, data])
@@ -1319,6 +1325,50 @@ model TicketFoto {
 
   @@index([viagemId])
   @@map("ticket_fotos")
+}
+
+/// Link público (sem login) do comprovante de uma viagem, gerado no painel e
+/// mandado pro cliente/embarcador no WhatsApp. É uma capability URL: quem tem o
+/// token vê, então o controle é ENTROPIA + VALIDADE + REVOGAÇÃO, não sessão.
+///
+/// O que o link mostra é o whitelist de `compartilhamento/viagem-publica.ts` —
+/// NUNCA o payload do detalhe admin (que tem CPF, GPS bruto, telemetria, etc).
+model ViagemCompartilhamento {
+  id       String @id @default(uuid())
+  viagem   Viagem @relation(fields: [viagemId], references: [id], onDelete: Cascade)
+  viagemId String
+  /// 32 chars base64url (192 bits de randomBytes). Guardado em CLARO porque o
+  /// painel precisa listar/copiar/reenviar o link depois; hash mataria isso.
+  /// Em compensação: nunca vai pra log nem pro AuditLog (que é legível por
+  /// qualquer um com viagens.ver — viraria uma lista de links vivos).
+  token    String @unique
+
+  criadoPor   User?   @relation("CompartilhouViagem", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId String?
+
+  expiraEm DateTime
+  /// Soft-revoke: a linha NUNCA é apagada, senão o histórico de quem expôs o
+  /// quê some junto com a evidência.
+  revogadoEm    DateTime?
+  revogadoPor   User?     @relation("RevogouCompartilhamento", fields: [revogadoPorId], references: [id], onDelete: SetNull)
+  revogadoPorId String?
+
+  /// Telemetria mínima de acesso. De propósito SEM tabela por visualização:
+  /// cresceria sem teto e viraria rastreamento do cliente, não auditoria.
+  visualizacoes    Int       @default(0)
+  primeiroAcessoEm DateTime?
+  ultimoAcessoEm   DateTime?
+  ultimoAcessoIp   String?
+
+  /// Envio pelo WhatsApp (número normalizado com DDI). Null = link só copiado.
+  destinatarioTelefone String?
+  enviadoEm            DateTime?
+
+  criadoEm DateTime @default(now())
+
+  @@index([viagemId, criadoEm])
+  @@index([expiraEm])
+  @@map("viagem_compartilhamentos")
 }
 
 /// Story do motorista (estilo Instagram): foto do trecho que todos os

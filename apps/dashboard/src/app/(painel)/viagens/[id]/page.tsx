@@ -78,6 +78,7 @@ import {
 } from "./_components/referencia-km-card";
 import { FaturamentoCard, type RegraMinimo } from "./_components/faturamento-card";
 import { ConversaViagemCard } from "./_components/conversa-viagem-card";
+import { CompartilharViagemModal } from "./_components/compartilhar-modal";
 
 type ViagemDetalhe = {
   id: string;
@@ -597,6 +598,9 @@ export default function ViagemDetalhePage({
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2 pl-8 sm:pl-0">
+          <Permitido chave="viagens.compartilhar">
+            <CompartilharViagemModal viagemId={v.id} />
+          </Permitido>
           {(v.matchesFechamento?.length ?? 0) === 0 ? (
             <Permitido chave="viagens.editar">
               <Link href={`/viagens/${v.id}/editar`}>

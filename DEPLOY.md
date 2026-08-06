@@ -81,7 +81,14 @@ MINIO_BUCKET=ronan-tickets
 VIACEP_URL=https://viacep.com.br/ws
 ANTHROPIC_API_KEY=sk-ant-api03-...
 CORS_ORIGINS=https://painel.SEU-DOMINIO.com.br,https://app.SEU-DOMINIO.com.br
+PUBLIC_APP_URL=https://app.schaba.com.br
 ```
+
+> `PUBLIC_APP_URL` é a base pública do painel, usada pra montar o link do
+> comprovante compartilhado (`PUBLIC_APP_URL/v/<token>`) que vai pro cliente no
+> WhatsApp. Mora na API, e não como `NEXT_PUBLIC_*` no dashboard, porque lá seria
+> baked no build da imagem — aqui basta reiniciar. Sem valor, a API loga um
+> `warn` no boot e os links saem apontando pra `localhost:3001`.
 
 ### Domínio
 

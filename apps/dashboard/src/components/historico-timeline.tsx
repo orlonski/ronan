@@ -2,11 +2,14 @@
 
 import {
   CheckCircle2,
+  Ban,
   Clock,
   Edit3,
   History,
   Image as ImageIcon,
+  MessageCircle,
   RefreshCw,
+  Share2,
   ShieldCheck,
   Sparkles,
   User as UserIcon,
@@ -118,6 +121,9 @@ function labelForAcao(acao: string): string {
       MOTORISTA_AJUSTOU_KM: "Motorista ajustou o km",
       PRE_VALIDAR_VIAGEM: "Pré-validação manual",
       ADICIONAR_FOTO: "Foto anexada",
+      COMPARTILHAR_VIAGEM: "Link de comprovante gerado",
+      REVOGAR_COMPARTILHAMENTO: "Link de comprovante revogado",
+      ENVIAR_COMPARTILHAMENTO: "Comprovante enviado no WhatsApp",
     } as const
   )[acao as never] ?? acao;
 }
@@ -129,6 +135,9 @@ function iconForAcao(acao: string) {
   if (acao === "RECALCULAR_TRAJETO") return RefreshCw;
   if (acao === "PRE_VALIDAR_VIAGEM") return ShieldCheck;
   if (acao === "ADICIONAR_FOTO") return ImageIcon;
+  if (acao === "COMPARTILHAR_VIAGEM") return Share2;
+  if (acao === "REVOGAR_COMPARTILHAMENTO") return Ban;
+  if (acao === "ENVIAR_COMPARTILHAMENTO") return MessageCircle;
   return Clock;
 }
 
@@ -142,6 +151,9 @@ function colorForAcao(acao: string): string {
   if (acao === "MOTORISTA_AJUSTOU_KM") return "bg-amber-500";
   if (acao === "PRE_VALIDAR_VIAGEM") return "bg-indigo-500";
   if (acao === "ADICIONAR_FOTO") return "bg-sky-500";
+  if (acao === "COMPARTILHAR_VIAGEM") return "bg-teal-500";
+  if (acao === "REVOGAR_COMPARTILHAMENTO") return "bg-rose-500";
+  if (acao === "ENVIAR_COMPARTILHAMENTO") return "bg-lime-600";
   return "bg-gray-500";
 }
 

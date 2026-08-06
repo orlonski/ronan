@@ -31,6 +31,7 @@ const ACAO_TITULO: Record<string, string> = {
   editar: "Editar",
   excluir: "Excluir",
   validar: "Pré-validar",
+  compartilhar: "Compartilhar (link público)",
   corrigir: "Corrigir local",
   conferir: "Conferir / resolver",
   exportar: "Exportar",
@@ -53,7 +54,10 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // cliente/empresa, mínimo aplicado, km e toneladas faturados, fechamento.
   // Sem ela o backend OMITE esses campos do payload — quem não precisa (gestor
   // de frota terceira) vê só o operacional.
-  { recurso: "viagens", label: "Viagens", modulo: "Operação", acoes: ["ver", "ver-comercial", "editar", "excluir", "validar"] },
+  // "compartilhar" gera link público do comprovante pro cliente. Exige TAMBÉM
+  // "ver-comercial" no endpoint: o comprovante mostra km/toneladas faturados,
+  // então quem não enxerga isso no painel não pode gerar link que mostre.
+  { recurso: "viagens", label: "Viagens", modulo: "Operação", acoes: ["ver", "ver-comercial", "editar", "excluir", "validar", "compartilhar"] },
   { recurso: "descargas-suspeitas", label: "Descargas suspeitas", modulo: "Operação", acoes: ["ver", "corrigir"] },
   { recurso: "abastecimentos", label: "Abastecimentos", modulo: "Operação", acoes: ["ver", "editar", "excluir"] },
   { recurso: "fechamentos", label: "Fechamentos", modulo: "Operação", acoes: ["ver", "criar", "conferir", "exportar", "excluir"] },

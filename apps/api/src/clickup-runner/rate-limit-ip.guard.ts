@@ -1,12 +1,14 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  HttpException,
-  HttpStatus,
-  Injectable,
-} from "@nestjs/common";
+import { CanActivate, ExecutionContext, HttpException, HttpStatus, Injectable } from "@nestjs/common";
 import type { Request } from "express";
+import { ContadorJanela } from "../common/rate-limit/contador-janela";
+import { ipDaRequisicao } from "../common/rate-limit/ip";
 import { RunnerConfig } from "./runner.config";
+
+// Re-export: o limite deste guard vem do RunnerConfig (env), então ele continua
+// sendo uma classe com DI, ao contrário do `criarRateLimitIpGuard` genérico.
+// `ipDaRequisicao` mora em common/ desde que o link público passou a precisar
+// dele; segue exportado daqui pra não mexer em quem já importava.
+export { ipDaRequisicao };
 
 /**
  * Rate limit por IP na janela de 1 minuto. Em memória de propósito: é defesa
@@ -18,39 +20,17 @@ import { RunnerConfig } from "./runner.config";
  */
 @Injectable()
 export class RateLimitIpGuard implements CanActivate {
-  private readonly janelaMs = 60_000;
-  private readonly hits = new Map<string, number[]>();
+  private readonly contador = new ContadorJanela();
 
   constructor(private readonly config: RunnerConfig) {}
 
   canActivate(context: ExecutionContext): boolean {
     const req = context.switchToHttp().getRequest<Request>();
-    const ip = ipDaRequisicao(req);
-    const agora = Date.now();
-    const corte = agora - this.janelaMs;
+    const total = this.contador.registrar(ipDaRequisicao(req));
 
-    const recentes = (this.hits.get(ip) ?? []).filter((t) => t > corte);
-    recentes.push(agora);
-    this.hits.set(ip, recentes);
-
-    // Poda preguiçosa: sem isso o Map cresce pra sempre com IP que sumiu.
-    if (this.hits.size > 5_000) {
-      for (const [chave, marcas] of this.hits) {
-        if (marcas.every((t) => t <= corte)) this.hits.delete(chave);
-      }
-    }
-
-    if (recentes.length > this.config.rateLimitPorMinuto) {
+    if (total > this.config.rateLimitPorMinuto) {
       throw new HttpException("Muitas requisições", HttpStatus.TOO_MANY_REQUESTS);
     }
     return true;
   }
-}
-
-/** IP de origem, respeitando proxy (Easypanel/Traefik na frente). */
-export function ipDaRequisicao(req: Request): string {
-  const fwd = req.headers["x-forwarded-for"];
-  const bruto = Array.isArray(fwd) ? fwd[0] : fwd;
-  if (bruto) return bruto.split(",")[0]!.trim();
-  return req.ip ?? req.socket?.remoteAddress ?? "desconhecido";
 }
