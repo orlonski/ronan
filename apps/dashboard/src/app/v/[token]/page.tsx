@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ArrowDown, MapPin } from "lucide-react";
+import { ArrowDown, MapPin, Package, Scale, Truck, User, type LucideIcon } from "lucide-react";
 import { AcoesComprovante } from "./_components/acoes-comprovante";
 import { FotosComprovante } from "./_components/fotos-comprovante";
 import { LinkIndisponivel, type CodigoIndisponivel } from "./_components/link-indisponivel";
@@ -163,15 +163,18 @@ export default async function ComprovantePage({
         </Card>
 
         <Card titulo="Carga">
-          <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <Campo rotulo="Material" valor={d.material?.nome ?? "—"} />
+          {/* Um item por linha: no celular (de onde o cliente abre) quatro
+              colunas viravam texto espremido e cortado. */}
+          <dl className="space-y-2">
+            <Campo icone={Package} rotulo="Material" valor={d.material?.nome ?? "—"} />
             <Campo
+              icone={Scale}
               rotulo="Peso"
               valor={`${numBR(d.toneladas.efetiva)} t`}
               nota={d.toneladas.ajustadoPorMinimo ? "mínimo contratado" : undefined}
             />
-            <Campo rotulo="Placa" valor={d.veiculo.placa} />
-            <Campo rotulo="Motorista" valor={d.motorista.nome} />
+            <Campo icone={Truck} rotulo="Placa" valor={d.veiculo.placa} />
+            <Campo icone={User} rotulo="Motorista" valor={d.motorista.nome} />
           </dl>
         </Card>
 
@@ -265,12 +268,27 @@ function Ponta({ rotulo, local, cor }: { rotulo: string; local: Local | null; co
   );
 }
 
-function Campo({ rotulo, valor, nota }: { rotulo: string; valor: string; nota?: string }) {
+function Campo({
+  icone: Icone,
+  rotulo,
+  valor,
+  nota,
+}: {
+  icone: LucideIcon;
+  rotulo: string;
+  valor: string;
+  nota?: string;
+}) {
   return (
-    <div>
-      <dt className="text-xs uppercase tracking-wide text-slate-500">{rotulo}</dt>
-      <dd className="font-semibold text-slate-900">{valor}</dd>
-      {nota && <p className="text-[11px] text-slate-500">{nota}</p>}
+    <div className="flex items-center gap-3 rounded-md border bg-slate-50/60 px-3 py-2.5">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white text-slate-500 shadow-sm">
+        <Icone className="h-4 w-4" />
+      </span>
+      <div className="min-w-0">
+        <dt className="text-[11px] uppercase tracking-wide text-slate-500">{rotulo}</dt>
+        <dd className="truncate font-semibold text-slate-900">{valor}</dd>
+        {nota && <p className="text-[11px] text-slate-500">{nota}</p>}
+      </div>
     </div>
   );
 }
