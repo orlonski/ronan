@@ -35,6 +35,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CoachTarget } from "@/components/coach-target";
 import { AnuncioIniciarViagem } from "@/components/anuncio-iniciar-viagem";
+import { AnuncioChat } from "@/components/anuncio-chat";
 import { IndicadorDados } from "@/components/indicador-dados";
 import { EmptyState } from "@/components/empty-state";
 import { NotificationBell } from "@/components/notification-bell";
@@ -101,6 +102,7 @@ export default function Home() {
   // banner "Retomar" e o botão "Iniciar viagem" aparecerem/sumirem certo.
   const [temLifecycle, setTemLifecycle] = useState<boolean | null>(null);
   const podeLifecycle = me.data?.podeViagemLifecycle ?? false;
+  const podeChat = me.data?.podeChat ?? false;
   useFocusEffect(
     useCallback(() => {
       let alive = true;
@@ -257,6 +259,7 @@ export default function Home() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <AnuncioIniciarViagem podeLifecycle={podeLifecycle} />
+      <AnuncioChat podeChat={podeChat} podeLifecycle={podeLifecycle} />
       {/* Header brand: status bar + nome motorista + sino de notificações */}
       <View className="bg-brand">
         <View className="flex-row items-start justify-between gap-3 px-5 pb-6 pt-14">

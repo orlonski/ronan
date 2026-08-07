@@ -403,10 +403,11 @@ model Motorista {
   /// o que a lista trouxe) — pra diagnosticar ex. "descarga errada". Opt-in por
   /// motorista; gate é client-side (só emite os eventos nv_*). Default false.
   podeTelemetria          Boolean   @default(false)
-  /// Chat entre motoristas (aba Conversas). Default false — rollout gradual,
-  /// o admin libera caso a caso. Desligar remove a aba e bloqueia /m/chat/*;
-  /// as conversas ficam guardadas, não são apagadas.
-  podeChat                Boolean   @default(false)
+  /// Chat entre motoristas (aba Conversas). Default TRUE: validado em campo e
+  /// liberado pra todo mundo — motorista novo já nasce com a aba. Continua
+  /// desligável caso a caso pelo painel (ex: alguém que abusou); desligar
+  /// remove a aba e bloqueia /m/chat/*, mas as conversas ficam guardadas.
+  podeChat                Boolean   @default(true)
   /// Frota dona do motorista. Null = não classificado (invisível pros usuários
   /// restritos). Usado pra carimbar Viagem/Pedagio/Abastecimento na criação —
   /// mudar aqui NÃO reescreve o histórico já carimbado, de propósito.

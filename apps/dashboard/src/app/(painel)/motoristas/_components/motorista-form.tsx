@@ -120,7 +120,7 @@ export function MotoristaForm({ initial }: Props) {
     podeVerTodosLocais: initial?.podeVerTodosLocais ?? false,
     podeReferenciaKm: initial?.podeReferenciaKm ?? false,
     podeTelemetria: initial?.podeTelemetria ?? false,
-    podeChat: initial?.podeChat ?? false,
+    podeChat: initial?.podeChat ?? true,
     receberResumoDiario: initial?.receberResumoDiario ?? true,
   });
   const token = useAuthToken();
