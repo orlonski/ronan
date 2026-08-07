@@ -9,6 +9,7 @@ import { AuthModule } from "./auth/auth.module";
 import { AdminModule } from "./admin/admin.module";
 import { GeocodingModule } from "./geocoding/geocoding.module";
 import { MotoristaModule } from "./motorista/motorista.module";
+import { ChatModule } from "./chat/chat.module";
 import { UploadsModule } from "./uploads/uploads.module";
 import { AuditoriaModule } from "./auditoria/auditoria.module";
 import { IaModule } from "./ia/ia.module";
@@ -33,6 +34,7 @@ import { AppVersionInterceptor } from "./common/app-version.interceptor";
     AuthModule,
     AdminModule,
     MotoristaModule,
+    ChatModule,
     UploadsModule,
     FechamentosModule,
     GeocodingModule,

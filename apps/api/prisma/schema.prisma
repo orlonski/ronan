@@ -226,6 +226,9 @@ model User {
   configsForcaAtualizacao ConfiguracaoForcaAtualizacao[]
   configsKmAtipico ConfiguracaoKmAtipico[]
   mensagensViagem  ViagemMensagem[] @relation("MensagensViagem")
+  mensagensChat           MensagemChat[]         @relation("MensagensChat")
+  mensagensChatRemovidas  MensagemChat[]         @relation("RemoveuMensagemChat")
+  denunciasChatResolvidas DenunciaMensagemChat[] @relation("ResolveuDenunciaChat")
   whatsappSessao   WhatsappSessao?
   whatsappConvites WhatsappConvite[]
   compartilhamentosCriados   ViagemCompartilhamento[] @relation("CompartilhouViagem")
@@ -400,6 +403,10 @@ model Motorista {
   /// o que a lista trouxe) — pra diagnosticar ex. "descarga errada". Opt-in por
   /// motorista; gate é client-side (só emite os eventos nv_*). Default false.
   podeTelemetria          Boolean   @default(false)
+  /// Chat entre motoristas (aba Conversas). Default false — rollout gradual,
+  /// o admin libera caso a caso. Desligar remove a aba e bloqueia /m/chat/*;
+  /// as conversas ficam guardadas, não são apagadas.
+  podeChat                Boolean   @default(false)
   /// Frota dona do motorista. Null = não classificado (invisível pros usuários
   /// restritos). Usado pra carimbar Viagem/Pedagio/Abastecimento na criação —
   /// mudar aqui NÃO reescreve o histórico já carimbado, de propósito.
@@ -420,6 +427,11 @@ model Motorista {
   notificacoes     Notificacao[]
   eventos          EventoMotorista[]
   mensagensViagem  ViagemMensagem[] @relation("MensagensViagem")
+  mensagensChat      MensagemChat[]         @relation("MensagensChat")
+  participacoesChat  ConversaParticipante[] @relation("ParticipacoesChat")
+  bloqueiosFeitos    BloqueioChat[]         @relation("BloqueiosFeitos")
+  bloqueiosRecebidos BloqueioChat[]         @relation("BloqueiosRecebidos")
+  denunciasChat      DenunciaMensagemChat[] @relation("DenunciasChat")
   posicaoConfig    MotoristaPosicaoConfig?
   posicoes         MotoristaPosicao[]
   stories            Story[]
@@ -2029,4 +2041,153 @@ model ExecucaoAgente {
   @@index([status, proximaTentativaEm])
   @@index([taskId, criadoEm(sort: Desc)])
   @@map("execucoes_agente")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Chat entre motoristas (estilo WhatsApp, dentro do app nativo).
+//
+// Escopo de propósito: só conversa 1:1 e um canal de Avisos da operação —
+// sem grupos, sem status, sem chamada. Privacidade: o painel NÃO lê conversa
+// de motorista com motorista; enxerga apenas o canal de Avisos (que ele mesmo
+// escreve) e as mensagens que chegaram por denúncia.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum TipoConversa {
+  /// 1:1 entre dois motoristas.
+  DIRETA
+  /// Canal da operação: admin escreve, motorista só lê. Um por instalação.
+  AVISOS
+}
+
+enum TipoMensagemChat {
+  TEXTO
+  AUDIO
+}
+
+enum StatusDenunciaChat {
+  ABERTA
+  ARQUIVADA
+  /// Mensagem removida pela operação (vira "removida por violar as regras").
+  REMOVIDA
+}
+
+model Conversa {
+  id   String       @id @default(uuid())
+  tipo TipoConversa @default(DIRETA)
+  /// Chave canônica do par: os dois motoristaIds ordenados e juntados por ":".
+  /// É o que garante UMA conversa por par mesmo com os dois celulares abrindo
+  /// ao mesmo tempo — a corrida morre no unique do banco, não no código.
+  /// Null no canal de Avisos (que é único por definição).
+  chaveDireta String? @unique
+  criadoEm    DateTime @default(now())
+
+  /// Denormalizado só pra ordenar/pintar a lista de conversas sem varrer
+  /// mensagens. Prévia já resolvida (áudio vira "Áudio 0:12").
+  ultimaMensagemEm   DateTime?
+  ultimaMensagemTexto String?  @db.Text
+
+  participantes ConversaParticipante[]
+  mensagens     MensagemChat[]
+
+  @@index([ultimaMensagemEm(sort: Desc)])
+  @@map("conversas")
+}
+
+/// Um motorista dentro de uma conversa. Guarda o estado de leitura dele —
+/// contador denormalizado pra o badge não custar um count() por conversa.
+model ConversaParticipante {
+  id          String    @id @default(uuid())
+  conversa    Conversa  @relation(fields: [conversaId], references: [id], onDelete: Cascade)
+  conversaId  String
+  motorista   Motorista @relation("ParticipacoesChat", fields: [motoristaId], references: [id], onDelete: Cascade)
+  motoristaId String
+
+  naoLidas        Int       @default(0)
+  ultimaLeituraEm DateTime?
+  /// Motorista silenciou a conversa: continua recebendo, mas sem push.
+  silenciado      Boolean   @default(false)
+  criadoEm        DateTime  @default(now())
+
+  @@unique([conversaId, motoristaId])
+  @@index([motoristaId])
+  @@map("conversa_participantes")
+}
+
+model MensagemChat {
+  id String @id @default(uuid())
+  /// UUID gerado no celular. É a idempotência do outbox: reenvio depois de
+  /// timeout devolve a mensagem existente em vez de duplicar na conversa.
+  clientId   String   @unique
+  conversa   Conversa @relation(fields: [conversaId], references: [id], onDelete: Cascade)
+  conversaId String
+
+  /// ADMIN só existe no canal de Avisos.
+  autor       AutorMensagem
+  motorista   Motorista? @relation("MensagensChat", fields: [motoristaId], references: [id], onDelete: SetNull)
+  motoristaId String?
+  usuario     User?      @relation("MensagensChat", fields: [usuarioId], references: [id], onDelete: SetNull)
+  usuarioId   String?
+  /// Snapshot do nome do autor — sobrevive à exclusão do Motorista/User.
+  autorNome   String
+
+  tipo TipoMensagemChat @default(TEXTO)
+  texto String?         @db.Text
+  /// Fase 2 (áudio): chave no MinIO, duração e transcrição automática. A
+  /// transcrição chega depois da mensagem (Whisper roda em background), então
+  /// é sempre nullable — a bolha aparece na hora e o texto preenche em seguida.
+  audioKey      String?
+  audioSegundos Int?
+  transcricao   String? @db.Text
+
+  criadoEm  DateTime  @default(now())
+  /// Soft delete. Preenchido tanto por "apagar pra todos" do autor quanto por
+  /// remoção da operação via denúncia; a bolha vira "mensagem apagada" e o
+  /// conteúdo some da API. Nunca hard delete: denúncia precisa do histórico.
+  apagadaEm DateTime?
+  /// Quem removeu, quando foi moderação (null quando foi o próprio autor).
+  removidaPor   User?   @relation("RemoveuMensagemChat", fields: [removidaPorId], references: [id], onDelete: SetNull)
+  removidaPorId String?
+
+  denuncias DenunciaMensagemChat[]
+
+  @@index([conversaId, criadoEm])
+  @@map("mensagens_chat")
+}
+
+/// Bloqueio 1:1. Bloqueado não aparece na lista de contatos, não consegue
+/// mandar mensagem, e a conversa some pros dois lados.
+model BloqueioChat {
+  id           String    @id @default(uuid())
+  motorista    Motorista @relation("BloqueiosFeitos", fields: [motoristaId], references: [id], onDelete: Cascade)
+  motoristaId  String
+  bloqueado    Motorista @relation("BloqueiosRecebidos", fields: [bloqueadoId], references: [id], onDelete: Cascade)
+  bloqueadoId  String
+  criadoEm     DateTime  @default(now())
+
+  @@unique([motoristaId, bloqueadoId])
+  @@index([bloqueadoId])
+  @@map("bloqueios_chat")
+}
+
+/// Denúncia de mensagem. Exigência de loja pra app com conteúdo entre usuários
+/// (App Store 1.2), e o único caminho pelo qual uma conversa privada chega aos
+/// olhos da operação.
+model DenunciaMensagemChat {
+  id            String       @id @default(uuid())
+  mensagem      MensagemChat @relation(fields: [mensagemId], references: [id], onDelete: Cascade)
+  mensagemId    String
+  denunciante   Motorista    @relation("DenunciasChat", fields: [denuncianteId], references: [id], onDelete: Cascade)
+  denuncianteId String
+  motivo        String
+  detalhe       String?      @db.Text
+
+  status         StatusDenunciaChat @default(ABERTA)
+  resolvidoPor   User?              @relation("ResolveuDenunciaChat", fields: [resolvidoPorId], references: [id], onDelete: SetNull)
+  resolvidoPorId String?
+  resolvidoEm    DateTime?
+  criadoEm       DateTime           @default(now())
+
+  @@unique([mensagemId, denuncianteId])
+  @@index([status, criadoEm(sort: Desc)])
+  @@map("denuncias_mensagem_chat")
 }

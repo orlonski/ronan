@@ -23,6 +23,15 @@ export type EnviarArgs = {
   tipo?: string; // default "mensagem-admin"
   /** Admin que disparou (null pra notificações automáticas do sistema). */
   criadoPorId?: string | null;
+  /**
+   * Gravar linha na central de notificações do app (o sininho)? Default true.
+   *
+   * `false` existe pro chat: mensagem de conversa já tem lugar próprio pra
+   * aparecer, e persistir cada uma encheria a central de ruído — o motorista
+   * abriria o sininho e acharia 200 itens "Fulano: bom dia". A push do sistema
+   * continua saindo normalmente; só não vira item de histórico.
+   */
+  persistir?: boolean;
 };
 
 export type EnviarResultado = { enviado: boolean; motivo?: string };
@@ -42,6 +51,16 @@ export class PushService {
     });
   }
 
+  /** Atualiza a entrega da notificação persistida. No-op quando o caller pediu
+   *  `persistir: false` (chat) — não existe linha pra atualizar. */
+  private async marcarEntrega(
+    notificacaoId: string | null,
+    data: Parameters<NotificacoesService["atualizarEntrega"]>[1],
+  ): Promise<void> {
+    if (!notificacaoId) return;
+    await this.notificacoes.atualizarEntrega(notificacaoId, data);
+  }
+
   /**
    * Envia uma push notification via Expo Push Service. Persiste a notificação
    * ANTES de enviar — sobrevive a qualquer falha de rede e fica disponível na
@@ -55,14 +74,21 @@ export class PushService {
     const tipo = args.tipo ?? "mensagem-admin";
 
     // 1) Persiste registro primeiro. Mesmo se Expo cair, fica no banco.
-    const { id: notificacaoId } = await this.notificacoes.registrar({
-      motoristaId: args.motoristaId,
-      tipo,
-      titulo: args.titulo,
-      corpo: args.corpo,
-      dados: args.dados,
-      criadoPorId: args.criadoPorId ?? null,
-    });
+    //    Salvo quando o caller pediu pra não persistir (chat) — aí a push é
+    //    fogo-e-esquece e não há entrega pra rastrear.
+    const notificacaoId =
+      args.persistir === false
+        ? null
+        : (
+            await this.notificacoes.registrar({
+              motoristaId: args.motoristaId,
+              tipo,
+              titulo: args.titulo,
+              corpo: args.corpo,
+              dados: args.dados,
+              criadoPorId: args.criadoPorId ?? null,
+            })
+          ).id;
 
     // Preferência do motorista: se ele desligou push no app, a notificação
     // ainda fica na central in-app (registrada acima), mas NÃO manda a push do
@@ -72,7 +98,7 @@ export class PushService {
       select: { aceitaPush: true },
     });
     if (pref && pref.aceitaPush === false) {
-      await this.notificacoes.atualizarEntrega(notificacaoId, {
+      await this.marcarEntrega(notificacaoId, {
         entregaStatus: "ERRO",
         entregaErro: "optout_push",
       });
@@ -80,7 +106,7 @@ export class PushService {
     }
 
     if (!Expo.isExpoPushToken(args.token)) {
-      await this.notificacoes.atualizarEntrega(notificacaoId, {
+      await this.marcarEntrega(notificacaoId, {
         entregaStatus: "ERRO",
         entregaErro: "TokenInvalido",
       });
@@ -91,7 +117,7 @@ export class PushService {
     //    no app saber o tipo (mensagem-admin abre /notificacoes).
     const dadosFinal: Record<string, unknown> = {
       ...(args.dados ?? {}),
-      notificacaoId,
+      ...(notificacaoId ? { notificacaoId } : {}),
       kind: (args.dados?.kind as string | undefined) ?? tipo,
     };
 
@@ -124,7 +150,7 @@ export class PushService {
     if (!ticket) {
       const msg = ultimoErro instanceof Error ? ultimoErro.message : "Falha ao enviar";
       this.log.error(`Push motoristaId=${args.motoristaId}: ${msg}`);
-      await this.notificacoes.atualizarEntrega(notificacaoId, {
+      await this.marcarEntrega(notificacaoId, {
         entregaStatus: "ERRO",
         entregaErro: `transitorio_max_retry: ${msg.slice(0, 200)}`,
       });
@@ -133,7 +159,7 @@ export class PushService {
 
     if (ticket.status === "error") {
       const detalhe = ticket.details?.error;
-      await this.notificacoes.atualizarEntrega(notificacaoId, {
+      await this.marcarEntrega(notificacaoId, {
         entregaStatus: "ERRO",
         entregaErro: detalhe ?? ticket.message ?? "ticket_erro",
       });
@@ -155,7 +181,7 @@ export class PushService {
     // device) é assíncrona — só confirmamos consultando o receipt.
     const ticketId = ticket.id;
     this.log.log(`Push aceita pelo Expo, ticket=${ticketId} motoristaId=${args.motoristaId}`);
-    await this.notificacoes.atualizarEntrega(notificacaoId, { expoTicketId: ticketId });
+    await this.marcarEntrega(notificacaoId, { expoTicketId: ticketId });
 
     await delay(3000);
     try {
@@ -167,7 +193,7 @@ export class PushService {
         return { enviado: true };
       }
       if (receipt.status === "ok") {
-        await this.notificacoes.atualizarEntrega(notificacaoId, { entregaStatus: "ENTREGUE" });
+        await this.marcarEntrega(notificacaoId, { entregaStatus: "ENTREGUE" });
         return { enviado: true };
       }
       // receipt.status === "error"
@@ -175,7 +201,7 @@ export class PushService {
       this.log.warn(
         `Push receipt ERRO motoristaId=${args.motoristaId} ticket=${ticketId} error=${detalhe} message=${receipt.message}`,
       );
-      await this.notificacoes.atualizarEntrega(notificacaoId, {
+      await this.marcarEntrega(notificacaoId, {
         entregaStatus: "ERRO",
         entregaErro: detalhe ?? receipt.message ?? "receipt_erro",
       });

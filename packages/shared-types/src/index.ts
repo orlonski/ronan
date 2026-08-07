@@ -5,6 +5,7 @@ export * from "./viagem-lifecycle";
 export * from "./pedagio";
 export * from "./abastecimento";
 export * from "./story";
+export * from "./chat";
 export * from "./cpf";
 export * from "./telefone";
 export * from "./local";

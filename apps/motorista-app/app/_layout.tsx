@@ -290,7 +290,14 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
         // Listener foreground: push chegou com app aberto. Invalida a query
         // da central pra o sino atualizar o badge na hora.
-        subRecv = Notifications.addNotificationReceivedListener(() => {
+        subRecv = Notifications.addNotificationReceivedListener((n) => {
+          const kind = n.request.content.data?.kind;
+          // Mensagem de chat não vive na central — atualiza a lista de
+          // conversas e o badge da aba, que é onde ela aparece.
+          if (kind === "chat-mensagem") {
+            void queryClient.invalidateQueries({ queryKey: ["chat"] });
+            return;
+          }
           void queryClient.invalidateQueries({ queryKey: ["notificacoes"] });
         });
 
@@ -312,7 +319,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
             })();
           }
 
-          if (kind === "auto-finalizar") {
+          if (kind === "chat-mensagem") {
+            // Mensagem de chat (ou aviso da operação): abre a conversa direto.
+            // Sem conversaId cai na lista — nunca deixa o toque sem resposta.
+            const conversaId =
+              typeof data.conversaId === "string" ? data.conversaId : null;
+            router.push(conversaId ? `/chat/${conversaId}` : "/conversas");
+          } else if (kind === "auto-finalizar") {
             router.push("/viagem-andamento");
           } else if (kind === "iniciar-tracking") {
             router.push("/");

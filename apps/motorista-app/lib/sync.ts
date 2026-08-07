@@ -10,6 +10,7 @@ import {
   deletePendingEventoViagem,
   deletePendingFoto,
   deletePendingLocal,
+  deletePendingMensagemChat,
   deletePendingPedagio,
   deletePendingStory,
   deletePendingViagem,
@@ -21,6 +22,7 @@ import {
   listPendingEventosViagem,
   listPendingFotos,
   listPendingLocais,
+  listPendingMensagensChat,
   listPendingPedagios,
   listPendingStories,
   listPendingViagemCancelar,
@@ -32,6 +34,7 @@ import {
   upsertPendingEventoViagem,
   upsertPendingFoto,
   upsertPendingLocal,
+  upsertPendingMensagemChat,
   upsertPendingPedagio,
   upsertPendingStory,
   upsertPendingViagem,
@@ -43,6 +46,7 @@ import {
   type PendingEventoViagem,
   type PendingFoto,
   type PendingLocal,
+  type PendingMensagemChat,
   type PendingPedagio,
   type PendingStory,
   type PendingViagem,
@@ -468,6 +472,50 @@ export async function enqueueStory(item: {
 }
 
 /**
+ * Enfileira uma mensagem de chat. Sai do outbox quando houver sinal — o
+ * motorista escreve no meio do nada e a mensagem vai sozinha depois.
+ */
+export async function enqueueMensagemChat(item: {
+  clientId: string;
+  conversaId: string;
+  texto: string;
+}): Promise<void> {
+  await upsertPendingMensagemChat({
+    clientId: item.clientId,
+    conversaId: item.conversaId,
+    texto: item.texto,
+    status: "pending",
+    attempts: 0,
+    createdAt: Date.now(),
+  });
+  notify();
+  void drain();
+}
+
+/** Mensagens da conversa que ainda não subiram (bolhas com relógio). */
+export async function mensagensChatPendentes(
+  conversaId: string,
+): Promise<PendingMensagemChat[]> {
+  const list = await listPendingMensagensChat();
+  return list.filter((m) => m.conversaId === conversaId);
+}
+
+/** Motorista tocou em "tentar de novo" numa bolha que falhou. */
+export async function tentarNovamenteMensagemChat(clientId: string): Promise<void> {
+  const list = await listPendingMensagensChat();
+  const item = list.find((x) => x.clientId === clientId);
+  if (!item) return;
+  await upsertPendingMensagemChat(resetItem(item));
+  notify();
+  void drain();
+}
+
+export async function descartarMensagemChat(clientId: string): Promise<void> {
+  await deletePendingMensagemChat(clientId);
+  notify();
+}
+
+/**
  * Enfileira o "completar peso" de uma viagem que está em AGUARDANDO_PESO
  * (romaneio saiu no fim do dia). viagemId é o id real do servidor. Idempotente
  * por viagemId: reenfileirar (ex: motorista corrigiu o ticket) substitui o
@@ -876,6 +924,7 @@ export async function drain(opts?: { force?: boolean }): Promise<DrainResumo> {
     await drainPedagios();
     await drainAbastecimentos();
     await drainStories();
+    await drainMensagensChat();
     const depois = await snapshotPendentes();
     return {
       enviados: Math.max(0, antes.total - depois.total),
@@ -922,6 +971,11 @@ async function rescueStaleItems(): Promise<void> {
   for (const s of await listPendingStories()) {
     if (s.status === "syncing" && isStale(s.lastTriedAt)) {
       await upsertPendingStory({ ...s, status: "pending" });
+    }
+  }
+  for (const m of await listPendingMensagensChat()) {
+    if (m.status === "syncing" && isStale(m.lastTriedAt)) {
+      await upsertPendingMensagemChat({ ...m, status: "pending" });
     }
   }
   for (const cp of await listPendingCompletarPeso()) {
@@ -1035,6 +1089,42 @@ async function processStory(item: PendingStory): Promise<void> {
     await deletePendingStory(item.clientId);
   } catch (err) {
     await upsertPendingStory(proximoEstadoFalha(item, err, isErroPermanente(err), "story"));
+  }
+  notify();
+}
+
+/**
+ * Mensagens de chat aguardando sinal. Ficam fora de `snapshotPendentes` e da
+ * tela de Pendentes de propósito: quem mostra que a mensagem não saiu é a
+ * própria bolha na conversa (relógio / "não enviou"), como no WhatsApp —
+ * misturar conversa com lançamento de viagem só confundiria.
+ */
+async function drainMensagensChat(): Promise<void> {
+  const list = await listPendingMensagensChat();
+  for (const item of list) {
+    if (item.status === "syncing") continue;
+    if (item.attempts >= MAX_ATTEMPTS) continue;
+    if (!(await podeTentar("mensagens-chat"))) return;
+    await processMensagemChat(item);
+  }
+}
+
+async function processMensagemChat(item: PendingMensagemChat): Promise<void> {
+  await upsertPendingMensagemChat({ ...item, status: "syncing", lastTriedAt: Date.now() });
+  notify();
+  try {
+    // Idempotente por clientId no backend: reenvio depois de timeout devolve a
+    // mensagem que já entrou, em vez de duplicar a bolha.
+    await api.post(
+      `/m/chat/conversas/${item.conversaId}/mensagens`,
+      { clientId: item.clientId, texto: item.texto },
+      { outbox: true },
+    );
+    await deletePendingMensagemChat(item.clientId);
+  } catch (err) {
+    await upsertPendingMensagemChat(
+      proximoEstadoFalha(item, err, isErroPermanente(err), "mensagem-chat"),
+    );
   }
   notify();
 }
@@ -1553,6 +1643,7 @@ export async function recuperarItensPresos(): Promise<void> {
   await varrer(await listPendingFotos(), upsertPendingFoto);
   await varrer(await listPendingStories(), upsertPendingStory);
   await varrer(await listPendingCompletarPeso(), upsertPendingCompletarPeso);
+  await varrer(await listPendingMensagensChat(), upsertPendingMensagemChat);
   // viagem-iniciar: além dos transitórios, um 409 morto aqui é SEMPRE bloqueio
   // por outra viagem em andamento (única causa de 409 no iniciar) — recuperável
   // assim que a vaga liberar. Reseta pra retentar sozinho (não vira "pending

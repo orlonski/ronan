@@ -120,6 +120,8 @@ export type Me = {
   // Telemetria de interação na tela "Nova viagem" (opt-in) — captura o que o
   // motorista buscou/selecionou pra diagnosticar. Gate client-side.
   podeTelemetria: boolean;
+  // Chat entre motoristas (aba Conversas). Rollout gradual — default false.
+  podeChat: boolean;
   // Preferências de recebimento (controladas na tela de perfil).
   aceitaPush: boolean;
   aceitaWhatsapp: boolean;

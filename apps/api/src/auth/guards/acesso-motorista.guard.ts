@@ -11,7 +11,8 @@ export type AcessoFlag =
   | "podeLancarPedagio"
   | "podeLancarAbastecimento"
   | "podeUsarOcrTicket"
-  | "podeVerStories";
+  | "podeVerStories"
+  | "podeChat";
 
 /**
  * Bloqueia endpoint do motorista quando a feature flag dele tá desligada.

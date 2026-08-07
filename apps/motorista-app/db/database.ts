@@ -274,7 +274,32 @@ export type PendingViagemFinalizar = {
   errorPermanenteLocal?: boolean;
 };
 
+/**
+ * Mensagem de chat aguardando envio. Fica no outbox pra o motorista escrever
+ * em zona sem sinal e a mensagem sair sozinha depois — igual WhatsApp.
+ *
+ * Diferente dos outros pendentes, ESTE tipo não entra na tela de Pendentes nem
+ * na contagem de "X com erro": o lugar natural de ver que a mensagem não saiu
+ * é a própria bolha na conversa (relógio / "não enviou, toque pra tentar").
+ * Jogar isso na tela de lançamentos misturaria conversa com viagem.
+ */
+export type PendingMensagemChat = {
+  /** UUID client-side — vira o clientId da mensagem (idempotência). */
+  clientId: string;
+  conversaId: string;
+  texto: string;
+  status: "pending" | "syncing" | "error";
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
+  errorPermanenteLocal?: boolean;
+};
+
 const VIAGENS_KEY = `${PREFIX}outbox.viagens`;
+const MENSAGENS_CHAT_KEY = `${PREFIX}outbox.mensagens-chat`;
 const PEDAGIOS_KEY = `${PREFIX}outbox.pedagios`;
 const ABASTECIMENTOS_KEY = `${PREFIX}outbox.abastecimentos`;
 const LOCAIS_KEY = `${PREFIX}outbox.locais`;
@@ -501,6 +526,30 @@ export async function deletePendingStory(clientId: string): Promise<void> {
   const list = await listPendingStories();
   await writeList(
     STORIES_KEY,
+    list.filter((x) => x.clientId !== clientId),
+  );
+}
+
+export async function listPendingMensagensChat(): Promise<PendingMensagemChat[]> {
+  return readList<PendingMensagemChat>(MENSAGENS_CHAT_KEY);
+}
+
+export async function upsertPendingMensagemChat(
+  item: PendingMensagemChat,
+): Promise<void> {
+  const list = await listPendingMensagensChat();
+  const idx = list.findIndex((x) => x.clientId === item.clientId);
+  if (idx >= 0) list[idx] = item;
+  // Append: a ordem da fila é a ordem em que o motorista escreveu, e é assim
+  // que as bolhas aparecem na conversa.
+  else list.push(item);
+  await writeList(MENSAGENS_CHAT_KEY, list);
+}
+
+export async function deletePendingMensagemChat(clientId: string): Promise<void> {
+  const list = await listPendingMensagensChat();
+  await writeList(
+    MENSAGENS_CHAT_KEY,
     list.filter((x) => x.clientId !== clientId),
   );
 }

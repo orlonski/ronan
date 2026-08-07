@@ -23,6 +23,7 @@ import {
   LogOut,
   MapPin,
   MessageCircle,
+  MessagesSquare,
   Package,
   Radio,
   Ruler,
@@ -68,6 +69,7 @@ const GRUPOS: Grupo[] = [
       { href: "/envios", label: "Envios", icon: Send, perm: "envios.ver" },
       { href: "/notificacoes", label: "Notificações", icon: Bell, perm: "notificacoes.ver" },
       { href: "/demandas", label: "Demandas do agente", icon: Bot, perm: "demandas.ver" },
+      { href: "/chat", label: "Chat dos motoristas", icon: MessagesSquare, perm: "chat.ver" },
     ],
   },
   {

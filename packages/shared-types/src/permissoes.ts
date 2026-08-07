@@ -41,6 +41,8 @@ const ACAO_TITULO: Record<string, string> = {
   homologar: "Homologar / mesclar",
   importar: "Importar (OSM)",
   resolver: "Resolver",
+  avisar: "Publicar aviso",
+  moderar: "Moderar denúncias",
   gerenciar: "Gerenciar",
   expurgar: "Expurgar histórico",
 };
@@ -64,6 +66,11 @@ const RESOURCE_DEFS: ResourceDef[] = [
   { recurso: "envios", label: "Envios", modulo: "Operação", acoes: ["ver", "criar", "excluir"] },
   { recurso: "notificacoes", label: "Notificações", modulo: "Operação", acoes: ["ver", "excluir"] },
   { recurso: "demandas", label: "Demandas do agente", modulo: "Operação", acoes: ["ver", "criar"] },
+  // Chat dos motoristas. "ver" abre a tela (avisos + denúncias), "avisar"
+  // publica no canal, "moderar" resolve denúncia e remove mensagem. Conversa
+  // de motorista com motorista NÃO é acessível por nenhuma dessas chaves —
+  // só o que chegou por denúncia aparece.
+  { recurso: "chat", label: "Chat dos motoristas", modulo: "Operação", acoes: ["ver", "avisar", "moderar"] },
   // ---- Cadastros ----
   { recurso: "motoristas", label: "Motoristas", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir", "aprovar", "documentos"] },
   // O controller de veículos já exigia veiculos.criar/editar/excluir, mas o

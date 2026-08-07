@@ -131,6 +131,7 @@ export class MotoristaService {
         podeVerTodosLocais: true,
         podeReferenciaKm: true,
         podeTelemetria: true,
+        podeChat: true,
         aceitaPush: true,
         aceitaWhatsapp: true,
         receberResumoDiario: true,
