@@ -200,8 +200,10 @@ export default function ConversaScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
-      <View className="flex-row items-center gap-3 bg-brand px-4 py-3">
+    // Só `bottom`: quem cobre a status bar é o header azul (pt-14), igual ao
+    // ScreenHeader. Com `top` o safe area pintaria essa faixa de branco.
+    <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
+      <View className="flex-row items-center gap-3 bg-brand px-4 pb-3 pt-14">
         <Pressable
           onPress={() => router.back()}
           className="h-11 w-11 items-center justify-center rounded-full bg-white/15 active:bg-white/25"

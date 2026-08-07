@@ -23,8 +23,11 @@ export default function ConversasScreen() {
   const conversas = q.data?.conversas ?? [];
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
-      <View className="flex-row items-center gap-3 bg-brand px-4 pb-4 pt-4">
+    // Sem `edges={["top"]}`: o padding do safe area pintaria a faixa da status
+    // bar de branco. O header é que vai por baixo dela, em azul — mesmo pt-14
+    // do ScreenHeader, pra a tela combinar com o resto do app.
+    <SafeAreaView className="flex-1 bg-background" edges={[]}>
+      <View className="flex-row items-center gap-3 bg-brand px-4 pb-4 pt-14">
         <Text className="flex-1 text-2xl font-bold text-white">Conversas</Text>
         <Pressable
           onPress={() => router.push("/chat/bloqueados")}
