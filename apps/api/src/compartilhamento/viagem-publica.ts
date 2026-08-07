@@ -103,6 +103,9 @@ export const SELECT_VIAGEM_PUBLICA = {
   material: { select: { id: true, nome: true } },
   // empresaId alimenta a regra de mínimo; NÃO vai pro payload.
   cliente: { select: { empresaId: true } },
+  // Ids dos locais servem só pra achar a rota do par no cache; NÃO vão pro payload.
+  localCargaId: true,
+  localDescargaId: true,
   motorista: { select: { nome: true } },
   veiculo: { select: { placa: true } },
   localCarga: { select: { nome: true, cidade: true, uf: true, lat: true, lng: true } },
@@ -153,7 +156,13 @@ function dataISO(d: Date | null): string | null {
 
 export function serializarViagemPublica(
   viagem: ViagemSelecionada,
-  ctx: { regras: RegraMinimoRow[]; expiraEm: Date; agora: Date },
+  ctx: {
+    regras: RegraMinimoRow[];
+    expiraEm: Date;
+    agora: Date;
+    /** Geometria do par de locais (RotaCache), usada quando a viagem não tem uma própria. */
+    rotaDoPar: string | null;
+  },
 ): ViagemPublica {
   // Mínimo por faixa: mesma resolução do painel, mas só o RESULTADO sai daqui.
   const empresaId = viagem.cliente?.empresaId;
@@ -203,7 +212,17 @@ export function serializarViagemPublica(
       })),
     },
 
-    rotaGeometria: viagem.rotaGeometria,
+    // `Viagem.rotaGeometria` só existe quando o motorista ESCOLHEU uma rota no
+    // seletor — na maioria das viagens é null, e sem o fallback o mapa do
+    // comprovante ficava só com os dois pinos. Mesmo encadeamento do detalhe do
+    // painel (viagens.service.ts `detalhe`), pra as duas telas desenharem igual.
+    //
+    // O `rota_cache` é por PAR de locais, não por viagem — ler ele direto já
+    // causou bug antes (aviso de pedágio acusando praça não cruzada). Aqui não
+    // morde: o comprovante não DERIVA nada da geometria; km e toneladas vêm da
+    // própria viagem, e a linha é ilustração do trajeto. Se um dia alguém for
+    // calcular algo a partir deste campo, tem que resolver por viagem primeiro.
+    rotaGeometria: viagem.rotaGeometria ?? ctx.rotaDoPar,
     fotos: viagem.fotos.map((f) => ({ id: f.id, rotacao: f.rotacao })),
   };
 }

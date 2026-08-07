@@ -180,6 +180,21 @@ export class CompartilhamentoService implements OnModuleInit {
     });
     if (!viagem) throw new NotFoundException({ code: "LINK_INVALIDO", message: "Link não encontrado" });
 
+    // Rota do par de locais: só é consultada quando a viagem não tem geometria
+    // própria (o motorista não escolheu rota). EM_ANDAMENTO não tem destino.
+    const rotaDoPar =
+      viagem.rotaGeometria == null && viagem.localCargaId && viagem.localDescargaId
+        ? await this.prisma.rotaCache.findUnique({
+            where: {
+              localOrigemId_localDestinoId: {
+                localOrigemId: viagem.localCargaId,
+                localDestinoId: viagem.localDescargaId,
+              },
+            },
+            select: { geometria: true },
+          })
+        : null;
+
     const regras = await this.prisma.regraMinimo.findMany({ where: { ativo: true } });
     const agora = new Date();
 
@@ -197,7 +212,12 @@ export class CompartilhamentoService implements OnModuleInit {
       })
       .catch((e: unknown) => this.log.warn(`Falha ao contar visualização: ${(e as Error).message}`));
 
-    return serializarViagemPublica(viagem, { regras, expiraEm: link.expiraEm, agora });
+    return serializarViagemPublica(viagem, {
+      regras,
+      expiraEm: link.expiraEm,
+      agora,
+      rotaDoPar: rotaDoPar?.geometria ?? null,
+    });
   }
 
   async fotoPorToken(token: string, fotoId: string) {
