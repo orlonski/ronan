@@ -79,7 +79,7 @@ export function BolhaAudio({
       <View className="flex-row items-center gap-3">
         {disponivel ? (
           <Pressable
-            onPress={player.alternar}
+            onPress={() => void player.alternar()}
             hitSlop={10}
             accessibilityLabel={player.tocando ? "Pausar áudio" : "Tocar áudio"}
             className={`h-11 w-11 items-center justify-center rounded-full ${

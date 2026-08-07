@@ -132,10 +132,28 @@ export function usePlayerChat(source: { uri: string; headers?: Record<string, st
     }
   }, [status.didJustFinish, player]);
 
-  const alternar = useCallback(() => {
+  const alternar = useCallback(async () => {
     if (!source) return;
-    if (player.playing) player.pause();
-    else player.play();
+    if (player.playing) {
+      player.pause();
+      return;
+    }
+    // Configura a sessão pra TOCAR antes de dar play.
+    //
+    // Sem isso o iPhone com o botãozinho lateral no silencioso simplesmente
+    // não emite som — o play "funciona" (a barra anda) e o motorista jura que
+    // o áudio está quebrado. E se ele acabou de gravar, a sessão ainda está em
+    // modo de gravação, o que deixa a reprodução muda mesmo com o som ligado.
+    try {
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+        interruptionMode: "duckOthers",
+      });
+    } catch {
+      /* se falhar, tenta tocar assim mesmo */
+    }
+    player.play();
   }, [player, source]);
 
   return {
