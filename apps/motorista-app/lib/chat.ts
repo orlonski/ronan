@@ -31,13 +31,22 @@ import type {
   MotivoDenuncia,
   NovidadesChatResponse,
 } from "@ronan/shared-types";
-import { cacheGet, cachePut, type PendingMensagemChat } from "@/db/database";
+import {
+  cacheGet,
+  cachePut,
+  type PendingAudioChat,
+  type PendingMensagemChat,
+} from "@/db/database";
 import { api } from "./api";
 import {
+  audiosChatPendentes,
+  descartarAudioChat,
   descartarMensagemChat,
+  enqueueAudioChat,
   enqueueMensagemChat,
   mensagensChatPendentes,
   onSyncChange,
+  tentarNovamenteAudioChat,
   tentarNovamenteMensagemChat,
 } from "./sync";
 
@@ -171,7 +180,13 @@ export function usePendentesDaConversa(conversaId: string | undefined) {
   const query = useQuery({
     queryKey: ["chat", "pendentes", conversaId ?? ""],
     enabled: !!conversaId,
-    queryFn: () => mensagensChatPendentes(conversaId!),
+    queryFn: async () => {
+      const [textos, audios] = await Promise.all([
+        mensagensChatPendentes(conversaId!),
+        audiosChatPendentes(conversaId!),
+      ]);
+      return { textos, audios };
+    },
     // Vem do AsyncStorage local: sempre fresco, custo zero.
     staleTime: 0,
   });
@@ -187,6 +202,45 @@ export function usePendentesDaConversa(conversaId: string | undefined) {
   }, [conversaId, qc]);
 
   return query;
+}
+
+/** Enfileira um áudio gravado. Igual ao texto: aparece na hora, sobe depois. */
+export function useEnviarAudio(conversaId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (g: { uri: string; mimetype: string; duracaoSegundos: number }) => {
+      await enqueueAudioChat({
+        clientId: uuid(),
+        conversaId,
+        audioUri: g.uri,
+        audioMime: g.mimetype,
+        duracaoSegundos: g.duracaoSegundos,
+      });
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["chat", "pendentes", conversaId] });
+    },
+  });
+}
+
+export function useReenviarAudio(conversaId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (clientId: string) => tentarNovamenteAudioChat(clientId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["chat", "pendentes", conversaId] });
+    },
+  });
+}
+
+export function useDescartarAudio(conversaId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (clientId: string) => descartarAudioChat(clientId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["chat", "pendentes", conversaId] });
+    },
+  });
 }
 
 export function useEnviarMensagem(conversaId: string) {
@@ -365,4 +419,4 @@ export function useApagarMensagem(conversaId: string) {
   });
 }
 
-export type { PendingMensagemChat };
+export type { PendingAudioChat, PendingMensagemChat };

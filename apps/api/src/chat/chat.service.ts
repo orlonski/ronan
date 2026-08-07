@@ -9,6 +9,7 @@ import type {
   ContatoChat,
   ConversaResumo,
   DenunciarMensagemInput,
+  EnviarAudioChatInput,
   EnviarMensagemChatInput,
   ListaConversasResponse,
   MensagemChatItem,
@@ -18,6 +19,8 @@ import type {
 import type { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { PushService } from "../push/push.service";
+import { UploadsService } from "../uploads/uploads.service";
+import { TranscricaoService } from "../ia/transcricao.service";
 
 /** Quantas mensagens uma página do histórico devolve. */
 const PAGINA_MENSAGENS = 40;
@@ -70,6 +73,7 @@ type MensagemComAutor = Prisma.MensagemChatGetPayload<{
     autorNome: true;
     tipo: true;
     texto: true;
+    audioKey: true;
     audioSegundos: true;
     transcricao: true;
     criadoEm: true;
@@ -87,6 +91,7 @@ const SELECT_MENSAGEM = {
   autorNome: true,
   tipo: true,
   texto: true,
+  audioKey: true,
   audioSegundos: true,
   transcricao: true,
   criadoEm: true,
@@ -101,6 +106,8 @@ export class ChatService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly push: PushService,
+    private readonly uploads: UploadsService,
+    private readonly transcricao: TranscricaoService,
   ) {}
 
   // ── Contatos ──────────────────────────────────────────────────────────────
@@ -372,6 +379,9 @@ export class ChatService {
       tipo: m.tipo,
       texto: apagada ? (removida ? MENSAGEM_REMOVIDA : MENSAGEM_APAGADA) : m.texto,
       audioSegundos: apagada ? null : m.audioSegundos,
+      // Passados os 60 dias de retenção o arquivo sai do MinIO e audioKey vira
+      // null — a bolha continua, mas só com a transcrição.
+      audioDisponivel: !apagada && m.audioKey !== null,
       transcricao: apagada ? null : m.transcricao,
       criadoEm: m.criadoEm.toISOString(),
       apagada,
@@ -448,6 +458,152 @@ export class ChatService {
     }
 
     return this.paraItem(mensagem, motoristaId);
+  }
+
+  /**
+   * Mensagem de áudio. Espelha `enviar()` — mesma idempotência, mesmo bloqueio,
+   * mesmo push — e dispara a transcrição em background.
+   *
+   * A transcrição NÃO segura a resposta de propósito: o Whisper leva alguns
+   * segundos, e o motorista não pode ficar olhando pra um spinner por causa
+   * disso. A bolha aparece na hora e o texto preenche embaixo quando ficar
+   * pronto (o poll da conversa traz).
+   */
+  async enviarAudio(
+    motoristaId: string,
+    conversaId: string,
+    input: EnviarAudioChatInput,
+  ): Promise<MensagemChatItem> {
+    const { conversa } = await this.exigirParticipacao(motoristaId, conversaId);
+    if (conversa.tipo === "AVISOS") {
+      throw new ForbiddenException("O canal de avisos é só pra leitura.");
+    }
+
+    const jaExiste = await this.prisma.mensagemChat.findUnique({
+      where: { clientId: input.clientId },
+      select: SELECT_MENSAGEM,
+    });
+    if (jaExiste) return this.paraItem(jaExiste, motoristaId);
+
+    const outros = await this.prisma.conversaParticipante.findMany({
+      where: { conversaId, motoristaId: { not: motoristaId } },
+      select: { motoristaId: true, silenciado: true },
+    });
+    const bloqueados = await this.idsBloqueadosNosDoisSentidos(motoristaId);
+    if (outros.some((o) => bloqueados.includes(o.motoristaId))) {
+      throw new ForbiddenException("Vocês não podem conversar.");
+    }
+
+    const eu = await this.prisma.motorista.findUnique({
+      where: { id: motoristaId },
+      select: { nome: true },
+    });
+
+    const previa = previaDe({
+      tipo: "AUDIO",
+      texto: null,
+      audioSegundos: input.duracaoSegundos,
+    });
+    const [mensagem] = await this.prisma.$transaction([
+      this.prisma.mensagemChat.create({
+        data: {
+          clientId: input.clientId,
+          conversaId,
+          autor: "MOTORISTA",
+          motoristaId,
+          autorNome: eu?.nome ?? "Motorista",
+          tipo: "AUDIO",
+          audioKey: input.audioKey,
+          audioSegundos: input.duracaoSegundos,
+        },
+        select: SELECT_MENSAGEM,
+      }),
+      this.prisma.conversa.update({
+        where: { id: conversaId },
+        data: { ultimaMensagemEm: new Date(), ultimaMensagemTexto: previa },
+      }),
+      this.prisma.conversaParticipante.updateMany({
+        where: { conversaId, motoristaId: { not: motoristaId } },
+        data: { naoLidas: { increment: 1 } },
+      }),
+    ]);
+
+    void this.transcreverEmBackground(mensagem.id, input.audioKey);
+
+    for (const o of outros) {
+      if (o.silenciado) continue;
+      void this.notificar(o.motoristaId, {
+        titulo: primeiroNome(eu?.nome ?? "Mensagem nova"),
+        corpo: previa,
+        conversaId,
+      });
+    }
+
+    return this.paraItem(mensagem, motoristaId);
+  }
+
+  /**
+   * Baixa o áudio do MinIO e grava a transcrição na mensagem. Best-effort: se
+   * o Whisper falhar ou não estiver configurado, o áudio continua tocando —
+   * só fica sem o texto embaixo.
+   */
+  private async transcreverEmBackground(mensagemId: string, audioKey: string): Promise<void> {
+    try {
+      if (!this.transcricao.configurado) return;
+      const buffer = await this.uploads.getObjectBuffer(audioKey);
+      const ext = audioKey.split(".").pop()?.toLowerCase() ?? "m4a";
+      const mimetype =
+        ext === "mp3"
+          ? "audio/mpeg"
+          : ext === "ogg"
+            ? "audio/ogg"
+            : ext === "webm"
+              ? "audio/webm"
+              : "audio/m4a";
+      const r = await this.transcricao.transcreverBuffer(buffer, mimetype, `audio.${ext}`);
+      if (!r.texto) return;
+      // A mensagem pode ter sido apagada enquanto o Whisper rodava — não
+      // ressuscita o conteúdo de uma bolha já removida.
+      const atual = await this.prisma.mensagemChat.findUnique({
+        where: { id: mensagemId },
+        select: { apagadaEm: true },
+      });
+      if (!atual || atual.apagadaEm) return;
+      await this.prisma.mensagemChat.update({
+        where: { id: mensagemId },
+        data: { transcricao: r.texto },
+      });
+    } catch (e) {
+      this.log.warn(`Transcrição do áudio ${mensagemId} falhou: ${e}`);
+    }
+  }
+
+  /**
+   * Bytes do áudio pra tocar no app. Passa pela MESMA checagem de participação
+   * das mensagens: sem isso, qualquer motorista com o id da mensagem ouviria
+   * conversa alheia — a URL seria a porta dos fundos do gate de privacidade.
+   */
+  async audioBuffer(
+    motoristaId: string,
+    mensagemId: string,
+  ): Promise<{ buffer: Buffer; contentType: string }> {
+    const m = await this.prisma.mensagemChat.findUnique({
+      where: { id: mensagemId },
+      select: { conversaId: true, audioKey: true, apagadaEm: true },
+    });
+    if (!m?.audioKey || m.apagadaEm) throw new NotFoundException("Áudio não disponível.");
+    await this.exigirParticipacao(motoristaId, m.conversaId);
+    const buffer = await this.uploads.getObjectBuffer(m.audioKey);
+    const ext = m.audioKey.split(".").pop()?.toLowerCase();
+    const contentType =
+      ext === "mp3"
+        ? "audio/mpeg"
+        : ext === "ogg"
+          ? "audio/ogg"
+          : ext === "webm"
+            ? "audio/webm"
+            : "audio/mp4";
+    return { buffer, contentType };
   }
 
   private async notificar(
@@ -558,13 +714,20 @@ export class ChatService {
   async apagarMensagem(motoristaId: string, mensagemId: string): Promise<void> {
     const m = await this.prisma.mensagemChat.findUnique({
       where: { id: mensagemId },
-      select: { id: true, motoristaId: true, apagadaEm: true, conversaId: true },
+      select: { id: true, motoristaId: true, apagadaEm: true, conversaId: true, audioKey: true },
     });
     if (!m) throw new NotFoundException("Mensagem não encontrada.");
     if (m.motoristaId !== motoristaId) {
       throw new ForbiddenException("Você só apaga as suas mensagens.");
     }
     if (m.apagadaEm) return;
+    // Tira o arquivo do MinIO junto: zerar só a coluna deixaria o áudio órfão
+    // no bucket pra sempre, sem nenhuma linha apontando pra ele.
+    if (m.audioKey) {
+      await this.uploads.removeObject(m.audioKey).catch(() => {
+        /* já pode ter sumido — não trava o apagar */
+      });
+    }
     await this.prisma.mensagemChat.update({
       where: { id: mensagemId },
       data: { apagadaEm: new Date(), texto: null, audioKey: null, transcricao: null },

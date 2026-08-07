@@ -8,6 +8,7 @@ import type {
 } from "@ronan/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
 import { PushService } from "../push/push.service";
+import { UploadsService } from "../uploads/uploads.service";
 import { ChatService } from "./chat.service";
 
 /** Quantas mensagens ao redor da denunciada acompanham a denúncia. */
@@ -28,6 +29,7 @@ export class ChatAdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly push: PushService,
+    private readonly uploads: UploadsService,
     private readonly chat: ChatService,
   ) {}
 
@@ -242,6 +244,17 @@ export class ChatAdminService {
     });
 
     if (input.status === "REMOVIDA") {
+      // Áudio removido por moderação sai do bucket também — senão o arquivo
+      // continua lá, sem nenhuma linha apontando pra ele.
+      const alvo = await this.prisma.mensagemChat.findUnique({
+        where: { id: denuncia.mensagemId },
+        select: { audioKey: true },
+      });
+      if (alvo?.audioKey) {
+        await this.uploads.removeObject(alvo.audioKey).catch(() => {
+          /* já pode ter sumido */
+        });
+      }
       await this.prisma.mensagemChat.update({
         where: { id: denuncia.mensagemId },
         data: {

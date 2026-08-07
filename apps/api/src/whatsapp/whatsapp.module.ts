@@ -7,7 +7,6 @@ import { AgenteService } from "./agente/agente.service";
 import { ConviteService } from "./convite.service";
 import { EvolutionModule } from "./evolution.module";
 import { SessaoService } from "./sessao.service";
-import { TranscricaoService } from "./transcricao.service";
 import { WhatsappController } from "./whatsapp.controller";
 import { WhatsappService } from "./whatsapp.service";
 
@@ -19,7 +18,6 @@ import { WhatsappService } from "./whatsapp.service";
     SessaoService,
     ConviteService,
     AgenteService,
-    TranscricaoService,
   ],
   exports: [WhatsappService, SessaoService, ConviteService, EvolutionModule],
 })

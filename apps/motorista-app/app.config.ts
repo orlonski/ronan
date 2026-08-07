@@ -6,7 +6,7 @@ const config: ExpoConfig = {
   name: "Schaba",
   slug: "ronan-motorista",
   scheme: "ronan",
-  version: "1.0.5",
+  version: "1.0.6",
   orientation: "portrait",
   platforms: ["ios", "android"],
   icon: "./assets/icon.png",
@@ -22,7 +22,7 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: false,
     bundleIdentifier: "br.com.schaba.motorista",
-    buildNumber: "12",
+    buildNumber: "13",
     // Google Maps SDK for iOS — usa o MESMO motor do Android (que desenha a
     // polilinha perfeitamente), no lugar do Apple Maps (que é furado com linha).
     // Chave via EAS Secret GOOGLE_MAPS_IOS_KEY (precisa "Maps SDK for iOS"
@@ -45,7 +45,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: "br.com.schaba.motorista",
-    versionCode: 14,
+    versionCode: 15,
     // FCM v1 (push notifications): exige google-services.json do projeto Firebase
     // vinculado a este package. EAS Secret GOOGLE_SERVICES_JSON aponta pro arquivo
     // subido via `eas secret:create`; em dev local cai pro arquivo na raiz do app.
@@ -64,6 +64,10 @@ const config: ExpoConfig = {
       "android.permission.FOREGROUND_SERVICE",
       "android.permission.FOREGROUND_SERVICE_LOCATION",
       "android.permission.POST_NOTIFICATIONS",
+      // Gravar recado de voz no chat. Declarada aqui além do plugin do
+      // expo-audio: esta lista é explícita, e o que não está nela pode não
+      // entrar no manifest final.
+      "android.permission.RECORD_AUDIO",
     ],
     // Google Maps SDK Android: chave gratuita (Maps SDK for Android).
     // Configurar via EAS Secret: GOOGLE_MAPS_ANDROID_KEY.
@@ -103,6 +107,16 @@ const config: ExpoConfig = {
         // Som customizado embarcado (E6→B5 chime, ~0.6s). Nome referenciado
         // pelo backend como `sound: "ding"` (sem extensão).
         sounds: ["./assets/sounds/ding.wav"],
+      },
+    ],
+    [
+      "expo-audio",
+      {
+        // Texto que o iOS mostra no popup de permissão. Tem que dizer PRA QUE
+        // serve na língua do motorista — "o app quer acessar o microfone" seco
+        // é o tipo de coisa que ele nega por desconfiança.
+        microphonePermission:
+          "Para gravar recado de voz nas conversas com os outros motoristas.",
       },
     ],
     "./plugins/with-abi-splits",

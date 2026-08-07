@@ -298,8 +298,32 @@ export type PendingMensagemChat = {
   errorPermanenteLocal?: boolean;
 };
 
+/**
+ * Áudio de chat aguardando envio. 2-step no drain: sobe o arquivo pro MinIO
+ * (/m/uploads/chat-audio) e cria a mensagem (POST .../audio). Mesmo espírito
+ * do texto — o motorista grava no meio do nada e o recado sai depois.
+ */
+export type PendingAudioChat = {
+  /** UUID client-side — vira o clientId da mensagem (idempotência). */
+  clientId: string;
+  conversaId: string;
+  audioUri: string;
+  audioMime: string;
+  duracaoSegundos: number;
+  status: "pending" | "syncing" | "error";
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
+  /** Arquivo sumiu do aparelho — definitivo, não adianta retentar. */
+  errorPermanenteLocal?: boolean;
+};
+
 const VIAGENS_KEY = `${PREFIX}outbox.viagens`;
 const MENSAGENS_CHAT_KEY = `${PREFIX}outbox.mensagens-chat`;
+const AUDIOS_CHAT_KEY = `${PREFIX}outbox.audios-chat`;
 const PEDAGIOS_KEY = `${PREFIX}outbox.pedagios`;
 const ABASTECIMENTOS_KEY = `${PREFIX}outbox.abastecimentos`;
 const LOCAIS_KEY = `${PREFIX}outbox.locais`;
@@ -550,6 +574,26 @@ export async function deletePendingMensagemChat(clientId: string): Promise<void>
   const list = await listPendingMensagensChat();
   await writeList(
     MENSAGENS_CHAT_KEY,
+    list.filter((x) => x.clientId !== clientId),
+  );
+}
+
+export async function listPendingAudiosChat(): Promise<PendingAudioChat[]> {
+  return readList<PendingAudioChat>(AUDIOS_CHAT_KEY);
+}
+
+export async function upsertPendingAudioChat(item: PendingAudioChat): Promise<void> {
+  const list = await listPendingAudiosChat();
+  const idx = list.findIndex((x) => x.clientId === item.clientId);
+  if (idx >= 0) list[idx] = item;
+  else list.push(item); // ordem em que o motorista gravou
+  await writeList(AUDIOS_CHAT_KEY, list);
+}
+
+export async function deletePendingAudioChat(clientId: string): Promise<void> {
+  const list = await listPendingAudiosChat();
+  await writeList(
+    AUDIOS_CHAT_KEY,
     list.filter((x) => x.clientId !== clientId),
   );
 }

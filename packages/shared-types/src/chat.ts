@@ -55,6 +55,24 @@ export const EnviarMensagemChatInput = z.object({
 });
 export type EnviarMensagemChatInput = z.infer<typeof EnviarMensagemChatInput>;
 
+/**
+ * Teto de duração do áudio. 5 min é generoso pra um recado de motorista e
+ * segura tanto o custo do Whisper quanto o tempo de upload em 4G ruim.
+ */
+export const MAX_DURACAO_AUDIO_SEG = 300;
+
+/**
+ * Mensagem de áudio. Dois passos, como o story: o arquivo sobe antes
+ * (`/m/uploads/chat-audio`) e vira `audioKey`; aqui só entra a mensagem.
+ * Idempotente por `clientId`, igual à de texto.
+ */
+export const EnviarAudioChatInput = z.object({
+  clientId: z.string().uuid(),
+  audioKey: z.string().min(1),
+  duracaoSegundos: z.number().int().min(1).max(MAX_DURACAO_AUDIO_SEG),
+});
+export type EnviarAudioChatInput = z.infer<typeof EnviarAudioChatInput>;
+
 export const DenunciarMensagemInput = z.object({
   motivo: MotivoDenunciaEnum,
   detalhe: z.string().trim().max(500).optional(),
@@ -105,6 +123,8 @@ export interface MensagemChatItem {
   /** null quando apagada, ou quando é áudio sem transcrição ainda. */
   texto: string | null;
   audioSegundos: number | null;
+  /** false = áudio expirou (passou da retenção) ou foi apagado; só resta o texto. */
+  audioDisponivel: boolean;
   transcricao: string | null;
   criadoEm: string; // ISO
   apagada: boolean;

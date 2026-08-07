@@ -5,7 +5,7 @@ import { AgenteService } from "./agente/agente.service";
 import { EvolutionClientService } from "./evolution-client.service";
 import { SessaoService } from "./sessao.service";
 import { ConviteService } from "./convite.service";
-import { TranscricaoService } from "./transcricao.service";
+import { TranscricaoService } from "../ia/transcricao.service";
 
 type MensagemTipo = "TEXTO" | "IMAGEM" | "AUDIO";
 
@@ -152,7 +152,12 @@ export class WhatsappService {
       let metadataTranscricao: Record<string, unknown> | null = null;
       if (tipo === "AUDIO" && identidade.tipo !== "DESCONHECIDO") {
         faseAtual = "transcricao";
-        const r = await this.transcricao.transcrever({ key: data.key, message: data.message });
+        // Baixa da Evolution aqui: o serviço de transcrição é genérico e só
+        // recebe o buffer (o chat do app usa o mesmo, vindo do MinIO).
+        const midia = await this.evolution.baixarMidia({ key: data.key, message: data.message });
+        const r = midia
+          ? await this.transcricao.transcreverBuffer(midia.buffer, midia.mimetype)
+          : { texto: "", modelo: "whisper-1", erro: "Falha ao baixar áudio" };
         textoEntrada = r.texto;
         metadataTranscricao = {
           origem: "audio_transcrito",

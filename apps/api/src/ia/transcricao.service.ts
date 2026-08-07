@@ -1,13 +1,25 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { EvolutionClientService } from "./evolution-client.service";
+
+export type ResultadoTranscricao = {
+  texto: string;
+  modelo: string;
+  erro?: string;
+};
 
 /**
- * Transcreve áudios do WhatsApp via OpenAI Whisper. Motorista que não escreve
- * bem (analfabeto funcional, dedo gordo, dirigindo) prefere áudio — sem isso
- * o agente WhatsApp não dá conta da realidade dele.
+ * Transcrição de áudio via OpenAI Whisper — genérica, recebe o buffer pronto.
  *
- * Provider: OpenAI `whisper-1` (pt-BR forte, aceita opus direto, USD ~0,006/min).
- * Sem OPENAI_API_KEY o serviço degrada silencioso e devolve string vazia.
+ * Nasceu dentro do módulo do WhatsApp, amarrada ao download da Evolution. Saiu
+ * de lá quando o chat do app passou a precisar da mesma coisa: quem tem o áudio
+ * (WhatsApp, MinIO, o que for) baixa e entrega o buffer; aqui só transcreve.
+ *
+ * Motorista que não escreve bem — analfabeto funcional, dedo grosso, dirigindo
+ * — prefere áudio. A transcrição é o que faz o outro lado conseguir LER isso
+ * sem parar o caminhão, e é o que torna a conversa pesquisável.
+ *
+ * Provider: `whisper-1` (pt-BR forte, aceita opus/m4a direto, ~US$0,006/min).
+ * Sem OPENAI_API_KEY degrada em silêncio e devolve string vazia — áudio sem
+ * transcrição continua tocando normalmente.
  */
 @Injectable()
 export class TranscricaoService {
@@ -15,27 +27,22 @@ export class TranscricaoService {
   private readonly modelo = process.env.OPENAI_TRANSCRIBE_MODEL ?? "whisper-1";
   private readonly apiKey = process.env.OPENAI_API_KEY ?? "";
 
-  constructor(private readonly evolution: EvolutionClientService) {}
-
   get configurado() {
     return this.apiKey.length > 0;
   }
 
-  async transcrever(payload: { key: unknown; message: unknown }): Promise<{
-    texto: string;
-    modelo: string;
-    erro?: string;
-  }> {
+  async transcreverBuffer(
+    buffer: Buffer,
+    mimetype: string,
+    nomeArquivo = "audio.ogg",
+  ): Promise<ResultadoTranscricao> {
     if (!this.configurado) {
       return { texto: "", modelo: this.modelo, erro: "OPENAI_API_KEY ausente" };
     }
-    const midia = await this.evolution.baixarMidia(payload);
-    if (!midia) return { texto: "", modelo: this.modelo, erro: "Falha ao baixar áudio" };
-
     try {
       const form = new FormData();
-      const blob = new Blob([new Uint8Array(midia.buffer)], { type: midia.mimetype });
-      form.append("file", blob, "audio.ogg");
+      const blob = new Blob([new Uint8Array(buffer)], { type: mimetype });
+      form.append("file", blob, nomeArquivo);
       form.append("model", this.modelo);
       form.append("language", "pt");
       form.append("response_format", "text");
@@ -63,8 +70,8 @@ export class TranscricaoService {
   }
 
   /**
-   * Whisper costuma alucinar frases conhecidas quando o áudio é silêncio ou
-   * só ruído. Filtra essas pra evitar enviar pro agente.
+   * Whisper costuma alucinar frases conhecidas quando o áudio é silêncio ou só
+   * ruído — e num caminhão em movimento isso acontece bastante.
    */
   private eAlucinacao(texto: string): boolean {
     if (!texto) return false;

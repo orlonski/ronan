@@ -7,14 +7,17 @@ import {
   Param,
   Post,
   Query,
+  Res,
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import type { Response } from "express";
 import { z } from "zod";
 import {
   AbrirConversaInput,
   BloquearMotoristaInput,
   DenunciarMensagemInput,
+  EnviarAudioChatInput,
   EnviarMensagemChatInput,
 } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
@@ -76,6 +79,34 @@ export class ChatMotoristaController {
     @Body(new ZodValidationPipe(EnviarMensagemChatInput)) body: EnviarMensagemChatInput,
   ) {
     return this.service.enviar(user.id, id, body);
+  }
+
+  /**
+   * Mensagem de áudio. O arquivo já subiu em `/m/uploads/chat-audio`; aqui só
+   * entra a mensagem. A transcrição roda em background e chega depois pelo poll.
+   */
+  @Post("conversas/:id/audio")
+  enviarAudio(
+    @CurrentUser() user: AuthMotorista,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(EnviarAudioChatInput)) body: EnviarAudioChatInput,
+  ) {
+    return this.service.enviarAudio(user.id, id, body);
+  }
+
+  @Get("mensagens/:id/audio")
+  async audio(
+    @CurrentUser() user: AuthMotorista,
+    @Param("id") id: string,
+    @Res() res: Response,
+  ) {
+    const { buffer, contentType } = await this.service.audioBuffer(user.id, id);
+    res.set("Content-Type", contentType);
+    // `private` porque o áudio é de conversa fechada — não pode encostar em
+    // cache compartilhado no caminho.
+    res.set("Cache-Control", "private, max-age=86400");
+    res.set("Accept-Ranges", "none");
+    res.send(buffer);
   }
 
   @Post("conversas/:id/lida")
