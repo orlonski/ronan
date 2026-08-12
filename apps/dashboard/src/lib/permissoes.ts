@@ -46,6 +46,7 @@ const ROTA_PERM: { prefixo: string; perm: string }[] = [
   { prefixo: "/configuracoes/campos-layout", perm: "config-campos-layout.ver" },
   { prefixo: "/configuracoes/forca-atualizacao", perm: "config-forca-atualizacao.ver" },
   { prefixo: "/configuracoes/km-atipico", perm: "config-km-atipico.ver" },
+  { prefixo: "/relatorios", perm: "relatorios.ver" },
   { prefixo: "/descargas-suspeitas", perm: "descargas-suspeitas.ver" },
   { prefixo: "/pedagios-rodovia", perm: "pedagios.ver" },
   { prefixo: "/viagens-andamento", perm: "viagens.ver" },

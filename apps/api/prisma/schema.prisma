@@ -1161,6 +1161,12 @@ model Viagem {
   // por localCargaId, que é prefixo dele — por isso não há @@index([localCargaId]).
   @@index([localCargaId, localDescargaId, data])
   @@index([localDescargaId])
+  // Relatório de produção por período. Os índices acima todos LIDERAM por outra
+  // coluna, então um recorte só por data (relatório sem filtro de dimensão) não
+  // usa nenhum deles e cai em seq scan.
+  @@index([data])
+  // Única dimensão do relatório que não tinha índice composto com data.
+  @@index([materialId, data])
   // Partial unique index "1 viagem EM_ANDAMENTO por motorista" é criado à mão
   // no migration.sql (Prisma não expressa índice parcial): ver migration
   // add_viagem_lifecycle (uq_viagem_em_andamento_por_motorista).
@@ -1480,6 +1486,8 @@ model Pedagio {
   @@index([veiculoId, data])
   @@index([viagemId])
   @@index([transportadoraId, data])
+  // Reconciliação de pedágio por motorista no relatório de produção.
+  @@index([motoristaId, data])
   @@map("pedagios")
 }
 

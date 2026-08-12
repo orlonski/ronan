@@ -64,6 +64,11 @@ const RESOURCE_DEFS: ResourceDef[] = [
   { recurso: "abastecimentos", label: "Abastecimentos", modulo: "Operação", acoes: ["ver", "editar", "excluir"] },
   { recurso: "fechamentos", label: "Fechamentos", modulo: "Operação", acoes: ["ver", "criar", "conferir", "exportar", "excluir"] },
   { recurso: "envios", label: "Envios", modulo: "Operação", acoes: ["ver", "criar", "excluir"] },
+  // Relatório de produção por período. Agrupar por cliente/empresa (ou filtrar
+  // por eles) exige TAMBÉM "viagens.ver-comercial" no endpoint: o agrupamento
+  // por cliente É a carteira, e as colunas de km/toneladas faturados são as
+  // mesmas que `admin/viagens/comercial.ts` omite de quem não tem a chave.
+  { recurso: "relatorios", label: "Relatórios", modulo: "Operação", acoes: ["ver", "exportar"] },
   { recurso: "notificacoes", label: "Notificações", modulo: "Operação", acoes: ["ver", "excluir"] },
   { recurso: "demandas", label: "Demandas do agente", modulo: "Operação", acoes: ["ver", "criar"] },
   // Chat dos motoristas. "ver" abre a tela (avisos + denúncias), "avisar"

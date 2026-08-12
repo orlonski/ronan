@@ -36,6 +36,7 @@ const podeVerComercial = (user: AuthAdminUser) =>
   user.permissoes.includes("viagens.ver-comercial");
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import type { AuthAdminUser } from "../../auth/types";
+import { exigirComercialParaFiltros } from "./comercial";
 import { ViagensAdminService } from "./viagens.service";
 
 const RotacaoFotoInput = z.object({
@@ -86,6 +87,19 @@ const ListViagensQuery = paginationQuerySchema.extend({
   veiculoId: z.string().uuid().optional(),
   clienteId: z.string().uuid().optional(),
   localId: z.string().uuid().optional(),
+  // Filtros que a tela de Relatórios usa no drill-down (e que a listagem também
+  // ganha de graça). `localId` casa carga OU descarga; estes dois são o lado
+  // específico, pra "tudo que saiu da pedreira X" não trazer o que chegou lá.
+  localCargaId: z.string().uuid().optional(),
+  localDescargaId: z.string().uuid().optional(),
+  materialId: z.string().uuid().optional(),
+  empresaId: z.string().uuid().optional(),
+  transportadoraId: z.string().uuid().optional(),
+  // Exclui EM_ANDAMENTO/AGUARDANDO_PESO (STATUS_FORA_FECHAMENTO). A listagem
+  // normal do painel mostra TUDO de propósito — o admin precisa enxergar a
+  // viagem incompleta pra completar. Mas o drill-down do relatório precisa do
+  // mesmo universo do resumo, senão a linha diz 4 viagens e a lista abre 5.
+  excluirForaFechamento: z.coerce.boolean().optional(),
   // Derivado do enum do Prisma (fonte de verdade) pra não voltar a defasar quando
   // surgem status novos — a lista chumbada antiga não tinha EM_ANDAMENTO nem
   // AGUARDANDO_PESO e quebrava o filtro do painel.
@@ -115,7 +129,9 @@ export class ViagensAdminController {
     @Query(new ZodValidationPipe(ListViagensQuery)) query: ListViagensQuery,
     @CurrentUser() user: AuthAdminUser,
   ) {
-    return this.service.list(query, user.escopo, podeVerComercial(user));
+    const comercial = podeVerComercial(user);
+    exigirComercialParaFiltros(query, comercial);
+    return this.service.list(query, user.escopo, comercial);
   }
 
   /**

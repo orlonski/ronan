@@ -21,6 +21,7 @@ import { ForcaAtualizacaoModule } from "./forca-atualizacao/forca-atualizacao.mo
 import { LayoutImportModule } from "./layout-import/layout-import.module";
 import { CamposLayoutModule } from "./campos-layout/campos-layout.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
+import { RelatoriosModule } from "./relatorios/relatorios.module";
 import { FrotaAdminModule } from "./frota/frota.module";
 import { PedagiosRodoviaModule } from "./pedagios-rodovia/pedagios-rodovia.module";
 import { AdminInboxModule } from "./inbox/inbox.module";
@@ -51,6 +52,7 @@ import { PapeisModule } from "./papeis/papeis.module";
     LayoutImportModule,
     CamposLayoutModule,
     DashboardModule,
+    RelatoriosModule,
     FrotaAdminModule,
     PedagiosRodoviaModule,
     AdminInboxModule,

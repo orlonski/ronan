@@ -1,3 +1,5 @@
+import { ForbiddenException } from "@nestjs/common";
+
 /**
  * O que numa viagem pertence à relação comercial Schaba↔cliente, e não à
  * operação de transporte.
@@ -22,6 +24,27 @@ const CAMPOS_COMERCIAIS = [
   "toneladasAjustada",
   "matchesFechamento",
 ] as const;
+
+/**
+ * Omitir o campo da resposta não basta quando o cliente pode virar FILTRO:
+ * filtrar por um clienteId e olhar a contagem revela o volume daquele cliente,
+ * e iterando ids revela a carteira inteira. A listagem só expõe o filtro na UI
+ * a quem tem a chave, mas a API é chamada direto do browser — o gate tem que
+ * estar aqui.
+ *
+ * Fica fora do `@RequerPermissao` porque aquele decorator é OR entre chaves, e
+ * o que se quer é AND com `viagens.ver`/`relatorios.ver`.
+ */
+export function exigirComercialParaFiltros(
+  filtros: { clienteId?: string; empresaId?: string },
+  podeVerComercial: boolean,
+): void {
+  if ((filtros.clienteId || filtros.empresaId) && !podeVerComercial) {
+    throw new ForbiddenException(
+      "Filtrar por cliente ou empresa exige a permissão de dados comerciais.",
+    );
+  }
+}
 
 /**
  * Devolve a viagem sem os campos comerciais. Some do JSON, não só da tela — o

@@ -8,6 +8,7 @@ import {
   Activity,
   AlertCircle,
   ArrowUpCircle,
+  BarChart3,
   Bell,
   Bot,
   Boxes,
@@ -63,6 +64,7 @@ const GRUPOS: Grupo[] = [
     itens: [
       { href: "/viagens", label: "Viagens", icon: ClipboardCheck, perm: "viagens.ver" },
       { href: "/viagens-andamento", label: "Viagens em andamento", icon: Radio, perm: "viagens.ver" },
+      { href: "/relatorios/viagens", label: "Relatórios", icon: BarChart3, perm: "relatorios.ver" },
       { href: "/descargas-suspeitas", label: "Descargas suspeitas", icon: MapPin, perm: "descargas-suspeitas.ver" },
       { href: "/abastecimentos", label: "Abastecimentos", icon: Fuel, perm: "abastecimentos.ver" },
       { href: "/fechamentos", label: "Fechamentos", icon: FileSpreadsheet, perm: "fechamentos.ver" },

@@ -26,6 +26,7 @@ import { RoteamentoService } from "../../roteamento/roteamento.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
+import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
 import { filtrarComercial, omitirComercial } from "./comercial";
 import { PedagiosRodoviaConsultaService } from "../pedagios-rodovia/pedagios-rodovia-consulta.service";
 import { BuscaLocaisConfigService } from "../busca-locais-config/busca-locais-config.service";
@@ -38,6 +39,12 @@ type ListViagensParams = PaginationQuery & {
   veiculoId?: string;
   clienteId?: string;
   localId?: string;
+  localCargaId?: string;
+  localDescargaId?: string;
+  materialId?: string;
+  empresaId?: string;
+  transportadoraId?: string;
+  excluirForaFechamento?: boolean;
   status?: StatusViagem;
   origem?: "guiada" | "direta";
   kmForaDoPadrao?: boolean;
@@ -359,7 +366,17 @@ export class ViagensAdminService {
         { localDescargaId: params.localId },
       ];
     }
+    if (params.localCargaId) where.localCargaId = params.localCargaId;
+    if (params.localDescargaId) where.localDescargaId = params.localDescargaId;
+    if (params.materialId) where.materialId = params.materialId;
+    if (params.transportadoraId) where.transportadoraId = params.transportadoraId;
+    // Subquery em vez de resolver os clientes da empresa antes: a lista de ids
+    // cresceria sem teto e viraria um IN gigante.
+    if (params.empresaId) where.cliente = { is: { empresaId: params.empresaId } };
+    // `status` explícito ganha do recorte amplo — quem pediu AGUARDANDO_PESO
+    // quer ver AGUARDANDO_PESO, mesmo com a flag ligada.
     if (params.status) where.status = params.status;
+    else if (params.excluirForaFechamento) where.status = { notIn: STATUS_FORA_FECHAMENTO };
     if (params.origem === "guiada") where.iniciadaGuiada = true;
     else if (params.origem === "direta") where.iniciadaGuiada = false;
     if (params.kmForaDoPadrao) where.kmForaDoPadrao = true;
