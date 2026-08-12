@@ -54,6 +54,12 @@ const MesSchema = z
 const ListarViagensQuery = z.object({
   mes: MesSchema.optional(),
   status: z.enum(["AGUARDANDO", "CONFERIDA", "DIVERGENTE"]).optional(),
+  // Só viagens que tiveram pedágio (valorPedagioTotal > 0) — alimenta a aba
+  // "Pedágios" do histórico. Fica como string ("true"/"false", convertida no
+  // handler) por dois motivos: z.coerce.boolean() transformaria a string
+  // "false" em true, e um .transform() aqui quebra o ZodValidationPipe, que
+  // exige schema com entrada e saída do mesmo tipo (ZodSchema<T>).
+  comPedagio: z.enum(["true", "false"]).optional(),
   cursor: z.string().uuid().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(30),
 });
@@ -86,6 +92,7 @@ export class ViagensMotoristaController {
     return this.service.list(user.id, {
       mes: query.mes,
       grupoStatus: query.status,
+      comPedagio: query.comPedagio === "true",
       cursor: query.cursor,
       limit: query.limit,
     });

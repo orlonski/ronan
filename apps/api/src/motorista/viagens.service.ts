@@ -138,6 +138,7 @@ export class ViagensMotoristaService {
     filtros: {
       mes?: string;
       grupoStatus?: "AGUARDANDO" | "CONFERIDA" | "DIVERGENTE";
+      comPedagio?: boolean;
       cursor?: string;
       limit: number;
     },
@@ -177,36 +178,51 @@ export class ViagensMotoristaService {
       motoristaId,
       data: { gte: inicio, lt: fim },
     } satisfies Prisma.PedagioWhereInput;
+    // Contador da aba "Pedágios" do histórico. É contador de LISTA, não KPI:
+    // usa o mesmo where do feed (com AGUARDANDO_PESO) pra bater com o que a
+    // aba realmente mostra — com o where dos KPIs, viagem aguardando peso com
+    // pedágio apareceria na lista sem entrar no número do chip.
+    const whereComPedagio = this.buildWhere(motoristaId, {
+      mes,
+      incluirAguardandoPeso: true,
+      comPedagio: true,
+    });
 
     // findMany pra somar toneladas/km com mínimo do cliente aplicado.
     // Volume típico < 300 viagens/mês — custo irrelevante vs aggregate.
-    const [viagens, pedagioAgg, porStatus, pedagiosAgg] = await this.prisma.$transaction([
-      this.prisma.viagem.findMany({
-        where,
-        select: {
-          toneladas: true,
-          km: true,
-          materialId: true,
-          cliente: { select: { empresaId: true, toneladasMinimas: true, kmMinimos: true } },
-        },
-      }),
-      this.prisma.viagem.aggregate({
-        where,
-        _count: { _all: true },
-        _sum: { valorPedagioTotal: true },
-      }),
-      this.prisma.viagem.groupBy({
-        where,
-        by: ["status"],
-        _count: { _all: true },
-        orderBy: { status: "asc" },
-      }),
-      this.prisma.pedagio.aggregate({
-        where: wherePedagio,
-        _count: { _all: true },
-        _sum: { valor: true },
-      }),
-    ]);
+    const [viagens, pedagioAgg, porStatus, pedagiosAgg, viagensComPedagioAgg] =
+      await this.prisma.$transaction([
+        this.prisma.viagem.findMany({
+          where,
+          select: {
+            toneladas: true,
+            km: true,
+            materialId: true,
+            cliente: { select: { empresaId: true, toneladasMinimas: true, kmMinimos: true } },
+          },
+        }),
+        this.prisma.viagem.aggregate({
+          where,
+          _count: { _all: true },
+          _sum: { valorPedagioTotal: true },
+        }),
+        this.prisma.viagem.groupBy({
+          where,
+          by: ["status"],
+          _count: { _all: true },
+          orderBy: { status: "asc" },
+        }),
+        this.prisma.pedagio.aggregate({
+          where: wherePedagio,
+          _count: { _all: true },
+          _sum: { valor: true },
+        }),
+        this.prisma.viagem.aggregate({
+          where: whereComPedagio,
+          _count: { _all: true },
+          _sum: { valorPedagioTotal: true },
+        }),
+      ]);
 
     const regras = await this.regrasMinimoAtivas();
     let totalToneladas = new Prisma.Decimal(0);
@@ -236,9 +252,16 @@ export class ViagensMotoristaService {
       totalKm: totalKm.toFixed(2),
       totalPedagio: (pedagioAgg._sum.valorPedagioTotal ?? "0").toString(),
       porStatus: contadores,
+      // Lançamentos avulsos de pedágio (model Pedagio). Mantido pro PWA, que
+      // ainda lista essa fonte na aba "Pedágios".
       pedagios: {
         count: pedagiosAgg._count._all,
         totalValor: (pedagiosAgg._sum.valor ?? "0").toString(),
+      },
+      // Viagens que tiveram pedágio — fonte da aba "Pedágios" do app nativo.
+      viagensComPedagio: {
+        count: viagensComPedagioAgg._count._all,
+        totalValor: (viagensComPedagioAgg._sum.valorPedagioTotal ?? "0").toString(),
       },
     };
   }
@@ -248,6 +271,8 @@ export class ViagensMotoristaService {
     filtros: {
       mes?: string;
       grupoStatus?: "AGUARDANDO" | "CONFERIDA" | "DIVERGENTE";
+      // Só viagens com pedágio pago (valorPedagioTotal > 0). Ignora null e 0,00.
+      comPedagio?: boolean;
       // Feed de viagens (recentes/histórico) MOSTRA AGUARDANDO_PESO: a viagem
       // existe e o motorista lançou, então ela aparece na lista (marcada como
       // "aguardando peso"). Só o lançamento incompleto EM_ANDAMENTO fica de fora.
@@ -270,6 +295,9 @@ export class ViagensMotoristaService {
       // Filtro por grupo de conferência nunca inclui AGUARDANDO_PESO (não é
       // conferível): o `in` do grupo já cuida disso.
       where.status = { in: grupoToStatus(filtros.grupoStatus) };
+    }
+    if (filtros.comPedagio) {
+      where.valorPedagioTotal = { gt: 0 };
     }
     return where;
   }

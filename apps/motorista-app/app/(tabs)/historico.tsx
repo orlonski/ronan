@@ -6,7 +6,6 @@ import {
   ArrowUp,
   Calendar,
   Fuel,
-  MapPin,
   Receipt,
   Trash2,
   WifiOff,
@@ -32,13 +31,10 @@ import { humanizeApiError } from "@/lib/api";
 import {
   useAbastecimentos,
   useExcluirAbastecimento,
-  useExcluirPedagio,
-  usePedagiosFiltrados,
   useResumoMes,
   useViagensFiltradas,
   type Abastecimento,
   type GrupoStatus,
-  type Pedagio,
   type Viagem,
 } from "@/lib/queries";
 
@@ -93,9 +89,13 @@ export default function HistoricoScreen() {
     mes: mesSelecionado,
     status: filtroStatus === "TODAS" ? undefined : filtroStatus,
   });
-  const pedagios = usePedagiosFiltrados({ mes: mesSelecionado });
+  // Aba "Pedágios" lista as viagens que tiveram pedágio (Viagem.valorPedagioTotal),
+  // não o lançamento avulso da model Pedagio — essa feature nunca foi liberada.
+  const pedagios = useViagensFiltradas({
+    mes: mesSelecionado,
+    comPedagio: true,
+  });
   const abastecimentos = useAbastecimentos(mesSelecionado);
-  const excluirPedagio = useExcluirPedagio();
   const excluirAbastecimento = useExcluirAbastecimento();
 
   const itensAbastecimentos = abastecimentos.data ?? [];
@@ -109,28 +109,6 @@ export default function HistoricoScreen() {
     () => pedagios.data?.pages.flatMap((p) => p.itens) ?? [],
     [pedagios.data],
   );
-
-  async function confirmarExcluirPedagio(p: Pedagio) {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const ok = await showConfirm({
-      title: "Excluir este pedágio?",
-      message: `Apagar pedágio de ${p.pracaPedagio} (R$ ${fmtNum(p.valor, 2)})?`,
-      confirmLabel: "Excluir",
-      destructive: true,
-    });
-    if (!ok) return;
-    try {
-      await excluirPedagio.mutateAsync(p.id);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (err) {
-      void showAlert({
-        title: "Não foi possível excluir",
-        message: humanizeApiError(err),
-        variant: "destructive",
-      });
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    }
-  }
 
   async function confirmarExcluirAbastecimento(a: Abastecimento) {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -158,7 +136,8 @@ export default function HistoricoScreen() {
   }
 
   const totalViagensMes = resumo.data?.totalViagens ?? 0;
-  const totalPedagiosMes = resumo.data?.pedagios.count ?? 0;
+  const pedagiosResumo = resumo.data?.viagensComPedagio;
+  const totalPedagiosMes = pedagiosResumo?.count ?? 0;
 
   const headerComponent = (
     <View className="mb-2 gap-3">
@@ -225,7 +204,7 @@ export default function HistoricoScreen() {
           <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
             Resumo de {fmtMesLongo(resumo.data.mes)}
           </Text>
-          {resumo.data.totalViagens === 0 && resumo.data.pedagios.count === 0 ? (
+          {resumo.data.totalViagens === 0 && totalPedagiosMes === 0 ? (
             <Text className="mt-2 text-base text-muted-foreground">
               Nenhuma movimentação nesse mês.
             </Text>
@@ -247,17 +226,17 @@ export default function HistoricoScreen() {
                   />
                 </View>
               )}
-              {resumo.data.pedagios.count > 0 && (
+              {pedagiosResumo && pedagiosResumo.count > 0 && (
                 <View
                   className={`${resumo.data.totalViagens > 0 ? "mt-3 border-t-2 border-border pt-3" : "mt-3"} flex-row gap-6`}
                 >
                   <ResumoStat
-                    label="pedágios"
-                    value={String(resumo.data.pedagios.count)}
+                    label="com pedágio"
+                    value={String(pedagiosResumo.count)}
                   />
                   <ResumoStat
                     label="total"
-                    value={`R$ ${fmtNum(resumo.data.pedagios.totalValor, 2)}`}
+                    value={`R$ ${fmtNum(pedagiosResumo.totalValor, 2)}`}
                   />
                 </View>
               )}
@@ -381,9 +360,9 @@ export default function HistoricoScreen() {
       )}
 
       {aba === "pedagios" && (
-        <FlatList<Pedagio>
+        <FlatList<Viagem>
           data={itensPedagios}
-          keyExtractor={(p) => p.id}
+          keyExtractor={(v) => v.id}
           contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }}
           refreshControl={
             <RefreshControl
@@ -405,10 +384,7 @@ export default function HistoricoScreen() {
             <Animated.View
               entering={FadeInDown.delay(index * 20).duration(180)}
             >
-              <PedagioCard
-                p={item}
-                onExcluir={() => confirmarExcluirPedagio(item)}
-              />
+              <ViagemPedagioCard v={item} />
             </Animated.View>
           )}
           ListEmptyComponent={
@@ -427,8 +403,8 @@ export default function HistoricoScreen() {
             ) : (
               <EmptyState
                 icon={Receipt}
-                title="Nenhum pedágio"
-                description='Cadastre tocando em "Pedágio" na tela inicial.'
+                title="Nenhuma viagem com pedágio"
+                description="O valor do pedágio é informado na hora de lançar a viagem."
               />
             )
           }
@@ -597,68 +573,61 @@ function ViagemCard({ v }: { v: Viagem }) {
   );
 }
 
-function PedagioCard({
-  p,
-  onExcluir,
-}: {
-  p: Pedagio;
-  onExcluir: () => void;
-}) {
-  const card = (
-    <View className="rounded-2xl border-2 border-border bg-card p-4">
+/**
+ * Card da aba "Pedágios": mostra o pedágio pago, mas o item é uma VIAGEM —
+ * tocar abre o detalhe dela. Sem swipe de excluir de propósito: apagar a
+ * viagem inteira a partir daqui seria destrutivo demais.
+ */
+function ViagemPedagioCard({ v }: { v: Viagem }) {
+  return (
+    <Pressable
+      onPress={() => router.push(`/viagens/${v.id}`)}
+      className="rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
+    >
       <View className="flex-row items-start justify-between gap-3">
         <Text
-          className="text-sm font-medium text-muted-foreground"
+          className="flex-1 text-sm font-medium text-muted-foreground"
           style={{ fontVariant: ["tabular-nums"] }}
+          numberOfLines={1}
         >
-          {fmtData(p.data)} · {p.veiculo.placa}
+          {fmtData(v.data)} · {v.veiculo.placa}
         </Text>
-        {p.viagem && (
-          <Badge variant="outline">Ticket {p.viagem.ticket}</Badge>
-        )}
+        {!!v.ticket && <Badge variant="outline">Ticket {v.ticket}</Badge>}
       </View>
 
-      <View className="mt-2 flex-row items-center gap-2">
-        <MapPin size={18} color="#13316b" />
-        <Text
-          className="flex-1 text-lg font-bold text-foreground"
-          numberOfLines={2}
-        >
-          {p.pracaPedagio}
-        </Text>
+      <View className="mt-3 gap-1.5">
+        <View className="flex-row items-center gap-2">
+          <ArrowUp size={16} color="#16a34a" />
+          <Text
+            className="flex-1 text-base font-medium text-foreground"
+            numberOfLines={1}
+          >
+            {v.localCarga.nome}
+          </Text>
+        </View>
+        <View className="flex-row items-center gap-2">
+          <ArrowDown size={16} color="#dc2626" />
+          <Text
+            className="flex-1 text-base font-medium text-foreground"
+            numberOfLines={1}
+          >
+            {v.localDescarga.nome}
+          </Text>
+        </View>
       </View>
 
       <View className="mt-3 border-t-2 border-border pt-3">
         <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-          valor pago
+          pedágio pago
         </Text>
         <Text
           className="text-2xl font-extrabold text-foreground"
           style={{ fontVariant: ["tabular-nums"] }}
         >
-          R$ {fmtNum(p.valor, 2)}
+          R$ {fmtNum(v.valorPedagioTotal ?? "0", 2)}
         </Text>
       </View>
-    </View>
-  );
-
-  return (
-    <Swipeable
-      renderRightActions={() => (
-        <View className="ml-2 flex-row items-stretch">
-          <Button
-            variant="destructive"
-            className="h-full w-24 rounded-2xl"
-            onPress={onExcluir}
-          >
-            <Trash2 size={22} color="white" />
-          </Button>
-        </View>
-      )}
-      overshootRight={false}
-    >
-      {card}
-    </Swipeable>
+    </Pressable>
   );
 }
 

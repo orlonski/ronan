@@ -151,6 +151,9 @@ export type Viagem = {
   kmEfetivo: string;
   kmAjustada: boolean;
   observacao: string | null;
+  /** Pedágio pago na viagem, informado pelo motorista ao lançar/finalizar.
+   * Fonte da aba "Pedágios" do histórico. Cache antigo não tem o campo. */
+  valorPedagioTotal?: string | null;
   status: string;
   /** Texto explicando a divergência quando admin marca status=DIVERGENTE. */
   motivoStatus: string | null;
@@ -514,7 +517,11 @@ export type ResumoMes = {
   totalKm: string;
   totalPedagio: string;
   porStatus: { aguardando: number; conferida: number; divergente: number };
+  /** Lançamentos avulsos de pedágio (model Pedagio) — feature desligada. */
   pedagios: { count: number; totalValor: string };
+  /** Viagens com pedágio pago no mês — contador da aba "Pedágios".
+   * Opcional: API antiga (e cache local antigo) não devolve o campo. */
+  viagensComPedagio?: { count: number; totalValor: string };
 };
 
 /** Home: top 10 mais recentes, sem filtro. */
@@ -555,6 +562,8 @@ export function useResumoMes(mes?: string) {
 export function useViagensFiltradas(params: {
   mes?: string;
   status?: GrupoStatus;
+  /** Só viagens que tiveram pedágio (valorPedagioTotal > 0). */
+  comPedagio?: boolean;
 }) {
   return useInfiniteQuery({
     queryKey: ["viagens-filtradas", params],
@@ -564,6 +573,7 @@ export function useViagensFiltradas(params: {
       const qs = new URLSearchParams();
       if (params.mes) qs.set("mes", params.mes);
       if (params.status) qs.set("status", params.status);
+      if (params.comPedagio) qs.set("comPedagio", "true");
       qs.set("limit", "30");
       if (pageParam) qs.set("cursor", pageParam);
       const res = await api.get<ListaViagens>(`/m/viagens?${qs.toString()}`);
@@ -612,37 +622,6 @@ export function usePedagios() {
     queryKey: ["pedagios"],
     staleTime: 60_000,
     queryFn: () => cacheFirst<Pedagio[]>(["pedagios"], cacheKey, buscarRede),
-  });
-}
-
-export function usePedagiosFiltrados(params: { mes?: string }) {
-  return useInfiniteQuery({
-    queryKey: ["pedagios-filtrados", params],
-    initialPageParam: undefined as string | undefined,
-    staleTime: 30_000,
-    queryFn: async ({ pageParam }) => {
-      const qs = new URLSearchParams();
-      if (params.mes) qs.set("mes", params.mes);
-      qs.set("limit", "30");
-      if (pageParam) qs.set("cursor", pageParam);
-      return api.get<ListaPedagios>(`/m/pedagios?${qs.toString()}`);
-    },
-    getNextPageParam: (last) => last.nextCursor ?? undefined,
-  });
-}
-
-export function useExcluirPedagio() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (pedagioId: string) => {
-      await api.delete(`/m/pedagios/${pedagioId}`);
-      return pedagioId;
-    },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["pedagios"] });
-      void qc.invalidateQueries({ queryKey: ["pedagios-filtrados"] });
-      void qc.invalidateQueries({ queryKey: ["resumo-mes"] });
-    },
   });
 }
 
