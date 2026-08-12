@@ -6,7 +6,6 @@ import { reportarErro } from "./error-reporter";
 import { drenarPosicoes } from "./posicao-sync";
 import {
   deletePendingAbastecimento,
-  deletePendingAudioChat,
   deletePendingCompletarPeso,
   deletePendingEventoViagem,
   deletePendingFoto,
@@ -19,7 +18,6 @@ import {
   deletePendingViagemFinalizar,
   deletePendingViagemIniciar,
   listPendingAbastecimentos,
-  listPendingAudiosChat,
   listPendingCompletarPeso,
   listPendingEventosViagem,
   listPendingFotos,
@@ -32,7 +30,6 @@ import {
   listPendingViagemIniciar,
   listPendingViagens,
   upsertPendingAbastecimento,
-  upsertPendingAudioChat,
   upsertPendingCompletarPeso,
   upsertPendingEventoViagem,
   upsertPendingFoto,
@@ -45,7 +42,6 @@ import {
   upsertPendingViagemFinalizar,
   upsertPendingViagemIniciar,
   type PendingAbastecimento,
-  type PendingAudioChat,
   type PendingCompletarPeso,
   type PendingEventoViagem,
   type PendingFoto,
@@ -496,44 +492,6 @@ export async function enqueueMensagemChat(item: {
   void drain();
 }
 
-/** Enfileira um áudio de chat (2-step no drain: upload + criar mensagem). */
-export async function enqueueAudioChat(item: {
-  clientId: string;
-  conversaId: string;
-  audioUri: string;
-  audioMime: string;
-  duracaoSegundos: number;
-}): Promise<void> {
-  await upsertPendingAudioChat({
-    ...item,
-    status: "pending",
-    attempts: 0,
-    createdAt: Date.now(),
-  });
-  notify();
-  void drain();
-}
-
-/** Áudios da conversa ainda no outbox. */
-export async function audiosChatPendentes(conversaId: string): Promise<PendingAudioChat[]> {
-  const list = await listPendingAudiosChat();
-  return list.filter((a) => a.conversaId === conversaId);
-}
-
-export async function tentarNovamenteAudioChat(clientId: string): Promise<void> {
-  const list = await listPendingAudiosChat();
-  const item = list.find((x) => x.clientId === clientId);
-  if (!item) return;
-  await upsertPendingAudioChat(resetItem(item));
-  notify();
-  void drain();
-}
-
-export async function descartarAudioChat(clientId: string): Promise<void> {
-  await deletePendingAudioChat(clientId);
-  notify();
-}
-
 /** Mensagens da conversa que ainda não subiram (bolhas com relógio). */
 export async function mensagensChatPendentes(
   conversaId: string,
@@ -967,7 +925,6 @@ export async function drain(opts?: { force?: boolean }): Promise<DrainResumo> {
     await drainAbastecimentos();
     await drainStories();
     await drainMensagensChat();
-    await drainAudiosChat();
     const depois = await snapshotPendentes();
     return {
       enviados: Math.max(0, antes.total - depois.total),
@@ -1014,11 +971,6 @@ async function rescueStaleItems(): Promise<void> {
   for (const s of await listPendingStories()) {
     if (s.status === "syncing" && isStale(s.lastTriedAt)) {
       await upsertPendingStory({ ...s, status: "pending" });
-    }
-  }
-  for (const a of await listPendingAudiosChat()) {
-    if (a.status === "syncing" && isStale(a.lastTriedAt)) {
-      await upsertPendingAudioChat({ ...a, status: "pending" });
     }
   }
   for (const m of await listPendingMensagensChat()) {
@@ -1172,56 +1124,6 @@ async function processMensagemChat(item: PendingMensagemChat): Promise<void> {
   } catch (err) {
     await upsertPendingMensagemChat(
       proximoEstadoFalha(item, err, isErroPermanente(err), "mensagem-chat"),
-    );
-  }
-  notify();
-}
-
-/**
- * Áudios de chat esperando sinal. Fora da tela de Pendentes pelo mesmo motivo
- * do texto: quem mostra o estado é a bolha na conversa.
- */
-async function drainAudiosChat(): Promise<void> {
-  const list = await listPendingAudiosChat();
-  for (const item of list) {
-    if (item.status === "syncing") continue;
-    if (item.attempts >= MAX_ATTEMPTS) continue;
-    if (!(await podeTentar("audios-chat"))) return;
-    await processAudioChat(item);
-  }
-}
-
-async function processAudioChat(item: PendingAudioChat): Promise<void> {
-  await upsertPendingAudioChat({ ...item, status: "syncing", lastTriedAt: Date.now() });
-  notify();
-  try {
-    // O arquivo é o conteúdo: sem ele não há o que mandar. Vira erro REAL
-    // (visível e descartável) em vez de "aguardando sinal" pra sempre — o iOS
-    // limpa o diretório de cache sob pressão de armazenamento.
-    if (!(await fotoAindaExiste(item.audioUri))) {
-      reportarFotoPerdida("audio-chat", item.clientId, item.audioUri);
-      throw new FotoPerdidaError("O áudio não está mais no aparelho. Grave de novo.");
-    }
-    const fd = new FormData();
-    fd.append("audio", {
-      uri: item.audioUri,
-      type: item.audioMime,
-      name: `chat-${item.clientId}.m4a`,
-    } as unknown as Blob);
-    const up = await api.postForm<{ storageKey: string }>("/m/uploads/chat-audio", fd);
-    await api.post(
-      `/m/chat/conversas/${item.conversaId}/audio`,
-      {
-        clientId: item.clientId,
-        audioKey: up.storageKey,
-        duracaoSegundos: item.duracaoSegundos,
-      },
-      { outbox: true },
-    );
-    await deletePendingAudioChat(item.clientId);
-  } catch (err) {
-    await upsertPendingAudioChat(
-      proximoEstadoFalha(item, err, isErroPermanente(err), "audio-chat"),
     );
   }
   notify();
@@ -1742,7 +1644,6 @@ export async function recuperarItensPresos(): Promise<void> {
   await varrer(await listPendingStories(), upsertPendingStory);
   await varrer(await listPendingCompletarPeso(), upsertPendingCompletarPeso);
   await varrer(await listPendingMensagensChat(), upsertPendingMensagemChat);
-  await varrer(await listPendingAudiosChat(), upsertPendingAudioChat);
   // viagem-iniciar: além dos transitórios, um 409 morto aqui é SEMPRE bloqueio
   // por outra viagem em andamento (única causa de 409 no iniciar) — recuperável
   // assim que a vaga liberar. Reseta pra retentar sozinho (não vira "pending

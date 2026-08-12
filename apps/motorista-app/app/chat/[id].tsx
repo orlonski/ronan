@@ -14,11 +14,9 @@ import {
   ArrowLeft,
   BellOff,
   Clock,
-  Mic,
   MoreVertical,
   RefreshCw,
   Send,
-  Trash2,
   TriangleAlert,
 } from "lucide-react-native";
 import {
@@ -31,22 +29,17 @@ import {
 import { showAlert, showConfirm } from "@/lib/alert";
 import { fmtDataHoraCurta } from "@/lib/datetime";
 import { humanizeApiError } from "@/lib/api";
-import type { PendingAudioChat, PendingMensagemChat } from "@/db/database";
-import { BolhaAudio } from "@/components/bolha-audio";
-import { fmtDuracao, useGravadorChat } from "@/lib/audio-chat";
+import type { PendingMensagemChat } from "@/db/database";
 import {
   useApagarMensagem,
   useBloquear,
   useDenunciar,
-  useDescartarAudio,
   useDescartarMensagem,
-  useEnviarAudio,
   useEnviarMensagem,
   useMarcarLida,
   useMensagens,
   useNovidadesConversa,
   usePendentesDaConversa,
-  useReenviarAudio,
   useReenviarMensagem,
   useSilenciar,
 } from "@/lib/chat";
@@ -66,10 +59,6 @@ export default function ConversaScreen() {
   const q = useMensagens(conversaId);
   const pendentes = usePendentesDaConversa(conversaId);
   const enviar = useEnviarMensagem(conversaId);
-  const enviarAudio = useEnviarAudio(conversaId);
-  const reenviarAudio = useReenviarAudio(conversaId);
-  const descartarAudio = useDescartarAudio(conversaId);
-  const gravador = useGravadorChat();
   const reenviar = useReenviarMensagem(conversaId);
   const descartar = useDescartarMensagem(conversaId);
   const marcarLida = useMarcarLida();
@@ -103,13 +92,10 @@ export default function ConversaScreen() {
     // Pendente que o servidor já confirmou some da fila no próximo drain; até
     // lá, filtrar por clientId evita a bolha duplicada no meio do caminho.
     const confirmados = new Set((q.data?.mensagens ?? []).map((m) => m.clientId));
-    const naFila: Linha[] = (pendentes.data?.textos ?? [])
+    const naFila: Linha[] = (pendentes.data ?? [])
       .filter((p) => !confirmados.has(p.clientId))
       .map((p) => ({ tipo: "pendente" as const, p }));
-    const audiosNaFila: Linha[] = (pendentes.data?.audios ?? [])
-      .filter((a) => !confirmados.has(a.clientId))
-      .map((a) => ({ tipo: "audio-pendente" as const, a }));
-    return [...doServidor, ...naFila, ...audiosNaFila];
+    return [...doServidor, ...naFila];
   }, [q.data?.mensagens, pendentes.data]);
 
   useEffect(() => {
@@ -117,14 +103,6 @@ export default function ConversaScreen() {
     const t = setTimeout(() => listaRef.current?.scrollToEnd({ animated: true }), 60);
     return () => clearTimeout(t);
   }, [linhas.length]);
-
-  // Teto de duração: para e manda sozinho. Sem isso, um dedo esquecido no
-  // botão vira um arquivo de 5+ min que não sobe em 4G e custa caro de
-  // transcrever — e o motorista só descobriria na hora de enviar.
-  useEffect(() => {
-    if (gravador.gravando && gravador.atingiuTeto) void pararEEnviar();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gravador.gravando, gravador.atingiuTeto]);
 
   async function mandar() {
     const t = texto.trim();
@@ -221,42 +199,6 @@ export default function ConversaScreen() {
     if (escolha === "apagar") descartar.mutate(p.clientId);
   }
 
-  async function menuDoAudioPendente(a: PendingAudioChat) {
-    const escolha = await showAlert({
-      title: "Áudio não enviado",
-      message: a.errorMsg ?? "Aguardando sinal.",
-      buttons: [
-        { label: "Tentar de novo", value: "tentar" },
-        { label: "Apagar", value: "apagar", style: "destructive" },
-        { label: "Fechar", value: "cancelar", style: "cancel" },
-      ],
-    });
-    if (escolha === "tentar") reenviarAudio.mutate(a.clientId);
-    if (escolha === "apagar") descartarAudio.mutate(a.clientId);
-  }
-
-  async function comecarGravacao() {
-    const ok = await gravador.comecar();
-    if (ok) return;
-    void showAlert({
-      title: gravador.erro === "permissao" ? "Sem acesso ao microfone" : "Não deu pra gravar",
-      message:
-        gravador.erro === "permissao"
-          ? "Libere o microfone nos ajustes do celular pra mandar recado de voz."
-          : "Tente de novo em alguns segundos.",
-    });
-  }
-
-  async function pararEEnviar() {
-    const g = await gravador.parar();
-    if (!g) return;
-    await enviarAudio.mutateAsync({
-      uri: g.uri,
-      mimetype: g.mimetype,
-      duracaoSegundos: g.duracaoSegundos,
-    });
-  }
-
   return (
     // Só `bottom`: quem cobre a status bar é o header azul (pt-14), igual ao
     // ScreenHeader. Com `top` o safe area pintaria essa faixa de branco.
@@ -306,13 +248,7 @@ export default function ConversaScreen() {
           <FlatList<Linha>
             ref={listaRef}
             data={linhas}
-            keyExtractor={(l) =>
-              l.tipo === "servidor"
-                ? l.m.id
-                : l.tipo === "pendente"
-                  ? l.p.clientId
-                  : l.a.clientId
-            }
+            keyExtractor={(l) => (l.tipo === "servidor" ? l.m.id : l.p.clientId)}
             contentContainerStyle={{ padding: 12, gap: 6 }}
             onContentSizeChange={() => listaRef.current?.scrollToEnd({ animated: false })}
             ListEmptyComponent={
@@ -322,44 +258,13 @@ export default function ConversaScreen() {
                   : "Manda a primeira mensagem."}
               </Text>
             }
-            renderItem={({ item }) => {
-              if (item.tipo === "audio-pendente") {
-                return (
-                  <BolhaPendente
-                    rotulo={`🎤 Áudio ${fmtDuracao(item.a.duracaoSegundos)}`}
-                    falhou={item.a.status === "error"}
-                    onPress={() => void menuDoAudioPendente(item.a)}
-                  />
-                );
-              }
-              if (item.tipo === "pendente") {
-                return (
-                  <BolhaPendente
-                    rotulo={item.p.texto}
-                    falhou={item.p.status === "error"}
-                    onPress={() => void menuDaPendente(item.p)}
-                  />
-                );
-              }
-              const m = item.m;
-              if (m.tipo === "AUDIO" && !m.apagada) {
-                return (
-                  <BolhaAudio
-                    mensagemId={m.id}
-                    meu={m.meu}
-                    duracaoSegundos={m.audioSegundos}
-                    transcricao={m.transcricao}
-                    disponivel={m.audioDisponivel}
-                    autorNome={m.autorNome}
-                    mostrarAutor={!m.meu && m.autor === "MOTORISTA"}
-                    horario={fmtDataHoraCurta(m.criadoEm)}
-                    criadoEm={m.criadoEm}
-                    onLongPress={() => void menuDaMensagem(m)}
-                  />
-                );
-              }
-              return <Bolha m={m} onLongPress={() => void menuDaMensagem(m)} />;
-            }}
+            renderItem={({ item }) =>
+              item.tipo === "servidor" ? (
+                <Bolha m={item.m} onLongPress={() => void menuDaMensagem(item.m)} />
+              ) : (
+                <BolhaPendente p={item.p} onPress={() => void menuDaPendente(item.p)} />
+              )
+            }
           />
         )}
 
@@ -370,34 +275,6 @@ export default function ConversaScreen() {
             </Text>
           </View>
         ) : (
-          gravador.gravando ? (
-          // Gravando: a linha inteira vira a barra de gravação. Tap pra
-          // começar e tap pra mandar (em vez de segurar) — segurar o dedo é
-          // ruim pra quem está no volante, e o alvo aqui é grande de propósito.
-          <View className="flex-row items-center gap-3 border-t border-border bg-destructive/10 px-3 py-3">
-            <Pressable
-              onPress={() => void gravador.cancelar()}
-              hitSlop={10}
-              accessibilityLabel="Descartar gravação"
-              className="h-12 w-12 items-center justify-center rounded-full bg-muted"
-            >
-              <Trash2 size={20} color="#dc2626" />
-            </Pressable>
-            <View className="flex-1 flex-row items-center gap-2">
-              <View className="h-3 w-3 rounded-full bg-destructive" />
-              <Text className="text-base font-bold text-foreground">
-                Gravando {fmtDuracao(gravador.segundos)}
-              </Text>
-            </View>
-            <Pressable
-              onPress={() => void pararEEnviar()}
-              accessibilityLabel="Enviar áudio"
-              className="h-12 w-12 items-center justify-center rounded-full bg-primary"
-            >
-              <Send size={20} color="white" />
-            </Pressable>
-          </View>
-          ) : (
           <View className="flex-row items-end gap-2 border-t border-border bg-background px-3 py-2">
             <TextInput
               value={texto}
@@ -408,25 +285,17 @@ export default function ConversaScreen() {
               maxLength={MAX_TEXTO_MENSAGEM}
               className="max-h-32 min-h-[48px] flex-1 rounded-3xl border border-input bg-white px-4 py-3 text-base text-foreground"
             />
-            {texto.trim().length === 0 ? (
-              <Pressable
-                onPress={() => void comecarGravacao()}
-                accessibilityLabel="Gravar áudio"
-                className="h-12 w-12 items-center justify-center rounded-full bg-primary"
-              >
-                <Mic size={22} color="white" />
-              </Pressable>
-            ) : (
-              <Pressable
-                onPress={() => void mandar()}
-                accessibilityLabel="Enviar"
-                className="h-12 w-12 items-center justify-center rounded-full bg-primary"
-              >
-                <Send size={20} color="white" />
-              </Pressable>
-            )}
+            <Pressable
+              onPress={() => void mandar()}
+              disabled={texto.trim().length === 0}
+              accessibilityLabel="Enviar"
+              className={`h-12 w-12 items-center justify-center rounded-full ${
+                texto.trim().length === 0 ? "bg-muted" : "bg-primary"
+              }`}
+            >
+              <Send size={20} color={texto.trim().length === 0 ? "#94a3b8" : "white"} />
+            </Pressable>
           </View>
-          )
         )}
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -435,8 +304,7 @@ export default function ConversaScreen() {
 
 type Linha =
   | { tipo: "servidor"; m: MensagemChatItem }
-  | { tipo: "pendente"; p: PendingMensagemChat }
-  | { tipo: "audio-pendente"; a: PendingAudioChat };
+  | { tipo: "pendente"; p: PendingMensagemChat };
 
 function Bolha({
   m,
@@ -481,17 +349,15 @@ function Bolha({
   );
 }
 
-/** Bolha ainda no outbox: relógio enquanto espera sinal, aviso quando falhou.
- *  Serve texto e áudio — muda só o rótulo. */
+/** Bolha ainda no outbox: relógio enquanto espera sinal, aviso quando falhou. */
 function BolhaPendente({
-  rotulo,
-  falhou,
+  p,
   onPress,
 }: {
-  rotulo: string;
-  falhou: boolean;
+  p: PendingMensagemChat;
   onPress: () => void;
 }) {
+  const falhou = p.status === "error";
   return (
     <Pressable
       onPress={onPress}
@@ -500,7 +366,7 @@ function BolhaPendente({
       }`}
     >
       <Text className={`text-base ${falhou ? "text-foreground" : "text-primary-foreground"}`}>
-        {rotulo}
+        {p.texto}
       </Text>
       <View className="mt-0.5 flex-row items-center justify-end gap-1">
         {falhou ? (
