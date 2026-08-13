@@ -453,11 +453,26 @@ function StatusCard({
 function AvisoGrupoCard({ isAdmin, online }: { isAdmin: boolean; online: boolean }) {
   const token = useAuthToken();
   const qc = useQueryClient();
+  const { plataforma, conta } = usePermissoes();
+
+  // O número do WhatsApp é UM só, mas o grupo é de cada empresa. Quem opera a
+  // plataforma escolhe aqui de qual empresa está configurando o grupo; para os
+  // demais, é sempre a própria (e o seletor nem aparece).
+  const [contaAlvo, setContaAlvo] = useState<string>("");
+  const empresas = useQuery({
+    queryKey: ["contas-para-grupo"],
+    enabled: !!token && plataforma,
+    staleTime: 5 * 60_000,
+    queryFn: () => fetchApi<{ id: string; nome: string }[]>("/admin/contas", { token }),
+  });
+
+  const alvo = contaAlvo || conta?.id || "";
+  const sufixo = plataforma && alvo && alvo !== conta?.id ? `?contaId=${alvo}` : "";
 
   const cfg = useQuery({
-    queryKey: ["aviso-grupo-config"],
+    queryKey: ["aviso-grupo-config", alvo],
     enabled: !!token,
-    queryFn: () => fetchApi<ConfigAvisoGrupo>("/admin/whatsapp/aviso-grupo", { token }),
+    queryFn: () => fetchApi<ConfigAvisoGrupo>(`/admin/whatsapp/aviso-grupo${sufixo}`, { token }),
   });
 
   // Grupos só carregam quando o número está conectado (precisa do Baileys).
@@ -484,7 +499,7 @@ function AvisoGrupoCard({ isAdmin, online }: { isAdmin: boolean; online: boolean
     mutationFn: () => {
       const nome =
         grupos.data?.find((g) => g.jid === grupoJid)?.nome ?? cfg.data?.grupoNome ?? null;
-      return fetchApi<ConfigAvisoGrupo>("/admin/whatsapp/aviso-grupo", {
+      return fetchApi<ConfigAvisoGrupo>(`/admin/whatsapp/aviso-grupo${sufixo}`, {
         method: "PUT",
         token,
         body: JSON.stringify({
@@ -530,6 +545,27 @@ function AvisoGrupoCard({ isAdmin, online }: { isAdmin: boolean; online: boolean
         </div>
         <StatusToggle active={ativo} onChange={setAtivo} disabled={!isAdmin} label />
       </div>
+
+      {/* Só a plataforma escolhe a empresa. Para o admin de uma empresa, isto nem
+          aparece — a configuração é sempre a dela. */}
+      {plataforma && (
+        <div className="space-y-2 border-t pt-3">
+          <label className="block text-xs font-medium text-muted-foreground">
+            Empresa que recebe este aviso
+          </label>
+          <Select value={alvo} onChange={(e) => setContaAlvo(e.target.value)}>
+            {(empresas.data ?? []).map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.nome}
+              </option>
+            ))}
+          </Select>
+          <p className="text-[11px] text-muted-foreground">
+            Cada empresa tem o grupo dela. O número que envia é o mesmo para todas — só o grupo
+            de destino muda.
+          </p>
+        </div>
+      )}
 
       <div className="space-y-2 border-t pt-3">
         <label className="block text-xs font-medium text-muted-foreground">Grupo destino</label>

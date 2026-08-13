@@ -18,6 +18,8 @@ import { RolesGuard } from "../auth/guards/roles.guard";
 import { RequerPermissao } from "../auth/decorators/requer-permissao.decorator";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { AuthUser } from "../auth/types";
+import { comConta } from "../common/conta/conta-context";
+import { contaAlvo } from "./conta-alvo";
 import { AvisoGrupoService } from "./aviso-grupo.service";
 import { ConviteService } from "./convite.service";
 import { EvolutionClientService } from "./evolution-client.service";
@@ -158,8 +160,11 @@ export class WhatsappController {
   @UseGuards(RolesGuard)
   @Roles("ADMIN_USER")
   @Get("admin/whatsapp/aviso-grupo")
-  async avisoGrupoConfig() {
-    return this.avisoGrupo.pegarConfig();
+  async avisoGrupoConfig(
+    @CurrentUser() user: AuthUser,
+    @Query("contaId") contaId?: string,
+  ) {
+    return comConta(contaAlvo(user, contaId), () => this.avisoGrupo.pegarConfig());
   }
 
   @ApiBearerAuth()
@@ -169,6 +174,7 @@ export class WhatsappController {
   @Put("admin/whatsapp/aviso-grupo")
   async salvarAvisoGrupo(
     @CurrentUser() user: AuthUser,
+    @Query("contaId") contaId: string | undefined,
     @Body()
     body: {
       ativo?: boolean;
@@ -177,14 +183,16 @@ export class WhatsappController {
       template?: string | null;
     },
   ) {
-    return this.avisoGrupo.salvarConfig(
-      {
-        ativo: body.ativo,
-        grupoJid: body.grupoJid,
-        grupoNome: body.grupoNome,
-        template: body.template,
-      },
-      user.id,
+    return comConta(contaAlvo(user, contaId), () =>
+      this.avisoGrupo.salvarConfig(
+        {
+          ativo: body.ativo,
+          grupoJid: body.grupoJid,
+          grupoNome: body.grupoNome,
+          template: body.template,
+        },
+        user.id,
+      ),
     );
   }
 
