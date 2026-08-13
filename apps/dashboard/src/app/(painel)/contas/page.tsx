@@ -18,6 +18,8 @@ import { useApiQuery, fetchApi, useAuthToken } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
 import { fmtDataHoraSP } from "@/lib/datetime-br";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
+
 type Conta = {
   id: string;
   nome: string;
@@ -25,6 +27,7 @@ type Conta = {
   cnpj: string | null;
   ativa: boolean;
   permiteAutoCadastro: boolean;
+  logoUrl: string | null;
   criadaEm: string;
   usuarios: number;
   motoristas: number;
@@ -99,6 +102,22 @@ export default function ContasPage() {
     }
   }
 
+  async function enviarLogo(conta: Conta, arquivo: File) {
+    if (arquivo.size > 2 * 1024 * 1024) {
+      toast.error("A logo precisa ter no máximo 2 MB.");
+      return;
+    }
+    try {
+      const form = new FormData();
+      form.append("logo", arquivo);
+      await fetchApi(`/admin/contas/${conta.id}/logo`, { method: "POST", token, body: form });
+      toast.success(`Logo de ${conta.nome} atualizada.`);
+      void refetch();
+    } catch (erro) {
+      toast.error(erro instanceof Error ? erro.message : "Não consegui enviar a logo.");
+    }
+  }
+
   async function definirAutoCadastro(conta: Conta) {
     try {
       await fetchApi(`/admin/contas/${conta.id}/auto-cadastro`, { method: "PATCH", token });
@@ -134,7 +153,21 @@ export default function ContasPage() {
           {(data ?? []).map((conta) => (
             <Card key={conta.id} className="p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
+                <div className="flex items-start gap-3">
+                  {/* A marca do cliente, quando ele já mandou uma. */}
+                  <div className="flex h-10 w-16 shrink-0 items-center justify-center rounded border bg-muted/30">
+                    {conta.logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={`${API_URL}${conta.logoUrl}`}
+                        alt={conta.nome}
+                        className="max-h-8 max-w-14 object-contain"
+                      />
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground">sem logo</span>
+                    )}
+                  </div>
+                  <div>
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{conta.nome}</span>
                     {!conta.ativa && (
@@ -152,8 +185,27 @@ export default function ContasPage() {
                     {conta.slug} · {conta.usuarios} usuário(s) · {conta.motoristas} motorista(s) ·{" "}
                     {conta.viagens} viagem(ns) · desde {fmtDataHoraSP(conta.criadaEm)}
                   </p>
+                  </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    id={`logo-${conta.id}`}
+                    onChange={(e) => {
+                      const arquivo = e.target.files?.[0];
+                      if (arquivo) void enviarLogo(conta, arquivo);
+                      e.target.value = "";
+                    }}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => document.getElementById(`logo-${conta.id}`)?.click()}
+                  >
+                    {conta.logoUrl ? "Trocar logo" : "Enviar logo"}
+                  </Button>
                   {!conta.permiteAutoCadastro && (
                     <Button variant="outline" size="sm" onClick={() => definirAutoCadastro(conta)}>
                       Receber cadastro pelo app

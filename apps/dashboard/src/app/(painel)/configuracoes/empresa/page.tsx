@@ -1,0 +1,137 @@
+"use client";
+
+import { useRef, useState } from "react";
+import { Building2, Trash2, Upload } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { RequerTela } from "@/components/requer-tela";
+import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { usePermissoes } from "@/lib/permissoes";
+import { useQueryClient } from "@tanstack/react-query";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
+
+/**
+ * A empresa mexendo na marca dela. Só a logo por enquanto — cor mexeria em
+ * contraste e tema escuro, que merece cuidado próprio.
+ */
+export default function MinhaEmpresaPage() {
+  return (
+    <RequerTela chave="minha-empresa.editar">
+      <Conteudo />
+    </RequerTela>
+  );
+}
+
+function Conteudo() {
+  const { conta } = usePermissoes();
+  const token = useAuthToken();
+  const queryClient = useQueryClient();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [enviando, setEnviando] = useState(false);
+
+  async function recarregar() {
+    // O nome e a logo vêm do /me, que é a fonte do painel inteiro.
+    await queryClient.invalidateQueries({ queryKey: ["/admin/users/me"] });
+  }
+
+  async function enviar(arquivo: File) {
+    if (arquivo.size > 2 * 1024 * 1024) {
+      toast.error("A logo precisa ter no máximo 2 MB.");
+      return;
+    }
+    setEnviando(true);
+    try {
+      const form = new FormData();
+      form.append("logo", arquivo);
+      await fetchApi("/admin/minha-empresa/logo", { method: "POST", token, body: form });
+      toast.success("Logo atualizada.");
+      await recarregar();
+    } catch (erro) {
+      toast.error(erro instanceof Error ? erro.message : "Não consegui enviar a logo.");
+    } finally {
+      setEnviando(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  async function remover() {
+    setEnviando(true);
+    try {
+      await fetchApi("/admin/minha-empresa/logo", { method: "DELETE", token });
+      toast.success("Logo removida.");
+      await recarregar();
+    } catch (erro) {
+      toast.error(erro instanceof Error ? erro.message : "Não consegui remover.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4 p-4 md:p-6">
+      <div>
+        <h1 className="flex items-center gap-2 text-xl font-semibold">
+          <Building2 className="h-5 w-5" />
+          Minha empresa
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          A logo aparece no menu do painel, pra quem trabalha aqui dentro.
+        </p>
+      </div>
+
+      <Card className="max-w-xl space-y-4 p-5">
+        <div>
+          <p className="text-sm font-medium">{conta?.nome ?? "—"}</p>
+          <p className="text-xs text-muted-foreground">Nome exibido no painel.</p>
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Logo</p>
+          <div className="flex min-h-24 items-center justify-center rounded-md border border-dashed bg-muted/30 p-4">
+            {conta?.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={`${API_URL}${conta.logoUrl}`}
+                alt={conta.nome}
+                className="max-h-16 object-contain"
+              />
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Nenhuma logo enviada — o painel mostra a marca padrão.
+              </p>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            PNG, JPG ou WEBP, até 2 MB. Fundo transparente fica melhor: o menu muda de cor
+            entre o tema claro e o escuro.
+          </p>
+        </div>
+
+        <div className="flex gap-2">
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="hidden"
+            onChange={(e) => {
+              const arquivo = e.target.files?.[0];
+              if (arquivo) void enviar(arquivo);
+            }}
+          />
+          <Button onClick={() => inputRef.current?.click()} disabled={enviando}>
+            <Upload className="mr-2 h-4 w-4" />
+            {enviando ? "Enviando…" : conta?.logoUrl ? "Trocar logo" : "Enviar logo"}
+          </Button>
+          {conta?.logoUrl && (
+            <Button variant="outline" onClick={remover} disabled={enviando}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              Remover
+            </Button>
+          )}
+        </div>
+      </Card>
+    </div>
+  );
+}

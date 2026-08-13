@@ -5,7 +5,7 @@ import { Menu } from "lucide-react";
 import { Sidebar } from "@/components/sidebar";
 import { BottomNav } from "@/components/bottom-nav";
 import { GlobalLoadingBar } from "@/components/loading";
-import { SchabaLogo } from "@/components/schaba-logo";
+import { LogoConta } from "@/components/logo-conta";
 import { Topbar } from "@/components/topbar";
 import { TelaGuard } from "@/components/requer-tela";
 import { useInboxStream } from "@/lib/inbox";
@@ -41,7 +41,7 @@ export function PainelShell({ children }: { children: React.ReactNode }) {
             <Menu className="h-6 w-6" />
           </button>
           <div className="flex items-center">
-            <SchabaLogo width={112} className="text-foreground" />
+            <LogoConta width={112} className="text-foreground" />
           </div>
           <div className="flex items-center gap-1">
             <Topbar />

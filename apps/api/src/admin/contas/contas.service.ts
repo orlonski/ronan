@@ -3,6 +3,7 @@ import * as bcrypt from "bcrypt";
 import { comConta, comoSistema } from "../../common/conta/conta-context";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuthService } from "../../auth/auth.service";
+import { UploadsService } from "../../uploads/uploads.service";
 import { CamposLayoutService } from "../campos-layout/campos-layout.service";
 import { PermissoesService, PAPEL_ADMIN } from "../permissoes/permissoes.service";
 import { MATERIAIS_INICIAIS, TIPOS_EVENTO_INICIAIS } from "./kit-inicial";
@@ -29,6 +30,7 @@ export class ContasService {
     private readonly prisma: PrismaService,
     private readonly permissoes: PermissoesService,
     private readonly camposLayout: CamposLayoutService,
+    private readonly uploads: UploadsService,
   ) {}
 
   /** `Conta` é model global (não tem dono), então a listagem não precisa de contexto. */
@@ -42,6 +44,7 @@ export class ContasService {
         cnpj: true,
         ativa: true,
         permiteAutoCadastro: true,
+        logoUrl: true,
         criadaEm: true,
         _count: { select: { users: true, motoristas: true, viagens: true } },
       },
@@ -131,6 +134,61 @@ export class ContasService {
 
     this.log.log(`Conta criada: ${conta.nome} (${conta.slug})`);
     return { id: conta.id, nome: conta.nome, slug: conta.slug, adminEmail: input.adminEmail };
+  }
+
+  /**
+   * Troca a logo da empresa. Devolve a URL já com um `v` novo — sem isso o
+   * navegador continuaria mostrando a logo velha do cache.
+   *
+   * A chave do objeto não vira a URL: quem serve é `/publico/contas/:id/logo`,
+   * pra a imagem poder ser usada em `<img src>` (o navegador não manda o header
+   * de autenticação numa tag de imagem).
+   */
+  async definirLogo(contaId: string, buffer: Buffer, mimetype: string) {
+    return comoSistema(async () => {
+      const atual = await this.prisma.conta.findUnique({
+        where: { id: contaId },
+        select: { logoKey: true },
+      });
+      const key = await this.uploads.putLogoConta(buffer, mimetype, contaId);
+      const conta = await this.prisma.conta.update({
+        where: { id: contaId },
+        data: { logoKey: key, logoUrl: `/publico/contas/${contaId}/logo?v=${key.slice(-12)}` },
+        select: { id: true, nome: true, logoUrl: true },
+      });
+      if (atual?.logoKey) await this.uploads.removerObjeto(atual.logoKey);
+      return conta;
+    });
+  }
+
+  /** Volta pra marca da plataforma. */
+  async removerLogo(contaId: string) {
+    return comoSistema(async () => {
+      const atual = await this.prisma.conta.findUnique({
+        where: { id: contaId },
+        select: { logoKey: true },
+      });
+      const conta = await this.prisma.conta.update({
+        where: { id: contaId },
+        data: { logoKey: null, logoUrl: null },
+        select: { id: true, nome: true, logoUrl: true },
+      });
+      if (atual?.logoKey) await this.uploads.removerObjeto(atual.logoKey);
+      return conta;
+    });
+  }
+
+  /** Bytes da logo, pra rota pública que a serve. */
+  async logoBuffer(contaId: string): Promise<{ buffer: Buffer; contentType: string } | null> {
+    const conta = await comoSistema(() =>
+      this.prisma.conta.findUnique({ where: { id: contaId }, select: { logoKey: true } }),
+    );
+    if (!conta?.logoKey) return null;
+    const buffer = await this.uploads.getObjectBuffer(conta.logoKey);
+    const ext = conta.logoKey.split(".").pop();
+    const contentType =
+      ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+    return { buffer, contentType };
   }
 
   /**

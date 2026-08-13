@@ -96,6 +96,10 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // ---- Sistema ----
   { recurso: "usuarios", label: "Usuários", modulo: "Sistema", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "permissoes", label: "Papéis e permissões", modulo: "Sistema", acoes: ["gerenciar"] },
+  // A empresa mexendo na marca dela mesma (logo do painel). Não confundir com a
+  // gestão de EMPRESAS da plataforma, que não passa por permissão nenhuma —
+  // é gateada por `User.plataforma`, fora da matriz de propósito.
+  { recurso: "minha-empresa", label: "Minha empresa (marca)", modulo: "Sistema", acoes: ["editar"] },
   { recurso: "whatsapp", label: "WhatsApp", modulo: "Sistema", acoes: ["ver", "gerenciar"] },
   { recurso: "erros", label: "Erros", modulo: "Sistema", acoes: ["ver", "resolver"] },
   { recurso: "diagnosticos", label: "Diagnósticos", modulo: "Sistema", acoes: ["ver"] },

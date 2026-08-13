@@ -47,6 +47,7 @@ export function usePermissoes() {
  */
 const ROTA_PERM: { prefixo: string; perm: string }[] = [
   { prefixo: "/configuracoes/permissoes", perm: "permissoes.gerenciar" },
+  { prefixo: "/configuracoes/empresa", perm: "minha-empresa.editar" },
   { prefixo: "/configuracoes/tracking", perm: "config-tracking.ver" },
   { prefixo: "/configuracoes/busca-locais", perm: "config-busca-locais.ver" },
   { prefixo: "/configuracoes/ia", perm: "config-ia.ver" },

@@ -205,23 +205,26 @@ enum TipoBlocoFechamento {
 /// conta com esse id, então um insert que escape da trava morre na chave
 /// estrangeira em vez de gravar dado sem dono.
 model Conta {
-  id          String   @id @default(uuid())
+  id                  String   @id @default(uuid())
   /// Nome comercial, aparece no painel e nas mensagens de WhatsApp.
-  nome        String
+  nome                String
   /// Identificador curto e estável (lowercase, sem espaço). Vai ser a chave da
   /// landing/subdomínio quando o auto-cadastro entrar.
-  slug        String   @unique
-  cnpj        String?  @unique
-  ativa       Boolean  @default(true)
+  slug                String   @unique
+  cnpj                String?  @unique
+  ativa               Boolean  @default(true)
   /// Se o auto-cadastro de motorista (signup pelo app) cai nesta conta.
   /// O app publicado nas lojas não diz de qual empresa o motorista é, então
   /// alguém precisa ser o destino padrão. Com mais de uma conta marcada, o
   /// signup passa a exigir o `contaSlug` no formulário.
-  permiteAutoCadastro Boolean @default(false)
-  logoUrl     String?
-  corPrimaria String?
-  criadaEm    DateTime @default(now())
-  alteradaEm  DateTime @updatedAt
+  permiteAutoCadastro Boolean  @default(false)
+  /// URL pública servida por /publico/contas/:id/logo (com `v` pra furar cache).
+  logoUrl             String?
+  /// Chave do objeto no MinIO. Separada da URL pra poder apagar a logo antiga.
+  logoKey             String?
+  corPrimaria         String?
+  criadaEm            DateTime @default(now())
+  alteradaEm          DateTime @updatedAt
 
   users                         User[]
   papeis                        Papel[]

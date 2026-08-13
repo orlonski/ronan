@@ -40,7 +40,7 @@ import {
 import { cn } from "@/lib/utils";
 import { usePermissoes } from "@/lib/permissoes";
 import { Button } from "@/components/ui/button";
-import { SchabaLogo } from "@/components/schaba-logo";
+import { LogoConta } from "@/components/logo-conta";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 
 type Item = {
@@ -95,6 +95,7 @@ const GRUPOS: Grupo[] = [
     itens: [
       { href: "/usuarios", label: "Usuários", icon: Users2, perm: "usuarios.ver" },
       { href: "/configuracoes/permissoes", label: "Papéis e permissões", icon: ShieldCheck, perm: "permissoes.gerenciar" },
+      { href: "/configuracoes/empresa", label: "Minha empresa", icon: Building2, perm: "minha-empresa.editar" },
       { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle, perm: "whatsapp.ver" },
       { href: "/erros", label: "Erros", icon: AlertCircle, perm: "erros.ver" },
       { href: "/diagnosticos", label: "Diagnósticos", icon: Activity, perm: "diagnosticos.ver" },
@@ -180,7 +181,7 @@ export function Sidebar({
         )}
       >
         <div className="mb-1 flex items-center px-2">
-          <SchabaLogo width={160} className="shrink-0 text-sidebar-foreground" />
+          <LogoConta width={160} className="shrink-0 text-sidebar-foreground" />
           {/* Botão fechar (só mobile) */}
           {onMobileClose && (
             <button

@@ -55,6 +55,31 @@ export class UploadsService implements OnModuleInit {
     return key;
   }
 
+  /**
+   * Logo da empresa (marca no painel).
+   *
+   * Nome com uuid a cada envio em vez de um `logo.png` fixo: o navegador cacheia
+   * imagem por URL, e reaproveitar a chave faria a logo antiga continuar
+   * aparecendo depois da troca.
+   */
+  async putLogoConta(buffer: Buffer, mimetype: string, contaId: string): Promise<string> {
+    const ext = mimetype.includes("png") ? "png" : mimetype.includes("webp") ? "webp" : "jpg";
+    const key = `${contaId}/marca/logo-${randomUUID()}.${ext}`;
+    await this.client.putObject(this.bucket, key, buffer, buffer.length, {
+      "Content-Type": mimetype,
+    });
+    return key;
+  }
+
+  /** Remove um objeto; usado pra não acumular logo antiga no bucket. */
+  async removerObjeto(key: string): Promise<void> {
+    try {
+      await this.client.removeObject(this.bucket, key);
+    } catch {
+      // Logo antiga que não apaga não é motivo pra falhar a troca da nova.
+    }
+  }
+
   async putStoryFoto(buffer: Buffer, mimetype: string, motoristaId: string): Promise<string> {
     const ext = mimetype.includes("png") ? "png" : "jpg";
     const key = `${contaIdAtual()}/stories/${new Date().toISOString().slice(0, 10)}/${motoristaId}/${randomUUID()}.${ext}`;
