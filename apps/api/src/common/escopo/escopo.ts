@@ -29,8 +29,12 @@ export type RecursoEscopado =
  */
 /**
  * Sentinela pra model que NÃO tem `transportadoraId` (Empresa, Cliente,
- * Material, Local, Papel…). Não dá pra filtrar por frota, e quem protege é o
- * `EscopoGuard`, que barra o usuário restrito na porta.
+ * Material, Local, Papel…). Não dá pra filtrar por frota, e quem decide o acesso
+ * é a matriz de papéis (o guard de escopo que existia foi removido em `279abd5`
+ * — comentários pelo código que ainda o citassem estavam mentindo).
+ *
+ * ATENÇÃO: isto é o recorte por FROTA, dentro de uma empresa. O isolamento
+ * entre empresas é outro e é automático — ver `common/conta/trava-conta.ts`.
  *
  * Existe pra `escopo` ser um parâmetro REQUERIDO em `paginate` sem virar
  * `undefined` silencioso: quem adiciona uma listagem nova tem que escolher

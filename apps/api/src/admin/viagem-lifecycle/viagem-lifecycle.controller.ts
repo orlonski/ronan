@@ -74,7 +74,7 @@ export class ViagensAndamentoAdminController {
   /**
    * Cancela (apaga) uma viagem em andamento presa. Sem @EscopoPor de propósito:
    * é rescue de admin (o gestor restrito é só leitura e nem tem viagens.editar),
-   * então o EscopoGuard barra antes de chegar aqui.
+   * então não há recorte por frota aqui — o acesso é da matriz de papéis.
    */
   @RequerPermissao("viagens.editar")
   @Delete(":id")

@@ -31,7 +31,7 @@ const ListarQuery = z.object({
  * de outra frota pra vazar — o recorte por transportadora já acontece no
  * fan-out, quando a notificação é criada (ver AdminInboxService.disparar).
  *
- * Precisa de @IgnoraEscopo explícito porque o EscopoGuard é fail-closed. Sem
+ * Mantém o @IgnoraEscopo como declaração pro EscopoRegistryService. Sem
  * isso o usuário restrito leva 403 no sininho de TODA tela, e o /stream (SSE)
  * vira loop de reconexão — o EventSource do browser reconecta sozinho a cada
  * falha, o que gerava dezenas de requisições por minuto.

@@ -52,7 +52,9 @@ export class UsersService {
     >(this.prisma.user, {
       params,
       where: where as Record<string, unknown>,
-      // Model sem coluna de frota: quem barra o usuário restrito é o EscopoGuard.
+      // Model sem coluna de frota: não há o que filtrar por transportadora. O
+      // isolamento entre EMPRESAS aqui é da trava de conta; o recorte por frota
+      // fica com a matriz de papéis (não existe guard de escopo — ver escopo.ts).
       escopo: SEM_ESCOPO,
       searchFields: ["nome", "email"],
       sortable: {

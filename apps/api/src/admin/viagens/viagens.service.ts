@@ -248,7 +248,7 @@ export class ViagensAdminService {
       { localDescargaId: local.id },
       usuarioId,
       // Tela de descargas suspeitas: handler sem @EscopoPor, então o
-      // EscopoGuard já barrou o restrito antes de chegar aqui.
+      // Handler sem @EscopoPor: sem recorte por frota aqui.
       null,
       true,
     );
@@ -646,7 +646,7 @@ export class ViagensAdminService {
       void this.kmAtipico.avaliarViagem(id);
     }
 
-    return this.detalhe(id, null /* handler não escopado: o EscopoGuard já barra o usuário restrito antes de chegar aqui (sem @EscopoPor) */, true /* admin */);
+    return this.detalhe(id, null /* handler sem @EscopoPor: sem recorte por frota (a conta a trava já filtra) */, true /* admin */);
   }
 
   /**
@@ -826,7 +826,7 @@ export class ViagensAdminService {
       });
     }
 
-    return this.detalhe(id, null /* handler não escopado: o EscopoGuard já barra o usuário restrito antes de chegar aqui (sem @EscopoPor) */, true /* admin */);
+    return this.detalhe(id, null /* handler sem @EscopoPor: sem recorte por frota (a conta a trava já filtra) */, true /* admin */);
   }
 
   /** Chat da viagem — histórico de mensagens (admin <-> motorista). */
@@ -1020,7 +1020,7 @@ export class ViagensAdminService {
       motivo: `Km ${antes.km?.toString() ?? "?"} aceito como correto — readmitido na referência do trajeto.`,
     });
 
-    return this.detalhe(id, null /* handler não escopado: o EscopoGuard já barra o usuário restrito antes de chegar aqui (sem @EscopoPor) */, true /* admin */);
+    return this.detalhe(id, null /* handler sem @EscopoPor: sem recorte por frota (a conta a trava já filtra) */, true /* admin */);
   }
 
   /** Lista as rotas alternativas (OSRM) do par carga→descarga da viagem. */
@@ -1095,7 +1095,7 @@ export class ViagensAdminService {
     // km e kmFonte mudaram → re-carimba o atípico (mesmo motivo do recalcular).
     void this.kmAtipico.avaliarViagem(viagem.id);
 
-    return this.detalhe(id, null /* handler não escopado: o EscopoGuard já barra o usuário restrito antes de chegar aqui (sem @EscopoPor) */, true /* admin */);
+    return this.detalhe(id, null /* handler sem @EscopoPor: sem recorte por frota (a conta a trava já filtra) */, true /* admin */);
   }
 
   /**
@@ -1284,7 +1284,7 @@ export class ViagensAdminService {
       },
     });
 
-    return this.detalhe(id, null /* handler não escopado: o EscopoGuard já barra o usuário restrito antes de chegar aqui (sem @EscopoPor) */, true /* admin */);
+    return this.detalhe(id, null /* handler sem @EscopoPor: sem recorte por frota (a conta a trava já filtra) */, true /* admin */);
   }
 
   async historico(viagemId: string, escopo: EscopoAdmin) {

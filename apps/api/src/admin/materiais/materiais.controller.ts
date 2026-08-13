@@ -31,7 +31,7 @@ type ListMateriaisQuery = z.infer<typeof ListMateriaisQuery>;
  * tela, e quem decide é o admin na matriz.
  *
  * A ESCRITA fica de fora de propósito: criar/editar material afeta todas as
- * frotas, então não é operação escopo-neutra e o EscopoGuard barra o restrito
+ * frotas, então não é operação escopo-neutra e fica com a matriz de papéis
  * mesmo que alguém marque a chave por engano.
  */
 @Controller("admin/materiais")
