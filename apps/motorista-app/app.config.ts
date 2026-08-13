@@ -6,7 +6,7 @@ const config: ExpoConfig = {
   name: "Movatruck",
   slug: "ronan-motorista",
   scheme: "ronan",
-  version: "1.0.5",
+  version: "1.0.6",
   orientation: "portrait",
   platforms: ["ios", "android"],
   icon: "./assets/icon.png",
@@ -22,7 +22,7 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: false,
     bundleIdentifier: "br.com.schaba.motorista",
-    buildNumber: "12",
+    buildNumber: "13",
     // Google Maps SDK for iOS — usa o MESMO motor do Android (que desenha a
     // polilinha perfeitamente), no lugar do Apple Maps (que é furado com linha).
     // Chave via EAS Secret GOOGLE_MAPS_IOS_KEY (precisa "Maps SDK for iOS"
@@ -45,7 +45,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: "br.com.schaba.motorista",
-    versionCode: 14,
+    versionCode: 15,
     // FCM v1 (push notifications): exige google-services.json do projeto Firebase
     // vinculado a este package. EAS Secret GOOGLE_SERVICES_JSON aponta pro arquivo
     // subido via `eas secret:create`; em dev local cai pro arquivo na raiz do app.

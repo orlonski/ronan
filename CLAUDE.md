@@ -2,9 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-# Ronan — Sistema de viagens da Schaba
+# Ronan — Movatruck, sistema de viagens pra transportadoras
 
 Monorepo pnpm + turbo. Sistema de lançamento de viagens, pedágios e abastecimentos pra transportadora. Código, comentários, UI e commits em **PT-BR**.
+
+`ronan` é o nome do repositório; **Movatruck** é o nome do produto. A Schaba era o
+sistema inteiro e hoje é o primeiro cliente entre outros — quando "Schaba" aparecer
+num texto que o usuário lê, quase sempre é bug de multi-tenant: o certo é sair o
+nome da conta. Ficam com o nome antigo, e não dá pra trocar: o bundle ID
+`br.com.schaba.motorista` (a Play não permite), o projeto Firebase e os domínios
+`*.schaba.com.br`.
 
 ## Estrutura
 
@@ -182,7 +189,7 @@ Tom dos textos: motoristas são **parceiros autônomos**, não funcionários —
 
 Easypanel (Contabo, slug `2azr6q`) — push na `main` dispara build de api + dashboard + PWA:
 - `ronan-api` — `ronan-api.2azr6q.easypanel.host` (alias `api.schaba.com.br`)
-- `ronan-dashboard` — `app.schaba.com.br`
+- `ronan-dashboard` — `app.movatruck.com.br` (+ `app.schaba.com.br`, o domínio antigo, ainda apontando pro mesmo painel)
 - `ronan-motorista` — `motorista.schaba.com.br`
 - `ronan_agente` — worker da fila de execuções (`apps/agente/Dockerfile`, sem domínio público)
 
