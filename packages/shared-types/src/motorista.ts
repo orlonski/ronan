@@ -148,8 +148,21 @@ export type AtualizarMotoristaInput = z.infer<typeof AtualizarMotoristaInput>;
  * CriarMotoristaInput (admin): celular é OBRIGATÓRIO (recebe o código por
  * WhatsApp) e exige ao menos uma placa. A senha é definida pelo motorista.
  */
+/**
+ * Código que a empresa dá ao motorista (ex.: `FREITAS-K9M4TX`). É o que diz em
+ * qual empresa o cadastro entra — o app das lojas é um só e não tem como saber.
+ * Aceita com ou sem hífen, em qualquer caixa: o backend normaliza.
+ */
+export const CodigoEmpresaSchema = z
+  .string()
+  .trim()
+  .min(3, "Digite o código da empresa")
+  .max(40)
+  .transform((s) => s.toUpperCase().replace(/\s+/g, ""));
+
 export const CadastroMotoristaInput = z
   .object({
+    codigoEmpresa: CodigoEmpresaSchema,
     nome: z.string().min(2, "Nome muito curto").max(120),
     cpf: CpfSchema,
     telefone: TelefoneObrigatorioSchema,
@@ -179,6 +192,7 @@ export type CadastroMotoristaInput = z.infer<typeof CadastroMotoristaInput>;
 
 /** Confirma o código de 6 dígitos enviado por WhatsApp e finaliza o cadastro. */
 export const ConfirmarCadastroInput = z.object({
+  codigoEmpresa: CodigoEmpresaSchema,
   cpf: CpfSchema,
   codigo: z
     .string()
@@ -189,6 +203,7 @@ export type ConfirmarCadastroInput = z.infer<typeof ConfirmarCadastroInput>;
 
 /** Reenvia o código de verificação pro cadastro pendente daquele CPF. */
 export const ReenviarCodigoInput = z.object({
+  codigoEmpresa: CodigoEmpresaSchema,
   cpf: CpfSchema,
 });
 export type ReenviarCodigoInput = z.infer<typeof ReenviarCodigoInput>;

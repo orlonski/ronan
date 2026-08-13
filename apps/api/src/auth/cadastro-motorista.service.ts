@@ -8,6 +8,7 @@ import {
 import { randomInt } from "node:crypto";
 import { formatCpf, type CadastroMotoristaInput, type PlacaInput } from "@ronan/shared-types";
 import { comConta, comoSistema, contaIdAtual } from "../common/conta/conta-context";
+import { normalizarCodigoConvite } from "../admin/contas/codigo-convite";
 import { PrismaService } from "../prisma/prisma.service";
 import { AvisoGrupoService } from "../whatsapp/aviso-grupo.service";
 import { EvolutionClientService } from "../whatsapp/evolution-client.service";
@@ -43,38 +44,42 @@ export class CadastroMotoristaService {
   ) {}
 
   /**
-   * Em qual empresa este cadastro entra.
+   * Em qual empresa este cadastro entra — decidido pelo CÓDIGO que a empresa deu
+   * ao motorista.
    *
-   * O app publicado nas lojas não pergunta a empresa — o motorista baixa, digita
-   * o CPF e pronto. Então uma conta é marcada como destino do auto-cadastro. Com
-   * mais de uma marcada a escolha deixa de ser óbvia, e aí o formulário passa a
-   * ter que dizer qual (é o que a landing vai mandar).
+   * O app publicado nas lojas é um só e não tem como adivinhar de quem é quem
+   * baixou. Sem o código, cadastro nenhum entra: o risco de deixar cair numa
+   * empresa "padrão" é o motorista do Alex aparecer na fila da Schaba, e alguém
+   * ter que perceber.
+   *
+   * O código DIRECIONA, não autoriza: o motorista continua nascendo
+   * PENDENTE_APROVACAO e quem decide é a empresa. Por isso um código que vaze não
+   * é incidente — no máximo um cadastro pra recusar.
    */
-  private async resolverConta(contaSlug?: string): Promise<string> {
-    const candidatas = await comoSistema(() =>
-      this.prisma.conta.findMany({
-        where: contaSlug
-          ? { slug: contaSlug, ativa: true }
-          : { permiteAutoCadastro: true, ativa: true },
+  private async resolverConta(codigoBruto?: string): Promise<string> {
+    const codigo = normalizarCodigoConvite(codigoBruto ?? "");
+    if (!codigo) {
+      throw new BadRequestException(
+        "Digite o código da empresa pra quem você roda. Peça pra ela — é o mesmo código pra todos os motoristas.",
+      );
+    }
+
+    const conta = await comoSistema(() =>
+      this.prisma.conta.findFirst({
+        where: { codigoConvite: codigo, ativa: true },
         select: { id: true },
       }),
     );
-
-    if (candidatas.length === 1) return candidatas[0]!.id;
-    if (candidatas.length === 0) {
+    if (!conta) {
       throw new BadRequestException(
-        contaSlug
-          ? "Empresa não encontrada. Confira o link que você recebeu."
-          : "O cadastro pelo app está fechado no momento. Fale com o pessoal do administrativo.",
+        "Código não confere. Confira com a empresa se digitou certinho.",
       );
     }
-    throw new BadRequestException(
-      "Precisamos saber pra qual empresa é o cadastro. Use o link que a empresa te mandou.",
-    );
+    return conta.id;
   }
 
-  async iniciar(data: CadastroMotoristaInput & { contaSlug?: string }) {
-    const contaId = await this.resolverConta(data.contaSlug);
+  async iniciar(data: CadastroMotoristaInput & { codigoEmpresa?: string }) {
+    const contaId = await this.resolverConta(data.codigoEmpresa);
     return comConta(contaId, () => this.iniciarNaConta(data));
   }
 
@@ -120,8 +125,8 @@ export class CadastroMotoristaService {
     return { ok: true, expiraEmSegundos: CODIGO_TTL_MIN * 60 };
   }
 
-  async reenviar(cpf: string, contaSlug?: string) {
-    const contaId = await this.resolverConta(contaSlug);
+  async reenviar(cpf: string, codigoEmpresa?: string) {
+    const contaId = await this.resolverConta(codigoEmpresa);
     return comConta(contaId, () => this.reenviarNaConta(cpf));
   }
 
@@ -158,8 +163,8 @@ export class CadastroMotoristaService {
     return { ok: true, expiraEmSegundos: CODIGO_TTL_MIN * 60 };
   }
 
-  async confirmar(cpf: string, codigo: string, contaSlug?: string) {
-    const contaId = await this.resolverConta(contaSlug);
+  async confirmar(cpf: string, codigo: string, codigoEmpresa?: string) {
+    const contaId = await this.resolverConta(codigoEmpresa);
     return comConta(contaId, () => this.confirmarNaConta(cpf, codigo));
   }
 

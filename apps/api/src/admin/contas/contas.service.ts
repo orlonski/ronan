@@ -13,6 +13,7 @@ import { UploadsService } from "../../uploads/uploads.service";
 import { CamposLayoutService } from "../campos-layout/campos-layout.service";
 import { PermissoesService, PAPEL_ADMIN } from "../permissoes/permissoes.service";
 import { MATERIAIS_INICIAIS, TIPOS_EVENTO_INICIAIS } from "./kit-inicial";
+import { gerarCodigoConvite } from "./codigo-convite";
 
 export type CriarContaInput = {
   nome: string;
@@ -41,6 +42,7 @@ export class ContasService implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     await this.garantirOperadorDaPlataforma();
+    await this.garantirCodigosDeConvite();
   }
 
   /**
@@ -134,6 +136,58 @@ export class ContasService implements OnModuleInit {
     }
   }
 
+  /**
+   * Código de convite que ainda não existe. O sufixo é aleatório e o índice na
+   * coluna é único, então a colisão é o próprio banco quem denuncia — tentar de
+   * novo é mais simples (e mais correto) do que confiar na aleatoriedade.
+   */
+  private async codigoInedito(nomeEmpresa: string): Promise<string> {
+    for (let tentativa = 0; tentativa < 10; tentativa++) {
+      const candidato = gerarCodigoConvite(nomeEmpresa);
+      const existe = await comoSistema(() =>
+        this.prisma.conta.findUnique({ where: { codigoConvite: candidato }, select: { id: true } }),
+      );
+      if (!existe) return candidato;
+    }
+    throw new Error("Não consegui gerar um código de convite único.");
+  }
+
+  /** Empresa que já existia (criada antes do código) ganha o dela no boot. */
+  private async garantirCodigosDeConvite(): Promise<void> {
+    try {
+      const semCodigo = await comoSistema(() =>
+        this.prisma.conta.findMany({ where: { codigoConvite: null }, select: { id: true, nome: true } }),
+      );
+      for (const conta of semCodigo) {
+        const codigo = await this.codigoInedito(conta.nome);
+        await comoSistema(() =>
+          this.prisma.conta.update({ where: { id: conta.id }, data: { codigoConvite: codigo } }),
+        );
+        this.log.log(`Código de convite de ${conta.nome}: ${codigo}`);
+      }
+    } catch (erro) {
+      this.log.error(
+        `Falhou ao gerar códigos de convite: ${erro instanceof Error ? erro.message : String(erro)}`,
+      );
+    }
+  }
+
+  /** Troca o código — pra quando a empresa achar que ele circulou demais. */
+  async trocarCodigoConvite(contaId: string) {
+    const conta = await comoSistema(() =>
+      this.prisma.conta.findUnique({ where: { id: contaId }, select: { nome: true } }),
+    );
+    if (!conta) throw new BadRequestException("Empresa não encontrada.");
+    const codigo = await this.codigoInedito(conta.nome);
+    return comoSistema(() =>
+      this.prisma.conta.update({
+        where: { id: contaId },
+        data: { codigoConvite: codigo },
+        select: { id: true, nome: true, codigoConvite: true },
+      }),
+    );
+  }
+
   /** `Conta` é model global (não tem dono), então a listagem não precisa de contexto. */
   async listar() {
     const contas = await this.prisma.conta.findMany({
@@ -146,6 +200,7 @@ export class ContasService implements OnModuleInit {
         ativa: true,
         permiteAutoCadastro: true,
         logoUrl: true,
+        codigoConvite: true,
         criadaEm: true,
         _count: { select: { users: true, motoristas: true, viagens: true } },
       },
@@ -183,6 +238,7 @@ export class ContasService implements OnModuleInit {
     });
 
     const senhaHash = await AuthService.hashPassword(input.adminSenha);
+    const codigoConvite = await this.codigoInedito(input.nome);
 
     const conta = await comoSistema(() =>
       this.prisma.conta.create({
@@ -190,6 +246,7 @@ export class ContasService implements OnModuleInit {
           nome: input.nome.trim(),
           slug,
           cnpj: input.cnpj?.replace(/\D/g, "") || null,
+          codigoConvite,
           // Auto-cadastro nasce DESLIGADO: o app publicado não pergunta a empresa,
           // então duas contas ligadas fariam o signup não saber onde cadastrar.
           permiteAutoCadastro: false,

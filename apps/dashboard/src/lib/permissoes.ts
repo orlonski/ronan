@@ -11,7 +11,7 @@ type MePayload = {
   acessoGlobal: boolean;
   transportadoras: { id: string; nome: string }[];
   /** A empresa (tenant) do usuário. O backend já filtra tudo por ela. */
-  conta: { id: string; nome: string; logoUrl: string | null } | null;
+  conta: { id: string; nome: string; logoUrl: string | null; codigoConvite: string | null } | null;
   /** true = equipe da plataforma (só ela vê a tela de empresas). */
   plataforma: boolean;
 };

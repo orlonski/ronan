@@ -83,6 +83,11 @@ export class ContasController {
   removerLogo(@Param("id") id: string) {
     return this.service.removerLogo(id);
   }
+
+  @Post(":id/codigo-convite")
+  trocarCodigo(@Param("id") id: string) {
+    return this.service.trocarCodigoConvite(id);
+  }
 }
 
 const LOGO_TIPOS = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
@@ -128,5 +133,16 @@ export class MinhaEmpresaController {
   @Delete("logo")
   removerLogo(@CurrentUser() user: AuthAdminUser) {
     return this.service.removerLogo(user.contaId);
+  }
+
+  /**
+   * Troca o código de convite da empresa. Serve pra quando ele circulou além do
+   * time — o antigo para de valer na hora, e quem estava com ele não consegue
+   * mais mandar cadastro pra cá.
+   */
+  @RequerPermissao("minha-empresa.editar")
+  @Post("codigo-convite")
+  trocarCodigo(@CurrentUser() user: AuthAdminUser) {
+    return this.service.trocarCodigoConvite(user.contaId);
   }
 }

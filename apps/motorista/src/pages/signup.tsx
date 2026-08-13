@@ -29,6 +29,9 @@ function maskPlaca(input: string): string {
 
 export default function SignupPage() {
   const navigate = useNavigate();
+  // Código que a empresa passa pro motorista. É ele que decide em qual
+  // empresa o cadastro entra — o mesmo app serve todas.
+  const [codigoEmpresa, setCodigoEmpresa] = useState("");
   const [nome, setNome] = useState("");
   const [cpf, setCpf] = useState("");
   const [celular, setCelular] = useState("");
@@ -52,6 +55,9 @@ export default function SignupPage() {
 
     if (nome.trim().length < 2) return setErro("Informe seu nome completo.");
     if (cpfDigitos.length !== 11) return setErro("CPF precisa ter 11 dígitos.");
+    if (codigoEmpresa.trim().length < 3) {
+      return setErro("Informe o código da empresa pra quem você roda.");
+    }
     if (celularDigitos.length < 10) return setErro("Informe um celular válido com DDD.");
     if (senha.length < 6) return setErro("A senha precisa ter ao menos 6 caracteres.");
     if (senha !== confirmar) return setErro("As senhas não conferem.");
@@ -60,6 +66,7 @@ export default function SignupPage() {
     setSubmitting(true);
     try {
       await api.iniciarCadastro({
+        codigoEmpresa: codigoEmpresa.trim(),
         nome: nome.trim(),
         cpf: cpfDigitos,
         telefone: celularDigitos,
@@ -68,7 +75,9 @@ export default function SignupPage() {
         placas: placasLimpa.map((placa) => ({ placa })),
         placaDefault: placasLimpa.length > 1 ? placasLimpa[0] : undefined,
       });
-      navigate(`/signup/codigo?cpf=${cpfDigitos}&celular=${celularDigitos}`);
+      navigate(
+        `/signup/codigo?cpf=${cpfDigitos}&celular=${celularDigitos}&empresa=${encodeURIComponent(codigoEmpresa.trim())}`,
+      );
     } catch (err) {
       setErro(humanizeApiError(err));
     } finally {
@@ -88,6 +97,23 @@ export default function SignupPage() {
       </div>
 
       <form onSubmit={enviar} className="flex flex-1 flex-col gap-5 px-6 py-7">
+        <div className="space-y-2">
+          <Label htmlFor="codigoEmpresa">Código da empresa</Label>
+          <Input
+            id="codigoEmpresa"
+            value={codigoEmpresa}
+            onChange={(e) => setCodigoEmpresa(e.target.value.toUpperCase())}
+            autoCapitalize="characters"
+            autoCorrect="off"
+            placeholder="Ex.: FREITAS-K9M4TX"
+            disabled={submitting}
+          />
+          <p className="text-xs text-muted-foreground">
+            Peça esse código para a empresa pra quem você roda. É ele que faz seu cadastro chegar
+            até ela.
+          </p>
+        </div>
+
         <div className="space-y-2">
           <Label htmlFor="nome">Nome completo</Label>
           <Input

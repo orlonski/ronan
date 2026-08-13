@@ -20,7 +20,7 @@ function mascararCelular(c: string): string {
 }
 
 export default function SignupCodigoScreen() {
-  const params = useLocalSearchParams<{ cpf?: string; celular?: string }>();
+  const params = useLocalSearchParams<{ cpf?: string; celular?: string; codigoEmpresa?: string }>();
   const cpf = params.cpf ?? "";
   const celular = params.celular ?? "";
 
@@ -45,7 +45,13 @@ export default function SignupCodigoScreen() {
     if (codigo.trim().length !== 6) return setErro("Digite os 6 dígitos do código.");
     setSubmitting(true);
     try {
-      const res = await api.confirmarCadastro({ cpf, codigo: codigo.trim() });
+      const res = await api.confirmarCadastro({
+        cpf,
+        codigo: codigo.trim(),
+        // Vem da tela anterior: confirmar precisa saber a mesma empresa do início,
+        // senão o cadastro pendente não é encontrado.
+        codigoEmpresa: params.codigoEmpresa ?? "",
+      });
       await saveTokens(res);
       setAuthState(true);
       router.replace("/");
@@ -61,7 +67,7 @@ export default function SignupCodigoScreen() {
     setErro(null);
     setReenviando(true);
     try {
-      await api.reenviarCodigoCadastro(cpf);
+      await api.reenviarCodigoCadastro(cpf, params.codigoEmpresa ?? "");
       setCodigo("");
       setCooldown(COOLDOWN_S);
     } catch (err) {

@@ -28,6 +28,7 @@ type Conta = {
   ativa: boolean;
   permiteAutoCadastro: boolean;
   logoUrl: string | null;
+  codigoConvite: string | null;
   criadaEm: string;
   usuarios: number;
   motoristas: number;
@@ -181,6 +182,10 @@ export default function ContasPage() {
                       </span>
                     )}
                   </div>
+                  <p className="mt-1 text-xs">
+                    <span className="text-muted-foreground">código dos motoristas: </span>
+                    <span className="font-mono font-medium">{conta.codigoConvite ?? "—"}</span>
+                  </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {conta.slug} · {conta.usuarios} usuário(s) · {conta.motoristas} motorista(s) ·{" "}
                     {conta.viagens} viagem(ns) · desde {fmtDataHoraSP(conta.criadaEm)}

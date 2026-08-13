@@ -193,9 +193,9 @@ export const api = {
       body,
       auth: false,
     }),
-  reenviarCodigoCadastro: (cpf: string) =>
+  reenviarCodigoCadastro: (cpf: string, codigoEmpresa: string) =>
     request<{ ok: true; expiraEmSegundos: number }>("POST", "/m/auth/cadastro/reenviar", {
-      body: { cpf },
+      body: { cpf, codigoEmpresa },
       auth: false,
     }),
   confirmarCadastro: async (body: ConfirmarCadastroInput) => {

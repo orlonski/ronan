@@ -46,7 +46,7 @@ export class AuthController {
   async reenviarCodigo(
     @Body(new ZodValidationPipe(ReenviarCodigoInput)) body: ReenviarCodigoInput,
   ) {
-    return this.cadastro.reenviar(body.cpf);
+    return this.cadastro.reenviar(body.cpf, body.codigoEmpresa);
   }
 
   @Public()
@@ -55,7 +55,7 @@ export class AuthController {
   async confirmarCadastro(
     @Body(new ZodValidationPipe(ConfirmarCadastroInput)) body: ConfirmarCadastroInput,
   ) {
-    return this.cadastro.confirmar(body.cpf, body.codigo);
+    return this.cadastro.confirmar(body.cpf, body.codigo, body.codigoEmpresa);
   }
 
   @Public()

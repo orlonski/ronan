@@ -167,7 +167,7 @@ export class UsersService {
   async me(id: string) {
     const u = await this.prisma.user.findUniqueOrThrow({
       where: { id },
-      select: { ...SAFE_SELECT, plataforma: true, conta: { select: { id: true, nome: true, logoUrl: true } } },
+      select: { ...SAFE_SELECT, plataforma: true, conta: { select: { id: true, nome: true, logoUrl: true, codigoConvite: true } } },
     });
     // `permissoes` no topo facilita o frontend (sidebar/guards) checar acesso.
     // Vai ÍNTEGRO, inclusive pra usuário restrito a transportadora: quem decide

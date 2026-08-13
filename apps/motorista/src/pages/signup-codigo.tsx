@@ -20,6 +20,7 @@ export default function SignupCodigoPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const cpf = params.get("cpf") ?? "";
+  const empresa = params.get("empresa") ?? "";
   const celular = params.get("celular") ?? "";
 
   const [codigo, setCodigo] = useState("");
@@ -31,8 +32,8 @@ export default function SignupCodigoPage() {
 
   useEffect(() => {
     // Sem cpf na URL não dá pra confirmar — volta pro cadastro.
-    if (!cpf) navigate("/signup", { replace: true });
-  }, [cpf, navigate]);
+    if (!cpf || !empresa) navigate("/signup", { replace: true });
+  }, [cpf, empresa, navigate]);
 
   useEffect(() => {
     timer.current = setInterval(() => {
@@ -49,7 +50,13 @@ export default function SignupCodigoPage() {
     if (codigo.trim().length !== 6) return setErro("Digite os 6 dígitos do código.");
     setSubmitting(true);
     try {
-      const res = await api.confirmarCadastro({ cpf, codigo: codigo.trim() });
+      const res = await api.confirmarCadastro({
+        cpf,
+        codigo: codigo.trim(),
+        // Vem da tela anterior: confirmar precisa da mesma empresa do início,
+        // senão o cadastro pendente não é encontrado.
+        codigoEmpresa: empresa,
+      });
       saveTokens(res);
       setAuthState(true);
       navigate("/", { replace: true });
@@ -65,7 +72,7 @@ export default function SignupCodigoPage() {
     setErro(null);
     setReenviando(true);
     try {
-      await api.reenviarCodigoCadastro(cpf);
+      await api.reenviarCodigoCadastro(cpf, empresa);
       setCodigo("");
       setCooldown(COOLDOWN_S);
     } catch (err) {

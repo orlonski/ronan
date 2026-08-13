@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Building2, Trash2, Upload } from "lucide-react";
+import { Building2, RefreshCw, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -56,6 +56,20 @@ function Conteudo() {
     }
   }
 
+  async function trocarCodigo() {
+    if (!confirm("Gerar um código novo? O atual para de funcionar imediatamente.")) return;
+    setEnviando(true);
+    try {
+      await fetchApi("/admin/minha-empresa/codigo-convite", { method: "POST", token });
+      toast.success("Código novo gerado. Passe o novo para os motoristas.");
+      await recarregar();
+    } catch (erro) {
+      toast.error(erro instanceof Error ? erro.message : "Não consegui gerar o código.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
   async function remover() {
     setEnviando(true);
     try {
@@ -106,6 +120,24 @@ function Conteudo() {
           <p className="text-xs text-muted-foreground">
             PNG, JPG ou WEBP, até 2 MB. Fundo transparente fica melhor: o menu muda de cor
             entre o tema claro e o escuro.
+          </p>
+        </div>
+
+        <div className="space-y-2 rounded-md border bg-muted/20 p-4">
+          <p className="text-sm font-medium">Código para os motoristas se cadastrarem</p>
+          <p className="font-mono text-lg tracking-wider">{conta?.codigoConvite ?? "—"}</p>
+          <p className="text-xs text-muted-foreground">
+            Passe este código para os seus motoristas. Eles digitam no app ao criar a conta, e é
+            assim que o cadastro chega até você — sem ele, ninguém entra. Ele só direciona: o
+            motorista continua aparecendo aqui para você aprovar.
+          </p>
+          <Button variant="outline" size="sm" onClick={trocarCodigo} disabled={enviando}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Gerar um código novo
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            Ao gerar um novo, o antigo para de funcionar na hora. Use se ele foi parar em quem não
+            devia.
           </p>
         </div>
 

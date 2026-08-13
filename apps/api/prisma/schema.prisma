@@ -213,6 +213,11 @@ model Conta {
   slug                String   @unique
   cnpj                String?  @unique
   ativa               Boolean  @default(true)
+  /// Código que o motorista digita no app pra dizer de qual empresa ele é.
+  /// Direciona o cadastro, NÃO autoriza: o motorista continua entrando como
+  /// PENDENTE_APROVACAO e é a empresa que decide. Por isso código vazado não é
+  /// incidente — no máximo um cadastro pra recusar. Trocável pelo painel.
+  codigoConvite       String?  @unique
   /// Se o auto-cadastro de motorista (signup pelo app) cai nesta conta.
   /// O app publicado nas lojas não diz de qual empresa o motorista é, então
   /// alguém precisa ser o destino padrão. Com mais de uma conta marcada, o
