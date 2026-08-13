@@ -6,7 +6,7 @@ const config: ExpoConfig = {
   name: "Movatruck",
   slug: "ronan-motorista",
   scheme: "ronan",
-  version: "1.0.6",
+  version: "1.1.0",
   orientation: "portrait",
   platforms: ["ios", "android"],
   icon: "./assets/icon.png",
@@ -118,7 +118,28 @@ const config: ExpoConfig = {
   },
   // OTA updates via EAS Update — quando push novo bundle JS, motorista
   // baixa silenciosamente na proxima vez que abrir o app.
-  runtimeVersion: { policy: "appVersion" },
+  //
+  // O runtime é o FINGERPRINT da camada nativa, não a versão de marketing.
+  //
+  // Com a política antiga (`appVersion`), cada número de versão virava uma ilha:
+  // o build que ia pra loja nascia com o JS congelado no dia do build e só
+  // aceitava OTA da ilha dele. Como os OTAs seguiam saindo na ilha da versão
+  // antiga (onde a frota estava), quem baixava da loja ANDAVA PRA TRÁS — pegava
+  // um app sem semanas de correções, e em silêncio.
+  //
+  // Com fingerprint, subir 1.1.0 → 1.1.1 sem mexer em módulo nativo não cria
+  // ilha nenhuma: loja e frota compartilham o runtime e um OTA só alcança todo
+  // mundo. Quando o nativo muda de verdade (módulo novo, plugin, SDK), o hash
+  // muda sozinho — que é exatamente quando o runtime DEVE mudar, sem depender
+  // de alguém lembrar de bumpar.
+  //
+  // Cuidado do monorepo pnpm: o fingerprint inclui os caminhos de node_modules,
+  // então mexer no lockfile pode mudar o hash sem mudança nativa real. Isso
+  // falha pro lado seguro (o OTA não alcança ninguém, em vez de rodar JS novo
+  // sobre nativo velho), mas exige o hábito: depois de publicar, conferir com
+  // `eas update:list` que o runtime bate com o do build que está nas lojas.
+  // Pra ver o hash atual: `pnpm exec expo-updates fingerprint:generate --platform ios`.
+  runtimeVersion: { policy: "fingerprint" },
   updates: {
     fallbackToCacheTimeout: 0,
     url: "https://u.expo.dev/33e8e936-fbac-4bb3-9f98-5de6dc84da53",
