@@ -75,8 +75,11 @@ export class GeocodingService {
     private readonly prisma: PrismaService,
   ) {}
 
-  async buscarPorCep(cepRaw: string): Promise<SugestaoEndereco | null> {
-    const cep = cepRaw.replace(/\D/g, "");
+  async buscarPorCep(cepRaw: string | undefined): Promise<SugestaoEndereco | null> {
+    // Sem `?cep=` isto estourava em `.replace` de undefined e virava 500 — que
+    // além de mentir sobre a causa, enchia o error_logs. CEP ausente é o mesmo
+    // caso de CEP inválido: não achou nada.
+    const cep = (cepRaw ?? "").replace(/\D/g, "");
     if (cep.length !== 8) return null;
     const base = this.config.get<string>("VIACEP_URL") ?? "https://viacep.com.br/ws";
     try {

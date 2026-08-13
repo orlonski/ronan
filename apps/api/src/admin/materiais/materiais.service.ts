@@ -35,7 +35,7 @@ export class MateriaisService {
   }
 
   async create(data: CriarMaterialInput, usuarioId: string) {
-    const exists = await this.prisma.material.findUnique({ where: { nome: data.nome } });
+    const exists = await this.prisma.material.findFirst({ where: { nome: data.nome } });
     if (exists) throw new ConflictException("Material já cadastrado");
     return this.prisma.material.create({ data: { ...data, criadoPorId: usuarioId } });
   }

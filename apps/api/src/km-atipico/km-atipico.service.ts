@@ -11,6 +11,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import type { EscopoAdmin } from "../common/escopo/escopo";
 import { RoteamentoService } from "../roteamento/roteamento.service";
 import { inicioDiasAtras } from "../common/timezone";
+import { contaIdAtual } from "../common/conta/conta-context";
 
 /** Referência de km de um par carga→descarga, com as duas fontes lado a lado. */
 export type ReferenciaKm = ReferenciaKmPayload & {
@@ -91,9 +92,9 @@ export class KmAtipicoService {
   /** Config singleton (upsert garante o "default"), já convertida pra números. */
   private async config(): Promise<ConfigKmAtipico> {
     const c = await this.prisma.configuracaoKmAtipico.upsert({
-      where: { id: "default" },
+      where: { contaId: contaIdAtual() },
       update: {},
-      create: { id: "default" },
+      create: {},
     });
     return {
       ativo: c.ativo,
@@ -250,7 +251,8 @@ export class KmAtipicoService {
     >`
       SELECT DISTINCT v."localCargaId" AS "cargaId", v."localDescargaId" AS "descargaId"
       FROM viagens v
-      WHERE v."motoristaId" = ${motoristaId}
+      WHERE v."contaId" = ${contaIdAtual()}
+        AND v."motoristaId" = ${motoristaId}
         AND v."localCargaId" IS NOT NULL
         AND v."localDescargaId" IS NOT NULL
         AND v.data >= ${desde}
@@ -396,6 +398,17 @@ export class KmAtipicoService {
    * inconsistente com o par (troca de local sem recálculo), que entraria como
    * mediana podre com cara de estatística. Ver plano §2.1.
    */
+  /**
+   * A amostra que serve de referência de km. SQL cru não passa pela trava, então
+   * o `contaId` entra aqui na mão.
+   *
+   * Repare que conta e transportadora se comportam de forma OPOSTA de propósito:
+   * a frota é uma fronteira macia (a amostra inclui as outras frotas da mesma
+   * empresa e só esconde a identificação — recortar destruiria a estatística),
+   * enquanto a conta é uma fronteira dura. Quanto uma empresa roda entre dois
+   * pontos é informação dela; a empresa nova não calibra o km dela pelo
+   * histórico da Schaba.
+   */
   private filtroAmostra(
     cargaId: string,
     descargaId: string,
@@ -404,7 +417,8 @@ export class KmAtipicoService {
   ): Prisma.Sql {
     const excluir = excluirViagemId ?? null;
     return Prisma.sql`
-      v."localCargaId" = ${cargaId}
+      v."contaId" = ${contaIdAtual()}
+      AND v."localCargaId" = ${cargaId}
       AND v."localDescargaId" = ${descargaId}
       AND (${excluir}::text IS NULL OR v.id <> ${excluir})
       AND v.km IS NOT NULL AND v.km > 0

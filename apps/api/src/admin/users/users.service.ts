@@ -80,7 +80,7 @@ export class UsersService {
     // Sem papel escolhido → cai no Operador (evita usuário sem acesso nenhum).
     let papelId = data.papelId ?? null;
     if (!papelId) {
-      const papel = await this.prisma.papel.findUnique({
+      const papel = await this.prisma.papel.findFirst({
         where: { nome: PAPEL_OPERADOR },
         select: { id: true },
       });
@@ -163,13 +163,25 @@ export class UsersService {
   }
 
   async me(id: string) {
-    const u = await this.prisma.user.findUniqueOrThrow({ where: { id }, select: SAFE_SELECT });
+    const u = await this.prisma.user.findUniqueOrThrow({
+      where: { id },
+      select: { ...SAFE_SELECT, plataforma: true, conta: { select: { id: true, nome: true, logoUrl: true } } },
+    });
     // `permissoes` no topo facilita o frontend (sidebar/guards) checar acesso.
     // Vai ÍNTEGRO, inclusive pra usuário restrito a transportadora: quem decide
     // quais telas ele acessa é a matriz de papéis, não o backend cortando por
     // conta própria. Telas que não filtram por frota mostram tudo — a matriz
     // sinaliza quais são (selo "frota", ver EscopoRegistryService).
-    return { ...serializar(u), permissoes: u.papel?.permissoes ?? [] };
+    //
+    // `conta` e `plataforma` vêm juntos porque este endpoint é por onde o painel
+    // recebe tudo do usuário logado (`usePermissoes`) — assim o nome da empresa
+    // e a tela de contas não precisam de chamada nem de sessão nova.
+    return {
+      ...serializar(u),
+      permissoes: u.papel?.permissoes ?? [],
+      conta: u.conta,
+      plataforma: u.plataforma,
+    };
   }
 
   private async ensureExists(id: string) {

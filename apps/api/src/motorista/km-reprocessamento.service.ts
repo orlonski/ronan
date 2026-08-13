@@ -4,6 +4,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { RoteamentoService } from "../roteamento/roteamento.service";
 import { PushService } from "../push/push.service";
 import { KmAtipicoService } from "../km-atipico/km-atipico.service";
+import { paraCadaConta } from "../common/conta/para-cada-conta";
 
 // Diferença mínima (km) pra considerar que o recálculo "mudou" o valor e valer
 // o aviso ao motorista. Abaixo disso, só marca como reprocessado sem incomodar.
@@ -187,6 +188,12 @@ export class KmReprocessamentoService {
    */
   @Cron("0 */15 * * * *", { name: "reprocessar-km", timeZone: "America/Sao_Paulo" })
   async sweep(): Promise<void> {
+    // Recalcula km e avisa o motorista. Vai por conta porque a configuração de km
+    // atípico é por empresa e o aviso sai em nome dela.
+    await paraCadaConta(this.prisma, () => this.sweepDaVez());
+  }
+
+  private async sweepDaVez(): Promise<void> {
     const candidatas = await this.prisma.viagem.findMany({
       where: {
         kmRecalculadoEm: null,

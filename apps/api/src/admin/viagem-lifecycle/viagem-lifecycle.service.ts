@@ -19,7 +19,7 @@ export class ViagemLifecycleAdminService {
   }
 
   async criarTipo(data: CriarTipoEventoViagemInput, usuarioId: string) {
-    const jaExiste = await this.prisma.tipoEventoViagem.findUnique({
+    const jaExiste = await this.prisma.tipoEventoViagem.findFirst({
       where: { slug: data.slug },
       select: { id: true },
     });

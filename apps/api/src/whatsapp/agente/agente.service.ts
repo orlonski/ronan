@@ -13,6 +13,7 @@ import { systemPromptMotorista, systemPromptAdmin } from "./prompts";
 import type { AgentMessage, AgentProvider } from "./providers/agent.provider";
 import { AnthropicProvider } from "./providers/anthropic.provider";
 import { GeminiProvider } from "./providers/gemini.provider";
+import { contaIdAtual } from "../../common/conta/conta-context";
 
 const MAX_HISTORICO_MENSAGENS = 30;
 const HISTORICO_JANELA_HORAS = 24;
@@ -84,9 +85,9 @@ export class AgenteService {
     }
 
     const cfg = await this.prisma.configuracaoAgente.upsert({
-      where: { id: CONFIG_ID },
+      where: { contaId: contaIdAtual() },
       update: {},
-      create: { id: CONFIG_ID },
+      create: {},
     });
 
     const providerId: ProviderId = cfg.provider === "gemini" ? "gemini" : "anthropic";

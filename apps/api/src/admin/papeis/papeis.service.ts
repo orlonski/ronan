@@ -25,7 +25,7 @@ export class PapeisService {
   }
 
   async create(input: CriarPapelInput) {
-    const existe = await this.prisma.papel.findUnique({ where: { nome: input.nome } });
+    const existe = await this.prisma.papel.findFirst({ where: { nome: input.nome } });
     if (existe) throw new ConflictException("Já existe um papel com esse nome.");
     return this.prisma.papel.create({
       data: {
@@ -45,7 +45,7 @@ export class PapeisService {
       throw new BadRequestException("O papel Administrador não pode ser editado.");
     }
     if (input.nome && input.nome !== papel.nome) {
-      const existe = await this.prisma.papel.findUnique({ where: { nome: input.nome } });
+      const existe = await this.prisma.papel.findFirst({ where: { nome: input.nome } });
       if (existe) throw new ConflictException("Já existe um papel com esse nome.");
     }
     return this.prisma.papel.update({

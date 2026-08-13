@@ -4,6 +4,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { ymdSaoPaulo } from "../../common/timezone";
 import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
 import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
+import { contaIdAtual } from "../../common/conta/conta-context";
 
 /**
  * Service do dashboard executivo. Tudo em paralelo via Promise.all —
@@ -172,7 +173,8 @@ export class DashboardService {
       this.prisma.$queryRaw<Array<{ avg_secs: number | null }>>`
         SELECT AVG(EXTRACT(EPOCH FROM ("revisadoEm" - "sincronizadoEm")))::float8 AS avg_secs
         FROM "viagens"
-        WHERE "revisadoEm" >= ${inicio14dInst}
+        WHERE "contaId" = ${contaIdAtual()}
+          AND "revisadoEm" >= ${inicio14dInst}
         ${escopo ? Prisma.sql`AND "transportadoraId" = ANY(${escopo.transportadoraIds}::text[])` : Prisma.empty}
       `,
     ]);

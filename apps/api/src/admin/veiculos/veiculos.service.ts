@@ -57,7 +57,7 @@ export class VeiculosService {
   }
 
   async create(data: CriarVeiculoInput, usuarioId: string) {
-    const exists = await this.prisma.veiculo.findUnique({ where: { placa: data.placa } });
+    const exists = await this.prisma.veiculo.findFirst({ where: { placa: data.placa } });
     if (exists) throw new ConflictException("Placa já cadastrada");
     return this.prisma.veiculo.create({ data: { ...data, criadoPorId: usuarioId } });
   }

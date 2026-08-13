@@ -14,6 +14,8 @@ import {
   ymdSaoPaulo,
 } from "../../common/timezone";
 import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
+import { contaIdAtual } from "../../common/conta/conta-context";
+import { paraCadaConta } from "../../common/conta/para-cada-conta";
 
 const DIA_MS = 86_400_000;
 
@@ -74,6 +76,12 @@ export class ResumoService {
   /** Todo dia às 20:00 de Brasília. */
   @Cron("0 0 20 * * *", { name: "resumo-diario", timeZone: "America/Sao_Paulo" })
   async enviarDiario(): Promise<void> {
+    // O resumo é uma mensagem com os números da empresa: uma passada por conta,
+    // senão o dono da Schaba receberia as viagens da outra no mesmo texto.
+    await paraCadaConta(this.prisma, () => this.enviarDiarioDaVez());
+  }
+
+  private async enviarDiarioDaVez(): Promise<void> {
     const users = await this.prisma.user.findMany({
       where: {
         receberResumoDiario: true,
@@ -327,7 +335,8 @@ export class ResumoService {
       this.prisma.$queryRaw<Array<{ s: number | null }>>`
         SELECT AVG(EXTRACT(EPOCH FROM ("revisadoEm" - "sincronizadoEm")))::float8 AS s
         FROM "viagens"
-        WHERE "revisadoEm" >= ${inicio14dInst}
+        WHERE "contaId" = ${contaIdAtual()}
+          AND "revisadoEm" >= ${inicio14dInst}
       `,
     ]);
 

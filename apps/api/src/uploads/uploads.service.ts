@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { Client as MinioClient } from "minio";
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
+import { contaIdAtual } from "../common/conta/conta-context";
 
 @Injectable()
 export class UploadsService implements OnModuleInit {
@@ -34,7 +35,7 @@ export class UploadsService implements OnModuleInit {
 
   async putTicketFoto(buffer: Buffer, mimetype: string, motoristaId: string): Promise<string> {
     const ext = mimetype.includes("png") ? "png" : "jpg";
-    const key = `tickets/${new Date().toISOString().slice(0, 10)}/${motoristaId}/${randomUUID()}.${ext}`;
+    const key = `${contaIdAtual()}/tickets/${new Date().toISOString().slice(0, 10)}/${motoristaId}/${randomUUID()}.${ext}`;
     await this.client.putObject(this.bucket, key, buffer, buffer.length, {
       "Content-Type": mimetype,
     });
@@ -47,7 +48,7 @@ export class UploadsService implements OnModuleInit {
     motoristaId: string,
   ): Promise<string> {
     const ext = mimetype.includes("png") ? "png" : "jpg";
-    const key = `abastecimentos/${new Date().toISOString().slice(0, 10)}/${motoristaId}/${randomUUID()}.${ext}`;
+    const key = `${contaIdAtual()}/abastecimentos/${new Date().toISOString().slice(0, 10)}/${motoristaId}/${randomUUID()}.${ext}`;
     await this.client.putObject(this.bucket, key, buffer, buffer.length, {
       "Content-Type": mimetype,
     });
@@ -56,7 +57,7 @@ export class UploadsService implements OnModuleInit {
 
   async putStoryFoto(buffer: Buffer, mimetype: string, motoristaId: string): Promise<string> {
     const ext = mimetype.includes("png") ? "png" : "jpg";
-    const key = `stories/${new Date().toISOString().slice(0, 10)}/${motoristaId}/${randomUUID()}.${ext}`;
+    const key = `${contaIdAtual()}/stories/${new Date().toISOString().slice(0, 10)}/${motoristaId}/${randomUUID()}.${ext}`;
     await this.client.putObject(this.bucket, key, buffer, buffer.length, {
       "Content-Type": mimetype,
     });
@@ -79,7 +80,7 @@ export class UploadsService implements OnModuleInit {
         : mimetype.includes("webm")
           ? "webm"
           : "m4a";
-    const key = `chat-audio/${new Date().toISOString().slice(0, 10)}/${motoristaId}/${randomUUID()}.${ext}`;
+    const key = `${contaIdAtual()}/chat-audio/${new Date().toISOString().slice(0, 10)}/${motoristaId}/${randomUUID()}.${ext}`;
     await this.client.putObject(this.bucket, key, buffer, buffer.length, {
       "Content-Type": mimetype,
     });
@@ -120,7 +121,7 @@ export class UploadsService implements OnModuleInit {
     nomeOriginal: string,
   ): Promise<string> {
     const ext = (nomeOriginal.split(".").pop() ?? "bin").toLowerCase().replace(/[^a-z0-9]/g, "");
-    const key = `documentos/${motoristaId}/${tipo}.${ext || "bin"}`;
+    const key = `${contaIdAtual()}/documentos/${motoristaId}/${tipo}.${ext || "bin"}`;
     await this.client.putObject(this.bucket, key, buffer, buffer.length, {
       "Content-Type": mimetype,
     });

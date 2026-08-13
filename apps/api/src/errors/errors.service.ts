@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { createHash } from "crypto";
+import { comoSistema, contaAtual } from "../common/conta/conta-context";
 import { PrismaService } from "../prisma/prisma.service";
 
 export type ReportarErroInput = {
@@ -31,20 +32,28 @@ export class ErrorsService {
 
   async reportar(input: ReportarErroInput) {
     const hash = this.gerarHash(input.message, input.stack);
-    return this.prisma.errorLog.create({
-      data: {
-        hash,
-        origem: input.origem,
-        message: input.message.slice(0, 500),
-        stack: input.stack?.slice(0, 20_000),
-        versao: input.versao,
-        userId: input.userId,
-        userType: input.userType,
-        url: input.url?.slice(0, 500),
-        userAgent: input.userAgent?.slice(0, 500),
-        extra: input.extra as never,
-      },
-    });
+    // Log de erro é da PLATAFORMA, não da empresa: precisa gravar mesmo quando o
+    // erro é justamente "não sei de que conta é" — senão o diagnóstico some no
+    // exato caso em que ele mais importa. A conta entra quando dá pra saber
+    // (`contaId` é opcional aqui), e a trava fica de fora.
+    const contaId = contaAtual()?.contaId ?? null;
+    return comoSistema(() =>
+      this.prisma.errorLog.create({
+        data: {
+          contaId,
+          hash,
+          origem: input.origem,
+          message: input.message.slice(0, 500),
+          stack: input.stack?.slice(0, 20_000),
+          versao: input.versao,
+          userId: input.userId,
+          userType: input.userType,
+          url: input.url?.slice(0, 500),
+          userAgent: input.userAgent?.slice(0, 500),
+          extra: input.extra as never,
+        },
+      }),
+    );
   }
 
   /**

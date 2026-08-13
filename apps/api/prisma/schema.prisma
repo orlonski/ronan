@@ -188,75 +188,182 @@ enum TipoBlocoFechamento {
   COMBUSTIVEL
 }
 
+/// Conta = a empresa que assina o sistema. É o tenant: todo dado de negócio
+/// pertence a exatamente uma conta, e o isolamento é garantido pela trava
+/// automática em `common/conta/trava-conta.ts` — não por filtro manual em cada
+/// consulta.
+///
+/// NÃO confundir com `Empresa` (o tomador de serviço, quem manda planilha de
+/// fechamento) nem com `Transportadora` (a frota dona dos caminhões, que é um
+/// sub-escopo DENTRO de uma conta).
+///
+/// Sobre o `@default("__SEM_CONTA__")` que todo `contaId` carrega: quem preenche
+/// o campo de verdade é a trava, em toda operação do Prisma. O default existe só
+/// pra que o TypeScript não exija `contaId` nos ~150 `create` espalhados pelo
+/// código — exigir levaria o contaId a ser carregado na mão service a service,
+/// que é justamente o erro que a trava evita. O valor é proposital: não existe
+/// conta com esse id, então um insert que escape da trava morre na chave
+/// estrangeira em vez de gravar dado sem dono.
+model Conta {
+  id          String   @id @default(uuid())
+  /// Nome comercial, aparece no painel e nas mensagens de WhatsApp.
+  nome        String
+  /// Identificador curto e estável (lowercase, sem espaço). Vai ser a chave da
+  /// landing/subdomínio quando o auto-cadastro entrar.
+  slug        String   @unique
+  cnpj        String?  @unique
+  ativa       Boolean  @default(true)
+  /// Se o auto-cadastro de motorista (signup pelo app) cai nesta conta.
+  /// O app publicado nas lojas não diz de qual empresa o motorista é, então
+  /// alguém precisa ser o destino padrão. Com mais de uma conta marcada, o
+  /// signup passa a exigir o `contaSlug` no formulário.
+  permiteAutoCadastro Boolean @default(false)
+  logoUrl     String?
+  corPrimaria String?
+  criadaEm    DateTime @default(now())
+  alteradaEm  DateTime @updatedAt
+
+  users                         User[]
+  papeis                        Papel[]
+  adminNotificacoes             AdminNotificacao[]
+  motoristas                    Motorista[]
+  cadastrosMotoristaPendentes   CadastroMotoristaPendente[]
+  redefinicoesSenhaPendentes    RedefinicaoSenhaPendente[]
+  motoristaPosicaoConfigs       MotoristaPosicaoConfig[]
+  motoristaPosicoes             MotoristaPosicao[]
+  motoristaDocumentos           MotoristaDocumento[]
+  motoristaVeiculos             MotoristaVeiculo[]
+  whatsappSessoes               WhatsappSessao[]
+  whatsappConvites              WhatsappConvite[]
+  whatsappMensagens             WhatsappMensagem[]
+  veiculos                      Veiculo[]
+  transportadoras               Transportadora[]
+  usuarioTransportadoras        UsuarioTransportadora[]
+  empresas                      Empresa[]
+  layoutImportBlocos            LayoutImportBloco[]
+  clientes                      Cliente[]
+  materiais                     Material[]
+  regrasMinimo                  RegraMinimo[]
+  locais                        Local[]
+  locaisClientes                LocalCliente[]
+  locaisEvidencias              LocalEvidencia[]
+  viagens                       Viagem[]
+  trechosViagem                 TrechoViagem[]
+  tiposEventoViagem             TipoEventoViagem[]
+  eventosViagem                 EventoViagem[]
+  viagensMensagens              ViagemMensagem[]
+  ticketFotos                   TicketFoto[]
+  viagensCompartilhamentos      ViagemCompartilhamento[]
+  stories                       Story[]
+  storyVisualizacoes            StoryVisualizacao[]
+  storyReacoes                  StoryReacao[]
+  viagensPontos                 ViagemPonto[]
+  pedagios                      Pedagio[]
+  fechamentos                   Fechamento[]
+  fechamentoLinhas              FechamentoLinha[]
+  layoutsEnvio                  LayoutEnvio[]
+  enviosFechamento              EnvioFechamento[]
+  auditLogs                     AuditLog[]
+  configuracoesTracking         ConfiguracaoTracking[]
+  configuracoesIa               ConfiguracaoIa[]
+  configuracoesAgente           ConfiguracaoAgente[]
+  configuracoesAvisoGrupo       ConfiguracaoAvisoGrupo[]
+  configuracoesBuscaLocais      ConfiguracaoBuscaLocais[]
+  configuracoesKmAtipico        ConfiguracaoKmAtipico[]
+  configuracoesForcaAtualizacao ConfiguracaoForcaAtualizacao[]
+  camposLayout                  CampoLayout[]
+  errorLogs                     ErrorLog[]
+  eventosMotorista              EventoMotorista[]
+  abastecimentos                Abastecimento[]
+  abastecimentoFotos            AbastecimentoFoto[]
+  notificacoes                  Notificacao[]
+  conversas                     Conversa[]
+  conversaParticipantes         ConversaParticipante[]
+  mensagensChat                 MensagemChat[]
+  bloqueiosChat                 BloqueioChat[]
+  denunciasMensagemChat         DenunciaMensagemChat[]
+
+  @@index([ativa])
+  @@map("contas")
+}
+
 model User {
-  id            String        @id @default(uuid())
-  nome          String
-  email         String        @unique
-  senhaHash     String
-  ativo         Boolean       @default(true)
-  ultimoLoginEm DateTime?
+  contaId             String    @default("__SEM_CONTA__")
+  conta               Conta     @relation(fields: [contaId], references: [id])
+  id                  String    @id @default(uuid())
+  nome                String
+  email               String    @unique
+  senhaHash           String
+  ativo               Boolean   @default(true)
+  ultimoLoginEm       DateTime?
   // Resumo diário no WhatsApp: número (normalizado com DDI) e opt-in.
   whatsappResumo      String?
-  receberResumoDiario Boolean @default(false)
+  receberResumoDiario Boolean   @default(false)
   // Assuntos do resumo que ESTE usuário recebe (preferência pessoal, não papel).
   // Vazio = trata como "todos" no envio. Ids em @ronan/shared-types ASSUNTOS_RESUMO.
-  resumoAssuntos      String[] @default([])
+  resumoAssuntos      String[]  @default([])
   // Papel (RBAC): define as permissões granulares (telas, assuntos do resumo).
   // O papel diz O QUE o usuário pode fazer; o escopo abaixo diz QUAIS registros
   // ele enxerga. São dimensões independentes.
-  papel         Papel?        @relation(fields: [papelId], references: [id], onDelete: SetNull)
-  papelId       String?
+  papel               Papel?    @relation(fields: [papelId], references: [id], onDelete: SetNull)
+  papelId             String?
   /// True = enxerga todos os registros (comportamento histórico; migration seta
   /// true pra todo mundo que já existia). False = restrito às transportadoras
   /// vinculadas em `transportadoras` — e restrito SEM vínculo nenhum não vê
   /// nada, nunca tudo. Fail-open aqui liberaria a base inteira por esquecimento.
-  acessoGlobal  Boolean       @default(true)
-  criadoEm      DateTime      @default(now())
-  alteradoEm    DateTime      @updatedAt
+  acessoGlobal        Boolean   @default(true)
+  /// True = operador da PLATAFORMA (o dono do sistema), não da conta. É o único
+  /// que enxerga a tela de contas e pode criar empresa nova. Não é "vê tudo de
+  /// todo mundo": pra dar suporte ele entra numa conta por impersonação
+  /// explícita, que fica registrada no AuditLog.
+  plataforma          Boolean   @default(false)
+  criadoEm            DateTime  @default(now())
+  alteradoEm          DateTime  @updatedAt
 
-  resolucoes       FechamentoLinha[]
-  envios           EnvioFechamento[]
-  auditorias       AuditLog[]
-  layoutsEnvio     LayoutEnvio[]
-  configsTracking  ConfiguracaoTracking[]
-  configsIa        ConfiguracaoIa[]
-  configsAgente    ConfiguracaoAgente[]
-  configsBuscaLocais ConfiguracaoBuscaLocais[]
-  configsAvisoGrupo  ConfiguracaoAvisoGrupo[]
-  configsForcaAtualizacao ConfiguracaoForcaAtualizacao[]
-  configsKmAtipico ConfiguracaoKmAtipico[]
-  mensagensViagem  ViagemMensagem[] @relation("MensagensViagem")
-  mensagensChat           MensagemChat[]         @relation("MensagensChat")
-  mensagensChatRemovidas  MensagemChat[]         @relation("RemoveuMensagemChat")
-  denunciasChatResolvidas DenunciaMensagemChat[] @relation("ResolveuDenunciaChat")
-  whatsappSessao   WhatsappSessao?
-  whatsappConvites WhatsappConvite[]
-  compartilhamentosCriados   ViagemCompartilhamento[] @relation("CompartilhouViagem")
-  compartilhamentosRevogados ViagemCompartilhamento[] @relation("RevogouCompartilhamento")
+  resolucoes                 FechamentoLinha[]
+  envios                     EnvioFechamento[]
+  auditorias                 AuditLog[]
+  layoutsEnvio               LayoutEnvio[]
+  configsTracking            ConfiguracaoTracking[]
+  configsIa                  ConfiguracaoIa[]
+  configsAgente              ConfiguracaoAgente[]
+  configsBuscaLocais         ConfiguracaoBuscaLocais[]
+  configsAvisoGrupo          ConfiguracaoAvisoGrupo[]
+  configsForcaAtualizacao    ConfiguracaoForcaAtualizacao[]
+  configsKmAtipico           ConfiguracaoKmAtipico[]
+  mensagensViagem            ViagemMensagem[]               @relation("MensagensViagem")
+  mensagensChat              MensagemChat[]                 @relation("MensagensChat")
+  mensagensChatRemovidas     MensagemChat[]                 @relation("RemoveuMensagemChat")
+  denunciasChatResolvidas    DenunciaMensagemChat[]         @relation("ResolveuDenunciaChat")
+  whatsappSessao             WhatsappSessao?
+  whatsappConvites           WhatsappConvite[]
+  compartilhamentosCriados   ViagemCompartilhamento[]       @relation("CompartilhouViagem")
+  compartilhamentosRevogados ViagemCompartilhamento[]       @relation("RevogouCompartilhamento")
 
   // Backreferences pra rastreamento "Cadastrado por": cada recurso admin
   // tem `criadoPorId` opcional → User. Listas inversas necessárias pelo Prisma.
   // Escopo de acesso (ver acessoGlobal). Vazio + acessoGlobal=false = vê nada.
-  transportadoras     UsuarioTransportadora[]
+  transportadoras UsuarioTransportadora[]
 
-  clientesCriados     Cliente[]     @relation("CriouCliente")
-  materiaisCriados    Material[]    @relation("CriouMaterial")
-  veiculosCriados     Veiculo[]     @relation("CriouVeiculo")
-  transportadorasCriadas Transportadora[] @relation("CriouTransportadora")
-  motoristasCriados   Motorista[]   @relation("CriouMotorista")
-  motoristasAprovados Motorista[]   @relation("AprovouMotorista")
-  empresasCriadas     Empresa[]     @relation("CriouEmpresa")
-  regrasMinimoCriadas RegraMinimo[] @relation("CriouRegraMinimo")
-  tiposEventoCriados  TipoEventoViagem[] @relation("CriouTipoEventoViagem")
-  locaisCriados       Local[]       @relation("CriouLocal")
-  usuariosCriados     User[]        @relation("CriouUser")
-  criadoPor           User?         @relation("CriouUser", fields: [criadoPorId], references: [id], onDelete: SetNull)
-  criadoPorId         String?
-  notificacoesCriadas Notificacao[] @relation("CriouNotificacao")
-  fechamentosCriados  Fechamento[]  @relation("CriouFechamento")
-  viagensRevisadas    Viagem[]      @relation("RevisouViagem")
-  adminNotificacoes   AdminNotificacao[]
+  clientesCriados        Cliente[]          @relation("CriouCliente")
+  materiaisCriados       Material[]         @relation("CriouMaterial")
+  veiculosCriados        Veiculo[]          @relation("CriouVeiculo")
+  transportadorasCriadas Transportadora[]   @relation("CriouTransportadora")
+  motoristasCriados      Motorista[]        @relation("CriouMotorista")
+  motoristasAprovados    Motorista[]        @relation("AprovouMotorista")
+  empresasCriadas        Empresa[]          @relation("CriouEmpresa")
+  regrasMinimoCriadas    RegraMinimo[]      @relation("CriouRegraMinimo")
+  tiposEventoCriados     TipoEventoViagem[] @relation("CriouTipoEventoViagem")
+  locaisCriados          Local[]            @relation("CriouLocal")
+  usuariosCriados        User[]             @relation("CriouUser")
+  criadoPor              User?              @relation("CriouUser", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId            String?
+  notificacoesCriadas    Notificacao[]      @relation("CriouNotificacao")
+  fechamentosCriados     Fechamento[]       @relation("CriouFechamento")
+  viagensRevisadas       Viagem[]           @relation("RevisouViagem")
+  adminNotificacoes      AdminNotificacao[]
 
+  @@index([contaId])
   @@map("users")
 }
 
@@ -278,8 +385,10 @@ model Permissao {
 /// Papel (RBAC): conjunto nomeado de permissões. `permissoes` guarda as chaves
 /// liberadas. `sistema=true` nos embutidos (Administrador/Operador).
 model Papel {
+  contaId    String   @default("__SEM_CONTA__")
+  conta      Conta    @relation(fields: [contaId], references: [id])
   id         String   @id @default(uuid())
-  nome       String   @unique
+  nome       String
   descricao  String?
   permissoes String[] @default([])
   sistema    Boolean  @default(false)
@@ -288,6 +397,8 @@ model Papel {
 
   usuarios User[]
 
+  @@unique([contaId, nome])
+  @@index([contaId])
   @@map("papeis")
 }
 
@@ -296,23 +407,26 @@ model Papel {
 /// gera 1 linha por admin/operador ativo (fan-out na criacao). Admin marca
 /// como lida individualmente sem afetar os outros.
 model AdminNotificacao {
-  id          String   @id @default(uuid())
-  usuario     User     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  usuarioId   String
+  contaId   String    @default("__SEM_CONTA__")
+  conta     Conta     @relation(fields: [contaId], references: [id])
+  id        String    @id @default(uuid())
+  usuario   User      @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId String
   /// Tipo do evento: "nova-viagem" | "resposta-divergencia-pedagio" |
   /// "resposta-divergencia-foto" | "foto-anexada" | "local-em-validacao".
   /// String pra poder evoluir sem migration.
-  tipo        String
-  titulo      String
-  corpo       String
+  tipo      String
+  titulo    String
+  corpo     String
   /// JSON com IDs auxiliares pra UI navegar (viagemId, motoristaId, localId).
-  dados       Json?
-  lida        Boolean  @default(false)
-  lidaEm      DateTime?
-  criadoEm    DateTime @default(now())
+  dados     Json?
+  lida      Boolean   @default(false)
+  lidaEm    DateTime?
+  criadoEm  DateTime  @default(now())
 
   @@index([usuarioId, lida, criadoEm])
   @@index([criadoEm])
+  @@index([contaId])
   @@map("admin_notificacoes")
 }
 
@@ -327,9 +441,11 @@ enum StatusMotorista {
 }
 
 model Motorista {
+  contaId                 String          @default("__SEM_CONTA__")
+  conta                   Conta           @relation(fields: [contaId], references: [id])
   id                      String          @id @default(uuid())
   nome                    String
-  cpf                     String          @unique // 11 dígitos (sem máscara) — também é o login
+  cpf                     String // 11 dígitos (sem máscara) — também é o login
   senhaHash               String
   telefone                String?
   email                   String?
@@ -342,9 +458,9 @@ model Motorista {
   aprovadoEm              DateTime?
   aprovadoPor             User?           @relation("AprovouMotorista", fields: [aprovadoPorId], references: [id], onDelete: SetNull)
   aprovadoPorId           String?
-  ativo                   Boolean   @default(true)
+  ativo                   Boolean         @default(true)
   ultimoLoginEm           DateTime?
-  tentativasLogin         Int       @default(0)
+  tentativasLogin         Int             @default(0)
   bloqueadoAte            DateTime?
   expoPushToken           String?
   pushTokenAtualizadoEm   DateTime?
@@ -352,20 +468,20 @@ model Motorista {
   // não silenciar ninguém sem escolha. aceitaPush gateia o PushService (choke
   // central); aceitaWhatsapp gateia os avisos por WhatsApp (não o código de
   // cadastro, que é de autenticação).
-  aceitaPush              Boolean   @default(true)
-  aceitaWhatsapp          Boolean   @default(true)
+  aceitaPush              Boolean         @default(true)
+  aceitaWhatsapp          Boolean         @default(true)
   // Resumo diário do dia no WhatsApp (cron 20h). Gate próprio além do
   // aceitaWhatsapp mestre — o motorista pode querer os avisos mas não o resumo.
-  receberResumoDiario     Boolean   @default(true)
+  receberResumoDiario     Boolean         @default(true)
   // Versão do app que o motorista está rodando — capturada via headers em
   // toda request pelo AppVersionInterceptor. Como o runtimeVersion usa policy
   // "appVersion", o appVersion sozinho NÃO muda entre updates OTA; o que
   // identifica o código real é o appUpdateId / appBuiltAt (bundle EAS Update).
-  appVersion              String?   // ex: "1.2.0" (Constants.expoConfig.version)
-  appPlatform             String?   // "ios" | "android" (Platform.OS) — força-atualização
-  appUpdateId             String?   // id do bundle OTA rodando (Updates.updateId)
+  appVersion              String? // ex: "1.2.0" (Constants.expoConfig.version)
+  appPlatform             String? // "ios" | "android" (Platform.OS) — força-atualização
+  appUpdateId             String? // id do bundle OTA rodando (Updates.updateId)
   appBuiltAt              DateTime? // quando o bundle foi publicado (Updates.createdAt)
-  appCanal                String?   // canal EAS Update (ex: "production")
+  appCanal                String? // canal EAS Update (ex: "production")
   appVistoEm              DateTime? // última vez que o app reportou versão (= visto online)
   // Quando o aviso "fulano entrou no app" foi postado no grupo do WhatsApp.
   // Trava de envio único: uma vez setado, nunca reanuncia esse motorista.
@@ -374,77 +490,81 @@ model Motorista {
   // Default false nos campos sensíveis = novo motorista nasce travado e o admin
   // libera caso a caso pelo dashboard. podeLancarViagem/podeLancarAbastecimento
   // seguem true pra não quebrar fluxo existente.
-  podeLancarViagem        Boolean   @default(true)
-  podeIniciarViagem       Boolean   @default(false)
+  podeLancarViagem        Boolean         @default(true)
+  podeIniciarViagem       Boolean         @default(false)
   /// Lifecycle guiado de viagem (Iniciar → eventos → Finalizar), com viagem
   /// criada no backend já no início (status EM_ANDAMENTO). Flag separada de
   /// podeIniciarViagem (tracking GPS efêmero legado) pra rodar os dois modos
   /// em paralelo durante a transição.
-  podeViagemLifecycle     Boolean   @default(false)
-  podeLancarPedagio       Boolean   @default(false)
-  podeLancarAbastecimento Boolean   @default(true)
+  podeViagemLifecycle     Boolean         @default(false)
+  podeLancarPedagio       Boolean         @default(false)
+  podeLancarAbastecimento Boolean         @default(true)
   /// Quando true, o app dispara OCR via IA na foto do ticket pra sugerir
   /// preenchimento. False = motorista preenche tudo manualmente.
-  podeUsarOcrTicket       Boolean   @default(false)
+  podeUsarOcrTicket       Boolean         @default(false)
   /// Stories (estilo Instagram): vê a barra na home, posta e reage. Liberado
   /// pra todos (default true); admin pode desligar caso a caso pelo dashboard.
-  podeVerStories          Boolean   @default(true)
+  podeVerStories          Boolean         @default(true)
   /// Quando true, o app mostra "Buscar local por nome" na descarga (lista todos
   /// os locais, não só os do GPS por perto). Default false — admin libera caso a
   /// caso (ex: desenvolvedor testando). Só affordance de UI: o catálogo já traz tudo.
-  podeVerTodosLocais      Boolean   @default(false)
+  podeVerTodosLocais      Boolean         @default(false)
   /// Referência de km por trajeto: ao escolher carga+descarga, o app mostra o que
   /// a frota já rodou nesse par ("7 viagens, quase sempre ~100 km") com um toque
   /// pra usar o valor; e avisa/pede justificativa se o km sair fora do padrão.
   /// Só UX do app — o backend carimba kmForaDoPadrao pra todo mundo independente
   /// desta flag, e o lançamento nunca é bloqueado. Rollout gradual: default false.
-  podeReferenciaKm        Boolean   @default(false)
+  podeReferenciaKm        Boolean         @default(false)
   /// Telemetria de interação na tela "Nova viagem" (o que clicou/buscou/selecionou,
   /// o que a lista trouxe) — pra diagnosticar ex. "descarga errada". Opt-in por
   /// motorista; gate é client-side (só emite os eventos nv_*). Default false.
-  podeTelemetria          Boolean   @default(false)
+  podeTelemetria          Boolean         @default(false)
   /// Chat entre motoristas (aba Conversas). Default TRUE: validado em campo e
   /// liberado pra todo mundo — motorista novo já nasce com a aba. Continua
   /// desligável caso a caso pelo painel (ex: alguém que abusou); desligar
   /// remove a aba e bloqueia /m/chat/*, mas as conversas ficam guardadas.
-  podeChat                Boolean   @default(true)
+  podeChat                Boolean         @default(true)
   /// Frota dona do motorista. Null = não classificado (invisível pros usuários
   /// restritos). Usado pra carimbar Viagem/Pedagio/Abastecimento na criação —
   /// mudar aqui NÃO reescreve o histórico já carimbado, de propósito.
   transportadora          Transportadora? @relation(fields: [transportadoraId], references: [id], onDelete: SetNull)
   transportadoraId        String?
-  criadoEm                DateTime  @default(now())
-  alteradoEm              DateTime  @updatedAt
+  criadoEm                DateTime        @default(now())
+  alteradoEm              DateTime        @updatedAt
 
-  viagens          Viagem[]
-  pedagios         Pedagio[]
-  abastecimentos   Abastecimento[]
-  veiculos         MotoristaVeiculo[]
-  documentos       MotoristaDocumento[]
-  locaisCriados    Local[]              @relation("LocalCriadoPor")
-  evidenciasLocal  LocalEvidencia[]
-  whatsappSessao   WhatsappSessao?
-  whatsappConvites WhatsappConvite[]
-  notificacoes     Notificacao[]
-  eventos          EventoMotorista[]
-  mensagensViagem  ViagemMensagem[] @relation("MensagensViagem")
-  mensagensChat      MensagemChat[]         @relation("MensagensChat")
-  participacoesChat  ConversaParticipante[] @relation("ParticipacoesChat")
-  bloqueiosFeitos    BloqueioChat[]         @relation("BloqueiosFeitos")
-  bloqueiosRecebidos BloqueioChat[]         @relation("BloqueiosRecebidos")
-  denunciasChat      DenunciaMensagemChat[] @relation("DenunciasChat")
-  posicaoConfig    MotoristaPosicaoConfig?
-  posicoes         MotoristaPosicao[]
+  viagens            Viagem[]
+  pedagios           Pedagio[]
+  abastecimentos     Abastecimento[]
+  veiculos           MotoristaVeiculo[]
+  documentos         MotoristaDocumento[]
+  locaisCriados      Local[]                   @relation("LocalCriadoPor")
+  evidenciasLocal    LocalEvidencia[]
+  whatsappSessao     WhatsappSessao?
+  whatsappConvites   WhatsappConvite[]
+  notificacoes       Notificacao[]
+  eventos            EventoMotorista[]
+  mensagensViagem    ViagemMensagem[]          @relation("MensagensViagem")
+  mensagensChat      MensagemChat[]            @relation("MensagensChat")
+  participacoesChat  ConversaParticipante[]    @relation("ParticipacoesChat")
+  bloqueiosFeitos    BloqueioChat[]            @relation("BloqueiosFeitos")
+  bloqueiosRecebidos BloqueioChat[]            @relation("BloqueiosRecebidos")
+  denunciasChat      DenunciaMensagemChat[]    @relation("DenunciasChat")
+  posicaoConfig      MotoristaPosicaoConfig?
+  posicoes           MotoristaPosicao[]
   stories            Story[]
   storyVisualizacoes StoryVisualizacao[]
   storyReacoes       StoryReacao[]
-  redefinicaoSenha RedefinicaoSenhaPendente?
-  criadoPor        User?                @relation("CriouMotorista", fields: [criadoPorId], references: [id], onDelete: SetNull)
-  criadoPorId      String?
+  redefinicaoSenha   RedefinicaoSenhaPendente?
+  criadoPor          User?                     @relation("CriouMotorista", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId        String?
 
+  @@unique([contaId, cpf])
   @@index([ativo])
   @@index([status])
   @@index([transportadoraId])
+  @@index([contaId])
+  @@index([contaId, ativo])
+  @@index([contaId, status])
   @@map("motoristas")
 }
 
@@ -453,8 +573,10 @@ model Motorista {
 /// antes do Motorista existir; vira Motorista ao confirmar o código e é apagado.
 /// Espelha o padrão de WhatsappConvite (código curto + expiração).
 model CadastroMotoristaPendente {
+  contaId       String   @default("__SEM_CONTA__")
+  conta         Conta    @relation(fields: [contaId], references: [id])
   id            String   @id @default(uuid())
-  cpf           String   @unique // 11 dígitos (sem máscara) — chave do cadastro
+  cpf           String // 11 dígitos (sem máscara) — chave do cadastro
   nome          String
   telefone      String // celular onde o código é enviado
   email         String?
@@ -468,6 +590,8 @@ model CadastroMotoristaPendente {
   ultimoEnvioEm DateTime @default(now())
   criadoEm      DateTime @default(now())
 
+  @@unique([contaId, cpf])
+  @@index([contaId])
   @@map("cadastros_motorista_pendentes")
 }
 
@@ -475,6 +599,8 @@ model CadastroMotoristaPendente {
 /// WhatsApp (fluxo "esqueci minha senha"). Chave por motorista (1 pendente por
 /// vez). Curto prazo: criado no "esqueci", apagado ao redefinir/expirar.
 model RedefinicaoSenhaPendente {
+  contaId       String    @default("__SEM_CONTA__")
+  conta         Conta     @relation(fields: [contaId], references: [id])
   id            String    @id @default(uuid())
   motoristaId   String    @unique
   motorista     Motorista @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
@@ -490,6 +616,7 @@ model RedefinicaoSenhaPendente {
   ultimoEnvioEm DateTime  @default(now())
   criadoEm      DateTime  @default(now())
 
+  @@index([contaId])
   @@map("redefinicoes_senha_pendentes")
 }
 
@@ -497,6 +624,8 @@ model RedefinicaoSenhaPendente {
 /// (controle de frota). Opt-in: motorista decide se quer participar e em
 /// qual janela horária. 1:1 com Motorista.
 model MotoristaPosicaoConfig {
+  contaId       String    @default("__SEM_CONTA__")
+  conta         Conta     @relation(fields: [contaId], references: [id])
   motoristaId   String    @id
   motorista     Motorista @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
   /// Master toggle. Default false — motorista escolhe explicitamente ativar.
@@ -506,6 +635,7 @@ model MotoristaPosicaoConfig {
   horarioFim    Int?
   alteradoEm    DateTime  @updatedAt
 
+  @@index([contaId])
   @@map("motorista_posicao_config")
 }
 
@@ -517,11 +647,11 @@ model MotoristaPosicaoConfig {
 /// cacheada). Cadastro manual ou importado do OpenStreetMap.
 model PedagioRodovia {
   id             String   @id @default(uuid())
-  nome           String   // ex: "Praça Reg. Norte BR-376 Ponta Grossa"
-  concessionaria String?  // ex: "Arteris", "CCR ViaSul"
-  rodovia        String?  // ex: "BR-376"
+  nome           String // ex: "Praça Reg. Norte BR-376 Ponta Grossa"
+  concessionaria String? // ex: "Arteris", "CCR ViaSul"
+  rodovia        String? // ex: "BR-376"
   cidade         String?
-  uf             String?  // sigla (2 chars)
+  uf             String? // sigla (2 chars)
   lat            Float
   lng            Float
   /// Valor base por eixo simples em R$. Caminhão com N eixos = valorBase * N.
@@ -550,6 +680,8 @@ model PedagioRodovia {
 /// ViagemPonto que é tracking granular durante viagem ativa. TTL = 90d
 /// (job de retenção no backend).
 model MotoristaPosicao {
+  contaId     String    @default("__SEM_CONTA__")
+  conta       Conta     @relation(fields: [contaId], references: [id])
   id          String    @id @default(uuid())
   motoristaId String
   motorista   Motorista @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
@@ -557,7 +689,7 @@ model MotoristaPosicao {
   lng         Float
   precisao    Float?
   velocidade  Float?
-  capturadoEm DateTime  // timestamp do device
+  capturadoEm DateTime // timestamp do device
   recebidoEm  DateTime  @default(now())
 
   // Idempotência: motorista pode enviar a mesma posição 2x (retry sync). Único
@@ -565,6 +697,7 @@ model MotoristaPosicao {
   @@unique([motoristaId, capturadoEm])
   @@index([motoristaId, capturadoEm])
   @@index([capturadoEm])
+  @@index([contaId])
   @@map("motorista_posicoes")
 }
 
@@ -573,6 +706,8 @@ model MotoristaPosicao {
 /// `validade` é opcional (alguns docs não têm); status (válido/vencendo/vencido)
 /// é derivado em runtime, não persistido. Arquivos ficam no MinIO sob a key.
 model MotoristaDocumento {
+  contaId     String                 @default("__SEM_CONTA__")
+  conta       Conta                  @relation(fields: [contaId], references: [id])
   id          String                 @id @default(uuid())
   motoristaId String
   motorista   Motorista              @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
@@ -587,6 +722,7 @@ model MotoristaDocumento {
 
   @@unique([motoristaId, tipo])
   @@index([motoristaId])
+  @@index([contaId])
   @@map("motorista_documento")
 }
 
@@ -595,6 +731,8 @@ model MotoristaDocumento {
 /// estar atrelado a múltiplas placas. Invariante: todo veículo precisa
 /// de ≥ 1 motorista (aplicada no service, não em SQL).
 model MotoristaVeiculo {
+  contaId     String   @default("__SEM_CONTA__")
+  conta       Conta    @relation(fields: [contaId], references: [id])
   motoristaId String
   veiculoId   String
   criadoEm    DateTime @default(now())
@@ -604,6 +742,7 @@ model MotoristaVeiculo {
 
   @@id([motoristaId, veiculoId])
   @@index([veiculoId])
+  @@index([contaId])
   @@map("motorista_veiculo")
 }
 
@@ -611,6 +750,8 @@ model MotoristaVeiculo {
 /// Sessão por telefone — quem mandar mensagem desse número é identificado e roteado
 /// pro toolset adequado (motorista lança viagem; admin consulta dashboard).
 model WhatsappSessao {
+  contaId        String             @default("__SEM_CONTA__")
+  conta          Conta              @relation(fields: [contaId], references: [id])
   id             String             @id @default(uuid())
   telefone       String             @unique // formato "5541999999999" (só dígitos, com DDI 55)
   motorista      Motorista?         @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
@@ -621,12 +762,15 @@ model WhatsappSessao {
   ultimaMensagem DateTime?
   mensagens      WhatsappMensagem[]
 
+  @@index([contaId])
   @@map("whatsapp_sessoes")
 }
 
 /// Código curto (6 chars alfanuméricos) gerado pelo admin no painel pra autorizar
 /// vinculação. Motorista cola no chat, sistema valida + cria sessão. Expira em 24h.
 model WhatsappConvite {
+  contaId     String     @default("__SEM_CONTA__")
+  conta       Conta      @relation(fields: [contaId], references: [id])
   id          String     @id @default(uuid())
   codigo      String     @unique // ex: "A3F7K9" (uppercase, sem 0/O/1/I)
   motorista   Motorista? @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
@@ -638,12 +782,15 @@ model WhatsappConvite {
   criadoEm    DateTime   @default(now())
 
   @@index([codigo])
+  @@index([contaId])
   @@map("whatsapp_convites")
 }
 
 /// Histórico de mensagens recebidas/enviadas pelo bot. Usado pra auditoria E pra
 /// montar contexto curto (últimas N) que vai pro Claude na próxima rodada.
 model WhatsappMensagem {
+  contaId  String          @default("__SEM_CONTA__")
+  conta    Conta           @relation(fields: [contaId], references: [id])
   id       String          @id @default(uuid())
   sessao   WhatsappSessao? @relation(fields: [sessaoId], references: [id], onDelete: Cascade)
   sessaoId String?
@@ -656,20 +803,23 @@ model WhatsappMensagem {
 
   @@index([telefone, criadoEm])
   @@index([sessaoId, criadoEm])
+  @@index([contaId])
   @@map("whatsapp_mensagens")
 }
 
 model Veiculo {
-  id         String   @id @default(uuid())
-  placa      String   @unique
-  modelo     String?
-  ativo      Boolean  @default(true)
+  contaId          String          @default("__SEM_CONTA__")
+  conta            Conta           @relation(fields: [contaId], references: [id])
+  id               String          @id @default(uuid())
+  placa            String
+  modelo           String?
+  ativo            Boolean         @default(true)
   /// Frota dona do caminhão. Null = não classificado. Serve de fallback quando
   /// o motorista não tem transportadora no momento do lançamento.
   transportadora   Transportadora? @relation(fields: [transportadoraId], references: [id], onDelete: SetNull)
   transportadoraId String?
-  criadoEm   DateTime @default(now())
-  alteradoEm DateTime @updatedAt
+  criadoEm         DateTime        @default(now())
+  alteradoEm       DateTime        @updatedAt
 
   motoristasComoDefault Motorista[]        @relation("VeiculoDefaultMotorista")
   motoristas            MotoristaVeiculo[]
@@ -679,8 +829,11 @@ model Veiculo {
   criadoPor             User?              @relation("CriouVeiculo", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId           String?
 
+  @@unique([contaId, placa])
   @@index([ativo])
   @@index([transportadoraId])
+  @@index([contaId])
+  @@index([contaId, ativo])
   @@map("veiculos")
 }
 
@@ -691,9 +844,11 @@ model Veiculo {
 /// Existe pra dar escopo de acesso no painel: um usuário restrito a uma
 /// transportadora só enxerga os lançamentos dela (ver UsuarioTransportadora).
 model Transportadora {
+  contaId    String   @default("__SEM_CONTA__")
+  conta      Conta    @relation(fields: [contaId], references: [id])
   id         String   @id @default(uuid())
   nome       String
-  cnpj       String?  @unique
+  cnpj       String?
   contato    String?
   ativa      Boolean  @default(true)
   criadoEm   DateTime @default(now())
@@ -708,7 +863,9 @@ model Transportadora {
   criadoPor      User?                   @relation("CriouTransportadora", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId    String?
 
+  @@unique([contaId, cnpj])
   @@index([ativa])
+  @@index([contaId])
   @@map("transportadoras")
 }
 
@@ -716,6 +873,8 @@ model Transportadora {
 /// Só tem efeito quando `User.acessoGlobal = false`. Editar exige a permissão
 /// `permissoes.gerenciar` (é RBAC, não dado cadastral) — ver UsersService.
 model UsuarioTransportadora {
+  contaId          String         @default("__SEM_CONTA__")
+  conta            Conta          @relation(fields: [contaId], references: [id])
   usuario          User           @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
   usuarioId        String
   transportadora   Transportadora @relation(fields: [transportadoraId], references: [id], onDelete: Cascade)
@@ -724,13 +883,16 @@ model UsuarioTransportadora {
 
   @@id([usuarioId, transportadoraId])
   @@index([transportadoraId])
+  @@index([contaId])
   @@map("usuario_transportadoras")
 }
 
 model Empresa {
+  contaId          String       @default("__SEM_CONTA__")
+  conta            Conta        @relation(fields: [contaId], references: [id])
   id               String       @id @default(uuid())
   nome             String
-  cnpj             String?      @unique
+  cnpj             String?
   contato          String?
   papel            PapelEmpresa @default(AMBOS)
   layoutImport     Json? // mapeamento de colunas do fechamento que ela manda (cached IA inference)
@@ -755,7 +917,9 @@ model Empresa {
   criadoPor      User?               @relation("CriouEmpresa", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId    String?
 
+  @@unique([contaId, cnpj])
   @@index([ativa])
+  @@index([contaId])
   @@map("empresas")
 }
 
@@ -764,6 +928,8 @@ model Empresa {
 /// blocos cadastrados (1 por tipo). Cada bloco aponta pra uma aba específica
 /// da planilha da empresa e mapeia colunas pros campos do nosso sistema.
 model LayoutImportBloco {
+  contaId          String              @default("__SEM_CONTA__")
+  conta            Conta               @relation(fields: [contaId], references: [id])
   id               String              @id @default(uuid())
   empresa          Empresa             @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   empresaId        String
@@ -779,24 +945,27 @@ model LayoutImportBloco {
 
   @@unique([empresaId, tipo])
   @@index([empresaId])
+  @@index([contaId])
   @@map("layout_import_blocos")
 }
 
 model Cliente {
-  id         String   @id @default(uuid())
-  nome       String
+  contaId          String   @default("__SEM_CONTA__")
+  conta            Conta    @relation(fields: [contaId], references: [id])
+  id               String   @id @default(uuid())
+  nome             String
   /// Apelidos/sinônimos pra busca fuzzy do agente WhatsApp. Como o motorista
   /// chama no dia a dia (ex: "cliente do beto", "shopping novo").
-  apelidos   String[] @default([])
-  empresa    Empresa  @relation(fields: [empresaId], references: [id])
-  empresaId  String
-  ativa      Boolean  @default(true)
+  apelidos         String[] @default([])
+  empresa          Empresa  @relation(fields: [empresaId], references: [id])
+  empresaId        String
+  ativa            Boolean  @default(true)
   /// LEGADO (aposentado): mínimo agora é por RegraMinimo (empresa+material+faixa
   /// de km). Colunas mantidas dormentes; nada lê/grava. Não usar.
   toneladasMinimas Decimal? @db.Decimal(10, 3)
   kmMinimos        Decimal? @db.Decimal(10, 2)
-  criadoEm   DateTime @default(now())
-  alteradoEm DateTime @updatedAt
+  criadoEm         DateTime @default(now())
+  alteradoEm       DateTime @updatedAt
 
   locais      LocalCliente[]
   viagens     Viagem[]
@@ -805,32 +974,37 @@ model Cliente {
 
   @@index([empresaId])
   @@index([ativa])
+  @@index([contaId])
   @@map("clientes")
 }
 
 model Material {
-  id         String   @id @default(uuid())
-  nome       String   @unique
+  contaId         String   @default("__SEM_CONTA__")
+  conta           Conta    @relation(fields: [contaId], references: [id])
+  id              String   @id @default(uuid())
+  nome            String
   /// Apelidos/sinônimos pra busca fuzzy do agente WhatsApp.
-  apelidos   String[] @default([])
-  ativo      Boolean  @default(true)
+  apelidos        String[] @default([])
+  ativo           Boolean  @default(true)
   /// Se false, viagens desse material não exigem número de ticket (ex: concreto,
   /// que não gera ticket de pesagem). Controlado pelo admin, nunca pelo motorista.
-  exigeTicket Boolean @default(true)
+  exigeTicket     Boolean  @default(true)
   /// Se true, o motorista pode marcar que precisou voltar pro bota-fora (limpeza):
   /// na última carga ele retorna ao local de carga pra descarregar a sobra. Isso
   /// adiciona a perna descarga→carga ao km faturável. Controlado pelo admin; o
   /// motorista só marca o fato. Ver Viagem.teveBotaFora.
-  permiteBotaFora Boolean @default(false)
-  criadoEm   DateTime @default(now())
-  alteradoEm DateTime @updatedAt
+  permiteBotaFora Boolean  @default(false)
+  criadoEm        DateTime @default(now())
+  alteradoEm      DateTime @updatedAt
 
   viagens      Viagem[]
   regrasMinimo RegraMinimo[]
-  criadoPor    User?    @relation("CriouMaterial", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPor    User?         @relation("CriouMaterial", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId  String?
 
+  @@unique([contaId, nome])
   @@index([ativo])
+  @@index([contaId])
   @@map("materiais")
 }
 
@@ -840,6 +1014,8 @@ model Material {
 /// kmFaixaDe inclusivo, kmFaixaAte exclusivo (null = sem teto). Pelo menos um
 /// dos mínimos (km/toneladas) preenchido.
 model RegraMinimo {
+  contaId         String    @default("__SEM_CONTA__")
+  conta           Conta     @relation(fields: [contaId], references: [id])
   id              String    @id @default(uuid())
   empresa         Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   empresaId       String
@@ -857,17 +1033,20 @@ model RegraMinimo {
 
   @@index([empresaId, materialId])
   @@index([ativo])
+  @@index([contaId])
   @@map("regras_minimo")
 }
 
 model Local {
-  id                   String              @id @default(uuid())
+  contaId              String               @default("__SEM_CONTA__")
+  conta                Conta                @relation(fields: [contaId], references: [id])
+  id                   String               @id @default(uuid())
   nome                 String
   logradouro           String
   numero               String?
   bairro               String?
   cidade               String
-  uf                   String              @db.Char(2)
+  uf                   String               @db.Char(2)
   cep                  String?
   lat                  Float?
   lng                  Float?
@@ -882,22 +1061,22 @@ model Local {
   pontoReferencia      String?
   /// Apelidos/sinônimos pra busca fuzzy do agente WhatsApp. Como o motorista
   /// chama no dia a dia (ex: "pedreira nova", "do souza", "balança 2").
-  apelidos             String[]            @default([])
+  apelidos             String[]             @default([])
   tipo                 TipoLocal
-  ativo                Boolean             @default(true)
+  ativo                Boolean              @default(true)
   /// Confiança no local. Começa RASCUNHO quando motorista cadastra; sobe
   /// sozinho conforme evidências (LocalEvidencia) chegam. RECORRENTE/HUMANO
   /// = limpo, sem destaque no app.
-  nivelConfianca       NivelConfiancaLocal @default(RASCUNHO)
+  nivelConfianca       NivelConfiancaLocal  @default(RASCUNHO)
   /// De qual fluxo o local nasceu. null pra registros antigos (pré-rastreio).
   origemCadastro       OrigemCadastroLocal?
   /// Quem cadastrou. null quando criado pelo admin.
   criadoPorMotoristaId String?
-  criadoPorMotorista   Motorista?          @relation("LocalCriadoPor", fields: [criadoPorMotoristaId], references: [id])
+  criadoPorMotorista   Motorista?           @relation("LocalCriadoPor", fields: [criadoPorMotoristaId], references: [id])
   ultimaValidacaoEm    DateTime?
-  contadorValidacoes   Int                 @default(0)
-  criadoEm             DateTime            @default(now())
-  alteradoEm           DateTime            @updatedAt
+  contadorValidacoes   Int                  @default(0)
+  criadoEm             DateTime             @default(now())
+  alteradoEm           DateTime             @updatedAt
 
   clientes        LocalCliente[]
   viagensCarga    Viagem[]         @relation("LocalCarga")
@@ -914,6 +1093,8 @@ model Local {
   @@index([cidade, uf])
   @@index([ativo])
   @@index([nivelConfianca])
+  @@index([contaId])
+  @@index([contaId, ativo])
   @@map("locais")
 }
 
@@ -922,6 +1103,8 @@ model Local {
 /// `LocalCliente` vazio (sem entradas pra um Local) = local genérico,
 /// aparece pra qualquer cliente em Nova Viagem.
 model LocalCliente {
+  contaId   String   @default("__SEM_CONTA__")
+  conta     Conta    @relation(fields: [contaId], references: [id])
   local     Local    @relation(fields: [localId], references: [id], onDelete: Cascade)
   localId   String
   cliente   Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
@@ -930,12 +1113,15 @@ model LocalCliente {
 
   @@id([localId, clienteId])
   @@index([clienteId])
+  @@index([contaId])
   @@map("local_cliente")
 }
 
 /// Histórico de evidências que promoveram um Local. Audit trail pra debug e
 /// pra recalcular RECORRENTE contando motoristas distintos.
 model LocalEvidencia {
+  contaId     String         @default("__SEM_CONTA__")
+  conta       Conta          @relation(fields: [contaId], references: [id])
   id          String         @id @default(uuid())
   local       Local          @relation(fields: [localId], references: [id], onDelete: Cascade)
   localId     String
@@ -950,6 +1136,7 @@ model LocalEvidencia {
 
   @@index([localId])
   @@index([motoristaId, localId])
+  @@index([contaId])
   @@map("local_evidencia")
 }
 
@@ -978,169 +1165,171 @@ model RotaCache {
 }
 
 model Viagem {
-  id                String       @id @default(uuid())
-  clientId          String       @unique // idempotência (gerado no PWA)
-  motorista         Motorista    @relation(fields: [motoristaId], references: [id])
-  motoristaId       String
-  veiculo           Veiculo      @relation(fields: [veiculoId], references: [id])
-  veiculoId         String
-  cliente           Cliente?     @relation(fields: [clienteId], references: [id])
+  contaId                 String             @default("__SEM_CONTA__")
+  conta                   Conta              @relation(fields: [contaId], references: [id])
+  id                      String             @id @default(uuid())
+  clientId                String             @unique // idempotência (gerado no PWA)
+  motorista               Motorista          @relation(fields: [motoristaId], references: [id])
+  motoristaId             String
+  veiculo                 Veiculo            @relation(fields: [veiculoId], references: [id])
+  veiculoId               String
+  cliente                 Cliente?           @relation(fields: [clienteId], references: [id])
   // Nullable: viagem EM_ANDAMENTO pode não ter cliente/material/data/etc até o
   // finalizar. Obrigatoriedade é validada condicionalmente no service.finalizar.
-  clienteId         String?
-  material          Material?    @relation(fields: [materialId], references: [id])
-  materialId        String?
-  data              DateTime?    @db.Date
-  toneladas         Decimal?     @db.Decimal(10, 3)
+  clienteId               String?
+  material                Material?          @relation(fields: [materialId], references: [id])
+  materialId              String?
+  data                    DateTime?          @db.Date
+  toneladas               Decimal?           @db.Decimal(10, 3)
   /// Null quando o material não exige ticket (ex: concreto). Ver Material.exigeTicket.
-  ticket            String?
-  km                Decimal?     @db.Decimal(10, 2)
+  ticket                  String?
+  km                      Decimal?           @db.Decimal(10, 2)
   /// Snapshot do km que o OSRM calculou no momento do lançamento. Permite
   /// detectar quando motorista sobrescreveu o sugerido (km != kmCalculado).
   /// Null pra viagens antigas (pré-feature) e quando OSRM não respondeu.
-  kmCalculado       Decimal?     @db.Decimal(10, 2)
+  kmCalculado             Decimal?           @db.Decimal(10, 2)
   /// Semântica de CONTROLE: "não sobrescreva esse km no reprocessamento". true
   /// sempre que o valor foi decidido pelo motorista — digitado na mão OU aceito
   /// da referência histórica (kmFonte=HISTORICO). Escrito pelo backend junto com
   /// kmFonte no create; nenhum caminho escreve os dois de forma independente.
   /// Null pra viagens antigas / app antigo que não envia o flag.
-  kmEditadoManual   Boolean?
+  kmEditadoManual         Boolean?
   /// Semântica de PROCEDÊNCIA (de onde veio o número). Distingue "aceitou o
   /// cálculo", "escolheu rota no mapa", "usou o que a frota já rodou nesse
   /// trajeto" e "digitou na mão" — coisas que kmEditadoManual sozinho não separa
   /// e que a timeline/painel precisam contar direito (usar a referência do
   /// trajeto NÃO é "ajustou o km na mão"). Null = app antigo.
-  kmFonte           KmFonte?
+  kmFonte                 KmFonte?
   /// Reprocessamento de km: quando a viagem foi criada sem sinal (km estimado
   /// por haversine), o backend recalcula pelo trajeto real (OSRM) ao sincronizar.
   /// kmRecalculadoEm = quando recalculou (também trava re-processo/re-aviso);
   /// kmAntesRecalculo = km que estava antes, pra mostrar "de X → Y" pro motorista.
-  kmRecalculadoEm   DateTime?
-  kmAntesRecalculo  Decimal?     @db.Decimal(10, 2)
+  kmRecalculadoEm         DateTime?
+  kmAntesRecalculo        Decimal?           @db.Decimal(10, 2)
   /// Detecção de km atípico: o backend compara o km desta viagem com o que a
   /// frota já rodou nesse par carga→descarga (mediana) ou, sem amostra, com a
   /// rota OSRM. Carimbo é sempre do BACKEND (o app pode estar offline/burlado).
   /// kmForaDoPadrao null = não avaliado (viagem com trechos, sem local, etc).
   /// Os kmReferencia* são SNAPSHOT do que a referência valia no carimbo — a
   /// mediana anda com o tempo e o badge precisa continuar explicável depois.
-  kmForaDoPadrao      Boolean?
-  kmReferencia        Decimal?  @db.Decimal(10, 2)
-  kmReferenciaFonte   FonteReferenciaKm?
-  kmReferenciaAmostra Int?
-  kmDesvioPct         Decimal?  @db.Decimal(6, 2)
-  kmAvaliadoEm        DateTime?
+  kmForaDoPadrao          Boolean?
+  kmReferencia            Decimal?           @db.Decimal(10, 2)
+  kmReferenciaFonte       FonteReferenciaKm?
+  kmReferenciaAmostra     Int?
+  kmDesvioPct             Decimal?           @db.Decimal(6, 2)
+  kmAvaliadoEm            DateTime?
   /// "Aceitar km" no painel: admin confirma que o km atípico está correto e
   /// readmite a viagem na mediana do par (KmAtipicoService.filtroAmostra).
   /// Dedicado — NÃO é revisadoEm: aceitar km é uma decisão diferente de
   /// pré-validar a viagem, e as duas não podem se confundir (uma não implica
   /// a outra, nem no card do painel nem no FechamentoProcessor).
-  kmAceitoEm          DateTime?
+  kmAceitoEm              DateTime?
   /// Texto que o motorista escreveu ao insistir num km fora do padrão. Fato
   /// histórico dele: o re-carimbo automático NUNCA mexe aqui. Null é estado
   /// válido e esperado mesmo com kmForaDoPadrao=true (lançou offline, app
   /// antigo, flag off) — o lançamento nunca é bloqueado por causa disso.
-  justificativaKm     String?
+  justificativaKm         String?
   /// Polyline (formato Google, precision 5) da rota que o motorista ESCOLHEU
   /// entre as alternativas OSRM no seletor de mapa. Null = não usou o seletor
   /// (viagem antiga, rota única ou offline) → painel cai no rotaCache
   /// (recomendada). Não-null também sinaliza "escolheu rota" no painel.
-  rotaGeometria     String?
+  rotaGeometria           String?
   /// Escolha "voltei no retorno vs segui direto" (pista dupla): true = COM retorno
   /// (curb), false = SEM retorno (direto), null = não perguntado (sem retorno real,
   /// viagem antiga ou app antigo). O "Recalcular trajeto" do painel RESPEITA esse
   /// campo em vez de sempre aplicar a variante com retorno.
-  retornoConfirmado Boolean?
+  retornoConfirmado       Boolean?
   /// Trechos ADICIONAIS do trajeto além da carga→descarga base: hoje o retorno do
   /// bota-fora (limpeza), amanhã entregas múltiplas. O km faturável (`km`) já inclui
   /// a soma dos trechos. Ver model TrechoViagem.
-  trechos           TrechoViagem[]
-  observacao        String?
-  status            StatusViagem @default(ENVIADA)
+  trechos                 TrechoViagem[]
+  observacao              String?
+  status                  StatusViagem       @default(ENVIADA)
   /// true = viagem aberta pelo fluxo guiado "Iniciar viagem" (lifecycle). Setado
   /// no iniciar() e persiste após finalizar (ENVIADA). O "Nova viagem" direto
   /// fica false. Marcador confiável de origem (≠ ter EventoViagem, que não é
   /// garantido). Alimenta o selo "Guiada" + filtro de origem no painel.
-  iniciadaGuiada    Boolean      @default(false)
+  iniciadaGuiada          Boolean            @default(false)
   // Nullable p/ lifecycle: localCarga é preenchido no evento de carga (ou no
   // iniciar se GPS detectou), localDescarga no evento de descarga/finalizar.
-  localCarga        Local?       @relation("LocalCarga", fields: [localCargaId], references: [id])
-  localCargaId      String?
-  localDescarga     Local?       @relation("LocalDescarga", fields: [localDescargaId], references: [id])
-  localDescargaId   String?
-  valorPedagioTotal Decimal?     @db.Decimal(10, 2)
+  localCarga              Local?             @relation("LocalCarga", fields: [localCargaId], references: [id])
+  localCargaId            String?
+  localDescarga           Local?             @relation("LocalDescarga", fields: [localDescargaId], references: [id])
+  localDescargaId         String?
+  valorPedagioTotal       Decimal?           @db.Decimal(10, 2)
   // Coordenadas GPS capturadas pelo motorista no momento do lançamento
   // (silencioso — null se permissão negada ou GPS indisponível)
-  lat               Float?
-  lng               Float?
+  lat                     Float?
+  lng                     Float?
   // Captura do GPS quando o motorista tocou "Estou no local de descarga":
   // posição dele, precisão do sinal (accuracy em metros) e distância até o
   // local que ele acabou selecionando. Auditoria de confiabilidade da
   // marcação. Null quando não houve captura fresca (edição reaproveitando
   // local já selecionado, ou viagem antiga pré-feature).
-  descargaLat            Float?
-  descargaLng            Float?
-  descargaPrecisao       Float? // accuracy em metros do GPS no clique
+  descargaLat             Float?
+  descargaLng             Float?
+  descargaPrecisao        Float? // accuracy em metros do GPS no clique
   // Fonte do sinal na captura da descarga (PRECISA/BALANCED/CACHE). Complementa
   // a precisão: CACHE = last-known do sistema (posição pode estar defasada).
   // null pra viagem antiga pré-feature, sem captura fresca, ou PWA.
-  descargaFonte          FonteGps?
-  descargaDistanciaMetros Int?  // distância do clique até o local selecionado
+  descargaFonte           FonteGps?
+  descargaDistanciaMetros Int? // distância do clique até o local selecionado
   // Raio (m) em que o local foi encontrado na busca (inicial ou ampliado, da
   // config do painel). Auditoria: quão "solta" foi a marcação. Null pra viagem
   // antiga, local novo cadastrado na hora (sem match), ou PWA.
-  descargaRaioUsadoM     Int?
+  descargaRaioUsadoM      Int?
   // true = a busca de locais no clique caiu no catálogo em cache (sem internet),
   // então pode ter faltado algum local criado por outro motorista recentemente.
   // null = não capturado (viagem antiga pré-feature ou sem captura fresca).
-  descargaBuscaOffline   Boolean?
+  descargaBuscaOffline    Boolean?
   // Espelho da captura da descarga, mas pro LOCAL DE CARGA no "Iniciar viagem":
   // GPS real do motorista ao escolher a carga + distância/raio até o local. Como
   // o raio da carga virou ordenação (não trava), isso audita quão longe ele
   // iniciou. Null pra "Nova viagem" direta, viagem antiga ou PWA.
-  cargaLat               Float?
-  cargaLng               Float?
-  cargaPrecisao          Float?
-  cargaFonte             FonteGps?
-  cargaDistanciaMetros   Int?
-  cargaRaioUsadoM        Int?
-  cargaBuscaOffline      Boolean?
+  cargaLat                Float?
+  cargaLng                Float?
+  cargaPrecisao           Float?
+  cargaFonte              FonteGps?
+  cargaDistanciaMetros    Int?
+  cargaRaioUsadoM         Int?
+  cargaBuscaOffline       Boolean?
   // Tracking GPS do trajeto (opcional — só preenchido se motorista usou "Iniciar viagem")
-  iniciadoEm        DateTime? // quando tocou Iniciar
-  kmReal            Decimal?     @db.Decimal(10, 2) // somatório das distâncias entre pontos consecutivos
+  iniciadoEm              DateTime? // quando tocou Iniciar
+  kmReal                  Decimal?           @db.Decimal(10, 2) // somatório das distâncias entre pontos consecutivos
   /// Rastreamento granular do OCR de ticket via IA. Cada campo preenchido
   /// pela IA (e mantido pelo motorista até o submit) entra no array. Ex:
   /// ["ticket","toneladas","clienteId"]. Quando motorista edita um campo
   /// depois de aplicar IA, ele sai do array (não é mais "valor da IA").
-  ocrCampos         String[]     @default([])
+  ocrCampos               String[]           @default([])
   /// Confidence geral da extração OCR (0..1). Null se IA não rodou.
-  ocrConfidence     Float?
+  ocrConfidence           Float?
   /// Pré-validação manual pelo admin no dashboard. Quando revisadoEm está
   /// preenchido, o FechamentoProcessor NÃO sobrescreve o status no match
   /// (preserva a decisão manual). Exclusivo do fluxo de pré-validação — "Aceitar
   /// km" (km atípico) usa kmAceitoEm, não este campo.
-  revisadoEm        DateTime?
-  revisadoPor       User?        @relation("RevisouViagem", fields: [revisadoPorId], references: [id], onDelete: SetNull)
-  revisadoPorId     String?
+  revisadoEm              DateTime?
+  revisadoPor             User?              @relation("RevisouViagem", fields: [revisadoPorId], references: [id], onDelete: SetNull)
+  revisadoPorId           String?
   /// Texto obrigatório quando status foi marcado DIVERGENTE via pré-validação.
-  motivoStatus      String?
+  motivoStatus            String?
   /// Tipifica a divergência pra UI dedicada no app motorista (ex: card pedindo
   /// só o valor do pedágio em vez do fluxo genérico de edição). Limpo quando
   /// motorista resolve. Default null = divergência genérica (motorista corrige
   /// editando a viagem normalmente).
-  tipoDivergencia   TipoDivergencia?
-  criadoOfflineEm   DateTime?
-  sincronizadoEm    DateTime     @default(now())
-  alteradoEm        DateTime     @updatedAt
+  tipoDivergencia         TipoDivergencia?
+  criadoOfflineEm         DateTime?
+  sincronizadoEm          DateTime           @default(now())
+  alteradoEm              DateTime           @updatedAt
   /// Versão do app usada na CRIAÇÃO (headers x-app-version / x-app-update-id do
   /// app nativo). Null pra viagens antigas ou PWA. Só pra auditoria/suporte.
-  appVersaoCriacao   String?
-  appUpdateIdCriacao String?
+  appVersaoCriacao        String?
+  appUpdateIdCriacao      String?
   /// Frota dona da viagem, CARIMBADA na criação (motorista.transportadoraId ??
   /// veiculo.transportadoraId). Desnormalizado de propósito: reclassificar um
   /// motorista não pode mover o histórico dele de uma frota pra outra. Também
   /// evita JOIN em toda listagem/count e deixa o filtro trivial no SQL cru.
-  transportadora    Transportadora? @relation(fields: [transportadoraId], references: [id], onDelete: SetNull)
-  transportadoraId  String?
+  transportadora          Transportadora?    @relation(fields: [transportadoraId], references: [id], onDelete: SetNull)
+  transportadoraId        String?
 
   fotos             TicketFoto[]
   pedagios          Pedagio[]
@@ -1170,6 +1359,9 @@ model Viagem {
   // Partial unique index "1 viagem EM_ANDAMENTO por motorista" é criado à mão
   // no migration.sql (Prisma não expressa índice parcial): ver migration
   // add_viagem_lifecycle (uq_viagem_em_andamento_por_motorista).
+  @@index([contaId])
+  @@index([contaId, data])
+  @@index([contaId, status])
   @@map("viagens")
 }
 
@@ -1208,6 +1400,8 @@ enum TipoTrecho {
 /// (cada trecho com seu peso/ticket próprios, quando fizer sentido). O km faturável
 /// da Viagem (`km`) já inclui a soma dos `km` dos trechos — aqui fica o detalhamento.
 model TrechoViagem {
+  contaId   String     @default("__SEM_CONTA__")
+  conta     Conta      @relation(fields: [contaId], references: [id])
   id        String     @id @default(uuid())
   viagem    Viagem     @relation(fields: [viagemId], references: [id], onDelete: Cascade)
   viagemId  String
@@ -1225,6 +1419,7 @@ model TrechoViagem {
   criadoEm  DateTime   @default(now())
 
   @@index([viagemId, ordem])
+  @@index([contaId])
   @@map("trechos_viagem")
 }
 
@@ -1234,9 +1429,11 @@ model TrechoViagem {
 /// ordenados por `ordem`; o próximo obrigatório não registrado vira o botão
 /// primário. Seed inicial: carga + descarga.
 model TipoEventoViagem {
+  contaId        String   @default("__SEM_CONTA__")
+  conta          Conta    @relation(fields: [contaId], references: [id])
   id             String   @id @default(uuid())
   /// Chave estável usada no código/snapshot (ex: "carga", "descarga"). Imutável.
-  slug           String   @unique
+  slug           String
   /// Rótulo exibido ao motorista (editável pelo admin).
   nome           String
   ativo          Boolean  @default(true)
@@ -1264,9 +1461,11 @@ model TipoEventoViagem {
   criadoPor      User?    @relation("CriouTipoEventoViagem", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId    String?
 
-  eventos        EventoViagem[]
+  eventos EventoViagem[]
 
+  @@unique([contaId, slug])
   @@index([ativo, ordem])
+  @@index([contaId])
   @@map("tipos_evento_viagem")
 }
 
@@ -1274,6 +1473,8 @@ model TipoEventoViagem {
 /// descarga, parada...). Idempotente por `id` (uuid client-side). Diferente de
 /// EventoMotorista, que é telemetria (string livre, retenção curta).
 model EventoViagem {
+  contaId         String           @default("__SEM_CONTA__")
+  conta           Conta            @relation(fields: [contaId], references: [id])
   id              String           @id
   viagem          Viagem           @relation(fields: [viagemId], references: [id], onDelete: Cascade)
   viagemId        String
@@ -1297,6 +1498,7 @@ model EventoViagem {
 
   @@index([viagemId, ocorridoEm])
   @@index([tipoEventoId])
+  @@index([contaId])
   @@map("eventos_viagem")
 }
 
@@ -1312,6 +1514,8 @@ enum AutorMensagem {
 /// mensagem livre, vira uma linha com autor + data/hora. motivoStatus/
 /// tipoDivergencia continuam governando os cards de resolução; o chat é o log.
 model ViagemMensagem {
+  contaId     String        @default("__SEM_CONTA__")
+  conta       Conta         @relation(fields: [contaId], references: [id])
   id          String        @id @default(uuid())
   viagem      Viagem        @relation(fields: [viagemId], references: [id], onDelete: Cascade)
   viagemId    String
@@ -1330,10 +1534,13 @@ model ViagemMensagem {
   criadoEm    DateTime      @default(now())
 
   @@index([viagemId, criadoEm])
+  @@index([contaId])
   @@map("viagem_mensagens")
 }
 
 model TicketFoto {
+  contaId     String   @default("__SEM_CONTA__")
+  conta       Conta    @relation(fields: [contaId], references: [id])
   id          String   @id @default(uuid())
   viagem      Viagem   @relation(fields: [viagemId], references: [id], onDelete: Cascade)
   viagemId    String
@@ -1343,6 +1550,7 @@ model TicketFoto {
   capturadaEm DateTime @default(now())
 
   @@index([viagemId])
+  @@index([contaId])
   @@map("ticket_fotos")
 }
 
@@ -1353,6 +1561,8 @@ model TicketFoto {
 /// O que o link mostra é o whitelist de `compartilhamento/viagem-publica.ts` —
 /// NUNCA o payload do detalhe admin (que tem CPF, GPS bruto, telemetria, etc).
 model ViagemCompartilhamento {
+  contaId  String @default("__SEM_CONTA__")
+  conta    Conta  @relation(fields: [contaId], references: [id])
   id       String @id @default(uuid())
   viagem   Viagem @relation(fields: [viagemId], references: [id], onDelete: Cascade)
   viagemId String
@@ -1365,7 +1575,7 @@ model ViagemCompartilhamento {
   criadoPor   User?   @relation("CompartilhouViagem", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId String?
 
-  expiraEm DateTime
+  expiraEm      DateTime
   /// Soft-revoke: a linha NUNCA é apagada, senão o histórico de quem expôs o
   /// quê some junto com a evidência.
   revogadoEm    DateTime?
@@ -1387,6 +1597,7 @@ model ViagemCompartilhamento {
 
   @@index([viagemId, criadoEm])
   @@index([expiraEm])
+  @@index([contaId])
   @@map("viagem_compartilhamentos")
 }
 
@@ -1395,6 +1606,8 @@ model ViagemCompartilhamento {
 /// MinIO + registro). O feed filtra por expiraEm > now, então nunca aparece
 /// expirado mesmo que a limpeza atrase. clientId dá idempotência ao outbox.
 model Story {
+  contaId       String              @default("__SEM_CONTA__")
+  conta         Conta               @relation(fields: [contaId], references: [id])
   id            String              @id @default(uuid())
   clientId      String              @unique // gerado no app (outbox)
   motorista     Motorista           @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
@@ -1410,12 +1623,15 @@ model Story {
 
   @@index([expiraEm])
   @@index([motoristaId, criadoEm])
+  @@index([contaId])
   @@map("stories")
 }
 
 /// Registro de que um motorista viu um story (tira o anel de "não visto" e
 /// alimenta o "visto por N" do autor). Único por (story, motorista).
 model StoryVisualizacao {
+  contaId     String    @default("__SEM_CONTA__")
+  conta       Conta     @relation(fields: [contaId], references: [id])
   id          String    @id @default(uuid())
   story       Story     @relation(fields: [storyId], references: [id], onDelete: Cascade)
   storyId     String
@@ -1425,12 +1641,15 @@ model StoryVisualizacao {
 
   @@unique([storyId, motoristaId])
   @@index([storyId])
+  @@index([contaId])
   @@map("story_visualizacoes")
 }
 
 /// Reação emoji de um motorista a um story. Uma por (story, motorista) — upsert
 /// troca o emoji anterior.
 model StoryReacao {
+  contaId     String    @default("__SEM_CONTA__")
+  conta       Conta     @relation(fields: [contaId], references: [id])
   id          String    @id @default(uuid())
   story       Story     @relation(fields: [storyId], references: [id], onDelete: Cascade)
   storyId     String
@@ -1441,6 +1660,7 @@ model StoryReacao {
 
   @@unique([storyId, motoristaId])
   @@index([storyId])
+  @@index([contaId])
   @@map("story_reacoes")
 }
 
@@ -1449,6 +1669,8 @@ model StoryReacao {
 /// ou velocidade>200km/h são filtrados no app antes de enviar; depois passam
 /// por Douglas-Peucker (tolerancia 3m) pra remover redundancia.
 model ViagemPonto {
+  contaId     String   @default("__SEM_CONTA__")
+  conta       Conta    @relation(fields: [contaId], references: [id])
   id          String   @id @default(uuid())
   viagem      Viagem   @relation(fields: [viagemId], references: [id], onDelete: Cascade)
   viagemId    String
@@ -1460,23 +1682,26 @@ model ViagemPonto {
 
   @@index([viagemId, capturadoEm])
   @@index([capturadoEm])
+  @@index([contaId])
   @@map("viagem_pontos")
 }
 
 model Pedagio {
-  id              String    @id @default(uuid())
-  clientId        String    @unique
-  veiculo         Veiculo   @relation(fields: [veiculoId], references: [id])
-  veiculoId       String
-  motorista       Motorista @relation(fields: [motoristaId], references: [id])
-  motoristaId     String
-  data            DateTime  @db.Date
-  pracaPedagio    String
-  valor           Decimal   @db.Decimal(10, 2)
-  viagem          Viagem?   @relation(fields: [viagemId], references: [id])
-  viagemId        String?
-  criadoOfflineEm DateTime?
-  sincronizadoEm  DateTime  @default(now())
+  contaId          String          @default("__SEM_CONTA__")
+  conta            Conta           @relation(fields: [contaId], references: [id])
+  id               String          @id @default(uuid())
+  clientId         String          @unique
+  veiculo          Veiculo         @relation(fields: [veiculoId], references: [id])
+  veiculoId        String
+  motorista        Motorista       @relation(fields: [motoristaId], references: [id])
+  motoristaId      String
+  data             DateTime        @db.Date
+  pracaPedagio     String
+  valor            Decimal         @db.Decimal(10, 2)
+  viagem           Viagem?         @relation(fields: [viagemId], references: [id])
+  viagemId         String?
+  criadoOfflineEm  DateTime?
+  sincronizadoEm   DateTime        @default(now())
   /// Carimbada na criação — ver Viagem.transportadoraId.
   transportadora   Transportadora? @relation(fields: [transportadoraId], references: [id], onDelete: SetNull)
   transportadoraId String?
@@ -1488,10 +1713,14 @@ model Pedagio {
   @@index([transportadoraId, data])
   // Reconciliação de pedágio por motorista no relatório de produção.
   @@index([motoristaId, data])
+  @@index([contaId])
+  @@index([contaId, data])
   @@map("pedagios")
 }
 
 model Fechamento {
+  contaId             String           @default("__SEM_CONTA__")
+  conta               Conta            @relation(fields: [contaId], references: [id])
   id                  String           @id @default(uuid())
   empresa             Empresa          @relation(fields: [empresaId], references: [id])
   empresaId           String
@@ -1518,10 +1747,13 @@ model Fechamento {
 
   @@index([empresaId, periodoInicio])
   @@index([status])
+  @@index([contaId])
   @@map("fechamentos")
 }
 
 model FechamentoLinha {
+  contaId              String                @default("__SEM_CONTA__")
+  conta                Conta                 @relation(fields: [contaId], references: [id])
   id                   String                @id @default(uuid())
   fechamento           Fechamento            @relation(fields: [fechamentoId], references: [id], onDelete: Cascade)
   fechamentoId         String
@@ -1559,10 +1791,13 @@ model FechamentoLinha {
   @@index([viagemMatchId])
   @@index([pedagioMatchId])
   @@index([abastecimentoMatchId])
+  @@index([contaId])
   @@map("fechamento_linhas")
 }
 
 model LayoutEnvio {
+  contaId     String   @default("__SEM_CONTA__")
+  conta       Conta    @relation(fields: [contaId], references: [id])
   id          String   @id @default(uuid())
   empresa     Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   empresaId   String
@@ -1578,10 +1813,13 @@ model LayoutEnvio {
   envios EnvioFechamento[]
 
   @@index([empresaId])
+  @@index([contaId])
   @@map("layouts_envio")
 }
 
 model EnvioFechamento {
+  contaId          String       @default("__SEM_CONTA__")
+  conta            Conta        @relation(fields: [contaId], references: [id])
   id               String       @id @default(uuid())
   // Quando o envio for fruto de uma planilha que a empresa nos mandou e
   // depois exportamos de volta, fica vinculado ao Fechamento. Quando for
@@ -1608,10 +1846,13 @@ model EnvioFechamento {
 
   @@index([fechamentoId])
   @@index([empresaId, periodoInicio])
+  @@index([contaId])
   @@map("envios_fechamento")
 }
 
 model AuditLog {
+  contaId     String        @default("__SEM_CONTA__")
+  conta       Conta         @relation(fields: [contaId], references: [id])
   id          String        @id @default(uuid())
   usuario     User?         @relation(fields: [usuarioId], references: [id])
   usuarioId   String?
@@ -1627,6 +1868,7 @@ model AuditLog {
 
   @@index([entidade, entidadeId])
   @@index([usuarioId, criadoEm])
+  @@index([contaId])
   @@map("audit_logs")
 }
 
@@ -1645,7 +1887,9 @@ model GeocodingCache {
 /// Configuração global do tracking GPS aplicado a todos os motoristas.
 /// Singleton: só existe uma linha (id="default"). Operadora ajusta pelo dashboard.
 model ConfiguracaoTracking {
-  id                    String   @id @default("default")
+  contaId               String   @default("__SEM_CONTA__")
+  conta                 Conta    @relation(fields: [contaId], references: [id])
+  id                    String   @id @default(uuid())
   // Captura GPS
   distanciaMinMetros    Int      @default(50) // captura a cada N metros andados
   intervaloMaxSegundos  Int      @default(30) // ou a cada N segundos (o que ocorrer 1º)
@@ -1663,13 +1907,16 @@ model ConfiguracaoTracking {
   alteradoPor           User?    @relation(fields: [alteradoPorId], references: [id])
   alteradoPorId         String?
 
+  @@unique([contaId])
   @@map("configuracao_tracking")
 }
 
 /// Singleton (id="default"): parâmetros do match por IA do fechamento.
 /// Lazy-create no primeiro acesso. Atualizada via /admin/ia-config.
 model ConfiguracaoIa {
-  id               String   @id @default("default")
+  contaId          String   @default("__SEM_CONTA__")
+  conta            Conta    @relation(fields: [contaId], references: [id])
+  id               String   @id @default(uuid())
   // 0.50–0.99 — quanto maior, mais conservador (menos auto-resolução)
   confidenceMinimo Float    @default(0.85)
   // 1–14 — janela de datas pra filtrar viagens candidatas (mesma placa, ±N dias)
@@ -1682,6 +1929,7 @@ model ConfiguracaoIa {
   alteradoPor      User?    @relation(fields: [alteradoPorId], references: [id])
   alteradoPorId    String?
 
+  @@unique([contaId])
   @@map("configuracao_ia")
 }
 
@@ -1690,7 +1938,9 @@ model ConfiguracaoIa {
 /// em background (tolera latência), agente chat é em tempo real (latência conta).
 /// API keys ficam em env var — aqui só seleciona provider e modelo.
 model ConfiguracaoAgente {
-  id              String   @id @default("default")
+  contaId         String   @default("__SEM_CONTA__")
+  conta           Conta    @relation(fields: [contaId], references: [id])
+  id              String   @id @default(uuid())
   // "anthropic" | "gemini"
   provider        String   @default("anthropic")
   // Modelo usado quando provider=anthropic
@@ -1706,6 +1956,7 @@ model ConfiguracaoAgente {
   alteradoPor     User?    @relation(fields: [alteradoPorId], references: [id])
   alteradoPorId   String?
 
+  @@unique([contaId])
   @@map("configuracao_agente")
 }
 
@@ -1714,20 +1965,23 @@ model ConfiguracaoAgente {
 /// comunidade pequena e fechada (~45 membros). Desligado por padrão; admin
 /// escolhe o grupo e ativa pelo dashboard.
 model ConfiguracaoAvisoGrupo {
-  id         String   @id @default("default")
+  contaId       String   @default("__SEM_CONTA__")
+  conta         Conta    @relation(fields: [contaId], references: [id])
+  id            String   @id @default(uuid())
   // Liga/desliga o disparo. Nasce desligado até o admin escolher o grupo.
-  ativo      Boolean  @default(false)
+  ativo         Boolean  @default(false)
   // JID do grupo destino (ex: "120363...@g.us"). Null = nada configurado.
-  grupoJid   String?
+  grupoJid      String?
   // Nome do grupo no momento da escolha — só pra exibir no painel.
-  grupoNome  String?
+  grupoNome     String?
   // Template da mensagem. `{nome}` é trocado pelo primeiro nome do motorista.
   // Null = usa o default do código.
-  template   String?  @db.Text
+  template      String?  @db.Text
   alteradoEm    DateTime @updatedAt
   alteradoPor   User?    @relation(fields: [alteradoPorId], references: [id])
   alteradoPorId String?
 
+  @@unique([contaId])
   @@map("configuracao_aviso_grupo")
 }
 
@@ -1736,22 +1990,25 @@ model ConfiguracaoAvisoGrupo {
 /// proximos um do outro); se nao achar nada, tenta o ampliado e o app SUGERE o
 /// resultado (nunca auto-seleciona). Ajustado pela operadora no dashboard.
 model ConfiguracaoBuscaLocais {
-  id            String   @id @default("default")
+  contaId              String   @default("__SEM_CONTA__")
+  conta                Conta    @relation(fields: [contaId], references: [id])
+  id                   String   @id @default(uuid())
   // Raio apertado da 1a tentativa (metros). 1 match aqui pode auto-selecionar.
-  raioInicialM  Int      @default(50)
+  raioInicialM         Int      @default(50)
   // Raio da 2a tentativa quando o inicial nao acha nada (metros). So sugere.
-  raioAmpliadoM Int      @default(500)
+  raioAmpliadoM        Int      @default(500)
   // Captura de GPS ao tocar "Estou no local de descarga":
   // alvo de precisao (m) que encerra a captura cedo; tempo maximo (s) que
   // amostra o GPS; e limite (m) acima do qual avisa "sinal fraco" e marca
   // a coordenada como suspeita no dashboard.
-  gpsAlvoMetros        Int @default(10)
-  gpsMaxSegundos       Int @default(20)
-  gpsLimiteSinalFracoM Int @default(50)
-  alteradoEm    DateTime @updatedAt
-  alteradoPor   User?    @relation(fields: [alteradoPorId], references: [id])
-  alteradoPorId String?
+  gpsAlvoMetros        Int      @default(10)
+  gpsMaxSegundos       Int      @default(20)
+  gpsLimiteSinalFracoM Int      @default(50)
+  alteradoEm           DateTime @updatedAt
+  alteradoPor          User?    @relation(fields: [alteradoPorId], references: [id])
+  alteradoPorId        String?
 
+  @@unique([contaId])
   @@map("configuracao_busca_locais")
 }
 
@@ -1760,7 +2017,9 @@ model ConfiguracaoBuscaLocais {
 /// exigir deploy da API nem OTA do app. O app recebe esta config embutida na
 /// resposta de referência (§/m/km-referencia) pra aplicar a MESMA régua offline.
 model ConfiguracaoKmAtipico {
-  id               String   @id @default("default")
+  contaId          String   @default("__SEM_CONTA__")
+  conta            Conta    @relation(fields: [contaId], references: [id])
+  id               String   @id @default(uuid())
   /// Kill switch server-side: false = ninguém é avaliado nem avisado (o carimbo
   /// para de acontecer e o app não mostra nada). Não precisa de deploy.
   ativo            Boolean  @default(true)
@@ -1783,6 +2042,7 @@ model ConfiguracaoKmAtipico {
   alteradoPor      User?    @relation(fields: [alteradoPorId], references: [id])
   alteradoPorId    String?
 
+  @@unique([contaId])
   @@map("configuracao_km_atipico")
 }
 
@@ -1792,11 +2052,13 @@ model ConfiguracaoKmAtipico {
 /// pra loja. `versaoMinima*` é override manual (opcional) — se setado, vence a
 /// detecção automática (pros dois lados: forçar ou segurar).
 model ConfiguracaoForcaAtualizacao {
-  id   String @id @default("default")
+  contaId             String   @default("__SEM_CONTA__")
+  conta               Conta    @relation(fields: [contaId], references: [id])
+  id                  String   @id @default(uuid())
   // off | observar | nudge | bloquear (ver MODOS_FORCA_ATUALIZACAO).
   // Default "observar": ao subir a migration NÃO bloqueia ninguém; o admin
   // liga o bloqueio no dashboard depois de conferir a versão detectada.
-  modo String @default("observar")
+  modo                String   @default("observar")
   // Override manual da versão mínima exigida por plataforma. null = automático
   // (usa a maior versão detectada). Serve tanto pra forçar quanto pra segurar.
   versaoMinimaIos     String?
@@ -1804,11 +2066,12 @@ model ConfiguracaoForcaAtualizacao {
   // Allowlist de teste: quando NÃO-vazia, só estes motoristas são avaliados
   // (todo o resto recebe "nenhuma"). Vazia = vale pra todos. Serve pra testar
   // o bloqueio em produção mirando só a própria conta, sem risco à frota.
-  motoristasAlvo String[] @default([])
-  alteradoEm    DateTime @updatedAt
-  alteradoPor   User?    @relation(fields: [alteradoPorId], references: [id])
-  alteradoPorId String?
+  motoristasAlvo      String[] @default([])
+  alteradoEm          DateTime @updatedAt
+  alteradoPor         User?    @relation(fields: [alteradoPorId], references: [id])
+  alteradoPorId       String?
 
+  @@unique([contaId])
   @@map("configuracao_forca_atualizacao")
 }
 
@@ -1816,8 +2079,10 @@ model ConfiguracaoForcaAtualizacao {
 /// Substitui o enum hardcoded — admin pode cadastrar campos novos sem dev.
 /// Campos `sistema=true` são embarcados no boot e não podem ser deletados.
 model CampoLayout {
+  contaId    String   @default("__SEM_CONTA__")
+  conta      Conta    @relation(fields: [contaId], references: [id])
   id         String   @id @default(uuid())
-  slug       String   @unique // identificador estável (lowercase, sem espaço)
+  slug       String // identificador estável (lowercase, sem espaço)
   label      String // label amigável no dropdown
   ordem      Int      @default(100)
   ativo      Boolean  @default(true)
@@ -1829,7 +2094,9 @@ model CampoLayout {
   criadoEm   DateTime @default(now())
   alteradoEm DateTime @updatedAt
 
+  @@unique([contaId, slug])
   @@index([ativo, ordem])
+  @@index([contaId])
   @@map("campos_layout")
 }
 
@@ -1837,6 +2104,8 @@ model CampoLayout {
 /// Cada ocorrência é uma row. Agrupamento por hash do stack trace
 /// é feito em query (GROUP BY hash). Sem expurgo automático.
 model ErrorLog {
+  contaId        String?
+  conta          Conta?    @relation(fields: [contaId], references: [id])
   id             String    @id @default(uuid())
   /// Hash sha256(message + stack normalizado) — agrupa erros idênticos
   hash           String
@@ -1868,6 +2137,7 @@ model ErrorLog {
   @@index([capturadoEm])
   @@index([userId])
   @@index([resolvido, capturadoEm])
+  @@index([contaId])
   @@map("error_logs")
 }
 
@@ -1878,6 +2148,8 @@ model ErrorLog {
 /// quando aplicável. Reconciliação: quando viagem chega no backend, faz
 /// UPDATE WHERE viagemClientId = ? AND viagemId IS NULL.
 model EventoMotorista {
+  contaId        String    @default("__SEM_CONTA__")
+  conta          Conta     @relation(fields: [contaId], references: [id])
   id             String    @id // motorista gera uuid local (idempotência)
   motorista      Motorista @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
   motoristaId    String
@@ -1903,39 +2175,42 @@ model EventoMotorista {
   @@index([viagemId, capturadoEm])
   @@index([viagemClientId, capturadoEm])
   @@index([tipo, capturadoEm])
+  @@index([contaId])
   @@map("eventos_motorista")
 }
 
 model Abastecimento {
-  id              String          @id @default(uuid())
-  clientId        String          @unique // idempotência (gerado no app)
-  motorista       Motorista       @relation(fields: [motoristaId], references: [id])
-  motoristaId     String
-  veiculo         Veiculo         @relation(fields: [veiculoId], references: [id])
-  veiculoId       String
-  empresa         Empresa?        @relation(fields: [empresaId], references: [id])
-  empresaId       String?
-  data            DateTime // timestamp completo (hora importa)
-  tipo            TipoCombustivel @default(DIESEL_S10)
-  litros          Decimal         @db.Decimal(8, 3)
+  contaId          String          @default("__SEM_CONTA__")
+  conta            Conta           @relation(fields: [contaId], references: [id])
+  id               String          @id @default(uuid())
+  clientId         String          @unique // idempotência (gerado no app)
+  motorista        Motorista       @relation(fields: [motoristaId], references: [id])
+  motoristaId      String
+  veiculo          Veiculo         @relation(fields: [veiculoId], references: [id])
+  veiculoId        String
+  empresa          Empresa?        @relation(fields: [empresaId], references: [id])
+  empresaId        String?
+  data             DateTime // timestamp completo (hora importa)
+  tipo             TipoCombustivel @default(DIESEL_S10)
+  litros           Decimal         @db.Decimal(8, 3)
   /// Null quando abastecimento em comboio (motorista não soube o valor na
   /// hora). Listagens e fechamentos lidam com null como "sem valor".
-  valorTotal      Decimal?        @db.Decimal(10, 2)
-  precoLitro      Decimal?        @db.Decimal(6, 3) // calculado server-side
+  valorTotal       Decimal?        @db.Decimal(10, 2)
+  precoLitro       Decimal?        @db.Decimal(6, 3) // calculado server-side
   /// True quando o abastecimento foi no comboio: valor real será informado
   /// depois (admin pode editar). Distingue de "motorista esqueceu".
-  emComboio       Boolean         @default(false)
-  odometro        Int // km do hodômetro
-  postoNome       String?
-  tanqueCheio     Boolean         @default(true)
-  observacao      String?
+  emComboio        Boolean         @default(false)
+  odometro         Int // km do hodômetro
+  postoNome        String?
+  tanqueCheio      Boolean         @default(true)
+  observacao       String?
   // GPS capturado no momento do registro (silencioso — null se permissão negada)
-  lat             Float?
-  lng             Float?
-  precisao        Float?
-  criadoOfflineEm DateTime?
-  sincronizadoEm  DateTime        @default(now())
-  alteradoEm      DateTime        @updatedAt
+  lat              Float?
+  lng              Float?
+  precisao         Float?
+  criadoOfflineEm  DateTime?
+  sincronizadoEm   DateTime        @default(now())
+  alteradoEm       DateTime        @updatedAt
   /// Carimbada na criação — ver Viagem.transportadoraId. Não confundir com
   /// `empresaId` acima, que é o tomador que paga o abastecimento.
   transportadora   Transportadora? @relation(fields: [transportadoraId], references: [id], onDelete: SetNull)
@@ -1949,10 +2224,14 @@ model Abastecimento {
   @@index([empresaId, data])
   @@index([data])
   @@index([transportadoraId, data])
+  @@index([contaId])
+  @@index([contaId, data])
   @@map("abastecimentos")
 }
 
 model AbastecimentoFoto {
+  contaId         String        @default("__SEM_CONTA__")
+  conta           Conta         @relation(fields: [contaId], references: [id])
   id              String        @id @default(uuid())
   abastecimento   Abastecimento @relation(fields: [abastecimentoId], references: [id], onDelete: Cascade)
   abastecimentoId String
@@ -1962,6 +2241,7 @@ model AbastecimentoFoto {
   capturadaEm     DateTime      @default(now())
 
   @@index([abastecimentoId])
+  @@index([contaId])
   @@map("abastecimento_fotos")
 }
 
@@ -1976,6 +2256,8 @@ enum NotificacaoEntregaStatus {
 /// busca via GET /m/notificacoes; push notification carrega o id no payload
 /// pra fechar o loop "tap → marcar lida".
 model Notificacao {
+  contaId       String                   @default("__SEM_CONTA__")
+  conta         Conta                    @relation(fields: [contaId], references: [id])
   id            String                   @id @default(uuid())
   motorista     Motorista                @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
   motoristaId   String
@@ -1994,6 +2276,7 @@ model Notificacao {
 
   @@index([motoristaId, criadoEm(sort: Desc)])
   @@index([motoristaId, lida])
+  @@index([contaId])
   @@map("notificacoes")
 }
 
@@ -2081,30 +2364,35 @@ enum StatusDenunciaChat {
 }
 
 model Conversa {
-  id   String       @id @default(uuid())
-  tipo TipoConversa @default(DIRETA)
+  contaId     String       @default("__SEM_CONTA__")
+  conta       Conta        @relation(fields: [contaId], references: [id])
+  id          String       @id @default(uuid())
+  tipo        TipoConversa @default(DIRETA)
   /// Chave canônica do par: os dois motoristaIds ordenados e juntados por ":".
   /// É o que garante UMA conversa por par mesmo com os dois celulares abrindo
   /// ao mesmo tempo — a corrida morre no unique do banco, não no código.
   /// Null no canal de Avisos (que é único por definição).
-  chaveDireta String? @unique
-  criadoEm    DateTime @default(now())
+  chaveDireta String?      @unique
+  criadoEm    DateTime     @default(now())
 
   /// Denormalizado só pra ordenar/pintar a lista de conversas sem varrer
   /// mensagens. Prévia já resolvida (áudio vira "Áudio 0:12").
-  ultimaMensagemEm   DateTime?
-  ultimaMensagemTexto String?  @db.Text
+  ultimaMensagemEm    DateTime?
+  ultimaMensagemTexto String?   @db.Text
 
   participantes ConversaParticipante[]
   mensagens     MensagemChat[]
 
   @@index([ultimaMensagemEm(sort: Desc)])
+  @@index([contaId])
   @@map("conversas")
 }
 
 /// Um motorista dentro de uma conversa. Guarda o estado de leitura dele —
 /// contador denormalizado pra o badge não custar um count() por conversa.
 model ConversaParticipante {
+  contaId     String    @default("__SEM_CONTA__")
+  conta       Conta     @relation(fields: [contaId], references: [id])
   id          String    @id @default(uuid())
   conversa    Conversa  @relation(fields: [conversaId], references: [id], onDelete: Cascade)
   conversaId  String
@@ -2119,11 +2407,14 @@ model ConversaParticipante {
 
   @@unique([conversaId, motoristaId])
   @@index([motoristaId])
+  @@index([contaId])
   @@map("conversa_participantes")
 }
 
 model MensagemChat {
-  id String @id @default(uuid())
+  contaId    String   @default("__SEM_CONTA__")
+  conta      Conta    @relation(fields: [contaId], references: [id])
+  id         String   @id @default(uuid())
   /// UUID gerado no celular. É a idempotência do outbox: reenvio depois de
   /// timeout devolve a mensagem existente em vez de duplicar na conversa.
   clientId   String   @unique
@@ -2132,49 +2423,53 @@ model MensagemChat {
 
   /// ADMIN só existe no canal de Avisos.
   autor       AutorMensagem
-  motorista   Motorista? @relation("MensagensChat", fields: [motoristaId], references: [id], onDelete: SetNull)
+  motorista   Motorista?    @relation("MensagensChat", fields: [motoristaId], references: [id], onDelete: SetNull)
   motoristaId String?
-  usuario     User?      @relation("MensagensChat", fields: [usuarioId], references: [id], onDelete: SetNull)
+  usuario     User?         @relation("MensagensChat", fields: [usuarioId], references: [id], onDelete: SetNull)
   usuarioId   String?
   /// Snapshot do nome do autor — sobrevive à exclusão do Motorista/User.
   autorNome   String
 
-  tipo TipoMensagemChat @default(TEXTO)
-  texto String?         @db.Text
+  tipo          TipoMensagemChat @default(TEXTO)
+  texto         String?          @db.Text
   /// Fase 2 (áudio): chave no MinIO, duração e transcrição automática. A
   /// transcrição chega depois da mensagem (Whisper roda em background), então
   /// é sempre nullable — a bolha aparece na hora e o texto preenche em seguida.
   audioKey      String?
   audioSegundos Int?
-  transcricao   String? @db.Text
+  transcricao   String?          @db.Text
 
-  criadoEm  DateTime  @default(now())
+  criadoEm      DateTime  @default(now())
   /// Soft delete. Preenchido tanto por "apagar pra todos" do autor quanto por
   /// remoção da operação via denúncia; a bolha vira "mensagem apagada" e o
   /// conteúdo some da API. Nunca hard delete: denúncia precisa do histórico.
-  apagadaEm DateTime?
+  apagadaEm     DateTime?
   /// Quem removeu, quando foi moderação (null quando foi o próprio autor).
-  removidaPor   User?   @relation("RemoveuMensagemChat", fields: [removidaPorId], references: [id], onDelete: SetNull)
+  removidaPor   User?     @relation("RemoveuMensagemChat", fields: [removidaPorId], references: [id], onDelete: SetNull)
   removidaPorId String?
 
   denuncias DenunciaMensagemChat[]
 
   @@index([conversaId, criadoEm])
+  @@index([contaId])
   @@map("mensagens_chat")
 }
 
 /// Bloqueio 1:1. Bloqueado não aparece na lista de contatos, não consegue
 /// mandar mensagem, e a conversa some pros dois lados.
 model BloqueioChat {
-  id           String    @id @default(uuid())
-  motorista    Motorista @relation("BloqueiosFeitos", fields: [motoristaId], references: [id], onDelete: Cascade)
-  motoristaId  String
-  bloqueado    Motorista @relation("BloqueiosRecebidos", fields: [bloqueadoId], references: [id], onDelete: Cascade)
-  bloqueadoId  String
-  criadoEm     DateTime  @default(now())
+  contaId     String    @default("__SEM_CONTA__")
+  conta       Conta     @relation(fields: [contaId], references: [id])
+  id          String    @id @default(uuid())
+  motorista   Motorista @relation("BloqueiosFeitos", fields: [motoristaId], references: [id], onDelete: Cascade)
+  motoristaId String
+  bloqueado   Motorista @relation("BloqueiosRecebidos", fields: [bloqueadoId], references: [id], onDelete: Cascade)
+  bloqueadoId String
+  criadoEm    DateTime  @default(now())
 
   @@unique([motoristaId, bloqueadoId])
   @@index([bloqueadoId])
+  @@index([contaId])
   @@map("bloqueios_chat")
 }
 
@@ -2182,6 +2477,8 @@ model BloqueioChat {
 /// (App Store 1.2), e o único caminho pelo qual uma conversa privada chega aos
 /// olhos da operação.
 model DenunciaMensagemChat {
+  contaId       String       @default("__SEM_CONTA__")
+  conta         Conta        @relation(fields: [contaId], references: [id])
   id            String       @id @default(uuid())
   mensagem      MensagemChat @relation(fields: [mensagemId], references: [id], onDelete: Cascade)
   mensagemId    String
@@ -2198,5 +2495,6 @@ model DenunciaMensagemChat {
 
   @@unique([mensagemId, denuncianteId])
   @@index([status, criadoEm(sort: Desc)])
+  @@index([contaId])
   @@map("denuncias_mensagem_chat")
 }

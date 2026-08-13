@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
+import { contaIdAtual } from "../../common/conta/conta-context";
 
 const SINGLETON_ID = "default";
 const HISTORICO_LIMIT = 100;
@@ -17,17 +18,17 @@ export class IaConfigService {
   /** Garante singleton e retorna. */
   async get() {
     return this.prisma.configuracaoIa.upsert({
-      where: { id: SINGLETON_ID },
+      where: { contaId: contaIdAtual() },
       update: {},
-      create: { id: SINGLETON_ID },
+      create: {},
     });
   }
 
   async update(input: AtualizarIaConfigInput, userId: string) {
     return this.prisma.configuracaoIa.upsert({
-      where: { id: SINGLETON_ID },
+      where: { contaId: contaIdAtual() },
       update: { ...input, alteradoPorId: userId },
-      create: { id: SINGLETON_ID, ...input, alteradoPorId: userId },
+      create: { ...input, alteradoPorId: userId },
     });
   }
 

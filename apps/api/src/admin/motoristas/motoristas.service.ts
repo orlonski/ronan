@@ -275,7 +275,7 @@ export class MotoristasService {
   }
 
   async create(data: CriarMotoristaInput, usuarioId: string) {
-    const exists = await this.prisma.motorista.findUnique({ where: { cpf: data.cpf } });
+    const exists = await this.prisma.motorista.findFirst({ where: { cpf: data.cpf } });
     if (exists) throw new ConflictException("CPF já cadastrado");
     const senhaHash = await AuthService.hashPassword(data.senha);
 
@@ -491,7 +491,7 @@ export class MotoristasService {
     if (placas.length === 0) return [];
     const resolvidos: { id: string; placa: string }[] = [];
     for (const p of placas) {
-      const existente = await tx.veiculo.findUnique({ where: { placa: p.placa } });
+      const existente = await tx.veiculo.findFirst({ where: { placa: p.placa } });
       if (existente) {
         if (p.modelo && existente.modelo !== p.modelo) {
           await tx.veiculo.update({

@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import { randomInt } from "node:crypto";
 import { formatCpf, type CadastroMotoristaInput, type PlacaInput } from "@ronan/shared-types";
+import { comConta, comoSistema, contaIdAtual } from "../common/conta/conta-context";
 import { PrismaService } from "../prisma/prisma.service";
 import { AvisoGrupoService } from "../whatsapp/aviso-grupo.service";
 import { EvolutionClientService } from "../whatsapp/evolution-client.service";
@@ -41,7 +42,43 @@ export class CadastroMotoristaService {
     private readonly auth: AuthService,
   ) {}
 
-  async iniciar(data: CadastroMotoristaInput) {
+  /**
+   * Em qual empresa este cadastro entra.
+   *
+   * O app publicado nas lojas não pergunta a empresa — o motorista baixa, digita
+   * o CPF e pronto. Então uma conta é marcada como destino do auto-cadastro. Com
+   * mais de uma marcada a escolha deixa de ser óbvia, e aí o formulário passa a
+   * ter que dizer qual (é o que a landing vai mandar).
+   */
+  private async resolverConta(contaSlug?: string): Promise<string> {
+    const candidatas = await comoSistema(() =>
+      this.prisma.conta.findMany({
+        where: contaSlug
+          ? { slug: contaSlug, ativa: true }
+          : { permiteAutoCadastro: true, ativa: true },
+        select: { id: true },
+      }),
+    );
+
+    if (candidatas.length === 1) return candidatas[0]!.id;
+    if (candidatas.length === 0) {
+      throw new BadRequestException(
+        contaSlug
+          ? "Empresa não encontrada. Confira o link que você recebeu."
+          : "O cadastro pelo app está fechado no momento. Fale com o pessoal do administrativo.",
+      );
+    }
+    throw new BadRequestException(
+      "Precisamos saber pra qual empresa é o cadastro. Use o link que a empresa te mandou.",
+    );
+  }
+
+  async iniciar(data: CadastroMotoristaInput & { contaSlug?: string }) {
+    const contaId = await this.resolverConta(data.contaSlug);
+    return comConta(contaId, () => this.iniciarNaConta(data));
+  }
+
+  private async iniciarNaConta(data: CadastroMotoristaInput) {
     await this.checarDuplicados(data.cpf, data.telefone, data.email, data.placas);
 
     const senhaHash = await AuthService.hashPassword(data.senha);
@@ -52,7 +89,9 @@ export class CadastroMotoristaService {
     // Upsert por CPF: reenviar o formulário (corrigindo algo) substitui o
     // pendente e zera tentativas/reenvios.
     await this.prisma.cadastroMotoristaPendente.upsert({
-      where: { cpf: data.cpf },
+      // O CPF só é único DENTRO da conta: o mesmo motorista pode ter cadastro em
+      // duas empresas, e são cadastros independentes.
+      where: { contaId_cpf: { contaId: contaIdAtual(), cpf: data.cpf } },
       create: {
         cpf: data.cpf,
         nome: data.nome,
@@ -81,8 +120,13 @@ export class CadastroMotoristaService {
     return { ok: true, expiraEmSegundos: CODIGO_TTL_MIN * 60 };
   }
 
-  async reenviar(cpf: string) {
-    const pendente = await this.prisma.cadastroMotoristaPendente.findUnique({ where: { cpf } });
+  async reenviar(cpf: string, contaSlug?: string) {
+    const contaId = await this.resolverConta(contaSlug);
+    return comConta(contaId, () => this.reenviarNaConta(cpf));
+  }
+
+  private async reenviarNaConta(cpf: string) {
+    const pendente = await this.prisma.cadastroMotoristaPendente.findFirst({ where: { cpf } });
     if (!pendente) {
       throw new NotFoundException("Nenhum cadastro pendente pra esse CPF. Comece o cadastro de novo.");
     }
@@ -101,7 +145,7 @@ export class CadastroMotoristaService {
 
     const codigo = gerarCodigo();
     await this.prisma.cadastroMotoristaPendente.update({
-      where: { cpf },
+      where: { id: pendente.id },
       data: {
         codigo,
         expiraEm: new Date(Date.now() + CODIGO_TTL_MIN * 60_000),
@@ -114,23 +158,28 @@ export class CadastroMotoristaService {
     return { ok: true, expiraEmSegundos: CODIGO_TTL_MIN * 60 };
   }
 
-  async confirmar(cpf: string, codigo: string) {
-    const pendente = await this.prisma.cadastroMotoristaPendente.findUnique({ where: { cpf } });
+  async confirmar(cpf: string, codigo: string, contaSlug?: string) {
+    const contaId = await this.resolverConta(contaSlug);
+    return comConta(contaId, () => this.confirmarNaConta(cpf, codigo));
+  }
+
+  private async confirmarNaConta(cpf: string, codigo: string) {
+    const pendente = await this.prisma.cadastroMotoristaPendente.findFirst({ where: { cpf } });
     if (!pendente) {
       throw new NotFoundException("Nenhum cadastro pendente pra esse CPF. Comece o cadastro de novo.");
     }
 
     if (pendente.expiraEm < new Date()) {
-      await this.prisma.cadastroMotoristaPendente.delete({ where: { cpf } });
+      await this.prisma.cadastroMotoristaPendente.delete({ where: { id: pendente.id } });
       throw new BadRequestException("O código expirou. Comece o cadastro de novo.");
     }
     if (pendente.tentativas >= MAX_TENTATIVAS) {
-      await this.prisma.cadastroMotoristaPendente.delete({ where: { cpf } });
+      await this.prisma.cadastroMotoristaPendente.delete({ where: { id: pendente.id } });
       throw new BadRequestException("Muitas tentativas erradas. Comece o cadastro de novo.");
     }
     if (pendente.codigo !== codigo) {
       await this.prisma.cadastroMotoristaPendente.update({
-        where: { cpf },
+        where: { id: pendente.id },
         data: { tentativas: { increment: 1 } },
       });
       throw new BadRequestException("Código incorreto. Confira e tente de novo.");
@@ -174,7 +223,7 @@ export class CadastroMotoristaService {
           data: { veiculoDefaultId },
         });
       }
-      await tx.cadastroMotoristaPendente.delete({ where: { cpf } });
+      await tx.cadastroMotoristaPendente.delete({ where: { id: pendente.id } });
       return motorista.id;
     });
 
@@ -212,7 +261,7 @@ export class CadastroMotoristaService {
   ) {
     const db = tx ?? this.prisma;
 
-    const porCpf = await db.motorista.findUnique({ where: { cpf }, select: { id: true } });
+    const porCpf = await db.motorista.findFirst({ where: { cpf }, select: { id: true } });
     if (porCpf) {
       throw new ConflictException({
         code: "CPF_JA_CADASTRADO",
@@ -232,7 +281,7 @@ export class CadastroMotoristaService {
     }
 
     for (const p of placas) {
-      const veiculo = await db.veiculo.findUnique({
+      const veiculo = await db.veiculo.findFirst({
         where: { placa: p.placa },
         select: {
           _count: { select: { motoristas: true } },
@@ -258,9 +307,15 @@ export class CadastroMotoristaService {
     // Evolution exige número internacional (DDI 55). O telefone do cadastro vem
     // só com DDD (ex: 41999998888) — sem normalizar, dá 400 no sendText.
     const numero = SessaoService.normalizar(telefone);
+    // O nome vem da conta: o motorista da empresa nova não pode receber um
+    // código "da Schaba", que pra ele não quer dizer nada.
+    const conta = await this.prisma.conta.findUnique({
+      where: { id: contaIdAtual() },
+      select: { nome: true },
+    });
     await this.evolution.enviarTexto(
       numero,
-      `Seu código de cadastro Schaba é ${codigo}. Vale por ${CODIGO_TTL_MIN} minutos. Se não foi você, ignore.`,
+      `Seu código de cadastro ${conta?.nome ?? "no app"} é ${codigo}. Vale por ${CODIGO_TTL_MIN} minutos. Se não foi você, ignore.`,
     );
   }
 }
@@ -294,7 +349,7 @@ async function upsertPlacas(
 ): Promise<{ id: string; placa: string }[]> {
   const resolvidos: { id: string; placa: string }[] = [];
   for (const p of placas) {
-    const existente = await tx.veiculo.findUnique({ where: { placa: p.placa } });
+    const existente = await tx.veiculo.findFirst({ where: { placa: p.placa } });
     if (existente) {
       // Veículo que estava inativo volta a rodar — senão ele fica de fora dos
       // selects e relatórios do painel apesar de ter motorista. O modelo não é

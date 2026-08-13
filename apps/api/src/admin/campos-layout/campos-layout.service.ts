@@ -8,6 +8,8 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
+import { contaIdAtual } from "../../common/conta/conta-context";
+import { paraCadaConta } from "../../common/conta/para-cada-conta";
 import { PrismaService } from "../../prisma/prisma.service";
 
 export type CriarCampoInput = {
@@ -49,7 +51,9 @@ export class CamposLayoutService implements OnModuleInit {
   constructor(private readonly prisma: PrismaService) {}
 
   async onModuleInit() {
-    await this.seedCamposSistema();
+    // Cada empresa tem a sua cópia dos campos de sistema — ela pode desativar e
+    // renomear os dela sem mexer nos da outra.
+    await paraCadaConta(this.prisma, () => this.seedCamposSistema());
   }
 
   /**
@@ -57,10 +61,11 @@ export class CamposLayoutService implements OnModuleInit {
    * Atualiza label/ordem/tipo/descricao se diferentes (drift control).
    */
   async seedCamposSistema() {
+    const contaId = contaIdAtual();
     try {
       for (const campo of CAMPOS_SISTEMA) {
         await this.prisma.campoLayout.upsert({
-          where: { slug: campo.slug },
+          where: { contaId_slug: { contaId, slug: campo.slug } },
           create: { ...campo, sistema: true, ativo: true },
           update: {
             label: campo.label,
@@ -109,7 +114,7 @@ export class CamposLayoutService implements OnModuleInit {
   async create(data: CriarCampoInput) {
     const slug = normalizarSlug(data.slug ?? data.label);
     if (!slug) throw new BadRequestException("Slug inválido — use letras, números, _, -");
-    const exists = await this.prisma.campoLayout.findUnique({ where: { slug } });
+    const exists = await this.prisma.campoLayout.findFirst({ where: { slug } });
     if (exists) throw new ConflictException(`Já existe campo com slug "${slug}"`);
     return this.prisma.campoLayout.create({
       data: {
@@ -141,7 +146,7 @@ export class CamposLayoutService implements OnModuleInit {
         const novoSlug = normalizarSlug(data.slug);
         if (!novoSlug) throw new BadRequestException("Slug inválido");
         if (novoSlug !== campo.slug) {
-          const conflito = await this.prisma.campoLayout.findUnique({ where: { slug: novoSlug } });
+          const conflito = await this.prisma.campoLayout.findFirst({ where: { slug: novoSlug } });
           if (conflito) throw new ConflictException(`Já existe campo com slug "${novoSlug}"`);
           updateData.slug = novoSlug;
         }

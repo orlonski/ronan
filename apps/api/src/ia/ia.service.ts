@@ -3,6 +3,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { ExtrairTicketResult } from "@ronan/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
+import { contaIdAtual } from "../common/conta/conta-context";
 
 // Default usado caso ConfiguracaoIa.modelo não esteja setada (raro).
 const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
@@ -59,9 +60,9 @@ export class IaService {
     }
     try {
       const cfg = await this.prisma.configuracaoIa.upsert({
-        where: { id: "default" },
+        where: { contaId: contaIdAtual() },
         update: {},
-        create: { id: "default" },
+        create: {},
       });
       const value = cfg.modelo || DEFAULT_MODEL;
       this.modeloCache = { value, until: Date.now() + 30_000 };

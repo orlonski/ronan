@@ -6,6 +6,18 @@ export type AuthAdminUser = {
   id: string;
   nome: string;
   email: string;
+  /**
+   * A empresa (tenant) a que ele pertence. Não precisa ser usado em `where`:
+   * quem filtra é a trava, a partir do contexto que o JwtStrategy preencheu.
+   * Está aqui pra exibição e pras decisões que dependem da conta.
+   */
+  contaId: string;
+  contaNome: string;
+  /**
+   * Operador da PLATAFORMA (o dono do sistema), não da empresa. É quem enxerga
+   * a tela de contas. Ver `User.plataforma` no schema.
+   */
+  plataforma: boolean;
   /** Permissões efetivas (chaves do papel). Vazio = nenhum papel atribuído. */
   permissoes: string[];
   /**
@@ -22,6 +34,8 @@ export type AuthMotorista = {
   nome: string;
   cpf: string;
   status: StatusMotorista;
+  /** A empresa dele. O CPF é único DENTRO dela, não no sistema todo. */
+  contaId: string;
 };
 
 export type AuthUser = AuthAdminUser | AuthMotorista;

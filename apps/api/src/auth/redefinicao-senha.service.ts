@@ -49,7 +49,7 @@ export class RedefinicaoSenhaService {
 
   async esqueci(cpf: string, telefoneInput: string) {
     const telefone = telefoneDigits(telefoneInput);
-    const motorista = await this.prisma.motorista.findUnique({
+    const motorista = await this.prisma.motorista.findFirst({
       where: { cpf },
       select: { id: true, telefone: true, ativo: true, status: true },
     });
@@ -249,7 +249,7 @@ export class RedefinicaoSenhaService {
 
   /** Resolve o pendente a partir do CPF (1 pendente por motorista). */
   private async buscarPendente(cpf: string) {
-    const motorista = await this.prisma.motorista.findUnique({
+    const motorista = await this.prisma.motorista.findFirst({
       where: { cpf },
       select: { id: true },
     });

@@ -6,6 +6,7 @@ import { EvolutionClientService } from "./evolution-client.service";
 import { SessaoService } from "./sessao.service";
 import { ConviteService } from "./convite.service";
 import { TranscricaoService } from "../ia/transcricao.service";
+import { contaIdAtual } from "../common/conta/conta-context";
 
 type MensagemTipo = "TEXTO" | "IMAGEM" | "AUDIO";
 
@@ -118,9 +119,9 @@ export class WhatsappService {
       // Loga a entrada e responde educado. Vale pra qualquer remetente: hoje esse
       // número serve só pra enviar código de cadastro (outbound, fora deste fluxo).
       const cfgAgente = await this.prisma.configuracaoAgente.upsert({
-        where: { id: "default" },
+        where: { contaId: contaIdAtual() },
         update: {},
-        create: { id: "default" },
+        create: {},
       });
       if (!cfgAgente.ativo) {
         faseAtual = "agente_desligado";

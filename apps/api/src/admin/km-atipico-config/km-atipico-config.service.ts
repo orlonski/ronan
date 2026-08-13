@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import type { AtualizarConfigKmAtipicoInput } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
+import { contaIdAtual } from "../../common/conta/conta-context";
 
 const SINGLETON_ID = "default";
 
@@ -13,17 +14,17 @@ export class KmAtipicoConfigService {
   /** Garante o singleton e retorna. */
   async get() {
     return this.prisma.configuracaoKmAtipico.upsert({
-      where: { id: SINGLETON_ID },
+      where: { contaId: contaIdAtual() },
       update: {},
-      create: { id: SINGLETON_ID },
+      create: {},
     });
   }
 
   async update(input: AtualizarConfigKmAtipicoInput, userId: string) {
     return this.prisma.configuracaoKmAtipico.upsert({
-      where: { id: SINGLETON_ID },
+      where: { contaId: contaIdAtual() },
       update: { ...input, alteradoPorId: userId },
-      create: { id: SINGLETON_ID, ...input, alteradoPorId: userId },
+      create: { ...input, alteradoPorId: userId },
     });
   }
 }

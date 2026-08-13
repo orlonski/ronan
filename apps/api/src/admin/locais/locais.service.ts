@@ -12,6 +12,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { SEM_ESCOPO, filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
+import { contaIdAtual } from "../../common/conta/conta-context";
 
 type ListLocaisParams = PaginationQuery & {
   clienteId?: string;
@@ -415,11 +416,16 @@ export class LocaisService {
     }
 
     // 2) Fallback por NOME só entre locais SEM coordenada (fora do alcance do geo).
+    // SQL cru não passa pela trava de conta — o filtro é na mão, e aqui ele é
+    // crítico: sem ele a tela de duplicados de uma empresa compararia os locais
+    // dela com os de outra, e o merge consolidaria cadastros de donos diferentes.
+    const contaId = contaIdAtual();
     const paresNome = await this.prisma.$queryRaw<{ id_a: string; id_b: string }[]>`
       SELECT a.id AS id_a, b.id AS id_b
       FROM "locais" a
       JOIN "locais" b
         ON a.id < b.id
+       AND a."contaId" = ${contaId} AND b."contaId" = ${contaId}
        AND a.ativo = true AND b.ativo = true
        AND (a.lat IS NULL OR a.lng IS NULL)
        AND (b.lat IS NULL OR b.lng IS NULL)
@@ -511,7 +517,7 @@ export class LocaisService {
   /** Raio inicial de busca configurado (metros). Fallback 50 (default antigo). */
   private async raioBuscaAtual(): Promise<number> {
     const cfg = await this.prisma.configuracaoBuscaLocais.findUnique({
-      where: { id: "default" },
+      where: { contaId: contaIdAtual() },
       select: { raioInicialM: true },
     });
     return cfg?.raioInicialM ?? 50;
@@ -563,6 +569,7 @@ export class LocaisService {
       FROM "locais" a
       JOIN "locais" b
         ON a.id < b.id
+       AND a."contaId" = ${contaIdAtual()} AND b."contaId" = ${contaIdAtual()}
        AND a.ativo = true AND b.ativo = true
        AND a.lat IS NOT NULL AND a.lng IS NOT NULL
        AND b.lat IS NOT NULL AND b.lng IS NOT NULL
@@ -640,13 +647,17 @@ export class LocaisService {
       }),
       this.prisma.$queryRaw<{ localId: string; m: bigint }[]>`
         SELECT "localId", count(DISTINCT "motoristaId") AS m
-        FROM "local_evidencia" WHERE "localId" = ANY(${idsCluster}) GROUP BY "localId"
+        FROM "local_evidencia"
+        WHERE "localId" = ANY(${idsCluster}) AND "contaId" = ${contaIdAtual()}
+        GROUP BY "localId"
       `,
       this.prisma.$queryRaw<{ localId: string; fora: bigint; total: bigint }[]>`
         SELECT "localDescargaId" AS "localId",
                count(*) FILTER (WHERE "descargaDistanciaMetros" > ${raioAtual}) AS fora,
                count(*) FILTER (WHERE "descargaDistanciaMetros" IS NOT NULL) AS total
-        FROM "viagens" WHERE "localDescargaId" = ANY(${idsCluster}) GROUP BY "localDescargaId"
+        FROM "viagens"
+        WHERE "localDescargaId" = ANY(${idsCluster}) AND "contaId" = ${contaIdAtual()}
+        GROUP BY "localDescargaId"
       `,
     ]);
 

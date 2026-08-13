@@ -4,6 +4,8 @@ import {
   PERMISSOES_OPERADOR,
   TODAS_AS_CHAVES,
 } from "@ronan/shared-types";
+import { comoSistema, contaIdAtual } from "../../common/conta/conta-context";
+import { paraCadaConta } from "../../common/conta/para-cada-conta";
 import { PrismaService } from "../../prisma/prisma.service";
 
 export const PAPEL_ADMIN = "Administrador";
@@ -17,9 +19,14 @@ export class PermissoesService implements OnModuleInit {
 
   async onModuleInit() {
     try {
-      await this.seedCatalogo();
-      await this.seedPapeisSistema();
-      await this.backfillUsuarios();
+      // O catálogo de chaves é da plataforma (uma linha por chave, sem dono).
+      await comoSistema(() => this.seedCatalogo());
+      // Papéis e usuários são de cada empresa: toda conta precisa do seu
+      // "Administrador" com o catálogo em dia.
+      await paraCadaConta(this.prisma, async () => {
+        await this.seedPapeisSistema();
+        await this.backfillUsuarios();
+      });
     } catch (err) {
       this.log.warn(`Falha ao semear RBAC: ${(err as Error).message}`);
     }
@@ -67,8 +74,11 @@ export class PermissoesService implements OnModuleInit {
    * pra pegar chaves novas). Operador só na criação (preserva edições do admin).
    */
   async seedPapeisSistema() {
+    // O nome do papel só é único DENTRO da conta — duas empresas têm cada uma o
+    // seu "Administrador" —, então o upsert precisa da chave composta.
+    const contaId = contaIdAtual();
     await this.prisma.papel.upsert({
-      where: { nome: PAPEL_ADMIN },
+      where: { contaId_nome: { contaId, nome: PAPEL_ADMIN } },
       create: {
         nome: PAPEL_ADMIN,
         descricao: "Acesso total ao sistema.",
@@ -78,7 +88,7 @@ export class PermissoesService implements OnModuleInit {
       update: { permissoes: TODAS_AS_CHAVES, sistema: true },
     });
     await this.prisma.papel.upsert({
-      where: { nome: PAPEL_OPERADOR },
+      where: { contaId_nome: { contaId, nome: PAPEL_OPERADOR } },
       create: {
         nome: PAPEL_OPERADOR,
         descricao: "Operação e cadastros, sem o módulo Sistema.",
@@ -92,7 +102,7 @@ export class PermissoesService implements OnModuleInit {
   /** Rede de segurança: usuário sem papel cai no Operador (a migração inicial
    * já atribuiu os papéis pelos perfis antigos). */
   async backfillUsuarios() {
-    const operador = await this.prisma.papel.findUnique({
+    const operador = await this.prisma.papel.findFirst({
       where: { nome: PAPEL_OPERADOR },
       select: { id: true },
     });

@@ -1293,7 +1293,7 @@ export class ViagensMotoristaService {
       throw new BadRequestException("Essa viagem não está mais em andamento.");
     }
 
-    const tipo = await this.prisma.tipoEventoViagem.findUnique({
+    const tipo = await this.prisma.tipoEventoViagem.findFirst({
       where: { slug: input.tipoSlug },
     });
     if (!tipo || !tipo.ativo) {

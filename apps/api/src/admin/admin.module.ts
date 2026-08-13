@@ -28,6 +28,7 @@ import { AdminInboxModule } from "./inbox/inbox.module";
 import { ResumoModule } from "./resumo/resumo.module";
 import { PermissoesModule } from "./permissoes/permissoes.module";
 import { PapeisModule } from "./papeis/papeis.module";
+import { ContasModule } from "./contas/contas.module";
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { PapeisModule } from "./papeis/papeis.module";
     ResumoModule,
     PermissoesModule,
     PapeisModule,
+    ContasModule,
     DemandasModule,
   ],
 })

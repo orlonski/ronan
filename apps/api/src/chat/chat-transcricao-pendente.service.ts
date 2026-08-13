@@ -3,6 +3,7 @@ import { Cron } from "@nestjs/schedule";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
 import { TranscricaoService } from "../ia/transcricao.service";
+import { comoSistema } from "../common/conta/conta-context";
 
 /** Quantos áudios transcrever por passada. Segura o custo de um susto. */
 const LOTE = 20;
@@ -36,6 +37,11 @@ export class ChatTranscricaoPendenteService {
 
   @Cron("0 15 * * * *", { name: "transcrever-audios-pendentes", timeZone: "America/Sao_Paulo" })
   async completar(): Promise<void> {
+    // Transcreve áudio que ficou pra trás; não cruza dado entre empresas.
+    await comoSistema(() => this.completarDaVez());
+  }
+
+  private async completarDaVez(): Promise<void> {
     if (!this.transcricao.configurado) return;
 
     const pendentes = await this.prisma.mensagemChat.findMany({

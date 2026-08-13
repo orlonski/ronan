@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
+import { comoSistema } from "../common/conta/conta-context";
 
 /**
  * Limpeza dos stories expirados (24h). O feed já filtra por expiraEm > agora,
@@ -20,6 +21,11 @@ export class StoriesCleanupService {
 
   @Cron("0 0 * * * *", { name: "limpar-stories", timeZone: "America/Sao_Paulo" })
   async limpar(): Promise<void> {
+    // Expurgo por data, igual pra todo mundo: uma passada só.
+    await comoSistema(() => this.limparDaVez());
+  }
+
+  private async limparDaVez(): Promise<void> {
     const expirados = await this.prisma.story.findMany({
       where: { expiraEm: { lte: new Date() } },
       select: { id: true, storageKey: true },

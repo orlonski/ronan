@@ -3,6 +3,7 @@ import type { MapaFrotaItem } from "@ronan/shared-types";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import type { EscopoAdmin } from "../../common/escopo/escopo";
+import { contaIdAtual } from "../../common/conta/conta-context";
 
 const RETENCAO_DIAS = 90;
 
@@ -53,7 +54,8 @@ export class FrotaAdminService {
       FROM motorista_posicoes mp
       JOIN motoristas m ON m.id = mp."motoristaId"
       LEFT JOIN veiculos v ON v.id = m."veiculoDefaultId"
-      WHERE (mp."capturadoEm" >= ${limite} OR mp."recebidoEm" >= ${limite})
+      WHERE mp."contaId" = ${contaIdAtual()}
+        AND (mp."capturadoEm" >= ${limite} OR mp."recebidoEm" >= ${limite})
       ${filtroFrota}
       ORDER BY mp."motoristaId", mp."capturadoEm" DESC
     `;

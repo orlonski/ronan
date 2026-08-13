@@ -4,6 +4,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { EvolutionClientService } from "../whatsapp/evolution-client.service";
 import { SessaoService } from "../whatsapp/sessao.service";
 import { inicioDoDiaData, ymdSaoPaulo } from "../common/timezone";
+import { paraCadaConta } from "../common/conta/para-cada-conta";
 
 /**
  * Resumo diário do dia PARA O MOTORISTA no WhatsApp (só os dados dele). Espelha
@@ -53,6 +54,11 @@ export class ResumoMotoristaService {
   /** Todo dia às 20:00 de Brasília. */
   @Cron("0 0 20 * * *", { name: "resumo-motorista", timeZone: "America/Sao_Paulo" })
   async enviarDiario(): Promise<void> {
+    // Mensagem por motorista com os números dele — roda dentro da conta dele.
+    await paraCadaConta(this.prisma, () => this.enviarDiarioDaVez());
+  }
+
+  private async enviarDiarioDaVez(): Promise<void> {
     if (!this.evolution.configurado) return;
     const motoristas = await this.prisma.motorista.findMany({
       where: {

@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { inicioDoDiaData, inicioDiasAtras } from "../common/timezone";
+import { contaIdAtual } from "../common/conta/conta-context";
 
 export type CatalogoTipo = "material" | "cliente" | "local" | "veiculo";
 
@@ -185,7 +186,8 @@ export class MotoristaService {
         SELECT mat.nome AS nome, COUNT(*)::bigint AS vezes, MAX(v.data) AS ultima
         FROM viagens v
         JOIN materiais mat ON mat.id = v."materialId"
-        WHERE v."motoristaId" = ${motoristaId}
+        WHERE v."contaId" = ${contaIdAtual()}
+          AND v."motoristaId" = ${motoristaId}
           AND v.data >= now() - interval '90 days'
           AND mat.ativo = true
         GROUP BY mat.nome
@@ -196,7 +198,8 @@ export class MotoristaService {
         SELECT c.nome AS nome, COUNT(*)::bigint AS vezes, MAX(v.data) AS ultima
         FROM viagens v
         JOIN clientes c ON c.id = v."clienteId"
-        WHERE v."motoristaId" = ${motoristaId}
+        WHERE v."contaId" = ${contaIdAtual()}
+          AND v."motoristaId" = ${motoristaId}
           AND v.data >= now() - interval '90 days'
           AND c.ativa = true
         GROUP BY c.nome
@@ -206,10 +209,10 @@ export class MotoristaService {
       this.prisma.$queryRaw<(LinhaTop & { cidade: string; uf: string })[]>`
         WITH usos AS (
           SELECT "localCargaId" AS id FROM viagens
-            WHERE "motoristaId" = ${motoristaId} AND data >= now() - interval '90 days'
+            WHERE "contaId" = ${contaIdAtual()} AND "motoristaId" = ${motoristaId} AND data >= now() - interval '90 days'
           UNION ALL
           SELECT "localDescargaId" AS id FROM viagens
-            WHERE "motoristaId" = ${motoristaId} AND data >= now() - interval '90 days'
+            WHERE "contaId" = ${contaIdAtual()} AND "motoristaId" = ${motoristaId} AND data >= now() - interval '90 days'
         ),
         agg AS (
           SELECT id, COUNT(*)::bigint AS vezes
@@ -234,7 +237,8 @@ export class MotoristaService {
         JOIN locais lc ON lc.id = v."localCargaId"
         JOIN locais ld ON ld.id = v."localDescargaId"
         JOIN clientes c ON c.id = v."clienteId" AND c.ativa = true
-        WHERE v."motoristaId" = ${motoristaId}
+        WHERE v."contaId" = ${contaIdAtual()}
+          AND v."motoristaId" = ${motoristaId}
           AND v.data >= now() - interval '90 days'
         GROUP BY lc.nome, lc.cidade, ld.nome, ld.cidade, c.nome
         ORDER BY vezes DESC, ultima DESC
@@ -724,10 +728,10 @@ export class MotoristaService {
       WITH hist AS (
         SELECT local_id, COUNT(*)::bigint AS n FROM (
           SELECT "localCargaId" AS local_id FROM viagens
-            WHERE "motoristaId" = ${motoristaId} AND data >= now() - interval '90 days'
+            WHERE "contaId" = ${contaIdAtual()} AND "motoristaId" = ${motoristaId} AND data >= now() - interval '90 days'
           UNION ALL
           SELECT "localDescargaId" AS local_id FROM viagens
-            WHERE "motoristaId" = ${motoristaId} AND data >= now() - interval '90 days'
+            WHERE "contaId" = ${contaIdAtual()} AND "motoristaId" = ${motoristaId} AND data >= now() - interval '90 days'
         ) t GROUP BY local_id
       )
       SELECT
@@ -737,7 +741,8 @@ export class MotoristaService {
         COALESCE(h.n, 0) AS "vezesUsadoMotorista"
       FROM locais l
       LEFT JOIN hist h ON h.local_id = l.id
-      WHERE l.ativo = true
+      WHERE l."contaId" = ${contaIdAtual()}
+        AND l.ativo = true
         AND l.lat IS NOT NULL AND l.lng IS NOT NULL
         AND l.tipo::text IN ${tiposPermitidos}
         AND earth_distance(ll_to_earth(${lat}, ${lng}), ll_to_earth(l.lat, l.lng)) <= ${raioKm * 1000}
@@ -781,7 +786,8 @@ export class MotoristaService {
         return this.prisma.$queryRaw<Row[]>`
           SELECT mat.id, mat.nome, COUNT(*)::bigint AS vezes
           FROM viagens v JOIN materiais mat ON mat.id = v."materialId"
-          WHERE (${motoristaFilter}::text IS NULL OR v."motoristaId" = ${motoristaFilter})
+          WHERE v."contaId" = ${contaIdAtual()}
+            AND (${motoristaFilter}::text IS NULL OR v."motoristaId" = ${motoristaFilter})
             AND v.data >= ${desde}
             AND mat.ativo = true
           GROUP BY mat.id, mat.nome
@@ -793,7 +799,8 @@ export class MotoristaService {
         return this.prisma.$queryRaw<Row[]>`
           SELECT c.id, c.nome, COUNT(*)::bigint AS vezes
           FROM viagens v JOIN clientes c ON c.id = v."clienteId"
-          WHERE (${motoristaFilter}::text IS NULL OR v."motoristaId" = ${motoristaFilter})
+          WHERE v."contaId" = ${contaIdAtual()}
+            AND (${motoristaFilter}::text IS NULL OR v."motoristaId" = ${motoristaFilter})
             AND v.data >= ${desde}
             AND c.ativa = true
           GROUP BY c.id, c.nome
@@ -806,7 +813,8 @@ export class MotoristaService {
       const sql = Prisma.sql`
         SELECT l.id, l.nome, COUNT(*)::bigint AS vezes
         FROM viagens v JOIN locais l ON l.id = v.${Prisma.raw(colunaLocal)}
-        WHERE (${motoristaFilter}::text IS NULL OR v."motoristaId" = ${motoristaFilter})
+        WHERE v."contaId" = ${contaIdAtual()}
+          AND (${motoristaFilter}::text IS NULL OR v."motoristaId" = ${motoristaFilter})
           AND v.data >= ${desde}
           AND l.ativo = true
         GROUP BY l.id, l.nome
@@ -1015,13 +1023,15 @@ export class MotoristaService {
       WITH usos AS (
         SELECT "localCargaId" AS local_id, data, 'carga'::text AS papel
         FROM viagens
-        WHERE "motoristaId" = ${motoristaId}
+        WHERE "contaId" = ${contaIdAtual()}
+          AND "motoristaId" = ${motoristaId}
           AND data >= ${desde}
           AND ${inclCarga}
         UNION ALL
         SELECT "localDescargaId" AS local_id, data, 'descarga'::text AS papel
         FROM viagens
-        WHERE "motoristaId" = ${motoristaId}
+        WHERE "contaId" = ${contaIdAtual()}
+          AND "motoristaId" = ${motoristaId}
           AND data >= ${desde}
           AND ${inclDescarga}
       ),
@@ -1111,7 +1121,8 @@ export class MotoristaService {
       WITH viagens_trajeto AS (
         SELECT v."clienteId", v."motoristaId", v."materialId", v.data
         FROM viagens v
-        WHERE v."localCargaId"    = ${localCargaId}
+        WHERE v."contaId" = ${contaIdAtual()}
+          AND v."localCargaId"    = ${localCargaId}
           AND v."localDescargaId" = ${localDescargaId}
           AND v.data >= ${desde}
       ),
@@ -1204,7 +1215,8 @@ export class MotoristaService {
           similarity(f_normalizar_array(l.apelidos),             f_normalizar(${termo})) * 1.1
         ) AS sim_score
         FROM locais l
-        WHERE l.ativo = true
+        WHERE l."contaId" = ${contaIdAtual()}
+          AND l.ativo = true
           AND (
                f_normalizar(l.nome)                    % f_normalizar(${termo})
             OR f_normalizar(coalesce(l.logradouro,'')) % f_normalizar(${termo})
@@ -1287,14 +1299,15 @@ export class MotoristaService {
           similarity(f_normalizar_array(m.apelidos),     f_normalizar(${termo})) * 1.1
         ) AS sim_score
         FROM materiais m
-        WHERE m.ativo = true
+        WHERE m."contaId" = ${contaIdAtual()}
+          AND m.ativo = true
           AND ( f_normalizar(m.nome) % f_normalizar(${termo})
              OR f_normalizar_array(m.apelidos) % f_normalizar(${termo}) )
       ),
       hist AS (
         SELECT "materialId" AS material_id, COUNT(*) AS n_uso, MAX(data) AS ultima
         FROM viagens
-        WHERE "motoristaId" = ${motoristaId} AND data >= now() - interval '60 days'
+        WHERE "contaId" = ${contaIdAtual()} AND "motoristaId" = ${motoristaId} AND data >= now() - interval '60 days'
         GROUP BY "materialId"
       )
       SELECT m.id, m.nome,
@@ -1342,14 +1355,15 @@ export class MotoristaService {
           similarity(f_normalizar_array(c.apelidos),     f_normalizar(${termo})) * 1.1
         ) AS sim_score
         FROM clientes c
-        WHERE c.ativa = true
+        WHERE c."contaId" = ${contaIdAtual()}
+          AND c.ativa = true
           AND ( f_normalizar(c.nome) % f_normalizar(${termo})
              OR f_normalizar_array(c.apelidos) % f_normalizar(${termo}) )
       ),
       hist AS (
         SELECT "clienteId" AS cliente_id, COUNT(*) AS n_uso, MAX(data) AS ultima
         FROM viagens
-        WHERE "motoristaId" = ${motoristaId} AND data >= now() - interval '60 days'
+        WHERE "contaId" = ${contaIdAtual()} AND "motoristaId" = ${motoristaId} AND data >= now() - interval '60 days'
         GROUP BY "clienteId"
       )
       SELECT c.id, c.nome,
@@ -1408,7 +1422,8 @@ export class MotoristaService {
           similarity(f_normalizar(coalesce(v.modelo,'')),    f_normalizar(${termo})) * 0.6
         ) AS "simScore"
       FROM veiculos v
-      WHERE v.ativo = true
+      WHERE v."contaId" = ${contaIdAtual()}
+        AND v.ativo = true
         ${filtroVinculo}
         AND (
              f_normalizar(v.placa) % f_normalizar(${termo})

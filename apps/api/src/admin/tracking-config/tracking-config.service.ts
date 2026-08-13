@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
+import { contaIdAtual } from "../../common/conta/conta-context";
 
 const SINGLETON_ID = "default";
 
@@ -22,17 +23,17 @@ export class TrackingConfigService {
   /** Garante que existe singleton e retorna. */
   async get() {
     return this.prisma.configuracaoTracking.upsert({
-      where: { id: SINGLETON_ID },
+      where: { contaId: contaIdAtual() },
       update: {},
-      create: { id: SINGLETON_ID },
+      create: {},
     });
   }
 
   async update(input: AtualizarConfigInput, userId: string) {
     return this.prisma.configuracaoTracking.upsert({
-      where: { id: SINGLETON_ID },
+      where: { contaId: contaIdAtual() },
       update: { ...input, alteradoPorId: userId },
-      create: { id: SINGLETON_ID, ...input, alteradoPorId: userId },
+      create: { ...input, alteradoPorId: userId },
     });
   }
 }

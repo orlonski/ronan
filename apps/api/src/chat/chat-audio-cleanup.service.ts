@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
+import { comoSistema } from "../common/conta/conta-context";
 
 /** Depois de quantos dias o arquivo de áudio some do MinIO. */
 const DIAS_RETENCAO = 60;
@@ -31,6 +32,11 @@ export class ChatAudioCleanupService {
 
   @Cron("0 30 4 * * *", { name: "limpar-audio-chat", timeZone: "America/Sao_Paulo" })
   async limpar(): Promise<void> {
+    // Expurgo por data, igual pra todo mundo: uma passada só.
+    await comoSistema(() => this.limparDaVez());
+  }
+
+  private async limparDaVez(): Promise<void> {
     const corte = new Date(Date.now() - DIAS_RETENCAO * 24 * 60 * 60 * 1000);
     const antigos = await this.prisma.mensagemChat.findMany({
       where: { tipo: "AUDIO", audioKey: { not: null }, criadoEm: { lt: corte } },

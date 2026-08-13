@@ -8,6 +8,7 @@ import {
   type VersaoAppResponse,
 } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
+import { contaIdAtual } from "../../common/conta/conta-context";
 
 const SINGLETON_ID = "default";
 
@@ -40,17 +41,17 @@ export class ForcaAtualizacaoService {
   /** Garante o singleton e retorna a config. */
   async getConfig() {
     return this.prisma.configuracaoForcaAtualizacao.upsert({
-      where: { id: SINGLETON_ID },
+      where: { contaId: contaIdAtual() },
       update: {},
-      create: { id: SINGLETON_ID },
+      create: {},
     });
   }
 
   async update(input: AtualizarForcaInput, userId: string) {
     return this.prisma.configuracaoForcaAtualizacao.upsert({
-      where: { id: SINGLETON_ID },
+      where: { contaId: contaIdAtual() },
       update: { ...input, alteradoPorId: userId },
-      create: { id: SINGLETON_ID, ...input, alteradoPorId: userId },
+      create: { ...input, alteradoPorId: userId },
     });
   }
 

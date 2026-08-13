@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { EvolutionClientService } from "./evolution-client.service";
 import { SessaoService } from "./sessao.service";
+import { contaIdAtual } from "../common/conta/conta-context";
 
 const CONFIG_ID = "default";
 
@@ -30,8 +31,8 @@ export class AvisoGrupoService {
   /** Config singleton (cria com defaults na primeira leitura). */
   async pegarConfig() {
     return this.prisma.configuracaoAvisoGrupo.upsert({
-      where: { id: CONFIG_ID },
-      create: { id: CONFIG_ID },
+      where: { contaId: contaIdAtual() },
+      create: {},
       update: {},
     });
   }
@@ -41,8 +42,8 @@ export class AvisoGrupoService {
     userId?: string,
   ) {
     return this.prisma.configuracaoAvisoGrupo.upsert({
-      where: { id: CONFIG_ID },
-      create: { id: CONFIG_ID, ...data, alteradoPorId: userId ?? null },
+      where: { contaId: contaIdAtual() },
+      create: { ...data, alteradoPorId: userId ?? null },
       update: { ...data, alteradoPorId: userId ?? null },
     });
   }
@@ -79,7 +80,7 @@ export class AvisoGrupoService {
    */
   async diagnosticar(motoristaRef: string, opts: { enviar?: boolean } = {}) {
     const ref = motoristaRef.replace(/\D/g, "").length === 11 ? { cpf: motoristaRef.replace(/\D/g, "") } : { id: motoristaRef };
-    const motorista = await this.prisma.motorista.findUnique({
+    const motorista = await this.prisma.motorista.findFirst({
       where: ref,
       select: { id: true, nome: true, telefone: true, avisoGrupoEnviadoEm: true },
     });

@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
+import { contaIdAtual } from "../../common/conta/conta-context";
 
 const SINGLETON_ID = "default";
 
@@ -18,17 +19,17 @@ export class BuscaLocaisConfigService {
   /** Garante que existe o singleton e retorna. */
   async get() {
     return this.prisma.configuracaoBuscaLocais.upsert({
-      where: { id: SINGLETON_ID },
+      where: { contaId: contaIdAtual() },
       update: {},
-      create: { id: SINGLETON_ID },
+      create: {},
     });
   }
 
   async update(input: AtualizarBuscaLocaisInput, userId: string) {
     return this.prisma.configuracaoBuscaLocais.upsert({
-      where: { id: SINGLETON_ID },
+      where: { contaId: contaIdAtual() },
       update: { ...input, alteradoPorId: userId },
-      create: { id: SINGLETON_ID, ...input, alteradoPorId: userId },
+      create: { ...input, alteradoPorId: userId },
     });
   }
 }

@@ -11,6 +11,12 @@ import { AgenteWorkerModule } from "./clickup-runner/agente-worker.module";
  *
  * NÃO roda `prisma migrate deploy`: quem versiona o banco é a API. Dois
  * processos aplicando migration no boot brigariam por lock à toa.
+ *
+ * Sobre multi-empresa: este processo NÃO abre contexto de conta, e está certo.
+ * A fila (`ExecucaoAgente`) é da plataforma, não de nenhuma empresa — é o Diego
+ * mandando task pro agente —, então a trava passa direto por ela. Se um dia o
+ * worker precisar tocar dado de negócio, aí sim terá que rodar dentro de
+ * `comConta` da empresa dona da demanda.
  */
 async function bootstrap() {
   const logger = new Logger("Agente");

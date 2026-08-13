@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../../prisma/prisma.service";
+import { contaIdAtual } from "../../common/conta/conta-context";
 
 const SINGLETON_ID = "default";
 
@@ -22,9 +23,9 @@ export class AgenteConfigService {
   /** Garante singleton e retorna. */
   async get() {
     const row = await this.prisma.configuracaoAgente.upsert({
-      where: { id: SINGLETON_ID },
+      where: { contaId: contaIdAtual() },
       update: {},
-      create: { id: SINGLETON_ID },
+      create: {},
     });
     return {
       ...row,
@@ -37,9 +38,9 @@ export class AgenteConfigService {
 
   async update(input: AtualizarAgenteConfigInput, userId: string) {
     const row = await this.prisma.configuracaoAgente.upsert({
-      where: { id: SINGLETON_ID },
+      where: { contaId: contaIdAtual() },
       update: { ...input, alteradoPorId: userId },
-      create: { id: SINGLETON_ID, ...input, alteradoPorId: userId },
+      create: { ...input, alteradoPorId: userId },
     });
     return {
       ...row,

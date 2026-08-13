@@ -60,7 +60,7 @@ export class TransportadorasService {
 
   async create(data: CriarTransportadoraInput, usuarioId: string) {
     if (data.cnpj) {
-      const exists = await this.prisma.transportadora.findUnique({
+      const exists = await this.prisma.transportadora.findFirst({
         where: { cnpj: data.cnpj },
       });
       if (exists) throw new ConflictException("CNPJ já cadastrado");
@@ -73,7 +73,7 @@ export class TransportadorasService {
   async update(id: string, data: AtualizarTransportadoraInput) {
     await this.ensureExists(id);
     if (data.cnpj) {
-      const exists = await this.prisma.transportadora.findUnique({
+      const exists = await this.prisma.transportadora.findFirst({
         where: { cnpj: data.cnpj },
       });
       if (exists && exists.id !== id) throw new ConflictException("CNPJ já cadastrado");

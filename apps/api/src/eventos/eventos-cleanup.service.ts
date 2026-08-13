@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { PrismaService } from "../prisma/prisma.service";
+import { comoSistema } from "../common/conta/conta-context";
 
 const RETENCAO_DIAS = 90;
 
@@ -17,6 +18,11 @@ export class EventosCleanupService {
 
   @Cron("0 30 3 * * *", { name: "expurgar-eventos-motorista", timeZone: "America/Sao_Paulo" })
   async expurgar(): Promise<void> {
+    // Expurgo por data, igual pra todo mundo: uma passada só.
+    await comoSistema(() => this.expurgarDaVez());
+  }
+
+  private async expurgarDaVez(): Promise<void> {
     const corte = new Date(Date.now() - RETENCAO_DIAS * 24 * 60 * 60 * 1000);
     const { count } = await this.prisma.eventoMotorista.deleteMany({
       where: { recebidoEm: { lt: corte } },

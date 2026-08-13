@@ -10,6 +10,10 @@ type MePayload = {
   papel: { id: string; nome: string } | null;
   acessoGlobal: boolean;
   transportadoras: { id: string; nome: string }[];
+  /** A empresa (tenant) do usuário. O backend já filtra tudo por ela. */
+  conta: { id: string; nome: string; logoUrl: string | null } | null;
+  /** true = equipe da plataforma (só ela vê a tela de empresas). */
+  plataforma: boolean;
 };
 
 /**
@@ -29,6 +33,10 @@ export function usePermissoes() {
     /** false = usuário restrito a transportadora (o backend filtra o que ele lê). */
     acessoGlobal: data?.acessoGlobal ?? true,
     transportadoras: data?.transportadoras ?? [],
+    /** A empresa do usuário — só pra exibir; o recorte dos dados é do backend. */
+    conta: data?.conta ?? null,
+    /** Equipe da plataforma: enxerga a tela de empresas. */
+    plataforma: data?.plataforma ?? false,
   };
 }
 

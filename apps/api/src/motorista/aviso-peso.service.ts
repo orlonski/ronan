@@ -4,6 +4,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { PushService } from "../push/push.service";
 import { EvolutionClientService } from "../whatsapp/evolution-client.service";
 import { SessaoService } from "../whatsapp/sessao.service";
+import { paraCadaConta } from "../common/conta/para-cada-conta";
 
 /**
  * Avisos pro motorista não esquecer de completar o peso/romaneio de uma viagem
@@ -80,6 +81,11 @@ export class AvisoPesoService {
     timeZone: "America/Sao_Paulo",
   })
   async lembreteFimDoDia(): Promise<void> {
+    // Cobra viagem sem peso de cada empresa; o texto e a lista são dela.
+    await paraCadaConta(this.prisma, () => this.lembreteFimDoDiaDaVez());
+  }
+
+  private async lembreteFimDoDiaDaVez(): Promise<void> {
     const pendentes = await this.prisma.viagem.findMany({
       where: { status: "AGUARDANDO_PESO" },
       select: {

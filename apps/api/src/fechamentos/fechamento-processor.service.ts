@@ -18,6 +18,7 @@ import {
   normalizarPlaca,
   normalizarTicket,
 } from "./utils/normalizers";
+import { contaIdAtual } from "../common/conta/conta-context";
 
 // Defaults — usados quando ConfiguracaoIa.id="default" ainda não existe
 // (primeiro fechamento processado num ambiente novo).
@@ -743,9 +744,9 @@ export class FechamentoProcessorService {
     // Lê config dinâmica (atualizável via /configuracoes/ia no dashboard).
     const cfg = await this.prisma.configuracaoIa
       .upsert({
-        where: { id: "default" },
+        where: { contaId: contaIdAtual() },
         update: {},
-        create: { id: "default" },
+        create: {},
       })
       .catch(() => null);
     const thresholdAuto = cfg?.confidenceMinimo ?? DEFAULT_CONFIDENCE_AUTORESOLVER;

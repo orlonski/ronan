@@ -127,7 +127,7 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const { data: session } = useSession();
-  const { temPermissao, papelNome } = usePermissoes();
+  const { temPermissao, papelNome, conta, plataforma } = usePermissoes();
 
   // Itens visíveis por permissão; grupo só aparece se sobrar algum item.
   const gruposVisiveis = GRUPOS.map((g) => ({
@@ -179,7 +179,7 @@ export function Sidebar({
           mobileOpen ? "translate-x-0 shadow-xl" : "-translate-x-full md:translate-x-0",
         )}
       >
-        <div className="mb-4 flex items-center px-2">
+        <div className="mb-1 flex items-center px-2">
           <SchabaLogo width={160} className="shrink-0 text-sidebar-foreground" />
           {/* Botão fechar (só mobile) */}
           {onMobileClose && (
@@ -193,6 +193,12 @@ export function Sidebar({
             </button>
           )}
         </div>
+
+        {/* De qual empresa é o que está na tela. Com mais de uma no ar, saber
+            onde você está deixa de ser detalhe. */}
+        {conta && (
+          <div className="mb-4 px-2 text-xs font-medium text-muted-foreground">{conta.nome}</div>
+        )}
 
         <nav className="flex-1 space-y-2 overflow-y-auto">
           {/* Dashboard fora dos grupos — sempre visível */}
@@ -214,6 +220,24 @@ export function Sidebar({
               </Link>
             );
           })()}
+
+          {/* Empresas: só a equipe da plataforma. Não passa pela matriz de
+              papéis de propósito — não é permissão que um administrador de
+              empresa possa ganhar por engano. */}
+          {plataforma && (
+            <Link
+              href={"/contas" as any}
+              className={cn(
+                "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                isRotaAtiva(pathname, "/contas")
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm"
+                  : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              )}
+            >
+              <Building2 className="h-4 w-4" />
+              Empresas (plataforma)
+            </Link>
+          )}
 
           {gruposVisiveis.map((grupo) => {
             const aberto = grupoAberto === grupo.titulo;
