@@ -1,6 +1,6 @@
 "use client";
 
-import { SchabaLogo } from "@/components/schaba-logo";
+import { MovatruckLogo } from "@/components/movatruck-logo";
 import { usePermissoes } from "@/lib/permissoes";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
@@ -37,5 +37,5 @@ export function LogoConta({
     );
   }
 
-  return <SchabaLogo width={width} className={className} />;
+  return <MovatruckLogo width={width} className={className} />;
 }

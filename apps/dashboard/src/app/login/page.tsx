@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { SchabaLogo } from "@/components/schaba-logo";
+import { MovatruckLogo } from "@/components/movatruck-logo";
 
 function LoginForm() {
   const router = useRouter();
@@ -138,7 +138,7 @@ export default function LoginPage() {
       <div className="relative z-10 flex w-full max-w-md flex-col items-center">
         {/* Logo + tagline acima do card */}
         <div className="mb-6 flex flex-col items-center">
-          <SchabaLogo width={192} className="text-white drop-shadow-2xl" />
+          <MovatruckLogo width={230} forcarClaro className="drop-shadow-2xl" />
           <p className="mt-2 text-xs uppercase tracking-[0.3em] text-zinc-300">
             Logistics &amp; Tracking
           </p>
@@ -207,7 +207,7 @@ export default function LoginPage() {
 
         {/* Footer fora do card */}
         <p className="mt-6 text-center text-xs text-zinc-400">
-          © {new Date().getFullYear()} Schaba · Logistics &amp; Tracking
+          © {new Date().getFullYear()} Movatruck · Logistics &amp; Tracking
         </p>
       </div>
     </main>

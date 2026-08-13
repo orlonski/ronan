@@ -18,6 +18,7 @@ type Situacao = { rotulo: string; tom: "ok" | "neutro" | "atencao" };
 type Local = { nome: string; cidade: string | null; uf: string | null; lat: number | null; lng: number | null };
 
 type Comprovante = {
+  marca: { nome: string; logoUrl: string | null };
   ticket: string | null;
   data: string | null;
   situacao: Situacao;
@@ -67,7 +68,7 @@ export async function generateMetadata({
     // Comprovante de cliente jamais pode ser indexado.
     robots: { index: false, follow: false },
   };
-  if (!r.ok) return { ...base, title: "Comprovante indisponível — Schaba" };
+  if (!r.ok) return { ...base, title: "Comprovante indisponível" };
 
   const d = r.dados;
   const titulo = d.ticket ? `Comprovante de viagem — Ticket ${d.ticket}` : "Comprovante de viagem";
@@ -81,14 +82,15 @@ export async function generateMetadata({
 
   return {
     ...base,
-    title: `${titulo} — Schaba`,
+    title: `${titulo} — ${d.marca.nome}`,
     description: resumo,
     openGraph: {
       title: titulo,
       description: resumo,
       // Logo estático, NÃO a foto do ticket: o WhatsApp derruba preview grande
-      // e a balança pode estar rotacionada/ilegível.
-      images: ["/schaba-logo.png"],
+      // e a balança pode estar rotacionada/ilegível. Da empresa dona quando ela
+      // tem uma; senão a da plataforma.
+      images: [d.marca.logoUrl ? `${API_BROWSER}${d.marca.logoUrl}` : "/marca/movatruck-icone.png"],
       type: "website",
     },
   };
@@ -111,8 +113,14 @@ export default async function ComprovantePage({
     <main className="mx-auto max-w-3xl px-4 py-6 text-slate-800 sm:px-6 sm:py-10">
       <header className="mb-6 flex flex-wrap items-start justify-between gap-4 border-b pb-6">
         <div>
+          {/* A marca de quem prestou o serviço — é o comprovante DELA. Sem logo
+              própria, entra a da plataforma. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/schaba-logo.png" alt="Schaba" className="mb-3 h-8 w-auto" />
+          <img
+            src={d.marca.logoUrl ? `${API_BROWSER}${d.marca.logoUrl}` : "/marca/movatruck-logo.svg"}
+            alt={d.marca.nome}
+            className="mb-3 h-8 w-auto"
+          />
           <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">Comprovante de viagem</h1>
           <p className="mt-1 text-slate-600">
             {d.ticket ? (

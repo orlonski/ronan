@@ -4,13 +4,13 @@ import { PwaRegister } from "@/components/pwa-register";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Schaba — Painel",
+  title: "Movatruck — Painel",
   description: "Painel de gestão de viagens e logística",
-  applicationName: "Schaba",
+  applicationName: "Movatruck",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Schaba",
+    title: "Movatruck",
   },
   icons: {
     icon: "/icon-512.png",

@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Schaba — Painel",
-    short_name: "Schaba",
+    name: "Movatruck — Painel",
+    short_name: "Movatruck",
     description: "Painel de gestão de viagens e logística",
     start_url: "/",
     display: "standalone",

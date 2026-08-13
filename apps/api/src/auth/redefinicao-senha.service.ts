@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import { randomInt } from "node:crypto";
 import { formatCpf, telefoneDigits } from "@ronan/shared-types";
+import { comConta, comoSistema } from "../common/conta/conta-context";
 import { PrismaService } from "../prisma/prisma.service";
 import { EvolutionClientService } from "../whatsapp/evolution-client.service";
 import { SessaoService } from "../whatsapp/sessao.service";
@@ -47,7 +48,38 @@ export class RedefinicaoSenhaService {
     private readonly avisoGrupo: AvisoGrupoService,
   ) {}
 
+  /**
+   * De qual empresa é o CPF. Roda sem conta no contexto porque é rota pública
+   * (o motorista esqueceu a senha e não está logado) — achar o cadastro é o que
+   * revela a empresa. Quase sempre há um só; havendo o mesmo CPF em duas
+   * empresas, o telefone desempata, e sem desempate vale o mais recente, que é
+   * o cadastro que ele está usando.
+   */
+  private async resolverConta(cpf: string, telefone?: string): Promise<string | null> {
+    const candidatos = await comoSistema(() =>
+      this.prisma.motorista.findMany({
+        where: { cpf },
+        select: { contaId: true, telefone: true, criadoEm: true },
+        orderBy: { criadoEm: "desc" },
+      }),
+    );
+    if (candidatos.length === 0) return null;
+    if (candidatos.length === 1) return candidatos[0]!.contaId;
+    const porTelefone = telefone
+      ? candidatos.find((c) => telefoneDigits(c.telefone ?? "") === telefoneDigits(telefone))
+      : undefined;
+    return (porTelefone ?? candidatos[0]!).contaId;
+  }
+
   async esqueci(cpf: string, telefoneInput: string) {
+    const contaId = await this.resolverConta(cpf, telefoneInput);
+    // CPF sem cadastro nenhum: o fluxo abaixo já trata (mensagem clara pro app
+    // oferecer o cadastro), então roda numa conta qualquer só pra ter contexto.
+    if (!contaId) return comoSistema(() => this.esqueciNaConta(cpf, telefoneInput));
+    return comConta(contaId, () => this.esqueciNaConta(cpf, telefoneInput));
+  }
+
+  private async esqueciNaConta(cpf: string, telefoneInput: string) {
     const telefone = telefoneDigits(telefoneInput);
     const motorista = await this.prisma.motorista.findFirst({
       where: { cpf },
@@ -131,6 +163,12 @@ export class RedefinicaoSenhaService {
   }
 
   async reenviar(cpf: string) {
+    const contaId = await this.resolverConta(cpf);
+    if (!contaId) throw new BadRequestException("Nenhum pedido de redefinição pra esse CPF. Comece de novo.");
+    return comConta(contaId, () => this.reenviarNaConta(cpf));
+  }
+
+  private async reenviarNaConta(cpf: string) {
     const pendente = await this.buscarPendente(cpf);
     if (!pendente) {
       throw new BadRequestException(
@@ -166,6 +204,12 @@ export class RedefinicaoSenhaService {
   }
 
   async redefinir(cpf: string, codigo: string, novaSenha: string) {
+    const contaId = await this.resolverConta(cpf);
+    if (!contaId) throw new BadRequestException("Não foi possível redefinir. Comece de novo.");
+    return comConta(contaId, () => this.redefinirNaConta(cpf, codigo, novaSenha));
+  }
+
+  private async redefinirNaConta(cpf: string, codigo: string, novaSenha: string) {
     const pendente = await this.buscarPendente(cpf);
     if (!pendente) {
       throw new BadRequestException("Não foi possível redefinir. Comece de novo.");

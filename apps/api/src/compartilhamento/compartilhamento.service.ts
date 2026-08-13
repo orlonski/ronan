@@ -22,6 +22,7 @@ import {
   serializarViagemPublica,
   type ViagemPublica,
 } from "./viagem-publica";
+import { comConta, comoSistema } from "../common/conta/conta-context";
 
 /** Validades oferecidas no painel. 30 dias cobre conferência + fechamento do mês. */
 export const DIAS_VALIDADE = [7, 30, 90] as const;
@@ -173,7 +174,15 @@ export class CompartilhamentoService implements OnModuleInit {
    */
   async viagemPorToken(token: string, ip: string): Promise<ViagemPublica> {
     const link = await this.buscarLinkValido(token);
+    // Daqui pra baixo tudo corre dentro da empresa dona do link — inclusive os
+    // mínimos e a rota, que são dados dela.
+    return comConta(link.contaId, () => this.montarComprovante(link, ip));
+  }
 
+  private async montarComprovante(
+    link: { id: string; contaId: string; viagemId: string; expiraEm: Date; primeiroAcessoEm: Date | null },
+    ip: string,
+  ): Promise<ViagemPublica> {
     const viagem = await this.prisma.viagem.findUnique({
       where: { id: link.viagemId },
       select: SELECT_VIAGEM_PUBLICA,
@@ -222,10 +231,14 @@ export class CompartilhamentoService implements OnModuleInit {
 
   async fotoPorToken(token: string, fotoId: string) {
     const link = await this.buscarLinkValido(token);
-    const foto = await this.prisma.ticketFoto.findFirst({
-      where: { id: fotoId, viagemId: link.viagemId },
-      select: { storageKey: true },
-    });
+    // Mesma regra do comprovante: o token resolve a empresa, e a leitura da foto
+    // corre dentro dela.
+    const foto = await comConta(link.contaId, () =>
+      this.prisma.ticketFoto.findFirst({
+        where: { id: fotoId, viagemId: link.viagemId },
+        select: { storageKey: true },
+      }),
+    );
     if (!foto) throw new NotFoundException("Foto não encontrada");
 
     const buffer = await this.uploads.getObjectBuffer(foto.storageKey);
@@ -244,11 +257,26 @@ export class CompartilhamentoService implements OnModuleInit {
     return `${this.baseUrl}/v/${token}`;
   }
 
+  /**
+   * Acha o link pelo token. Roda SEM conta no contexto de propósito: é uma
+   * página pública, aberta pelo cliente da empresa, sem login — o token é
+   * justamente o que revela de qual empresa é a viagem. Depois de resolvido, o
+   * resto da leitura roda dentro da conta dona (ver `viagemPorToken`).
+   */
   private async buscarLinkValido(token: string) {
-    const link = await this.prisma.viagemCompartilhamento.findUnique({
-      where: { token },
-      select: { id: true, viagemId: true, expiraEm: true, revogadoEm: true, primeiroAcessoEm: true },
-    });
+    const link = await comoSistema(() =>
+      this.prisma.viagemCompartilhamento.findUnique({
+        where: { token },
+        select: {
+          id: true,
+          contaId: true,
+          viagemId: true,
+          expiraEm: true,
+          revogadoEm: true,
+          primeiroAcessoEm: true,
+        },
+      }),
+    );
     // Nunca logar o token — nem aqui, nem no erro.
     if (!link) {
       throw new NotFoundException({ code: "LINK_INVALIDO", message: "Link não encontrado" });

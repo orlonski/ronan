@@ -53,6 +53,8 @@ export type SituacaoPublica = {
 };
 
 export type ViagemPublica = {
+  /** De quem é o comprovante. Da EMPRESA, não da plataforma. */
+  marca: { nome: string; logoUrl: string | null };
   ticket: string | null;
   data: string | null;
   situacao: SituacaoPublica;
@@ -93,6 +95,9 @@ export type LocalPublico = {
  * lidos aqui e descartados no builder; nunca são emitidos.
  */
 export const SELECT_VIAGEM_PUBLICA = {
+  // Marca da empresa dona da viagem. Vai pro comprovante de propósito: quem
+  // abre o link é cliente DELA, e o comprovante é dela — não da plataforma.
+  conta: { select: { nome: true, logoUrl: true } },
   status: true,
   ticket: true,
   data: true,
@@ -174,6 +179,7 @@ export function serializarViagemPublica(
   const minimos = aplicarMinimos({ km: viagem.km, toneladas: viagem.toneladas }, override);
 
   return {
+    marca: { nome: viagem.conta.nome, logoUrl: viagem.conta.logoUrl },
     ticket: viagem.ticket,
     data: dataISO(viagem.data),
     situacao: mapearSituacao(viagem.status),
