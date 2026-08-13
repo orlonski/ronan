@@ -43,7 +43,7 @@ export class EmpresasService {
   async create(data: CriarEmpresaInput, usuarioId: string) {
     if (data.cnpj) {
       const exists = await this.prisma.empresa.findFirst({ where: { cnpj: data.cnpj } });
-      if (exists) throw new ConflictException("CNPJ já cadastrado");
+      if (exists) throw new ConflictException("CNPJ/CPF já cadastrado");
     }
     return this.prisma.empresa.create({
       data: { ...data, criadoPorId: usuarioId } as Prisma.EmpresaUncheckedCreateInput,

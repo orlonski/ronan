@@ -5,7 +5,11 @@ const CampoChaveMatch = z.enum(["placa", "data", "ticket"]);
 
 export const CriarEmpresaInput = z.object({
   nome: z.string().min(2).max(160),
-  cnpj: z.string().regex(/^\d{14}$/).optional(),
+  // CPF (11) ou CNPJ (14): empresa de dono autônomo/MEI muitas vezes só tem CPF.
+  cnpj: z
+    .string()
+    .regex(/^(\d{11}|\d{14})$/, "Informe um CPF (11 dígitos) ou CNPJ (14 dígitos)")
+    .optional(),
   contato: z.string().max(160).optional(),
   papel: z.nativeEnum(PapelEmpresa).default(PapelEmpresa.AMBOS),
   layoutImport: z.unknown().optional(),

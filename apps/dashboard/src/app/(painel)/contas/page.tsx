@@ -17,6 +17,7 @@ import {
 import { useApiQuery, fetchApi, useAuthToken } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
 import { fmtDataHoraSP } from "@/lib/datetime-br";
+import { maskDocumento } from "@ronan/shared-types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
@@ -246,11 +247,14 @@ export default function ContasPage() {
               />
             </div>
             <div>
-              <Label htmlFor="cnpj">CNPJ (opcional)</Label>
+              <Label htmlFor="cnpj">CNPJ ou CPF (opcional)</Label>
               <Input
                 id="cnpj"
                 value={form.cnpj}
-                onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
+                inputMode="numeric"
+                maxLength={18}
+                placeholder="12.345.678/0001-99 ou 123.456.789-01"
+                onChange={(e) => setForm({ ...form, cnpj: maskDocumento(e.target.value) })}
               />
             </div>
             <hr className="my-2" />

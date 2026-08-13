@@ -27,7 +27,16 @@ import { ContasService } from "./contas.service";
 const CriarContaBody = z.object({
   nome: z.string().trim().min(2, "Diga o nome da empresa."),
   slug: z.string().trim().optional(),
-  cnpj: z.string().trim().optional(),
+  // CPF (11) ou CNPJ (14) — chega com máscara da tela, guarda só dígitos.
+  cnpj: z
+    .string()
+    .trim()
+    .transform((v) => v.replace(/\D/g, ""))
+    .refine(
+      (v) => v === "" || v.length === 11 || v.length === 14,
+      "Informe um CPF (11 dígitos) ou CNPJ (14 dígitos)",
+    )
+    .optional(),
   adminNome: z.string().trim().min(2, "Diga o nome de quem vai administrar."),
   adminEmail: z.string().trim().email("E-mail inválido."),
   adminSenha: z.string().min(8, "A senha precisa de pelo menos 8 caracteres."),

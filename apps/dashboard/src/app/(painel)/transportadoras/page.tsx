@@ -20,6 +20,7 @@ import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { useApiQuery, usePaginatedList, useUpdateResource } from "@/lib/client-api";
+import { formatDocumento } from "@ronan/shared-types";
 
 type Transportadora = {
   id: string;
@@ -53,9 +54,9 @@ export default function TransportadorasPage() {
       {
         id: "cnpj",
         accessorKey: "cnpj",
-        header: ({ column }) => <DataTableColumnHeader column={column} title="CNPJ" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="CNPJ/CPF" />,
         cell: ({ row }) => (
-          <span className="font-mono text-xs">{row.original.cnpj ?? "—"}</span>
+          <span className="font-mono text-xs">{formatDocumento(row.original.cnpj) || "—"}</span>
         ),
       },
       {
@@ -186,7 +187,7 @@ export default function TransportadorasPage() {
         toolbar={
           <DataTableToolbar
             state={tableState}
-            searchPlaceholder="Buscar por nome, CNPJ, contato…"
+            searchPlaceholder="Buscar por nome, CNPJ/CPF, contato…"
             filters={
               <Combobox
                 value={tableState.filters.ativa}
@@ -217,7 +218,7 @@ export default function TransportadorasPage() {
                     {t._count.motoristas} motorista{t._count.motoristas === 1 ? "" : "s"} ·{" "}
                     {t._count.veiculos} placa{t._count.veiculos === 1 ? "" : "s"}
                   </Badge>
-                  {t.cnpj && <span className="font-mono">{t.cnpj}</span>}
+                  {t.cnpj && <span className="font-mono">{formatDocumento(t.cnpj)}</span>}
                   {t.contato && <span>{t.contato}</span>}
                 </div>
               </div>

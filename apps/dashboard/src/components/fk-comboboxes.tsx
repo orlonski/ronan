@@ -1,6 +1,6 @@
 "use client";
 
-import { formatCpf } from "@ronan/shared-types";
+import { formatCpf, formatDocumento } from "@ronan/shared-types";
 import {
   AsyncCombobox,
   AsyncComboboxMulti,
@@ -53,7 +53,7 @@ export const transportadoraOption = (t: {
 }): ComboboxOption => ({
   value: t.id,
   label: t.nome,
-  sublabel: t.cnpj ?? undefined,
+  sublabel: formatDocumento(t.cnpj) || undefined,
 });
 
 type SingleProps = {
@@ -97,7 +97,7 @@ export function TransportadoraCombobox(props: SingleProps) {
       {...props}
       path="/admin/transportadoras"
       mapOption={transportadoraOption}
-      searchPlaceholder="Buscar por nome ou CNPJ…"
+      searchPlaceholder="Buscar por nome ou CNPJ/CPF…"
       emptyMessage="Nenhuma transportadora encontrada."
       placeholder={props.placeholder ?? "Sem transportadora"}
     />
@@ -122,7 +122,7 @@ export function TransportadoraComboboxMulti({
       initialOptions={initialOptions}
       path="/admin/transportadoras"
       mapOption={transportadoraOption}
-      searchPlaceholder="Buscar por nome ou CNPJ…"
+      searchPlaceholder="Buscar por nome ou CNPJ/CPF…"
       emptyMessage="Nenhuma transportadora encontrada."
       placeholder={placeholder}
     />

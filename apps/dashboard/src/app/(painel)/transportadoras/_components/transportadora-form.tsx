@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCreateResource, useUpdateResource } from "@/lib/client-api";
+import { documentoDigits, maskDocumento } from "@ronan/shared-types";
 
 export type Transportadora = {
   id: string;
@@ -28,15 +29,21 @@ export function TransportadoraForm({ initial }: Props) {
 
   const [form, setForm] = useState({
     nome: initial?.nome ?? "",
-    cnpj: initial?.cnpj ?? "",
+    cnpj: maskDocumento(initial?.cnpj ?? ""),
     contato: initial?.contato ?? "",
   });
 
+  // Vazio é permitido (campo opcional); preenchido tem que fechar 11 ou 14 dígitos.
+  const digitos = documentoDigits(form.cnpj);
+  const documentoIncompleto =
+    digitos.length > 0 && digitos.length !== 11 && digitos.length !== 14;
+
   async function onSubmit(ev: React.FormEvent) {
     ev.preventDefault();
+    if (documentoIncompleto) return;
     const body: Partial<Transportadora> = {
       nome: form.nome,
-      cnpj: form.cnpj.replace(/\D/g, "") || undefined,
+      cnpj: digitos || undefined,
       contato: form.contato || undefined,
     };
     if (initial) {
@@ -64,13 +71,20 @@ export function TransportadoraForm({ initial }: Props) {
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div className="space-y-2">
-            <Label>CNPJ</Label>
+            <Label>CNPJ ou CPF</Label>
             <Input
               value={form.cnpj}
+              inputMode="numeric"
               maxLength={18}
-              onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
-              placeholder="apenas números"
+              onChange={(e) => setForm({ ...form, cnpj: maskDocumento(e.target.value) })}
+              placeholder="12.345.678/0001-99 ou 123.456.789-01"
+              aria-invalid={documentoIncompleto || undefined}
             />
+            {documentoIncompleto && (
+              <p className="text-xs text-destructive">
+                Faltam dígitos: CPF tem 11 e CNPJ tem 14.
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label>Contato</Label>

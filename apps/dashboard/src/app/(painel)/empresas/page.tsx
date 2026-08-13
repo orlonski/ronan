@@ -26,6 +26,7 @@ import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePaginatedList, useUpdateResource } from "@/lib/client-api";
+import { formatDocumento } from "@ronan/shared-types";
 
 type Papel = "RECEBE_PLANILHA" | "MANDA_FECHAMENTO" | "AMBOS";
 type Empresa = {
@@ -58,9 +59,9 @@ export default function EmpresasPage() {
       {
         id: "cnpj",
         accessorKey: "cnpj",
-        header: ({ column }) => <DataTableColumnHeader column={column} title="CNPJ" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="CNPJ/CPF" />,
         cell: ({ row }) => (
-          <span className="font-mono text-xs">{row.original.cnpj ?? "—"}</span>
+          <span className="font-mono text-xs">{formatDocumento(row.original.cnpj) || "—"}</span>
         ),
       },
       {
@@ -165,7 +166,7 @@ export default function EmpresasPage() {
         toolbar={
           <DataTableToolbar
             state={tableState}
-            searchPlaceholder="Buscar por nome, CNPJ, contato…"
+            searchPlaceholder="Buscar por nome, CNPJ/CPF, contato…"
             filters={
               <>
                 <Combobox
@@ -209,7 +210,7 @@ export default function EmpresasPage() {
                 </div>
                 {(e.cnpj || e.contato) && (
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                    {e.cnpj && <span className="font-mono">{e.cnpj}</span>}
+                    {e.cnpj && <span className="font-mono">{formatDocumento(e.cnpj)}</span>}
                     {e.cnpj && e.contato && <span>·</span>}
                     {e.contato && <span>{e.contato}</span>}
                   </div>

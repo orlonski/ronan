@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { useCreateResource, useUpdateResource } from "@/lib/client-api";
+import { documentoDigits, maskDocumento } from "@ronan/shared-types";
 
 type Papel = "RECEBE_PLANILHA" | "MANDA_FECHAMENTO" | "AMBOS";
 export type Empresa = {
@@ -31,16 +32,22 @@ export function EmpresaForm({ initial }: Props) {
 
   const [form, setForm] = useState({
     nome: initial?.nome ?? "",
-    cnpj: initial?.cnpj ?? "",
+    cnpj: maskDocumento(initial?.cnpj ?? ""),
     contato: initial?.contato ?? "",
     papel: (initial?.papel ?? "AMBOS") as Papel,
   });
 
+  // Vazio é permitido (campo opcional); preenchido tem que fechar 11 ou 14 dígitos.
+  const digitos = documentoDigits(form.cnpj);
+  const documentoIncompleto =
+    digitos.length > 0 && digitos.length !== 11 && digitos.length !== 14;
+
   async function onSubmit(ev: React.FormEvent) {
     ev.preventDefault();
+    if (documentoIncompleto) return;
     const body: Partial<Empresa> = {
       nome: form.nome,
-      cnpj: form.cnpj.replace(/\D/g, "") || undefined,
+      cnpj: digitos || undefined,
       contato: form.contato || undefined,
       papel: form.papel,
     };
@@ -68,13 +75,20 @@ export function EmpresaForm({ initial }: Props) {
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div className="space-y-2">
-            <Label>CNPJ</Label>
+            <Label>CNPJ ou CPF</Label>
             <Input
               value={form.cnpj}
+              inputMode="numeric"
               maxLength={18}
-              onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
-              placeholder="apenas números"
+              onChange={(e) => setForm({ ...form, cnpj: maskDocumento(e.target.value) })}
+              placeholder="12.345.678/0001-99 ou 123.456.789-01"
+              aria-invalid={documentoIncompleto || undefined}
             />
+            {documentoIncompleto && (
+              <p className="text-xs text-destructive">
+                Faltam dígitos: CPF tem 11 e CNPJ tem 14.
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label>Papel</Label>
@@ -101,7 +115,7 @@ export function EmpresaForm({ initial }: Props) {
               Cancelar
             </Button>
           </Link>
-          <Button type="submit" disabled={saving}>
+          <Button type="submit" disabled={saving || documentoIncompleto}>
             Salvar
           </Button>
         </div>
