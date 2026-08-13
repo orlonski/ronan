@@ -5,6 +5,7 @@ import { ArrowUpCircle } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { getVersaoApp } from "@/lib/versao-app-state";
 import { tentarInAppUpdateImediato } from "@/lib/in-app-update";
+import { MovatruckLogo } from "./movatruck-logo";
 
 /**
  * Tela que cobre o app inteiro quando esta versão ficou abaixo do piso exigido
@@ -50,9 +51,7 @@ export function AtualizacaoObrigatoria() {
     <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
         <View className="bg-brand px-6 pb-10 pt-20">
-          <Text className="text-4xl font-extrabold tracking-tight text-white">
-            MOVATRUCK
-          </Text>
+          <MovatruckLogo />
           <Text className="mt-2 text-base font-medium text-white/80">
             Aplicativo do motorista
           </Text>

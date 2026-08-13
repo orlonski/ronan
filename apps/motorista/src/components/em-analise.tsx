@@ -5,6 +5,7 @@ import { useMe } from "@/lib/queries";
 import { clearTokens } from "@/lib/auth";
 import { setAuthState } from "@/lib/auth-state";
 import { clearCadastroStatus, setCadastroStatus } from "@/lib/cadastro-status";
+import { MovatruckLogo } from "@/components/movatruck-logo";
 
 /**
  * Tela que cobre o app inteiro quando o cadastro ainda está PENDENTE_APROVACAO.
@@ -31,7 +32,7 @@ export function EmAnalise() {
     <div className="flex min-h-screen-safe flex-col bg-background">
       <div className="bg-brand px-6 pb-10 pt-safe">
         <div className="pt-12">
-          <h1 className="text-4xl font-extrabold tracking-tight text-white">MOVATRUCK</h1>
+          <MovatruckLogo />
           <p className="mt-2 text-base font-medium text-white/80">Aplicativo do motorista</p>
         </div>
       </div>

@@ -16,6 +16,7 @@ import { cpfDigits } from "@ronan/shared-types";
 import { api, ApiError } from "@/lib/api";
 import { saveTokens } from "@/lib/auth";
 import { setAuthState } from "@/lib/auth-state";
+import { MovatruckLogo } from "@/components/movatruck-logo";
 
 // Aplica máscara CPF enquanto digita.
 function maskCpf(input: string): string {
@@ -65,9 +66,7 @@ export default function LoginScreen() {
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
           {/* Hero: faixa azul marinho com brand (status bar fica em cima) */}
           <View className="bg-brand px-6 pb-10 pt-20">
-            <Text className="text-4xl font-extrabold tracking-tight text-white">
-              MOVATRUCK
-            </Text>
+            <MovatruckLogo />
             <Text className="mt-2 text-base font-medium text-white/80">
               Aplicativo do motorista
             </Text>

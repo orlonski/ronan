@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { api, ApiError } from "@/lib/api";
 import { saveTokens } from "@/lib/auth";
 import { setAuthState } from "@/lib/auth-state";
+import { MovatruckLogo } from "@/components/movatruck-logo";
 
 function maskCpf(input: string): string {
   const d = cpfDigits(input).slice(0, 11);
@@ -54,7 +55,7 @@ export default function LoginPage() {
       {/* Hero brand */}
       <div className="bg-brand px-6 pb-10 pt-safe">
         <div className="pt-12">
-          <h1 className="text-4xl font-extrabold tracking-tight text-white">MOVATRUCK</h1>
+          <MovatruckLogo />
           <p className="mt-2 text-base font-medium text-white/80">Aplicativo do motorista</p>
         </div>
       </div>
