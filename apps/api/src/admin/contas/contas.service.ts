@@ -44,21 +44,48 @@ export class ContasService implements OnModuleInit {
   }
 
   /**
-   * Sem isto, ninguém no mundo enxerga a tela de empresas.
+   * Quem opera a plataforma (vê a tela de empresas).
    *
-   * A coluna `plataforma` nasceu `false` pra todo mundo — o que está certo,
-   * porque fail-open num acesso desses seria pior. Só que aí o sistema sobe sem
-   * NENHUM operador de plataforma e não existe caminho pela interface pra criar
-   * o primeiro (a tela que criaria já exige ser um). Clássico ovo e galinha.
+   * A coluna `plataforma` nasce `false` pra todo mundo, o que está certo — mas
+   * cria um ovo e galinha: o sistema sobe sem nenhum operador e a única tela que
+   * criaria o primeiro já exige ser um.
    *
-   * A saída: quando não há nenhum, o dono do sistema é quem estava aqui
-   * primeiro — o usuário mais antigo da conta mais antiga. Roda uma vez só; a
-   * partir do momento em que existe um operador, isto não toca em mais nada,
-   * inclusive se depois ele for despromovido de propósito.
+   * Duas saídas, nesta ordem:
+   *
+   * 1. `PLATAFORMA_EMAILS` (lista separada por vírgula) — a forma EXPLÍCITA, e a
+   *    que resolve na prática. Reaplica a cada boot, então serve pra recuperar o
+   *    acesso sem mexer no banco: basta corrigir a variável e reiniciar.
+   * 2. Sem a variável e sem nenhum operador, promove os ADMINISTRADORES da conta
+   *    mais antiga — não só o usuário mais antigo, que foi o que deixou o dono de
+   *    fora quando havia um cadastro anterior ao dele (um seed, um teste).
+   *
+   * Nunca REMOVE o acesso de ninguém: se você despromover alguém pelo banco, o
+   * boot não desfaz — só a variável adiciona.
    */
   private async garantirOperadorDaPlataforma(): Promise<void> {
     try {
       await comoSistema(async () => {
+        const emails = (process.env.PLATAFORMA_EMAILS ?? "")
+          .split(",")
+          .map((e) => e.trim().toLowerCase())
+          .filter(Boolean);
+
+        if (emails.length > 0) {
+          const { count } = await this.prisma.user.updateMany({
+            where: { email: { in: emails }, plataforma: false },
+            data: { plataforma: true },
+          });
+          const achados = await this.prisma.user.count({ where: { email: { in: emails } } });
+          if (achados < emails.length) {
+            this.log.warn(
+              `PLATAFORMA_EMAILS tem ${emails.length} e-mail(s) e só ${achados} existe(m) no banco — ` +
+                `confira se escreveu certo: ${emails.join(", ")}`,
+            );
+          }
+          if (count > 0) this.log.log(`${count} usuário(s) promovido(s) a operador da plataforma.`);
+          if (achados > 0) return;
+        }
+
         const jaExiste = await this.prisma.user.count({ where: { plataforma: true } });
         if (jaExiste > 0) return;
 
@@ -68,20 +95,34 @@ export class ContasService implements OnModuleInit {
         });
         if (!contaMaisAntiga) return;
 
-        const primeiro = await this.prisma.user.findFirst({
-          where: { contaId: contaMaisAntiga.id, ativo: true },
-          orderBy: { criadoEm: "asc" },
+        // Administradores da conta 1. Se não houver papel nenhum atribuído, cai
+        // pro usuário mais antigo — melhor alguém que ninguém.
+        const admins = await this.prisma.user.findMany({
+          where: {
+            contaId: contaMaisAntiga.id,
+            ativo: true,
+            papel: { nome: PAPEL_ADMIN },
+          },
           select: { id: true, email: true },
         });
-        if (!primeiro) return;
+        const alvos =
+          admins.length > 0
+            ? admins
+            : await this.prisma.user.findMany({
+                where: { contaId: contaMaisAntiga.id, ativo: true },
+                orderBy: { criadoEm: "asc" },
+                take: 1,
+                select: { id: true, email: true },
+              });
+        if (alvos.length === 0) return;
 
-        await this.prisma.user.update({
-          where: { id: primeiro.id },
+        await this.prisma.user.updateMany({
+          where: { id: { in: alvos.map((a) => a.id) } },
           data: { plataforma: true },
         });
         this.log.warn(
-          `Nenhum operador de plataforma existia. Promovi ${primeiro.email} ` +
-            `(usuário mais antigo de ${contaMaisAntiga.nome}) — é quem passa a ver a tela de empresas.`,
+          `Nenhum operador de plataforma existia. Promovi ${alvos.map((a) => a.email).join(", ")} ` +
+            `(administradores de ${contaMaisAntiga.nome}). Pra fixar quem manda, use PLATAFORMA_EMAILS.`,
         );
       });
     } catch (erro) {
