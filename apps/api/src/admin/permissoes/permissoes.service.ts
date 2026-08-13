@@ -4,6 +4,7 @@ import {
   PERMISSOES_OPERADOR,
   TODAS_AS_CHAVES,
   PERMISSOES_ADMIN_EMPRESA,
+  CHAVES_PLATAFORMA,
 } from "@ronan/shared-types";
 import { comoSistema, contaIdAtual } from "../../common/conta/conta-context";
 import { paraCadaConta } from "../../common/conta/para-cada-conta";
@@ -85,6 +86,13 @@ export class PermissoesService implements OnModuleInit {
     // publica nas lojas. A conta 1 (a do dono) continua com tudo.
     const daPlataforma = await this.ehContaDaPlataforma(contaId);
     const permissoesAdmin = daPlataforma ? TODAS_AS_CHAVES : PERMISSOES_ADMIN_EMPRESA;
+    // O Operador segue a mesma régua: `PERMISSOES_OPERADOR` é montado por módulo
+    // (Operação + Cadastros), e "Pedágios (rodovias)" mora em Cadastros — então
+    // sem esta poda o operador de uma empresa cliente herdaria a base de praças,
+    // que é compartilhada entre todas.
+    const permissoesOperador = daPlataforma
+      ? PERMISSOES_OPERADOR
+      : PERMISSOES_OPERADOR.filter((c) => !CHAVES_PLATAFORMA.includes(c));
 
     await this.prisma.papel.upsert({
       where: { contaId_nome: { contaId, nome: PAPEL_ADMIN } },
@@ -103,11 +111,37 @@ export class PermissoesService implements OnModuleInit {
       create: {
         nome: PAPEL_OPERADOR,
         descricao: "Operação e cadastros, sem o módulo Sistema.",
-        permissoes: PERMISSOES_OPERADOR,
+        permissoes: permissoesOperador,
         sistema: true,
       },
       update: { sistema: true },
     });
+
+    if (!daPlataforma) await this.podarChavesDePlataforma();
+  }
+
+  /**
+   * Tira das mãos de uma empresa cliente qualquer chave que virou de
+   * plataforma.
+   *
+   * Não basta cuidar do papel Administrador na criação: o Operador é montado por
+   * MÓDULO (Operação + Cadastros) e "Pedágios (rodovias)" mora em Cadastros;
+   * além disso a empresa pode ter criado papéis próprios antes de a chave virar
+   * exclusiva. Roda a cada boot, então promover um recurso a "de plataforma"
+   * limpa o passado sozinho.
+   */
+  private async podarChavesDePlataforma(): Promise<void> {
+    const papeis = await this.prisma.papel.findMany({
+      select: { id: true, nome: true, permissoes: true },
+    });
+    for (const papel of papeis) {
+      const limpas = papel.permissoes.filter((c) => !CHAVES_PLATAFORMA.includes(c));
+      if (limpas.length === papel.permissoes.length) continue;
+      await this.prisma.papel.update({ where: { id: papel.id }, data: { permissoes: limpas } });
+      this.log.log(
+        `Papel "${papel.nome}": removidas ${papel.permissoes.length - limpas.length} permissão(ões) de plataforma.`,
+      );
+    }
   }
 
   /**

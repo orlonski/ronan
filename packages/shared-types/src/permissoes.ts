@@ -152,6 +152,13 @@ export const RECURSOS_PLATAFORMA: string[] = [
   "config-forca-atualizacao",
   "erros",
   "diagnosticos",
+  // A fila de tarefas do agente de desenvolvimento. É ferramenta de quem
+  // constrói o sistema — não tem o que uma transportadora faça aqui.
+  "demandas",
+  // A base de praças de pedágio é COMPARTILHADA por todas as empresas (o model
+  // não tem dono, é dado do OSM). Uma empresa apagando uma praça mudaria o
+  // cálculo de pedágio das outras — parece menu de operação e não é.
+  "pedagios",
 ];
 
 /** Chaves de plataforma (`recurso.acao`), derivadas de RECURSOS_PLATAFORMA. */

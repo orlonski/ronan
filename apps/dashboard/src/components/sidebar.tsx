@@ -286,7 +286,11 @@ export function Sidebar({
             <UserCircle className="h-5 w-5 text-muted-foreground" />
             <div className="min-w-0">
               <p className="truncate font-medium">{session?.user?.name ?? "—"}</p>
-              <p className="truncate text-xs text-muted-foreground">{papelNome ?? "—"}</p>
+              {/* Quem opera a plataforma é outro nível, não um papel da matriz —
+                  por isso aparece por cima do papel, e não como um deles. */}
+              <p className="truncate text-xs text-muted-foreground">
+                {plataforma ? "Super administrador" : (papelNome ?? "—")}
+              </p>
             </div>
           </div>
           <Button

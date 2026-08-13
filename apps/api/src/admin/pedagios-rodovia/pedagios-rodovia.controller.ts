@@ -54,16 +54,19 @@ export class PedagiosRodoviaController {
     private readonly consulta: PedagiosRodoviaConsultaService,
   ) {}
 
+  @RequerPermissao("pedagios.ver")
   @Get()
   list(@Query(new ZodValidationPipe(ListQuery)) q: z.infer<typeof ListQuery>) {
     return this.service.list(q);
   }
 
+  @RequerPermissao("pedagios.ver")
   @Get("mapa")
   mapa() {
     return this.service.listarParaMapa();
   }
 
+  @RequerPermissao("pedagios.ver")
   @Get("na-rota")
   naRota(
     @Query(new ZodValidationPipe(z.object({
@@ -74,6 +77,7 @@ export class PedagiosRodoviaController {
     return this.consulta.pedagiosNaRota(q.origem, q.destino);
   }
 
+  @RequerPermissao("pedagios.ver")
   @Get(":id")
   detalhe(@Param("id") id: string) {
     return this.service.detalhe(id);
