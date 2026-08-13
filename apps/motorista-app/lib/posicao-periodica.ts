@@ -7,7 +7,11 @@
  * - Enfileira em AsyncStorage; drain via posicao-sync.ts
  */
 
-import AsyncStorage from "@react-native-async-storage/async-storage";
+// O `storage` é o AsyncStorage carimbado com a empresa ativa (lib/storage.ts):
+// as posições de GPS pendentes são de quem as capturou, e o motorista pode rodar pra mais
+// de uma. Chave global aqui faria o dado de uma aparecer — ou ser ENVIADO —
+// pela outra.
+import { storage as AsyncStorage } from "@/lib/storage";
 import type { LocationObject } from "expo-location";
 import { showConfirm } from "./alert";
 

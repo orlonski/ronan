@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api, humanizeApiError } from "@/lib/api";
 import { saveTokens } from "@/lib/auth";
+import { migrarSessaoLegada } from "@/lib/sessoes";
 import { setAuthState } from "@/lib/auth-state";
 
 const COOLDOWN_S = 60;
@@ -58,7 +59,15 @@ export default function SignupCodigoPage() {
         codigoEmpresa: empresa,
       });
       saveTokens(res);
+      // Transforma o token recém-gravado em sessão de empresa (o token diz de
+      // qual cadastro é). Sem isso o app entraria pelo caminho legado.
+      migrarSessaoLegada();
       setAuthState(true);
+      if (res.senhaHerdada) {
+        alert(
+          "Como você já tem cadastro em outra empresa, continua entrando com a MESMA senha de sempre — a que você digitou agora não foi usada.",
+        );
+      }
       navigate("/", { replace: true });
     } catch (err) {
       setErro(humanizeApiError(err));

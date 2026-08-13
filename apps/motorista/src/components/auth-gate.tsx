@@ -7,6 +7,9 @@ import { startAutoSync } from "@/lib/sync";
 import { enviarPendentes } from "@/lib/error-reporter";
 import { obterEEnviarPushToken } from "@/lib/notifications";
 import { EmAnalise } from "@/components/em-analise";
+import { EscolherEmpresaAbertura } from "@/components/escolher-empresa-abertura";
+import { assinarSessoes, listarSessoes, precisaEscolherEmpresa } from "@/lib/sessoes";
+import { atualizarCadastros, prepararSessoes } from "@/lib/troca-empresa";
 
 /**
  * Gate de autenticação. Usa useSyncExternalStore pra evitar bug de ordem
@@ -21,18 +24,29 @@ export function AuthGate({ children }: { children: ReactNode }) {
     getCadastroStatus,
     () => null,
   );
+  // Re-renderiza ao trocar/escolher empresa (o gate de escolha some).
+  useSyncExternalStore(assinarSessoes, () => JSON.stringify(listarSessoes()));
   const location = useLocation();
 
   // Boot único: lê tokens e popula auth-state. useSyncExternalStore re-renderiza
   // automaticamente quando setAuthState muda o valor.
   useEffect(() => {
     if (getAuthState() !== null) return;
-    try {
-      const tokens = loadTokens();
-      setAuthState(!!tokens?.accessToken);
-    } catch {
-      setAuthState(false);
-    }
+    // `prepararSessoes` PRIMEIRO: adota a sessão de quem já estava logado antes
+    // das sessões por empresa e resolve os pendentes sem dono. Ler o token antes
+    // disso mostraria dado da empresa errada por um instante.
+    void prepararSessoes()
+      .catch(() => {
+        /* nunca derruba o boot: sem migrar, cai no caminho antigo */
+      })
+      .then(() => {
+        try {
+          const tokens = loadTokens();
+          setAuthState(!!tokens?.accessToken);
+        } catch {
+          setAuthState(false);
+        }
+      });
   }, []);
 
   // Inicia auto-sync ao logar.
@@ -40,6 +54,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
     if (state !== true) return;
     startAutoSync();
     void enviarPendentes();
+    // Alinha as empresas dele com o servidor: nome da empresa (que a migração
+    // não tinha como saber), aprovação e cadastro numa segunda empresa.
+    void atualizarCadastros().catch(() => {});
     if (typeof Notification !== "undefined" && Notification.permission === "granted") {
       void obterEEnviarPushToken();
     }
@@ -55,6 +72,10 @@ export function AuthGate({ children }: { children: ReactNode }) {
   // Logado mas cadastro ainda em análise: cobre o app inteiro com a tela de
   // espera (some sozinho quando o status vira APROVADO).
   if (state && cadastroStatus === "PENDENTE_APROVACAO") return <EmAnalise />;
+
+  // Roda pra mais de uma empresa: escolhe a do turno antes de ver qualquer tela.
+  // Uma vez por abertura do app (o marcador vive em memória).
+  if (state && precisaEscolherEmpresa()) return <EscolherEmpresaAbertura />;
 
   return <>{children}</>;
 }

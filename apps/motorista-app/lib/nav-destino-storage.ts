@@ -6,7 +6,11 @@
  *
  * Limpo em Finalizar/Descartar (o caller chama clearNavDestino).
  */
-import AsyncStorage from "@react-native-async-storage/async-storage";
+// O `storage` é o AsyncStorage carimbado com a empresa ativa (lib/storage.ts):
+// o destino guardado é o da viagem aberta numa empresa, e o motorista pode rodar pra mais
+// de uma. Chave global aqui faria o dado de uma aparecer — ou ser ENVIADO —
+// pela outra.
+import { storage as AsyncStorage } from "@/lib/storage";
 import type { Local, RotaNav } from "@/lib/queries";
 
 const KEY = "ronan.viagem-nav-destino";

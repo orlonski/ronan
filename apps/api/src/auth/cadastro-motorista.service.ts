@@ -194,6 +194,13 @@ export class CadastroMotoristaService {
     const placaInputs: PlacaInput[] = placas.map((p) => ({ placa: p.placa, modelo: p.modelo }));
     const placaDefault = placas.find((p) => p.default)?.placa ?? null;
 
+    // Já tem cadastro em outra empresa? Então ele já tem senha, e a senha é da
+    // PESSOA (ver AuthService.propagarSenha): herda o hash e ignora a que ele
+    // digitou aqui, senão ficaria com duas senhas pro mesmo CPF e uma delas
+    // pararia de funcionar na primeira troca. O app avisa na tela de conclusão.
+    const senhaHash = (await this.senhaExistenteDoCpf(pendente.cpf)) ?? pendente.senhaHash;
+    const senhaHerdada = senhaHash !== pendente.senhaHash;
+
     const motoristaId = await this.prisma.$transaction(async (tx) => {
       // Re-checa duplicados dentro da transação (corrida entre iniciar e confirmar).
       await this.checarDuplicados(
@@ -208,7 +215,7 @@ export class CadastroMotoristaService {
         data: {
           nome: pendente.nome,
           cpf: pendente.cpf,
-          senhaHash: pendente.senhaHash,
+          senhaHash,
           telefone: pendente.telefone,
           email: pendente.email,
           status: "PENDENTE_APROVACAO",
@@ -250,7 +257,25 @@ export class CadastroMotoristaService {
     void this.avisoGrupo.anunciarCadastro(motoristaId);
 
     const tokens = await this.auth.issueMotoristaTokens(motoristaId);
-    return { ...tokens, status: "PENDENTE_APROVACAO" as const };
+    return { ...tokens, status: "PENDENTE_APROVACAO" as const, senhaHerdada };
+  }
+
+  /**
+   * O hash de senha que este CPF já tem em outra empresa, se tiver.
+   *
+   * Atravessa contas de propósito e é o ÚNICO lugar do cadastro que faz isso —
+   * mas não vaza nada: o hash não sai da API, e a empresa nova nunca fica
+   * sabendo em qual outra ele roda. Ver AuthService.propagarSenha.
+   */
+  private async senhaExistenteDoCpf(cpf: string): Promise<string | null> {
+    const existente = await comoSistema(() =>
+      this.prisma.motorista.findFirst({
+        where: { cpf, ativo: true },
+        select: { senhaHash: true },
+        orderBy: { criadoEm: "desc" },
+      }),
+    );
+    return existente?.senhaHash ?? null;
   }
 
   /**

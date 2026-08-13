@@ -86,7 +86,14 @@ export const CriarMotoristaInput = z
   .object({
     nome: z.string().min(2).max(120),
     cpf: CpfSchema,
-    senha: z.string().min(6).max(80),
+    /**
+     * Opcional de propósito: se o CPF já tem cadastro em outra empresa, a senha
+     * dele já existe (é da pessoa, não do cadastro) e o painel nem mostra o
+     * campo. Quem cobra a senha quando ela é mesmo necessária é o backend — a
+     * checagem "já existe em outra empresa" atravessa contas e não pode morar
+     * num schema que roda no navegador.
+     */
+    senha: z.string().min(6).max(80).optional(),
     telefone: TelefoneOpcionalSchema,
     email: EmailOpcionalSchema,
     placas: z.array(PlacaInput).default([]),

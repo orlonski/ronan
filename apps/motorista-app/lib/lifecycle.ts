@@ -7,7 +7,11 @@
  *   registrados, dizem qual é o PRÓXIMO passo (botão primário) e os extras.
  * - Ações de alto nível: montam o payload e enfileiram no outbox (sync.ts).
  */
-import AsyncStorage from "@react-native-async-storage/async-storage";
+// O `storage` é o AsyncStorage carimbado com a empresa ativa (lib/storage.ts):
+// a viagem guiada em andamento é de UMA empresa, e o motorista pode rodar pra mais
+// de uma. Chave global aqui faria o dado de uma aparecer — ou ser ENVIADO —
+// pela outra.
+import { storage as AsyncStorage } from "@/lib/storage";
 import type { FonteGps, KmFonte, TipoEventoViagem, TrechoViagemInput } from "@ronan/shared-types";
 import {
   listPendingEventosViagem,

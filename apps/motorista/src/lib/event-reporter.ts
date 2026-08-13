@@ -7,8 +7,11 @@
 import type { TipoEvento } from "@ronan/shared-types";
 import { db } from "@/db/dexie";
 import { api } from "./api";
+import { motoristaAtivoId } from "./sessoes";
 
-const QUEUE_KEY = "ronan.eventos-pendentes";
+// Fila carimbada com o cadastro ativo: o evento de telemetria é de UMA empresa
+// e não pode subir com o token da outra (o motorista pode rodar pra mais de uma).
+const queueKey = () => `ronan.eventos-pendentes.${motoristaAtivoId() ?? "sem-sessao"}`;
 const MAX_PENDENTES = 200;
 const BATCH_SIZE = 50;
 
@@ -69,7 +72,7 @@ export async function drenar(): Promise<void> {
 
 async function getPendentes(): Promise<EventoPendente[]> {
   try {
-    const row = await db.cache.get(QUEUE_KEY);
+    const row = await db.cache.get(queueKey());
     return row ? ((row.v as EventoPendente[]) ?? []) : [];
   } catch {
     return [];
@@ -78,7 +81,7 @@ async function getPendentes(): Promise<EventoPendente[]> {
 
 async function setPendentes(eventos: EventoPendente[]): Promise<void> {
   try {
-    await db.cache.put({ key: QUEUE_KEY, v: eventos, t: Date.now() });
+    await db.cache.put({ key: queueKey(), v: eventos, t: Date.now() });
   } catch {
     /* */
   }

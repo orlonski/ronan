@@ -22,6 +22,7 @@ import {
   type PedagioCadastrado,
 } from "./pedagios-offline";
 import { getRotaCache, setRotaCache } from "./rota-cache";
+import { motoristaAtivoId } from "./sessoes";
 import {
   drainLocais,
   enqueueAbastecimento,
@@ -595,7 +596,10 @@ export type PedagioNaRota = {
 
 // Cache local da lista de pedágios cadastrados. Permite calcular alerta
 // "rota passa por pedágio" 100% offline. ~100KB total.
-const PEDAGIOS_CACHE_KEY = "ronan.pedagios-cadastrados-v1";
+//
+// Carimbado com o cadastro ativo: as praças cadastradas são de UMA empresa, e o
+// motorista pode rodar pra mais de uma (ver lib/sessoes.ts).
+const chavePedagios = () => `ronan.pedagios-cadastrados-v1.${motoristaAtivoId() ?? "sem-sessao"}`;
 const PEDAGIOS_REFRESH_MS = 24 * 60 * 60_000;
 
 export function usePedagiosCadastrados() {
@@ -607,14 +611,14 @@ export function usePedagiosCadastrados() {
       try {
         const lista = await api.get<PedagioCadastrado[]>("/m/pedagios-rodovia");
         try {
-          localStorage.setItem(PEDAGIOS_CACHE_KEY, JSON.stringify(lista));
+          localStorage.setItem(chavePedagios(), JSON.stringify(lista));
         } catch {
           /* quota cheia, etc — ignora; cache em memoria do TanStack ainda vale */
         }
         return lista;
       } catch {
         try {
-          const raw = localStorage.getItem(PEDAGIOS_CACHE_KEY);
+          const raw = localStorage.getItem(chavePedagios());
           if (raw) return JSON.parse(raw) as PedagioCadastrado[];
         } catch {
           /* ignora */

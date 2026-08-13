@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Post, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import {
   CadastroMotoristaInput,
@@ -10,6 +10,7 @@ import {
   RefreshInput,
   ReenviarCodigoInput,
   ReenviarSenhaInput,
+  TrocarEmpresaInput,
   TrocarSenhaInput,
 } from "@ronan/shared-types";
 import { AuthService } from "./auth.service";
@@ -107,6 +108,31 @@ export class AuthController {
   @Post("m/auth/refresh")
   async refreshMotorista(@Body(new ZodValidationPipe(RefreshInput)) body: RefreshInput) {
     return this.auth.refresh(body.refreshToken);
+  }
+
+  /**
+   * As empresas em que este CPF tem cadastro — alimenta o seletor de empresa do
+   * app. Não devolve nada da outra empresa além do nome dela.
+   */
+  @ApiBearerAuth()
+  @UseGuards(RolesGuard)
+  @Roles("MOTORISTA")
+  @Get("m/auth/cadastros")
+  async cadastros(@CurrentUser() user: AuthMotorista) {
+    return this.auth.cadastrosDoMotorista(user.id);
+  }
+
+  /** Troca a empresa ativa sem pedir senha (só entre cadastros do mesmo CPF). */
+  @ApiBearerAuth()
+  @UseGuards(RolesGuard)
+  @Roles("MOTORISTA")
+  @HttpCode(200)
+  @Post("m/auth/trocar-empresa")
+  async trocarEmpresa(
+    @CurrentUser() user: AuthMotorista,
+    @Body(new ZodValidationPipe(TrocarEmpresaInput)) body: TrocarEmpresaInput,
+  ) {
+    return this.auth.trocarEmpresa(user.id, body.motoristaId);
   }
 
   @ApiBearerAuth()

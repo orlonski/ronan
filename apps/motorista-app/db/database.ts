@@ -2,12 +2,21 @@
 // Volume real é baixo (cache de catálogos + outbox de poucas viagens),
 // AsyncStorage é mais robusto e estável que SQLite no Expo Go.
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { chaveDoCadastro, storage } from "../lib/storage";
 
+/**
+ * Cache e outbox passam pelo `storage`, que carimba a chave com o cadastro
+ * ativo. O motorista pode rodar pra mais de uma empresa e nada de uma pode
+ * aparecer na outra — nem na tela, nem (pior) na hora de enviar: com a chave
+ * global de antes, o pendente de uma subia com o token da outra.
+ */
 const PREFIX = "ronan.";
+
+const chave = (sufixo: string) => `${PREFIX}${sufixo}`;
 
 export async function cacheGet<T>(key: string): Promise<T | null> {
   try {
-    const raw = await AsyncStorage.getItem(`${PREFIX}cache.${key}`);
+    const raw = await storage.getItem(chave(`cache.${key}`));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { v: T; t: number };
     return parsed.v;
@@ -18,8 +27,8 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
 
 export async function cachePut<T>(key: string, value: T): Promise<void> {
   try {
-    await AsyncStorage.setItem(
-      `${PREFIX}cache.${key}`,
+    await storage.setItem(
+      chave(`cache.${key}`),
       JSON.stringify({ v: value, t: Date.now() }),
     );
   } catch {
@@ -31,7 +40,7 @@ export async function cachePut<T>(key: string, value: T): Promise<void> {
  *  nunca baixado. Usado pra mostrar "dados atualizados há X" no app. */
 export async function cacheGetAt(key: string): Promise<number | null> {
   try {
-    const raw = await AsyncStorage.getItem(`${PREFIX}cache.${key}`);
+    const raw = await storage.getItem(chave(`cache.${key}`));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { v: unknown; t: number };
     return typeof parsed.t === "number" ? parsed.t : null;
@@ -42,7 +51,7 @@ export async function cacheGetAt(key: string): Promise<number | null> {
 
 export async function cacheDelete(key: string): Promise<void> {
   try {
-    await AsyncStorage.removeItem(`${PREFIX}cache.${key}`);
+    await storage.removeItem(chave(`cache.${key}`));
   } catch {
     /* nope */
   }
@@ -298,22 +307,39 @@ export type PendingMensagemChat = {
   errorPermanenteLocal?: boolean;
 };
 
-const VIAGENS_KEY = `${PREFIX}outbox.viagens`;
-const MENSAGENS_CHAT_KEY = `${PREFIX}outbox.mensagens-chat`;
-const PEDAGIOS_KEY = `${PREFIX}outbox.pedagios`;
-const ABASTECIMENTOS_KEY = `${PREFIX}outbox.abastecimentos`;
-const LOCAIS_KEY = `${PREFIX}outbox.locais`;
-const FOTOS_KEY = `${PREFIX}outbox.fotos`;
-const STORIES_KEY = `${PREFIX}outbox.stories`;
-const VG_INICIAR_KEY = `${PREFIX}outbox.viagem-iniciar`;
-const VG_EVENTOS_KEY = `${PREFIX}outbox.viagem-eventos`;
-const VG_FINALIZAR_KEY = `${PREFIX}outbox.viagem-finalizar`;
-const VG_CANCELAR_KEY = `${PREFIX}outbox.viagem-cancelar`;
-const COMPLETAR_PESO_KEY = `${PREFIX}outbox.viagem-completar-peso`;
+// Sufixos (sem o prefixo do cadastro — quem monta a chave completa é `chave`).
+const VIAGENS_KEY = "outbox.viagens";
+const MENSAGENS_CHAT_KEY = "outbox.mensagens-chat";
+const PEDAGIOS_KEY = "outbox.pedagios";
+const ABASTECIMENTOS_KEY = "outbox.abastecimentos";
+const LOCAIS_KEY = "outbox.locais";
+const FOTOS_KEY = "outbox.fotos";
+const STORIES_KEY = "outbox.stories";
+const VG_INICIAR_KEY = "outbox.viagem-iniciar";
+const VG_EVENTOS_KEY = "outbox.viagem-eventos";
+const VG_FINALIZAR_KEY = "outbox.viagem-finalizar";
+const VG_CANCELAR_KEY = "outbox.viagem-cancelar";
+const COMPLETAR_PESO_KEY = "outbox.viagem-completar-peso";
+
+/** Todos os sufixos do outbox — usado pela adoção/limpeza do storage legado. */
+const SUFIXOS_OUTBOX = [
+  VIAGENS_KEY,
+  MENSAGENS_CHAT_KEY,
+  PEDAGIOS_KEY,
+  ABASTECIMENTOS_KEY,
+  LOCAIS_KEY,
+  FOTOS_KEY,
+  STORIES_KEY,
+  VG_INICIAR_KEY,
+  VG_EVENTOS_KEY,
+  VG_FINALIZAR_KEY,
+  VG_CANCELAR_KEY,
+  COMPLETAR_PESO_KEY,
+];
 
 async function readList<T>(key: string): Promise<T[]> {
   try {
-    const raw = await AsyncStorage.getItem(key);
+    const raw = await storage.getItem(chave(key));
     if (!raw) return [];
     const parsed = JSON.parse(raw) as T[];
     return Array.isArray(parsed) ? parsed : [];
@@ -323,7 +349,31 @@ async function readList<T>(key: string): Promise<T[]> {
 }
 
 async function writeList<T>(key: string, list: T[]): Promise<void> {
-  await AsyncStorage.setItem(key, JSON.stringify(list));
+  await storage.setItem(chave(key), JSON.stringify(list));
+}
+
+/**
+ * Quantos itens do outbox estão parados no cadastro de OUTRA empresa.
+ *
+ * O drain só roda na empresa ativa (é a que tem token em uso), então o pendente
+ * da outra espera ela voltar a ser a ativa. Este número é o que impede isso de
+ * virar silêncio: o seletor de empresa mostra "3 não enviados" na linha dela, e
+ * o motorista sabe que precisa voltar lá. Só conta — nada do conteúdo sai do
+ * namespace da outra empresa.
+ */
+export async function pendentesDoCadastro(motoristaId: string): Promise<number> {
+  let total = 0;
+  for (const sufixo of SUFIXOS_OUTBOX) {
+    try {
+      const raw = await AsyncStorage.getItem(chaveDoCadastro(motoristaId, chave(sufixo)));
+      if (!raw) continue;
+      const lista = JSON.parse(raw) as unknown[];
+      if (Array.isArray(lista)) total += lista.length;
+    } catch {
+      /* chave corrompida não vira erro de tela */
+    }
+  }
+  return total;
 }
 
 export async function listPendingViagens(): Promise<PendingViagem[]> {

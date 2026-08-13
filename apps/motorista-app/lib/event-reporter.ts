@@ -7,7 +7,11 @@
  * tem conexão (chamado pelo startAutoSync em sync.ts).
  */
 
-import AsyncStorage from "@react-native-async-storage/async-storage";
+// O `storage` é o AsyncStorage carimbado com a empresa ativa (lib/storage.ts):
+// a telemetria pendente sobe com o token da dona, e o motorista pode rodar pra mais
+// de uma. Chave global aqui faria o dado de uma aparecer — ou ser ENVIADO —
+// pela outra.
+import { storage as AsyncStorage } from "@/lib/storage";
 import NetInfo from "@react-native-community/netinfo";
 import Constants from "expo-constants";
 import * as Updates from "expo-updates";

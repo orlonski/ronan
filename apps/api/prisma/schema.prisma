@@ -761,7 +761,11 @@ model WhatsappSessao {
   contaId        String             @default("__SEM_CONTA__")
   conta          Conta              @relation(fields: [contaId], references: [id])
   id             String             @id @default(uuid())
-  telefone       String             @unique // formato "5541999999999" (só dígitos, com DDI 55)
+  /// Formato "5541999999999" (só dígitos, com DDI 55). Único DENTRO da conta,
+  /// não no sistema: o motorista que roda pra duas empresas tem UM celular e
+  /// precisa poder falar com as duas. Quem decide de qual empresa é a mensagem
+  /// que chega é o cadastro que está com o aparelho (ver `resolverPorTelefone`).
+  telefone       String
   motorista      Motorista?         @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
   motoristaId    String?            @unique
   user           User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -770,7 +774,9 @@ model WhatsappSessao {
   ultimaMensagem DateTime?
   mensagens      WhatsappMensagem[]
 
+  @@unique([contaId, telefone])
   @@index([contaId])
+  @@index([telefone])
   @@map("whatsapp_sessoes")
 }
 

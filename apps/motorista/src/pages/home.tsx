@@ -15,6 +15,7 @@ import { useNavigate } from "react-router-dom";
 import { EmptyState } from "@/components/empty-state";
 import { IosInstallPrompt } from "@/components/ios-install-prompt";
 import { NotificationBell } from "@/components/notification-bell";
+import { SeletorEmpresa } from "@/components/seletor-empresa";
 import { ViagemCardSkeleton } from "@/components/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { UpdateBanner } from "@/components/update-banner";
@@ -83,7 +84,10 @@ export default function HomePage() {
       <div className="bg-brand">
         <div className="flex items-start justify-between gap-3 px-5 pb-6 pt-safe">
           <div className="flex-1 pt-3">
-            <p className="text-xs font-semibold uppercase tracking-wider text-white/70">Motorista</p>
+            {/* No lugar do rótulo "Motorista" (que ele já sabe que é) vai a
+                empresa pra qual está rodando — é o que muda o significado de
+                tudo que vem abaixo. Some quando ele só tem uma. */}
+            <SeletorEmpresa />
             {me.isLoading && (
               <p className="mt-1 text-sm text-white/70">Carregando...</p>
             )}

@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type {
   CriarMotoristaInput,
@@ -9,6 +14,7 @@ import type {
   StatusMotorista,
 } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
+import { comoSistema } from "../../common/conta/conta-context";
 import { AuthService } from "../../auth/auth.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { PushService } from "../../push/push.service";
@@ -277,7 +283,16 @@ export class MotoristasService {
   async create(data: CriarMotoristaInput, usuarioId: string) {
     const exists = await this.prisma.motorista.findFirst({ where: { cpf: data.cpf } });
     if (exists) throw new ConflictException("CPF já cadastrado");
-    const senhaHash = await AuthService.hashPassword(data.senha);
+
+    // Já roda pra outra empresa? Então ele já tem senha — herda o hash e ignora
+    // o que vier no corpo. A senha é da PESSOA (ver AuthService.propagarSenha);
+    // criar outra aqui daria duas senhas pro mesmo CPF e uma delas pararia de
+    // funcionar na primeira troca. O painel nem mostra o campo nesse caso.
+    const herdado = await this.senhaExistenteDoCpf(data.cpf);
+    if (!herdado && !data.senha) {
+      throw new BadRequestException("Informe a senha inicial do motorista.");
+    }
+    const senhaHash = herdado ?? (await AuthService.hashPassword(data.senha!));
 
     const created = await this.prisma.$transaction(async (tx) => {
       const motorista = await tx.motorista.create({
@@ -310,6 +325,29 @@ export class MotoristasService {
     return this.flatten(created);
   }
 
+  /**
+   * Esse CPF já tem cadastro em outra empresa?
+   *
+   * Responde SÓ isso — nunca em qual. Quem cadastra precisa saber que não deve
+   * inventar uma senha nova, e nada além disso: pra qual outra empresa o
+   * motorista roda não é assunto de quem está do lado de cá.
+   */
+  async cpfEmOutraEmpresa(cpf: string): Promise<boolean> {
+    return (await this.senhaExistenteDoCpf(cpf)) !== null;
+  }
+
+  /** O hash que este CPF já tem em outra empresa, se tiver. Atravessa contas. */
+  private async senhaExistenteDoCpf(cpf: string): Promise<string | null> {
+    const existente = await comoSistema(() =>
+      this.prisma.motorista.findFirst({
+        where: { cpf, ativo: true },
+        select: { senhaHash: true },
+        orderBy: { criadoEm: "desc" },
+      }),
+    );
+    return existente?.senhaHash ?? null;
+  }
+
   async update(id: string, data: AtualizarMotoristaInput) {
     const atual = await this.prisma.motorista.findUnique({
       where: { id },
@@ -319,7 +357,10 @@ export class MotoristasService {
 
     const { novaSenha, placas: placasInput, placaDefault, ...rest } = data;
     const updateData: Record<string, unknown> = { ...rest };
-    if (novaSenha) updateData.senhaHash = await AuthService.hashPassword(novaSenha);
+    // Senha nova definida pelo admin vale em todas as empresas do motorista —
+    // ele tem uma senha só. Vai por propagarSenha depois da transação; o
+    // updateData não recebe senhaHash pra não gravar duas vezes.
+    const cpfParaSenha = novaSenha ? (rest.cpf ?? atual.cpf) : null;
 
     const updated = await this.prisma.$transaction(async (tx) => {
       if (placasInput) {
@@ -365,6 +406,14 @@ export class MotoristasService {
 
       return tx.motorista.update({ where: { id }, data: updateData, select: SAFE_SELECT });
     });
+
+    if (cpfParaSenha && novaSenha) {
+      await AuthService.propagarSenha(
+        this.prisma,
+        cpfParaSenha,
+        await AuthService.hashPassword(novaSenha),
+      );
+    }
 
     // Classificou um motorista que ainda não tinha frota: adota o histórico dele
     // que está sem dono, senão o gestor loga e não vê nada do que já rodou.

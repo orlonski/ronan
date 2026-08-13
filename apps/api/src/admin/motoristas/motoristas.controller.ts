@@ -6,6 +6,7 @@ import {
   AtualizarMotoristaInput,
   CriarMotoristaInput,
   EnviarPushInput,
+  cpfDigits,
 } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { paginationQuerySchema } from "../../common/pagination";
@@ -84,6 +85,19 @@ export class MotoristasController {
   @Get("versoes/lista")
   versoesDisponiveis(@CurrentUser() user: AuthAdminUser) {
     return this.service.versoesDisponiveis(user.escopo);
+  }
+
+  /**
+   * Esse CPF já tem cadastro em outra empresa? Serve pro form esconder o campo
+   * de senha (ele já tem uma). Devolve só o booleano — nunca qual empresa.
+   * Antes do :id pra não ser capturado como id.
+   */
+  @RequerPermissao("motoristas.criar")
+  @Get("checar-cpf")
+  async checarCpf(@Query("cpf") cpf?: string) {
+    const digitos = cpfDigits(cpf ?? "");
+    if (digitos.length !== 11) return { existeEmOutraEmpresa: false };
+    return { existeEmOutraEmpresa: await this.service.cpfEmOutraEmpresa(digitos) };
   }
 
   @EscopoPor("motorista")

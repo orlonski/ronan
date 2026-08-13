@@ -10,6 +10,7 @@ import { formatCpf } from "@ronan/shared-types";
 import { api, humanizeApiError } from "@/lib/api";
 import { saveTokens } from "@/lib/auth";
 import { setAuthState } from "@/lib/auth-state";
+import { migrarSessaoLegada } from "@/lib/sessoes";
 
 const COOLDOWN_S = 60;
 
@@ -52,6 +53,9 @@ export default function EsqueciSenhaCodigoScreen() {
     try {
       const res = await api.redefinirSenha({ cpf, codigo: codigo.trim(), novaSenha: senha });
       await saveTokens(res);
+      // Vira sessão de empresa (o token diz de qual cadastro é). A senha nova
+      // vale nas outras empresas dele também — quem propaga é o backend.
+      await migrarSessaoLegada();
       setAuthState(true);
       router.replace("/");
     } catch (err) {

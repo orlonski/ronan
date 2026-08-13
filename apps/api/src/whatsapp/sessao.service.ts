@@ -1,10 +1,11 @@
 import { Injectable } from "@nestjs/common";
+import { comoSistema } from "../common/conta/conta-context";
 import { PrismaService } from "../prisma/prisma.service";
 
 export type SessaoResolvida =
-  | { tipo: "MOTORISTA"; sessaoId: string; motoristaId: string; nome: string }
-  | { tipo: "ADMIN"; sessaoId: string; userId: string; nome: string }
-  | { tipo: "DESCONHECIDO"; sessaoId: null };
+  | { tipo: "MOTORISTA"; sessaoId: string; motoristaId: string; nome: string; contaId: string }
+  | { tipo: "ADMIN"; sessaoId: string; userId: string; nome: string; contaId: string }
+  | { tipo: "DESCONHECIDO"; sessaoId: null; contaId: null };
 
 /**
  * Resolve "quem é esse telefone" em uma identidade do sistema. Toda vez que
@@ -28,16 +29,45 @@ export class SessaoService {
     return d;
   }
 
+  /**
+   * Quem é este telefone — e de qual empresa.
+   *
+   * Roda `comoSistema` porque é a mesma situação do login: a consulta que
+   * DESCOBRE a conta não pode depender dela. O telefone é único por conta, então
+   * o motorista que roda pra duas empresas pode ter duas sessões com o mesmo
+   * número; nesse caso vale a empresa que está com o aparelho (a que ele
+   * escolheu no app), pra mensagem não chegar em nome de quem ele não está
+   * rodando agora. Empate resolve pelo vínculo mais recente.
+   *
+   * Quem chamar precisa abrir `comConta(resolvida.contaId)` antes de tocar em
+   * qualquer dado — daqui pra frente tudo é dado de empresa.
+   */
   async resolverPorTelefone(telefoneRaw: string): Promise<SessaoResolvida> {
     const telefone = SessaoService.normalizar(telefoneRaw);
-    const sessao = await this.prisma.whatsappSessao.findUnique({
-      where: { telefone },
-      include: {
-        motorista: { select: { id: true, nome: true, ativo: true } },
-        user: { select: { id: true, nome: true, ativo: true } },
-      },
-    });
-    if (!sessao) return { tipo: "DESCONHECIDO", sessaoId: null };
+    const sessoes = await comoSistema(() =>
+      this.prisma.whatsappSessao.findMany({
+        where: { telefone },
+        include: {
+          motorista: {
+            select: { id: true, nome: true, ativo: true, expoPushToken: true, ultimoLoginEm: true },
+          },
+          user: { select: { id: true, nome: true, ativo: true } },
+        },
+        orderBy: { vinculadoEm: "desc" },
+      }),
+    );
+    const validas = sessoes.filter(
+      (s) => (s.motorista && s.motorista.ativo) || (s.user && s.user.ativo),
+    );
+    if (validas.length === 0) return { tipo: "DESCONHECIDO", sessaoId: null, contaId: null };
+
+    // Com o aparelho = com o push token. É o mesmo sinal que o app grava ao
+    // trocar de empresa, então as duas pontas concordam sem campo novo.
+    const comAparelho = validas.filter((s) => s.motorista?.expoPushToken);
+    const sessao = (comAparelho.length > 0 ? comAparelho : validas).sort(
+      (a, b) =>
+        (b.motorista?.ultimoLoginEm?.getTime() ?? 0) - (a.motorista?.ultimoLoginEm?.getTime() ?? 0),
+    )[0]!;
 
     if (sessao.motorista && sessao.motorista.ativo) {
       return {
@@ -45,18 +75,16 @@ export class SessaoService {
         sessaoId: sessao.id,
         motoristaId: sessao.motorista.id,
         nome: sessao.motorista.nome,
+        contaId: sessao.contaId,
       };
     }
-    if (sessao.user && sessao.user.ativo) {
-      return {
-        tipo: "ADMIN",
-        sessaoId: sessao.id,
-        userId: sessao.user.id,
-        nome: sessao.user.nome,
-      };
-    }
-    // Sessão existe mas relação foi inativada — trata como desconhecido.
-    return { tipo: "DESCONHECIDO", sessaoId: null };
+    return {
+      tipo: "ADMIN",
+      sessaoId: sessao.id,
+      userId: sessao.user!.id,
+      nome: sessao.user!.nome,
+      contaId: sessao.contaId,
+    };
   }
 
   async marcarMensagemRecebida(sessaoId: string): Promise<void> {

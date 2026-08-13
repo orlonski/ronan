@@ -6,7 +6,7 @@ import { EvolutionClientService } from "./evolution-client.service";
 import { SessaoService } from "./sessao.service";
 import { ConviteService } from "./convite.service";
 import { TranscricaoService } from "../ia/transcricao.service";
-import { contaIdAtual } from "../common/conta/conta-context";
+import { comConta, contaIdAtual } from "../common/conta/conta-context";
 
 type MensagemTipo = "TEXTO" | "IMAGEM" | "AUDIO";
 
@@ -105,16 +105,49 @@ export class WhatsappService {
 
     if (!texto && tipo === "TEXTO") return; // mensagem vazia/desconhecida
 
+    // Antes de tocar em qualquer dado é preciso saber de QUAL EMPRESA é esta
+    // mensagem — o número sozinho não diz, porque o mesmo motorista pode rodar
+    // pra mais de uma. É a sessão que revela, e ela é buscada sem filtro (igual
+    // ao login). Daqui pra frente tudo roda dentro da conta dele.
+    let identidade: Awaited<ReturnType<SessaoService["resolverPorTelefone"]>>;
+    try {
+      identidade = await this.sessao.resolverPorTelefone(telefone);
+    } catch (e) {
+      // Sem conta resolvida não dá nem pra gravar o erro (error_logs é da conta).
+      this.log.error(`Falha ao resolver o telefone ${telefone}: ${(e as Error).message}`);
+      return;
+    }
+
+    // Número que ainda não está vinculado a ninguém: quem revela a empresa é o
+    // CÓDIGO DE CONVITE que ele mandou. Sem código não há como saber de quem é a
+    // mensagem — e responder "de qual empresa?" seria pior que o silêncio,
+    // porque a resposta em si já teria que ser gravada em alguma conta.
+    const contaId =
+      identidade.contaId ??
+      (tipo === "TEXTO" ? await this.convite.contaDoCodigo(texto ?? "") : null);
+    if (contaId === null) {
+      this.log.warn(`Mensagem de ${telefone} sem vínculo e sem código — ignorada.`);
+      return;
+    }
+
+    return comConta(contaId, () =>
+      this.processarDaEmpresa(data, telefone, texto, tipo, identidade),
+    );
+  }
+
+  private async processarDaEmpresa(
+    data: any,
+    telefone: string,
+    texto: string | null,
+    tipo: MensagemTipo,
+    identidade: Awaited<ReturnType<SessaoService["resolverPorTelefone"]>>,
+  ): Promise<void> {
     // Estado capturado pra contexto de erro — preenchido conforme avança no fluxo
     const evolutionMessageId = data.key?.id ?? null;
-    let identidade: Awaited<ReturnType<SessaoService["resolverPorTelefone"]>> | null = null;
     let textoEntrada = texto ?? "";
-    let faseAtual = "extracao";
+    let faseAtual = "sessao";
 
     try {
-      faseAtual = "sessao";
-      identidade = await this.sessao.resolverPorTelefone(telefone);
-
       // Agente desligado na config → não gasta IA (sem Whisper, sem Claude/Gemini).
       // Loga a entrada e responde educado. Vale pra qualquer remetente: hoje esse
       // número serve só pra enviar código de cadastro (outbound, fora deste fluxo).

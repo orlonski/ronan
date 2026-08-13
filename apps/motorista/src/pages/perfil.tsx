@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api, ApiError } from "@/lib/api";
 import { clearTokens } from "@/lib/auth";
+import { listarSessoes, sessaoAtiva } from "@/lib/sessoes";
 import { setAuthState } from "@/lib/auth-state";
 import { clearCadastroStatus } from "@/lib/cadastro-status";
 import { useMe } from "@/lib/queries";
@@ -34,8 +35,12 @@ export default function PerfilPage() {
     setPushPermissao(estadoPermissao());
   }, []);
 
+  const empresaAtiva = sessaoAtiva();
+  const temMaisDeUma = listarSessoes().length > 1;
+
   function sair() {
-    if (!confirm("Sair da conta?")) return;
+    // Quem roda pra mais de uma empresa sai de TODAS — precisa saber antes.
+    if (!confirm(temMaisDeUma ? "Sair de todas as empresas?" : "Sair da conta?")) return;
     clearTokens();
     clearCadastroStatus();
     setAuthState(false);
@@ -215,9 +220,17 @@ export default function PerfilPage() {
           </p>
         )}
 
+        {/* De qual empresa é esta sessão. Sair é de TODAS elas. */}
+        {empresaAtiva?.contaNome ? (
+          <p className="px-1 text-sm text-muted-foreground">
+            Você está em <span className="font-bold">{empresaAtiva.contaNome}</span>
+            {temMaisDeUma ? " — trocar de empresa é no topo da tela inicial." : ""}
+          </p>
+        ) : null}
+
         <Button variant="outline" size="lg" onClick={sair} className="w-full text-destructive">
           <LogOut size={18} />
-          Sair
+          {temMaisDeUma ? "Sair de todas as empresas" : "Sair"}
         </Button>
 
         <p className="pt-4 text-center text-xs text-muted-foreground">

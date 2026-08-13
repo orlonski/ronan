@@ -5,9 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
+import { Building2 } from "lucide-react";
+import type { SessaoEmpresa } from "@ronan/shared-types";
 import { api, ApiError } from "@/lib/api";
 import { saveTokens } from "@/lib/auth";
 import { setAuthState } from "@/lib/auth-state";
+import { setCadastroStatus } from "@/lib/cadastro-status";
+import { ativarSessao, marcarEmpresaEscolhida, salvarSessoesDoLogin } from "@/lib/sessoes";
+import { resolverLegadoAposLogin } from "@/lib/troca-empresa";
 import { MovatruckLogo } from "@/components/movatruck-logo";
 
 function maskCpf(input: string): string {
@@ -24,6 +29,9 @@ export default function LoginPage() {
   const [senha, setSenha] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  // Só aparece pra quem tem cadastro em mais de uma empresa — pra todo mundo o
+  // login continua sendo CPF, senha, entrou.
+  const [escolha, setEscolha] = useState<SessaoEmpresa[] | null>(null);
 
   async function entrar(e: React.FormEvent) {
     e.preventDefault();
@@ -35,8 +43,23 @@ export default function LoginPage() {
     }
     setSubmitting(true);
     try {
-      const tokens = await api.loginMotorista(cpfDigitos, senha);
-      saveTokens(tokens);
+      const resp = await api.loginMotorista(cpfDigitos, senha);
+      const cadastros = resp.cadastros ?? [];
+      if (cadastros.length > 1) {
+        // Guarda TODAS as sessões já (o login é a única hora em que ele digita a
+        // senha) e só pergunta qual começa ativa. A troca depois é offline.
+        salvarSessoesDoLogin(cadastros, cadastros[0]!.motoristaId);
+        setEscolha(cadastros);
+        return;
+      }
+      if (cadastros.length === 1) {
+        salvarSessoesDoLogin(cadastros, cadastros[0]!.motoristaId);
+        await resolverLegadoAposLogin(cadastros[0]!.motoristaId);
+        marcarEmpresaEscolhida();
+      } else {
+        // Backend antigo (deploy ainda não chegou): guarda como antes.
+        saveTokens(resp);
+      }
       setAuthState(true);
       navigate("/", { replace: true });
     } catch (err) {
@@ -48,6 +71,48 @@ export default function LoginPage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function comecarEm(sessao: SessaoEmpresa) {
+    ativarSessao(sessao.motoristaId);
+    // Acabou de escolher: não faz sentido a tela de abertura perguntar de novo.
+    marcarEmpresaEscolhida();
+    await resolverLegadoAposLogin(sessao.motoristaId);
+    setCadastroStatus(sessao.status);
+    setAuthState(true);
+    navigate("/", { replace: true });
+  }
+
+  if (escolha) {
+    return (
+      <div className="flex min-h-screen-safe flex-col bg-background">
+        <div className="bg-brand px-6 pb-8 pt-safe">
+          <div className="pt-12">
+            <MovatruckLogo />
+            <p className="mt-2 text-base font-medium text-white/80">
+              Você roda pra mais de uma empresa
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-col gap-3 p-6">
+          <h2 className="text-lg font-bold text-foreground">Pra qual você vai rodar agora?</h2>
+          <p className="text-base text-muted-foreground">
+            Dá pra trocar a qualquer hora lá no topo da tela inicial.
+          </p>
+          {escolha.map((s) => (
+            <button
+              key={s.motoristaId}
+              type="button"
+              onClick={() => void comecarEm(s)}
+              className="flex items-center gap-3 rounded-2xl border-2 border-border bg-card p-5 text-left active:opacity-75"
+            >
+              <Building2 size={24} className="text-brand" />
+              <span className="flex-1 text-lg font-bold text-foreground">{s.contaNome}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (

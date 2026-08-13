@@ -50,6 +50,41 @@ export const TrocarSenhaInput = z.object({
 });
 export type TrocarSenhaInput = z.infer<typeof TrocarSenhaInput>;
 
+// ---- Motorista em mais de uma empresa ----
+
+/**
+ * Um cadastro do motorista numa empresa. O mesmo CPF pode ter cadastro em várias
+ * (ele carrega de dia pra uma e de noite pra outra) — são cadastros
+ * INDEPENDENTES, cada um com seu id, e nada de um aparece no outro. O que eles
+ * compartilham é só a senha, que é da pessoa e não do cadastro.
+ *
+ * O nome da empresa é a ÚNICA coisa que atravessa a fronteira: o motorista
+ * precisa saber pra quem está lançando.
+ */
+export const CadastroEmpresa = z.object({
+  motoristaId: z.string(),
+  contaId: z.string(),
+  contaNome: z.string(),
+  status: z.enum(["PENDENTE_APROVACAO", "APROVADO", "REJEITADO"]),
+});
+export type CadastroEmpresa = z.infer<typeof CadastroEmpresa>;
+
+/** Cadastro + o par de tokens dele (o app guarda uma sessão por empresa). */
+export const SessaoEmpresa = CadastroEmpresa.extend({
+  accessToken: z.string(),
+  refreshToken: z.string(),
+});
+export type SessaoEmpresa = z.infer<typeof SessaoEmpresa>;
+
+/**
+ * Troca a empresa ativa sem pedir senha de novo. Só emite token pra cadastro do
+ * MESMO CPF de quem está pedindo — a checagem mora no backend.
+ */
+export const TrocarEmpresaInput = z.object({
+  motoristaId: z.string().uuid(),
+});
+export type TrocarEmpresaInput = z.infer<typeof TrocarEmpresaInput>;
+
 // ---- Recuperação de senha do motorista (esqueci a senha) ----
 
 /**

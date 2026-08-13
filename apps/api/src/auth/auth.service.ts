@@ -2,6 +2,8 @@ import { ForbiddenException, Injectable, UnauthorizedException } from "@nestjs/c
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
 import * as bcrypt from "bcrypt";
+import type { StatusMotorista } from "@prisma/client";
+import type { CadastroEmpresa, SessaoEmpresa } from "@ronan/shared-types";
 import { comConta, comoSistema } from "../common/conta/conta-context";
 import { PrismaService } from "../prisma/prisma.service";
 import { AvisoGrupoService } from "../whatsapp/aviso-grupo.service";
@@ -42,12 +44,17 @@ export class AuthService {
   }
 
   async loginMotorista(cpf: string, senha: string) {
-    // O CPF deixou de ser único no sistema: agora é único DENTRO da conta, então
-    // o mesmo motorista pode ter cadastro em duas empresas — são cadastros
-    // independentes, com senhas próprias. Na prática quase sempre há um só, e o
-    // login é idêntico ao de antes; havendo mais de um, é a senha que diz qual.
+    // O CPF é único DENTRO da conta, não no sistema: o mesmo motorista pode ter
+    // cadastro em várias empresas (carrega de dia pra uma, de noite pra outra).
+    // São cadastros INDEPENDENTES — um nunca enxerga o dado do outro —, mas a
+    // SENHA é da pessoa, não do cadastro (ver `propagarSenha`). Por isso a senha
+    // não serve pra dizer em qual empresa ele quer entrar: o login devolve
+    // todas em que ela bate e QUEM ESCOLHE É ELE, no app.
     const candidatos = await comoSistema(() =>
-      this.prisma.motorista.findMany({ where: { cpf, ativo: true } }),
+      this.prisma.motorista.findMany({
+        where: { cpf, ativo: true },
+        orderBy: { criadoEm: "desc" },
+      }),
     );
     if (candidatos.length === 0) throw new UnauthorizedException("Credenciais inválidas");
 
@@ -60,13 +67,11 @@ export class AuthService {
       );
     }
 
-    let motorista: (typeof liberados)[number] | undefined;
+    const conferem: (typeof liberados)[number][] = [];
     for (const candidato of liberados) {
-      if (await bcrypt.compare(senha, candidato.senhaHash)) {
-        motorista = candidato;
-        break;
-      }
+      if (await bcrypt.compare(senha, candidato.senhaHash)) conferem.push(candidato);
     }
+    const motorista = conferem[0];
 
     if (!motorista) {
       // Senha errada conta tentativa em TODOS os cadastros do CPF: contar só num
@@ -89,30 +94,128 @@ export class AuthService {
       throw new UnauthorizedException("Credenciais inválidas");
     }
 
-    // Cadastro recusado não loga (PENDENTE_APROVACAO loga normal — o app mostra
-    // o modo "em análise"). Só REJEITADO é barrado aqui.
-    if (motorista.status === "REJEITADO") {
+    // Cadastro recusado não entra (PENDENTE_APROVACAO entra normal — o app mostra
+    // o modo "em análise"). Recusado em UMA empresa não impede as outras: some da
+    // lista e pronto. Só barra se todas recusaram.
+    const validos = conferem.filter((m) => m.status !== "REJEITADO");
+    if (validos.length === 0) {
       throw new ForbiddenException(
         "Seu cadastro não foi aprovado. Fale com a empresa pra mais informações.",
       );
     }
 
-    const escolhido = motorista;
-    return comConta(escolhido.contaId, async () => {
+    // Uma sessão por empresa, todas de uma vez. Emitir o token das duas não
+    // amplia risco nenhum: quem sabe a senha do CPF já podia entrar em qualquer
+    // uma delas — e é isso que deixa o motorista trocar de empresa no meio do
+    // dia sem digitar senha, inclusive offline.
+    const sessoes: SessaoEmpresa[] = [];
+    for (const cadastro of validos) {
+      sessoes.push(await this.abrirSessao(cadastro));
+    }
+
+    const principal = sessoes[0]!;
+    // Formato antigo no topo, de propósito: o app que ainda não recebeu o update
+    // lê exatamente estes campos e ignora `cadastros`. Ninguém é deslogado por
+    // causa desta mudança.
+    return {
+      accessToken: principal.accessToken,
+      refreshToken: principal.refreshToken,
+      status: principal.status,
+      cadastros: sessoes,
+    };
+  }
+
+  /**
+   * Marca o acesso e emite os tokens de UM cadastro. Roda dentro da conta dele —
+   * o `update` é dado de negócio e passa pela trava.
+   */
+  private async abrirSessao(cadastro: {
+    id: string;
+    contaId: string;
+    status: StatusMotorista;
+    ultimoLoginEm: Date | null;
+  }): Promise<SessaoEmpresa> {
+    return comConta(cadastro.contaId, async () => {
       // Captura ANTES do update: ultimoLoginEm null = nunca acessou (ex:
       // motorista criado pelo admin que agora entra pela 1ª vez).
-      const primeiroAcesso = escolhido.ultimoLoginEm === null;
-      await this.prisma.motorista.update({
-        where: { id: escolhido.id },
+      const primeiroAcesso = cadastro.ultimoLoginEm === null;
+      const atualizado = await this.prisma.motorista.update({
+        where: { id: cadastro.id },
         data: { tentativasLogin: 0, bloqueadoAte: null, ultimoLoginEm: new Date() },
+        select: { contaId: true, status: true, conta: { select: { nome: true } } },
       });
       // No primeiro acesso, anuncia no grupo se ele já estiver lá (prova social).
       // Best-effort e idempotente (trava avisoGrupoEnviadoEm) — não duplica com o
       // disparo do auto-cadastro nem quebra o login.
-      if (primeiroAcesso) void this.avisoGrupo.anunciarCadastro(escolhido.id);
-      const tokens = await this.issueTokens({ sub: escolhido.id, kind: "MOTORISTA" });
-      return { ...tokens, status: escolhido.status };
+      if (primeiroAcesso) void this.avisoGrupo.anunciarCadastro(cadastro.id);
+      const tokens = await this.issueTokens({ sub: cadastro.id, kind: "MOTORISTA" });
+      return {
+        motoristaId: cadastro.id,
+        contaId: atualizado.contaId,
+        contaNome: atualizado.conta.nome,
+        status: atualizado.status,
+        ...tokens,
+      };
     });
+  }
+
+  /**
+   * As empresas em que este CPF tem cadastro. O app usa pra manter o seletor em
+   * dia (cadastro novo aprovado depois do login não aparece sozinho).
+   *
+   * Atravessa contas de propósito, mas devolve só o que o próprio motorista já
+   * sabe: o nome da empresa pra qual ele roda. Nada mais da outra empresa sai
+   * daqui — o campo a campo é a fronteira.
+   */
+  async cadastrosDoMotorista(motoristaId: string): Promise<CadastroEmpresa[]> {
+    const eu = await comoSistema(() =>
+      this.prisma.motorista.findUniqueOrThrow({
+        where: { id: motoristaId },
+        select: { cpf: true },
+      }),
+    );
+    const cadastros = await comoSistema(() =>
+      this.prisma.motorista.findMany({
+        where: { cpf: eu.cpf, ativo: true, status: { not: "REJEITADO" } },
+        select: { id: true, contaId: true, status: true, conta: { select: { nome: true } } },
+        orderBy: { criadoEm: "desc" },
+      }),
+    );
+    return cadastros.map((c) => ({
+      motoristaId: c.id,
+      contaId: c.contaId,
+      contaNome: c.conta.nome,
+      status: c.status,
+    }));
+  }
+
+  /**
+   * Emite tokens pra outro cadastro do MESMO CPF, sem senha. É o caminho de
+   * quando o app não tem a sessão guardada (cadastro aprovado depois do login,
+   * ou app reinstalado).
+   *
+   * A trava não protege isto — a checagem "é o mesmo CPF" é o guard aqui, e
+   * precisa ser feita à mão.
+   */
+  async trocarEmpresa(motoristaAtualId: string, destinoId: string) {
+    const [atual, destino] = await comoSistema(() =>
+      Promise.all([
+        this.prisma.motorista.findUniqueOrThrow({
+          where: { id: motoristaAtualId },
+          select: { cpf: true },
+        }),
+        this.prisma.motorista.findUnique({
+          where: { id: destinoId },
+          select: { id: true, cpf: true, contaId: true, status: true, ativo: true, ultimoLoginEm: true },
+        }),
+      ]),
+    );
+    // Mesma resposta pra "não existe" e "é de outra pessoa": quem tentar adivinhar
+    // id de motorista não descobre nem que ele existe.
+    if (!destino || destino.cpf !== atual.cpf || !destino.ativo || destino.status === "REJEITADO") {
+      throw new ForbiddenException("Esse cadastro não é seu.");
+    }
+    return this.abrirSessao(destino);
   }
 
   async refresh(refreshToken: string) {
@@ -150,10 +253,32 @@ export class AuthService {
     const motorista = await this.prisma.motorista.findUniqueOrThrow({ where: { id: motoristaId } });
     const ok = await bcrypt.compare(senhaAtual, motorista.senhaHash);
     if (!ok) throw new UnauthorizedException("Senha atual incorreta");
-    await this.prisma.motorista.update({
-      where: { id: motoristaId },
-      data: { senhaHash: await AuthService.hashPassword(novaSenha) },
-    });
+    await AuthService.propagarSenha(
+      this.prisma,
+      motorista.cpf,
+      await AuthService.hashPassword(novaSenha),
+    );
+  }
+
+  /**
+   * Grava a senha em TODOS os cadastros do CPF.
+   *
+   * A senha é da PESSOA, não do cadastro: o motorista tem um CPF e uma senha, e
+   * não faz sentido pedir que ele decore uma por empresa. É a única coisa que
+   * atravessa a fronteira entre empresas de propósito — e nem chega a ser dado
+   * de negócio: é credencial dele, ninguém do outro lado a enxerga (o painel só
+   * vê o hash, e nem isso: `senhaHash` nunca sai da API).
+   *
+   * Sem isto o motorista trocaria a senha numa empresa e ficaria trancado do
+   * lado de fora da outra, sem entender por quê.
+   */
+  static async propagarSenha(prisma: PrismaService, cpf: string, senhaHash: string) {
+    await comoSistema(() =>
+      prisma.motorista.updateMany({
+        where: { cpf, ativo: true },
+        data: { senhaHash, tentativasLogin: 0, bloqueadoAte: null },
+      }),
+    );
   }
 
   /** Emite tokens pra um motorista já criado (usado no auto-cadastro). */

@@ -19,7 +19,11 @@
  */
 import { getViagemAndamento } from "./tracking-storage";
 import { notificarLocal } from "./notifications";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+// O `storage` é o AsyncStorage carimbado com a empresa ativa (lib/storage.ts):
+// o histórico do detector é do turno numa empresa, e o motorista pode rodar pra mais
+// de uma. Chave global aqui faria o dado de uma aparecer — ou ser ENVIADO —
+// pela outra.
+import { storage as AsyncStorage } from "@/lib/storage";
 
 export const WATCHDOG_TASK = "ronan-tracking-watchdog";
 const HISTORICO_KEY = "ronan.detector-historico";

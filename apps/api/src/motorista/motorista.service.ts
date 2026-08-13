@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { inicioDoDiaData, inicioDiasAtras } from "../common/timezone";
-import { contaIdAtual } from "../common/conta/conta-context";
+import { comoSistema, contaIdAtual } from "../common/conta/conta-context";
 
 export type CatalogoTipo = "material" | "cliente" | "local" | "veiculo";
 
@@ -92,19 +92,52 @@ export class MotoristaService {
   }
 
   async registrarPushToken(motoristaId: string, token: string): Promise<void> {
-    // Um Expo push token pertence a UM aparelho. Se outro motorista ainda tem
-    // esse token (troca de conta no mesmo celular), tira dele primeiro — senão o
-    // device recebe push duplicado (1 por motorista que compartilha o token).
-    await this.prisma.$transaction([
+    // Um Expo push token pertence a UM aparelho. Se outro cadastro ainda tem
+    // esse token (troca de cadastro no mesmo celular), tira dele primeiro —
+    // senão o device recebe push duplicado (1 por cadastro que compartilha o
+    // token).
+    //
+    // A limpeza roda em `comoSistema` porque a fronteira aqui é o APARELHO, não
+    // a empresa: quem tem cadastro em duas e está trabalhando pra uma não pode
+    // receber na tela o aviso da outra. Confinada à conta atual (que é o que a
+    // trava faria), a limpeza deixava o token vivo no cadastro da outra empresa
+    // e ela seguia empurrando conteúdo dela pro celular dele.
+    //
+    // Isto NÃO lê nem escreve dado de negócio de outra conta: mexe só no campo
+    // que endereça o aparelho.
+    await comoSistema(() =>
       this.prisma.motorista.updateMany({
         where: { expoPushToken: token, id: { not: motoristaId } },
         data: { expoPushToken: null, pushTokenAtualizadoEm: null },
       }),
-      this.prisma.motorista.update({
-        where: { id: motoristaId },
-        data: { expoPushToken: token, pushTokenAtualizadoEm: new Date() },
+    );
+    await this.prisma.motorista.update({
+      where: { id: motoristaId },
+      data: { expoPushToken: token, pushTokenAtualizadoEm: new Date() },
+    });
+  }
+
+  /**
+   * O cadastro deste motorista que está com o aparelho AGORA — quer dizer, a
+   * empresa que ele escolheu no app. Usado pelos disparos que vão pro celular
+   * ou pro WhatsApp dele: quem não está com o aparelho não interrompe o turno
+   * da outra empresa.
+   *
+   * Empate (nenhum com push token) resolve pelo último login.
+   */
+  async cadastroAtivoDoCpf(cpf: string): Promise<string | null> {
+    const cadastros = await comoSistema(() =>
+      this.prisma.motorista.findMany({
+        where: { cpf, ativo: true },
+        select: { id: true, expoPushToken: true, ultimoLoginEm: true },
       }),
-    ]);
+    );
+    if (cadastros.length <= 1) return cadastros[0]?.id ?? null;
+    const comToken = cadastros.filter((c) => c.expoPushToken);
+    const pool = comToken.length > 0 ? comToken : cadastros;
+    return pool.sort(
+      (a, b) => (b.ultimoLoginEm?.getTime() ?? 0) - (a.ultimoLoginEm?.getTime() ?? 0),
+    )[0]!.id;
   }
 
   async me(id: string) {

@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { comoSistema } from "../common/conta/conta-context";
 import { PrismaService } from "../prisma/prisma.service";
 import { SessaoService } from "./sessao.service";
 
@@ -59,6 +60,27 @@ export class ConviteService {
   }
 
   /**
+   * De qual empresa é este código de convite.
+   *
+   * O webhook recebe a mensagem de um número que ainda não está vinculado a
+   * ninguém — não há conta no contexto e a trava recusa qualquer consulta. É o
+   * CÓDIGO que revela a empresa, então esta busca atravessa contas de propósito
+   * (mesma situação do login) e devolve só o `contaId`, pra quem chamou abrir o
+   * contexto certo antes de gravar qualquer coisa.
+   */
+  async contaDoCodigo(codigoRaw: string): Promise<string | null> {
+    const codigo = codigoRaw.trim().toUpperCase();
+    if (!/^[A-Z0-9]{4,8}$/.test(codigo)) return null;
+    const convite = await comoSistema(() =>
+      this.prisma.whatsappConvite.findUnique({
+        where: { codigo },
+        select: { contaId: true },
+      }),
+    );
+    return convite?.contaId ?? null;
+  }
+
+  /**
    * Consome um código durante o webhook: valida, cria sessão e marca como usado.
    * Throw com mensagem amigável se código inválido/expirado/já usado/destino com sessão.
    */
@@ -79,12 +101,14 @@ export class ConviteService {
       throw new BadRequestException("Convite sem destinatário");
     }
 
-    // Telefone já vinculado a outra conta? Bloqueia.
-    const sessaoExistente = await this.prisma.whatsappSessao.findUnique({
+    // Já vinculado NESTA empresa? Bloqueia. Vinculado em outra não é problema:
+    // o motorista tem um celular só e pode rodar pra mais de uma — cada empresa
+    // tem a sua sessão, e quem recebe a mensagem é quem está com o aparelho.
+    const sessaoExistente = await this.prisma.whatsappSessao.findFirst({
       where: { telefone },
     });
     if (sessaoExistente) {
-      throw new ConflictException("Esse número já está vinculado a outra conta");
+      throw new ConflictException("Esse número já está vinculado a outro cadastro desta empresa");
     }
 
     return this.prisma.$transaction(async (tx) => {

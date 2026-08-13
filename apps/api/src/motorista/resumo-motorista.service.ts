@@ -5,6 +5,7 @@ import { EvolutionClientService } from "../whatsapp/evolution-client.service";
 import { SessaoService } from "../whatsapp/sessao.service";
 import { inicioDoDiaData, ymdSaoPaulo } from "../common/timezone";
 import { paraCadaConta } from "../common/conta/para-cada-conta";
+import { comoSistema } from "../common/conta/conta-context";
 
 /**
  * Resumo diário do dia PARA O MOTORISTA no WhatsApp (só os dados dele). Espelha
@@ -68,7 +69,7 @@ export class ResumoMotoristaService {
         receberResumoDiario: true,
         telefone: { not: null },
       },
-      select: { id: true, telefone: true },
+      select: { id: true, cpf: true, telefone: true, conta: { select: { nome: true } } },
     });
 
     for (const m of motoristas) {
@@ -78,11 +79,25 @@ export class ResumoMotoristaService {
         if (dados.viagensHoje === 0 && dados.aguardandoPeso === 0 && dados.divergente === 0) {
           continue;
         }
-        await this.enviarWhatsapp(m.telefone, this.montar(dados));
+        // Quem roda pra mais de uma empresa recebe um resumo de cada — mas só
+        // das que ele TRABALHOU hoje (o gate acima), e com o nome na frente. É a
+        // exceção consciente à regra de "só a empresa ativa": segurar o resumo
+        // da outra sumiria com pendência de peso que é dele e ele precisa
+        // resolver. Push, esse sim, só chega da empresa que está com o aparelho.
+        const empresa = await this.nomeSeMultiEmpresa(m.cpf, m.conta.nome);
+        await this.enviarWhatsapp(m.telefone, this.montar(dados, empresa));
       } catch (err) {
         this.log.warn(`resumo do motorista ${m.id} falhou: ${(err as Error).message}`);
       }
     }
+  }
+
+  /** O nome da empresa, só se o CPF tiver cadastro em mais de uma. */
+  private async nomeSeMultiEmpresa(cpf: string, nome: string): Promise<string | null> {
+    const quantos = await comoSistema(() =>
+      this.prisma.motorista.count({ where: { cpf, ativo: true } }),
+    );
+    return quantos > 1 ? nome : null;
   }
 
   /**
@@ -140,13 +155,16 @@ export class ResumoMotoristaService {
     };
   }
 
-  private montar(d: ResumoDados): string {
+  private montar(d: ResumoDados, empresa?: string | null): string {
     const [y, m, dia] = ymdSaoPaulo();
     const ds = DIAS_SEMANA[new Date(Date.UTC(y, m - 1, dia)).getUTCDay()];
     const dataBr = `${String(dia).padStart(2, "0")}/${String(m).padStart(2, "0")}`;
 
     const linhas: string[] = [
-      `🚛 *Seu dia* — ${ds}, ${dataBr}`,
+      // O nome da empresa só entra pra quem roda pra mais de uma: sem ele, duas
+      // mensagens iguais às 20h e o motorista sem saber qual é qual. Pra quem
+      // tem uma empresa só, a mensagem fica idêntica à de sempre.
+      empresa ? `🚛 *Seu dia na ${empresa}* — ${ds}, ${dataBr}` : `🚛 *Seu dia* — ${ds}, ${dataBr}`,
       "",
       "Hoje você fez:",
       `• ${plural(d.viagensHoje, "viagem", "viagens")}`,

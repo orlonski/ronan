@@ -258,6 +258,12 @@ export class RedefinicaoSenhaService {
       await tx.redefinicaoSenhaPendente.delete({ where: { id: pendente.id } });
     });
 
+    // A senha é da pessoa, não do cadastro: quem tem cadastro em mais de uma
+    // empresa redefine uma vez e entra em todas. O telefone NÃO propaga — esse é
+    // dado da empresa e cada uma mantém o seu. Fora da transação de propósito: a
+    // redefinição já valeu, e falhar aqui não pode desfazê-la.
+    await AuthService.propagarSenha(this.prisma, cpf, senhaHash);
+
     // Avisa os admins quando um número novo é vinculado por reset (visibilidade
     // de segurança). Best-effort — nunca derruba a redefinição.
     if (pendente.vincular) {

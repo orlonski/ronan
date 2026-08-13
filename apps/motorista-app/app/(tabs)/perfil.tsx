@@ -30,6 +30,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import { clearTokens } from "@/lib/auth";
+import { sessaoAtivaSync, sessoesSync } from "@/lib/sessoes";
 import { clearCadastroStatus } from "@/lib/cadastro-status";
 import { setAuthState } from "@/lib/auth-state";
 import { useMe, useSalvarPreferenciasNotificacao } from "@/lib/queries";
@@ -79,6 +80,9 @@ export default function Perfil() {
       sub.remove();
     };
   }, []);
+
+  const empresaAtiva = sessaoAtivaSync();
+  const temMaisDeUma = sessoesSync().length > 1;
 
   async function ativarNotificacoes() {
     if (permNotif === "denied") {
@@ -318,9 +322,20 @@ export default function Perfil() {
             </Text>
           )}
 
+          {/* De qual empresa é esta sessão. Sair é de TODAS elas — quem tem
+              cadastro em mais de uma precisa saber disso antes de tocar. */}
+          {empresaAtiva?.contaNome ? (
+            <Text className="px-1 text-sm text-muted-foreground">
+              Você está em <Text className="font-bold">{empresaAtiva.contaNome}</Text>
+              {temMaisDeUma ? " — trocar de empresa é no topo da tela inicial." : ""}
+            </Text>
+          ) : null}
+
           <Button variant="outline" size="lg" onPress={sair}>
             <LogOut size={18} color="#dc2626" />
-            <Text className="text-base font-medium text-destructive">Sair</Text>
+            <Text className="text-base font-medium text-destructive">
+              {temMaisDeUma ? "Sair de todas as empresas" : "Sair"}
+            </Text>
           </Button>
         </ScrollView>
       </KeyboardAvoidingView>

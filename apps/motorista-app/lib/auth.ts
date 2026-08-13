@@ -1,58 +1,38 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
+import {
+  KEYCHAIN_OPTS,
+  KEY_LEGADA,
+  KeychainLockedError,
+  ehKeychainBloqueado,
+  type Tokens,
+} from "./keychain";
+import { esquecerTudo, motoristaAtivoId, salvarTokensDe, tokensDe } from "./sessoes";
 
-const KEY = "ronan.motorista.tokens";
+export { KeychainLockedError };
+export type { Tokens };
+
 const FLAG_MIGRACAO = "ronan.keychain.migrado.v1";
 
-export type Tokens = { accessToken: string; refreshToken: string };
-
-// SecureStore syncroniza com Keychain (iOS) e EncryptedSharedPreferences (Android).
-// API e armazenamento sao assíncronos diferente do localStorage, mas a interface
-// foi pensada pra refletir isso.
-//
-// keychainAccessible: AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY é essencial. O default
-// (WHEN_UNLOCKED) proíbe QUALQUER leitura do Keychain com a tela bloqueada — e o
-// app tem drains de background (geofence, auto-sync a cada 60s enquanto a task de
-// GPS mantém o runtime vivo) que leem o token com o iPhone travado. Sem isso, o
-// getItemAsync joga "User interaction is not allowed" (errSecInteractionNotAllowed),
-// que estourava no outbox como falso "erro do servidor". AFTER_FIRST_UNLOCK libera
-// leitura após o 1º desbloqueio desde o boot; THIS_DEVICE_ONLY evita o token vazar
-// pra outro aparelho via iCloud Keychain.
-const KEYCHAIN_OPTS: SecureStore.SecureStoreOptions = {
-  keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
-};
-
 /**
- * Erro transitório: o Keychain recusou a leitura porque o device estava
- * bloqueado (errSecInteractionNotAllowed). Não é falha de credencial nem do
- * servidor — resolve sozinho quando o telefone é desbloqueado. O outbox trata
- * como transitório (não queima tentativas, não vira "erro do servidor").
+ * Token da empresa ATIVA — o motorista pode ter cadastro em mais de uma, cada
+ * uma com sessão própria (ver `lib/sessoes.ts`). Enquanto o aparelho não tiver
+ * migrado pra estrutura nova, cai na chave única antiga: é o que garante que
+ * ninguém seja deslogado pela atualização.
  */
-export class KeychainLockedError extends Error {
-  constructor(cause?: unknown) {
-    super("Keychain bloqueado (device travado). Vai retentar ao desbloquear.");
-    this.name = "KeychainLockedError";
-    (this as { cause?: unknown }).cause = cause;
-  }
-}
-
-// SÓ o sinal real de device bloqueado (errSecInteractionNotAllowed). NÃO casar
-// "getValueWithKeyAsync" — esse texto aparece em QUALQUER erro de leitura do
-// Keychain; casá-lo faria um problema real do Keychain ser engolido como
-// "transitório/travado" pra sempre, invisível. Outros erros devem aparecer.
-function ehKeychainBloqueado(err: unknown): boolean {
-  const msg = (err as Error)?.message ?? String(err);
-  return /User interaction is not allowed|InteractionNotAllowed/i.test(msg);
-}
-
 export async function saveTokens(t: Tokens) {
-  await SecureStore.setItemAsync(KEY, JSON.stringify(t), KEYCHAIN_OPTS);
+  const id = await motoristaAtivoId();
+  if (id) return salvarTokensDe(id, t);
+  await SecureStore.setItemAsync(KEY_LEGADA, JSON.stringify(t), KEYCHAIN_OPTS);
 }
 
 export async function loadTokens(): Promise<Tokens | null> {
+  const id = await motoristaAtivoId();
+  if (id) return tokensDe(id);
+
   let raw: string | null;
   try {
-    raw = await SecureStore.getItemAsync(KEY, KEYCHAIN_OPTS);
+    raw = await SecureStore.getItemAsync(KEY_LEGADA, KEYCHAIN_OPTS);
   } catch (err) {
     // Device travado: relança tipado pro outbox tratar como transitório em vez
     // de gravar o texto cru do Keychain como "erro do servidor".
@@ -67,8 +47,10 @@ export async function loadTokens(): Promise<Tokens | null> {
   }
 }
 
+/** Sai de TODAS as empresas (botão "Sair"). */
 export async function clearTokens() {
-  await SecureStore.deleteItemAsync(KEY, KEYCHAIN_OPTS);
+  await esquecerTudo();
+  await SecureStore.deleteItemAsync(KEY_LEGADA, KEYCHAIN_OPTS).catch(() => {});
 }
 
 /**
@@ -83,6 +65,9 @@ export async function clearTokens() {
  * nova (refresh futuro só atualiza o valor). Se o Keychain estiver travado ou
  * sem token, não marca a flag — tenta no próximo boot. Guarda `raw` em memória
  * e regrava em caso de falha pra não perder a sessão entre o delete e o set.
+ *
+ * Roda ANTES da migração pra sessões por empresa, e por isso continua olhando a
+ * chave legada: nesse ponto do boot é lá que o token ainda está.
  */
 export async function migrarProtecaoKeychain(): Promise<void> {
   const jaMigrou = await AsyncStorage.getItem(FLAG_MIGRACAO).catch(() => null);
@@ -90,7 +75,7 @@ export async function migrarProtecaoKeychain(): Promise<void> {
 
   let raw: string | null;
   try {
-    raw = await SecureStore.getItemAsync(KEY, KEYCHAIN_OPTS);
+    raw = await SecureStore.getItemAsync(KEY_LEGADA, KEYCHAIN_OPTS);
   } catch {
     // Keychain travado/indisponível: tenta de novo no próximo boot.
     return;
@@ -103,12 +88,12 @@ export async function migrarProtecaoKeychain(): Promise<void> {
   }
 
   try {
-    await SecureStore.deleteItemAsync(KEY, KEYCHAIN_OPTS);
-    await SecureStore.setItemAsync(KEY, raw, KEYCHAIN_OPTS);
+    await SecureStore.deleteItemAsync(KEY_LEGADA, KEYCHAIN_OPTS);
+    await SecureStore.setItemAsync(KEY_LEGADA, raw, KEYCHAIN_OPTS);
     await AsyncStorage.setItem(FLAG_MIGRACAO, "1").catch(() => {});
   } catch {
     // Falhou no meio: garante que o token não se perca (regrava com `raw` em
     // memória). Não marca a flag — retenta no próximo boot.
-    await SecureStore.setItemAsync(KEY, raw, KEYCHAIN_OPTS).catch(() => {});
+    await SecureStore.setItemAsync(KEY_LEGADA, raw, KEYCHAIN_OPTS).catch(() => {});
   }
 }

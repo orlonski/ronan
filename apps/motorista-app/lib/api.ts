@@ -3,9 +3,11 @@ import * as Updates from "expo-updates";
 import { router } from "expo-router";
 import { Platform } from "react-native";
 import type {
+  CadastroEmpresa,
   CadastroMotoristaInput,
   ConfirmarCadastroInput,
   RedefinirSenhaInput,
+  SessaoEmpresa,
   StatusMotorista,
 } from "@ronan/shared-types";
 import { API_URL } from "./api-url";
@@ -15,8 +17,18 @@ import { clearCadastroStatus, setCadastroStatus } from "./cadastro-status";
 import { humanizeZodIssues, type ZodIssueLite } from "./validation";
 import { marcarInternetFalha, marcarInternetOk } from "./connectivity";
 
-/** Resposta de login/confirmar-cadastro: tokens + status de aprovação. */
-export type AuthResposta = Tokens & { status: StatusMotorista };
+/**
+ * Resposta de login/cadastro/reset. Os campos de topo apontam pro cadastro
+ * principal (formato antigo, que o app de antes desta versão lê). `cadastros`
+ * traz UMA SESSÃO POR EMPRESA pra quem roda pra mais de uma — é o que deixa
+ * trocar de empresa depois sem digitar senha, inclusive sem sinal.
+ */
+export type AuthResposta = Tokens & {
+  status: StatusMotorista;
+  cadastros?: SessaoEmpresa[];
+  /** Cadastro novo herdou a senha que ele já usava em outra empresa. */
+  senhaHerdada?: boolean;
+};
 
 export class ApiError extends Error {
   constructor(public status: number, public body: unknown) {
@@ -364,6 +376,12 @@ export const api = {
     setCadastroStatus(res.status);
     return res;
   },
+  // ---- Empresas do motorista ----
+  /** Empresas em que este CPF tem cadastro (mantém o seletor em dia). */
+  listarCadastros: () => request<CadastroEmpresa[]>("GET", "/m/auth/cadastros"),
+  /** Sessão de outro cadastro do mesmo CPF, sem pedir senha. */
+  trocarEmpresa: (motoristaId: string) =>
+    request<SessaoEmpresa>("POST", "/m/auth/trocar-empresa", { body: { motoristaId } }),
   atualizarPushToken: (token: string) =>
     request<{ ok: true }>("POST", "/m/push-token", { body: { token } }),
   listarNotificacoes: (opts: { cursor?: string; limit?: number } = {}) => {

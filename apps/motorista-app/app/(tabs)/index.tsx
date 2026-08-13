@@ -40,6 +40,7 @@ import { IndicadorDados } from "@/components/indicador-dados";
 import { EmptyState } from "@/components/empty-state";
 import { NotificationBell } from "@/components/notification-bell";
 import { ViagemCardSkeleton } from "@/components/skeleton";
+import { SeletorEmpresa } from "@/components/seletor-empresa";
 import { StoriesBar } from "@/components/stories-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -264,9 +265,10 @@ export default function Home() {
       <View className="bg-brand">
         <View className="flex-row items-start justify-between gap-3 px-5 pb-6 pt-14">
           <View className="flex-1">
-            <Text className="text-xs font-semibold uppercase tracking-wider text-white/70">
-              Motorista
-            </Text>
+            {/* No lugar do rótulo "MOTORISTA" (que ele já sabe que é) vai a
+                empresa pra qual está rodando — é o que muda o significado de
+                tudo que vem abaixo. Some quando ele só tem uma. */}
+            <SeletorEmpresa />
             {me.isLoading && <ActivityIndicator color="white" className="mt-2" />}
             {me.data && (
               <>

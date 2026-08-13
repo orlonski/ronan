@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Send, Trash2 } from "lucide-react";
@@ -125,6 +125,7 @@ export function MotoristaForm({ initial }: Props) {
   });
   const token = useAuthToken();
   const qc = useQueryClient();
+
   const acessosMutation = useMutation({
     mutationFn: (body: Partial<AcessosState>) =>
       fetchApi<AcessosState>(`${PATH}/${initial?.id}/acessos`, {
@@ -174,6 +175,38 @@ export function MotoristaForm({ initial }: Props) {
         }
       : empty,
   );
+
+  /**
+   * O CPF já tem cadastro em OUTRA empresa?
+   *
+   * O mesmo motorista pode rodar pra mais de uma, e a senha é da PESSOA, não do
+   * cadastro: ele entra em todas com a mesma. Então aqui a senha não é pedida —
+   * inventar uma segunda deixaria uma delas parando de funcionar na primeira
+   * troca. Qual é a outra empresa não se diz: não é assunto de quem cadastra.
+   */
+  const [cpfEmOutraEmpresa, setCpfEmOutraEmpresa] = useState(false);
+  const cpfDigitado = cpfDigits(form.cpf);
+  useEffect(() => {
+    if (initial || cpfDigitado.length !== 11 || !token) {
+      setCpfEmOutraEmpresa(false);
+      return;
+    }
+    let vivo = true;
+    void fetchApi<{ existeEmOutraEmpresa: boolean }>(
+      `${PATH}/checar-cpf?cpf=${cpfDigitado}`,
+      { token },
+    )
+      .then((r) => {
+        if (vivo) setCpfEmOutraEmpresa(r.existeEmOutraEmpresa);
+      })
+      .catch(() => {
+        // Falhou a checagem: mostra o campo de senha (comportamento de sempre).
+        if (vivo) setCpfEmOutraEmpresa(false);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [cpfDigitado, initial, token]);
 
   function addPlaca() {
     setForm((f) => ({ ...f, placas: [...f.placas, { placa: "", modelo: "" }] }));
@@ -259,7 +292,9 @@ export function MotoristaForm({ initial }: Props) {
       await create.mutateAsync({
         nome: form.nome,
         cpf: cpfDigitos,
-        senha: form.senha,
+        // Sem senha quando ele já tem cadastro em outra empresa — o backend
+        // herda a que ele já usa (e ignora qualquer coisa mandada aqui).
+        senha: cpfEmOutraEmpresa ? undefined : form.senha,
         telefone: telDigitos || undefined,
         email: emailTrim || undefined,
         placas: placasPayload,
@@ -295,16 +330,32 @@ export function MotoristaForm({ initial }: Props) {
               onChange={(e) => setForm({ ...form, cpf: maskCpf(e.target.value) })}
             />
           </div>
-          <div className="space-y-2">
-            <Label>{initial ? "Nova senha (opcional)" : "Senha"}</Label>
-            <Input
-              type="password"
-              minLength={initial ? 0 : 6}
-              required={!initial}
-              value={form.senha}
-              onChange={(e) => setForm({ ...form, senha: e.target.value })}
-            />
-          </div>
+          {cpfEmOutraEmpresa ? (
+            <div className="space-y-2">
+              <Label>Senha</Label>
+              <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                Esse CPF já tem cadastro em outra empresa. Ele entra com a senha que já usa —
+                não precisa definir nenhuma aqui.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label>{initial ? "Nova senha (opcional)" : "Senha"}</Label>
+              <Input
+                type="password"
+                minLength={initial ? 0 : 6}
+                required={!initial}
+                value={form.senha}
+                onChange={(e) => setForm({ ...form, senha: e.target.value })}
+              />
+              {initial ? (
+                <p className="text-xs text-muted-foreground">
+                  A senha é do motorista, não do cadastro: trocar aqui vale pra todas as
+                  empresas em que ele roda.
+                </p>
+              ) : null}
+            </div>
+          )}
           <div className="space-y-2">
             <Label>Telefone</Label>
             <Input

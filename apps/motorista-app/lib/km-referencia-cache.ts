@@ -11,7 +11,11 @@
  * Chave: `${cargaId}|${descargaId}`. Storage: AsyncStorage (JSON simples).
  */
 
-import AsyncStorage from "@react-native-async-storage/async-storage";
+// O `storage` é o AsyncStorage carimbado com a empresa ativa (lib/storage.ts):
+// o km de referência é o histórico de UMA frota, e o motorista pode rodar pra mais
+// de uma. Chave global aqui faria o dado de uma aparecer — ou ser ENVIADO —
+// pela outra.
+import { storage as AsyncStorage } from "@/lib/storage";
 import type { ReferenciaKmPayload } from "@ronan/shared-types";
 
 // v1: bumpar o prefixo (v2, v3...) descarta o cache quando o shape/régua mudar.

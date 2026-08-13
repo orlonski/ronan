@@ -3,7 +3,11 @@
  * Sem sync com backend — só sincroniza quando motorista finalizar e
  * o form Nova Viagem mandar tudo no payload.
  */
-import AsyncStorage from "@react-native-async-storage/async-storage";
+// O `storage` é o AsyncStorage carimbado com a empresa ativa (lib/storage.ts):
+// a viagem em andamento é de UMA empresa, e o motorista pode rodar pra mais
+// de uma. Chave global aqui faria o dado de uma aparecer — ou ser ENVIADO —
+// pela outra.
+import { storage as AsyncStorage } from "@/lib/storage";
 
 export type Ponto = {
   lat: number;

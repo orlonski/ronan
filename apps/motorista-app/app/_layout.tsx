@@ -21,6 +21,10 @@ import { getConnected, subscribeConnected } from "@/lib/connectivity";
 import { TelaCarregando } from "@/components/tela-carregando";
 import { aplicarOtaAoVoltar, baixarUpdateNoBoot } from "@/lib/ota";
 import { loadTokens, migrarProtecaoKeychain } from "@/lib/auth";
+import { prepararSessoes } from "@/lib/boot-sessao";
+import { EscolherEmpresaAbertura } from "@/components/escolher-empresa-abertura";
+import { assinarSessoes, precisaEscolherEmpresa } from "@/lib/sessoes";
+import { atualizarCadastros } from "@/lib/troca-empresa";
 import {
   getCadastroStatus,
   loadCadastroStatus,
@@ -120,7 +124,14 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       return;
     }
     let alive = true;
-    Promise.all([loadTokens(), loadCadastroStatus()])
+    // `prepararSessoes` PRIMEIRO: é quem adota a sessão de quem já estava logado
+    // antes das sessões por empresa e coloca cache/outbox no namespace certo.
+    // Ler token antes disso mostraria dado da empresa errada por um instante.
+    prepararSessoes()
+      .catch(() => {
+        /* nunca derruba o boot: sem migrar, o app cai no caminho antigo */
+      })
+      .then(() => Promise.all([loadTokens(), loadCadastroStatus()]))
       .then(([t]) => {
         if (!alive) return;
         setAuthState(!!t?.accessToken);
@@ -151,6 +162,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   // Re-renderiza ao mudar auth (login/logout) ou status (aprovação).
   useEffect(() => subscribeAuth(() => setVersion((v) => v + 1)), []);
+  // Re-renderiza ao trocar/escolher empresa (o gate de escolha some).
+  useEffect(() => assinarSessoes(() => setVersion((v) => v + 1)), []);
   useEffect(() => subscribeCadastroStatus(() => setVersion((v) => v + 1)), []);
   // Re-renderiza quando a decisão de força-atualização muda (pra cobrir/liberar
   // o app com a tela de bloqueio).
@@ -175,6 +188,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!loggedIn) return;
     void prefetchDadosBase(queryClient);
+    // Alinha as empresas dele com o servidor: nome da empresa (que a migração
+    // não tinha como saber), aprovação que saiu do "em análise" e cadastro novo
+    // numa segunda empresa. Best-effort — offline fica com o que já tem.
+    void atualizarCadastros().catch(() => {});
     const unsub = NetInfo.addEventListener((s) => {
       if (s.isConnected) void prefetchDadosBase(queryClient);
     });
@@ -389,6 +406,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // Logado mas cadastro ainda em análise: cobre o app inteiro com a tela de
   // espera (some sozinho quando o status vira APROVADO).
   if (loggedIn && pendenteAprovacao) return <EmAnalise />;
+
+  // Roda pra mais de uma empresa: escolhe a do turno antes de ver qualquer tela.
+  // Uma vez por abertura do app (o marcador vive em memória).
+  if (loggedIn && precisaEscolherEmpresa()) return <EscolherEmpresaAbertura />;
 
   // Versão abaixo do piso exigido: bloqueio duro até atualizar (decisão do
   // backend; some sozinho quando o app volta atualizado). Fail-open — offline

@@ -6,7 +6,11 @@
  * Chave: `${origemId}|${destinoId}`. Storage: AsyncStorage (JSON simples).
  */
 
-import AsyncStorage from "@react-native-async-storage/async-storage";
+// O `storage` é o AsyncStorage carimbado com a empresa ativa (lib/storage.ts):
+// a rota é calculada entre locais de UMA empresa, e o motorista pode rodar pra mais
+// de uma. Chave global aqui faria o dado de uma aparecer — ou ser ENVIADO —
+// pela outra.
+import { storage as AsyncStorage } from "@/lib/storage";
 
 // v2: o backend passou a rotear com approaches=curb (respeita o lado correto da
 // via / conta o retorno em pista dupla). Entradas v1 têm km subestimado — bumpar

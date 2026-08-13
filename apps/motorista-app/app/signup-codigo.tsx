@@ -6,9 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatCpf } from "@ronan/shared-types";
+import { showAlert } from "@/lib/alert";
 import { api, humanizeApiError } from "@/lib/api";
 import { saveTokens } from "@/lib/auth";
 import { setAuthState } from "@/lib/auth-state";
+import { migrarSessaoLegada } from "@/lib/sessoes";
 
 const COOLDOWN_S = 60;
 
@@ -53,7 +55,18 @@ export default function SignupCodigoScreen() {
         codigoEmpresa: params.codigoEmpresa ?? "",
       });
       await saveTokens(res);
+      // Transforma o token recém-gravado em sessão de empresa (o cadastro sabe
+      // dizer de quem é pelo próprio token). Sem isso o app entraria pelo
+      // caminho legado e o seletor não teria o que mostrar.
+      await migrarSessaoLegada();
       setAuthState(true);
+      if (res.senhaHerdada) {
+        void showAlert({
+          title: "Você já usa o app",
+          message:
+            "Como você já tem cadastro em outra empresa, continua entrando com a MESMA senha de sempre — a que você digitou agora não foi usada.",
+        });
+      }
       router.replace("/");
     } catch (err) {
       setErro(humanizeApiError(err));

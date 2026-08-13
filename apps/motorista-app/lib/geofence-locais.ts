@@ -12,7 +12,11 @@
  * Imports nativos são lazy (mesmo padrão de tracking-task.ts) pra não
  * quebrar o boot do expo-router.
  */
-import AsyncStorage from "@react-native-async-storage/async-storage";
+// O `storage` é o AsyncStorage carimbado com a empresa ativa (lib/storage.ts):
+// os locais e eventos de geofence são de UMA empresa, e o motorista pode rodar pra mais
+// de uma. Chave global aqui faria o dado de uma aparecer — ou ser ENVIADO —
+// pela outra.
+import { storage as AsyncStorage } from "@/lib/storage";
 import { api, ApiError } from "./api";
 import type { LocalEmValidacao } from "./queries";
 
