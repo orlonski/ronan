@@ -16,6 +16,15 @@ export const metadata: Metadata = {
     icon: "/icon-512.png",
     apple: "/apple-icon-180.png",
   },
+  // Preview de quando alguém manda o link no WhatsApp. Sem isto, o link vai sem
+  // cara nenhuma — ou, pior, com o ícone que sobrou no cache do aplicativo.
+  openGraph: {
+    title: "Movatruck",
+    description: "Gestão de viagens, pedágios e abastecimentos.",
+    images: ["/icon-512.png"],
+    type: "website",
+    locale: "pt_BR",
+  },
 };
 
 export const viewport: Viewport = {
