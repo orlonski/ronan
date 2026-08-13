@@ -3,6 +3,7 @@ import {
   CATALOGO_PERMISSOES,
   PERMISSOES_OPERADOR,
   TODAS_AS_CHAVES,
+  PERMISSOES_ADMIN_EMPRESA,
 } from "@ronan/shared-types";
 import { comoSistema, contaIdAtual } from "../../common/conta/conta-context";
 import { paraCadaConta } from "../../common/conta/para-cada-conta";
@@ -77,15 +78,25 @@ export class PermissoesService implements OnModuleInit {
     // O nome do papel só é único DENTRO da conta — duas empresas têm cada uma o
     // seu "Administrador" —, então o upsert precisa da chave composta.
     const contaId = contaIdAtual();
+
+    // O "Administrador" de uma empresa CLIENTE não é o mesmo que o da conta da
+    // plataforma. Ele manda na empresa dele — não no WhatsApp compartilhado, nem
+    // nas chaves de IA que a plataforma paga, nem na versão do app que ela
+    // publica nas lojas. A conta 1 (a do dono) continua com tudo.
+    const daPlataforma = await this.ehContaDaPlataforma(contaId);
+    const permissoesAdmin = daPlataforma ? TODAS_AS_CHAVES : PERMISSOES_ADMIN_EMPRESA;
+
     await this.prisma.papel.upsert({
       where: { contaId_nome: { contaId, nome: PAPEL_ADMIN } },
       create: {
         nome: PAPEL_ADMIN,
-        descricao: "Acesso total ao sistema.",
-        permissoes: TODAS_AS_CHAVES,
+        descricao: daPlataforma ? "Acesso total ao sistema." : "Administra esta empresa.",
+        permissoes: permissoesAdmin,
         sistema: true,
       },
-      update: { permissoes: TODAS_AS_CHAVES, sistema: true },
+      // Re-sincroniza a cada boot pra pegar chave nova do catálogo. Pra empresa
+      // cliente isso também PODA o que virou de plataforma depois.
+      update: { permissoes: permissoesAdmin, sistema: true },
     });
     await this.prisma.papel.upsert({
       where: { contaId_nome: { contaId, nome: PAPEL_OPERADOR } },
@@ -97,6 +108,18 @@ export class PermissoesService implements OnModuleInit {
       },
       update: { sistema: true },
     });
+  }
+
+  /**
+   * A conta da plataforma é a primeira criada — a do dono. Não há flag no model
+   * porque a ordem já responde: quem estava aqui antes de existir "empresa
+   * cliente" é a casa.
+   */
+  private async ehContaDaPlataforma(contaId: string): Promise<boolean> {
+    const primeira = await comoSistema(() =>
+      this.prisma.conta.findFirst({ orderBy: { criadaEm: "asc" }, select: { id: true } }),
+    );
+    return primeira?.id === contaId;
   }
 
   /** Rede de segurança: usuário sem papel cai no Operador (a migração inicial

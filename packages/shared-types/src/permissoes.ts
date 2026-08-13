@@ -128,6 +128,46 @@ export const CATALOGO_PERMISSOES: PermissaoCatalogo[] = RESOURCE_DEFS.flatMap((r
 
 export const TODAS_AS_CHAVES: string[] = CATALOGO_PERMISSOES.map((p) => p.chave);
 
+/**
+ * Recursos que são da PLATAFORMA, não da empresa que assina.
+ *
+ * A régua é: mexer nisso afeta gente de fora da empresa, ou custa dinheiro/marca
+ * de quem opera a plataforma.
+ *
+ * - `whatsapp` e `config-agente`: a instância do WhatsApp é UMA só, dividida por
+ *   todas as empresas. O dono de uma delas desconectando a sessão derruba os
+ *   avisos de todas — inclusive das outras.
+ * - `config-ia`: as chaves de API e a conta que paga são da plataforma.
+ * - `config-forca-atualizacao`: decide qual versão do app é aceita, e o app é
+ *   publicado nas lojas pela plataforma.
+ * - `erros` e `diagnosticos`: telemetria técnica do sistema, não da operação.
+ *
+ * Fica de fora das permissões que uma empresa nova recebe. O dono da plataforma
+ * ainda pode conceder caso a caso pela matriz, se um dia quiser.
+ */
+export const RECURSOS_PLATAFORMA: string[] = [
+  "whatsapp",
+  "config-agente",
+  "config-ia",
+  "config-forca-atualizacao",
+  "erros",
+  "diagnosticos",
+];
+
+/** Chaves de plataforma (`recurso.acao`), derivadas de RECURSOS_PLATAFORMA. */
+export const CHAVES_PLATAFORMA: string[] = CATALOGO_PERMISSOES.filter((p) =>
+  RECURSOS_PLATAFORMA.includes(p.chave.split(".")[0] ?? ""),
+).map((p) => p.chave);
+
+/**
+ * O que o Administrador de uma empresa cliente recebe: tudo menos o que é da
+ * plataforma. Inclui `permissoes.gerenciar` de propósito — ele monta os papéis
+ * da equipe DELE, e não consegue conceder o que ele mesmo não tem.
+ */
+export const PERMISSOES_ADMIN_EMPRESA: string[] = TODAS_AS_CHAVES.filter(
+  (chave) => !CHAVES_PLATAFORMA.includes(chave),
+);
+
 /** Ações que hoje são restritas a ADMIN (DELETEs sensíveis + importar OSM).
  * O papel Operador NÃO recebe estas — preserva o comportamento atual. */
 export const ADMIN_ONLY: string[] = [

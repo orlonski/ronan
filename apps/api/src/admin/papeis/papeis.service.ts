@@ -4,7 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import type { CriarPapelInput, AtualizarPapelInput } from "@ronan/shared-types";
+import { CHAVES_PLATAFORMA, type CriarPapelInput, type AtualizarPapelInput } from "@ronan/shared-types";
+import { comoSistema, contaIdAtual } from "../../common/conta/conta-context";
 import { PrismaService } from "../../prisma/prisma.service";
 import { PAPEL_ADMIN } from "../permissoes/permissoes.service";
 
@@ -24,7 +25,35 @@ export class PapeisService {
     return this.prisma.papel.findUniqueOrThrow({ where: { id } });
   }
 
+  /**
+   * Impede que uma empresa cliente conceda a si mesma o que é da plataforma.
+   *
+   * Esconder o menu não basta: o admin da empresa tem `permissoes.gerenciar` (ele
+   * monta os papéis da equipe dele), e sem esta trava bastaria criar um papel com
+   * `whatsapp.gerenciar` e se atribuir — chegando na instância de WhatsApp que
+   * todas as empresas dividem. O painel chama a API direto do navegador, então a
+   * regra tem que morar aqui, não na tela.
+   *
+   * A conta da plataforma (a primeira, do dono) passa livre.
+   */
+  private async recusarChavesDePlataforma(chaves: string[] | undefined): Promise<void> {
+    if (!chaves || chaves.length === 0) return;
+    const proibidas = chaves.filter((c) => CHAVES_PLATAFORMA.includes(c));
+    if (proibidas.length === 0) return;
+
+    const contaId = contaIdAtual();
+    const primeira = await comoSistema(() =>
+      this.prisma.conta.findFirst({ orderBy: { criadaEm: "asc" }, select: { id: true } }),
+    );
+    if (primeira?.id === contaId) return;
+
+    throw new BadRequestException(
+      `Estas permissões são da plataforma e não podem ser concedidas aqui: ${proibidas.join(", ")}.`,
+    );
+  }
+
   async create(input: CriarPapelInput) {
+    await this.recusarChavesDePlataforma(input.permissoes);
     const existe = await this.prisma.papel.findFirst({ where: { nome: input.nome } });
     if (existe) throw new ConflictException("Já existe um papel com esse nome.");
     return this.prisma.papel.create({
@@ -48,6 +77,7 @@ export class PapeisService {
       const existe = await this.prisma.papel.findFirst({ where: { nome: input.nome } });
       if (existe) throw new ConflictException("Já existe um papel com esse nome.");
     }
+    await this.recusarChavesDePlataforma(input.permissoes);
     return this.prisma.papel.update({
       where: { id },
       data: {
