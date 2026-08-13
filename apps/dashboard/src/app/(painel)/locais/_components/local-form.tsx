@@ -44,6 +44,7 @@ export type Local = {
   lat: number | null;
   lng: number | null;
   apelidos: string[];
+  totalViagens?: number;
 };
 
 type ViaCepRes = {

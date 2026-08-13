@@ -1,10 +1,9 @@
 "use client";
 
-import { use, useMemo } from "react";
+import { use } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { MapPin, Pencil, Truck, User } from "lucide-react";
-import type { ColumnDef } from "@tanstack/react-table";
 import type { FonteGps } from "@ronan/shared-types";
 import { FormPageHeader } from "@/components/form-page-header";
 import { Permitido } from "@/components/requer-tela";
@@ -13,15 +12,10 @@ import { SinalGpsBadge } from "@/components/sinal-gps-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import {
-  DataTable,
-  DataTableColumnHeader,
-} from "@/components/data-table";
 import { useQuery } from "@tanstack/react-query";
-import { useDataTableState } from "@/hooks/use-data-table-state";
 import { fmtBR } from "@/lib/fechamento-helpers";
-import { fetchApi, useAuthToken, useResourceItem, usePaginatedList } from "@/lib/client-api";
-import { STATUS_VIAGEM_COLOR, STATUS_VIAGEM_LABEL } from "@/lib/status-viagem";
+import { fetchApi, useAuthToken, useResourceItem } from "@/lib/client-api";
+import { ViagensDoLocal } from "../../_components/viagens-do-local";
 
 const PontoMap = dynamic(
   () => import("@/components/ponto-map").then((m) => m.PontoMap),
@@ -64,17 +58,6 @@ type Local = {
   clientes: { id: string; nome: string }[];
   criadoPor: { id: string; nome: string } | null;
   criadoPorMotorista: { id: string; nome: string } | null;
-};
-
-type Viagem = {
-  id: string;
-  data: string;
-  ticket: string;
-  status: string;
-  motorista: { id: string; nome: string };
-  cliente?: { id: string; nome: string } | null;
-  localCarga: { id: string; nome: string };
-  localDescarga: { id: string; nome: string };
 };
 
 const TIPO_LOCAL_COLOR: Record<Tipo, string> = {
@@ -166,88 +149,6 @@ export default function VisualizarLocalPage({
         }>;
       }>(`/admin/locais/${id}/lancamentos`, { token }),
   });
-
-  // Viagens deste local (carga OU descarga) — backend filtra por localId.
-  const tableState = useDataTableState({ defaultSort: { field: "data", order: "desc" } });
-  const viagens = usePaginatedList<Viagem>("/admin/viagens", {
-    ...tableState,
-    filters: { ...tableState.filters, localId: id },
-  });
-
-  function lado(v: Viagem): "Carga" | "Descarga" | "Carga e descarga" {
-    const carga = v.localCarga?.id === id;
-    const descarga = v.localDescarga?.id === id;
-    if (carga && descarga) return "Carga e descarga";
-    return carga ? "Carga" : "Descarga";
-  }
-
-  const columns = useMemo<ColumnDef<Viagem>[]>(
-    () => [
-      {
-        id: "data",
-        accessorKey: "data",
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Data" />,
-        cell: ({ row }) => <span className="text-sm">{fmtBR(row.original.data)}</span>,
-      },
-      {
-        id: "ticket",
-        accessorKey: "ticket",
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Ticket" />,
-        cell: ({ row }) => (
-          <span className="font-mono text-sm">{row.original.ticket}</span>
-        ),
-      },
-      {
-        id: "lado",
-        enableSorting: false,
-        header: "Lado",
-        cell: ({ row }) => (
-          <span className="text-sm text-muted-foreground">{lado(row.original)}</span>
-        ),
-      },
-      {
-        id: "motorista",
-        accessorKey: "motorista.nome",
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Motorista" />,
-        cell: ({ row }) => <span className="text-sm">{row.original.motorista.nome}</span>,
-      },
-      {
-        id: "cliente",
-        accessorKey: "cliente.nome",
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Cliente" />,
-        cell: ({ row }) => (
-          <span className="text-sm">{row.original.cliente?.nome ?? "—"}</span>
-        ),
-      },
-      {
-        id: "status",
-        accessorKey: "status",
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
-        cell: ({ row }) => (
-          <Badge className={STATUS_VIAGEM_COLOR[row.original.status] ?? ""}>
-            {STATUS_VIAGEM_LABEL[row.original.status] ?? row.original.status}
-          </Badge>
-        ),
-      },
-      {
-        id: "acoes",
-        size: 80,
-        enableSorting: false,
-        header: () => <span className="block text-center">Abrir</span>,
-        cell: ({ row }) => (
-          <div className="flex justify-center">
-            <Link href={`/viagens/${row.original.id}`}>
-              <Button variant="ghost" size="icon" title="Abrir viagem">
-                <Pencil className="h-4 w-4" />
-              </Button>
-            </Link>
-          </div>
-        ),
-      },
-    ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [id],
-  );
 
   return (
     <div className="space-y-6">
@@ -394,21 +295,7 @@ export default function VisualizarLocalPage({
             </Card>
           )}
 
-          <Card className="space-y-3 p-6">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Truck className="h-4 w-4 text-muted-foreground" /> Viagens deste local
-              <span className="text-muted-foreground">({l.totalViagens})</span>
-            </div>
-            <DataTable
-              columns={columns}
-              data={viagens.data?.data ?? []}
-              pagination={viagens.data?.pagination}
-              state={tableState}
-              isLoading={viagens.isLoading}
-              isFetching={viagens.isFetching}
-              emptyMessage="Nenhuma viagem usou este local ainda."
-            />
-          </Card>
+          <ViagensDoLocal localId={id} totalViagens={l.totalViagens} />
         </>
       )}
     </div>
