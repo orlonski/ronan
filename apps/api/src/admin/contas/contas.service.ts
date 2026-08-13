@@ -1,4 +1,10 @@
-import { BadRequestException, ConflictException, Injectable, Logger } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  type OnModuleInit,
+} from "@nestjs/common";
 import * as bcrypt from "bcrypt";
 import { comConta, comoSistema } from "../../common/conta/conta-context";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -23,7 +29,7 @@ export type CriarContaInput = {
  * atravessa contas de propósito, e por isso mora atrás de `User.plataforma`.
  */
 @Injectable()
-export class ContasService {
+export class ContasService implements OnModuleInit {
   private readonly log = new Logger(ContasService.name);
 
   constructor(
@@ -32,6 +38,60 @@ export class ContasService {
     private readonly camposLayout: CamposLayoutService,
     private readonly uploads: UploadsService,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    await this.garantirOperadorDaPlataforma();
+  }
+
+  /**
+   * Sem isto, ninguém no mundo enxerga a tela de empresas.
+   *
+   * A coluna `plataforma` nasceu `false` pra todo mundo — o que está certo,
+   * porque fail-open num acesso desses seria pior. Só que aí o sistema sobe sem
+   * NENHUM operador de plataforma e não existe caminho pela interface pra criar
+   * o primeiro (a tela que criaria já exige ser um). Clássico ovo e galinha.
+   *
+   * A saída: quando não há nenhum, o dono do sistema é quem estava aqui
+   * primeiro — o usuário mais antigo da conta mais antiga. Roda uma vez só; a
+   * partir do momento em que existe um operador, isto não toca em mais nada,
+   * inclusive se depois ele for despromovido de propósito.
+   */
+  private async garantirOperadorDaPlataforma(): Promise<void> {
+    try {
+      await comoSistema(async () => {
+        const jaExiste = await this.prisma.user.count({ where: { plataforma: true } });
+        if (jaExiste > 0) return;
+
+        const contaMaisAntiga = await this.prisma.conta.findFirst({
+          orderBy: { criadaEm: "asc" },
+          select: { id: true, nome: true },
+        });
+        if (!contaMaisAntiga) return;
+
+        const primeiro = await this.prisma.user.findFirst({
+          where: { contaId: contaMaisAntiga.id, ativo: true },
+          orderBy: { criadoEm: "asc" },
+          select: { id: true, email: true },
+        });
+        if (!primeiro) return;
+
+        await this.prisma.user.update({
+          where: { id: primeiro.id },
+          data: { plataforma: true },
+        });
+        this.log.warn(
+          `Nenhum operador de plataforma existia. Promovi ${primeiro.email} ` +
+            `(usuário mais antigo de ${contaMaisAntiga.nome}) — é quem passa a ver a tela de empresas.`,
+        );
+      });
+    } catch (erro) {
+      this.log.error(
+        `Falhou ao garantir o operador de plataforma: ${
+          erro instanceof Error ? erro.message : String(erro)
+        }`,
+      );
+    }
+  }
 
   /** `Conta` é model global (não tem dono), então a listagem não precisa de contexto. */
   async listar() {
