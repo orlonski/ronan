@@ -41,6 +41,7 @@ import { cn } from "@/lib/utils";
 import { usePermissoes } from "@/lib/permissoes";
 import { Button } from "@/components/ui/button";
 import { LogoConta } from "@/components/logo-conta";
+import { limparMarca, useMarcaConta } from "@/lib/marca-conta";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 
 type Item = {
@@ -128,7 +129,8 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const { data: session } = useSession();
-  const { temPermissao, papelNome, conta, plataforma } = usePermissoes();
+  const { temPermissao, papelNome, plataforma } = usePermissoes();
+  const { marca } = useMarcaConta();
 
   // Itens visíveis por permissão; grupo só aparece se sobrar algum item.
   const gruposVisiveis = GRUPOS.map((g) => ({
@@ -197,9 +199,11 @@ export function Sidebar({
 
         {/* De qual empresa é o que está na tela. Com mais de uma no ar, saber
             onde você está deixa de ser detalhe. */}
-        {conta && (
-          <div className="mb-4 px-2 text-xs font-medium text-muted-foreground">{conta.nome}</div>
-        )}
+        {/* Mesma marca lembrada do logo: sem isso o nome aparecia do nada um
+            segundo depois e empurrava o menu pra baixo. */}
+        <div className="mb-4 h-4 px-2 text-xs font-medium text-muted-foreground">
+          {marca?.nome ?? ""}
+        </div>
 
         <nav className="flex-1 space-y-2 overflow-y-auto">
           {/* Dashboard fora dos grupos — sempre visível */}
@@ -297,7 +301,10 @@ export function Sidebar({
             variant="ghost"
             size="sm"
             className="w-full justify-start gap-2"
-            onClick={() => signOut({ callbackUrl: "/login" })}
+            onClick={() => {
+              limparMarca();
+              void signOut({ callbackUrl: "/login" });
+            }}
           >
             <LogOut className="h-4 w-4" />
             Sair
