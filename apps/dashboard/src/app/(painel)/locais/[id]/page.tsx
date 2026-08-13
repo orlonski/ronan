@@ -5,6 +5,7 @@ import { RequerTela } from "@/components/requer-tela";
 import { FormPageHeader } from "@/components/form-page-header";
 import { useResourceItem } from "@/lib/client-api";
 import { LocalForm, type Local } from "../_components/local-form";
+import { ViagensDoLocal } from "../_components/viagens-do-local";
 
 export default function EditarLocalPage({
   params,
@@ -24,7 +25,12 @@ export default function EditarLocalPage({
         {item.isLoading && (
           <p className="text-sm text-muted-foreground">Carregando…</p>
         )}
-        {item.data && <LocalForm initial={item.data} />}
+        {item.data && (
+          <>
+            <LocalForm initial={item.data} />
+            <ViagensDoLocal localId={id} totalViagens={item.data.totalViagens} />
+          </>
+        )}
       </div>
     </RequerTela>
   );
