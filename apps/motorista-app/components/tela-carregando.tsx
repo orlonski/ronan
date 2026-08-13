@@ -5,7 +5,7 @@ const LOGO = require("../assets/splash.png");
 
 /**
  * Tela de carregamento full-screen que casa com o splash nativo (fundo branco
- * + logo Schaba). Usada no boot: enquanto baixa a OTA (com mensagem) e enquanto
+ * + logo Movatruck). Usada no boot: enquanto baixa a OTA (com mensagem) e enquanto
  * a auth resolve (sem mensagem, só o spinner).
  */
 export function TelaCarregando({ mensagem }: { mensagem?: string }) {

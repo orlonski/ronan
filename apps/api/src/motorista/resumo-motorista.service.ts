@@ -146,7 +146,7 @@ export class ResumoMotoristaService {
     const dataBr = `${String(dia).padStart(2, "0")}/${String(m).padStart(2, "0")}`;
 
     const linhas: string[] = [
-      `🚛 *Seu dia na Schaba* — ${ds}, ${dataBr}`,
+      `🚛 *Seu dia* — ${ds}, ${dataBr}`,
       "",
       "Hoje você fez:",
       `• ${plural(d.viagensHoje, "viagem", "viagens")}`,

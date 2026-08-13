@@ -229,7 +229,7 @@ export function UsuarioForm({ initial }: Props) {
                 <span className="font-medium">Vê tudo</span>
                 <span className="block text-xs text-muted-foreground">
                   Todas as viagens, motoristas e placas — como qualquer usuário da
-                  Schaba.
+                  empresa.
                 </span>
               </span>
             </label>

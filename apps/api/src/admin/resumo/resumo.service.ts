@@ -164,6 +164,13 @@ export class ResumoService {
   private async montarMensagem(chaves: Set<string>): Promise<string> {
     const [y, m, dia] = ymdSaoPaulo();
 
+    // O título leva o nome da EMPRESA, não o da plataforma: quem lê é o dono da
+    // transportadora, e o resumo é dos números dele.
+    const conta = await this.prisma.conta.findUnique({
+      where: { id: contaIdAtual() },
+      select: { nome: true },
+    });
+
     // Colunas @db.Date (Viagem.data): fronteiras em meia-noite UTC da data BR.
     const hoje00 = inicioDoDiaData();
     const amanha00 = new Date(hoje00.getTime() + DIA_MS);
@@ -421,7 +428,8 @@ export class ResumoService {
     const has = (c: string) => chaves.has(c);
 
     // Cabeçalho: título + data com dia da semana. A régua entra no join.
-    const blocos: string[] = [`📊 *RESUMO SCHABA*\n🗓️ ${dataLabel}`];
+    const tituloResumo = conta?.nome ? `RESUMO ${conta.nome.toUpperCase()}` : "RESUMO";
+    const blocos: string[] = [`📊 *${tituloResumo}*\n🗓️ ${dataLabel}`];
 
     if (has("motoristas"))
       blocos.push(

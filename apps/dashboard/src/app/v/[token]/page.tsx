@@ -235,7 +235,7 @@ export default async function ComprovantePage({
         <p>
           Emitido em {dataHoraBR(d.emitidoEm)} · Link válido até {dataBR(d.linkExpiraEm)}
         </p>
-        <p className="mt-1 font-medium text-slate-600">Schaba Transportes</p>
+        <p className="mt-1 font-medium text-slate-600">{d.marca.nome}</p>
       </footer>
     </main>
   );

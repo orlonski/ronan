@@ -3,7 +3,7 @@ import type { ExpoConfig } from "expo/config";
 const config: ExpoConfig = {
   // Nome de exibicao (aparece no celular). Slug/scheme antigos mantidos
   // pra preservar projectId no EAS (nao quebrar canal de OTA Update).
-  name: "Schaba",
+  name: "Movatruck",
   slug: "ronan-motorista",
   scheme: "ronan",
   version: "1.0.5",
@@ -15,7 +15,7 @@ const config: ExpoConfig = {
   splash: {
     image: "./assets/splash.png",
     resizeMode: "contain",
-    // Fundo branco fica melhor pq o S \xc3\xa9 azul escuro - precisa contraste
+    // Fundo branco: a marca Movatruck e azul marinho + laranja, precisa contraste
     backgroundColor: "#ffffff",
   },
   assetBundlePatterns: ["**/*"],
@@ -51,9 +51,11 @@ const config: ExpoConfig = {
     // subido via `eas secret:create`; em dev local cai pro arquivo na raiz do app.
     googleServicesFile:
       process.env.GOOGLE_SERVICES_JSON ?? "./google-services.json",
+    // O foreground traz so as barras da marca; o navy da marca e o fundo, pra
+    // mascara redonda do Android nao cortar nada.
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-icon.png",
-      backgroundColor: "#ffffff",
+      backgroundColor: "#1E3575",
     },
     permissions: [
       "android.permission.CAMERA",
@@ -98,7 +100,10 @@ const config: ExpoConfig = {
     [
       "expo-notifications",
       {
-        icon: "./assets/icon.png",
+        // Arquivo proprio, e nao o icone do app: o Android desenha a
+        // notificacao como silhueta do canal alfa, e o icone do app e opaco -
+        // usa-lo aqui vira um quadrado branco solido na barra de status.
+        icon: "./assets/notification-icon.png",
         color: "#ea580c",
         // Som customizado embarcado (E6→B5 chime, ~0.6s). Nome referenciado
         // pelo backend como `sound: "ding"` (sem extensão).

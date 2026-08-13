@@ -11,9 +11,9 @@ export default defineConfig({
       injectRegister: "auto",
       includeAssets: ["favicon.ico", "robots.txt", "icon-192.png", "icon-512.png"],
       manifest: {
-        name: "Schaba — Motorista",
-        short_name: "Schaba",
-        description: "App do motorista da Schaba. Lança viagens, pedágios e abastecimentos com suporte offline.",
+        name: "Movatruck — Motorista",
+        short_name: "Movatruck",
+        description: "App do motorista Movatruck. Lança viagens, pedágios e abastecimentos com suporte offline.",
         theme_color: "#13316b",
         background_color: "#13316b",
         display: "standalone",

@@ -135,7 +135,7 @@ export interface MensagemChatItem {
 export interface ConversaResumo {
   id: string;
   tipo: TipoConversa;
-  /** Nome do outro lado (ou "Avisos da Schaba" no canal). */
+  /** Nome do outro lado (ou "Avisos da transportadora" no canal). */
   titulo: string;
   iniciais: string;
   /** null no canal de Avisos. */

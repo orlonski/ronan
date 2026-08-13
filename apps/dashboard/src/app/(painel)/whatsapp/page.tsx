@@ -78,7 +78,7 @@ type ConfigAvisoGrupo = {
 };
 
 const TEMPLATE_AVISO_PLACEHOLDER =
-  "🎉 {nome} acabou de entrar no app da Schaba! Seja bem-vindo, parceiro 🚛";
+  "🎉 {nome} acabou de entrar no app! Seja bem-vindo, parceiro 🚛";
 
 type Diagnostico = {
   ok: boolean;

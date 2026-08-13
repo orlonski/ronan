@@ -221,7 +221,7 @@ export default function PerfilPage() {
         </Button>
 
         <p className="pt-4 text-center text-xs text-muted-foreground">
-          Schaba — Motorista PWA
+          Movatruck — Motorista PWA
         </p>
       </div>
     </div>

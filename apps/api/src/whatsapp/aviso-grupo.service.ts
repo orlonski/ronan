@@ -7,7 +7,7 @@ import { contaIdAtual } from "../common/conta/conta-context";
 const CONFIG_ID = "default";
 
 const TEMPLATE_DEFAULT =
-  "🎉 {nome} acabou de entrar no app da Schaba! Seja bem-vindo, parceiro 🚛";
+  "🎉 {nome} acabou de entrar no app! Seja bem-vindo, parceiro 🚛";
 
 /**
  * Aviso automático no grupo de WhatsApp quando um motorista se cadastra no app.

@@ -319,7 +319,7 @@ export class RedefinicaoSenhaService {
     const numero = SessaoService.normalizar(telefone);
     await this.evolution.enviarTexto(
       numero,
-      `Seu código pra redefinir a senha Schaba é ${codigo}. Vale por ${CODIGO_TTL_MIN} minutos. Se não foi você, ignore.`,
+      `Seu código pra redefinir a senha Movatruck é ${codigo}. Vale por ${CODIGO_TTL_MIN} minutos. Se não foi você, ignore.`,
     );
   }
 }

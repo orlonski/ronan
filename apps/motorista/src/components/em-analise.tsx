@@ -31,7 +31,7 @@ export function EmAnalise() {
     <div className="flex min-h-screen-safe flex-col bg-background">
       <div className="bg-brand px-6 pb-10 pt-safe">
         <div className="pt-12">
-          <h1 className="text-5xl font-extrabold tracking-tight text-white">SCHABA</h1>
+          <h1 className="text-4xl font-extrabold tracking-tight text-white">MOVATRUCK</h1>
           <p className="mt-2 text-base font-medium text-white/80">Aplicativo do motorista</p>
         </div>
       </div>

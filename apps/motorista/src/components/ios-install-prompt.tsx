@@ -19,7 +19,7 @@ export function IosInstallPrompt() {
         <X size={18} />
       </button>
       <p className="pr-9 text-base font-bold text-brand">
-        Instale o Schaba na tela inicial
+        Instale o Movatruck na tela inicial
       </p>
       <p className="mt-1 text-sm text-foreground">
         Use o botão{" "}

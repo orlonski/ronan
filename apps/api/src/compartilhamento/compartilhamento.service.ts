@@ -22,7 +22,7 @@ import {
   serializarViagemPublica,
   type ViagemPublica,
 } from "./viagem-publica";
-import { comConta, comoSistema } from "../common/conta/conta-context";
+import { comConta, comoSistema, contaIdAtual } from "../common/conta/conta-context";
 
 /** Validades oferecidas no painel. 30 dias cobre conferência + fechamento do mês. */
 export const DIAS_VALIDADE = [7, 30, 90] as const;
@@ -352,6 +352,13 @@ export class CompartilhamentoService implements OnModuleInit {
     });
     if (!v) throw new NotFoundException("Viagem não encontrada");
 
+    // Assina com o nome da EMPRESA que prestou o serviço, não com o da
+    // plataforma — quem recebe é o cliente dela, e o comprovante é dela.
+    const conta = await this.prisma.conta.findUnique({
+      where: { id: contaIdAtual() },
+      select: { nome: true },
+    });
+
     const linhas: string[] = [];
     if (mensagemExtra?.trim()) linhas.push(mensagemExtra.trim(), "");
 
@@ -373,7 +380,8 @@ export class CompartilhamentoService implements OnModuleInit {
     if (detalhes.length > 0) linhas.push(detalhes.join(" · "));
 
     linhas.push("", "Ver comprovante:", this.urlDoToken(token), "");
-    linhas.push(`O link fica disponível até ${dataHoraBR(expiraEm)}.`, "Schaba Transportes");
+    linhas.push(`O link fica disponível até ${dataHoraBR(expiraEm)}.`);
+    if (conta?.nome) linhas.push(conta.nome);
 
     return linhas.join("\n");
   }

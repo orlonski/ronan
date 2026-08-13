@@ -23,7 +23,7 @@ const MODELOS: { rotulo: string; texto: string }[] = [
   {
     rotulo: "Atualizar app",
     texto:
-      "Oi {nome}! Saiu uma atualização importante do app da Schaba. Abre a Play Store, procura por Schaba e toque em Atualizar. Qualquer dúvida, me chama por aqui. 👍",
+      "Oi {nome}! Saiu uma atualização importante do app Movatruck. Abre a Play Store, procura por Movatruck e toque em Atualizar. Qualquer dúvida, me chama por aqui. 👍",
   },
   {
     rotulo: "Documento pendente",
@@ -96,7 +96,7 @@ export function EnviarWhatsappButton({
           <DialogHeader>
             <DialogTitle>WhatsApp · {motoristaNome}</DialogTitle>
             <DialogDescription>
-              Vai direto pro WhatsApp do motorista, pelo número da Schaba.
+              Vai direto pro WhatsApp do motorista, pelo número da transportadora.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-3">

@@ -131,7 +131,7 @@ out body;
         body: `data=${encodeURIComponent(query)}`,
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
-          "User-Agent": "ronan-schaba/1.0 (contact: orlonski@icloud.com)",
+          "User-Agent": "movatruck/1.0 (contact: contato@movatruck.com.br)",
         },
         signal: ac.signal,
       });

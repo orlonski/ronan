@@ -86,7 +86,7 @@ export class ChatAdminService {
         conversaId: canalId,
         autor: "ADMIN",
         usuarioId,
-        autorNome: autor?.nome ?? "Schaba",
+        autorNome: autor?.nome ?? "Avisos",
         tipo: "TEXTO",
         texto: input.texto,
       },
@@ -125,7 +125,7 @@ export class ChatAdminService {
         const r = await this.push.enviar({
           motoristaId: d.id,
           token: d.expoPushToken,
-          titulo: "Avisos da Schaba",
+          titulo: "Avisos da transportadora",
           corpo: input.texto.slice(0, 160),
           tipo: "chat-aviso",
           dados: { kind: "chat-mensagem", conversaId: canalId },

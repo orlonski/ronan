@@ -271,7 +271,7 @@ export default function ConversaScreen() {
         {somenteLeitura ? (
           <View className="border-t border-border bg-muted px-4 py-4">
             <Text className="text-center text-sm text-muted-foreground">
-              Canal de avisos — só a Schaba escreve aqui.
+              Canal de avisos — só a transportadora escreve aqui.
             </Text>
           </View>
         ) : (

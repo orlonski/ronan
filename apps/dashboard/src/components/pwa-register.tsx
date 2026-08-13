@@ -11,7 +11,7 @@ export function PwaRegister() {
     if (process.env.NODE_ENV !== "production") return;
     // O comprovante público (/v/<token>) é aberto no celular do CLIENTE, que
     // não é usuário do painel: instalar o service worker e oferecer "adicionar
-    // à tela inicial" do Schaba ali é invasivo e confuso.
+    // à tela inicial" do Movatruck ali é invasivo e confuso.
     if (pathname?.startsWith("/v/")) return;
     navigator.serviceWorker.register("/sw.js").catch(() => {
       // sem SW o painel funciona igual; só não fica "instalável"

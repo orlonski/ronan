@@ -224,8 +224,8 @@ export class ChatService {
       return {
         id: c.id,
         tipo: "AVISOS",
-        titulo: "Avisos da Schaba",
-        iniciais: "SC",
+        titulo: "Avisos da transportadora",
+        iniciais: "AV",
         outroMotoristaId: null,
         ultimaMensagemTexto: c.ultimaMensagemTexto,
         ultimaMensagemEm: c.ultimaMensagemEm?.toISOString() ?? null,

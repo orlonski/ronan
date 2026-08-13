@@ -3,11 +3,11 @@ import { LinkIcon } from "lucide-react";
 const TEXTOS = {
   LINK_EXPIRADO: {
     titulo: "Este link expirou",
-    corpo: "Peça um comprovante novo para a Schaba — leva um minuto pra gerar.",
+    corpo: "Peça um comprovante novo para quem te mandou o link — leva um minuto pra gerar.",
   },
   LINK_REVOGADO: {
     titulo: "Este link foi desativado",
-    corpo: "Peça um comprovante novo para a Schaba.",
+    corpo: "Peça um comprovante novo para quem te mandou o link.",
   },
   LINK_INVALIDO: {
     titulo: "Link não encontrado",
@@ -30,7 +30,7 @@ export function LinkIndisponivel({ code }: { code: CodigoIndisponivel }) {
       </div>
       <h1 className="text-xl font-bold text-slate-900">{t.titulo}</h1>
       <p className="mt-2 text-slate-600">{t.corpo}</p>
-      <p className="mt-10 text-xs text-slate-400">Schaba Transportes</p>
+      <p className="mt-10 text-xs text-slate-400">Movatruck</p>
     </main>
   );
 }

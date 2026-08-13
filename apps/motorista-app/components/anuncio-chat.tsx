@@ -81,7 +81,7 @@ export function AnuncioChat({
             {[
               "Fale direto com os outros motoristas",
               "Escreva sem sinal — envia sozinho depois",
-              "Avisos da Schaba chegam por aqui também",
+              "Avisos da transportadora chegam por aqui também",
             ].map((txt) => (
               <View key={txt} className="flex-row items-center gap-3">
                 <View className="h-7 w-7 items-center justify-center rounded-full bg-success/15">
