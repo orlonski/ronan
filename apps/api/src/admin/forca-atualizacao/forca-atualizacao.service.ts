@@ -138,6 +138,9 @@ export class ForcaAtualizacaoService {
     // Alvo: override manual vence; senão a versão detectada automaticamente.
     const override =
       plataforma === "ios" ? config.versaoMinimaIos : config.versaoMinimaAndroid;
+    // Guarda o QUE é o alvo, não só o valor: piso detectado e piso decidido por
+    // gente não podem ter o mesmo poder (ver abaixo).
+    const pisoExplicito = override != null && override !== "";
     let alvo = override ?? null;
     if (!alvo) {
       const detectadas = await this.detectarVersoes();
@@ -153,9 +156,23 @@ export class ForcaAtualizacaoService {
     if (!desatualizado) return nada(alvo);
 
     // Está atrás. Ação depende do modo (observar = detecta mas não age).
+    //
+    // BLOQUEIO DURO SÓ COM PISO EXPLÍCITO — e isso não é preciosismo, é
+    // cicatriz. A detecção automática lê a versão que o app REPORTA, e essa
+    // string sai do manifesto do OTA, não do binário: publicar um update com
+    // outro número faz a frota inteira "subir de versão" sem nada novo existir
+    // na loja. Foi o que aconteceu em 14/08/2026 — a frota reportou 1.1.0 por
+    // duas horas, 1.1.0 firmou como "a última", e ao voltar pro número real
+    // todo mundo virou desatualizado contra uma versão que ninguém tinha como
+    // instalar. Tela de "atualização obrigatória" e motorista parado sem saída.
+    //
+    // Trancar a porta é decisão de quem sabe o que está publicado na loja.
+    // Detecção automática opina (recomenda); ela não tranca.
     const acao: AcaoAtualizacao =
       modo === "bloquear"
-        ? "bloquear"
+        ? pisoExplicito
+          ? "bloquear"
+          : "recomendar"
         : modo === "nudge"
           ? "recomendar"
           : "nenhuma"; // observar
