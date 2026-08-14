@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable } from "@nestjs/common";
 import { type FonteGps, NivelConfiancaLocal, OrigemCadastroLocal, type TipoLocal } from "@prisma/client";
+import { ItemInexistenteException } from "../common/item-inexistente";
 import { PrismaService } from "../prisma/prisma.service";
 import { inicioDiasAtras } from "../common/timezone";
 import { GeocodingService } from "../geocoding/geocoding.service";
@@ -61,6 +62,23 @@ export class LocaisMotoristaService {
   }
 
   /**
+   * Confere os clientes vinculados ao local antes de gravar.
+   *
+   * O vínculo entra como `create` aninhado, então um cliente excluído no painel
+   * derruba o local INTEIRO na chave estrangeira — com a mensagem genérica, que
+   * não diz sequer que o problema foi o cliente. E local é o lançamento mais
+   * caro de perder: quando o erro aparece, o motorista já saiu de lá e não tem
+   * como refazer o GPS.
+   */
+  private async garantirClientes(clienteIds: string[]): Promise<void> {
+    if (clienteIds.length === 0) return;
+    const achados = await this.prisma.cliente.count({
+      where: { id: { in: clienteIds } },
+    });
+    if (achados !== clienteIds.length) throw new ItemInexistenteException("clienteId");
+  }
+
+  /**
    * Antes de criar, busca locais ativos dentro de 200m do GPS enviado. Se
    * achar 1+, devolve 409 com sugestões pra o app perguntar "é algum
    * destes?". App reenvia com forcarCriacao=true se motorista insistir.
@@ -94,6 +112,7 @@ export class LocaisMotoristaService {
     }
 
     const clienteIds = input.clienteIds ?? [];
+    await this.garantirClientes(clienteIds);
     const local = await this.prisma.local.create({
       data: {
         nome: input.nome,
@@ -371,6 +390,7 @@ export class LocaisMotoristaService {
 
     const reverse = await this.geocoding.reverseGeocoding(input.lat, input.lng);
     const clienteIds = input.clienteIds ?? [];
+    await this.garantirClientes(clienteIds);
     const local = await this.prisma.local.create({
       data: {
         ...(input.id ? { id: input.id } : {}),

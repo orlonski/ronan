@@ -5,6 +5,7 @@ import {
 } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type { CriarPedagioInput } from "@ronan/shared-types";
+import { garantirCadastro } from "../common/item-inexistente";
 import { resolverTransportadora } from "../common/transportadora";
 import { PrismaService } from "../prisma/prisma.service";
 import { mesRange } from "./viagens.service";
@@ -67,6 +68,30 @@ export class PedagiosMotoristaService {
         include: PEDAGIO_INCLUDE,
       });
     }
+    // Valida os cadastros antes de gravar: a placa pode ter sido removida do
+    // cadastro do motorista enquanto o pedágio esperava sinal no celular, e a
+    // viagem vinculada pode ter sido apagada no painel. Sem isso vira FK
+    // violation com mensagem genérica — e pedágio ainda não tem tela de edição,
+    // então o motorista fica sem saída nenhuma a não ser descartar.
+    await garantirCadastro(
+      () =>
+        this.prisma.veiculo.findUnique({
+          where: { id: input.veiculoId },
+          select: { id: true },
+        }),
+      "veiculoId",
+    );
+    if (input.viagemId) {
+      await garantirCadastro(
+        () =>
+          this.prisma.viagem.findUnique({
+            where: { id: input.viagemId },
+            select: { id: true },
+          }),
+        "viagemId",
+      );
+    }
+
     // Frota dona do lançamento, carimbada na criação (ver common/transportadora.ts).
     const transportadoraId = await resolverTransportadora(
       this.prisma,

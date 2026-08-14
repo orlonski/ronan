@@ -15,6 +15,7 @@ import type {
 } from "@ronan/shared-types";
 import type { AppInfoHeaders } from "../auth/decorators/app-info.decorator";
 import { AuditoriaService } from "../auditoria/auditoria.service";
+import { garantirCadastro, ItemInexistenteException } from "../common/item-inexistente";
 import { resolverTransportadora } from "../common/transportadora";
 import {
   aplicarMinimos,
@@ -798,12 +799,33 @@ export class ViagensMotoristaService {
       return serializarViagemComMinimos(existente, await this.regrasMinimoAtivas());
     }
 
-    // Valida que o cliente existe (FK → 4xx claro em vez de 500 no create).
+    // Valida os cadastros que a viagem referencia ANTES de gravar, cada um com
+    // a sua mensagem. Sem isso a FK estoura no banco e o motorista recebe uma
+    // frase genérica que não diz se foi a placa, o cliente ou o material —
+    // e sem saber o que corrigir, ele acaba descartando o lançamento.
+    // Ordem = a da tela, pra ele achar o campo na hora de editar.
+    await garantirCadastro(
+      () =>
+        this.prisma.veiculo.findUnique({
+          where: { id: input.veiculoId },
+          select: { id: true },
+        }),
+      "veiculoId",
+    );
+
     const cliente = await this.prisma.cliente.findUnique({
       where: { id: input.clienteId },
       select: { empresaId: true },
     });
-    if (!cliente) throw new NotFoundException("Cliente não encontrado");
+    if (!cliente) throw new ItemInexistenteException("clienteId");
+
+    // Material é lido aqui (e não junto do bota-fora, mais abaixo) porque a
+    // validação do ticket já depende dele.
+    const material = await this.prisma.material.findUnique({
+      where: { id: input.materialId },
+      select: { permiteBotaFora: true },
+    });
+    if (!material) throw new ItemInexistenteException("materialId");
 
     // Modo "aguardando peso": motorista lança sem peso/ticket porque o romaneio
     // só sai no fim do dia. Pula a validação de ticket (fica null); peso e ticket
@@ -820,13 +842,9 @@ export class ViagensMotoristaService {
     // Trechos adicionais (retorno do bota-fora hoje). RETORNO_BOTA_FORA só vale se
     // o material permite (admin autoritativo, igual exigeTicket); o app só oferece
     // quando permite, aqui sanitiza por garantia.
-    const material = await this.prisma.material.findUnique({
-      where: { id: input.materialId },
-      select: { permiteBotaFora: true },
-    });
     const trechosCreate = this.montarTrechos(
       input.trechos,
-      material?.permiteBotaFora === true,
+      material.permiteBotaFora === true,
       input.localCargaId,
     );
 
@@ -1206,19 +1224,33 @@ export class ViagensMotoristaService {
       select: { clientId: true },
     });
     if (aberta) {
+      // O texto vai pro card de pendente do motorista e fica lá enquanto a vaga
+      // não libera. Por isso ele precisa dizer as duas coisas que evitam pânico
+      // (e evitam que ele apague a fila): nada se perdeu, e existe saída quando
+      // a viagem presa não é dele resolver.
       throw new ConflictException({
-        message: "Você já tem uma viagem em andamento. Finalize antes de iniciar outra.",
+        message:
+          "Você já tem uma viagem em andamento. Finalize ela que as outras sobem " +
+          "sozinhas na sequência — nenhuma se perde. Se ela travou, peça pro " +
+          "escritório cancelar essa viagem.",
         clientIdEmAndamento: aberta.clientId,
       });
     }
 
-    // Cliente é escolhido no início (filtra os locais de carga). Valida que
-    // existe antes de abrir a viagem.
+    // Placa e cliente: mesma validação da viagem normal, mesma mensagem.
+    await garantirCadastro(
+      () =>
+        this.prisma.veiculo.findUnique({
+          where: { id: input.veiculoId },
+          select: { id: true },
+        }),
+      "veiculoId",
+    );
     const cliente = await this.prisma.cliente.findUnique({
       where: { id: input.clienteId },
       select: { id: true },
     });
-    if (!cliente) throw new NotFoundException("Cliente não encontrado");
+    if (!cliente) throw new ItemInexistenteException("clienteId");
 
     // Local de carga é opcional no iniciar (pode ser detectado por GPS já, ou
     // só no evento de carga). Auto-recovery se o id sumiu do servidor.

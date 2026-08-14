@@ -1,5 +1,4 @@
 import {
-  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -8,6 +7,7 @@ import {
 import type { Prisma } from "@prisma/client";
 import type { CriarAbastecimentoInput } from "@ronan/shared-types";
 import { resolverTransportadora } from "../common/transportadora";
+import { ItemInexistenteException } from "../common/item-inexistente";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
 import { mesRange } from "./viagens.service";
@@ -101,21 +101,13 @@ export class AbastecimentosMotoristaService {
       where: { id: input.veiculoId },
       select: { id: true },
     });
-    if (!veiculo) {
-      throw new ConflictException(
-        "O veículo desse abastecimento não existe mais. Confira a placa na tela de Pendentes.",
-      );
-    }
+    if (!veiculo) throw new ItemInexistenteException("veiculoId");
     if (input.empresaId) {
       const empresa = await this.prisma.empresa.findUnique({
         where: { id: input.empresaId },
         select: { id: true },
       });
-      if (!empresa) {
-        throw new ConflictException(
-          "A empresa desse abastecimento não existe mais. Confira na tela de Pendentes.",
-        );
-      }
+      if (!empresa) throw new ItemInexistenteException("empresaId");
     }
 
     // Valida odômetro: deve ser >= o último registrado ANTES deste lançamento.

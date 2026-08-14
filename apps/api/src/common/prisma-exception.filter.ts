@@ -36,11 +36,28 @@ export class PrismaExceptionFilter implements ExceptionFilter {
         ? new NotFoundException("Registro não encontrado.")
         : erro.code === "P2003"
           ? new BadRequestException(
-              "Um dos itens escolhidos não existe mais. Atualize a tela e tente de novo.",
+              "Um dos itens escolhidos não existe mais. Abra os pendentes e toque " +
+                "em Editar nesse lançamento pra escolher outro — ele não se perde.",
             )
           : erro.code === "P2002"
             ? new BadRequestException("Já existe um registro com esse valor.")
             : null;
+
+    // P2003 aqui é REDE DE SEGURANÇA, não o caminho normal: quem valida FK de
+    // lançamento do motorista é `common/item-inexistente.ts`, que diz qual
+    // cadastro sumiu. Se caiu aqui, algum ponto ficou sem validação — e sem
+    // este log o erro é invisível no servidor (4xx não entra no error_logs),
+    // sobrando só o motorista pra avisar. `field_name` do Prisma é o nome da
+    // constraint, que carrega a coluna: é ele que diz onde falta validar.
+    if (erro.code === "P2003" || erro.code === "P2002") {
+      const req = host.switchToHttp().getRequest<{ method?: string; url?: string }>();
+      const campo = (erro.meta as { field_name?: string; target?: unknown } | undefined)
+        ?.field_name;
+      this.log.warn(
+        `Prisma ${erro.code} sem validação prévia em ${req?.method ?? "?"} ` +
+          `${req?.url ?? "?"} — modelo=${erro.meta?.modelName ?? "?"} campo=${campo ?? "?"}`,
+      );
+    }
 
     if (!traduzido) {
       // Código que não sabemos traduzir segue como 500 — mas registrado com o
