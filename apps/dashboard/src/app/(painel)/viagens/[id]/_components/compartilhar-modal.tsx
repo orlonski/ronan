@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AlertTriangle, Ban, Check, Copy, Eye, Link2, Share2 } from "lucide-react";
@@ -18,7 +18,8 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { isTelefoneValid, maskTelefone } from "@ronan/shared-types";
-import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { fetchApi, useApiQuery, useAuthToken } from "@/lib/client-api";
+import { MotoristaCombobox } from "@/components/fk-comboboxes";
 import { usePermissoes } from "@/lib/permissoes";
 import { fmtDataHoraBR } from "@/lib/fechamento-helpers";
 
@@ -54,6 +55,7 @@ export function CompartilharViagemModal({ viagemId }: { viagemId: string }) {
   const [aberto, setAberto] = useState(false);
   const [dias, setDias] = useState<number>(30);
   const [telefone, setTelefone] = useState("");
+  const [motoristaId, setMotoristaId] = useState<string | undefined>();
   const [mensagemExtra, setMensagemExtra] = useState("");
   const [copiado, setCopiado] = useState(false);
   const [confirmandoRevogar, setConfirmandoRevogar] = useState<string | null>(null);
@@ -75,6 +77,22 @@ export function CompartilharViagemModal({ viagemId }: { viagemId: string }) {
 
   const links = lista.data ?? [];
   const ativo = links.find((l) => l.estado === "ATIVO") ?? null;
+
+  const motoristaSelecionado = useApiQuery<{ nome: string; telefone: string | null }>(
+    motoristaId ? `/admin/motoristas/${motoristaId}` : undefined,
+  );
+
+  // Preenche o campo com o telefone cadastrado do motorista, mas continua editável —
+  // motorista pode não ter telefone salvo, ou o número certo pra esse envio ser outro.
+  useEffect(() => {
+    if (!motoristaId || !motoristaSelecionado.data) return;
+    const m = motoristaSelecionado.data;
+    if (!m.telefone) {
+      toast.error(`${m.nome} não tem WhatsApp cadastrado.`);
+      return;
+    }
+    setTelefone(maskTelefone(m.telefone));
+  }, [motoristaId, motoristaSelecionado.data]);
 
   const gerar = useMutation({
     mutationFn: () =>
@@ -213,13 +231,25 @@ export function CompartilharViagemModal({ viagemId }: { viagemId: string }) {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="tel">WhatsApp do cliente</Label>
+                <Label>Buscar motorista da base (opcional)</Label>
+                <MotoristaCombobox
+                  value={motoristaId}
+                  onChange={(id) => setMotoristaId(id)}
+                  placeholder="Selecionar motorista…"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="tel">WhatsApp</Label>
                 <Input
                   id="tel"
                   inputMode="tel"
                   placeholder="(44) 99999-9999"
                   value={telefone}
-                  onChange={(e) => setTelefone(maskTelefone(e.target.value))}
+                  onChange={(e) => {
+                    setMotoristaId(undefined);
+                    setTelefone(maskTelefone(e.target.value));
+                  }}
                 />
                 <p className="text-xs text-muted-foreground">Com DDD — o 55 entra sozinho.</p>
               </div>
