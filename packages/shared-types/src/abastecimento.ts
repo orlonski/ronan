@@ -37,7 +37,10 @@ export const CriarAbastecimentoBaseInput = z.object({
   // depois pelo dashboard.
   emComboio: z.boolean().default(false),
   odometro: z.number().int().nonnegative().max(MAX_ODOMETRO),
-  postoNome: z.string().max(120).optional(),
+  // `.trim()` porque o nome do posto é texto livre e vira CHAVE em dois lugares:
+  // no agrupamento do relatório e na lista de sugestões que o app devolve pro
+  // motorista. "Posto Trevo " e "Posto Trevo" viravam dois postos.
+  postoNome: z.string().trim().max(120).optional(),
   tanqueCheio: z.boolean().default(true),
   observacao: z.string().max(500).optional(),
   lat: z.number().min(-90).max(90).optional(),
@@ -70,7 +73,7 @@ export const AtualizarAbastecimentoInput = z
     valorTotal: z.number().positive().max(MAX_VALOR).nullable().optional(),
     emComboio: z.boolean().optional(),
     odometro: z.number().int().nonnegative().max(MAX_ODOMETRO).optional(),
-    postoNome: z.string().max(120).nullable().optional(),
+    postoNome: z.string().trim().max(120).nullable().optional(),
     tanqueCheio: z.boolean().optional(),
     observacao: z.string().max(500).nullable().optional(),
     veiculoId: z.string().uuid().optional(),

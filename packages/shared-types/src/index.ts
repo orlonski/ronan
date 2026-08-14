@@ -19,6 +19,7 @@ export * from "./veiculo";
 export * from "./material";
 export * from "./regra-minimo";
 export * from "./relatorio";
+export * from "./relatorio-abastecimento";
 export * from "./km-atipico";
 export * from "./user";
 export * from "./permissoes";

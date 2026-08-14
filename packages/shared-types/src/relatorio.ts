@@ -68,13 +68,25 @@ const filtrosBase = {
   transportadoraId: z.string().uuid().optional(),
 };
 
-const comPeriodoValido = <T extends z.ZodTypeAny>(schema: T) =>
+/**
+ * As duas regras de período, aplicadas a qualquer schema que tenha `de`/`ate`.
+ * Exportado porque o relatório de abastecimentos usa exatamente as mesmas —
+ * duas cópias divergiriam no dia em que MAX_DIAS mudar.
+ *
+ * O genérico é `z.ZodType<Out, _, In>` e NÃO `z.ZodTypeAny`: com `ZodTypeAny`,
+ * o `.refine` do zod devolve `ZodEffects<T, any, any>` e todo `z.infer` daqui
+ * pra baixo vira `any` — o que apagava a checagem de tipo de todas as querys de
+ * relatório (`q.agruparPor`, `q.formato`…) sem um único erro de compilação.
+ */
+export const comPeriodoValido = <Out extends { de: string; ate: string }, In>(
+  schema: z.ZodType<Out, z.ZodTypeDef, In>,
+): z.ZodType<Out, z.ZodTypeDef, In> =>
   schema
-    .refine((f: { de: string; ate: string }) => f.de <= f.ate, {
+    .refine((f) => f.de <= f.ate, {
       message: "A data final não pode ser antes da inicial.",
       path: ["ate"],
     })
-    .refine((f: { de: string; ate: string }) => diasEntre(f.de, f.ate) <= MAX_DIAS_RELATORIO, {
+    .refine((f) => diasEntre(f.de, f.ate) <= MAX_DIAS_RELATORIO, {
       message: `Período máximo de ${MAX_DIAS_RELATORIO} dias. Reduza o intervalo ou aplique um filtro.`,
       path: ["de"],
     });

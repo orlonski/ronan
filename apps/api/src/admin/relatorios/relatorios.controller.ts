@@ -1,7 +1,12 @@
 import { Controller, Get, Query, Res, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
-import { RelatorioViagensExportQuery, RelatorioViagensQuery } from "@ronan/shared-types";
+import {
+  RelatorioAbastecimentosExportQuery,
+  RelatorioAbastecimentosQuery,
+  RelatorioViagensExportQuery,
+  RelatorioViagensQuery,
+} from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
@@ -11,6 +16,8 @@ import { EscopoPor } from "../../common/escopo/escopo.decorator";
 import type { AuthAdminUser } from "../../auth/types";
 import { RelatoriosViagensService } from "./relatorios-viagens.service";
 import { RelatoriosExportService } from "./relatorios-export.service";
+import { RelatoriosAbastecimentosService } from "./relatorios-abastecimentos.service";
+import { RelatoriosAbastecimentosExportService } from "./relatorios-abastecimentos-export.service";
 import { exigirComercialParaDimensao, podeVerComercial } from "./comercial-relatorio";
 import { exigirComercialParaFiltros } from "../viagens/comercial";
 
@@ -26,6 +33,8 @@ export class RelatoriosController {
   constructor(
     private readonly viagens: RelatoriosViagensService,
     private readonly exportar: RelatoriosExportService,
+    private readonly abastecimentos: RelatoriosAbastecimentosService,
+    private readonly exportarAbastecimentos: RelatoriosAbastecimentosExportService,
   ) {}
 
   @EscopoPor("viagem")
@@ -63,17 +72,58 @@ export class RelatoriosController {
       ? await this.exportar.pdf(relatorio, detalhe, query)
       : await this.exportar.xlsx(relatorio, detalhe, query);
 
-    const nome = `relatorio-viagens-${query.de}_${query.ate}.${pdf ? "pdf" : "xlsx"}`;
-    res.setHeader(
-      "Content-Type",
-      pdf
-        ? "application/pdf"
-        : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    );
-    res.setHeader("Content-Disposition", `attachment; filename="${nome}"`);
-    // O arquivo carrega o recorte de quem pediu; cache intermediário serviria o
-    // recorte de um usuário pra outro.
-    res.setHeader("Cache-Control", "no-store");
-    res.send(buffer);
+    responderArquivo(res, buffer, `relatorio-viagens-${query.de}_${query.ate}`, pdf);
   }
+
+  /**
+   * Abastecimentos do período, agregados. Não passa pelo gate comercial do
+   * relatório de viagens de propósito: `empresa` aqui é o TOMADOR que paga o
+   * combustível, e a listagem de abastecimentos já mostra esse vínculo a quem
+   * tem `abastecimentos.ver` — gatear só neste ponto daria a falsa impressão de
+   * proteção sem esconder nada. O que restringe as linhas é o escopo de frota.
+   */
+  @EscopoPor("abastecimento")
+  @RequerPermissao("relatorios.ver")
+  @Get("abastecimentos")
+  resumoAbastecimentos(
+    @Query(new ZodValidationPipe(RelatorioAbastecimentosQuery))
+    query: RelatorioAbastecimentosQuery,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.abastecimentos.resumo(query, user.escopo);
+  }
+
+  @EscopoPor("abastecimento")
+  @RequerPermissao("relatorios.exportar")
+  @Get("abastecimentos/exportar")
+  async exportarAbastecimentosArquivo(
+    @Query(new ZodValidationPipe(RelatorioAbastecimentosExportQuery))
+    query: RelatorioAbastecimentosExportQuery,
+    @CurrentUser() user: AuthAdminUser,
+    @Res() res: Response,
+  ) {
+    const relatorio = await this.abastecimentos.resumo(query, user.escopo);
+    const detalhe = query.incluirDetalhe
+      ? await this.abastecimentos.detalhe(query, user.escopo, MAX_DETALHE_XLSX)
+      : null;
+
+    const pdf = query.formato === "pdf";
+    const buffer = pdf
+      ? await this.exportarAbastecimentos.pdf(relatorio, detalhe, query)
+      : await this.exportarAbastecimentos.xlsx(relatorio, detalhe, query);
+
+    responderArquivo(res, buffer, `relatorio-abastecimentos-${query.de}_${query.ate}`, pdf);
+  }
+}
+
+function responderArquivo(res: Response, buffer: Buffer, nome: string, pdf: boolean): void {
+  res.setHeader(
+    "Content-Type",
+    pdf ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  );
+  res.setHeader("Content-Disposition", `attachment; filename="${nome}.${pdf ? "pdf" : "xlsx"}"`);
+  // O arquivo carrega o recorte de quem pediu; cache intermediário serviria o
+  // recorte de um usuário pra outro.
+  res.setHeader("Cache-Control", "no-store");
+  res.send(buffer);
 }

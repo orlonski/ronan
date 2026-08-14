@@ -14,7 +14,11 @@ type ListAbastecimentosParams = PaginationQuery & {
   veiculoId?: string;
   empresaId?: string;
   semEmpresa?: "true" | "false";
+  transportadoraId?: string;
   tipo?: TipoCombustivel;
+  /** Nome exato do posto, sem diferenciar caixa. Usado pelo drill-down do relatório. */
+  posto?: string;
+  semPosto?: "true" | "false";
   de?: string;
   ate?: string;
 };
@@ -34,7 +38,16 @@ export class AbastecimentosAdminService {
     if (params.veiculoId) where.veiculoId = params.veiculoId;
     if (params.empresaId) where.empresaId = params.empresaId;
     if (params.semEmpresa === "true") where.empresaId = null;
+    if (params.transportadoraId) where.transportadoraId = params.transportadoraId;
     if (params.tipo) where.tipo = params.tipo;
+    // Posto é texto livre: comparação exata mas insensível a caixa, igual à
+    // chave de agrupamento do relatório — senão o drill-down de "Posto Shell"
+    // volta vazio porque o motorista digitou "posto shell".
+    if (params.posto) where.postoNome = { equals: params.posto, mode: "insensitive" };
+    // O grupo "(sem posto informado)" junta null e string vazia/em branco.
+    if (params.semPosto === "true") {
+      where.OR = [{ postoNome: null }, { postoNome: { equals: "" } }];
+    }
     if (params.de || params.ate) {
       // data é timestamp: ancorar nas fronteiras do dia civil de Brasília.
       // `lt` no dia seguinte do "ate" pra incluir o último dia inteiro.

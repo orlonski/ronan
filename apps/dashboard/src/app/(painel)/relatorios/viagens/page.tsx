@@ -30,6 +30,7 @@ import { usePermissoes } from "@/lib/permissoes";
 import { primeiroDiaDoMesSP, ultimoDiaDoMesSP } from "@/lib/datetime-br";
 import { fmtBRL, fmtNum } from "@/lib/fechamento-helpers";
 import { PeriodoPresets } from "../_components/periodo-presets";
+import { RelatorioTabs } from "../_components/relatorio-tabs";
 import { DetalheGrupoSheet } from "../_components/detalhe-grupo-sheet";
 import { Combobox } from "@/components/ui/combobox";
 
@@ -160,6 +161,8 @@ function Conteudo() {
           </div>
         )}
       </div>
+
+      <RelatorioTabs de={de} ate={ate} />
 
       <Card className="space-y-3 p-3">
         <div className="flex flex-wrap items-center gap-2">

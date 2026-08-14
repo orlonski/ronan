@@ -34,7 +34,12 @@ const ListAbastecimentosQuery = paginationQuerySchema.extend({
   veiculoId: z.string().uuid().optional(),
   empresaId: z.string().uuid().optional(),
   semEmpresa: z.enum(["true", "false"]).optional(),
+  transportadoraId: z.string().uuid().optional(),
   tipo: z.enum(["DIESEL_S10", "DIESEL_S500", "ARLA_32", "GASOLINA", "ETANOL"]).optional(),
+  // Nome exato do posto (sem diferenciar caixa) — o drill-down do relatório
+  // agrupa por posto e precisa reabrir a lista exatamente daquele grupo.
+  posto: z.string().min(1).max(120).optional(),
+  semPosto: z.enum(["true", "false"]).optional(),
   de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
