@@ -78,13 +78,26 @@ const WHERE_UNICO = new Set([
   "upsert",
 ]);
 
-/** Operações que gravam e precisam do carimbo no `data`. */
+/** Operações que gravam uma linha NOVA e precisam do carimbo no próprio `data`. */
 const ESCRITAS = new Set([
   "create",
   "createMany",
   "createManyAndReturn",
   "upsert",
 ]);
+
+/**
+ * Operações que alteram linha EXISTENTE — o `data` delas não leva carimbo (a
+ * linha já é da conta, garantido pelo `where` acima), mas pode trazer `create`
+ * ANINHADO, e esse sim precisa.
+ *
+ * Faltava, e o preço foi real: `viagem.update({ data: { trechos: { create } } })`
+ * gravava o trecho com o contaId default `__SEM_CONTA__`, que não existe na
+ * tabela de contas — a FK derrubava o finalizar inteiro com P2003, que o filtro
+ * traduzia como "um dos itens escolhidos não existe mais". Mensagem que manda o
+ * motorista procurar um cadastro sumido que estava lá o tempo todo.
+ */
+const ALTERACOES = new Set(["update", "updateMany", "updateManyAndReturn"]);
 
 /** model → (campo de relação → model do outro lado), derivado do próprio schema. */
 const RELACOES: Map<string, Map<string, string>> = new Map(
@@ -108,14 +121,20 @@ const ehObjeto = (v: unknown): v is Obj =>
  * gravaria a viagem certa e explodiria no NOT NULL do ponto — o Prisma não
  * herda campo escalar do pai pro filho.
  */
-function carimbar(model: string, data: unknown, contaId: string): void {
+function carimbar(
+  model: string,
+  data: unknown,
+  contaId: string,
+  /** false = só desce nos aninhados (caso do `update`: a linha já tem dono). */
+  carimbarTopo = true,
+): void {
   if (Array.isArray(data)) {
-    for (const item of data) carimbar(model, item, contaId);
+    for (const item of data) carimbar(model, item, contaId, carimbarTopo);
     return;
   }
   if (!ehObjeto(data)) return;
 
-  if (!MODELS_GLOBAIS.has(model)) data.contaId = contaId;
+  if (carimbarTopo && !MODELS_GLOBAIS.has(model)) data.contaId = contaId;
 
   const relacoes = RELACOES.get(model);
   if (!relacoes) return;
@@ -134,7 +153,23 @@ function carimbar(model: string, data: unknown, contaId: string): void {
       const bruto = valor[chave];
       if (!bruto) continue;
       for (const item of Array.isArray(bruto) ? bruto : [bruto]) {
-        if (ehObjeto(item) && item.create) carimbar(modelAlvo, item.create, contaId);
+        if (!ehObjeto(item)) continue;
+        if (item.create) carimbar(modelAlvo, item.create, contaId);
+        // O lado `update` do upsert altera linha existente: não leva carimbo
+        // próprio, mas pode ter create mais fundo.
+        if (item.update) carimbar(modelAlvo, item.update, contaId, false);
+      }
+    }
+
+    // Alteração aninhada (`{ update: { where, data } }`, `updateMany`): mesma
+    // regra do topo — não carimba, mas continua descendo.
+    for (const chave of ["update", "updateMany"] as const) {
+      const bruto = valor[chave];
+      if (!bruto) continue;
+      for (const item of Array.isArray(bruto) ? bruto : [bruto]) {
+        if (!ehObjeto(item)) continue;
+        const alvo = ehObjeto(item.data) ? item.data : item;
+        carimbar(modelAlvo, alvo, contaId, false);
       }
     }
   }
@@ -170,6 +205,12 @@ export const travaConta = Prisma.defineExtension({
           // que já é da conta porque o `where` acima garantiu isso.
           const alvo = operation === "upsert" ? a.create : a.data;
           if (alvo) carimbar(model, alvo, contaId);
+          // ...e o lado `update` do upsert ainda pode trazer create aninhado.
+          if (operation === "upsert" && a.update) {
+            carimbar(model, a.update, contaId, false);
+          }
+        } else if (ALTERACOES.has(operation) && a.data) {
+          carimbar(model, a.data, contaId, false);
         }
 
         return query(a);

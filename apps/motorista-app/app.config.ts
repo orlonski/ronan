@@ -6,7 +6,13 @@ const config: ExpoConfig = {
   name: "Movatruck",
   slug: "ronan-motorista",
   scheme: "ronan",
-  version: "1.1.0",
+  // 1.0.5, e não 1.1.0, enquanto o OTA sair na ilha 1.0.5 (ver runtimeVersion
+  // abaixo). O app reporta ESTA string pro backend — ela sai do manifesto do
+  // update, não do binário. Deixá-la em 1.1.0 fazia a frota inteira dizer que
+  // era 1.1.0 sendo 1.0.5 nativa: o painel mostrava versão errada e o gate de
+  // força-atualização passaria batido, porque o piso é comparado com o que o
+  // aparelho DIZ. Sobe pra 1.1.0 junto com o build de loja, não antes.
+  version: "1.0.5",
   orientation: "portrait",
   platforms: ["ios", "android"],
   icon: "./assets/icon.png",

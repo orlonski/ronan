@@ -1456,9 +1456,10 @@ export class ViagensMotoristaService {
       where: { id: input.materialId },
       select: { permiteBotaFora: true },
     });
+    if (!materialFin) throw new ItemInexistenteException("materialId");
     const trechosCreate = this.montarTrechos(
       input.trechos,
-      materialFin?.permiteBotaFora === true,
+      materialFin.permiteBotaFora === true,
       viagem.localCargaId,
     );
 
