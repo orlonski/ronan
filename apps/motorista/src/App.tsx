@@ -46,6 +46,7 @@ export default function App() {
             <Route path="/nova-viagem" element={<NovaViagemPage />} />
             <Route path="/nova-viagem/:clientId" element={<NovaViagemPage />} />
             <Route path="/novo-pedagio" element={<NovoPedagioPage />} />
+            <Route path="/novo-pedagio/:clientId" element={<NovoPedagioPage />} />
             <Route path="/novo-abastecimento" element={<NovoAbastecimentoPage />} />
             <Route path="/pendentes" element={<PendentesPage />} />
             <Route path="/notificacoes" element={<NotificacoesPage />} />

@@ -124,6 +124,36 @@ export async function tentarNovamenteViagemPendente(clientId: string): Promise<v
   void drain();
 }
 
+/**
+ * Regrava um pedágio pendente travado (mesmo clientId, payload novo). Espelha o
+ * `atualizarViagemPendente`: sem isso, pedágio recusado (placa que saiu do
+ * cadastro, viagem apagada) só tinha "tentar de novo" — que nunca ia passar — e
+ * "descartar". O clientId é mantido porque o servidor é idempotente por ele.
+ */
+export async function atualizarPedagioPendente(input: {
+  clientId: string;
+  payload: Record<string, unknown>;
+}): Promise<{ removed: boolean }> {
+  const list = await listPendingPedagios();
+  const existing = list.find((x) => x.clientId === input.clientId);
+  if (!existing) return { removed: true };
+
+  await upsertPendingPedagio({
+    clientId: existing.clientId,
+    payload: input.payload,
+    status: "pending",
+    attempts: 0,
+    createdAt: existing.createdAt,
+    lastTriedAt: undefined,
+    errorMsg: undefined,
+    errorStatus: undefined,
+    errorIssues: undefined,
+  });
+  notify();
+  void drain();
+  return { removed: false };
+}
+
 export async function tentarNovamentePedagioPendente(clientId: string): Promise<void> {
   const list = await listPendingPedagios();
   const item = list.find((x) => x.clientId === clientId);

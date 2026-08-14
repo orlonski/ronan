@@ -222,6 +222,7 @@ function ViagemCard({
 }
 
 function PedagioCard({ item, onDetalhes }: { item: PendingPedagio; onDetalhes: () => void }) {
+  const navigate = useNavigate();
   const p = item.payload as Record<string, string | number | undefined>;
   const temErro = item.status === "error";
 
@@ -252,6 +253,18 @@ function PedagioCard({ item, onDetalhes }: { item: PendingPedagio; onDetalhes: (
         <Button variant="outline" size="sm" onClick={onDetalhes} className="flex-1">
           Detalhes
         </Button>
+        {/* Corrigir vem antes de "tentar": quando o erro é cadastro que sumiu,
+            tentar de novo nunca passa e sem esse botão só sobrava descartar. */}
+        {temErro && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            onClick={() => navigate(`/novo-pedagio/${item.clientId}`)}
+          >
+            <Pencil size={16} /> Editar
+          </Button>
+        )}
         {temErro && (
           <Button
             size="sm"

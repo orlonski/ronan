@@ -491,14 +491,17 @@ function PendingCard({
   const temIssues = !!item.errorIssues && item.errorIssues.length > 0;
   const cabecalho = resumoCard(row, lookups);
 
-  // Só abastecimento tem edição hoje (form suporta editarClientId). Viagem já
-  // tinha; pedágio ainda não.
+  // Viagem, abastecimento e pedágio abrem o próprio form em modo correção
+  // (`editarClientId`). Pedágio entrou por último: sem ele, um lançamento
+  // recusado (placa fora do cadastro) só tinha "excluir" como saída.
   const editarRota =
     row.kind === "viagem"
       ? "/nova-viagem"
       : row.kind === "abastecimento"
         ? "/novo-abastecimento"
-        : null;
+        : row.kind === "pedagio"
+          ? "/novo-pedagio"
+          : null;
 
   return (
     <Swipeable

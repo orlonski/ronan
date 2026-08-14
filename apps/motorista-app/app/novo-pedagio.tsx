@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { router, Stack } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { Check } from "lucide-react-native";
 import {
@@ -22,10 +22,17 @@ import { fmtDataBR, hojeISO } from "@/lib/datetime";
 import { humanizeZodError } from "@/lib/validation";
 import { CriarPedagioInput } from "@ronan/shared-types";
 import { useCatalogos, useCriarPedagio, useMe } from "@/lib/queries";
+import { atualizarPedagioPendente } from "@/lib/sync";
+import { listPendingPedagios } from "@/db/database";
 
 const today = hojeISO;
 
 export default function NovoPedagio() {
+  // Mesma tela serve pra corrigir um pedágio que ficou preso nos pendentes
+  // (placa que saiu do cadastro, viagem apagada). Sem isso o único caminho era
+  // excluir o lançamento — ver `atualizarPedagioPendente`.
+  const { editarClientId } = useLocalSearchParams<{ editarClientId?: string }>();
+  const editando = !!editarClientId;
   const me = useMe();
   const cat = useCatalogos();
   const criar = useCriarPedagio();
@@ -38,10 +45,31 @@ export default function NovoPedagio() {
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
-    if (me.data?.veiculoDefaultId && !veiculoId) {
+    // No modo correção quem manda é o que já estava lançado, não o padrão.
+    if (!editando && me.data?.veiculoDefaultId && !veiculoId) {
       setVeiculoId(me.data.veiculoDefaultId);
     }
   }, [me.data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Carrega o pedágio pendente pra editar e preenche os campos.
+  useEffect(() => {
+    if (!editarClientId) return;
+    let vivo = true;
+    void (async () => {
+      const item = (await listPendingPedagios()).find(
+        (x) => x.clientId === editarClientId,
+      );
+      if (!vivo || !item) return;
+      const p = item.payload as Record<string, unknown>;
+      if (p.veiculoId) setVeiculoId(String(p.veiculoId));
+      if (p.data) setData(String(p.data).slice(0, 10));
+      if (p.pracaPedagio) setPracaPedagio(String(p.pracaPedagio));
+      if (p.valor != null) setValor(String(p.valor).replace(".", ","));
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [editarClientId]);
 
   const veiculoOptions: SelectOption[] = useMemo(
     () =>
@@ -92,7 +120,8 @@ export default function NovoPedagio() {
     setSubmitting(true);
     try {
       const payload = {
-        clientId: makeUuid(),
+        // Editando: mantém o MESMO clientId (idempotência no servidor).
+        clientId: editarClientId ?? makeUuid(),
         veiculoId,
         data: dataFinal,
         pracaPedagio: pracaPedagio.trim(),
@@ -107,7 +136,21 @@ export default function NovoPedagio() {
         return;
       }
 
-      await criar(payload);
+      if (editando) {
+        const res = await atualizarPedagioPendente({
+          clientId: editarClientId!,
+          payload,
+        });
+        if (res.removed) {
+          void showAlert({
+            title: "Já sincronizado",
+            message: "Esse pedágio já tinha sido enviado. Nada a corrigir.",
+            variant: "default",
+          });
+        }
+      } else {
+        await criar(payload);
+      }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
     } catch (err) {
@@ -122,7 +165,7 @@ export default function NovoPedagio() {
     <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <ScreenHeader title="Novo pedágio" />
+      <ScreenHeader title={editando ? "Corrigir pedágio" : "Novo pedágio"} />
 
       {(cat.isLoading || me.isLoading) && !cat.data && !me.data && (
         <View className="items-center py-8">
@@ -186,7 +229,11 @@ export default function NovoPedagio() {
             <Button size="lg" className="h-20" onPress={salvar} loading={submitting}>
               <Check size={24} color="white" />
               <Text className="text-xl font-bold text-primary-foreground">
-                {submitting ? "Salvando..." : "Salvar pedágio"}
+                {submitting
+                  ? "Salvando..."
+                  : editando
+                    ? "Salvar correção"
+                    : "Salvar pedágio"}
               </Text>
             </Button>
           </ScrollView>

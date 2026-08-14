@@ -283,6 +283,43 @@ export async function atualizarAbastecimentoPendente(input: {
   return { removed: false };
 }
 
+/**
+ * Regrava um pedágio pendente que ficou travado (mesmo clientId, payload novo).
+ *
+ * Existia pra viagem e pra abastecimento, e faltava justamente aqui: pedágio
+ * recusado — placa que saiu do cadastro, viagem apagada no painel — só tinha
+ * "tentar de novo" (que nunca ia passar) e "excluir". Beco sem saída, e o
+ * lançamento morria por falta de caminho, não por falta de dado.
+ *
+ * Mantém o `clientId` de propósito: o servidor é idempotente por ele, então se
+ * o pedágio tiver subido enquanto o motorista editava, o reenvio devolve o que
+ * já existe em vez de duplicar.
+ */
+export async function atualizarPedagioPendente(input: {
+  clientId: string;
+  payload: Record<string, unknown>;
+}): Promise<{ removed: boolean }> {
+  const list = await listPendingPedagios();
+  const existing = list.find((x) => x.clientId === input.clientId);
+  if (!existing) return { removed: true };
+
+  await upsertPendingPedagio({
+    clientId: existing.clientId,
+    payload: input.payload,
+    status: "pending",
+    attempts: 0,
+    createdAt: existing.createdAt,
+    lastTriedAt: undefined,
+    errorMsg: undefined,
+    errorStatus: undefined,
+    errorIssues: undefined,
+    errorPermanenteLocal: undefined,
+  });
+  notify();
+  void drain();
+  return { removed: false };
+}
+
 export async function descartarPedagioPendente(clientId: string): Promise<void> {
   await deletePendingPedagio(clientId);
   notify();
@@ -855,6 +892,23 @@ export type DrainResumo = {
 };
 
 /** Total de itens no outbox (todos os tipos) + o motivo da última falha salva. */
+/**
+ * Teto de voltas do lifecycle numa passada só. Alto o bastante pra escoar o
+ * backlog de um dia inteiro de viagens guiadas, baixo o bastante pra nunca
+ * virar laço infinito se algum item passar a "escoar" sem sair da fila.
+ */
+const MAX_VOLTAS_LIFECYCLE = 15;
+
+/** Itens do fluxo guiado ainda na fila (iniciar + eventos + finalizar). */
+async function totalLifecyclePendente(): Promise<number> {
+  const listas = await Promise.all([
+    listPendingViagemIniciar(),
+    listPendingEventosViagem(),
+    listPendingViagemFinalizar(),
+  ]);
+  return listas.flat().length;
+}
+
 async function snapshotPendentes(): Promise<{ total: number; motivo?: string }> {
   const listas = await Promise.all([
     listPendingViagens(),
@@ -912,9 +966,24 @@ export async function drain(opts?: { force?: boolean }): Promise<DrainResumo> {
     await drainViagemCancelar();
     // Lifecycle guiado, em ordem: iniciar (cria a viagem) → eventos → finalizar.
     // Gates internos garantem que evento/finalizar só vão depois da viagem-mãe.
-    await drainViagemIniciar();
-    await drainEventosViagem();
-    await drainViagemFinalizar();
+    //
+    // O laço existe porque o servidor só aceita UMA viagem EM_ANDAMENTO por
+    // motorista: numa volta, a primeira viagem entra e as outras levam 409 de
+    // bloqueio; quem libera a vaga é o `finalizar`, que roda DEPOIS do
+    // `iniciar`. Sem repetir, cada passada subia no máximo uma viagem guiada —
+    // 10 viagens paradas viravam 10 toques em "Sincronizar" (ou 10 minutos de
+    // app aberto), e pro motorista isso é indistinguível de estar travado.
+    // Para na primeira volta que não escoou nada: se não saiu ninguém, a vaga
+    // não é o problema (offline, backoff, ou a bloqueadora é uma viagem presa
+    // que só o escritório cancela) e insistir seria rajada de request à toa.
+    for (let volta = 0; volta < MAX_VOLTAS_LIFECYCLE; volta++) {
+      const pendentesAntes = await totalLifecyclePendente();
+      await drainViagemIniciar();
+      await drainEventosViagem();
+      await drainViagemFinalizar();
+      const pendentesDepois = await totalLifecyclePendente();
+      if (pendentesDepois === 0 || pendentesDepois >= pendentesAntes) break;
+    }
     await drainViagens();
     // Fotos DEPOIS de viagens: foto pode estar referenciando viagem que
     // acabou de ser sincronizada (raro mas possível).
