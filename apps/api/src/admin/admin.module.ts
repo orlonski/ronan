@@ -29,6 +29,7 @@ import { ResumoModule } from "./resumo/resumo.module";
 import { PermissoesModule } from "./permissoes/permissoes.module";
 import { PapeisModule } from "./papeis/papeis.module";
 import { ContasModule } from "./contas/contas.module";
+import { LancamentosResgatadosAdminModule } from "./lancamentos-resgatados/lancamentos-resgatados.module";
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { ContasModule } from "./contas/contas.module";
     PapeisModule,
     ContasModule,
     DemandasModule,
+    LancamentosResgatadosAdminModule,
   ],
 })
 export class AdminModule {}

@@ -8,6 +8,7 @@ import type { Prisma } from "@prisma/client";
 import type { CriarAbastecimentoInput } from "@ronan/shared-types";
 import { resolverTransportadora } from "../common/transportadora";
 import { ItemInexistenteException } from "../common/item-inexistente";
+import { LancamentosResgatadosService } from "../lancamentos-resgatados/lancamentos-resgatados.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
 import { mesRange } from "./viagens.service";
@@ -23,6 +24,7 @@ export class AbastecimentosMotoristaService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly uploads: UploadsService,
+    private readonly resgates: LancamentosResgatadosService,
   ) {}
 
   async list(
@@ -145,6 +147,7 @@ export class AbastecimentosMotoristaService {
       motoristaId,
       rest.veiculoId,
     );
+    void this.resgates.marcarQueSubiu(input.clientId);
     return this.prisma.abastecimento.create({
       data: {
         clientId,

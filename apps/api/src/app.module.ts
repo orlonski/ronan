@@ -7,6 +7,7 @@ import { EscopoModule } from "./common/escopo/escopo.module";
 import { HealthModule } from "./health/health.module";
 import { AuthModule } from "./auth/auth.module";
 import { AdminModule } from "./admin/admin.module";
+import { LancamentosResgatadosModule } from "./lancamentos-resgatados/lancamentos-resgatados.module";
 import { GeocodingModule } from "./geocoding/geocoding.module";
 import { MotoristaModule } from "./motorista/motorista.module";
 import { ChatModule } from "./chat/chat.module";
@@ -35,6 +36,7 @@ import { PrismaExceptionFilter } from "./common/prisma-exception.filter";
     IaModule,
     AuthModule,
     AdminModule,
+    LancamentosResgatadosModule,
     MotoristaModule,
     ChatModule,
     UploadsModule,

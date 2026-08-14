@@ -69,6 +69,10 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // por cliente É a carteira, e as colunas de km/toneladas faturados são as
   // mesmas que `admin/viagens/comercial.ts` omite de quem não tem a chave.
   { recurso: "relatorios", label: "Relatórios", modulo: "Operação", acoes: ["ver", "exportar"] },
+  // Lançamentos que o app não conseguiu enviar e ficaram guardados aqui pra não
+  // se perder. "resolver" é o que encerra o caso (lançado na mão / descartado) —
+  // separado do "ver" porque encerrar é decisão, não leitura.
+  { recurso: "lancamentos-resgatados", label: "Lançamentos travados", modulo: "Operação", acoes: ["ver", "resolver"] },
   { recurso: "notificacoes", label: "Notificações", modulo: "Operação", acoes: ["ver", "excluir"] },
   { recurso: "demandas", label: "Demandas do agente", modulo: "Operação", acoes: ["ver", "criar"] },
   // Chat dos motoristas. "ver" abre a tela (avisos + denúncias), "avisar"

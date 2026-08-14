@@ -40,6 +40,7 @@ import { StoriesMotoristaController } from "./stories.controller";
 import { StoriesMotoristaService } from "./stories.service";
 import { StoriesCleanupService } from "./stories-cleanup.service";
 import { VersaoAppMotoristaController } from "./versao-app.controller";
+import { LancamentosResgatadosMotoristaController } from "./lancamentos-resgatados.controller";
 
 @Module({
   imports: [
@@ -75,6 +76,7 @@ import { VersaoAppMotoristaController } from "./versao-app.controller";
     PosicaoMotoristaController,
     StoriesMotoristaController,
     VersaoAppMotoristaController,
+    LancamentosResgatadosMotoristaController,
   ],
   providers: [
     MotoristaService,

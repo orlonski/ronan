@@ -64,6 +64,7 @@ const ROTA_PERM: { prefixo: string; perm: string }[] = [
   { prefixo: "/abastecimentos", perm: "abastecimentos.ver" },
   { prefixo: "/fechamentos", perm: "fechamentos.ver" },
   { prefixo: "/envios", perm: "envios.ver" },
+  { prefixo: "/lancamentos-travados", perm: "lancamentos-resgatados.ver" },
   { prefixo: "/notificacoes", perm: "notificacoes.ver" },
   { prefixo: "/demandas", perm: "demandas.ver" },
   { prefixo: "/motoristas", perm: "motoristas.ver" },

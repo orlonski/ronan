@@ -33,6 +33,7 @@ import { KmReprocessamentoService } from "./km-reprocessamento.service";
 import { KmAtipicoService } from "../km-atipico/km-atipico.service";
 import { ViagemMensagensService } from "../viagem-mensagens/viagem-mensagens.service";
 import { AvisoPesoService } from "./aviso-peso.service";
+import { LancamentosResgatadosService } from "../lancamentos-resgatados/lancamentos-resgatados.service";
 
 const VIAGEM_INCLUDE = {
   veiculo: { select: { id: true, placa: true, modelo: true } },
@@ -91,6 +92,7 @@ export class ViagensMotoristaService {
     private readonly avisos: AvisoPesoService,
     private readonly kmAtipico: KmAtipicoService,
     private readonly mensagens: ViagemMensagensService,
+    private readonly resgates: LancamentosResgatadosService,
   ) {}
 
   /** Regras de mínimo por faixa ativas (empresa+material+faixa de km). */
@@ -796,6 +798,9 @@ export class ViagensMotoristaService {
         include: VIAGEM_INCLUDE,
       });
       if (!existente) return null;
+      // Chegou (mesmo que por reenvio): se havia cópia de segurança desse
+      // lançamento esperando no painel, o caso está encerrado.
+      void this.resgates.marcarQueSubiu(input.clientId);
       return serializarViagemComMinimos(existente, await this.regrasMinimoAtivas());
     }
 
@@ -953,6 +958,8 @@ export class ViagensMotoristaService {
       },
       include: VIAGEM_INCLUDE,
     });
+
+    void this.resgates.marcarQueSubiu(clientId);
 
     // Backfill: eventos enviados antes da viagem chegar (offline) usam
     // viagemClientId. Agora que a viagem existe, linka viagemId pros eventos
@@ -1297,6 +1304,8 @@ export class ViagensMotoristaService {
       },
       include: { ...VIAGEM_INCLUDE, eventosViagem: { orderBy: { ocorridoEm: "asc" } } },
     });
+
+    void this.resgates.marcarQueSubiu(input.clientId);
 
     // Eventos disparados offline antes da viagem existir linkam por clientId.
     try {

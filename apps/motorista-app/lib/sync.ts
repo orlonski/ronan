@@ -842,6 +842,67 @@ function reportarFalhaOutbox(
   });
 }
 
+/**
+ * Tipos cujo conteúdo vale guardar no servidor quando o envio morre.
+ *
+ * Fora daqui: foto, story e mensagem de chat. Não é desprezo — é que o valor
+ * deles está no arquivo/anexo, que não cabe nesse payload, e nenhum deles é
+ * lançamento que entra em fechamento. O que não pode sumir é o que vira
+ * dinheiro no fim do mês.
+ */
+const TIPOS_RESGATAVEIS: Record<string, string> = {
+  viagem: "viagem",
+  "viagem-iniciar": "viagem-iniciar",
+  "viagem-finalizar": "viagem-finalizar",
+  pedagio: "pedagio",
+  abastecimento: "abastecimento",
+  local: "local",
+  "completar-peso": "completar-peso",
+};
+
+/**
+ * Manda pro servidor a CÓPIA do lançamento que morreu — payload e tudo.
+ *
+ * O `reportarFalhaOutbox` acima conta que algo travou; isto guarda o que
+ * travou. A diferença importa: com a mensagem de erro dá pra investigar, com o
+ * payload dá pra relançar. Enquanto isso não existia, o conteúdo de um
+ * lançamento recusado morava só dentro do celular — bastava o motorista tocar
+ * em "excluir" pra limpar a tela, trocar de aparelho ou reinstalar o app, e a
+ * viagem sumia sem ninguém no escritório ter chance de saber que existiu.
+ *
+ * Best-effort de verdade: falha aqui é engolida e NÃO mexe no item do outbox.
+ * Ele continua no aparelho, continua editável, continua contando na tela. Isto
+ * é uma segunda cópia, nunca a primeira.
+ */
+function resgatarLancamento(
+  tipo: string,
+  payload: unknown,
+  clientId: string | undefined,
+  msg: string,
+  status?: number,
+): void {
+  const tipoResgate = TIPOS_RESGATAVEIS[tipo];
+  if (!tipoResgate || !clientId) return;
+  if (!payload || typeof payload !== "object") return;
+
+  void api
+    .post(
+      "/m/lancamentos-travados",
+      {
+        clientId,
+        tipo: tipoResgate,
+        payload,
+        erroMensagem: msg.slice(0, 500),
+        ...(status ? { erroStatus: status } : {}),
+      },
+      // outbox: usa o timeout mais folgado da fila, não o de tela.
+      { outbox: true },
+    )
+    .catch(() => {
+      /* sem internet agora: a próxima morte do mesmo item reenvia (upsert). */
+    });
+}
+
 /** Idem, pra foto que sumiu do aparelho antes de conseguir subir. */
 function reportarFotoPerdida(tipo: string, clientId: string, uri?: string): void {
   void reportarErro(new Error(`Foto do outbox sumiu do aparelho (${tipo})`), {
@@ -1650,6 +1711,9 @@ function proximoEstadoFalha<T extends ComErro & { clientId?: string }>(
   // não a cada passada.
   if (tipo && attempts >= MAX_ATTEMPTS) {
     reportarFalhaOutbox(tipo, item.clientId, msg, status, issues);
+    // A cópia de segurança sai no mesmo instante: é aqui que o lançamento passa
+    // a depender de o motorista não desistir dele.
+    resgatarLancamento(tipo, (item as { payload?: unknown }).payload, item.clientId, msg, status);
   }
   return {
     ...item,

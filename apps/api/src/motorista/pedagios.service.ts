@@ -7,6 +7,7 @@ import type { Prisma } from "@prisma/client";
 import type { CriarPedagioInput } from "@ronan/shared-types";
 import { garantirCadastro } from "../common/item-inexistente";
 import { resolverTransportadora } from "../common/transportadora";
+import { LancamentosResgatadosService } from "../lancamentos-resgatados/lancamentos-resgatados.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { mesRange } from "./viagens.service";
 
@@ -17,7 +18,10 @@ const PEDAGIO_INCLUDE = {
 
 @Injectable()
 export class PedagiosMotoristaService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly resgates: LancamentosResgatadosService,
+  ) {}
 
   async list(
     motoristaId: string,
@@ -98,6 +102,7 @@ export class PedagiosMotoristaService {
       motoristaId,
       input.veiculoId,
     );
+    void this.resgates.marcarQueSubiu(input.clientId);
     return this.prisma.pedagio.create({
       data: {
         clientId: input.clientId,

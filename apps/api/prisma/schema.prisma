@@ -281,6 +281,7 @@ model Conta {
   configuracoesForcaAtualizacao ConfiguracaoForcaAtualizacao[]
   camposLayout                  CampoLayout[]
   errorLogs                     ErrorLog[]
+  lancamentosResgatados         LancamentoResgatado[]
   eventosMotorista              EventoMotorista[]
   abastecimentos                Abastecimento[]
   abastecimentoFotos            AbastecimentoFoto[]
@@ -331,6 +332,7 @@ model User {
   resolucoes                 FechamentoLinha[]
   envios                     EnvioFechamento[]
   auditorias                 AuditLog[]
+  resgatesResolvidos         LancamentoResgatado[]
   layoutsEnvio               LayoutEnvio[]
   configsTracking            ConfiguracaoTracking[]
   configsIa                  ConfiguracaoIa[]
@@ -540,31 +542,32 @@ model Motorista {
   criadoEm                DateTime        @default(now())
   alteradoEm              DateTime        @updatedAt
 
-  viagens            Viagem[]
-  pedagios           Pedagio[]
-  abastecimentos     Abastecimento[]
-  veiculos           MotoristaVeiculo[]
-  documentos         MotoristaDocumento[]
-  locaisCriados      Local[]                   @relation("LocalCriadoPor")
-  evidenciasLocal    LocalEvidencia[]
-  whatsappSessao     WhatsappSessao?
-  whatsappConvites   WhatsappConvite[]
-  notificacoes       Notificacao[]
-  eventos            EventoMotorista[]
-  mensagensViagem    ViagemMensagem[]          @relation("MensagensViagem")
-  mensagensChat      MensagemChat[]            @relation("MensagensChat")
-  participacoesChat  ConversaParticipante[]    @relation("ParticipacoesChat")
-  bloqueiosFeitos    BloqueioChat[]            @relation("BloqueiosFeitos")
-  bloqueiosRecebidos BloqueioChat[]            @relation("BloqueiosRecebidos")
-  denunciasChat      DenunciaMensagemChat[]    @relation("DenunciasChat")
-  posicaoConfig      MotoristaPosicaoConfig?
-  posicoes           MotoristaPosicao[]
-  stories            Story[]
-  storyVisualizacoes StoryVisualizacao[]
-  storyReacoes       StoryReacao[]
-  redefinicaoSenha   RedefinicaoSenhaPendente?
-  criadoPor          User?                     @relation("CriouMotorista", fields: [criadoPorId], references: [id], onDelete: SetNull)
-  criadoPorId        String?
+  viagens               Viagem[]
+  pedagios              Pedagio[]
+  abastecimentos        Abastecimento[]
+  veiculos              MotoristaVeiculo[]
+  documentos            MotoristaDocumento[]
+  locaisCriados         Local[]                   @relation("LocalCriadoPor")
+  evidenciasLocal       LocalEvidencia[]
+  whatsappSessao        WhatsappSessao?
+  whatsappConvites      WhatsappConvite[]
+  notificacoes          Notificacao[]
+  eventos               EventoMotorista[]
+  mensagensViagem       ViagemMensagem[]          @relation("MensagensViagem")
+  mensagensChat         MensagemChat[]            @relation("MensagensChat")
+  participacoesChat     ConversaParticipante[]    @relation("ParticipacoesChat")
+  bloqueiosFeitos       BloqueioChat[]            @relation("BloqueiosFeitos")
+  bloqueiosRecebidos    BloqueioChat[]            @relation("BloqueiosRecebidos")
+  denunciasChat         DenunciaMensagemChat[]    @relation("DenunciasChat")
+  posicaoConfig         MotoristaPosicaoConfig?
+  posicoes              MotoristaPosicao[]
+  stories               Story[]
+  lancamentosResgatados LancamentoResgatado[]
+  storyVisualizacoes    StoryVisualizacao[]
+  storyReacoes          StoryReacao[]
+  redefinicaoSenha      RedefinicaoSenhaPendente?
+  criadoPor             User?                     @relation("CriouMotorista", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId           String?
 
   @@unique([contaId, cpf])
   @@index([ativo])
@@ -1619,6 +1622,62 @@ model ViagemCompartilhamento {
 /// motoristas veem. Efêmero — expira em 24h (job de limpeza remove foto do
 /// MinIO + registro). O feed filtra por expiraEm > now, então nunca aparece
 /// expirado mesmo que a limpeza atrase. clientId dá idempotência ao outbox.
+/// A cópia de segurança de um lançamento que o app não conseguiu enviar.
+///
+/// Regra que isso existe pra garantir: lançamento que o motorista fez NÃO some.
+/// Quando o outbox recusa um item de vez (4xx: placa excluída, cliente apagado,
+/// ticket repetido), o conteúdo dele mora num lugar só — o celular. Basta o
+/// motorista descartar pra limpar a tela, trocar de aparelho ou reinstalar, e a
+/// viagem evapora sem ninguém no escritório saber que existiu.
+///
+/// Nenhuma coluna daqui aponta pra cadastro (o payload é Json solto), e é de
+/// propósito: esta gravação não pode falhar pelo mesmo motivo que derrubou o
+/// lançamento original. Se ela dependesse do veiculoId, morreria junto.
+///
+/// Não substitui o outbox — o item continua no celular e continua podendo ser
+/// corrigido lá. Isto é a segunda cópia, pra quando o celular não colaborar.
+model LancamentoResgatado {
+  contaId         String            @default("__SEM_CONTA__")
+  conta           Conta             @relation(fields: [contaId], references: [id])
+  id              String            @id @default(uuid())
+  /// O mesmo clientId do outbox: reenvio atualiza a linha em vez de duplicar, e
+  /// é por ele que o backend reconhece quando o lançamento finalmente entrou.
+  clientId        String
+  tipo            String
+  motorista       Motorista         @relation(fields: [motoristaId], references: [id])
+  motoristaId     String
+  /// Snapshot do nome: a tela precisa continuar legível mesmo se o cadastro do
+  /// motorista mudar de nome depois.
+  motoristaNome   String
+  payload         Json
+  erroMensagem    String?
+  erroStatus      Int?
+  appVersao       String?
+  criadoOfflineEm DateTime?
+  recebidoEm      DateTime          @default(now())
+  atualizadoEm    DateTime          @updatedAt
+  resolucao       ResolucaoResgate?
+  resolvidoEm     DateTime?
+  resolvidoPor    User?             @relation(fields: [resolvidoPorId], references: [id])
+  resolvidoPorId  String?
+  observacao      String?
+
+  @@unique([clientId, tipo])
+  @@index([contaId, resolvidoEm])
+  @@index([motoristaId])
+  @@map("lancamentos_resgatados")
+}
+
+/// SUBIU_SOZINHO é carimbo do BACKEND, não escolha de quem está na tela: vale
+/// quando o lançamento daquele clientId acabou entrando (o motorista corrigiu no
+/// app, ou o cadastro voltou). Sem ele a tela encheria de caso já resolvido — e
+/// tela cheia de ruído é tela que ninguém abre.
+enum ResolucaoResgate {
+  SUBIU_SOZINHO
+  LANCADO_NO_PAINEL
+  DESCARTADO
+}
+
 model Story {
   contaId       String              @default("__SEM_CONTA__")
   conta         Conta               @relation(fields: [contaId], references: [id])

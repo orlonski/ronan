@@ -355,6 +355,38 @@ async function rescueStaleItems(): Promise<void> {
   }
 }
 
+/**
+ * Manda pro servidor a CÓPIA do lançamento que morreu de vez.
+ *
+ * Enquanto isso não existia, o conteúdo de um lançamento recusado (4xx: placa
+ * excluída, cliente apagado) morava num lugar só — dentro deste navegador.
+ * Bastava o motorista descartar pra limpar a tela, trocar de aparelho ou o iOS
+ * expurgar o IndexedDB, e a viagem sumia sem ninguém no escritório saber que
+ * existiu. O painel tem a tela "Lançamentos travados" pra isso.
+ *
+ * Best-effort: falha aqui é engolida e NÃO mexe no item pendente. Ele continua
+ * aqui, continua editável, continua contando na tela. É a segunda cópia.
+ */
+function resgatarLancamento(
+  tipo: "viagem" | "pedagio" | "abastecimento" | "local",
+  item: { clientId: string; payload?: unknown },
+  msg: string,
+  status?: number,
+): void {
+  if (!item.payload || typeof item.payload !== "object") return;
+  void api
+    .post("/m/lancamentos-travados", {
+      clientId: item.clientId,
+      tipo,
+      payload: item.payload,
+      erroMensagem: msg.slice(0, 500),
+      ...(status ? { erroStatus: status } : {}),
+    })
+    .catch(() => {
+      /* sem internet agora: a próxima falha do mesmo item reenvia (upsert). */
+    });
+}
+
 async function drainFotos(): Promise<void> {
   const list = await listPendingFotos();
   for (const item of list) {
@@ -411,6 +443,9 @@ async function processLocal(item: PendingLocal): Promise<void> {
   } catch (err) {
     const permanente = isErroPermanente(err);
     const { msg, status, issues } = extractErrorDetails(err);
+    // Morreu de vez: guarda a cópia no servidor antes que o lançamento
+    // dependa de o motorista não desistir dele.
+    if (permanente) resgatarLancamento("local", item, msg, status);
     await upsertPendingLocal({
       ...item,
       status: "error",
@@ -463,6 +498,9 @@ async function processViagem(item: PendingViagem): Promise<void> {
   } catch (err) {
     const permanente = isErroPermanente(err);
     const { msg, status, issues } = extractErrorDetails(err);
+    // Morreu de vez: guarda a cópia no servidor antes que o lançamento
+    // dependa de o motorista não desistir dele.
+    if (permanente) resgatarLancamento("viagem", item, msg, status);
     await upsertPendingViagem({
       ...item,
       status: "error",
@@ -494,6 +532,9 @@ async function processPedagio(item: PendingPedagio): Promise<void> {
   } catch (err) {
     const permanente = isErroPermanente(err);
     const { msg, status, issues } = extractErrorDetails(err);
+    // Morreu de vez: guarda a cópia no servidor antes que o lançamento
+    // dependa de o motorista não desistir dele.
+    if (permanente) resgatarLancamento("pedagio", item, msg, status);
     await upsertPendingPedagio({
       ...item,
       status: "error",
@@ -542,6 +583,9 @@ async function processAbastecimento(item: PendingAbastecimento): Promise<void> {
   } catch (err) {
     const permanente = isErroPermanente(err);
     const { msg, status, issues } = extractErrorDetails(err);
+    // Morreu de vez: guarda a cópia no servidor antes que o lançamento
+    // dependa de o motorista não desistir dele.
+    if (permanente) resgatarLancamento("abastecimento", item, msg, status);
     await upsertPendingAbastecimento({
       ...item,
       status: "error",
