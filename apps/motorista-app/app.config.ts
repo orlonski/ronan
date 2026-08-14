@@ -139,7 +139,23 @@ const config: ExpoConfig = {
   // sobre nativo velho), mas exige o hábito: depois de publicar, conferir com
   // `eas update:list` que o runtime bate com o do build que está nas lojas.
   // Pra ver o hash atual: `pnpm exec expo-updates fingerprint:generate --platform ios`.
-  runtimeVersion: { policy: "fingerprint" },
+  // FIXADO EM 1.0.5 POR DECISÃO DE 14/08/2026, e não é a política definitiva.
+  //
+  // A frota inteira roda o build 1.0.5, e todo update que ela recebeu saiu com
+  // esse runtime. Publicar com fingerprint agora geraria um runtime que
+  // NENHUM aparelho instalado tem: o OTA sai "com sucesso" e não alcança
+  // ninguém, em silêncio. Enquanto a 1.1.0 não estiver viva nas lojas, é aqui
+  // que os aparelhos estão — e segurar correção esperando por isso já custou
+  // motorista com viagem parada sem conserto no app.
+  //
+  // Só é seguro porque a camada nativa não mudou desde o build 1.0.5: o
+  // package.json do app não muda desde 12/08 e nenhum módulo nativo entrou.
+  // Antes de publicar de novo, conferir isso — JS novo sobre nativo velho que
+  // não tem o módulo é crash de boot.
+  //
+  // QUANDO A 1.1.0 SUBIR PRAS LOJAS: apagar esta linha e voltar
+  // `{ policy: "fingerprint" }` (ver commit 9da33a5 pro porquê da política).
+  runtimeVersion: "1.0.5",
   updates: {
     fallbackToCacheTimeout: 0,
     url: "https://u.expo.dev/33e8e936-fbac-4bb3-9f98-5de6dc84da53",
