@@ -22,8 +22,11 @@ export const SEM_JUSTIFICATIVA =
   "Lançada sem foto e sem justificativa (app desatualizado ou foto perdida no aparelho).";
 
 export type ContextoFotoViagem = {
-  /** `false`/ausente quando a empresa não exige (o padrão). */
-  empresaExige?: boolean | null;
+  /**
+   * `Conta.exigeFotoViagem` — a política é da TRANSPORTADORA, não da contraparte.
+   * `false`/ausente quando não exige (o padrão).
+   */
+  contaExige?: boolean | null;
   /** `Material.temComprovanteFoto` — false = material que não gera papel. */
   materialTemComprovante?: boolean | null;
   /** `TipoServico.exigeTicket` — diária não tem ticket, logo não tem foto dele. */
@@ -31,14 +34,14 @@ export type ContextoFotoViagem = {
 };
 
 /**
- * A empresa exige a foto E existe comprovante pra fotografar?
+ * A transportadora exige a foto E existe comprovante pra fotografar?
  *
  * As duas supressões são deliberadas: cobrar foto de concreto (que não gera
  * ticket) ou de uma diária (que não tem romaneio) deixaria o motorista preso
  * pedindo foto de um papel que não existe.
  */
 export function exigeFotoDaViagem(ctx: ContextoFotoViagem): boolean {
-  if (ctx.empresaExige !== true) return false;
+  if (ctx.contaExige !== true) return false;
   if (ctx.materialTemComprovante === false) return false;
   if (ctx.modoExigeTicket === false) return false;
   return true;

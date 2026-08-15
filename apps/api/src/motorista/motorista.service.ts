@@ -942,6 +942,17 @@ export class MotoristaService {
       select: { podeDiaria: true },
     });
 
+    // Política de comprovante da CONTA. Vai no catálogo pra o app conseguir
+    // bloquear o lançamento por falta de foto SEM depender de internet — e no
+    // topo, não dentro de cliente/empresa: é config da transportadora, não da
+    // contraparte, e assim a exigência já vale antes de escolher o cliente.
+    // `Conta` é isenta da trava de conta, então findFirst traria a de outro
+    // tenant — o id precisa ser citado (ver viagens.service.contaExigeFoto).
+    const conta = await this.prisma.conta.findUnique({
+      where: { id: contaIdAtual() },
+      select: { exigeFotoViagem: true, exigeFotoAbastecimento: true },
+    });
+
     const [veiculos, materiais, tiposServico, clientes, locais, empresas, ultimosAbast] = await Promise.all([
       this.prisma.veiculo.findMany({
         where: veiculosWhere,
@@ -981,16 +992,7 @@ export class MotoristaService {
         select: {
           id: true,
           nome: true,
-          // As flags de exigência viajam junto: é assim que o app decide se
-          // bloqueia o lançamento por falta de foto SEM depender de internet.
-          empresa: {
-            select: {
-              id: true,
-              nome: true,
-              exigeFotoViagem: true,
-              exigeFotoAbastecimento: true,
-            },
-          },
+          empresa: { select: { id: true, nome: true } },
         },
         orderBy: { nome: "asc" },
       }),
@@ -1014,13 +1016,7 @@ export class MotoristaService {
       }),
       this.prisma.empresa.findMany({
         where: { ativa: true },
-        // O abastecimento escolhe a empresa direto (não passa por cliente).
-        select: {
-          id: true,
-          nome: true,
-          exigeFotoViagem: true,
-          exigeFotoAbastecimento: true,
-        },
+        select: { id: true, nome: true },
         orderBy: { nome: "asc" },
       }),
       // Último odômetro por veículo, pro app validar abastecimento já na
@@ -1050,6 +1046,10 @@ export class MotoristaService {
       clientes,
       locais: locaisFlat,
       empresas,
+      config: {
+        exigeFotoViagem: conta?.exigeFotoViagem === true,
+        exigeFotoAbastecimento: conta?.exigeFotoAbastecimento === true,
+      },
     };
   }
 

@@ -90,13 +90,13 @@ export default function NovoAbastecimento() {
   const [pedindoJustificativa, setPedindoJustificativa] = useState(false);
 
   /**
-   * A empresa que paga esse abastecimento exige a foto do cupom? Roda offline —
-   * as empresas vêm no catálogo cacheado. Ausência da flag nunca exige.
+   * A transportadora exige a foto do cupom? Roda offline (bloco `config` do
+   * catálogo). Ausência da flag nunca exige.
+   *
+   * Mudou de eixo: antes vinha da empresa que paga, e como ela é opcional no
+   * abastecimento, quem lançava sem empresa nunca era cobrado.
    */
-  const exigeFoto = useMemo(() => {
-    const e = cat.data?.empresas.find((x) => x.id === empresaId);
-    return e?.exigeFotoAbastecimento === true;
-  }, [cat.data?.empresas, empresaId]);
+  const exigeFoto = cat.data?.config?.exigeFotoAbastecimento === true;
   const [submitting, setSubmitting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const val = useValidacaoGuiada();
@@ -253,7 +253,7 @@ export default function NovoAbastecimento() {
       if (!texto) {
         return void val.apontar(
           "foto",
-          "Essa empresa exige a foto do cupom. Tire a foto ou explique por que não dá.",
+          "A foto do cupom é obrigatória. Tire a foto ou explique por que não dá.",
         );
       }
       if (texto.length < 10) {
@@ -600,7 +600,7 @@ export default function NovoAbastecimento() {
             >
               <Label error={!!val.erroDe("foto")}>Foto do comprovante</Label>
               <Text className="text-xs text-muted-foreground">
-                {exigeFoto ? "obrigatória pra essa empresa" : "opcional"}
+                {exigeFoto ? "obrigatória neste lançamento" : "opcional"}
               </Text>
               <PhotoCapture value={foto} onChange={setFoto} />
               {val.erroDe("foto") ? <ErroCampo msg={val.erroDe("foto")!} /> : null}

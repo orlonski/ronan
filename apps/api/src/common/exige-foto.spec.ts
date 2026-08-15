@@ -6,32 +6,32 @@ import {
 } from "./exige-foto";
 
 describe("exigeFotoDaViagem", () => {
-  it("empresa que não configurou nada não exige (o padrão de hoje)", () => {
+  it("conta que não configurou nada não exige (o padrão de hoje)", () => {
     expect(exigeFotoDaViagem({})).toBe(false);
-    expect(exigeFotoDaViagem({ empresaExige: false })).toBe(false);
-    expect(exigeFotoDaViagem({ empresaExige: null })).toBe(false);
+    expect(exigeFotoDaViagem({ contaExige: false })).toBe(false);
+    expect(exigeFotoDaViagem({ contaExige: null })).toBe(false);
   });
 
-  it("empresa que exige, material normal, frete comum: exige", () => {
+  it("conta que exige, material normal, frete comum: exige", () => {
     expect(
       exigeFotoDaViagem({
-        empresaExige: true,
+        contaExige: true,
         materialTemComprovante: true,
         modoExigeTicket: true,
       }),
     ).toBe(true);
   });
 
-  it("material sem comprovante (concreto) suprime, mesmo com a empresa exigindo", () => {
+  it("material sem comprovante (concreto) suprime, mesmo com a conta exigindo", () => {
     expect(
-      exigeFotoDaViagem({ empresaExige: true, materialTemComprovante: false }),
+      exigeFotoDaViagem({ contaExige: true, materialTemComprovante: false }),
     ).toBe(false);
   });
 
   it("diária suprime: não há romaneio pra fotografar", () => {
     expect(
       exigeFotoDaViagem({
-        empresaExige: true,
+        contaExige: true,
         materialTemComprovante: true,
         modoExigeTicket: false,
       }),
@@ -40,8 +40,8 @@ describe("exigeFotoDaViagem", () => {
 
   it("campos ausentes (app/cache antigo) não inventam exigência nem a cancelam à toa", () => {
     // Sem material informado (diária à disposição) mas com modo que pede ticket:
-    // a empresa manda.
-    expect(exigeFotoDaViagem({ empresaExige: true })).toBe(true);
+    // a conta manda.
+    expect(exigeFotoDaViagem({ contaExige: true })).toBe(true);
   });
 });
 
@@ -51,7 +51,7 @@ describe("resolverJustificativaSemFoto", () => {
     expect(resolverJustificativaSemFoto(true, true, "qualquer coisa")).toBe(null);
   });
 
-  it("empresa não exige: viagem sem foto segue limpa, como sempre foi", () => {
+  it("conta não exige: viagem sem foto segue limpa, como sempre foi", () => {
     expect(resolverJustificativaSemFoto(false, false, undefined)).toBe(null);
   });
 

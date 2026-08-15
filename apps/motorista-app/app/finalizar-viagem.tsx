@@ -125,16 +125,15 @@ export default function FinalizarViagem() {
   );
 
   /**
-   * A empresa do cliente exige a foto do comprovante? Roda offline (o cliente
-   * já vem do catálogo cacheado). Defaults seguros: ausência nunca exige.
+   * A transportadora exige a foto do comprovante? Roda offline (vem no bloco
+   * `config` do catálogo). Defaults seguros: ausência nunca exige.
    */
   const exigeFoto = useMemo(() => {
-    const c = cat.data?.clientes.find((x) => x.id === clienteId);
-    if (c?.empresa?.exigeFotoViagem !== true) return false;
+    if (cat.data?.config?.exigeFotoViagem !== true) return false;
     const m = cat.data?.materiais.find((x) => x.id === materialId);
     if (m?.temComprovanteFoto === false) return false;
     return true;
-  }, [cat.data?.clientes, cat.data?.materiais, clienteId, materialId]);
+  }, [cat.data?.config?.exigeFotoViagem, cat.data?.materiais, materialId]);
 
   // Material que não exige ticket (ex: concreto) esconde o campo. Default true.
   const exigeTicket = useMemo(() => {
@@ -421,7 +420,7 @@ export default function FinalizarViagem() {
       if (!texto) {
         val.apontar(
           "foto",
-          "Esse cliente exige a foto do ticket. Tire a foto ou explique por que não dá.",
+          "A foto do ticket é obrigatória. Tire a foto ou explique por que não dá.",
         );
         return;
       }
@@ -781,7 +780,7 @@ export default function FinalizarViagem() {
               ) : (
                 <Text className="text-xs text-muted-foreground">
                   {exigeFoto
-                    ? "Obrigatória pra esse cliente."
+                    ? "Obrigatória neste lançamento."
                     : "Opcional, mas ajuda na conferência."}
                 </Text>
               )}

@@ -15,6 +15,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
+import { AtualizarMinhaEmpresaInput } from "@ronan/shared-types";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { PlataformaGuard } from "../../auth/guards/plataforma.guard";
@@ -126,6 +127,23 @@ export function validarLogo(arquivo?: Express.Multer.File): void {
 @Controller("admin/minha-empresa")
 export class MinhaEmpresaController {
   constructor(private readonly service: ContasService) {}
+
+  /** O que a transportadora tem configurado hoje (alimenta a tela). */
+  @RequerPermissao("minha-empresa.editar")
+  @Get()
+  minhaEmpresa(@CurrentUser() user: AuthAdminUser) {
+    return this.service.minhaEmpresa(user.contaId);
+  }
+
+  @RequerPermissao("minha-empresa.editar")
+  @Patch()
+  atualizar(
+    @CurrentUser() user: AuthAdminUser,
+    @Body(new ZodValidationPipe(AtualizarMinhaEmpresaInput))
+    body: AtualizarMinhaEmpresaInput,
+  ) {
+    return this.service.atualizarMinhaEmpresa(user.contaId, body);
+  }
 
   @RequerPermissao("minha-empresa.editar")
   @Post("logo")

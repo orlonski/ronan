@@ -17,6 +17,7 @@ import type { AppInfoHeaders } from "../auth/decorators/app-info.decorator";
 import { AuditoriaService } from "../auditoria/auditoria.service";
 import { garantirCadastro, ItemInexistenteException } from "../common/item-inexistente";
 import { resolverTransportadora } from "../common/transportadora";
+import { contaIdAtual } from "../common/conta/conta-context";
 import { resolverModoServico, resolverPeriodo } from "../common/tipo-servico";
 import { exigeFotoDaViagem, resolverJustificativaSemFoto } from "../common/exige-foto";
 import { formatarDuracao } from "@ronan/shared-types";
@@ -827,8 +828,7 @@ export class ViagensMotoristaService {
 
     const cliente = await this.prisma.cliente.findUnique({
       where: { id: input.clienteId },
-      // A exigência de foto é da EMPRESA; a viagem chega nela pelo cliente.
-      select: { empresaId: true, empresa: { select: { exigeFotoViagem: true } } },
+      select: { empresaId: true },
     });
     if (!cliente) throw new ItemInexistenteException("clienteId");
 
@@ -886,7 +886,7 @@ export class ViagensMotoristaService {
     // Foto do comprovante: a empresa exige? Só carimba a falta — nunca recusa.
     // Recusar aqui mataria o item no outbox do motorista (ver common/exige-foto.ts).
     const exigeFoto = exigeFotoDaViagem({
-      empresaExige: cliente.empresa?.exigeFotoViagem,
+      contaExige: (await this.contaExigeFoto()).viagem,
       materialTemComprovante: material?.temComprovanteFoto,
       modoExigeTicket: modo.exigeTicket,
     });
@@ -1145,6 +1145,24 @@ export class ViagensMotoristaService {
     }
 
     return serializarViagemComMinimos(viagem, await this.regrasMinimoAtivas());
+  }
+
+  /**
+   * Política de comprovante da CONTA (a transportadora). A trava de conta já
+   * resolve qual — não precisa (nem deve) receber contaId de fora.
+   *
+   * Conta sem registro é impossível na prática, mas o fallback é "não exige":
+   * na dúvida a gente nunca inventa exigência.
+   */
+  private async contaExigeFoto(): Promise<{ viagem: boolean }> {
+    // ⚠️ `Conta` é ISENTA da trava de conta (é o próprio tenant, não pertence a
+    // um). Então findFirst aqui traria a conta de OUTRA empresa. O id tem que
+    // ser citado à mão — é um dos poucos lugares onde isso é obrigatório.
+    const conta = await this.prisma.conta.findUnique({
+      where: { id: contaIdAtual() },
+      select: { exigeFotoViagem: true },
+    });
+    return { viagem: conta?.exigeFotoViagem === true };
   }
 
   /**
@@ -1578,8 +1596,7 @@ export class ViagensMotoristaService {
     if (!clienteIdEfetivo) throw new BadRequestException("Cliente não informado.");
     const cliente = await this.prisma.cliente.findUnique({
       where: { id: clienteIdEfetivo },
-      // empresa.exigeFotoViagem: a exigência de foto é da empresa do cliente.
-      select: { empresaId: true, empresa: { select: { exigeFotoViagem: true } } },
+      select: { empresaId: true },
     });
     if (!cliente) throw new NotFoundException("Cliente não encontrado");
 
@@ -1609,7 +1626,7 @@ export class ViagensMotoristaService {
     // O lifecycle guiado não escolhe modo de serviço (diária não passa por aqui),
     // então só o material suprime.
     const exigeFotoFin = exigeFotoDaViagem({
-      empresaExige: cliente.empresa?.exigeFotoViagem,
+      contaExige: (await this.contaExigeFoto()).viagem,
       materialTemComprovante: materialFin.temComprovanteFoto,
     });
     const trechosCreate = this.montarTrechos(

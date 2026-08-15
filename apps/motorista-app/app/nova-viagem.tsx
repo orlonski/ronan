@@ -526,26 +526,19 @@ export default function NovaViagem() {
   const exigeKm = modo?.exigeKm ?? true;
 
   /**
-   * A empresa do cliente escolhido exige a FOTO do comprovante?
+   * A transportadora exige a FOTO do comprovante?
    *
-   * Roda 100% offline: `cliente.empresa` já vem no catálogo cacheado. Defaults
-   * seguros em toda parte — cache antigo, cliente não escolhido ou flag ausente
-   * NUNCA inventam exigência.
+   * Roda 100% offline: a política vem no bloco `config` do catálogo cacheado.
+   * Defaults seguros em toda parte — cache antigo ou flag ausente NUNCA inventam
+   * exigência.
    */
   const exigeFoto = useMemo(() => {
-    const c = cat.data?.clientes.find((x) => x.id === form.clienteId);
-    if (c?.empresa?.exigeFotoViagem !== true) return false;
+    if (cat.data?.config?.exigeFotoViagem !== true) return false;
     const m = cat.data?.materiais.find((x) => x.id === form.materialId);
     if (m?.temComprovanteFoto === false) return false; // concreto não gera papel
     if (modo?.exigeTicket === false) return false; // diária não tem romaneio
     return true;
-  }, [
-    cat.data?.clientes,
-    cat.data?.materiais,
-    form.clienteId,
-    form.materialId,
-    modo?.exigeTicket,
-  ]);
+  }, [cat.data?.config?.exigeFotoViagem, cat.data?.materiais, form.materialId, modo?.exigeTicket]);
 
   // Alguns materiais não exigem ticket (ex: concreto) — o admin configura isso.
   // Default true: se o catálogo é antigo (sem o campo) ou o material não foi
@@ -752,7 +745,7 @@ export default function NovaViagem() {
         return (
           void val.apontar(
             "foto",
-            "Esse cliente exige a foto do ticket. Tire a foto ou explique por que não dá.",
+            "A foto do ticket é obrigatória. Tire a foto ou explique por que não dá.",
           ),
           false
         );
@@ -1240,7 +1233,7 @@ export default function NovaViagem() {
       label="Foto do ticket"
       hint={
         exigeFoto
-          ? "obrigatória pra esse cliente"
+          ? "obrigatória neste lançamento"
           : "opcional, mas ajuda na conferência"
       }
     >

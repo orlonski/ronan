@@ -90,16 +90,9 @@ export type TipoServico = {
   exigeKm?: boolean;
 };
 
-/**
- * Empresa como o app a conhece. As flags de exigência viajam no catálogo de
- * propósito: é assim que o app consegue bloquear o lançamento por falta de foto
- * SEM internet. Opcionais — cache antigo não tem, e a ausência nunca exige.
- */
 export type EmpresaDoCliente = {
   id: string;
   nome: string;
-  exigeFotoViagem?: boolean;
-  exigeFotoAbastecimento?: boolean;
 };
 
 export type Cliente = {
@@ -134,6 +127,17 @@ export type Catalogos = {
   clientes: Cliente[];
   locais: Local[];
   empresas: Empresa[];
+  /**
+   * Política da transportadora (Conta), não da contraparte. Vem no catálogo pra
+   * o app bloquear o lançamento por falta de foto SEM internet.
+   *
+   * Opcional e com defaults seguros: cache antigo não tem o bloco, e ausência
+   * NUNCA inventa exigência.
+   */
+  config?: {
+    exigeFotoViagem?: boolean;
+    exigeFotoAbastecimento?: boolean;
+  };
 };
 
 export type Me = {

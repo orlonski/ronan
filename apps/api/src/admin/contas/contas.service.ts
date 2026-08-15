@@ -307,6 +307,30 @@ export class ContasService implements OnModuleInit {
    * pra a imagem poder ser usada em `<img src>` (o navegador não manda o header
    * de autenticação numa tag de imagem).
    */
+  /** Config da própria conta pra tela "Minha empresa". */
+  async minhaEmpresa(contaId: string) {
+    return this.prisma.conta.findUniqueOrThrow({
+      where: { id: contaId },
+      select: { id: true, nome: true, exigeFotoViagem: true, exigeFotoAbastecimento: true },
+    });
+  }
+
+  /**
+   * A transportadora ajustando as regras dela mesma (tela "Minha empresa").
+   * O `contaId` vem do usuário logado — nunca da URL, senão um admin trocaria a
+   * config de outra conta só mudando o id no endereço.
+   */
+  async atualizarMinhaEmpresa(
+    contaId: string,
+    data: { exigeFotoViagem?: boolean; exigeFotoAbastecimento?: boolean },
+  ) {
+    return this.prisma.conta.update({
+      where: { id: contaId },
+      data,
+      select: { id: true, nome: true, exigeFotoViagem: true, exigeFotoAbastecimento: true },
+    });
+  }
+
   async definirLogo(contaId: string, buffer: Buffer, mimetype: string) {
     return comoSistema(async () => {
       const atual = await this.prisma.conta.findUnique({

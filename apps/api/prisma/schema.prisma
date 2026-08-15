@@ -238,6 +238,22 @@ model Conta {
   /// alguém precisa ser o destino padrão. Com mais de uma conta marcada, o
   /// signup passa a exigir o `contaSlug` no formulário.
   permiteAutoCadastro Boolean  @default(false)
+  /// Esta transportadora exige a FOTO do comprovante no lançamento.
+  ///
+  /// É política DELA, não do tomador: "aqui todo lançamento tem foto". Por isso
+  /// mora na Conta e não na Empresa — Empresa é a contraparte (a pedreira que
+  /// manda/recebe planilha de fechamento), e as duas se chamando "empresa" já
+  /// confundiu uma vez.
+  ///
+  /// Não confundir com Material.exigeTicket, que é o NÚMERO do ticket. Suprimida
+  /// por Material.temComprovanteFoto=false (concreto) e por modo de serviço sem
+  /// ticket (diária) — ver common/exige-foto.ts.
+  ///
+  /// O bloqueio de verdade acontece no APP. O backend NUNCA recusa por falta de
+  /// foto: recusar mataria item de outbox offline; ele carimba a falta.
+  exigeFotoViagem     Boolean  @default(false)
+  /// Idem pro cupom do posto no abastecimento.
+  exigeFotoAbastecimento Boolean @default(false)
   /// URL pública servida por /publico/contas/:id/logo (com `v` pra furar cache).
   logoUrl             String?
   /// Chave do objeto no MinIO. Separada da URL pra poder apagar a logo antiga.
@@ -947,16 +963,6 @@ model Empresa {
   toleranciaKmPct  Int          @default(0)
   // 0–10 — idem pra toneladas
   toleranciaTonPct Int          @default(0)
-  /// Esta empresa exige a FOTO do ticket/romaneio no lançamento da viagem.
-  /// Diferente de Material.exigeTicket, que é o NÚMERO — dá pra exigir um sem o
-  /// outro. Default false: quem não configurar nada segue como sempre.
-  ///
-  /// O bloqueio de verdade acontece no APP (o motorista não salva sem foto nem
-  /// justificativa). O backend NUNCA recusa por falta de foto: recusar mataria
-  /// item de outbox offline — ele carimba a falta e o painel cobra.
-  exigeFotoViagem  Boolean      @default(false)
-  /// Idem pro cupom do posto no abastecimento.
-  exigeFotoAbastecimento Boolean @default(false)
   ativa            Boolean      @default(true)
   criadoEm         DateTime     @default(now())
   alteradoEm       DateTime     @updatedAt

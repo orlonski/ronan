@@ -18,10 +18,6 @@ export const CriarEmpresaInput = z.object({
   chaveMatch: z.array(CampoChaveMatch).min(1).nullable().optional(),
   toleranciaKmPct: z.number().int().min(0).max(20).optional(),
   toleranciaTonPct: z.number().int().min(0).max(10).optional(),
-  // Exigir a FOTO do comprovante no lançamento. Não confundir com
-  // Material.exigeTicket, que é o NÚMERO do ticket — dá pra exigir um sem o outro.
-  exigeFotoViagem: z.boolean().optional(),
-  exigeFotoAbastecimento: z.boolean().optional(),
 });
 export type CriarEmpresaInput = z.infer<typeof CriarEmpresaInput>;
 
@@ -29,3 +25,4 @@ export const AtualizarEmpresaInput = CriarEmpresaInput.partial().extend({
   ativa: z.boolean().optional(),
 });
 export type AtualizarEmpresaInput = z.infer<typeof AtualizarEmpresaInput>;
+

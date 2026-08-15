@@ -8,6 +8,7 @@ import type { Prisma } from "@prisma/client";
 import type { CriarAbastecimentoInput } from "@ronan/shared-types";
 import { resolverTransportadora } from "../common/transportadora";
 import { resolverJustificativaSemFoto } from "../common/exige-foto";
+import { contaIdAtual } from "../common/conta/conta-context";
 import { ItemInexistenteException } from "../common/item-inexistente";
 import { LancamentosResgatadosService } from "../lancamentos-resgatados/lancamentos-resgatados.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -148,15 +149,18 @@ export class AbastecimentosMotoristaService {
       motoristaId,
       rest.veiculoId,
     );
-    // Foto do cupom: a empresa que paga exige? Só carimba a falta — nunca recusa
+    // Foto do cupom: a transportadora exige? Só carimba a falta — nunca recusa
     // (recusar mataria o item no outbox offline; ver common/exige-foto.ts).
-    const empresaAbast = rest.empresaId
-      ? await this.prisma.empresa.findUnique({
-          where: { id: rest.empresaId },
-          select: { exigeFotoAbastecimento: true },
-        })
-      : null;
-    const exigeFoto = empresaAbast?.exigeFotoAbastecimento === true;
+    //
+    // Mudou de eixo: antes vinha da Empresa que paga, e como `empresaId` é
+    // opcional no abastecimento, quem lançava sem empresa nunca era cobrado.
+    // Agora a política é da conta e vale pra todo abastecimento.
+    // `Conta` é isenta da trava (ver viagens.service.contaExigeFoto): citar o id.
+    const conta = await this.prisma.conta.findUnique({
+      where: { id: contaIdAtual() },
+      select: { exigeFotoAbastecimento: true },
+    });
+    const exigeFoto = conta?.exigeFotoAbastecimento === true;
 
     void this.resgates.marcarQueSubiu(input.clientId);
     return this.prisma.abastecimento.create({

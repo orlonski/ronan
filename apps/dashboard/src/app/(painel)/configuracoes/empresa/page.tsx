@@ -8,9 +8,12 @@ import { Card } from "@/components/ui/card";
 import { RequerTela } from "@/components/requer-tela";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+import { StatusToggle } from "@/components/status-toggle";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
+const PATH_MINHA_EMPRESA = "/admin/minha-empresa";
 
 /**
  * A empresa mexendo na marca dela. Só a logo por enquanto — cor mexeria em
@@ -164,6 +167,82 @@ function Conteudo() {
           )}
         </div>
       </Card>
+
+      <ComprovantesCard />
     </div>
+  );
+}
+
+/**
+ * Regras de comprovante da transportadora — política DELA, não da contraparte.
+ *
+ * Mora aqui e não em Cadastros → Empresas de propósito: "Empresa" ali é a
+ * pedreira/obra que manda ou recebe planilha de fechamento. As duas se chamando
+ * "empresa" já confundiu uma vez.
+ */
+function ComprovantesCard() {
+  const token = useAuthToken();
+  const queryClient = useQueryClient();
+  const config = useQuery({
+    queryKey: [PATH_MINHA_EMPRESA],
+    enabled: !!token,
+    queryFn: () =>
+      fetchApi<{ exigeFotoViagem: boolean; exigeFotoAbastecimento: boolean }>(
+        PATH_MINHA_EMPRESA,
+        { token },
+      ),
+  });
+
+  const salvar = useMutation({
+    mutationFn: (body: Record<string, boolean>) =>
+      fetchApi(PATH_MINHA_EMPRESA, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify(body),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: [PATH_MINHA_EMPRESA] });
+      toast.success("Regra salva.");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Não consegui salvar."),
+  });
+
+  return (
+    <Card className="max-w-xl space-y-4 p-5">
+      <div>
+        <p className="text-sm font-medium">Comprovantes</p>
+        <p className="text-xs text-muted-foreground">
+          Quando ligado, o app não deixa o motorista salvar sem a foto. Se ele não
+          conseguir fotografar, precisa escrever o motivo — e o lançamento aparece na
+          lista marcado como “sem foto”, pra você cobrar.
+        </p>
+      </div>
+
+      <div className="space-y-1">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-sm font-medium">Foto do ticket na viagem</span>
+          <StatusToggle
+            active={config.data?.exigeFotoViagem ?? false}
+            onChange={(next) => salvar.mutate({ exigeFotoViagem: next })}
+            size="sm"
+            disabled={config.isLoading || salvar.isPending}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Material marcado como “não gera comprovante” (ex.: concreto) e diária ficam de
+          fora sozinhos — não dá pra cobrar foto de papel que não existe.
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm font-medium">Foto do cupom no abastecimento</span>
+        <StatusToggle
+          active={config.data?.exigeFotoAbastecimento ?? false}
+          onChange={(next) => salvar.mutate({ exigeFotoAbastecimento: next })}
+          size="sm"
+          disabled={config.isLoading || salvar.isPending}
+        />
+      </div>
+    </Card>
   );
 }
