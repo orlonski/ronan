@@ -553,9 +553,14 @@ model Motorista {
   podeChat                Boolean         @default(true)
   /// Serviço medido por período (diária): o motorista pode escolher o modo de
   /// serviço no lançamento e marcar hora de entrada/saída em vez de peso.
-  /// Default false — rollout de um motorista por vez. Sem a flag, /m/catalogos
-  /// nem devolve os tipos de serviço e o app fica idêntico ao de hoje.
-  podeDiaria              Boolean         @default(false)
+  ///
+  /// Default TRUE porque quem já esconde o campo é o CATÁLOGO: com um único modo
+  /// cadastrado (o caso de toda conta que não usa diária) o app nem renderiza o
+  /// seletor. Deixar false aqui só criava um segundo interruptor pra ligar na
+  /// mão sem ganho nenhum. Continua desligável caso a caso pelo painel — aí vira
+  /// o que ele deveria ser: uma exceção ("esse aqui não lança diária"), não um
+  /// pré-requisito.
+  podeDiaria              Boolean         @default(true)
   /// Frota dona do motorista. Null = não classificado (invisível pros usuários
   /// restritos). Usado pra carimbar Viagem/Pedagio/Abastecimento na criação —
   /// mudar aqui NÃO reescreve o histórico já carimbado, de propósito.

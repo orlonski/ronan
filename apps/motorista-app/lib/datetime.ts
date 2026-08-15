@@ -101,6 +101,23 @@ export function fmtHoraBR(iso: string | null | undefined): string {
 }
 
 /**
+ * A saída caiu num dia diferente da entrada, em horário de BRASÍLIA?
+ *
+ * Comparar a parte de data do ISO não serve: entrada 22h e saída 06h no Brasil
+ * podem cair no mesmo dia UTC, e a virada da noite passaria batida.
+ */
+export function virouDiaBR(
+  entradaISO: string | null | undefined,
+  saidaISO: string | null | undefined,
+): boolean {
+  if (!entradaISO || !saidaISO) return false;
+  const e = partesBR(entradaISO);
+  const s = partesBR(saidaISO);
+  if (!e || !s) return false;
+  return e.dia !== s.dia || e.mes !== s.mes;
+}
+
+/**
  * "07:12 → 11:32" da diária, marcando a virada de dia. Sem o "+1d",
  * "22:10 → 06:30" parece erro em vez de uma diária de 8h.
  */
@@ -113,8 +130,7 @@ export function fmtPeriodoBR(
   const e = partesBR(entradaEm);
   const s = partesBR(saidaEm);
   if (!e || !s) return "—";
-  const virou = e.dia !== s.dia;
-  return `${e.hh}:${e.mm} → ${s.hh}:${s.mm}${virou ? " (+1d)" : ""}`;
+  return `${e.hh}:${e.mm} → ${s.hh}:${s.mm}${virouDiaBR(entradaEm, saidaEm) ? " (+1d)" : ""}`;
 }
 
 /**

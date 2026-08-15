@@ -148,7 +148,8 @@ export type Me = {
   podeTelemetria: boolean;
   // Chat entre motoristas (aba Conversas). Rollout gradual — default false.
   podeChat: boolean;
-  // Escolher o modo de serviço no lançamento (diária). Rollout gradual.
+  // Escolher o modo de serviço no lançamento (diária). Default true — o que
+  // esconde o seletor é a conta ter um modo só. Desligar é exceção.
   podeDiaria: boolean;
   // Preferências de recebimento (controladas na tela de perfil).
   aceitaPush: boolean;
@@ -325,8 +326,10 @@ function normalizarMe<T extends Record<string, unknown>>(m: T): T {
   if (typeof anyM.podeReferenciaKm !== "boolean") anyM.podeReferenciaKm = false;
   // Opt-in: telemetria off por default (cache antigo / sem a flag).
   if (typeof anyM.podeTelemetria !== "boolean") anyM.podeTelemetria = false;
-  // Opt-in: sem a flag o app nem mostra o seletor de modo de serviço.
-  if (typeof anyM.podeDiaria !== "boolean") anyM.podeDiaria = false;
+  // Default TRUE (igual ao backend): quem esconde o seletor é o catálogo — com
+  // um modo só, o app não renderiza o campo. Cache antigo sem a chave não pode
+  // travar o motorista fora de uma feature que a conta já habilitou.
+  if (typeof anyM.podeDiaria !== "boolean") anyM.podeDiaria = true;
   // Backend antigo/cache sem as prefs: assume que recebe tudo (default true).
   if (typeof anyM.aceitaPush !== "boolean") anyM.aceitaPush = true;
   if (typeof anyM.aceitaWhatsapp !== "boolean") anyM.aceitaWhatsapp = true;

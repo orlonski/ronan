@@ -123,7 +123,7 @@ export function MotoristaForm({ initial }: Props) {
     podeReferenciaKm: initial?.podeReferenciaKm ?? false,
     podeTelemetria: initial?.podeTelemetria ?? false,
     podeChat: initial?.podeChat ?? true,
-    podeDiaria: initial?.podeDiaria ?? false,
+    podeDiaria: initial?.podeDiaria ?? true,
     receberResumoDiario: initial?.receberResumoDiario ?? true,
   });
   const token = useAuthToken();
@@ -534,7 +534,7 @@ export function MotoristaForm({ initial }: Props) {
                 onChange={(v) => alterarAcesso("podeChat", v)}
               />
               <AcessoRow
-                label="Escolher o modo de serviço no lançamento (diária: marca hora de entrada e saída em vez de peso)"
+                label="Escolher o modo de serviço no lançamento (diária). Desligue só pra quem não pode lançar diária — quando a empresa tem um modo só, o campo nem aparece pro motorista."
                 active={acessos.podeDiaria}
                 onChange={(v) => alterarAcesso("podeDiaria", v)}
               />

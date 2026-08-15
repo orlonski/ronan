@@ -29,14 +29,8 @@ import { PerguntaBotaFora } from "@/components/pergunta-bota-fora";
 import { showAlert, showConfirm } from "@/lib/alert";
 import { clearNavDestino } from "@/lib/nav-destino-storage";
 import { humanizeApiError } from "@/lib/api";
-import {
-  fmtDataBR,
-  fmtHoraBR,
-  hojeISO,
-  isoDeDataHoraBR,
-  minutosEntre,
-  UM_DIA_MS,
-} from "@/lib/datetime";
+import { fmtDataBR, hojeISO, minutosEntre, virouDiaBR } from "@/lib/datetime";
+import { HoraField } from "@/components/ui/hora-field";
 import { formatarDuracao } from "@ronan/shared-types";
 import { reportarEvento } from "@/lib/event-reporter";
 import { criarTelemetriaViagem } from "@/lib/telemetria-viagem";
@@ -2115,14 +2109,12 @@ function makeUuid(): string {
   });
 }
 
-
 /**
  * Uma linha de hora da diária: o botão "Agora" (carimba o relógio) e o campo
- * pra corrigir/lançar depois.
+ * que abre o seletor de hora do sistema.
  *
- * `referencia` é a hora de entrada quando esta linha é a de saída: se o
- * motorista digitar uma hora anterior, é porque a diária virou a noite — a
- * saída vai pro dia seguinte sozinha, e a linha diz isso em voz alta.
+ * Os dois caminhos existem de propósito: dirigindo, "Agora" resolve com um
+ * toque e sem digitar nada; quem só lembrou de marcar depois usa o seletor.
  */
 function LinhaHora({
   titulo,
@@ -2141,31 +2133,9 @@ function LinhaHora({
   onAgora: () => void;
   onHora: (iso: string) => void;
 }) {
-  const [texto, setTexto] = useState("");
-  // O campo espelha o ISO gravado, mas só quando o motorista não está digitando
-  // — senão o "07:1" que ele acabou de teclar seria reescrito a cada tecla.
-  const [editando, setEditando] = useState(false);
-  const mostrado = editando ? texto : iso ? fmtHoraBR(iso) : "";
-
-  function aplicar(valor: string) {
-    const limpo = valor.replace(/[^\d:]/g, "");
-    setTexto(limpo);
-    let novo = isoDeDataHoraBR(data, limpo);
-    if (!novo) return;
-    if (referencia) {
-      const min = minutosEntre(referencia, novo);
-      // Virada da noite: entrou 22h, saiu 06h — a saída é do dia seguinte.
-      if (min != null && min <= 0) {
-        novo = new Date(new Date(novo).getTime() + UM_DIA_MS).toISOString();
-      }
-    }
-    onHora(novo);
-  }
-
-  const viraNoite =
-    !!referencia && !!iso && (minutosEntre(referencia, iso) ?? 0) > 0
-      ? fmtHoraBR(referencia) > fmtHoraBR(iso)
-      : false;
+  // "Saída no dia seguinte": só quando a saída caiu num dia civil diferente do
+  // da entrada — o sinal de que a diária virou a noite.
+  const viraNoite = virouDiaBR(referencia, iso);
 
   return (
     <View className="gap-2">
@@ -2177,24 +2147,16 @@ function LinhaHora({
           onPress={onAgora}
         >
           <Clock size={18} color={iso ? "#0f172a" : "white"} />
-          <Text
-            className={`ml-1 font-semibold ${iso ? "text-foreground" : "text-white"}`}
-          >
+          <Text className={`ml-1 font-semibold ${iso ? "text-foreground" : "text-white"}`}>
             Agora
           </Text>
         </Button>
         <View className="flex-1">
-          <Input
-            value={mostrado}
-            onFocus={() => {
-              setEditando(true);
-              setTexto(iso ? fmtHoraBR(iso) : "");
-            }}
-            onBlur={() => setEditando(false)}
-            onChangeText={aplicar}
-            keyboardType="numbers-and-punctuation"
-            placeholder="00:00"
-            maxLength={5}
+          <HoraField
+            value={iso}
+            data={data}
+            referencia={referencia}
+            onChange={onHora}
             error={erro}
           />
         </View>

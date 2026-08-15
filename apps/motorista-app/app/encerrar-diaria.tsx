@@ -14,15 +14,10 @@ import { ScreenHeader } from "@/components/screen-header";
 import { ErroCampo, useValidacaoGuiada } from "@/components/validacao-guiada";
 import { ViagemAguardandoInfo } from "@/components/viagem-aguardando-info";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { showAlert } from "@/lib/alert";
-import {
-  fmtHoraBR,
-  isoDeDataHoraBR,
-  minutosEntre,
-  UM_DIA_MS,
-} from "@/lib/datetime";
+import { fmtHoraBR, hojeISO, minutosEntre } from "@/lib/datetime";
+import { HoraField } from "@/components/ui/hora-field";
 import { formatarDuracao } from "@ronan/shared-types";
 import { useDiariasAbertas, useEncerrarDiaria } from "@/lib/queries";
 
@@ -31,7 +26,7 @@ import { useDiariasAbertas, useEncerrarDiaria } from "@/lib/queries";
  * agora saiu. Espelho de completar-peso.tsx — tela enxuta, uma decisão só.
  *
  * Dois caminhos, de propósito: "Saí agora" carimba o relógio com um toque, e o
- * campo de hora atende quem só lembrou de encerrar depois.
+ * seletor de hora atende quem só lembrou de encerrar depois.
  */
 export default function EncerrarDiaria() {
   const { viagemId } = useLocalSearchParams<{ viagemId: string }>();
@@ -44,8 +39,6 @@ export default function EncerrarDiaria() {
   );
 
   const [saidaEm, setSaidaEm] = useState("");
-  const [horaTexto, setHoraTexto] = useState("");
-  const [editando, setEditando] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const val = useValidacaoGuiada();
@@ -60,28 +53,12 @@ export default function EncerrarDiaria() {
   }, [entradaEm, saidaEm]);
 
   /**
-   * A hora digitada é do dia da ENTRADA. Se der um instante anterior a ela, a
-   * diária virou a noite — empurra um dia em vez de recusar um lançamento que
-   * está certo.
+   * A hora escolhida pertence ao dia da ENTRADA (o HoraField ancora nele, e
+   * empurra pro dia seguinte sozinho quando a diária vira a noite).
    */
-  function aplicarHora(valor: string) {
-    const limpo = valor.replace(/[^\d:]/g, "");
-    setHoraTexto(limpo);
-    if (!entradaEm) return;
-    const diaDaEntrada = new Date(
-      new Date(entradaEm).getTime() - 3 * 60 * 60 * 1000,
-    )
-      .toISOString()
-      .slice(0, 10);
-    let iso = isoDeDataHoraBR(diaDaEntrada, limpo);
-    if (!iso) return;
-    const min = minutosEntre(entradaEm, iso);
-    if (min != null && min <= 0) {
-      iso = new Date(new Date(iso).getTime() + UM_DIA_MS).toISOString();
-    }
-    val.limpar();
-    setSaidaEm(iso);
-  }
+  const diaDaEntrada = entradaEm
+    ? new Date(new Date(entradaEm).getTime() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    : hojeISO();
 
   async function salvar() {
     setErro(null);
@@ -169,8 +146,6 @@ export default function EncerrarDiaria() {
                     onPress={() => {
                       val.limpar();
                       setSaidaEm(new Date().toISOString());
-                      setHoraTexto("");
-                      setEditando(false);
                     }}
                   >
                     <Clock size={18} color={saidaEm ? "#0f172a" : "white"} />
@@ -183,17 +158,14 @@ export default function EncerrarDiaria() {
                     </Text>
                   </Button>
                   <View className="flex-1">
-                    <Input
-                      value={editando ? horaTexto : saidaEm ? fmtHoraBR(saidaEm) : ""}
-                      onFocus={() => {
-                        setEditando(true);
-                        setHoraTexto(saidaEm ? fmtHoraBR(saidaEm) : "");
+                    <HoraField
+                      value={saidaEm}
+                      data={diaDaEntrada}
+                      referencia={entradaEm ?? undefined}
+                      onChange={(iso) => {
+                        val.limpar();
+                        setSaidaEm(iso);
                       }}
-                      onBlur={() => setEditando(false)}
-                      onChangeText={aplicarHora}
-                      keyboardType="numbers-and-punctuation"
-                      placeholder="00:00"
-                      maxLength={5}
                       error={!!val.erroDe("saidaEm")}
                     />
                   </View>
@@ -202,7 +174,7 @@ export default function EncerrarDiaria() {
                   <ErroCampo msg={val.erroDe("saidaEm")!} />
                 ) : (
                   <Text className="text-xs text-muted-foreground">
-                    Toque em “Saí agora” ou digite a hora, se já faz um tempo.
+                    Toque em “Saí agora”, ou escolha a hora se já faz um tempo.
                   </Text>
                 )}
               </View>
