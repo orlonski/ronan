@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { router, Stack } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { CloudOff, Pencil, RefreshCw, Scale, Trash2 } from "lucide-react-native";
+import { Clock, CloudOff, Pencil, RefreshCw, Scale, Trash2 } from "lucide-react-native";
 import {
   FlatList,
   Modal,
@@ -22,6 +22,7 @@ import {
   type PendingPedagio,
   type PendingAbastecimento,
   type PendingCompletarPeso,
+  type PendingEncerrarDiaria,
   type PendingFoto,
   type PendingLocal,
   type PendingStory,
@@ -32,12 +33,15 @@ import { usePendingPedagios } from "@/hooks/use-pending-pedagios";
 import { usePendingAbastecimentos } from "@/hooks/use-pending-abastecimentos";
 import { usePendingLifecycle, type LifecycleTrip } from "@/hooks/use-pending-lifecycle";
 import { usePendingCompletarPeso } from "@/hooks/use-pending-completar-peso";
+import { fmtHoraBR } from "@/lib/datetime";
+import { usePendingEncerrarDiaria } from "@/hooks/use-pending-encerrar-diaria";
 import { usePendingOutros } from "@/hooks/use-pending-outros";
 import {
   descartarViagemPendente,
   descartarPedagioPendente,
   descartarAbastecimentoPendente,
   descartarCompletarPesoPendente,
+  descartarEncerrarDiariaPendente,
   descartarFotoPendente,
   descartarLocalPendente,
   descartarStoryPendente,
@@ -46,6 +50,7 @@ import {
   tentarNovamentePedagioPendente,
   tentarNovamenteAbastecimentoPendente,
   tentarNovamenteCompletarPeso,
+  tentarNovamenteEncerrarDiaria,
   tentarNovamenteTripLifecycle,
   tentarNovamenteFotoPendente,
   tentarNovamenteLocalPendente,
@@ -84,6 +89,7 @@ export default function Pendentes() {
   const abastecimentos = usePendingAbastecimentos();
   const lifecycleTrips = usePendingLifecycle();
   const completarPeso = usePendingCompletarPeso();
+  const encerrarDiaria = usePendingEncerrarDiaria();
   const outros = usePendingOutros();
   const cat = useCatalogos();
   const [sincronizando, setSincronizando] = useState(false);
@@ -143,6 +149,20 @@ export default function Pendentes() {
     });
     if (!ok) return;
     await descartarCompletarPesoPendente(item.viagemId);
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }
+
+  async function descartarEncerramento(item: PendingEncerrarDiaria) {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const ok = await showConfirm({
+      title: "Descartar este envio?",
+      message:
+        "A hora de saída não vai ser enviada. A diária continua aberta — você pode encerrar de novo depois.",
+      confirmLabel: "Descartar",
+      destructive: true,
+    });
+    if (!ok) return;
+    await descartarEncerrarDiariaPendente(item.viagemId);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
   const [detalheItem, setDetalheItem] = useState<PendingComum | null>(null);
@@ -235,7 +255,10 @@ export default function Pendentes() {
           keyExtractor={(r) => `${r.kind}-${r.item.clientId}`}
           contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }}
           ListHeaderComponent={
-            rows.length > 0 || lifecycleTrips.length > 0 || completarPeso.length > 0 ? (
+            rows.length > 0 ||
+            lifecycleTrips.length > 0 ||
+            completarPeso.length > 0 ||
+            encerrarDiaria.length > 0 ? (
               <View className="mb-2 gap-3">
                 <Text className="text-sm text-muted-foreground">
                   Lançamentos aguardando envio. Toque em &quot;Sincronizar&quot; pra tentar
@@ -273,11 +296,24 @@ export default function Pendentes() {
                     onTentarNovamente={() => tentarNovamenteCompletarPeso(item.viagemId)}
                   />
                 ))}
+                {encerrarDiaria.map((item) => (
+                  <EncerrarDiariaCard
+                    key={`ed-${item.viagemId}`}
+                    item={item}
+                    onDescartar={() => descartarEncerramento(item)}
+                    onEditar={() =>
+                      router.push(`/encerrar-diaria?viagemId=${item.viagemId}`)
+                    }
+                    onTentarNovamente={() => tentarNovamenteEncerrarDiaria(item.viagemId)}
+                  />
+                ))}
               </View>
             ) : null
           }
           ListEmptyComponent={
-            lifecycleTrips.length === 0 && completarPeso.length === 0 ? (
+            lifecycleTrips.length === 0 &&
+            completarPeso.length === 0 &&
+            encerrarDiaria.length === 0 ? (
               <EmptyState
                 icon={CloudOff}
                 title="Tudo sincronizado"
@@ -438,6 +474,83 @@ function CompletarPesoCard({
             {item.errorStatus === 409
               ? "Esse ticket já foi lançado pra essa empresa. Toque em Editar pra corrigir o número."
               : (item.errorMsg ?? "Erro desconhecido.")}
+          </Text>
+        </View>
+      )}
+
+      {!temErro && item.errorMsg && (
+        <View className="mt-3 gap-1 rounded-lg border border-border bg-muted/40 p-3">
+          <Text className="text-xs font-semibold text-muted-foreground">Última tentativa:</Text>
+          <Text className="text-xs text-muted-foreground" numberOfLines={3}>
+            {item.errorMsg}
+          </Text>
+        </View>
+      )}
+
+      <View className="mt-3 flex-row gap-2">
+        <Button variant="outline" size="sm" className="flex-1" onPress={onDescartar}>
+          <Trash2 size={16} color="#dc2626" />
+          <Text className="ml-1 font-semibold text-destructive">Descartar</Text>
+        </Button>
+        {temErro && (
+          <>
+            <Button variant="outline" size="sm" className="flex-1" onPress={onEditar}>
+              <Pencil size={16} color="#0f172a" />
+              <Text className="ml-1 font-semibold">Editar</Text>
+            </Button>
+            <Button size="sm" className="flex-1" onPress={onTentarNovamente}>
+              <RefreshCw size={16} color="white" />
+              <Text className="ml-1 font-semibold text-primary-foreground">De novo</Text>
+            </Button>
+          </>
+        )}
+      </View>
+    </View>
+  );
+}
+
+/** Espelho do CompletarPesoCard pro encerramento de diária. */
+function EncerrarDiariaCard({
+  item,
+  onDescartar,
+  onEditar,
+  onTentarNovamente,
+}: {
+  item: PendingEncerrarDiaria;
+  onDescartar: () => void;
+  onEditar: () => void;
+  onTentarNovamente: () => void;
+}) {
+  const temErro = item.status === "error";
+  return (
+    <View className="rounded-2xl border-2 border-violet-500/40 bg-card p-4">
+      <View className="flex-row items-start justify-between gap-3">
+        <View className="flex-1 flex-row items-start gap-2">
+          <Clock size={20} color="#7c3aed" />
+          <View className="flex-1">
+            <Badge variant="outline">Diária</Badge>
+            <Text className="mt-1.5 text-lg font-bold text-foreground">
+              Encerrar diária
+            </Text>
+            <Text className="mt-0.5 text-base font-medium text-muted-foreground">
+              Saída às {fmtHoraBR(item.payload.saidaEm)}
+            </Text>
+          </View>
+        </View>
+        <Badge variant={temErro ? "destructive" : "warning"}>
+          {temErro
+            ? item.errorStatus
+              ? `Erro ${item.errorStatus}`
+              : `Falhou (${item.attempts})`
+            : "Enviando"}
+        </Badge>
+      </View>
+
+      {temErro && (
+        <View className="mt-3 gap-1.5 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+          <Text className="text-xs font-semibold text-destructive">Último erro:</Text>
+          <Text className="text-xs text-destructive" numberOfLines={3}>
+            {item.errorMsg ?? "Erro desconhecido."}
           </Text>
         </View>
       )}

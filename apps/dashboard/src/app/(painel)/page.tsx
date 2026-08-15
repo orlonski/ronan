@@ -48,6 +48,7 @@ type Snapshot = {
     viagensDivergentes: number;
     errosPendentes: number;
     aguardandoPeso: number;
+    diariasAbertas: number;
   };
   conferencia: {
     total: number;
@@ -357,6 +358,18 @@ function BlocoPendencias({ d }: { d: Snapshot }) {
           tone={tone(d.pendencias.aguardandoPeso)}
           href="/viagens?status=AGUARDANDO_PESO"
         />
+        {/* Só aparece quando existe diária aberta: conta que não usa diária
+            nunca vê um card zerado a mais no painel. */}
+        {d.pendencias.diariasAbertas > 0 && (
+          <StatCard
+            icon={Clock}
+            label="Diárias abertas"
+            value={d.pendencias.diariasAbertas}
+            info="Diárias em que o motorista marcou a entrada e ainda não marcou a saída. Não entram em fechamento até alguém informar a hora de saída."
+            tone={tone(d.pendencias.diariasAbertas)}
+            href="/viagens?status=AGUARDANDO_SAIDA"
+          />
+        )}
         <StatCard
           icon={Bug}
           label="Erros pendentes"

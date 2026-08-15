@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { FonteGps } from "./enums";
 import { KmFonte } from "./km-atipico";
-import { LocalSnapshot, TrechoViagemInput, checarPesoObrigatorio } from "./viagem";
+import { LocalSnapshot, TrechoViagemInput, checarObrigatoriosDoModo } from "./viagem";
 
 // Limites espelham o schema do banco (Decimal(10,3)/Decimal(10,2)).
 const MAX_TONELADAS = 9999;
@@ -133,7 +133,7 @@ export const FinalizarViagemInput = z.object({
   data: z.coerce.date(),
   // Opcional por causa do modo "aguardando peso" (romaneio no fim do dia): o
   // motorista finaliza sem peso. Fora desse modo é obrigatório — imposto pelo
-  // superRefine abaixo (checarPesoObrigatorio) e pelo backend.
+  // superRefine abaixo (checarObrigatoriosDoModo) e pelo backend.
   toneladas: z.number().positive().max(MAX_TONELADAS).optional(),
   // true = finaliza sem peso/ticket. Backend transiciona pra AGUARDANDO_PESO
   // (em vez de ENVIADA); motorista/admin completa depois.
@@ -170,7 +170,7 @@ export const FinalizarViagemInput = z.object({
   valorPedagioTotal: z.number().nonnegative().max(MAX_VALOR).optional(),
   observacao: z.string().max(500).optional(),
   fotoKey: z.string().optional(),
-}).superRefine(checarPesoObrigatorio);
+}).superRefine(checarObrigatoriosDoModo);
 export type FinalizarViagemInput = z.infer<typeof FinalizarViagemInput>;
 
 // Leitura de um evento já registrado (app timeline + dashboard).

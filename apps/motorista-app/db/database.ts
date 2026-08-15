@@ -185,6 +185,26 @@ export type PendingCompletarPeso = {
   errorPermanenteLocal?: boolean;
 };
 
+/** Encerrar uma diária JÁ sincronizada que está em AGUARDANDO_SAIDA (o
+ * motorista marcou a entrada e depois saiu). viagemId é o id real do servidor
+ * (POST /m/viagens/:id/encerrar-diaria). Idempotente no backend.
+ * Espelho de PendingCompletarPeso. */
+export type PendingEncerrarDiaria = {
+  /** UUID client-side pra identificar essa pending. */
+  clientId: string;
+  viagemId: string;
+  /** ISO do instante em que o caminhão saiu. */
+  payload: { saidaEm: string };
+  status: "pending" | "syncing" | "error";
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
+  errorPermanenteLocal?: boolean;
+};
+
 /** Local de descarga criado offline. clientId vira id real no servidor
  * (POST /m/locais/rapido aceita id pra idempotência). */
 export type PendingLocal = {
@@ -320,6 +340,7 @@ const VG_EVENTOS_KEY = "outbox.viagem-eventos";
 const VG_FINALIZAR_KEY = "outbox.viagem-finalizar";
 const VG_CANCELAR_KEY = "outbox.viagem-cancelar";
 const COMPLETAR_PESO_KEY = "outbox.viagem-completar-peso";
+const ENCERRAR_DIARIA_KEY = "outbox.viagem-encerrar-diaria";
 
 /** Todos os sufixos do outbox — usado pela adoção/limpeza do storage legado. */
 const SUFIXOS_OUTBOX = [
@@ -536,6 +557,26 @@ export async function deletePendingCompletarPeso(viagemId: string): Promise<void
   const list = await listPendingCompletarPeso();
   await writeList(
     COMPLETAR_PESO_KEY,
+    list.filter((x) => x.viagemId !== viagemId),
+  );
+}
+
+export async function listPendingEncerrarDiaria(): Promise<PendingEncerrarDiaria[]> {
+  return readList<PendingEncerrarDiaria>(ENCERRAR_DIARIA_KEY);
+}
+
+export async function upsertPendingEncerrarDiaria(item: PendingEncerrarDiaria): Promise<void> {
+  const list = await listPendingEncerrarDiaria();
+  const idx = list.findIndex((x) => x.viagemId === item.viagemId);
+  if (idx >= 0) list[idx] = item;
+  else list.unshift(item);
+  await writeList(ENCERRAR_DIARIA_KEY, list);
+}
+
+export async function deletePendingEncerrarDiaria(viagemId: string): Promise<void> {
+  const list = await listPendingEncerrarDiaria();
+  await writeList(
+    ENCERRAR_DIARIA_KEY,
     list.filter((x) => x.viagemId !== viagemId),
   );
 }

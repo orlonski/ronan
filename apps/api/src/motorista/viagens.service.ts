@@ -17,6 +17,8 @@ import type { AppInfoHeaders } from "../auth/decorators/app-info.decorator";
 import { AuditoriaService } from "../auditoria/auditoria.service";
 import { garantirCadastro, ItemInexistenteException } from "../common/item-inexistente";
 import { resolverTransportadora } from "../common/transportadora";
+import { resolverModoServico, resolverPeriodo } from "../common/tipo-servico";
+import { formatarDuracao } from "@ronan/shared-types";
 import {
   aplicarMinimos,
   resolverRegraMinimo,
@@ -39,6 +41,9 @@ const VIAGEM_INCLUDE = {
   veiculo: { select: { id: true, placa: true, modelo: true } },
   cliente: { select: { id: true, nome: true, empresaId: true, toneladasMinimas: true, kmMinimos: true } },
   material: { select: { id: true, nome: true } },
+  // O app precisa do modo pra renderizar peso x entrada/saída na lista e no
+  // detalhe. `medicao` é o que decide; o nome é o rótulo do badge.
+  tipoServico: { select: { id: true, nome: true, medicao: true } },
   localCarga: { select: { id: true, nome: true, cidade: true, uf: true } },
   localDescarga: { select: { id: true, nome: true, cidade: true, uf: true } },
   fotos: { select: { id: true, storageKey: true } },
@@ -61,6 +66,7 @@ const VIAGEM_DETALHE_INCLUDE = {
     },
   },
   material: { select: { id: true, nome: true } },
+  tipoServico: { select: { id: true, nome: true, medicao: true } },
   localCarga: {
     select: { id: true, nome: true, logradouro: true, cidade: true, uf: true, lat: true, lng: true },
   },
@@ -824,32 +830,63 @@ export class ViagensMotoristaService {
     });
     if (!cliente) throw new ItemInexistenteException("clienteId");
 
+    // Modo de serviço: define o que este lançamento exige (peso x período).
+    // Autoritativo — o app esconde os campos, mas quem valida é aqui.
+    const modo = await resolverModoServico(this.prisma, input.tipoServicoId);
+    const ehPeriodo = modo.medicao === "PERIODO";
+
     // Material é lido aqui (e não junto do bota-fora, mais abaixo) porque a
-    // validação do ticket já depende dele.
-    const material = await this.prisma.material.findUnique({
-      where: { id: input.materialId },
-      select: { permiteBotaFora: true },
-    });
-    if (!material) throw new ItemInexistenteException("materialId");
+    // validação do ticket já depende dele. Modo que não exige material (diária
+    // de caminhão à disposição) grava materialId null.
+    if (modo.exigeMaterial && !input.materialId) {
+      throw new BadRequestException("Escolha o material.");
+    }
+    const materialId = modo.exigeMaterial ? input.materialId! : null;
+    const material = materialId
+      ? await this.prisma.material.findUnique({
+          where: { id: materialId },
+          select: { permiteBotaFora: true },
+        })
+      : null;
+    if (materialId && !material) throw new ItemInexistenteException("materialId");
+
+    if (modo.exigeLocalDescarga && !input.localDescargaId) {
+      throw new BadRequestException("Escolha o local de descarga.");
+    }
+    if (modo.exigeKm && input.km == null) {
+      throw new BadRequestException("Informe o km rodado.");
+    }
+
+    // Período (diária): valida entrada/saída e diz se a diária ficou aberta.
+    const periodo = resolverPeriodo(modo, input);
 
     // Modo "aguardando peso": motorista lança sem peso/ticket porque o romaneio
     // só sai no fim do dia. Pula a validação de ticket (fica null); peso e ticket
     // entram depois via completarPeso (app) ou update admin (dashboard).
-    const aguardandoPeso = input.aguardandoPeso === true;
-    const ticket = aguardandoPeso
-      ? null
-      : await this.validarTicketParaEmpresa(
-          cliente.empresaId,
-          input.materialId,
-          input.ticket,
-        );
+    // Serviço medido por período não tem peso nenhum — nunca entra nesse modo.
+    const aguardandoPeso = !ehPeriodo && input.aguardandoPeso === true;
+    if (!ehPeriodo && !aguardandoPeso && (input.toneladas == null || input.toneladas <= 0)) {
+      throw new BadRequestException("Informe as toneladas.");
+    }
+    // Ticket: basta o modo OU o material dispensar. Modo que não exige pula a
+    // checagem, mas mantém a unicidade por empresa se o número vier mesmo assim.
+    const ticket =
+      aguardandoPeso
+        ? null
+        : await this.validarTicketParaEmpresa(
+            cliente.empresaId,
+            materialId,
+            input.ticket,
+            undefined,
+            modo.exigeTicket,
+          );
 
     // Trechos adicionais (retorno do bota-fora hoje). RETORNO_BOTA_FORA só vale se
     // o material permite (admin autoritativo, igual exigeTicket); o app só oferece
     // quando permite, aqui sanitiza por garantia.
     const trechosCreate = this.montarTrechos(
       input.trechos,
-      material.permiteBotaFora === true,
+      material?.permiteBotaFora === true,
       input.localCargaId,
     );
 
@@ -865,12 +902,16 @@ export class ViagensMotoristaService {
       lado: "carga",
       motoristaId,
     });
-    await this.garantirLocal({
-      id: input.localDescargaId,
-      snapshot: input.localDescargaDados,
-      lado: "descarga",
-      motoristaId,
-    });
+    // Modo sem local de descarga (diária que começa e termina no mesmo lugar)
+    // não tem o que validar aqui.
+    if (input.localDescargaId) {
+      await this.garantirLocal({
+        id: input.localDescargaId,
+        snapshot: input.localDescargaDados,
+        lado: "descarga",
+        motoristaId,
+      });
+    }
 
     const { fotoKey, clientId, pontos, ...rest } = input;
 
@@ -899,12 +940,23 @@ export class ViagensMotoristaService {
         veiculoId: rest.veiculoId,
         clienteId: rest.clienteId,
         transportadoraId,
-        materialId: rest.materialId,
+        materialId,
+        tipoServicoId: modo.id,
         data: rest.data,
         // Aguardando peso: toneladas fica null até completar (romaneio no fim do
         // dia). Status AGUARDANDO_PESO mantém a viagem fora de match/fechamento/KPIs.
-        toneladas: aguardandoPeso ? null : rest.toneladas,
-        status: aguardandoPeso ? "AGUARDANDO_PESO" : undefined,
+        // Serviço medido por período não tem peso — fica null sempre.
+        toneladas: ehPeriodo ? null : aguardandoPeso ? null : rest.toneladas,
+        entradaEm: periodo.entradaEm,
+        saidaEm: periodo.saidaEm,
+        duracaoMinutos: periodo.duracaoMinutos,
+        // Diária aberta (sem saída) também é viagem incompleta: AGUARDANDO_SAIDA
+        // a mantém fora de match/fechamento/KPIs até o motorista encerrar.
+        status: aguardandoPeso
+          ? "AGUARDANDO_PESO"
+          : periodo.aguardandoSaida
+            ? "AGUARDANDO_SAIDA"
+            : undefined,
         ticket,
         km: rest.km,
         kmCalculado: rest.kmCalculado,
@@ -982,6 +1034,7 @@ export class ViagensMotoristaService {
       kmFonte === "MANUAL" ||
       (kmFonte == null &&
         rest.kmCalculado != null &&
+        rest.km != null &&
         Math.abs(rest.kmCalculado - rest.km) > 0.001);
     if (houveAjusteManual) {
       try {
@@ -1021,11 +1074,14 @@ export class ViagensMotoristaService {
     // - Motorista sincronizou viagem mas nao abriu /m/rotas/calcular pra esse par
     // Sem isso, o dashboard nao mostra polilinha no mapa de trajeto e
     // a query de "pedagios na rota" volta vazia. Best-effort em background.
-    void this.roteamento
-      .calcularKm(rest.localCargaId, rest.localDescargaId)
-      .catch(() => {
-        /* best-effort: OSRM down, fora de cobertura, etc — nao bloqueia */
-      });
+    // Modo sem local de descarga (diária) não tem par pra cachear.
+    if (rest.localDescargaId) {
+      void this.roteamento
+        .calcularKm(rest.localCargaId, rest.localDescargaId)
+        .catch(() => {
+          /* best-effort: OSRM down, fora de cobertura, etc — nao bloqueia */
+        });
+    }
 
     // Viagem criada sem sinal (km estimado, kmCalculado null): recalcula pelo
     // trajeto real agora que o backend está online e avisa o motorista se mudou.
@@ -1044,16 +1100,27 @@ export class ViagensMotoristaService {
         where: { id: motoristaId },
         select: { nome: true },
       });
-      await this.notificarAdmins(
-        "nova-viagem",
-        aguardandoPeso
-          ? `Viagem sem peso de ${m?.nome ?? "motorista"}`
-          : `Nova viagem de ${m?.nome ?? "motorista"}`,
-        aguardandoPeso
+      const quem = m?.nome ?? "motorista";
+      const titulo = ehPeriodo
+        ? periodo.aguardandoSaida
+          ? `Diária aberta por ${quem}`
+          : `Diária de ${quem}`
+        : aguardandoPeso
+          ? `Viagem sem peso de ${quem}`
+          : `Nova viagem de ${quem}`;
+      const corpo = ehPeriodo
+        ? `${viagem.cliente?.nome ?? ""} · ${
+            periodo.aguardandoSaida
+              ? "aguardando a saída"
+              : formatarDuracao(periodo.duracaoMinutos)
+          }`
+        : aguardandoPeso
           ? `${viagem.cliente?.nome ?? ""} · aguardando peso/romaneio`
-          : `${viagem.ticket ? `Ticket ${viagem.ticket} · ` : ""}${viagem.cliente?.nome ?? ""} · ${viagem.toneladas ?? 0}t`,
-        { viagemId: viagem.id, motoristaId },
-      );
+          : `${viagem.ticket ? `Ticket ${viagem.ticket} · ` : ""}${viagem.cliente?.nome ?? ""} · ${viagem.toneladas ?? 0}t`;
+      await this.notificarAdmins("nova-viagem", titulo, corpo, {
+        viagemId: viagem.id,
+        motoristaId,
+      });
     })();
 
     // Aguardando peso: avisa o próprio motorista (push + WhatsApp) pra ele não
@@ -1077,6 +1144,7 @@ export class ViagensMotoristaService {
     materialId: string | null,
     ticketRaw?: string | null,
     ignorarViagemId?: string,
+    modoExigeTicket = true,
   ): Promise<string | null> {
     const material = materialId
       ? await this.prisma.material.findUnique({
@@ -1085,7 +1153,11 @@ export class ViagensMotoristaService {
         })
       : null;
     const ticket = ticketRaw?.trim() || null;
-    if (material?.exigeTicket !== false && !ticket) {
+    // Basta UM dos dois dispensar: o modo de serviço (diária não tem pesagem) ou
+    // o material (concreto não gera ticket). A unicidade abaixo continua valendo
+    // pro número que vier mesmo assim.
+    const exige = modoExigeTicket && material?.exigeTicket !== false;
+    if (exige && !ticket) {
       throw new BadRequestException("Informe o número do ticket.");
     }
     if (ticket) {
@@ -1119,6 +1191,65 @@ export class ViagensMotoristaService {
     });
     const regras = await this.regrasMinimoAtivas();
     return viagens.map((v) => serializarViagemComMinimos(v, regras));
+  }
+
+  /**
+   * Lista as diárias do motorista que ficaram abertas (AGUARDANDO_SAIDA).
+   * Alimenta o card "Diária aberta" na home do app. Espelha listarAguardandoPeso:
+   * mais antiga primeiro, que é a que ele mais provavelmente esqueceu.
+   */
+  async listarAguardandoSaida(motoristaId: string) {
+    const viagens = await this.prisma.viagem.findMany({
+      where: { motoristaId, status: "AGUARDANDO_SAIDA" },
+      include: VIAGEM_INCLUDE,
+      orderBy: { entradaEm: "asc" },
+    });
+    const regras = await this.regrasMinimoAtivas();
+    return viagens.map((v) => serializarViagemComMinimos(v, regras));
+  }
+
+  /**
+   * Encerra uma diária aberta (AGUARDANDO_SAIDA): grava a saída, calcula a
+   * duração e transita pra ENVIADA. Espelho de completarPeso, inclusive na
+   * idempotência — se a diária já foi encerrada, devolve a viagem em vez de
+   * erro, que é o que faz o retry do outbox offline não virar item preso.
+   */
+  async encerrarDiaria(motoristaId: string, viagemId: string, input: { saidaEm: Date }) {
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { id: viagemId },
+      select: { id: true, motoristaId: true, status: true, entradaEm: true, tipoServicoId: true },
+    });
+    if (!viagem) throw new NotFoundException("Viagem não encontrada.");
+    if (viagem.motoristaId !== motoristaId) {
+      throw new ForbiddenException("Esta viagem não é sua.");
+    }
+    // Idempotência: já encerrada → devolve a atual.
+    if (viagem.status !== "AGUARDANDO_SAIDA") {
+      const atual = await this.prisma.viagem.findUnique({
+        where: { id: viagemId },
+        include: VIAGEM_INCLUDE,
+      });
+      return atual ? serializarViagemComMinimos(atual, await this.regrasMinimoAtivas()) : null;
+    }
+
+    // Reusa a mesma validação do create pra saída/duração — uma regra só.
+    const modo = await resolverModoServico(this.prisma, viagem.tipoServicoId);
+    const periodo = resolverPeriodo(modo, {
+      entradaEm: viagem.entradaEm ?? undefined,
+      saidaEm: input.saidaEm,
+    });
+
+    const atualizada = await this.prisma.viagem.update({
+      where: { id: viagemId },
+      data: {
+        saidaEm: periodo.saidaEm,
+        duracaoMinutos: periodo.duracaoMinutos,
+        status: "ENVIADA",
+      },
+      include: VIAGEM_INCLUDE,
+    });
+
+    return serializarViagemComMinimos(atualizada, await this.regrasMinimoAtivas());
   }
 
   /**

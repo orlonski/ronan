@@ -45,6 +45,8 @@ const SELECT_AGREGACAO = {
   toneladas: true,
   km: true,
   valorPedagioTotal: true,
+  // Necessário pro guarda de mínimo em aplicarMinimos (diária não tem mínimo).
+  tipoServico: { select: { medicao: true } },
 } as const;
 
 type LinhaBruta = LinhaAgregacao & {
@@ -52,6 +54,7 @@ type LinhaBruta = LinhaAgregacao & {
   toneladas: Prisma.Decimal | null;
   km: Prisma.Decimal | null;
   valorPedagioTotal: Prisma.Decimal | null;
+  tipoServico: { medicao: "PESO" | "PERIODO" } | null;
 };
 
 type Acumulador = {
@@ -278,6 +281,8 @@ export class RelatoriosViagensService {
         veiculo: { select: { placa: true } },
         cliente: { select: { nome: true, empresaId: true } },
         material: { select: { id: true, nome: true } },
+        // Necessário pro guarda de mínimo em aplicarMinimos (diária não tem mínimo).
+        tipoServico: { select: { medicao: true } },
         localCarga: { select: { nome: true, cidade: true, uf: true } },
         localDescarga: { select: { nome: true, cidade: true, uf: true } },
       },

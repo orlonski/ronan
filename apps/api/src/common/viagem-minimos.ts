@@ -14,6 +14,15 @@ type DecimalLike = Prisma.Decimal | string | number;
 export type ViagemBruta = {
   toneladas: DecimalLike | null;
   km: DecimalLike | null;
+  // Modo de serviço da viagem. Ausente/null = frete por tonelada (todo o
+  // histórico e todo app antigo) — ver o guarda em aplicarMinimos.
+  //
+  // ⚠️ Toda query que alimenta aplicarMinimos precisa do
+  // `tipoServico: { select: { medicao: true } }` no select. Esquecer NÃO quebra
+  // o typecheck (o campo é opcional): a diária volta a ganhar mínimo de frete
+  // em silêncio e sai tonelagem inventada na planilha. Mesma natureza da
+  // pegadinha do STATUS_FORA_FECHAMENTO.
+  tipoServico?: { medicao: "PESO" | "PERIODO" } | null;
 };
 
 // Regra dinâmica de mínimo por empresa + material + faixa de km (tabela
@@ -134,8 +143,26 @@ export function aplicarMinimos(
   const tonReal = dec(viagem.toneladas ?? 0);
   const kmReal = dec(viagem.km ?? 0);
 
-  const tonMin = override?.toneladasMinimo ?? null;
-  const kmMin = override?.kmMinimo ?? null;
+  /**
+   * ⚠️ Serviço medido por PERÍODO (diária) não tem mínimo — nem de tonelada,
+   * nem de km.
+   *
+   * RegraMinimo é uma regra de FRETE: "essa empresa paga no mínimo 27t / 100km
+   * por viagem". Uma diária não transporta nada e pode nem sair do pátio, então
+   * o real dela é 0t e 0km. Sem este guarda, a regra veria 0 < mínimo e
+   * faturaria a tonelagem/km MÍNIMOS num caminhão parado — dinheiro inventado
+   * saindo na planilha de fechamento e no relatório comercial.
+   *
+   * Vale pro mínimo por km também (não só o de tonelada): inflar o km de quem
+   * ficou à disposição é o mesmo erro com outro nome.
+   *
+   * Quando existir uma regra comercial própria de diária (valor/dia, valor/hora),
+   * ela entra aqui como um mínimo de PERÍODO — não reaproveitando o de frete.
+   */
+  const ehPeriodo = viagem.tipoServico?.medicao === "PERIODO";
+
+  const tonMin = ehPeriodo ? null : (override?.toneladasMinimo ?? null);
+  const kmMin = ehPeriodo ? null : (override?.kmMinimo ?? null);
 
   const tonAjustada = tonMin !== null && tonReal.lt(tonMin);
   const kmAjustada = kmMin !== null && kmReal.lt(kmMin);

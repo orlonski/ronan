@@ -16,6 +16,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fetchApi, useAuthToken, useResourceOptions } from "@/lib/client-api";
+import { isoDeInputDataHoraSP, paraInputDataHoraSP } from "@/lib/datetime-br";
+import { formatarDuracao } from "@ronan/shared-types";
 
 type Material = { id: string; nome: string };
 type Motorista = { id: string; nome: string };
@@ -27,7 +29,8 @@ export type ViagemEditavel = {
   toneladas: string | null;
   data: string;
   ticket: string | null;
-  km: string;
+  // Null quando o modo de serviço não exige km (diária à disposição).
+  km: string | null;
   kmCalculado: string | null;
   observacao: string | null;
   valorPedagioTotal: string | null;
@@ -40,9 +43,14 @@ export type ViagemEditavel = {
   motorista: Motorista;
   // Ausentes pra quem não tem `viagens.ver-comercial` — o backend omite.
   cliente?: { id: string; nome: string } | null;
-  material: { id: string; nome: string };
+  // Nulos quando o modo de serviço não os exige (diária à disposição).
+  material: { id: string; nome: string } | null;
   localCarga: { id: string; nome: string; cidade: string; uf: string };
-  localDescarga: { id: string; nome: string; cidade: string; uf: string };
+  localDescarga: { id: string; nome: string; cidade: string; uf: string } | null;
+  /** Modo de serviço. null = frete por tonelada (histórico e app antigo). */
+  tipoServico: { id: string; nome: string; medicao: "PESO" | "PERIODO" } | null;
+  entradaEm: string | null;
+  saidaEm: string | null;
   matchesFechamento?: { id: string }[];
 };
 
@@ -58,6 +66,9 @@ type FormState = {
   materialId: string;
   localCargaId: string;
   localDescargaId: string;
+  // Serviço medido por período (diária). "YYYY-MM-DDTHH:mm" em hora de Brasília.
+  entradaEm: string;
+  saidaEm: string;
 };
 
 function parseDecimal(v: string): number | null {
@@ -89,7 +100,9 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
       initial.toneladas != null
         ? String(initial.toneladas).replace(".", ",")
         : "",
-    km: String(initial.km).replace(".", ","),
+    // Modo sem km (diária à disposição) chega null — sem a guarda o campo
+    // exibiria a string "null".
+    km: initial.km != null ? String(initial.km).replace(".", ",") : "",
     valorPedagioTotal:
       initial.valorPedagioTotal != null
         ? String(initial.valorPedagioTotal).replace(".", ",")
@@ -97,10 +110,28 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
     observacao: initial.observacao ?? "",
     veiculoId: initial.veiculo.id,
     clienteId: initial.cliente?.id ?? "",
-    materialId: initial.material.id,
+    materialId: initial.material?.id ?? "",
     localCargaId: initial.localCarga.id,
-    localDescargaId: initial.localDescarga.id,
+    localDescargaId: initial.localDescarga?.id ?? "",
+    entradaEm: paraInputDataHoraSP(initial.entradaEm),
+    saidaEm: paraInputDataHoraSP(initial.saidaEm),
   });
+
+  const ehPeriodo = initial.tipoServico?.medicao === "PERIODO";
+
+  // Permanência recalculada enquanto o admin digita — ele vê o resultado antes
+  // de salvar, em vez de descobrir depois que errou o dia.
+  const duracaoPreview = useMemo(() => {
+    if (!ehPeriodo) return null;
+    const entrada = isoDeInputDataHoraSP(form.entradaEm);
+    const saida = isoDeInputDataHoraSP(form.saidaEm);
+    if (!entrada || !saida) return "em aberto";
+    const minutos = Math.round(
+      (new Date(saida).getTime() - new Date(entrada).getTime()) / 60000,
+    );
+    if (minutos <= 0) return "saída antes da entrada";
+    return formatarDuracao(minutos);
+  }, [ehPeriodo, form.entradaEm, form.saidaEm]);
 
   const materialOptions = useMemo(
     () => (materiais.data ?? []).map((m) => ({ value: m.id, label: m.nome })),
@@ -122,11 +153,13 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
     label: initial.localCarga.nome,
     sublabel: `${initial.localCarga.cidade}/${initial.localCarga.uf}`,
   };
-  const localDescargaInicial = {
-    value: initial.localDescarga.id,
-    label: initial.localDescarga.nome,
-    sublabel: `${initial.localDescarga.cidade}/${initial.localDescarga.uf}`,
-  };
+  const localDescargaInicial = initial.localDescarga
+    ? {
+        value: initial.localDescarga.id,
+        label: initial.localDescarga.nome,
+        sublabel: `${initial.localDescarga.cidade}/${initial.localDescarga.uf}`,
+      }
+    : undefined;
 
   // Sugere o local mais próximo do lat/lng capturado pelo motorista no
   // lançamento (raio 500m). Útil pra corrigir viagens onde motorista
@@ -176,11 +209,20 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
     if (ticketNorm !== (initial.ticket ?? null)) diff.ticket = ticketNorm;
     if (form.veiculoId !== initial.veiculo.id) diff.veiculoId = form.veiculoId;
     if (form.clienteId !== (initial.cliente?.id ?? "")) diff.clienteId = form.clienteId;
-    if (form.materialId !== initial.material.id) diff.materialId = form.materialId;
+    if (form.materialId !== (initial.material?.id ?? "")) diff.materialId = form.materialId;
     if (form.localCargaId !== initial.localCarga.id)
       diff.localCargaId = form.localCargaId;
-    if (form.localDescargaId !== initial.localDescarga.id)
+    if (form.localDescargaId !== (initial.localDescarga?.id ?? ""))
       diff.localDescargaId = form.localDescargaId;
+
+    // Diária: as horas viajam como instante ISO. O backend recalcula a duração
+    // e promove a viagem pra ENVIADA quando a saída entra.
+    if (ehPeriodo) {
+      const entradaNova = isoDeInputDataHoraSP(form.entradaEm);
+      const saidaNova = isoDeInputDataHoraSP(form.saidaEm);
+      if (entradaNova !== (initial.entradaEm ?? null)) diff.entradaEm = entradaNova;
+      if (saidaNova !== (initial.saidaEm ?? null)) diff.saidaEm = saidaNova;
+    }
 
     const tonNum = parseDecimal(form.toneladas);
     if (tonNum != null && tonNum !== Number(initial.toneladas)) {
@@ -222,6 +264,13 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
   return (
     <Card className="p-6">
       <form onSubmit={onSubmit} className="space-y-5">
+        {initial.status === "AGUARDANDO_SAIDA" && (
+          <div className="rounded-lg border border-violet-300 bg-violet-50 p-3 text-sm text-violet-900">
+            <strong>Diária aberta.</strong> O motorista marcou a entrada e ainda não
+            marcou a saída, então essa viagem não entra em fechamento. Preencha a hora
+            de saída e salve — ela passa pra “Aguardando conferência” automaticamente.
+          </div>
+        )}
         {initial.status === "AGUARDANDO_PESO" && (
           <div className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-900">
             <strong>Aguardando peso.</strong> Essa viagem foi lançada sem o peso
@@ -274,19 +323,56 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
               value={form.materialId}
               onChange={(v) => setForm({ ...form, materialId: v ?? "" })}
               options={materialOptions}
-              placeholder="Selecione"
+              placeholder={ehPeriodo ? "Sem material" : "Selecione"}
             />
           </div>
-          <div className="space-y-2">
-            <Label>Toneladas</Label>
-            <Input
-              required
-              inputMode="decimal"
-              value={form.toneladas}
-              onChange={(e) => setForm({ ...form, toneladas: e.target.value })}
-            />
-          </div>
+          {/* Serviço medido por período não tem peso: o campo de toneladas dá
+              lugar às horas, que é o que se cobra. */}
+          {ehPeriodo ? (
+            <div className="space-y-2">
+              <Label>Entrada</Label>
+              <Input
+                type="datetime-local"
+                required
+                value={form.entradaEm}
+                onChange={(e) => setForm({ ...form, entradaEm: e.target.value })}
+              />
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label>Toneladas</Label>
+              <Input
+                required
+                inputMode="decimal"
+                value={form.toneladas}
+                onChange={(e) => setForm({ ...form, toneladas: e.target.value })}
+              />
+            </div>
+          )}
         </div>
+
+        {ehPeriodo && (
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-2">
+              <Label>Saída</Label>
+              <Input
+                type="datetime-local"
+                value={form.saidaEm}
+                onChange={(e) => setForm({ ...form, saidaEm: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">
+                Deixe vazio enquanto o caminhão ainda estiver lá. A duração é
+                calculada sozinha, inclusive quando o turno vira a noite.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Permanência</Label>
+              <p className="pt-2 text-sm font-medium tabular-nums">
+                {duracaoPreview ?? "—"}
+              </p>
+            </div>
+          </div>
+        )}
 
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">

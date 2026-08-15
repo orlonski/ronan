@@ -32,7 +32,8 @@ type Props = {
   toneladasAjustada?: boolean;
   // Regra de mínimo que casou
   regraMinimo?: RegraMinimo | null;
-  materialNome: string;
+  /** Null quando o modo de serviço não exige material (diária à disposição). */
+  materialNome: string | null;
 };
 
 /**
@@ -142,7 +143,7 @@ export function FaturamentoCard(p: Props) {
               .join(" · ")}
           </p>
           <p className="mt-0.5 text-xs text-amber-800">
-            {regra.materialEspecifico
+            {regra.materialEspecifico && p.materialNome
               ? `Regra específica de ${p.materialNome}`
               : "Regra de qualquer material desta empresa"}
             {p.kmAjustada || p.toneladasAjustada

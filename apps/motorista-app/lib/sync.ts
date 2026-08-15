@@ -7,6 +7,7 @@ import { drenarPosicoes } from "./posicao-sync";
 import {
   deletePendingAbastecimento,
   deletePendingCompletarPeso,
+  deletePendingEncerrarDiaria,
   deletePendingEventoViagem,
   deletePendingFoto,
   deletePendingLocal,
@@ -19,6 +20,7 @@ import {
   deletePendingViagemIniciar,
   listPendingAbastecimentos,
   listPendingCompletarPeso,
+  listPendingEncerrarDiaria,
   listPendingEventosViagem,
   listPendingFotos,
   listPendingLocais,
@@ -31,6 +33,7 @@ import {
   listPendingViagens,
   upsertPendingAbastecimento,
   upsertPendingCompletarPeso,
+  upsertPendingEncerrarDiaria,
   upsertPendingEventoViagem,
   upsertPendingFoto,
   upsertPendingLocal,
@@ -43,6 +46,7 @@ import {
   upsertPendingViagemIniciar,
   type PendingAbastecimento,
   type PendingCompletarPeso,
+  type PendingEncerrarDiaria,
   type PendingEventoViagem,
   type PendingFoto,
   type PendingLocal,
@@ -605,6 +609,55 @@ export async function descartarCompletarPesoPendente(viagemId: string): Promise<
 }
 
 /**
+ * Enfileira o encerramento de uma diária (hora de saída) de uma viagem em
+ * AGUARDANDO_SAIDA. Espelho de enqueueCompletarPeso.
+ */
+export async function enqueueEncerrarDiaria(item: {
+  viagemId: string;
+  saidaEm: string;
+}): Promise<void> {
+  await upsertPendingEncerrarDiaria({
+    clientId: `${item.viagemId}-encerrar-diaria`,
+    viagemId: item.viagemId,
+    payload: { saidaEm: item.saidaEm },
+    status: "pending",
+    attempts: 0,
+    createdAt: Date.now(),
+    lastTriedAt: undefined,
+    errorMsg: undefined,
+    errorStatus: undefined,
+    errorIssues: undefined,
+    errorPermanenteLocal: undefined,
+  });
+  notify();
+  void drain();
+}
+
+/** Reseta o erro e tenta encerrar a diária de novo (após 4xx permanente). */
+export async function tentarNovamenteEncerrarDiaria(viagemId: string): Promise<void> {
+  const list = await listPendingEncerrarDiaria();
+  const item = list.find((x) => x.viagemId === viagemId);
+  if (!item) return;
+  await upsertPendingEncerrarDiaria({
+    ...item,
+    status: "pending",
+    attempts: 0,
+    errorMsg: undefined,
+    errorStatus: undefined,
+    errorIssues: undefined,
+    errorPermanenteLocal: undefined,
+  });
+  notify();
+  void drain();
+}
+
+/** Descarta o encerramento (a diária segue aberta, em AGUARDANDO_SAIDA). */
+export async function descartarEncerrarDiariaPendente(viagemId: string): Promise<void> {
+  await deletePendingEncerrarDiaria(viagemId);
+  notify();
+}
+
+/**
  * Enfileira a criação de um local novo (descarga em lugar nunca visto).
  * clientId é o UUID gerado client-side, vira o id real no servidor pra
  * idempotência. A viagem que referencia esse local usa o mesmo clientId
@@ -729,12 +782,14 @@ export async function pendingCounts(): Promise<{
   lifecycle: number;
   /** "Completar peso" de viagens AGUARDANDO_PESO aguardando sync. */
   completarPeso: number;
+  /** "Encerrar diária" de viagens AGUARDANDO_SAIDA aguardando sync. */
+  encerrarDiaria: number;
   /** Foto avulsa, local criado offline e story aguardando sync. */
   outros: number;
   /** Itens com erro permanente (4xx) que precisam de ação do motorista. */
   comErro: number;
 }> {
-  const [v, p, a, li, ev, fi, cp, fo, lo, st] = await Promise.all([
+  const [v, p, a, li, ev, fi, cp, ed, fo, lo, st] = await Promise.all([
     listPendingViagens(),
     listPendingPedagios(),
     listPendingAbastecimentos(),
@@ -742,13 +797,14 @@ export async function pendingCounts(): Promise<{
     listPendingEventosViagem(),
     listPendingViagemFinalizar(),
     listPendingCompletarPeso(),
+    listPendingEncerrarDiaria(),
     listPendingFotos(),
     listPendingLocais(),
     listPendingStories(),
   ]);
   // foto/local/story ficavam de fora da contagem: item travado desses não
   // aparecia em lugar nenhum, nem no badge da home nem na tela de Pendentes.
-  const comErro = [v, p, a, li, ev, fi, cp, fo, lo, st].reduce(
+  const comErro = [v, p, a, li, ev, fi, cp, ed, fo, lo, st].reduce(
     (acc, lista) => acc + lista.filter((i) => i.attempts >= MAX_ATTEMPTS).length,
     0,
   );
@@ -758,6 +814,7 @@ export async function pendingCounts(): Promise<{
     abastecimentos: a.length,
     lifecycle: li.length + ev.length + fi.length,
     completarPeso: cp.length,
+    encerrarDiaria: ed.length,
     outros: fo.length + lo.length + st.length,
     comErro,
   };
@@ -979,6 +1036,7 @@ async function snapshotPendentes(): Promise<{ total: number; motivo?: string }> 
     listPendingFotos(),
     listPendingStories(),
     listPendingCompletarPeso(),
+    listPendingEncerrarDiaria(),
     listPendingViagemIniciar(),
     listPendingEventosViagem(),
     listPendingViagemFinalizar(),
@@ -1051,6 +1109,8 @@ export async function drain(opts?: { force?: boolean }): Promise<DrainResumo> {
     await drainFotos();
     // Completar peso: age sobre viagem JÁ sincronizada (AGUARDANDO_PESO).
     await drainCompletarPeso();
+    // Encerrar diária: mesma natureza (viagem já sincronizada, AGUARDANDO_SAIDA).
+    await drainEncerrarDiaria();
     await drainPedagios();
     await drainAbastecimentos();
     await drainStories();
@@ -1111,6 +1171,11 @@ async function rescueStaleItems(): Promise<void> {
   for (const cp of await listPendingCompletarPeso()) {
     if (cp.status === "syncing" && isStale(cp.lastTriedAt)) {
       await upsertPendingCompletarPeso({ ...cp, status: "pending" });
+    }
+  }
+  for (const ed of await listPendingEncerrarDiaria()) {
+    if (ed.status === "syncing" && isStale(ed.lastTriedAt)) {
+      await upsertPendingEncerrarDiaria({ ...ed, status: "pending" });
     }
   }
   for (const i of await listPendingViagemIniciar()) {
@@ -1279,6 +1344,31 @@ async function processCompletarPeso(item: PendingCompletarPeso): Promise<void> {
   } catch (err) {
     await upsertPendingCompletarPeso(
       proximoEstadoFalha(item, err, isErroPermanente(err), "completar-peso"),
+    );
+  }
+  notify();
+}
+
+async function drainEncerrarDiaria(): Promise<void> {
+  const list = await listPendingEncerrarDiaria();
+  for (const item of list) {
+    if (item.status === "syncing") continue;
+    if (item.attempts >= MAX_ATTEMPTS) continue;
+    if (!(await podeTentar("encerrar-diaria"))) return;
+    await processEncerrarDiaria(item);
+  }
+}
+
+async function processEncerrarDiaria(item: PendingEncerrarDiaria): Promise<void> {
+  await upsertPendingEncerrarDiaria({ ...item, status: "syncing", lastTriedAt: Date.now() });
+  notify();
+  try {
+    // Idempotente no backend: se já foi encerrada (ENVIADA), devolve a existente.
+    await api.post(`/m/viagens/${item.viagemId}/encerrar-diaria`, item.payload, { outbox: true });
+    await deletePendingEncerrarDiaria(item.viagemId);
+  } catch (err) {
+    await upsertPendingEncerrarDiaria(
+      proximoEstadoFalha(item, err, isErroPermanente(err), "encerrar-diaria"),
     );
   }
   notify();
@@ -1776,6 +1866,7 @@ export async function recuperarItensPresos(): Promise<void> {
   await varrer(await listPendingFotos(), upsertPendingFoto);
   await varrer(await listPendingStories(), upsertPendingStory);
   await varrer(await listPendingCompletarPeso(), upsertPendingCompletarPeso);
+  await varrer(await listPendingEncerrarDiaria(), upsertPendingEncerrarDiaria);
   await varrer(await listPendingMensagensChat(), upsertPendingMensagemChat);
   // viagem-iniciar: além dos transitórios, um 409 morto aqui é SEMPRE bloqueio
   // por outra viagem em andamento (única causa de 409 no iniciar) — recuperável

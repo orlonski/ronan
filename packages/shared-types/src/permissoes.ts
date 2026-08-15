@@ -95,6 +95,7 @@ const RESOURCE_DEFS: ResourceDef[] = [
   { recurso: "locais", label: "Locais", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir", "homologar"] },
   { recurso: "pedagios", label: "Pedágios (rodovias)", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir", "importar"] },
   { recurso: "materiais", label: "Materiais", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
+  { recurso: "tipos-servico", label: "Modos de serviço", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "regras-minimo", label: "Mínimos por faixa", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "tipos-evento-viagem", label: "Eventos da viagem", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   // ---- Sistema ----

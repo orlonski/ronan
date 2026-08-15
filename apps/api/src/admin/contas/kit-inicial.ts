@@ -92,3 +92,21 @@ export const TIPOS_EVENTO_INICIAIS: Prisma.TipoEventoViagemCreateManyContaInput[
     pedeObservacao: true,
   },
 ];
+
+/**
+ * Modos de serviço (como a viagem é medida). O kit traz SÓ o frete por
+ * tonelada, marcado como padrão.
+ *
+ * ⚠️ Isso é deliberado e é o que garante compatibilidade: com um único modo
+ * cadastrado, o app nem mostra o seletor e a conta se comporta exatamente como
+ * antes desta feature existir. Quem quiser diária cadastra o modo no painel.
+ */
+export const TIPOS_SERVICO_INICIAIS: Prisma.TipoServicoCreateManyContaInput[] = [
+  {
+    slug: "frete",
+    nome: "Frete por tonelada",
+    ordem: 1,
+    padrao: true,
+    medicao: "PESO",
+  },
+];

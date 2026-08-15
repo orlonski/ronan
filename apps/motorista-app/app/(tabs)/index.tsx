@@ -9,6 +9,7 @@ import {
   ArrowDown,
   ArrowRight,
   ArrowUp,
+  Clock,
   CloudOff,
   Fuel,
   MapPin,
@@ -22,6 +23,7 @@ import {
   Truck,
   WifiOff,
 } from "lucide-react-native";
+import { fmtHoraBR } from "@/lib/datetime";
 import {
   ActivityIndicator,
   FlatList,
@@ -55,6 +57,7 @@ import {
   useResumoMes,
   useTrackingConfig,
   useViagens,
+  useDiariasAbertas,
   useViagensAguardandoPeso,
   type Viagem,
 } from "@/lib/queries";
@@ -91,6 +94,11 @@ export default function Home() {
   const pending = usePending();
   const aguardandoPeso = useViagensAguardandoPeso();
   const nAguardandoPeso = aguardandoPeso.data?.length ?? 0;
+  // Diárias abertas (entrada marcada, saída pendente). Sem a flag podeDiaria o
+  // motorista nunca abre uma, então a lista fica sempre vazia e o card não sai.
+  const diariasAbertas = useDiariasAbertas();
+  const nDiariasAbertas = diariasAbertas.data?.length ?? 0;
+  const diariaUnica = nDiariasAbertas === 1 ? diariasAbertas.data?.[0] : undefined;
   const posicaoConfig = usePosicaoConfig();
   const excluir = useExcluirViagem();
   const updates = Updates.useUpdates();
@@ -506,6 +514,38 @@ export default function Home() {
               </Pressable>
             )}
 
+            {/* Banner: diárias em que ele marcou a entrada e não encerrou.
+                Violeta (mesma cor da diária no painel) e persistente — enquanto
+                a saída não entra, a viagem fica fora do fechamento. */}
+            {nDiariasAbertas > 0 && (
+              <Pressable
+                onPress={() =>
+                  router.push(
+                    diariaUnica
+                      ? `/encerrar-diaria?viagemId=${diariaUnica.id}`
+                      : "/viagens",
+                  )
+                }
+                className="flex-row items-center gap-3 rounded-2xl border-2 border-violet-500/40 bg-violet-500/15 p-4 active:opacity-75"
+              >
+                <View className="h-12 w-12 items-center justify-center rounded-full bg-violet-500">
+                  <Clock size={22} color="white" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-base font-bold text-foreground">
+                    {nDiariasAbertas === 1
+                      ? "Diária aberta"
+                      : `${nDiariasAbertas} diárias abertas`}
+                  </Text>
+                  <Text className="text-sm text-muted-foreground">
+                    {diariaUnica?.entradaEm
+                      ? `Você entrou às ${fmtHoraBR(diariaUnica.entradaEm)} — toque pra encerrar`
+                      : "Toque pra marcar a hora que você saiu"}
+                  </Text>
+                </View>
+              </Pressable>
+            )}
+
             {/* Botão Hero "Iniciar viagem" (lifecycle guiado, NOVO). É o
                 destaque e vem primeiro. Escondido enquanto há viagem em
                 andamento (o banner "Retomar" cobre). */}
@@ -792,12 +832,14 @@ function ViagemCard({ v, onExcluir }: { v: Viagem; onExcluir: () => void }) {
             {v.localCarga.nome}
           </Text>
         </View>
-        <View className="flex-row items-center gap-2">
-          <ArrowDown size={16} color="#dc2626" />
-          <Text className="flex-1 text-base font-medium text-foreground" numberOfLines={1}>
-            {v.localDescarga.nome}
-          </Text>
-        </View>
+        {v.localDescarga ? (
+          <View className="flex-row items-center gap-2">
+            <ArrowDown size={16} color="#dc2626" />
+            <Text className="flex-1 text-base font-medium text-foreground" numberOfLines={1}>
+              {v.localDescarga.nome}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       <View className="mt-3 flex-row gap-5 border-t-2 border-border pt-3">

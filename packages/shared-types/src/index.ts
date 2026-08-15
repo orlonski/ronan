@@ -18,6 +18,7 @@ export * from "./motorista";
 export * from "./motorista-documento";
 export * from "./veiculo";
 export * from "./material";
+export * from "./tipo-servico";
 export * from "./regra-minimo";
 export * from "./relatorio";
 export * from "./relatorio-abastecimento";

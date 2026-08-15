@@ -12,7 +12,7 @@ import { AuthService } from "../../auth/auth.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { CamposLayoutService } from "../campos-layout/campos-layout.service";
 import { PermissoesService, PAPEL_ADMIN } from "../permissoes/permissoes.service";
-import { MATERIAIS_INICIAIS, TIPOS_EVENTO_INICIAIS } from "./kit-inicial";
+import { MATERIAIS_INICIAIS, TIPOS_EVENTO_INICIAIS, TIPOS_SERVICO_INICIAIS } from "./kit-inicial";
 import { gerarCodigoConvite } from "./codigo-convite";
 
 export type CriarContaInput = {
@@ -282,6 +282,11 @@ export class ContasService implements OnModuleInit {
 
         await this.prisma.tipoEventoViagem.createMany({
           data: TIPOS_EVENTO_INICIAIS.map((t) => ({ ...t, contaId: conta.id })),
+          skipDuplicates: true,
+        });
+
+        await this.prisma.tipoServico.createMany({
+          data: TIPOS_SERVICO_INICIAIS.map((t) => ({ ...t, contaId: conta.id })),
           skipDuplicates: true,
         });
       });

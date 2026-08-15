@@ -36,6 +36,21 @@ enum StatusViagem {
   /// match/fechamento/KPIs/resumos/export enquanto incompleta. Vira ENVIADA
   /// quando o motorista (app) ou o admin (dashboard) completa peso + ticket.
   AGUARDANDO_PESO
+  /// Viagem de serviço medido por PERÍODO (diária): o motorista marcou a hora de
+  /// entrada e ainda não marcou a de saída. Mesma natureza do AGUARDANDO_PESO —
+  /// incompleta, visível pro admin, NUNCA entra em match/fechamento/KPIs/export.
+  /// Vira ENVIADA quando o motorista (app) ou o admin (dashboard) grava a saída.
+  AGUARDANDO_SAIDA
+}
+
+/// Como a viagem é MEDIDA — e portanto o que o app pede ao motorista.
+/// Ver model TipoServico.
+enum MedicaoViagem {
+  /// Viagem medida em toneladas transportadas (o padrão de sempre).
+  PESO
+  /// Viagem medida pelo tempo em que o caminhão ficou à disposição (diária):
+  /// entrada → saída. Não tem peso.
+  PERIODO
 }
 
 enum TipoDivergencia {
@@ -251,6 +266,7 @@ model Conta {
   layoutImportBlocos            LayoutImportBloco[]
   clientes                      Cliente[]
   materiais                     Material[]
+  tiposServico                  TipoServico[]
   regrasMinimo                  RegraMinimo[]
   locais                        Local[]
   locaisClientes                LocalCliente[]
@@ -357,6 +373,7 @@ model User {
 
   clientesCriados        Cliente[]          @relation("CriouCliente")
   materiaisCriados       Material[]         @relation("CriouMaterial")
+  tiposServicoCriados    TipoServico[]      @relation("CriouTipoServico")
   veiculosCriados        Veiculo[]          @relation("CriouVeiculo")
   transportadorasCriadas Transportadora[]   @relation("CriouTransportadora")
   motoristasCriados      Motorista[]        @relation("CriouMotorista")
@@ -534,6 +551,11 @@ model Motorista {
   /// desligável caso a caso pelo painel (ex: alguém que abusou); desligar
   /// remove a aba e bloqueia /m/chat/*, mas as conversas ficam guardadas.
   podeChat                Boolean         @default(true)
+  /// Serviço medido por período (diária): o motorista pode escolher o modo de
+  /// serviço no lançamento e marcar hora de entrada/saída em vez de peso.
+  /// Default false — rollout de um motorista por vez. Sem a flag, /m/catalogos
+  /// nem devolve os tipos de serviço e o app fica idêntico ao de hoje.
+  podeDiaria              Boolean         @default(false)
   /// Frota dona do motorista. Null = não classificado (invisível pros usuários
   /// restritos). Usado pra carimbar Viagem/Pedagio/Abastecimento na criação —
   /// mudar aqui NÃO reescreve o histórico já carimbado, de propósito.
@@ -1025,6 +1047,55 @@ model Material {
   @@map("materiais")
 }
 
+/// Catálogo de MODOS DE SERVIÇO da conta: como a viagem é medida e o que o app
+/// pede ao motorista. Existe porque "diária" não é um material — é a unidade de
+/// medida do serviço. Cadastrar diária como Material contamina RegraMinimo,
+/// ranking de tonelagem e layout de fechamento (viagem sem peso vira 0t, ou pior,
+/// vira a tonelagem MÍNIMA da faixa).
+///
+/// Segue o padrão de TipoEventoViagem: o admin cadastra e o app monta o
+/// formulário a partir das flags — nada de fluxo hardcoded por slug.
+///
+/// ⚠️ Conta que só tem o tipo `frete` (o do kit inicial) se comporta EXATAMENTE
+/// como antes desta feature existir: o app nem mostra o seletor.
+model TipoServico {
+  contaId            String        @default("__SEM_CONTA__")
+  conta              Conta         @relation(fields: [contaId], references: [id])
+  id                 String        @id @default(uuid())
+  /// Chave estável usada no código/seed (ex: "frete", "diaria"). Imutável.
+  slug               String
+  /// Rótulo que o motorista lê no app (editável pelo admin).
+  nome               String
+  ativo              Boolean       @default(true)
+  /// O tipo herdado por viagem sem tipoServicoId (histórico e app antigo). Só um
+  /// por conta — garantido por índice parcial único criado no migration.sql.
+  padrao             Boolean       @default(false)
+  /// Ordena o seletor no app.
+  ordem              Int           @default(0)
+  /// PESO = pede toneladas (comportamento de sempre).
+  /// PERIODO = pede hora de entrada e de saída, e NÃO pede peso.
+  medicao            MedicaoViagem @default(PESO)
+  // --- o que esse tipo exige (mesmo espírito dos `pede*` do TipoEventoViagem) ---
+  /// false = a viagem não tem material (diária de caminhão à disposição).
+  exigeMaterial      Boolean       @default(true)
+  /// Combinado em E com Material.exigeTicket: basta um dos dois dispensar.
+  exigeTicket        Boolean       @default(true)
+  exigeLocalDescarga Boolean       @default(true)
+  exigeKm            Boolean       @default(true)
+  criadoEm           DateTime      @default(now())
+  alteradoEm         DateTime      @updatedAt
+  criadoPor          User?         @relation("CriouTipoServico", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId        String?
+
+  viagens Viagem[]
+
+  @@unique([contaId, slug])
+  @@unique([contaId, nome])
+  @@index([ativo, ordem])
+  @@index([contaId])
+  @@map("tipos_servico")
+}
+
 /// Regra dinâmica de mínimo faturado por empresa + material + faixa de km rodado.
 /// Quando a viagem casa (empresa da viagem, material — ou "qualquer" se null —,
 /// e km real dentro da faixa), o mínimo da regra vence o mínimo do cliente.
@@ -1196,8 +1267,24 @@ model Viagem {
   clienteId               String?
   material                Material?          @relation(fields: [materialId], references: [id])
   materialId              String?
+  /// Modo de serviço da viagem (como ela é medida). NULL = o tipo `padrao` da
+  /// conta, que é PESO — é assim que todo o histórico e todo app antigo seguem
+  /// funcionando sem migração de dados. Ver model TipoServico.
+  tipoServico             TipoServico?       @relation(fields: [tipoServicoId], references: [id])
+  tipoServicoId           String?
   data                    DateTime?          @db.Date
+  /// Null quando o serviço é medido por PERÍODO (diária). Ver TipoServico.medicao.
   toneladas               Decimal?           @db.Decimal(10, 3)
+  /// Serviço medido por PERÍODO (diária): quando o caminhão entrou e saiu.
+  /// DateTime completo (não só hora) de propósito — diária que vira a noite
+  /// (22h → 06h) precisa fechar sozinha, sem heurística de "dia seguinte".
+  /// Null nas viagens medidas por peso.
+  entradaEm               DateTime?
+  saidaEm                 DateTime?
+  /// Duração derivada de saidaEm - entradaEm, gravada na escrita pra permitir
+  /// orderBy/_sum em SQL (mesmo espírito do kmCalculado). Null enquanto a saída
+  /// não foi marcada (status AGUARDANDO_SAIDA).
+  duracaoMinutos          Int?
   /// Null quando o material não exige ticket (ex: concreto). Ver Material.exigeTicket.
   ticket                  String?
   km                      Decimal?           @db.Decimal(10, 2)
@@ -1373,6 +1460,8 @@ model Viagem {
   @@index([data])
   // Única dimensão do relatório que não tinha índice composto com data.
   @@index([materialId, data])
+  // Recorte de diárias no relatório/lista, e FK do TipoServico.
+  @@index([tipoServicoId, data])
   // Partial unique index "1 viagem EM_ANDAMENTO por motorista" é criado à mão
   // no migration.sql (Prisma não expressa índice parcial): ver migration
   // add_viagem_lifecycle (uq_viagem_em_andamento_por_motorista).

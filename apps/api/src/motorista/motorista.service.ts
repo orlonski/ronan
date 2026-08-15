@@ -166,6 +166,7 @@ export class MotoristaService {
         podeReferenciaKm: true,
         podeTelemetria: true,
         podeChat: true,
+        podeDiaria: true,
         aceitaPush: true,
         aceitaWhatsapp: true,
         receberResumoDiario: true,
@@ -933,7 +934,15 @@ export class MotoristaService {
         ? { ativo: true, id: { in: vinculadosIds } }
         : { ativo: true };
 
-    const [veiculos, materiais, clientes, locais, empresas, ultimosAbast] = await Promise.all([
+    // Modos de serviço: só chegam pro motorista com a flag `podeDiaria`.
+    // Sem a flag o app não recebe nada e fica idêntico ao de hoje — é a camada
+    // de rollout gradual (a outra é a conta não ter cadastrado modo nenhum).
+    const motorista = await this.prisma.motorista.findUnique({
+      where: { id: motoristaId },
+      select: { podeDiaria: true },
+    });
+
+    const [veiculos, materiais, tiposServico, clientes, locais, empresas, ultimosAbast] = await Promise.all([
       this.prisma.veiculo.findMany({
         where: veiculosWhere,
         select: { id: true, placa: true, modelo: true },
@@ -944,6 +953,22 @@ export class MotoristaService {
         select: { id: true, nome: true, exigeTicket: true, permiteBotaFora: true },
         orderBy: { nome: "asc" },
       }),
+      motorista?.podeDiaria
+        ? this.prisma.tipoServico.findMany({
+            where: { ativo: true },
+            select: {
+              id: true,
+              nome: true,
+              padrao: true,
+              medicao: true,
+              exigeMaterial: true,
+              exigeTicket: true,
+              exigeLocalDescarga: true,
+              exigeKm: true,
+            },
+            orderBy: [{ ordem: "asc" }, { nome: "asc" }],
+          })
+        : Promise.resolve([]),
       this.prisma.cliente.findMany({
         where: { ativa: true },
         select: {
@@ -996,7 +1021,14 @@ export class MotoristaService {
       ...l,
       clienteIds: clientes.map((c) => c.clienteId),
     }));
-    return { veiculos: veiculosComOdometro, materiais, clientes, locais: locaisFlat, empresas };
+    return {
+      veiculos: veiculosComOdometro,
+      materiais,
+      tiposServico,
+      clientes,
+      locais: locaisFlat,
+      empresas,
+    };
   }
 
   /**

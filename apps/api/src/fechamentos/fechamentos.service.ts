@@ -50,6 +50,8 @@ const LINHA_INCLUDE = {
       motorista: { select: { nome: true } },
       cliente: { select: { nome: true, empresaId: true, toneladasMinimas: true, kmMinimos: true } },
       material: { select: { id: true, nome: true } },
+      // Necessário pro guarda de mínimo em aplicarMinimos (diária não tem mínimo).
+      tipoServico: { select: { medicao: true } },
     },
   },
   resolvidoPor: { select: { id: true, nome: true } },

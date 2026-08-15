@@ -13,7 +13,12 @@ import {
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { z } from "zod";
-import { CriarViagemBase, CompletarPesoInput, checarPesoObrigatorio } from "@ronan/shared-types";
+import {
+  CriarViagemBase,
+  CompletarPesoInput,
+  EncerrarDiariaInput,
+  checarObrigatoriosDoModo,
+} from "@ronan/shared-types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
@@ -26,7 +31,7 @@ import { ViagensMotoristaService } from "./viagens.service";
 
 const CriarViagemPayload = CriarViagemBase.extend({
   fotoKey: z.string().optional(),
-}).superRefine(checarPesoObrigatorio);
+}).superRefine(checarObrigatoriosDoModo);
 
 const AdicionarFotoInput = z.object({
   fotoKey: z.string().min(1),
@@ -117,6 +122,15 @@ export class ViagensMotoristaController {
     return this.service.listarAguardandoPeso(user.id);
   }
 
+  /**
+   * Diárias abertas (status AGUARDANDO_SAIDA) — alimenta o card "Diária aberta"
+   * na home do app. Mesma regra de rota do aguardando-peso: antes do @Get(":id").
+   */
+  @Get("aguardando-saida")
+  aguardandoSaida(@CurrentUser() user: AuthMotorista) {
+    return this.service.listarAguardandoSaida(user.id);
+  }
+
   @Post()
   @AcessoMotorista("podeLancarViagem")
   create(
@@ -139,6 +153,20 @@ export class ViagensMotoristaController {
     body: z.infer<typeof CompletarPesoInput>,
   ) {
     return this.service.completarPeso(user.id, id, body);
+  }
+
+  /**
+   * Encerra uma diária aberta (AGUARDANDO_SAIDA): grava a hora de saída,
+   * calcula a duração e transiciona pra ENVIADA.
+   */
+  @Post(":id/encerrar-diaria")
+  encerrarDiaria(
+    @CurrentUser() user: AuthMotorista,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(EncerrarDiariaInput))
+    body: z.infer<typeof EncerrarDiariaInput>,
+  ) {
+    return this.service.encerrarDiaria(user.id, id, body);
   }
 
   @Delete(":id")

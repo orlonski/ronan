@@ -37,7 +37,8 @@ import { showAlert, showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import { API_URL } from "@/lib/api-url";
 import { loadTokens } from "@/lib/auth";
-import { fmtDataBR } from "@/lib/datetime";
+import { fmtDataBR, fmtPeriodoBR } from "@/lib/datetime";
+import { formatarDuracao } from "@ronan/shared-types";
 import {
   useExcluirViagem,
   useInformarValorPedagio,
@@ -73,7 +74,7 @@ export default function ViagemDetalheScreen() {
   const detalhe = useViagemDetalhe(id ?? "");
   const pedagiosNaRota = usePedagiosNaRota(
     detalhe.data?.localCarga.id,
-    detalhe.data?.localDescarga.id,
+    detalhe.data?.localDescarga?.id,
   );
   const excluir = useExcluirViagem();
   const informarPedagio = useInformarValorPedagio();
@@ -202,7 +203,9 @@ export default function ViagemDetalheScreen() {
             <View className="mt-4 flex-row gap-6 border-t-2 border-border pt-3">
               <Info label="Data" value={fmtDataBR(detalhe.data.data)} />
               <Info label="Placa" value={detalhe.data.veiculo.placa} mono />
-              <Info label="Material" value={detalhe.data.material.nome} />
+              {detalhe.data.material ? (
+                <Info label="Material" value={detalhe.data.material.nome} />
+              ) : null}
             </View>
           </Card>
 
@@ -435,18 +438,21 @@ export default function ViagemDetalheScreen() {
                   </Text>
                 </View>
               </View>
-              <View className="flex-row items-start gap-3">
-                <ArrowDown size={20} color="#dc2626" />
-                <View className="flex-1">
-                  <Text className="text-base font-semibold text-foreground">
-                    {detalhe.data.localDescarga.nome}
-                  </Text>
-                  <Text className="text-sm text-muted-foreground">
-                    {detalhe.data.localDescarga.logradouro} —{" "}
-                    {detalhe.data.localDescarga.cidade}/{detalhe.data.localDescarga.uf}
-                  </Text>
+              {/* Diária à disposição pode não ter descarga. */}
+              {detalhe.data.localDescarga ? (
+                <View className="flex-row items-start gap-3">
+                  <ArrowDown size={20} color="#dc2626" />
+                  <View className="flex-1">
+                    <Text className="text-base font-semibold text-foreground">
+                      {detalhe.data.localDescarga.nome}
+                    </Text>
+                    <Text className="text-sm text-muted-foreground">
+                      {detalhe.data.localDescarga.logradouro} —{" "}
+                      {detalhe.data.localDescarga.cidade}/{detalhe.data.localDescarga.uf}
+                    </Text>
+                  </View>
                 </View>
-              </View>
+              ) : null}
               {/* Trechos adicionais (retorno do bota-fora): voltou pra carga */}
               {(detalhe.data.trechos ?? []).map((t) => (
                 <View key={t.id} className="flex-row items-start gap-3">
@@ -472,22 +478,34 @@ export default function ViagemDetalheScreen() {
           {/* Stats */}
           <Card>
             <View className="flex-row gap-6">
-              <Stat
-                label="Toneladas"
-                value={
-                  detalhe.data.status === "AGUARDANDO_PESO"
-                    ? "—"
-                    : fmtNum(detalhe.data.toneladasEfetiva, 3)
-                }
-                fromAi={detalhe.data.ocrCampos?.includes("toneladas")}
-                subValue={
-                  detalhe.data.status === "AGUARDANDO_PESO"
-                    ? "aguardando"
-                    : detalhe.data.toneladasAjustada
-                      ? `informado ${fmtNum(detalhe.data.toneladasInformada, 3)}`
-                      : undefined
-                }
-              />
+              {detalhe.data.tipoServico?.medicao === "PERIODO" ? (
+                <Stat
+                  label="Permanência"
+                  value={
+                    detalhe.data.saidaEm
+                      ? formatarDuracao(detalhe.data.duracaoMinutos)
+                      : "—"
+                  }
+                  subValue={fmtPeriodoBR(detalhe.data.entradaEm, detalhe.data.saidaEm)}
+                />
+              ) : (
+                <Stat
+                  label="Toneladas"
+                  value={
+                    detalhe.data.status === "AGUARDANDO_PESO"
+                      ? "—"
+                      : fmtNum(detalhe.data.toneladasEfetiva, 3)
+                  }
+                  fromAi={detalhe.data.ocrCampos?.includes("toneladas")}
+                  subValue={
+                    detalhe.data.status === "AGUARDANDO_PESO"
+                      ? "aguardando"
+                      : detalhe.data.toneladasAjustada
+                        ? `informado ${fmtNum(detalhe.data.toneladasInformada, 3)}`
+                        : undefined
+                  }
+                />
+              )}
               <Stat
                 label="Km"
                 value={fmtNum(detalhe.data.kmEfetivo, 2)}
@@ -642,7 +660,7 @@ export default function ViagemDetalheScreen() {
               acima já mostra o trajeto real) */}
           {detalhe.data.pontos.length < 2 &&
             (detalhe.data.localCarga.lat != null ||
-              detalhe.data.localDescarga.lat != null ||
+              detalhe.data.localDescarga?.lat != null ||
               detalhe.data.lat != null) && (
               <Card>
                 <View className="mb-2 flex-row items-center gap-2">
@@ -664,8 +682,8 @@ export default function ViagemDetalheScreen() {
                         : null
                     }
                     descarga={
-                      detalhe.data.localDescarga.lat != null &&
-                      detalhe.data.localDescarga.lng != null
+                      detalhe.data.localDescarga?.lat != null &&
+                      detalhe.data.localDescarga?.lng != null
                         ? {
                             lat: detalhe.data.localDescarga.lat,
                             lng: detalhe.data.localDescarga.lng,

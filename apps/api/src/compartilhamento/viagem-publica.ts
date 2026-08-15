@@ -106,6 +106,8 @@ export const SELECT_VIAGEM_PUBLICA = {
   valorPedagioTotal: true,
   rotaGeometria: true,
   material: { select: { id: true, nome: true } },
+  // Necessário pro guarda de mínimo em aplicarMinimos (diária não tem mínimo).
+  tipoServico: { select: { medicao: true } },
   // empresaId alimenta a regra de mínimo; NÃO vai pro payload.
   cliente: { select: { empresaId: true } },
   // Ids dos locais servem só pra achar a rota do par no cache; NÃO vão pro payload.
@@ -176,7 +178,10 @@ export function serializarViagemPublica(
     ctx.regras.length > 0 && empresaId && materialId
       ? (resolverRegraMinimo(ctx.regras, empresaId, materialId, viagem.km ?? 0) ?? undefined)
       : undefined;
-  const minimos = aplicarMinimos({ km: viagem.km, toneladas: viagem.toneladas }, override);
+  const minimos = aplicarMinimos(
+    { km: viagem.km, toneladas: viagem.toneladas, tipoServico: viagem.tipoServico },
+    override,
+  );
 
   return {
     marca: { nome: viagem.conta.nome, logoUrl: viagem.conta.logoUrl },

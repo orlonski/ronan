@@ -41,6 +41,7 @@ const AcessosInput = z.object({
   podeReferenciaKm: z.boolean().optional(),
   podeTelemetria: z.boolean().optional(),
   podeChat: z.boolean().optional(),
+  podeDiaria: z.boolean().optional(),
   receberResumoDiario: z.boolean().optional(),
 });
 type AcessosInput = z.infer<typeof AcessosInput>;

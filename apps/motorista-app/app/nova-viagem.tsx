@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { router, Stack, useLocalSearchParams, useNavigation } from "expo-router";
 import { usePreventRemove } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
-import { Check, MapPinOff, Trash2, X } from "lucide-react-native";
+import { Check, Clock, MapPinOff, Trash2, X } from "lucide-react-native";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -29,7 +29,15 @@ import { PerguntaBotaFora } from "@/components/pergunta-bota-fora";
 import { showAlert, showConfirm } from "@/lib/alert";
 import { clearNavDestino } from "@/lib/nav-destino-storage";
 import { humanizeApiError } from "@/lib/api";
-import { fmtDataBR, hojeISO } from "@/lib/datetime";
+import {
+  fmtDataBR,
+  fmtHoraBR,
+  hojeISO,
+  isoDeDataHoraBR,
+  minutosEntre,
+  UM_DIA_MS,
+} from "@/lib/datetime";
+import { formatarDuracao } from "@ronan/shared-types";
 import { reportarEvento } from "@/lib/event-reporter";
 import { criarTelemetriaViagem } from "@/lib/telemetria-viagem";
 import { humanizeZodError } from "@/lib/validation";
@@ -57,8 +65,15 @@ type FormShape = {
   veiculoId: string;
   clienteId: string;
   materialId: string;
+  // Modo de serviço escolhido. "" = o padrão da conta (frete por tonelada) —
+  // que é onde todo mundo cai quando a conta não cadastrou nenhum outro.
+  tipoServicoId: string;
   data: string;
   toneladas: string;
+  // Serviço medido por PERÍODO (diária). ISO do instante — carimbado pelo
+  // relógio no botão "Agora" ou montado da hora que o motorista digitou.
+  entradaEm: string;
+  saidaEm: string;
   ticket: string;
   km: string;
   localCargaId: string;
@@ -84,8 +99,11 @@ const empty: FormShape = {
   veiculoId: "",
   clienteId: "",
   materialId: "",
+  tipoServicoId: "",
   data: today(),
   toneladas: "",
+  entradaEm: "",
+  saidaEm: "",
   ticket: "",
   km: "",
   localCargaId: "",
@@ -215,6 +233,11 @@ export default function NovaViagem() {
         veiculoId: String(p.veiculoId ?? ""),
         clienteId: String(p.clienteId ?? ""),
         materialId: String(p.materialId ?? ""),
+        // Compat ON-READ: pendente salvo antes da feature não tem esses campos,
+        // e o modo vazio resolve pro padrão da conta (frete) na hora de enviar.
+        tipoServicoId: String(p.tipoServicoId ?? ""),
+        entradaEm: typeof p.entradaEm === "string" ? p.entradaEm : "",
+        saidaEm: typeof p.saidaEm === "string" ? p.saidaEm : "",
         data: typeof p.data === "string" ? p.data.slice(0, 10) : today(),
         toneladas: numToStr(p.toneladas),
         ticket: String(p.ticket ?? ""),
@@ -477,13 +500,41 @@ export default function NovaViagem() {
     [cat.data?.materiais],
   );
 
+  /**
+   * Modos de serviço disponíveis. Vazio quando: o motorista não tem a flag
+   * podeDiaria, a conta só tem o modo padrão, ou o cache é antigo. Nos três
+   * casos o seletor nem aparece e a tela fica idêntica à de sempre.
+   */
+  const tiposServico = useMemo(
+    () => cat.data?.tiposServico ?? [],
+    [cat.data?.tiposServico],
+  );
+  const mostrarSeletorServico = tiposServico.length > 1;
+
+  // Modo escolhido — ou o padrão da conta quando não escolheu.
+  const modo = useMemo(() => {
+    if (!tiposServico.length) return null;
+    return (
+      tiposServico.find((t) => t.id === form.tipoServicoId) ??
+      tiposServico.find((t) => t.padrao) ??
+      null
+    );
+  }, [tiposServico, form.tipoServicoId]);
+
+  // Defaults seguros: sem modo resolvido, tudo se comporta como frete.
+  const ehPeriodo = modo?.medicao === "PERIODO";
+  const exigeMaterial = modo?.exigeMaterial ?? true;
+  const exigeLocalDescarga = modo?.exigeLocalDescarga ?? true;
+  const exigeKm = modo?.exigeKm ?? true;
+
   // Alguns materiais não exigem ticket (ex: concreto) — o admin configura isso.
   // Default true: se o catálogo é antigo (sem o campo) ou o material não foi
-  // escolhido, mantém a exigência.
+  // escolhido, mantém a exigência. O modo de serviço também pode dispensar
+  // (diária não tem pesagem): basta um dos dois pra o campo sumir.
   const exigeTicket = useMemo(() => {
     const m = cat.data?.materiais.find((x) => x.id === form.materialId);
-    return m?.exigeTicket ?? true;
-  }, [cat.data?.materiais, form.materialId]);
+    return (m?.exigeTicket ?? true) && (modo?.exigeTicket ?? true);
+  }, [cat.data?.materiais, form.materialId, modo?.exigeTicket]);
 
   // Material libera "voltar pro bota-fora" (limpeza)? Só então mostra a pergunta.
   const permiteBotaFora = useMemo(() => {
@@ -637,11 +688,28 @@ export default function NovaViagem() {
   function validarBase(): boolean {
     if (!form.veiculoId) return void val.apontar("veiculoId", "Escolha a placa do caminhão"), false;
     if (!form.clienteId) return void val.apontar("clienteId", "Escolha o cliente"), false;
-    if (!form.materialId) return void val.apontar("materialId", "Escolha o material"), false;
+    // O modo de serviço decide o que é obrigatório: diária à disposição não
+    // tem material, pode não ter descarga e pode não ter km.
+    if (exigeMaterial && !form.materialId)
+      return void val.apontar("materialId", "Escolha o material"), false;
     if (!form.localCargaId) return void val.apontar("localCarga", "Escolha o local de carga"), false;
-    if (!form.localDescargaId)
+    if (exigeLocalDescarga && !form.localDescargaId)
       return void val.apontar("localDescarga", "Marque o local de descarga"), false;
-    if (!form.km.trim()) return void val.apontar("km", "Informe os km rodados"), false;
+    if (exigeKm && !form.km.trim())
+      return void val.apontar("km", "Informe os km rodados"), false;
+    // Diária: a entrada é o que não pode faltar. A saída pode ficar pra depois
+    // (o caminhão ainda está lá) — isso é estado normal, não erro.
+    if (ehPeriodo) {
+      if (!form.entradaEm)
+        return void val.apontar("entradaEm", "Marque a hora que você entrou"), false;
+      if (form.saidaEm) {
+        const min = minutosEntre(form.entradaEm, form.saidaEm);
+        if (min == null || min <= 0)
+          return (
+            void val.apontar("saidaEm", "A saída tem que ser depois da entrada"), false
+          );
+      }
+    }
     // Observação obrigatória quando o motorista MEXEU no km calculado (digitou
     // outro valor ou tocou "Foi outro valor" → kmFonte=MANUAL) OU quando o km é
     // atípico e ele insistiu. Um lugar só pra justificar km — a observação.
@@ -669,8 +737,10 @@ export default function NovaViagem() {
 
     // Se falta o peso, pode ser que o romaneio (peso + ticket) só saia no fim
     // do dia. Em vez de só bloquear, oferece lançar agora e completar depois.
+    // Serviço medido por período não tem peso nenhum — a pergunta do romaneio
+    // não faz sentido e nunca aparece.
     let aguardandoPeso = false;
-    if (!form.toneladas.trim()) {
+    if (!ehPeriodo && !form.toneladas.trim()) {
       const escolha = await showAlert({
         title: "Você já tem o peso?",
         message:
@@ -692,7 +762,7 @@ export default function NovaViagem() {
     // Peso presente: valida a FAIXA já apontando o campo (antes ia só cair no
     // safeParse final e mostrar o erro genérico lá embaixo). Motorista leigo
     // costuma digitar em quilo/sem vírgula — a mensagem lembra que é tonelada.
-    if (!aguardandoPeso) {
+    if (!ehPeriodo && !aguardandoPeso) {
       const t = parseFloat(form.toneladas.replace(",", "."));
       if (!Number.isFinite(t) || t <= 0) {
         return void val.apontar(
@@ -809,7 +879,9 @@ export default function NovaViagem() {
           : "Esse km foi calculado automático pela rota. Se você rodou diferente, toque em Alterar e corrija — o que você confirmar é o que vale.";
     // Km fora do padrão já passou pelo pop-up próprio (+ justificativa) acima —
     // não repete a confirmação genérica.
-    const kmConfirmado = kmForaDoPadrao
+    // Modo que não exige km e sem km digitado: não há o que confirmar — e
+    // perguntar "você rodou 0 km?" pra quem ficou à disposição só confunde.
+    const kmConfirmado = kmForaDoPadrao || (!exigeKm && !form.km.trim())
       ? true
       : await showConfirm({
           title:
@@ -863,15 +935,27 @@ export default function NovaViagem() {
         clientId: viagemClientId,
         veiculoId: form.veiculoId,
         clienteId: form.clienteId,
-        materialId: form.materialId,
+        // Modo que não exige material vai sem material (diária à disposição).
+        materialId: exigeMaterial ? form.materialId : undefined,
+        // Só manda quando a conta tem mais de um modo: assim o payload de quem
+        // só faz frete continua idêntico ao de antes da feature.
+        tipoServicoId: mostrarSeletorServico ? (modo?.id ?? undefined) : undefined,
         data: dataFinal,
-        // Aguardando peso: lança sem toneladas/ticket (romaneio no fim do dia).
-        // O backend cria a viagem em AGUARDANDO_PESO e o motorista completa depois.
-        toneladas: aguardandoPeso ? undefined : parseFloat(form.toneladas.replace(",", ".")),
-        // Material que não exige ticket vai sem ticket (undefined).
-        ticket: aguardandoPeso ? undefined : exigeTicket ? form.ticket.trim() : undefined,
+        // Serviço medido por período não tem peso. Aguardando peso: lança sem
+        // toneladas/ticket (romaneio no fim do dia) e completa depois.
+        toneladas:
+          ehPeriodo || aguardandoPeso
+            ? undefined
+            : parseFloat(form.toneladas.replace(",", ".")),
+        // Diária: entrada sempre; saída só quando ele já saiu (senão o backend
+        // cria em AGUARDANDO_SAIDA e ele encerra depois).
+        entradaEm: ehPeriodo ? form.entradaEm : undefined,
+        saidaEm: ehPeriodo && form.saidaEm ? form.saidaEm : undefined,
+        // Material/modo que não exige ticket vai sem ticket (undefined).
+        ticket:
+          ehPeriodo || aguardandoPeso ? undefined : exigeTicket ? form.ticket.trim() : undefined,
         ...(aguardandoPeso ? { aguardandoPeso: true } : {}),
-        km: kmTotalNum,
+        km: !exigeKm && !form.km.trim() ? undefined : kmTotalNum,
         // Snapshot do km OSRM no momento do lançamento — captura mesmo que
         // motorista tenha sobrescrito. Null quando OSRM não respondeu. Quando o
         // seletor governa, é o km da opção escolhida (== form.km) → sem divergência.
@@ -902,7 +986,7 @@ export default function NovaViagem() {
         // Rota escolhida no seletor de mapa (rota real no painel).
         rotaGeometria: rotaGeometriaEscolhida ?? undefined,
         localCargaId: form.localCargaId,
-        localDescargaId: form.localDescargaId,
+        localDescargaId: exigeLocalDescarga ? form.localDescargaId : undefined,
         // Snapshot pra auto-recovery: se o local foi excluido server-side
         // entre o lancamento offline e a sync, backend recria a partir destes
         // dados. Sem isso, sync falha com "Local nao encontrado".
@@ -1213,6 +1297,33 @@ export default function NovaViagem() {
     </View>
   );
 
+  /**
+   * Seletor de modo de serviço. SÓ aparece quando a conta tem mais de um modo
+   * ativo e o motorista tem a flag — quem trabalha só com frete nunca vê um
+   * campo a mais na tela.
+   */
+  const secaoTipoServico = mostrarSeletorServico ? (
+    <View className="gap-2">
+      <Label>Tipo de serviço</Label>
+      <Select
+        value={modo?.id ?? ""}
+        onChange={(v) => {
+          val.limpar();
+          update("tipoServicoId", v);
+        }}
+        options={tiposServico.map((t) => ({ value: t.id, label: t.nome }))}
+        placeholder="Escolha o tipo de serviço"
+        title="Tipo de serviço"
+      />
+      {ehPeriodo ? (
+        <Text className="text-xs text-muted-foreground">
+          Nesse serviço você marca a hora que entrou e a que saiu — não precisa
+          informar peso.
+        </Text>
+      ) : null}
+    </View>
+  ) : null;
+
   const secaoMaterial = (
     <View
       className="gap-2"
@@ -1238,6 +1349,83 @@ export default function NovaViagem() {
       ) : !exigeTicket && form.materialId ? (
         <Text className="text-xs text-muted-foreground">
           Esse material não exige ticket — pode lançar sem número.
+        </Text>
+      ) : null}
+    </View>
+  );
+
+  /**
+   * Serviço medido por período (diária): entrada e saída no lugar do peso.
+   *
+   * Dois caminhos de propósito — o motorista dirige, e nenhum dos dois pode ser
+   * o único: "Agora" carimba o relógio com um toque (menos digitação, e a hora
+   * fica exata), e o campo ao lado deixa corrigir/lançar depois quem esqueceu
+   * de marcar na hora.
+   */
+  // Duração ao vivo — o motorista confere antes de salvar, em vez de descobrir
+  // depois que marcou a hora errada.
+  const duracaoLabel = useMemo(() => {
+    if (!form.entradaEm) return "—";
+    if (!form.saidaEm) return "em aberto";
+    const min = minutosEntre(form.entradaEm, form.saidaEm);
+    if (min == null || min <= 0) return "confira as horas";
+    return formatarDuracao(min);
+  }, [form.entradaEm, form.saidaEm]);
+
+  const secaoPeriodo = (
+    <View
+      className="gap-3"
+      ref={(n) => {
+        val.refCampo("entradaEm")(n);
+        val.refCampo("saidaEm")(n);
+      }}
+      onLayout={(e) => {
+        val.onLayoutCampo("entradaEm")(e);
+        val.onLayoutCampo("saidaEm")(e);
+      }}
+    >
+      <LinhaHora
+        titulo="Entrada"
+        iso={form.entradaEm}
+        data={form.data}
+        erro={!!val.erroDe("entradaEm")}
+        onAgora={() => {
+          val.limpar();
+          update("entradaEm", new Date().toISOString());
+        }}
+        onHora={(iso) => {
+          val.limpar();
+          update("entradaEm", iso);
+        }}
+      />
+      <LinhaHora
+        titulo="Saída"
+        iso={form.saidaEm}
+        data={form.data}
+        erro={!!val.erroDe("saidaEm")}
+        // Saída antes da entrada = virou a noite: empurra um dia. Sem isso,
+        // "entrou 22h, saiu 6h" viraria duração negativa e o backend recusaria
+        // um lançamento que está certo.
+        referencia={form.entradaEm}
+        onAgora={() => {
+          val.limpar();
+          update("saidaEm", new Date().toISOString());
+        }}
+        onHora={(iso) => {
+          val.limpar();
+          update("saidaEm", iso);
+        }}
+      />
+      {val.erroDe("entradaEm") ? <ErroCampo msg={val.erroDe("entradaEm")!} /> : null}
+      {val.erroDe("saidaEm") ? <ErroCampo msg={val.erroDe("saidaEm")!} /> : null}
+      <View className="flex-row items-center justify-between rounded-xl bg-muted/50 px-3 py-2">
+        <Text className="text-sm text-muted-foreground">Tempo à disposição</Text>
+        <Text className="text-lg font-bold text-foreground">{duracaoLabel}</Text>
+      </View>
+      {!form.saidaEm ? (
+        <Text className="text-xs text-muted-foreground">
+          Ainda está lá? Pode salvar só com a entrada — a diária fica aberta e
+          você encerra quando sair.
         </Text>
       ) : null}
     </View>
@@ -1618,10 +1806,11 @@ export default function NovaViagem() {
                 </Secao>
                 <Secao titulo="Dados da viagem">
                   {secaoCliente}
-                  {secaoMaterial}
+                  {secaoTipoServico}
+                  {exigeMaterial ? secaoMaterial : null}
                   {secaoPlaca}
                   {secaoData}
-                  {secaoPesoTicket}
+                  {ehPeriodo ? secaoPeriodo : secaoPesoTicket}
                   {secaoFoto}
                 </Secao>
                 <Secao titulo="Km rodado">
@@ -1653,8 +1842,9 @@ export default function NovaViagem() {
                   {secaoPlaca}
                   {secaoData}
                   {secaoCliente}
-                  {secaoMaterial}
-                  {secaoPesoTicket}
+                  {secaoTipoServico}
+                  {exigeMaterial ? secaoMaterial : null}
+                  {ehPeriodo ? secaoPeriodo : secaoPesoTicket}
                 </Secao>
                 <Secao titulo="Carga e descarga">
                   {secaoCarga}
@@ -1925,3 +2115,95 @@ function makeUuid(): string {
   });
 }
 
+
+/**
+ * Uma linha de hora da diária: o botão "Agora" (carimba o relógio) e o campo
+ * pra corrigir/lançar depois.
+ *
+ * `referencia` é a hora de entrada quando esta linha é a de saída: se o
+ * motorista digitar uma hora anterior, é porque a diária virou a noite — a
+ * saída vai pro dia seguinte sozinha, e a linha diz isso em voz alta.
+ */
+function LinhaHora({
+  titulo,
+  iso,
+  data,
+  erro,
+  referencia,
+  onAgora,
+  onHora,
+}: {
+  titulo: string;
+  iso: string;
+  data: string;
+  erro?: boolean;
+  referencia?: string;
+  onAgora: () => void;
+  onHora: (iso: string) => void;
+}) {
+  const [texto, setTexto] = useState("");
+  // O campo espelha o ISO gravado, mas só quando o motorista não está digitando
+  // — senão o "07:1" que ele acabou de teclar seria reescrito a cada tecla.
+  const [editando, setEditando] = useState(false);
+  const mostrado = editando ? texto : iso ? fmtHoraBR(iso) : "";
+
+  function aplicar(valor: string) {
+    const limpo = valor.replace(/[^\d:]/g, "");
+    setTexto(limpo);
+    let novo = isoDeDataHoraBR(data, limpo);
+    if (!novo) return;
+    if (referencia) {
+      const min = minutosEntre(referencia, novo);
+      // Virada da noite: entrou 22h, saiu 06h — a saída é do dia seguinte.
+      if (min != null && min <= 0) {
+        novo = new Date(new Date(novo).getTime() + UM_DIA_MS).toISOString();
+      }
+    }
+    onHora(novo);
+  }
+
+  const viraNoite =
+    !!referencia && !!iso && (minutosEntre(referencia, iso) ?? 0) > 0
+      ? fmtHoraBR(referencia) > fmtHoraBR(iso)
+      : false;
+
+  return (
+    <View className="gap-2">
+      <Label error={erro}>{titulo}</Label>
+      <View className="flex-row items-center gap-2">
+        <Button
+          variant={iso ? "outline" : "default"}
+          className={iso ? "" : "bg-emerald-600"}
+          onPress={onAgora}
+        >
+          <Clock size={18} color={iso ? "#0f172a" : "white"} />
+          <Text
+            className={`ml-1 font-semibold ${iso ? "text-foreground" : "text-white"}`}
+          >
+            Agora
+          </Text>
+        </Button>
+        <View className="flex-1">
+          <Input
+            value={mostrado}
+            onFocus={() => {
+              setEditando(true);
+              setTexto(iso ? fmtHoraBR(iso) : "");
+            }}
+            onBlur={() => setEditando(false)}
+            onChangeText={aplicar}
+            keyboardType="numbers-and-punctuation"
+            placeholder="00:00"
+            maxLength={5}
+            error={erro}
+          />
+        </View>
+      </View>
+      {viraNoite ? (
+        <Text className="text-xs text-amber-700">
+          Saída no dia seguinte — a diária virou a noite.
+        </Text>
+      ) : null}
+    </View>
+  );
+}

@@ -43,6 +43,7 @@ import {
   drainLocais,
   enqueueAbastecimento,
   enqueueCompletarPeso,
+  enqueueEncerrarDiaria,
   enqueueLocal,
   enqueuePedagio,
   enqueueStory,
@@ -66,6 +67,24 @@ export type Material = {
   // Admin liberou "voltar pro bota-fora" (limpeza) pra esse material: o app
   // mostra a pergunta e soma a perna de volta no km. Cache antigo não tem o campo.
   permiteBotaFora?: boolean;
+};
+
+/**
+ * Modo de serviço: como a viagem é medida e o que o formulário pede.
+ *
+ * Campos opcionais de propósito — cache antigo (AsyncStorage anterior à
+ * feature) não tem nenhum deles, e o app tem que continuar funcionando com o
+ * catálogo velho até a próxima revalidação.
+ */
+export type TipoServico = {
+  id: string;
+  nome: string;
+  padrao?: boolean;
+  medicao?: "PESO" | "PERIODO";
+  exigeMaterial?: boolean;
+  exigeTicket?: boolean;
+  exigeLocalDescarga?: boolean;
+  exigeKm?: boolean;
 };
 
 export type Cliente = {
@@ -94,6 +113,9 @@ export type Empresa = { id: string; nome: string };
 export type Catalogos = {
   veiculos: Veiculo[];
   materiais: Material[];
+  // Vazio/ausente = motorista sem a flag podeDiaria, conta sem modo cadastrado,
+  // ou cache antigo. Nos três casos o app se comporta como sempre.
+  tiposServico?: TipoServico[];
   clientes: Cliente[];
   locais: Local[];
   empresas: Empresa[];
@@ -126,6 +148,8 @@ export type Me = {
   podeTelemetria: boolean;
   // Chat entre motoristas (aba Conversas). Rollout gradual — default false.
   podeChat: boolean;
+  // Escolher o modo de serviço no lançamento (diária). Rollout gradual.
+  podeDiaria: boolean;
   // Preferências de recebimento (controladas na tela de perfil).
   aceitaPush: boolean;
   aceitaWhatsapp: boolean;
@@ -137,6 +161,15 @@ export type Viagem = {
   clientId: string;
   data: string;
   toneladas: string;
+  /**
+   * Modo de serviço da viagem. Ausente = frete por tonelada — é assim que todo
+   * o histórico e todo cache antigo continuam sendo lidos certo.
+   */
+  tipoServico?: { id: string; nome: string; medicao: "PESO" | "PERIODO" } | null;
+  /** Só em serviço medido por período (diária). ISO. */
+  entradaEm?: string | null;
+  saidaEm?: string | null;
+  duracaoMinutos?: number | null;
   ticket: string;
   km: string;
   // Snapshot do km OSRM no momento do lançamento. Quando km !== kmCalculado,
@@ -172,7 +205,10 @@ export type Viagem = {
   sincronizadoEm: string;
   veiculo: Veiculo;
   cliente: { id: string; nome: string };
-  material: Material;
+  // Nulos quando o modo de serviço não os exige (diária à disposição).
+  // Declarados assim de propósito: o compilador força cada tela a tratar o
+  // caso, em vez de a tela quebrar no celular do motorista.
+  material: Material | null;
   localCarga: {
     id: string;
     nome: string;
@@ -188,7 +224,7 @@ export type Viagem = {
     uf: string;
     lat?: number | null;
     lng?: number | null;
-  };
+  } | null;
   // Trechos adicionais do trajeto (retorno do bota-fora hoje). Vazio na viagem
   // normal. km já somado no `km` acima. Cache antigo não tem o campo.
   trechos?: {
@@ -289,6 +325,8 @@ function normalizarMe<T extends Record<string, unknown>>(m: T): T {
   if (typeof anyM.podeReferenciaKm !== "boolean") anyM.podeReferenciaKm = false;
   // Opt-in: telemetria off por default (cache antigo / sem a flag).
   if (typeof anyM.podeTelemetria !== "boolean") anyM.podeTelemetria = false;
+  // Opt-in: sem a flag o app nem mostra o seletor de modo de serviço.
+  if (typeof anyM.podeDiaria !== "boolean") anyM.podeDiaria = false;
   // Backend antigo/cache sem as prefs: assume que recebe tudo (default true).
   if (typeof anyM.aceitaPush !== "boolean") anyM.aceitaPush = true;
   if (typeof anyM.aceitaWhatsapp !== "boolean") anyM.aceitaWhatsapp = true;
@@ -601,7 +639,16 @@ export type ViagemDetalhe = Viagem & {
   pontos: { lat: number; lng: number; capturadoEm: string }[];
   cliente: { id: string; nome: string; empresa?: { id: string; nome: string } };
   localCarga: Viagem["localCarga"] & { logradouro: string; lat: number | null; lng: number | null };
-  localDescarga: Viagem["localDescarga"] & { logradouro: string; lat: number | null; lng: number | null };
+  // NonNullable + `| null` explícito: `X | null & {...}` colapsaria o null e a
+  // tela acharia que a descarga sempre existe (some no typecheck, quebra no
+  // celular quando é diária sem descarga).
+  localDescarga:
+    | (NonNullable<Viagem["localDescarga"]> & {
+        logradouro: string;
+        lat: number | null;
+        lng: number | null;
+      })
+    | null;
   rotaGeometria: string | null;
 };
 
@@ -731,6 +778,73 @@ export function useCompletarPeso() {
       /* cache indisponível — ignora */
     }
     await enqueueCompletarPeso(input);
+    void qc.invalidateQueries({ queryKey: ["viagens"] });
+    void qc.invalidateQueries({ queryKey: ["viagens-filtradas"] });
+    void qc.invalidateQueries({ queryKey: ["resumo-mes"] });
+  };
+}
+
+/**
+ * Diárias abertas (AGUARDANDO_SAIDA): o motorista marcou a entrada e ainda não
+ * saiu. Alimenta o card da home. Espelho de useViagensAguardandoPeso.
+ */
+export function useDiariasAbertas() {
+  const qc = useQueryClient();
+  const cacheKey = "q:viagens-aguardando-saida";
+  const buscarRede = async (): Promise<Viagem[]> => {
+    const fresh = await api.get<Viagem[]>("/m/viagens/aguardando-saida");
+    const itens = fresh.map(normalizarViagem);
+    void cachePut(cacheKey, itens).catch(() => {});
+    return itens;
+  };
+  const query = useQuery({
+    queryKey: ["viagens-aguardando-saida"],
+    staleTime: 30_000,
+    queryFn: () =>
+      cacheFirst<Viagem[]>(
+        ["viagens-aguardando-saida"],
+        cacheKey,
+        buscarRede,
+        (arr) => arr.map(normalizarViagem),
+      ),
+  });
+
+  // Mesmo motivo do aguardando-peso: abrir/encerrar diária é offline-first, e
+  // sem isso o card só se atualizaria no staleTime.
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | null = null;
+    const off = onSyncChange(() => {
+      if (t) clearTimeout(t);
+      t = setTimeout(() => {
+        void qc.invalidateQueries({ queryKey: ["viagens-aguardando-saida"] });
+      }, 1200);
+    });
+    return () => {
+      if (t) clearTimeout(t);
+      off();
+    };
+  }, [qc]);
+
+  return query;
+}
+
+/**
+ * Offline-first: enfileira o "encerrar diária" (hora de saída) de uma viagem
+ * AGUARDANDO_SAIDA. Espelho de useCompletarPeso.
+ */
+export function useEncerrarDiaria() {
+  const qc = useQueryClient();
+  return async (input: { viagemId: string; saidaEm: string }) => {
+    const semItem = (cur?: Viagem[] | null): Viagem[] | undefined =>
+      cur ? cur.filter((v) => v.id !== input.viagemId) : undefined;
+    qc.setQueryData<Viagem[]>(["viagens-aguardando-saida"], semItem);
+    try {
+      const disk = await cacheGet<Viagem[]>("q:viagens-aguardando-saida");
+      if (disk) await cachePut("q:viagens-aguardando-saida", semItem(disk) ?? []);
+    } catch {
+      /* cache indisponível — ignora */
+    }
+    await enqueueEncerrarDiaria(input);
     void qc.invalidateQueries({ queryKey: ["viagens"] });
     void qc.invalidateQueries({ queryKey: ["viagens-filtradas"] });
     void qc.invalidateQueries({ queryKey: ["resumo-mes"] });

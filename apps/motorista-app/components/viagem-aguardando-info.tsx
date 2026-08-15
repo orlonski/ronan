@@ -10,7 +10,7 @@ function localComCidade(l?: {
   nome?: string;
   cidade?: string | null;
   uf?: string | null;
-}): { nome: string; cidade: string } {
+} | null): { nome: string; cidade: string } {
   const nome = l?.nome ?? "—";
   const cidade = l?.cidade ? `${l.cidade}${l.uf ? `/${l.uf}` : ""}` : "";
   return { nome, cidade };
@@ -54,24 +54,33 @@ export function ViagemAguardandoInfo({ viagem: v }: { viagem: Viagem }) {
             ) : null}
           </Text>
         </View>
-        <View className="flex-row items-center gap-2">
-          <ArrowDown size={16} color="#dc2626" />
-          <Text className="flex-1 text-base font-medium text-foreground" numberOfLines={1}>
-            {descarga.nome}
-            {descarga.cidade ? (
-              <Text className="text-sm font-normal text-muted-foreground">
-                {"  "}
-                {descarga.cidade}
-              </Text>
-            ) : null}
-          </Text>
-        </View>
+        {/* Modo de serviço sem local de descarga (diária à disposição) não
+            tem a segunda linha — mostrar "—" com seta vermelha pareceria erro. */}
+        {v.localDescarga ? (
+          <View className="flex-row items-center gap-2">
+            <ArrowDown size={16} color="#dc2626" />
+            <Text className="flex-1 text-base font-medium text-foreground" numberOfLines={1}>
+              {descarga.nome}
+              {descarga.cidade ? (
+                <Text className="text-sm font-normal text-muted-foreground">
+                  {"  "}
+                  {descarga.cidade}
+                </Text>
+              ) : null}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       {/* Stats: km · data · placa */}
       <View className="flex-row flex-wrap items-center gap-x-2 gap-y-1">
-        <Stat>{fmtNum(v.km, 2)} km</Stat>
-        <Dot />
+        {/* Diária pode não ter km (caminhão à disposição): "0,00 km" seria ruído. */}
+        {v.km && Number(v.km) > 0 ? (
+          <>
+            <Stat>{fmtNum(v.km, 2)} km</Stat>
+            <Dot />
+          </>
+        ) : null}
         <Stat>{v.data ? fmtDataBR(v.data) : "—"}</Stat>
         {placa ? (
           <>

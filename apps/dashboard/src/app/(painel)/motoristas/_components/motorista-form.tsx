@@ -48,6 +48,7 @@ export type Motorista = {
   podeReferenciaKm: boolean;
   podeTelemetria: boolean;
   podeChat: boolean;
+  podeDiaria: boolean;
   receberResumoDiario: boolean;
 };
 
@@ -101,6 +102,7 @@ type AcessosState = {
   podeReferenciaKm: boolean;
   podeTelemetria: boolean;
   podeChat: boolean;
+  podeDiaria: boolean;
   receberResumoDiario: boolean;
 };
 
@@ -121,6 +123,7 @@ export function MotoristaForm({ initial }: Props) {
     podeReferenciaKm: initial?.podeReferenciaKm ?? false,
     podeTelemetria: initial?.podeTelemetria ?? false,
     podeChat: initial?.podeChat ?? true,
+    podeDiaria: initial?.podeDiaria ?? false,
     receberResumoDiario: initial?.receberResumoDiario ?? true,
   });
   const token = useAuthToken();
@@ -529,6 +532,11 @@ export function MotoristaForm({ initial }: Props) {
                 label="Chat com os outros motoristas (aba Conversas no app)"
                 active={acessos.podeChat}
                 onChange={(v) => alterarAcesso("podeChat", v)}
+              />
+              <AcessoRow
+                label="Escolher o modo de serviço no lançamento (diária: marca hora de entrada e saída em vez de peso)"
+                active={acessos.podeDiaria}
+                onChange={(v) => alterarAcesso("podeDiaria", v)}
               />
             </div>
 

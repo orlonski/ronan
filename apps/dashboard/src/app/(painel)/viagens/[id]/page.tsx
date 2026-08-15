@@ -62,6 +62,8 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
+import { fmtPeriodoSP } from "@/lib/datetime-br";
+import { formatarDuracao } from "@ronan/shared-types";
 import {
   fmtBR,
   fmtBRL,
@@ -145,7 +147,13 @@ type ViagemDetalhe = {
   motorista: { id: string; nome: string; cpf: string };
   // Omitidos pelo backend pra quem não tem `viagens.ver-comercial`.
   cliente?: { id: string; nome: string; empresa: { nome: string } } | null;
-  material: { id: string; nome: string; exigeTicket: boolean };
+  // Nulos quando o modo de serviço não os exige (diária à disposição).
+  material: { id: string; nome: string; exigeTicket: boolean } | null;
+  /** Modo de serviço. null = frete por tonelada (histórico e app antigo). */
+  tipoServico: { id: string; nome: string; medicao: "PESO" | "PERIODO" } | null;
+  entradaEm: string | null;
+  saidaEm: string | null;
+  duracaoMinutos: number | null;
   localCarga: {
     id: string;
     nome: string;
@@ -155,6 +163,7 @@ type ViagemDetalhe = {
     lat: number | null;
     lng: number | null;
   };
+  // Nulo quando o modo de serviço não exige descarga (diária à disposição).
   localDescarga: {
     id: string;
     nome: string;
@@ -163,7 +172,7 @@ type ViagemDetalhe = {
     logradouro: string;
     lat: number | null;
     lng: number | null;
-  };
+  } | null;
   rotaGeometria: string | null;
   /** True quando o motorista escolheu a rota no seletor (≠ edição manual de km). */
   rotaEscolhida?: boolean;
@@ -268,7 +277,7 @@ export default function ViagemDetalhePage({
   });
   const limiteSinalFraco = gpsConfig.data?.gpsLimiteSinalFracoM ?? 50;
   const localCargaId = viagem.data?.localCarga.id;
-  const localDescargaId = viagem.data?.localDescarga.id;
+  const localDescargaId = viagem.data?.localDescarga?.id;
   // Por viagem, não por par de locais: o backend resolve a rota que ela de fato
   // percorreu (rota escolhida / "cheguei direto" / bota-fora). `pedagios: null`
   // = não deu pra checar.
@@ -481,10 +490,10 @@ export default function ViagemDetalhePage({
   );
   const mapaDescarga = useMemo(
     () =>
-      vd?.localDescarga.lat != null && vd?.localDescarga.lng != null
+      vd?.localDescarga?.lat != null && vd?.localDescarga?.lng != null
         ? { lat: vd.localDescarga.lat, lng: vd.localDescarga.lng, nome: vd.localDescarga.nome }
         : null,
-    [vd?.localDescarga.lat, vd?.localDescarga.lng, vd?.localDescarga.nome],
+    [vd?.localDescarga?.lat, vd?.localDescarga?.lng, vd?.localDescarga?.nome],
   );
   const mapaLancamento = useMemo(
     () => (vd?.lat != null && vd?.lng != null ? { lat: vd.lat, lng: vd.lng } : null),
@@ -564,7 +573,7 @@ export default function ViagemDetalhePage({
                 {v.ticket ? `Viagem ${v.ticket}` : "Viagem sem ticket"}
               </h1>
               <Badge>{v.status}</Badge>
-              {!v.material.exigeTicket && (
+              {v.material && !v.material.exigeTicket && (
                 <Badge className="border-amber-300 bg-amber-50 text-amber-700">
                   {v.material.nome} não exige ticket
                 </Badge>
@@ -664,7 +673,7 @@ export default function ViagemDetalhePage({
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <CampoTile
               label="Material"
-              value={v.material.nome}
+              value={v.material?.nome ?? "—"}
               fromAi={v.ocrCampos?.includes("materialId")}
             />
             {/* Cliente/Empresa são da relação comercial Schaba↔cliente: o
@@ -688,26 +697,45 @@ export default function ViagemDetalhePage({
                   v.ticket
                 ) : (
                   <span className="text-sm font-normal italic text-muted-foreground">
-                    {v.material.exigeTicket ? "sem ticket" : "não exige"}
+                    {v.material?.exigeTicket ?? false ? "sem ticket" : "não exige"}
                   </span>
                 )
               }
             />
-            <CampoTile
-              label="Toneladas"
-              value={
-                <span className="inline-flex flex-wrap items-baseline gap-x-1">
-                  {/* Sem `viagens.ver-comercial` não vem o faturado — mostra o
-                      que o motorista lançou, que é operacional. */}
-                  {fmtNum(v.toneladasEfetiva ?? v.toneladasInformada, 3)} t
-                  {v.toneladasAjustada && (
-                    <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
-                      ↑ mínimo
+            {/* Serviço medido por período (diária) não tem peso: o tile vira a
+                permanência, que é o que se cobra. Mostrar "0,000 t" aqui faria
+                a viagem parecer defeituosa. */}
+            {v.tipoServico?.medicao === "PERIODO" ? (
+              <CampoTile
+                label="Permanência"
+                value={
+                  <span className="inline-flex flex-col">
+                    <span className="text-base">
+                      {v.saidaEm ? formatarDuracao(v.duracaoMinutos) : "em aberto"}
                     </span>
-                  )}
-                </span>
-              }
-            />
+                    <span className="text-xs font-normal text-muted-foreground">
+                      {fmtPeriodoSP(v.entradaEm, v.saidaEm)}
+                    </span>
+                  </span>
+                }
+              />
+            ) : (
+              <CampoTile
+                label="Toneladas"
+                value={
+                  <span className="inline-flex flex-wrap items-baseline gap-x-1">
+                    {/* Sem `viagens.ver-comercial` não vem o faturado — mostra o
+                        que o motorista lançou, que é operacional. */}
+                    {fmtNum(v.toneladasEfetiva ?? v.toneladasInformada, 3)} t
+                    {v.toneladasAjustada && (
+                      <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                        ↑ mínimo
+                      </span>
+                    )}
+                  </span>
+                }
+              />
+            )}
             {v.valorPedagioTotal && (
               <CampoTile label="Pedágio" value={fmtBRL(v.valorPedagioTotal)} />
             )}
@@ -744,7 +772,7 @@ export default function ViagemDetalhePage({
                 toneladasEfetiva={v.toneladasEfetiva}
                 toneladasAjustada={v.toneladasAjustada}
                 regraMinimo={v.regraMinimo}
-                materialNome={v.material.nome}
+                materialNome={v.material?.nome ?? null}
               />
 
               {/* Trajeto + Km do trajeto: par que cresce (flex-1) pra preencher a
@@ -782,6 +810,9 @@ export default function ViagemDetalhePage({
                         </div>
                       )}
                     </div>
+                    {/* Modo de serviço sem local de descarga (diária à disposição):
+                        o bloco inteiro some em vez de renderizar vazio. */}
+                    {v.localDescarga && (
                     <div>
                       <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                         <ArrowDown className="h-3.5 w-3.5" /> Descarga
@@ -811,6 +842,7 @@ export default function ViagemDetalhePage({
                         </div>
                       )}
                     </div>
+                    )}
                     {/* Trechos adicionais (retorno do bota-fora): voltou pra carga */}
                     {(v.trechos ?? []).map((t) => (
                       <div key={t.id}>
@@ -1016,7 +1048,7 @@ export default function ViagemDetalhePage({
           )}
 
           {(v.localCarga.lat != null ||
-            v.localDescarga.lat != null ||
+            v.localDescarga?.lat != null ||
             v.lat != null) && (
             <Card className="p-4 sm:p-5">
               <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">

@@ -26,6 +26,7 @@ import { EmptyState } from "@/components/empty-state";
 import { ViagemCardSkeleton } from "@/components/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { formatarDuracao } from "@ronan/shared-types";
 import { showAlert, showConfirm } from "@/lib/alert";
 import { humanizeApiError } from "@/lib/api";
 import {
@@ -539,29 +540,43 @@ function ViagemCard({ v }: { v: Viagem }) {
             {v.localCarga.nome}
           </Text>
         </View>
-        <View className="flex-row items-center gap-2">
-          <ArrowDown size={16} color="#dc2626" />
-          <Text
-            className="flex-1 text-base font-medium text-foreground"
-            numberOfLines={1}
-          >
-            {v.localDescarga.nome}
-          </Text>
-        </View>
+        {/* Diária à disposição pode não ter descarga — a linha some em vez
+            de mostrar vazio com seta vermelha (pareceria erro). */}
+        {v.localDescarga ? (
+          <View className="flex-row items-center gap-2">
+            <ArrowDown size={16} color="#dc2626" />
+            <Text
+              className="flex-1 text-base font-medium text-foreground"
+              numberOfLines={1}
+            >
+              {v.localDescarga.nome}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       <View className="mt-3 flex-row gap-5 border-t-2 border-border pt-3">
-        <Stat
-          label="t"
-          value={aguardandoPeso ? "—" : fmtNum(v.toneladasEfetiva, 3)}
-          subValue={
-            aguardandoPeso
-              ? "aguardando"
-              : v.toneladasAjustada
-                ? `(${fmtNum(v.toneladasInformada, 3)})`
-                : undefined
-          }
-        />
+        {/* Serviço medido por período (diária) não tem peso: o lugar do "t"
+            vira a permanência, que é o que conta nesse serviço. */}
+        {v.tipoServico?.medicao === "PERIODO" ? (
+          <Stat
+            label="tempo"
+            value={v.saidaEm ? formatarDuracao(v.duracaoMinutos) : "—"}
+            subValue={v.saidaEm ? undefined : "diária aberta"}
+          />
+        ) : (
+          <Stat
+            label="t"
+            value={aguardandoPeso ? "—" : fmtNum(v.toneladasEfetiva, 3)}
+            subValue={
+              aguardandoPeso
+                ? "aguardando"
+                : v.toneladasAjustada
+                  ? `(${fmtNum(v.toneladasInformada, 3)})`
+                  : undefined
+            }
+          />
+        )}
         <Stat
           label="km"
           value={fmtNum(v.kmEfetivo, 2)}
@@ -605,15 +620,19 @@ function ViagemPedagioCard({ v }: { v: Viagem }) {
             {v.localCarga.nome}
           </Text>
         </View>
-        <View className="flex-row items-center gap-2">
-          <ArrowDown size={16} color="#dc2626" />
-          <Text
-            className="flex-1 text-base font-medium text-foreground"
-            numberOfLines={1}
-          >
-            {v.localDescarga.nome}
-          </Text>
-        </View>
+        {/* Diária à disposição pode não ter descarga — a linha some em vez
+            de mostrar vazio com seta vermelha (pareceria erro). */}
+        {v.localDescarga ? (
+          <View className="flex-row items-center gap-2">
+            <ArrowDown size={16} color="#dc2626" />
+            <Text
+              className="flex-1 text-base font-medium text-foreground"
+              numberOfLines={1}
+            >
+              {v.localDescarga.nome}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       <View className="mt-3 border-t-2 border-border pt-3">

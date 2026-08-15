@@ -85,6 +85,7 @@ const SAFE_SELECT = {
   podeReferenciaKm: true,
   podeTelemetria: true,
   podeChat: true,
+  podeDiaria: true,
   receberResumoDiario: true,
   criadoEm: true,
   criadoPor: { select: { id: true, nome: true } },
@@ -442,6 +443,7 @@ export class MotoristasService {
       podeReferenciaKm?: boolean;
       podeTelemetria?: boolean;
       podeChat?: boolean;
+      podeDiaria?: boolean;
       receberResumoDiario?: boolean;
     },
   ) {
@@ -463,6 +465,7 @@ export class MotoristasService {
         podeReferenciaKm: true,
         podeTelemetria: true,
         podeChat: true,
+        podeDiaria: true,
         receberResumoDiario: true,
       },
     });
