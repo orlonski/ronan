@@ -48,6 +48,8 @@ type ListViagensParams = PaginationQuery & {
   status?: StatusViagem;
   origem?: "guiada" | "direta";
   kmForaDoPadrao?: boolean;
+  /** true = só viagens com ticket repetido ainda não conferido. */
+  ticketDuplicado?: boolean;
   /** true = só viagens sem nenhuma foto anexada (cobrança de comprovante). */
   semFoto?: boolean;
   de?: string;
@@ -382,6 +384,11 @@ export class ViagensAdminService {
     if (params.origem === "guiada") where.iniciadaGuiada = true;
     else if (params.origem === "direta") where.iniciadaGuiada = false;
     if (params.kmForaDoPadrao) where.kmForaDoPadrao = true;
+    // Só as que ainda pedem atenção: aceita já foi conferida.
+    if (params.ticketDuplicado) {
+      where.ticketDuplicadoDeId = { not: null };
+      where.duplicidadeAceitaEm = null;
+    }
     // Sem NENHUMA foto: a viagem pode ter sido lançada com justificativa ou ter
     // perdido o arquivo no caminho — os dois casos precisam ser cobrados.
     if (params.semFoto) where.fotos = { none: {} };
@@ -399,6 +406,7 @@ export class ViagensAdminService {
           cliente: { select: { id: true; nome: true; empresaId: true; toneladasMinimas: true; kmMinimos: true } };
           material: { select: { id: true; nome: true; exigeTicket: true } };
           tipoServico: { select: { id: true; nome: true; medicao: true } };
+          ticketDuplicadoDe: { select: { id: true; ticket: true; data: true } };
           localCarga: { select: { id: true; nome: true; cidade: true; uf: true } };
           localDescarga: { select: { id: true; nome: true; cidade: true; uf: true } };
           fotos: { select: { id: true; storageKey: true } };
@@ -440,6 +448,8 @@ export class ViagensAdminService {
         // O painel precisa do modo pra decidir entre coluna de peso e de
         // permanência — e aplicarMinimos precisa dele pro guarda da diária.
         tipoServico: { select: { id: true, nome: true, medicao: true } },
+        // Pro selo e pro link "ver a outra viagem" no painel.
+        ticketDuplicadoDe: { select: { id: true, ticket: true, data: true } },
         localCarga: { select: { id: true, nome: true, cidade: true, uf: true } },
         localDescarga: { select: { id: true, nome: true, cidade: true, uf: true } },
         fotos: { select: { id: true, storageKey: true } },
@@ -483,6 +493,8 @@ export class ViagensAdminService {
         // O painel decide entre tile de peso e de permanência com isto — e o
         // guarda de mínimo em aplicarMinimos depende dele.
         tipoServico: { select: { id: true, nome: true, medicao: true } },
+        // Pro selo e pro link "ver a outra viagem" no painel.
+        ticketDuplicadoDe: { select: { id: true, ticket: true, data: true } },
         localCarga: true,
         localDescarga: true,
         trechos: {
@@ -577,31 +589,34 @@ export class ViagensAdminService {
       );
     }
 
-    // Se trocou ticket OU clienteId, valida unicidade ticket+empresa. Só faz
-    // sentido quando há ticket — viagens sem ticket (material que não exige)
-    // não entram no dedup.
+    // Se trocou ticket OU clienteId, RECARIMBA a duplicidade (não bloqueia mais —
+    // ver resolverTicketParaEmpresa no service do motorista). Recarimbar aqui é o
+    // que faz o selo sumir quando o admin corrige o número, e aparecer quando ele
+    // digita um que já existe.
     const novoTicket = input.ticket ?? antes.ticket;
     const novoClienteId = input.clienteId ?? antes.clienteId;
+    let duplicadoDeId: string | null | undefined;
     if (
-      novoTicket &&
-      novoClienteId &&
-      (novoTicket !== antes.ticket || novoClienteId !== antes.clienteId)
+      novoTicket !== antes.ticket ||
+      novoClienteId !== antes.clienteId
     ) {
-      const cliente = await this.prisma.cliente.findUnique({
-        where: { id: novoClienteId },
-        select: { empresaId: true },
-      });
-      if (!cliente) throw new NotFoundException("Cliente não encontrado");
-      const dup = await this.prisma.viagem.findFirst({
-        where: {
-          id: { not: id },
-          ticket: novoTicket,
-          cliente: { empresaId: cliente.empresaId },
-        },
-        select: { id: true },
-      });
-      if (dup) {
-        throw new ConflictException(`Ticket ${novoTicket} já existe pra essa empresa.`);
+      duplicadoDeId = null;
+      if (novoTicket && novoClienteId) {
+        const cliente = await this.prisma.cliente.findUnique({
+          where: { id: novoClienteId },
+          select: { empresaId: true },
+        });
+        if (!cliente) throw new NotFoundException("Cliente não encontrado");
+        const dup = await this.prisma.viagem.findFirst({
+          where: {
+            id: { not: id },
+            ticket: novoTicket,
+            cliente: { empresaId: cliente.empresaId },
+          },
+          orderBy: { sincronizadoEm: "asc" },
+          select: { id: true },
+        });
+        duplicadoDeId = dup?.id ?? null;
       }
     }
 
@@ -609,6 +624,13 @@ export class ViagensAdminService {
     // toneladas pelo dashboard, ela sai de "aguardando peso" e entra no fluxo
     // normal (ENVIADA) — passando a contar em conferência/fechamento/KPIs.
     const dataUpdate: Prisma.ViagemUpdateInput = { ...input };
+    if (duplicadoDeId !== undefined) {
+      dataUpdate.ticketDuplicadoDe = duplicadoDeId
+        ? { connect: { id: duplicadoDeId } }
+        : { disconnect: true };
+      // Ticket novo = duplicidade nova: o aceite anterior não vale mais.
+      dataUpdate.duplicidadeAceitaEm = null;
+    }
     if (antes.status === StatusViagem.AGUARDANDO_PESO && input.toneladas != null) {
       dataUpdate.status = StatusViagem.ENVIADA;
     }
@@ -761,7 +783,7 @@ export class ViagensAdminService {
     input: {
       status: "OK" | "DIVERGENTE" | "DESFAZER";
       motivo?: string;
-      tipo?: "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "KM_DIVERGENTE" | "OUTRO";
+      tipo?: "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "KM_DIVERGENTE" | "TICKET_DUPLICADO" | "OUTRO";
     },
     usuarioId: string,
   ) {
@@ -1054,6 +1076,46 @@ export class ViagensAdminService {
     });
 
     return this.detalhe(id, null /* handler sem @EscopoPor: sem recorte por frota (a conta a trava já filtra) */, true /* admin */);
+  }
+
+  /**
+   * "Aceitar duplicidade": o conferente olhou as duas viagens de mesmo ticket e
+   * concluiu que está certo. O selo some e a viagem sai do filtro de pendências.
+   *
+   * Campo dedicado (`duplicidadeAceitaEm`), NÃO `revisadoEm` — mesma lição do
+   * `aceitarKm`: aceitar uma anomalia é decisão diferente de pré-validar a
+   * viagem, e confundir as duas embaralha o card de pré-validação.
+   *
+   * O vínculo com a viagem anterior é PRESERVADO de propósito: o fato de terem
+   * o mesmo número continua verdadeiro e auditável, só deixa de pedir atenção.
+   */
+  async aceitarDuplicidade(id: string, usuarioId: string) {
+    const antes = await this.prisma.viagem.findUnique({
+      where: { id },
+      select: { id: true, ticket: true, ticketDuplicadoDeId: true },
+    });
+    if (!antes) throw new NotFoundException("Viagem não encontrada");
+    if (!antes.ticketDuplicadoDeId) {
+      throw new BadRequestException("Essa viagem não está marcada como ticket repetido.");
+    }
+
+    await this.prisma.viagem.update({
+      where: { id },
+      data: { duplicidadeAceitaEm: new Date() },
+    });
+
+    await this.auditoria.log({
+      usuarioId,
+      entidade: "Viagem",
+      entidadeId: id,
+      acao: AcaoAuditoria.UPDATE,
+      campo: "duplicidadeAceitaEm",
+      valorAntes: null,
+      valorDepois: true,
+      motivo: `Ticket ${antes.ticket ?? "?"} repetido aceito como correto após conferência.`,
+    });
+
+    return this.detalhe(id, null, true);
   }
 
   /** Lista as rotas alternativas (OSRM) do par carga→descarga da viagem. */

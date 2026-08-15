@@ -151,6 +151,9 @@ type ViagemDetalhe = {
   material: { id: string; nome: string; exigeTicket: boolean } | null;
   /** Preenchido quando a viagem veio sem foto numa empresa que exige. */
   justificativaSemFoto: string | null;
+  /** Viagem anterior da mesma empresa com o MESMO número de ticket. */
+  ticketDuplicadoDe: { id: string; ticket: string | null; data: string | null } | null;
+  duplicidadeAceitaEm: string | null;
   /** Modo de serviço. null = frete por tonelada (histórico e app antigo). */
   tipoServico: { id: string; nome: string; medicao: "PESO" | "PERIODO" } | null;
   entradaEm: string | null;
@@ -331,6 +334,19 @@ export default function ViagemDetalhePage({
   }, [duplicatasGeo.data]);
   const historico = useHistoricoViagem(id);
   const queryClient = useQueryClient();
+  const aceitarDuplicidade = useMutation({
+    mutationFn: () =>
+      fetchApi(`/admin/viagens/${id}/aceitar-duplicidade`, { method: "POST", token }),
+    onSuccess: () => {
+      toast.success("Duplicidade aceita", {
+        description: "O aviso some. O vínculo com a outra viagem fica registrado.",
+      });
+      void queryClient.invalidateQueries({ queryKey: ["viagem-admin", id] });
+    },
+    onError: (err) =>
+      toast.error("Não foi possível aceitar", { description: (err as Error).message }),
+  });
+
   const aceitarKm = useMutation({
     mutationFn: () =>
       fetchApi(`/admin/viagens/${id}/aceitar-km`, { method: "POST", token }),
@@ -453,7 +469,7 @@ export default function ViagemDetalhePage({
     mutationFn: (body: {
       status: "OK" | "DIVERGENTE" | "DESFAZER";
       motivo?: string;
-      tipo?: "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "KM_DIVERGENTE" | "OUTRO";
+      tipo?: "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "KM_DIVERGENTE" | "TICKET_DUPLICADO" | "OUTRO";
     }) =>
       fetchApi<{ ok: true }>(`/admin/viagens/${id}/pre-validar`, {
         method: "POST",
@@ -475,7 +491,7 @@ export default function ViagemDetalhePage({
   const [dialogDivergente, setDialogDivergente] = useState(false);
   const [motivoTexto, setMotivoTexto] = useState("");
   const [tipoDivergencia, setTipoDivergencia] = useState<
-    "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "KM_DIVERGENTE" | "OUTRO"
+    "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "KM_DIVERGENTE" | "TICKET_DUPLICADO" | "OUTRO"
   >("OUTRO");
   const [motivoFoiEditado, setMotivoFoiEditado] = useState(false);
 
@@ -550,13 +566,15 @@ export default function ViagemDetalhePage({
     : "";
 
   function motivoSugeridoPorTipo(
-    tipo: "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "KM_DIVERGENTE" | "OUTRO",
+    tipo: "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "KM_DIVERGENTE" | "TICKET_DUPLICADO" | "OUTRO",
   ): string {
     if (tipo === "PEDAGIO_SEM_VALOR") return motivoSugeridoPedagio;
     if (tipo === "FOTO_ILEGIVEL")
       return "A foto enviada não permite identificar o ticket. Por favor, tire uma foto nova com boa iluminação e foco no número e na data.";
     if (tipo === "KM_DIVERGENTE")
       return `O km lançado (${fmtNum(v.km, 2)} km) parece divergir do trajeto. Confira o valor e, se estiver certo, explique o porquê (desvio, obra, etc.).`;
+    if (tipo === "TICKET_DUPLICADO")
+      return `O ticket ${v.ticket ?? ""} já tinha sido lançado nesta empresa. Confira o número no romaneio e corrija, ou explique por que ele se repete.`.trim();
     return "";
   }
 
@@ -748,6 +766,70 @@ export default function ViagemDetalhePage({
                 Observação
               </div>
               <p className="mt-0.5 break-words text-sm">{v.observacao}</p>
+            </div>
+          )}
+
+          {/* Ticket repetido: antes isso era 409 e o motorista nem conseguia
+              lançar. Agora entra e a decisão é aqui — com o link pra outra
+              viagem, que é a primeira coisa que o conferente quer ver. */}
+          {v.ticketDuplicadoDe && (
+            <div
+              className={`rounded-lg border p-3 ${
+                v.duplicidadeAceitaEm
+                  ? "border-border bg-muted/30"
+                  : "border-rose-300 bg-rose-50"
+              }`}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p
+                    className={`text-sm font-medium ${
+                      v.duplicidadeAceitaEm ? "text-foreground" : "text-rose-900"
+                    }`}
+                  >
+                    {v.duplicidadeAceitaEm
+                      ? "Ticket repetido — já conferido"
+                      : "Ticket repetido"}
+                  </p>
+                  <p
+                    className={`mt-0.5 text-sm ${
+                      v.duplicidadeAceitaEm ? "text-muted-foreground" : "text-rose-800"
+                    }`}
+                  >
+                    O número{" "}
+                    <span className="font-mono font-medium">{v.ticket ?? "—"}</span> já
+                    tinha sido lançado nesta empresa em{" "}
+                    <Link
+                      href={`/viagens/${v.ticketDuplicadoDe.id}`}
+                      className="font-medium underline hover:no-underline"
+                    >
+                      outra viagem
+                      {v.ticketDuplicadoDe.data
+                        ? ` de ${fmtBR(v.ticketDuplicadoDe.data)}`
+                        : ""}
+                    </Link>
+                    . Confira as duas antes de decidir.
+                  </p>
+                </div>
+                {!v.duplicidadeAceitaEm && (
+                  <Permitido chave="viagens.editar">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => aceitarDuplicidade.mutate()}
+                      disabled={aceitarDuplicidade.isPending}
+                    >
+                      Aceitar duplicidade
+                    </Button>
+                  </Permitido>
+                )}
+              </div>
+              {!v.duplicidadeAceitaEm && (
+                <p className="mt-2 text-xs text-rose-700">
+                  Se estiver errado, use “Marcar como divergente” abaixo — o motorista
+                  recebe o aviso e corrige pelo app.
+                </p>
+              )}
             </div>
           )}
 
@@ -1409,6 +1491,9 @@ export default function ViagemDetalhePage({
                 </option>
                 <option value="KM_DIVERGENTE">
                   Km divergente (motorista corrige/justifica)
+                </option>
+                <option value="TICKET_DUPLICADO">
+                  Ticket repetido (motorista confere o número)
                 </option>
                 <option value="OUTRO">Outro motivo</option>
               </Select>

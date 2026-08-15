@@ -64,6 +64,11 @@ enum TipoDivergencia {
   /// Km lancado parece divergir do trajeto. App motorista mostra card com o
   /// motivo do admin + campo pra corrigir o km e justificar (vai pra observacao).
   KM_DIVERGENTE
+  /// Ticket repetido: já existe outra viagem da mesma empresa com esse número.
+  /// A viagem ENTRA assim mesmo (travar o motorista na estrada por um número
+  /// custa mais caro que conferir depois) — o painel sinaliza e, se estiver
+  /// errado mesmo, o conferente reprova por aqui. App mostra card dedicado.
+  TICKET_DUPLICADO
   /// Qualquer outro motivo. Motorista corrige editando a viagem normal.
   OUTRO
 }
@@ -1418,6 +1423,21 @@ model Viagem {
   /// pré-validar a viagem, e as duas não podem se confundir (uma não implica
   /// a outra, nem no card do painel nem no FechamentoProcessor).
   kmAceitoEm              DateTime?
+  /// Ticket repetido: aponta pra viagem ANTERIOR da mesma empresa com o mesmo
+  /// número. Antes isso era 409 e travava o lançamento; agora entra carimbado.
+  ///
+  /// Mesma natureza do kmForaDoPadrao: o backend detecta, o painel mostra e o
+  /// humano decide. Guardar o ID (e não um booleano) é o que deixa o painel
+  /// levar direto pra outra viagem, que é a pergunta que o conferente faz.
+  ///
+  /// SetNull: se a viagem anterior for excluída, não há mais duplicidade.
+  ticketDuplicadoDe       Viagem?            @relation("TicketDuplicado", fields: [ticketDuplicadoDeId], references: [id], onDelete: SetNull)
+  ticketDuplicadoDeId     String?
+  ticketsDuplicados       Viagem[]           @relation("TicketDuplicado")
+  /// "Aceitar duplicidade": o conferente olhou e o número repetido está certo.
+  /// Dedicado, igual ao kmAceitoEm — aceitar a duplicidade não é pré-validar a
+  /// viagem, e as duas decisões não podem se confundir.
+  duplicidadeAceitaEm     DateTime?
   /// Por que essa viagem foi lançada SEM a foto do ticket, numa empresa que
   /// exige. O app bloqueia o salvar até ter foto ou este texto — então preenchido
   /// significa "o motorista explicou".
@@ -1560,6 +1580,7 @@ model Viagem {
   @@index([materialId, data])
   // Recorte de diárias no relatório/lista, e FK do TipoServico.
   @@index([tipoServicoId, data])
+  @@index([ticketDuplicadoDeId])
   // Partial unique index "1 viagem EM_ANDAMENTO por motorista" é criado à mão
   // no migration.sql (Prisma não expressa índice parcial): ver migration
   // add_viagem_lifecycle (uq_viagem_em_andamento_por_motorista).

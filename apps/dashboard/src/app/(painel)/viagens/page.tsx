@@ -10,6 +10,7 @@ import {
   Camera,
   ChevronRight,
   Clock,
+  Copy,
   ExternalLink,
   Package,
   Route,
@@ -79,6 +80,10 @@ type Viagem = {
   justificativaSemFoto: string | null;
   /** true = km fora do padrão do trajeto (badge "Km atípico"). null = não avaliado. */
   kmForaDoPadrao: boolean | null;
+  /** Viagem anterior da mesma empresa com o MESMO número de ticket. */
+  ticketDuplicadoDe: { id: string; ticket: string | null; data: string | null } | null;
+  /** Preenchido quando alguém conferiu a duplicidade e deu ok. */
+  duplicidadeAceitaEm: string | null;
   /** Preenchido quando a viagem foi criada com o app offline (momento real da criação no device). */
   criadoOfflineEm: string | null;
   /** Quando o registro chegou/sincronizou no backend — fallback de criadoOfflineEm. */
@@ -119,6 +124,18 @@ function AlertasBadges({ v }: { v: Viagem }) {
         title="Km fora do padrão das outras viagens deste trajeto"
       >
         <AlertTriangle className="h-3 w-3" /> Km atípico
+      </Badge>,
+    );
+  }
+  // Some depois de conferida: senão a mesma viagem pede atenção pra sempre.
+  if (v.ticketDuplicadoDe && !v.duplicidadeAceitaEm) {
+    badges.push(
+      <Badge
+        key="ticket-dup"
+        className="gap-1 border-rose-300 bg-rose-100 text-rose-800"
+        title="Já existe outra viagem desta empresa com o mesmo número de ticket"
+      >
+        <Copy className="h-3 w-3" /> Ticket repetido
       </Badge>,
     );
   }
@@ -436,6 +453,13 @@ export default function ViagensPage() {
                   placeholder="Km"
                   showSearch={false}
                   options={[{ value: "true", label: "Só km atípico" }]}
+                />
+                <Combobox
+                  value={tableState.filters.ticketDuplicado}
+                  onChange={(v) => tableState.setFilter("ticketDuplicado", v)}
+                  placeholder="Ticket"
+                  showSearch={false}
+                  options={[{ value: "true", label: "Só ticket repetido" }]}
                 />
                 <MotoristaCombobox
                   value={tableState.filters.motoristaId}

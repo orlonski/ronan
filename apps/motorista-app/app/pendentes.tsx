@@ -471,9 +471,10 @@ function CompletarPesoCard({
         <View className="mt-3 gap-1.5 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
           <Text className="text-xs font-semibold text-destructive">Último erro:</Text>
           <Text className="text-xs text-destructive" numberOfLines={3}>
-            {item.errorStatus === 409
-              ? "Esse ticket já foi lançado pra essa empresa. Toque em Editar pra corrigir o número."
-              : (item.errorMsg ?? "Erro desconhecido.")}
+            {/* O 409 de ticket repetido deixou de existir — agora a viagem
+                entra e o painel sinaliza. Outros 409 (ex.: número em uso por
+                outro motivo) continuam caindo no texto da API. */}
+            {item.errorMsg ?? "Erro desconhecido."}
           </Text>
         </View>
       )}

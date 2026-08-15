@@ -45,6 +45,7 @@ import {
   usePedagiosNaRota,
   useResponderFotoDivergente,
   useResponderKmDivergente,
+  useResponderTicketDuplicado,
   useViagemDetalhe,
 } from "@/lib/queries";
 import { enqueueFoto } from "@/lib/sync";
@@ -80,6 +81,9 @@ export default function ViagemDetalheScreen() {
   const informarPedagio = useInformarValorPedagio();
   const responderFoto = useResponderFotoDivergente();
   const responderKm = useResponderKmDivergente();
+  const responderTicket = useResponderTicketDuplicado();
+  const [ticketNovoStr, setTicketNovoStr] = useState("");
+  const [justificativaTicketStr, setJustificativaTicketStr] = useState("");
   const [valorPedagioStr, setValorPedagioStr] = useState("");
   const [novaFotoDivergente, setNovaFotoDivergente] =
     useState<CapturedPhoto | null>(null);
@@ -369,6 +373,91 @@ export default function ViagemDetalheScreen() {
                             justificativa: justificativaKmStr.trim(),
                           });
                           setJustificativaKmStr("");
+                          void showAlert({
+                            title: "Obrigado!",
+                            message:
+                              "Resposta enviada — viagem foi marcada como ajustada.",
+                          });
+                        } catch (err) {
+                          void showAlert({
+                            title: "Erro",
+                            message: humanizeApiError(err),
+                          });
+                        }
+                      }}
+                    >
+                      Responder
+                    </Button>
+                  </View>
+                </View>
+              </Card>
+            )}
+
+          {detalhe.data.status === "DIVERGENTE" &&
+            detalhe.data.tipoDivergencia === "TICKET_DUPLICADO" && (
+              <Card className="border-2 border-orange-500 bg-orange-50">
+                <View className="flex-row items-start gap-3">
+                  <AlertTriangle size={20} color="#ea580c" />
+                  <View className="flex-1">
+                    <Text className="text-base font-bold text-orange-900">
+                      Confira o número do ticket
+                    </Text>
+                    <Text className="mt-1 text-sm text-orange-900">
+                      Esse número já tinha sido lançado. Corrija se digitou errado, ou
+                      explique por que ele se repete.
+                    </Text>
+                    {detalhe.data.motivoStatus ? (
+                      <Text className="mt-2 text-sm text-orange-800">
+                        {detalhe.data.motivoStatus}
+                      </Text>
+                    ) : null}
+
+                    <Text className="mt-3 text-sm font-medium text-foreground">
+                      Número do ticket
+                    </Text>
+                    <TextInput
+                      value={ticketNovoStr || (detalhe.data.ticket ?? "")}
+                      onChangeText={(v: string) => setTicketNovoStr(v.toUpperCase())}
+                      placeholder="número"
+                      maxLength={50}
+                      autoCapitalize="characters"
+                      autoCorrect={false}
+                      className="mt-1 h-11 rounded-md border border-input bg-white px-3 text-base text-foreground"
+                    />
+
+                    <Text className="mt-3 text-sm font-medium text-foreground">
+                      O que houve? (obrigatório)
+                    </Text>
+                    <TextInput
+                      value={justificativaTicketStr}
+                      onChangeText={setJustificativaTicketStr}
+                      placeholder="Ex.: digitei errado, o certo é esse"
+                      multiline
+                      maxLength={500}
+                      className="mt-1 min-h-16 rounded-md border border-input bg-white px-3 py-2 text-base text-foreground"
+                    />
+
+                    <Button
+                      className="mt-3"
+                      loading={responderTicket.isPending}
+                      disabled={responderTicket.isPending}
+                      onPress={async () => {
+                        if (justificativaTicketStr.trim().length < 5) {
+                          void showAlert({
+                            title: "Falta explicar",
+                            message: "Escreva o que houve com o ticket.",
+                          });
+                          return;
+                        }
+                        const novo = ticketNovoStr.trim();
+                        try {
+                          await responderTicket.mutateAsync({
+                            viagemId: detalhe.data!.id,
+                            ticket: novo || undefined,
+                            justificativa: justificativaTicketStr.trim(),
+                          });
+                          setJustificativaTicketStr("");
+                          setTicketNovoStr("");
                           void showAlert({
                             title: "Obrigado!",
                             message:

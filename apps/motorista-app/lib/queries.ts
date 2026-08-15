@@ -234,6 +234,7 @@ export type Viagem = {
     | "PEDAGIO_SEM_VALOR"
     | "FOTO_ILEGIVEL"
     | "KM_DIVERGENTE"
+    | "TICKET_DUPLICADO"
     | "OUTRO"
     | null;
   sincronizadoEm: string;
@@ -1644,6 +1645,30 @@ export function useResponderKmDivergente() {
       void qc.invalidateQueries({ queryKey: ["viagens-filtradas"] });
       void qc.invalidateQueries({ queryKey: ["resumo-mes"] });
       // O responder-km também posta no chat → recarrega a conversa.
+      void qc.invalidateQueries({ queryKey: ["viagem-mensagens", atualizada.id] });
+    },
+  });
+}
+
+/** Responde uma divergência TICKET_DUPLICADO: corrige o número (opcional) e
+ *  explica (obrigatório). A viagem vira AJUSTADA e o carimbo é refeito. */
+export function useResponderTicketDuplicado() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      viagemId: string;
+      ticket?: string;
+      justificativa: string;
+    }) => {
+      return await api.post<ViagemDetalhe>(
+        `/m/viagens/${args.viagemId}/responder-ticket-duplicado`,
+        { ticket: args.ticket, justificativa: args.justificativa },
+      );
+    },
+    onSuccess: (atualizada) => {
+      qc.setQueryData(["viagem-detalhe", atualizada.id], atualizada);
+      void qc.invalidateQueries({ queryKey: ["viagens"] });
+      void qc.invalidateQueries({ queryKey: ["viagens-filtradas"] });
       void qc.invalidateQueries({ queryKey: ["viagem-mensagens", atualizada.id] });
     },
   });

@@ -128,6 +128,7 @@ export class ViagensMotoristaService {
       | "nova-viagem"
       | "resposta-divergencia-pedagio"
       | "resposta-divergencia-km"
+      | "resposta-divergencia-ticket"
       | "resposta-divergencia-foto"
       | "nova-mensagem-viagem"
       | "foto-anexada",
@@ -451,6 +452,114 @@ export class ViagensMotoristaService {
    * observação (preserva o que já havia). Viagem vira AJUSTADA pro admin
    * revisar. Se o km mudou, marca como manual e re-carimba o atípico.
    */
+  /**
+   * Motorista responde a viagem reprovada por TICKET DUPLICADO: corrige o
+   * número (ou explica por que ele repete de verdade).
+   *
+   * Molde do responderKmDivergente. A diferença é que corrigir o ticket muda o
+   * dado que gerou a duplicidade, então o carimbo é REFEITO aqui — se o número
+   * novo não colide com nada, o selo do painel some sozinho.
+   */
+  async responderTicketDuplicado(
+    motoristaId: string,
+    viagemId: string,
+    input: { ticket?: string; justificativa: string },
+  ) {
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { id: viagemId },
+      select: {
+        id: true,
+        motoristaId: true,
+        status: true,
+        tipoDivergencia: true,
+        ticket: true,
+        materialId: true,
+        cliente: { select: { empresaId: true } },
+      },
+    });
+    if (!viagem) throw new NotFoundException("Viagem não encontrada.");
+    if (viagem.motoristaId !== motoristaId) {
+      throw new ForbiddenException("Esta viagem não é sua.");
+    }
+    if (viagem.status !== "DIVERGENTE" || viagem.tipoDivergencia !== "TICKET_DUPLICADO") {
+      throw new ConflictException("Essa viagem não está aguardando conferência do ticket.");
+    }
+    const justificativa = input.justificativa.trim();
+    if (justificativa.length < 5) {
+      throw new ConflictException("Explique em poucas palavras o que houve com o ticket.");
+    }
+
+    const ticketNovo = input.ticket?.trim() || null;
+    const mudou = ticketNovo != null && ticketNovo !== viagem.ticket;
+    const ticketAntes = viagem.ticket ?? "?";
+
+    // Recarimba com o número que vale agora. Se ele corrigiu pra um número
+    // livre, `duplicadoDeId` volta null e o painel para de sinalizar.
+    const { duplicadoDeId } = await this.resolverTicketParaEmpresa(
+      viagem.cliente?.empresaId ?? "",
+      viagem.materialId,
+      mudou ? ticketNovo : viagem.ticket,
+      viagemId,
+    );
+
+    const nomeMot = (
+      await this.prisma.motorista.findUnique({
+        where: { id: motoristaId },
+        select: { nome: true },
+      })
+    )?.nome;
+
+    await this.prisma.viagem.update({
+      where: { id: viagemId },
+      data: {
+        status: "AJUSTADA",
+        tipoDivergencia: null,
+        ...(mudou ? { ticket: ticketNovo } : {}),
+        ticketDuplicadoDeId: duplicadoDeId,
+        // Número novo = duplicidade nova: o aceite anterior não vale mais.
+        ...(mudou ? { duplicidadeAceitaEm: null } : {}),
+      },
+    });
+
+    await this.mensagens.criar({
+      viagemId,
+      autor: "MOTORISTA",
+      motoristaId,
+      autorNome: nomeMot ?? "Motorista",
+      texto: mudou
+        ? `Corrigi o ticket de ${ticketAntes} para ${ticketNovo}. ${justificativa}`
+        : justificativa,
+      acao: "CORRIGIU_TICKET",
+    });
+
+    try {
+      await this.auditoria.log({
+        usuarioId: null,
+        entidade: "Viagem",
+        entidadeId: viagemId,
+        acao: AcaoAuditoria.UPDATE,
+        campo: "ticket",
+        valorAntes: viagem.ticket,
+        valorDepois: mudou ? ticketNovo : viagem.ticket,
+        motivo: `Motorista respondeu o ticket repetido${mudou ? ` (corrigiu para ${ticketNovo})` : ""}: ${justificativa}`,
+        metadata: { motoristaId, mudou, justificativa },
+      });
+    } catch {
+      // best-effort
+    }
+
+    void this.notificarAdmins(
+      "resposta-divergencia-ticket",
+      `${nomeMot ?? "Motorista"} respondeu o ticket`,
+      mudou
+        ? `Corrigiu para ${ticketNovo} — viagem aguardando sua revisão`
+        : `Explicou o número repetido — viagem aguardando sua revisão`,
+      { viagemId, motoristaId, justificativa },
+    );
+
+    return this.detalhe(motoristaId, viagemId);
+  }
+
   async responderKmDivergente(
     motoristaId: string,
     viagemId: string,
@@ -870,18 +979,17 @@ export class ViagensMotoristaService {
     if (!ehPeriodo && !aguardandoPeso && (input.toneladas == null || input.toneladas <= 0)) {
       throw new BadRequestException("Informe as toneladas.");
     }
-    // Ticket: basta o modo OU o material dispensar. Modo que não exige pula a
-    // checagem, mas mantém a unicidade por empresa se o número vier mesmo assim.
-    const ticket =
-      aguardandoPeso
-        ? null
-        : await this.validarTicketParaEmpresa(
-            cliente.empresaId,
-            materialId,
-            input.ticket,
-            undefined,
-            modo.exigeTicket,
-          );
+    // Ticket: basta o modo OU o material dispensar. Número repetido NÃO impede
+    // o lançamento — vem carimbado pra quem confere decidir.
+    const { ticket, duplicadoDeId } = aguardandoPeso
+      ? { ticket: null, duplicadoDeId: null }
+      : await this.resolverTicketParaEmpresa(
+          cliente.empresaId,
+          materialId,
+          input.ticket,
+          undefined,
+          modo.exigeTicket,
+        );
 
     // Foto do comprovante: a empresa exige? Só carimba a falta — nunca recusa.
     // Recusar aqui mataria o item no outbox do motorista (ver common/exige-foto.ts).
@@ -968,6 +1076,9 @@ export class ViagensMotoristaService {
             ? "AGUARDANDO_SAIDA"
             : undefined,
         ticket,
+        // Número repetido: guarda QUAL viagem já usa, pro painel levar direto
+        // até ela. Null = sem duplicidade.
+        ticketDuplicadoDeId: duplicadoDeId,
         km: rest.km,
         kmCalculado: rest.kmCalculado,
         kmEditadoManual,
@@ -1166,19 +1277,30 @@ export class ViagensMotoristaService {
   }
 
   /**
-   * Valida o ticket de uma viagem: exige quando o material exige (autoritativo,
-   * mesmo com o Zod relaxado) e garante unicidade por empresa. Retorna o ticket
-   * limpo (ou null quando o material não exige). Reusado no create e no
-   * completarPeso. `ignorarViagemId` exclui a própria viagem da checagem de
-   * duplicidade (ao completar peso da viagem que já existe).
+   * Resolve o ticket de uma viagem: o número limpo + a viagem ANTERIOR da mesma
+   * empresa que já usa esse número, quando houver.
+   *
+   * Duas regras diferentes moram aqui, e elas se comportam de formas opostas:
+   *
+   * 1. **Obrigatoriedade** (material/modo exige ticket) — continua BLOQUEANDO
+   *    com 400. É dado que o motorista tem na mão; cobrar é barato.
+   * 2. **Duplicidade** — NÃO bloqueia mais. Antes era 409, que no app vira erro
+   *    permanente: o lançamento morria em Pendentes e o motorista tinha que
+   *    editar o número no meio da estrada. Acontece de repetir de verdade, e
+   *    travar a viagem custa mais caro que conferir depois. Agora o duplicado
+   *    é devolvido pra ser CARIMBADO na viagem, e quem confere decide — mesmo
+   *    desenho do km atípico (detecta, sinaliza, humano resolve).
+   *
+   * `ignorarViagemId` exclui a própria viagem da busca (ao completar peso ou
+   * finalizar uma viagem que já existe).
    */
-  private async validarTicketParaEmpresa(
+  private async resolverTicketParaEmpresa(
     empresaId: string,
     materialId: string | null,
     ticketRaw?: string | null,
     ignorarViagemId?: string,
     modoExigeTicket = true,
-  ): Promise<string | null> {
+  ): Promise<{ ticket: string | null; duplicadoDeId: string | null }> {
     const material = materialId
       ? await this.prisma.material.findUnique({
           where: { id: materialId },
@@ -1187,28 +1309,25 @@ export class ViagensMotoristaService {
       : null;
     const ticket = ticketRaw?.trim() || null;
     // Basta UM dos dois dispensar: o modo de serviço (diária não tem pesagem) ou
-    // o material (concreto não gera ticket). A unicidade abaixo continua valendo
-    // pro número que vier mesmo assim.
+    // o material (concreto não gera ticket).
     const exige = modoExigeTicket && material?.exigeTicket !== false;
     if (exige && !ticket) {
       throw new BadRequestException("Informe o número do ticket.");
     }
-    if (ticket) {
-      const duplicado = await this.prisma.viagem.findFirst({
-        where: {
-          ticket,
-          cliente: { empresaId },
-          ...(ignorarViagemId ? { id: { not: ignorarViagemId } } : {}),
-        },
-        select: { id: true },
-      });
-      if (duplicado) {
-        throw new ConflictException(
-          `Ticket ${ticket} já foi lançado para essa empresa.`,
-        );
-      }
-    }
-    return ticket;
+    if (!ticket) return { ticket: null, duplicadoDeId: null };
+
+    // A MAIS ANTIGA de mesmo número: é a que o conferente quer abrir pra
+    // comparar. Sem ordenar, o link apontaria pra qualquer uma.
+    const duplicado = await this.prisma.viagem.findFirst({
+      where: {
+        ticket,
+        cliente: { empresaId },
+        ...(ignorarViagemId ? { id: { not: ignorarViagemId } } : {}),
+      },
+      orderBy: { sincronizadoEm: "asc" },
+      select: { id: true },
+    });
+    return { ticket, duplicadoDeId: duplicado?.id ?? null };
   }
 
   /**
@@ -1322,7 +1441,7 @@ export class ViagensMotoristaService {
         : null;
     }
 
-    const ticket = await this.validarTicketParaEmpresa(
+    const { ticket, duplicadoDeId } = await this.resolverTicketParaEmpresa(
       viagem.cliente?.empresaId ?? "",
       viagem.materialId,
       input.ticket,
@@ -1334,6 +1453,7 @@ export class ViagensMotoristaService {
       data: {
         toneladas: input.toneladas,
         ticket,
+        ticketDuplicadoDeId: duplicadoDeId,
         status: "ENVIADA",
       },
       include: VIAGEM_INCLUDE,
@@ -1604,9 +1724,9 @@ export class ViagensMotoristaService {
     // Pula a validação de ticket (fica null) e a viagem vai pra AGUARDANDO_PESO
     // em vez de ENVIADA; peso e ticket entram depois via completarPeso/admin.
     const aguardandoPeso = input.aguardandoPeso === true;
-    const ticket = aguardandoPeso
-      ? null
-      : await this.validarTicketParaEmpresa(
+    const { ticket, duplicadoDeId } = aguardandoPeso
+      ? { ticket: null, duplicadoDeId: null }
+      : await this.resolverTicketParaEmpresa(
           cliente.empresaId,
           input.materialId,
           input.ticket,
@@ -1664,6 +1784,7 @@ export class ViagensMotoristaService {
         // Recria os trechos do zero (idempotente em reenvio do finalizar).
         trechos: { deleteMany: {}, ...(trechosCreate.length ? { create: trechosCreate } : {}) },
         ticket,
+        ticketDuplicadoDeId: duplicadoDeId,
         localDescargaId: input.localDescargaId,
         descargaLat: input.descargaLat,
         descargaLng: input.descargaLng,

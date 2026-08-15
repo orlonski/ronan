@@ -50,7 +50,7 @@ const PreValidarInput = z
     motivo: z.string().min(2).max(500).optional(),
     /** Tipo da divergência. Default "OUTRO". Tipos estruturados desbloqueiam
      * UI dedicada no app motorista (input de valor, botão de tirar foto, etc). */
-    tipo: z.enum(["PEDAGIO_SEM_VALOR", "FOTO_ILEGIVEL", "KM_DIVERGENTE", "OUTRO"]).optional(),
+    tipo: z.enum(["PEDAGIO_SEM_VALOR", "FOTO_ILEGIVEL", "KM_DIVERGENTE", "TICKET_DUPLICADO", "OUTRO"]).optional(),
   })
   .refine(
     (d) => d.status !== "DIVERGENTE" || (d.motivo && d.motivo.trim().length >= 2),
@@ -109,6 +109,7 @@ const ListViagensQuery = paginationQuerySchema.extend({
   origem: z.enum(["guiada", "direta"]).optional(),
   // Só viagens marcadas com km fora do padrão do trajeto (badge "Km atípico").
   kmForaDoPadrao: z.coerce.boolean().optional(),
+  ticketDuplicado: z.coerce.boolean().optional(),
   semFoto: z.coerce.boolean().optional(),
   de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -210,6 +211,16 @@ export class ViagensAdminController {
   aceitarKm(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
     return this.service.aceitarKm(id, user.id);
   }
+  /**
+   * "Aceitar duplicidade": o conferente confirma que o ticket repetido está
+   * certo. Some o selo, sem mexer no status nem na pré-validação.
+   */
+  @RequerPermissao("viagens.editar")
+  @Post(":id/aceitar-duplicidade")
+  aceitarDuplicidade(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    return this.service.aceitarDuplicidade(id, user.id);
+  }
+
 
   @EscopoPor("viagem")
   @RequerPermissao("viagens.editar")

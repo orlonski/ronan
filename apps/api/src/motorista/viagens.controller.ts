@@ -48,6 +48,12 @@ const ResponderKmDivergenteInput = z.object({
   justificativa: z.string().min(5).max(500),
 });
 
+const ResponderTicketDuplicadoInput = z.object({
+  // Opcional: às vezes o número está certo e o que ele precisa é explicar.
+  ticket: z.string().max(50).optional(),
+  justificativa: z.string().min(5).max(500),
+});
+
 const EnviarMensagemInput = z.object({
   texto: z.string().min(1).max(1000),
 });
@@ -256,6 +262,21 @@ export class ViagensMotoristaController {
     body: z.infer<typeof ResponderKmDivergenteInput>,
   ) {
     return this.service.responderKmDivergente(user.id, id, body);
+  }
+
+  /**
+   * Motorista responde a uma divergência tipo TICKET_DUPLICADO: corrige o
+   * número do ticket e/ou explica por que ele se repete. A viagem vira AJUSTADA
+   * e o carimbo de duplicidade é refeito com o número que vale agora.
+   */
+  @Post(":id/responder-ticket-duplicado")
+  responderTicketDuplicado(
+    @CurrentUser() user: AuthMotorista,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(ResponderTicketDuplicadoInput))
+    body: z.infer<typeof ResponderTicketDuplicadoInput>,
+  ) {
+    return this.service.responderTicketDuplicado(user.id, id, body);
   }
 
   /** Chat da viagem: histórico de mensagens. */
