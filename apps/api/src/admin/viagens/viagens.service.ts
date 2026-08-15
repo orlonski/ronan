@@ -48,6 +48,8 @@ type ListViagensParams = PaginationQuery & {
   status?: StatusViagem;
   origem?: "guiada" | "direta";
   kmForaDoPadrao?: boolean;
+  /** true = só viagens sem nenhuma foto anexada (cobrança de comprovante). */
+  semFoto?: boolean;
   de?: string;
   ate?: string;
 };
@@ -380,6 +382,9 @@ export class ViagensAdminService {
     if (params.origem === "guiada") where.iniciadaGuiada = true;
     else if (params.origem === "direta") where.iniciadaGuiada = false;
     if (params.kmForaDoPadrao) where.kmForaDoPadrao = true;
+    // Sem NENHUMA foto: a viagem pode ter sido lançada com justificativa ou ter
+    // perdido o arquivo no caminho — os dois casos precisam ser cobrados.
+    if (params.semFoto) where.fotos = { none: {} };
     if (params.de || params.ate) {
       where.data = {};
       if (params.de) where.data.gte = new Date(params.de);

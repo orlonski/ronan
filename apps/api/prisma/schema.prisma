@@ -947,6 +947,16 @@ model Empresa {
   toleranciaKmPct  Int          @default(0)
   // 0–10 — idem pra toneladas
   toleranciaTonPct Int          @default(0)
+  /// Esta empresa exige a FOTO do ticket/romaneio no lançamento da viagem.
+  /// Diferente de Material.exigeTicket, que é o NÚMERO — dá pra exigir um sem o
+  /// outro. Default false: quem não configurar nada segue como sempre.
+  ///
+  /// O bloqueio de verdade acontece no APP (o motorista não salva sem foto nem
+  /// justificativa). O backend NUNCA recusa por falta de foto: recusar mataria
+  /// item de outbox offline — ele carimba a falta e o painel cobra.
+  exigeFotoViagem  Boolean      @default(false)
+  /// Idem pro cupom do posto no abastecimento.
+  exigeFotoAbastecimento Boolean @default(false)
   ativa            Boolean      @default(true)
   criadoEm         DateTime     @default(now())
   alteradoEm       DateTime     @updatedAt
@@ -1033,6 +1043,10 @@ model Material {
   /// Se false, viagens desse material não exigem número de ticket (ex: concreto,
   /// que não gera ticket de pesagem). Controlado pelo admin, nunca pelo motorista.
   exigeTicket     Boolean  @default(true)
+  /// Esse material gera algum papel que dá pra fotografar (ticket de pesagem,
+  /// canhoto, nota). false = não gera nada (concreto): suprime a exigência de
+  /// foto da empresa, porque não dá pra cobrar foto de comprovante inexistente.
+  temComprovanteFoto Boolean @default(true)
   /// Se true, o motorista pode marcar que precisou voltar pro bota-fora (limpeza):
   /// na última carga ele retorna ao local de carga pra descarregar a sobra. Isso
   /// adiciona a perna descarga→carga ao km faturável. Controlado pelo admin; o
@@ -1333,6 +1347,14 @@ model Viagem {
   /// pré-validar a viagem, e as duas não podem se confundir (uma não implica
   /// a outra, nem no card do painel nem no FechamentoProcessor).
   kmAceitoEm              DateTime?
+  /// Por que essa viagem foi lançada SEM a foto do ticket, numa empresa que
+  /// exige. O app bloqueia o salvar até ter foto ou este texto — então preenchido
+  /// significa "o motorista explicou".
+  ///
+  /// Null + zero fotos numa empresa que exige NÃO quer dizer que está tudo bem:
+  /// quer dizer que ninguém explicou (app antigo, ou o SO purgou o arquivo antes
+  /// do envio). Os dois casos aparecem no filtro "sem foto" do painel.
+  justificativaSemFoto    String?
   /// Texto que o motorista escreveu ao insistir num km fora do padrão. Fato
   /// histórico dele: o re-carimbo automático NUNCA mexe aqui. Null é estado
   /// válido e esperado mesmo com kmForaDoPadrao=true (lançou offline, app
@@ -2371,6 +2393,9 @@ model Abastecimento {
   postoNome        String?
   tanqueCheio      Boolean         @default(true)
   observacao       String?
+  /// Por que o abastecimento foi lançado sem o cupom do posto, numa empresa que
+  /// exige a foto. Ver Viagem.justificativaSemFoto.
+  justificativaSemFoto String?
   // GPS capturado no momento do registro (silencioso — null se permissão negada)
   lat              Float?
   lng              Float?

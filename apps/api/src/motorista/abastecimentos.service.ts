@@ -7,6 +7,7 @@ import {
 import type { Prisma } from "@prisma/client";
 import type { CriarAbastecimentoInput } from "@ronan/shared-types";
 import { resolverTransportadora } from "../common/transportadora";
+import { resolverJustificativaSemFoto } from "../common/exige-foto";
 import { ItemInexistenteException } from "../common/item-inexistente";
 import { LancamentosResgatadosService } from "../lancamentos-resgatados/lancamentos-resgatados.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -147,6 +148,16 @@ export class AbastecimentosMotoristaService {
       motoristaId,
       rest.veiculoId,
     );
+    // Foto do cupom: a empresa que paga exige? Só carimba a falta — nunca recusa
+    // (recusar mataria o item no outbox offline; ver common/exige-foto.ts).
+    const empresaAbast = rest.empresaId
+      ? await this.prisma.empresa.findUnique({
+          where: { id: rest.empresaId },
+          select: { exigeFotoAbastecimento: true },
+        })
+      : null;
+    const exigeFoto = empresaAbast?.exigeFotoAbastecimento === true;
+
     void this.resgates.marcarQueSubiu(input.clientId);
     return this.prisma.abastecimento.create({
       data: {
@@ -169,6 +180,11 @@ export class AbastecimentosMotoristaService {
         lng: rest.lng,
         precisao: rest.precisao,
         criadoOfflineEm: rest.criadoOfflineEm,
+        justificativaSemFoto: resolverJustificativaSemFoto(
+          exigeFoto,
+          !!fotoKey,
+          rest.justificativaSemFoto,
+        ),
         ...(fotoKey
           ? {
               fotos: {

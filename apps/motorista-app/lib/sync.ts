@@ -1587,6 +1587,12 @@ async function processViagemFinalizar(item: PendingViagemFinalizar): Promise<voi
         payload = { ...payload, fotoKey: up.storageKey };
       } else {
         reportarFotoPerdida("viagem-finalizar", atual.clientId, atual.fotoUri);
+        if (!payload.justificativaSemFoto) {
+          payload = {
+            ...payload,
+            justificativaSemFoto: "A foto sumiu do aparelho antes de conseguir enviar.",
+          };
+        }
       }
       atual = { ...atual, payload, fotoUri: undefined, fotoMime: undefined };
       await upsertPendingViagemFinalizar(atual);
@@ -1634,6 +1640,15 @@ async function processViagem(item: PendingViagem): Promise<void> {
         // Arquivo purgado pelo SO. Melhor a viagem subir sem a foto do que ficar
         // presa pra sempre — a foto pode ser anexada depois pela tela da viagem.
         reportarFotoPerdida("viagem", atual.clientId, atual.fotoUri);
+        // Numa empresa que exige a foto, chegar sem foto E sem explicação faria
+        // o painel cobrar o motorista por algo que não foi culpa dele. Carimba o
+        // motivo real — ele TIROU a foto, o aparelho é que a apagou.
+        if (!payload.justificativaSemFoto) {
+          payload = {
+            ...payload,
+            justificativaSemFoto: "A foto sumiu do aparelho antes de conseguir enviar.",
+          };
+        }
       }
       // Persiste o resultado do passo da foto pra não repetir o upload se o
       // POST abaixo falhar (antes, o catch usava o `item` original e desfazia).
@@ -1710,6 +1725,14 @@ async function processAbastecimento(item: PendingAbastecimento): Promise<void> {
         // no abastecimento — o lançamento vale mais que ela. Segue sem foto em
         // vez de ficar preso pra sempre "aguardando sinal".
         reportarFotoPerdida("abastecimento", atual.clientId, atual.fotoUri);
+        // Mesma proteção da viagem: numa empresa que exige o cupom, explica que
+        // o aparelho apagou a foto em vez de deixar o motorista levar a culpa.
+        if (!payload.justificativaSemFoto) {
+          payload = {
+            ...payload,
+            justificativaSemFoto: "A foto sumiu do aparelho antes de conseguir enviar.",
+          };
+        }
       }
       // Persiste o resultado do passo da foto (subida ou perdida) pra não
       // repetir o upload se o POST abaixo falhar.

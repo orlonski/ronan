@@ -73,6 +73,9 @@ export default function FinalizarViagem() {
   const [valorPedagio, setValorPedagio] = useState("");
   const [observacao, setObservacao] = useState("");
   const [foto, setFoto] = useState<CapturedPhoto | null>(null);
+  // Válvula pra quem não consegue fotografar — ver nova-viagem.tsx.
+  const [justificativaSemFoto, setJustificativaSemFoto] = useState("");
+  const [pedindoJustificativa, setPedindoJustificativa] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const val = useValidacaoGuiada();
@@ -120,6 +123,18 @@ export default function FinalizarViagem() {
     () => (cat.data?.materiais ?? []).map((m) => ({ value: m.id, label: m.nome })),
     [cat.data?.materiais],
   );
+
+  /**
+   * A empresa do cliente exige a foto do comprovante? Roda offline (o cliente
+   * já vem do catálogo cacheado). Defaults seguros: ausência nunca exige.
+   */
+  const exigeFoto = useMemo(() => {
+    const c = cat.data?.clientes.find((x) => x.id === clienteId);
+    if (c?.empresa?.exigeFotoViagem !== true) return false;
+    const m = cat.data?.materiais.find((x) => x.id === materialId);
+    if (m?.temComprovanteFoto === false) return false;
+    return true;
+  }, [cat.data?.clientes, cat.data?.materiais, clienteId, materialId]);
 
   // Material que não exige ticket (ex: concreto) esconde o campo. Default true.
   const exigeTicket = useMemo(() => {
@@ -400,6 +415,25 @@ export default function FinalizarViagem() {
       return;
     }
 
+    // Foto do comprovante exigida pela empresa (com saída pela justificativa).
+    if (exigeFoto && !foto) {
+      const texto = justificativaSemFoto.trim();
+      if (!texto) {
+        val.apontar(
+          "foto",
+          "Esse cliente exige a foto do ticket. Tire a foto ou explique por que não dá.",
+        );
+        return;
+      }
+      if (texto.length < 10) {
+        val.apontar(
+          "justificativaSemFoto",
+          "Escreva um pouco mais — o escritório precisa entender o motivo.",
+        );
+        return;
+      }
+    }
+
     // Km fora do padrão: avisa uma vez; se insistir, exige a explicação na
     // observação. Pula quando a observação já foi preenchida (não cobra 2x).
     if (
@@ -475,6 +509,8 @@ export default function FinalizarViagem() {
       await finalizarViagemGuiada({
         clienteId,
         materialId,
+        justificativaSemFoto:
+          exigeFoto && !foto ? justificativaSemFoto.trim() || undefined : undefined,
         data: hojeISO(),
         // Aguardando peso: finaliza sem toneladas/ticket (romaneio no fim do dia).
         toneladas: aguardandoPeso
@@ -733,12 +769,55 @@ export default function FinalizarViagem() {
               </View>
             )}
 
-            <View className="gap-2">
-              <Label>Foto do ticket</Label>
+            <View
+              className="gap-2"
+              ref={val.refCampo("foto")}
+              onLayout={val.onLayoutCampo("foto")}
+            >
+              <Label error={!!val.erroDe("foto")}>Foto do ticket</Label>
               <PhotoCapture value={foto} onChange={setFoto} />
-              <Text className="text-xs text-muted-foreground">
-                Opcional, mas ajuda na conferência.
-              </Text>
+              {val.erroDe("foto") ? (
+                <ErroCampo msg={val.erroDe("foto")!} />
+              ) : (
+                <Text className="text-xs text-muted-foreground">
+                  {exigeFoto
+                    ? "Obrigatória pra esse cliente."
+                    : "Opcional, mas ajuda na conferência."}
+                </Text>
+              )}
+              {exigeFoto &&
+                !foto &&
+                (pedindoJustificativa ? (
+                  <View className="gap-2">
+                    <Label error={!!val.erroDe("justificativaSemFoto")}>
+                      Por que não dá pra tirar a foto?
+                    </Label>
+                    <Input
+                      value={justificativaSemFoto}
+                      onChangeText={(v) => {
+                        val.limpar();
+                        setJustificativaSemFoto(v);
+                      }}
+                      placeholder="Ex.: o papel ficou na portaria"
+                      multiline
+                      maxLength={500}
+                      error={!!val.erroDe("justificativaSemFoto")}
+                    />
+                    {val.erroDe("justificativaSemFoto") ? (
+                      <ErroCampo msg={val.erroDe("justificativaSemFoto")!} />
+                    ) : null}
+                  </View>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onPress={() => setPedindoJustificativa(true)}
+                  >
+                    <Text className="text-sm font-medium text-foreground">
+                      Não consigo tirar a foto agora
+                    </Text>
+                  </Button>
+                ))}
             </View>
 
             {/* 5) Por último: toneladas e observação */}

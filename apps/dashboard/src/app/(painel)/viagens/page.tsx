@@ -75,6 +75,8 @@ type Viagem = {
   fotos: { id: string; storageKey: string }[];
   /** true quando rota passa por pedágio cadastrado mas motorista não pôs valor. */
   temPedagioSemValor: boolean;
+  /** Preenchido quando a viagem veio sem a foto numa empresa que exige. */
+  justificativaSemFoto: string | null;
   /** true = km fora do padrão do trajeto (badge "Km atípico"). null = não avaliado. */
   kmForaDoPadrao: boolean | null;
   /** Preenchido quando a viagem foi criada com o app offline (momento real da criação no device). */
@@ -350,9 +352,18 @@ export default function ViagensPage() {
         header: () => <span className="block text-center">Ações</span>,
         cell: ({ row }) => (
           <div className="flex items-center justify-center gap-1">
-            {row.original.fotos.length > 0 && (
+            {row.original.fotos.length > 0 ? (
               <Camera className="h-4 w-4 text-muted-foreground" />
-            )}
+            ) : row.original.justificativaSemFoto ? (
+              // Ausência de foto onde a empresa EXIGE. Antes isso era invisível
+              // (só faltava o ícone), então ninguém cobrava.
+              <span
+                className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
+                title={row.original.justificativaSemFoto}
+              >
+                sem foto
+              </span>
+            ) : null}
             <Link href={`/viagens/${row.original.id}`}>
               <span className="rounded p-1 hover:bg-muted">
                 <ExternalLink className="h-4 w-4" />
@@ -503,14 +514,23 @@ function ViagemCard({ v }: { v: Viagem }) {
               <AlertasBadges v={v} />
             </div>
             <span className="flex shrink-0 items-center gap-2 text-xs tabular-nums text-muted-foreground">
-              {v.fotos.length > 0 && (
+              {v.fotos.length > 0 ? (
                 <span
                   className="flex items-center gap-0.5"
                   title={`${v.fotos.length} foto${v.fotos.length === 1 ? "" : "s"}`}
                 >
                   <Camera className="h-3.5 w-3.5" /> {v.fotos.length}
                 </span>
-              )}
+              ) : v.justificativaSemFoto ? (
+                // Espelha o selo da tabela: em Cards (o modo padrão) a ausência
+                // de foto precisa aparecer igual, senão a cobrança some da tela.
+                <span
+                  className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
+                  title={v.justificativaSemFoto}
+                >
+                  sem foto
+                </span>
+              ) : null}
               <span className="flex items-center gap-1" title="Quando a viagem foi criada">
                 <Clock className="h-3.5 w-3.5" />
                 {criadoEm(v)}

@@ -149,6 +149,8 @@ type ViagemDetalhe = {
   cliente?: { id: string; nome: string; empresa: { nome: string } } | null;
   // Nulos quando o modo de serviço não os exige (diária à disposição).
   material: { id: string; nome: string; exigeTicket: boolean } | null;
+  /** Preenchido quando a viagem veio sem foto numa empresa que exige. */
+  justificativaSemFoto: string | null;
   /** Modo de serviço. null = frete por tonelada (histórico e app antigo). */
   tipoServico: { id: string; nome: string; medicao: "PESO" | "PERIODO" } | null;
   entradaEm: string | null;
@@ -880,11 +882,23 @@ export default function ViagemDetalhePage({
               <h3 className="mb-3 flex items-center gap-2 text-base font-medium">
                 <Camera className="h-4 w-4" /> Fotos do ticket
               </h3>
-              {v.fotos.length === 0 && (
-                <p className="mb-2 text-sm text-muted-foreground">
-                  Nenhuma foto anexada pelo motorista.
-                </p>
-              )}
+              {v.fotos.length === 0 &&
+                (v.justificativaSemFoto ? (
+                  // A empresa exige foto e ela não veio. Mostrar o motivo que o
+                  // motorista deu evita cobrar quem já explicou.
+                  <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 p-3">
+                    <p className="text-sm font-medium text-amber-900">
+                      Lançada sem a foto do ticket
+                    </p>
+                    <p className="mt-0.5 text-sm text-amber-800">
+                      {v.justificativaSemFoto}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="mb-2 text-sm text-muted-foreground">
+                    Nenhuma foto anexada pelo motorista.
+                  </p>
+                ))}
               <FotosViagem viagemId={v.id} fotos={v.fotos} />
             </Card>
           </div>

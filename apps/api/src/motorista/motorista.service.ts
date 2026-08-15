@@ -950,7 +950,14 @@ export class MotoristaService {
       }),
       this.prisma.material.findMany({
         where: { ativo: true },
-        select: { id: true, nome: true, exigeTicket: true, permiteBotaFora: true },
+        select: {
+          id: true,
+          nome: true,
+          exigeTicket: true,
+          permiteBotaFora: true,
+          // Suprime a exigência de foto da empresa (material sem papel).
+          temComprovanteFoto: true,
+        },
         orderBy: { nome: "asc" },
       }),
       motorista?.podeDiaria
@@ -974,7 +981,16 @@ export class MotoristaService {
         select: {
           id: true,
           nome: true,
-          empresa: { select: { id: true, nome: true } },
+          // As flags de exigência viajam junto: é assim que o app decide se
+          // bloqueia o lançamento por falta de foto SEM depender de internet.
+          empresa: {
+            select: {
+              id: true,
+              nome: true,
+              exigeFotoViagem: true,
+              exigeFotoAbastecimento: true,
+            },
+          },
         },
         orderBy: { nome: "asc" },
       }),
@@ -998,7 +1014,13 @@ export class MotoristaService {
       }),
       this.prisma.empresa.findMany({
         where: { ativa: true },
-        select: { id: true, nome: true },
+        // O abastecimento escolhe a empresa direto (não passa por cliente).
+        select: {
+          id: true,
+          nome: true,
+          exigeFotoViagem: true,
+          exigeFotoAbastecimento: true,
+        },
         orderBy: { nome: "asc" },
       }),
       // Último odômetro por veículo, pro app validar abastecimento já na

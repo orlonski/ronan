@@ -64,6 +64,9 @@ export type Material = {
   id: string;
   nome: string;
   exigeTicket?: boolean;
+  // false = material que não gera papel nenhum (concreto). Suprime a exigência
+  // de foto da empresa. Opcional: cache antigo não tem o campo.
+  temComprovanteFoto?: boolean;
   // Admin liberou "voltar pro bota-fora" (limpeza) pra esse material: o app
   // mostra a pergunta e soma a perna de volta no km. Cache antigo não tem o campo.
   permiteBotaFora?: boolean;
@@ -87,10 +90,22 @@ export type TipoServico = {
   exigeKm?: boolean;
 };
 
+/**
+ * Empresa como o app a conhece. As flags de exigência viajam no catálogo de
+ * propósito: é assim que o app consegue bloquear o lançamento por falta de foto
+ * SEM internet. Opcionais — cache antigo não tem, e a ausência nunca exige.
+ */
+export type EmpresaDoCliente = {
+  id: string;
+  nome: string;
+  exigeFotoViagem?: boolean;
+  exigeFotoAbastecimento?: boolean;
+};
+
 export type Cliente = {
   id: string;
   nome: string;
-  empresa: { id: string; nome: string };
+  empresa: EmpresaDoCliente;
 };
 
 export type Local = {
@@ -108,7 +123,7 @@ export type Local = {
   lng: number | null;
 };
 
-export type Empresa = { id: string; nome: string };
+export type Empresa = EmpresaDoCliente;
 
 export type Catalogos = {
   veiculos: Veiculo[];

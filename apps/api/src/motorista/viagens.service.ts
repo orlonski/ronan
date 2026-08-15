@@ -18,6 +18,7 @@ import { AuditoriaService } from "../auditoria/auditoria.service";
 import { garantirCadastro, ItemInexistenteException } from "../common/item-inexistente";
 import { resolverTransportadora } from "../common/transportadora";
 import { resolverModoServico, resolverPeriodo } from "../common/tipo-servico";
+import { exigeFotoDaViagem, resolverJustificativaSemFoto } from "../common/exige-foto";
 import { formatarDuracao } from "@ronan/shared-types";
 import {
   aplicarMinimos,
@@ -826,7 +827,8 @@ export class ViagensMotoristaService {
 
     const cliente = await this.prisma.cliente.findUnique({
       where: { id: input.clienteId },
-      select: { empresaId: true },
+      // A exigência de foto é da EMPRESA; a viagem chega nela pelo cliente.
+      select: { empresaId: true, empresa: { select: { exigeFotoViagem: true } } },
     });
     if (!cliente) throw new ItemInexistenteException("clienteId");
 
@@ -845,7 +847,7 @@ export class ViagensMotoristaService {
     const material = materialId
       ? await this.prisma.material.findUnique({
           where: { id: materialId },
-          select: { permiteBotaFora: true },
+          select: { permiteBotaFora: true, temComprovanteFoto: true },
         })
       : null;
     if (materialId && !material) throw new ItemInexistenteException("materialId");
@@ -880,6 +882,14 @@ export class ViagensMotoristaService {
             undefined,
             modo.exigeTicket,
           );
+
+    // Foto do comprovante: a empresa exige? Só carimba a falta — nunca recusa.
+    // Recusar aqui mataria o item no outbox do motorista (ver common/exige-foto.ts).
+    const exigeFoto = exigeFotoDaViagem({
+      empresaExige: cliente.empresa?.exigeFotoViagem,
+      materialTemComprovante: material?.temComprovanteFoto,
+      modoExigeTicket: modo.exigeTicket,
+    });
 
     // Trechos adicionais (retorno do bota-fora hoje). RETORNO_BOTA_FORA só vale se
     // o material permite (admin autoritativo, igual exigeTicket); o app só oferece
@@ -985,6 +995,11 @@ export class ViagensMotoristaService {
         appUpdateIdCriacao: appInfo?.appUpdateId ?? null,
         ocrCampos: rest.ocrCampos ?? [],
         ocrConfidence: rest.ocrConfidence,
+        justificativaSemFoto: resolverJustificativaSemFoto(
+          exigeFoto,
+          !!fotoKey,
+          rest.justificativaSemFoto,
+        ),
         ...(fotoKey
           ? {
               fotos: {
@@ -1563,7 +1578,8 @@ export class ViagensMotoristaService {
     if (!clienteIdEfetivo) throw new BadRequestException("Cliente não informado.");
     const cliente = await this.prisma.cliente.findUnique({
       where: { id: clienteIdEfetivo },
-      select: { empresaId: true },
+      // empresa.exigeFotoViagem: a exigência de foto é da empresa do cliente.
+      select: { empresaId: true, empresa: { select: { exigeFotoViagem: true } } },
     });
     if (!cliente) throw new NotFoundException("Cliente não encontrado");
 
@@ -1585,9 +1601,17 @@ export class ViagensMotoristaService {
     // vem da viagem (foi escolhido no iniciar).
     const materialFin = await this.prisma.material.findUnique({
       where: { id: input.materialId },
-      select: { permiteBotaFora: true },
+      select: { permiteBotaFora: true, temComprovanteFoto: true },
     });
     if (!materialFin) throw new ItemInexistenteException("materialId");
+
+    // Foto do comprovante (mesma regra do create): carimba a falta, nunca recusa.
+    // O lifecycle guiado não escolhe modo de serviço (diária não passa por aqui),
+    // então só o material suprime.
+    const exigeFotoFin = exigeFotoDaViagem({
+      empresaExige: cliente.empresa?.exigeFotoViagem,
+      materialTemComprovante: materialFin.temComprovanteFoto,
+    });
     const trechosCreate = this.montarTrechos(
       input.trechos,
       materialFin.permiteBotaFora === true,
@@ -1633,6 +1657,11 @@ export class ViagensMotoristaService {
         valorPedagioTotal: input.valorPedagioTotal,
         observacao: input.observacao,
         sincronizadoEm: new Date(),
+        justificativaSemFoto: resolverJustificativaSemFoto(
+          exigeFotoFin,
+          !!input.fotoKey,
+          input.justificativaSemFoto,
+        ),
         ...(input.fotoKey
           ? { fotos: { create: { storageKey: input.fotoKey, capturadaEm: new Date() } } }
           : {}),

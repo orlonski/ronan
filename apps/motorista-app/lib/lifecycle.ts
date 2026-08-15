@@ -521,6 +521,8 @@ export async function finalizarViagemGuiada(input: {
   kmEditadoManual?: boolean;
   kmFonte?: KmFonte;
   justificativaKm?: string;
+  /** Por que veio sem a foto do comprovante (empresa que exige). */
+  justificativaSemFoto?: string;
   rotaGeometria?: string;
   trechos?: TrechoViagemInput[];
   ticket?: string;
@@ -552,6 +554,7 @@ export async function finalizarViagemGuiada(input: {
       kmEditadoManual: input.kmEditadoManual,
       kmFonte: input.kmFonte,
       justificativaKm: input.justificativaKm,
+      justificativaSemFoto: input.justificativaSemFoto,
       rotaGeometria: input.rotaGeometria,
       trechos: input.trechos,
       ticket: input.ticket,

@@ -18,6 +18,7 @@ export type Material = {
   apelidos: string[];
   exigeTicket: boolean;
   permiteBotaFora: boolean;
+  temComprovanteFoto: boolean;
 };
 
 const PATH = "/admin/materiais";
@@ -29,6 +30,7 @@ type MaterialBody = {
   apelidos: string[];
   exigeTicket: boolean;
   permiteBotaFora: boolean;
+  temComprovanteFoto: boolean;
 };
 
 export function MaterialForm({ initial }: Props) {
@@ -40,6 +42,7 @@ export function MaterialForm({ initial }: Props) {
     apelidos: initial?.apelidos ?? [],
     exigeTicket: initial?.exigeTicket ?? true,
     permiteBotaFora: initial?.permiteBotaFora ?? false,
+    temComprovanteFoto: initial?.temComprovanteFoto ?? true,
   });
 
   async function onSubmit(e: React.FormEvent) {
@@ -91,6 +94,21 @@ export function MaterialForm({ initial }: Props) {
             Ligado (padrão): o motorista precisa informar o número do ticket. Desligue
             pra materiais que não geram ticket (ex: concreto) — aí o campo some pro
             motorista e a viagem pode ser lançada sem ticket.
+          </p>
+        </div>
+        <div className="space-y-2 rounded-lg border p-3">
+          <div className="flex items-center justify-between gap-3">
+            <Label htmlFor="temComprovanteFoto">Gera comprovante fotografável</Label>
+            <StatusToggle
+              active={form.temComprovanteFoto}
+              onChange={(next) => setForm({ ...form, temComprovanteFoto: next })}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Ligado (padrão): esse material gera algum papel que o motorista pode
+            fotografar. Desligue pra material que não gera nada (ex: concreto) — aí
+            ele fica de fora da exigência de foto das empresas, porque não daria pra
+            cobrar foto de um comprovante que não existe.
           </p>
         </div>
         <div className="space-y-2 rounded-lg border p-3">

@@ -85,6 +85,18 @@ export default function NovoAbastecimento() {
   const [tanqueCheio, setTanqueCheio] = useState(true);
   const [observacao, setObservacao] = useState("");
   const [foto, setFoto] = useState<CapturedPhoto | null>(null);
+  // Válvula pra quem não consegue fotografar — ver nova-viagem.tsx.
+  const [justificativaSemFoto, setJustificativaSemFoto] = useState("");
+  const [pedindoJustificativa, setPedindoJustificativa] = useState(false);
+
+  /**
+   * A empresa que paga esse abastecimento exige a foto do cupom? Roda offline —
+   * as empresas vêm no catálogo cacheado. Ausência da flag nunca exige.
+   */
+  const exigeFoto = useMemo(() => {
+    const e = cat.data?.empresas.find((x) => x.id === empresaId);
+    return e?.exigeFotoAbastecimento === true;
+  }, [cat.data?.empresas, empresaId]);
   const [submitting, setSubmitting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const val = useValidacaoGuiada();
@@ -235,6 +247,22 @@ export default function NovoAbastecimento() {
     if (!Number.isFinite(odometroNum) || odometroNum < 0) {
       return void val.apontar("odometro", "Informe o odômetro");
     }
+    // Foto do cupom exigida pela empresa (com saída pela justificativa).
+    if (exigeFoto && !foto) {
+      const texto = justificativaSemFoto.trim();
+      if (!texto) {
+        return void val.apontar(
+          "foto",
+          "Essa empresa exige a foto do cupom. Tire a foto ou explique por que não dá.",
+        );
+      }
+      if (texto.length < 10) {
+        return void val.apontar(
+          "justificativaSemFoto",
+          "Escreva um pouco mais — o escritório precisa entender o motivo.",
+        );
+      }
+    }
     if (
       ultimoOdometroDoVeiculo !== null &&
       odometroNum < ultimoOdometroDoVeiculo
@@ -273,6 +301,8 @@ export default function NovoAbastecimento() {
         clientId: editarClientId ?? makeUuid(),
         veiculoId,
         empresaId,
+        justificativaSemFoto:
+          exigeFoto && !foto ? justificativaSemFoto.trim() || undefined : undefined,
         // Combina data (YYYY-MM-DD) com hora atual pra timestamp completo
         data: combinarDataComHoraAtual(dataFinal),
         tipo,
@@ -563,10 +593,50 @@ export default function NovoAbastecimento() {
               />
             </View>
 
-            <View className="gap-2">
-              <Label>Foto do comprovante</Label>
-              <Text className="text-xs text-muted-foreground">opcional</Text>
+            <View
+              className="gap-2"
+              ref={val.refCampo("foto")}
+              onLayout={val.onLayoutCampo("foto")}
+            >
+              <Label error={!!val.erroDe("foto")}>Foto do comprovante</Label>
+              <Text className="text-xs text-muted-foreground">
+                {exigeFoto ? "obrigatória pra essa empresa" : "opcional"}
+              </Text>
               <PhotoCapture value={foto} onChange={setFoto} />
+              {val.erroDe("foto") ? <ErroCampo msg={val.erroDe("foto")!} /> : null}
+              {exigeFoto &&
+                !foto &&
+                (pedindoJustificativa ? (
+                  <View className="gap-2">
+                    <Label error={!!val.erroDe("justificativaSemFoto")}>
+                      Por que não dá pra tirar a foto?
+                    </Label>
+                    <Input
+                      value={justificativaSemFoto}
+                      onChangeText={(v) => {
+                        val.limpar();
+                        setJustificativaSemFoto(v);
+                      }}
+                      placeholder="Ex.: a impressora do posto falhou"
+                      multiline
+                      maxLength={500}
+                      error={!!val.erroDe("justificativaSemFoto")}
+                    />
+                    {val.erroDe("justificativaSemFoto") ? (
+                      <ErroCampo msg={val.erroDe("justificativaSemFoto")!} />
+                    ) : null}
+                  </View>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onPress={() => setPedindoJustificativa(true)}
+                  >
+                    <Text className="text-sm font-medium text-foreground">
+                      Não consigo tirar a foto agora
+                    </Text>
+                  </Button>
+                ))}
             </View>
 
             {erro && <Text className="text-sm text-destructive">{erro}</Text>}

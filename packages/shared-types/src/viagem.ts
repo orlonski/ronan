@@ -159,6 +159,10 @@ export const CriarViagemBase = z.object({
   // Ausente é válido mesmo com km atípico (offline, app antigo, flag off): o
   // backend carimba assim mesmo e nunca bloqueia o lançamento.
   justificativaKm: z.string().min(10).max(500).optional(),
+  // Por que veio sem a foto do comprovante, numa empresa que exige. O APP é quem
+  // bloqueia (não salva sem foto nem justificativa); aqui é opcional de propósito
+  // — recusar no backend mataria item de outbox offline. Ver common/exige-foto.ts.
+  justificativaSemFoto: z.string().min(10).max(500).optional(),
 });
 
 /**

@@ -147,6 +147,10 @@ export default function NovaViagem() {
       : empty,
   );
   const [foto, setFoto] = useState<CapturedPhoto | null>(null);
+  // Saída pra quem não consegue fotografar (papel ficou na portaria, câmera
+  // falhou). Sem isto o motorista ficaria travado e perderia o lançamento.
+  const [justificativaSemFoto, setJustificativaSemFoto] = useState("");
+  const [pedindoJustificativa, setPedindoJustificativa] = useState(false);
   // clientId da viagem gerado JÁ no início da sessão (estável) pra:
   // (a) taggear a telemetria de interação (viagemClientId → reconcilia no backend);
   // (b) ser o mesmo id usado no submit (idempotência do outbox).
@@ -521,6 +525,28 @@ export default function NovaViagem() {
   const exigeLocalDescarga = modo?.exigeLocalDescarga ?? true;
   const exigeKm = modo?.exigeKm ?? true;
 
+  /**
+   * A empresa do cliente escolhido exige a FOTO do comprovante?
+   *
+   * Roda 100% offline: `cliente.empresa` já vem no catálogo cacheado. Defaults
+   * seguros em toda parte — cache antigo, cliente não escolhido ou flag ausente
+   * NUNCA inventam exigência.
+   */
+  const exigeFoto = useMemo(() => {
+    const c = cat.data?.clientes.find((x) => x.id === form.clienteId);
+    if (c?.empresa?.exigeFotoViagem !== true) return false;
+    const m = cat.data?.materiais.find((x) => x.id === form.materialId);
+    if (m?.temComprovanteFoto === false) return false; // concreto não gera papel
+    if (modo?.exigeTicket === false) return false; // diária não tem romaneio
+    return true;
+  }, [
+    cat.data?.clientes,
+    cat.data?.materiais,
+    form.clienteId,
+    form.materialId,
+    modo?.exigeTicket,
+  ]);
+
   // Alguns materiais não exigem ticket (ex: concreto) — o admin configura isso.
   // Default true: se o catálogo é antigo (sem o campo) ou o material não foi
   // escolhido, mantém a exigência. O modo de serviço também pode dispensar
@@ -718,6 +744,29 @@ export default function NovaViagem() {
         ),
         false
       );
+    // Foto do comprovante: a empresa exige e ele não tirou. Não é beco sem
+    // saída — o botão "Não consigo tirar a foto agora" abre a justificativa.
+    if (exigeFoto && !foto) {
+      const texto = justificativaSemFoto.trim();
+      if (!texto) {
+        return (
+          void val.apontar(
+            "foto",
+            "Esse cliente exige a foto do ticket. Tire a foto ou explique por que não dá.",
+          ),
+          false
+        );
+      }
+      if (texto.length < 10) {
+        return (
+          void val.apontar(
+            "justificativaSemFoto",
+            "Escreva um pouco mais — o escritório precisa entender o motivo.",
+          ),
+          false
+        );
+      }
+    }
     return true;
   }
 
@@ -979,6 +1028,10 @@ export default function NovaViagem() {
               : "ROTA_OSRM"),
         // Rota escolhida no seletor de mapa (rota real no painel).
         rotaGeometria: rotaGeometriaEscolhida ?? undefined,
+        // Só viaja quando a empresa exige E ele não tirou a foto — nos outros
+        // casos o campo nem existe no payload (nada muda pra quem não usa).
+        justificativaSemFoto:
+          exigeFoto && !foto ? justificativaSemFoto.trim() || undefined : undefined,
         localCargaId: form.localCargaId,
         localDescargaId: exigeLocalDescarga ? form.localDescargaId : undefined,
         // Snapshot pra auto-recovery: se o local foi excluido server-side
@@ -1183,7 +1236,14 @@ export default function NovaViagem() {
   // modo GPS ("finalizar viagem"). Extrair em variáveis evita duplicar lógica.
 
   const secaoFoto = (
-    <Field label="Foto do ticket" hint="opcional, mas ajuda na conferência">
+    <Field
+      label="Foto do ticket"
+      hint={
+        exigeFoto
+          ? "obrigatória pra esse cliente"
+          : "opcional, mas ajuda na conferência"
+      }
+    >
       <PhotoCapture
         value={foto}
         onChange={(novaFoto) => {
@@ -1226,6 +1286,48 @@ export default function NovaViagem() {
           }}
           onDispensar={() => setSugestoesIa(null)}
         />
+      )}
+      {/* Só aparece quando a empresa exige E ele ainda não tirou a foto. É a
+          válvula: trava, mas não deixa o motorista sem saída. */}
+      {exigeFoto && !foto && (
+        <View className="mt-2 gap-2" ref={val.refCampo("foto")} onLayout={val.onLayoutCampo("foto")}>
+          {val.erroDe("foto") ? <ErroCampo msg={val.erroDe("foto")!} /> : null}
+          {pedindoJustificativa ? (
+            <>
+              <Label error={!!val.erroDe("justificativaSemFoto")}>
+                Por que não dá pra tirar a foto?
+              </Label>
+              <Input
+                value={justificativaSemFoto}
+                onChangeText={(v) => {
+                  val.limpar();
+                  setJustificativaSemFoto(v);
+                }}
+                placeholder="Ex.: o papel ficou na portaria"
+                multiline
+                maxLength={500}
+                error={!!val.erroDe("justificativaSemFoto")}
+              />
+              {val.erroDe("justificativaSemFoto") ? (
+                <ErroCampo msg={val.erroDe("justificativaSemFoto")!} />
+              ) : (
+                <Text className="text-xs text-muted-foreground">
+                  O escritório vai ver essa explicação e pode pedir a foto depois.
+                </Text>
+              )}
+            </>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={() => setPedindoJustificativa(true)}
+            >
+              <Text className="text-sm font-medium text-foreground">
+                Não consigo tirar a foto agora
+              </Text>
+            </Button>
+          )}
+        </View>
       )}
     </Field>
   );

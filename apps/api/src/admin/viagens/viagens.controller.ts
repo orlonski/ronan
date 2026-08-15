@@ -109,6 +109,7 @@ const ListViagensQuery = paginationQuerySchema.extend({
   origem: z.enum(["guiada", "direta"]).optional(),
   // Só viagens marcadas com km fora do padrão do trajeto (badge "Km atípico").
   kmForaDoPadrao: z.coerce.boolean().optional(),
+  semFoto: z.coerce.boolean().optional(),
   de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });

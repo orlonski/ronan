@@ -43,6 +43,9 @@ export const CriarAbastecimentoBaseInput = z.object({
   postoNome: z.string().trim().max(120).optional(),
   tanqueCheio: z.boolean().default(true),
   observacao: z.string().max(500).optional(),
+  // Por que veio sem o cupom do posto, numa empresa que exige a foto.
+  // O APP é quem bloqueia; aqui é opcional (ver common/exige-foto.ts).
+  justificativaSemFoto: z.string().min(10).max(500).optional(),
   lat: z.number().min(-90).max(90).optional(),
   lng: z.number().min(-180).max(180).optional(),
   precisao: z.number().nonnegative().optional(),

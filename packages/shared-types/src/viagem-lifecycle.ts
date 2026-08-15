@@ -170,6 +170,8 @@ export const FinalizarViagemInput = z.object({
   valorPedagioTotal: z.number().nonnegative().max(MAX_VALOR).optional(),
   observacao: z.string().max(500).optional(),
   fotoKey: z.string().optional(),
+  // Ver CriarViagemBase.justificativaSemFoto.
+  justificativaSemFoto: z.string().min(10).max(500).optional(),
 }).superRefine(checarObrigatoriosDoModo);
 export type FinalizarViagemInput = z.infer<typeof FinalizarViagemInput>;
 
