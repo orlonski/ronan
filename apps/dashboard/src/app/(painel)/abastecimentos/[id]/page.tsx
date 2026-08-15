@@ -28,6 +28,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { HistoricoTimeline } from "@/components/historico-timeline";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import {
+  ROTULO_FOTO_ABASTECIMENTO,
+  type TipoFotoAbastecimento,
+} from "@ronan/shared-types";
 import { fmtNum } from "@/lib/fechamento-helpers";
 import { useHistoricoAbastecimento } from "@/lib/fechamentos-api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -72,7 +76,14 @@ type AbastecimentoDetalhe = {
   veiculo: { id: string; placa: string; modelo: string | null };
   motorista: { id: string; nome: string; cpf: string };
   empresa: { id: string; nome: string } | null;
-  fotos: { id: string; storageKey: string; rotacao: number; capturadaEm: string }[];
+  fotos: {
+    id: string;
+    storageKey: string;
+    rotacao: number;
+    capturadaEm: string;
+    /** Ausente em foto anterior às fotos tipadas — todas eram o cupom. */
+    tipo?: TipoFotoAbastecimento;
+  }[];
   sincronizadoEm: string;
 };
 
@@ -298,13 +309,18 @@ export default function AbastecimentoDetalhePage({
               </h2>
               <div className="grid grid-cols-2 gap-3">
                 {x.fotos.map((f) => (
-                  <FotoThumb
-                    key={f.id}
-                    abastecimentoId={x.id}
-                    fotoId={f.id}
-                    rotacao={f.rotacao}
-                    token={token}
-                  />
+                  <div key={f.id} className="space-y-1">
+                    {/* Sem o rótulo, três fotos viram um monte indistinguível. */}
+                    <p className="text-xs font-medium text-muted-foreground">
+                      {ROTULO_FOTO_ABASTECIMENTO[f.tipo ?? "CUPOM"]}
+                    </p>
+                    <FotoThumb
+                      abastecimentoId={x.id}
+                      fotoId={f.id}
+                      rotacao={f.rotacao}
+                      token={token}
+                    />
+                  </div>
                 ))}
               </div>
             </Card>

@@ -33,6 +33,12 @@ import {
   usePostosRecentes,
 } from "@/lib/queries";
 import { atualizarAbastecimentoPendente } from "@/lib/sync";
+import type { FotoPendente } from "@/db/database";
+import {
+  ROTULO_FOTO_ABASTECIMENTO,
+  TIPOS_FOTO_ABASTECIMENTO,
+  type TipoFotoAbastecimento,
+} from "@ronan/shared-types";
 import { listPendingAbastecimentos } from "@/db/database";
 import { usePendingAbastecimentos } from "@/hooks/use-pending-abastecimentos";
 import { pegarCoordsPrecisa } from "@/lib/geo";
@@ -84,19 +90,53 @@ export default function NovoAbastecimento() {
   const [postoNome, setPostoNome] = useState("");
   const [tanqueCheio, setTanqueCheio] = useState(true);
   const [observacao, setObservacao] = useState("");
-  const [foto, setFoto] = useState<CapturedPhoto | null>(null);
+  // Uma foto por tipo de comprovante. Quais aparecem depende da modalidade.
+  const [fotos, setFotos] = useState<
+    Partial<Record<TipoFotoAbastecimento, CapturedPhoto | null>>
+  >({});
   // Válvula pra quem não consegue fotografar — ver nova-viagem.tsx.
   const [justificativaSemFoto, setJustificativaSemFoto] = useState("");
   const [pedindoJustificativa, setPedindoJustificativa] = useState(false);
 
   /**
-   * A transportadora exige a foto do cupom? Roda offline (bloco `config` do
-   * catálogo). Ausência da flag nunca exige.
+   * Quais comprovantes este abastecimento exige.
    *
-   * Mudou de eixo: antes vinha da empresa que paga, e como ela é opcional no
-   * abastecimento, quem lançava sem empresa nunca era cobrado.
+   * Roda 100% offline: a modalidade vem no `/m/me` cacheado e a política da
+   * conta no bloco `config` do catálogo. Defaults seguros em toda parte —
+   * motorista sem modalidade e cache antigo NUNCA inventam exigência.
+   *
+   * Mesma regra do backend (common/exige-foto.ts): quem tem modalidade segue
+   * ela, inclusive pro cupom; quem não tem cai no interruptor da conta.
    */
-  const exigeFoto = cat.data?.config?.exigeFotoAbastecimento === true;
+  const exigidas = useMemo(() => {
+    const m = me.data?.modalidade;
+    if (m) {
+      return {
+        CUPOM: m.exigeFotoCupom === true,
+        ODOMETRO: m.exigeFotoOdometro === true,
+        BOMBA: m.exigeFotoBomba === true,
+      };
+    }
+    return {
+      CUPOM: cat.data?.config?.exigeFotoAbastecimento === true,
+      ODOMETRO: false,
+      BOMBA: false,
+    };
+  }, [me.data?.modalidade, cat.data?.config?.exigeFotoAbastecimento]);
+
+  // Os blocos que aparecem na tela: os exigidos, mais o cupom, que continua
+  // podendo ser anexado por vontade própria como sempre foi.
+  const tiposVisiveis = useMemo(
+    () => TIPOS_FOTO_ABASTECIMENTO.filter((t) => t === "CUPOM" || exigidas[t]),
+    [exigidas],
+  );
+
+  // O que falta do que foi pedido — é isso que trava o salvar.
+  const faltando = useMemo(
+    () => TIPOS_FOTO_ABASTECIMENTO.filter((t) => exigidas[t] && !fotos[t]),
+    [exigidas, fotos],
+  );
+  const exigeFoto = faltando.length > 0;
   const [submitting, setSubmitting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const val = useValidacaoGuiada();
@@ -229,6 +269,14 @@ export default function NovoAbastecimento() {
     return candidatos.length > 0 ? Math.max(...candidatos) : null;
   }, [veiculoId, cat.data, recentes.data, pendentes, editarClientId, data]);
 
+  /** O estado da tela no formato do outbox (só o que ele realmente tirou). */
+  function fotosPendentes(): FotoPendente[] {
+    return TIPOS_FOTO_ABASTECIMENTO.flatMap((tipo) => {
+      const f = fotos[tipo];
+      return f ? [{ tipo, uri: f.uri, mime: f.mime }] : [];
+    });
+  }
+
   async function salvar() {
     setErro(null);
     val.limpar();
@@ -247,13 +295,15 @@ export default function NovoAbastecimento() {
     if (!Number.isFinite(odometroNum) || odometroNum < 0) {
       return void val.apontar("odometro", "Informe o odômetro");
     }
-    // Foto do cupom exigida pela empresa (com saída pela justificativa).
-    if (exigeFoto && !foto) {
+    // Comprovantes exigidos pela modalidade (com saída pela justificativa).
+    if (faltando.length > 0) {
       const texto = justificativaSemFoto.trim();
       if (!texto) {
+        const nomes = faltando.map((t) => ROTULO_FOTO_ABASTECIMENTO[t]).join(" e ");
+        // Aponta a PRIMEIRA que falta — a validação guiada rola até ela.
         return void val.apontar(
-          "foto",
-          "A foto do cupom é obrigatória. Tire a foto ou explique por que não dá.",
+          `foto-${faltando[0]}`,
+          `Falta a foto: ${nomes}. Tire a foto ou explique por que não dá.`,
         );
       }
       if (texto.length < 10) {
@@ -301,8 +351,11 @@ export default function NovoAbastecimento() {
         clientId: editarClientId ?? makeUuid(),
         veiculoId,
         empresaId,
-        justificativaSemFoto:
-          exigeFoto && !foto ? justificativaSemFoto.trim() || undefined : undefined,
+        // Só viaja quando falta alguma foto exigida — nos outros casos o campo
+        // nem existe no payload.
+        justificativaSemFoto: exigeFoto
+          ? justificativaSemFoto.trim() || undefined
+          : undefined,
         // Combina data (YYYY-MM-DD) com hora atual pra timestamp completo
         data: combinarDataComHoraAtual(dataFinal),
         tipo,
@@ -328,9 +381,9 @@ export default function NovoAbastecimento() {
 
       if (editando) {
         const res = await atualizarAbastecimentoPendente({
-          clientId: editarClientId!,
+          clientId: editarClientId,
           payload,
-          foto: foto ?? undefined,
+          fotos: fotosPendentes(),
         });
         if (res.removed) {
           void showAlert({
@@ -340,7 +393,7 @@ export default function NovoAbastecimento() {
           });
         }
       } else {
-        await criar({ payload, foto: foto ?? undefined });
+        await criar({ payload, fotos: fotosPendentes() });
       }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
@@ -593,19 +646,36 @@ export default function NovoAbastecimento() {
               />
             </View>
 
-            <View
-              className="gap-2"
-              ref={val.refCampo("foto")}
-              onLayout={val.onLayoutCampo("foto")}
-            >
-              <Label error={!!val.erroDe("foto")}>Foto do comprovante</Label>
-              <Text className="text-xs text-muted-foreground">
-                {exigeFoto ? "obrigatória neste lançamento" : "opcional"}
-              </Text>
-              <PhotoCapture value={foto} onChange={setFoto} />
-              {val.erroDe("foto") ? <ErroCampo msg={val.erroDe("foto")!} /> : null}
+            {tiposVisiveis.map((tipo) => (
+              <View
+                key={tipo}
+                className="gap-2"
+                ref={val.refCampo(`foto-${tipo}`)}
+                onLayout={val.onLayoutCampo(`foto-${tipo}`)}
+              >
+                <Label error={!!val.erroDe(`foto-${tipo}`)}>
+                  {ROTULO_FOTO_ABASTECIMENTO[tipo]}
+                </Label>
+                <Text className="text-xs text-muted-foreground">
+                  {exigidas[tipo] ? "obrigatória neste lançamento" : "opcional"}
+                </Text>
+                <PhotoCapture
+                  value={fotos[tipo] ?? null}
+                  onChange={(f) => {
+                    val.limpar();
+                    setFotos((atual) => ({ ...atual, [tipo]: f }));
+                  }}
+                />
+                {val.erroDe(`foto-${tipo}`) ? (
+                  <ErroCampo msg={val.erroDe(`foto-${tipo}`)!} />
+                ) : null}
+              </View>
+            ))}
+
+            {/* Uma justificativa só cobre tudo que faltar — a coluna no banco é
+                uma, e pedir um motivo por foto seria burocracia pro motorista. */}
+            <View className="gap-2">
               {exigeFoto &&
-                !foto &&
                 (pedindoJustificativa ? (
                   <View className="gap-2">
                     <Label error={!!val.erroDe("justificativaSemFoto")}>

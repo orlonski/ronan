@@ -65,3 +65,71 @@ export function resolverJustificativaSemFoto(
   const texto = justificativaDoMotorista?.trim();
   return texto || SEM_JUSTIFICATIVA;
 }
+
+// ===========================================================================
+// Abastecimento: até três comprovantes, decididos pela MODALIDADE do motorista
+// ===========================================================================
+
+/** As flags da modalidade do motorista, ou null quando ele não tem uma. */
+export type ModalidadeDoMotorista = {
+  exigeFotoCupom: boolean;
+  exigeFotoOdometro: boolean;
+  exigeFotoBomba: boolean;
+} | null;
+
+export type FotosExigidas = {
+  cupom: boolean;
+  odometro: boolean;
+  bomba: boolean;
+};
+
+/**
+ * Quais fotos este abastecimento exige.
+ *
+ * Duas fontes, nesta ordem:
+ *
+ * 1. **Motorista COM modalidade** → as três flags vêm dela, inclusive o cupom.
+ *    É o que torna possível "própria não pede foto de nada" mesmo com o
+ *    interruptor geral da conta ligado.
+ * 2. **Motorista SEM modalidade** → nada muda em relação a antes: vale só o
+ *    cupom da conta, e odômetro/bomba nem existem pra ele.
+ *
+ * O ponto 2 é o que deixa a feature inerte: conta que não cadastrar modalidade
+ * nenhuma, e motorista que ninguém classificou, seguem exatamente como hoje.
+ */
+export function resolverFotosExigidas(
+  modalidade: ModalidadeDoMotorista,
+  contaExigeCupom: boolean,
+): FotosExigidas {
+  if (modalidade) {
+    return {
+      cupom: modalidade.exigeFotoCupom === true,
+      odometro: modalidade.exigeFotoOdometro === true,
+      bomba: modalidade.exigeFotoBomba === true,
+    };
+  }
+  return { cupom: contaExigeCupom === true, odometro: false, bomba: false };
+}
+
+/**
+ * O motorista entregou tudo que foi exigido?
+ *
+ * Serve pra decidir se carimba `justificativaSemFoto` — e o que conta é a
+ * COBERTURA do que se pediu, não a quantidade de fotos: mandar a bomba quando
+ * se pediu o odômetro não resolve.
+ */
+export function fotosExigidasAtendidas(
+  exigidas: FotosExigidas,
+  tiposEnviados: readonly string[],
+): boolean {
+  const tem = (t: string) => tiposEnviados.includes(t);
+  if (exigidas.cupom && !tem("CUPOM")) return false;
+  if (exigidas.odometro && !tem("ODOMETRO")) return false;
+  if (exigidas.bomba && !tem("BOMBA")) return false;
+  return true;
+}
+
+/** true quando o abastecimento exige pelo menos uma foto. */
+export function exigeAlgumaFoto(e: FotosExigidas): boolean {
+  return e.cupom || e.odometro || e.bomba;
+}

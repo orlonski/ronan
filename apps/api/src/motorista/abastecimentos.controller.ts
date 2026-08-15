@@ -13,7 +13,7 @@ import {
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { z } from "zod";
-import { CriarAbastecimentoBaseInput } from "@ronan/shared-types";
+import { CriarAbastecimentoBaseInput, FotoAbastecimentoInput } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
@@ -24,7 +24,11 @@ import type { AuthMotorista } from "../auth/types";
 import { AbastecimentosMotoristaService } from "./abastecimentos.service";
 
 const CriarAbastecimentoPayload = CriarAbastecimentoBaseInput.extend({
+  // Legado: app sem o OTA manda uma foto avulsa, que sempre foi o cupom.
+  // Mantido de propósito — enquanto a frota não atualiza, é o que chega.
   fotoKey: z.string().optional(),
+  // App novo: lista tipada (cupom / odômetro / bomba).
+  fotos: z.array(FotoAbastecimentoInput).max(3).optional(),
 }).refine((d) => d.emComboio || d.valorTotal !== undefined, {
   message: "Valor obrigatório quando não é abastecimento em comboio.",
   path: ["valorTotal"],

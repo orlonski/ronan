@@ -106,7 +106,8 @@ export class AbastecimentosAdminService {
         veiculo: true,
         motorista: { select: { id: true, nome: true, cpf: true } },
         empresa: { select: { id: true, nome: true } },
-        fotos: true,
+        // `tipo` distingue cupom/odômetro/bomba; ordem estável pro grid não dançar.
+      fotos: { orderBy: { capturadaEm: "asc" } },
       },
     });
     if (!a) throw new NotFoundException("Abastecimento não encontrado");

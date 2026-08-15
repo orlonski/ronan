@@ -91,6 +91,31 @@ export function VeiculoCombobox(props: SingleProps) {
   );
 }
 
+type Modalidade = { id: string; nome: string };
+
+export const modalidadeOption = (m: Modalidade): ComboboxOption => ({
+  value: m.id,
+  label: m.nome,
+});
+
+/**
+ * Vínculo do motorista (próprio / agregado / terceiro…). Só ativas — modalidade
+ * desativada some do seletor mas não desclassifica quem já está nela.
+ */
+export function ModalidadeCombobox(props: SingleProps) {
+  return (
+    <AsyncCombobox<Modalidade>
+      {...props}
+      path="/admin/modalidades"
+      filtros={{ ativo: "true" }}
+      mapOption={modalidadeOption}
+      searchPlaceholder="Buscar modalidade…"
+      emptyMessage="Nenhuma modalidade cadastrada."
+      placeholder={props.placeholder ?? "Sem modalidade"}
+    />
+  );
+}
+
 export function TransportadoraCombobox(props: SingleProps) {
   return (
     <AsyncCombobox<Transportadora>

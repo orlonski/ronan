@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { DemandasModule } from "./demandas/demandas.module";
 import { MateriaisModule } from "./materiais/materiais.module";
 import { TiposServicoModule } from "./tipos-servico/tipos-servico.module";
+import { ModalidadesModule } from "./modalidades/modalidades.module";
 import { RegrasMinimoModule } from "./regras-minimo/regras-minimo.module";
 import { ViagemLifecycleAdminModule } from "./viagem-lifecycle/viagem-lifecycle.module";
 import { VeiculosModule } from "./veiculos/veiculos.module";
@@ -36,6 +37,7 @@ import { LancamentosResgatadosAdminModule } from "./lancamentos-resgatados/lanca
   imports: [
     MateriaisModule,
     TiposServicoModule,
+    ModalidadesModule,
     RegrasMinimoModule,
     ViagemLifecycleAdminModule,
     VeiculosModule,

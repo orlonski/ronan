@@ -17,6 +17,7 @@ export * from "./minha-empresa";
 export * from "./transportadora";
 export * from "./motorista";
 export * from "./motorista-documento";
+export * from "./modalidade-motorista";
 export * from "./veiculo";
 export * from "./material";
 export * from "./tipo-servico";

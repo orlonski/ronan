@@ -45,6 +45,7 @@ import {
   upsertPendingViagemFinalizar,
   upsertPendingViagemIniciar,
   type PendingAbastecimento,
+  type FotoPendente,
   type PendingCompletarPeso,
   type PendingEncerrarDiaria,
   type PendingEventoViagem,
@@ -259,20 +260,20 @@ export async function tentarNovamenteViagemPendente(
 export async function atualizarAbastecimentoPendente(input: {
   clientId: string;
   payload: Record<string, unknown>;
-  foto?: { uri: string; mime: string };
+  fotos?: FotoPendente[];
 }): Promise<{ removed: boolean }> {
   const list = await listPendingAbastecimentos();
   const existing = list.find((x) => x.clientId === input.clientId);
   if (!existing) return { removed: true };
 
-  const fotoUri = input.foto?.uri ?? existing.fotoUri;
-  const fotoMime = input.foto?.mime ?? existing.fotoMime;
+  // Sem foto nova, preserva o que já estava — inclusive item no formato antigo,
+  // que é normalizado aqui pra lista tipada.
+  const fotos = input.fotos?.length ? input.fotos : fotosDoItem(existing);
 
   await upsertPendingAbastecimento({
     clientId: existing.clientId,
     payload: input.payload,
-    fotoUri,
-    fotoMime,
+    fotos: fotos.length ? fotos : undefined,
     status: "pending",
     attempts: 0,
     createdAt: existing.createdAt,
@@ -444,14 +445,15 @@ export async function enqueuePedagio(payload: Record<string, unknown>): Promise<
 
 export async function enqueueAbastecimento(
   payload: Record<string, unknown>,
-  foto?: { uri: string; mime: string },
+  fotos?: FotoPendente[],
 ): Promise<void> {
   const clientId = payload.clientId as string;
   await upsertPendingAbastecimento({
     clientId,
     payload,
-    fotoUri: foto?.uri,
-    fotoMime: foto?.mime,
+    // Formato novo. Os campos legados (fotoUri/fotoMime) ficam vazios aqui —
+    // eles só existem pra LER item antigo, nunca pra escrever item novo.
+    fotos: fotos?.length ? fotos : undefined,
     status: "pending",
     attempts: 0,
     createdAt: Date.now(),
@@ -1695,50 +1697,85 @@ async function drainAbastecimentos(): Promise<void> {
   }
 }
 
+/**
+ * Lê as fotos do item aceitando os DOIS formatos do outbox.
+ *
+ * Item enfileirado antes das fotos tipadas tem só `fotoUri`/`fotoMime` — e o que
+ * ele guardava sempre foi o cupom. Sem esta leitura tolerante, todo
+ * abastecimento que já estava na fila do aparelho subiria sem foto.
+ */
+function fotosDoItem(item: PendingAbastecimento): FotoPendente[] {
+  if (item.fotos?.length) return item.fotos;
+  if (item.fotoUri) return [{ tipo: "CUPOM", uri: item.fotoUri, mime: item.fotoMime }];
+  return [];
+}
+
 async function processAbastecimento(item: PendingAbastecimento): Promise<void> {
-  // `atual` acompanha o que já foi persistido: se a foto subir e o POST falhar,
-  // o catch precisa salvar o item COM a fotoKey. Usar o `item` do parâmetro
-  // desfazia o upsert do meio e re-uploadava a foto em toda tentativa.
+  // `atual` acompanha o que já foi persistido: se uma foto subir e o POST
+  // falhar, o catch precisa salvar o item COM a fotoKey dela. Usar o `item` do
+  // parâmetro desfazia o upsert do meio e re-uploadava tudo em toda tentativa.
   let atual: PendingAbastecimento = { ...item, status: "syncing", lastTriedAt: Date.now() };
   await upsertPendingAbastecimento(atual);
   notify();
   try {
     let payload = { ...atual.payload };
-    if (atual.fotoUri && !payload.fotoKey) {
-      if (await fotoAindaExiste(atual.fotoUri)) {
+    let fotos = fotosDoItem(atual);
+    let perdeuAlguma = false;
+
+    // Uma por vez, marcando individualmente. A guarda de "já subiu" é POR FOTO
+    // (o `fotoKey` de cada uma) — com uma flag só no payload, um item que já
+    // tinha mandado o cupom re-enviaria tudo ou pularia tudo.
+    for (let i = 0; i < fotos.length; i++) {
+      const f = fotos[i];
+      if (f.fotoKey) continue;
+      if (await fotoAindaExiste(f.uri)) {
         const fd = new FormData();
-        const filename = `abast-${atual.clientId}.${
-          atual.fotoMime?.includes("png") ? "png" : "jpg"
+        const filename = `abast-${atual.clientId}-${f.tipo.toLowerCase()}.${
+          f.mime?.includes("png") ? "png" : "jpg"
         }`;
         fd.append("foto", {
-          uri: atual.fotoUri,
-          type: atual.fotoMime ?? "image/jpeg",
+          uri: f.uri,
+          type: f.mime ?? "image/jpeg",
           name: filename,
         } as unknown as Blob);
         const up = await api.postForm<{ storageKey: string }>(
           "/m/uploads/abastecimento",
           fd,
         );
-        payload = { ...payload, fotoKey: up.storageKey };
+        fotos = fotos.map((x, idx) => (idx === i ? { ...x, fotoKey: up.storageKey } : x));
       } else {
-        // Arquivo sumiu do aparelho (cache purgado pelo SO). A foto é opcional
-        // no abastecimento — o lançamento vale mais que ela. Segue sem foto em
-        // vez de ficar preso pra sempre "aguardando sinal".
-        reportarFotoPerdida("abastecimento", atual.clientId, atual.fotoUri);
-        // Mesma proteção da viagem: numa empresa que exige o cupom, explica que
-        // o aparelho apagou a foto em vez de deixar o motorista levar a culpa.
-        if (!payload.justificativaSemFoto) {
-          payload = {
-            ...payload,
-            justificativaSemFoto: "A foto sumiu do aparelho antes de conseguir enviar.",
-          };
-        }
+        // Arquivo sumiu do aparelho (cache purgado pelo SO). O lançamento vale
+        // mais que a foto: segue sem ela em vez de ficar preso pra sempre.
+        reportarFotoPerdida("abastecimento", atual.clientId, f.uri);
+        fotos = fotos.filter((_, idx) => idx !== i);
+        i--;
+        perdeuAlguma = true;
       }
-      // Persiste o resultado do passo da foto (subida ou perdida) pra não
-      // repetir o upload se o POST abaixo falhar.
-      atual = { ...atual, payload, fotoUri: undefined, fotoMime: undefined };
+      // Persiste a cada passo — o que já subiu não volta a subir. Os campos
+      // legados são zerados aqui: o item deixa de ser do formato antigo.
+      atual = { ...atual, fotos, fotoUri: undefined, fotoMime: undefined };
       await upsertPendingAbastecimento(atual);
     }
+
+    // Explica a falta em vez de deixar o motorista levar a culpa por algo que o
+    // aparelho apagou.
+    if (perdeuAlguma && !payload.justificativaSemFoto) {
+      payload = {
+        ...payload,
+        justificativaSemFoto: "A foto sumiu do aparelho antes de conseguir enviar.",
+      };
+    }
+
+    const enviadas = fotos.filter((f) => f.fotoKey);
+    if (enviadas.length > 0) {
+      payload = {
+        ...payload,
+        fotos: enviadas.map((f) => ({ fotoKey: f.fotoKey, tipo: f.tipo })),
+      };
+    }
+    atual = { ...atual, payload, fotos };
+    await upsertPendingAbastecimento(atual);
+
     await api.post("/m/abastecimentos", payload, { outbox: true });
     await deletePendingAbastecimento(atual.clientId);
   } catch (err) {

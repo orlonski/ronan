@@ -824,7 +824,10 @@ type PendingComum = {
   errorMsg?: string;
   errorStatus?: number;
   errorIssues?: ZodIssueSaved[];
+  /** Formato legado (item enfileirado antes das fotos tipadas). */
   fotoUri?: string;
+  /** Formato novo do abastecimento: até três comprovantes. */
+  fotos?: { tipo: string; uri: string }[];
 };
 
 function DetalheModal({
@@ -935,14 +938,26 @@ function DetalheModal({
             </View>
           )}
 
-          {item.fotoUri && (
+          {/* Aceita os dois formatos do outbox: item antigo tem `fotoUri`
+              escalar, item novo tem a lista tipada. */}
+          {(item.fotos?.length || item.fotoUri) && (
             <View className="gap-1">
               <Text className="text-xs font-semibold uppercase text-muted-foreground">
-                Foto local
+                {(item.fotos?.length ?? 1) > 1 ? "Fotos locais" : "Foto local"}
               </Text>
-              <Text className="text-xs text-muted-foreground" numberOfLines={2}>
-                {item.fotoUri}
-              </Text>
+              {(item.fotos?.length
+                ? item.fotos
+                : [{ tipo: "", uri: item.fotoUri! }]
+              ).map((f) => (
+                <Text
+                  key={f.uri}
+                  className="text-xs text-muted-foreground"
+                  numberOfLines={2}
+                >
+                  {f.tipo ? `${f.tipo}: ` : ""}
+                  {f.uri}
+                </Text>
+              ))}
             </View>
           )}
         </ScrollView>

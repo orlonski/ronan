@@ -28,6 +28,7 @@ import {
   cachePut,
   listPendingStories,
   type PendingStory,
+  type FotoPendente,
 } from "@/db/database";
 import { api, ApiError } from "./api";
 import { reportarEvento } from "./event-reporter";
@@ -170,6 +171,19 @@ export type Me = {
   // Escolher o modo de serviço no lançamento (diária). Default true — o que
   // esconde o seletor é a conta ter um modo só. Desligar é exceção.
   podeDiaria: boolean;
+  /**
+   * Vínculo do motorista (próprio/agregado/terceiro) e o que ele exige de foto
+   * no abastecimento. Null/ausente = não classificado: nada muda pra ele, vale
+   * só o cupom da conta. Opcional — cache antigo não tem, e a ausência NUNCA
+   * inventa exigência.
+   */
+  modalidade?: {
+    id: string;
+    nome: string;
+    exigeFotoCupom?: boolean;
+    exigeFotoOdometro?: boolean;
+    exigeFotoBomba?: boolean;
+  } | null;
   // Preferências de recebimento (controladas na tela de perfil).
   aceitaPush: boolean;
   aceitaWhatsapp: boolean;
@@ -947,9 +961,9 @@ export function useCriarAbastecimento() {
   const qc = useQueryClient();
   return async (input: {
     payload: Record<string, unknown>;
-    foto?: { uri: string; mime: string };
+    fotos?: FotoPendente[];
   }) => {
-    await enqueueAbastecimento(input.payload, input.foto);
+    await enqueueAbastecimento(input.payload, input.fotos);
     void qc.invalidateQueries({ queryKey: ["abastecimentos"] });
     void qc.invalidateQueries({ queryKey: ["postos-recentes"] });
   };

@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   exigeFotoDaViagem,
+  fotosExigidasAtendidas,
+  resolverFotosExigidas,
   resolverJustificativaSemFoto,
   SEM_JUSTIFICATIVA,
 } from "./exige-foto";
@@ -64,5 +66,72 @@ describe("resolverJustificativaSemFoto", () => {
   it("exige e ninguém explicou: carimba pro painel cobrar (nunca deixa em branco)", () => {
     expect(resolverJustificativaSemFoto(true, false, undefined)).toBe(SEM_JUSTIFICATIVA);
     expect(resolverJustificativaSemFoto(true, false, "   ")).toBe(SEM_JUSTIFICATIVA);
+  });
+});
+
+describe("resolverFotosExigidas", () => {
+  const nada = { cupom: false, odometro: false, bomba: false };
+
+  it("sem modalidade e conta sem cupom: não exige nada (o padrão de hoje)", () => {
+    expect(resolverFotosExigidas(null, false)).toEqual(nada);
+  });
+
+  it("sem modalidade: vale só o cupom da conta — odômetro/bomba nem existem", () => {
+    expect(resolverFotosExigidas(null, true)).toEqual({
+      cupom: true,
+      odometro: false,
+      bomba: false,
+    });
+  });
+
+  it("o exemplo do Diego: agregado só odômetro", () => {
+    const agregado = { exigeFotoCupom: false, exigeFotoOdometro: true, exigeFotoBomba: false };
+    expect(resolverFotosExigidas(agregado, true)).toEqual({
+      cupom: false,
+      odometro: true,
+      bomba: false,
+    });
+  });
+
+  it("o exemplo do Diego: terceiro pede odômetro e bomba", () => {
+    const terceiro = { exigeFotoCupom: false, exigeFotoOdometro: true, exigeFotoBomba: true };
+    expect(resolverFotosExigidas(terceiro, true)).toEqual({
+      cupom: false,
+      odometro: true,
+      bomba: true,
+    });
+  });
+
+  it("o exemplo do Diego: própria não pede nada, MESMO com o cupom ligado na conta", () => {
+    const propria = { exigeFotoCupom: false, exigeFotoOdometro: false, exigeFotoBomba: false };
+    expect(resolverFotosExigidas(propria, true)).toEqual(nada);
+  });
+
+  it("modalidade pode exigir o cupom sem a conta exigir", () => {
+    const m = { exigeFotoCupom: true, exigeFotoOdometro: false, exigeFotoBomba: false };
+    expect(resolverFotosExigidas(m, false).cupom).toBe(true);
+  });
+});
+
+describe("fotosExigidasAtendidas", () => {
+  it("nada exigido: qualquer coisa serve", () => {
+    expect(fotosExigidasAtendidas({ cupom: false, odometro: false, bomba: false }, [])).toBe(true);
+  });
+
+  it("cobre o que foi pedido", () => {
+    const e = { cupom: true, odometro: true, bomba: false };
+    expect(fotosExigidasAtendidas(e, ["CUPOM", "ODOMETRO"])).toBe(true);
+    expect(fotosExigidasAtendidas(e, ["CUPOM", "ODOMETRO", "BOMBA"])).toBe(true);
+  });
+
+  it("mandar a foto errada não conta — é cobertura, não quantidade", () => {
+    const e = { cupom: false, odometro: true, bomba: false };
+    expect(fotosExigidasAtendidas(e, ["BOMBA"])).toBe(false);
+    expect(fotosExigidasAtendidas(e, ["CUPOM", "BOMBA"])).toBe(false);
+  });
+
+  it("faltando uma das exigidas, reprova", () => {
+    const e = { cupom: true, odometro: true, bomba: true };
+    expect(fotosExigidasAtendidas(e, ["CUPOM", "ODOMETRO"])).toBe(false);
   });
 });

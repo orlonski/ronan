@@ -100,11 +100,28 @@ export type PendingPedagio = {
   errorPermanenteLocal?: boolean;
 };
 
+/** Uma foto do abastecimento na fila. `fotoKey` preenchida = já subiu. */
+export type FotoPendente = {
+  tipo: "CUPOM" | "ODOMETRO" | "BOMBA";
+  uri: string;
+  mime?: string;
+  /** Preenchida depois do upload — é a marca de "não subir de novo". */
+  fotoKey?: string;
+};
+
 export type PendingAbastecimento = {
   clientId: string;
   payload: Record<string, unknown>;
+  /**
+   * ⚠️ LEGADO — não remover. Itens enfileirados antes das fotos tipadas têm só
+   * estes dois campos, e não existe migração de outbox (o readList só faz
+   * JSON.parse). Quem lê tem que aceitar os dois formatos:
+   *   item.fotos ?? (item.fotoUri ? [{ tipo: "CUPOM", uri, mime }] : [])
+   */
   fotoUri?: string;
   fotoMime?: string;
+  /** Formato novo: até três comprovantes (cupom, odômetro, bomba). */
+  fotos?: FotoPendente[];
   status: "pending" | "syncing" | "error";
   attempts: number;
   createdAt: number;

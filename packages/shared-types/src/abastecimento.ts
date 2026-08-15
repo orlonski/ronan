@@ -1,5 +1,28 @@
 import { z } from "zod";
 
+/**
+ * O que cada foto do abastecimento comprova.
+ *
+ * Ordem = ordem na tela do app (o motorista tira nesta sequência). Molde de
+ * `motorista-documento.ts`, o único precedente de arquivo tipado no repo.
+ */
+export const TIPOS_FOTO_ABASTECIMENTO = ["CUPOM", "ODOMETRO", "BOMBA"] as const;
+export type TipoFotoAbastecimento = (typeof TIPOS_FOTO_ABASTECIMENTO)[number];
+export const TipoFotoAbastecimentoSchema = z.enum(TIPOS_FOTO_ABASTECIMENTO);
+
+export const ROTULO_FOTO_ABASTECIMENTO: Record<TipoFotoAbastecimento, string> = {
+  CUPOM: "Cupom do posto",
+  ODOMETRO: "Odômetro (KM)",
+  BOMBA: "Bomba",
+};
+
+/** Foto já enviada (tem storageKey), pronta pra ser vinculada ao abastecimento. */
+export const FotoAbastecimentoInput = z.object({
+  fotoKey: z.string().min(1),
+  tipo: TipoFotoAbastecimentoSchema,
+});
+export type FotoAbastecimentoInput = z.infer<typeof FotoAbastecimentoInput>;
+
 export const TipoCombustivelEnum = z.enum([
   "DIESEL_S10",
   "DIESEL_S500",

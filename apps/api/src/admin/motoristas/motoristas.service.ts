@@ -64,6 +64,8 @@ const SAFE_SELECT = {
   },
   transportadoraId: true,
   transportadora: { select: { id: true, nome: true } },
+  modalidadeId: true,
+  modalidade: { select: { id: true, nome: true } },
   ativo: true,
   status: true,
   aprovadoEm: true,

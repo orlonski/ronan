@@ -122,6 +122,17 @@ enum AcaoAuditoria {
   ENVIAR_COMPARTILHAMENTO
 }
 
+/// Qual comprovante a foto do abastecimento é.
+///
+/// Existe porque uma modalidade de motorista pode exigir mais de um: o cupom do
+/// posto, a foto do odômetro (pra provar o KM do momento) e a foto da bomba.
+/// Sem o tipo, três fotos no mesmo abastecimento viram um monte indistinguível.
+enum TipoFotoAbastecimento {
+  CUPOM
+  ODOMETRO
+  BOMBA
+}
+
 enum TipoCombustivel {
   DIESEL_S10
   DIESEL_S500
@@ -283,6 +294,7 @@ model Conta {
   clientes                      Cliente[]
   materiais                     Material[]
   tiposServico                  TipoServico[]
+  modalidadesMotorista          ModalidadeMotorista[]
   regrasMinimo                  RegraMinimo[]
   locais                        Local[]
   locaisClientes                LocalCliente[]
@@ -390,6 +402,7 @@ model User {
   clientesCriados        Cliente[]          @relation("CriouCliente")
   materiaisCriados       Material[]         @relation("CriouMaterial")
   tiposServicoCriados    TipoServico[]      @relation("CriouTipoServico")
+  modalidadesCriadas     ModalidadeMotorista[] @relation("CriouModalidadeMotorista")
   veiculosCriados        Veiculo[]          @relation("CriouVeiculo")
   transportadorasCriadas Transportadora[]   @relation("CriouTransportadora")
   motoristasCriados      Motorista[]        @relation("CriouMotorista")
@@ -582,6 +595,15 @@ model Motorista {
   /// mudar aqui NÃO reescreve o histórico já carimbado, de propósito.
   transportadora          Transportadora? @relation(fields: [transportadoraId], references: [id], onDelete: SetNull)
   transportadoraId        String?
+  /// Vínculo do motorista (próprio / agregado / terceiro). Decide quais fotos o
+  /// app exige no abastecimento. Null = não classificado, e aí nada muda pra ele:
+  /// vale só o cupom da conta (Conta.exigeFotoAbastecimento).
+  ///
+  /// ORTOGONAL a transportadora, não sinônimo: aquela é a frota (pessoa jurídica,
+  /// com CNPJ) e serve pra particionar quem enxerga o quê no painel. Um agregado
+  /// pertence à frota X E é agregado.
+  modalidade              ModalidadeMotorista? @relation(fields: [modalidadeId], references: [id], onDelete: SetNull)
+  modalidadeId            String?
   criadoEm                DateTime        @default(now())
   alteradoEm              DateTime        @updatedAt
 
@@ -1119,6 +1141,49 @@ model TipoServico {
   @@index([ativo, ordem])
   @@index([contaId])
   @@map("tipos_servico")
+}
+
+/// Vínculo do motorista com a transportadora: próprio, agregado, terceiro…
+/// Catálogo por conta — cada empresa nomeia os vínculos dela e diz o que cada um
+/// exige. Cadastrado só no painel web; o motorista não escolhe a modalidade dele.
+///
+/// Molde do TipoServico, com uma diferença: aqui NÃO existe `padrao`. Lá ele é
+/// necessário porque a Viagem sem FK precisa herdar alguma coisa; aqui motorista
+/// sem modalidade simplesmente não muda de comportamento (cai no cupom da conta).
+///
+/// ⚠️ Conta que não cadastrar modalidade nenhuma se comporta EXATAMENTE como
+/// antes desta feature existir.
+model ModalidadeMotorista {
+  contaId           String   @default("__SEM_CONTA__")
+  conta             Conta    @relation(fields: [contaId], references: [id])
+  id                String   @id @default(uuid())
+  /// Chave estável usada no código/seed (ex: "agregado"). Imutável no rename.
+  slug              String
+  /// Rótulo que o admin lê no painel (editável).
+  nome              String
+  ativo             Boolean  @default(true)
+  /// Ordena o seletor no cadastro do motorista.
+  ordem             Int      @default(0)
+  // --- o que o abastecimento exige nesta modalidade ---
+  /// Cupom do posto. Quando o motorista TEM modalidade, esta flag substitui o
+  /// interruptor geral da conta — é o que permite "própria não pede nada".
+  exigeFotoCupom    Boolean  @default(false)
+  /// Foto do odômetro (comprova o KM no momento do abastecimento).
+  exigeFotoOdometro Boolean  @default(false)
+  /// Foto da bomba.
+  exigeFotoBomba    Boolean  @default(false)
+  criadoEm          DateTime @default(now())
+  alteradoEm        DateTime @updatedAt
+  criadoPor         User?    @relation("CriouModalidadeMotorista", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId       String?
+
+  motoristas Motorista[]
+
+  @@unique([contaId, slug])
+  @@unique([contaId, nome])
+  @@index([ativo, ordem])
+  @@index([contaId])
+  @@map("modalidades_motorista")
 }
 
 /// Regra dinâmica de mínimo faturado por empresa + material + faixa de km rodado.
@@ -2434,6 +2499,9 @@ model AbastecimentoFoto {
   abastecimento   Abastecimento @relation(fields: [abastecimentoId], references: [id], onDelete: Cascade)
   abastecimentoId String
   storageKey      String // chave no MinIO
+  /// O que essa foto comprova. Default CUPOM porque é o que todas as fotos
+  /// existentes são — antes disto só havia uma foto por abastecimento.
+  tipo            TipoFotoAbastecimento @default(CUPOM)
   /// Rotação aplicada via CSS na exibição admin. 0/90/180/270. Persistente.
   rotacao         Int           @default(0)
   capturadaEm     DateTime      @default(now())

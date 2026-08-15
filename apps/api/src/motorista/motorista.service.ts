@@ -167,6 +167,17 @@ export class MotoristaService {
         podeTelemetria: true,
         podeChat: true,
         podeDiaria: true,
+        // Vínculo do motorista: decide quais fotos o abastecimento exige dele.
+        // Vai no /m/me (e não no catálogo) porque é dado DELE, não da conta.
+        modalidade: {
+          select: {
+            id: true,
+            nome: true,
+            exigeFotoCupom: true,
+            exigeFotoOdometro: true,
+            exigeFotoBomba: true,
+          },
+        },
         aceitaPush: true,
         aceitaWhatsapp: true,
         receberResumoDiario: true,

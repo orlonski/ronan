@@ -5,9 +5,14 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
-import type { CriarAbastecimentoInput } from "@ronan/shared-types";
+import type { CriarAbastecimentoInput, FotoAbastecimentoInput } from "@ronan/shared-types";
 import { resolverTransportadora } from "../common/transportadora";
-import { resolverJustificativaSemFoto } from "../common/exige-foto";
+import {
+  exigeAlgumaFoto,
+  fotosExigidasAtendidas,
+  resolverFotosExigidas,
+  resolverJustificativaSemFoto,
+} from "../common/exige-foto";
 import { contaIdAtual } from "../common/conta/conta-context";
 import { ItemInexistenteException } from "../common/item-inexistente";
 import { LancamentosResgatadosService } from "../lancamentos-resgatados/lancamentos-resgatados.service";
@@ -18,7 +23,7 @@ import { mesRange } from "./viagens.service";
 const ABAST_INCLUDE = {
   veiculo: { select: { id: true, placa: true, modelo: true } },
   empresa: { select: { id: true, nome: true } },
-  fotos: { select: { id: true, storageKey: true } },
+  fotos: { select: { id: true, storageKey: true, tipo: true } },
 } satisfies Prisma.AbastecimentoInclude;
 
 @Injectable()
@@ -83,7 +88,12 @@ export class AbastecimentosMotoristaService {
 
   async create(
     motoristaId: string,
-    input: CriarAbastecimentoInput & { fotoKey?: string },
+    input: CriarAbastecimentoInput & {
+      /** Legado: app sem OTA manda uma foto avulsa (o cupom). */
+      fotoKey?: string;
+      /** App novo: lista tipada. */
+      fotos?: FotoAbastecimentoInput[];
+    },
   ) {
     const exists = await this.prisma.abastecimento.findUnique({
       where: { clientId: input.clientId },
@@ -141,7 +151,7 @@ export class AbastecimentosMotoristaService {
         ? Number((input.valorTotal / input.litros).toFixed(3))
         : null;
 
-    const { fotoKey, clientId, ...rest } = input;
+    const { fotoKey, fotos: fotosInput, clientId, ...rest } = input;
     // Frota dona do lançamento, carimbada na criação (ver common/transportadora.ts).
     // Não confundir com empresaId, que é o tomador que paga o abastecimento.
     const transportadoraId = await resolverTransportadora(
@@ -149,18 +159,43 @@ export class AbastecimentosMotoristaService {
       motoristaId,
       rest.veiculoId,
     );
-    // Foto do cupom: a transportadora exige? Só carimba a falta — nunca recusa
+    // Quais fotos este abastecimento exige. Só carimba a falta — NUNCA recusa
     // (recusar mataria o item no outbox offline; ver common/exige-foto.ts).
     //
-    // Mudou de eixo: antes vinha da Empresa que paga, e como `empresaId` é
-    // opcional no abastecimento, quem lançava sem empresa nunca era cobrado.
-    // Agora a política é da conta e vale pra todo abastecimento.
-    // `Conta` é isenta da trava (ver viagens.service.contaExigeFoto): citar o id.
-    const conta = await this.prisma.conta.findUnique({
-      where: { id: contaIdAtual() },
-      select: { exigeFotoAbastecimento: true },
-    });
-    const exigeFoto = conta?.exigeFotoAbastecimento === true;
+    // `Conta` é isenta da trava de conta (ver viagens.service.contaExigeFoto),
+    // por isso o id é citado à mão.
+    const [conta, motorista] = await Promise.all([
+      this.prisma.conta.findUnique({
+        where: { id: contaIdAtual() },
+        select: { exigeFotoAbastecimento: true },
+      }),
+      this.prisma.motorista.findUnique({
+        where: { id: motoristaId },
+        select: {
+          modalidade: {
+            select: {
+              exigeFotoCupom: true,
+              exigeFotoOdometro: true,
+              exigeFotoBomba: true,
+            },
+          },
+        },
+      }),
+    ]);
+    const exigidas = resolverFotosExigidas(
+      motorista?.modalidade ?? null,
+      conta?.exigeFotoAbastecimento === true,
+    );
+
+    // Compat de app antigo: quem ainda não pegou o OTA manda `fotoKey` avulso,
+    // que sempre foi o cupom. App novo manda a lista tipada.
+    const fotosCreate = (
+      fotosInput?.length
+        ? fotosInput
+        : fotoKey
+          ? [{ fotoKey, tipo: "CUPOM" as const }]
+          : []
+    ).map((f) => ({ storageKey: f.fotoKey, tipo: f.tipo, capturadaEm: new Date() }));
 
     void this.resgates.marcarQueSubiu(input.clientId);
     return this.prisma.abastecimento.create({
@@ -184,18 +219,17 @@ export class AbastecimentosMotoristaService {
         lng: rest.lng,
         precisao: rest.precisao,
         criadoOfflineEm: rest.criadoOfflineEm,
+        // O que importa é a COBERTURA do que se pediu, não a quantidade: mandar
+        // a bomba quando se pediu o odômetro não resolve.
         justificativaSemFoto: resolverJustificativaSemFoto(
-          exigeFoto,
-          !!fotoKey,
+          exigeAlgumaFoto(exigidas),
+          fotosExigidasAtendidas(
+            exigidas,
+            fotosCreate.map((f) => f.tipo),
+          ),
           rest.justificativaSemFoto,
         ),
-        ...(fotoKey
-          ? {
-              fotos: {
-                create: { storageKey: fotoKey, capturadaEm: new Date() },
-              },
-            }
-          : {}),
+        ...(fotosCreate.length ? { fotos: { create: fotosCreate } } : {}),
       },
       include: ABAST_INCLUDE,
     });
