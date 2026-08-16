@@ -28,17 +28,50 @@ empresa.
 
 ### 1. Cloudflare R2
 
-1. Criar um bucket — sugestão de nome: `ronan-backups`.
-2. Criar um **API Token** com acesso a esse bucket. Escolha o **menor escopo que
-   ainda permita gravar**; se o painel oferecer Object Lock ou retenção
-   imutável, ative — é o que impede que um token roubado destrua o histórico.
-   As opções do R2 mudam de tempos em tempos: confira o que está disponível no
-   painel na hora de criar.
-3. Configurar **Object lifecycle rule** no bucket: apagar objetos com mais de
-   N dias (90 é um ponto de partida razoável). É isto que substitui a limpeza
-   que o script deliberadamente não faz.
-4. Guardar o Access Key e o Secret Key — eles vão nas variáveis abaixo.
-   **Nunca colar essas chaves em chat, issue ou commit.**
+**Ative 2FA na conta Cloudflare antes de tudo.** De nada adianta a cópia estar
+fora do Contabo se a conta que a guarda cai com uma senha reusada.
+
+1. **Criar o bucket** — sugestão de nome: `ronan-backups`.
+
+2. **Bucket lock** (R2 → bucket → Settings → *Bucket lock rules* → Add rule).
+   Esta é a peça que protege de verdade contra invasão, e o motivo é que o R2
+   **não tem escopo de token "só gravar"**: o menor escopo que escreve
+   (`Object Read & Write`) também apaga. Ou seja, a credencial que fica no
+   servidor sempre poderá apagar — a defesa não pode depender dela.
+
+   O bucket lock é WORM (grava uma vez, lê muitas): dentro do prazo, o objeto
+   não pode ser apagado nem sobrescrito **por ninguém**, nem com a chave em
+   mãos. Duas regras:
+
+   | Prefixo | Retenção | Por quê |
+   |---|---|---|
+   | `banco/` | 90 dias | ninguém apaga um dump dos últimos 3 meses |
+   | `fotos/` | 90 dias | idem pras fotos de ticket |
+
+   **Nunca use a opção "indefinido".** Lock indefinido não pode ser removido, o
+   bucket nunca mais pode ser esvaziado, e o custo passa a crescer pra sempre
+   sem volta. Prazo fixo protege igual e continua reversível.
+
+3. **Object lifecycle rule** (mesma tela, card *Object Lifecycle Rules*). É
+   isto que substitui a limpeza que o script deliberadamente não faz:
+
+   | Prefixo | Regra |
+   |---|---|
+   | `banco/` | expirar em 90 dias |
+   | `fotos/` | **nenhuma regra** — foto de ticket é evidência, não expira |
+
+   Se as duas coisas conflitarem, o lock vence: o objeto só some depois de
+   cumprido o prazo de retenção.
+
+4. **API Token** (R2 → *Account details* → API Tokens → Manage). Escopo
+   `Object Read & Write`, **restrito só ao bucket `ronan-backups`** — nunca
+   `Admin`, que daria poder de mexer nas regras de lock. Guarde o Access Key ID
+   e o Secret Access Key: o secret **só aparece uma vez**.
+
+   **Nunca cole essas chaves em chat, issue ou commit.**
+
+5. **Endpoint**: `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`. O Account ID
+   está na mesma página do R2.
 
 ### 2. Serviço de backup no Easypanel
 
