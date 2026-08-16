@@ -1,6 +1,10 @@
 "use client";
 
 import { useMemo, type ReactNode } from "react";
+import {
+  DivergenciasBadge,
+  type DivergenciaViagem,
+} from "@/components/divergencias-viagem";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -82,6 +86,8 @@ type Viagem = {
   kmForaDoPadrao: boolean | null;
   /** Viagem anterior da mesma empresa com o MESMO número de ticket. */
   ticketDuplicadoDe: { id: string; ticket: string | null; data: string | null } | null;
+  /** Pendências ABERTAS com que o lançamento entrou (ver divergencias-viagem.tsx). */
+  divergencias: DivergenciaViagem[] | null;
   /** Preenchido quando alguém conferiu a duplicidade e deu ok. */
   duplicidadeAceitaEm: string | null;
   /** Preenchido quando a viagem foi criada com o app offline (momento real da criação no device). */
@@ -137,6 +143,13 @@ function AlertasBadges({ v }: { v: Viagem }) {
       >
         <Copy className="h-3 w-3" /> Ticket repetido
       </Badge>,
+    );
+  }
+  // O que o lançamento trouxe pendente: falta de dado ou cadastro que sumiu.
+  // Antes isto era um 4xx pro app e a viagem nem chegava aqui.
+  if (v.divergencias?.some((d) => !d.resolvidoEm)) {
+    badges.push(
+      <DivergenciasBadge key="divergencias" divergencias={v.divergencias} />,
     );
   }
   return <>{badges}</>;
@@ -435,6 +448,7 @@ export default function ViagensPage() {
                     { value: "AJUSTADA", label: "Ajustada" },
                     { value: "AGUARDANDO_PESO", label: "Aguardando peso" },
                     { value: "AGUARDANDO_SAIDA", label: "Diária aberta" },
+                    { value: "INCOMPLETA", label: "Falta preencher" },
                   ]}
                 />
                 <Combobox
@@ -460,6 +474,16 @@ export default function ViagensPage() {
                   placeholder="Ticket"
                   showSearch={false}
                   options={[{ value: "true", label: "Só ticket repetido" }]}
+                />
+                {/* A fila de conferência do que o motorista lançou com pendência.
+                    Antes esses lançamentos não chegavam: viravam erro no celular
+                    dele. Ver components/divergencias-viagem.tsx. */}
+                <Combobox
+                  value={tableState.filters.comDivergencia}
+                  onChange={(v) => tableState.setFilter("comDivergencia", v)}
+                  placeholder="Pendências"
+                  showSearch={false}
+                  options={[{ value: "true", label: "Só com pendência" }]}
                 />
                 <MotoristaCombobox
                   value={tableState.filters.motoristaId}

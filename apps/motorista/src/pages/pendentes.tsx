@@ -153,12 +153,8 @@ function ViagemCard({
             {fmtDataCurta(data)}{placa ? ` · ${placa}` : ""}
           </p>
         </div>
-        <Badge variant={temErro ? "destructive" : "warning"}>
-          {temErro
-            ? item.errorStatus
-              ? `Erro ${item.errorStatus}`
-              : `Falhou (${item.attempts})`
-            : "Pendente"}
+        <Badge variant="warning">
+          Pendente
         </Badge>
       </div>
 
@@ -171,22 +167,27 @@ function ViagemCard({
         </p>
       )}
 
-      {temErro && (
-        <div className="mt-3 space-y-1 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-          <p className="text-xs font-semibold text-destructive">
-            {temIssues ? "Campos com problema:" : "Último erro:"}
-          </p>
-          {temIssues ? (
-            <ul className="space-y-0.5">
-              {item.errorIssues!.map((issue, idx) => (
-                <li key={`${issue.path}-${idx}`} className="text-xs text-destructive">
-                  • {labelDoCampo(issue.path)}: {frasePorCodigo(issue.code, issue.message)}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-xs text-destructive">{item.errorMsg ?? "Erro desconhecido."}</p>
-          )}
+      {/* Cinza e informativo SEMPRE — não existe mais card vermelho aqui. O
+          motorista não é quem resolve cadastro apagado no painel nem viagem
+          anterior que não fechou; dizer "erro" pra ele só faz ele desistir do
+          app. O servidor aceita o lançamento e a pendência vai carimbada pro
+          escritório (ver common/divergencias.ts no backend). */}
+      {temErro && temIssues && (
+        <div className="mt-3 space-y-1 rounded-lg border border-border bg-muted/40 p-3">
+          <p className="text-xs font-semibold text-muted-foreground">Falta preencher:</p>
+          <ul className="space-y-0.5">
+            {item.errorIssues!.map((issue, idx) => (
+              <li key={`${issue.path}-${idx}`} className="text-xs text-muted-foreground">
+                • {labelDoCampo(issue.path)}: {frasePorCodigo(issue.code, issue.message)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {temErro && !temIssues && item.errorMsg && (
+        <div className="mt-3 space-y-1 rounded-lg border border-border bg-muted/40 p-3">
+          <p className="text-xs font-semibold text-muted-foreground">Última tentativa:</p>
+          <p className="text-xs text-muted-foreground">{item.errorMsg}</p>
         </div>
       )}
 
@@ -242,12 +243,12 @@ function PedagioCard({ item, onDetalhes }: { item: PendingPedagio; onDetalhes: (
             {fmtDataCurta(String(p.data ?? ""))} · R$ {fmtNum(String(p.valor ?? 0), 2)}
           </p>
         </div>
-        <Badge variant={temErro ? "destructive" : "warning"}>
-          {temErro ? "Erro" : "Pendente"}
+        <Badge variant="warning">
+          Pendente
         </Badge>
       </div>
       {temErro && item.errorMsg && (
-        <p className="mt-2 text-xs text-destructive">{item.errorMsg}</p>
+        <p className="mt-2 text-xs text-muted-foreground">{item.errorMsg}</p>
       )}
       <div className="mt-3 flex gap-2">
         <Button variant="outline" size="sm" onClick={onDetalhes} className="flex-1">
@@ -308,12 +309,12 @@ function AbastecimentoCard({
             {fmtDataCurta(String(p.data ?? ""))} · {String(p.litros ?? "")} L
           </p>
         </div>
-        <Badge variant={temErro ? "destructive" : "warning"}>
-          {temErro ? "Erro" : "Pendente"}
+        <Badge variant="warning">
+          Pendente
         </Badge>
       </div>
       {temErro && item.errorMsg && (
-        <p className="mt-2 text-xs text-destructive">{item.errorMsg}</p>
+        <p className="mt-2 text-xs text-muted-foreground">{item.errorMsg}</p>
       )}
       <div className="mt-3 flex gap-2">
         <Button variant="outline" size="sm" onClick={onDetalhes} className="flex-1">

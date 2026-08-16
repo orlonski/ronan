@@ -17,7 +17,6 @@ import {
   CriarViagemBase,
   CompletarPesoInput,
   EncerrarDiariaInput,
-  checarObrigatoriosDoModo,
 } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { Roles } from "../auth/decorators/roles.decorator";
@@ -29,9 +28,21 @@ import { AppInfo, type AppInfoHeaders } from "../auth/decorators/app-info.decora
 import type { AuthMotorista } from "../auth/types";
 import { ViagensMotoristaService } from "./viagens.service";
 
+/**
+ * SEM `checarObrigatoriosDoModo` de propósito.
+ *
+ * O refine continua valendo no APP (é ele que faz a validação guiada rolar até
+ * o campo que falta, antes de o motorista sequer enfileirar). Aqui ele só
+ * chegava a disparar quando o lançamento JÁ tinha sido feito e estava tentando
+ * subir — e aí virava um 400 que matava o item no outbox por um campo que
+ * ninguém mais podia preencher naquele celular.
+ *
+ * O que falta agora é decidido no service, que aceita a viagem e carimba a
+ * falta pra conferência (ver common/divergencias.ts).
+ */
 const CriarViagemPayload = CriarViagemBase.extend({
   fotoKey: z.string().optional(),
-}).superRefine(checarObrigatoriosDoModo);
+});
 
 const AdicionarFotoInput = z.object({
   fotoKey: z.string().min(1),

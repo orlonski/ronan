@@ -1,4 +1,5 @@
 import { AppState } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
 import * as FileSystem from "expo-file-system/legacy";
 import { drenar as drenarEventos, reportarEvento } from "./event-reporter";
@@ -1897,6 +1898,93 @@ function falhaSalvaEhTransitoria(item: ComErro): boolean {
   if (s === undefined) return true; // sem status HTTP: rede/keychain/desconhecido
   if (s === 408 || s === 429) return true;
   return s >= 500; // 4xx real fica pro motorista editar
+}
+
+/**
+ * Traz pro painel TUDO que está preso em erro no aparelho — e devolve pra fila
+ * o que agora tem chance de subir.
+ *
+ * Roda uma vez por instalação, no boot, sem o motorista tocar em nada.
+ *
+ * Por que existe: até aqui, o servidor recusava lançamento por motivos que o
+ * motorista não causou nem podia resolver (material desativado no painel, local
+ * excluído, viagem anterior que não fechou). O item morria em "error", virava
+ * um card vermelho na tela dele, e ficava ali — dentro do celular, invisível
+ * pro escritório. Bastava trocar de aparelho ou tocar em excluir pra viagem
+ * sumir sem ninguém nunca ter sabido que existiu.
+ *
+ * Agora o servidor aceita tudo (ver common/divergencias.ts no backend), então:
+ *
+ *  1. Todo item morto ganha uma cópia no painel ANTES de qualquer tentativa —
+ *     é o que garante que a viagem chega ao conferente mesmo que o reenvio
+ *     falhe de novo, mesmo que o app seja desinstalado depois. A cópia é
+ *     idempotente por (clientId, tipo): reenviar não duplica nem reabre caso
+ *     que o escritório já resolveu.
+ *  2. Todo item morto volta pra fila. O que morreu sob a regra antiga merece
+ *     uma chance sob a nova — e a maioria vai entrar de primeira, carimbada
+ *     como divergência em vez de recusada.
+ *
+ * A flag de "já rodou" é só pra não repetir a varredura a cada boot: o fluxo
+ * normal de outbox continua cuidando dos itens dali em diante.
+ */
+const CHAVE_PASSIVO_REPROCESSADO = "outbox:passivo-reprocessado:v1";
+
+export async function reprocessarPassivoDeErros(): Promise<void> {
+  try {
+    if (await AsyncStorage.getItem(CHAVE_PASSIVO_REPROCESSADO)) return;
+
+    let mexeu = false;
+    const varrer = async <T extends ComErro & { clientId: string }>(
+      lista: T[],
+      upsert: (item: T) => Promise<void>,
+      tipo: string,
+    ) => {
+      for (const item of lista) {
+        if (item.status !== "error") continue;
+        // A cópia primeiro: ela é a garantia de que o lançamento chega ao
+        // painel mesmo se tudo o mais falhar.
+        resgatarLancamento(
+          tipo,
+          (item as { payload?: unknown }).payload,
+          item.clientId,
+          item.errorMsg ?? "Lançamento preso no aparelho antes da varredura.",
+          item.errorStatus,
+        );
+        await upsert(resetItem(item));
+        mexeu = true;
+      }
+    };
+
+    await varrer(await listPendingViagens(), upsertPendingViagem, "viagem");
+    await varrer(await listPendingViagemIniciar(), upsertPendingViagemIniciar, "viagem-iniciar");
+    await varrer(
+      await listPendingViagemFinalizar(),
+      upsertPendingViagemFinalizar,
+      "viagem-finalizar",
+    );
+    await varrer(await listPendingEventosViagem(), upsertPendingEventoViagem, "evento-viagem");
+    await varrer(await listPendingViagemCancelar(), upsertPendingViagemCancelar, "viagem-cancelar");
+    await varrer(await listPendingPedagios(), upsertPendingPedagio, "pedagio");
+    await varrer(await listPendingAbastecimentos(), upsertPendingAbastecimento, "abastecimento");
+    await varrer(await listPendingCompletarPeso(), upsertPendingCompletarPeso, "completar-peso");
+    await varrer(
+      await listPendingEncerrarDiaria(),
+      upsertPendingEncerrarDiaria,
+      "encerrar-diaria",
+    );
+    await varrer(await listPendingLocais(), upsertPendingLocal, "local");
+    await varrer(await listPendingFotos(), upsertPendingFoto, "foto");
+    await varrer(await listPendingStories(), upsertPendingStory, "story");
+    await varrer(await listPendingMensagensChat(), upsertPendingMensagemChat, "mensagem-chat");
+
+    await AsyncStorage.setItem(CHAVE_PASSIVO_REPROCESSADO, String(Date.now()));
+    if (mexeu) {
+      notify();
+      void drain();
+    }
+  } catch {
+    /* varredura é best-effort: falhar aqui não pode atrapalhar o boot */
+  }
 }
 
 /**

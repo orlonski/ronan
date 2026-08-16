@@ -1,0 +1,11 @@
+-- Novo status: INCOMPLETA — viagem que ENTROU faltando dado essencial (km,
+-- material, local de descarga, peso) ou apontando pra cadastro que sumiu.
+--
+-- Antes desses casos o endpoint do motorista respondia 4xx e o lançamento
+-- morria dentro do celular: o motorista via "erro" numa tela que ele não tinha
+-- como resolver, e o escritório nunca ficava sabendo que a viagem existiu.
+-- Agora a viagem entra sempre e o que falta vira linha em viagem_divergencias.
+--
+-- Vai sozinho na migration porque ALTER TYPE ... ADD VALUE não pode ser usado
+-- na MESMA transação que o cria (a próxima migration referencia o valor).
+ALTER TYPE "StatusViagem" ADD VALUE 'INCOMPLETA';

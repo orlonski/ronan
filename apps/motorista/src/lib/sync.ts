@@ -598,6 +598,72 @@ async function processAbastecimento(item: PendingAbastecimento): Promise<void> {
   notify();
 }
 
+/**
+ * Traz pro painel TUDO que está preso em erro neste navegador — e devolve pra
+ * fila o que agora tem chance de subir. Roda uma vez, no boot, sem o motorista
+ * tocar em nada.
+ *
+ * Gêmea do `reprocessarPassivoDeErros` do app nativo, pelo mesmo motivo: até
+ * aqui o servidor recusava lançamento por coisas que o motorista não causou
+ * (material desativado no painel, local excluído, viagem anterior que não
+ * fechou). O item morria em "error", virava card vermelho na tela dele e ficava
+ * dentro do navegador — invisível pro escritório, e perdido de vez se o iOS
+ * expurgasse o IndexedDB.
+ *
+ * Hoje o servidor aceita tudo e carimba a pendência (ver common/divergencias.ts
+ * no backend). Então: cópia pro painel primeiro (garante que a viagem chega
+ * mesmo se o reenvio falhar de novo), item de volta pra fila depois.
+ */
+const CHAVE_PASSIVO_REPROCESSADO = "outbox:passivo-reprocessado:v1";
+
+export async function reprocessarPassivoDeErros(): Promise<void> {
+  try {
+    if (localStorage.getItem(CHAVE_PASSIVO_REPROCESSADO)) return;
+
+    let mexeu = false;
+    const varrer = async <T extends { clientId: string; status: string; attempts: number; errorMsg?: string; errorStatus?: number; payload?: unknown }>(
+      lista: T[],
+      upsert: (item: T) => Promise<unknown>,
+      tipo: "viagem" | "pedagio" | "abastecimento" | "local" | null,
+    ) => {
+      for (const item of lista) {
+        if (item.status !== "error") continue;
+        if (tipo) {
+          resgatarLancamento(
+            tipo,
+            item,
+            item.errorMsg ?? "Lançamento preso no aparelho antes da varredura.",
+            item.errorStatus,
+          );
+        }
+        await upsert({
+          ...item,
+          status: "pending",
+          attempts: 0,
+          errorMsg: undefined,
+          errorStatus: undefined,
+          errorIssues: undefined,
+        } as T);
+        mexeu = true;
+      }
+    };
+
+    await varrer(await listPendingViagens(), upsertPendingViagem, "viagem");
+    await varrer(await listPendingPedagios(), upsertPendingPedagio, "pedagio");
+    await varrer(await listPendingAbastecimentos(), upsertPendingAbastecimento, "abastecimento");
+    await varrer(await listPendingLocais(), upsertPendingLocal, "local");
+    await varrer(await listPendingFotos(), upsertPendingFoto, null);
+
+    localStorage.setItem(CHAVE_PASSIVO_REPROCESSADO, String(Date.now()));
+    if (mexeu) {
+      notify();
+      void drain();
+    }
+  } catch {
+    /* varredura é best-effort: falhar aqui não pode atrapalhar o boot */
+  }
+}
+
 let autoSyncStarted = false;
 
 export function startAutoSync(): void {
@@ -625,4 +691,7 @@ export function startAutoSync(): void {
   setTimeout(() => {
     void drain();
   }, 2_000);
+
+  // Passivo preso neste navegador: sobe sozinho, sem o motorista pedir.
+  void reprocessarPassivoDeErros();
 }

@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import {
-  FinalizarViagemInput,
+  FinalizarViagemBase,
   IniciarViagemInput,
   RegistrarEventoInput,
 } from "@ronan/shared-types";
@@ -18,7 +18,10 @@ import { ViagensMotoristaService } from "./viagens.service";
 
 // Payloads aceitam fotoKey (upload 2-step prévio via /m/uploads/ticket).
 const RegistrarEventoPayload = RegistrarEventoInput;
-const FinalizarViagemPayload = FinalizarViagemInput;
+// Base (sem o refine de obrigatórios): o servidor não recusa mais um
+// lançamento por campo faltando — aceita e carimba. Ver o comentário do
+// FinalizarViagemBase e common/divergencias.ts.
+const FinalizarViagemPayload = FinalizarViagemBase;
 
 /**
  * Lifecycle guiado de viagem (Iniciar → eventos → Finalizar). Controller

@@ -329,6 +329,9 @@ export function prontoParaFinalizar(
 /** Abre a viagem: cria localmente, enfileira o POST /iniciar. Retorna clientId. */
 export async function iniciarViagemGuiada(input: {
   veiculoId: string;
+  // Snapshot da placa: auto-recovery se o veículo for excluído do cadastro
+  // entre o início da viagem e a sincronização.
+  veiculoPlaca?: string;
   clienteId: string;
   clienteNome?: string;
   coords?: { lat: number; lng: number; precisao?: number; fonte?: FonteGps };
@@ -381,6 +384,7 @@ export async function iniciarViagemGuiada(input: {
     precisao: input.coords?.precisao,
     localCargaId: lc?.id,
     localCargaDados,
+    ...(input.veiculoPlaca ? { veiculoDados: { placa: input.veiculoPlaca } } : {}),
     criadoOfflineEm: iniciadoEm,
     // Captura do local de carga (espelha descarga*). Chaves extras no payload
     // fluem direto pro body de /m/viagem/iniciar (IniciarViagemInput).

@@ -1,6 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import {
+  DivergenciasCard,
+  type DivergenciaViagem,
+} from "@/components/divergencias-viagem";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { use, useMemo, useState } from "react";
@@ -153,6 +157,8 @@ type ViagemDetalhe = {
   justificativaSemFoto: string | null;
   /** Viagem anterior da mesma empresa com o MESMO número de ticket. */
   ticketDuplicadoDe: { id: string; ticket: string | null; data: string | null } | null;
+  /** Pendências do lançamento (abertas e já resolvidas). */
+  divergencias: DivergenciaViagem[] | null;
   duplicidadeAceitaEm: string | null;
   /** Modo de serviço. null = frete por tonelada (histórico e app antigo). */
   tipoServico: { id: string; nome: string; medicao: "PESO" | "PERIODO" } | null;
@@ -768,6 +774,12 @@ export default function ViagemDetalhePage({
               <p className="mt-0.5 break-words text-sm">{v.observacao}</p>
             </div>
           )}
+
+          {/* O que o lançamento trouxe pendente. Mesmo princípio do ticket
+              repetido logo abaixo, generalizado: o servidor não recusa mais
+              lançamento do motorista — aceita e carimba o que falta, pra
+              decisão ser tomada aqui, por quem tem os cadastros na mão. */}
+          <DivergenciasCard divergencias={v.divergencias} />
 
           {/* Ticket repetido: antes isso era 409 e o motorista nem conseguia
               lançar. Agora entra e a decisão é aqui — com o link pra outra

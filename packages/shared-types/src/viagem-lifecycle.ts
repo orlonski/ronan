@@ -1,7 +1,12 @@
 import { z } from "zod";
 import { FonteGps } from "./enums";
 import { KmFonte } from "./km-atipico";
-import { LocalSnapshot, TrechoViagemInput, checarObrigatoriosDoModo } from "./viagem";
+import {
+  LocalSnapshot,
+  TrechoViagemInput,
+  VeiculoSnapshot,
+  checarObrigatoriosDoModo,
+} from "./viagem";
 
 // Limites espelham o schema do banco (Decimal(10,3)/Decimal(10,2)).
 const MAX_TONELADAS = 9999;
@@ -82,6 +87,9 @@ export const IniciarViagemInput = z.object({
   localCargaId: z.string().uuid().optional(),
   // Auto-recovery: recria o local se o ID sumiu entre o cache do app e a sync.
   localCargaDados: LocalSnapshot.optional(),
+  // Idem pra placa: sem ela, um veículo excluído do cadastro faria o servidor
+  // ter que inventar um caminhão pra viagem poder entrar.
+  veiculoDados: VeiculoSnapshot.optional(),
   criadoOfflineEm: z.coerce.date().optional(),
   // Captura do GPS do motorista ao escolher o local de carga (espelha os campos
   // descarga*). Grava a posição real dele + distância até o local escolhido — o
@@ -125,11 +133,17 @@ export type RegistrarEventoInput = z.infer<typeof RegistrarEventoInput>;
 // Finalizar: preenche os campos que faltavam e fecha (EM_ANDAMENTO → ENVIADA).
 // ticket é opcional aqui; a obrigatoriedade depende de Material.exigeTicket e
 // é imposta no backend, igual ao fluxo de CriarViagemInput.
-export const FinalizarViagemInput = z.object({
+// Base SEM o refine: é ela que o backend valida. Os campos que o motorista
+// preenche na tela são opcionais AQUI de propósito — não porque sejam
+// dispensáveis, mas porque recusar no servidor um lançamento que já foi feito
+// só destruía o lançamento. O que falta é carimbado como divergência e
+// resolvido no painel. A obrigatoriedade de verdade vive no app, ANTES de
+// enfileirar (FinalizarViagemInput, logo abaixo).
+export const FinalizarViagemBase = z.object({
   // Opcional: o cliente já foi escolhido no iniciar (backend reusa o da viagem
   // se não vier). Mantido no schema pra compat/edição.
   clienteId: z.string().uuid().optional(),
-  materialId: z.string().uuid(),
+  materialId: z.string().uuid().optional(),
   data: z.coerce.date(),
   // Opcional por causa do modo "aguardando peso" (romaneio no fim do dia): o
   // motorista finaliza sem peso. Fora desse modo é obrigatório — imposto pelo
@@ -138,7 +152,7 @@ export const FinalizarViagemInput = z.object({
   // true = finaliza sem peso/ticket. Backend transiciona pra AGUARDANDO_PESO
   // (em vez de ENVIADA); motorista/admin completa depois.
   aguardandoPeso: z.boolean().optional(),
-  km: z.number().nonnegative().max(MAX_KM),
+  km: z.number().nonnegative().max(MAX_KM).optional(),
   kmCalculado: z.number().nonnegative().max(MAX_KM).optional(),
   // true = motorista digitou o km na mão (reprocessamento respeita, não sobrescreve).
   kmEditadoManual: z.boolean().optional(),
@@ -155,7 +169,7 @@ export const FinalizarViagemInput = z.object({
   // em TrechoViagem. Ausente/[] = viagem normal carga→descarga.
   trechos: z.array(TrechoViagemInput).max(20).optional(),
   ticket: z.string().max(50).optional(),
-  localDescargaId: z.string().uuid(),
+  localDescargaId: z.string().uuid().optional(),
   localDescargaDados: LocalSnapshot.optional(),
   // Captura fresca do GPS no clique "descarreguei aqui" (auditoria), espelha
   // os campos descarga* da Viagem. Normalmente vem do evento de descarga.
@@ -172,7 +186,11 @@ export const FinalizarViagemInput = z.object({
   fotoKey: z.string().optional(),
   // Ver CriarViagemBase.justificativaSemFoto.
   justificativaSemFoto: z.string().min(10).max(500).optional(),
-}).superRefine(checarObrigatoriosDoModo);
+});
+export type FinalizarViagemBase = z.infer<typeof FinalizarViagemBase>;
+
+/** O que o APP exige antes de deixar o motorista finalizar (validação guiada). */
+export const FinalizarViagemInput = FinalizarViagemBase.superRefine(checarObrigatoriosDoModo);
 export type FinalizarViagemInput = z.infer<typeof FinalizarViagemInput>;
 
 // Leitura de um evento já registrado (app timeline + dashboard).

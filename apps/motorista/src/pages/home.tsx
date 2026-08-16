@@ -1,5 +1,4 @@
 import {
-  AlertTriangle,
   ArrowDown,
   ArrowRight,
   ArrowUp,
@@ -40,6 +39,8 @@ const statusVariant: Record<
   OK: "success",
   EM_CONFERENCIA: "warning",
   DIVERGENTE: "destructive",
+  // Nunca "destructive": o motorista não causou nem resolve o que falta.
+  INCOMPLETA: "warning",
   AJUSTADA: "secondary",
 };
 
@@ -48,6 +49,8 @@ const statusLabel: Record<string, string> = {
   OK: "Conferida",
   EM_CONFERENCIA: "Conferindo",
   DIVERGENTE: "Divergente",
+  // O escritório é que tem algo a preencher — pro motorista é conferência normal.
+  INCOMPLETA: "Conferindo",
   AJUSTADA: "Ajustada",
 };
 
@@ -116,23 +119,13 @@ export default function HomePage() {
 
         <IosInstallPrompt />
 
-        {pending.comErro > 0 && (
-          <button
-            type="button"
-            onClick={() => navigate("/pendentes")}
-            className="flex w-full items-center gap-3 rounded-2xl border-2 border-destructive/40 bg-destructive/10 p-4 text-left active:opacity-75"
-          >
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive">
-              <AlertTriangle size={22} color="white" />
-            </div>
-            <div className="flex-1">
-              <p className="text-base font-bold text-foreground">{pending.comErro} com erro</p>
-              <p className="text-sm text-muted-foreground">Toque pra revisar e descartar</p>
-            </div>
-          </button>
-        )}
+        {/* Não existe mais banner de erro aqui. Nenhum dos erros que apareciam
+            neste lugar era causado pelo motorista, nem tinha como ser resolvido
+            por ele — o card vermelho só dizia que o trabalho do dia deu errado.
+            Hoje o servidor aceita o lançamento sempre e a pendência vai
+            carimbada pro escritório. Sobra a tarja de "ainda não subiu". */}
 
-        {pending.viagens + pending.pedagios + pending.abastecimentos - pending.comErro > 0 && (
+        {pending.viagens + pending.pedagios + pending.abastecimentos > 0 && (
           <button
             type="button"
             onClick={() => navigate("/pendentes")}
@@ -143,10 +136,12 @@ export default function HomePage() {
             </div>
             <div className="flex-1">
               <p className="text-base font-bold text-foreground">
-                {pending.viagens + pending.pedagios + pending.abastecimentos - pending.comErro} aguardando
+                {pending.viagens + pending.pedagios + pending.abastecimentos} aguardando
                 sincronizar
               </p>
-              <p className="text-sm text-muted-foreground">Toque pra ver e gerenciar</p>
+              <p className="text-sm text-muted-foreground">
+                Sobem sozinhos quando o sinal voltar
+              </p>
             </div>
           </button>
         )}

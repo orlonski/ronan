@@ -5,7 +5,6 @@ import * as Updates from "expo-updates";
 import Constants from "expo-constants";
 import {
   Activity,
-  AlertTriangle,
   ArrowDown,
   ArrowRight,
   ArrowUp,
@@ -76,6 +75,8 @@ const statusVariant: Record<
   DIVERGENTE: "destructive",
   AJUSTADA: "secondary",
   AGUARDANDO_PESO: "warning",
+  // Nunca "destructive": o motorista não causou nem resolve o que falta.
+  INCOMPLETA: "warning",
 };
 
 const statusLabel: Record<string, string> = {
@@ -85,6 +86,8 @@ const statusLabel: Record<string, string> = {
   DIVERGENTE: "Divergente",
   AJUSTADA: "Ajustada",
   AGUARDANDO_PESO: "Aguardando peso",
+  // O escritório é que tem algo a preencher — pro motorista é conferência normal.
+  INCOMPLETA: "Conferindo",
 };
 
 export default function Home() {
@@ -427,41 +430,28 @@ export default function Home() {
               </Pressable>
             )}
 
-            {/* Banner: itens com erro permanente (4xx, motorista precisa
-                editar/descartar). Vermelho — exige ação. */}
-            {pending.comErro > 0 && (
-              <Pressable
-                onPress={() => router.push("/pendentes")}
-                className="flex-row items-center gap-3 rounded-2xl border-2 border-destructive/40 bg-destructive/10 p-4 active:opacity-75"
-              >
-                <View className="h-12 w-12 items-center justify-center rounded-full bg-destructive">
-                  <AlertTriangle size={22} color="white" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-base font-bold text-foreground">
-                    {pending.comErro} com erro
-                  </Text>
-                  <Text className="text-sm text-muted-foreground">
-                    Toque pra revisar e descartar
-                  </Text>
-                </View>
-              </Pressable>
-            )}
+            {/* Não existe mais banner de erro aqui.
+
+                O motorista não causava nenhum dos erros que apareciam neste
+                lugar (cadastro apagado no painel, viagem anterior que não
+                fechou, romaneio que não veio) e não tinha como resolver nenhum
+                deles — o card vermelho só dizia a ele que o trabalho do dia
+                tinha dado errado. Hoje o servidor aceita o lançamento sempre e
+                a pendência vai carimbada pro escritório. O que sobra aqui é a
+                tarja de "ainda não subiu", que é fato e não é culpa de
+                ninguém. */}
 
             {/* Banner: itens só aguardando sincronizar (sem erro). Amarelo — informativo.
                 Inclui abastecimentos (antes só contava viagens+pedágios, e o
                 abastecimento sumia dessa conta; depois foi a vez de foto/local/story,
                 que travavam a fila inteira sem aparecer em lugar nenhum). */}
-            {Math.max(
-              0,
-              pending.viagens +
-                pending.pedagios +
-                pending.abastecimentos +
-                pending.lifecycle +
-                pending.completarPeso +
-                pending.outros -
-                pending.comErro,
-            ) > 0 && (
+            {pending.viagens +
+              pending.pedagios +
+              pending.abastecimentos +
+              pending.lifecycle +
+              pending.completarPeso +
+              pending.outros >
+              0 && (
               <Pressable
                 onPress={() => router.push("/pendentes")}
                 className="flex-row items-center gap-3 rounded-2xl border-2 border-warning/30 bg-warning/15 p-4 active:opacity-75"
@@ -471,20 +461,16 @@ export default function Home() {
                 </View>
                 <View className="flex-1">
                   <Text className="text-base font-bold text-foreground">
-                    {Math.max(
-                      0,
-                      pending.viagens +
-                pending.pedagios +
-                pending.abastecimentos +
-                pending.lifecycle +
-                pending.completarPeso +
-                pending.outros -
-                pending.comErro,
-                    )}{" "}
+                    {pending.viagens +
+                      pending.pedagios +
+                      pending.abastecimentos +
+                      pending.lifecycle +
+                      pending.completarPeso +
+                      pending.outros}{" "}
                     aguardando sincronizar
                   </Text>
                   <Text className="text-sm text-muted-foreground">
-                    Toque pra ver e gerenciar
+                    Sobem sozinhos quando o sinal voltar
                   </Text>
                 </View>
               </Pressable>

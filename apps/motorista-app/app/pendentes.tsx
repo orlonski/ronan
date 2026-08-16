@@ -379,25 +379,12 @@ function LifecycleTripCard({
             {ESTAGIO_LABEL[trip.estagio]}
           </Text>
         </View>
-        <Badge variant={temErro ? "destructive" : "warning"}>
-          {temErro
-            ? trip.errorStatus
-              ? `Erro ${trip.errorStatus}`
-              : `Falhou (${trip.attempts})`
-            : "Enviando"}
+        <Badge variant="warning">
+          Enviando
         </Badge>
       </View>
 
-      {temErro && (
-        <View className="mt-3 gap-1.5 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-          <Text className="text-xs font-semibold text-destructive">Último erro:</Text>
-          <Text className="text-xs text-destructive" numberOfLines={3}>
-            {trip.errorMsg ?? "Erro desconhecido."}
-          </Text>
-        </View>
-      )}
-
-      {!temErro && trip.errorMsg && (
+      {trip.errorMsg && (
         <View className="mt-3 gap-1 rounded-lg border border-border bg-muted/40 p-3">
           <Text className="text-xs font-semibold text-muted-foreground">Última tentativa:</Text>
           <Text className="text-xs text-muted-foreground" numberOfLines={3}>
@@ -458,28 +445,12 @@ function CompletarPesoCard({
             </Text>
           </View>
         </View>
-        <Badge variant={temErro ? "destructive" : "warning"}>
-          {temErro
-            ? item.errorStatus
-              ? `Erro ${item.errorStatus}`
-              : `Falhou (${item.attempts})`
-            : "Enviando"}
+        <Badge variant="warning">
+          Enviando
         </Badge>
       </View>
 
-      {temErro && (
-        <View className="mt-3 gap-1.5 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-          <Text className="text-xs font-semibold text-destructive">Último erro:</Text>
-          <Text className="text-xs text-destructive" numberOfLines={3}>
-            {/* O 409 de ticket repetido deixou de existir — agora a viagem
-                entra e o painel sinaliza. Outros 409 (ex.: número em uso por
-                outro motivo) continuam caindo no texto da API. */}
-            {item.errorMsg ?? "Erro desconhecido."}
-          </Text>
-        </View>
-      )}
-
-      {!temErro && item.errorMsg && (
+      {item.errorMsg && (
         <View className="mt-3 gap-1 rounded-lg border border-border bg-muted/40 p-3">
           <Text className="text-xs font-semibold text-muted-foreground">Última tentativa:</Text>
           <Text className="text-xs text-muted-foreground" numberOfLines={3}>
@@ -538,25 +509,12 @@ function EncerrarDiariaCard({
             </Text>
           </View>
         </View>
-        <Badge variant={temErro ? "destructive" : "warning"}>
-          {temErro
-            ? item.errorStatus
-              ? `Erro ${item.errorStatus}`
-              : `Falhou (${item.attempts})`
-            : "Enviando"}
+        <Badge variant="warning">
+          Enviando
         </Badge>
       </View>
 
-      {temErro && (
-        <View className="mt-3 gap-1.5 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-          <Text className="text-xs font-semibold text-destructive">Último erro:</Text>
-          <Text className="text-xs text-destructive" numberOfLines={3}>
-            {item.errorMsg ?? "Erro desconhecido."}
-          </Text>
-        </View>
-      )}
-
-      {!temErro && item.errorMsg && (
+      {item.errorMsg && (
         <View className="mt-3 gap-1 rounded-lg border border-border bg-muted/40 p-3">
           <Text className="text-xs font-semibold text-muted-foreground">Última tentativa:</Text>
           <Text className="text-xs text-muted-foreground" numberOfLines={3}>
@@ -648,12 +606,8 @@ function PendingCard({
               {cabecalho.subtitulo}
             </Text>
           </View>
-          <Badge variant={temErro ? "destructive" : "warning"}>
-            {temErro
-              ? item.errorStatus
-                ? `Erro ${item.errorStatus}`
-                : `Falhou (${item.attempts})`
-              : "Pendente"}
+          <Badge variant="warning">
+            Pendente
           </Badge>
         </View>
 
@@ -663,33 +617,28 @@ function PendingCard({
           </Text>
         )}
 
-        {temErro && (
-          <View className="mt-3 gap-1.5 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-            <Text className="text-xs font-semibold text-destructive">
-              {temIssues ? "Campos com problema:" : "Último erro:"}
+        {temErro && temIssues && (
+          <View className="mt-3 gap-1.5 rounded-lg border border-border bg-muted/40 p-3">
+            <Text className="text-xs font-semibold text-muted-foreground">
+              Falta preencher:
             </Text>
-            {temIssues ? (
-              <View className="gap-0.5">
-                {item.errorIssues!.map((issue, idx) => (
-                  <Text
-                    key={`${issue.path}-${idx}`}
-                    className="text-xs text-destructive"
-                  >
-                    • {labelDoCampo(issue.path)}: {frasePorCodigo(issue.code, issue.message)}
-                  </Text>
-                ))}
-              </View>
-            ) : (
-              <Text className="text-xs text-destructive" numberOfLines={3}>
-                {item.errorMsg ?? "Erro desconhecido."}
-              </Text>
-            )}
+            <View className="gap-0.5">
+              {item.errorIssues!.map((issue, idx) => (
+                <Text key={`${issue.path}-${idx}`} className="text-xs text-muted-foreground">
+                  • {labelDoCampo(issue.path)}: {frasePorCodigo(issue.code, issue.message)}
+                </Text>
+              ))}
+            </View>
           </View>
         )}
 
-        {/* Pendente com causa da última tentativa (transitório: sem sinal etc.).
-            Informativo (cinza), NÃO é FALHOU — vai retentar sozinho. */}
-        {!temErro && item.errorMsg && (
+        {/* Causa da última tentativa. Cinza e informativo SEMPRE — não existe
+            mais card vermelho aqui. O motorista não é a pessoa certa pra
+            resolver um cadastro apagado no painel ou uma viagem anterior que
+            não fechou, e dizer "erro" pra ele só faz ele desistir do app. O
+            servidor aceita o lançamento e a pendência vai carimbada pro
+            escritório (ver common/divergencias.ts no backend). */}
+        {item.errorMsg && !temIssues && (
           <View className="mt-3 gap-1 rounded-lg border border-border bg-muted/40 p-3">
             <Text className="text-xs font-semibold text-muted-foreground">
               Última tentativa:

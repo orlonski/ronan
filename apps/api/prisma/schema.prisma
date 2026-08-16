@@ -41,6 +41,80 @@ enum StatusViagem {
   /// incompleta, visível pro admin, NUNCA entra em match/fechamento/KPIs/export.
   /// Vira ENVIADA quando o motorista (app) ou o admin (dashboard) grava a saída.
   AGUARDANDO_SAIDA
+  /// Viagem que ENTROU faltando dado essencial (km, material, local de descarga,
+  /// peso fora do modo aguardando-peso) ou apontando pra cadastro que sumiu do
+  /// servidor. Antes desses casos eram RECUSADOS com 4xx e o lançamento morria
+  /// dentro do celular do motorista; hoje a viagem entra sempre e o que falta
+  /// vira `ViagemDivergencia` pra quem confere resolver.
+  ///
+  /// NÃO confundir com o status DIVERGENTE: aquele é decisão humana da
+  /// conferência, o motorista é notificado e responde. INCOMPLETA é o servidor
+  /// dizendo "aceitei, mas falta dado" — o motorista não vê e não faz nada.
+  /// Incompleta = NUNCA entra em match/fechamento/KPI/export (está em
+  /// STATUS_FORA_FECHAMENTO). Vira ENVIADA quando o painel completa o que falta.
+  INCOMPLETA
+}
+
+/// Por que uma viagem entrou carimbada. Cada motivo responde "o que houve" pra
+/// quem confere — é o que o motorista teria visto como erro na tela e hoje não vê.
+///
+/// Os três primeiros grupos têm pesos diferentes:
+/// - FALTA_*    → dado essencial ausente. Segura a viagem em INCOMPLETA.
+/// - CADASTRO_* → apontava pra registro que sumiu do servidor. Segura em INCOMPLETA
+///                (menos quando deu pra readotar pelo snapshot que o app mandou).
+/// - Os demais  → informativos. A viagem segue o fluxo normal, só fica sinalizada.
+enum MotivoDivergencia {
+  FALTA_MATERIAL
+  FALTA_LOCAL_DESCARGA
+  FALTA_KM
+  FALTA_TONELADAS
+  FALTA_TICKET
+  FALTA_CLIENTE
+  CADASTRO_VEICULO_SUMIU
+  CADASTRO_CLIENTE_SUMIU
+  CADASTRO_MATERIAL_SUMIU
+  CADASTRO_LOCAL_SUMIU
+  CADASTRO_TIPO_SERVICO_SUMIU
+  /// Motorista iniciou uma viagem enquanto outra dele seguia aberta no servidor.
+  /// Carimbo vai na ANTERIOR (a que ficou pra trás), nunca na nova.
+  VIAGEM_ANTERIOR_ABERTA
+  /// O app não conseguiu enviar na hora e o lançamento ficou preso no aparelho;
+  /// entrou depois pela varredura automática. `dados` guarda o erro original.
+  RESGATADA_DO_APP
+  /// Payload que o schema não entendeu por inteiro (app antigo, campo renomeado).
+  /// A viagem entra com o que deu pra aproveitar e o resto vai em `dados`.
+  PAYLOAD_PARCIAL
+}
+
+/// O que impediu a viagem de entrar completa. Uma linha por motivo, idempotente
+/// por (viagem, motivo) — reenvio do outbox não duplica carimbo.
+///
+/// Existe porque o lugar errado de mostrar isso é a tela do motorista: ele não
+/// causou nenhum destes casos (cadastro apagado no painel, romaneio que só sai
+/// no fim do dia, app sem sinal) e não tem como resolver nenhum deles. Ver
+/// `common/divergencias.ts`.
+model ViagemDivergencia {
+  contaId       String            @default("__SEM_CONTA__")
+  conta         Conta             @relation(fields: [contaId], references: [id])
+  id            String            @id @default(uuid())
+  viagem        Viagem            @relation(fields: [viagemId], references: [id], onDelete: Cascade)
+  viagemId      String
+  motivo        MotivoDivergencia
+  /// Frase pronta pro conferente, em português. Montada no servidor (não vem do
+  /// app) pra ficar igual em toda origem.
+  detalhe       String
+  /// O que o app tinha mandado: id que não existia, nome/placa do snapshot, erro
+  /// HTTP original. É o que permite reconstruir o lançamento na mão.
+  dados         Json?
+  resolvidoEm   DateTime?
+  resolvidoPor  User?             @relation(fields: [resolvidoPorId], references: [id], onDelete: SetNull)
+  resolvidoPorId String?
+  criadoEm      DateTime          @default(now())
+
+  @@unique([viagemId, motivo])
+  @@index([contaId, resolvidoEm])
+  @@index([viagemId])
+  @@map("viagem_divergencias")
 }
 
 /// Como a viagem é MEDIDA — e portanto o que o app pede ao motorista.
@@ -308,6 +382,7 @@ model Conta {
   trechosViagem                 TrechoViagem[]
   tiposEventoViagem             TipoEventoViagem[]
   eventosViagem                 EventoViagem[]
+  viagensDivergencias           ViagemDivergencia[]
   viagensMensagens              ViagemMensagem[]
   ticketFotos                   TicketFoto[]
   viagensCompartilhamentos      ViagemCompartilhamento[]
@@ -422,6 +497,7 @@ model User {
   notificacoesCriadas    Notificacao[]      @relation("CriouNotificacao")
   fechamentosCriados     Fechamento[]       @relation("CriouFechamento")
   viagensRevisadas       Viagem[]           @relation("RevisouViagem")
+  divergenciasResolvidas ViagemDivergencia[]
   adminNotificacoes      AdminNotificacao[]
 
   @@index([contaId])
@@ -1561,6 +1637,7 @@ model Viagem {
   eventosViagem     EventoViagem[]
   mensagens         ViagemMensagem[]
   compartilhamentos ViagemCompartilhamento[]
+  divergencias      ViagemDivergencia[]
 
   @@index([transportadoraId, data])
   @@index([motoristaId, data])

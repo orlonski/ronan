@@ -38,6 +38,16 @@ export const LocalSnapshot = z.object({
 });
 export type LocalSnapshot = z.infer<typeof LocalSnapshot>;
 
+// Mesmo auto-recovery do local, pro veículo. `veiculoId` é a única FK
+// obrigatória da Viagem: sem a placa que o motorista tinha em mãos, uma placa
+// excluída do cadastro obrigaria o servidor a inventar um caminhão. Com o
+// snapshot ele readota a placa certa e só carimba a divergência pra conferência.
+export const VeiculoSnapshot = z.object({
+  placa: z.string().min(1).max(20),
+  modelo: z.string().max(100).optional(),
+});
+export type VeiculoSnapshot = z.infer<typeof VeiculoSnapshot>;
+
 // Tipo de trecho ADICIONAL do trajeto (além da carga→descarga base).
 // RETORNO_BOTA_FORA = volta pro local de carga pra jogar a sobra (limpeza).
 // ENTREGA = entrega adicional (múltiplas entregas — futuro).
@@ -124,6 +134,8 @@ export const CriarViagemBase = z.object({
   // a viagem. Apps devem enviar sempre que possivel.
   localCargaDados: LocalSnapshot.optional(),
   localDescargaDados: LocalSnapshot.optional(),
+  // Idem, pra placa (ver VeiculoSnapshot).
+  veiculoDados: VeiculoSnapshot.optional(),
   valorPedagioTotal: z.number().nonnegative().max(MAX_VALOR).optional(),
   observacao: z.string().max(500).optional(),
   fotoKey: z.string().optional(),

@@ -60,6 +60,8 @@ const STATUS_VARIANT: Record<
   EM_CONFERENCIA: "warning",
   DIVERGENTE: "destructive",
   AJUSTADA: "secondary",
+  // Nunca "destructive": o motorista não causou nem resolve o que falta.
+  INCOMPLETA: "warning",
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -68,6 +70,8 @@ const STATUS_LABEL: Record<string, string> = {
   EM_CONFERENCIA: "Conferindo",
   DIVERGENTE: "Divergente",
   AJUSTADA: "Ajustada",
+  // O escritório é que tem algo a preencher — pro motorista é conferência normal.
+  INCOMPLETA: "Conferindo",
 };
 
 export default function ViagemDetalheScreen() {

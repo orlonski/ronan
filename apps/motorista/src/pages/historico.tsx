@@ -35,6 +35,8 @@ const statusVariant: Record<
   OK: "success",
   EM_CONFERENCIA: "warning",
   DIVERGENTE: "destructive",
+  // Nunca "destructive": o motorista não causou nem resolve o que falta.
+  INCOMPLETA: "warning",
   AJUSTADA: "secondary",
 };
 
@@ -43,6 +45,8 @@ const statusLabel: Record<string, string> = {
   OK: "Conferida",
   EM_CONFERENCIA: "Conferindo",
   DIVERGENTE: "Divergente",
+  // O escritório é que tem algo a preencher — pro motorista é conferência normal.
+  INCOMPLETA: "Conferindo",
   AJUSTADA: "Ajustada",
 };
 

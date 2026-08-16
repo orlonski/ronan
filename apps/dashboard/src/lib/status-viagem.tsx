@@ -13,6 +13,9 @@ export const STATUS_VIAGEM_LABEL: Record<string, string> = {
   EM_CONFERENCIA: "Em conferência",
   AGUARDANDO_PESO: "Aguardando peso",
   AGUARDANDO_SAIDA: "Diária aberta",
+  // O servidor aceitou o lançamento do motorista faltando dado (em vez de
+  // recusar e matá-lo no celular dele). O que falta está em `divergencias`.
+  INCOMPLETA: "Falta preencher",
   DIVERGENTE: "Divergente",
   AJUSTADA: "Ajustada",
   OK: "OK",
@@ -25,6 +28,8 @@ export const STATUS_VIAGEM_COLOR: Record<string, string> = {
   EM_CONFERENCIA: "bg-purple-100 text-purple-800 border-purple-200",
   AGUARDANDO_PESO: "bg-orange-100 text-orange-900 border-orange-300",
   AGUARDANDO_SAIDA: "bg-violet-100 text-violet-900 border-violet-300",
+  // Âmbar, não vermelho: é trabalho a fazer, não erro de ninguém.
+  INCOMPLETA: "bg-amber-100 text-amber-900 border-amber-300",
   DIVERGENTE: "bg-red-100 text-red-800 border-red-200",
   AJUSTADA: "bg-blue-100 text-blue-800 border-blue-200",
   OK: "bg-green-100 text-green-800 border-green-200",
@@ -43,6 +48,7 @@ export const STATUS_VIAGEM_CHART_COLOR: Record<string, string> = {
   EM_CONFERENCIA: "#a855f7",
   AGUARDANDO_PESO: "#f97316",
   AGUARDANDO_SAIDA: "#8b5cf6",
+  INCOMPLETA: "#f59e0b",
   DIVERGENTE: "#ef4444",
   AJUSTADA: "#3b82f6",
   OK: "#22c55e",

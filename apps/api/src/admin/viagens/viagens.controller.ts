@@ -111,6 +111,8 @@ const ListViagensQuery = paginationQuerySchema.extend({
   kmForaDoPadrao: z.coerce.boolean().optional(),
   ticketDuplicado: z.coerce.boolean().optional(),
   semFoto: z.coerce.boolean().optional(),
+  // Viagens que entraram com pendência carimbada (ver common/divergencias.ts).
+  comDivergencia: z.coerce.boolean().optional(),
   de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });

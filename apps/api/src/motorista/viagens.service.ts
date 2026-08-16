@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { AcaoAuditoria, Prisma, type StatusViagem } from "@prisma/client";
+import { AcaoAuditoria, MotivoDivergencia, Prisma, type StatusViagem } from "@prisma/client";
 import type {
   CriarViagemInput,
   FinalizarViagemInput,
@@ -16,6 +16,7 @@ import type {
 import type { AppInfoHeaders } from "../auth/decorators/app-info.decorator";
 import { AuditoriaService } from "../auditoria/auditoria.service";
 import { garantirCadastro, ItemInexistenteException } from "../common/item-inexistente";
+import { aplicarDivergencias, Divergencias } from "../common/divergencias";
 import { resolverTransportadora } from "../common/transportadora";
 import { contaIdAtual } from "../common/conta/conta-context";
 import { resolverModoServico, resolverPeriodo } from "../common/tipo-servico";
@@ -38,6 +39,14 @@ import { KmAtipicoService } from "../km-atipico/km-atipico.service";
 import { ViagemMensagensService } from "../viagem-mensagens/viagem-mensagens.service";
 import { AvisoPesoService } from "./aviso-peso.service";
 import { LancamentosResgatadosService } from "../lancamentos-resgatados/lancamentos-resgatados.service";
+
+/**
+ * Placa do veículo-tampão: existe só pra uma viagem nunca ser recusada por
+ * causa de um caminhão apagado do cadastro. Nasce inativo (não aparece em
+ * seletor) e a viagem que o usa vai carimbada pro conferente trocar pela placa
+ * de verdade. Uma linha por conta, reusada.
+ */
+const PLACA_A_CONFERIR = "A CONFERIR";
 
 const VIAGEM_INCLUDE = {
   veiculo: { select: { id: true, placa: true, modelo: true } },
@@ -833,28 +842,38 @@ export class ViagensMotoristaService {
   }
 
   /**
-   * Garante que um Local com o id passado exista. Se não existir e o app
-   * mandou snapshot (nome+lat+lng), recria com aquele id. Usado pra
-   * auto-recovery quando motorista lança viagem offline com local cacheado
-   * que entrementes foi excluído. Se não existe E não há snapshot,
-   * devolve 4xx claro pro motorista corrigir manual.
+   * Garante que um Local com o id passado exista, e devolve o id que a viagem
+   * deve gravar (ou null quando não deu pra resolver).
+   *
+   * Se o local não existir e o app mandou snapshot (nome+lat+lng), recria com
+   * aquele id — auto-recovery de quando o motorista lança offline com um local
+   * do cache que foi excluído no painel enquanto isso.
+   *
+   * Sem snapshot NÃO recusa mais o lançamento: devolve null e carimba a viagem
+   * com CADASTRO_LOCAL_SUMIU. Recusar aqui matava a viagem inteira dentro do
+   * celular por causa de um cadastro que o próprio escritório apagou — e o
+   * motorista não tem como adivinhar qual local escolher no lugar.
    */
   private async garantirLocal(args: {
     id: string;
     snapshot?: { nome: string; lat: number; lng: number };
     lado: "carga" | "descarga";
     motoristaId: string;
-  }): Promise<void> {
+    divs: Divergencias;
+  }): Promise<string | null> {
     const existe = await this.prisma.local.findUnique({
       where: { id: args.id },
       select: { id: true },
     });
-    if (existe) return;
+    if (existe) return args.id;
 
     if (!args.snapshot) {
-      throw new ConflictException(
-        `Local de ${args.lado} não foi encontrado no servidor. Pode ter sido removido. Edite a viagem na lista de Pendentes e selecione outro.`,
+      args.divs.add(
+        MotivoDivergencia.CADASTRO_LOCAL_SUMIU,
+        { localId: args.id, lado: args.lado },
+        `O local de ${args.lado} usado no lançamento não existe mais no cadastro. Escolha o local certo.`,
       );
+      return null;
     }
     // Cria com o id que o app já está usando — idempotente: se duas viagens
     // pendentes do mesmo local sincronizarem ao mesmo tempo, a segunda
@@ -875,6 +894,75 @@ export class ViagensMotoristaService {
         origemCadastro: "VIAGEM_OFFLINE",
       },
     });
+    return args.id;
+  }
+
+  /**
+   * Garante um veículo pra viagem. `veiculoId` é a única FK NOT NULL da Viagem,
+   * então aqui não existe "grava null e carimba": é preciso devolver ALGUMA
+   * placa. A ordem vai da mais provável pra menos:
+   *
+   *   1. O id que o app mandou, se ainda existe (caso normal).
+   *   2. A placa do snapshot que o app mandou junto — se já houver um veículo
+   *      com essa placa, é ele; senão recria com o id original (mesmo
+   *      auto-recovery do Local: o veículo existia quando o motorista escolheu).
+   *   3. A placa padrão do cadastro do motorista.
+   *   4. Último recurso: um veículo "A CONFERIR" da conta, pra viagem entrar.
+   *
+   * Do passo 2 em diante a viagem sai carimbada com CADASTRO_VEICULO_SUMIU —
+   * ninguém fatura uma viagem sem saber o caminhão, mas essa conferência é do
+   * escritório, não do motorista parado no pátio.
+   */
+  private async garantirVeiculo(args: {
+    id: string;
+    snapshot?: { placa: string; modelo?: string };
+    motoristaId: string;
+    divs: Divergencias;
+  }): Promise<string> {
+    const existe = await this.prisma.veiculo.findUnique({
+      where: { id: args.id },
+      select: { id: true },
+    });
+    if (existe) return args.id;
+
+    const dados = { veiculoIdOriginal: args.id, placaEnviada: args.snapshot?.placa ?? null };
+
+    if (args.snapshot?.placa) {
+      const placa = args.snapshot.placa.trim().toUpperCase();
+      const porPlaca = await this.prisma.veiculo.findFirst({
+        where: { placa },
+        select: { id: true },
+      });
+      if (porPlaca) {
+        args.divs.add(MotivoDivergencia.CADASTRO_VEICULO_SUMIU, dados);
+        return porPlaca.id;
+      }
+      const recriado = await this.prisma.veiculo.create({
+        data: { id: args.id, placa, modelo: args.snapshot.modelo ?? null },
+        select: { id: true },
+      });
+      args.divs.add(MotivoDivergencia.CADASTRO_VEICULO_SUMIU, dados);
+      return recriado.id;
+    }
+
+    const motorista = await this.prisma.motorista.findUnique({
+      where: { id: args.motoristaId },
+      select: { veiculoDefaultId: true },
+    });
+    if (motorista?.veiculoDefaultId) {
+      args.divs.add(MotivoDivergencia.CADASTRO_VEICULO_SUMIU, dados);
+      return motorista.veiculoDefaultId;
+    }
+
+    // Placeholder da conta — reusado, nunca duplicado (placa é única por conta).
+    const placeholder = await this.prisma.veiculo.upsert({
+      where: { contaId_placa: { contaId: contaIdAtual(), placa: PLACA_A_CONFERIR } },
+      update: {},
+      create: { placa: PLACA_A_CONFERIR, ativo: false },
+      select: { id: true },
+    });
+    args.divs.add(MotivoDivergencia.CADASTRO_VEICULO_SUMIU, dados);
+    return placeholder.id;
   }
 
   /**
@@ -921,51 +1009,66 @@ export class ViagensMotoristaService {
       return serializarViagemComMinimos(existente, await this.regrasMinimoAtivas());
     }
 
-    // Valida os cadastros que a viagem referencia ANTES de gravar, cada um com
-    // a sua mensagem. Sem isso a FK estoura no banco e o motorista recebe uma
-    // frase genérica que não diz se foi a placa, o cliente ou o material —
-    // e sem saber o que corrigir, ele acaba descartando o lançamento.
-    // Ordem = a da tela, pra ele achar o campo na hora de editar.
-    await garantirCadastro(
-      () =>
-        this.prisma.veiculo.findUnique({
-          where: { id: input.veiculoId },
-          select: { id: true },
-        }),
-      "veiculoId",
-    );
+    // Daqui pra baixo NADA recusa o lançamento.
+    //
+    // Cada cadastro que sumiu e cada campo que faltou vira carimbo pro painel,
+    // e a viagem entra assim mesmo. O caminho antigo (4xx pro app) devolvia o
+    // problema pra única pessoa da cadeia que não tinha como resolvê-lo: o
+    // motorista, que escolheu um material que existia, num celular sem sinal,
+    // e três horas depois recebe "esse material não existe mais". O lançamento
+    // morria no aparelho e o escritório nunca sabia da viagem.
+    const divs = new Divergencias();
 
-    const cliente = await this.prisma.cliente.findUnique({
-      where: { id: input.clienteId },
-      select: { empresaId: true },
+    const veiculoId = await this.garantirVeiculo({
+      id: input.veiculoId,
+      snapshot: input.veiculoDados,
+      motoristaId,
+      divs,
     });
-    if (!cliente) throw new ItemInexistenteException("clienteId");
+
+    const cliente = input.clienteId
+      ? await this.prisma.cliente.findUnique({
+          where: { id: input.clienteId },
+          select: { empresaId: true },
+        })
+      : null;
+    let clienteId: string | null = input.clienteId ?? null;
+    if (!input.clienteId) {
+      divs.add(MotivoDivergencia.FALTA_CLIENTE);
+    } else if (!cliente) {
+      divs.add(MotivoDivergencia.CADASTRO_CLIENTE_SUMIU, { clienteId: input.clienteId });
+      clienteId = null;
+    }
 
     // Modo de serviço: define o que este lançamento exige (peso x período).
-    // Autoritativo — o app esconde os campos, mas quem valida é aqui.
-    const modo = await resolverModoServico(this.prisma, input.tipoServicoId);
+    // Autoritativo — o app esconde os campos, mas quem valida é aqui. Tipo que
+    // sumiu do cadastro cai no padrão da conta e sai carimbado (nunca recusa).
+    const modo = await resolverModoServico(this.prisma, input.tipoServicoId, divs);
     const ehPeriodo = modo.medicao === "PERIODO";
 
     // Material é lido aqui (e não junto do bota-fora, mais abaixo) porque a
     // validação do ticket já depende dele. Modo que não exige material (diária
     // de caminhão à disposição) grava materialId null.
+    let materialId = modo.exigeMaterial ? (input.materialId ?? null) : null;
     if (modo.exigeMaterial && !input.materialId) {
-      throw new BadRequestException("Escolha o material.");
+      divs.add(MotivoDivergencia.FALTA_MATERIAL);
     }
-    const materialId = modo.exigeMaterial ? input.materialId! : null;
     const material = materialId
       ? await this.prisma.material.findUnique({
           where: { id: materialId },
           select: { permiteBotaFora: true, temComprovanteFoto: true },
         })
       : null;
-    if (materialId && !material) throw new ItemInexistenteException("materialId");
+    if (materialId && !material) {
+      divs.add(MotivoDivergencia.CADASTRO_MATERIAL_SUMIU, { materialId });
+      materialId = null;
+    }
 
     if (modo.exigeLocalDescarga && !input.localDescargaId) {
-      throw new BadRequestException("Escolha o local de descarga.");
+      divs.add(MotivoDivergencia.FALTA_LOCAL_DESCARGA);
     }
     if (modo.exigeKm && input.km == null) {
-      throw new BadRequestException("Informe o km rodado.");
+      divs.add(MotivoDivergencia.FALTA_KM);
     }
 
     // Período (diária): valida entrada/saída e diz se a diária ficou aberta.
@@ -976,20 +1079,25 @@ export class ViagensMotoristaService {
     // entram depois via completarPeso (app) ou update admin (dashboard).
     // Serviço medido por período não tem peso nenhum — nunca entra nesse modo.
     const aguardandoPeso = !ehPeriodo && input.aguardandoPeso === true;
-    if (!ehPeriodo && !aguardandoPeso && (input.toneladas == null || input.toneladas <= 0)) {
-      throw new BadRequestException("Informe as toneladas.");
-    }
+    const semPeso =
+      !ehPeriodo && !aguardandoPeso && (input.toneladas == null || input.toneladas <= 0);
+    if (semPeso) divs.add(MotivoDivergencia.FALTA_TONELADAS);
+
     // Ticket: basta o modo OU o material dispensar. Número repetido NÃO impede
-    // o lançamento — vem carimbado pra quem confere decidir.
-    const { ticket, duplicadoDeId } = aguardandoPeso
-      ? { ticket: null, duplicadoDeId: null }
-      : await this.resolverTicketParaEmpresa(
-          cliente.empresaId,
-          materialId,
-          input.ticket,
-          undefined,
-          modo.exigeTicket,
-        );
+    // o lançamento — vem carimbado pra quem confere decidir. Sem cliente
+    // resolvido não há empresa contra a qual conferir repetição: o ticket entra
+    // como veio (a divergência do cliente já leva o conferente até a viagem).
+    const { ticket, duplicadoDeId } =
+      aguardandoPeso || !cliente
+        ? { ticket: input.ticket?.trim() || null, duplicadoDeId: null }
+        : await this.resolverTicketParaEmpresa(
+            cliente.empresaId,
+            materialId,
+            input.ticket,
+            undefined,
+            modo.exigeTicket,
+            divs,
+          );
 
     // Foto do comprovante: a empresa exige? Só carimba a falta — nunca recusa.
     // Recusar aqui mataria o item no outbox do motorista (ver common/exige-foto.ts).
@@ -999,37 +1107,39 @@ export class ViagensMotoristaService {
       modoExigeTicket: modo.exigeTicket,
     });
 
-    // Trechos adicionais (retorno do bota-fora hoje). RETORNO_BOTA_FORA só vale se
-    // o material permite (admin autoritativo, igual exigeTicket); o app só oferece
-    // quando permite, aqui sanitiza por garantia.
-    const trechosCreate = this.montarTrechos(
-      input.trechos,
-      material?.permiteBotaFora === true,
-      input.localCargaId,
-    );
-
-    // Valida que os locais existem antes de inserir. Auto-recovery:
-    // se o ID nao existe mas o app enviou um snapshot (nome+lat+lng), o
-    // backend recria o local com o MESMO id. Cobre o caso do motorista
-    // ter usado um local do cache offline que ja foi excluido por outro
-    // usuario. Sem snapshot, devolve 4xx claro pro motorista editar a
-    // viagem na lista de Pendentes.
-    await this.garantirLocal({
+    // Locais. Auto-recovery: se o ID não existe mas o app enviou snapshot
+    // (nome+lat+lng), o backend recria o local com o MESMO id — cobre o
+    // motorista ter usado um local do cache offline que foi excluído nesse meio
+    // tempo. Sem snapshot, grava null e carimba (nunca recusa).
+    const localCargaId = await this.garantirLocal({
       id: input.localCargaId,
       snapshot: input.localCargaDados,
       lado: "carga",
       motoristaId,
+      divs,
     });
     // Modo sem local de descarga (diária que começa e termina no mesmo lugar)
-    // não tem o que validar aqui.
-    if (input.localDescargaId) {
-      await this.garantirLocal({
-        id: input.localDescargaId,
-        snapshot: input.localDescargaDados,
-        lado: "descarga",
-        motoristaId,
-      });
-    }
+    // não tem o que resolver aqui.
+    const localDescargaId = input.localDescargaId
+      ? await this.garantirLocal({
+          id: input.localDescargaId,
+          snapshot: input.localDescargaDados,
+          lado: "descarga",
+          motoristaId,
+          divs,
+        })
+      : null;
+
+    // Trechos adicionais (retorno do bota-fora hoje). RETORNO_BOTA_FORA só vale se
+    // o material permite (admin autoritativo, igual exigeTicket); o app só oferece
+    // quando permite, aqui sanitiza por garantia. Usa o localCarga JÁ RESOLVIDO:
+    // se o local sumiu e não deu pra readotar, o retorno perde a âncora e é
+    // descartado em vez de estourar a FK.
+    const trechosCreate = this.montarTrechos(
+      input.trechos,
+      material?.permiteBotaFora === true,
+      localCargaId,
+    );
 
     const { fotoKey, clientId, pontos, ...rest } = input;
 
@@ -1048,15 +1158,15 @@ export class ViagensMotoristaService {
     const transportadoraId = await resolverTransportadora(
       this.prisma,
       motoristaId,
-      rest.veiculoId,
+      veiculoId,
     );
 
     const viagem = await this.prisma.viagem.create({
       data: {
         clientId,
         motoristaId,
-        veiculoId: rest.veiculoId,
-        clienteId: rest.clienteId,
+        veiculoId,
+        clienteId,
         transportadoraId,
         materialId,
         tipoServicoId: modo.id,
@@ -1070,11 +1180,19 @@ export class ViagensMotoristaService {
         duracaoMinutos: periodo.duracaoMinutos,
         // Diária aberta (sem saída) também é viagem incompleta: AGUARDANDO_SAIDA
         // a mantém fora de match/fechamento/KPIs até o motorista encerrar.
-        status: aguardandoPeso
-          ? "AGUARDANDO_PESO"
-          : periodo.aguardandoSaida
-            ? "AGUARDANDO_SAIDA"
-            : undefined,
+        // Carimbo bloqueante (falta km/material/local/peso, cadastro sumido)
+        // vence e manda pra INCOMPLETA — fora de match/fechamento/KPI até o
+        // painel completar. AGUARDANDO_PESO/SAIDA prevalecem: são fluxos
+        // legítimos que já mantêm a viagem fora do fechamento e cuja semântica
+        // o INCOMPLETA apagaria.
+        status: divs.statusFinal(
+          aguardandoPeso
+            ? "AGUARDANDO_PESO"
+            : periodo.aguardandoSaida
+              ? "AGUARDANDO_SAIDA"
+              : "ENVIADA",
+        ),
+        ...(divs.paraCreateAninhado() ? { divergencias: divs.paraCreateAninhado() } : {}),
         ticket,
         // Número repetido: guarda QUAL viagem já usa, pro painel levar direto
         // até ela. Null = sem duplicidade.
@@ -1087,8 +1205,8 @@ export class ViagensMotoristaService {
         rotaGeometria: rest.rotaGeometria,
         ...(trechosCreate.length ? { trechos: { create: trechosCreate } } : {}),
         observacao: rest.observacao,
-        localCargaId: rest.localCargaId,
-        localDescargaId: rest.localDescargaId,
+        localCargaId,
+        localDescargaId,
         valorPedagioTotal: rest.valorPedagioTotal,
         lat: rest.lat,
         lng: rest.lng,
@@ -1300,6 +1418,7 @@ export class ViagensMotoristaService {
     ticketRaw?: string | null,
     ignorarViagemId?: string,
     modoExigeTicket = true,
+    divs?: Divergencias,
   ): Promise<{ ticket: string | null; duplicadoDeId: string | null }> {
     const material = materialId
       ? await this.prisma.material.findUnique({
@@ -1312,7 +1431,12 @@ export class ViagensMotoristaService {
     // o material (concreto não gera ticket).
     const exige = modoExigeTicket && material?.exigeTicket !== false;
     if (exige && !ticket) {
-      throw new BadRequestException("Informe o número do ticket.");
+      // Com coletor (lançamento do motorista) NUNCA recusa: era este 400 que
+      // matava o finalizar da viagem dentro do outbox, e com ele a viagem
+      // ficava EM_ANDAMENTO no servidor pra sempre, travando a fila do
+      // caminhão inteiro. Sem coletor (chamadas do painel) segue recusando.
+      if (!divs) throw new BadRequestException("Informe o número do ticket.");
+      divs.add(MotivoDivergencia.FALTA_TICKET);
     }
     if (!ticket) return { ticket: null, duplicadoDeId: null };
 
@@ -1441,11 +1565,17 @@ export class ViagensMotoristaService {
         : null;
     }
 
+    // Também vem do outbox (o motorista completa o peso quando o romaneio sai,
+    // muitas vezes sem sinal): recusar aqui deixaria a viagem presa em
+    // AGUARDANDO_PESO pra sempre. Carimba e segue.
+    const divs = new Divergencias();
     const { ticket, duplicadoDeId } = await this.resolverTicketParaEmpresa(
       viagem.cliente?.empresaId ?? "",
       viagem.materialId,
       input.ticket,
       viagemId,
+      true,
+      divs,
     );
 
     const atualizada = await this.prisma.viagem.update({
@@ -1454,10 +1584,11 @@ export class ViagensMotoristaService {
         toneladas: input.toneladas,
         ticket,
         ticketDuplicadoDeId: duplicadoDeId,
-        status: "ENVIADA",
+        status: divs.statusFinal("ENVIADA"),
       },
       include: VIAGEM_INCLUDE,
     });
+    await aplicarDivergencias(this.prisma, atualizada.id, divs);
 
     // Agora que virou ENVIADA e tem km, recalcula pelo trajeto real se preciso.
     void this.kmReprocessamento.reprocessar(atualizada.id);
@@ -1498,8 +1629,23 @@ export class ViagensMotoristaService {
   }
 
   /**
-   * Abre uma viagem EM_ANDAMENTO. Idempotente por clientId. Só permite uma
-   * aberta por motorista (409 com o clientId da existente, pro app retomar).
+   * Abre uma viagem EM_ANDAMENTO. Idempotente por clientId.
+   *
+   * NÃO existe mais limite de uma aberta por motorista. Esse limite produzia o
+   * pior erro que o app já mostrou: "você já tem uma viagem em andamento",
+   * numa viagem recém-iniciada, sem nada de errado com ela.
+   *
+   * A causa nunca era o motorista. Era a viagem ANTERIOR dele, que tinha
+   * tentado fechar e levado 4xx do servidor (material desativado no painel,
+   * local de descarga excluído, foto sumida do aparelho no meio do upload).
+   * Ela ficava EM_ANDAMENTO pra sempre e TODAS as viagens seguintes batiam na
+   * trava — o motorista via a fila inteira parada por um problema que era do
+   * cadastro, não dele, e cuja única saída oferecida era pedir pro escritório
+   * cancelar.
+   *
+   * Duas abertas ao mesmo tempo no servidor não incomodam ninguém: o app segue
+   * tocando UMA por vez (o espelho local é quem manda). A que ficou pra trás é
+   * carimbada com VIAGEM_ANTERIOR_ABERTA pra quem confere fechar na mão.
    */
   async iniciar(motoristaId: string, input: IniciarViagemInput, appInfo?: AppInfoHeaders) {
     const existente = await this.prisma.viagem.findUnique({
@@ -1508,71 +1654,75 @@ export class ViagensMotoristaService {
     });
     if (existente) return existente; // sync duplicado → mesma viagem
 
-    // Uma viagem aberta por vez. Devolve o clientId da aberta pro app retomar
-    // em vez de tentar criar outra. (Índice parcial no banco também garante.)
-    const aberta = await this.prisma.viagem.findFirst({
+    const divs = new Divergencias();
+
+    // Havia outra aberta? Ela é que fica sinalizada — a nova entra limpa.
+    const abertas = await this.prisma.viagem.findMany({
       where: { motoristaId, status: "EM_ANDAMENTO" },
-      select: { clientId: true },
+      select: { id: true, status: true },
     });
-    if (aberta) {
-      // O texto vai pro card de pendente do motorista e fica lá enquanto a vaga
-      // não libera. Por isso ele precisa dizer as duas coisas que evitam pânico
-      // (e evitam que ele apague a fila): nada se perdeu, e existe saída quando
-      // a viagem presa não é dele resolver.
-      throw new ConflictException({
-        message:
-          "Você já tem uma viagem em andamento. Finalize ela que as outras sobem " +
-          "sozinhas na sequência — nenhuma se perde. Se ela travou, peça pro " +
-          "escritório cancelar essa viagem.",
-        clientIdEmAndamento: aberta.clientId,
+    for (const anterior of abertas) {
+      const divAnterior = new Divergencias();
+      divAnterior.add(MotivoDivergencia.VIAGEM_ANTERIOR_ABERTA, {
+        novaViagemClientId: input.clientId,
       });
+      await aplicarDivergencias(this.prisma, anterior.id, divAnterior);
     }
 
-    // Placa e cliente: mesma validação da viagem normal, mesma mensagem.
-    await garantirCadastro(
-      () =>
-        this.prisma.veiculo.findUnique({
-          where: { id: input.veiculoId },
-          select: { id: true },
-        }),
-      "veiculoId",
-    );
-    const cliente = await this.prisma.cliente.findUnique({
-      where: { id: input.clienteId },
-      select: { id: true },
+    const veiculoId = await this.garantirVeiculo({
+      id: input.veiculoId,
+      snapshot: input.veiculoDados,
+      motoristaId,
+      divs,
     });
-    if (!cliente) throw new ItemInexistenteException("clienteId");
+    const cliente = input.clienteId
+      ? await this.prisma.cliente.findUnique({
+          where: { id: input.clienteId },
+          select: { id: true },
+        })
+      : null;
+    let clienteId: string | null = input.clienteId ?? null;
+    if (!input.clienteId) {
+      divs.add(MotivoDivergencia.FALTA_CLIENTE);
+    } else if (!cliente) {
+      divs.add(MotivoDivergencia.CADASTRO_CLIENTE_SUMIU, { clienteId: input.clienteId });
+      clienteId = null;
+    }
 
     // Local de carga é opcional no iniciar (pode ser detectado por GPS já, ou
     // só no evento de carga). Auto-recovery se o id sumiu do servidor.
-    if (input.localCargaId) {
-      await this.garantirLocal({
-        id: input.localCargaId,
-        snapshot: input.localCargaDados,
-        lado: "carga",
-        motoristaId,
-      });
-    }
+    const localCargaId = input.localCargaId
+      ? await this.garantirLocal({
+          id: input.localCargaId,
+          snapshot: input.localCargaDados,
+          lado: "carga",
+          motoristaId,
+          divs,
+        })
+      : null;
 
     const transportadoraId = await resolverTransportadora(
       this.prisma,
       motoristaId,
-      input.veiculoId,
+      veiculoId,
     );
 
     const viagem = await this.prisma.viagem.create({
       data: {
         clientId: input.clientId,
         motoristaId,
-        veiculoId: input.veiculoId,
-        clienteId: input.clienteId,
+        veiculoId,
+        clienteId,
         transportadoraId,
+        // EM_ANDAMENTO já é fora do fechamento; carimbo não muda o status aqui
+        // (statusFinal preserva os status de fluxo), só sinaliza pro painel.
         status: "EM_ANDAMENTO",
+        ...(divs.paraCreateAninhado() ? { divergencias: divs.paraCreateAninhado() } : {}),
         iniciadaGuiada: true,
         iniciadoEm: input.iniciadoEm,
         lat: input.lat,
         lng: input.lng,
-        localCargaId: input.localCargaId,
+        localCargaId,
         criadoOfflineEm: input.criadoOfflineEm,
         appVersaoCriacao: appInfo?.appVersao ?? null,
         appUpdateIdCriacao: appInfo?.appUpdateId ?? null,
@@ -1629,15 +1779,21 @@ export class ViagensMotoristaService {
     const jaExiste = await this.prisma.eventoViagem.findUnique({ where: { id: input.id } });
     if (jaExiste) return jaExiste;
 
-    // Auto-recovery do local associado ao evento (carga/descarga por GPS).
-    if (input.localId) {
-      await this.garantirLocal({
-        id: input.localId,
-        snapshot: input.localDados,
-        lado: tipo.ehDescarga ? "descarga" : "carga",
-        motoristaId,
-      });
-    }
+    // Auto-recovery do local associado ao evento (carga/descarga por GPS). Local
+    // que sumiu e não deu pra readotar grava null e carimba a VIAGEM — o evento
+    // em si (a hora, o GPS, a foto) é o que o motorista registrou e não se perde
+    // por causa de um cadastro apagado no painel.
+    const divsEvento = new Divergencias();
+    const localId = input.localId
+      ? await this.garantirLocal({
+          id: input.localId,
+          snapshot: input.localDados,
+          lado: tipo.ehDescarga ? "descarga" : "carga",
+          motoristaId,
+          divs: divsEvento,
+        })
+      : null;
+    await aplicarDivergencias(this.prisma, viagem.id, divsEvento);
 
     const evento = await this.prisma.eventoViagem.create({
       data: {
@@ -1648,7 +1804,7 @@ export class ViagensMotoristaService {
         lat: input.lat,
         lng: input.lng,
         precisao: input.precisao,
-        localId: input.localId,
+        localId,
         fotoKey: input.fotoKey,
         toneladas: input.toneladas,
         valor: input.valor,
@@ -1664,7 +1820,7 @@ export class ViagensMotoristaService {
       await this.prisma.viagem.update({
         where: { id: viagem.id },
         data: {
-          localCargaId: input.localId ?? undefined,
+          localCargaId: localId ?? undefined,
           lat: input.lat ?? undefined,
           lng: input.lng ?? undefined,
           iniciadoEm: viagem.iniciadoEm ?? input.ocorridoEm,
@@ -1675,7 +1831,7 @@ export class ViagensMotoristaService {
       await this.prisma.viagem.update({
         where: { id: viagem.id },
         data: {
-          localDescargaId: input.localId ?? undefined,
+          localDescargaId: localId ?? undefined,
           descargaLat: input.lat ?? undefined,
           descargaLng: input.lng ?? undefined,
           descargaPrecisao: input.precisao ?? undefined,
@@ -1710,64 +1866,97 @@ export class ViagensMotoristaService {
       return serializarViagemComMinimos(existente!, await this.regrasMinimoAtivas());
     }
 
+    // Aqui é o ponto mais crítico da mudança: era este endpoint que, ao recusar,
+    // deixava a viagem presa em EM_ANDAMENTO no servidor pra sempre — e, com a
+    // trava antiga de "uma aberta por motorista", travava também TODAS as
+    // viagens seguintes do motorista. Um material desativado no painel
+    // paralisava a fila inteira de um caminhão. Nada aqui recusa mais.
+    const divs = new Divergencias();
+
     // Cliente já foi escolhido no iniciar — reusa o da viagem se o app não
     // reenviar. Compat: aceita clienteId no input (edição futura).
-    const clienteIdEfetivo = input.clienteId ?? viagem.clienteId;
-    if (!clienteIdEfetivo) throw new BadRequestException("Cliente não informado.");
-    const cliente = await this.prisma.cliente.findUnique({
-      where: { id: clienteIdEfetivo },
-      select: { empresaId: true },
-    });
-    if (!cliente) throw new NotFoundException("Cliente não encontrado");
+    const clienteIdInformado = input.clienteId ?? viagem.clienteId;
+    const cliente = clienteIdInformado
+      ? await this.prisma.cliente.findUnique({
+          where: { id: clienteIdInformado },
+          select: { empresaId: true },
+        })
+      : null;
+    let clienteIdEfetivo: string | null = clienteIdInformado ?? null;
+    if (!clienteIdInformado) {
+      divs.add(MotivoDivergencia.FALTA_CLIENTE);
+    } else if (!cliente) {
+      divs.add(MotivoDivergencia.CADASTRO_CLIENTE_SUMIU, { clienteId: clienteIdInformado });
+      clienteIdEfetivo = null;
+    }
 
     // Modo "aguardando peso": finaliza sem peso/ticket (romaneio no fim do dia).
     // Pula a validação de ticket (fica null) e a viagem vai pra AGUARDANDO_PESO
     // em vez de ENVIADA; peso e ticket entram depois via completarPeso/admin.
     const aguardandoPeso = input.aguardandoPeso === true;
-    const { ticket, duplicadoDeId } = aguardandoPeso
-      ? { ticket: null, duplicadoDeId: null }
-      : await this.resolverTicketParaEmpresa(
-          cliente.empresaId,
-          input.materialId,
-          input.ticket,
-          viagem.id,
-        );
+    const { ticket, duplicadoDeId } =
+      aguardandoPeso || !cliente
+        ? { ticket: aguardandoPeso ? null : input.ticket?.trim() || null, duplicadoDeId: null }
+        : await this.resolverTicketParaEmpresa(
+            cliente.empresaId,
+            input.materialId ?? null,
+            input.ticket,
+            viagem.id,
+            true,
+            divs,
+          );
 
     // Trechos adicionais (retorno do bota-fora). RETORNO_BOTA_FORA só vale se o
     // material permite (autoritativo); o app só oferece quando permite. localCarga
     // vem da viagem (foi escolhido no iniciar).
-    const materialFin = await this.prisma.material.findUnique({
-      where: { id: input.materialId },
-      select: { permiteBotaFora: true, temComprovanteFoto: true },
-    });
-    if (!materialFin) throw new ItemInexistenteException("materialId");
+    let materialIdFin: string | null = input.materialId ?? null;
+    const materialFin = materialIdFin
+      ? await this.prisma.material.findUnique({
+          where: { id: materialIdFin },
+          select: { permiteBotaFora: true, temComprovanteFoto: true },
+        })
+      : null;
+    if (!materialIdFin) {
+      divs.add(MotivoDivergencia.FALTA_MATERIAL);
+    } else if (!materialFin) {
+      divs.add(MotivoDivergencia.CADASTRO_MATERIAL_SUMIU, { materialId: materialIdFin });
+      materialIdFin = null;
+    }
+    if (input.km == null) divs.add(MotivoDivergencia.FALTA_KM);
+    if (!aguardandoPeso && (input.toneladas == null || Number(input.toneladas) <= 0)) {
+      divs.add(MotivoDivergencia.FALTA_TONELADAS);
+    }
 
     // Foto do comprovante (mesma regra do create): carimba a falta, nunca recusa.
     // O lifecycle guiado não escolhe modo de serviço (diária não passa por aqui),
     // então só o material suprime.
     const exigeFotoFin = exigeFotoDaViagem({
       contaExige: (await this.contaExigeFoto()).viagem,
-      materialTemComprovante: materialFin.temComprovanteFoto,
+      materialTemComprovante: materialFin?.temComprovanteFoto,
     });
     const trechosCreate = this.montarTrechos(
       input.trechos,
-      materialFin.permiteBotaFora === true,
+      materialFin?.permiteBotaFora === true,
       viagem.localCargaId,
     );
 
-    await this.garantirLocal({
-      id: input.localDescargaId,
-      snapshot: input.localDescargaDados,
-      lado: "descarga",
-      motoristaId,
-    });
+    const localDescargaId = input.localDescargaId
+      ? await this.garantirLocal({
+          id: input.localDescargaId,
+          snapshot: input.localDescargaDados,
+          lado: "descarga",
+          motoristaId,
+          divs,
+        })
+      : null;
+    if (!input.localDescargaId) divs.add(MotivoDivergencia.FALTA_LOCAL_DESCARGA);
 
     const finalizada = await this.prisma.viagem.update({
       where: { id: viagem.id },
       data: {
-        status: aguardandoPeso ? "AGUARDANDO_PESO" : "ENVIADA",
+        status: divs.statusFinal(aguardandoPeso ? "AGUARDANDO_PESO" : "ENVIADA"),
         clienteId: clienteIdEfetivo,
-        materialId: input.materialId,
+        materialId: materialIdFin,
         data: input.data,
         toneladas: aguardandoPeso ? null : input.toneladas,
         km: input.km,
@@ -1785,7 +1974,7 @@ export class ViagensMotoristaService {
         trechos: { deleteMany: {}, ...(trechosCreate.length ? { create: trechosCreate } : {}) },
         ticket,
         ticketDuplicadoDeId: duplicadoDeId,
-        localDescargaId: input.localDescargaId,
+        localDescargaId,
         descargaLat: input.descargaLat,
         descargaLng: input.descargaLng,
         descargaPrecisao: input.descargaPrecisao,
@@ -1806,6 +1995,10 @@ export class ViagensMotoristaService {
       },
       include: VIAGEM_INCLUDE,
     });
+
+    // Carimbos vão DEPOIS do update: a viagem fechada é o que importa, o
+    // carimbo é secundário (aplicarDivergencias nunca derruba o chamador).
+    await aplicarDivergencias(this.prisma, finalizada.id, divs);
 
     // Revalida locais + garante rota (best-effort, igual create).
     try {
@@ -1881,7 +2074,11 @@ export class ViagensMotoristaService {
 function grupoToStatus(
   grupo: "AGUARDANDO" | "CONFERIDA" | "DIVERGENTE",
 ): StatusViagem[] {
-  if (grupo === "AGUARDANDO") return ["ENVIADA", "EM_CONFERENCIA"];
+  // INCOMPLETA entra em AGUARDANDO de propósito: pro motorista, ele lançou e o
+  // escritório está conferindo — que é a verdade. O que falta (km, material,
+  // cadastro que sumiu) não é problema dele e NUNCA pode chegar como
+  // "divergência" na tela dele, que é justamente o que se quis acabar.
+  if (grupo === "AGUARDANDO") return ["ENVIADA", "EM_CONFERENCIA", "INCOMPLETA"];
   if (grupo === "CONFERIDA") return ["OK", "AJUSTADA"];
   return ["DIVERGENTE"];
 }
@@ -1889,7 +2086,9 @@ function grupoToStatus(
 function mapStatusToGrupo(
   status: StatusViagem,
 ): "AGUARDANDO" | "CONFERIDA" | "DIVERGENTE" | null {
-  if (status === "ENVIADA" || status === "EM_CONFERENCIA") return "AGUARDANDO";
+  if (status === "ENVIADA" || status === "EM_CONFERENCIA" || status === "INCOMPLETA") {
+    return "AGUARDANDO";
+  }
   if (status === "OK" || status === "AJUSTADA") return "CONFERIDA";
   if (status === "DIVERGENTE") return "DIVERGENTE";
   return null;

@@ -37,9 +37,18 @@ export const MODO_CLASSICO: ModoServico = {
 /** Uma diária mais longa que isso é quase certamente data digitada errada. */
 const MAX_DURACAO_MINUTOS = 30 * 24 * 60;
 
+/**
+ * Coletor de divergências (só o que esta função usa). Opcional: chamadores do
+ * painel não carimbam nada — lá o admin tem como corrigir na hora.
+ */
+type ColetorDivergencia = {
+  add: (motivo: "CADASTRO_TIPO_SERVICO_SUMIU", dados?: { tipoServicoId: string }) => unknown;
+};
+
 export async function resolverModoServico(
   prisma: PrismaService,
   tipoServicoId?: string | null,
+  divs?: ColetorDivergencia,
 ): Promise<ModoServico> {
   const select = {
     id: true,
@@ -56,8 +65,13 @@ export async function resolverModoServico(
     // o motorista ter que reeditar um lançamento que estava certo quando foi
     // feito. Desativar esconde do seletor; não invalida o que já saiu.
     const tipo = await prisma.tipoServico.findUnique({ where: { id: tipoServicoId }, select });
-    if (!tipo) throw new ItemInexistenteException("tipoServicoId");
-    return tipo;
+    if (tipo) return tipo;
+    // Tipo apagado do cadastro. Com coletor (lançamento do motorista) o
+    // lançamento NUNCA é recusado: cai no padrão da conta e sai carimbado pro
+    // conferente dizer como a viagem deve ser medida. Sem coletor (painel),
+    // segue recusando — lá quem está na tela consegue corrigir na hora.
+    if (!divs) throw new ItemInexistenteException("tipoServicoId");
+    divs.add("CADASTRO_TIPO_SERVICO_SUMIU", { tipoServicoId });
   }
 
   // Sem tipo explícito: herda o padrão da conta. Conta sem padrão (base antiga

@@ -27,6 +27,7 @@ import { UploadsService } from "../../uploads/uploads.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
 import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
+import { resolverDivergenciasSupridas } from "../../common/divergencias";
 import { filtrarComercial, omitirComercial } from "./comercial";
 import { PedagiosRodoviaConsultaService } from "../pedagios-rodovia/pedagios-rodovia-consulta.service";
 import { BuscaLocaisConfigService } from "../busca-locais-config/busca-locais-config.service";
@@ -50,6 +51,7 @@ type ListViagensParams = PaginationQuery & {
   kmForaDoPadrao?: boolean;
   /** true = só viagens com ticket repetido ainda não conferido. */
   ticketDuplicado?: boolean;
+  comDivergencia?: boolean;
   /** true = só viagens sem nenhuma foto anexada (cobrança de comprovante). */
   semFoto?: boolean;
   de?: string;
@@ -392,6 +394,9 @@ export class ViagensAdminService {
     // Sem NENHUMA foto: a viagem pode ter sido lançada com justificativa ou ter
     // perdido o arquivo no caminho — os dois casos precisam ser cobrados.
     if (params.semFoto) where.fotos = { none: {} };
+    // A fila de quem confere: tudo que o motorista lançou e o servidor aceitou
+    // com pendência (cadastro sumido, campo faltando, viagem que ficou aberta).
+    if (params.comDivergencia) where.divergencias = { some: { resolvidoEm: null } };
     if (params.de || params.ate) {
       where.data = {};
       if (params.de) where.data.gte = new Date(params.de);
@@ -407,6 +412,10 @@ export class ViagensAdminService {
           material: { select: { id: true; nome: true; exigeTicket: true } };
           tipoServico: { select: { id: true; nome: true; medicao: true } };
           ticketDuplicadoDe: { select: { id: true; ticket: true; data: true } };
+          divergencias: {
+            where: { resolvidoEm: null };
+            select: { id: true; motivo: true; detalhe: true; dados: true; criadoEm: true };
+          };
           localCarga: { select: { id: true; nome: true; cidade: true; uf: true } };
           localDescarga: { select: { id: true; nome: true; cidade: true; uf: true } };
           fotos: { select: { id: true; storageKey: true } };
@@ -450,6 +459,12 @@ export class ViagensAdminService {
         tipoServico: { select: { id: true, nome: true, medicao: true } },
         // Pro selo e pro link "ver a outra viagem" no painel.
         ticketDuplicadoDe: { select: { id: true, ticket: true, data: true } },
+        // O que o lançamento trouxe pendente. Só as ABERTAS: resolvida vira
+        // histórico e não tem por que continuar chamando atenção na lista.
+        divergencias: {
+          where: { resolvidoEm: null },
+          select: { id: true, motivo: true, detalhe: true, dados: true, criadoEm: true },
+        },
         localCarga: { select: { id: true, nome: true, cidade: true, uf: true } },
         localDescarga: { select: { id: true, nome: true, cidade: true, uf: true } },
         fotos: { select: { id: true, storageKey: true } },
@@ -495,6 +510,12 @@ export class ViagensAdminService {
         tipoServico: { select: { id: true, nome: true, medicao: true } },
         // Pro selo e pro link "ver a outra viagem" no painel.
         ticketDuplicadoDe: { select: { id: true, ticket: true, data: true } },
+        // No detalhe vêm TODAS (inclusive resolvidas): aqui o histórico ajuda
+        // quem está conferindo a entender o que a viagem já passou.
+        divergencias: {
+          orderBy: { criadoEm: "asc" },
+          include: { resolvidoPor: { select: { id: true, nome: true } } },
+        },
         localCarga: true,
         localDescarga: true,
         trechos: {
@@ -660,6 +681,24 @@ export class ViagensAdminService {
       where: { id },
       data: dataUpdate,
     });
+
+    // Viagem que entrou INCOMPLETA (o servidor aceitou o lançamento do motorista
+    // faltando dado, em vez de recusar e matá-lo no celular): o conferente
+    // resolve PREENCHENDO o campo, não marcando caixinha. Toda edição fecha
+    // sozinha os carimbos supridos e, quando não sobra nenhum bloqueante,
+    // promove a viagem pra ENVIADA na mesma ação.
+    const statusPosDivergencia = await resolverDivergenciasSupridas(
+      this.prisma,
+      depois,
+      usuarioId,
+    );
+    if (statusPosDivergencia && statusPosDivergencia !== depois.status) {
+      await this.prisma.viagem.update({
+        where: { id },
+        data: { status: statusPosDivergencia },
+      });
+      depois.status = statusPosDivergencia;
+    }
 
     // Remove o _count antes de gravar o diff — ele não é campo da entidade.
     const { _count: _ignored, ...antesPlain } = antes;

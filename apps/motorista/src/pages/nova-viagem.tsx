@@ -351,9 +351,13 @@ export default function NovaViagemPage() {
             l && l.lat != null && l.lng != null
               ? { nome: l.nome, lat: l.lat, lng: l.lng }
               : undefined;
+          // Mesma ideia pra placa: sem ela, um veículo excluído do cadastro
+          // obrigaria o servidor a adivinhar o caminhão da viagem.
+          const veiculo = (cat.data?.veiculos ?? []).find((v) => v.id === form.veiculoId);
           return {
             localCargaDados: snap(carga),
             localDescargaDados: snap(descarga),
+            veiculoDados: veiculo ? { placa: veiculo.placa } : undefined,
           };
         })(),
         valorPedagioTotal: form.valorPedagio

@@ -423,7 +423,7 @@ export class KmAtipicoService {
       AND (${excluir}::text IS NULL OR v.id <> ${excluir})
       AND v.km IS NOT NULL AND v.km > 0
       AND v.data >= ${desde}
-      AND v.status::text NOT IN ('RASCUNHO_OFFLINE','EM_ANDAMENTO','AGUARDANDO_PESO','DIVERGENTE')
+      AND v.status::text NOT IN ('RASCUNHO_OFFLINE','EM_ANDAMENTO','AGUARDANDO_PESO','AGUARDANDO_SAIDA','INCOMPLETA','DIVERGENTE')
       AND NOT EXISTS (SELECT 1 FROM trechos_viagem t WHERE t."viagemId" = v.id)
       AND NOT (v."kmForaDoPadrao" IS TRUE AND v."kmAceitoEm" IS NULL)
       AND (

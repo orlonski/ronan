@@ -54,6 +54,7 @@ import {
 import {
   onSyncChange,
   recuperarItensPresos,
+  reprocessarPassivoDeErros,
   startAutoSync,
 } from "@/lib/sync";
 
@@ -157,6 +158,11 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     void (async () => {
       await migrarProtecaoKeychain();
       await recuperarItensPresos();
+      // Traz pro painel o passivo que ficou preso em erro no aparelho (e
+      // devolve pra fila o que agora tem chance de subir). Sem toque do
+      // motorista: ele não causou nenhum desses erros e não tem como
+      // resolvê-los. Ver reprocessarPassivoDeErros em lib/sync.ts.
+      await reprocessarPassivoDeErros();
     })();
   }, []);
 

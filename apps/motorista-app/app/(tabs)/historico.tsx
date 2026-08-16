@@ -59,6 +59,8 @@ const statusVariant: Record<
   DIVERGENTE: "destructive",
   AJUSTADA: "secondary",
   AGUARDANDO_PESO: "warning",
+  // Nunca "destructive": o motorista não causou nem resolve o que falta.
+  INCOMPLETA: "warning",
 };
 
 const statusLabel: Record<string, string> = {
@@ -68,6 +70,8 @@ const statusLabel: Record<string, string> = {
   DIVERGENTE: "Divergente",
   AJUSTADA: "Ajustada",
   AGUARDANDO_PESO: "Aguardando peso",
+  // O escritório é que tem algo a preencher — pro motorista é conferência normal.
+  INCOMPLETA: "Conferindo",
 };
 
 const FILTROS: { key: "TODAS" | GrupoStatus; label: string }[] = [

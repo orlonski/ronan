@@ -95,6 +95,10 @@ export default function IniciarViagem() {
     try {
       await iniciarViagemGuiada({
         veiculoId,
+        // Snapshot da placa junto: se o veículo sumir do cadastro antes de esta
+        // viagem subir, o servidor readota pela placa em vez de ter que
+        // adivinhar o caminhão.
+        veiculoPlaca: veiculoOptions.find((o) => o.value === veiculoId)?.label,
         clienteId,
         clienteNome,
         coords: localCarga?.lat != null && localCarga?.lng != null
