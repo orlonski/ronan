@@ -174,19 +174,25 @@ Não precisa fazer nada — funciona sozinho após o deploy.
 - Easypanel mostra status, logs e uso de CPU/RAM por container.
 - Healthchecks já configurados nos Dockerfiles.
 
-## 8. Backup (opcional, mas recomendado)
+## 8. Backup
 
-A VPS sozinha não faz backup do banco. Pra ativar, ver `scripts/backup-postgres.sh` — script standalone que faz `pg_dump` diário e envia pra Cloudflare R2 (~R$ 5/mês).
+**Não é opcional.** Banco e fotos vivem num único servidor; sem cópia fora dele,
+qualquer perda é total e definitiva — e as fotos de ticket, que sustentam o
+faturamento, não têm como ser refeitas.
 
-Configuração:
-1. Criar bucket no Cloudflare R2
-2. Criar API token com permissão de write nesse bucket
-3. Adicionar variáveis de ambiente no Easypanel:
-   - `BACKUP_S3_ENDPOINT=https://CONTA.r2.cloudflarestorage.com`
-   - `BACKUP_S3_BUCKET=ronan-backups`
-   - `BACKUP_S3_ACCESS_KEY=...`
-   - `BACKUP_S3_SECRET_KEY=...`
-4. Criar **Cron Job** no Easypanel rodando o script às 3h da manhã.
+O passo a passo completo (bucket no R2, variáveis, cron, monitor de "parou de
+rodar", teste de restauração e o roteiro do dia do desastre) está em
+[`docs/backup.md`](docs/backup.md).
+
+Resumo do que existe:
+
+- `apps/backup/Dockerfile` — imagem com `pg_dump` 17 + `mc`, disparada por Cron.
+- `scripts/backup.sh` — dump do banco + espelho das fotos. **Nunca apaga nada no
+  destino**: a retenção é regra de ciclo de vida do R2, porque credencial com
+  poder de apagar guardada no servidor é poder que o invasor herda.
+- `scripts/restaurar-backup.sh` — restaura numa base descartável e confere as
+  contagens. Restaurar por cima de um banco real exige
+  `RESTAURAR_EM_PRODUCAO=sim-eu-tenho-certeza`.
 
 ## 9. Atualizando versões
 
