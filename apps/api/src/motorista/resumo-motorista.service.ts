@@ -102,7 +102,7 @@ export class ResumoMotoristaService {
 
   /**
    * Disparo manual (botão "Enviar resumo agora" no painel). Sempre monta e envia
-   * (ignora o gate de "sem movimento"), mas exige telefone + opt-in + Evolution.
+   * (ignora o gate de "sem movimento"), mas exige telefone + opt-in + provedor.
    * Deixa o erro de envio propagar pra o botão mostrar a falha.
    */
   async enviarAgora(motoristaId: string): Promise<{ enviado: boolean; motivo?: string }> {

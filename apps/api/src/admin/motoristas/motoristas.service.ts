@@ -106,7 +106,7 @@ export class MotoristasService {
   ) {}
 
   /**
-   * Envia uma mensagem de WhatsApp personalizada pro motorista (via Evolution).
+   * Envia uma mensagem de WhatsApp personalizada pro motorista.
    * Admin escreve o texto na tela de Motoristas. Reaproveita o número (SessaoService
    * normaliza pro DDI 55). Retorna se enviou + motivo quando não dá.
    */
