@@ -119,7 +119,7 @@ export class MotoristasService {
       select: { id: true, nome: true, telefone: true },
     });
     if (!m) throw new NotFoundException("Motorista não encontrado");
-    const disp = this.envio.disponivel("MENSAGEM_AVULSA");
+    const disp = await this.envio.disponivel("MENSAGEM_AVULSA");
     if (!disp.ok) {
       return { enviado: false, motivo: disp.motivo };
     }

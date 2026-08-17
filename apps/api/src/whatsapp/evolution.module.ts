@@ -3,6 +3,7 @@ import { AvisoGrupoService } from "./aviso-grupo.service";
 import { EvolutionClientService } from "./evolution-client.service";
 import { EnvioWhatsappService } from "./envio/envio-whatsapp.service";
 import { EvolutionProvedor } from "./envio/evolution.provedor";
+import { RoteamentoWhatsappService } from "./envio/roteamento.service";
 
 /**
  * Módulo fino do WhatsApp de saída. Separado do WhatsappModule (pesado — agente
@@ -15,7 +16,18 @@ import { EvolutionProvedor } from "./envio/evolution.provedor";
  * na Cloud API e é consumido direto pelo painel e pelo agente.
  */
 @Module({
-  providers: [EvolutionClientService, EvolutionProvedor, EnvioWhatsappService, AvisoGrupoService],
-  exports: [EvolutionClientService, EnvioWhatsappService, AvisoGrupoService],
+  providers: [
+    EvolutionClientService,
+    EvolutionProvedor,
+    RoteamentoWhatsappService,
+    EnvioWhatsappService,
+    AvisoGrupoService,
+  ],
+  exports: [
+    EvolutionClientService,
+    EnvioWhatsappService,
+    RoteamentoWhatsappService,
+    AvisoGrupoService,
+  ],
 })
 export class EvolutionModule {}

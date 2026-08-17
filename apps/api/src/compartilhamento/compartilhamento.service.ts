@@ -123,7 +123,7 @@ export class CompartilhamentoService implements OnModuleInit {
     escopo: EscopoAdmin,
   ) {
     await this.ensureViagemNoEscopo(viagemId, escopo);
-    const disp = this.envio.disponivel("COMPARTILHAMENTO");
+    const disp = await this.envio.disponivel("COMPARTILHAMENTO");
     if (!disp.ok) {
       throw new BadRequestException(disp.motivo);
     }

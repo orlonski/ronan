@@ -7,12 +7,18 @@ import {
   MessageCircle,
   QrCode,
   RefreshCw,
+  Route,
   Save,
   Trash2,
   Users,
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  CUSTO_ESTIMADO_BRL,
+  type CategoriaWhatsapp,
+  type ProvedorWhatsapp,
+} from "@ronan/shared-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -102,7 +108,7 @@ export default function WhatsappPage() {
   const [sessaoSelecionada, setSessaoSelecionada] = useState<string | null>(null);
   const { viewMode, setViewMode } = useListViewMode("whatsapp-sessoes");
 
-  const { temPermissao } = usePermissoes();
+  const { temPermissao, plataforma } = usePermissoes();
   const isAdmin = temPermissao("whatsapp.gerenciar");
 
   const status = useQuery({
@@ -175,6 +181,10 @@ export default function WhatsappPage() {
 
       {/* Aviso automático no grupo quando motorista se cadastra */}
       {status.data?.configurado && <AvisoGrupoCard isAdmin={isAdmin} online={status.data.state === "open"} />}
+
+      {/* Por qual serviço sai cada mensagem — só a plataforma. O backend também
+          gateia com PlataformaGuard; esconder aqui é conveniência, não defesa. */}
+      {plataforma && <RoteamentoCard />}
 
       {/* Sessões vinculadas */}
       <section className="space-y-3">
@@ -815,4 +825,175 @@ function fmtDataHora(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+type RotaConfig = {
+  chave: string;
+  rotulo: string;
+  descricao: string;
+  categoria: CategoriaWhatsapp;
+  critica: boolean;
+  provedores: ProvedorWhatsapp[];
+  provedor: ProvedorWhatsapp;
+  explicito: boolean;
+};
+
+type RoteamentoResposta = {
+  telefonesTeste: string[];
+  alteradoEm: string;
+  rotas: RotaConfig[];
+};
+
+/**
+ * Por qual serviço sai cada mensagem.
+ *
+ * Só a equipe da plataforma vê e mexe — trocar o provedor de uma rota muda
+ * quanto ela custa e, nas rotas de código, decide se o motorista consegue entrar
+ * no app. Por isso o backend gateia com `PlataformaGuard` e não com uma chave da
+ * matriz de permissões: esconder o card aqui é conveniência, não segurança.
+ */
+function RoteamentoCard() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  const { plataforma, conta } = usePermissoes();
+
+  const [contaAlvo, setContaAlvo] = useState<string>("");
+  const empresas = useQuery({
+    queryKey: ["contas-para-roteamento"],
+    enabled: !!token && plataforma,
+    staleTime: 5 * 60_000,
+    queryFn: () => fetchApi<{ id: string; nome: string }[]>("/admin/contas", { token }),
+  });
+
+  const alvo = contaAlvo || conta?.id || "";
+  const sufixo = alvo && alvo !== conta?.id ? `?contaId=${alvo}` : "";
+
+  const cfg = useQuery({
+    queryKey: ["roteamento-whatsapp", alvo],
+    enabled: !!token,
+    queryFn: () =>
+      fetchApi<RoteamentoResposta>(`/admin/roteamento-whatsapp${sufixo}`, { token }),
+  });
+
+  const salvar = useMutation({
+    mutationFn: (rotas: Record<string, ProvedorWhatsapp>) =>
+      fetchApi<RoteamentoResposta>(`/admin/roteamento-whatsapp${sufixo}`, {
+        token,
+        method: "PUT",
+        body: JSON.stringify({ rotas }),
+      }),
+    onSuccess: () => {
+      toast.success("Roteamento salvo");
+      void qc.invalidateQueries({ queryKey: ["roteamento-whatsapp"] });
+    },
+    onError: (e: Error) => toast.error("Não deu pra salvar", { description: e.message }),
+  });
+
+  const rotas = cfg.data?.rotas ?? [];
+  const naMeta = rotas.filter((r) => r.provedor === "meta").length;
+
+  return (
+    <Card className="space-y-4 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="flex items-center gap-2 text-sm font-bold">
+            <Route className="h-4 w-4" />
+            Por onde sai cada mensagem
+          </h2>
+          <p className="mt-1 max-w-2xl text-xs text-muted-foreground">
+            O <strong>Evolution</strong> não custa por mensagem e é o único que posta em grupo, mas
+            é não-oficial e o número pode ser banido. A <strong>Meta</strong> é oficial e não bane,
+            porém cobra por mensagem e, fora da janela de 24h, só entrega texto aprovado por ela.
+          </p>
+        </div>
+      </div>
+
+      {plataforma && (
+        <div className="space-y-2 border-t pt-3">
+          <label className="block text-xs font-medium text-muted-foreground">
+            Empresa que está sendo configurada
+          </label>
+          <Select value={alvo} onChange={(e) => setContaAlvo(e.target.value)}>
+            {(empresas.data ?? []).map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.nome}
+              </option>
+            ))}
+          </Select>
+          <p className="text-[11px] text-muted-foreground">
+            Dá pra virar uma rota só pra uma empresa — é assim que se testa antes de valer pra
+            todas.
+          </p>
+        </div>
+      )}
+
+      {cfg.isLoading && <LoadingCard label="Carregando roteamento..." />}
+
+      {rotas.length > 0 && (
+        <div className="space-y-2 border-t pt-3">
+          {rotas.map((r) => {
+            const soEvolution = r.provedores.length === 1;
+            return (
+              <div
+                key={r.chave}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
+              >
+                <div className="min-w-[16rem] flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{r.rotulo}</span>
+                    {r.critica && (
+                      <Badge className="border-amber-200 bg-amber-50 text-amber-800">
+                        trava o motorista se falhar
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">{r.descricao}</p>
+                  {r.provedor === "meta" && (
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      Custa ~{custoTexto(r.categoria)} por mensagem na Meta.
+                    </p>
+                  )}
+                </div>
+                <div className="w-44">
+                  <Select
+                    value={r.provedor}
+                    disabled={soEvolution || salvar.isPending}
+                    onChange={(e) =>
+                      salvar.mutate({ [r.chave]: e.target.value as ProvedorWhatsapp })
+                    }
+                  >
+                    {r.provedores.map((p) => (
+                      <option key={p} value={p}>
+                        {p === "evolution" ? "Evolution" : "Meta (oficial)"}
+                      </option>
+                    ))}
+                  </Select>
+                  {soEvolution && (
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      A Meta não posta em grupo.
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {naMeta > 0 && (
+        <p className="border-t pt-3 text-[11px] text-amber-700">
+          {naMeta === 1 ? "1 rota está" : `${naMeta} rotas estão`} apontada
+          {naMeta === 1 ? "" : "s"} pra Meta, que ainda não está ligada no servidor — enquanto isso
+          essas mensagens continuam saindo pelo Evolution.
+        </p>
+      )}
+    </Card>
+  );
+}
+
+/** Custo aproximado por mensagem, pra quem escolhe ver o preço junto. */
+function custoTexto(categoria: CategoriaWhatsapp): string {
+  const v = CUSTO_ESTIMADO_BRL[categoria] ?? 0;
+  if (v === 0) return "R$ 0";
+  return `R$ ${v.toFixed(2).replace(".", ",")}`;
 }

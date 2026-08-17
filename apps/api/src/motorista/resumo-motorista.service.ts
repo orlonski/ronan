@@ -60,7 +60,7 @@ export class ResumoMotoristaService {
   }
 
   private async enviarDiarioDaVez(): Promise<void> {
-    if (!this.envio.disponivel("RESUMO_MOTORISTA").ok) return;
+    if (!(await this.envio.disponivel("RESUMO_MOTORISTA")).ok) return;
     const motoristas = await this.prisma.motorista.findMany({
       where: {
         ativo: true,
@@ -111,7 +111,7 @@ export class ResumoMotoristaService {
       select: { id: true, telefone: true, aceitaWhatsapp: true, receberResumoDiario: true },
     });
     if (!m) throw new NotFoundException("Motorista não encontrado");
-    const disp = this.envio.disponivel("RESUMO_MOTORISTA");
+    const disp = await this.envio.disponivel("RESUMO_MOTORISTA");
     if (!disp.ok) {
       return { enviado: false, motivo: disp.motivo };
     }

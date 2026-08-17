@@ -101,7 +101,7 @@ export class ResumoService {
       },
     });
     if (users.length === 0) return;
-    const disp = this.envio.disponivel("RESUMO_GESTOR");
+    const disp = await this.envio.disponivel("RESUMO_GESTOR");
     if (!disp.ok) {
       this.log.warn(`Resumo diário: ${disp.motivo} — pulando.`);
       return;
@@ -139,7 +139,7 @@ export class ResumoService {
         "Usuário sem número de WhatsApp configurado. Edite o usuário e informe o número.",
       );
     }
-    const disp = this.envio.disponivel("RESUMO_GESTOR");
+    const disp = await this.envio.disponivel("RESUMO_GESTOR");
     if (!disp.ok) {
       throw new BadRequestException(disp.motivo);
     }

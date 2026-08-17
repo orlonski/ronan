@@ -19,6 +19,7 @@ import { IaConfigModule } from "./ia-config/ia-config.module";
 import { AgenteConfigModule } from "./agente-config/agente-config.module";
 import { BuscaLocaisConfigModule } from "./busca-locais-config/busca-locais-config.module";
 import { KmAtipicoConfigModule } from "./km-atipico-config/km-atipico-config.module";
+import { AdminRoteamentoWhatsappModule } from "./roteamento-whatsapp/roteamento-whatsapp.module";
 import { ForcaAtualizacaoModule } from "./forca-atualizacao/forca-atualizacao.module";
 import { LayoutImportModule } from "./layout-import/layout-import.module";
 import { CamposLayoutModule } from "./campos-layout/campos-layout.module";
@@ -54,6 +55,7 @@ import { LancamentosResgatadosAdminModule } from "./lancamentos-resgatados/lanca
     AgenteConfigModule,
     BuscaLocaisConfigModule,
     KmAtipicoConfigModule,
+    AdminRoteamentoWhatsappModule,
     ForcaAtualizacaoModule,
     LayoutImportModule,
     CamposLayoutModule,

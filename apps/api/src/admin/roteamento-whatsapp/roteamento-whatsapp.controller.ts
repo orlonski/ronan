@@ -1,0 +1,49 @@
+import { Body, Controller, Get, Put, Query, UseGuards } from "@nestjs/common";
+import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { AtualizarRoteamentoWhatsappInput } from "@ronan/shared-types";
+import { CurrentUser } from "../../auth/decorators/current-user.decorator";
+import { Roles } from "../../auth/decorators/roles.decorator";
+import { PlataformaGuard } from "../../auth/guards/plataforma.guard";
+import { RolesGuard } from "../../auth/guards/roles.guard";
+import type { AuthUser } from "../../auth/types";
+import { comConta } from "../../common/conta/conta-context";
+import { ZodValidationPipe } from "../../common/zod-validation.pipe";
+import { contaAlvo } from "../../whatsapp/conta-alvo";
+import { AdminRoteamentoWhatsappService } from "./roteamento-whatsapp.service";
+
+/**
+ * Por qual serviço sai cada mensagem de WhatsApp, por empresa.
+ *
+ * Atrás de `PlataformaGuard` e **fora do catálogo de permissões**, de propósito
+ * e pelo mesmo motivo da gestão de contas: trocar o provedor de uma rota muda
+ * quanto ela custa e pode deixar motorista sem receber o código de cadastro.
+ * Não é permissão que um administrador de empresa possa ganhar por engano numa
+ * matriz de checkbox — e o `PermissaoGuard` é fail-open, enquanto este é
+ * fail-closed.
+ *
+ * O `?contaId=` deixa a plataforma configurar em nome de qualquer empresa, do
+ * mesmo jeito que o aviso de grupo.
+ */
+@ApiTags("admin/roteamento-whatsapp")
+@ApiBearerAuth()
+@UseGuards(RolesGuard, PlataformaGuard)
+@Roles("ADMIN_USER")
+@Controller("admin/roteamento-whatsapp")
+export class AdminRoteamentoWhatsappController {
+  constructor(private readonly service: AdminRoteamentoWhatsappService) {}
+
+  @Get()
+  pegar(@CurrentUser() user: AuthUser, @Query("contaId") contaId?: string) {
+    return comConta(contaAlvo(user, contaId), () => this.service.pegar());
+  }
+
+  @Put()
+  salvar(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(AtualizarRoteamentoWhatsappInput))
+    body: AtualizarRoteamentoWhatsappInput,
+    @Query("contaId") contaId?: string,
+  ) {
+    return comConta(contaAlvo(user, contaId), () => this.service.salvar(body, user.id));
+  }
+}

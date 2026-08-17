@@ -400,6 +400,7 @@ model Conta {
   configuracoesIa               ConfiguracaoIa[]
   configuracoesAgente           ConfiguracaoAgente[]
   configuracoesAvisoGrupo       ConfiguracaoAvisoGrupo[]
+  configuracoesRoteamentoWpp    ConfiguracaoRoteamentoWhatsapp[]
   configuracoesBuscaLocais      ConfiguracaoBuscaLocais[]
   configuracoesKmAtipico        ConfiguracaoKmAtipico[]
   configuracoesForcaAtualizacao ConfiguracaoForcaAtualizacao[]
@@ -463,6 +464,7 @@ model User {
   configsAgente              ConfiguracaoAgente[]
   configsBuscaLocais         ConfiguracaoBuscaLocais[]
   configsAvisoGrupo          ConfiguracaoAvisoGrupo[]
+  configsRoteamentoWpp       ConfiguracaoRoteamentoWhatsapp[]
   configsForcaAtualizacao    ConfiguracaoForcaAtualizacao[]
   configsKmAtipico           ConfiguracaoKmAtipico[]
   mensagensViagem            ViagemMensagem[]               @relation("MensagensViagem")
@@ -2341,6 +2343,45 @@ model ConfiguracaoAvisoGrupo {
 
   @@unique([contaId])
   @@map("configuracao_aviso_grupo")
+}
+
+/// Singleton (por conta): por qual serviço sai cada tipo de mensagem de WhatsApp.
+///
+/// O sistema fala WhatsApp por dois caminhos — Evolution (não-oficial, manda pra
+/// grupo, de graça, mas o número pode ser banido) e Meta Cloud API (oficial,
+/// custa por mensagem, exige template aprovado fora da janela de 24h, e não
+/// enxerga grupo). A escolha é por MENSAGEM, não global: o código de cadastro
+/// tem que sair pelo caminho que não cai, e o aviso de grupo só existe num deles.
+///
+/// Quem mexe aqui é SÓ a equipe da plataforma (`PlataformaGuard` no endpoint, e
+/// não uma chave da matriz de permissões): trocar o provedor de uma rota muda
+/// quanto ela custa e pode deixar motorista sem conseguir entrar no app.
+///
+/// A linha é por conta porque a empresa com número próprio vai precisar disso —
+/// e, de brinde, dá a granularidade de "vira só pra uma empresa piloto" sem
+/// código extra.
+model ConfiguracaoRoteamentoWhatsapp {
+  contaId String @default("__SEM_CONTA__")
+  conta   Conta  @relation(fields: [contaId], references: [id])
+  id      String @id @default(uuid())
+
+  /// Mapa `chave da rota -> provedor` (ex: {"RESUMO_MOTORISTA":"meta"}).
+  /// Rota ausente = o padrão do código (hoje, Evolution pra tudo). Json e não
+  /// linha-por-rota porque o catálogo é de código: rota nova já nasce
+  /// funcionando e rota removida vira chave órfã inofensiva, sem migration.
+  rotas Json @default("{}")
+
+  /// Telefones (só dígitos, com DDI) que saem pelo provedor novo mesmo com a
+  /// rota ainda apontada pro antigo. É como se testa uma rota em produção sem
+  /// virar a chave pra ninguém.
+  telefonesTeste String[] @default([])
+
+  alteradoEm    DateTime @updatedAt
+  alteradoPor   User?    @relation(fields: [alteradoPorId], references: [id])
+  alteradoPorId String?
+
+  @@unique([contaId])
+  @@map("configuracao_roteamento_whatsapp")
 }
 
 /// Singleton (id="default"): raios da busca de local de DESCARGA por GPS.

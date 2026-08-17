@@ -1,8 +1,10 @@
 import { Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
-import { provedorAtendeRota, rotaWhatsapp, type RotaWhatsapp } from "@ronan/shared-types";
+import { rotaWhatsapp, type ProvedorWhatsapp, type RotaWhatsapp } from "@ronan/shared-types";
 import { EvolutionProvedor } from "./evolution.provedor";
+import { RoteamentoWhatsappService } from "./roteamento.service";
 import {
   ROTULO_PROVEDOR,
+  type DestinoWhatsapp,
   type EnvioWhatsapp,
   type ProvedorWhatsappClient,
   type ResultadoEnvio,
@@ -34,31 +36,43 @@ const FALHA_GENERICA =
 export class EnvioWhatsappService {
   private readonly log = new Logger("EnvioWhatsapp");
 
-  constructor(private readonly evolution: EvolutionProvedor) {}
+  constructor(
+    private readonly evolution: EvolutionProvedor,
+    private readonly roteamento: RoteamentoWhatsappService,
+  ) {}
 
   /**
-   * Qual provedor entrega esta rota.
+   * Os provedores que existem de verdade neste processo.
    *
-   * Hoje é sempre o Evolution — a Meta ainda não está ligada. Quando entrar, é
-   * AQUI que a configuração de roteamento por conta é lida, e em nenhum outro
-   * lugar. Quem chama nunca escolhe provedor.
-   *
-   * Já respeita a lista de provedores do catálogo: a rota do aviso de grupo
-   * declara só `evolution`, e continuará no Evolution mesmo depois que a Meta
-   * existir, porque a Cloud API não posta em grupo.
+   * A Meta ainda não tem implementação. Uma rota configurada pra ela cai no
+   * Evolution com um aviso — o que é o comportamento certo: config apontando
+   * pra um provedor que ainda não existe não pode deixar de mandar a mensagem.
    */
-  private provedorDa(rota: RotaWhatsapp): ProvedorWhatsappClient {
-    const provedor = this.evolution;
-    if (!provedorAtendeRota(rota, provedor.nome)) {
-      // Só acontece se alguém tirar um provedor do catálogo sem ajustar aqui.
-      this.log.warn(`rota ${rota} não declara suporte a ${provedor.nome} — enviando assim mesmo`);
-    }
-    return provedor;
+  private clienteDe(provedor: ProvedorWhatsapp): ProvedorWhatsappClient {
+    if (provedor === "evolution") return this.evolution;
+    this.log.warn(`provedor "${provedor}" ainda não implementado — indo pelo Evolution`);
+    return this.evolution;
+  }
+
+  /**
+   * Qual provedor entrega este envio. É o único ponto do sistema que lê a
+   * configuração de roteamento — quem chama nunca escolhe provedor.
+   */
+  private async provedorDe(
+    rota: RotaWhatsapp,
+    destino?: DestinoWhatsapp,
+  ): Promise<ProvedorWhatsappClient> {
+    const { provedor } = await this.roteamento.resolver({
+      rota,
+      destinoEhGrupo: destino?.tipo === "GRUPO",
+      telefone: destino?.tipo === "TELEFONE" ? destino.numero : undefined,
+    });
+    return this.clienteDe(provedor);
   }
 
   /** Se dá pra mandar esta rota agora, e o motivo quando não dá. */
-  disponivel(rota: RotaWhatsapp): { ok: boolean; motivo?: string } {
-    const provedor = this.provedorDa(rota);
+  async disponivel(rota: RotaWhatsapp): Promise<{ ok: boolean; motivo?: string }> {
+    const provedor = await this.provedorDe(rota);
     if (!provedor.configurado()) {
       return {
         ok: false,
@@ -87,7 +101,7 @@ export class EnvioWhatsappService {
 
   /** Manda e devolve o que aconteceu. Nunca lança. */
   async tentarEnviar(envio: EnvioWhatsapp): Promise<ResultadoEnvio> {
-    const provedor = this.provedorDa(envio.rota);
+    const provedor = await this.provedorDe(envio.rota, envio.destino);
 
     if (!provedor.configurado()) {
       return {

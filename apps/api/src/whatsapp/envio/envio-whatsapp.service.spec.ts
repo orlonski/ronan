@@ -3,6 +3,7 @@ import { ServiceUnavailableException } from "@nestjs/common";
 import { EnvioWhatsappService } from "./envio-whatsapp.service";
 import type { EnvioWhatsapp, ResultadoEnvio } from "./envio.types";
 import type { EvolutionProvedor } from "./evolution.provedor";
+import type { RoteamentoWhatsappService } from "./roteamento.service";
 
 /** Um provedor de mentira, pra poder testar a fachada sem rede. */
 function provedorFake(opts: { configurado?: boolean; resultado?: Partial<ResultadoEnvio> } = {}) {
@@ -21,8 +22,24 @@ function provedorFake(opts: { configurado?: boolean; resultado?: Partial<Resulta
   };
 }
 
-function servico(fake: ReturnType<typeof provedorFake>) {
-  return new EnvioWhatsappService(fake as unknown as EvolutionProvedor);
+/**
+ * Roteamento de mentira: manda tudo pro Evolution, como o padrão de hoje. O
+ * roteamento de verdade tem spec próprio (`roteamento.service.spec.ts`).
+ */
+function roteamentoFake(provedor: "evolution" | "meta" = "evolution") {
+  return {
+    resolver: vi.fn(async () => ({ provedor, motivo: "teste" })),
+  };
+}
+
+function servico(
+  fake: ReturnType<typeof provedorFake>,
+  roteia: "evolution" | "meta" = "evolution",
+) {
+  return new EnvioWhatsappService(
+    fake as unknown as EvolutionProvedor,
+    roteamentoFake(roteia) as unknown as RoteamentoWhatsappService,
+  );
 }
 
 const paraMotorista = (rota: EnvioWhatsapp["rota"]): EnvioWhatsapp => ({
@@ -90,15 +107,30 @@ describe("EnvioWhatsappService.tentarEnviar", () => {
   });
 });
 
+describe("provedor configurado mas ainda não implementado", () => {
+  it("cai no Evolution em vez de deixar de enviar", async () => {
+    // Alguém aponta uma rota pra Meta antes de a Meta existir no código. A
+    // mensagem TEM que sair mesmo assim — config apontando pro futuro não pode
+    // virar motorista sem código de cadastro.
+    const fake = provedorFake();
+    const r = await servico(fake, "meta").tentarEnviar(paraMotorista("RESUMO_MOTORISTA"));
+    expect(r.enviado).toBe(true);
+    expect(r.provedor).toBe("evolution");
+    expect(fake.enviar).toHaveBeenCalledOnce();
+  });
+});
+
 describe("EnvioWhatsappService.disponivel", () => {
   it("diz o nome do provedor no motivo, pra o painel mostrar", async () => {
-    expect(servico(provedorFake({ configurado: false })).disponivel("RESUMO_GESTOR")).toEqual({
+    await expect(
+      servico(provedorFake({ configurado: false })).disponivel("RESUMO_GESTOR"),
+    ).resolves.toEqual({
       ok: false,
       motivo: "WhatsApp (Evolution) não está configurado no servidor.",
     });
   });
 
-  it("ok quando configurado", () => {
-    expect(servico(provedorFake()).disponivel("RESUMO_GESTOR")).toEqual({ ok: true });
+  it("ok quando configurado", async () => {
+    await expect(servico(provedorFake()).disponivel("RESUMO_GESTOR")).resolves.toEqual({ ok: true });
   });
 });
