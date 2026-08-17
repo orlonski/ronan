@@ -1,19 +1,9 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from "@nestjs/common";
-import { createHash, timingSafeEqual } from "node:crypto";
 import type { Request } from "express";
 import { RunnerConfig } from "./runner.config";
+import { segredoConfere } from "../common/seguranca/segredo";
 
-/**
- * Compara dois segredos em tempo constante. Compara o SHA-256 dos dois (não o
- * texto): `timingSafeEqual` exige buffers do mesmo tamanho, e comparar tamanho
- * antes já vazaria o comprimento do segredo.
- */
-export function segredoConfere(recebido: string | undefined, esperado: string): boolean {
-  if (!esperado || !recebido) return false;
-  const a = createHash("sha256").update(recebido, "utf8").digest();
-  const b = createHash("sha256").update(esperado, "utf8").digest();
-  return timingSafeEqual(a, b);
-}
+export { segredoConfere };
 
 /**
  * Autenticação do webhook: header `X-Runner-Token` + (opcional) segmento

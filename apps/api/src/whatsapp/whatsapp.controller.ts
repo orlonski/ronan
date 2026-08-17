@@ -3,7 +3,9 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   HttpCode,
+  Logger,
   Param,
   Post,
   Put,
@@ -19,6 +21,7 @@ import { RequerPermissao } from "../auth/decorators/requer-permissao.decorator";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { AuthUser } from "../auth/types";
 import { comConta } from "../common/conta/conta-context";
+import { segredoConfere } from "../common/seguranca/segredo";
 import { contaAlvo } from "./conta-alvo";
 import { AvisoGrupoService } from "./aviso-grupo.service";
 import { ConviteService } from "./convite.service";
@@ -34,9 +37,18 @@ import { WhatsappService } from "./whatsapp.service";
  */
 let ultimoQrCode: { base64: string | null; capturadoEm: Date } | null = null;
 
+/**
+ * Headers em que o segredo do webhook pode chegar. O Evolution v2 manda a
+ * `apikey` da instância; um proxy na frente pode preferir um header próprio.
+ * Conferimos os dois pra não depender de um detalhe de config remota.
+ */
+const HEADERS_SEGREDO_WEBHOOK = ["apikey", "x-webhook-secret"] as const;
+
 @ApiTags("whatsapp")
 @Controller()
 export class WhatsappController {
+  private readonly log = new Logger("WhatsappWebhook");
+
   constructor(
     private readonly service: WhatsappService,
     private readonly sessao: SessaoService,
@@ -47,22 +59,32 @@ export class WhatsappController {
   ) {}
 
   /**
-   * Webhook do Evolution. Sem auth de JWT — Evolution chama com header `apikey`,
-   * que validamos contra `EVOLUTION_API_KEY`. Resposta 200 imediata pra não
-   * bloquear o Evolution; processamento é fire-and-forget.
+   * Webhook do Evolution. Sem auth de JWT (`@Public()` pula o guard global) —
+   * a autenticação é o segredo compartilhado em `WHATSAPP_WEBHOOK_SECRET`,
+   * mandado pelo Evolution num header.
+   *
+   * ⚠️ ETAPA 1 DE 2 — hoje a conferência só OBSERVA: quando o segredo não bate,
+   * loga e deixa passar. É de propósito. O Evolution v2 não garante qual header
+   * manda no webhook (depende da config da instância), e ligar a recusa no
+   * escuro derrubaria todo o inbound em produção. Depois de 24h de log limpo
+   * confirmando qual header chega, trocar o `warn` por `UnauthorizedException`.
+   *
+   * Resposta 200 imediata pra não bloquear o Evolution; processamento é
+   * fire-and-forget.
    */
   @Public()
   @Post("whatsapp/webhook")
   @HttpCode(200)
-  async webhook(@Body() body: any) {
+  async webhook(@Body() body: any, @Headers() headers: Record<string, string | string[]>) {
     const event = body?.event;
-    // Loga TUDO que chega — útil pra debug enquanto a integração está sendo
-    // pareada. Removível depois.
-    console.log(`[whatsapp] webhook event=${event}`, JSON.stringify(body).slice(0, 500));
+    this.conferirSegredo(headers, event);
+    // Só o tipo do evento. O corpo carrega mensagem de motorista (dado pessoal)
+    // e não tem por que ficar no log de produção.
+    this.log.log(`webhook event=${event}`);
 
     if (event === "messages.upsert") {
       this.service.processarMensagemRecebida(body).catch((e) => {
-        console.error("processarMensagemRecebida falhou:", e);
+        this.log.error(`processarMensagemRecebida falhou: ${(e as Error).message}`);
       });
     } else if (event === "qrcode.updated" || event === "QRCODE_UPDATED") {
       // Captura QR pra exibir no painel. Salva em memória global (simples) —
@@ -71,12 +93,45 @@ export class WhatsappController {
       const base64 = data?.qrcode?.base64 ?? data?.qrcode ?? null;
       if (base64) {
         ultimoQrCode = { base64: typeof base64 === "string" ? base64 : null, capturadoEm: new Date() };
-        console.log("[whatsapp] QR capturado via webhook, tamanho:", String(base64).length);
+        this.log.log(`QR capturado via webhook, tamanho: ${String(base64).length}`);
       }
     } else if (event === "connection.update" || event === "CONNECTION_UPDATE") {
-      console.log("[whatsapp] connection state:", body?.data?.state);
+      this.log.log(`connection state: ${body?.data?.state}`);
     }
     return { ok: true };
+  }
+
+  /**
+   * Confere o segredo compartilhado do webhook. Só observa e loga — ver o aviso
+   * de ETAPA 1 DE 2 no handler.
+   *
+   * O valor recebido NUNCA é logado, nem em erro. O que vai pro log é só qual
+   * header chegou, pra dar pra descobrir onde o Evolution põe o segredo antes
+   * de ligar a recusa.
+   */
+  private conferirSegredo(headers: Record<string, string | string[]>, event: unknown): void {
+    const esperado = this.config.get<string>("WHATSAPP_WEBHOOK_SECRET");
+    if (!esperado) {
+      // Sem segredo configurado não há o que conferir. Avisa uma vez por
+      // evento pra não passar despercebido em produção.
+      this.log.warn(`WHATSAPP_WEBHOOK_SECRET não configurado — webhook aberto (event=${event})`);
+      return;
+    }
+
+    const presentes = HEADERS_SEGREDO_WEBHOOK.filter((h) => headers[h] !== undefined);
+    const bateu = HEADERS_SEGREDO_WEBHOOK.find((h) => {
+      const v = headers[h];
+      return segredoConfere(Array.isArray(v) ? v[0] : v, esperado);
+    });
+
+    if (bateu) {
+      this.log.debug(`segredo do webhook conferido no header "${bateu}"`);
+      return;
+    }
+    this.log.warn(
+      `segredo do webhook NÃO bateu (event=${event}) — headers de segredo presentes: ` +
+        `${presentes.length ? presentes.join(", ") : "nenhum"}. Passando assim mesmo (etapa 1 de 2).`,
+    );
   }
 
   /** Endpoint extra pra ler o último QR recebido por webhook (workaround quando
