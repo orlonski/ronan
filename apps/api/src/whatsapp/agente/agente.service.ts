@@ -7,6 +7,7 @@ import { DashboardService } from "../../admin/dashboard/dashboard.service";
 import { ErrorsService } from "../../errors/errors.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { EvolutionClientService } from "../evolution-client.service";
+import { EnvioWhatsappService } from "../envio/envio-whatsapp.service";
 import type { SessaoResolvida } from "../sessao.service";
 import { construirTools, executarTool } from "./tools";
 import { systemPromptMotorista, systemPromptAdmin } from "./prompts";
@@ -54,6 +55,7 @@ export class AgenteService {
     private readonly errors: ErrorsService,
     private readonly uploads: UploadsService,
     private readonly evolution: EvolutionClientService,
+    private readonly envio: EnvioWhatsappService,
   ) {
     this.providers = {
       anthropic: new AnthropicProvider(this.config.get<string>("ANTHROPIC_API_KEY")),
@@ -173,6 +175,7 @@ export class AgenteService {
           errors: this.errors,
           uploads: this.uploads,
           evolution: this.evolution,
+          envio: this.envio,
           metadata,
         });
       },

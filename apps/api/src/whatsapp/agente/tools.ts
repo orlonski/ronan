@@ -7,6 +7,7 @@ import { DashboardService } from "../../admin/dashboard/dashboard.service";
 import { ErrorsService } from "../../errors/errors.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { EvolutionClientService } from "../evolution-client.service";
+import { EnvioWhatsappService } from "../envio/envio-whatsapp.service";
 import { ymdSaoPaulo } from "../../common/timezone";
 import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
 import type { SessaoResolvida } from "../sessao.service";
@@ -24,7 +25,9 @@ export type ToolContext = {
   dashboard: DashboardService;
   errors: ErrorsService;
   uploads: UploadsService;
+  /** Só pro download de mídia — quem envia é o `envio`. */
   evolution: EvolutionClientService;
+  envio: EnvioWhatsappService;
   metadata?: {
     evolutionMessageId?: string;
     tipoMidia?: "imagem" | "audio";
@@ -582,7 +585,15 @@ async function executarToolInterno(
       const mensagem =
         `${pergunta}\n\n${linhas.join("\n")}\n\n_Responde com o número ou o nome._`;
 
-      await ctx.evolution.enviarTexto(telefone, mensagem);
+      // Aqui a falha PROPAGA (503), diferente das outras respostas do agente:
+      // se as opções não chegam, o motorista fica esperando uma pergunta que
+      // não existe, e o turno já terminou.
+      await ctx.envio.enviarOuFalhar({
+        destino: { tipo: "TELEFONE", numero: telefone },
+        rota: "RESPOSTA_AGENTE",
+        texto: mensagem,
+        sessaoId: ctx.identidade.sessaoId,
+      });
 
       // Persiste a mensagem enviada como SAIDA (assim o histórico do agente
       // já vê isso na próxima mensagem do motorista).

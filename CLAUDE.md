@@ -44,7 +44,9 @@ pnpm --filter @ronan/api exec prisma migrate deploy   # aplicar migrations sem g
 
 ### Testes
 
-Não existe suíte de unidade rodando (`apps/api` tem vitest configurado mas sem arquivos de teste). A cobertura real é **Playwright E2E**, que exige api+dashboard+PWA de pé e banco semeado — ver `tests/e2e/README.md`.
+`apps/api` tem **vitest** com ~140 testes de unidade (regras puras e o runner do ClickUp): `cd apps/api && pnpm exec vitest run`. A cobertura de fluxo é **Playwright E2E**, que exige api+dashboard+PWA de pé e banco semeado — ver `tests/e2e/README.md`.
+
+`pnpm lint` **não roda**: nenhum app tem `eslint.config.js` (ESLint 9 exige o formato novo e a migração nunca foi feita). Falha em todos os pacotes, é anterior a qualquer mudança — não confundir com regressão.
 
 ```bash
 pnpm exec playwright install chromium          # 1ª vez
@@ -100,6 +102,18 @@ Corpo das rotas usa **Zod dos `shared-types`** via `ZodValidationPipe` (não cla
 - `common/viagem-status.ts` — `STATUS_FORA_FECHAMENTO` (`EM_ANDAMENTO`, `AGUARDANDO_PESO`): viagens incompletas que nunca entram em match/fechamento/KPI/export. Esquecer um ponto de exclusão faz viagem sem peso entrar como 0t.
 - `common/viagem-minimos.ts` — `RegraMinimo` (empresa+material+faixa de km → km/ton mínimo faturado). O real nunca é sobrescrito no banco; o mínimo é aplicado ao **exibir/agregar/faturar**. Todo cálculo de efetivo passa por aqui.
 - `common/timezone.ts` — container roda em UTC; "hoje"/mês devem ancorar em `America/Sao_Paulo`, nunca `setHours(0)`.
+
+### Enviar WhatsApp: sempre pelo `EnvioWhatsappService`
+
+Todo envio passa por `whatsapp/envio/envio-whatsapp.service.ts` declarando **qual mensagem é** (a `rota`, catálogo em `shared-types/src/whatsapp-mensagens.ts`). Nunca chamar `EvolutionClientService.enviarTexto` direto — é o que permite escolher provedor por mensagem quando a Meta Cloud API entrar.
+
+- `enviarOuFalhar` lança `503 ENVIO_WHATSAPP_FALHOU` — pra quem não pode dizer que enviou sem ter enviado (códigos, link de comprovante).
+- `tentarEnviar` devolve o resultado e nunca lança — pra quem roda em cron/webhook e não pode derrubar o fluxo.
+- `disponivel(rota)` no lugar de `evolution.configurado`: checar só o Evolution faz rota apontada pra outro provedor virar no-op silencioso.
+- `params` são os valores de template da Meta. Cada um tem que ser **uma linha só** — a Meta recusa parâmetro com `\n`, tab ou 4+ espaços. Usar `achatarParam`.
+- `AVISO_GRUPO` nunca sai do Evolution: a Cloud API não posta em grupo. Um número também não pode estar nos dois provedores — registrar na Meta desfaz o pareamento do WhatsApp Web.
+
+O `EvolutionClientService` segue exportado só pro que é exclusivo dele: grupos, QR code, status da instância e download de mídia.
 
 ### Serviços externos
 

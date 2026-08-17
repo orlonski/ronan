@@ -6,7 +6,7 @@ import {
 } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { PrismaService } from "../../prisma/prisma.service";
-import { EvolutionClientService } from "../../whatsapp/evolution-client.service";
+import { EnvioWhatsappService } from "../../whatsapp/envio/envio-whatsapp.service";
 import { SessaoService } from "../../whatsapp/sessao.service";
 import {
   inicioDoDiaData,
@@ -70,7 +70,7 @@ export class ResumoService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly evolution: EvolutionClientService,
+    private readonly envio: EnvioWhatsappService,
   ) {}
 
   /** Todo dia às 20:00 de Brasília. */
@@ -101,8 +101,9 @@ export class ResumoService {
       },
     });
     if (users.length === 0) return;
-    if (!this.evolution.configurado) {
-      this.log.warn("Resumo diário: Evolution não configurado — pulando.");
+    const disp = this.envio.disponivel("RESUMO_GESTOR");
+    if (!disp.ok) {
+      this.log.warn(`Resumo diário: ${disp.motivo} — pulando.`);
       return;
     }
     let ok = 0;
@@ -138,8 +139,9 @@ export class ResumoService {
         "Usuário sem número de WhatsApp configurado. Edite o usuário e informe o número.",
       );
     }
-    if (!this.evolution.configurado) {
-      throw new BadRequestException("WhatsApp (Evolution) não está configurado no servidor.");
+    const disp = this.envio.disponivel("RESUMO_GESTOR");
+    if (!disp.ok) {
+      throw new BadRequestException(disp.motivo);
     }
     const chaves = new Set(u.resumoAssuntos);
     if (chaves.size === 0) {
@@ -154,7 +156,11 @@ export class ResumoService {
 
   private async enviar(numeroRaw: string, texto: string): Promise<void> {
     const numero = SessaoService.normalizar(numeroRaw);
-    await this.evolution.enviarTexto(numero, texto);
+    await this.envio.enviarOuFalhar({
+      destino: { tipo: "TELEFONE", numero },
+      rota: "RESUMO_GESTOR",
+      texto,
+    });
   }
 
   /**

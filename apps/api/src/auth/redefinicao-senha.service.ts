@@ -9,7 +9,7 @@ import { randomInt } from "node:crypto";
 import { formatCpf, telefoneDigits } from "@ronan/shared-types";
 import { comConta, comoSistema } from "../common/conta/conta-context";
 import { PrismaService } from "../prisma/prisma.service";
-import { EvolutionClientService } from "../whatsapp/evolution-client.service";
+import { EnvioWhatsappService } from "../whatsapp/envio/envio-whatsapp.service";
 import { SessaoService } from "../whatsapp/sessao.service";
 import { AdminInboxService } from "../admin/inbox/inbox.service";
 import { AvisoGrupoService } from "../whatsapp/aviso-grupo.service";
@@ -42,7 +42,7 @@ export class RedefinicaoSenhaService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly evolution: EvolutionClientService,
+    private readonly envio: EnvioWhatsappService,
     private readonly inbox: AdminInboxService,
     private readonly auth: AuthService,
     private readonly avisoGrupo: AvisoGrupoService,
@@ -323,10 +323,12 @@ export class RedefinicaoSenhaService {
 
   private async enviarCodigo(telefone: string, codigo: string) {
     const numero = SessaoService.normalizar(telefone);
-    await this.evolution.enviarTexto(
-      numero,
-      `Seu código pra redefinir a senha Movatruck é ${codigo}. Vale por ${CODIGO_TTL_MIN} minutos. Se não foi você, ignore.`,
-    );
+    await this.envio.enviarOuFalhar({
+      destino: { tipo: "TELEFONE", numero },
+      rota: "OTP_SENHA",
+      texto: `Seu código pra redefinir a senha Movatruck é ${codigo}. Vale por ${CODIGO_TTL_MIN} minutos. Se não foi você, ignore.`,
+      params: [codigo, String(CODIGO_TTL_MIN)],
+    });
   }
 }
 

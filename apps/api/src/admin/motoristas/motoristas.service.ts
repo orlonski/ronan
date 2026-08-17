@@ -18,7 +18,7 @@ import { comoSistema } from "../../common/conta/conta-context";
 import { AuthService } from "../../auth/auth.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { PushService } from "../../push/push.service";
-import { EvolutionClientService } from "../../whatsapp/evolution-client.service";
+import { EnvioWhatsappService } from "../../whatsapp/envio/envio-whatsapp.service";
 import { SessaoService } from "../../whatsapp/sessao.service";
 import { paginate, type Paginated, type PaginationQuery } from "../../common/pagination";
 import { ymdSaoPaulo } from "../../common/timezone";
@@ -102,7 +102,7 @@ export class MotoristasService {
     private readonly uploads: UploadsService,
     private readonly push: PushService,
     private readonly eas: EasUpdateService,
-    private readonly evolution: EvolutionClientService,
+    private readonly envio: EnvioWhatsappService,
   ) {}
 
   /**
@@ -119,17 +119,21 @@ export class MotoristasService {
       select: { id: true, nome: true, telefone: true },
     });
     if (!m) throw new NotFoundException("Motorista não encontrado");
-    if (!this.evolution.configurado) {
-      return { enviado: false, motivo: "WhatsApp (Evolution) não está configurado no servidor." };
+    const disp = this.envio.disponivel("MENSAGEM_AVULSA");
+    if (!disp.ok) {
+      return { enviado: false, motivo: disp.motivo };
     }
     if (!m.telefone) {
       return { enviado: false, motivo: "Motorista sem telefone cadastrado." };
     }
     const numero = SessaoService.normalizar(m.telefone);
-    try {
-      await this.evolution.enviarTexto(numero, mensagem);
-    } catch (err) {
-      return { enviado: false, motivo: `Falha no envio: ${(err as Error).message}` };
+    const r = await this.envio.tentarEnviar({
+      destino: { tipo: "TELEFONE", numero },
+      rota: "MENSAGEM_AVULSA",
+      texto: mensagem,
+    });
+    if (!r.enviado) {
+      return { enviado: false, motivo: `Falha no envio: ${r.erro?.detalhe ?? "motivo desconhecido"}` };
     }
     return { enviado: true };
   }

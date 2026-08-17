@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { PrismaService } from "../prisma/prisma.service";
-import { EvolutionClientService } from "../whatsapp/evolution-client.service";
+import { EnvioWhatsappService } from "../whatsapp/envio/envio-whatsapp.service";
 import { SessaoService } from "../whatsapp/sessao.service";
 import { inicioDoDiaData, ymdSaoPaulo } from "../common/timezone";
 import { paraCadaConta } from "../common/conta/para-cada-conta";
@@ -49,7 +49,7 @@ export class ResumoMotoristaService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly evolution: EvolutionClientService,
+    private readonly envio: EnvioWhatsappService,
   ) {}
 
   /** Todo dia às 20:00 de Brasília. */
@@ -60,7 +60,7 @@ export class ResumoMotoristaService {
   }
 
   private async enviarDiarioDaVez(): Promise<void> {
-    if (!this.evolution.configurado) return;
+    if (!this.envio.disponivel("RESUMO_MOTORISTA").ok) return;
     const motoristas = await this.prisma.motorista.findMany({
       where: {
         ativo: true,
@@ -111,8 +111,9 @@ export class ResumoMotoristaService {
       select: { id: true, telefone: true, aceitaWhatsapp: true, receberResumoDiario: true },
     });
     if (!m) throw new NotFoundException("Motorista não encontrado");
-    if (!this.evolution.configurado) {
-      return { enviado: false, motivo: "WhatsApp (Evolution) não está configurado." };
+    const disp = this.envio.disponivel("RESUMO_MOTORISTA");
+    if (!disp.ok) {
+      return { enviado: false, motivo: disp.motivo };
     }
     if (!m.telefone) return { enviado: false, motivo: "Motorista sem telefone cadastrado." };
     if (m.aceitaWhatsapp === false) {
@@ -190,9 +191,13 @@ export class ResumoMotoristaService {
   }
 
   private async enviarWhatsapp(telefone: string | null | undefined, texto: string): Promise<void> {
-    if (!telefone || !this.evolution.configurado) return;
-    // Evolution exige DDI 55; o telefone do motorista vem só com DDD.
+    if (!telefone) return;
+    // O WhatsApp exige DDI 55; o telefone do motorista vem só com DDD.
     const numero = SessaoService.normalizar(telefone);
-    await this.evolution.enviarTexto(numero, texto);
+    await this.envio.enviarOuFalhar({
+      destino: { tipo: "TELEFONE", numero },
+      rota: "RESUMO_MOTORISTA",
+      texto,
+    });
   }
 }

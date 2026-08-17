@@ -11,7 +11,7 @@ import { comConta, comoSistema, contaIdAtual } from "../common/conta/conta-conte
 import { normalizarCodigoConvite } from "../admin/contas/codigo-convite";
 import { PrismaService } from "../prisma/prisma.service";
 import { AvisoGrupoService } from "../whatsapp/aviso-grupo.service";
-import { EvolutionClientService } from "../whatsapp/evolution-client.service";
+import { EnvioWhatsappService } from "../whatsapp/envio/envio-whatsapp.service";
 import { SessaoService } from "../whatsapp/sessao.service";
 import { AdminInboxService } from "../admin/inbox/inbox.service";
 import { AuthService } from "./auth.service";
@@ -37,7 +37,7 @@ export class CadastroMotoristaService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly evolution: EvolutionClientService,
+    private readonly envio: EnvioWhatsappService,
     private readonly avisoGrupo: AvisoGrupoService,
     private readonly inbox: AdminInboxService,
     private readonly auth: AuthService,
@@ -334,8 +334,8 @@ export class CadastroMotoristaService {
   }
 
   private async enviarCodigo(telefone: string, codigo: string) {
-    // Evolution exige número internacional (DDI 55). O telefone do cadastro vem
-    // só com DDD (ex: 41999998888) — sem normalizar, dá 400 no sendText.
+    // O WhatsApp exige número internacional (DDI 55). O telefone do cadastro vem
+    // só com DDD (ex: 41999998888) — sem normalizar, dá 400 no envio.
     const numero = SessaoService.normalizar(telefone);
     // O nome vem da conta: o motorista da empresa nova não pode receber um
     // código "da Schaba", que pra ele não quer dizer nada.
@@ -343,10 +343,13 @@ export class CadastroMotoristaService {
       where: { id: contaIdAtual() },
       select: { nome: true },
     });
-    await this.evolution.enviarTexto(
-      numero,
-      `Seu código de cadastro ${conta?.nome ?? "no app"} é ${codigo}. Vale por ${CODIGO_TTL_MIN} minutos. Se não foi você, ignore.`,
-    );
+    const nomeConta = conta?.nome ?? "no app";
+    await this.envio.enviarOuFalhar({
+      destino: { tipo: "TELEFONE", numero },
+      rota: "OTP_CADASTRO",
+      texto: `Seu código de cadastro ${nomeConta} é ${codigo}. Vale por ${CODIGO_TTL_MIN} minutos. Se não foi você, ignore.`,
+      params: [nomeConta, codigo, String(CODIGO_TTL_MIN)],
+    });
   }
 }
 

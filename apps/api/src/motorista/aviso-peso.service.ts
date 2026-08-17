@@ -1,8 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
+import { achatarParam } from "@ronan/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
 import { PushService } from "../push/push.service";
-import { EvolutionClientService } from "../whatsapp/evolution-client.service";
+import { EnvioWhatsappService } from "../whatsapp/envio/envio-whatsapp.service";
 import { SessaoService } from "../whatsapp/sessao.service";
 import { paraCadaConta } from "../common/conta/para-cada-conta";
 
@@ -22,7 +23,7 @@ export class AvisoPesoService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly push: PushService,
-    private readonly evolution: EvolutionClientService,
+    private readonly envio: EnvioWhatsappService,
   ) {}
 
   /** Aviso na criação de uma viagem sem peso. */
@@ -63,6 +64,9 @@ export class AvisoPesoService {
         await this.enviarWhatsapp(
           viagem.motorista?.telefone,
           `⚖️ *Falta o peso da viagem*\n\n${corpo}`,
+          // `corpo` já é uma linha só — cabe como parâmetro de template da Meta,
+          // que recusa quebra de linha.
+          [corpo],
         );
       }
     } catch (err) {
@@ -137,6 +141,7 @@ export class AvisoPesoService {
         await this.enviarWhatsapp(
           viagens[0]?.motorista?.telefone,
           `⚖️ *${titulo}*\n\nFalta o peso/romaneio de:\n${linhas}${resto}\n\nAbra o app e complete antes de fechar o dia.`,
+          [`${n} ${plural}`, listaEmLinha(viagens)],
         );
       }
     }
@@ -168,14 +173,39 @@ export class AvisoPesoService {
   private async enviarWhatsapp(
     telefone: string | null | undefined,
     texto: string,
+    params: string[],
   ): Promise<void> {
-    if (!telefone || !this.evolution.configurado) return;
-    try {
-      // Evolution exige DDI 55; o telefone do motorista vem só com DDD.
-      const numero = SessaoService.normalizar(telefone);
-      await this.evolution.enviarTexto(numero, texto);
-    } catch (err) {
-      this.log.warn(`whatsapp aguardando-peso falhou: ${(err as Error).message}`);
+    if (!telefone) return;
+    // O WhatsApp exige DDI 55; o telefone do motorista vem só com DDD.
+    const numero = SessaoService.normalizar(telefone);
+    const r = await this.envio.tentarEnviar({
+      destino: { tipo: "TELEFONE", numero },
+      rota: "AVISO_PESO",
+      texto,
+      params,
+    });
+    if (!r.enviado) {
+      this.log.warn(`whatsapp aguardando-peso falhou: ${r.erro?.detalhe}`);
     }
   }
+}
+
+/**
+ * A lista de viagens pendentes achatada numa linha só.
+ *
+ * Parâmetro de template da Meta não aceita quebra de linha, então o que no
+ * Evolution são bullets vira itens separados por " · ". Corta em 5 (contra os
+ * 10 do texto longo) porque o interponto não dá a leitura vertical do bullet:
+ * dez itens numa linha viram um bloco ilegível, e o total já vai no cabeçalho.
+ */
+function listaEmLinha(
+  viagens: Array<{ cliente?: { nome: string } | null; localDescarga?: { nome: string } | null }>,
+  max = 5,
+): string {
+  const itens = viagens.slice(0, max).map((v) => {
+    const cli = v.cliente?.nome ?? "viagem";
+    return v.localDescarga?.nome ? `${cli} (${v.localDescarga.nome})` : cli;
+  });
+  const resto = viagens.length - itens.length;
+  return achatarParam(itens.join(" · ") + (resto > 0 ? ` — e mais ${resto}` : ""));
 }

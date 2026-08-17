@@ -1,10 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { EvolutionClientService } from "./evolution-client.service";
+import { EnvioWhatsappService } from "./envio/envio-whatsapp.service";
 import { SessaoService } from "./sessao.service";
 import { contaIdAtual } from "../common/conta/conta-context";
-
-const CONFIG_ID = "default";
 
 const TEMPLATE_DEFAULT =
   "🎉 {nome} acabou de entrar no app! Seja bem-vindo, parceiro 🚛";
@@ -25,7 +24,9 @@ export class AvisoGrupoService {
 
   constructor(
     private readonly prisma: PrismaService,
+    // Listar grupo é coisa só do Evolution — a Cloud API não enxerga grupo.
     private readonly evolution: EvolutionClientService,
+    private readonly envio: EnvioWhatsappService,
   ) {}
 
   /** Config singleton (cria com defaults na primeira leitura). */
@@ -149,8 +150,17 @@ export class AvisoGrupoService {
       return { ...comTexto, motivo: "Tudo certo — enviaria (dry-run, não enviado)." };
     }
 
-    // O Evolution aceita o JID do grupo (@g.us) no lugar do número em sendText.
-    await this.evolution.enviarTexto(config.grupoJid, texto);
+    // Aviso de grupo é a única rota que nunca sai do Evolution: a Cloud API da
+    // Meta não posta em grupo. O catálogo declara isso e o roteamento respeita.
+    const r = await this.envio.tentarEnviar({
+      destino: { tipo: "GRUPO", jid: config.grupoJid },
+      rota: "AVISO_GRUPO",
+      texto,
+      params: [primeiroNome(motorista.nome)],
+    });
+    if (!r.enviado) {
+      return { ...comTexto, motivo: `Falhou no envio: ${r.erro?.detalhe ?? "motivo desconhecido"}` };
+    }
     await this.prisma.motorista.update({
       where: { id: motoristaId },
       data: { avisoGrupoEnviadoEm: new Date() },

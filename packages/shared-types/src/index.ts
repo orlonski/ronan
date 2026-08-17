@@ -34,3 +34,4 @@ export * from "./ia-ticket";
 export * from "./evento-motorista";
 export * from "./posicao-motorista";
 export * from "./versao-app";
+export * from "./whatsapp-mensagens";

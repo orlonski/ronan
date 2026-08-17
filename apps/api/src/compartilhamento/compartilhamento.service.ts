@@ -13,7 +13,7 @@ import { AcaoAuditoria } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditoriaService } from "../auditoria/auditoria.service";
 import { UploadsService } from "../uploads/uploads.service";
-import { EvolutionClientService } from "../whatsapp/evolution-client.service";
+import { EnvioWhatsappService } from "../whatsapp/envio/envio-whatsapp.service";
 import { SessaoService } from "../whatsapp/sessao.service";
 import type { EscopoAdmin } from "../common/escopo/escopo";
 import { filtroEscopo } from "../common/escopo/escopo";
@@ -40,7 +40,7 @@ export class CompartilhamentoService implements OnModuleInit {
     private readonly config: ConfigService,
     private readonly auditoria: AuditoriaService,
     private readonly uploads: UploadsService,
-    private readonly evolution: EvolutionClientService,
+    private readonly envio: EnvioWhatsappService,
   ) {}
 
   onModuleInit() {
@@ -123,8 +123,9 @@ export class CompartilhamentoService implements OnModuleInit {
     escopo: EscopoAdmin,
   ) {
     await this.ensureViagemNoEscopo(viagemId, escopo);
-    if (!this.evolution.configurado) {
-      throw new BadRequestException("WhatsApp (Evolution) não está configurado no servidor.");
+    const disp = this.envio.disponivel("COMPARTILHAMENTO");
+    if (!disp.ok) {
+      throw new BadRequestException(disp.motivo);
     }
 
     const link = await this.prisma.viagemCompartilhamento.findFirst({
@@ -143,9 +144,14 @@ export class CompartilhamentoService implements OnModuleInit {
     }
 
     const texto = await this.montarMensagem(viagemId, link.token, link.expiraEm, input.mensagemExtra);
-    // Só marca como enviado DEPOIS do envio dar certo — enviarTexto joga 503 se
-    // o Evolution não devolver key.id, e um "enviado" mentiroso é pior que erro.
-    await this.evolution.enviarTexto(numero, texto);
+    // Só marca como enviado DEPOIS do envio dar certo — `enviarOuFalhar` joga
+    // 503 se o provedor não devolver a prova de aceite, e um "enviado"
+    // mentiroso é pior que erro.
+    await this.envio.enviarOuFalhar({
+      destino: { tipo: "TELEFONE", numero },
+      rota: "COMPARTILHAMENTO",
+      texto,
+    });
 
     const atualizado = await this.prisma.viagemCompartilhamento.update({
       where: { id },

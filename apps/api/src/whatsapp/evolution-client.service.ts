@@ -19,6 +19,18 @@ import { ConfigService } from "@nestjs/config";
  * Sem nenhuma das três configuradas, métodos lançam ServiceUnavailable —
  * útil em dev local sem Evolution rodando: o resto da app ainda sobe.
  */
+/**
+ * Teto de espera por requisição ao Evolution. 15s é folgado pro `sendText` e
+ * ainda curto o bastante pra não segurar um cron que percorre conta por conta.
+ */
+const TIMEOUT_MS = 15_000;
+
+/**
+ * Teto maior pro download de mídia: o Evolution descriptografa o arquivo e
+ * devolve base64, o que num áudio longo passa folgado dos 15s do envio.
+ */
+const TIMEOUT_MIDIA_MS = 45_000;
+
 @Injectable()
 export class EvolutionClientService {
   private readonly log = new Logger("EvolutionClient");
@@ -36,18 +48,37 @@ export class EvolutionClientService {
     return !!(this.baseUrl && this.apiKey && this.instance);
   }
 
+  /**
+   * Manda o texto e devolve a `key.id` — a prova de que o Evolution aceitou e
+   * enfileirou. Lança em qualquer outro desfecho.
+   *
+   * `alvo` é telefone (`5541...`) ou JID de grupo (`120363...@g.us`): o
+   * `sendText` do Evolution aceita os dois no mesmo campo.
+   */
+  async enviarTextoRetornandoId(alvo: string, texto: string): Promise<string> {
+    const res = await this.req(`/message/sendText/${this.instance}`, {
+      number: alvo,
+      text: texto,
+    });
+    const key = (res as { key?: { id?: string } } | null)?.key;
+    if (!key?.id) {
+      this.log.error(`sendText sem key.id — resposta: ${JSON.stringify(res).slice(0, 300)}`);
+      throw new Error("Evolution respondeu sem key.id");
+    }
+    return key.id;
+  }
+
   async enviarTexto(telefone: string, texto: string): Promise<void> {
     // Garantia de envio: só consideramos enviado quando o Evolution devolve a
     // `key.id` da mensagem (prova de que aceitou e enfileirou). Qualquer falha
     // — erro HTTP, Evolution fora do ar, ou 200 "vazio"/de erro sem key — vira
     // um 503 com código, pra quem chama NUNCA dizer ao motorista que o código
     // foi enviado quando não foi.
-    let res: unknown;
+    //
+    // Preferir `EnvioWhatsappService` a chamar isto direto: lá a mensagem de
+    // erro combina com a mensagem que falhou, e o envio fica roteável.
     try {
-      res = await this.req(`/message/sendText/${this.instance}`, {
-        number: telefone,
-        text: texto,
-      });
+      await this.enviarTextoRetornandoId(telefone, texto);
     } catch (e) {
       this.log.error(`Falha no sendText pra ${telefone}: ${(e as Error).message}`);
       throw new ServiceUnavailableException({
@@ -56,44 +87,6 @@ export class EvolutionClientService {
           "Não conseguimos enviar o código pelo WhatsApp agora. Tente de novo em alguns instantes.",
       });
     }
-    const key = (res as { key?: { id?: string } } | null)?.key;
-    if (!key?.id) {
-      this.log.error(`sendText sem key.id — resposta: ${JSON.stringify(res).slice(0, 300)}`);
-      throw new ServiceUnavailableException({
-        code: "ENVIO_WHATSAPP_FALHOU",
-        message:
-          "Não conseguimos enviar o código pelo WhatsApp agora. Tente de novo em alguns instantes.",
-      });
-    }
-  }
-
-  /**
-   * Envia até 3 botões clicáveis pro motorista escolher entre opções.
-   * Quando ele clica, vem de volta no webhook como buttonsResponseMessage
-   * e é convertido pra "[OPÇÃO] <texto>" pra continuar o fluxo natural.
-   *
-   * Formato Evolution API v2.x. Aceita até 3 botões (limite WhatsApp).
-   */
-  async enviarBotoes(
-    telefone: string,
-    titulo: string,
-    descricao: string,
-    opcoes: Array<{ id: string; texto: string }>,
-  ): Promise<void> {
-    if (opcoes.length === 0 || opcoes.length > 3) {
-      throw new Error("enviarBotoes aceita 1 a 3 opções");
-    }
-    await this.req(`/message/sendButtons/${this.instance}`, {
-      number: telefone,
-      title: titulo,
-      description: descricao,
-      footer: "Ronan",
-      buttons: opcoes.map((o) => ({
-        type: "reply",
-        displayText: o.texto.slice(0, 20), // WhatsApp corta acima de 20
-        id: o.id,
-      })),
-    });
   }
 
   /**
@@ -116,23 +109,6 @@ export class EvolutionClientService {
         return { jid: o.id ?? "", nome: o.subject ?? "(sem nome)", tamanho: o.size ?? 0 };
       })
       .filter((g) => g.jid.endsWith("@g.us"));
-  }
-
-  /**
-   * Participantes crus de um grupo (objetos como o WhatsApp devolve). A
-   * extração do telefone fica em quem chama, porque o WhatsApp moderno às vezes
-   * manda o `id` no formato `@lid` (id oculto, NÃO é telefone) e o número real
-   * num campo separado (`jid`/`phoneNumber`). Devolver cru deixa o chamador
-   * escolher o campo certo e diagnosticar.
-   */
-  async participantesDoGrupo(grupoJid: string): Promise<Array<Record<string, unknown>>> {
-    const data = await this.req(
-      `/group/participants/${this.instance}?groupJid=${encodeURIComponent(grupoJid)}`,
-      undefined,
-      "GET",
-    );
-    const d = data as { participants?: Array<Record<string, unknown>> };
-    return Array.isArray(d?.participants) ? d.participants : [];
   }
 
   /**
@@ -178,10 +154,12 @@ export class EvolutionClientService {
     payload: { key: unknown; message: unknown },
   ): Promise<{ buffer: Buffer; mimetype: string } | null> {
     try {
-      const data = await this.req(`/chat/getBase64FromMediaMessage/${this.instance}`, {
-        message: payload,
-        convertToMp4: false,
-      });
+      const data = await this.req(
+        `/chat/getBase64FromMediaMessage/${this.instance}`,
+        { message: payload, convertToMp4: false },
+        "POST",
+        TIMEOUT_MIDIA_MS,
+      );
       const d = data as { base64?: string; mimetype?: string };
       if (!d.base64) return null;
       return {
@@ -198,6 +176,7 @@ export class EvolutionClientService {
     path: string,
     body?: unknown,
     method: "GET" | "POST" | "PUT" | "DELETE" = body !== undefined ? "POST" : "GET",
+    timeoutMs: number = TIMEOUT_MS,
   ): Promise<unknown> {
     if (!this.configurado) {
       throw new ServiceUnavailableException(
@@ -205,14 +184,28 @@ export class EvolutionClientService {
       );
     }
     const url = `${this.baseUrl}${path}`;
-    const res = await fetch(url, {
-      method,
-      headers: {
-        apikey: this.apiKey!,
-        "content-type": "application/json",
-      },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method,
+        headers: {
+          apikey: this.apiKey!,
+          "content-type": "application/json",
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        // Sem isto um Evolution pendurado pendura o request inteiro. No cron das
+        // 18h/20h o envio roda dentro de `paraCadaConta`, em série — uma
+        // requisição travada segura o resumo de TODAS as empresas seguintes.
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (e) {
+      // `AbortSignal.timeout` estoura com TimeoutError; rede fora dá TypeError.
+      // Os dois são falha de transporte e viram 503, não 500.
+      const msg =
+        (e as Error).name === "TimeoutError" ? `timeout de ${timeoutMs}ms` : (e as Error).message;
+      this.log.error(`Evolution ${method} ${path} falhou: ${msg}`);
+      throw new ServiceUnavailableException(`Evolution API não respondeu (${msg})`);
+    }
     if (!res.ok) {
       const detalhes = await res.text().catch(() => "");
       this.log.error(`Evolution ${method} ${path} ${res.status}: ${detalhes.slice(0, 300)}`);

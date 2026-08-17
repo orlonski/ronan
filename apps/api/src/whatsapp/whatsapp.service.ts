@@ -3,6 +3,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { ErrorsService } from "../errors/errors.service";
 import { AgenteService } from "./agente/agente.service";
 import { EvolutionClientService } from "./evolution-client.service";
+import { EnvioWhatsappService } from "./envio/envio-whatsapp.service";
 import { SessaoService } from "./sessao.service";
 import { ConviteService } from "./convite.service";
 import { TranscricaoService } from "../ia/transcricao.service";
@@ -31,7 +32,10 @@ export class WhatsappService {
 
   constructor(
     private readonly prisma: PrismaService,
+    // Só pro download de mídia — a Cloud API baixa de outro jeito, e é o
+    // provedor de entrada quem decide. Enviar é sempre pelo `envio`.
     private readonly evolution: EvolutionClientService,
+    private readonly envio: EnvioWhatsappService,
     private readonly sessao: SessaoService,
     private readonly convite: ConviteService,
     private readonly agente: AgenteService,
@@ -148,6 +152,17 @@ export class WhatsappService {
     let faseAtual = "sessao";
 
     try {
+      // Carimba a hora da mensagem ANTES de qualquer decisão. É o que registra
+      // que a pessoa falou com a gente — e portanto que a janela de 24h da Meta
+      // está aberta, dentro da qual dá pra responder texto livre de graça.
+      //
+      // Ficava lá embaixo, depois do `return` do agente desligado. Como o agente
+      // nasce desligado (e em produção está desligado), na prática o campo nunca
+      // era escrito e a janela era invisível.
+      if (identidade.sessaoId) {
+        await this.sessao.marcarMensagemRecebida(identidade.sessaoId);
+      }
+
       // Agente desligado na config → não gasta IA (sem Whisper, sem Claude/Gemini).
       // Loga a entrada e responde educado. Vale pra qualquer remetente: hoje esse
       // número serve só pra enviar código de cadastro (outbound, fora deste fluxo).
@@ -233,8 +248,7 @@ export class WhatsappService {
         return;
       }
 
-      // Telefone vinculado → marca atividade
-      await this.sessao.marcarMensagemRecebida(identidade.sessaoId);
+      // (a atividade da sessão já foi marcada no início do fluxo)
 
       // Áudio sem transcrição (chave faltando, falha, alucinação) → avisa o
       // motorista em vez de mandar string vazia pro agente.
@@ -323,12 +337,16 @@ export class WhatsappService {
   }
 
   async enviarTexto(telefone: string, texto: string, sessaoId: string | null = null) {
-    if (this.evolution.configurado) {
-      try {
-        await this.evolution.enviarTexto(telefone, texto);
-      } catch (e) {
-        this.log.error(`Falha ao enviar pra ${telefone}: ${(e as Error).message}`);
-      }
+    // Resposta a quem escreveu: o erro é engolido de propósito (só loga) e a
+    // linha de SAIDA é gravada de qualquer jeito. Isto roda dentro do webhook,
+    // e uma falha de envio não pode derrubar o processamento da mensagem.
+    if (this.envio.disponivel("RESPOSTA_AGENTE").ok) {
+      await this.envio.tentarEnviar({
+        destino: { tipo: "TELEFONE", numero: telefone },
+        rota: "RESPOSTA_AGENTE",
+        texto,
+        sessaoId,
+      });
     } else {
       this.log.log(`[DEV] enviaria pra ${telefone}: ${texto}`);
     }
