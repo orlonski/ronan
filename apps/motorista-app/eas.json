@@ -24,6 +24,12 @@
         "simulator": false
       }
     },
+    "preview-simulator": {
+      "extends": "preview",
+      "ios": {
+        "simulator": true
+      }
+    },
     "preview-universal": {
       "extends": "preview",
       "env": {
