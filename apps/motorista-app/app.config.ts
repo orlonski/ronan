@@ -6,13 +6,16 @@ const config: ExpoConfig = {
   name: "Movatruck",
   slug: "ronan-motorista",
   scheme: "ronan",
-  // 1.0.5, e não 1.1.0, enquanto o OTA sair na ilha 1.0.5 (ver runtimeVersion
-  // abaixo). O app reporta ESTA string pro backend — ela sai do manifesto do
-  // update, não do binário. Deixá-la em 1.1.0 fazia a frota inteira dizer que
-  // era 1.1.0 sendo 1.0.5 nativa: o painel mostrava versão errada e o gate de
-  // força-atualização passaria batido, porque o piso é comparado com o que o
-  // aparelho DIZ. Sobe pra 1.1.0 junto com o build de loja, não antes.
-  version: "1.0.5",
+  // 1.1.0 é o build de loja que leva a marca Movatruck pro aparelho: nome,
+  // ícone e splash são compilados no binário, e a frota rodava um build de
+  // 14/07 — anterior ao rebranding (assets trocados em 15109fb, 13/08). Ficha
+  // da loja e OTA não alcançam nada disso.
+  //
+  // O app reporta ESTA string pro backend (sai do manifesto do update, não do
+  // binário), e o piso da força-atualização compara com o que o aparelho DIZ.
+  // Por isso ela só sobe junto com o build que vai pras lojas — nunca antes,
+  // senão a frota inteira se declara 1.1.0 rodando 1.0.5 nativa.
+  version: "1.1.0",
   orientation: "portrait",
   platforms: ["ios", "android"],
   icon: "./assets/icon.png",
@@ -145,23 +148,26 @@ const config: ExpoConfig = {
   // sobre nativo velho), mas exige o hábito: depois de publicar, conferir com
   // `eas update:list` que o runtime bate com o do build que está nas lojas.
   // Pra ver o hash atual: `pnpm exec expo-updates fingerprint:generate --platform ios`.
-  // FIXADO EM 1.0.5 POR DECISÃO DE 14/08/2026, e não é a política definitiva.
   //
-  // A frota inteira roda o build 1.0.5, e todo update que ela recebeu saiu com
-  // esse runtime. Publicar com fingerprint agora geraria um runtime que
-  // NENHUM aparelho instalado tem: o OTA sai "com sucesso" e não alcança
-  // ninguém, em silêncio. Enquanto a 1.1.0 não estiver viva nas lojas, é aqui
-  // que os aparelhos estão — e segurar correção esperando por isso já custou
-  // motorista com viagem parada sem conserto no app.
+  // FINGERPRINT NÃO DÁ PRA USAR NESTE REPO — tentado de novo em 18/08/2026 e o
+  // build falha na fase "Configure expo-updates" com "Runtime version calculated
+  // on local machine not equal to runtime version calculated during build":
+  // local `b9477bf5…` × builder `ba43680e…`. O fingerprint inclui os caminhos de
+  // node_modules, e num monorepo pnpm os diretórios `.pnpm/<pacote>@<versão>_<hash>`
+  // não saem iguais aqui e no builder do EAS. Não é o `android/`/`ios/` local:
+  // removê-los não mudou o hash. Enquanto isso não for resolvido, a política é
+  // string explícita — determinística e que builda.
   //
-  // Só é seguro porque a camada nativa não mudou desde o build 1.0.5: o
-  // package.json do app não muda desde 12/08 e nenhum módulo nativo entrou.
-  // Antes de publicar de novo, conferir isso — JS novo sobre nativo velho que
-  // não tem o módulo é crash de boot.
+  // Custo de usar string: cada versão vira uma ilha de OTA. Subir 1.1.0 → 1.1.1
+  // sem mexer em nativo exige lembrar que o update sai na ilha nova e quem não
+  // atualizou pela loja não recebe. Era o que o commit 9da33a5 queria evitar.
   //
-  // QUANDO A 1.1.0 SUBIR PRAS LOJAS: apagar esta linha e voltar
-  // `{ policy: "fingerprint" }` (ver commit 9da33a5 pro porquê da política).
-  runtimeVersion: "1.0.5",
+  // JANELA DE TRANSIÇÃO: quem está em 1.0.5 não recebe OTA publicado daqui.
+  // Correção urgente pra frota velha sai com o runtime antigo explícito:
+  //   EXPO_PUBLIC_API_URL=https://api.schaba.com.br npx eas update \
+  //     --branch production --runtime-version 1.0.5 --message "..."
+  // A janela fecha quando o painel parar de mostrar aparelhos em 1.0.5.
+  runtimeVersion: "1.1.0",
   updates: {
     fallbackToCacheTimeout: 0,
     url: "https://u.expo.dev/33e8e936-fbac-4bb3-9f98-5de6dc84da53",
