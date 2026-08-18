@@ -1,5 +1,7 @@
 import { Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
-import { rotaWhatsapp, type ProvedorWhatsapp, type RotaWhatsapp } from "@ronan/shared-types";
+import { custoEstimado, rotaWhatsapp, type ProvedorWhatsapp, type RotaWhatsapp } from "@ronan/shared-types";
+import { contaAtual } from "../../common/conta/conta-context";
+import { PrismaService } from "../../prisma/prisma.service";
 import { EvolutionProvedor } from "./evolution.provedor";
 import { RoteamentoWhatsappService } from "./roteamento.service";
 import {
@@ -39,6 +41,7 @@ export class EnvioWhatsappService {
   constructor(
     private readonly evolution: EvolutionProvedor,
     private readonly roteamento: RoteamentoWhatsappService,
+    private readonly prisma: PrismaService,
   ) {}
 
   /**
@@ -102,9 +105,10 @@ export class EnvioWhatsappService {
   /** Manda e devolve o que aconteceu. Nunca lança. */
   async tentarEnviar(envio: EnvioWhatsapp): Promise<ResultadoEnvio> {
     const provedor = await this.provedorDe(envio.rota, envio.destino);
+    let r: ResultadoEnvio;
 
     if (!provedor.configurado()) {
-      return {
+      r = {
         enviado: false,
         provedor: provedor.nome,
         idExterno: null,
@@ -113,12 +117,58 @@ export class EnvioWhatsappService {
           detalhe: `${ROTULO_PROVEDOR[provedor.nome]} não está configurado no servidor.`,
         },
       };
+      this.log.warn(`envio ${envio.rota} não saiu: ${r.erro!.detalhe}`);
+    } else {
+      r = await provedor.enviar(envio);
+      if (!r.enviado) {
+        this.log.error(`envio ${envio.rota} por ${provedor.nome} falhou: ${r.erro?.detalhe}`);
+      }
     }
 
-    const r = await provedor.enviar(envio);
-    if (!r.enviado) {
-      this.log.error(`envio ${envio.rota} por ${provedor.nome} falhou: ${r.erro?.detalhe}`);
-    }
+    // Grava mesmo quando não saiu: o histórico do agente é montado a partir
+    // destas linhas, e uma resposta que falhou precisa aparecer no contexto.
+    await this.registrar(envio, r);
     return r;
+  }
+
+  /**
+   * Deixa o rastro da mensagem: por onde saiu, qual era, quanto custou.
+   *
+   * Antes disto, os envios do sistema não gravavam nada — só o inbound e as
+   * respostas do agente apareciam no histórico. Não dava pra responder "o resumo
+   * saiu ontem?" nem "quanto o código de cadastro custou este mês".
+   *
+   * **Nunca pode fazer o envio falhar.** A mensagem já foi entregue quando isto
+   * roda; um erro de INSERT aqui não pode virar 503 pro motorista que está
+   * esperando o código. Daí o try/catch engolindo tudo, com o log como rede.
+   */
+  private async registrar(envio: EnvioWhatsapp, r: ResultadoEnvio): Promise<void> {
+    // Sem conta no contexto não há onde gravar: a tabela é escopada e a linha
+    // morreria na chave estrangeira. É o caso do código de redefinição de senha,
+    // que roda em `comoSistema`. Perder o registro é melhor que perder o envio.
+    if (!contaAtual()?.contaId) return;
+
+    const def = rotaWhatsapp(envio.rota);
+    const categoria = r.provedor === "meta" ? (def?.categoria ?? null) : null;
+    try {
+      await this.prisma.whatsappMensagem.create({
+        data: {
+          sessaoId: envio.sessaoId ?? null,
+          telefone:
+            envio.destino.tipo === "GRUPO" ? envio.destino.jid : envio.destino.numero,
+          direcao: "SAIDA",
+          conteudo: envio.texto,
+          tipo: "TEXTO",
+          provedor: r.provedor,
+          idExterno: r.idExterno,
+          rota: envio.rota,
+          categoria,
+          custoEstimado: custoEstimado(r.provedor, def?.categoria),
+          metadata: r.enviado ? undefined : { erro: r.erro?.detalhe ?? null },
+        },
+      });
+    } catch (e) {
+      this.log.warn(`não deu pra registrar o envio ${envio.rota}: ${(e as Error).message}`);
+    }
   }
 }

@@ -4,6 +4,8 @@ import { EnvioWhatsappService } from "./envio-whatsapp.service";
 import type { EnvioWhatsapp, ResultadoEnvio } from "./envio.types";
 import type { EvolutionProvedor } from "./evolution.provedor";
 import type { RoteamentoWhatsappService } from "./roteamento.service";
+import type { PrismaService } from "../../prisma/prisma.service";
+import { comConta, comoSistema } from "../../common/conta/conta-context";
 
 /** Um provedor de mentira, pra poder testar a fachada sem rede. */
 function provedorFake(opts: { configurado?: boolean; resultado?: Partial<ResultadoEnvio> } = {}) {
@@ -32,13 +34,27 @@ function roteamentoFake(provedor: "evolution" | "meta" = "evolution") {
   };
 }
 
+/**
+ * Prisma de mentira. `create` sempre estoura pra provar o ponto que mais
+ * importa: registrar o envio NUNCA pode fazer o envio falhar.
+ */
+function prismaFake(opts: { falha?: boolean } = {}) {
+  const create = vi.fn(async (args: unknown) => {
+    if (opts.falha) throw new Error("banco fora do ar");
+    return args;
+  });
+  return { whatsappMensagem: { create } };
+}
+
 function servico(
   fake: ReturnType<typeof provedorFake>,
   roteia: "evolution" | "meta" = "evolution",
+  prisma = prismaFake(),
 ) {
   return new EnvioWhatsappService(
     fake as unknown as EvolutionProvedor,
     roteamentoFake(roteia) as unknown as RoteamentoWhatsappService,
+    prisma as unknown as PrismaService,
   );
 }
 
@@ -132,5 +148,50 @@ describe("EnvioWhatsappService.disponivel", () => {
 
   it("ok quando configurado", async () => {
     await expect(servico(provedorFake()).disponivel("RESUMO_GESTOR")).resolves.toEqual({ ok: true });
+  });
+});
+
+describe("rastro do envio", () => {
+  it("grava por onde saiu, qual era e quanto custou", async () => {
+    const prisma = prismaFake();
+    const s = servico(provedorFake(), "evolution", prisma);
+    await comConta("conta-1", () => s.tentarEnviar(paraMotorista("OTP_CADASTRO")));
+
+    expect(prisma.whatsappMensagem.create).toHaveBeenCalledOnce();
+    const { data } = prisma.whatsappMensagem.create.mock.calls[0]![0] as {
+      data: Record<string, unknown>;
+    };
+    expect(data.direcao).toBe("SAIDA");
+    expect(data.rota).toBe("OTP_CADASTRO");
+    expect(data.provedor).toBe("evolution");
+    expect(data.idExterno).toBe("ABC123");
+    // No Evolution não se paga por mensagem — custo zero e sem categoria.
+    expect(data.categoria).toBeNull();
+    expect(data.custoEstimado).toBe(0);
+  });
+
+  it("grava também o envio que NÃO saiu — o histórico do agente precisa dele", async () => {
+    const prisma = prismaFake();
+    const s = servico(provedorFake({ configurado: false }), "evolution", prisma);
+    await comConta("conta-1", () => s.tentarEnviar(paraMotorista("RESPOSTA_AGENTE")));
+    expect(prisma.whatsappMensagem.create).toHaveBeenCalledOnce();
+  });
+
+  it("banco fora do ar NÃO derruba o envio", async () => {
+    // A mensagem já foi entregue quando o registro roda. Um erro de INSERT não
+    // pode virar 503 pro motorista que está esperando o código.
+    const s = servico(provedorFake(), "evolution", prismaFake({ falha: true }));
+    const r = await comConta("conta-1", () => s.enviarOuFalhar(paraMotorista("OTP_CADASTRO")));
+    expect(r.enviado).toBe(true);
+  });
+
+  it("sem conta no contexto não tenta gravar — é o caminho do código de senha", async () => {
+    // A tabela é escopada por conta; sem conta a linha morreria na FK. Perder o
+    // registro é melhor que perder o envio.
+    const prisma = prismaFake();
+    const s = servico(provedorFake(), "evolution", prisma);
+    const r = await comoSistema(() => s.tentarEnviar(paraMotorista("OTP_SENHA")));
+    expect(r.enviado).toBe(true);
+    expect(prisma.whatsappMensagem.create).not.toHaveBeenCalled();
   });
 });

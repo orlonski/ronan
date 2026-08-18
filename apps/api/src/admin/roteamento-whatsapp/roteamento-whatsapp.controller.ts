@@ -37,6 +37,17 @@ export class AdminRoteamentoWhatsappController {
     return comConta(contaAlvo(user, contaId), () => this.service.pegar());
   }
 
+  /** Quanto saiu e quanto custou, por tipo de mensagem. */
+  @Get("consumo")
+  consumo(
+    @CurrentUser() user: AuthUser,
+    @Query("contaId") contaId?: string,
+    @Query("dias") dias?: string,
+  ) {
+    const janela = Math.min(Math.max(Number(dias) || 30, 1), 180);
+    return comConta(contaAlvo(user, contaId), () => this.service.consumo(janela));
+  }
+
   @Put()
   salvar(
     @CurrentUser() user: AuthUser,

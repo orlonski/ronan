@@ -7,6 +7,7 @@ import {
   type ProvedorWhatsapp,
 } from "@ronan/shared-types";
 import { contaIdAtual } from "../../common/conta/conta-context";
+import { inicioDoDiaData } from "../../common/timezone";
 import { PrismaService } from "../../prisma/prisma.service";
 import { RoteamentoWhatsappService as Roteador } from "../../whatsapp/envio/roteamento.service";
 
@@ -81,4 +82,38 @@ export class AdminRoteamentoWhatsappService {
     this.roteador.invalidar(contaIdAtual());
     return { ...(await this.pegar()), alteradoEm: salvo.alteradoEm };
   }
+
+  /**
+   * Quanto esta empresa mandou (e custou) por tipo de mensagem, nos últimos N
+   * dias.
+   *
+   * Só olha SAIDA: o inbound é do motorista e não custa. O custo é a ESTIMATIVA
+   * congelada no envio — a conta que vale é a da Meta, e enquanto tudo sai pelo
+   * Evolution ela é zero de propósito.
+   */
+  async consumo(dias = 30) {
+    const desde = new Date(inicioDoDiaData().getTime() - (dias - 1) * 24 * 60 * 60 * 1000);
+    const linhas = await this.prisma.whatsappMensagem.groupBy({
+      by: ["rota", "provedor"],
+      where: { direcao: "SAIDA", criadoEm: { gte: desde } },
+      _count: { _all: true },
+      _sum: { custoEstimado: true },
+    });
+
+    const porRota = linhas.map((l) => ({
+      rota: l.rota,
+      provedor: l.provedor,
+      mensagens: l._count._all,
+      custoEstimado: Number(l._sum.custoEstimado ?? 0),
+    }));
+
+    return {
+      dias,
+      desde,
+      total: porRota.reduce((a, l) => a + l.mensagens, 0),
+      custoEstimado: porRota.reduce((a, l) => a + l.custoEstimado, 0),
+      porRota: porRota.sort((a, b) => b.mensagens - a.mensagens),
+    };
+  }
 }
+

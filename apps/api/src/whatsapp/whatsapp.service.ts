@@ -337,27 +337,15 @@ export class WhatsappService {
   }
 
   async enviarTexto(telefone: string, texto: string, sessaoId: string | null = null) {
-    // Resposta a quem escreveu: o erro é engolido de propósito (só loga) e a
-    // linha de SAIDA é gravada de qualquer jeito. Isto roda dentro do webhook,
-    // e uma falha de envio não pode derrubar o processamento da mensagem.
-    if ((await this.envio.disponivel("RESPOSTA_AGENTE")).ok) {
-      await this.envio.tentarEnviar({
-        destino: { tipo: "TELEFONE", numero: telefone },
-        rota: "RESPOSTA_AGENTE",
-        texto,
-        sessaoId,
-      });
-    } else {
-      this.log.log(`[DEV] enviaria pra ${telefone}: ${texto}`);
-    }
-    await this.prisma.whatsappMensagem.create({
-      data: {
-        sessaoId,
-        telefone,
-        direcao: "SAIDA",
-        conteudo: texto,
-        tipo: "TEXTO",
-      },
+    // O erro é engolido de propósito: isto roda dentro do webhook, e uma falha
+    // de envio não pode derrubar o processamento da mensagem. A linha de SAIDA
+    // é gravada pela própria fachada, inclusive quando o envio não sai — o
+    // histórico do agente é montado a partir dela.
+    await this.envio.tentarEnviar({
+      destino: { tipo: "TELEFONE", numero: telefone },
+      rota: "RESPOSTA_AGENTE",
+      texto,
+      sessaoId,
     });
   }
 

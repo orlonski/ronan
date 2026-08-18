@@ -595,18 +595,6 @@ async function executarToolInterno(
         sessaoId: ctx.identidade.sessaoId,
       });
 
-      // Persiste a mensagem enviada como SAIDA (assim o histórico do agente
-      // já vê isso na próxima mensagem do motorista).
-      await ctx.prisma.whatsappMensagem.create({
-        data: {
-          sessaoId: ctx.identidade.sessaoId,
-          telefone,
-          direcao: "SAIDA",
-          conteudo: mensagem,
-          tipo: "TEXTO",
-        },
-      });
-
       return {
         enviado: true,
         instrucao:

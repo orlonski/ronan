@@ -844,6 +844,13 @@ type RoteamentoResposta = {
   rotas: RotaConfig[];
 };
 
+type Consumo = {
+  dias: number;
+  total: number;
+  custoEstimado: number;
+  porRota: { rota: string | null; provedor: string; mensagens: number; custoEstimado: number }[];
+};
+
 /**
  * Por qual serviço sai cada mensagem.
  *
@@ -889,8 +896,19 @@ function RoteamentoCard() {
     onError: (e: Error) => toast.error("Não deu pra salvar", { description: e.message }),
   });
 
+  const consumo = useQuery({
+    queryKey: ["roteamento-consumo", alvo],
+    enabled: !!token,
+    queryFn: () =>
+      fetchApi<Consumo>(
+        `/admin/roteamento-whatsapp/consumo${sufixo ? `${sufixo}&` : "?"}dias=30`,
+        { token },
+      ),
+  });
+
   const rotas = cfg.data?.rotas ?? [];
   const naMeta = rotas.filter((r) => r.provedor === "meta").length;
+  const rotulos = new Map(rotas.map((r) => [r.chave, r.rotulo]));
 
   return (
     <Card className="space-y-4 p-4">
@@ -977,6 +995,48 @@ function RoteamentoCard() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {consumo.data && (
+        <div className="space-y-2 border-t pt-3">
+          <div className="flex items-baseline justify-between">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Últimos {consumo.data.dias} dias
+            </h3>
+            <span className="text-xs text-muted-foreground">
+              {consumo.data.total} {consumo.data.total === 1 ? "mensagem" : "mensagens"}
+              {consumo.data.custoEstimado > 0 &&
+                ` · ~R$ ${consumo.data.custoEstimado.toFixed(2).replace(".", ",")}`}
+            </span>
+          </div>
+          {consumo.data.porRota.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground">
+              Nada enviado ainda nessa janela.
+            </p>
+          ) : (
+            <div className="space-y-1">
+              {consumo.data.porRota.map((l) => (
+                <div
+                  key={`${l.rota}-${l.provedor}`}
+                  className="flex items-center justify-between text-xs"
+                >
+                  <span className="text-muted-foreground">
+                    {l.rota ? (rotulos.get(l.rota) ?? l.rota) : "(antes do rastro existir)"}
+                  </span>
+                  <span className="tabular-nums">
+                    {l.mensagens}
+                    {l.custoEstimado > 0 &&
+                      ` · ~R$ ${l.custoEstimado.toFixed(2).replace(".", ",")}`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="text-[11px] text-muted-foreground">
+            O custo é estimativa nossa, congelada no envio — a conta que vale é a da Meta. Pelo
+            Evolution não se paga por mensagem.
+          </p>
         </div>
       )}
 

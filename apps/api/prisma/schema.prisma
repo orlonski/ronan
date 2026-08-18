@@ -966,9 +966,36 @@ model WhatsappMensagem {
   metadata Json? // { fotoStorageKey, viagemCriadaId, toolsChamadas, evolutionMsgId, ... }
   criadoEm DateTime        @default(now())
 
+  /// Por onde saiu (ou entrou): "evolution" | "meta". Default no histórico que
+  /// já existe porque, até agosto/2026, só havia um caminho.
+  provedor String @default("evolution")
+
+  /// Id da mensagem no provedor: `key.id` no Evolution, `wamid` na Meta.
+  /// Coluna própria e indexada porque é por ela que o callback de entrega da
+  /// Meta acha a mensagem — dentro do `metadata` seria imbuscável. O
+  /// `metadata.evolutionMsgId` continua onde está, não migra.
+  idExterno String?
+
+  /// Qual mensagem é (chave do catálogo em shared-types: OTP_CADASTRO, …).
+  /// Null nas linhas antigas e no inbound. É o que permite perguntar "o resumo
+  /// saiu ontem?" e "quanto custou o código este mês", que hoje não dá.
+  rota String?
+
+  /// Categoria de cobrança da Meta: "authentication" | "utility" | "servico".
+  /// No Evolution é sempre null — lá não se paga por mensagem.
+  categoria String?
+
+  /// Custo ESTIMADO em reais, congelado no envio. É estimativa pra dar noção de
+  /// consumo no painel; a conta que vale é a da Meta. Fica gravado em vez de ser
+  /// calculado na leitura porque a tabela de preços muda e o que já saiu não
+  /// deveria mudar de preço junto.
+  custoEstimado Decimal? @db.Decimal(10, 4)
+
   @@index([telefone, criadoEm])
   @@index([sessaoId, criadoEm])
   @@index([contaId])
+  @@index([idExterno])
+  @@index([contaId, rota, criadoEm])
   @@map("whatsapp_mensagens")
 }
 
