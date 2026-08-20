@@ -101,6 +101,7 @@ Corpo das rotas usa **Zod dos `shared-types`** via `ZodValidationPipe` (não cla
 
 - `common/viagem-status.ts` — `STATUS_FORA_FECHAMENTO` (`EM_ANDAMENTO`, `AGUARDANDO_PESO`): viagens incompletas que nunca entram em match/fechamento/KPI/export. Esquecer um ponto de exclusão faz viagem sem peso entrar como 0t.
 - `common/viagem-minimos.ts` — `RegraMinimo` (empresa+material+faixa de km → km/ton mínimo faturado). O real nunca é sobrescrito no banco; o mínimo é aplicado ao **exibir/agregar/faturar**. Todo cálculo de efetivo passa por aqui.
+- `common/km-motorista.ts` — **o km que o motorista informa é lei.** `Viagem.kmMotorista` é cópia intocável do valor dele (só os 3 caminhos do app escrevem); `Viagem.km` é o faturado. Qualquer alteração de km pelo painel passa por `checarAlteracaoKm` → sem motivo escrito é 400, e o que passa vira auditoria `ADMIN_ALTEROU_KM` + carimbo `kmAlterado*` (que também tira a viagem do reprocessamento). Endpoint novo que escreva `km` tem que chamar a regra — nunca reimplementar.
 - `common/timezone.ts` — container roda em UTC; "hoje"/mês devem ancorar em `America/Sao_Paulo`, nunca `setHours(0)`.
 
 ### Enviar WhatsApp: sempre pelo `EnvioWhatsappService`
