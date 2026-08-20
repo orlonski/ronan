@@ -63,8 +63,9 @@ export default function FinalizarViagem() {
   const [exigirJustificativa, setExigirJustificativa] = useState(false);
   // Bota-fora (limpeza): motorista voltou pro local de carga pra jogar a sobra.
   const [teveBotaFora, setTeveBotaFora] = useState(false);
-  // Rota escolhida no seletor de mapa (quando há alternativas).
-  const [rotaIdx, setRotaIdx] = useState(0);
+  // Rota escolhida no seletor de mapa (quando há alternativas). Nasce em -1:
+  // nada vem marcado, quem escolhe a estrada é o motorista.
+  const [rotaIdx, setRotaIdx] = useState(-1);
   const [rotaGeometriaEscolhida, setRotaGeometriaEscolhida] = useState<string | null>(null);
   const [localDescargaId, setLocalDescargaId] = useState("");
   const [descargaCaptura, setDescargaCaptura] = useState<DescargaCaptura | null>(null);
@@ -265,20 +266,23 @@ export default function FinalizarViagem() {
     return escolhida ? parseFloat(escolhida.km) : null;
   }, [botaFora, opcoesVolta.data]);
   // Auto-preenche o km com o valor calculado pela rota, se motorista não editou.
+  //
+  // Havendo alternativas, o valor sai da RECOMENDADA — a mesma fonte de
+  // `kmCalculado` acima. Puxar aqui de `rota.data` (que passa pelo rota_cache) e
+  // lá de `rotasAtivas` (que ignora o cache) deixaria os dois divergirem, e o
+  // painel carimbaria "ajustou o km na mão" sem ninguém ter ajustado nada.
+  //
+  // NÃO existe pré-seleção de rota: o seletor abre sem nada marcado e só
+  // `escolherRota` (o toque do motorista) governa km e geometria. O que vem do
+  // rascunho é escolha anterior dele — essa continua valendo.
   useEffect(() => {
     if (kmEditadoManual || kmGovernadoPorRota) return;
-    if (!rota.data || rota.data.km === null) return;
-    setKm((cur) => (cur === rota.data!.km ? cur : (rota.data as { km: string }).km));
-  }, [rota.data, kmEditadoManual, kmGovernadoPorRota]);
-
-  // Pré-seleciona a recomendada no seletor de estrada. Preserva a escolha
-  // restaurada do rascunho.
-  useEffect(() => {
-    if (kmEditadoManual || rotaGeometriaEscolhida != null) return;
-    if (rotasAtivas.length < 1) return;
-    const recIdx = Math.max(0, rotasAtivas.findIndex((r) => r.recomendada));
-    escolherRota(recIdx);
-  }, [rotasAtivas, kmEditadoManual, rotaGeometriaEscolhida]); // eslint-disable-line react-hooks/exhaustive-deps
+    const recomendada = rotasAtivas.find((r) => r.recomendada);
+    const doCalculo = rota.data && rota.data.km !== null ? String(rota.data.km) : null;
+    const novoKm = recomendada?.km ?? doCalculo;
+    if (novoKm == null) return;
+    setKm((cur) => (cur === novoKm ? cur : novoKm));
+  }, [rota.data, rotasAtivas, kmEditadoManual, kmGovernadoPorRota]);
 
   const nomeDescargaSelecionado = useMemo(() => {
     if (!localDescargaId) return undefined;
@@ -346,6 +350,14 @@ export default function FinalizarViagem() {
     }
     if (!materialId) {
       val.apontar("material", "Escolha o material");
+      return false;
+    }
+    // A estrada é escolha do motorista: com 2+ opções ele tem que apontar qual
+    // pegou — nada vem marcado. Com uma opção só não há o que escolher, e
+    // offline nem chega alternativa. Se ele já assumiu o km por outro caminho
+    // (digitou na mão ou pegou a sugestão da frota), não cobra a estrada também.
+    if (temMapa && rotasAtivas.length > 1 && rotaIdx < 0 && !kmEditadoManual) {
+      val.apontar("rota", "Escolha a estrada que você pegou");
       return false;
     }
     if (!km.trim()) {
@@ -675,11 +687,14 @@ export default function FinalizarViagem() {
 
             {/* Seletor de estrada (escolha da rota no mapa) */}
             {temMapa ? (
-              <SeletorRotas
-                rotas={rotasAtivas}
-                selecionadaIdx={rotaIdx}
-                onSelecionar={escolherRota}
-              />
+              <View ref={val.refCampo("rota")} onLayout={val.onLayoutCampo("rota")}>
+                <SeletorRotas
+                  rotas={rotasAtivas}
+                  selecionadaIdx={rotaIdx}
+                  onSelecionar={escolherRota}
+                />
+                {val.erroDe("rota") ? <ErroCampo msg={val.erroDe("rota")!} /> : null}
+              </View>
             ) : null}
 
             {/* 3) Km e pedágio */}

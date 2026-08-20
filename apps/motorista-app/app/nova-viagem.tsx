@@ -192,8 +192,9 @@ export default function NovaViagem() {
   const [exigirJustificativa, setExigirJustificativa] = useState(false);
   // Bota-fora (limpeza): motorista voltou pro local de carga pra jogar a sobra.
   const [teveBotaFora, setTeveBotaFora] = useState(false);
-  // Rota escolhida no seletor de mapa (quando há alternativas).
-  const [rotaIdx, setRotaIdx] = useState(0);
+  // Rota escolhida no seletor de mapa (quando há alternativas). Nasce em -1:
+  // nada vem marcado, quem escolhe a estrada é o motorista.
+  const [rotaIdx, setRotaIdx] = useState(-1);
   const [rotaGeometriaEscolhida, setRotaGeometriaEscolhida] = useState<string | null>(null);
 
   // Modo edit: hidrata form com viagem pendente que falhou na sync
@@ -375,21 +376,25 @@ export default function NovaViagem() {
       ? parseFloat(rotasAtivas[rotaIdx]!.km)
       : kmRecomendado;
 
-  // Auto-preenche KM com valor calculado pelo OSRM, se motorista nao editou.
+  // Auto-preenche KM com o valor calculado pelo OSRM, se o motorista não editou.
+  //
+  // Havendo alternativas, o valor sai da RECOMENDADA — a mesma fonte que
+  // alimenta `kmCalculado` logo acima. Puxar aqui de `rota.data` (que passa pelo
+  // rota_cache) e lá de `rotasAtivas` (que ignora o cache) deixaria os dois
+  // divergirem, e o painel carimbaria "ajustou o km na mão" sem ninguém ter
+  // ajustado nada. Sem alternativas (offline), cai no `rota.data` — inclusive o
+  // estimado por haversine, que preenche o campo mas não vai como kmCalculado.
+  //
+  // NÃO existe pré-seleção de rota: o seletor abre sem nada marcado e só
+  // `escolherRota` (o toque do motorista) governa km e geometria.
   useEffect(() => {
     if (kmEditadoManual || kmGovernadoPorRota) return;
-    if (!rota.data || rota.data.km === null) return;
-    const novoKm = rota.data.km;
+    const recomendada = rotasAtivas.find((r) => r.recomendada);
+    const doCalculo = rota.data && rota.data.km !== null ? String(rota.data.km) : null;
+    const novoKm = recomendada?.km ?? doCalculo;
+    if (novoKm == null) return;
     setForm((f) => (f.km === novoKm ? f : { ...f, km: novoKm }));
-  }, [rota.data, kmEditadoManual, kmGovernadoPorRota]);
-
-  // Pré-seleciona a recomendada no seletor de estrada.
-  useEffect(() => {
-    if (kmEditadoManual || rotaGeometriaEscolhida != null) return;
-    if (rotasAtivas.length < 1) return;
-    const recIdx = Math.max(0, rotasAtivas.findIndex((r) => r.recomendada));
-    escolherRota(recIdx);
-  }, [rotasAtivas, kmEditadoManual, rotaGeometriaEscolhida]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rota.data, rotasAtivas, kmEditadoManual, kmGovernadoPorRota]);
 
   // Auto-detecta local de carga/descarga a partir dos pontos GPS do tracking.
   // O GPS de LARGADA (e de chegada) costuma ser impreciso (cold start, prédios),
@@ -708,6 +713,12 @@ export default function NovaViagem() {
     if (!form.localCargaId) return void val.apontar("localCarga", "Escolha o local de carga"), false;
     if (exigeLocalDescarga && !form.localDescargaId)
       return void val.apontar("localDescarga", "Marque o local de descarga"), false;
+    // A estrada é escolha do motorista: com 2+ opções ele tem que apontar qual
+    // pegou — nada vem marcado. Com uma opção só não há o que escolher, e
+    // offline nem chega alternativa. Se ele já assumiu o km por outro caminho
+    // (digitou na mão ou pegou a sugestão da frota), não cobra a estrada também.
+    if (exigeKm && temMapa && rotasAtivas.length > 1 && rotaIdx < 0 && !kmEditadoManual)
+      return void val.apontar("rota", "Escolha a estrada que você pegou"), false;
     if (exigeKm && !form.km.trim())
       return void val.apontar("km", "Informe os km rodados"), false;
     // Diária: a entrada é o que não pode faltar. A saída pode ficar pra depois
@@ -1704,11 +1715,14 @@ export default function NovaViagem() {
     ) : null;
 
   const secaoSeletorRotas = temMapa ? (
-    <SeletorRotas
-      rotas={rotasAtivas}
-      selecionadaIdx={rotaIdx}
-      onSelecionar={escolherRota}
-    />
+    <View ref={val.refCampo("rota")} onLayout={val.onLayoutCampo("rota")}>
+      <SeletorRotas
+        rotas={rotasAtivas}
+        selecionadaIdx={rotaIdx}
+        onSelecionar={escolherRota}
+      />
+      {val.erroDe("rota") ? <ErroCampo msg={val.erroDe("rota")!} /> : null}
+    </View>
   ) : null;
 
   // Banner informativo de km fora do padrão (a explicação é exigida na

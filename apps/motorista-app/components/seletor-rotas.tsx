@@ -10,6 +10,10 @@ import type { RotaOption } from "@/lib/queries";
  * distintas (combinando com os botões) e a escolha é feita nos botões grandes
  * embaixo do mapa — feito pra dedão de motorista.
  *
+ * REGRA: nenhuma opção vem marcada. Quem dirigiu foi ele, e é ele quem aponta
+ * qual estrada pegou — o app marcar sozinho já fez o painel afirmar que o
+ * motorista "escolheu outra rota" por uma decisão que ele nunca tomou.
+ *
  * IMPORTANTE (crash iOS): o mapa fica num componente memoizado (`RotasMapa`)
  * que só depende de `rotas` (estável). Assim ele renderiza UMA vez e não
  * re-renderiza quando o motorista seleciona/edita — o react-native-maps no
@@ -30,6 +34,7 @@ type LatLng = { latitude: number; longitude: number };
 
 type Props = {
   rotas: RotaOption[];
+  /** -1 = nenhuma escolhida ainda. É assim que a tela abre — sempre. */
   selecionadaIdx: number;
   onSelecionar: (idx: number) => void;
   height?: number;
@@ -40,9 +45,11 @@ export function corDaRota(idx: number): string {
 }
 
 /**
- * Mapa isolado e memoizado. Destaca a rota escolhida (colorida/grossa) e apaga
- * as outras (cinza). Memoizado por `rotas`/`height`/`selecionadaIdx`, então só
- * re-renderiza ao TROCAR de rota — não a cada tecla do km.
+ * Mapa isolado e memoizado. Com `selecionadaIdx = -1` (ninguém escolheu ainda)
+ * todas as rotas saem na sua própria cor; depois da escolha, a escolhida fica
+ * colorida/grossa e as outras apagam (cinza). Memoizado por
+ * `rotas`/`height`/`selecionadaIdx`, então só re-renderiza ao TROCAR de rota —
+ * não a cada tecla do km.
  *
  * Segurança iOS: o conjunto de Polylines é FIXO (uma por rota, `key` e
  * `coordinates` estáveis); a seleção muda só `strokeColor`/`strokeWidth`. NÃO
@@ -112,6 +119,7 @@ export const RotasMapa = memo(function RotasMapa({
     return <View className="rounded-xl bg-muted/40" style={{ height }} />;
   }
 
+  const nenhumaEscolhida = selecionadaIdx < 0;
   const MapView = mod.default;
   const Marker = mod.Marker;
   const Polyline = mod.Polyline;
@@ -129,7 +137,10 @@ export const RotasMapa = memo(function RotasMapa({
         {rotasCoords.map((coords, idx) => {
           if (coords.length < 2) return null;
           const sel = idx === selecionadaIdx;
-          const apagado = !sel;
+          // Enquanto o motorista não escolheu, TODAS aparecem na sua cor — é a
+          // hora em que ele precisa comparar os caminhos. Apagar as outras só
+          // faz sentido depois que ele apontou uma.
+          const apagado = !nenhumaEscolhida && !sel;
           return (
             <Polyline
               key={idx}
