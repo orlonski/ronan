@@ -78,6 +78,12 @@ export type ViagemPublica = {
   };
 
   rotaGeometria: string | null;
+  /**
+   * "viagem" = traçado que o motorista registrou. "cache" = rota calculada do
+   * par carga→descarga, ilustração do trecho. O comprovante sai da empresa: a
+   * linha não pode passar por prova do caminho quando não é dele.
+   */
+  rotaGeometriaFonte: "viagem" | "cache" | null;
   fotos: { id: string; rotacao: number }[];
 };
 
@@ -234,6 +240,11 @@ export function serializarViagemPublica(
     // própria viagem, e a linha é ilustração do trajeto. Se um dia alguém for
     // calcular algo a partir deste campo, tem que resolver por viagem primeiro.
     rotaGeometria: viagem.rotaGeometria ?? ctx.rotaDoPar,
+    rotaGeometriaFonte: viagem.rotaGeometria
+      ? ("viagem" as const)
+      : ctx.rotaDoPar
+        ? ("cache" as const)
+        : null,
     fotos: viagem.fotos.map((f) => ({ id: f.id, rotacao: f.rotacao })),
   };
 }

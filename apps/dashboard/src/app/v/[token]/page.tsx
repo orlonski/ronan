@@ -34,6 +34,8 @@ type Comprovante = {
   toneladas: { informada: string; efetiva: string; ajustadoPorMinimo: boolean };
   pedagio: { total: string | null; itens: { praca: string; valor: string; data: string }[] };
   rotaGeometria: string | null;
+  /** "cache" = ilustração do trecho, não o caminho que o motorista registrou. */
+  rotaGeometriaFonte: "viagem" | "cache" | null;
   fotos: { id: string; rotacao: number }[];
 };
 
@@ -212,6 +214,12 @@ export default async function ComprovantePage({
                 destino={pontoMapa(d.destino)}
                 geometria={d.rotaGeometria}
               />
+              {d.rotaGeometriaFonte === "cache" && d.rotaGeometria && (
+                <p className="mt-2 text-xs text-slate-500">
+                  A linha é o trajeto calculado entre os dois pontos, para ilustrar o
+                  percurso — não é o caminho registrado pelo motorista.
+                </p>
+              )}
             </Card>
             {/* Leaflet imprime tiles em branco — no papel vai o texto. */}
             <div className="hidden print:block">

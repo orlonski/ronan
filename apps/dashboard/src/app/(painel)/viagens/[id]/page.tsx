@@ -193,6 +193,12 @@ type ViagemDetalhe = {
     lng: number | null;
   } | null;
   rotaGeometria: string | null;
+  /**
+   * De onde veio o traçado. "viagem" = o caminho que este motorista registrou.
+   * "cache" = referência do trecho, calculada pra outra viagem — não é prova do
+   * que ele fez, e a tela tem que deixar isso escrito.
+   */
+  rotaGeometriaFonte?: "viagem" | "cache" | null;
   /** True quando o motorista escolheu a rota no seletor (≠ edição manual de km). */
   rotaEscolhida?: boolean;
   /** Regra de mínimo por faixa que casou (empresa+material+faixa). Null = nenhuma. */
@@ -487,6 +493,9 @@ export default function ViagemDetalhePage({
     [vd?.lat, vd?.lng],
   );
   const mapaGeometria = useMemo(() => vd?.rotaGeometria ?? null, [vd?.rotaGeometria]);
+  // A linha não é desta viagem: veio do cache do trecho (calculada pra outra
+  // viagem). Serve de referência, não de prova do que o motorista fez.
+  const tracadoDeReferencia = vd?.rotaGeometriaFonte === "cache";
   const mapaPedagios = useMemo(
     () => pedagiosNaRota.data?.pedagios ?? [],
     [pedagiosNaRota.data],
@@ -1220,6 +1229,21 @@ export default function ViagemDetalhePage({
                       <>A volta pela rota dá {fmtNum(botaFora.data.kmVolta, 1)} km.</>
                     )}
                   </div>
+                </div>
+              )}
+              {tracadoDeReferencia && mapaGeometria && (
+                <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <p>
+                    <span className="font-medium">
+                      A linha do mapa é o traçado de referência do trecho, não o caminho
+                      registrado nesta viagem.
+                    </span>{" "}
+                    Esta viagem não guardou rota própria (lançada sem sinal ou sem as
+                    alternativas), então o mapa desenha a rota calculada para o par
+                    carga → descarga. Não use esse desenho para afirmar por onde o
+                    motorista passou.
+                  </p>
                 </div>
               )}
               <MapaTrajetoViagem

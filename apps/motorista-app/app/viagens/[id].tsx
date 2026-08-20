@@ -793,6 +793,13 @@ export default function ViagemDetalheScreen() {
                     pedagios={pedagiosNaRota.data ?? []}
                     height={220}
                   />
+                  {detalhe.data.rotaGeometriaFonte === "cache" &&
+                  detalhe.data.rotaGeometria ? (
+                    <Text className="mt-2 text-xs text-muted-foreground">
+                      A linha é o trajeto calculado entre os dois pontos — nesta viagem
+                      não ficou guardada a estrada que você pegou.
+                    </Text>
+                  ) : null}
                 </View>
                 {detalhe.data.lat != null && detalhe.data.lng != null && (
                   <Button

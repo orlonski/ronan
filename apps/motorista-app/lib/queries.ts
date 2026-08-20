@@ -687,6 +687,12 @@ export type ViagemDetalhe = Viagem & {
       })
     | null;
   rotaGeometria: string | null;
+  /**
+   * "viagem" = a estrada que o motorista registrou. "cache" = rota calculada do
+   * trecho, de outra viagem — a tela avisa, pra ninguém ler a linha como prova
+   * do caminho. Ausente nas respostas antigas em cache (offline-first).
+   */
+  rotaGeometriaFonte?: "viagem" | "cache" | null;
 };
 
 export function useViagemDetalhe(id: string) {

@@ -585,6 +585,15 @@ export class ViagensAdminService {
           : null,
       // Rota escolhida pelo motorista (fallback: cache/recomendada).
       rotaGeometria: viagem.rotaGeometria ?? rota?.geometria ?? null,
+      // DE ONDE veio esse traçado. "cache" é o do RotaCache do par de locais:
+      // foi calculado pra OUTRA viagem, vale 90 dias e NÃO é o caminho que este
+      // motorista fez — a tela precisa dizer isso, senão a linha é lida como
+      // prova do trajeto e vira acusação em cima de dado que não é dele.
+      rotaGeometriaFonte: viagem.rotaGeometria
+        ? ("viagem" as const)
+        : rota?.geometria
+          ? ("cache" as const)
+          : null,
       // Sinaliza que o motorista escolheu uma rota no seletor (distingue de
       // edição manual de km no painel).
       rotaEscolhida: viagem.rotaGeometria != null,

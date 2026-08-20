@@ -353,6 +353,13 @@ export class ViagensMotoristaService {
       // Prefere a rota que o motorista escolheu no seletor; cai no cache
       // (recomendada) pra viagens antigas sem escolha registrada.
       rotaGeometria: viagem.rotaGeometria ?? rota?.geometria ?? null,
+      // "cache" = a linha é do trecho, não desta viagem. O app avisa: o
+      // motorista não pode olhar um traçado que não é o dele achando que é.
+      rotaGeometriaFonte: viagem.rotaGeometria
+        ? ("viagem" as const)
+        : rota?.geometria
+          ? ("cache" as const)
+          : null,
     };
   }
 
