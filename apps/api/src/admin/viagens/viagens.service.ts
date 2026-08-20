@@ -28,6 +28,7 @@ import { paginate, type PaginationQuery } from "../../common/pagination";
 import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
 import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
 import { resolverDivergenciasSupridas } from "../../common/divergencias";
+import { checarAlteracaoKm } from "../../common/km-motorista";
 import { filtrarComercial, omitirComercial } from "./comercial";
 import { PedagiosRodoviaConsultaService } from "../pedagios-rodovia/pedagios-rodovia-consulta.service";
 import { BuscaLocaisConfigService } from "../busca-locais-config/busca-locais-config.service";
@@ -510,6 +511,8 @@ export class ViagensAdminService {
         tipoServico: { select: { id: true, nome: true, medicao: true } },
         // Pro selo e pro link "ver a outra viagem" no painel.
         ticketDuplicadoDe: { select: { id: true, ticket: true, data: true } },
+        // Quem mexeu no km do motorista — o painel mostra o nome junto do motivo.
+        kmAlteradoPor: { select: { id: true, nome: true } },
         // No detalhe vêm TODAS (inclusive resolvidas): aqui o histórico ajuda
         // quem está conferindo a entender o que a viagem já passou.
         divergencias: {
@@ -610,6 +613,17 @@ export class ViagensAdminService {
       );
     }
 
+    // O KM DO MOTORISTA É LEI. O painel pode corrigir (erro de digitação
+    // acontece), mas nunca calado: exige motivo escrito, que vai pro histórico
+    // com nome próprio e chega no celular dele junto com o valor novo.
+    // Regra em common/km-motorista.ts — não reimplementar aqui.
+    const { motivoKm, ...campos } = input;
+    const checagemKm = checarAlteracaoKm(antes, campos.km, motivoKm);
+    if (checagemKm.mudou && checagemKm.erro) {
+      throw new BadRequestException(checagemKm.erro);
+    }
+    const kmMudou = checagemKm.mudou;
+
     // Se trocou ticket OU clienteId, RECARIMBA a duplicidade (não bloqueia mais —
     // ver resolverTicketParaEmpresa no service do motorista). Recarimbar aqui é o
     // que faz o selo sumir quando o admin corrige o número, e aparecer quando ele
@@ -644,7 +658,15 @@ export class ViagensAdminService {
     // Viagem lançada sem peso (AGUARDANDO_PESO): quando o admin preenche as
     // toneladas pelo dashboard, ela sai de "aguardando peso" e entra no fluxo
     // normal (ENVIADA) — passando a contar em conferência/fechamento/KPIs.
-    const dataUpdate: Prisma.ViagemUpdateInput = { ...input };
+    const dataUpdate: Prisma.ViagemUpdateInput = { ...campos };
+    // Carimbo da alteração de km: quem, quando e por quê. kmMotorista NUNCA é
+    // tocado aqui. kmAlteradoEm também tira a viagem da fila do reprocessamento
+    // (o cron não desfaz decisão justificada de humano).
+    if (kmMudou) {
+      dataUpdate.kmAlteradoEm = new Date();
+      dataUpdate.kmAlteradoPor = { connect: { id: usuarioId } };
+      dataUpdate.kmAlteracaoMotivo = motivoKm ?? null;
+    }
     if (duplicadoDeId !== undefined) {
       dataUpdate.ticketDuplicadoDe = duplicadoDeId
         ? { connect: { id: duplicadoDeId } }
@@ -652,16 +674,16 @@ export class ViagensAdminService {
       // Ticket novo = duplicidade nova: o aceite anterior não vale mais.
       dataUpdate.duplicidadeAceitaEm = null;
     }
-    if (antes.status === StatusViagem.AGUARDANDO_PESO && input.toneladas != null) {
+    if (antes.status === StatusViagem.AGUARDANDO_PESO && campos.toneladas != null) {
       dataUpdate.status = StatusViagem.ENVIADA;
     }
 
     // Espelho da regra acima pra diária: o admin fecha pelo painel a que o
     // motorista deixou aberta. A duração é sempre RECALCULADA aqui (nunca vem
     // do cliente) pra não existir viagem com hora e duração se contradizendo.
-    const entradaFinal = input.entradaEm ?? antes.entradaEm;
-    const saidaFinal = input.saidaEm ?? antes.saidaEm;
-    if (input.entradaEm !== undefined || input.saidaEm !== undefined) {
+    const entradaFinal = campos.entradaEm ?? antes.entradaEm;
+    const saidaFinal = campos.saidaEm ?? antes.saidaEm;
+    if (campos.entradaEm !== undefined || campos.saidaEm !== undefined) {
       if (entradaFinal && saidaFinal) {
         const minutos = Math.round((saidaFinal.getTime() - entradaFinal.getTime()) / 60000);
         if (minutos <= 0) {
@@ -710,11 +732,31 @@ export class ViagensAdminService {
       this.enriquecerCamposFK(depois),
     ]);
 
+    // O km sai do diff genérico: mexer no km do motorista não pode aparecer no
+    // histórico como uma linha "Atualização Km" igual a qualquer outra. Ele tem
+    // registro próprio logo abaixo, com o motivo escrito.
     await this.auditoria.logDiff(
       { usuarioId, entidade: "Viagem", entidadeId: id, acao: AcaoAuditoria.UPDATE },
-      antesEnriquecido,
-      depoisEnriquecido,
+      semCamposDeKm(antesEnriquecido),
+      semCamposDeKm(depoisEnriquecido),
     );
+
+    if (kmMudou) {
+      await this.auditoria.log({
+        usuarioId,
+        entidade: "Viagem",
+        entidadeId: id,
+        acao: AcaoAuditoria.ADMIN_ALTEROU_KM,
+        campo: "km",
+        valorAntes: antes.km?.toString() ?? null,
+        valorDepois: String(campos.km),
+        motivo: motivoKm ?? null,
+        metadata: {
+          kmMotorista: antes.kmMotorista?.toString() ?? null,
+          kmCalculado: antes.kmCalculado?.toString() ?? null,
+        },
+      });
+    }
 
     // Notifica motorista com 1 push agrupado descrevendo o que mudou.
     // FK já vêm enriquecidas com { id, nome } pra resumo legível.
@@ -724,8 +766,13 @@ export class ViagensAdminService {
         viagemId: id,
         tipo: "viagem-editada",
         titulo: "Sua viagem foi editada",
-        corpo: corpoDoDiff(diffs),
-        dados: { diffs },
+        // Km alterado sempre viaja com o porquê: o motorista não descobre o
+        // número novo sem saber o motivo.
+        corpo:
+          kmMudou && motivoKm
+            ? `${corpoDoDiff(diffs)}\nMotivo do km: ${motivoKm}`
+            : corpoDoDiff(diffs),
+        dados: { diffs, ...(kmMudou && motivoKm ? { motivoKm } : {}) },
         criadoPorId: usuarioId,
       });
     }
@@ -1157,81 +1204,6 @@ export class ViagensAdminService {
     return this.detalhe(id, null, true);
   }
 
-  /** Lista as rotas alternativas (OSRM) do par carga→descarga da viagem. */
-  async rotasAlternativas(id: string) {
-    const viagem = await this.prisma.viagem.findUnique({
-      where: { id },
-      select: { localCargaId: true, localDescargaId: true },
-    });
-    if (!viagem) throw new NotFoundException("Viagem não encontrada");
-    if (!viagem.localCargaId || !viagem.localDescargaId) {
-      throw new BadRequestException("Viagem sem locais definidos.");
-    }
-    return this.roteamento.calcularAlternativas(
-      viagem.localCargaId,
-      viagem.localDescargaId,
-    );
-  }
-
-  /**
-   * Aplica manualmente uma rota escolhida no painel: define o km faturado, a
-   * geometria da rota (desenhada no painel) e o kmCalculado de referência.
-   *
-   * Grava kmFonte=ROTA_ESCOLHIDA (mesmo valor que o app usa quando o motorista
-   * escolhe rota no seletor dele) — é a procedência declarada que o
-   * KmAtipicoService.baseConsistente exige. Sem isso, um "Recalcular trajeto"
-   * posterior (que só atualiza kmCalculado pra rota mais curta) acusava a
-   * viagem de "km sem procedência" mesmo tendo sido corrigida aqui — e ela
-   * sumia de "viagens comparáveis" sem ninguém ter mexido nela de novo.
-   */
-  async escolherRota(
-    id: string,
-    input: {
-      km: number;
-      rotaGeometria: string;
-      kmCalculado?: number;
-    },
-    usuarioId: string,
-  ) {
-    const viagem = await this.prisma.viagem.findUnique({
-      where: { id },
-      select: { id: true, km: true, kmCalculado: true },
-    });
-    if (!viagem) throw new NotFoundException("Viagem não encontrada");
-
-    await this.prisma.viagem.update({
-      where: { id: viagem.id },
-      data: {
-        km: input.km,
-        rotaGeometria: input.rotaGeometria,
-        kmFonte: KmFonte.ROTA_ESCOLHIDA,
-        ...(input.kmCalculado != null ? { kmCalculado: input.kmCalculado } : {}),
-      },
-    });
-
-    await this.auditoria.log({
-      usuarioId,
-      entidade: "Viagem",
-      entidadeId: viagem.id,
-      acao: AcaoAuditoria.RECALCULAR_TRAJETO,
-      campo: "km",
-      valorAntes: viagem.km?.toString() ?? null,
-      valorDepois: String(input.km),
-      motivo: `Rota escolhida manualmente no painel.`,
-      metadata: {
-        rotaGeometriaDefinida: true,
-        kmAntes: viagem.km?.toString() ?? null,
-        kmDepois: String(input.km),
-        kmCalculado: input.kmCalculado != null ? String(input.kmCalculado) : null,
-      },
-    });
-
-    // km e kmFonte mudaram → re-carimba o atípico (mesmo motivo do recalcular).
-    void this.kmAtipico.avaliarViagem(viagem.id);
-
-    return this.detalhe(id, null /* handler sem @EscopoPor: sem recorte por frota (a conta a trava já filtra) */, true /* admin */);
-  }
-
   /**
    * Km da volta do bota-fora (descarga → carga), na MESMA régua do app. Usa a
    * rota direta (mais curta) — o roteador não força mais o retorno de pista dupla.
@@ -1368,6 +1340,9 @@ export class ViagensAdminService {
     const kmNovo = kmBase + (kmVoltaNovo ?? 0);
     const kmCalculadoNovo =
       kmCalculadoBase != null ? kmCalculadoBase + (kmVoltaNovo ?? 0) : null;
+    const motivoBotaFora = teveBotaFora
+      ? `Bota-fora marcado no painel: +${(kmVoltaNovo ?? 0).toFixed(2)} km de volta até o local de carga.`
+      : `Bota-fora desmarcado no painel: -${kmVoltaAtual.toFixed(2)} km da volta.`;
 
     await this.prisma.$transaction(async (tx) => {
       // Recria em vez de atualizar: idempotente e igual ao `finalizar` do app.
@@ -1392,6 +1367,12 @@ export class ViagensAdminService {
         data: {
           km: kmNovo,
           ...(kmCalculadoNovo != null ? { kmCalculado: kmCalculadoNovo } : {}),
+          // Isto mexe no km faturado do motorista: carimba como alteração do
+          // painel (mesma regra do PATCH), com o motivo automático da volta.
+          // kmMotorista fica intacto — a lei continua registrada.
+          kmAlteradoEm: new Date(),
+          kmAlteradoPorId: usuarioId,
+          kmAlteracaoMotivo: motivoBotaFora,
         },
       });
     });
@@ -1400,13 +1381,11 @@ export class ViagensAdminService {
       usuarioId,
       entidade: "Viagem",
       entidadeId: viagem.id,
-      acao: AcaoAuditoria.RECALCULAR_TRAJETO,
+      acao: AcaoAuditoria.ADMIN_ALTEROU_KM,
       campo: "km",
       valorAntes: viagem.km?.toString() ?? null,
       valorDepois: kmNovo.toFixed(2),
-      motivo: teveBotaFora
-        ? `Bota-fora marcado no painel: +${(kmVoltaNovo ?? 0).toFixed(2)} km de volta até o local de carga.`
-        : `Bota-fora desmarcado no painel: -${kmVoltaAtual.toFixed(2)} km da volta.`,
+      motivo: motivoBotaFora,
       metadata: {
         teveBotaFora,
         kmVoltaAntes: kmVoltaAtual.toFixed(2),
@@ -1557,6 +1536,12 @@ const CAMPOS_IGNORADOS_NOTIF = new Set([
   "iniciadoEm",
   "kmReal",
   "kmCalculado",
+  // Carimbo de quem/quando/por que o painel mexeu no km: o motivo já vai no
+  // corpo do push, não vira linha de diff.
+  "kmMotorista",
+  "kmAlteradoEm",
+  "kmAlteradoPorId",
+  "kmAlteracaoMotivo",
   "ocrCampos",
   "ocrConfidence",
   "criadoOfflineEm",
@@ -1582,6 +1567,25 @@ const LABEL_CAMPO: Record<string, string> = {
   localCargaId: "Local de carga",
   localDescargaId: "Local de descarga",
 };
+
+/**
+ * Tira do diff genérico o km e o carimbo da alteração — eles têm registro
+ * próprio (ADMIN_ALTEROU_KM), com o motivo escrito. Sem isso o histórico
+ * mostraria a mesma alteração duas vezes, uma delas muda.
+ */
+const CAMPOS_KM_AUDITADOS_A_PARTE = [
+  "km",
+  "kmMotorista",
+  "kmAlteradoEm",
+  "kmAlteradoPorId",
+  "kmAlteracaoMotivo",
+] as const;
+
+function semCamposDeKm(registro: Record<string, unknown>): Record<string, unknown> {
+  const copia = { ...registro };
+  for (const campo of CAMPOS_KM_AUDITADOS_A_PARTE) delete copia[campo];
+  return copia;
+}
 
 type DiffCampo = { campo: string; label: string; antes: unknown; depois: unknown };
 

@@ -48,6 +48,7 @@ export class KmReprocessamentoService {
           kmEditadoManual: true,
           kmFonte: true,
           kmRecalculadoEm: true,
+          kmAlteradoEm: true,
           trechos: { select: { id: true, localId: true }, orderBy: { ordem: "asc" } },
           localCargaId: true,
           localDescargaId: true,
@@ -60,6 +61,9 @@ export class KmReprocessamentoService {
       // Já reprocessada, ou OSRM já rodou na criação (viagem online) → nada a fazer.
       if (v.kmRecalculadoEm) return;
       if (v.kmCalculado != null) return;
+      // Km já alterado no painel — e alteração no painel só acontece com motivo
+      // escrito. Decisão justificada de humano não é desfeita por cron.
+      if (v.kmAlteradoEm) return;
       // EM_ANDAMENTO ainda não tem km/locais definidos.
       if (v.status === "EM_ANDAMENTO") return;
       if (!v.localCargaId || !v.localDescargaId) return;
@@ -110,7 +114,14 @@ export class KmReprocessamentoService {
       // esta guarda o reprocessador sobrescreveria o valor dele pelo OSRM,
       // calado — justo na rota em que a sugestão mais importa. Só atualiza a
       // referência OSRM e marca; não mexe no km faturado.
-      if (v.kmEditadoManual === true || v.kmFonte === "HISTORICO") {
+      // ROTA_ESCOLHIDA entra na mesma guarda: escolher a estrada no mapa é
+      // decisão do motorista tanto quanto digitar o número. Sem isso o cron
+      // trocava a rota que ele escolheu pela mais curta do OSRM, calado.
+      if (
+        v.kmEditadoManual === true ||
+        v.kmFonte === "HISTORICO" ||
+        v.kmFonte === "ROTA_ESCOLHIDA"
+      ) {
         await this.prisma.viagem.update({
           where: { id: v.id },
           data: {
@@ -198,6 +209,8 @@ export class KmReprocessamentoService {
       where: {
         kmRecalculadoEm: null,
         kmCalculado: null,
+        // Km alterado no painel (com motivo) não volta pra fila do cron.
+        kmAlteradoEm: null,
         status: { notIn: ["EM_ANDAMENTO", "RASCUNHO_OFFLINE"] },
         localCargaId: { not: null },
         localDescargaId: { not: null },

@@ -118,6 +118,7 @@ function labelForAcao(acao: string): string {
       MATCH_AUTOMATICO: "Match automático",
       MATCH_IA: "Match via IA",
       RECALCULAR_TRAJETO: "Recálculo de trajeto",
+      ADMIN_ALTEROU_KM: "Conferente alterou o km",
       MOTORISTA_AJUSTOU_KM: "Motorista ajustou o km",
       PRE_VALIDAR_VIAGEM: "Pré-validação manual",
       ADICIONAR_FOTO: "Foto anexada",

@@ -2,7 +2,7 @@
 
 import { ArrowDown, Calculator, Route, TrendingUp, User } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { fmtNum } from "@/lib/fechamento-helpers";
+import { fmtDataHoraBR, fmtNum } from "@/lib/fechamento-helpers";
 
 export type RegraMinimo = {
   kmFaixaDe: string;
@@ -22,6 +22,14 @@ type Props = {
   kmAjustada?: boolean;
   kmReal: string | null; // GPS (tracking)
   rotaEscolhida?: boolean; // motorista escolheu outra rota no seletor
+  /** O km que o motorista informou — a lei, intocada por edição do painel. */
+  kmMotorista?: string | null;
+  /** Procedência do km do motorista. Sinal fiel (o resto é inferência). */
+  kmFonte?: "ROTA_OSRM" | "ROTA_ESCOLHIDA" | "HISTORICO" | "MANUAL" | null;
+  /** Alteração do km pelo painel (só acontece com motivo escrito). */
+  kmAlteradoEm?: string | null;
+  kmAlteracaoMotivo?: string | null;
+  kmAlteradoPorNome?: string | null;
   kmRecalculadoEm: string | null;
   kmAntesRecalculo: string | null;
   temBotaFora: boolean;
@@ -48,6 +56,10 @@ export function FaturamentoCard(p: Props) {
   const inf = Number(p.kmInformado);
   const diffRota = calc != null ? inf - calc : 0;
   const regra = p.regraMinimo;
+  // Km alterado no painel: o tile do motorista mostra a LEI (kmMotorista) e o
+  // número que está faturando ganha nota própria com quem mexeu e por quê.
+  const kmMot = p.kmMotorista != null ? Number(p.kmMotorista) : null;
+  const alterado = p.kmAlteradoEm != null && kmMot != null && kmMot !== inf;
 
   const seloMinimo = (
     <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
@@ -73,7 +85,7 @@ export function FaturamentoCard(p: Props) {
         <Tile
           Icon={User}
           label={p.kmAjustada ? "Informado" : "Km da viagem"}
-          hint="motorista"
+          hint={hintDoKmFonte(p.kmFonte)}
           valor={fmtNum(p.kmInformado, 2)}
           unidade="km"
         />
@@ -90,6 +102,21 @@ export function FaturamentoCard(p: Props) {
         )}
       </div>
 
+      {/* Km alterado no painel: a lei era outra, e isso não pode ficar escondido
+          numa nota fininha — vem em faixa, com autor e motivo. */}
+      {alterado && (
+        <div className="mt-3 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900">
+          <p className="font-semibold">
+            Km alterado no painel: o motorista informou {fmtNum(p.kmMotorista, 2)} km.
+          </p>
+          <p className="mt-0.5 text-xs">
+            {p.kmAlteradoPorNome ? `Por ${p.kmAlteradoPorNome}` : "Alterado"} em{" "}
+            {fmtDataHoraBR(p.kmAlteradoEm)}
+            {p.kmAlteracaoMotivo ? ` — ${p.kmAlteracaoMotivo}` : ""}
+          </p>
+        </div>
+      )}
+
       {/* Notas do km (explicam a diferença entre os tiles) */}
       <div className="mt-2 space-y-1">
         {p.kmRecalculadoEm && (
@@ -101,11 +128,11 @@ export function FaturamentoCard(p: Props) {
           </Nota>
         )}
         {/* Só quando a diferença é real (>= 0,5 km) — abaixo disso é só
-            arredondamento do snapshot, não um ajuste de verdade. */}
+            arredondamento do snapshot, não um ajuste de verdade. O texto sai do
+            kmFonte (o que o app declarou), não de adivinhar pela diferença. */}
         {calc != null && Math.abs(diffRota) >= 0.5 && (
-          <Nota tom={p.rotaEscolhida ? "ambar" : "cinza"}>
-            {p.rotaEscolhida ? "Escolheu outra rota no mapa" : "Ajustou o km na mão"}:{" "}
-            {diffRota > 0 ? "+" : ""}
+          <Nota tom={p.kmFonte === "ROTA_ESCOLHIDA" || p.rotaEscolhida ? "ambar" : "cinza"}>
+            {textoDoKmFonte(p.kmFonte, p.rotaEscolhida)}: {diffRota > 0 ? "+" : ""}
             {fmtNum(String(diffRota), 1)} km vs. a rota calculada
           </Nota>
         )}
@@ -207,6 +234,44 @@ function Nota({
         ? "text-emerald-700"
         : "text-muted-foreground";
   return <p className={`text-xs ${cor}`}>{children}</p>;
+}
+
+type KmFonte = Props["kmFonte"];
+
+/** Rótulo curto do tile — de onde saiu o número do motorista. */
+function hintDoKmFonte(fonte: KmFonte): string {
+  switch (fonte) {
+    case "MANUAL":
+      return "motorista (digitou)";
+    case "ROTA_ESCOLHIDA":
+      return "motorista (escolheu a estrada)";
+    case "HISTORICO":
+      return "motorista (histórico da frota)";
+    case "ROTA_OSRM":
+      return "motorista (km da rota)";
+    default:
+      return "motorista";
+  }
+}
+
+/**
+ * Explica a diferença pra rota calculada. Só cai no `rotaEscolhida` (que é
+ * inferido de "tem geometria salva") quando o app não declarou a procedência —
+ * viagem antiga, anterior ao kmFonte.
+ */
+function textoDoKmFonte(fonte: KmFonte, rotaEscolhida?: boolean): string {
+  switch (fonte) {
+    case "MANUAL":
+      return "Digitou o km na mão";
+    case "ROTA_ESCOLHIDA":
+      return "Escolheu outra rota no mapa";
+    case "HISTORICO":
+      return "Usou o km que a frota já rodou nesse trajeto";
+    case "ROTA_OSRM":
+      return "Km da rota calculada no lançamento";
+    default:
+      return rotaEscolhida ? "Escolheu outra rota no mapa" : "Ajustou o km na mão";
+  }
 }
 
 function faixaTexto(de: string, ate: string | null): string {

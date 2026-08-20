@@ -110,6 +110,14 @@ type ViagemDetalhe = {
   kmInformado: string;
   kmEfetivo?: string;
   kmAjustada?: boolean;
+  /** O km que o motorista informou — a lei. Não muda quando o painel edita. */
+  kmMotorista: string | null;
+  /** Procedência do km do motorista (digitou, escolheu rota, usou histórico). */
+  kmFonte: "ROTA_OSRM" | "ROTA_ESCOLHIDA" | "HISTORICO" | "MANUAL" | null;
+  /** Alteração do km pelo painel: quando, por quem e com qual motivo. */
+  kmAlteradoEm: string | null;
+  kmAlteracaoMotivo: string | null;
+  kmAlteradoPor: { id: string; nome: string } | null;
   iniciadoEm: string | null;
   // Quando o motorista criou a viagem no device (offline) e quando sincronizou.
   criadoOfflineEm: string | null;
@@ -234,15 +242,14 @@ type Tab = "dados" | "historico" | "diagnostico";
  * cidade antiga, 29,12, enquanto o kmCalculado já era 16,88) o card mostrou
  * 46 km com cara de certeza — pronto pra virar faturamento.
  *
- * Pior: o "Aplicar" do seletor de retorno logo acima grava o km IGNORANDO os
- * trechos. Usar os dois na mesma viagem deixou km=18,71 com um trecho de 16,83
- * pendurado — e a base derivada (km − trecho) virou 1,88 km.
+ * O outro pé desse problema — o seletor "Escolher rota", que gravava o km
+ * IGNORANDO os trechos — foi ARRANCADO em 2026-08-19: ele passava por cima do
+ * km do motorista sem motivo nem aviso, e o km do motorista é lei.
  *
- * Religar só quando as três estiverem prontas e testadas:
+ * Religar só quando as duas estiverem prontas e testadas:
  *   1. trocar local de carga/descarga recalcular (ou barrar) o km faturado;
  *   2. este card RECUSAR base inconsistente (km divergindo de kmCalculado sem
  *      escolha de rota que justifique) em vez de somar por cima e exibir número;
- *   3. escolherRota somar os trechos, em vez de comer a volta calado.
  *
  * O endpoint /admin/viagens/:id/bota-fora segue de pé e testado — só a UI saiu.
  */
@@ -385,50 +392,6 @@ export default function ViagemDetalhePage({
       });
     },
   });
-  // Seletor de rota alternativa (corrigir a estrada de uma viagem).
-  const [escolhendoRota, setEscolhendoRota] = useState(false);
-  const [rotaPreviewIdx, setRotaPreviewIdx] = useState<number | null>(null);
-  const rotasAlt = useQuery({
-    queryKey: ["viagem-rotas-alt", id],
-    enabled: !!token && escolhendoRota,
-    staleTime: 60_000,
-    queryFn: () =>
-      fetchApi<{
-        rotas: {
-          km: string;
-          duracaoSegundos: number;
-          geometria: string | null;
-          recomendada: boolean;
-        }[];
-        erro?: string;
-      }>(`/admin/viagens/${id}/rotas-alternativas`, { token }),
-  });
-  const escolherRota = useMutation({
-    mutationFn: (rota: { km: string; geometria: string | null }) => {
-      const rec = rotasAlt.data?.rotas.find((r) => r.recomendada);
-      return fetchApi<unknown>(`/admin/viagens/${id}/escolher-rota`, {
-        method: "POST",
-        token,
-        body: JSON.stringify({
-          km: Number(rota.km),
-          rotaGeometria: rota.geometria,
-          kmCalculado: rec ? Number(rec.km) : undefined,
-        }),
-      });
-    },
-    onSuccess: () => {
-      toast.success("Rota da viagem atualizada.");
-      setEscolhendoRota(false);
-      setRotaPreviewIdx(null);
-      void queryClient.invalidateQueries({ queryKey: ["viagem-admin", id] });
-      void queryClient.invalidateQueries({ queryKey: ["viagem-historico", id] });
-    },
-    onError: (err) => {
-      toast.error("Não foi possível aplicar a rota", {
-        description: (err as Error).message,
-      });
-    },
-  });
   /**
    * Bota-fora: o que o motorista responde na descarga, aqui pelo admin (a
    * correção chega por fora, tipo WhatsApp). O km de cada resposta vem do
@@ -523,13 +486,7 @@ export default function ViagemDetalhePage({
     () => (vd?.lat != null && vd?.lng != null ? { lat: vd.lat, lng: vd.lng } : null),
     [vd?.lat, vd?.lng],
   );
-  const mapaGeometria = useMemo(() => {
-    // Preview do seletor de estrada tem prioridade; senão a geometria salva.
-    if (escolhendoRota && rotaPreviewIdx != null) {
-      return rotasAlt.data?.rotas[rotaPreviewIdx]?.geometria ?? vd?.rotaGeometria ?? null;
-    }
-    return vd?.rotaGeometria ?? null;
-  }, [escolhendoRota, rotaPreviewIdx, rotasAlt.data, vd?.rotaGeometria]);
+  const mapaGeometria = useMemo(() => vd?.rotaGeometria ?? null, [vd?.rotaGeometria]);
   const mapaPedagios = useMemo(
     () => pedagiosNaRota.data?.pedagios ?? [],
     [pedagiosNaRota.data],
@@ -858,6 +815,11 @@ export default function ViagemDetalhePage({
                 kmAjustada={v.kmAjustada}
                 kmReal={v.kmReal}
                 rotaEscolhida={v.rotaEscolhida}
+                kmMotorista={v.kmMotorista}
+                kmFonte={v.kmFonte}
+                kmAlteradoEm={v.kmAlteradoEm}
+                kmAlteracaoMotivo={v.kmAlteracaoMotivo}
+                kmAlteradoPorNome={v.kmAlteradoPor?.nome ?? null}
                 kmRecalculadoEm={v.kmRecalculadoEm}
                 kmAntesRecalculo={v.kmAntesRecalculo}
                 temBotaFora={(v.trechos ?? []).some((t) => t.tipo === "RETORNO_BOTA_FORA")}
@@ -1177,114 +1139,9 @@ export default function ViagemDetalhePage({
                       />
                       {recalcular.isPending ? "Recalculando…" : "Recalcular trajeto"}
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setEscolhendoRota((s) => !s);
-                        setRotaPreviewIdx(null);
-                      }}
-                      title="Escolher entre as rotas alternativas do OSRM"
-                    >
-                      <MapPin className="h-4 w-4" />
-                      {escolhendoRota ? "Fechar" : "Escolher rota"}
-                    </Button>
                   </div>
                 </Permitido>
               </div>
-              {escolhendoRota && (
-                <div className="mb-3 rounded-lg border bg-muted/20 p-3">
-                  {rotasAlt.isLoading ? (
-                    <p className="text-sm text-muted-foreground">Buscando rotas…</p>
-                  ) : rotasAlt.data && rotasAlt.data.rotas.length === 1 ? (
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">
-                        Esse trajeto só tem um caminho no mapa (
-                        {fmtNum(rotasAlt.data.rotas[0]!.km, 2)} km ·{" "}
-                        {Math.round(rotasAlt.data.rotas[0]!.duracaoSegundos / 60)} min) — o
-                        OSRM não encontrou rota alternativa pra escolher. Pra ajustar o km,
-                        use a edição da viagem.
-                      </p>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setEscolhendoRota(false);
-                          setRotaPreviewIdx(null);
-                        }}
-                      >
-                        Fechar
-                      </Button>
-                    </div>
-                  ) : rotasAlt.data && rotasAlt.data.rotas.length > 1 ? (
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium">
-                        Escolha a estrada usada (clique pra ver no mapa):
-                      </p>
-                      {rotasAlt.data.rotas.map((r, idx) => {
-                        const rec = rotasAlt.data!.rotas.find((x) => x.recomendada);
-                        const diff = rec ? Number(r.km) - Number(rec.km) : 0;
-                        const sel = rotaPreviewIdx === idx;
-                        return (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={() => setRotaPreviewIdx(idx)}
-                            className={`flex w-full items-center justify-between gap-3 rounded-md border p-2.5 text-left text-sm ${
-                              sel ? "border-primary bg-primary/5" : "hover:bg-muted"
-                            }`}
-                          >
-                            <span>
-                              <span className="font-semibold">{fmtNum(r.km, 2)} km</span>
-                              <span className="text-muted-foreground">
-                                {" · "}
-                                {Math.round(r.duracaoSegundos / 60)} min
-                              </span>
-                              {r.recomendada ? (
-                                <Badge className="ml-2 bg-muted text-muted-foreground">
-                                  Sugerida
-                                </Badge>
-                              ) : diff !== 0 ? (
-                                <span className="ml-2 text-xs text-amber-700">
-                                  {diff > 0 ? "+" : ""}
-                                  {fmtNum(String(diff), 0)} km vs. sugerida
-                                </span>
-                              ) : null}
-                            </span>
-                            {sel && <CheckCircle2 className="h-4 w-4 text-primary" />}
-                          </button>
-                        );
-                      })}
-                      <div className="flex gap-2 pt-1">
-                        <Button
-                          size="sm"
-                          disabled={rotaPreviewIdx == null || escolherRota.isPending}
-                          onClick={() => {
-                            const r = rotasAlt.data!.rotas[rotaPreviewIdx!];
-                            if (r) escolherRota.mutate({ km: r.km, geometria: r.geometria });
-                          }}
-                        >
-                          {escolherRota.isPending ? "Aplicando…" : "Aplicar esta rota"}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setEscolhendoRota(false);
-                            setRotaPreviewIdx(null);
-                          }}
-                        >
-                          Cancelar
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      {rotasAlt.data?.erro ?? "Sem rotas alternativas pra esse trajeto."}
-                    </p>
-                  )}
-                </div>
-              )}
               {MOSTRAR_BOTA_FORA && botaFora.data?.permiteBotaFora && (
                 <div className="mb-3 rounded-lg border bg-muted/20 p-3">
                   <div className="mb-2 flex items-center gap-2">
@@ -1750,6 +1607,7 @@ function labelForAcao(acao: string): string {
       MATCH_AUTOMATICO: "Match automático",
       MATCH_IA: "Match via IA",
       RECALCULAR_TRAJETO: "Recálculo de trajeto",
+      ADMIN_ALTEROU_KM: "Conferente alterou o km",
       MOTORISTA_AJUSTOU_KM: "Motorista ajustou o km",
       PRE_VALIDAR_VIAGEM: "Pré-validação manual",
     } as const
@@ -1760,6 +1618,7 @@ function iconForAcao(acao: string) {
   if (acao === "MATCH_IA") return Sparkles;
   if (acao === "MATCH_AUTOMATICO" || acao === "RESOLVER") return CheckCircle2;
   if (acao === "UPDATE" || acao === "MOTORISTA_AJUSTOU_KM") return Edit3;
+  if (acao === "ADMIN_ALTEROU_KM") return AlertTriangle;
   if (acao === "RECALCULAR_TRAJETO") return RefreshCw;
   if (acao === "PRE_VALIDAR_VIAGEM") return ShieldCheck;
   return Clock;
@@ -1773,6 +1632,8 @@ function colorForAcao(acao: string): string {
   if (acao === "EXPORTAR" || acao === "MARCAR_ENVIADO") return "bg-purple-500";
   if (acao === "RECALCULAR_TRAJETO") return "bg-cyan-500";
   if (acao === "MOTORISTA_AJUSTOU_KM") return "bg-amber-500";
+  // Vermelho de propósito: mexer no km do motorista é a exceção, não a rotina.
+  if (acao === "ADMIN_ALTEROU_KM") return "bg-red-500";
   if (acao === "PRE_VALIDAR_VIAGEM") return "bg-indigo-500";
   return "bg-gray-500";
 }

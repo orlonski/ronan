@@ -267,6 +267,15 @@ export const AtualizarViagemInput = z.object({
   // nullable pra permitir limpar o ticket (material que não exige).
   ticket: z.string().max(50).nullable().optional(),
   km: z.number().nonnegative().max(MAX_KM, `Km acima do limite (${MAX_KM}).`).optional(),
+  // O km que o motorista informou é lei: o painel só passa por cima dele
+  // escrevendo o porquê. Não é coluna da Viagem — o service tira do input antes
+  // do update e grava em kmAlteracaoMotivo + auditoria ADMIN_ALTEROU_KM.
+  motivoKm: z
+    .string()
+    .trim()
+    .min(10, "Explique em pelo menos 10 caracteres por que está alterando o km.")
+    .max(300, "Motivo muito longo (máx. 300 caracteres).")
+    .optional(),
   localCargaId: z.string().uuid().optional(),
   localDescargaId: z.string().uuid().optional(),
   valorPedagioTotal: z.number().nonnegative().max(MAX_VALOR).nullable().optional(),

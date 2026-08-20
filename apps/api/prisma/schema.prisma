@@ -189,6 +189,10 @@ enum AcaoAuditoria {
   MATCH_AUTOMATICO
   MATCH_IA
   RECALCULAR_TRAJETO
+  /// Alguém do painel mexeu no km que o motorista informou. Ação separada do
+  /// UPDATE genérico de propósito: o km do motorista é lei, então quando cede
+  /// tem que aparecer no histórico com nome próprio e com o motivo escrito.
+  ADMIN_ALTEROU_KM
   MOTORISTA_AJUSTOU_KM
   MOTORISTA_JUSTIFICOU_KM
   MOTORISTA_INFORMOU_PEDAGIO
@@ -499,6 +503,7 @@ model User {
   notificacoesCriadas    Notificacao[]      @relation("CriouNotificacao")
   fechamentosCriados     Fechamento[]       @relation("CriouFechamento")
   viagensRevisadas       Viagem[]           @relation("RevisouViagem")
+  viagensKmAlterado      Viagem[]           @relation("AlterouKmViagem")
   divergenciasResolvidas ViagemDivergencia[]
   adminNotificacoes      AdminNotificacao[]
 
@@ -1488,6 +1493,21 @@ model Viagem {
   /// Null quando o material não exige ticket (ex: concreto). Ver Material.exigeTicket.
   ticket                  String?
   km                      Decimal?           @db.Decimal(10, 2)
+  /// O km que o MOTORISTA informou — a lei. Só os caminhos do app escrevem aqui
+  /// (create, finalizar viagem guiada e a correção que ele mesmo faz ao responder
+  /// divergência). Nem o painel nem o reprocessamento encostam: `km` pode ser
+  /// alterado pelo conferente (com motivo, ver kmAlteracaoMotivo), este NUNCA.
+  /// É o que permite mostrar "informado pelo motorista: X" mesmo depois de mexido.
+  /// Null só em viagem lançada direto pelo painel (não tem motorista informando).
+  kmMotorista             Decimal?           @db.Decimal(10, 2)
+  /// Quem/quando/por que o painel alterou o km do motorista. Motivo é OBRIGATÓRIO
+  /// na alteração (400 sem ele) — o valor do motorista é lei e só cede com
+  /// justificativa escrita. kmAlteradoEm também trava o reprocessamento de km:
+  /// decisão justificada de humano não é desfeita por cron.
+  kmAlteradoEm            DateTime?
+  kmAlteradoPor           User?              @relation("AlterouKmViagem", fields: [kmAlteradoPorId], references: [id], onDelete: SetNull)
+  kmAlteradoPorId         String?
+  kmAlteracaoMotivo       String?
   /// Snapshot do km que o OSRM calculou no momento do lançamento. Permite
   /// detectar quando motorista sobrescreveu o sugerido (km != kmCalculado).
   /// Null pra viagens antigas (pré-feature) e quando OSRM não respondeu.

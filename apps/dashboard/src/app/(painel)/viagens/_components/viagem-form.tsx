@@ -15,6 +15,7 @@ import {
 } from "@/components/fk-comboboxes";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { fetchApi, useAuthToken, useResourceOptions } from "@/lib/client-api";
 import { isoDeInputDataHoraSP, paraInputDataHoraSP } from "@/lib/datetime-br";
 import { formatarDuracao } from "@ronan/shared-types";
@@ -32,6 +33,8 @@ export type ViagemEditavel = {
   // Null quando o modo de serviço não exige km (diária à disposição).
   km: string | null;
   kmCalculado: string | null;
+  /** O km que o MOTORISTA informou — a lei. Alterar exige motivo escrito. */
+  kmMotorista?: string | null;
   observacao: string | null;
   valorPedagioTotal: string | null;
   status: string;
@@ -59,6 +62,8 @@ type FormState = {
   ticket: string;
   toneladas: string;
   km: string;
+  /** Por que o km do motorista está sendo alterado. Só viaja quando o km muda. */
+  motivoKm: string;
   valorPedagioTotal: string;
   observacao: string;
   veiculoId: string;
@@ -103,6 +108,7 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
     // Modo sem km (diária à disposição) chega null — sem a guarda o campo
     // exibiria a string "null".
     km: initial.km != null ? String(initial.km).replace(".", ",") : "",
+    motivoKm: "",
     valorPedagioTotal:
       initial.valorPedagioTotal != null
         ? String(initial.valorPedagioTotal).replace(".", ",")
@@ -231,6 +237,9 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
     const kmNum = parseDecimal(form.km);
     if (kmNum != null && kmNum !== Number(initial.km)) {
       diff.km = kmNum;
+      // O km do motorista é lei: quando cede, vai junto o porquê (o backend
+      // recusa a alteração sem isso).
+      if (form.motivoKm.trim()) diff.motivoKm = form.motivoKm.trim();
     }
 
     const pedagioNovo = parseDecimal(form.valorPedagioTotal);
@@ -249,8 +258,24 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
     return diff;
   }
 
+  // O km que o motorista informou é lei: mexer nele exige motivo escrito. A
+  // mesma regra vale no backend (400 sem motivo) — aqui é só pra não deixar o
+  // conferente descobrir isso depois de digitar tudo.
+  const kmNovo = parseDecimal(form.km);
+  const kmMudou = kmNovo != null && kmNovo !== Number(initial.km);
+  const exigeMotivoKm = kmMudou && initial.kmMotorista != null;
+  const motivoKmCurto = form.motivoKm.trim().length < 10;
+
   async function onSubmit(ev: React.FormEvent) {
     ev.preventDefault();
+    if (exigeMotivoKm && motivoKmCurto) {
+      toast.error("Explique por que está alterando o km", {
+        description:
+          "O km foi informado pelo motorista. Escreva o motivo (pelo menos 10 caracteres) — ele vai pro histórico e pro celular dele.",
+      });
+      document.getElementById("motivo-km")?.focus();
+      return;
+    }
     const body = buildDiff();
     if (Object.keys(body).length === 0) {
       toast.info("Nada pra salvar.");
@@ -413,8 +438,42 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
               value={form.km}
               onChange={(e) => setForm({ ...form, km: e.target.value })}
             />
+            {initial.kmMotorista != null && (
+              <p className="text-xs text-muted-foreground">
+                Informado pelo motorista:{" "}
+                <strong>{String(initial.kmMotorista).replace(".", ",")} km</strong> —
+                esse valor é lei.
+              </p>
+            )}
           </div>
         </div>
+
+        {/* O km do motorista só cede com o porquê escrito. O texto vai pro
+            histórico (registro "Conferente alterou o km") e pro celular dele. */}
+        {exigeMotivoKm && (
+          <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
+            <Label htmlFor="motivo-km" className="text-amber-900">
+              Por que está alterando o km do motorista?
+            </Label>
+            <p className="text-xs text-amber-900">
+              Ele informou {String(initial.kmMotorista).replace(".", ",")} km e você
+              está pondo {form.km} km. O motivo aparece no histórico da viagem e chega
+              pra ele no celular.
+            </p>
+            <Textarea
+              id="motivo-km"
+              maxLength={300}
+              placeholder="Ex.: motorista digitou 640 em vez de 64 — confirmado com ele por telefone."
+              value={form.motivoKm}
+              onChange={(e) => setForm({ ...form, motivoKm: e.target.value })}
+            />
+            {motivoKmCurto && (
+              <p className="text-xs text-amber-900">
+                Faltam pelo menos {10 - form.motivoKm.trim().length} caracteres.
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">

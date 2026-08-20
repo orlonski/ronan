@@ -612,8 +612,15 @@ export class ViagensMotoristaService {
       data: {
         status: "AJUSTADA",
         tipoDivergencia: null,
+        // Ele mesmo corrigindo o próprio km: a lei muda junto (kmMotorista
+        // acompanha), porque a fonte continua sendo o motorista.
         ...(kmMudou
-          ? { km: input.km, kmEditadoManual: true, kmFonte: "MANUAL" as const }
+          ? {
+              km: input.km,
+              kmMotorista: input.km,
+              kmEditadoManual: true,
+              kmFonte: "MANUAL" as const,
+            }
           : {}),
       },
     });
@@ -1198,6 +1205,9 @@ export class ViagensMotoristaService {
         // até ela. Null = sem duplicidade.
         ticketDuplicadoDeId: duplicadoDeId,
         km: rest.km,
+        // O km do motorista é lei: além do faturado, guarda cópia num campo que
+        // só ele escreve. O painel pode alterar `km` (com motivo); este fica.
+        kmMotorista: rest.km,
         kmCalculado: rest.kmCalculado,
         kmEditadoManual,
         kmFonte,
@@ -1960,6 +1970,8 @@ export class ViagensMotoristaService {
         data: input.data,
         toneladas: aguardandoPeso ? null : input.toneladas,
         km: input.km,
+        // Cópia intocável do que o motorista informou (ver create).
+        kmMotorista: input.km,
         kmCalculado: input.kmCalculado,
         // kmFonte é o dono; kmEditadoManual deriva dele (ver create). App antigo
         // sem kmFonte cai no kmEditadoManual que ele envia.
