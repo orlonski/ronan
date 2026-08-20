@@ -911,8 +911,15 @@ export class LocaisService {
     id: string,
     data: Partial<CriarLocalInput> & { ativo?: boolean },
   ) {
-    await this.ensureExists(id);
+    const antes = await this.ensureExists(id);
     const { clienteIds, ...rest } = data;
+    // Mexeu na coordenada? Toda rota guardada que passa por este local virou
+    // mentira: o RotaCache é por PAR de locais e vale 90 dias, então sem purgar
+    // o km velho continua sendo servido pra quem calcular esse trecho — e o
+    // motorista leva a diferença. Mesmo purge que o merge já faz.
+    const mudouCoordenada =
+      (rest.lat !== undefined && rest.lat !== antes.lat) ||
+      (rest.lng !== undefined && rest.lng !== antes.lng);
     const local = await this.prisma.$transaction(async (tx) => {
       if (clienteIds !== undefined) {
         await tx.localCliente.deleteMany({ where: { localId: id } });
@@ -921,6 +928,11 @@ export class LocaisService {
             data: clienteIds.map((clienteId) => ({ localId: id, clienteId })),
           });
         }
+      }
+      if (mudouCoordenada) {
+        await tx.rotaCache.deleteMany({
+          where: { OR: [{ localOrigemId: id }, { localDestinoId: id }] },
+        });
       }
       return tx.local.update({
         where: { id },
