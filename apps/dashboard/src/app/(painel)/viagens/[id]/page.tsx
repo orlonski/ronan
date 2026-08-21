@@ -84,6 +84,7 @@ import {
 } from "./_components/referencia-km-card";
 import { FaturamentoCard, type RegraMinimo } from "./_components/faturamento-card";
 import { ConversaViagemCard } from "./_components/conversa-viagem-card";
+import { EscolherRotaModal } from "./_components/escolher-rota-modal";
 import { CompartilharViagemModal } from "./_components/compartilhar-modal";
 
 type ViagemDetalhe = {
@@ -1136,6 +1137,11 @@ export default function ViagemDetalhePage({
                 </h3>
                 <Permitido chave="viagens.editar">
                   <div className="flex flex-wrap gap-2">
+                    <EscolherRotaModal
+                      viagemId={id}
+                      carga={mapaCarga}
+                      descarga={mapaDescarga}
+                    />
                     <Button
                       variant="outline"
                       size="sm"

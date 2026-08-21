@@ -19,7 +19,7 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { z } from "zod";
 import { StatusViagem } from "@prisma/client";
-import { AtualizarViagemInput } from "@ronan/shared-types";
+import { AtualizarViagemInput, EscolherRotaViagemInput } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { paginationQuerySchema } from "../../common/pagination";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
@@ -193,6 +193,32 @@ export class ViagensAdminController {
   @Get(":id/referencia-km")
   referenciaKm(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
     return this.service.referenciaKm(id, user.escopo);
+  }
+
+  /**
+   * Estradas possíveis do trecho, pro painel registrar por qual o motorista foi.
+   * Calculadas AGORA — a lista que a tela dele mostrou no dia não foi guardada.
+   */
+  @EscopoPor("viagem")
+  @RequerPermissao("viagens.ver")
+  @Get(":id/rotas")
+  rotasDaViagem(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    return this.service.rotasDaViagem(id, user.escopo);
+  }
+
+  /**
+   * Registra a estrada escolhida. O traçado sempre muda; o km só acompanha com
+   * `atualizarKm` + motivo escrito (ver escolherRota no service).
+   */
+  @EscopoPor("viagem")
+  @RequerPermissao("viagens.editar")
+  @Post(":id/rota")
+  escolherRota(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(EscolherRotaViagemInput)) body: EscolherRotaViagemInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.escolherRota(id, body, user.id, user.nome, user.escopo);
   }
 
   /**

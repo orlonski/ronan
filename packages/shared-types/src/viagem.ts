@@ -282,3 +282,31 @@ export const AtualizarViagemInput = z.object({
   observacao: z.string().max(500).nullable().optional(),
 });
 export type AtualizarViagemInput = z.infer<typeof AtualizarViagemInput>;
+
+/**
+ * Painel escolhe a estrada de uma viagem já lançada.
+ *
+ * Existe porque o motorista lançou numa época em que a tela oferecia uma opção
+ * só (ou nenhuma), e quem opera a plataforma precisa poder corrigir o traçado
+ * depois, com calma — sem cobrar do motorista que volte no passado.
+ *
+ * A geometria NÃO vem do cliente por confiança: o backend recalcula as
+ * alternativas do par e só aceita uma que esteja na lista. Assim ninguém
+ * desenha uma linha arbitrária no comprovante de uma viagem.
+ */
+export const EscolherRotaViagemInput = z.object({
+  /** Polyline (precisão 5) de uma das alternativas devolvidas por GET :id/rotas. */
+  geometria: z.string().min(1),
+  /**
+   * Levar o km faturado junto com a estrada escolhida. Falso = só o traçado
+   * muda, o km fica como está. O km do motorista é lei: só cede com motivo.
+   */
+  atualizarKm: z.boolean().default(false),
+  motivo: z
+    .string()
+    .trim()
+    .min(10, "Explique em pelo menos 10 caracteres por que está alterando o km.")
+    .max(300, "Motivo muito longo (máx. 300 caracteres).")
+    .optional(),
+});
+export type EscolherRotaViagemInput = z.infer<typeof EscolherRotaViagemInput>;

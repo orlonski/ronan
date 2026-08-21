@@ -21,6 +21,7 @@ type Mensagem = {
 const ACAO_LABEL: Record<string, string> = {
   MARCOU_DIVERGENTE: "Marcou como divergente",
   CORRIGIU_KM: "Respondeu o km",
+  ESCOLHEU_ROTA: "Registrou a estrada",
   INFORMOU_PEDAGIO: "Informou o pedágio",
   ENVIOU_FOTO: "Enviou foto nova",
 };

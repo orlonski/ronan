@@ -14,7 +14,7 @@ import {
   TipoLocal,
   TipoTrecho,
 } from "@prisma/client";
-import type { AtualizarViagemInput } from "@ronan/shared-types";
+import type { AtualizarViagemInput, EscolherRotaViagemInput } from "@ronan/shared-types";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
 import {
   detalharRegraMinimo,
@@ -28,7 +28,7 @@ import { paginate, type PaginationQuery } from "../../common/pagination";
 import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
 import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
 import { resolverDivergenciasSupridas } from "../../common/divergencias";
-import { checarAlteracaoKm } from "../../common/km-motorista";
+import { checarAlteracaoKm, fmtKmBr } from "../../common/km-motorista";
 import { filtrarComercial, omitirComercial } from "./comercial";
 import { PedagiosRodoviaConsultaService } from "../pedagios-rodovia/pedagios-rodovia-consulta.service";
 import { BuscaLocaisConfigService } from "../busca-locais-config/busca-locais-config.service";
@@ -1019,6 +1019,222 @@ export class ViagensAdminService {
       criadoPorId: usuarioId,
     });
     return this.mensagens.listar(id);
+  }
+
+  /**
+   * As estradas possíveis do trecho desta viagem, pro painel escolher qual o
+   * motorista pegou.
+   *
+   * As opções são calculadas AGORA — não dá pra reconstruir o que a tela dele
+   * mostrou no dia (a lista nunca foi guardada, e por muito tempo o roteador
+   * devolvia uma opção só). A tela diz isso com todas as letras; o objetivo é
+   * corrigir o registro do caminho, não fingir que sabemos o que ele viu.
+   *
+   * `emVigor` marca a que está gravada na viagem hoje. Nenhuma marcada significa
+   * que o traçado atual não é nenhuma das opções — viagem antiga, lançada quando
+   * a estrada nem era escolhível.
+   */
+  async rotasDaViagem(id: string, escopo: EscopoAdmin) {
+    await this.ensureNoEscopo(id, escopo);
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { id },
+      select: {
+        localCargaId: true,
+        localDescargaId: true,
+        km: true,
+        kmMotorista: true,
+        kmFonte: true,
+        kmEditadoManual: true,
+        rotaGeometria: true,
+        _count: { select: { matchesFechamento: true } },
+      },
+    });
+    if (!viagem) throw new NotFoundException("Viagem não encontrada");
+
+    const contexto = {
+      kmAtual: viagem.km?.toString() ?? null,
+      kmMotorista: viagem.kmMotorista?.toString() ?? null,
+      kmFonte: viagem.kmFonte ?? null,
+      // Motorista digitou o km na mão: mexer nele é o caso mais delicado de
+      // todos, e a tela precisa avisar antes de deixar clicar.
+      kmDigitadoPeloMotorista:
+        viagem.kmEditadoManual === true || viagem.kmFonte === "MANUAL",
+      emFechamento: viagem._count.matchesFechamento > 0,
+    };
+
+    if (!viagem.localCargaId || !viagem.localDescargaId) {
+      return { ...contexto, rotas: [], erro: "Viagem sem local de carga ou descarga." };
+    }
+
+    const resultado = await this.roteamento.calcularAlternativas(
+      viagem.localCargaId,
+      viagem.localDescargaId,
+    );
+    const rotas = resultado.rotas.map((r) => ({
+      ...r,
+      emVigor: r.geometria != null && r.geometria === viagem.rotaGeometria,
+    }));
+    return {
+      ...contexto,
+      rotas,
+      erro: "erro" in resultado ? resultado.erro : undefined,
+    };
+  }
+
+  /**
+   * Painel escolhe a estrada de uma viagem já lançada.
+   *
+   * REGRA CENTRAL: o traçado sempre muda; o km só acompanha com motivo escrito.
+   *
+   * São duas decisões diferentes e o código as mantém separadas de propósito.
+   * Corrigir a linha do mapa arruma o registro do caminho e não tira um centavo
+   * de ninguém. Mexer no km mexe no que o motorista recebe — e aí vale a lei de
+   * sempre (`checarAlteracaoKm`): sem o porquê escrito, não passa. Por isso
+   * `atualizarKm` é uma escolha explícita de quem opera, e não um efeito colateral
+   * de ter clicado noutra estrada.
+   *
+   * A geometria vinda do cliente é revalidada contra as alternativas do trecho:
+   * o painel escolhe ENTRE as opções, não desenha uma linha qualquer no
+   * comprovante que sai pra fora da empresa.
+   */
+  async escolherRota(
+    id: string,
+    input: EscolherRotaViagemInput,
+    usuarioId: string,
+    usuarioNome: string,
+    escopo: EscopoAdmin,
+  ) {
+    await this.ensureNoEscopo(id, escopo);
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        localCargaId: true,
+        localDescargaId: true,
+        km: true,
+        kmMotorista: true,
+        kmCalculado: true,
+        kmFonte: true,
+        kmEditadoManual: true,
+        rotaGeometria: true,
+        _count: { select: { matchesFechamento: true } },
+      },
+    });
+    if (!viagem) throw new NotFoundException("Viagem não encontrada");
+    if (viagem._count.matchesFechamento > 0) {
+      throw new ConflictException(
+        "Não é possível editar: viagem já vinculada a fechamento. Desfaça o match primeiro.",
+      );
+    }
+    if (!viagem.localCargaId || !viagem.localDescargaId) {
+      throw new BadRequestException("Viagem sem local de carga ou descarga.");
+    }
+
+    const alternativas = await this.roteamento.calcularAlternativas(
+      viagem.localCargaId,
+      viagem.localDescargaId,
+    );
+    const escolhida = alternativas.rotas.find((r) => r.geometria === input.geometria);
+    if (!escolhida) {
+      throw new BadRequestException(
+        "Essa estrada não está mais entre as opções deste trecho. Recarregue a tela e escolha de novo.",
+      );
+    }
+
+    const kmDaRota = parseFloat(escolhida.km);
+    const kmAntes = viagem.km != null ? Number(viagem.km) : null;
+    const mesmaGeometria = viagem.rotaGeometria === escolhida.geometria;
+
+    // O km só entra na jogada quando pedido. `checarAlteracaoKm` é a mesma porta
+    // que o PATCH usa — nenhum caminho novo escapa da lei do km do motorista.
+    let alterarKm = false;
+    if (input.atualizarKm) {
+      const checagem = checarAlteracaoKm(viagem, kmDaRota, input.motivo);
+      if (checagem.mudou && checagem.erro) {
+        throw new BadRequestException(checagem.erro);
+      }
+      alterarKm = checagem.mudou;
+    }
+
+    if (mesmaGeometria && !alterarKm) {
+      throw new BadRequestException("Essa já é a estrada registrada nesta viagem.");
+    }
+
+    const motivoKm = input.motivo?.trim() || null;
+    await this.prisma.viagem.update({
+      where: { id: viagem.id },
+      data: {
+        rotaGeometria: escolhida.geometria,
+        ...(alterarKm
+          ? {
+              km: kmDaRota,
+              // kmCalculado acompanha a estrada escolhida, senão o painel passa a
+              // acusar divergência ("ajustou o km na mão") contra um número que
+              // ele mesmo acabou de gravar.
+              kmCalculado: kmDaRota,
+              kmAlteradoEm: new Date(),
+              kmAlteradoPorId: usuarioId,
+              kmAlteracaoMotivo: motivoKm,
+            }
+          : {}),
+      },
+    });
+
+    const kmTexto = `${fmtKmBr(kmDaRota)} km`;
+    await this.auditoria.log({
+      usuarioId,
+      entidade: "Viagem",
+      entidadeId: viagem.id,
+      acao: AcaoAuditoria.ADMIN_ESCOLHEU_ROTA,
+      campo: "rotaGeometria",
+      valorAntes: viagem.rotaGeometria ? "traçado anterior" : null,
+      valorDepois: `estrada de ${kmTexto}`,
+      motivo: motivoKm,
+      metadata: {
+        kmDaRota: escolhida.km,
+        duracaoSegundos: escolhida.duracaoSegundos,
+        atualizouKm: alterarKm,
+      },
+    });
+    if (alterarKm) {
+      await this.auditoria.log({
+        usuarioId,
+        entidade: "Viagem",
+        entidadeId: viagem.id,
+        acao: AcaoAuditoria.ADMIN_ALTEROU_KM,
+        campo: "km",
+        valorAntes: kmAntes != null ? kmAntes.toFixed(2) : null,
+        valorDepois: kmDaRota.toFixed(2),
+        motivo: motivoKm,
+        metadata: { origem: "escolha-de-rota" },
+      });
+    }
+
+    // O motorista fica sabendo. Mexeram no registro da viagem DELE: aparecer na
+    // conversa (com selo) e chegar por push não é cortesia, é o mínimo — e é o
+    // mesmo caminho que faz o app rebuscar a viagem e redesenhar a polilinha.
+    const texto = alterarKm
+      ? `A operação registrou a estrada desta viagem: ${kmTexto}. O km faturado passou de ${
+          kmAntes != null ? fmtKmBr(kmAntes) : "—"
+        } para ${fmtKmBr(kmDaRota)} km. Motivo: ${motivoKm}`
+      : `A operação registrou a estrada desta viagem (${kmTexto}). O km faturado não mudou.`;
+    await this.mensagens.criar({
+      viagemId: viagem.id,
+      autor: "ADMIN",
+      usuarioId,
+      autorNome: usuarioNome,
+      texto,
+      acao: "ESCOLHEU_ROTA",
+    });
+    void this.notificarMotorista({
+      viagemId: viagem.id,
+      tipo: "nova-mensagem-viagem",
+      titulo: "Estrada da viagem atualizada",
+      corpo: texto.slice(0, 120),
+      criadoPorId: usuarioId,
+    });
+
+    return { ok: true, km: escolhida.km, atualizouKm: alterarKm };
   }
 
   async recalcularTrajeto(id: string, usuarioId: string) {

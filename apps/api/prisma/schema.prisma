@@ -200,6 +200,11 @@ enum AcaoAuditoria {
   PRE_VALIDAR_VIAGEM
   ADICIONAR_FOTO
   MESCLAR_LOCAL
+  /// Painel trocou a ESTRADA (traçado) de uma viagem já lançada. Separado do
+  /// ADMIN_ALTEROU_KM porque são decisões distintas: mudar a linha do mapa é
+  /// corrigir o registro do caminho; mexer no km é mexer no que o motorista
+  /// recebe. Uma escolha de rota pode gerar as duas ações, ou só esta.
+  ADMIN_ESCOLHEU_ROTA
   COMPARTILHAR_VIAGEM
   REVOGAR_COMPARTILHAMENTO
   ENVIAR_COMPARTILHAMENTO
