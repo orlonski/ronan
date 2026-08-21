@@ -147,6 +147,49 @@ export class AdminRoteamentoWhatsappService {
    * congelada no envio — a conta que vale é a da Meta, e enquanto tudo sai pelo
    * Evolution ela é zero de propósito.
    */
+  /**
+   * Os últimos envios que NÃO saíram, com o motivo cru do provedor.
+   *
+   * A fachada já gravava tudo isso em `whatsapp_mensagens` desde agosto, e nada
+   * lia. O resultado era ter a resposta exata da Meta no banco e mesmo assim
+   * depender de log de container pra descobrir por que um código não chegou —
+   * ou pior, adivinhar.
+   *
+   * O telefone sai mascarado: quem depura roteamento precisa saber que houve
+   * falha e qual foi, não o número de quem não recebeu.
+   */
+  async falhas(limite = 20) {
+    const linhas = await this.prisma.whatsappMensagem.findMany({
+      where: {
+        direcao: "SAIDA",
+        // Sem id do provedor = não houve aceite. É o mesmo critério que a
+        // fachada usa pra decidir se lança 503.
+        idExterno: null,
+      },
+      orderBy: { criadoEm: "desc" },
+      take: Math.min(Math.max(limite, 1), 100),
+      select: {
+        criadoEm: true,
+        rota: true,
+        provedor: true,
+        telefone: true,
+        statusEntrega: true,
+        erroCodigo: true,
+        metadata: true,
+      },
+    });
+
+    return linhas.map((l) => ({
+      criadoEm: l.criadoEm,
+      rota: l.rota,
+      provedor: l.provedor,
+      telefone: mascarar(l.telefone),
+      statusEntrega: l.statusEntrega,
+      erroCodigo: l.erroCodigo,
+      erro: (l.metadata as { erro?: string } | null)?.erro ?? null,
+    }));
+  }
+
   async consumo(dias = 30) {
     const desde = new Date(inicioDoDiaData().getTime() - (dias - 1) * 24 * 60 * 60 * 1000);
     const linhas = await this.prisma.whatsappMensagem.groupBy({
@@ -173,3 +216,9 @@ export class AdminRoteamentoWhatsappService {
   }
 }
 
+/** 5544998887766 → 55 44 9****-7766. Nunca o número inteiro num diagnóstico. */
+function mascarar(t: string): string {
+  const d = t.replace(/\D/g, "");
+  if (d.length < 8) return "***";
+  return `${d.slice(0, 4)} ${d.slice(4, 5)}****-${d.slice(-4)}`;
+}

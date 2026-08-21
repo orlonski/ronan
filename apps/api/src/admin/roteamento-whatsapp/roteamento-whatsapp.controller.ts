@@ -64,6 +64,16 @@ export class AdminRoteamentoWhatsappController {
     return comConta(contaAlvo(user, contaId), () => this.service.payloads(numero));
   }
 
+  /** Os últimos envios que não saíram, com o motivo cru do provedor. */
+  @Get("falhas")
+  falhas(
+    @CurrentUser() user: AuthUser,
+    @Query("contaId") contaId?: string,
+    @Query("limite") limite?: string,
+  ) {
+    return comConta(contaAlvo(user, contaId), () => this.service.falhas(Number(limite) || 20));
+  }
+
   @Put()
   salvar(
     @CurrentUser() user: AuthUser,
