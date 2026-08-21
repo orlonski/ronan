@@ -48,6 +48,22 @@ export class AdminRoteamentoWhatsappController {
     return comConta(contaAlvo(user, contaId), () => this.service.consumo(janela));
   }
 
+  /**
+   * O payload real de cada rota, montado e não enviado. Confere um template
+   * recém-aprovado sem esperar o cron das 20h.
+   */
+  @Get("payloads")
+  payloads(
+    @CurrentUser() user: AuthUser,
+    @Query("contaId") contaId?: string,
+    @Query("telefone") telefone?: string,
+  ) {
+    // Um número qualquer só pra montar o payload — nada sai daqui. O default
+    // existe pra a tela abrir sem exigir que alguém digite um telefone.
+    const numero = (telefone ?? "").replace(/\D/g, "") || "5541999998888";
+    return comConta(contaAlvo(user, contaId), () => this.service.payloads(numero));
+  }
+
   @Put()
   salvar(
     @CurrentUser() user: AuthUser,

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { ConfigService } from "@nestjs/config";
+import { ROTAS_WHATSAPP, templateWhatsapp } from "@ronan/shared-types";
 import { MetaProvedor } from "./meta.provedor";
 import type { EnvioWhatsapp } from "./envio.types";
 
@@ -160,5 +161,41 @@ describe("aceite", () => {
   it("respeita META_GRAPH_VERSION — a Meta quebra em major", async () => {
     await provedor({ ...ENV, META_GRAPH_VERSION: "v25.0" }).enviar(envio());
     expect(fetchMock.mock.calls[0]![0]).toContain("/v25.0/");
+  });
+});
+
+describe("simulação de payload", () => {
+  /**
+   * O teste que fecha o ciclo: os exemplos que o catálogo declara são os mesmos
+   * que vão pro formulário da Meta E os que alimentam a simulação do painel. Se
+   * um deles não montar payload válido, ou o exemplo está errado (e a Meta
+   * reprova o template) ou o template está errado (e o envio real quebra).
+   */
+  it.each(
+    ROTAS_WHATSAPP.filter((r) => templateWhatsapp(r.chave)).map((r) => [r.chave] as const),
+  )("%s: o exemplo do catálogo monta payload válido", (rota) => {
+    const t = templateWhatsapp(rota)!;
+    const r = provedor().simular(envio({ rota, params: [...t.exemplo] }));
+    expect(r.ok, r.ok ? "" : r.erro).toBe(true);
+  });
+
+  it("simular não toca a rede", () => {
+    const t = templateWhatsapp("AVISO_PESO")!;
+    provedor().simular(envio({ rota: "AVISO_PESO", params: [...t.exemplo] }));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("param faltando vira erro legível, não exceção", () => {
+    const r = provedor().simular(envio({ rota: "OTP_SENHA", params: [] }));
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.erro).toContain("params[0]");
+  });
+
+  it("grupo é recusado com o motivo", () => {
+    const r = provedor().simular(
+      envio({ destino: { tipo: "GRUPO", jid: "12036@g.us" }, rota: "AVISO_GRUPO" }),
+    );
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.erro).toContain("grupo");
   });
 });

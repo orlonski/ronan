@@ -3,12 +3,14 @@ import {
   CHAVES_ROTA_WHATSAPP,
   provedorAtendeRota,
   ROTAS_WHATSAPP,
+  templateWhatsapp,
   type AtualizarRoteamentoWhatsappInput,
   type ProvedorWhatsapp,
 } from "@ronan/shared-types";
 import { contaIdAtual } from "../../common/conta/conta-context";
 import { inicioDoDiaData } from "../../common/timezone";
 import { PrismaService } from "../../prisma/prisma.service";
+import { MetaProvedor } from "../../whatsapp/envio/meta.provedor";
 import { RoteamentoWhatsappService as Roteador } from "../../whatsapp/envio/roteamento.service";
 
 @Injectable()
@@ -16,7 +18,52 @@ export class AdminRoteamentoWhatsappService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly roteador: Roteador,
+    private readonly meta: MetaProvedor,
   ) {}
+
+  /**
+   * O payload que CADA rota mandaria pra Meta, montado com os exemplos do
+   * catálogo e sem sair do servidor.
+   *
+   * Existe por causa da assimetria mais cara desta migração: um template
+   * recém-aprovado só é exercitado de verdade quando o cron das 20h roda, ou
+   * quando um motorista pede um código. Descobrir ali que a contagem de
+   * parâmetros não bate é descobrir tarde e no cliente.
+   *
+   * Pega tudo que é erro de montagem. NÃO pega o que só a Meta sabe: se o
+   * template existe lá com aquele nome e naquele idioma.
+   */
+  async payloads(telefone: string) {
+    const rotas = [];
+    for (const r of ROTAS_WHATSAPP) {
+      const t = templateWhatsapp(r.chave);
+      const { provedor, motivo } = await this.roteador.resolver({
+        rota: r.chave,
+        destinoEhGrupo: r.chave === "AVISO_GRUPO",
+        telefone,
+      });
+
+      rotas.push({
+        chave: r.chave,
+        rotulo: r.rotulo,
+        provedor,
+        motivo,
+        template: t ? { nome: t.nome, idioma: t.idioma } : null,
+        // Só faz sentido simular o que iria pela Meta: o Evolution manda o
+        // texto cru, e não existe montagem que possa dar errado nele.
+        simulacao:
+          provedor === "meta"
+            ? this.meta.simular({
+                destino: { tipo: "TELEFONE", numero: telefone },
+                rota: r.chave,
+                texto: `[simulação] ${r.rotulo}`,
+                params: t ? [...t.exemplo] : undefined,
+              })
+            : null,
+      });
+    }
+    return { telefone, metaConfigurada: this.meta.configurado(), rotas };
+  }
 
   /**
    * O que a tela mostra: o catálogo inteiro com o provedor de cada rota, pra o

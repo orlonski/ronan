@@ -81,6 +81,26 @@ export class MetaProvedor implements ProvedorWhatsappClient {
   }
 
   /**
+   * Monta o payload e NÃO manda. É como se confere um template recém-aprovado
+   * sem esperar o cron das 20h nem gastar uma conversa.
+   *
+   * Pega tudo que é erro de montagem — parâmetro faltando, `\n` no meio de um
+   * valor, template com contagem diferente da que o envio manda. O que não
+   * pega é o que só a Meta sabe: se o template existe lá com aquele nome e
+   * naquele idioma. Pra isso, mandar de verdade.
+   */
+  simular(envio: EnvioWhatsapp): { ok: true; corpo: unknown } | { ok: false; erro: string } {
+    if (envio.destino.tipo === "GRUPO") {
+      return { ok: false, erro: "A Cloud API da Meta não posta em grupo." };
+    }
+    try {
+      return { ok: true, corpo: this.montarCorpo(envio.destino.numero, envio) };
+    } catch (e) {
+      return { ok: false, erro: (e as Error).message };
+    }
+  }
+
+  /**
    * Template ou texto livre.
    *
    * Texto livre só chega ao destinatário dentro da janela de 24h desde a última

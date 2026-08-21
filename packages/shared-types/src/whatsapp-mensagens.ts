@@ -235,6 +235,15 @@ export type TemplateWhatsappDef = {
    * Serve de fonte única: o que está aqui é o que tem que estar lá.
    */
   textoAprovacao: string;
+  /**
+   * Um `params` de mentira, na MESMA indexação que o envio real usa.
+   *
+   * Serve a duas coisas de uma vez: é o valor de exemplo que a Meta exige pra
+   * cada variável no formulário do template (ela reprova exemplo genérico do
+   * tipo "texto"), e é o que alimenta a simulação de payload do painel, que
+   * confere um template recém-aprovado sem esperar o cron das 20h.
+   */
+  exemplo: readonly string[];
 };
 
 /**
@@ -250,19 +259,31 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
   // validade, botão de copiar) mas não escrever o texto. `nomeConta` e o TTL do
   // envio ficam de fora — quem identifica a empresa é o nome de exibição do
   // número, e a validade é uma opção do template, não um parâmetro.
+  //
+  // O texto abaixo é o que a Meta monta em pt_BR, conferido no criador de
+  // modelos em 21/08/2026. A ordem NÃO é a tradução literal do inglês
+  // ("{{1}} is your verification code"), e o rodapé de validade é um componente
+  // separado, não parte do corpo.
+  //
+  // Na tela: categoria Autenticação → entrega "Copiar código". As outras duas
+  // opções (preenchimento automático de zero toque e de um toque) exigem nome
+  // de pacote e hash de assinatura do app Android, mais um handshake que o app
+  // do motorista não implementa.
   OTP_CADASTRO: {
     nome: "otp_cadastro",
     idioma: "pt_BR",
     corpo: [1],
     botao: { tipo: "COPIAR_CODIGO", param: 1 },
-    textoAprovacao: "{{1}} é seu código de verificação.",
+    textoAprovacao: "Seu código de verificação é {{1}}.\nPara sua segurança, não o compartilhe.",
+    exemplo: ["Schaba", "482913", "10"],
   },
   OTP_SENHA: {
     nome: "otp_senha",
     idioma: "pt_BR",
     corpo: [0],
     botao: { tipo: "COPIAR_CODIGO", param: 0 },
-    textoAprovacao: "{{1}} é seu código de verificação.",
+    textoAprovacao: "Seu código de verificação é {{1}}.\nPara sua segurança, não o compartilhe.",
+    exemplo: ["482913", "10"],
   },
   AVISO_PESO: {
     nome: "aviso_peso",
@@ -275,6 +296,7 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
       "",
       "Abra o app e complete antes de fechar o dia.",
     ].join("\n"),
+    exemplo: ["2 viagens", "Cimento SA (Obra Centro) · Britagem Norte"],
   },
   RESUMO_MOTORISTA: {
     nome: "resumo_motorista",
@@ -290,6 +312,7 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
       "No mês: {{5}}",
       "Bom descanso! 💪",
     ].join("\n"),
+    exemplo: ["Schaba", "quinta, 21/08", "3 viagens · 78,5 t · 412 km", "Tá tudo certo, nada pendente.", "45 viagens"],
   },
   // O resumo do gestor tem 12 blocos e cada usuário escolhe os seus. Isso não
   // cabe em corpo fixo: seriam 12 parâmetros com travessão de enchimento na
@@ -315,6 +338,7 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
       "",
       "Abra o painel pra ver o resumo completo.",
     ].join("\n"),
+    exemplo: ["Schaba", "21/08/2026 · quinta", "47 viagem(ns) · 1.240,5 t · 8.320,0 km", "Pendências: 3 motorista(s) pra aprovar"],
   },
   COMPARTILHAMENTO: {
     nome: "compartilhamento_viagem",
@@ -337,6 +361,7 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
       "",
       "O link fica disponível até {{4}}.",
     ].join("\n"),
+    exemplo: ["21/08/2026 · Britagem Norte → Obra Centro", "Placa ABC1D23 · 32,500 t de Brita · 84,20 km", "Qualquer dúvida, é só chamar.", "20/09/2026 18:30", "aBc123XyZ"],
   },
 };
 

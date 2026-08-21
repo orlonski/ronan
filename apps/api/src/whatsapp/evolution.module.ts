@@ -29,6 +29,9 @@ import { RoteamentoWhatsappService } from "./envio/roteamento.service";
     EvolutionClientService,
     EnvioWhatsappService,
     RoteamentoWhatsappService,
+    // Exportado só pra simulação de payload no painel. Quem ENVIA usa a
+    // fachada — provedor escolhido na mão fura o roteamento.
+    MetaProvedor,
     AvisoGrupoService,
   ],
 })
