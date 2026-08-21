@@ -834,6 +834,8 @@ type RotaConfig = {
   categoria: CategoriaWhatsapp;
   critica: boolean;
   provedores: ProvedorWhatsapp[];
+  /** De quem é a decisão: da empresa ou da plataforma (vale pra todas). */
+  escopo: "empresa" | "plataforma";
   provedor: ProvedorWhatsapp;
   explicito: boolean;
 };
@@ -898,6 +900,25 @@ function RoteamentoCard() {
     onError: (e: Error) => toast.error("Não deu pra salvar", { description: e.message }),
   });
 
+  /**
+   * Rota de plataforma tem endpoint próprio e NÃO leva `contaId`: a escolha é
+   * uma só pra todas as empresas. Mandar pelo PUT da empresa gravaria numa
+   * linha que o roteador nem lê.
+   */
+  const salvarPlataforma = useMutation({
+    mutationFn: (rotas: Record<string, ProvedorWhatsapp>) =>
+      fetchApi<RoteamentoResposta>(`/admin/roteamento-whatsapp/plataforma`, {
+        token,
+        method: "PUT",
+        body: JSON.stringify({ rotas }),
+      }),
+    onSuccess: () => {
+      toast.success("Salvo pra todas as empresas");
+      void qc.invalidateQueries({ queryKey: ["roteamento-whatsapp"] });
+    },
+    onError: (e: Error) => toast.error("Não deu pra salvar", { description: e.message }),
+  });
+
   const consumo = useQuery({
     queryKey: ["roteamento-consumo", alvo],
     enabled: !!token,
@@ -925,6 +946,13 @@ function RoteamentoCard() {
             O <strong>Evolution</strong> não custa por mensagem e é o único que posta em grupo, mas
             é não-oficial e o número pode ser banido. A <strong>Meta</strong> é oficial e não bane,
             porém cobra por mensagem e, fora da janela de 24h, só entrega texto aprovado por ela.
+          </p>
+          <p className="mt-2 max-w-2xl text-xs text-muted-foreground">
+            As linhas marcadas <strong>vale pra todas as empresas</strong> são os códigos de
+            acesso. Elas não seguem a empresa selecionada abaixo de propósito: o mesmo CPF pode ter
+            cadastro em várias transportadoras e a senha é uma só, então o código precisa sair
+            sempre pelo mesmo caminho — senão a mesma pessoa recebe ou não recebe conforme qual
+            cadastro for usado.
           </p>
         </div>
       </div>
@@ -954,6 +982,7 @@ function RoteamentoCard() {
         <div className="space-y-2 border-t pt-3">
           {rotas.map((r) => {
             const soEvolution = r.provedores.length === 1;
+            const daPlataforma = r.escopo === "plataforma";
             return (
               <div
                 key={r.chave}
@@ -967,6 +996,11 @@ function RoteamentoCard() {
                         trava o motorista se falhar
                       </Badge>
                     )}
+                    {daPlataforma && (
+                      <Badge className="border-sky-200 bg-sky-50 text-sky-800">
+                        vale pra todas as empresas
+                      </Badge>
+                    )}
                   </div>
                   <p className="mt-0.5 text-[11px] text-muted-foreground">{r.descricao}</p>
                   {r.provedor === "meta" && (
@@ -978,10 +1012,16 @@ function RoteamentoCard() {
                 <div className="w-44">
                   <Select
                     value={r.provedor}
-                    disabled={soEvolution || salvar.isPending}
-                    onChange={(e) =>
-                      salvar.mutate({ [r.chave]: e.target.value as ProvedorWhatsapp })
-                    }
+                    disabled={soEvolution || salvar.isPending || salvarPlataforma.isPending}
+                    onChange={(e) => {
+                      const prov = e.target.value as ProvedorWhatsapp;
+                      // O seletor é o mesmo; o destino da gravação não. Rota de
+                      // plataforma escrita pelo PUT da empresa iria pra uma
+                      // linha que o roteador não lê — a tela mostraria a troca e
+                      // o envio continuaria pelo caminho antigo.
+                      if (daPlataforma) salvarPlataforma.mutate({ [r.chave]: prov });
+                      else salvar.mutate({ [r.chave]: prov });
+                    }}
                   >
                     {r.provedores.map((p) => (
                       <option key={p} value={p}>
@@ -992,6 +1032,11 @@ function RoteamentoCard() {
                   {soEvolution && (
                     <p className="mt-1 text-[11px] text-muted-foreground">
                       A Meta não posta em grupo.
+                    </p>
+                  )}
+                  {daPlataforma && !soEvolution && (
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Trocar aqui muda pra todas as empresas.
                     </p>
                   )}
                 </div>

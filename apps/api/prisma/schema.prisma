@@ -495,6 +495,7 @@ model User {
   configsBuscaLocais         ConfiguracaoBuscaLocais[]
   configsAvisoGrupo          ConfiguracaoAvisoGrupo[]
   configsRoteamentoWpp       ConfiguracaoRoteamentoWhatsapp[]
+  configsRoteamentoPlataforma ConfiguracaoRoteamentoPlataforma[]
   configsForcaAtualizacao    ConfiguracaoForcaAtualizacao[]
   configsKmAtipico           ConfiguracaoKmAtipico[]
   mensagensViagem            ViagemMensagem[]               @relation("MensagensViagem")
@@ -2493,6 +2494,29 @@ model ConfiguracaoAvisoGrupo {
 /// A linha é por conta porque a empresa com número próprio vai precisar disso —
 /// e, de brinde, dá a granularidade de "vira só pra uma empresa piloto" sem
 /// código extra.
+/// Roteamento que vale pra TODAS as contas — linha única.
+///
+/// Primeiro `Configuracao*` sem `contaId` do repo, e por um motivo específico:
+/// as rotas de código de acesso são sobre a PESSOA, não sobre a empresa. O
+/// mesmo CPF tem cadastro em várias transportadoras com UMA senha
+/// (`AuthService.propagarSenha`), então deixar cada conta escolher o caminho do
+/// código faz a mesma pessoa receber ou não receber conforme o desempate de
+/// qual cadastro é mais recente. Escolha única resolve por construção.
+///
+/// Quais rotas moram aqui é o catálogo que diz (`escopo: "plataforma"` em
+/// shared-types), não esta tabela.
+model ConfiguracaoRoteamentoPlataforma {
+  /// Linha única. O default fixo é o que garante que só exista uma.
+  id            String   @id @default("singleton")
+  /// Chave da rota -> provedor. Rota ausente cai no padrão do código.
+  rotas         Json     @default("{}")
+  alteradoEm    DateTime @updatedAt
+  alteradoPorId String?
+  alteradoPor   User?    @relation(fields: [alteradoPorId], references: [id])
+
+  @@map("configuracao_roteamento_plataforma")
+}
+
 model ConfiguracaoRoteamentoWhatsapp {
   contaId String @default("__SEM_CONTA__")
   conta   Conta  @relation(fields: [contaId], references: [id])

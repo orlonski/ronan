@@ -1,6 +1,9 @@
 import { Body, Controller, Get, Put, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { AtualizarRoteamentoWhatsappInput } from "@ronan/shared-types";
+import {
+  AtualizarRoteamentoPlataformaInput,
+  AtualizarRoteamentoWhatsappInput,
+} from "@ronan/shared-types";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { PlataformaGuard } from "../../auth/guards/plataforma.guard";
@@ -72,6 +75,21 @@ export class AdminRoteamentoWhatsappController {
     @Query("limite") limite?: string,
   ) {
     return comConta(contaAlvo(user, contaId), () => this.service.falhas(Number(limite) || 20));
+  }
+
+  /**
+   * Troca uma rota de PLATAFORMA. Não aceita `contaId`: a escolha é única e
+   * vale pra todas as empresas — aceitar o parâmetro sugeriria o contrário.
+   */
+  @Put("plataforma")
+  salvarPlataforma(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(AtualizarRoteamentoPlataformaInput))
+    body: AtualizarRoteamentoPlataformaInput,
+  ) {
+    // `comoSistema` porque a linha não tem conta; `pegar()` no fim precisa de
+    // uma pra montar a resposta, então usa a do próprio usuário.
+    return comConta(contaAlvo(user), () => this.service.salvarPlataforma(body.rotas, user.id));
   }
 
   @Put()

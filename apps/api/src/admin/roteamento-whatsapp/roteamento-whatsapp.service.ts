@@ -2,15 +2,19 @@ import { Injectable } from "@nestjs/common";
 import {
   CHAVES_ROTA_WHATSAPP,
   provedorAtendeRota,
+  ROTAS_DA_PLATAFORMA,
   ROTAS_WHATSAPP,
   templateWhatsapp,
   type AtualizarRoteamentoWhatsappInput,
   type ProvedorWhatsapp,
 } from "@ronan/shared-types";
-import { contaIdAtual } from "../../common/conta/conta-context";
+import { comoSistema, contaIdAtual } from "../../common/conta/conta-context";
 import { inicioDoDiaData } from "../../common/timezone";
 import { PrismaService } from "../../prisma/prisma.service";
 import { MetaProvedor } from "../../whatsapp/envio/meta.provedor";
+
+/** Mesmo padrão que o roteador aplica — a tela não pode discordar dele. */
+const PADRAO: ProvedorWhatsapp = "meta";
 import { RoteamentoWhatsappService as Roteador } from "../../whatsapp/envio/roteamento.service";
 
 @Injectable()
@@ -76,6 +80,7 @@ export class AdminRoteamentoWhatsappService {
       update: {},
     });
     const escolhas = (cfg.rotas as Record<string, ProvedorWhatsapp> | null) ?? {};
+    const daPlataforma = await this.rotasDaPlataforma();
 
     return {
       telefonesTeste: cfg.telefonesTeste,
@@ -97,10 +102,20 @@ export class AdminRoteamentoWhatsappService {
         critica: r.critica,
         /** Provedores que esta rota aceita — o painel desabilita o resto. */
         provedores: r.provedores,
+        /**
+         * De quem é a decisão. Rota de plataforma vale pra todas as empresas —
+         * a tela precisa disso pra não oferecer um seletor que não manda em
+         * nada. Ver o comentário de `escopo` no catálogo.
+         */
+        escopo: r.escopo,
         /** O que está valendo. */
-        provedor: escolhas[r.chave] ?? "evolution",
+        provedor:
+          r.escopo === "plataforma"
+            ? (daPlataforma[r.chave] ?? PADRAO)
+            : (escolhas[r.chave] ?? PADRAO),
         /** Se veio de escolha explícita ou do padrão do código. */
-        explicito: !!escolhas[r.chave],
+        explicito:
+          r.escopo === "plataforma" ? !!daPlataforma[r.chave] : !!escolhas[r.chave],
       })),
     };
   }
@@ -147,6 +162,41 @@ export class AdminRoteamentoWhatsappService {
    * congelada no envio — a conta que vale é a da Meta, e enquanto tudo sai pelo
    * Evolution ela é zero de propósito.
    */
+  private async rotasDaPlataforma(): Promise<Record<string, ProvedorWhatsapp>> {
+    const linha = await comoSistema(() =>
+      this.prisma.configuracaoRoteamentoPlataforma.upsert({
+        where: { id: "singleton" },
+        create: {},
+        update: {},
+      }),
+    );
+    return (linha.rotas as Record<string, ProvedorWhatsapp> | null) ?? {};
+  }
+
+  /**
+   * Troca o provedor de uma rota de plataforma. Vale pra todas as empresas de
+   * uma vez — que é o ponto: são as mensagens sobre a pessoa, e a pessoa pode
+   * estar em várias transportadoras com uma senha só.
+   */
+  async salvarPlataforma(rotas: Record<string, ProvedorWhatsapp>, userId: string) {
+    const limpas = Object.fromEntries(
+      Object.entries(rotas).filter(
+        ([chave, prov]) =>
+          (ROTAS_DA_PLATAFORMA as string[]).includes(chave) && provedorAtendeRota(chave, prov),
+      ),
+    );
+    const anterior = await this.rotasDaPlataforma();
+    await comoSistema(() =>
+      this.prisma.configuracaoRoteamentoPlataforma.update({
+        where: { id: "singleton" },
+        data: { rotas: { ...anterior, ...limpas }, alteradoPorId: userId },
+      }),
+    );
+    // Vale pra todas as contas, então o cache de todas precisa cair.
+    this.roteador.invalidarPlataforma();
+    return this.pegar();
+  }
+
   /**
    * Os últimos envios que NÃO saíram, com o motivo cru do provedor.
    *

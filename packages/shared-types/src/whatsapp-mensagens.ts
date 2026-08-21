@@ -51,6 +51,20 @@ export type RotaWhatsappDef = {
    * de migração — rota crítica é a última a sair do caminho conhecido.
    */
   critica: boolean;
+  /**
+   * De quem é a decisão de provedor nesta rota.
+   *
+   * - `empresa`: a mensagem é sobre a operação DAQUELA transportadora, e cada
+   *   uma pode estar num provedor diferente. É o que torna possível migrar uma
+   *   empresa de cada vez.
+   * - `plataforma`: a mensagem é sobre a PESSOA, não sobre a empresa. O mesmo
+   *   CPF pode ter cadastro em várias transportadoras e a senha é uma só
+   *   (`AuthService.propagarSenha`); deixar cada empresa escolher o caminho do
+   *   código faria a MESMA pessoa redefinir a MESMA senha e receber — ou não
+   *   receber — dependendo de qual cadastro venceu o desempate. Escolha única,
+   *   valendo pra todas.
+   */
+  escopo: "empresa" | "plataforma";
 };
 
 export const ROTAS_WHATSAPP = [
@@ -61,6 +75,7 @@ export const ROTAS_WHATSAPP = [
     categoria: "authentication",
     provedores: ["evolution", "meta"],
     critica: true,
+    escopo: "plataforma",
   },
   {
     chave: "OTP_SENHA",
@@ -69,6 +84,7 @@ export const ROTAS_WHATSAPP = [
     categoria: "authentication",
     provedores: ["evolution", "meta"],
     critica: true,
+    escopo: "plataforma",
   },
   {
     chave: "AVISO_GRUPO",
@@ -78,6 +94,7 @@ export const ROTAS_WHATSAPP = [
     // Grupo não existe na Cloud API. Isto não é uma escolha de configuração.
     provedores: ["evolution"],
     critica: false,
+    escopo: "empresa",
   },
   {
     chave: "MENSAGEM_AVULSA",
@@ -87,6 +104,7 @@ export const ROTAS_WHATSAPP = [
     categoria: "servico",
     provedores: ["evolution", "meta"],
     critica: false,
+    escopo: "empresa",
   },
   {
     chave: "RESUMO_MOTORISTA",
@@ -95,6 +113,7 @@ export const ROTAS_WHATSAPP = [
     categoria: "utility",
     provedores: ["evolution", "meta"],
     critica: false,
+    escopo: "empresa",
   },
   {
     chave: "AVISO_PESO",
@@ -103,6 +122,7 @@ export const ROTAS_WHATSAPP = [
     categoria: "utility",
     provedores: ["evolution", "meta"],
     critica: false,
+    escopo: "empresa",
   },
   {
     chave: "RESUMO_GESTOR",
@@ -111,6 +131,7 @@ export const ROTAS_WHATSAPP = [
     categoria: "utility",
     provedores: ["evolution", "meta"],
     critica: false,
+    escopo: "empresa",
   },
   {
     chave: "COMPARTILHAMENTO",
@@ -119,6 +140,7 @@ export const ROTAS_WHATSAPP = [
     categoria: "utility",
     provedores: ["evolution", "meta"],
     critica: false,
+    escopo: "empresa",
   },
   {
     chave: "RESPOSTA_AGENTE",
@@ -131,6 +153,7 @@ export const ROTAS_WHATSAPP = [
     // conversa se parte em dois chats. Ver `roteamento.service.ts`.
     provedores: ["evolution", "meta"],
     critica: false,
+    escopo: "empresa",
   },
 ] as const satisfies readonly RotaWhatsappDef[];
 
@@ -142,6 +165,21 @@ export const CHAVES_ROTA_WHATSAPP = ROTAS_WHATSAPP.map((r) => r.chave) as RotaWh
 export function rotaWhatsapp(chave: string): RotaWhatsappDef | undefined {
   return ROTAS_WHATSAPP.find((r) => r.chave === chave);
 }
+
+/**
+ * Se a escolha de provedor desta rota vale pra todas as empresas.
+ *
+ * Quem lê config de roteamento tem que perguntar isto ANTES de olhar a linha da
+ * conta: pra rota de plataforma, o que a conta gravou não vale.
+ */
+export function rotaEhDaPlataforma(chave: string): boolean {
+  return rotaWhatsapp(chave)?.escopo === "plataforma";
+}
+
+/** As rotas cuja decisão é da plataforma, não da empresa. */
+export const ROTAS_DA_PLATAFORMA = ROTAS_WHATSAPP.filter(
+  (r) => r.escopo === "plataforma",
+).map((r) => r.chave) as RotaWhatsapp[];
 
 /** Se aquele provedor consegue entregar aquela rota. */
 export function provedorAtendeRota(chave: string, provedor: ProvedorWhatsapp): boolean {
@@ -369,3 +407,16 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
 export function templateWhatsapp(rota: string): TemplateWhatsappDef | undefined {
   return TEMPLATES_WHATSAPP[rota as RotaWhatsapp];
 }
+
+/**
+ * Troca de provedor numa rota de PLATAFORMA.
+ *
+ * Sem `telefonesTeste` e sem conta de propósito: a allowlist é um mecanismo de
+ * migração por empresa, e rota de plataforma não migra por empresa.
+ */
+export const AtualizarRoteamentoPlataformaInput = z.object({
+  rotas: z.record(z.enum(PROVEDORES_WHATSAPP)),
+});
+export type AtualizarRoteamentoPlataformaInput = z.infer<
+  typeof AtualizarRoteamentoPlataformaInput
+>;
