@@ -200,3 +200,120 @@ export const AtualizarRoteamentoWhatsappInput = z.object({
   telefonesTeste: z.array(z.string().regex(/^\d{10,15}$/)).max(20).optional(),
 });
 export type AtualizarRoteamentoWhatsappInput = z.infer<typeof AtualizarRoteamentoWhatsappInput>;
+
+/* ---------------------------------------------------------------- templates ---
+ *
+ * Fora da janela de 24h a Meta só entrega TEMPLATE previamente aprovado. Cada
+ * rota que precisa de um declara aqui: o nome exato aprovado lá, o idioma, e —
+ * o ponto que não é óbvio — QUAIS dos `params` do envio entram no corpo.
+ *
+ * O mapa por índice existe porque `params` foi montado pensando no texto que o
+ * Evolution manda, e o template da Meta quase nunca aceita os mesmos valores.
+ * O caso extremo é o OTP: o envio manda `[nomeConta, codigo, ttl]`, e o corpo
+ * do template de autenticação é FIXO pela Meta — só cabe o código. Sem o mapa,
+ * ou a gente mandava parâmetro a mais (a Meta rejeita a mensagem inteira) ou
+ * mexia no call site pra caber na Meta e estragava o texto do Evolution, que é
+ * justamente a rede pra quando um template é reprovado.
+ */
+
+export type BotaoTemplate =
+  /** Botão "Copiar código" do template de autenticação. O param é o código. */
+  | { tipo: "COPIAR_CODIGO"; param: number }
+  /** Botão de URL dinâmica: o param é só o SUFIXO que completa a URL base. */
+  | { tipo: "URL"; param: number };
+
+export type TemplateWhatsappDef = {
+  /** Nome exato aprovado na Meta. Minúsculas e underscore — a Meta exige. */
+  nome: string;
+  /** Código de idioma do template aprovado. */
+  idioma: string;
+  /** Posições de `params` que viram {{1}}..{{n}} do corpo, nessa ordem. */
+  corpo: readonly number[];
+  botao?: BotaoTemplate;
+  /**
+   * O corpo exato a cadastrar na Meta, pra submeter e pra conferir depois.
+   * Serve de fonte única: o que está aqui é o que tem que estar lá.
+   */
+  textoAprovacao: string;
+};
+
+/**
+ * Rota → template. Rota ausente daqui **não tem template**, e na Meta só sai
+ * como texto livre dentro da janela de 24h:
+ *
+ * - `MENSAGEM_AVULSA` e `RESPOSTA_AGENTE` são texto que alguém digitou na hora.
+ *   Não existe template possível — é a natureza delas, não uma pendência.
+ * - `RESUMO_GESTOR` tem corpo variável (cada usuário escolhe seus blocos em
+ *   `resumoAssuntos`), e parâmetro de template não aceita quebra de linha. Ou o
+ *   resumo do gestor ganha uma forma fixa, ou fica no Evolution. Decisão em
+ *   aberto — de propósito, em vez de um template chutado que a Meta reprova.
+ * - `AVISO_GRUPO` é grupo, que a Cloud API não faz.
+ */
+export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDef>> = {
+  // Corpo FIXO pela Meta: dá pra escolher os complementos (aviso de segurança,
+  // validade, botão de copiar) mas não escrever o texto. `nomeConta` e o TTL do
+  // envio ficam de fora — quem identifica a empresa é o nome de exibição do
+  // número, e a validade é uma opção do template, não um parâmetro.
+  OTP_CADASTRO: {
+    nome: "otp_cadastro",
+    idioma: "pt_BR",
+    corpo: [1],
+    botao: { tipo: "COPIAR_CODIGO", param: 1 },
+    textoAprovacao: "{{1}} é seu código de verificação.",
+  },
+  OTP_SENHA: {
+    nome: "otp_senha",
+    idioma: "pt_BR",
+    corpo: [0],
+    botao: { tipo: "COPIAR_CODIGO", param: 0 },
+    textoAprovacao: "{{1}} é seu código de verificação.",
+  },
+  AVISO_PESO: {
+    nome: "aviso_peso",
+    idioma: "pt_BR",
+    corpo: [0, 1],
+    textoAprovacao: [
+      "⚖️ *Você tem {{1}} sem peso*",
+      "",
+      "Falta o peso/romaneio de: {{2}}",
+      "",
+      "Abra o app e complete antes de fechar o dia.",
+    ].join("\n"),
+  },
+  RESUMO_MOTORISTA: {
+    nome: "resumo_motorista",
+    idioma: "pt_BR",
+    corpo: [0, 1, 2, 3, 4],
+    textoAprovacao: [
+      "🚛 *Seu dia na {{1}}* — {{2}}",
+      "",
+      "Hoje você fez: {{3}}",
+      "",
+      "{{4}}",
+      "",
+      "No mês: {{5}}",
+      "Bom descanso! 💪",
+    ].join("\n"),
+  },
+  COMPARTILHAMENTO: {
+    nome: "compartilhamento_viagem",
+    idioma: "pt_BR",
+    corpo: [0, 1, 2, 3],
+    // O token do link é o sufixo da URL do botão, não texto do corpo: link em
+    // parâmetro de corpo a Meta trata como conteúdo suspeito com frequência.
+    botao: { tipo: "URL", param: 4 },
+    textoAprovacao: [
+      "Olá! Segue o comprovante da viagem de {{1}}.",
+      "",
+      "{{2}}",
+      "{{3}}",
+      "",
+      "O link fica disponível até {{4}}.",
+    ].join("\n"),
+  },
+};
+
+/** O template daquela rota, ou `undefined` se ela não tem um. */
+export function templateWhatsapp(rota: string): TemplateWhatsappDef | undefined {
+  return TEMPLATES_WHATSAPP[rota as RotaWhatsapp];
+}

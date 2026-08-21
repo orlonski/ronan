@@ -39,7 +39,18 @@ export type ResultadoEnvio = {
   provedor: ProvedorWhatsapp;
   /** `key.id` no Evolution, `wamid` na Meta. A prova de que foi aceito. */
   idExterno: string | null;
-  erro?: { codigo: string; detalhe: string };
+  erro?: {
+    /**
+     * Transporte é a Meta/Evolution fora do ar ou a rede caindo — dá pra tentar
+     * de novo, e é a ÚNICA falha em que cair pro outro provedor é aceitável.
+     * Política é template reprovado, janela de 24h expirada, número limitado,
+     * token vencido: repetir ou desviar pro Evolution é usar de propósito a
+     * ferramenta que o WhatsApp sinalizou, no tráfego que ele sinalizou.
+     */
+    tipo?: "TRANSPORTE" | "POLITICA";
+    codigo: string;
+    detalhe: string;
+  };
 };
 
 /**

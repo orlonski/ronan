@@ -3,6 +3,7 @@ import { AvisoGrupoService } from "./aviso-grupo.service";
 import { EvolutionClientService } from "./evolution-client.service";
 import { EnvioWhatsappService } from "./envio/envio-whatsapp.service";
 import { EvolutionProvedor } from "./envio/evolution.provedor";
+import { MetaProvedor } from "./envio/meta.provedor";
 import { RoteamentoWhatsappService } from "./envio/roteamento.service";
 
 /**
@@ -19,6 +20,7 @@ import { RoteamentoWhatsappService } from "./envio/roteamento.service";
   providers: [
     EvolutionClientService,
     EvolutionProvedor,
+    MetaProvedor,
     RoteamentoWhatsappService,
     EnvioWhatsappService,
     AvisoGrupoService,

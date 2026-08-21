@@ -1,27 +1,32 @@
 import { describe, it, expect, vi } from "vitest";
 import { ServiceUnavailableException } from "@nestjs/common";
 import { EnvioWhatsappService } from "./envio-whatsapp.service";
+import type { ProvedorWhatsapp } from "@ronan/shared-types";
 import type { EnvioWhatsapp, ResultadoEnvio } from "./envio.types";
 import type { EvolutionProvedor } from "./evolution.provedor";
+import type { MetaProvedor } from "./meta.provedor";
 import type { RoteamentoWhatsappService } from "./roteamento.service";
 import type { PrismaService } from "../../prisma/prisma.service";
 import { comConta, comoSistema } from "../../common/conta/conta-context";
 
 /** Um provedor de mentira, pra poder testar a fachada sem rede. */
-function provedorFake(opts: { configurado?: boolean; resultado?: Partial<ResultadoEnvio> } = {}) {
+function provedorFake(
+  opts: {
+    configurado?: boolean;
+    resultado?: Partial<ResultadoEnvio>;
+    nome?: ProvedorWhatsapp;
+  } = {},
+) {
+  const nome = opts.nome ?? "evolution";
   const enviar = vi.fn(
     async (): Promise<ResultadoEnvio> => ({
       enviado: true,
-      provedor: "evolution",
+      provedor: nome,
       idExterno: "ABC123",
       ...opts.resultado,
     }),
   );
-  return {
-    nome: "evolution" as const,
-    configurado: () => opts.configurado ?? true,
-    enviar,
-  };
+  return { nome, configurado: () => opts.configurado ?? true, enviar };
 }
 
 /**
@@ -50,9 +55,11 @@ function servico(
   fake: ReturnType<typeof provedorFake>,
   roteia: "evolution" | "meta" = "evolution",
   prisma = prismaFake(),
+  meta = provedorFake({ nome: "meta" }),
 ) {
   return new EnvioWhatsappService(
     fake as unknown as EvolutionProvedor,
+    meta as unknown as MetaProvedor,
     roteamentoFake(roteia) as unknown as RoteamentoWhatsappService,
     prisma as unknown as PrismaService,
   );
@@ -123,16 +130,34 @@ describe("EnvioWhatsappService.tentarEnviar", () => {
   });
 });
 
-describe("provedor configurado mas ainda não implementado", () => {
-  it("cai no Evolution em vez de deixar de enviar", async () => {
-    // Alguém aponta uma rota pra Meta antes de a Meta existir no código. A
-    // mensagem TEM que sair mesmo assim — config apontando pro futuro não pode
-    // virar motorista sem código de cadastro.
-    const fake = provedorFake();
-    const r = await servico(fake, "meta").tentarEnviar(paraMotorista("RESUMO_MOTORISTA"));
+describe("rota apontada pra Meta", () => {
+  it("sai pela Meta, e o Evolution nem é tocado", async () => {
+    // Até a Fase 3 a fachada caía no Evolution com um warn, porque a Meta não
+    // existia no código. Agora existe — e o silêncio dessa troca era o risco:
+    // o painel diria "Meta" e a mensagem sairia pelo canal banido.
+    const evolution = provedorFake();
+    const meta = provedorFake({ nome: "meta" });
+    const r = await servico(evolution, "meta", prismaFake(), meta).tentarEnviar(
+      paraMotorista("RESUMO_MOTORISTA"),
+    );
     expect(r.enviado).toBe(true);
-    expect(r.provedor).toBe("evolution");
-    expect(fake.enviar).toHaveBeenCalledOnce();
+    expect(r.provedor).toBe("meta");
+    expect(meta.enviar).toHaveBeenCalledOnce();
+    expect(evolution.enviar).not.toHaveBeenCalled();
+  });
+
+  it("Meta desconfigurada não escorrega pro Evolution", async () => {
+    // Cair pro Evolution porque a Meta não respondeu é usar de propósito o
+    // canal que o WhatsApp sinalizou. Prefere-se não enviar e registrar.
+    const evolution = provedorFake();
+    const meta = provedorFake({ nome: "meta", configurado: false });
+    const r = await servico(evolution, "meta", prismaFake(), meta).tentarEnviar(
+      paraMotorista("RESUMO_MOTORISTA"),
+    );
+    expect(r.enviado).toBe(false);
+    expect(r.provedor).toBe("meta");
+    expect(r.erro?.codigo).toBe("PROVEDOR_NAO_CONFIGURADO");
+    expect(evolution.enviar).not.toHaveBeenCalled();
   });
 });
 

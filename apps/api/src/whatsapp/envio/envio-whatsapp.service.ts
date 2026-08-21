@@ -3,6 +3,7 @@ import { custoEstimado, rotaWhatsapp, type ProvedorWhatsapp, type RotaWhatsapp }
 import { contaAtual } from "../../common/conta/conta-context";
 import { PrismaService } from "../../prisma/prisma.service";
 import { EvolutionProvedor } from "./evolution.provedor";
+import { MetaProvedor } from "./meta.provedor";
 import { RoteamentoWhatsappService } from "./roteamento.service";
 import {
   ROTULO_PROVEDOR,
@@ -40,21 +41,14 @@ export class EnvioWhatsappService {
 
   constructor(
     private readonly evolution: EvolutionProvedor,
+    private readonly meta: MetaProvedor,
     private readonly roteamento: RoteamentoWhatsappService,
     private readonly prisma: PrismaService,
   ) {}
 
-  /**
-   * Os provedores que existem de verdade neste processo.
-   *
-   * A Meta ainda não tem implementação. Uma rota configurada pra ela cai no
-   * Evolution com um aviso — o que é o comportamento certo: config apontando
-   * pra um provedor que ainda não existe não pode deixar de mandar a mensagem.
-   */
+  /** Os provedores que existem de verdade neste processo. */
   private clienteDe(provedor: ProvedorWhatsapp): ProvedorWhatsappClient {
-    if (provedor === "evolution") return this.evolution;
-    this.log.warn(`provedor "${provedor}" ainda não implementado — indo pelo Evolution`);
-    return this.evolution;
+    return provedor === "meta" ? this.meta : this.evolution;
   }
 
   /**
