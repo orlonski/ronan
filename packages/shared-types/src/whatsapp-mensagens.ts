@@ -302,10 +302,16 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
     // O token do link é o sufixo da URL do botão, não texto do corpo: link em
     // parâmetro de corpo a Meta trata como conteúdo suspeito com frequência.
     botao: { tipo: "URL", param: 4 },
+    // {{3}} existe por causa da mensagem que o operador digita junto do link.
+    // Sem ela, o template mandaria o comprovante e engoliria o recado — e quem
+    // escreveu acharia que foi. Vazia, o parâmetro vira uma frase neutra: a
+    // Meta recusa parâmetro em branco.
     textoAprovacao: [
-      "Olá! Segue o comprovante da viagem de {{1}}.",
+      "Olá! Segue o comprovante da viagem.",
       "",
+      "{{1}}",
       "{{2}}",
+      "",
       "{{3}}",
       "",
       "O link fica disponível até {{4}}.",

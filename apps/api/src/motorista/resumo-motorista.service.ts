@@ -3,6 +3,7 @@ import { Cron } from "@nestjs/schedule";
 import { PrismaService } from "../prisma/prisma.service";
 import { EnvioWhatsappService } from "../whatsapp/envio/envio-whatsapp.service";
 import { SessaoService } from "../whatsapp/sessao.service";
+import { achatarParam } from "@ronan/shared-types";
 import { inicioDoDiaData, ymdSaoPaulo } from "../common/timezone";
 import { paraCadaConta } from "../common/conta/para-cada-conta";
 import { comoSistema } from "../common/conta/conta-context";
@@ -85,7 +86,7 @@ export class ResumoMotoristaService {
         // da outra sumiria com pendência de peso que é dele e ele precisa
         // resolver. Push, esse sim, só chega da empresa que está com o aparelho.
         const empresa = await this.nomeSeMultiEmpresa(m.cpf, m.conta.nome);
-        await this.enviarWhatsapp(m.telefone, this.montar(dados, empresa));
+        await this.enviarWhatsapp(m.telefone, this.montar(dados, m.conta.nome, !!empresa));
       } catch (err) {
         this.log.warn(`resumo do motorista ${m.id} falhou: ${(err as Error).message}`);
       }
@@ -108,7 +109,13 @@ export class ResumoMotoristaService {
   async enviarAgora(motoristaId: string): Promise<{ enviado: boolean; motivo?: string }> {
     const m = await this.prisma.motorista.findUnique({
       where: { id: motoristaId },
-      select: { id: true, telefone: true, aceitaWhatsapp: true, receberResumoDiario: true },
+      select: {
+        id: true,
+        telefone: true,
+        aceitaWhatsapp: true,
+        receberResumoDiario: true,
+        conta: { select: { nome: true } },
+      },
     });
     if (!m) throw new NotFoundException("Motorista não encontrado");
     const disp = await this.envio.disponivel("RESUMO_MOTORISTA");
@@ -124,7 +131,8 @@ export class ResumoMotoristaService {
     }
 
     const dados = await this.coletar(m.id);
-    await this.enviarWhatsapp(m.telefone, this.montar(dados));
+    // Disparo manual é sempre de uma conta só: o texto não repete o nome dela.
+    await this.enviarWhatsapp(m.telefone, this.montar(dados, m.conta.nome, false));
     return { enviado: true };
   }
 
@@ -156,48 +164,87 @@ export class ResumoMotoristaService {
     };
   }
 
-  private montar(d: ResumoDados, empresa?: string | null): string {
+  /**
+   * O texto do Evolution e os parâmetros do template da Meta, lado a lado.
+   *
+   * São duas representações do MESMO resumo, e as duas continuam existindo de
+   * propósito: o texto é o que fica no histórico e o que sai se um template for
+   * reprovado; os params são o que a Meta aceita. O corpo do template é fixo
+   * ("Seu dia na {{1}}"), então `nomeConta` vai SEMPRE no parâmetro, mesmo
+   * quando o texto o omite — parâmetro vazio a Meta recusa.
+   *
+   * As pendências, que no texto são bullets em linhas separadas, viram uma
+   * linha só com " · ": parâmetro de template não aceita quebra de linha.
+   */
+  private montar(
+    d: ResumoDados,
+    nomeConta: string,
+    mostrarEmpresa: boolean,
+  ): { texto: string; params: string[] } {
     const [y, m, dia] = ymdSaoPaulo();
     const ds = DIAS_SEMANA[new Date(Date.UTC(y, m - 1, dia)).getUTCDay()];
     const dataBr = `${String(dia).padStart(2, "0")}/${String(m).padStart(2, "0")}`;
+
+    const feitos = [
+      plural(d.viagensHoje, "viagem", "viagens"),
+      `${fmtTon(d.toneladas)} t carregadas`,
+      `${fmt(Math.round(d.km))} km rodados`,
+    ];
+
+    const pendencias: string[] = [];
+    if (d.aguardandoPeso > 0) {
+      pendencias.push(`${plural(d.aguardandoPeso, "viagem", "viagens")} sem o peso → manda o romaneio`);
+    }
+    if (d.divergente > 0) {
+      pendencias.push(`${plural(d.divergente, "viagem", "viagens")} com problema → confere no app`);
+    }
 
     const linhas: string[] = [
       // O nome da empresa só entra pra quem roda pra mais de uma: sem ele, duas
       // mensagens iguais às 20h e o motorista sem saber qual é qual. Pra quem
       // tem uma empresa só, a mensagem fica idêntica à de sempre.
-      empresa ? `🚛 *Seu dia na ${empresa}* — ${ds}, ${dataBr}` : `🚛 *Seu dia* — ${ds}, ${dataBr}`,
+      mostrarEmpresa
+        ? `🚛 *Seu dia na ${nomeConta}* — ${ds}, ${dataBr}`
+        : `🚛 *Seu dia* — ${ds}, ${dataBr}`,
       "",
       "Hoje você fez:",
-      `• ${plural(d.viagensHoje, "viagem", "viagens")}`,
-      `• ${fmtTon(d.toneladas)} t carregadas`,
-      `• ${fmt(Math.round(d.km))} km rodados`,
+      ...feitos.map((f) => `• ${f}`),
       "",
     ];
 
-    if (d.aguardandoPeso > 0 || d.divergente > 0) {
-      linhas.push("⚠️ *Falta resolver:*");
-      if (d.aguardandoPeso > 0) {
-        linhas.push(`• ${plural(d.aguardandoPeso, "viagem", "viagens")} sem o peso → manda o romaneio`);
-      }
-      if (d.divergente > 0) {
-        linhas.push(`• ${plural(d.divergente, "viagem", "viagens")} com problema → confere no app`);
-      }
+    if (pendencias.length > 0) {
+      linhas.push("⚠️ *Falta resolver:*", ...pendencias.map((p) => `• ${p}`));
     } else {
       linhas.push("✅ Tá tudo certo, nada pendente.");
     }
 
     linhas.push("", `No mês: ${plural(d.viagensMes, "viagem", "viagens")}`, "Bom descanso! 💪");
-    return linhas.join("\n");
+
+    const params = [
+      nomeConta,
+      `${ds}, ${dataBr}`,
+      feitos.join(" · "),
+      pendencias.length > 0
+        ? `Falta resolver: ${pendencias.join(" · ")}`
+        : "Tá tudo certo, nada pendente.",
+      plural(d.viagensMes, "viagem", "viagens"),
+    ].map(achatarParam);
+
+    return { texto: linhas.join("\n"), params };
   }
 
-  private async enviarWhatsapp(telefone: string | null | undefined, texto: string): Promise<void> {
+  private async enviarWhatsapp(
+    telefone: string | null | undefined,
+    mensagem: { texto: string; params: string[] },
+  ): Promise<void> {
     if (!telefone) return;
     // O WhatsApp exige DDI 55; o telefone do motorista vem só com DDD.
     const numero = SessaoService.normalizar(telefone);
     await this.envio.enviarOuFalhar({
       destino: { tipo: "TELEFONE", numero },
       rota: "RESUMO_MOTORISTA",
-      texto,
+      texto: mensagem.texto,
+      params: mensagem.params,
     });
   }
 }

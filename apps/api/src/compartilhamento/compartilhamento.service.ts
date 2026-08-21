@@ -10,6 +10,7 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { AcaoAuditoria } from "@prisma/client";
+import { achatarParam } from "@ronan/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditoriaService } from "../auditoria/auditoria.service";
 import { UploadsService } from "../uploads/uploads.service";
@@ -143,14 +144,15 @@ export class CompartilhamentoService implements OnModuleInit {
       throw new BadRequestException("Número de WhatsApp inválido. Informe com DDD.");
     }
 
-    const texto = await this.montarMensagem(viagemId, link.token, link.expiraEm, input.mensagemExtra);
+    const mensagem = await this.montarMensagem(viagemId, link.token, link.expiraEm, input.mensagemExtra);
     // Só marca como enviado DEPOIS do envio dar certo — `enviarOuFalhar` joga
     // 503 se o provedor não devolver a prova de aceite, e um "enviado"
     // mentiroso é pior que erro.
     await this.envio.enviarOuFalhar({
       destino: { tipo: "TELEFONE", numero },
       rota: "COMPARTILHAMENTO",
-      texto,
+      texto: mensagem.texto,
+      params: mensagem.params,
     });
 
     const atualizado = await this.prisma.viagemCompartilhamento.update({
@@ -343,7 +345,7 @@ export class CompartilhamentoService implements OnModuleInit {
     token: string,
     expiraEm: Date,
     mensagemExtra?: string,
-  ): Promise<string> {
+  ): Promise<{ texto: string; params: string[] }> {
     const v = await this.prisma.viagem.findUnique({
       where: { id: viagemId },
       select: {
@@ -375,9 +377,12 @@ export class CompartilhamentoService implements OnModuleInit {
       "",
     );
 
-    if (v.localCarga || v.localDescarga) {
-      linhas.push(`${v.localCarga?.nome ?? "—"} → ${v.localDescarga?.nome ?? "—"}`);
-    }
+    const trecho =
+      v.localCarga || v.localDescarga
+        ? `${v.localCarga?.nome ?? "—"} → ${v.localDescarga?.nome ?? "—"}`
+        : null;
+    if (trecho) linhas.push(trecho);
+
     const detalhes = [
       v.veiculo ? `Placa ${v.veiculo.placa}` : null,
       v.toneladas != null && v.material ? `${numBR(v.toneladas.toFixed(3))} t de ${v.material.nome}` : null,
@@ -389,7 +394,26 @@ export class CompartilhamentoService implements OnModuleInit {
     linhas.push(`O link fica disponível até ${dataHoraBR(expiraEm)}.`);
     if (conta?.nome) linhas.push(conta.nome);
 
-    return linhas.join("\n");
+    /**
+     * Os mesmos dados na forma que a Meta aceita: uma linha por parâmetro,
+     * nenhum vazio (parâmetro em branco derruba a mensagem inteira).
+     *
+     * A data entra junto do trecho em vez de virar parâmetro próprio porque
+     * `Viagem.data` é anulável: um parâmetro só pra ela precisaria de um
+     * travessão de enchimento quando faltasse.
+     *
+     * O link NÃO está aqui — ele é o sufixo da URL do botão, último parâmetro.
+     */
+    const params = [
+      [v.data ? dataBR(v.data) : null, trecho].filter(Boolean).join(" · ") ||
+        "Comprovante de viagem",
+      detalhes.length > 0 ? detalhes.join(" · ") : (conta?.nome ?? "Movatruck"),
+      mensagemExtra?.trim() || "Qualquer dúvida, é só chamar.",
+      dataHoraBR(expiraEm),
+      token,
+    ].map(achatarParam);
+
+    return { texto: linhas.join("\n"), params };
   }
 }
 
