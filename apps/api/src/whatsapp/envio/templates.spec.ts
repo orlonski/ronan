@@ -43,7 +43,7 @@ describe("catálogo de templates", () => {
   it.each(entradas)("%s: a rota existe no catálogo e aceita a Meta", (rota, _def) => {
     const r = rotaWhatsapp(rota);
     expect(r, `rota "${rota}" tem template mas sumiu do catálogo`).toBeDefined();
-    expect(r!.provedores).toContain("meta");
+    expect(r!.provedores as readonly string[]).toContain("meta");
   });
 
   it("rota de autenticação sempre tem botão de copiar código", () => {
@@ -62,7 +62,7 @@ describe("catálogo de templates", () => {
     // 24h. Se uma aparecer aqui, ou ganhou template ou virou serviço — e
     // qualquer um dos dois é decisão, não esquecimento.
     const semTemplate = ROTAS_WHATSAPP.filter(
-      (r) => r.provedores.includes("meta") && !TEMPLATES_WHATSAPP[r.chave],
+      (r) => (r.provedores as readonly string[]).includes("meta") && !TEMPLATES_WHATSAPP[r.chave],
     ).map((r) => r.chave);
     expect(semTemplate.sort()).toEqual(["MENSAGEM_AVULSA", "RESPOSTA_AGENTE", "RESUMO_GESTOR"]);
   });

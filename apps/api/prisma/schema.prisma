@@ -1001,11 +1001,22 @@ model WhatsappMensagem {
   /// deveria mudar de preço junto.
   custoEstimado Decimal? @db.Decimal(10, 4)
 
+  /// Último status de entrega que a Meta reportou: "sent" | "delivered" |
+  /// "read" | "failed". Null no Evolution, que não tem callback de entrega, e
+  /// null enquanto a Meta ainda não mandou nada sobre a mensagem.
+  statusEntrega String?
+
+  /// Código do erro da Meta quando `statusEntrega` é "failed". É o que
+  /// distingue "número não tem WhatsApp" de "template reprovado" de "estourou
+  /// o limite" — três coisas com respostas completamente diferentes.
+  erroCodigo String?
+
   @@index([telefone, criadoEm])
   @@index([sessaoId, criadoEm])
   @@index([contaId])
   @@index([idExterno])
   @@index([contaId, rota, criadoEm])
+  @@index([statusEntrega, criadoEm])
   @@map("whatsapp_mensagens")
 }
 

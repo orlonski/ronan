@@ -7,12 +7,13 @@ import { AgenteService } from "./agente/agente.service";
 import { ConviteService } from "./convite.service";
 import { EvolutionModule } from "./evolution.module";
 import { SessaoService } from "./sessao.service";
+import { MetaWebhookController } from "./meta-webhook.controller";
 import { WhatsappController } from "./whatsapp.controller";
 import { WhatsappService } from "./whatsapp.service";
 
 @Module({
   imports: [MotoristaModule, DashboardModule, ErrorsModule, UploadsModule, EvolutionModule],
-  controllers: [WhatsappController],
+  controllers: [WhatsappController, MetaWebhookController],
   providers: [
     WhatsappService,
     SessaoService,

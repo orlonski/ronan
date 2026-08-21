@@ -27,7 +27,21 @@ async function bootstrap() {
 
   // aumenta limite do body-parser pra aceitar uploads de planilhas e fotos
   // (default do Express e 100KB e barra antes do Multer pegar)
-  app.use(json({ limit: "50mb" }));
+  app.use(
+    json({
+      limit: "50mb",
+      // O webhook da Meta assina o corpo CRU (HMAC-SHA256). Reserializar o JSON
+      // muda espaço e ordem de chave e a assinatura deixa de bater, então o
+      // buffer original precisa sobreviver ao parse.
+      //
+      // Só nesse path: guardar o buffer de TODA requisição faria um upload de
+      // 50MB ocupar 100MB de memória, pra nada.
+      verify: (req, _res, buf) => {
+        const r = req as { url?: string; rawBody?: Buffer };
+        if (r.url?.startsWith("/whatsapp/meta/")) r.rawBody = buf;
+      },
+    }),
+  );
   app.use(urlencoded({ extended: true, limit: "50mb" }));
 
   app.useGlobalPipes(
