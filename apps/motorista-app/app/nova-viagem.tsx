@@ -376,6 +376,21 @@ export default function NovaViagem() {
       ? parseFloat(rotasAtivas[rotaIdx]!.km)
       : kmRecomendado;
 
+  // A dica embaixo do campo de km tem que falar da rota que GOVERNA o valor.
+  // Alimentar sempre com `rota.data` (o cálculo direto do roteador de km) fazia a
+  // legenda anunciar distância e tempo de OUTRA estrada — o motorista escolhia
+  // 36,56 km / 82 min e lia "calculado automaticamente (36,87 km · 43 min)".
+  const rotaDaDica = useMemo(() => {
+    const escolhida = kmGovernadoPorRota ? rotasAtivas[rotaIdx] : undefined;
+    const base = escolhida ?? rotasAtivas.find((r) => r.recomendada);
+    if (!base) return rota.data ?? null;
+    return {
+      km: base.km,
+      duracaoSegundos: base.duracaoSegundos,
+      fonte: escolhida ? "rota_escolhida" : "rota_recomendada",
+    };
+  }, [kmGovernadoPorRota, rotasAtivas, rotaIdx, rota.data]);
+
   // Auto-preenche KM com o valor calculado pelo OSRM, se o motorista não editou.
   //
   // Havendo alternativas, o valor sai da RECOMENDADA — a mesma fonte que
@@ -1752,7 +1767,7 @@ export default function NovaViagem() {
             error={!!val.erroDe("km")}
           />
           <KmHint
-            rota={rota.data ?? null}
+            rota={rotaDaDica}
             loading={rota.isFetching}
             editado={kmEditadoManual}
           />
@@ -2120,6 +2135,16 @@ function KmHint({
     // Ambos são SEM INTERNET → o aviso grande âmbar é renderizado em linha
     // inteira (fora da coluna estreita). Aqui, nada — pra não parecer "ok verde".
     return null;
+  }
+  // Estrada apontada pelo motorista: o km é decisão dele, não conta automática.
+  // Chamar isso de "calculado" tira dele a autoria da escolha.
+  if (rota.fonte === "rota_escolhida") {
+    return (
+      <Text className="text-xs font-medium text-success">
+        ✓ Estrada que você escolheu ({rota.km} km
+        {minutos != null ? ` · ${minutos} min` : ""})
+      </Text>
+    );
   }
   return (
     <Text className="text-xs font-medium text-success">

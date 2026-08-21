@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { codificarPolyline, decodificarPolyline } from "./polyline";
 
 const CACHE_TTL_DIAS = 90;
 // Timeout por-tentativa. A cascata curb→sem-curb pode fazer até 2 chamadas; com
@@ -21,6 +22,11 @@ const ROUTER_VERSION = 4;
 // curb, basta OSRM_APPROACHES="curb;curb" no ambiente (e bumpar ROUTER_VERSION).
 const OSRM_APPROACHES = (process.env.OSRM_APPROACHES ?? "off").trim();
 
+// Quantas alternativas pedir ao Valhalla ALÉM da principal. O servidor corta
+// pelo `service_limits.max_alternates` (2 no default da imagem) — pedir mais que
+// isso não é erro, só volta menos.
+const VALHALLA_ALTERNATES = 2;
+
 // Diferença mínima (km) entre a variante COM retorno (curb) e SEM retorno pra
 // valer a pena perguntar ao motorista. Abaixo disso, o ponto já está do lado
 // certo (sem retorno real) → devolve 1 opção só, sem escolha/fricção.
@@ -28,6 +34,14 @@ const LIMIAR_DEDUP_KM = 0.3;
 
 type OsrmRoute = { distance: number; duration: number; geometry?: string };
 type OsrmResponse = { code: string; routes?: OsrmRoute[] };
+
+type ValhallaTrip = {
+  summary?: { length: number; time: number };
+  legs?: { shape?: string }[];
+};
+type ValhallaRouteResponse = { trip?: ValhallaTrip; alternates?: { trip?: ValhallaTrip }[] };
+/** Trip que já passou pelo filtro de resumo — só essa vira RotaOption. */
+type ValhallaTripComResumo = ValhallaTrip & { summary: { length: number; time: number } };
 
 type RotaResult =
   | {
@@ -58,6 +72,10 @@ export type AlternativasResult = { rotas: RotaOption[] } | { rotas: []; erro: st
 export class RoteamentoService {
   private readonly logger = new Logger(RoteamentoService.name);
   private readonly osrmUrl = process.env.OSRM_URL ?? "";
+  // Mesmo servidor da navegação ao vivo (navegacao.service.ts). Aqui ele serve a
+  // LISTA de estradas que o motorista escolhe; o km continua saindo da opção que
+  // ele apontar.
+  private readonly valhallaUrl = process.env.VALHALLA_URL ?? "";
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -158,11 +176,19 @@ export class RoteamentoService {
   }
 
   /**
-   * Calcula ATÉ 3 rotas alternativas carga→descarga (OSRM `alternatives=3`).
-   * Online-only: não lê cache antes (queremos as alternativas frescas). Atualiza
-   * o RotaCache com routes[0] (recomendada) pra manter o default coerente com o
-   * que calcularKm devolveria. NÃO cacheia a lista inteira. OSRM pode devolver
-   * só 1 rota (sem alternativa real) → lista de 1.
+   * Calcula ATÉ 3 rotas alternativas carga→descarga, pra o motorista apontar
+   * qual estrada pegou.
+   *
+   * Ordem: **Valhalla primeiro** (é ele que enxerga os caminhos reais — ver
+   * `consultarValhallaAlternativas`), OSRM como rede de segurança. Só adota o
+   * Valhalla quando ele traz ESCOLHA de fato (2+ rotas); com uma rota só o OSRM
+   * entrega o mesmo e mantém o km na régua do resto do sistema.
+   *
+   * Online-only: não lê cache antes (queremos as alternativas frescas). No
+   * caminho OSRM, atualiza o RotaCache com routes[0] pra manter o default
+   * coerente com o que `calcularKm` devolveria — o caminho Valhalla **não**
+   * escreve no cache, que é convenção OSRM (mesma origem de km, mesma polyline).
+   * NÃO cacheia a lista inteira.
    */
   async calcularAlternativas(
     localOrigemId: string,
@@ -190,6 +216,25 @@ export class RoteamentoService {
         rotas: [],
         erro: "Local sem coordenadas. Cadastre o endereço completo.",
       };
+    }
+
+    // 1ª tentativa: Valhalla. É ele que acha os caminhos que o motorista
+    // reconhece — o OSRM devolve 1 rota em par onde existem 3 de verdade.
+    // Só vale a pena quando trouxe ESCOLHA (2+); com 1 rota o OSRM serve igual e
+    // mantém o km na mesma régua do resto do sistema (cache, reprocessamento,
+    // pedágio na rota). Falha aqui nunca derruba o lançamento: cai pro OSRM.
+    try {
+      const doValhalla = await this.consultarValhallaAlternativas(
+        origem.lat,
+        origem.lng,
+        destino.lat,
+        destino.lng,
+      );
+      if (doValhalla.length > 1) return { rotas: doValhalla };
+    } catch (err) {
+      this.logger.warn(
+        `Valhalla alternativas falhou ${localOrigemId}->${localDestinoId}: ${(err as Error).message}`,
+      );
     }
 
     if (!this.osrmUrl) {
@@ -433,6 +478,79 @@ export class RoteamentoService {
     // alternatives=3 pede até 3 rotas distintas. OSRM pode devolver menos (ou
     // só 1) quando não há alternativa razoável. routes[0] = a recomendada.
     return this.rotearOsrm(`${lng1},${lat1};${lng2},${lat2}`, "&alternatives=3");
+  }
+
+  /**
+   * Alternativas pelo VALHALLA — o motor que realmente acha os caminhos.
+   *
+   * O OSRM é severo demais pra esse uso: ele descarta alternativa que
+   * compartilhe muito trecho com a principal, e esses limites são constantes
+   * compiladas no C++ (`alternative_path_mld.cpp`), sem parâmetro HTTP pra
+   * afrouxar. Resultado prático: em par onde o Google mostra 3 caminhos, o OSRM
+   * devolve 1 — e o motorista era cobrado por uma escolha que a tela nunca
+   * ofereceu. O Valhalla, no mesmo par, devolve os 3.
+   *
+   * `costing: "truck"` é o mesmo perfil da navegação ao vivo
+   * (`navegacao.service.ts`), então a estrada oferecida aqui é a mesma que o guia
+   * de voz vai conduzir depois.
+   *
+   * `alternates` é limitado pelo `service_limits.max_alternates` do servidor
+   * (2 no default da imagem, ou seja 3 rotas no total contando a principal). Se
+   * o servidor estiver com 0, isto devolve 1 rota e o chamador cai no OSRM.
+   */
+  private async consultarValhallaAlternativas(
+    lat1: number,
+    lng1: number,
+    lat2: number,
+    lng2: number,
+  ): Promise<RotaOption[]> {
+    if (!this.valhallaUrl) return [];
+
+    const body = {
+      locations: [
+        { lat: lat1, lon: lng1 },
+        { lat: lat2, lon: lng2 },
+      ],
+      costing: "truck",
+      alternates: VALHALLA_ALTERNATES,
+      directions_options: { language: "pt-BR", units: "kilometers" },
+    };
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${this.valhallaUrl}/route`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error(`Valhalla HTTP ${res.status}`);
+      const data = (await res.json()) as ValhallaRouteResponse;
+
+      const trips = [data.trip, ...(data.alternates ?? []).map((a) => a.trip)].filter(
+        (t): t is ValhallaTripComResumo => !!t?.summary,
+      );
+
+      return trips
+        .map((trip, idx) => {
+          // O `shape` vem por PERNA e em precisão 6; o sistema inteiro fala
+          // polyline 5 (ver roteamento/polyline.ts). Emenda as pernas e converte
+          // aqui, na fronteira — depois daqui ninguém mais precisa saber disso.
+          const pontos = (trip.legs ?? []).flatMap((leg) =>
+            leg.shape ? decodificarPolyline(leg.shape, 6) : [],
+          );
+          return {
+            km: trip.summary.length.toFixed(2),
+            duracaoSegundos: Math.round(trip.summary.time),
+            geometria: pontos.length >= 2 ? codificarPolyline(pontos, 5) : null,
+            recomendada: idx === 0,
+          };
+        })
+        .filter((r) => r.geometria !== null);
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   /**
