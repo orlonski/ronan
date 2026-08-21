@@ -28,6 +28,10 @@ type Conta = {
   cnpj: string | null;
   ativa: boolean;
   permiteAutoCadastro: boolean;
+  /** Leitura do ticket por IA na hora da foto, no app do motorista. */
+  iaLeituraTicket: boolean;
+  /** Conferência automática do ticket no servidor, depois do lançamento. */
+  iaConferenciaTicket: boolean;
   logoUrl: string | null;
   codigoConvite: string | null;
   criadaEm: string;
@@ -130,6 +134,34 @@ export default function ContasPage() {
     }
   }
 
+  /**
+   * Liga/desliga um recurso de IA da empresa. Cada chamada custa dinheiro e quem
+   * paga é a plataforma, então isto vive aqui — e não nas configurações que o
+   * administrador da empresa enxerga.
+   */
+  async function alternarRecursoIa(
+    conta: Conta,
+    campo: "iaLeituraTicket" | "iaConferenciaTicket",
+    rotulo: string,
+  ) {
+    const ligando = !conta[campo];
+    try {
+      await fetchApi(`/admin/contas/${conta.id}/recursos-ia`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({ [campo]: ligando }),
+      });
+      toast.success(
+        ligando
+          ? `${rotulo} ligada pra ${conta.nome}. A partir de agora consome por uso.`
+          : `${rotulo} desligada pra ${conta.nome}.`,
+      );
+      void refetch();
+    } catch (erro) {
+      toast.error(erro instanceof Error ? erro.message : "Não consegui mudar.");
+    }
+  }
+
   return (
     <div className="space-y-4 p-4 md:p-6">
       <div className="flex items-center justify-between">
@@ -191,6 +223,31 @@ export default function ContasPage() {
                     {conta.slug} · {conta.usuarios} usuário(s) · {conta.motoristas} motorista(s) ·{" "}
                     {conta.viagens} viagem(ns) · desde {fmtDataHoraSP(conta.criadaEm)}
                   </p>
+
+                  {/*
+                    Recursos que geram custo por uso. Ficam visíveis no card (e
+                    não escondidos num submenu) justamente porque a conta é
+                    nossa: dá pra bater o olho na lista e ver quem está gastando.
+                  */}
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground">IA (cobra por uso):</span>
+                    <BotaoRecursoIa
+                      ligado={conta.iaLeituraTicket}
+                      rotulo="Leitura no app"
+                      titulo="Lê o ticket e sugere o preenchimento assim que o motorista tira a foto."
+                      onClick={() =>
+                        void alternarRecursoIa(conta, "iaLeituraTicket", "Leitura no app")
+                      }
+                    />
+                    <BotaoRecursoIa
+                      ligado={conta.iaConferenciaTicket}
+                      rotulo="Conferência"
+                      titulo="Depois do lançamento, confere a foto do ticket contra o que o motorista declarou."
+                      onClick={() =>
+                        void alternarRecursoIa(conta, "iaConferenciaTicket", "Conferência")
+                      }
+                    />
+                  </div>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -309,5 +366,40 @@ export default function ContasPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+/**
+ * Estado e chave de um recurso de IA, no mesmo controle.
+ *
+ * Ligado sai em âmbar de propósito: não é "tudo certo, siga em frente" (que
+ * seria verde), é "isto aqui está consumindo dinheiro agora". Numa lista de
+ * empresas, é o que faz o gasto saltar aos olhos sem precisar abrir nada.
+ */
+function BotaoRecursoIa({
+  ligado,
+  rotulo,
+  titulo,
+  onClick,
+}: {
+  ligado: boolean;
+  rotulo: string;
+  titulo: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={`${titulo}\n\nClique pra ${ligado ? "desligar" : "ligar"}.`}
+      className={
+        "rounded border px-2 py-0.5 text-xs transition-colors " +
+        (ligado
+          ? "border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
+          : "border-input bg-muted/40 text-muted-foreground hover:bg-muted")
+      }
+    >
+      {rotulo}: {ligado ? "ligada" : "desligada"}
+    </button>
   );
 }

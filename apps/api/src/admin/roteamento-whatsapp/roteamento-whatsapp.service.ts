@@ -80,6 +80,15 @@ export class AdminRoteamentoWhatsappService {
     return {
       telefonesTeste: cfg.telefonesTeste,
       alteradoEm: cfg.alteradoEm,
+      /**
+       * Se o servidor tem credencial da Meta AGORA.
+       *
+       * A tela precisa disso pra não mentir. Apontar uma rota pra Meta com o
+       * servidor sem token não desvia a mensagem — ela simplesmente não sai, e
+       * quem configurou merece ver isso na hora, não descobrir pelo motorista
+       * que não recebeu o código.
+       */
+      metaConfigurada: this.meta.configurado(),
       rotas: ROTAS_WHATSAPP.map((r) => ({
         chave: r.chave,
         rotulo: r.rotulo,

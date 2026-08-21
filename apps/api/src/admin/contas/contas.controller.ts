@@ -46,6 +46,21 @@ const CriarContaBody = z.object({
 const AtivaBody = z.object({ ativa: z.boolean() });
 
 /**
+ * Os dois são opcionais pra tela poder mexer num sem mandar o outro — e o
+ * `refine` impede o corpo vazio, que passaria batido como "salvei" sem alterar
+ * nada.
+ */
+const RecursosIaBody = z
+  .object({
+    iaLeituraTicket: z.boolean().optional(),
+    iaConferenciaTicket: z.boolean().optional(),
+  })
+  .refine(
+    (v) => v.iaLeituraTicket !== undefined || v.iaConferenciaTicket !== undefined,
+    "Diga qual recurso de IA você quer ligar ou desligar.",
+  );
+
+/**
  * Gestão das empresas que usam o sistema. Fica atrás do `PlataformaGuard`, e não
  * do catálogo de permissões: criar empresa não é algo que um administrador de
  * empresa possa ganhar por engano na matriz de papéis.
@@ -80,6 +95,18 @@ export class ContasController {
   @Patch(":id/auto-cadastro")
   definirAutoCadastro(@Param("id") id: string) {
     return this.service.definirAutoCadastro(id);
+  }
+
+  /**
+   * Liga/desliga a IA de ticket da empresa. Fica junto das outras chaves de
+   * plataforma porque cada leitura custa dinheiro, e quem paga não é a empresa.
+   */
+  @Patch(":id/recursos-ia")
+  definirRecursosIa(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(RecursosIaBody)) body: z.infer<typeof RecursosIaBody>,
+  ) {
+    return this.service.definirRecursosIa(id, body);
   }
 
   @Post(":id/logo")

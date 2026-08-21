@@ -353,6 +353,26 @@ model Conta {
   exigeFotoViagem     Boolean  @default(false)
   /// Idem pro cupom do posto no abastecimento.
   exigeFotoAbastecimento Boolean @default(false)
+
+  /// Leitura do ticket por IA na hora da foto, no app do motorista.
+  ///
+  /// Cada chamada custa dinheiro de verdade, então quem libera é a PLATAFORMA
+  /// (tela de Empresas, atrás do PlataformaGuard) — não o administrador da
+  /// empresa, que não paga a conta. É a torneira; `Motorista.podeUsarOcrTicket`
+  /// continua sendo o rollout motorista a motorista dentro da empresa liberada.
+  ///
+  /// Default `true` de propósito, ao contrário do irmão abaixo: o recurso já
+  /// está no ar e desligá-lo por omissão numa migration seria tirar do ar em
+  /// silêncio algo que hoje funciona.
+  iaLeituraTicket     Boolean  @default(true)
+
+  /// Conferência automática do ticket no backend: um worker lê a foto guardada
+  /// e confere contra o que o motorista declarou.
+  ///
+  /// Nasce DESLIGADA — recurso novo que gasta por viagem lançada não se liga
+  /// sozinho pra ninguém. Ligar é decisão da plataforma, empresa por empresa.
+  iaConferenciaTicket Boolean  @default(false)
+
   /// URL pública servida por /publico/contas/:id/logo (com `v` pra furar cache).
   logoUrl             String?
   /// Chave do objeto no MinIO. Separada da URL pra poder apagar a logo antiga.
@@ -425,6 +445,7 @@ model Conta {
   mensagensChat                 MensagemChat[]
   bloqueiosChat                 BloqueioChat[]
   denunciasMensagemChat         DenunciaMensagemChat[]
+  usosIa                        UsoIa[]
 
   @@index([ativa])
   @@map("contas")
@@ -2354,6 +2375,55 @@ model ConfiguracaoIa {
 
   @@unique([contaId])
   @@map("configuracao_ia")
+}
+
+/// Uma linha por chamada de IA, com o que ela custou de verdade.
+///
+/// Existe porque até aqui o `usage` que a Anthropic devolve em toda resposta era
+/// descartado, e a consequência é que ninguém consegue responder "quanto o OCR
+/// de ticket custou este mês". A tela de configuração de IA chegava a mostrar
+/// "~R$ 0,01 por match" — número escrito à mão no frontend, sem nenhum dado por
+/// trás.
+///
+/// Gravação é best-effort: falhar ao registrar custo NUNCA pode derrubar a
+/// chamada que estava sendo medida. Perder uma linha de contabilidade é barato;
+/// perder o OCR do motorista, não.
+model UsoIa {
+  contaId String @default("__SEM_CONTA__")
+  conta   Conta  @relation(fields: [contaId], references: [id])
+  id      String @id @default(uuid())
+
+  /// Onde a chamada foi feita: "ocr-app" | "conferencia" | "match" | "layout" |
+  /// "transcricao". É por aqui que se separa o OCR do app do conferente — os
+  /// dois usam o mesmo modelo, então sem isso não dá pra saber qual pesa mais.
+  escopo String
+  modelo String
+
+  tokensEntrada      Int @default(0)
+  tokensSaida        Int @default(0)
+  /// Ler do cache custa ~10% de um token novo. É esta coluna que prova que o
+  /// prompt caching está pegando — zerada por dias seguidos significa que algum
+  /// invalidador silencioso entrou no prefixo.
+  tokensCacheLeitura Int @default(0)
+  tokensCacheEscrita Int @default(0)
+
+  /// Decimal(12,6), não (10,4): uma chamada de Haiku custa ~US$ 0,0004 e
+  /// arredondaria pra ZERO em 4 casas — a medição morreria calada.
+  /// Null quando o modelo não está na tabela de preços (mede tokens mesmo assim).
+  custoUsd  Decimal? @db.Decimal(12, 6)
+  duracaoMs Int?
+  /// Chamada que falhou também é medida: a Anthropic cobra o que processou, e
+  /// uma sequência de falhas é justamente o que precisa aparecer no relatório.
+  sucesso   Boolean  @default(true)
+  erro      String?
+
+  criadoEm DateTime @default(now())
+
+  /// Custo por conta num período — a query do painel.
+  @@index([contaId, criadoEm(sort: Desc)])
+  /// "quanto o OCR custou vs o conferente" — atravessa contas, pra plataforma.
+  @@index([escopo, criadoEm(sort: Desc)])
+  @@map("usos_ia")
 }
 
 /// Singleton (id="default"): config do agente IA do WhatsApp (motorista/admin).

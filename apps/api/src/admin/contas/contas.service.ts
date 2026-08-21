@@ -199,6 +199,8 @@ export class ContasService implements OnModuleInit {
         cnpj: true,
         ativa: true,
         permiteAutoCadastro: true,
+        iaLeituraTicket: true,
+        iaConferenciaTicket: true,
         logoUrl: true,
         codigoConvite: true,
         criadaEm: true,
@@ -433,6 +435,41 @@ export class ContasService implements OnModuleInit {
         select: { id: true, nome: true, permiteAutoCadastro: true },
       });
     });
+  }
+
+  /**
+   * Liga/desliga os recursos de IA de ticket de uma empresa.
+   *
+   * Mora aqui, e não na matriz de permissões, porque quem paga a chamada é a
+   * plataforma: um administrador de empresa não pode ganhar essa chave por
+   * engano num papel e sair gastando. Mesma família de `ativa` e
+   * `permiteAutoCadastro`.
+   *
+   * Os dois campos são opcionais e aplicados só quando vêm — assim a tela pode
+   * mexer num sem mandar o valor do outro e sobrescrever sem querer.
+   */
+  async definirRecursosIa(
+    id: string,
+    recursos: { iaLeituraTicket?: boolean; iaConferenciaTicket?: boolean },
+  ) {
+    const data: { iaLeituraTicket?: boolean; iaConferenciaTicket?: boolean } = {};
+    if (recursos.iaLeituraTicket !== undefined) data.iaLeituraTicket = recursos.iaLeituraTicket;
+    if (recursos.iaConferenciaTicket !== undefined) {
+      data.iaConferenciaTicket = recursos.iaConferenciaTicket;
+    }
+
+    return comoSistema(() =>
+      this.prisma.conta.update({
+        where: { id },
+        data,
+        select: {
+          id: true,
+          nome: true,
+          iaLeituraTicket: true,
+          iaConferenciaTicket: true,
+        },
+      }),
+    );
   }
 }
 

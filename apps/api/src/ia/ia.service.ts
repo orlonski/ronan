@@ -4,9 +4,17 @@ import { ConfigService } from "@nestjs/config";
 import type { ExtrairTicketResult } from "@ronan/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
 import { contaIdAtual } from "../common/conta/conta-context";
+import { UsoIaService } from "./uso-ia.service";
 
 // Default usado caso ConfiguracaoIa.modelo não esteja setada (raro).
 const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
+
+/**
+ * Teto por chamada. Uma leitura de ticket resolve em poucos segundos; passar
+ * disso é sinal de problema, não de imagem difícil. O default do SDK (10 min)
+ * deixaria o motorista esperando por nada.
+ */
+const TIMEOUT_ANTHROPIC_MS = 60_000;
 
 // Slug do campo é resolvido dinamicamente pela tabela CampoLayout (ver
 // CamposLayoutService). Se um slug aqui não existe na tabela, é tratado como
@@ -45,29 +53,59 @@ export class IaService {
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly uso: UsoIaService,
   ) {
     const apiKey = this.config.get<string>("ANTHROPIC_API_KEY");
     if (apiKey) {
-      this.client = new Anthropic({ apiKey });
+      // Timeout e retries explícitos. O default do SDK é 10 min por tentativa e
+      // 2 retries — até 30 min de relógio numa chamada só. Num endpoint que o
+      // motorista está esperando isso é inaceitável, e num worker é pior ainda:
+      // segura uma vaga de execução pelo mesmo tempo.
+      this.client = new Anthropic({
+        apiKey,
+        timeout: TIMEOUT_ANTHROPIC_MS, // milissegundos no SDK TS
+        maxRetries: 1,
+      });
     }
   }
 
-  /** Lê modelo da config singleton; cache simples por 30s pra evitar query a cada call. */
-  private modeloCache: { value: string; until: number } | null = null;
+  /**
+   * Lê o modelo da config da conta; cache curto pra não consultar a cada call.
+   *
+   * O cache é POR CONTA. Já foi um campo único de instância — e como este
+   * provider é singleton (`IaModule` é `@Global`) enquanto a consulta filtra por
+   * `contaIdAtual()`, o valor da primeira conta era servido a todas as outras
+   * pelos 30s seguintes. Com tráfego de requisição isso era uma corrida
+   * ocasional; num worker que pula de conta a cada job vira quase certo.
+   */
+  private modeloCache = new Map<string, { value: string; until: number }>();
   private async modeloAtual(): Promise<string> {
-    if (this.modeloCache && this.modeloCache.until > Date.now()) {
-      return this.modeloCache.value;
+    let contaId: string;
+    try {
+      contaId = contaIdAtual();
+    } catch (err) {
+      // Sem conta no contexto não há config pra ler — e engolir isso calado é
+      // como o bug acima passou despercebido. Avisa e cai no default.
+      this.log.warn(
+        `modeloAtual() sem conta no contexto, usando ${DEFAULT_MODEL}: ${(err as Error).message}`,
+      );
+      return DEFAULT_MODEL;
     }
+
+    const cacheado = this.modeloCache.get(contaId);
+    if (cacheado && cacheado.until > Date.now()) return cacheado.value;
+
     try {
       const cfg = await this.prisma.configuracaoIa.upsert({
-        where: { contaId: contaIdAtual() },
+        where: { contaId },
         update: {},
         create: {},
       });
       const value = cfg.modelo || DEFAULT_MODEL;
-      this.modeloCache = { value, until: Date.now() + 30_000 };
+      this.modeloCache.set(contaId, { value, until: Date.now() + 30_000 });
       return value;
-    } catch {
+    } catch (err) {
+      this.log.warn(`Falha ao ler ConfiguracaoIa de ${contaId}: ${(err as Error).message}`);
       return DEFAULT_MODEL;
     }
   }
@@ -181,12 +219,19 @@ Responda APENAS um JSON válido sem cercas markdown, no formato:
     const userMsg = JSON.stringify(amostra, null, 2);
     const modelo = await this.modeloAtual();
 
+    const t0 = Date.now();
     try {
       const res = await this.client.messages.create({
         model: modelo,
         max_tokens: 2000,
         system: sysPrompt,
         messages: [{ role: "user", content: userMsg }],
+      });
+      this.uso.registrar({
+        escopo: "layout",
+        modelo,
+        usage: res.usage,
+        duracaoMs: Date.now() - t0,
       });
       const text = res.content
         .filter((c) => c.type === "text")
@@ -195,6 +240,13 @@ Responda APENAS um JSON válido sem cercas markdown, no formato:
       const parsed = extractJson<LayoutInferenceResult>(text);
       return parsed;
     } catch (err) {
+      this.uso.registrar({
+        escopo: "layout",
+        modelo,
+        duracaoMs: Date.now() - t0,
+        sucesso: false,
+        erro: (err as Error).message,
+      });
       this.log.error(`Falha na inferência de layout: ${(err as Error).message}`);
       return null;
     }
@@ -242,6 +294,7 @@ Responda APENAS um JSON válido:
 
     const modelo = await this.modeloAtual();
 
+    const t0 = Date.now();
     try {
       const res = await this.client.messages.create({
         model: modelo,
@@ -249,12 +302,25 @@ Responda APENAS um JSON válido:
         system: sysPrompt,
         messages: [{ role: "user", content: JSON.stringify(input, null, 2) }],
       });
+      this.uso.registrar({
+        escopo: "match",
+        modelo,
+        usage: res.usage,
+        duracaoMs: Date.now() - t0,
+      });
       const text = res.content
         .filter((c) => c.type === "text")
         .map((c) => (c as { text: string }).text)
         .join("");
       return extractJson<SugestaoMatchResult>(text);
     } catch (err) {
+      this.uso.registrar({
+        escopo: "match",
+        modelo,
+        duracaoMs: Date.now() - t0,
+        sucesso: false,
+        erro: (err as Error).message,
+      });
       this.log.error(`Falha na sugestão de match: ${(err as Error).message}`);
       return null;
     }
@@ -279,74 +345,28 @@ Responda APENAS um JSON válido:
       throw new Error("Anthropic API key não configurada");
     }
 
-    const catalogoStr = JSON.stringify(
-      {
-        clientes: args.catalogos.clientes.map((c) => ({
-          id: c.id,
-          nome: c.nome,
-          apelidos: c.apelidos ?? [],
-        })),
-        materiais: args.catalogos.materiais.map((m) => ({
-          id: m.id,
-          nome: m.nome,
-          apelidos: m.apelidos ?? [],
-        })),
-        veiculos: args.catalogos.veiculos.map((v) => ({
-          id: v.id,
-          placa: v.placa,
-          modelo: v.modelo,
-        })),
-      },
-      null,
-      0,
-    );
-
-    const sysPrompt = `Você lê tickets de pesagem (balança) de transporte de carga e extrai dados estruturados.
-Tickets têm tipicamente: número do ticket, data, placa do veículo, peso (toneladas), cliente, material/produto, origem/destino, eventualmente km.
-
-Catálogos do sistema (use os IDs daqui quando reconhecer):
-${catalogoStr}
-
-Retorne UM objeto JSON puro (sem markdown, sem texto antes/depois) com este schema:
-{
-  "ticket": "string ou null",            // número do ticket
-  "toneladas": number ou null,           // PESO LÍQUIDO em toneladas (ver regras abaixo)
-  "data": "YYYY-MM-DD ou null",
-  "km": number ou null,                  // km rodados se aparecer
-  "clienteId": "string ou null",         // ID do catálogo se reconhecer; senão null
-  "clienteSugerido": "string ou null",   // nome bruto do cliente no ticket quando não casar com catálogo
-  "materialId": "string ou null",
-  "materialSugerido": "string ou null",
-  "veiculoId": "string ou null",         // ID quando placa casar com catálogo
-  "placaSugerida": "string ou null",     // placa bruta lida
-  "observacoes": "string ou null",       // notas curtas (ex: "ticket borrado em parte")
-  "confidence": number                    // 0..1 confiança geral da extração
-}
-
-REGRAS DE PESO (importante — erro recorrente):
-- O ticket geralmente mostra TRÊS valores: PESO BRUTO, TARA e PESO LÍQUIDO. Use SEMPRE o PESO LÍQUIDO em "toneladas". NUNCA o bruto, NUNCA a tara.
-- Se só aparecerem dois valores (bruto e tara) sem líquido explícito, calcule: líquido = bruto − tara.
-- Se aparecer um valor único de peso sem rótulo, assuma que é líquido.
-- Converta de kg pra toneladas dividindo por 1000 (ex: 32.000 kg → 32 toneladas; 32500 kg → 32.5).
-- Se o valor já vier em toneladas/t, use direto.
-
-REGRAS DE MATCHING DE NOMES (cliente / material / placa):
-- Cada item do catálogo tem "nome" e "apelidos" (array de variações conhecidas). SEMPRE compare contra nome+apelidos antes de desistir.
-- Normalize antes de comparar: ignore caixa (lowercase), pontos, espaços, hífens, acentos. Ex: "C.B.U.Q" e "cbuq" são iguais; "São José" e "SAO JOSE" são iguais.
-- Ignore sufixos descritivos como "FAIXA A/B/C", "TIPO 1/2", "GRUPO X", "GRADUAÇÃO Y" — esses qualificam o material mas não mudam a identidade. Ex: "C.B.U.Q FAIXA C" deve casar com catálogo "CBUQ".
-- Se bater por qualquer forma (nome ou apelido, mesmo com sufixo extra), preencha o Id correspondente. Só use *Sugerido quando o ticket trouxer um nome que claramente não tem equivalente nenhum no catálogo.
-- Para placa, normalize removendo hífen/espaço (ABC-1234 = ABC1234 = abc 1234).
-
-OUTRAS REGRAS:
-- Só preencha campos que conseguir ler com confiança. Em dúvida, deixe null.
-- Confidence baixo (<0.5) quando foto está ruim/incompleta.`;
+    const catalogoStr = catalogoCompacto(args.catalogos);
 
     const modelo = await this.modeloAtual();
+    const t0 = Date.now();
     try {
       const resp = await this.client.messages.create({
         model: modelo,
         max_tokens: 1024,
-        system: sysPrompt,
+        // Dois blocos, e a ordem é o que faz o cache funcionar: as instruções
+        // são idênticas em toda chamada e levam o breakpoint; o catálogo, que
+        // muda a cada cadastro novo, vem DEPOIS. Invertido (como era), qualquer
+        // cliente cadastrado invalidaria o prompt inteiro.
+        system: [
+          {
+            type: "text",
+            text: INSTRUCOES_TICKET,
+            // 1h cobre um dia de trabalho de uma frota inteira: o primeiro
+            // motorista da manhã paga a escrita, todos os outros leem por ~10%.
+            cache_control: { type: "ephemeral", ttl: "1h" },
+          },
+          { type: "text", text: catalogoStr },
+        ],
         messages: [
           {
             role: "user",
@@ -363,6 +383,12 @@ OUTRAS REGRAS:
             ],
           },
         ],
+      });
+      this.uso.registrar({
+        escopo: "ocr-app",
+        modelo,
+        usage: resp.usage,
+        duracaoMs: Date.now() - t0,
       });
       const text = resp.content
         .filter((b) => b.type === "text")
@@ -458,6 +484,16 @@ OUTRAS REGRAS:
         confidence,
       };
     } catch (err) {
+      // Falha também é medida: a Anthropic cobra o que processou antes de
+      // estourar, e uma sequência de falhas é justamente o que precisa aparecer
+      // no relatório — hoje o OCR pode estar fora do ar por dias sem ninguém ver.
+      this.uso.registrar({
+        escopo: "ocr-app",
+        modelo,
+        duracaoMs: Date.now() - t0,
+        sucesso: false,
+        erro: (err as Error).message,
+      });
       this.log.warn(`OCR ticket falhou: ${(err as Error).message}`);
       throw err;
     }
@@ -465,10 +501,120 @@ OUTRAS REGRAS:
 }
 
 /**
+ * As instruções do OCR de ticket, fixas e fora do método de propósito.
+ *
+ * Prompt caching é casamento de PREFIXO byte a byte: qualquer variação invalida
+ * tudo daí pra frente. Por isso este texto é uma constante de módulo, sem
+ * interpolação nenhuma — é ele que leva o `cache_control`, e é ele que todas as
+ * contas e todos os motoristas compartilham.
+ *
+ * O catálogo NÃO mora aqui: ele muda a cada cliente cadastrado e, se viesse
+ * antes do breakpoint, um cadastro novo jogaria fora o cache de todo mundo.
+ *
+ * ⚠️ Tem que passar de **1024 tokens**, que é o prefixo mínimo cacheável — abaixo
+ * disso a API simplesmente não cacheia, **sem erro nenhum**, e a economia some
+ * em silêncio. Hoje o texto está em ~1.300 tokens; encurtar mexe nisso.
+ * Pra conferir que está pegando de verdade em produção:
+ *
+ *   SELECT sum("tokensCacheLeitura"), sum("tokensCacheEscrita"), count(*)
+ *     FROM usos_ia WHERE escopo = 'ocr-app' AND "criadoEm" > now() - interval '1 day';
+ *
+ * Leitura zerada com dezenas de chamadas no dia = o cache não está pegando.
+ */
+const INSTRUCOES_TICKET = `Você lê tickets de pesagem (balança) de transporte de carga e extrai dados estruturados.
+Tickets têm tipicamente: número do ticket, data, placa do veículo, peso (toneladas), cliente, material/produto, origem/destino, eventualmente km.
+
+Retorne UM objeto JSON puro (sem markdown, sem texto antes/depois) com este schema:
+{
+  "ticket": "string ou null",            // número do ticket
+  "toneladas": number ou null,           // PESO LÍQUIDO em toneladas (ver regras abaixo)
+  "data": "YYYY-MM-DD ou null",
+  "km": number ou null,                  // km rodados se aparecer
+  "clienteSugerido": "string ou null",   // ver REGRAS DE NOMES
+  "materialSugerido": "string ou null",
+  "placaSugerida": "string ou null",     // placa lida no ticket
+  "observacoes": "string ou null",       // notas curtas (ex: "ticket borrado em parte")
+  "confidence": number                    // 0..1 confiança geral da extração
+}
+
+REGRAS DE PESO (importante — erro recorrente):
+- O ticket geralmente mostra TRÊS valores: PESO BRUTO, TARA e PESO LÍQUIDO. Use SEMPRE o PESO LÍQUIDO em "toneladas". NUNCA o bruto, NUNCA a tara.
+- Os rótulos variam: "LIQUIDO", "LÍQ.", "PESO LIQ", "NET", "CARGA" são todos o líquido. "BRUTO"/"GROSS"/"PBT" e "TARA"/"TARE" são os outros dois.
+- Se só aparecerem dois valores (bruto e tara) sem líquido explícito, calcule: líquido = bruto − tara.
+- Se aparecer um valor único de peso sem rótulo, assuma que é líquido.
+- Converta de kg pra toneladas dividindo por 1000 (ex: 32.000 kg → 32 toneladas; 32500 kg → 32.5).
+- Se o valor já vier em toneladas/t, use direto.
+- Peso de caminhão carregado vive entre 5 e 50 toneladas. Se o seu número saiu muito fora disso, você provavelmente leu a unidade errada ou pegou o bruto — reveja antes de responder.
+
+NÚMEROS EM FORMATO BRASILEIRO (a armadilha mais cara aqui):
+- O separador de MILHAR é o ponto e o de DECIMAL é a vírgula — o contrário do inglês. "32.500" é trinta e dois mil e quinhentos, NÃO trinta e dois vírgula cinco.
+- Então: "32.500 KG" = 32500 kg = 32.5 toneladas. E "32,500 T" = 32,5 toneladas. Os dois dão o mesmo resultado por caminhos diferentes; confundir a regra erra por mil vezes.
+- No JSON que você devolve, use SEMPRE ponto decimal e nunca separador de milhar: 32.5, nunca "32,5" e nunca 32.500.
+- Balança costuma imprimir o peso em kg, com 0 ou 2 casas. Um valor como "32.480" quase sempre é 32480 kg = 32.48 toneladas.
+
+DATA:
+- Formato brasileiro: DD/MM/AAAA. "03/04/2026" é 3 de abril, não 4 de março.
+- Ano com 2 dígitos ("03/04/26") vira 2026. Devolva sempre em AAAA-MM-DD.
+- Se houver mais de uma data no ticket (emissão, entrada, saída, vencimento), prefira a da PESAGEM/SAÍDA — é a que corresponde à viagem.
+- Hora não entra; só a data.
+
+NÚMERO DO TICKET:
+- Aparece como "TICKET", "Nº", "ROMANEIO", "NOTA", "CONTROLE", "SEQ" ou só um número grande em destaque no topo.
+- Copie exatamente como está impresso, inclusive zeros à esquerda e letras. Não normalize, não tire pontuação, não converta pra número.
+- Se houver vários números candidatos, prefira o que estiver rotulado como ticket/romaneio; na dúvida entre dois sem rótulo, deixe null.
+
+REGRAS DE NOMES (cliente / material / placa):
+- Depois das instruções vem a lista de nomes já cadastrados no sistema, um por linha, com as variações conhecidas separadas por "|".
+- Quando o que você leu no ticket corresponder a um item da lista, devolva o **primeiro nome daquela linha, copiado exatamente como está escrito lá**. É assim que o sistema liga o ticket ao cadastro.
+- Quando não corresponder a nada da lista, devolva o texto bruto que você leu no ticket. Não invente e não force parecença.
+- Pra comparar, ignore caixa, pontos, espaços, hífens e acentos: "C.B.U.Q" = "cbuq"; "São José" = "SAO JOSE".
+- Ignore sufixos que só qualificam o material e não mudam a identidade: "FAIXA A/B/C", "TIPO 1/2", "GRUPO X", "GRADUAÇÃO Y". Ex.: "C.B.U.Q FAIXA C" corresponde ao item "CBUQ".
+- Razão social costuma vir por extenso no ticket e curta no cadastro: "PEDREIRA SÃO JOÃO LTDA - ME" corresponde ao item "São João". Nome contido no outro conta como correspondência.
+- Placa: normalize removendo hífen e espaço (ABC-1234 = ABC1234 = abc 1234). Devolva sempre em "placaSugerida".
+
+OUTRAS REGRAS:
+- Só preencha campos que conseguir ler com confiança. Em dúvida, deixe null — campo vazio é MUITO melhor que campo errado, porque quem lançou vai conferir o que você preencheu.
+- confidence abaixo de 0.5 quando a foto está ruim, cortada ou borrada; abaixo de 0.3 quando você mal conseguiu ler.
+- Se a imagem não for um ticket de pesagem, devolva todos os campos null e confidence 0.`;
+
+/**
+ * O catálogo, no formato mais barato que ainda deixa o modelo reconhecer nome.
+ *
+ * Antes ia como JSON com UUID em cada item — e o UUID é ~14 tokens que não
+ * ajudam a IA a reconhecer absolutamente nada, só a devolver um id pronto.
+ * Trocar por "nome|apelido|apelido" corta a maior parte do peso do catálogo,
+ * e quem resolve nome → id passa a ser `matchPorNomeOuApelido` aqui no
+ * servidor, que já existia como fallback e é testável.
+ */
+function catalogoCompacto(catalogos: {
+  clientes: { nome: string; apelidos?: string[] }[];
+  materiais: { nome: string; apelidos?: string[] }[];
+  veiculos: { placa: string }[];
+}): string {
+  const linhas = (itens: { nome: string; apelidos?: string[] }[]) =>
+    itens
+      .map((i) => [i.nome, ...(i.apelidos ?? [])].filter(Boolean).join("|"))
+      .join("\n");
+
+  return [
+    "Cadastrados no sistema (primeiro nome da linha = o que devolver):",
+    "",
+    "CLIENTES:",
+    linhas(catalogos.clientes) || "(nenhum)",
+    "",
+    "MATERIAIS:",
+    linhas(catalogos.materiais) || "(nenhum)",
+    "",
+    "PLACAS:",
+    catalogos.veiculos.map((v) => v.placa).join("\n") || "(nenhuma)",
+  ].join("\n");
+}
+
+/**
  * Normaliza string pra comparação fuzzy: lowercase + remove acentos +
  * remove tudo que não for letra/dígito. "C.B.U.Q FAIXA C" → "cbuqfaixac".
  */
-function normalizar(s: string): string {
+export function normalizar(s: string): string {
   return s
     .toLowerCase()
     .normalize("NFD")
@@ -482,7 +628,7 @@ function normalizar(s: string): string {
  * é prefix (em qualquer direção) quando o alvo tem 4+ chars — conservador pra
  * evitar falsos positivos de strings muito curtas.
  */
-function matchPorNomeOuApelido(
+export function matchPorNomeOuApelido(
   bruto: string,
   catalogo: { id: string; nome: string; apelidos?: string[] }[],
 ): string | undefined {
@@ -497,16 +643,37 @@ function matchPorNomeOuApelido(
     }
   }
 
-  // Pass 2: prefix match (cobre "CBUQ" vs "C.B.U.Q FAIXA C" → "cbuqfaixac")
+  // Pass 2: correspondência parcial — prefixo (cobre "CBUQ" vs "C.B.U.Q FAIXA
+  // C" → "cbuqfaixac") ou um contido no outro em qualquer posição, que é o caso
+  // da razão social: vem por extenso no ticket e curta no cadastro. "PEDREIRA
+  // SÃO JOÃO LTDA - ME" contém "São João" no MEIO, onde prefixo não alcança.
+  //
+  // **Vence o candidato mais longo**, e não o primeiro encontrado. Sem isso,
+  // "BRITA GRADUADA SIMPLES" casava com "Brita" ou com "Brita Graduada"
+  // conforme a ordem em que os materiais saíram do banco — e material errado
+  // muda o preço da viagem. Ganha quem explica mais do texto lido.
+  //
+  // Guarda de tamanho: prefixo aceita a partir de 4 caracteres; "contido em",
+  // que casa por acaso com muito mais facilidade, exige 6.
   if (alvo.length >= 4) {
+    let melhorId: string | undefined;
+    let melhorTam = 0;
+
     for (const item of catalogo) {
-      const candidatos = [item.nome, ...(item.apelidos ?? [])];
-      for (const cand of candidatos) {
+      for (const cand of [item.nome, ...(item.apelidos ?? [])]) {
         const n = normalizar(cand);
-        if (n.length < 4) continue;
-        if (n.startsWith(alvo) || alvo.startsWith(n)) return item.id;
+        if (n.length < 4 || n.length <= melhorTam) continue;
+
+        const prefixo = n.startsWith(alvo) || alvo.startsWith(n);
+        const contido = n.length >= 6 && alvo.length >= 6 && (alvo.includes(n) || n.includes(alvo));
+
+        if (prefixo || contido) {
+          melhorId = item.id;
+          melhorTam = n.length;
+        }
       }
     }
+    if (melhorId) return melhorId;
   }
 
   return undefined;

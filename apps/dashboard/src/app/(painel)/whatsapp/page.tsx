@@ -841,6 +841,8 @@ type RotaConfig = {
 type RoteamentoResposta = {
   telefonesTeste: string[];
   alteradoEm: string;
+  /** Se o servidor tem credencial da Meta agora. */
+  metaConfigurada: boolean;
   rotas: RotaConfig[];
 };
 
@@ -908,6 +910,7 @@ function RoteamentoCard() {
 
   const rotas = cfg.data?.rotas ?? [];
   const naMeta = rotas.filter((r) => r.provedor === "meta").length;
+  const metaLigada = cfg.data?.metaConfigurada ?? false;
   const rotulos = new Map(rotas.map((r) => [r.chave, r.rotulo]));
 
   return (
@@ -1040,11 +1043,22 @@ function RoteamentoCard() {
         </div>
       )}
 
-      {naMeta > 0 && (
-        <p className="border-t pt-3 text-[11px] text-amber-700">
-          {naMeta === 1 ? "1 rota está" : `${naMeta} rotas estão`} apontada
-          {naMeta === 1 ? "" : "s"} pra Meta, que ainda não está ligada no servidor — enquanto isso
-          essas mensagens continuam saindo pelo Evolution.
+      {/*
+        O aviso era fixo e dizia que as mensagens continuavam saindo pelo
+        Evolution. Isso deixou de ser verdade quando a Meta virou provedor de
+        verdade: rota apontada pra lá com o servidor sem token NÃO desvia, ela
+        falha. Uma tela que diz "está saindo por outro caminho" quando nada está
+        saindo é pior que uma tela sem aviso nenhum.
+      */}
+      {naMeta > 0 && !metaLigada && (
+        <p className="border-t pt-3 text-[11px] text-red-700">
+          <strong>
+            {naMeta === 1 ? "1 rota está" : `${naMeta} rotas estão`} apontada
+            {naMeta === 1 ? "" : "s"} pra Meta, e o servidor não tem credencial da Meta.
+          </strong>{" "}
+          Essas mensagens não estão sendo entregues. Configure{" "}
+          <code>META_WHATSAPP_TOKEN</code> e <code>META_WHATSAPP_PHONE_NUMBER_ID</code> no servidor
+          e reinicie — ou traga essas rotas de volta pro Evolution.
         </p>
       )}
     </Card>

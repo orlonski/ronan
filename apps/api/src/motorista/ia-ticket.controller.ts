@@ -39,6 +39,28 @@ export class IaTicketController {
     @Body(new ZodValidationPipe(ExtrairTicketInput))
     body: { fotoBase64: string; mime: string },
   ): Promise<ExtrairTicketResult> {
+    // A torneira da PLATAFORMA, e ela vem ANTES de tudo. Cada leitura custa
+    // dinheiro, e quem paga é a plataforma — então a empresa precisa estar
+    // liberada na tela de Empresas, antes de qualquer flag por motorista.
+    // Esconder o botão no app não basta: é aqui que a chamada morre de fato.
+    //
+    // Antes do check de disponibilidade da IA de propósito: pra uma empresa que
+    // não tem o recurso, se a chave da Anthropic está configurada ou não é
+    // irrelevante — e não é informação que ela deva conseguir sondar.
+    //
+    // 403 e não 503: não é indisponibilidade passageira, é "esta empresa não
+    // tem o recurso". O app trata 4xx sem ficar reencaminhando.
+    const conta = await this.prisma.conta.findUnique({
+      where: { id: user.contaId },
+      select: { iaLeituraTicket: true },
+    });
+    if (!conta?.iaLeituraTicket) {
+      throw new HttpException(
+        "A leitura automática de ticket não está liberada para esta empresa.",
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
     if (!this.ia.habilitada) {
       throw new HttpException(
         "Serviço de IA indisponível no momento",

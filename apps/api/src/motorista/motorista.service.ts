@@ -161,6 +161,7 @@ export class MotoristaService {
         podeViagemLifecycle: true,
         podeLancarPedagio: true,
         podeLancarAbastecimento: true,
+        podeUsarOcrTicket: true,
         podeVerStories: true,
         podeVerTodosLocais: true,
         podeReferenciaKm: true,
@@ -181,10 +182,26 @@ export class MotoristaService {
         aceitaPush: true,
         aceitaWhatsapp: true,
         receberResumoDiario: true,
+        // A torneira da plataforma pro OCR de ticket. Vem junto porque o app
+        // decide mostrar (ou não) a leitura automática a partir do /m/me.
+        conta: { select: { iaLeituraTicket: true } },
       },
     });
-    const { veiculos, ...rest } = m;
-    return { ...rest, veiculos: veiculos.map((v) => v.veiculo) };
+    const { veiculos, conta, ...rest } = m;
+    return {
+      ...rest,
+      // Duas travas em série, e o app não precisa saber que são duas: a empresa
+      // tem que estar liberada pela plataforma (quem paga a chamada) E o
+      // motorista tem que estar no rollout.
+      //
+      // Até aqui este campo simplesmente NÃO era devolvido, e o shim de compat
+      // dos dois apps assume `true` quando ele falta — ou seja, o botão aparecia
+      // pra todo mundo e o rollout por motorista só existia no backend, virando
+      // 403 que o `catch {}` do app engolia. Mandar o valor conserta o rollout
+      // e liga a trava da empresa de uma vez, sem mexer em nenhum dos dois apps.
+      podeUsarOcrTicket: rest.podeUsarOcrTicket && conta.iaLeituraTicket,
+      veiculos: veiculos.map((v) => v.veiculo),
+    };
   }
 
   /** Atualiza as preferências de notificação do motorista (app). */
