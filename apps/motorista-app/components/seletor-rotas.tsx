@@ -45,6 +45,20 @@ export function corDaRota(idx: number): string {
 }
 
 /**
+ * Rótulo de uma opção quando há escolha. Só descreve o que a rota É — a do meio
+ * fica sem rótulo mesmo, porque não tem nada verdadeiro e útil a dizer sobre ela
+ * (e inventar rótulo pra preencher espaço vira ruído ou, pior, conselho).
+ */
+function rotuloDaRota(idx: number, rapidaIdx: number, curtaIdx: number): string | null {
+  const rapida = idx === rapidaIdx;
+  const curta = idx === curtaIdx;
+  if (rapida && curta) return "Mais rápida e mais curta";
+  if (rapida) return "Mais rápida";
+  if (curta) return "Mais curta";
+  return null;
+}
+
+/**
  * Mapa isolado e memoizado. Com `selecionadaIdx = -1` (ninguém escolheu ainda)
  * todas as rotas saem na sua própria cor; depois da escolha, a escolhida fica
  * colorida/grossa e as outras apagam (cinza). Memoizado por
@@ -165,6 +179,30 @@ export function SeletorRotas({
 }: Props) {
   const temEscolha = rotas.length > 1;
 
+  // Rótulo FACTUAL, não conselho. "Sugerida pelo sistema" era pré-seleção
+  // disfarçada: empurrava o motorista pra uma opção antes de ele lembrar por
+  // onde passou — e como o roteador ordena pela mais RÁPIDA, a sugerida vinha a
+  // ser justamente a mais longa. Dizer qual é a mais rápida e qual é a mais
+  // curta ajuda ele a reconhecer a estrada dele sem opinar sobre a escolha.
+  const rapidaIdx = useMemo(
+    () =>
+      rotas.reduce(
+        (melhor, r, i) =>
+          r.duracaoSegundos < rotas[melhor]!.duracaoSegundos ? i : melhor,
+        0,
+      ),
+    [rotas],
+  );
+  const curtaIdx = useMemo(
+    () =>
+      rotas.reduce(
+        (melhor, r, i) =>
+          parseFloat(r.km) < parseFloat(rotas[melhor]!.km) ? i : melhor,
+        0,
+      ),
+    [rotas],
+  );
+
   function selecionar(idx: number) {
     void Haptics.selectionAsync();
     onSelecionar(idx);
@@ -210,15 +248,11 @@ export function SeletorRotas({
                   <Text className="text-xs font-medium text-muted-foreground">
                     Calculado pelo sistema
                   </Text>
-                ) : r.recomendada ? (
+                ) : rotuloDaRota(idx, rapidaIdx, curtaIdx) ? (
                   <Text className="text-xs font-medium text-muted-foreground">
-                    Sugerida pelo sistema
+                    {rotuloDaRota(idx, rapidaIdx, curtaIdx)}
                   </Text>
-                ) : (
-                  <Text className="text-xs font-medium text-muted-foreground">
-                    Outro caminho
-                  </Text>
-                )}
+                ) : null}
               </View>
               {selecionada && <Check size={24} color={cor} strokeWidth={3} />}
             </Pressable>
