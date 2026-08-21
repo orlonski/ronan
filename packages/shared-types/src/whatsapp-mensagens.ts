@@ -243,10 +243,6 @@ export type TemplateWhatsappDef = {
  *
  * - `MENSAGEM_AVULSA` e `RESPOSTA_AGENTE` são texto que alguém digitou na hora.
  *   Não existe template possível — é a natureza delas, não uma pendência.
- * - `RESUMO_GESTOR` tem corpo variável (cada usuário escolhe seus blocos em
- *   `resumoAssuntos`), e parâmetro de template não aceita quebra de linha. Ou o
- *   resumo do gestor ganha uma forma fixa, ou fica no Evolution. Decisão em
- *   aberto — de propósito, em vez de um template chutado que a Meta reprova.
  * - `AVISO_GRUPO` é grupo, que a Cloud API não faz.
  */
 export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDef>> = {
@@ -293,6 +289,31 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
       "",
       "No mês: {{5}}",
       "Bom descanso! 💪",
+    ].join("\n"),
+  },
+  // O resumo do gestor tem 12 blocos e cada usuário escolhe os seus. Isso não
+  // cabe em corpo fixo: seriam 12 parâmetros com travessão de enchimento na
+  // maioria, que a Meta reprova como template de baixa qualidade.
+  //
+  // Então o WhatsApp deixa de carregar o resumo e passa a AVISAR que ele saiu,
+  // com os números de manchete e um botão pro painel. A personalização dos 12
+  // blocos continua existindo — no painel, onde ela já funciona e não tem
+  // limite de formato. O texto longo segue montado e gravado no histórico.
+  //
+  // O botão é URL ESTÁTICA (o painel, sempre o mesmo endereço), então não gasta
+  // parâmetro nenhum: cadastrar em Meta → Modelos → botão "Visitar site" fixo.
+  RESUMO_GESTOR: {
+    nome: "resumo_gestor",
+    idioma: "pt_BR",
+    corpo: [0, 1, 2, 3],
+    textoAprovacao: [
+      "📊 *Resumo da {{1}}* — {{2}}",
+      "",
+      "Hoje: {{3}}",
+      "",
+      "{{4}}",
+      "",
+      "Abra o painel pra ver o resumo completo.",
     ].join("\n"),
   },
   COMPARTILHAMENTO: {

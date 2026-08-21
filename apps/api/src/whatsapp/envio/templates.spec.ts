@@ -61,9 +61,12 @@ describe("catálogo de templates", () => {
     // Rota `utility`/`authentication` sem template NÃO sai fora da janela de
     // 24h. Se uma aparecer aqui, ou ganhou template ou virou serviço — e
     // qualquer um dos dois é decisão, não esquecimento.
+    //
+    // As duas que sobram são texto que uma pessoa digitou na hora: não existe
+    // template possível, e isso é a natureza delas, não pendência.
     const semTemplate = ROTAS_WHATSAPP.filter(
       (r) => (r.provedores as readonly string[]).includes("meta") && !TEMPLATES_WHATSAPP[r.chave],
     ).map((r) => r.chave);
-    expect(semTemplate.sort()).toEqual(["MENSAGEM_AVULSA", "RESPOSTA_AGENTE", "RESUMO_GESTOR"]);
+    expect(semTemplate.sort()).toEqual(["MENSAGEM_AVULSA", "RESPOSTA_AGENTE"]);
   });
 });

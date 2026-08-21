@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
+import { achatarParam } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { EnvioWhatsappService } from "../../whatsapp/envio/envio-whatsapp.service";
 import { SessaoService } from "../../whatsapp/sessao.service";
@@ -111,8 +112,8 @@ export class ResumoService {
       const chaves = new Set(u.resumoAssuntos);
       if (chaves.size === 0) continue; // usuário sem nenhum assunto marcado
       try {
-        const texto = await this.montarMensagem(chaves);
-        await this.enviar(u.whatsappResumo!, texto);
+        const mensagem = await this.montarMensagem(chaves);
+        await this.enviar(u.whatsappResumo!, mensagem);
         ok++;
       } catch (e) {
         this.log.error(`Resumo pra ${u.nome} falhou: ${(e as Error).message}`);
@@ -149,17 +150,21 @@ export class ResumoService {
         "Este usuário não tem nenhum assunto do resumo marcado. Edite o usuário e selecione os assuntos.",
       );
     }
-    const texto = await this.montarMensagem(chaves);
-    await this.enviar(u.whatsappResumo, texto);
+    const mensagem = await this.montarMensagem(chaves);
+    await this.enviar(u.whatsappResumo, mensagem);
     return { ok: true };
   }
 
-  private async enviar(numeroRaw: string, texto: string): Promise<void> {
+  private async enviar(
+    numeroRaw: string,
+    mensagem: { texto: string; params: string[] },
+  ): Promise<void> {
     const numero = SessaoService.normalizar(numeroRaw);
     await this.envio.enviarOuFalhar({
       destino: { tipo: "TELEFONE", numero },
       rota: "RESUMO_GESTOR",
-      texto,
+      texto: mensagem.texto,
+      params: mensagem.params,
     });
   }
 
@@ -167,7 +172,21 @@ export class ResumoService {
    * Monta o texto do resumo só com os blocos marcados (`chaves` = assuntos do
    * usuário). As métricas são sempre calculadas; o filtro decide o que entra.
    */
-  private async montarMensagem(chaves: Set<string>): Promise<string> {
+  /**
+   * O resumo longo (texto) e a manchete dele (params), lado a lado.
+   *
+   * O texto é o de sempre: os blocos que o usuário escolheu, montados inteiros.
+   * É ele que fica no histórico e é o que sairia se um dia voltar a existir um
+   * caminho de texto livre.
+   *
+   * Os params são outra coisa: na Meta este resumo NÃO é a mensagem, é o aviso
+   * de que a mensagem existe. Doze blocos personalizáveis não cabem em corpo
+   * fixo de template, então o WhatsApp leva a manchete e o botão leva ao painel,
+   * onde a personalização já funciona sem limite de formato.
+   */
+  private async montarMensagem(
+    chaves: Set<string>,
+  ): Promise<{ texto: string; params: string[] }> {
     const [y, m, dia] = ymdSaoPaulo();
 
     // O título leva o nome da EMPRESA, não o da plataforma: quem lê é o dono da
@@ -557,6 +576,26 @@ export class ResumoService {
         ),
       );
 
-    return blocos.join("\n\n");
+    // A manchete é sempre a mesma, independente dos blocos escolhidos: é o que
+    // faz o aviso ser legível pra quem só marcou "Custos" e pra quem marcou
+    // tudo. Nenhum parâmetro pode ficar vazio — a Meta recusa.
+    const pendencias = [
+      motPend > 0 ? `${fmt(motPend)} motorista(s) pra aprovar` : null,
+      fechAguardando > 0 ? `${fmt(fechAguardando)} fechamento(s) aguardando` : null,
+      pendentesConf > 0 ? `${fmt(pendentesConf)} viagem(ns) pra conferir` : null,
+    ].filter(Boolean);
+
+    const params = [
+      conta?.nome ?? "Movatruck",
+      dataLabel,
+      [
+        `${fmt(viHoje)} viagem(ns)`,
+        `${fmtTon(tonDe(viAggHoje))} t`,
+        `${fmtTon(kmDe(viAggHoje))} km`,
+      ].join(" · "),
+      pendencias.length > 0 ? `Pendências: ${pendencias.join(" · ")}` : "Nada pendente.",
+    ].map(achatarParam);
+
+    return { texto: blocos.join("\n\n"), params };
   }
 }
