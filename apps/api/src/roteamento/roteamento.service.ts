@@ -27,6 +27,15 @@ const OSRM_APPROACHES = (process.env.OSRM_APPROACHES ?? "off").trim();
 // isso não é erro, só volta menos.
 const VALHALLA_ALTERNATES = 2;
 
+// Teto de desvio de uma alternativa sobre a MAIS CURTA do par. O Valhalla não
+// tem pudor: em par de 28 km ele chega a oferecer um caminho de 52 (+84%), e
+// medindo 39 alternativas de pares reais da frota o excesso se agrupa até ~30% e
+// depois vira cauda solta (+30% a +74%). Como agora o motorista é obrigado a
+// escolher e o que ele escolhe é o que se fatura, deixar essa cauda na tela é
+// oferecer prejuízo de bandeja — e nenhum mapa de rua mostraria aquilo como
+// "opção". Acima do teto a rota é descartada da lista.
+const VALHALLA_DESVIO_MAX = 1.3;
+
 // Diferença mínima (km) entre a variante COM retorno (curb) e SEM retorno pra
 // valer a pena perguntar ao motorista. Abaixo disso, o ponto já está do lado
 // certo (sem retorno real) → devolve 1 opção só, sem escolha/fricção.
@@ -532,7 +541,7 @@ export class RoteamentoService {
         (t): t is ValhallaTripComResumo => !!t?.summary,
       );
 
-      return trips
+      const comGeometria = trips
         .map((trip, idx) => {
           // O `shape` vem por PERNA e em precisão 6; o sistema inteiro fala
           // polyline 5 (ver roteamento/polyline.ts). Emenda as pernas e converte
@@ -541,13 +550,34 @@ export class RoteamentoService {
             leg.shape ? decodificarPolyline(leg.shape, 6) : [],
           );
           return {
+            kmNum: trip.summary.length,
             km: trip.summary.length.toFixed(2),
             duracaoSegundos: Math.round(trip.summary.time),
             geometria: pontos.length >= 2 ? codificarPolyline(pontos, 5) : null,
-            recomendada: idx === 0,
+            principal: idx === 0,
           };
         })
         .filter((r) => r.geometria !== null);
+
+      if (comGeometria.length === 0) return [];
+
+      // Corta a cauda de desvios absurdos (ver VALHALLA_DESVIO_MAX).
+      const maisCurta = Math.min(...comGeometria.map((r) => r.kmNum));
+      const sobreviventes = comGeometria.filter(
+        (r) => r.kmNum <= maisCurta * VALHALLA_DESVIO_MAX,
+      );
+
+      // A "sugerida" é a principal do Valhalla — mas ela mesma pode ter caído no
+      // corte (a principal é a mais RÁPIDA, e às vezes a mais rápida é um desvio
+      // longo demais). Nesse caso a primeira que sobrou assume, pra lista nunca
+      // ficar sem referência.
+      const temPrincipal = sobreviventes.some((r) => r.principal);
+      return sobreviventes.map((r, idx) => ({
+        km: r.km,
+        duracaoSegundos: r.duracaoSegundos,
+        geometria: r.geometria,
+        recomendada: temPrincipal ? r.principal : idx === 0,
+      }));
     } finally {
       clearTimeout(timeout);
     }
