@@ -5,17 +5,20 @@ import type { ConfigService } from "@nestjs/config";
 import type { Request } from "express";
 import { MetaWebhookController } from "./meta-webhook.controller";
 import type { PrismaService } from "../prisma/prisma.service";
+import type { ErrorsService } from "../errors/errors.service";
 
 const SEGREDO = "app-secret-de-teste";
 const VERIFY = "verify-token-de-teste";
 
 function controller(env: Record<string, string> = { META_APP_SECRET: SEGREDO, META_WEBHOOK_VERIFY_TOKEN: VERIFY }) {
   const updateMany = vi.fn(async () => ({ count: 1 }));
+  const reportar = vi.fn(async (_input: { message: string; extra?: unknown }) => ({}));
   const c = new MetaWebhookController(
     { get: (k: string) => env[k] } as unknown as ConfigService,
     { whatsappMensagem: { updateMany } } as unknown as PrismaService,
+    { reportar } as unknown as ErrorsService,
   );
-  return { c, updateMany };
+  return { c, updateMany, reportar };
 }
 
 /** Monta o POST como a Meta monta: corpo cru + assinatura hex do HMAC dele. */
@@ -147,6 +150,7 @@ describe("status de entrega", () => {
           }),
         },
       } as unknown as PrismaService,
+      { reportar: vi.fn(async () => ({})) } as unknown as ErrorsService,
     );
     const e = evento(STATUS());
     await expect(
@@ -157,5 +161,53 @@ describe("status de entrega", () => {
   it("evento sem status nenhum não quebra", async () => {
     const { r } = await enviar({ entry: [{ changes: [{ value: { messages: [{ id: "x" }] } }] }] });
     expect(r).toBe("ok");
+  });
+});
+
+describe("status de template", () => {
+  const enviarEvento = async (value: unknown) => {
+    const { c, reportar } = controller();
+    const body = { entry: [{ changes: [{ field: "message_template_status_update", value }] }] };
+    const raw = Buffer.from(JSON.stringify(body));
+    const hex = createHmac("sha256", SEGREDO).update(raw).digest("hex");
+    const r = await c.receber(body as never, `sha256=${hex}`, {
+      rawBody: raw,
+    } as Request & { rawBody?: Buffer });
+    return { r, reportar };
+  };
+
+  it("reprovação vira erro no painel, com o motivo da Meta", async () => {
+    // Sem isto, template reprovado só aparece quando a mensagem tenta sair —
+    // às 20h no cron, ou quando um motorista pede o código.
+    const { reportar } = await enviarEvento({
+      event: "REJECTED",
+      message_template_name: "resumo_motorista",
+      message_template_language: "pt_BR",
+      reason: "INVALID_FORMAT",
+    });
+    expect(reportar).toHaveBeenCalledOnce();
+    const arg = reportar.mock.calls[0]?.[0];
+    expect(arg?.message).toContain("resumo_motorista");
+    expect(arg?.message).toContain("REJECTED");
+    expect((arg?.extra as { reason?: string })?.reason).toBe("INVALID_FORMAT");
+  });
+
+  it("aprovação não polui a tela de erros", async () => {
+    const { reportar } = await enviarEvento({
+      event: "APPROVED",
+      message_template_name: "aviso_peso",
+      message_template_language: "pt_BR",
+    });
+    expect(reportar).not.toHaveBeenCalled();
+  });
+
+  it("evento de template não é confundido com status de entrega", async () => {
+    const { r, reportar } = await enviarEvento({
+      event: "REJECTED",
+      message_template_name: "x",
+      statuses: [{ id: "wamid.NAO", status: "delivered" }],
+    });
+    expect(r).toBe("ok");
+    expect(reportar).toHaveBeenCalledOnce();
   });
 });

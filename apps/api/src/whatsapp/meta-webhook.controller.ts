@@ -16,6 +16,7 @@ import { ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { Public } from "../auth/decorators/public.decorator";
 import { comoSistema } from "../common/conta/conta-context";
+import { ErrorsService } from "../errors/errors.service";
 import { PrismaService } from "../prisma/prisma.service";
 
 /**
@@ -37,6 +38,13 @@ import { PrismaService } from "../prisma/prisma.service";
 /** Status de entrega que a Meta manda, do mais cru ao mais final. */
 const STATUS_CONHECIDOS = new Set(["sent", "delivered", "read", "failed"]);
 
+type TemplateStatus = {
+  event?: string;
+  message_template_name?: string;
+  message_template_language?: string;
+  reason?: string;
+};
+
 type ValueMeta = {
   statuses?: Array<{
     id?: string;
@@ -45,7 +53,7 @@ type ValueMeta = {
   }>;
   messages?: Array<{ id?: string; from?: string; type?: string }>;
   metadata?: { phone_number_id?: string };
-};
+} & TemplateStatus;
 
 type CorpoWebhook = {
   object?: string;
@@ -60,6 +68,7 @@ export class MetaWebhookController {
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly errors: ErrorsService,
   ) {}
 
   /**
@@ -143,6 +152,11 @@ export class MetaWebhookController {
         const value = change.value;
         if (!value) continue;
 
+        if (change.field === "message_template_status_update") {
+          await this.gravarStatusTemplate(value);
+          continue;
+        }
+
         for (const s of value.statuses ?? []) {
           await this.gravarStatus(s);
         }
@@ -157,6 +171,42 @@ export class MetaWebhookController {
           );
         }
       }
+    }
+  }
+
+  /**
+   * Template aprovado ou reprovado pela Meta.
+   *
+   * Sem isto, template reprovado só aparece quando a mensagem tenta sair — às
+   * 20h no cron do resumo, ou quando um motorista pede o código. Descobrir ali
+   * é descobrir tarde e pelo cliente.
+   *
+   * Reprovação vai pro `ErrorLog`, que é a tela de Erros do painel: é o único
+   * lugar do sistema onde alguém já olha esperando encontrar problema. Aprovação
+   * é só log — notícia boa não precisa de tela.
+   */
+  private async gravarStatusTemplate(v: ValueMeta): Promise<void> {
+    const nome = v.message_template_name ?? "?";
+    const idioma = v.message_template_language ?? "?";
+    const evento = (v.event ?? "").toUpperCase();
+
+    if (evento === "APPROVED") {
+      this.log.log(`template "${nome}" (${idioma}) APROVADO pela Meta`);
+      return;
+    }
+
+    const detalhe = v.reason ? ` — motivo: ${v.reason}` : "";
+    this.log.error(`template "${nome}" (${idioma}) ${evento || "sem evento"}${detalhe}`);
+    // Nunca deixa a falha ao registrar derrubar o webhook: a Meta desliga a URL
+    // depois de muita resposta não-200 seguida.
+    try {
+      await this.errors.reportar({
+        origem: "api",
+        message: `Template do WhatsApp "${nome}" (${idioma}): ${evento || "status desconhecido"}`,
+        extra: { nome, idioma, evento, reason: v.reason ?? null },
+      });
+    } catch (e) {
+      this.log.warn(`não deu pra registrar o status do template: ${(e as Error).message}`);
     }
   }
 
