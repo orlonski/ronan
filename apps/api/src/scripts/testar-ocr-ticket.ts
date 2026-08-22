@@ -196,13 +196,29 @@ async function main() {
             const marca = d === "—" || l === "—" ? " " : bate ? "✓" : "✗";
             console.log(`  ${marca} ${campo.padEnd(11)}${d.padEnd(21)}${l}`);
           };
+          // Quando a IA casa o nome com o cadastro, ela devolve o ID — e ID não
+          // se compara com nome. Resolver de volta pro nome é o que torna a
+          // linha legível; sem isso toda leitura BOA aparecia como divergência.
+          const nomeCliente = r.clienteId
+            ? clientes.find((c) => c.id === r.clienteId)?.nome
+            : r.clienteSugerido;
+          const nomeMaterial = r.materialId
+            ? materiais.find((m) => m.id === r.materialId)?.nome
+            : r.materialSugerido;
+
           linha("ticket", declarado.ticket, r.ticket);
           linha("toneladas", declarado.toneladas, r.toneladas);
           linha("data", declarado.data?.toISOString().slice(0, 10), r.data);
           linha("placa", declarado.placa, r.placaSugerida);
-          linha("cliente", declarado.cliente, r.clienteSugerido ?? (r.clienteId ? "(casou no cadastro)" : null));
-          linha("material", declarado.material, r.materialSugerido ?? (r.materialId ? "(casou no cadastro)" : null));
-          console.log("\n  (✗ aqui é o que o conferente da Fase 2 devolveria pro motorista)");
+          linha("cliente", declarado.cliente, nomeCliente);
+          linha("material", declarado.material, nomeMaterial);
+
+          console.log(
+            "\n  ✗ = o que o conferente da Fase 2 olharia. Nem todo ✗ vira aviso\n" +
+              "  pro motorista: 1 caractere de diferença numa placa ou num ticket é\n" +
+              "  leitura ruim (G/Q, 0/O, 1/7, 5/S, 8/B), não motorista errado — vai\n" +
+              "  pra revisão humana, nunca pra cobrança.",
+          );
         }
       }
 
@@ -230,8 +246,9 @@ async function main() {
           console.log(`✅ CACHE PEGOU — ${linha.tokensCacheLeitura} tokens vieram por ~10% do preço.`);
         } else {
           console.log(
-            "❌ CACHE NÃO PEGOU. O prefixo não chegou aos 1024 tokens mínimos, ou algo\n" +
-              "   variou entre as duas chamadas. A economia principal não está acontecendo.",
+            "ℹ️  Sem cache, e no Haiku 4.5 é esperado: o prefixo mínimo cacheável dele\n" +
+              "   é 4096 tokens, e uma leitura inteira não chega lá. Não é defeito de\n" +
+              "   configuração — é o modelo. (Sonnet pede 1024, Opus 5 pede 512.)",
           );
         }
       }
