@@ -522,6 +522,39 @@ export class ConferenciaFilaService {
     };
   }
 
+  /**
+   * Manda ler de novo a foto de uma viagem.
+   *
+   * Serve pro caso em que quem confere olha a foto, vê que está boa, e a
+   * leitura não deu certo assim mesmo. Sem isto o único caminho seria pedir
+   * foto nova ao motorista por um problema que não é dele.
+   *
+   * Custa uma leitura, então é ação de gente clicando — não entra sozinha.
+   */
+  async relerViagem(viagemId: string): Promise<{ enfileirada: boolean; motivo?: string }> {
+    const conta = await this.prisma.conta.findUnique({
+      where: { id: contaIdAtual() },
+      select: { iaConferenciaTicket: true },
+    });
+    if (!conta?.iaConferenciaTicket) {
+      return { enfileirada: false, motivo: "A conferência não está liberada para esta empresa." };
+    }
+
+    const ativa = await this.prisma.conferenciaTicket.findFirst({
+      where: { viagemId, viagemAtiva: { not: null } },
+      select: { id: true },
+    });
+    if (ativa) return { enfileirada: false, motivo: "Já tem uma leitura em andamento pra essa viagem." };
+
+    const antes = await this.prisma.conferenciaTicket.count({ where: { viagemId } });
+    await this.enfileirar(viagemId, "reconferencia");
+    const depois = await this.prisma.conferenciaTicket.count({ where: { viagemId } });
+
+    return depois > antes
+      ? { enfileirada: true }
+      : { enfileirada: false, motivo: "Essa viagem não está em estado de ser conferida agora." };
+  }
+
   /** Só pra deixar explícito de qual conta é o resumo/lista (uso em log). */
   contaAtual(): string {
     return contaIdAtual();

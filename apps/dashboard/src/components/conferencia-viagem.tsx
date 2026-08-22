@@ -1,7 +1,10 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, Eye, ScanEye } from "lucide-react";
-import { useApiQuery } from "@/lib/client-api";
+import { useState } from "react";
+import { toast } from "sonner";
+import { AlertTriangle, CheckCircle2, Eye, RefreshCw, ScanEye } from "lucide-react";
+import { fetchApi, useApiQuery, useAuthToken } from "@/lib/client-api";
+import { usePermissoes } from "@/lib/permissoes";
 
 type Divergencia = {
   campo: string;
@@ -44,9 +47,32 @@ const CAMPOS: { chave: string; leituraChave: string; rotulo: string }[] = [
  * card serve pra decidir uma viagem.
  */
 export function ConferenciaViagemCard({ viagemId }: { viagemId: string }) {
-  const { data, isLoading } = useApiQuery<Conferencia | null>(
+  const { data, isLoading, refetch } = useApiQuery<Conferencia | null>(
     `/admin/conferencias/viagem/${viagemId}`,
   );
+  const { temPermissao } = usePermissoes();
+  const token = useAuthToken();
+  const [relendo, setRelendo] = useState(false);
+
+  async function reler() {
+    setRelendo(true);
+    try {
+      const r = await fetchApi<{ enfileirada: boolean; motivo?: string }>(
+        `/admin/conferencias/viagem/${viagemId}/reler`,
+        { method: "POST", token, body: "{}" },
+      );
+      if (r.enfileirada) {
+        toast.success("Vou ler de novo", { description: "O resultado aparece aqui em instantes." });
+        setTimeout(() => void refetch(), 8_000);
+      } else {
+        toast.error(r.motivo ?? "Não consegui mandar reler.");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não consegui mandar reler.");
+    } finally {
+      setRelendo(false);
+    }
+  }
 
   if (isLoading || !data || !data.veredito) return null;
 
@@ -80,6 +106,22 @@ export function ConferenciaViagemCard({ viagemId }: { viagemId: string }) {
           <span className="rounded border border-current/20 bg-white/60 px-1.5 py-0.5 text-[11px]">
             2ª opinião
           </span>
+        )}
+
+        {/* Pra quando a foto está boa e a leitura não deu certo assim mesmo.
+            Sem isto o único caminho seria pedir foto nova ao motorista por um
+            problema que não é dele. */}
+        {temPermissao("viagens.validar") && (
+          <button
+            type="button"
+            onClick={() => void reler()}
+            disabled={relendo}
+            title="A foto está boa e a leitura não pegou? Manda ler de novo."
+            className="ml-auto flex items-center gap-1 rounded border border-current/20 bg-white/60 px-2 py-0.5 text-[11px] hover:bg-white disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3 w-3 ${relendo ? "animate-spin" : ""}`} />
+            {relendo ? "lendo…" : "ler de novo"}
+          </button>
         )}
       </div>
 
@@ -129,6 +171,14 @@ export function ConferenciaViagemCard({ viagemId }: { viagemId: string }) {
         <p className="mt-2 text-xs text-muted-foreground">
           Diferença marcada como provável erro de leitura não vira cobrança pro motorista — a decisão
           fica com você.
+        </p>
+      )}
+
+      {data.veredito === "ILEGIVEL" && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Já tentei com o modelo mais forte antes de desistir. Se a foto estiver boa, use{" "}
+          <strong>ler de novo</strong> — melhor que pedir outra foto ao motorista por um problema
+          que pode não ser dele.
         </p>
       )}
 

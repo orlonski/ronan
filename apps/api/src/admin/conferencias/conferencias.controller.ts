@@ -85,6 +85,17 @@ export class ConferenciasController {
     return this.fila.recompararTudo();
   }
 
+  /**
+   * Relê a foto de uma viagem. Pro caso em que a foto está boa e a leitura não
+   * deu certo — pedir foto nova ao motorista seria cobrar dele um problema
+   * nosso. Custa uma leitura, daí exigir `viagens.validar`.
+   */
+  @Post("viagem/:viagemId/reler")
+  @RequerPermissao("viagens.validar")
+  reler(@Param("viagemId") viagemId: string) {
+    return this.fila.relerViagem(viagemId);
+  }
+
   @Post("reprocessar")
   @RequerPermissao("viagens.validar")
   reprocessar(

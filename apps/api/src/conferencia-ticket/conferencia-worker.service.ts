@@ -198,12 +198,62 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
       throw new FalhaInfra("o modelo respondeu fora do formato pedido");
     }
 
-    if (!primeira.legivel) {
+    // Nada lido não é o mesmo que foto ruim.
+    //
+    // Um modelo pequeno erra em foto perfeitamente legível — e antes deste
+    // trecho o código desistia aqui, declarava ILEGIVEL e ia pedir foto nova ao
+    // motorista por uma limitação NOSSA. Custa uma leitura descobrir de quem é
+    // a culpa, e essa leitura é muito mais barata que mandar um motorista
+    // parar o caminhão pra fotografar de novo um papel que já estava bom.
+    const naoLeuNada =
+      !primeira.legivel ||
+      (primeira.lido.confianca <= 0 &&
+        !primeira.lido.ticket &&
+        primeira.lido.toneladas == null);
+
+    if (naoLeuNada && this.config.modeloSegundaOpiniao && (await this.temCotaDeEscalada())) {
+      try {
+        const forte = await this.leitor.ler({
+          fotoBase64,
+          mime,
+          declarado: paraOModelo,
+          modelo: this.config.modeloSegundaOpiniao,
+        });
+        const custoAte = primeira.custoUsd + forte.custoUsd;
+
+        if (forte.legivel && forte.lido.confianca > 0) {
+          // Era limitação do modelo pequeno, não da foto. Segue o fluxo normal
+          // com a leitura boa — e ninguém precisa ser incomodado.
+          const r = conferirComJulgamento(declarado, forte.lido, forte.julgamento);
+          return {
+            resultado: r,
+            leitura: { ...forte.lido, julgamento: forte.julgamento },
+            custoUsd: custoAte,
+            modelo: forte.modelo,
+            passadas: 2,
+            escalou: true,
+          };
+        }
+
+        // Os dois falharam: aí sim o problema é a foto.
+        return {
+          resultado: { veredito: "ILEGIVEL", divergencias: [], incertezas: [], conferidos: [] },
+          leitura: { ...forte.lido, julgamento: forte.julgamento },
+          custoUsd: custoAte,
+          modelo: forte.modelo,
+          passadas: 2,
+          escalou: true,
+        };
+      } catch (err) {
+        this.log.warn(`Releitura no modelo forte falhou: ${(err as Error).message}`);
+      }
+    }
+
+    if (naoLeuNada) {
       return {
         resultado: {
-          // Foto que não dá pra ler tem desfecho próprio: quem resolve é o
-          // motorista mandando outra, não um conferente olhando a mesma foto
-          // ruim de novo.
+          // Sem cota de releitura (ou com ela falhando), fica ILEGIVEL — mas
+          // isso agora é exceção, não o caminho padrão.
           veredito: "ILEGIVEL",
           divergencias: [],
           incertezas: [],

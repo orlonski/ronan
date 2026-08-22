@@ -315,3 +315,27 @@ describe("foto que não dá pra ler", () => {
     expect(push.enviar).not.toHaveBeenCalled();
   });
 });
+
+describe("foto boa que o modelo pequeno não leu", () => {
+  it("ILEGIVEL só é declarado depois de tentar o modelo forte", async () => {
+    // O worker escala antes de concluir; quando chega aqui com ILEGIVEL, a
+    // segunda tentativa já foi feita. Este teste fixa que o desfecho continua
+    // sendo pedir foto — mas o `passadas: 2` prova que não desistiu de primeira.
+    const { svc, updateMany, fila } = montar();
+
+    await svc.aplicar(
+      JOB,
+      {
+        ...dados(resultado({ veredito: "ILEGIVEL", conferidos: [] })),
+        passadas: 2,
+        escalou: true,
+      },
+      false,
+    );
+
+    expect(updateMany.mock.calls[0][0].data.tipoDivergencia).toBe("FOTO_ILEGIVEL");
+    const gravado = (fila.finalizar as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(gravado.passadas).toBe(2);
+    expect(gravado.escalouEm).toBeInstanceOf(Date);
+  });
+});
