@@ -353,18 +353,24 @@ Responda APENAS um JSON válido:
       const resp = await this.client.messages.create({
         model: modelo,
         max_tokens: 1024,
-        // Dois blocos, e a ordem é o que faz o cache funcionar: as instruções
-        // são idênticas em toda chamada e levam o breakpoint; o catálogo, que
-        // muda a cada cadastro novo, vem DEPOIS. Invertido (como era), qualquer
-        // cliente cadastrado invalidaria o prompt inteiro.
+        // Dois blocos: as instruções, idênticas em toda chamada, e o catálogo,
+        // que muda a cada cadastro novo. A ordem importa se um dia isto for
+        // cacheável — o que HOJE NÃO É, e o motivo está registrado abaixo.
+        //
+        // ⚠️ NÃO ponha `cache_control` aqui enquanto o modelo for Haiku 4.5.
+        // O prefixo mínimo cacheável dele é 4096 tokens, e uma leitura inteira
+        // (imagem ~1.600 + instruções ~1.300 + catálogo ~600) dá ~3.500. Ou
+        // seja: o prompt COMPLETO não alcança o mínimo, então nenhum
+        // breakpoint cacheia coisa alguma. A API não reclama — devolve
+        // `cache_creation_input_tokens: 0` e segue cobrando cheio, que foi
+        // exatamente o que aconteceu aqui (5 leituras, zero cache).
+        //
+        // O mínimo NÃO é monotônico entre modelos: Sonnet 4.5/5 pedem 1024 e
+        // Opus 5 pede 512. Se um dia o modelo mudar, reavaliar — mas medindo
+        // `tokensCacheEscrita` em `usos_ia`, não no chute (foi o chute de 1024
+        // que inflou este prompt à toa).
         system: [
-          {
-            type: "text",
-            text: INSTRUCOES_TICKET,
-            // 1h cobre um dia de trabalho de uma frota inteira: o primeiro
-            // motorista da manhã paga a escrita, todos os outros leem por ~10%.
-            cache_control: { type: "ephemeral", ttl: "1h" },
-          },
+          { type: "text", text: INSTRUCOES_TICKET },
           { type: "text", text: catalogoStr },
         ],
         messages: [
@@ -508,18 +514,15 @@ Responda APENAS um JSON válido:
  * interpolação nenhuma — é ele que leva o `cache_control`, e é ele que todas as
  * contas e todos os motoristas compartilham.
  *
- * O catálogo NÃO mora aqui: ele muda a cada cliente cadastrado e, se viesse
- * antes do breakpoint, um cadastro novo jogaria fora o cache de todo mundo.
+ * O catálogo NÃO mora aqui: ele muda a cada cliente cadastrado, e mantê-lo
+ * separado deixa este texto estável entre chamadas.
  *
- * ⚠️ Tem que passar de **1024 tokens**, que é o prefixo mínimo cacheável — abaixo
- * disso a API simplesmente não cacheia, **sem erro nenhum**, e a economia some
- * em silêncio. Hoje o texto está em ~1.300 tokens; encurtar mexe nisso.
- * Pra conferir que está pegando de verdade em produção:
- *
- *   SELECT sum("tokensCacheLeitura"), sum("tokensCacheEscrita"), count(*)
- *     FROM usos_ia WHERE escopo = 'ocr-app' AND "criadoEm" > now() - interval '1 day';
- *
- * Leitura zerada com dezenas de chamadas no dia = o cache não está pegando.
+ * Não há prompt caching neste fluxo — ver o comentário no `system` da chamada
+ * pro motivo (Haiku 4.5 pede 4096 tokens de prefixo e a leitura inteira dá
+ * ~3.500). Portanto **cada palavra aqui é paga em toda leitura**: só entra
+ * texto que melhore o que o modelo lê. As regras de formato numérico
+ * brasileiro, por exemplo, pagam-se sozinhas — confundir "32.500" com 32,5
+ * erra o peso por mil vezes, e peso é o que vira dinheiro.
  */
 const INSTRUCOES_TICKET = `Você lê tickets de pesagem (balança) de transporte de carga e extrai dados estruturados.
 Tickets têm tipicamente: número do ticket, data, placa do veículo, peso (toneladas), cliente, material/produto, origem/destino, eventualmente km.
