@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "prisma": "prisma",
-    "seed:admin": "ts-node -P tsconfig.json --transpile-only src/scripts/seed-admin.ts"
+    "seed:admin": "ts-node -P tsconfig.json --transpile-only src/scripts/seed-admin.ts",
+    "testar:ocr": "ts-node -P tsconfig.json --transpile-only src/scripts/testar-ocr-ticket.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",
