@@ -313,7 +313,7 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
     corpo: [1],
     botao: { tipo: "COPIAR_CODIGO", param: 1 },
     textoAprovacao: "Seu código de verificação é {{1}}.\nPara sua segurança, não o compartilhe.",
-    exemplo: ["Schaba", "482913", "10"],
+    exemplo: ["Movatruck", "482913", "10"],
   },
   OTP_SENHA: {
     nome: "otp_senha",
@@ -350,7 +350,13 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
       "No mês: {{5}}",
       "Bom descanso! 💪",
     ].join("\n"),
-    exemplo: ["Schaba", "quinta, 21/08", "3 viagens · 78,5 t · 412 km", "Tá tudo certo, nada pendente.", "45 viagens"],
+    exemplo: [
+      "Movatruck",
+      "quinta, 21/08",
+      "3 viagens · 78,5 t · 412 km",
+      "Tá tudo certo, nada pendente.",
+      "45 viagens",
+    ],
   },
   // O resumo do gestor tem 12 blocos e cada usuário escolhe os seus. Isso não
   // cabe em corpo fixo: seriam 12 parâmetros com travessão de enchimento na
@@ -362,7 +368,8 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
   // limite de formato. O texto longo segue montado e gravado no histórico.
   //
   // O botão é URL ESTÁTICA (o painel, sempre o mesmo endereço), então não gasta
-  // parâmetro nenhum: cadastrar em Meta → Modelos → botão "Visitar site" fixo.
+  // parâmetro nenhum. Cadastrado na Meta como "Abrir o painel" apontando pra
+  // https://app.movatruck.com.br/ — estático mesmo, sem sufixo variável.
   RESUMO_GESTOR: {
     nome: "resumo_gestor",
     idioma: "pt_BR",
@@ -376,7 +383,12 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
       "",
       "Abra o painel pra ver o resumo completo.",
     ].join("\n"),
-    exemplo: ["Schaba", "21/08/2026 · quinta", "47 viagem(ns) · 1.240,5 t · 8.320,0 km", "Pendências: 3 motorista(s) pra aprovar"],
+    exemplo: [
+      "Movatruck",
+      "22/08/2026 · sexta",
+      "47 viagens · 1.240,5 t · 8.320,0 km",
+      "Pendências: 3 motoristas pra aprovar",
+    ],
   },
   COMPARTILHAMENTO: {
     nome: "compartilhamento_viagem",
@@ -399,7 +411,13 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
       "",
       "O link fica disponível até {{4}}.",
     ].join("\n"),
-    exemplo: ["21/08/2026 · Britagem Norte → Obra Centro", "Placa ABC1D23 · 32,500 t de Brita · 84,20 km", "Qualquer dúvida, é só chamar.", "20/09/2026 18:30", "aBc123XyZ"],
+    exemplo: [
+      "22/08/2026 · Britagem Norte → Obra Centro",
+      "Placa ABC1D23 · 32,500 t de Brita · 84,20 km",
+      "Qualquer dúvida, é só chamar.",
+      "21/09/2026 18:30",
+      "aBc123XyZ",
+    ],
   },
 };
 
