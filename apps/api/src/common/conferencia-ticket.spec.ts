@@ -141,8 +141,13 @@ describe("placa", () => {
     expect(r.veredito).toBe("INCERTO");
   });
 
-  it("placa de outro caminhão é divergência ALTA", () => {
-    const r = conferir({ placa: "AQF7758" }, { placa: "XYZ1234" });
+  it("placa de outro caminhão é ALTA — mas só sabendo quais são os da frota", () => {
+    // Sem a lista, placa desconhecida costuma ser a carreta. Ver a auditoria
+    // de campos mais abaixo.
+    const r = conferir(
+      { placa: "AQF7758", placasConhecidas: ["AQF7758", "XYZ1234"] },
+      { placa: "XYZ1234" },
+    );
     expect(r.divergencias[0]).toMatchObject({ campo: "placa", gravidade: "ALTA" });
   });
 
@@ -347,5 +352,60 @@ describe("regressão: os falsos positivos da primeira rodada", () => {
     // diferentes seguem sendo divergência.
     expect(conferir({ toneladas: 35.14 }, { toneladas: 30.5 }).veredito).toBe("DIVERGE");
     expect(conferir({ ticket: "043625" }, { ticket: "TKB-999999" }).veredito).toBe("DIVERGE");
+  });
+});
+
+describe("auditoria dos demais campos (não só os que apareceram no relato)", () => {
+  it("série de ticket diferente NÃO passa por igual — falso negativo perigoso", () => {
+    // Comparar só os dígitos faria "A-3174" e "B-3174" baterem, e o conferente
+    // deixaria passar exatamente o que existe pra pegar.
+    //
+    // Fica em revisão humana e não em cobrança porque A/B também é a cara de um
+    // erro de leitura de um caractere. O que não pode, de jeito nenhum, é
+    // passar como BATE.
+    const r = conferir({ ticket: "A-3174" }, { ticket: "B-3174" });
+    expect(r.veredito).not.toBe("BATE");
+    expect(r.incertezas[0].campo).toBe("ticket");
+  });
+
+  it("mas série omitida de um lado segue batendo", () => {
+    expect(conferir({ ticket: "043625" }, { ticket: "TKB-043625" }).veredito).toBe("BATE");
+    expect(conferir({ ticket: "TKB-043625" }, { ticket: "TKB-043625" }).veredito).toBe("BATE");
+  });
+
+  it("rótulo não conta como série", () => {
+    expect(conferir({ ticket: "TICKET 3174" }, { ticket: "3174" }).veredito).toBe("BATE");
+  });
+
+  it("placa que não é de nenhum caminhão da frota vira revisão, não acusação", () => {
+    // Caso real de transporte: o ticket registra a placa da CARRETA e o
+    // motorista lança o cavalo mecânico. Não é viagem no veículo errado.
+    const r = conferir(
+      { placa: "AQF7758", placasConhecidas: ["AQF7758", "XYZ1234"] },
+      { placa: "QRS9876" },
+    );
+    expect(r.divergencias).toHaveLength(0);
+    expect(r.incertezas[0].motivo).toMatch(/carreta|frota/);
+    expect(r.veredito).toBe("INCERTO");
+  });
+
+  it("placa de OUTRO caminhão da frota é que vira divergência ALTA", () => {
+    const r = conferir(
+      { placa: "AQF7758", placasConhecidas: ["AQF7758", "XYZ1234"] },
+      { placa: "XYZ1234" },
+    );
+    expect(r.divergencias[0]).toMatchObject({ campo: "placa", gravidade: "ALTA" });
+    expect(r.veredito).toBe("DIVERGE");
+  });
+
+  it("sem a lista da frota, placa diferente é revisão — não dá pra afirmar", () => {
+    const r = conferir({ placa: "AQF7758" }, { placa: "QRS9876" });
+    expect(r.divergencias).toHaveLength(0);
+    expect(r.veredito).toBe("INCERTO");
+  });
+
+  it("data virando o mês continua certa", () => {
+    expect(conferir({ data: "2026-09-01" }, { data: "2026-08-31" }).veredito).toBe("BATE");
+    expect(conferir({ data: "2026-01-01" }, { data: "2025-12-31" }).veredito).toBe("BATE");
   });
 });

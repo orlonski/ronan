@@ -59,6 +59,12 @@ export type Declarado = {
   clienteNome?: string | null;
   materialNome?: string | null;
   /**
+   * Placas cadastradas na empresa. Sem esta lista não dá pra distinguir "o
+   * ticket é de OUTRO caminhão da frota" (grave) de "não reconheci a placa"
+   * (que costuma ser a carreta, ou leitura ruim).
+   */
+  placasConhecidas?: string[];
+  /**
    * `false` quando não há peso pra conferir: viagem AGUARDANDO_PESO (o romaneio
    * sai no fim do dia), diária medida por período, material sem ticket.
    * Sem isto, `declarado: null` × `lido: 32` viraria DIVERGE e o sistema
@@ -149,6 +155,20 @@ export function nucleoNumericoTicket(s: string): string {
   const digitos = s.replace(/\D/g, "").replace(/^0+(?=.)/, "");
   return digitos;
 }
+
+/**
+ * A parte alfabética do ticket — a série que a balança imprime ("TKB-043625").
+ *
+ * Serve pra saber se dá pra ignorar: quando só um dos lados tem série, ela foi
+ * omitida na digitação. Quando os dois têm e são diferentes, é outro ticket.
+ */
+export function serieTicket(s: string): string {
+  const letras = s.toUpperCase().replace(/[^A-Z]/g, "");
+  return letras.replace(ROTULOS_TICKET_LETRAS, "");
+}
+
+/** Rótulo puro ("TICKET 043625") não é série — é etiqueta. */
+const ROTULOS_TICKET_LETRAS = /^(NUMERO|NUM|ROMANEIO|TICKET|CONTROLE|SEQ|NO|N)$/;
 
 /** Placa comparável: "ABC-1234", "abc 1234" e "ABC1234" viram o mesmo. */
 export function normalizarPlaca(s: string): string {
@@ -282,11 +302,20 @@ export function compararDeclaradoComLido(
     const dec = normalizarTicket(declarado.ticket);
     const lid = normalizarTicket(lido.ticket);
 
-    // Antes de qualquer coisa: o número bate? Prefixo de série ("TKB-"),
-    // rótulo e zero à esquerda são jeito de imprimir, não outro ticket.
+    // O número bate? Prefixo de série ("TKB-"), rótulo e zero à esquerda são
+    // jeito de imprimir, não outro ticket.
+    //
+    // MAS: comparar só os dígitos abre um falso negativo — "A-3174" e "B-3174"
+    // passariam por iguais, e aí o conferente deixa passar ticket trocado, que
+    // é justamente o que ele existe pra pegar. Então a série só é ignorada
+    // quando UM dos lados a omite (o motorista digitou só o número). Se os dois
+    // trazem série e elas diferem, é outro ticket.
     const nDec = nucleoNumericoTicket(declarado.ticket);
     const nLid = nucleoNumericoTicket(lido.ticket);
-    const mesmoNumero = nDec.length >= 3 && nDec === nLid;
+    const sDec = serieTicket(declarado.ticket);
+    const sLid = serieTicket(lido.ticket);
+    const seriesCompativeis = !sDec || !sLid || sDec === sLid;
+    const mesmoNumero = nDec.length >= 3 && nDec === nLid && seriesCompativeis;
 
     if (!mesmoNumero && dec !== lid) {
       // Um caractere de diferença em número longo é 0/O, 1/7, 5/S, 8/B — o pão
@@ -318,12 +347,24 @@ export function compararDeclaradoComLido(
     const lid = normalizarPlaca(lido.placa);
     if (dec !== lid) {
       const perto = distanciaEdicao(dec, lid, 1) <= 1;
-      if (perto) {
+
+      // Só é "viagem no caminhão errado" se a placa lida for de OUTRO veículo
+      // da frota. Placa que não bate com ninguém costuma ser a carreta (o
+      // ticket registra o reboque, o motorista lança o cavalo) ou leitura ruim
+      // — e nenhum dos dois é motivo pra cobrar alguém.
+      const conhecidas = (declarado.placasConhecidas ?? []).map(normalizarPlaca);
+      const ehDeOutroVeiculo = conhecidas.length > 0 && conhecidas.includes(lid);
+
+      if (perto || !ehDeOutroVeiculo) {
         incertezas.push({
           campo: "placa",
           declarado: declarado.placa,
           lido: lido.placa,
-          motivo: "diferença de um caractere — provável erro de leitura",
+          motivo: perto
+            ? "diferença de um caractere — provável erro de leitura"
+            : conhecidas.length === 0
+              ? "placa diferente da lançada"
+              : "placa não é de nenhum veículo da frota — provável carreta ou leitura ruim",
         });
       } else {
         divergencias.push({
@@ -331,7 +372,7 @@ export function compararDeclaradoComLido(
           declarado: declarado.placa,
           lido: lido.placa,
           gravidade: "ALTA",
-          detalhe: `O ticket é do veículo ${lido.placa} e a viagem foi lançada no ${declarado.placa}.`,
+          detalhe: `O ticket é do veículo ${lido.placa}, que é outro caminhão da frota, e a viagem foi lançada no ${declarado.placa}.`,
         });
       }
     }

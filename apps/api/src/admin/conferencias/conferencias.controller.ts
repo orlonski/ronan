@@ -45,6 +45,16 @@ export class ConferenciasController {
     return this.fila.listar(limite ? Number(limite) : 50);
   }
 
+  /**
+   * Onde as divergências se concentram. É o atalho pra calibrar a regra sem
+   * adivinhar a partir de exemplos soltos.
+   */
+  @Get("diagnostico")
+  @RequerPermissao("viagens.ver")
+  diagnostico() {
+    return this.fila.diagnostico();
+  }
+
   /** Quantas viagens JÁ EXISTENTES ainda esperam conferência. */
   @Get("pendentes")
   @RequerPermissao("viagens.ver")

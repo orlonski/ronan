@@ -28,6 +28,9 @@ function montar(viagem: unknown, criarLanca?: unknown, liberada = true) {
   const prisma = {
     conta: { findUnique: vi.fn().mockResolvedValue({ iaConferenciaTicket: liberada }) },
     viagem: { findUnique: vi.fn().mockResolvedValue(viagem) },
+    // As placas da frota vão junto no declarado: é o que deixa o comparador
+    // distinguir "ticket de outro caminhão" de "não reconheci a placa".
+    veiculo: { findMany: vi.fn().mockResolvedValue([{ placa: "AQF7758" }, { placa: "XYZ1234" }]) },
     conferenciaTicket: { create },
   } as unknown as PrismaService;
   return { fila: new ConferenciaFilaService(prisma, config), create };
@@ -55,6 +58,7 @@ describe("enfileirar", () => {
       clienteNome: "TRIPOLONI",
       materialNome: "PÓ DE PEDRA",
       pesoConferivel: true,
+      placasConhecidas: ["AQF7758", "XYZ1234"],
     });
   });
 

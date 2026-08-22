@@ -43,6 +43,16 @@ type Conferencia = {
   } | null;
 };
 
+type Diagnostico = {
+  porVeredito: Record<string, number>;
+  porCampo: {
+    campo: string;
+    tipo: "divergencia" | "incerteza";
+    quantidade: number;
+    exemplos: { declarado: string; lido: string; nota?: string }[];
+  }[];
+};
+
 type Resumo = {
   aguardando: number;
   executando: number;
@@ -82,6 +92,10 @@ export default function ConferenciasPage() {
   const pendentes = useApiQuery<{ pendentes: number }>("/admin/conferencias/pendentes", {
     refetchInterval: 30_000,
   });
+  // Onde as divergências se concentram. Calibrar a regra a partir de exemplos
+  // soltos é adivinhação; agrupado, o padrão que responde por metade do acervo
+  // salta na primeira olhada.
+  const diag = useApiQuery<Diagnostico>("/admin/conferencias/diagnostico");
 
   async function recomparar() {
     setRecomparando(true);
@@ -217,6 +231,44 @@ export default function ConferenciasPage() {
             );
           })}
         </div>
+      )}
+
+      {(diag.data?.porCampo.length ?? 0) > 0 && (
+        <Card className="p-4">
+          <p className="text-sm font-medium">Onde estão as diferenças</p>
+          <p className="mb-3 text-sm text-muted-foreground">
+            Agrupado por campo. Um padrão que aparece muito costuma ser regra a afinar, não
+            motorista errando — e afinar não custa nada, é só reavaliar depois.
+          </p>
+          <div className="space-y-3">
+            {diag.data!.porCampo.map((g) => (
+              <div key={`${g.tipo}:${g.campo}`} className="rounded border p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">{g.campo}</span>
+                  <span
+                    className={`rounded border px-1.5 py-0.5 text-[11px] ${
+                      g.tipo === "divergencia"
+                        ? "border-red-200 bg-red-50 text-red-700"
+                        : "border-amber-200 bg-amber-50 text-amber-800"
+                    }`}
+                  >
+                    {g.tipo === "divergencia" ? "diverge" : "revisar"}
+                  </span>
+                  <span className="text-sm text-muted-foreground">{g.quantidade}x</span>
+                </div>
+                <ul className="mt-1.5 space-y-0.5">
+                  {g.exemplos.map((e, i) => (
+                    <li key={i} className="text-xs text-muted-foreground">
+                      lançado <strong className="font-medium text-foreground">{e.declarado}</strong>
+                      {" · "}ticket <strong className="font-medium text-foreground">{e.lido}</strong>
+                      {e.nota && ` — ${e.nota}`}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </Card>
       )}
 
       {lista.isLoading ? (

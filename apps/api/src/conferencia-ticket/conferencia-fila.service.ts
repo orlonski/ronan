@@ -92,6 +92,9 @@ export class ConferenciaFilaService {
       }
 
       const foto = viagem.fotos[0];
+      const placas = (
+        await this.prisma.veiculo.findMany({ select: { placa: true } })
+      ).map((v) => v.placa);
       const declarado: Declarado = {
         toneladas: viagem.toneladas ? Number(viagem.toneladas) : null,
         ticket: viagem.ticket,
@@ -99,6 +102,10 @@ export class ConferenciaFilaService {
         data: viagem.data,
         clienteNome: viagem.cliente?.nome ?? null,
         materialNome: viagem.material?.nome ?? null,
+        // Sem isto o comparador não distingue "ticket de outro caminhão da
+        // frota" de "não reconheci a placa" — e o segundo caso, que costuma ser
+        // a carreta, viraria acusação.
+        placasConhecidas: placas,
         // Sem peso ainda não há o que conferir nesse campo — e sem esta linha o
         // sistema acusaria TODO motorista que lançou esperando o romaneio.
         pesoConferivel:
@@ -438,6 +445,77 @@ export class ConferenciaFilaService {
 
     this.log.log(`Recomparação: ${mudaram} de ${feitas.length} mudaram de veredito (custo zero).`);
     return { total: feitas.length, mudaram, porVeredito };
+  }
+
+  /**
+   * Onde estão as divergências que sobraram, agrupadas por campo e motivo.
+   *
+   * Existe porque calibrar no escuro é caro: sem isto, afinar a regra vira
+   * adivinhação a partir de exemplos soltos. Agrupado, um padrão que responde
+   * por metade do acervo aparece na primeira olhada — foi assim que "prefixo de
+   * série no ticket" apareceu como causa da maioria dos falsos positivos.
+   *
+   * Leitura pura e sem custo.
+   */
+  async diagnostico(): Promise<{
+    porVeredito: Record<string, number>;
+    porCampo: {
+      campo: string;
+      tipo: "divergencia" | "incerteza";
+      quantidade: number;
+      exemplos: { declarado: string; lido: string; nota?: string }[];
+    }[];
+  }> {
+    const feitas = await this.prisma.conferenciaTicket.findMany({
+      where: { status: "CONCLUIDA" },
+      select: { veredito: true, divergencias: true, incertezas: true },
+      take: 1000,
+    });
+
+    const porVeredito: Record<string, number> = {};
+    const mapa = new Map<
+      string,
+      { campo: string; tipo: "divergencia" | "incerteza"; quantidade: number; exemplos: { declarado: string; lido: string; nota?: string }[] }
+    >();
+
+    const somar = (
+      campo: string,
+      tipo: "divergencia" | "incerteza",
+      ex: { declarado: string; lido: string; nota?: string },
+    ) => {
+      const chave = `${tipo}:${campo}`;
+      const atual = mapa.get(chave) ?? { campo, tipo, quantidade: 0, exemplos: [] };
+      atual.quantidade++;
+      // Poucos exemplos bastam pra reconhecer o padrão; a contagem é o que
+      // diz se vale mexer na regra.
+      if (atual.exemplos.length < 5) atual.exemplos.push(ex);
+      mapa.set(chave, atual);
+    };
+
+    for (const c of feitas) {
+      if (c.veredito) porVeredito[c.veredito] = (porVeredito[c.veredito] ?? 0) + 1;
+      for (const d of (c.divergencias ?? []) as unknown as {
+        campo: string;
+        declarado: string;
+        lido: string;
+        gravidade: string;
+      }[]) {
+        somar(d.campo, "divergencia", { declarado: d.declarado, lido: d.lido, nota: d.gravidade });
+      }
+      for (const i of (c.incertezas ?? []) as unknown as {
+        campo: string;
+        declarado: string;
+        lido: string;
+        motivo: string;
+      }[]) {
+        somar(i.campo, "incerteza", { declarado: i.declarado, lido: i.lido, nota: i.motivo });
+      }
+    }
+
+    return {
+      porVeredito,
+      porCampo: [...mapa.values()].sort((a, b) => b.quantidade - a.quantidade),
+    };
   }
 
   /** Só pra deixar explícito de qual conta é o resumo/lista (uso em log). */
