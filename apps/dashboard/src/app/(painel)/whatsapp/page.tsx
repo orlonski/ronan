@@ -22,6 +22,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { StatusToggle } from "@/components/status-toggle";
 import { ViewModeToggle } from "@/components/view-mode-toggle";
@@ -184,6 +185,7 @@ export default function WhatsappPage() {
 
       {/* Por qual serviço sai cada mensagem — só a plataforma. O backend também
           gateia com PlataformaGuard; esconder aqui é conveniência, não defesa. */}
+      {plataforma && <NumeroMetaCard />}
       {plataforma && <RoteamentoCard />}
 
       {/* Sessões vinculadas */}
@@ -1115,4 +1117,144 @@ function custoTexto(categoria: CategoriaWhatsapp): string {
   const v = CUSTO_ESTIMADO_BRL[categoria] ?? 0;
   if (v === 0) return "R$ 0";
   return `R$ ${v.toFixed(2).replace(".", ",")}`;
+}
+
+type StatusNumero = {
+  ok?: boolean;
+  status?: number;
+  erro?: string;
+  resposta?: {
+    display_phone_number?: string;
+    verified_name?: string;
+    code_verification_status?: string;
+    quality_rating?: string;
+    platform_type?: string;
+    error?: { message?: string; code?: number };
+  };
+};
+
+/**
+ * O número da plataforma na Cloud API.
+ *
+ * Existe por uma lição cara: o console da Meta afirmou "Não registrado" com o
+ * número criado, "número indisponível" com ele disponível, e o botão de
+ * registrar fechou a janela quatro vezes sem emitir requisição nenhuma.
+ * Enquanto isso todo envio morria com 133010 e a única pista era o rótulo
+ * daquela tela. Aqui a resposta vem da Graph API, crua.
+ *
+ * `platform_type: CLOUD_API` é o que significa registrado. VERIFIED sozinho é
+ * só o SMS conferido — o número passa por verificado e mesmo assim não envia.
+ */
+function NumeroMetaCard() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  const [pin, setPin] = useState("");
+
+  const status = useQuery({
+    queryKey: ["meta-status-numero"],
+    enabled: !!token,
+    queryFn: () =>
+      fetchApi<StatusNumero>("/admin/roteamento-whatsapp/status-numero", { token }),
+  });
+
+  const registrar = useMutation({
+    mutationFn: (p: string) =>
+      fetchApi<StatusNumero>("/admin/roteamento-whatsapp/registrar-numero", {
+        token,
+        method: "POST",
+        body: JSON.stringify({ pin: p }),
+      }),
+    onSuccess: (r) => {
+      setPin("");
+      if (r.ok) toast.success("Número registrado na Cloud API");
+      else
+        toast.error("A Meta recusou o registro", {
+          description: r.resposta?.error?.message ?? r.erro ?? `HTTP ${r.status}`,
+        });
+      void qc.invalidateQueries({ queryKey: ["meta-status-numero"] });
+    },
+    onError: (e: Error) => toast.error("Não deu pra registrar", { description: e.message }),
+  });
+
+  const d = status.data?.resposta;
+  const registrado = d?.platform_type === "CLOUD_API";
+
+  return (
+    <Card className="space-y-4 p-4">
+      <div>
+        <h2 className="text-sm font-semibold">Número da plataforma na Cloud API</h2>
+        <p className="mt-1 max-w-2xl text-xs text-muted-foreground">
+          É por este número que saem os códigos de acesso de todas as empresas. Um número pode
+          estar <strong>verificado</strong> (o SMS conferiu) e mesmo assim <strong>não
+          registrado</strong> — e aí nenhuma mensagem sai, com o erro 133010.
+        </p>
+      </div>
+
+      {status.isLoading && <p className="text-xs text-muted-foreground">Perguntando à Meta…</p>}
+
+      {d && (
+        <div className="grid gap-2 text-xs sm:grid-cols-2">
+          <Info rotulo="Número" valor={d.display_phone_number ?? "—"} />
+          <Info rotulo="Nome de exibição" valor={d.verified_name ?? "—"} />
+          <Info rotulo="Verificação do número" valor={d.code_verification_status ?? "—"} />
+          <Info rotulo="Qualidade" valor={d.quality_rating ?? "—"} />
+          <div className="sm:col-span-2">
+            <Badge
+              className={
+                registrado
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                  : "border-red-200 bg-red-50 text-red-800"
+              }
+            >
+              {registrado ? "Registrado na Cloud API" : "NÃO registrado — nada é entregue"}
+            </Badge>
+          </div>
+        </div>
+      )}
+
+      {status.data && !status.data.ok && (
+        <p className="text-xs text-red-700">
+          {status.data.resposta?.error?.message ?? status.data.erro ?? "A Meta não respondeu."}
+        </p>
+      )}
+
+      {!registrado && (
+        <div className="space-y-2 border-t pt-3">
+          <label className="block text-xs font-medium text-muted-foreground">
+            PIN de 6 dígitos
+          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="000000"
+              inputMode="numeric"
+              autoComplete="off"
+              className="w-32 font-mono"
+            />
+            <Button
+              onClick={() => registrar.mutate(pin)}
+              disabled={pin.length !== 6 || registrar.isPending}
+            >
+              {registrar.isPending ? "Registrando…" : "Registrar número"}
+            </Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Com a verificação em duas etapas desligada, este PIN passa a valer — não precisa ser
+            um anterior. <strong>Anote:</strong> ele é exigido pra registrar o número de novo no
+            futuro.
+          </p>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function Info({ rotulo, valor }: { rotulo: string; valor: string }) {
+  return (
+    <div>
+      <span className="text-muted-foreground">{rotulo}: </span>
+      <span className="font-medium">{valor}</span>
+    </div>
+  );
 }
