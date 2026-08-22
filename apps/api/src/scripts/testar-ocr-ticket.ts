@@ -1,19 +1,22 @@
 /**
  * Testa a leitura de ticket ponta a ponta, com chamada REAL à Anthropic.
  *
- * Uso:
+ * Em desenvolvimento (precisa de ANTHROPIC_API_KEY no .env):
+ *   cd apps/api && pnpm testar:ocr -- --ultima
  *   cd apps/api && pnpm testar:ocr -- --foto /caminho/do/ticket.jpg
- *   cd apps/api && pnpm testar:ocr -- --storage-key "cnt_x/tickets/2026-08-20/m1/abc.jpg"
  *
- * Serve pra responder três perguntas que teste unitário não responde:
- *   1. o modelo continua lendo o ticket direito com o catálogo enxuto?
- *   2. o prompt caching está pegando de verdade? (é o que corta a conta)
- *   3. quanto custa, em dinheiro, uma leitura?
+ * DENTRO do container em produção (a chave já está no ambiente, e o `src/` não
+ * existe lá — só o compilado):
+ *   node dist/scripts/testar-ocr-ticket.js --ultima
  *
- * Roda a chamada DUAS vezes de propósito: na primeira o cache é escrito, na
- * segunda ele deveria ser lido. Se `cache_read` continuar zero na segunda, o
- * prefixo não atingiu o mínimo de 1024 tokens e a economia não existe — falha
- * que a API não reporta como erro.
+ * `--ultima` pega a foto mais recente que um motorista mandou e compara o que a
+ * IA lê com o que ele DECLAROU na viagem — o conferente da Fase 2 em miniatura,
+ * feito à mão. É o jeito mais rápido de responder "por que não apareceu
+ * sugestão nenhuma pro motorista?", porque mostra o `confidence` contra o corte
+ * de 0.2 que o app aplica em silêncio.
+ *
+ * Responde o que teste unitário não responde: o modelo lê direito com o
+ * catálogo enxuto, quanto custa de verdade, e quantos tokens vão em cada parte.
  */
 import { readFileSync } from "node:fs";
 import { PrismaClient } from "@prisma/client";
@@ -30,15 +33,24 @@ function arg(flag: string): string | undefined {
   return i === -1 ? undefined : process.argv[i + 1];
 }
 
+const tem = (flag: string) => process.argv.includes(flag);
+
 const brl = (usd: number) => `R$ ${(usd * 5.45).toFixed(4)}`;
 
 async function main() {
   const caminho = arg("--foto");
-  const storageKey = arg("--storage-key");
+  let storageKey = arg("--storage-key");
   const contaSlug = arg("--conta");
+  const ultima = tem("--ultima");
 
-  if (!caminho && !storageKey) {
-    console.error("Diga --foto <arquivo> ou --storage-key <chave no MinIO>.");
+  if (!caminho && !storageKey && !ultima) {
+    console.error(
+      "Escolha a foto:\n" +
+        "  --ultima                  a última que um motorista mandou (o caso comum)\n" +
+        "  --foto <arquivo>          um arquivo do disco\n" +
+        "  --storage-key <chave>     uma chave específica do MinIO\n" +
+        "\nOpcional: --conta <slug> pra escolher a empresa.",
+    );
     process.exit(1);
   }
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -62,6 +74,59 @@ async function main() {
   if (!conta) {
     console.error("Nenhuma conta no banco.");
     process.exit(1);
+  }
+
+  // `--ultima`: acha sozinho a foto mais recente da conta e, junto, o que o
+  // motorista declarou naquela viagem. É o que permite comparar leitura x
+  // declaração sem ninguém precisar caçar uuid no banco.
+  // `data` é nullable na viagem (lifecycle guiado abre sem ela).
+  let declarado:
+    | {
+        ticket: string | null;
+        toneladas: unknown;
+        data: Date | null;
+        placa?: string;
+        cliente?: string;
+        material?: string;
+      }
+    | undefined;
+
+  if (ultima) {
+    const foto = await comoSistema(() =>
+      base.ticketFoto.findFirst({
+        where: { contaId: conta.id },
+        orderBy: { capturadaEm: "desc" },
+        select: {
+          storageKey: true,
+          capturadaEm: true,
+          viagem: {
+            select: {
+              ticket: true,
+              toneladas: true,
+              data: true,
+              veiculo: { select: { placa: true } },
+              cliente: { select: { nome: true } },
+              material: { select: { nome: true } },
+            },
+          },
+        },
+      }),
+    );
+    if (!foto) {
+      console.error(`Nenhuma foto de ticket em ${conta.nome}.`);
+      process.exit(1);
+    }
+    storageKey = foto.storageKey;
+    const v = foto.viagem;
+    declarado = {
+      ticket: v.ticket,
+      toneladas: v.toneladas,
+      data: v.data,
+      placa: v.veiculo?.placa,
+      cliente: v.cliente?.nome,
+      material: v.material?.nome,
+    };
+    console.log(`Foto mais recente: ${foto.capturadaEm.toISOString()}\n`);
   }
 
   // Carrega a imagem: de disco, ou do MinIO (que é onde as fotos de verdade
@@ -106,6 +171,38 @@ async function main() {
         console.log("O que a IA leu:");
         for (const [k, v] of Object.entries(r)) {
           if (v !== undefined && v !== null) console.log(`  ${k.padEnd(18)} ${String(v)}`);
+        }
+
+        // O corte que o app usa: abaixo disso o resultado é descartado sem
+        // aparecer pro motorista. É a explicação mais provável pra "tirei a
+        // foto e não apareceu nada".
+        console.log("");
+        if ((r.confidence ?? 0) <= 0.2) {
+          console.log(
+            `⚠️  confidence ${r.confidence} — ABAIXO do corte de 0.2 do app.\n` +
+              "   Nesta viagem o motorista não teria visto sugestão nenhuma.",
+          );
+        } else {
+          console.log(`✅ confidence ${r.confidence} — acima do corte de 0.2; o app mostraria.`);
+        }
+
+        if (declarado) {
+          // Conferente em miniatura: a comparação que a Fase 2 vai automatizar.
+          console.log("\n  campo        declarado            lido");
+          const linha = (campo: string, dec: unknown, lido: unknown) => {
+            const d = dec == null || dec === "" ? "—" : String(dec);
+            const l = lido == null || lido === "" ? "—" : String(lido);
+            const bate = d !== "—" && l !== "—" && d.toLowerCase() === l.toLowerCase();
+            const marca = d === "—" || l === "—" ? " " : bate ? "✓" : "✗";
+            console.log(`  ${marca} ${campo.padEnd(11)}${d.padEnd(21)}${l}`);
+          };
+          linha("ticket", declarado.ticket, r.ticket);
+          linha("toneladas", declarado.toneladas, r.toneladas);
+          linha("data", declarado.data?.toISOString().slice(0, 10), r.data);
+          linha("placa", declarado.placa, r.placaSugerida);
+          linha("cliente", declarado.cliente, r.clienteSugerido ?? (r.clienteId ? "(casou no cadastro)" : null));
+          linha("material", declarado.material, r.materialSugerido ?? (r.materialId ? "(casou no cadastro)" : null));
+          console.log("\n  (✗ aqui é o que o conferente da Fase 2 devolveria pro motorista)");
         }
       }
 
