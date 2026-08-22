@@ -477,8 +477,20 @@ export default function NovaViagemPage() {
                         mime: novaFoto.mime as "image/jpeg" | "image/png" | "image/webp",
                       });
                       if (res.confidence > 0.2) setSugestoesIa(res);
-                    } catch {
-                      /* silencioso */
+                    } catch (err) {
+                      // Silencioso pro motorista (ele preenche manual), mas não
+                      // pra gente: era um catch vazio, e leitura que morria no
+                      // timeout ficava indistinguível de leitura nunca tentada.
+                      void import("../lib/error-reporter").then(({ reportarErro }) =>
+                        reportarErro(err, {
+                          url: "POST /m/ia/extrair-ticket",
+                          extra: {
+                            origem: "ocr-ticket",
+                            motivo:
+                              (err as Error)?.name === "AbortError" ? "timeout" : "erro",
+                          },
+                        }),
+                      );
                     }
                   })();
                 }

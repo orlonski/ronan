@@ -236,11 +236,18 @@ async function reportarSilencioso(
 export async function request<T>(
   method: string,
   path: string,
-  init: { body?: unknown; isFormData?: boolean; auth?: boolean; outbox?: boolean } = {
+  init: {
+    body?: unknown;
+    isFormData?: boolean;
+    auth?: boolean;
+    outbox?: boolean;
+    /** Teto próprio, pra chamada que sabidamente demora mais que um GET. */
+    timeoutMs?: number;
+  } = {
     auth: true,
   },
 ): Promise<T> {
-  const { body, isFormData = false, auth = true, outbox = false } = init;
+  const { body, isFormData = false, auth = true, outbox = false, timeoutMs: tetoProprio } = init;
   const headers: Record<string, string> = { ...appVersionHeaders() };
   if (body !== undefined && !isFormData) headers["content-type"] = "application/json";
   // Aceita gzip — backend agora tem compression() middleware
@@ -252,11 +259,9 @@ export async function request<T>(
   // Envios do outbox (sync em background) ganham teto folgado: 4G ruim de
   // caminhoneiro estourava o timeout curto de 8s do foreground e o lançamento
   // ficava preso. Upload de foto (multipart) já tem os seus 45s.
-  const timeoutMs = isFormData
-    ? UPLOAD_TIMEOUT_MS
-    : outbox
-      ? OUTBOX_TIMEOUT_MS
-      : REQUEST_TIMEOUT_MS;
+  const timeoutMs =
+    tetoProprio ??
+    (isFormData ? UPLOAD_TIMEOUT_MS : outbox ? OUTBOX_TIMEOUT_MS : REQUEST_TIMEOUT_MS);
   const fetchInit: RequestInit = {
     method,
     headers,
@@ -324,8 +329,8 @@ export async function request<T>(
 
 export const api = {
   get: <T>(path: string) => request<T>("GET", path),
-  post: <T>(path: string, body: unknown, opts?: { outbox?: boolean }) =>
-    request<T>("POST", path, { body, outbox: opts?.outbox }),
+  post: <T>(path: string, body: unknown, opts?: { outbox?: boolean; timeoutMs?: number }) =>
+    request<T>("POST", path, { body, outbox: opts?.outbox, timeoutMs: opts?.timeoutMs }),
   put: <T>(path: string, body: unknown) => request<T>("PUT", path, { body }),
   patch: <T>(path: string, body: unknown) => request<T>("PATCH", path, { body }),
   delete: <T>(path: string) => request<T>("DELETE", path),

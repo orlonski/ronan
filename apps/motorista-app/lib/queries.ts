@@ -2170,14 +2170,27 @@ export function useMarcarTodasNotificacoesLidas() {
 }
 
 /**
+ * Teto de tempo do OCR.
+ *
+ * Ler um ticket é uma chamada de visão: manda a imagem, o modelo processa,
+ * devolve. Passa de 10s com folga em 4G de estrada. Enquanto isso herdava os
+ * 8s do GET comum, boa parte das leituras morria em AbortError DEPOIS de o
+ * servidor já ter feito (e pago) a chamada — o motorista não via sugestão
+ * nenhuma e ninguém ficava sabendo, porque a falha é engolida na tela.
+ */
+const OCR_TIMEOUT_MS = 30_000;
+
+/**
  * OCR de ticket via Claude vision. Best-effort: motorista preenche manual
  * se chamada falhar (sem internet, IA off, etc). Sem retry — uma tentativa
- * só por foto. Timeout no client é controlado pelo `api.post`.
+ * só por foto.
  */
 export function useExtrairTicket() {
   return useMutation({
     mutationFn: async (input: { fotoBase64: string; mime: string }) =>
-      api.post<ExtrairTicketResult>("/m/ia/extrair-ticket", input),
+      api.post<ExtrairTicketResult>("/m/ia/extrair-ticket", input, {
+        timeoutMs: OCR_TIMEOUT_MS,
+      }),
   });
 }
 

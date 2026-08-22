@@ -1150,10 +1150,21 @@ export function useMarcarTodasNotificacoesLidas() {
   });
 }
 
+/**
+ * Teto de tempo do OCR — maior que o do GET comum de propósito.
+ *
+ * Ler um ticket é uma chamada de visão: manda a imagem, o modelo processa,
+ * devolve. Passa do teto normal com folga em 4G de estrada, e quando estoura o
+ * servidor já fez (e pagou) a chamada — o motorista só não chega a ver.
+ */
+const OCR_TIMEOUT_MS = 30_000;
+
 export function useExtrairTicket() {
   return useMutation({
     mutationFn: async (input: { fotoBase64: string; mime: string }) =>
-      api.post<ExtrairTicketResult>("/m/ia/extrair-ticket", input),
+      api.post<ExtrairTicketResult>("/m/ia/extrair-ticket", input, {
+        timeoutMs: OCR_TIMEOUT_MS,
+      }),
   });
 }
 

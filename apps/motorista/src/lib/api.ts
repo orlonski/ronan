@@ -122,16 +122,22 @@ async function fetchComTimeout(
 export async function request<T>(
   method: string,
   path: string,
-  init: { body?: unknown; isFormData?: boolean; auth?: boolean } = { auth: true },
+  init: {
+    body?: unknown;
+    isFormData?: boolean;
+    auth?: boolean;
+    /** Teto próprio, pra chamada que sabidamente demora mais que um GET. */
+    timeoutMs?: number;
+  } = { auth: true },
 ): Promise<T> {
-  const { body, isFormData = false, auth = true } = init;
+  const { body, isFormData = false, auth = true, timeoutMs: tetoProprio } = init;
   const headers: Record<string, string> = {};
   if (body !== undefined && !isFormData) headers["content-type"] = "application/json";
   let tokens = auth ? loadTokens() : null;
   if (tokens) headers["authorization"] = `Bearer ${tokens.accessToken}`;
 
   const url = `${API_URL}${path}`;
-  const timeoutMs = isFormData ? UPLOAD_TIMEOUT_MS : REQUEST_TIMEOUT_MS;
+  const timeoutMs = tetoProprio ?? (isFormData ? UPLOAD_TIMEOUT_MS : REQUEST_TIMEOUT_MS);
   const fetchInit: RequestInit = {
     method,
     headers,
@@ -187,7 +193,8 @@ export async function request<T>(
 
 export const api = {
   get: <T>(path: string) => request<T>("GET", path),
-  post: <T>(path: string, body: unknown) => request<T>("POST", path, { body }),
+  post: <T>(path: string, body: unknown, opts?: { timeoutMs?: number }) =>
+    request<T>("POST", path, { body, timeoutMs: opts?.timeoutMs }),
   patch: <T>(path: string, body: unknown) => request<T>("PATCH", path, { body }),
   delete: <T>(path: string) => request<T>("DELETE", path),
   postForm: <T>(path: string, body: FormData) =>

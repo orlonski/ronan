@@ -1284,8 +1284,28 @@ export default function NovaViagem() {
                   mime: novaFoto.mime,
                 });
                 if (res.confidence > 0.2) setSugestoesIa(res);
-              } catch {
-                // silencioso — motorista preenche manual
+              } catch (err) {
+                // Pro motorista segue silencioso: ele preenche manual e não tem
+                // o que fazer com o erro.
+                //
+                // Mas para de ser invisível pra GENTE. Era um catch vazio, e aí
+                // uma leitura que morreu no timeout ficava indistinguível de
+                // uma que nunca foi tentada — o OCR podia estar fora do ar por
+                // uma semana sem ninguém perceber. Vai pro reporter (que a tela
+                // /erros do painel lê) e não pela telemetria, que é opt-in por
+                // motorista e portanto não serve pra diagnóstico.
+                void import("../lib/error-reporter").then(({ reportarErro }) =>
+                  reportarErro(err, {
+                    url: "POST /m/ia/extrair-ticket",
+                    extra: {
+                      origem: "ocr-ticket",
+                      // AbortError aqui é o teto do client estourando, não o
+                      // servidor recusando: distingue "demorou" de "quebrou".
+                      motivo:
+                        (err as Error)?.name === "AbortError" ? "timeout" : "erro",
+                    },
+                  }),
+                );
               }
             })();
           }
