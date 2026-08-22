@@ -4,6 +4,7 @@ import { AplicarVereditoService } from "./aplicar-veredito.service";
 import type { PrismaService } from "../prisma/prisma.service";
 import type { PushService } from "../push/push.service";
 import type { ConferenciaFilaService } from "./conferencia-fila.service";
+import type { ConferenciaConfig } from "./conferencia.config";
 import type { ResultadoConferencia } from "../common/conferencia-ticket";
 
 const JOB = { id: "j1", viagemId: "v1", contaId: "c1" } as never;
@@ -29,7 +30,7 @@ const DIVERGE = resultado({
   ],
 });
 
-function montar() {
+function montar(cfg: Partial<{ autoAprovar: boolean; confiancaParaAprovar: number; minCamposParaAprovar: number }> = {}) {
   const updateMany = vi.fn().mockResolvedValue({ count: 1 });
   const prisma = {
     viagem: {
@@ -40,7 +41,12 @@ function montar() {
   } as unknown as PrismaService;
   const fila = { finalizar: vi.fn().mockResolvedValue(undefined) } as unknown as ConferenciaFilaService;
   const push = { enviar: vi.fn().mockResolvedValue(undefined) } as unknown as PushService;
-  return { svc: new AplicarVereditoService(prisma, fila, push), prisma, fila, push, updateMany };
+  const config = {
+    autoAprovar: cfg.autoAprovar ?? false,
+    confiancaParaAprovar: cfg.confiancaParaAprovar ?? 0.9,
+    minCamposParaAprovar: cfg.minCamposParaAprovar ?? 3,
+  } as ConferenciaConfig;
+  return { svc: new AplicarVereditoService(prisma, fila, push, config), prisma, fila, push, updateMany };
 }
 
 const dados = (r: ResultadoConferencia) => ({
@@ -123,9 +129,8 @@ describe("atuando", () => {
   });
 
   it("BATE não marca a viagem como OK sozinho", async () => {
-    // Auto-aprovar sem revisadoEm faria o FechamentoProcessor sobrescrever
-    // depois; com revisadoEm seria o robô assinando por um humano. O selo de
-    // conferido vem da tabela de conferência, no painel.
+    // A aprovação automática nasce desligada: é a ação de maior raio de dano,
+    // porque ninguém revisa o que já está aprovado.
     const { svc, updateMany, push, fila } = montar();
 
     await svc.aplicar(JOB, dados(resultado({ veredito: "BATE" })), false);
@@ -169,5 +174,95 @@ describe("atuando", () => {
     await svc.aplicar(JOB, dados(DIVERGE), false);
 
     expect(fila.finalizar).toHaveBeenCalledOnce();
+  });
+});
+
+/**
+ * Aprovar sozinho é a ação de maior raio de dano do sistema — acusar errado
+ * incomoda alguém que reclama, aprovar errado passa dinheiro adiante e ninguém
+ * revisa o que já está aprovado. Daí os limiares próprios.
+ */
+describe("aprovação automática", () => {
+  const BATE = resultado({
+    veredito: "BATE",
+    conferidos: ["toneladas", "ticket", "data", "placa"],
+  });
+  const comConfianca = (r: ResultadoConferencia, c: number) => ({ ...dados(r), leitura: { confianca: c } });
+
+  it("aprova marcando como conferida, do jeito que um humano marcaria", async () => {
+    const { svc, updateMany, fila } = montar({ autoAprovar: true });
+
+    await svc.aplicar(JOB, comConfianca(BATE, 0.95), false);
+
+    const escrito = updateMany.mock.calls[0][0].data;
+    expect(escrito.status).toBe(StatusViagem.OK);
+    // revisadoEm é o que faz o fechamento preservar a decisão em vez de
+    // sobrescrever o status — é o ponto de aprovar.
+    expect(escrito.revisadoEm).toBeInstanceOf(Date);
+    expect((fila.finalizar as ReturnType<typeof vi.fn>).mock.calls[0][1].acao).toBe("APROVOU");
+  });
+
+  it("deixa registrado que quem aprovou foi o sistema", async () => {
+    // Sem isto a viagem apareceria como revisada e ninguém saberia por quem —
+    // pior do que não aprovar.
+    const { svc, updateMany, prisma } = montar({ autoAprovar: true });
+
+    await svc.aplicar(JOB, comConfianca(BATE, 0.95), false);
+
+    expect(updateMany.mock.calls[0][0].data.conferidoPorIaEm).toBeInstanceOf(Date);
+    const msg = (prisma.viagemMensagem.create as ReturnType<typeof vi.fn>).mock.calls[0][0].data;
+    expect(msg.autorNome).toBe("Conferência automática");
+    expect(msg.acao).toBe("CONFERIU");
+  });
+
+  it("nunca preenche revisadoPor — não há pessoa por trás", async () => {
+    const { svc, updateMany } = montar({ autoAprovar: true });
+    await svc.aplicar(JOB, comConfianca(BATE, 0.95), false);
+    const escrito = updateMany.mock.calls[0][0].data;
+    expect(escrito).not.toHaveProperty("revisadoPor");
+    expect(escrito).not.toHaveProperty("revisadoPorId");
+  });
+
+  it("não aprova com leitura menos confiante que o limiar", async () => {
+    // Pra deixar passar sem olho humano tem que estar mais certo do que pra
+    // pedir uma conferida.
+    const { svc, updateMany } = montar({ autoAprovar: true, confiancaParaAprovar: 0.9 });
+    await svc.aplicar(JOB, comConfianca(BATE, 0.85), false);
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it("não aprova quando poucos campos foram realmente conferidos", async () => {
+    // Viagem em que só o peso deu pra ler não é uma viagem conferida.
+    const { svc, updateMany } = montar({ autoAprovar: true, minCamposParaAprovar: 3 });
+    await svc.aplicar(JOB, comConfianca(resultado({ conferidos: ["toneladas"] }), 0.98), false);
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it("não aprova com incerteza pendurada", async () => {
+    const { svc, updateMany } = montar({ autoAprovar: true });
+    const comIncerteza = resultado({
+      conferidos: ["toneladas", "ticket", "data"],
+      incertezas: [{ campo: "placa", declarado: "A", lido: "B", motivo: "x" }],
+    });
+    await svc.aplicar(JOB, comConfianca(comIncerteza, 0.98), false);
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it("não toca em viagem que um humano já revisou", async () => {
+    const { svc, updateMany } = montar({ autoAprovar: true });
+    await svc.aplicar(JOB, comConfianca(BATE, 0.95), false);
+    expect(updateMany.mock.calls[0][0].where.revisadoEm).toBeNull();
+  });
+
+  it("desligada, não aprova nada", async () => {
+    const { svc, updateMany } = montar({ autoAprovar: false });
+    await svc.aplicar(JOB, comConfianca(BATE, 0.99), false);
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it("em modo sombra não aprova nem com tudo ligado", async () => {
+    const { svc, updateMany } = montar({ autoAprovar: true });
+    await svc.aplicar(JOB, comConfianca(BATE, 0.99), true);
+    expect(updateMany).not.toHaveBeenCalled();
   });
 });

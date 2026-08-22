@@ -1694,6 +1694,16 @@ model Viagem {
   /// (preserva a decisão manual). Exclusivo do fluxo de pré-validação — "Aceitar
   /// km" (km atípico) usa kmAceitoEm, não este campo.
   revisadoEm              DateTime?
+  /// Quando a conferência AUTOMÁTICA aprovou esta viagem.
+  ///
+  /// Preenchido junto de `revisadoEm` (com `revisadoPorId` nulo, porque não há
+  /// User por trás). É o que deixa a tela dizer em voz alta que quem aprovou
+  /// foi o sistema — sem isso a viagem apareceria como "revisada" e ninguém
+  /// saberia por quem, o que é pior que não aprovar.
+  ///
+  /// Também é por aqui que se auditam as aprovações automáticas depois, e que
+  /// dá pra desfazer em lote se a calibragem se mostrar errada.
+  conferidoPorIaEm        DateTime?
   revisadoPor             User?              @relation("RevisouViagem", fields: [revisadoPorId], references: [id], onDelete: SetNull)
   revisadoPorId           String?
   /// Texto obrigatório quando status foi marcado DIVERGENTE via pré-validação.

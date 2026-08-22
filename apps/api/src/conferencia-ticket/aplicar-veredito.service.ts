@@ -9,23 +9,32 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { PushService } from "../push/push.service";
 import { ConferenciaFilaService } from "./conferencia-fila.service";
+import { ConferenciaConfig } from "./conferencia.config";
 import { resumirConferencia, type ResultadoConferencia } from "../common/conferencia-ticket";
 
 /**
  * O que fazer com o veredito.
  *
- * Três regras governam este arquivo, e as três existem por motivo caro:
+ * Quatro regras governam este arquivo, e as quatro existem por motivo caro:
  *
- * 1. **O robô nunca escreve `revisadoEm`/`revisadoPor`.** Esse campo é o que
- *    faz o FechamentoProcessor parar de sobrescrever o status, e exige um User
- *    de verdade. Um robô carimbando ali congela a viagem contra o match e ainda
- *    mente no painel sobre quem revisou. Por isso este serviço reusa as PEÇAS
- *    do `preValidar` (chat + push), nunca o método.
+ * 1. **`revisadoEm` só é escrito ao APROVAR, e sempre junto de
+ *    `conferidoPorIaEm`.** Preencher `revisadoEm` é o que faz o
+ *    FechamentoProcessor preservar a decisão em vez de sobrescrever o status —
+ *    exatamente o que se quer numa viagem já conferida. Mas sozinho ele diria
+ *    "alguém revisou" sem dizer quem, o que é pior que não aprovar; o segundo
+ *    campo é o que deixa a tela falar em voz alta que foi o sistema.
+ *    Ao marcar divergência, `revisadoEm` NÃO é tocado: ali a decisão ainda é de
+ *    gente. E `revisadoPor` nunca é preenchido — não há User por trás.
  *
- * 2. **Só `DIVERGE` chega ao motorista.** `INCERTO` para no painel. Nunca se
+ * 2. **Aprovar exige mais certeza que acusar.** Acusar errado incomoda um
+ *    motorista honesto, e ele reclama; aprovar errado passa dinheiro errado
+ *    adiante e ninguém revisa o que já está aprovado. Por isso a aprovação tem
+ *    limiar próprio, mínimo de campos conferidos e nasce desligada.
+ *
+ * 3. **Só `DIVERGE` chega ao motorista.** `INCERTO` para no painel. Nunca se
  *    cobra alguém na estrada por causa de uma leitura duvidosa.
  *
- * 3. **Modo sombra é o padrão.** Enquanto ele estiver ligado, nada disso é
+ * 4. **Modo sombra é o padrão.** Enquanto ele estiver ligado, nada disso é
  *    escrito: o veredito é gravado e mais nada. É assim que dá pra comparar o
  *    robô com o conferente humano antes de deixar ele agir.
  */
@@ -37,6 +46,7 @@ export class AplicarVereditoService {
     private readonly prisma: PrismaService,
     private readonly fila: ConferenciaFilaService,
     private readonly push: PushService,
+    private readonly config: ConferenciaConfig,
   ) {}
 
   async aplicar(
@@ -52,12 +62,13 @@ export class AplicarVereditoService {
     modoSombra: boolean,
   ): Promise<void> {
     const { resultado } = dados;
-    const acao = modoSombra ? "NENHUMA" : await this.agir(job, resultado);
+    const confianca = (dados.leitura as { confianca?: number })?.confianca ?? 0;
+    const acao = modoSombra ? "NENHUMA" : await this.agir(job, resultado, confianca);
 
     await this.fila.finalizar(job, {
       status: StatusConferenciaTicket.CONCLUIDA,
       veredito: resultado.veredito,
-      confianca: (dados.leitura as { confianca?: number })?.confianca ?? null,
+      confianca,
       leitura: (dados.leitura ?? {}) as Prisma.InputJsonValue,
       divergencias: resultado.divergencias as unknown as Prisma.InputJsonValue,
       incertezas: resultado.incertezas as unknown as Prisma.InputJsonValue,
@@ -84,13 +95,15 @@ export class AplicarVereditoService {
   }
 
   /** Executa o desfecho. Só é chamado fora do modo sombra. */
-  private async agir(job: ConferenciaTicket, r: ResultadoConferencia): Promise<string> {
-    if (r.veredito === "BATE" || r.veredito === "NAO_APLICAVEL") {
-      // De propósito NÃO marca a viagem como OK. Auto-aprovar sem `revisadoEm`
-      // faria o FechamentoProcessor sobrescrever o status depois; e escrever
-      // `revisadoEm` seria o robô assinando no lugar de um humano. O selo de
-      // "conferido pela IA" vem da própria tabela de conferência, no painel.
-      return "NENHUMA";
+  private async agir(
+    job: ConferenciaTicket,
+    r: ResultadoConferencia,
+    confianca: number,
+  ): Promise<string> {
+    if (r.veredito === "NAO_APLICAVEL") return "NENHUMA";
+
+    if (r.veredito === "BATE") {
+      return this.aprovarSeCabivel(job, r, confianca);
     }
 
     if (r.veredito === "INCERTO") {
@@ -104,6 +117,67 @@ export class AplicarVereditoService {
 
     await this.avisarMotorista(job, r);
     return "AVISOU_MOTORISTA";
+  }
+
+  /**
+   * Aprova a viagem que confere — mesma marca que a conferência humana deixa.
+   *
+   * `revisadoEm` preenchido é o que faz o FechamentoProcessor preservar a
+   * decisão em vez de sobrescrever o status; é o comportamento certo pra uma
+   * viagem já conferida. `revisadoPorId` fica nulo, porque não há pessoa por
+   * trás, e `conferidoPorIaEm` diz em voz alta quem foi — sem isso a viagem
+   * apareceria como revisada e ninguém saberia por quem.
+   *
+   * Três travas, porque aprovar errado é mais silencioso que acusar errado:
+   * leitura tem que estar bem confiante, um número mínimo de campos tem que ter
+   * sido realmente conferido, e nada de incerteza pendurada.
+   */
+  private async aprovarSeCabivel(
+    job: ConferenciaTicket,
+    r: ResultadoConferencia,
+    confianca: number,
+  ): Promise<string> {
+    if (!this.config.autoAprovar) return "NENHUMA";
+    if (confianca < this.config.confiancaParaAprovar) return "NENHUMA";
+    if (r.conferidos.length < this.config.minCamposParaAprovar) return "NENHUMA";
+    if (r.incertezas.length > 0 || r.divergencias.length > 0) return "NENHUMA";
+
+    const alterou = await this.prisma.viagem.updateMany({
+      where: {
+        id: job.viagemId,
+        // Só toca no que ainda está esperando conferência. Se um humano mexeu
+        // no meio, nada acontece.
+        status: { in: [StatusViagem.ENVIADA, StatusViagem.AJUSTADA] },
+        revisadoEm: null,
+      },
+      data: {
+        status: StatusViagem.OK,
+        revisadoEm: new Date(),
+        conferidoPorIaEm: new Date(),
+        motivoStatus: null,
+        tipoDivergencia: null,
+      },
+    });
+    if (alterou.count === 0) return "NENHUMA";
+
+    // Fica registrado no chat da viagem: quem abrir depois vê que foi o sistema
+    // e com base em quê, sem precisar caçar noutra tela.
+    try {
+      await this.prisma.viagemMensagem.create({
+        data: {
+          viagemId: job.viagemId,
+          autor: "ADMIN",
+          usuarioId: null,
+          autorNome: "Conferência automática",
+          texto: `Confere com o documento (${r.conferidos.length} campos verificados, leitura ${Math.round(confianca * 100)}%).`,
+          acao: "CONFERIU",
+        },
+      });
+    } catch {
+      /* o registro no chat é conveniência; a aprovação já está gravada */
+    }
+
+    return "APROVOU";
   }
 
   private async moverParaConferencia(viagemId: string): Promise<void> {

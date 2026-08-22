@@ -1756,6 +1756,9 @@ const CAMPOS_IGNORADOS_NOTIF = new Set([
   "motoristaId",
   "revisadoEm",
   "revisadoPorId",
+  // Carimbo de que quem aprovou foi a conferência automática. Não é edição de
+  // dado da viagem — virar linha de diff num push pro motorista seria ruído.
+  "conferidoPorIaEm",
   "lat",
   "lng",
   "iniciadoEm",

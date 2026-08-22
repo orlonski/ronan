@@ -46,6 +46,41 @@ export class ConferenciaConfig {
     return this.bool("CONFERENCIA_MODO_SOMBRA", true);
   }
 
+  /**
+   * Aprovar sozinho a viagem que confere — marcando como conferida, do jeito
+   * que um humano marcaria.
+   *
+   * É a ação de maior raio de dano do sistema: aprovar errado deixa passar
+   * viagem torta pro fechamento, e ninguém revisa o que já está aprovado.
+   * Nasce DESLIGADA e só faz sentido depois de olhar a taxa de acerto real em
+   * modo sombra.
+   *
+   * Aprovar não é o contrário de acusar: acusar errado incomoda um motorista
+   * honesto, aprovar errado passa dinheiro errado adiante sem ninguém ver.
+   */
+  get autoAprovar(): boolean {
+    return this.bool("CONFERENCIA_AUTO_APROVAR", false);
+  }
+
+  /**
+   * Confiança mínima da leitura pra aprovar sozinho — mais alta que a de
+   * avisar, de propósito: pra deixar passar sem olho humano, tem que estar bem
+   * mais certo do que pra pedir uma conferida.
+   */
+  get confiancaParaAprovar(): number {
+    return this.num("CONFERENCIA_CONFIANCA_APROVAR", 0.9, 0.5, 1);
+  }
+
+  /**
+   * Quantos campos precisam ter sido conferidos pra valer aprovação.
+   *
+   * Sem isto, uma viagem em que só o peso deu pra ler seria "aprovada" com um
+   * campo — e o resto passaria sem ninguém olhar.
+   */
+  get minCamposParaAprovar(): number {
+    return this.num("CONFERENCIA_MIN_CAMPOS_APROVAR", 3, 1, 6);
+  }
+
   /** Quantas conferências ao mesmo tempo no processo. */
   get concorrencia(): number {
     return this.num("CONFERENCIA_CONCORRENCIA", 2, 1, 10);
@@ -97,6 +132,9 @@ export class ConferenciaConfig {
         concorrencia: this.concorrencia,
         intervaloMs: this.intervaloMs,
         segundaOpiniao: this.modeloSegundaOpiniao || "desligada",
+        autoAprovar: this.autoAprovar
+          ? `sim (confiança ≥ ${this.confiancaParaAprovar}, ≥ ${this.minCamposParaAprovar} campos)`
+          : "não",
       }),
     );
   }

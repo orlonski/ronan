@@ -206,6 +206,8 @@ type ViagemDetalhe = {
   /** Regra de mínimo por faixa que casou (empresa+material+faixa). Null = nenhuma. */
   regraMinimo?: RegraMinimo | null;
   revisadoEm: string | null;
+  /** Preenchido quando quem aprovou foi a conferência automática. */
+  conferidoPorIaEm: string | null;
   revisadoPor: { id: string; nome: string } | null;
   motivoStatus: string | null;
   ocrCampos: string[];
@@ -1036,7 +1038,11 @@ export default function ViagemDetalhePage({
                       {v.status === "OK" ? "Validada" : "Divergente"}
                     </Badge>
                     <span className="ml-2 text-muted-foreground">
-                      por {v.revisadoPor?.nome ?? "—"} em {fmtDataHoraBR(v.revisadoEm)}
+                      {/* Sem dizer que foi automático, a viagem apareceria como
+                          revisada e ninguém saberia por quem — pior que não
+                          aprovar. */}
+                      por {v.conferidoPorIaEm ? "conferência automática" : (v.revisadoPor?.nome ?? "—")} em{" "}
+                      {fmtDataHoraBR(v.revisadoEm)}
                     </span>
                   </p>
                   {v.motivoStatus && (
