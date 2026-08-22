@@ -22,6 +22,20 @@ import { z } from "zod";
  * numa rota de código deixa o motorista sem conseguir entrar no app.
  */
 
+/**
+ * Como a plataforma se apresenta nas mensagens de WhatsApp.
+ *
+ * Até 22/08/2026 as mensagens levavam o nome da TRANSPORTADORA (`conta.nome`),
+ * pra o motorista que roda pra duas saber de qual era cada uma. O dono decidiu
+ * o contrário: quem assina é a plataforma, sempre.
+ *
+ * Consequência conhecida e aceita: motorista com cadastro em duas empresas
+ * recebe às 20h dois resumos com o MESMO cabeçalho e números diferentes.
+ * Existe em um lugar só justamente pra essa decisão poder ser revista de uma
+ * vez, sem caçar string por serviço.
+ */
+export const NOME_PLATAFORMA = "Movatruck";
+
 export const PROVEDORES_WHATSAPP = ["evolution", "meta"] as const;
 export type ProvedorWhatsapp = (typeof PROVEDORES_WHATSAPP)[number];
 

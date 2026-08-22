@@ -6,7 +6,9 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { randomInt } from "node:crypto";
-import { formatCpf, type CadastroMotoristaInput, type PlacaInput } from "@ronan/shared-types";
+import { formatCpf, type CadastroMotoristaInput, type PlacaInput,
+  NOME_PLATAFORMA,
+} from "@ronan/shared-types";
 import { comConta, comoSistema, contaIdAtual } from "../common/conta/conta-context";
 import { normalizarCodigoConvite } from "../admin/contas/codigo-convite";
 import { PrismaService } from "../prisma/prisma.service";
@@ -337,18 +339,14 @@ export class CadastroMotoristaService {
     // O WhatsApp exige número internacional (DDI 55). O telefone do cadastro vem
     // só com DDD (ex: 41999998888) — sem normalizar, dá 400 no envio.
     const numero = SessaoService.normalizar(telefone);
-    // O nome vem da conta: o motorista da empresa nova não pode receber um
-    // código "da Schaba", que pra ele não quer dizer nada.
-    const conta = await this.prisma.conta.findUnique({
-      where: { id: contaIdAtual() },
-      select: { nome: true },
-    });
-    const nomeConta = conta?.nome ?? "no app";
+    // Quem assina o código é a PLATAFORMA, não a transportadora — decisão do
+    // dono em 22/08/2026. Na Meta o corpo é fixo e nem carrega nome nenhum;
+    // isto vale pro texto do histórico e pro dia em que houver texto livre.
     await this.envio.enviarOuFalhar({
       destino: { tipo: "TELEFONE", numero },
       rota: "OTP_CADASTRO",
-      texto: `Seu código de cadastro ${nomeConta} é ${codigo}. Vale por ${CODIGO_TTL_MIN} minutos. Se não foi você, ignore.`,
-      params: [nomeConta, codigo, String(CODIGO_TTL_MIN)],
+      texto: `Seu código de cadastro ${NOME_PLATAFORMA} é ${codigo}. Vale por ${CODIGO_TTL_MIN} minutos. Se não foi você, ignore.`,
+      params: [NOME_PLATAFORMA, codigo, String(CODIGO_TTL_MIN)],
     });
   }
 }

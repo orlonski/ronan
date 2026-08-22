@@ -5,7 +5,9 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
-import { achatarParam } from "@ronan/shared-types";
+import { achatarParam,
+  NOME_PLATAFORMA,
+} from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { EnvioWhatsappService } from "../../whatsapp/envio/envio-whatsapp.service";
 import { SessaoService } from "../../whatsapp/sessao.service";
@@ -188,13 +190,6 @@ export class ResumoService {
     chaves: Set<string>,
   ): Promise<{ texto: string; params: string[] }> {
     const [y, m, dia] = ymdSaoPaulo();
-
-    // O título leva o nome da EMPRESA, não o da plataforma: quem lê é o dono da
-    // transportadora, e o resumo é dos números dele.
-    const conta = await this.prisma.conta.findUnique({
-      where: { id: contaIdAtual() },
-      select: { nome: true },
-    });
 
     // Colunas @db.Date (Viagem.data): fronteiras em meia-noite UTC da data BR.
     const hoje00 = inicioDoDiaData();
@@ -453,7 +448,8 @@ export class ResumoService {
     const has = (c: string) => chaves.has(c);
 
     // Cabeçalho: título + data com dia da semana. A régua entra no join.
-    const tituloResumo = conta?.nome ? `RESUMO ${conta.nome.toUpperCase()}` : "RESUMO";
+    // Quem assina é a plataforma, não a transportadora — ver NOME_PLATAFORMA.
+    const tituloResumo = `RESUMO ${NOME_PLATAFORMA.toUpperCase()}`;
     const blocos: string[] = [`📊 *${tituloResumo}*\n🗓️ ${dataLabel}`];
 
     if (has("motoristas"))
@@ -586,7 +582,7 @@ export class ResumoService {
     ].filter(Boolean);
 
     const params = [
-      conta?.nome ?? "Movatruck",
+      NOME_PLATAFORMA,
       dataLabel,
       [
         `${fmt(viHoje)} viagem(ns)`,

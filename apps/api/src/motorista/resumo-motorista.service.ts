@@ -3,7 +3,7 @@ import { Cron } from "@nestjs/schedule";
 import { PrismaService } from "../prisma/prisma.service";
 import { EnvioWhatsappService } from "../whatsapp/envio/envio-whatsapp.service";
 import { SessaoService } from "../whatsapp/sessao.service";
-import { achatarParam } from "@ronan/shared-types";
+import { achatarParam, NOME_PLATAFORMA } from "@ronan/shared-types";
 import { inicioDoDiaData, ymdSaoPaulo } from "../common/timezone";
 import { paraCadaConta } from "../common/conta/para-cada-conta";
 import { comoSistema } from "../common/conta/conta-context";
@@ -85,21 +85,13 @@ export class ResumoMotoristaService {
         // exceção consciente à regra de "só a empresa ativa": segurar o resumo
         // da outra sumiria com pendência de peso que é dele e ele precisa
         // resolver. Push, esse sim, só chega da empresa que está com o aparelho.
-        const empresa = await this.nomeSeMultiEmpresa(m.cpf, m.conta.nome);
-        await this.enviarWhatsapp(m.telefone, this.montar(dados, m.conta.nome, !!empresa));
+        await this.enviarWhatsapp(m.telefone, this.montar(dados));
       } catch (err) {
         this.log.warn(`resumo do motorista ${m.id} falhou: ${(err as Error).message}`);
       }
     }
   }
 
-  /** O nome da empresa, só se o CPF tiver cadastro em mais de uma. */
-  private async nomeSeMultiEmpresa(cpf: string, nome: string): Promise<string | null> {
-    const quantos = await comoSistema(() =>
-      this.prisma.motorista.count({ where: { cpf, ativo: true } }),
-    );
-    return quantos > 1 ? nome : null;
-  }
 
   /**
    * Disparo manual (botão "Enviar resumo agora" no painel). Sempre monta e envia
@@ -131,8 +123,7 @@ export class ResumoMotoristaService {
     }
 
     const dados = await this.coletar(m.id);
-    // Disparo manual é sempre de uma conta só: o texto não repete o nome dela.
-    await this.enviarWhatsapp(m.telefone, this.montar(dados, m.conta.nome, false));
+    await this.enviarWhatsapp(m.telefone, this.montar(dados));
     return { enviado: true };
   }
 
@@ -170,17 +161,13 @@ export class ResumoMotoristaService {
    * São duas representações do MESMO resumo, e as duas continuam existindo de
    * propósito: o texto é o que fica no histórico e o que sai se um template for
    * reprovado; os params são o que a Meta aceita. O corpo do template é fixo
-   * ("Seu dia na {{1}}"), então `nomeConta` vai SEMPRE no parâmetro, mesmo
-   * quando o texto o omite — parâmetro vazio a Meta recusa.
+   * ("Seu dia na {{1}}"), e quem vai no parâmetro é a PLATAFORMA — decisão do
+   * dono em 22/08/2026, ver `NOME_PLATAFORMA`.
    *
    * As pendências, que no texto são bullets em linhas separadas, viram uma
    * linha só com " · ": parâmetro de template não aceita quebra de linha.
    */
-  private montar(
-    d: ResumoDados,
-    nomeConta: string,
-    mostrarEmpresa: boolean,
-  ): { texto: string; params: string[] } {
+  private montar(d: ResumoDados): { texto: string; params: string[] } {
     const [y, m, dia] = ymdSaoPaulo();
     const ds = DIAS_SEMANA[new Date(Date.UTC(y, m - 1, dia)).getUTCDay()];
     const dataBr = `${String(dia).padStart(2, "0")}/${String(m).padStart(2, "0")}`;
@@ -200,12 +187,7 @@ export class ResumoMotoristaService {
     }
 
     const linhas: string[] = [
-      // O nome da empresa só entra pra quem roda pra mais de uma: sem ele, duas
-      // mensagens iguais às 20h e o motorista sem saber qual é qual. Pra quem
-      // tem uma empresa só, a mensagem fica idêntica à de sempre.
-      mostrarEmpresa
-        ? `🚛 *Seu dia na ${nomeConta}* — ${ds}, ${dataBr}`
-        : `🚛 *Seu dia* — ${ds}, ${dataBr}`,
+      `🚛 *Seu dia na ${NOME_PLATAFORMA}* — ${ds}, ${dataBr}`,
       "",
       "Hoje você fez:",
       ...feitos.map((f) => `• ${f}`),
@@ -221,7 +203,7 @@ export class ResumoMotoristaService {
     linhas.push("", `No mês: ${plural(d.viagensMes, "viagem", "viagens")}`, "Bom descanso! 💪");
 
     const params = [
-      nomeConta,
+      NOME_PLATAFORMA,
       `${ds}, ${dataBr}`,
       feitos.join(" · "),
       pendencias.length > 0

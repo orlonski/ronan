@@ -10,7 +10,7 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { AcaoAuditoria } from "@prisma/client";
-import { achatarParam } from "@ronan/shared-types";
+import { achatarParam, NOME_PLATAFORMA } from "@ronan/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditoriaService } from "../auditoria/auditoria.service";
 import { UploadsService } from "../uploads/uploads.service";
@@ -360,13 +360,6 @@ export class CompartilhamentoService implements OnModuleInit {
     });
     if (!v) throw new NotFoundException("Viagem não encontrada");
 
-    // Assina com o nome da EMPRESA que prestou o serviço, não com o da
-    // plataforma — quem recebe é o cliente dela, e o comprovante é dela.
-    const conta = await this.prisma.conta.findUnique({
-      where: { id: contaIdAtual() },
-      select: { nome: true },
-    });
-
     const linhas: string[] = [];
     if (mensagemExtra?.trim()) linhas.push(mensagemExtra.trim(), "");
 
@@ -392,7 +385,8 @@ export class CompartilhamentoService implements OnModuleInit {
 
     linhas.push("", "Ver comprovante:", this.urlDoToken(token), "");
     linhas.push(`O link fica disponível até ${dataHoraBR(expiraEm)}.`);
-    if (conta?.nome) linhas.push(conta.nome);
+    // Assina a plataforma, não a transportadora — ver NOME_PLATAFORMA.
+    linhas.push(NOME_PLATAFORMA);
 
     /**
      * Os mesmos dados na forma que a Meta aceita: uma linha por parâmetro,
@@ -407,7 +401,7 @@ export class CompartilhamentoService implements OnModuleInit {
     const params = [
       [v.data ? dataBR(v.data) : null, trecho].filter(Boolean).join(" · ") ||
         "Comprovante de viagem",
-      detalhes.length > 0 ? detalhes.join(" · ") : (conta?.nome ?? "Movatruck"),
+      detalhes.length > 0 ? detalhes.join(" · ") : NOME_PLATAFORMA,
       mensagemExtra?.trim() || "Qualquer dúvida, é só chamar.",
       dataHoraBR(expiraEm),
       token,
