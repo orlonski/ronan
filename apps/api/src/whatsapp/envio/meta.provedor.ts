@@ -205,6 +205,21 @@ export class MetaProvedor implements ProvedorWhatsappClient {
   }
 
   /**
+   * Os templates que a Meta REALMENTE tem, com nome e idioma exatos.
+   *
+   * Existe porque a tela da Meta mostrou "Portuguese (BR) · Ativo" enquanto o
+   * envio morria com 132001 dizendo que o template não existe em pt_BR. Uma das
+   * duas está errada, e só a API resolve o impasse.
+   *
+   * O `wabaId` vem por parâmetro, não de env: é diagnóstico, e amarrar a mais
+   * uma variável de ambiente só pra depurar atrasaria o próprio diagnóstico.
+   */
+  async listarTemplates(wabaId: string): Promise<Record<string, unknown>> {
+    const campos = "name,language,status,category,components";
+    return this.chamar(`/${wabaId}/message_templates?fields=${campos}&limit=100`, "GET");
+  }
+
+  /**
    * Uma chamada à Graph API que devolve o corpo CRU, dando certo ou não.
    *
    * Diferente de `postar`, que traduz pro contrato de envio: aqui quem chama

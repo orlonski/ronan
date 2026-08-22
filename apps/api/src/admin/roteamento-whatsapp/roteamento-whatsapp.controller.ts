@@ -97,6 +97,12 @@ export class AdminRoteamentoWhatsappController {
    * O que a Meta diz sobre o número. Responde "está registrado?" sem depender
    * do rótulo do console dela, que já mostrou os dois estados errados.
    */
+  /** O que a Meta tem cadastrado de template, contra o que o código espera. */
+  @Get("templates-meta")
+  templatesMeta(@Query("wabaId") wabaId: string) {
+    return this.service.templatesMeta(wabaId);
+  }
+
   @Get("status-numero")
   statusNumero() {
     return this.service.statusNumero();

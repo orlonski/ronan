@@ -4,6 +4,7 @@ import {
   provedorAtendeRota,
   ROTAS_DA_PLATAFORMA,
   ROTAS_WHATSAPP,
+  TEMPLATES_WHATSAPP,
   templateWhatsapp,
   type AtualizarRoteamentoWhatsappInput,
   type ProvedorWhatsapp,
@@ -195,6 +196,30 @@ export class AdminRoteamentoWhatsappService {
     // Vale pra todas as contas, então o cache de todas precisa cair.
     this.roteador.invalidarPlataforma();
     return this.pegar();
+  }
+
+  /**
+   * O que a Meta tem cadastrado, confrontado com o que o código espera.
+   *
+   * A comparação é o ponto: nome igual com idioma diferente é justamente o que
+   * produz 132001, e é invisível olhando as duas listas separadas.
+   */
+  async templatesMeta(wabaId: string) {
+    const r = (await this.meta.listarTemplates(wabaId)) as {
+      ok?: boolean;
+      resposta?: { data?: { name: string; language: string; status: string }[] };
+    };
+    const naMeta = r.resposta?.data ?? [];
+    const esperados = Object.entries(TEMPLATES_WHATSAPP).map(([rota, def]) => {
+      const achado = naMeta.find((t) => t.name === def!.nome);
+      return {
+        rota,
+        esperado: `${def!.nome} / ${def!.idioma}`,
+        naMeta: achado ? `${achado.name} / ${achado.language} (${achado.status})` : "NÃO EXISTE",
+        bate: !!achado && achado.language === def!.idioma && achado.status === "APPROVED",
+      };
+    });
+    return { bruto: r, esperados };
   }
 
   /** O que a Meta diz sobre o número configurado no servidor. */
