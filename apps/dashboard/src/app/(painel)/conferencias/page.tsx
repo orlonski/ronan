@@ -24,7 +24,7 @@ type Conferencia = {
   id: string;
   viagemId: string;
   status: string;
-  veredito: "BATE" | "DIVERGE" | "INCERTO" | "NAO_APLICAVEL" | null;
+  veredito: "BATE" | "DIVERGE" | "INCERTO" | "ILEGIVEL" | "NAO_APLICAVEL" | null;
   confianca: number | null;
   divergencias: Divergencia[] | null;
   incertezas: Incerteza[] | null;
@@ -67,6 +67,7 @@ const VEREDITO = {
   BATE: { rotulo: "Confere", cor: "border-emerald-200 bg-emerald-50 text-emerald-800", icone: CheckCircle2 },
   DIVERGE: { rotulo: "Diverge", cor: "border-red-200 bg-red-50 text-red-800", icone: AlertTriangle },
   INCERTO: { rotulo: "Revisar", cor: "border-amber-200 bg-amber-50 text-amber-900", icone: Eye },
+  ILEGIVEL: { rotulo: "Foto ilegível", cor: "border-orange-200 bg-orange-50 text-orange-800", icone: Eye },
   NAO_APLICAVEL: { rotulo: "Sem o que conferir", cor: "border-slate-200 bg-slate-50 text-slate-600", icone: Eye },
 } as const;
 
@@ -389,6 +390,8 @@ function LinhaConferencia({ c }: { c: Conferencia }) {
 
 function rotuloAcao(acao: string): string {
   if (acao === "AVISOU_MOTORISTA") return "motorista avisado";
+  if (acao === "PEDIU_FOTO") return "pedi outra foto ao motorista";
+  if (acao === "APROVOU") return "aprovada automaticamente";
   if (acao === "FILA_REVISAO") return "mandada pra revisão";
   return acao;
 }

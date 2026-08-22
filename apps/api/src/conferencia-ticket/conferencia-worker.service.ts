@@ -190,10 +190,21 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
       throw new FalhaInfra(`leitura: ${(err as Error).message}`);
     }
 
+    // Resposta que não parseou é defeito de execução, não resultado: retenta.
+    // Antes isso virava "leitura 0%" e ia parar na fila de revisão junto com
+    // foto borrada — dois problemas diferentes no mesmo balde, e nenhum dos
+    // dois resolvido.
+    if (primeira.falha === "resposta-invalida") {
+      throw new FalhaInfra("o modelo respondeu fora do formato pedido");
+    }
+
     if (!primeira.legivel) {
       return {
         resultado: {
-          veredito: "INCERTO",
+          // Foto que não dá pra ler tem desfecho próprio: quem resolve é o
+          // motorista mandando outra, não um conferente olhando a mesma foto
+          // ruim de novo.
+          veredito: "ILEGIVEL",
           divergencias: [],
           incertezas: [],
           conferidos: [],

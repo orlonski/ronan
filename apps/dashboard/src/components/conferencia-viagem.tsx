@@ -14,7 +14,7 @@ type Incerteza = { campo: string; declarado: string; lido: string; motivo: strin
 
 type Conferencia = {
   id: string;
-  veredito: "BATE" | "DIVERGE" | "INCERTO" | "NAO_APLICAVEL" | null;
+  veredito: "BATE" | "DIVERGE" | "INCERTO" | "ILEGIVEL" | "NAO_APLICAVEL" | null;
   confianca: number | null;
   divergencias: Divergencia[] | null;
   incertezas: Incerteza[] | null;
@@ -60,6 +60,8 @@ export function ConferenciaViagemCard({ viagemId }: { viagemId: string }) {
       ? { rotulo: "Confere com o ticket", cor: "border-emerald-300 bg-emerald-50", texto: "text-emerald-900", Icone: CheckCircle2 }
       : data.veredito === "DIVERGE"
         ? { rotulo: "Não bate com o ticket", cor: "border-red-300 bg-red-50", texto: "text-red-900", Icone: AlertTriangle }
+        : data.veredito === "ILEGIVEL"
+        ? { rotulo: "Foto ilegível — pedi outra ao motorista", cor: "border-amber-300 bg-amber-50", texto: "text-amber-900", Icone: Eye }
         : data.veredito === "INCERTO"
           ? { rotulo: "Precisa de um olho humano", cor: "border-amber-300 bg-amber-50", texto: "text-amber-900", Icone: Eye }
           : { rotulo: "Não havia o que conferir", cor: "border-border bg-muted/30", texto: "", Icone: Eye };

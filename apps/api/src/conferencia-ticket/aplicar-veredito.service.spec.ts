@@ -266,3 +266,52 @@ describe("aprovação automática", () => {
     expect(updateMany).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * "Leitura 0%" juntava três coisas que pedem desfechos opostos. Separadas:
+ * resposta fora do formato retenta (é defeito de execução), foto ilegível pede
+ * foto nova ao motorista, e leitura fraca porém aproveitável vai pra revisão.
+ */
+describe("foto que não dá pra ler", () => {
+  const ILEGIVEL = resultado({ veredito: "ILEGIVEL", conferidos: [] });
+
+  it("pede outra foto em vez de mandar pra fila de revisão", async () => {
+    // Nenhum conferente resolve olhando a mesma foto borrada.
+    const { svc, updateMany, fila } = montar();
+
+    await svc.aplicar(JOB, dados(ILEGIVEL), false);
+
+    expect(updateMany.mock.calls[0][0].data.tipoDivergencia).toBe("FOTO_ILEGIVEL");
+    expect((fila.finalizar as ReturnType<typeof vi.fn>).mock.calls[0][1].acao).toBe("PEDIU_FOTO");
+  });
+
+  it("usa o card que já existe nos dois apps, sem precisar de tela nova", async () => {
+    // FOTO_ILEGIVEL é o único TipoDivergencia com card e botão de tirar outra
+    // foto prontos no nativo E no PWA.
+    const { svc, updateMany, push } = montar();
+    await svc.aplicar(JOB, dados(ILEGIVEL), false);
+    expect(updateMany.mock.calls[0][0].data.status).toBe(StatusViagem.DIVERGENTE);
+    expect(push.enviar).toHaveBeenCalledOnce();
+  });
+
+  it("não marca revisadoEm — a viagem continua pendente de decisão", async () => {
+    const { svc, updateMany } = montar();
+    await svc.aplicar(JOB, dados(ILEGIVEL), false);
+    expect(updateMany.mock.calls[0][0].data).not.toHaveProperty("revisadoEm");
+  });
+
+  it("o pedido fala como quem pede favor, não como quem cobra", async () => {
+    const { svc, push } = montar();
+    await svc.aplicar(JOB, dados(ILEGIVEL), false);
+    const enviado = (push.enviar as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(enviado.corpo).toMatch(/dá pra mandar outra/i);
+    expect(enviado.corpo).not.toMatch(/errad|incorret|inválid/i);
+  });
+
+  it("em modo sombra não pede nada", async () => {
+    const { svc, updateMany, push } = montar();
+    await svc.aplicar(JOB, dados(ILEGIVEL), true);
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(push.enviar).not.toHaveBeenCalled();
+  });
+});

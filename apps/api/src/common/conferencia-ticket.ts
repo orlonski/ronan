@@ -48,7 +48,17 @@ export type Incerteza = {
   motivo: string;
 };
 
-export type Veredito = "BATE" | "DIVERGE" | "INCERTO" | "NAO_APLICAVEL";
+export type Veredito =
+  | "BATE"
+  | "DIVERGE"
+  | "INCERTO"
+  /**
+   * A foto não dá pra ler. Desfecho próprio porque a saída é outra: nenhum
+   * conferente resolve olhando a mesma foto borrada — quem resolve é o
+   * motorista mandando outra, e pra isso já existe caminho pronto no app.
+   */
+  | "ILEGIVEL"
+  | "NAO_APLICAVEL";
 
 /**
  * O parecer da IA, campo a campo.
@@ -569,6 +579,9 @@ export function decidirVeredito(
 ): Veredito {
   // Nada pra conferir não é sucesso nem falha: é uma viagem que não tinha o que
   // comparar (diária, material sem ticket, foto que não é ticket).
+  //
+  // Foto ilegível NÃO passa por aqui: quem detecta isso é o leitor, e o
+  // desfecho é outro (pedir foto nova). Ver `Veredito`.
   if (conferidos.length === 0) return "NAO_APLICAVEL";
 
   // Leitura ruim invalida qualquer conclusão, inclusive a de que está tudo bem.

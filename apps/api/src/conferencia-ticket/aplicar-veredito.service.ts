@@ -106,6 +106,15 @@ export class AplicarVereditoService {
       return this.aprovarSeCabivel(job, r, confianca);
     }
 
+    if (r.veredito === "ILEGIVEL") {
+      // Aqui o desfecho útil não é chamar um conferente: ele veria a mesma foto
+      // borrada. Quem resolve é o motorista, mandando outra — e pra isso o app
+      // já tem card pronto e endpoint de resposta há tempos (FOTO_ILEGIVEL),
+      // nos dois apps, sem precisar de OTA nem de tela nova.
+      await this.pedirFotoNova(job);
+      return "PEDIU_FOTO";
+    }
+
     if (r.veredito === "INCERTO") {
       // Fila de revisão humana: a viagem passa a "Conferindo" (status que os
       // dois apps já sabem exibir e que o painel já filtra) sem incomodar o
@@ -178,6 +187,64 @@ export class AplicarVereditoService {
     }
 
     return "APROVOU";
+  }
+
+  /**
+   * Pede foto nova ao motorista, pelo caminho que ele já conhece.
+   *
+   * `FOTO_ILEGIVEL` é o único `TipoDivergencia` cujo card existe nos DOIS apps
+   * com botão de tirar outra foto, e cujo endpoint de resposta já devolve a
+   * viagem pra `AJUSTADA` e avisa o painel. Reusar isso é o que torna este
+   * desfecho possível hoje, em vez de virar trabalho de app.
+   *
+   * A foto nova, quando chega, enfileira conferência nova sozinha — o
+   * `adicionarFoto` já faz isso.
+   */
+  private async pedirFotoNova(job: ConferenciaTicket): Promise<void> {
+    const texto =
+      "Não consegui ler o ticket dessa viagem pela foto. Dá pra mandar outra, " +
+      "com o papel todo no quadro e boa luz?";
+
+    const alterou = await this.prisma.viagem.updateMany({
+      where: { id: job.viagemId, status: { in: [StatusViagem.ENVIADA, StatusViagem.AJUSTADA] } },
+      data: {
+        status: StatusViagem.DIVERGENTE,
+        motivoStatus: texto,
+        tipoDivergencia: TipoDivergencia.FOTO_ILEGIVEL,
+        // Sem revisadoEm: a decisão sobre esta viagem continua pendente.
+      },
+    });
+    if (alterou.count === 0) return;
+
+    try {
+      await this.prisma.viagemMensagem.create({
+        data: {
+          viagemId: job.viagemId,
+          autor: "ADMIN",
+          usuarioId: null,
+          autorNome: "Conferência automática",
+          texto,
+          acao: "MARCOU_DIVERGENTE",
+        },
+      });
+      const viagem = await this.prisma.viagem.findUnique({
+        where: { id: job.viagemId },
+        select: { motoristaId: true, motorista: { select: { expoPushToken: true } } },
+      });
+      if (viagem) {
+        await this.push.enviar({
+          motoristaId: viagem.motoristaId,
+          token: viagem.motorista?.expoPushToken ?? "",
+          titulo: "Preciso de outra foto do ticket",
+          corpo: texto,
+          dados: { viagemId: job.viagemId, rota: "foto-ilegivel" },
+          tipo: "viagem-divergente",
+          criadoPorId: null,
+        });
+      }
+    } catch (err) {
+      this.log.warn(`Aviso de foto ilegível falhou: ${(err as Error).message}`);
+    }
   }
 
   private async moverParaConferencia(viagemId: string): Promise<void> {

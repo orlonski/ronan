@@ -130,6 +130,16 @@ export class LeitorTicketService {
     custoUsd: number;
     modelo: string;
     legivel: boolean;
+    /**
+     * Por que a leitura não serviu. `null` quando serviu.
+     *
+     * Existe porque "confiança 0%" juntava três coisas que pedem desfechos
+     * opostos: resposta que não parseou (defeito nosso, retenta), foto que não
+     * dá pra ler (o motorista precisa mandar outra) e leitura fraca mas
+     * aproveitável (humano olha). Tratar as três como a mesma coisa deixava
+     * todas paradas na fila de revisão sem ninguém saber o que fazer.
+     */
+    falha: "resposta-invalida" | "foto-ilegivel" | null;
   }> {
     if (!this.client) throw new Error("ANTHROPIC_API_KEY não configurada");
     const modelo = args.modelo || MODELO_PADRAO;
@@ -184,10 +194,16 @@ export class LeitorTicketService {
           custoUsd: uso.custoUsd ?? 0,
           modelo,
           legivel: false,
+          // Não é foto ruim: o modelo respondeu algo que não é o JSON pedido.
+          // Isso é defeito de execução e merece outra tentativa, não uma
+          // cobrança de foto nova ao motorista.
+          falha: "resposta-invalida",
         };
       }
 
+      const legivel = parsed.legivel !== false;
       return {
+        falha: legivel ? null : "foto-ilegivel",
         julgamento: lerJulgamento(parsed.conferencia),
         lido: {
           tipoDocumento: str(parsed.tipoDocumento),
@@ -201,7 +217,7 @@ export class LeitorTicketService {
         },
         custoUsd: uso.custoUsd ?? 0,
         modelo,
-        legivel: parsed.legivel !== false,
+        legivel,
       };
     } catch (err) {
       this.uso.registrar({

@@ -94,22 +94,22 @@ enum MotivoDivergencia {
 /// no fim do dia, app sem sinal) e não tem como resolver nenhum deles. Ver
 /// `common/divergencias.ts`.
 model ViagemDivergencia {
-  contaId       String            @default("__SEM_CONTA__")
-  conta         Conta             @relation(fields: [contaId], references: [id])
-  id            String            @id @default(uuid())
-  viagem        Viagem            @relation(fields: [viagemId], references: [id], onDelete: Cascade)
-  viagemId      String
-  motivo        MotivoDivergencia
+  contaId        String            @default("__SEM_CONTA__")
+  conta          Conta             @relation(fields: [contaId], references: [id])
+  id             String            @id @default(uuid())
+  viagem         Viagem            @relation(fields: [viagemId], references: [id], onDelete: Cascade)
+  viagemId       String
+  motivo         MotivoDivergencia
   /// Frase pronta pro conferente, em português. Montada no servidor (não vem do
   /// app) pra ficar igual em toda origem.
-  detalhe       String
+  detalhe        String
   /// O que o app tinha mandado: id que não existia, nome/placa do snapshot, erro
   /// HTTP original. É o que permite reconstruir o lançamento na mão.
-  dados         Json?
-  resolvidoEm   DateTime?
-  resolvidoPor  User?             @relation(fields: [resolvidoPorId], references: [id], onDelete: SetNull)
+  dados          Json?
+  resolvidoEm    DateTime?
+  resolvidoPor   User?             @relation(fields: [resolvidoPorId], references: [id], onDelete: SetNull)
   resolvidoPorId String?
-  criadoEm      DateTime          @default(now())
+  criadoEm       DateTime          @default(now())
 
   @@unique([viagemId, motivo])
   @@index([contaId, resolvidoEm])
@@ -319,24 +319,24 @@ enum TipoBlocoFechamento {
 /// conta com esse id, então um insert que escape da trava morre na chave
 /// estrangeira em vez de gravar dado sem dono.
 model Conta {
-  id                  String   @id @default(uuid())
+  id                     String  @id @default(uuid())
   /// Nome comercial, aparece no painel e nas mensagens de WhatsApp.
-  nome                String
+  nome                   String
   /// Identificador curto e estável (lowercase, sem espaço). Vai ser a chave da
   /// landing/subdomínio quando o auto-cadastro entrar.
-  slug                String   @unique
-  cnpj                String?  @unique
-  ativa               Boolean  @default(true)
+  slug                   String  @unique
+  cnpj                   String? @unique
+  ativa                  Boolean @default(true)
   /// Código que o motorista digita no app pra dizer de qual empresa ele é.
   /// Direciona o cadastro, NÃO autoriza: o motorista continua entrando como
   /// PENDENTE_APROVACAO e é a empresa que decide. Por isso código vazado não é
   /// incidente — no máximo um cadastro pra recusar. Trocável pelo painel.
-  codigoConvite       String?  @unique
+  codigoConvite          String? @unique
   /// Se o auto-cadastro de motorista (signup pelo app) cai nesta conta.
   /// O app publicado nas lojas não diz de qual empresa o motorista é, então
   /// alguém precisa ser o destino padrão. Com mais de uma conta marcada, o
   /// signup passa a exigir o `contaSlug` no formulário.
-  permiteAutoCadastro Boolean  @default(false)
+  permiteAutoCadastro    Boolean @default(false)
   /// Esta transportadora exige a FOTO do comprovante no lançamento.
   ///
   /// É política DELA, não do tomador: "aqui todo lançamento tem foto". Por isso
@@ -350,7 +350,7 @@ model Conta {
   ///
   /// O bloqueio de verdade acontece no APP. O backend NUNCA recusa por falta de
   /// foto: recusar mataria item de outbox offline; ele carimba a falta.
-  exigeFotoViagem     Boolean  @default(false)
+  exigeFotoViagem        Boolean @default(false)
   /// Idem pro cupom do posto no abastecimento.
   exigeFotoAbastecimento Boolean @default(false)
 
@@ -364,22 +364,22 @@ model Conta {
   /// Default `true` de propósito, ao contrário do irmão abaixo: o recurso já
   /// está no ar e desligá-lo por omissão numa migration seria tirar do ar em
   /// silêncio algo que hoje funciona.
-  iaLeituraTicket     Boolean  @default(true)
+  iaLeituraTicket Boolean @default(true)
 
   /// Conferência automática do ticket no backend: um worker lê a foto guardada
   /// e confere contra o que o motorista declarou.
   ///
   /// Nasce DESLIGADA — recurso novo que gasta por viagem lançada não se liga
   /// sozinho pra ninguém. Ligar é decisão da plataforma, empresa por empresa.
-  iaConferenciaTicket Boolean  @default(false)
+  iaConferenciaTicket Boolean @default(false)
 
   /// URL pública servida por /publico/contas/:id/logo (com `v` pra furar cache).
-  logoUrl             String?
+  logoUrl     String?
   /// Chave do objeto no MinIO. Separada da URL pra poder apagar a logo antiga.
-  logoKey             String?
-  corPrimaria         String?
-  criadaEm            DateTime @default(now())
-  alteradaEm          DateTime @updatedAt
+  logoKey     String?
+  corPrimaria String?
+  criadaEm    DateTime @default(now())
+  alteradaEm  DateTime @updatedAt
 
   users                         User[]
   papeis                        Papel[]
@@ -485,53 +485,53 @@ model User {
   criadoEm            DateTime  @default(now())
   alteradoEm          DateTime  @updatedAt
 
-  resolucoes                 FechamentoLinha[]
-  envios                     EnvioFechamento[]
-  auditorias                 AuditLog[]
-  resgatesResolvidos         LancamentoResgatado[]
-  layoutsEnvio               LayoutEnvio[]
-  configsTracking            ConfiguracaoTracking[]
-  configsIa                  ConfiguracaoIa[]
-  configsAgente              ConfiguracaoAgente[]
-  configsBuscaLocais         ConfiguracaoBuscaLocais[]
-  configsAvisoGrupo          ConfiguracaoAvisoGrupo[]
-  configsRoteamentoWpp       ConfiguracaoRoteamentoWhatsapp[]
+  resolucoes                  FechamentoLinha[]
+  envios                      EnvioFechamento[]
+  auditorias                  AuditLog[]
+  resgatesResolvidos          LancamentoResgatado[]
+  layoutsEnvio                LayoutEnvio[]
+  configsTracking             ConfiguracaoTracking[]
+  configsIa                   ConfiguracaoIa[]
+  configsAgente               ConfiguracaoAgente[]
+  configsBuscaLocais          ConfiguracaoBuscaLocais[]
+  configsAvisoGrupo           ConfiguracaoAvisoGrupo[]
+  configsRoteamentoWpp        ConfiguracaoRoteamentoWhatsapp[]
   configsRoteamentoPlataforma ConfiguracaoRoteamentoPlataforma[]
-  configsForcaAtualizacao    ConfiguracaoForcaAtualizacao[]
-  configsKmAtipico           ConfiguracaoKmAtipico[]
-  mensagensViagem            ViagemMensagem[]               @relation("MensagensViagem")
-  mensagensChat              MensagemChat[]                 @relation("MensagensChat")
-  mensagensChatRemovidas     MensagemChat[]                 @relation("RemoveuMensagemChat")
-  denunciasChatResolvidas    DenunciaMensagemChat[]         @relation("ResolveuDenunciaChat")
-  whatsappSessao             WhatsappSessao?
-  whatsappConvites           WhatsappConvite[]
-  compartilhamentosCriados   ViagemCompartilhamento[]       @relation("CompartilhouViagem")
-  compartilhamentosRevogados ViagemCompartilhamento[]       @relation("RevogouCompartilhamento")
+  configsForcaAtualizacao     ConfiguracaoForcaAtualizacao[]
+  configsKmAtipico            ConfiguracaoKmAtipico[]
+  mensagensViagem             ViagemMensagem[]                   @relation("MensagensViagem")
+  mensagensChat               MensagemChat[]                     @relation("MensagensChat")
+  mensagensChatRemovidas      MensagemChat[]                     @relation("RemoveuMensagemChat")
+  denunciasChatResolvidas     DenunciaMensagemChat[]             @relation("ResolveuDenunciaChat")
+  whatsappSessao              WhatsappSessao?
+  whatsappConvites            WhatsappConvite[]
+  compartilhamentosCriados    ViagemCompartilhamento[]           @relation("CompartilhouViagem")
+  compartilhamentosRevogados  ViagemCompartilhamento[]           @relation("RevogouCompartilhamento")
 
   // Backreferences pra rastreamento "Cadastrado por": cada recurso admin
   // tem `criadoPorId` opcional → User. Listas inversas necessárias pelo Prisma.
   // Escopo de acesso (ver acessoGlobal). Vazio + acessoGlobal=false = vê nada.
   transportadoras UsuarioTransportadora[]
 
-  clientesCriados        Cliente[]          @relation("CriouCliente")
-  materiaisCriados       Material[]         @relation("CriouMaterial")
-  tiposServicoCriados    TipoServico[]      @relation("CriouTipoServico")
+  clientesCriados        Cliente[]             @relation("CriouCliente")
+  materiaisCriados       Material[]            @relation("CriouMaterial")
+  tiposServicoCriados    TipoServico[]         @relation("CriouTipoServico")
   modalidadesCriadas     ModalidadeMotorista[] @relation("CriouModalidadeMotorista")
-  veiculosCriados        Veiculo[]          @relation("CriouVeiculo")
-  transportadorasCriadas Transportadora[]   @relation("CriouTransportadora")
-  motoristasCriados      Motorista[]        @relation("CriouMotorista")
-  motoristasAprovados    Motorista[]        @relation("AprovouMotorista")
-  empresasCriadas        Empresa[]          @relation("CriouEmpresa")
-  regrasMinimoCriadas    RegraMinimo[]      @relation("CriouRegraMinimo")
-  tiposEventoCriados     TipoEventoViagem[] @relation("CriouTipoEventoViagem")
-  locaisCriados          Local[]            @relation("CriouLocal")
-  usuariosCriados        User[]             @relation("CriouUser")
-  criadoPor              User?              @relation("CriouUser", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  veiculosCriados        Veiculo[]             @relation("CriouVeiculo")
+  transportadorasCriadas Transportadora[]      @relation("CriouTransportadora")
+  motoristasCriados      Motorista[]           @relation("CriouMotorista")
+  motoristasAprovados    Motorista[]           @relation("AprovouMotorista")
+  empresasCriadas        Empresa[]             @relation("CriouEmpresa")
+  regrasMinimoCriadas    RegraMinimo[]         @relation("CriouRegraMinimo")
+  tiposEventoCriados     TipoEventoViagem[]    @relation("CriouTipoEventoViagem")
+  locaisCriados          Local[]               @relation("CriouLocal")
+  usuariosCriados        User[]                @relation("CriouUser")
+  criadoPor              User?                 @relation("CriouUser", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId            String?
-  notificacoesCriadas    Notificacao[]      @relation("CriouNotificacao")
-  fechamentosCriados     Fechamento[]       @relation("CriouFechamento")
-  viagensRevisadas       Viagem[]           @relation("RevisouViagem")
-  viagensKmAlterado      Viagem[]           @relation("AlterouKmViagem")
+  notificacoesCriadas    Notificacao[]         @relation("CriouNotificacao")
+  fechamentosCriados     Fechamento[]          @relation("CriouFechamento")
+  viagensRevisadas       Viagem[]              @relation("RevisouViagem")
+  viagensKmAlterado      Viagem[]              @relation("AlterouKmViagem")
   divergenciasResolvidas ViagemDivergencia[]
   adminNotificacoes      AdminNotificacao[]
 
@@ -613,26 +613,26 @@ enum StatusMotorista {
 }
 
 model Motorista {
-  contaId                 String          @default("__SEM_CONTA__")
-  conta                   Conta           @relation(fields: [contaId], references: [id])
-  id                      String          @id @default(uuid())
+  contaId                 String               @default("__SEM_CONTA__")
+  conta                   Conta                @relation(fields: [contaId], references: [id])
+  id                      String               @id @default(uuid())
   nome                    String
   cpf                     String // 11 dígitos (sem máscara) — também é o login
   senhaHash               String
   telefone                String?
   email                   String?
-  veiculoDefault          Veiculo?        @relation("VeiculoDefaultMotorista", fields: [veiculoDefaultId], references: [id])
+  veiculoDefault          Veiculo?             @relation("VeiculoDefaultMotorista", fields: [veiculoDefaultId], references: [id])
   veiculoDefaultId        String?
   // Status de aprovação do cadastro. Default APROVADO pra não quebrar fluxo
   // existente (admin cria já aprovado; migration seta existentes pra APROVADO).
   // Auto-cadastro pelo app nasce PENDENTE_APROVACAO.
-  status                  StatusMotorista @default(APROVADO)
+  status                  StatusMotorista      @default(APROVADO)
   aprovadoEm              DateTime?
-  aprovadoPor             User?           @relation("AprovouMotorista", fields: [aprovadoPorId], references: [id], onDelete: SetNull)
+  aprovadoPor             User?                @relation("AprovouMotorista", fields: [aprovadoPorId], references: [id], onDelete: SetNull)
   aprovadoPorId           String?
-  ativo                   Boolean         @default(true)
+  ativo                   Boolean              @default(true)
   ultimoLoginEm           DateTime?
-  tentativasLogin         Int             @default(0)
+  tentativasLogin         Int                  @default(0)
   bloqueadoAte            DateTime?
   expoPushToken           String?
   pushTokenAtualizadoEm   DateTime?
@@ -640,11 +640,11 @@ model Motorista {
   // não silenciar ninguém sem escolha. aceitaPush gateia o PushService (choke
   // central); aceitaWhatsapp gateia os avisos por WhatsApp (não o código de
   // cadastro, que é de autenticação).
-  aceitaPush              Boolean         @default(true)
-  aceitaWhatsapp          Boolean         @default(true)
+  aceitaPush              Boolean              @default(true)
+  aceitaWhatsapp          Boolean              @default(true)
   // Resumo diário do dia no WhatsApp (cron 20h). Gate próprio além do
   // aceitaWhatsapp mestre — o motorista pode querer os avisos mas não o resumo.
-  receberResumoDiario     Boolean         @default(true)
+  receberResumoDiario     Boolean              @default(true)
   // Versão do app que o motorista está rodando — capturada via headers em
   // toda request pelo AppVersionInterceptor. Como o runtimeVersion usa policy
   // "appVersion", o appVersion sozinho NÃO muda entre updates OTA; o que
@@ -662,40 +662,40 @@ model Motorista {
   // Default false nos campos sensíveis = novo motorista nasce travado e o admin
   // libera caso a caso pelo dashboard. podeLancarViagem/podeLancarAbastecimento
   // seguem true pra não quebrar fluxo existente.
-  podeLancarViagem        Boolean         @default(true)
-  podeIniciarViagem       Boolean         @default(false)
+  podeLancarViagem        Boolean              @default(true)
+  podeIniciarViagem       Boolean              @default(false)
   /// Lifecycle guiado de viagem (Iniciar → eventos → Finalizar), com viagem
   /// criada no backend já no início (status EM_ANDAMENTO). Flag separada de
   /// podeIniciarViagem (tracking GPS efêmero legado) pra rodar os dois modos
   /// em paralelo durante a transição.
-  podeViagemLifecycle     Boolean         @default(false)
-  podeLancarPedagio       Boolean         @default(false)
-  podeLancarAbastecimento Boolean         @default(true)
+  podeViagemLifecycle     Boolean              @default(false)
+  podeLancarPedagio       Boolean              @default(false)
+  podeLancarAbastecimento Boolean              @default(true)
   /// Quando true, o app dispara OCR via IA na foto do ticket pra sugerir
   /// preenchimento. False = motorista preenche tudo manualmente.
-  podeUsarOcrTicket       Boolean         @default(false)
+  podeUsarOcrTicket       Boolean              @default(false)
   /// Stories (estilo Instagram): vê a barra na home, posta e reage. Liberado
   /// pra todos (default true); admin pode desligar caso a caso pelo dashboard.
-  podeVerStories          Boolean         @default(true)
+  podeVerStories          Boolean              @default(true)
   /// Quando true, o app mostra "Buscar local por nome" na descarga (lista todos
   /// os locais, não só os do GPS por perto). Default false — admin libera caso a
   /// caso (ex: desenvolvedor testando). Só affordance de UI: o catálogo já traz tudo.
-  podeVerTodosLocais      Boolean         @default(false)
+  podeVerTodosLocais      Boolean              @default(false)
   /// Referência de km por trajeto: ao escolher carga+descarga, o app mostra o que
   /// a frota já rodou nesse par ("7 viagens, quase sempre ~100 km") com um toque
   /// pra usar o valor; e avisa/pede justificativa se o km sair fora do padrão.
   /// Só UX do app — o backend carimba kmForaDoPadrao pra todo mundo independente
   /// desta flag, e o lançamento nunca é bloqueado. Rollout gradual: default false.
-  podeReferenciaKm        Boolean         @default(false)
+  podeReferenciaKm        Boolean              @default(false)
   /// Telemetria de interação na tela "Nova viagem" (o que clicou/buscou/selecionou,
   /// o que a lista trouxe) — pra diagnosticar ex. "descarga errada". Opt-in por
   /// motorista; gate é client-side (só emite os eventos nv_*). Default false.
-  podeTelemetria          Boolean         @default(false)
+  podeTelemetria          Boolean              @default(false)
   /// Chat entre motoristas (aba Conversas). Default TRUE: validado em campo e
   /// liberado pra todo mundo — motorista novo já nasce com a aba. Continua
   /// desligável caso a caso pelo painel (ex: alguém que abusou); desligar
   /// remove a aba e bloqueia /m/chat/*, mas as conversas ficam guardadas.
-  podeChat                Boolean         @default(true)
+  podeChat                Boolean              @default(true)
   /// Serviço medido por período (diária): o motorista pode escolher o modo de
   /// serviço no lançamento e marcar hora de entrada/saída em vez de peso.
   ///
@@ -705,11 +705,11 @@ model Motorista {
   /// mão sem ganho nenhum. Continua desligável caso a caso pelo painel — aí vira
   /// o que ele deveria ser: uma exceção ("esse aqui não lança diária"), não um
   /// pré-requisito.
-  podeDiaria              Boolean         @default(true)
+  podeDiaria              Boolean              @default(true)
   /// Frota dona do motorista. Null = não classificado (invisível pros usuários
   /// restritos). Usado pra carimbar Viagem/Pedagio/Abastecimento na criação —
   /// mudar aqui NÃO reescreve o histórico já carimbado, de propósito.
-  transportadora          Transportadora? @relation(fields: [transportadoraId], references: [id], onDelete: SetNull)
+  transportadora          Transportadora?      @relation(fields: [transportadoraId], references: [id], onDelete: SetNull)
   transportadoraId        String?
   /// Vínculo do motorista (próprio / agregado / terceiro). Decide quais fotos o
   /// app exige no abastecimento. Null = não classificado, e aí nada muda pra ele:
@@ -720,8 +720,8 @@ model Motorista {
   /// pertence à frota X E é agregado.
   modalidade              ModalidadeMotorista? @relation(fields: [modalidadeId], references: [id], onDelete: SetNull)
   modalidadeId            String?
-  criadoEm                DateTime        @default(now())
-  alteradoEm              DateTime        @updatedAt
+  criadoEm                DateTime             @default(now())
+  alteradoEm              DateTime             @updatedAt
 
   viagens               Viagem[]
   pedagios              Pedagio[]
@@ -1215,27 +1215,27 @@ model Cliente {
 }
 
 model Material {
-  contaId         String   @default("__SEM_CONTA__")
-  conta           Conta    @relation(fields: [contaId], references: [id])
-  id              String   @id @default(uuid())
-  nome            String
+  contaId            String   @default("__SEM_CONTA__")
+  conta              Conta    @relation(fields: [contaId], references: [id])
+  id                 String   @id @default(uuid())
+  nome               String
   /// Apelidos/sinônimos pra busca fuzzy do agente WhatsApp.
-  apelidos        String[] @default([])
-  ativo           Boolean  @default(true)
+  apelidos           String[] @default([])
+  ativo              Boolean  @default(true)
   /// Se false, viagens desse material não exigem número de ticket (ex: concreto,
   /// que não gera ticket de pesagem). Controlado pelo admin, nunca pelo motorista.
-  exigeTicket     Boolean  @default(true)
+  exigeTicket        Boolean  @default(true)
   /// Esse material gera algum papel que dá pra fotografar (ticket de pesagem,
   /// canhoto, nota). false = não gera nada (concreto): suprime a exigência de
   /// foto da empresa, porque não dá pra cobrar foto de comprovante inexistente.
-  temComprovanteFoto Boolean @default(true)
+  temComprovanteFoto Boolean  @default(true)
   /// Se true, o motorista pode marcar que precisou voltar pro bota-fora (limpeza):
   /// na última carga ele retorna ao local de carga pra descarregar a sobra. Isso
   /// adiciona a perna descarga→carga ao km faturável. Controlado pelo admin; o
   /// motorista só marca o fato. Ver Viagem.teveBotaFora.
-  permiteBotaFora Boolean  @default(false)
-  criadoEm        DateTime @default(now())
-  alteradoEm      DateTime @updatedAt
+  permiteBotaFora    Boolean  @default(false)
+  criadoEm           DateTime @default(now())
+  alteradoEm         DateTime @updatedAt
 
   viagens      Viagem[]
   regrasMinimo RegraMinimo[]
@@ -1727,15 +1727,15 @@ model Viagem {
   transportadora          Transportadora?    @relation(fields: [transportadoraId], references: [id], onDelete: SetNull)
   transportadoraId        String?
 
-  fotos             TicketFoto[]
-  pedagios          Pedagio[]
-  pontos            ViagemPonto[]
-  matchesFechamento FechamentoLinha[]
-  eventos           EventoMotorista[]
-  eventosViagem     EventoViagem[]
-  mensagens         ViagemMensagem[]
-  compartilhamentos ViagemCompartilhamento[]
-  divergencias      ViagemDivergencia[]
+  fotos              TicketFoto[]
+  pedagios           Pedagio[]
+  pontos             ViagemPonto[]
+  matchesFechamento  FechamentoLinha[]
+  eventos            EventoMotorista[]
+  eventosViagem      EventoViagem[]
+  mensagens          ViagemMensagem[]
+  compartilhamentos  ViagemCompartilhamento[]
+  divergencias       ViagemDivergencia[]
   conferenciasTicket ConferenciaTicket[]
 
   @@index([transportadoraId, data])
@@ -2456,6 +2456,10 @@ enum StatusConferenciaTicket {
 enum VereditoConferencia {
   BATE
   DIVERGE
+  /// A foto não dá pra ler. Sai da fila de revisão humana de propósito: nenhum
+  /// conferente resolve olhando a mesma foto borrada — quem resolve é o
+  /// motorista mandando outra.
+  ILEGIVEL
   /// Leu mal, leu pouco, ou divergiu em campo que não é dinheiro. Vai pra
   /// revisão humana — NUNCA vira aviso pro motorista.
   INCERTO
@@ -2474,8 +2478,8 @@ model ConferenciaTicket {
   conta   Conta  @relation(fields: [contaId], references: [id])
   id      String @id @default(uuid())
 
-  viagem   Viagem @relation(fields: [viagemId], references: [id], onDelete: Cascade)
-  viagemId String
+  viagem       Viagem      @relation(fields: [viagemId], references: [id], onDelete: Cascade)
+  viagemId     String
   /// A foto exata que foi lida. SetNull e não Cascade: apagar a foto no painel
   /// não pode apagar o histórico do que a IA leu dela.
   ticketFoto   TicketFoto? @relation(fields: [ticketFotoId], references: [id], onDelete: SetNull)
@@ -2517,9 +2521,9 @@ model ConferenciaTicket {
 
   /// Custo somado das passadas (a 2ª opinião entra aqui também).
   modelo    String?
-  custoUsd  Decimal? @db.Decimal(12, 6)
+  custoUsd  Decimal?  @db.Decimal(12, 6)
   /// Quantas leituras foram feitas: 1 normalmente, 2 quando escalou pro modelo forte.
-  passadas  Int      @default(0)
+  passadas  Int       @default(0)
   escalouEm DateTime?
 
   /// O que foi FEITO com o veredito: "NENHUMA" | "FILA_REVISAO" |
@@ -2527,7 +2531,7 @@ model ConferenciaTicket {
   /// veredito existe e a ação é NENHUMA.
   acao       String?
   aplicadoEm DateTime?
-  erro       String?  @db.Text
+  erro       String?   @db.Text
 
   criadoEm   DateTime @default(now())
   alteradoEm DateTime @updatedAt
@@ -2848,44 +2852,44 @@ model EventoMotorista {
 }
 
 model Abastecimento {
-  contaId          String          @default("__SEM_CONTA__")
-  conta            Conta           @relation(fields: [contaId], references: [id])
-  id               String          @id @default(uuid())
-  clientId         String          @unique // idempotência (gerado no app)
-  motorista        Motorista       @relation(fields: [motoristaId], references: [id])
-  motoristaId      String
-  veiculo          Veiculo         @relation(fields: [veiculoId], references: [id])
-  veiculoId        String
-  empresa          Empresa?        @relation(fields: [empresaId], references: [id])
-  empresaId        String?
-  data             DateTime // timestamp completo (hora importa)
-  tipo             TipoCombustivel @default(DIESEL_S10)
-  litros           Decimal         @db.Decimal(8, 3)
+  contaId              String          @default("__SEM_CONTA__")
+  conta                Conta           @relation(fields: [contaId], references: [id])
+  id                   String          @id @default(uuid())
+  clientId             String          @unique // idempotência (gerado no app)
+  motorista            Motorista       @relation(fields: [motoristaId], references: [id])
+  motoristaId          String
+  veiculo              Veiculo         @relation(fields: [veiculoId], references: [id])
+  veiculoId            String
+  empresa              Empresa?        @relation(fields: [empresaId], references: [id])
+  empresaId            String?
+  data                 DateTime // timestamp completo (hora importa)
+  tipo                 TipoCombustivel @default(DIESEL_S10)
+  litros               Decimal         @db.Decimal(8, 3)
   /// Null quando abastecimento em comboio (motorista não soube o valor na
   /// hora). Listagens e fechamentos lidam com null como "sem valor".
-  valorTotal       Decimal?        @db.Decimal(10, 2)
-  precoLitro       Decimal?        @db.Decimal(6, 3) // calculado server-side
+  valorTotal           Decimal?        @db.Decimal(10, 2)
+  precoLitro           Decimal?        @db.Decimal(6, 3) // calculado server-side
   /// True quando o abastecimento foi no comboio: valor real será informado
   /// depois (admin pode editar). Distingue de "motorista esqueceu".
-  emComboio        Boolean         @default(false)
-  odometro         Int // km do hodômetro
-  postoNome        String?
-  tanqueCheio      Boolean         @default(true)
-  observacao       String?
+  emComboio            Boolean         @default(false)
+  odometro             Int // km do hodômetro
+  postoNome            String?
+  tanqueCheio          Boolean         @default(true)
+  observacao           String?
   /// Por que o abastecimento foi lançado sem o cupom do posto, numa empresa que
   /// exige a foto. Ver Viagem.justificativaSemFoto.
   justificativaSemFoto String?
   // GPS capturado no momento do registro (silencioso — null se permissão negada)
-  lat              Float?
-  lng              Float?
-  precisao         Float?
-  criadoOfflineEm  DateTime?
-  sincronizadoEm   DateTime        @default(now())
-  alteradoEm       DateTime        @updatedAt
+  lat                  Float?
+  lng                  Float?
+  precisao             Float?
+  criadoOfflineEm      DateTime?
+  sincronizadoEm       DateTime        @default(now())
+  alteradoEm           DateTime        @updatedAt
   /// Carimbada na criação — ver Viagem.transportadoraId. Não confundir com
   /// `empresaId` acima, que é o tomador que paga o abastecimento.
-  transportadora   Transportadora? @relation(fields: [transportadoraId], references: [id], onDelete: SetNull)
-  transportadoraId String?
+  transportadora       Transportadora? @relation(fields: [transportadoraId], references: [id], onDelete: SetNull)
+  transportadoraId     String?
 
   fotos            AbastecimentoFoto[]
   fechamentoLinhas FechamentoLinha[]
@@ -2901,18 +2905,18 @@ model Abastecimento {
 }
 
 model AbastecimentoFoto {
-  contaId         String        @default("__SEM_CONTA__")
-  conta           Conta         @relation(fields: [contaId], references: [id])
-  id              String        @id @default(uuid())
-  abastecimento   Abastecimento @relation(fields: [abastecimentoId], references: [id], onDelete: Cascade)
+  contaId         String                @default("__SEM_CONTA__")
+  conta           Conta                 @relation(fields: [contaId], references: [id])
+  id              String                @id @default(uuid())
+  abastecimento   Abastecimento         @relation(fields: [abastecimentoId], references: [id], onDelete: Cascade)
   abastecimentoId String
   storageKey      String // chave no MinIO
   /// O que essa foto comprova. Default CUPOM porque é o que todas as fotos
   /// existentes são — antes disto só havia uma foto por abastecimento.
   tipo            TipoFotoAbastecimento @default(CUPOM)
   /// Rotação aplicada via CSS na exibição admin. 0/90/180/270. Persistente.
-  rotacao         Int           @default(0)
-  capturadaEm     DateTime      @default(now())
+  rotacao         Int                   @default(0)
+  capturadaEm     DateTime              @default(now())
 
   @@index([abastecimentoId])
   @@index([contaId])
