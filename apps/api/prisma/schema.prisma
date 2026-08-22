@@ -446,6 +446,7 @@ model Conta {
   bloqueiosChat                 BloqueioChat[]
   denunciasMensagemChat         DenunciaMensagemChat[]
   usosIa                        UsoIa[]
+  conferenciasTicket            ConferenciaTicket[]
 
   @@index([ativa])
   @@map("contas")
@@ -1725,6 +1726,7 @@ model Viagem {
   mensagens         ViagemMensagem[]
   compartilhamentos ViagemCompartilhamento[]
   divergencias      ViagemDivergencia[]
+  conferenciasTicket ConferenciaTicket[]
 
   @@index([transportadoraId, data])
   @@index([motoristaId, data])
@@ -1937,6 +1939,8 @@ model TicketFoto {
   /// Rotação aplicada via CSS na exibição admin. 0/90/180/270. Persistente.
   rotacao     Int      @default(0)
   capturadaEm DateTime @default(now())
+
+  conferencias ConferenciaTicket[]
 
   @@index([viagemId])
   @@index([contaId])
@@ -2425,6 +2429,104 @@ model UsoIa {
   /// "quanto o OCR custou vs o conferente" — atravessa contas, pra plataforma.
   @@index([escopo, criadoEm(sort: Desc)])
   @@map("usos_ia")
+}
+
+enum StatusConferenciaTicket {
+  PENDENTE
+  EXECUTANDO
+  CONCLUIDA
+  FALHOU
+  /// Terminou sem julgar, e isso NÃO é falha: a foto sumiu do storage, a viagem
+  /// foi apagada, um humano já decidiu antes, ou o que o motorista declarou
+  /// mudou entre o enfileirar e o processar. Nunca retenta.
+  DESCARTADA
+}
+
+/// O que a leitura do ticket disse sobre o que o motorista declarou.
+enum VereditoConferencia {
+  BATE
+  DIVERGE
+  /// Leu mal, leu pouco, ou divergiu em campo que não é dinheiro. Vai pra
+  /// revisão humana — NUNCA vira aviso pro motorista.
+  INCERTO
+  /// Não havia o que conferir (diária, material sem ticket, viagem sem peso).
+  NAO_APLICAVEL
+}
+
+/// Fila de conferência automática de ticket.
+///
+/// Mesma mecânica da fila do agente (`ExecucaoAgente`), com duas diferenças que
+/// importam: aqui há `contaId`, porque isto é dado de negócio de uma empresa —
+/// e por isso o model NÃO entra em MODELS_GLOBAIS da trava de conta —, e o
+/// mutex é por VIAGEM.
+model ConferenciaTicket {
+  contaId String @default("__SEM_CONTA__")
+  conta   Conta  @relation(fields: [contaId], references: [id])
+  id      String @id @default(uuid())
+
+  viagem   Viagem @relation(fields: [viagemId], references: [id], onDelete: Cascade)
+  viagemId String
+  /// A foto exata que foi lida. SetNull e não Cascade: apagar a foto no painel
+  /// não pode apagar o histórico do que a IA leu dela.
+  ticketFoto   TicketFoto? @relation(fields: [ticketFotoId], references: [id], onDelete: SetNull)
+  ticketFotoId String?
+  /// Cópia da chave do storage — sobrevive à exclusão da TicketFoto.
+  storageKey   String
+
+  /// Espelha viagemId enquanto o job está vivo e vira null ao terminar. É o
+  /// mutex NO BANCO: uma conferência ativa por viagem. Duas tentativas
+  /// simultâneas brigam no índice único, não numa checagem em memória.
+  viagemAtiva String?                 @unique
+  status      StatusConferenciaTicket @default(PENDENTE)
+  /// De onde veio: "create" | "finalizar" | "completar-peso" | "foto-avulsa" |
+  /// "foto-divergente" | "reconferencia".
+  origem      String
+
+  /// O que o MOTORISTA declarou, congelado no enfileiramento. É contra isto que
+  /// a leitura é comparada — e é isto que permite descartar o job quando o
+  /// painel editou a viagem no meio do caminho.
+  declarado Json
+
+  leitura      Json?
+  /// [{ campo, declarado, lido, gravidade, detalhe }]
+  divergencias Json?
+  /// [{ campo, declarado, lido, motivo }] — leitura suspeita, não erro do motorista.
+  incertezas   Json?
+  veredito     VereditoConferencia?
+  /// 0..1 — confiança da LEITURA, não da comparação.
+  confianca    Float?
+
+  tentativas         Int       @default(0)
+  proximaTentativaEm DateTime?
+  workerId           String?
+  reivindicadoEm     DateTime?
+
+  iniciadoEm   DateTime?
+  finalizadoEm DateTime?
+  duracaoMs    Int?
+
+  /// Custo somado das passadas (a 2ª opinião entra aqui também).
+  modelo    String?
+  custoUsd  Decimal? @db.Decimal(12, 6)
+  /// Quantas leituras foram feitas: 1 normalmente, 2 quando escalou pro modelo forte.
+  passadas  Int      @default(0)
+  escalouEm DateTime?
+
+  /// O que foi FEITO com o veredito: "NENHUMA" | "FILA_REVISAO" |
+  /// "AVISOU_MOTORISTA". Separado do veredito de propósito — em modo sombra o
+  /// veredito existe e a ação é NENHUMA.
+  acao       String?
+  aplicadoEm DateTime?
+  erro       String?  @db.Text
+
+  criadoEm   DateTime @default(now())
+  alteradoEm DateTime @updatedAt
+
+  /// A query do reivindicar.
+  @@index([status, proximaTentativaEm])
+  @@index([viagemId, criadoEm(sort: Desc)])
+  @@index([contaId, criadoEm(sort: Desc)])
+  @@map("conferencias_ticket")
 }
 
 /// Singleton (id="default"): config do agente IA do WhatsApp (motorista/admin).

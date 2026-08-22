@@ -28,6 +28,7 @@ import {
   MessagesSquare,
   Package,
   Radio,
+  ScanEye,
   Ruler,
   IdCard,
   Timer,
@@ -68,6 +69,7 @@ const GRUPOS: Grupo[] = [
     itens: [
       { href: "/viagens", label: "Viagens", icon: ClipboardCheck, perm: "viagens.ver" },
       { href: "/viagens-andamento", label: "Viagens em andamento", icon: Radio, perm: "viagens.ver" },
+      { href: "/conferencias", label: "Conferência de ticket", icon: ScanEye, perm: "viagens.ver" },
       { href: "/relatorios/viagens", label: "Relatórios", icon: BarChart3, perm: "relatorios.ver" },
       { href: "/descargas-suspeitas", label: "Descargas suspeitas", icon: MapPin, perm: "descargas-suspeitas.ver" },
       { href: "/abastecimentos", label: "Abastecimentos", icon: Fuel, perm: "abastecimentos.ver" },

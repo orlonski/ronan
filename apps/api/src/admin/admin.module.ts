@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { DemandasModule } from "./demandas/demandas.module";
+import { ConferenciasModule } from "./conferencias/conferencias.module";
 import { MateriaisModule } from "./materiais/materiais.module";
 import { TiposServicoModule } from "./tipos-servico/tipos-servico.module";
 import { ModalidadesModule } from "./modalidades/modalidades.module";
@@ -69,6 +70,7 @@ import { LancamentosResgatadosAdminModule } from "./lancamentos-resgatados/lanca
     PapeisModule,
     ContasModule,
     DemandasModule,
+    ConferenciasModule,
     LancamentosResgatadosAdminModule,
   ],
 })

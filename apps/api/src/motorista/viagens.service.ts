@@ -35,6 +35,7 @@ import { UploadsService } from "../uploads/uploads.service";
 import { ValidacaoLocalService } from "./validacao-local.service";
 import { AdminInboxService } from "../admin/inbox/inbox.service";
 import { KmReprocessamentoService } from "./km-reprocessamento.service";
+import { ConferenciaFilaService } from "../conferencia-ticket/conferencia-fila.service";
 import { KmAtipicoService } from "../km-atipico/km-atipico.service";
 import { ViagemMensagensService } from "../viagem-mensagens/viagem-mensagens.service";
 import { AvisoPesoService } from "./aviso-peso.service";
@@ -108,6 +109,7 @@ export class ViagensMotoristaService {
     private readonly kmReprocessamento: KmReprocessamentoService,
     private readonly avisos: AvisoPesoService,
     private readonly kmAtipico: KmAtipicoService,
+    private readonly conferencia: ConferenciaFilaService,
     private readonly mensagens: ViagemMensagensService,
     private readonly resgates: LancamentosResgatadosService,
   ) {}
@@ -819,6 +821,11 @@ export class ViagensMotoristaService {
       );
     })();
 
+    // Foto nova é exatamente o que a conferência precisa. Vale também pra
+    // resposta a FOTO_ILEGIVEL, que anexa sem apagar a antiga — o job fixa a
+    // foto que leu, então a leitura anterior não é sobrescrita.
+    void this.conferencia.enfileirar(viagemId, "foto-avulsa");
+
     return foto;
   }
 
@@ -1356,6 +1363,11 @@ export class ViagensMotoristaService {
     // sobre o que se tem agora e será corrigido quando o km real chegar.
     void this.kmAtipico.avaliarViagem(viagem.id);
 
+    // Confere a foto do ticket contra o que foi declarado. Best-effort e sem
+    // `.catch` porque `enfileirar` engole o próprio erro — `void` sobre promise
+    // rejeitada derruba o processo.
+    void this.conferencia.enfileirar(viagem.id, "create");
+
     void (async () => {
       const m = await this.prisma.motorista.findUnique({
         where: { id: motoristaId },
@@ -1609,6 +1621,11 @@ export class ViagensMotoristaService {
 
     // Agora que virou ENVIADA e tem km, recalcula pelo trajeto real se preciso.
     void this.kmReprocessamento.reprocessar(atualizada.id);
+
+    // O peso só agora existe: a viagem entrou como AGUARDANDO_PESO e o
+    // romaneio chegou. É este o momento em que dá pra conferir o número que
+    // vira dinheiro.
+    void this.conferencia.enfileirar(atualizada.id, "completar-peso");
 
     return serializarViagemComMinimos(
       atualizada,
@@ -2036,6 +2053,7 @@ export class ViagensMotoristaService {
     void this.kmReprocessamento.reprocessar(finalizada.id);
     // Carimba se o km está fora do padrão do trajeto (igual ao create).
     void this.kmAtipico.avaliarViagem(finalizada.id);
+    void this.conferencia.enfileirar(finalizada.id, "finalizar");
 
     // Notifica os admins (inbox/sininho do dashboard) — mesma "Nova viagem" que
     // o fluxo de lançamento único dispara. Só ao FINALIZAR (a viagem em

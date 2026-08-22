@@ -21,6 +21,7 @@ import { EventosModule } from "./eventos/eventos.module";
 import { WhatsappModule } from "./whatsapp/whatsapp.module";
 import { NotificacoesModule } from "./notificacoes/notificacoes.module";
 import { ClickupRunnerModule } from "./clickup-runner/clickup-runner.module";
+import { ConferenciaWorkerModule } from "./conferencia-ticket/conferencia-worker.module";
 import { CompartilhamentoModule } from "./compartilhamento/compartilhamento.module";
 import { AppVersionInterceptor } from "./common/app-version.interceptor";
 import { ContaMiddleware } from "./common/conta/conta.middleware";
@@ -48,6 +49,7 @@ import { PrismaExceptionFilter } from "./common/prisma-exception.filter";
     WhatsappModule,
     NotificacoesModule,
     ClickupRunnerModule,
+    ConferenciaWorkerModule,
     CompartilhamentoModule,
   ],
   providers: [

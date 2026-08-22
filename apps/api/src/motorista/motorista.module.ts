@@ -32,6 +32,7 @@ import { BuscaLocaisConfigMotoristaController } from "./busca-locais-config.cont
 import { ValidacaoLocalService } from "./validacao-local.service";
 import { IaTicketController } from "./ia-ticket.controller";
 import { KmReprocessamentoService } from "./km-reprocessamento.service";
+import { ConferenciaTicketModule } from "../conferencia-ticket/conferencia-ticket.module";
 import { KmAtipicoModule } from "../km-atipico/km-atipico.module";
 import { LocaisImagemModule } from "../locais-imagem/locais-imagem.module";
 import { ViagemMensagensModule } from "../viagem-mensagens/viagem-mensagens.module";
@@ -57,6 +58,7 @@ import { LancamentosResgatadosMotoristaController } from "./lancamentos-resgatad
     EvolutionModule,
     ForcaAtualizacaoModule,
     KmAtipicoModule,
+    ConferenciaTicketModule,
     ViagemMensagensModule,
     LocaisImagemModule,
   ],
