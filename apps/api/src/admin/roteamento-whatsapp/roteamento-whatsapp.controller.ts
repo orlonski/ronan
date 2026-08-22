@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Put, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Post, Put, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import {
   AtualizarRoteamentoPlataformaInput,
   AtualizarRoteamentoWhatsappInput,
+  RegistrarNumeroMetaInput,
 } from "@ronan/shared-types";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
@@ -90,6 +91,28 @@ export class AdminRoteamentoWhatsappController {
     // `comoSistema` porque a linha não tem conta; `pegar()` no fim precisa de
     // uma pra montar a resposta, então usa a do próprio usuário.
     return comConta(contaAlvo(user), () => this.service.salvarPlataforma(body.rotas, user.id));
+  }
+
+  /**
+   * O que a Meta diz sobre o número. Responde "está registrado?" sem depender
+   * do rótulo do console dela, que já mostrou os dois estados errados.
+   */
+  @Get("status-numero")
+  statusNumero() {
+    return this.service.statusNumero();
+  }
+
+  /**
+   * Registra o número na Cloud API. É a chamada que o botão do console
+   * embrulha — aqui o erro da Meta volta por escrito em vez de sumir.
+   *
+   * O PIN vem no corpo e não é logado em lugar nenhum.
+   */
+  @Post("registrar-numero")
+  registrarNumero(
+    @Body(new ZodValidationPipe(RegistrarNumeroMetaInput)) body: RegistrarNumeroMetaInput,
+  ) {
+    return this.service.registrarNumero(body.pin);
   }
 
   @Put()

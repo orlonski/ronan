@@ -167,6 +167,82 @@ export class MetaProvedor implements ProvedorWhatsappClient {
     return componentes;
   }
 
+  /**
+   * O que a Meta diz sobre o número. É a pergunta que o painel não conseguia
+   * fazer: "esse número está registrado?".
+   *
+   * O console da Meta mostrou "Não registrado" com o número criado, e "número
+   * indisponível" com ele disponível, no mesmo dia. Perguntar direto pra Graph
+   * API é a única resposta que não depende do rótulo de uma tela.
+   */
+  async statusNumero(): Promise<Record<string, unknown>> {
+    const campos = [
+      "id",
+      "display_phone_number",
+      "verified_name",
+      "code_verification_status",
+      "quality_rating",
+      "platform_type",
+      "throughput",
+    ].join(",");
+    return this.chamar(`/${this.phoneNumberId}?fields=${campos}`, "GET");
+  }
+
+  /**
+   * Registra o número na Cloud API — a chamada que o botão "Registrar" do
+   * console embrulha, e que lá falhou quatro vezes sem dizer o motivo.
+   *
+   * Com a verificação em duas etapas desligada, o `pin` passado aqui é o que
+   * PASSA A VALER. Com ela ligada, tem que ser o que já vale.
+   *
+   * O pin nunca é logado, nem em erro. Ele entra no corpo e sai do escopo.
+   */
+  async registrarNumero(pin: string): Promise<Record<string, unknown>> {
+    return this.chamar(`/${this.phoneNumberId}/register`, "POST", {
+      messaging_product: "whatsapp",
+      pin,
+    });
+  }
+
+  /**
+   * Uma chamada à Graph API que devolve o corpo CRU, dando certo ou não.
+   *
+   * Diferente de `postar`, que traduz pro contrato de envio: aqui quem chama
+   * está depurando, e a resposta literal da Meta é justamente o que se quer ver.
+   */
+  private async chamar(
+    caminho: string,
+    metodo: "GET" | "POST",
+    corpo?: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    if (!this.configurado()) {
+      return { ok: false, erro: "Meta não está configurada no servidor." };
+    }
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), TIMEOUT_MS);
+    try {
+      const res = await fetch(`https://graph.facebook.com/${this.versao}${caminho}`, {
+        method: metodo,
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          "Content-Type": "application/json",
+        },
+        body: corpo ? JSON.stringify(corpo) : undefined,
+        signal: ac.signal,
+      });
+      const json = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+      return { ok: res.ok, status: res.status, resposta: json };
+    } catch (e) {
+      const msg =
+        (e as Error).name === "AbortError"
+          ? `A Meta não respondeu em ${TIMEOUT_MS / 1000}s.`
+          : (e as Error).message;
+      return { ok: false, erro: msg };
+    } finally {
+      clearTimeout(t);
+    }
+  }
+
   private async postar(corpo: Record<string, unknown>): Promise<ResultadoEnvio> {
     const url = `https://graph.facebook.com/${this.versao}/${this.phoneNumberId}/messages`;
     const ac = new AbortController();

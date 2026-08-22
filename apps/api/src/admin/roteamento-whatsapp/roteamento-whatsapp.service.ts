@@ -197,6 +197,21 @@ export class AdminRoteamentoWhatsappService {
     return this.pegar();
   }
 
+  /** O que a Meta diz sobre o número configurado no servidor. */
+  statusNumero() {
+    return this.meta.statusNumero();
+  }
+
+  /**
+   * Registra o número na Cloud API.
+   *
+   * Sem conta no contexto e sem gravar nada: é operação sobre o número da
+   * plataforma, não sobre dados de empresa. O PIN só atravessa este método.
+   */
+  registrarNumero(pin: string) {
+    return this.meta.registrarNumero(pin);
+  }
+
   /**
    * Os últimos envios que NÃO saíram, com o motivo cru do provedor.
    *

@@ -420,3 +420,16 @@ export const AtualizarRoteamentoPlataformaInput = z.object({
 export type AtualizarRoteamentoPlataformaInput = z.infer<
   typeof AtualizarRoteamentoPlataformaInput
 >;
+
+/**
+ * Registro do número na Cloud API.
+ *
+ * O PIN é a verificação em duas etapas do número. Com ela desligada, este é o
+ * valor que passa a valer; com ela ligada, tem que ser o que já vale. Seis
+ * dígitos, sempre — a Meta recusa qualquer outra coisa, inclusive espaço colado
+ * na cola.
+ */
+export const RegistrarNumeroMetaInput = z.object({
+  pin: z.string().regex(/^\d{6}$/, "O PIN tem exatamente 6 dígitos."),
+});
+export type RegistrarNumeroMetaInput = z.infer<typeof RegistrarNumeroMetaInput>;
