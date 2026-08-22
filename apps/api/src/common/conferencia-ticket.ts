@@ -136,6 +136,20 @@ export function normalizarTicket(s: string): string {
   return limpo.replace(/^0+(?=.)/, "");
 }
 
+/**
+ * O NÚMERO do ticket, sem a série/prefixo que a balança imprime.
+ *
+ * "TKB-043625" e "043625" são o mesmo ticket: o motorista digita o número e a
+ * impressora acrescenta a sigla do posto. Comparar as strings inteiras marcava
+ * divergência em todo ticket de balança que usa prefixo — que é a maioria.
+ *
+ * Zeros à esquerda também saem: "043625" e "43625" são o mesmo número.
+ */
+export function nucleoNumericoTicket(s: string): string {
+  const digitos = s.replace(/\D/g, "").replace(/^0+(?=.)/, "");
+  return digitos;
+}
+
 /** Placa comparável: "ABC-1234", "abc 1234" e "ABC1234" viram o mesmo. */
 export function normalizarPlaca(s: string): string {
   return s.toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -175,6 +189,21 @@ const diasEntre = (a: string, b: string): number =>
   );
 
 const fmtPeso = (n: number) => `${n.toFixed(2).replace(".", ",")} t`;
+
+/**
+ * Dois nomes que descrevem a mesma coisa? Serve pra dizer que o campo FOI
+ * verificado, não pra acusar diferença.
+ *
+ * Um contido no outro cobre razão social ("CASTILHO" dentro de "CONSTRUTORA
+ * CASTILHO") e qualificador de faixa ("CBUQ" dentro de "CBUQ FAIXA C").
+ */
+export function nomesCompativeis(a: string, b: string): boolean {
+  const x = normalizarTexto(a);
+  const y = normalizarTexto(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  return (x.length >= 4 && y.includes(x)) || (y.length >= 4 && x.includes(y));
+}
 
 // ─── peso ────────────────────────────────────────────────────────────────────
 
@@ -252,7 +281,14 @@ export function compararDeclaradoComLido(
     conferidos.push("ticket");
     const dec = normalizarTicket(declarado.ticket);
     const lid = normalizarTicket(lido.ticket);
-    if (dec !== lid) {
+
+    // Antes de qualquer coisa: o número bate? Prefixo de série ("TKB-"),
+    // rótulo e zero à esquerda são jeito de imprimir, não outro ticket.
+    const nDec = nucleoNumericoTicket(declarado.ticket);
+    const nLid = nucleoNumericoTicket(lido.ticket);
+    const mesmoNumero = nDec.length >= 3 && nDec === nLid;
+
+    if (!mesmoNumero && dec !== lid) {
       // Um caractere de diferença em número longo é 0/O, 1/7, 5/S, 8/B — o pão
       // de cada dia de OCR. Não dá pra chamar o motorista de errado por isso.
       const perto = dec.length >= 4 && distanciaEdicao(dec, lid, 1) <= 1;
@@ -320,24 +356,27 @@ export function compararDeclaradoComLido(
     }
   }
 
-  // ── cliente e material ──
-  // Chegam aqui já resolvidos contra o cadastro pelo fuzzy do servidor. Se o
-  // nome lido não casou com nada, não é divergência: ticket costuma trazer o
-  // nome da pedreira, da obra ou da razão social por extenso.
+  // ── cliente e material: INFORMATIVOS, nunca divergência ──
+  //
+  // Aprendido na marra: numa rodada real, 100 de 103 viagens saíram
+  // divergentes, e a maior parte era isto aqui. O ticket de balança quase nunca
+  // usa o mesmo nome do cadastro —
+  //
+  //   cadastro "CASTILHO"          ticket "CONSTRUTORA CASTILHO"
+  //   cadastro "MASSA DE ASFALTO"  ticket "C.B.U.Q. FAIXA C"
+  //
+  // — e as duas linhas estão CERTAS. A primeira é razão social, a segunda é o
+  // nome técnico do mesmo produto. Comparar esses nomes como se fossem chave
+  // gera ruído, e conferente que aponta tudo não poupa trabalho nenhum.
+  //
+  // Quem manda no vínculo é o cadastro que o motorista escolheu, não o texto
+  // impresso. Então estes campos aparecem no card pra quem confere olhar, e
+  // ficam fora do veredito.
   for (const campo of ["cliente", "material"] as const) {
     const dec = campo === "cliente" ? declarado.clienteNome : declarado.materialNome;
     const lid = campo === "cliente" ? lido.clienteNome : lido.materialNome;
     if (!dec || !lid) continue;
-    conferidos.push(campo);
-    if (normalizarTexto(dec) !== normalizarTexto(lid)) {
-      divergencias.push({
-        campo,
-        declarado: dec,
-        lido: lid,
-        gravidade: "MEDIA",
-        detalhe: `O ticket indica ${lid} e a viagem foi lançada com ${dec}.`,
-      });
-    }
+    if (nomesCompativeis(dec, lid)) conferidos.push(campo);
   }
 
   return {

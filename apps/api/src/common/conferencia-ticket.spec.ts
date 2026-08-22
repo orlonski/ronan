@@ -184,10 +184,15 @@ describe("cliente e material", () => {
     expect(r.veredito).toBe("BATE");
   });
 
-  it("cliente diferente é MEDIA — vai pra revisão, não pro motorista", () => {
+  it("cliente diferente NÃO vira divergência — decisão revista", () => {
+    // Antes isto era MEDIA. Numa rodada real de 103 viagens, comparar nome de
+    // cliente e material como se fosse chave respondeu pela maior parte dos
+    // 100 falsos positivos: o ticket traz razão social, nome de obra, nome
+    // técnico do produto. Quem manda no vínculo é o cadastro que o motorista
+    // escolheu; estes campos são informação pra quem confere, não veredito.
     const r = conferir({ clienteNome: "TRIPOLONI" }, { clienteNome: "OUTRA EMPRESA" });
-    expect(r.divergencias[0]).toMatchObject({ campo: "cliente", gravidade: "MEDIA" });
-    expect(r.veredito).toBe("INCERTO");
+    expect(r.divergencias).toHaveLength(0);
+    expect(r.veredito).toBe("BATE");
   });
 });
 
@@ -293,5 +298,54 @@ describe("rótulo colado no número do ticket", () => {
   it("ticket com rótulo bate com o mesmo ticket sem rótulo", () => {
     const r = conferir({ ticket: "Nº 3174" }, { ticket: "3174" });
     expect(r.veredito).toBe("BATE");
+  });
+});
+
+/**
+ * Casos tirados de uma rodada real: 100 de 103 viagens saíram divergentes, e
+ * quase tudo era o comparador sendo literal demais. Cada um destes estava
+ * marcado como divergência e estava CERTO na viagem.
+ */
+describe("regressão: os falsos positivos da primeira rodada", () => {
+  it("prefixo de série no ticket não é outro ticket", () => {
+    // Motorista digita o número; a balança imprime a sigla do posto junto.
+    const r = conferir({ ticket: "043625" }, { ticket: "TKB-043625" });
+    expect(r.divergencias).toHaveLength(0);
+    expect(r.incertezas).toHaveLength(0);
+    expect(r.veredito).toBe("BATE");
+  });
+
+  it("razão social no ticket não é outro cliente", () => {
+    const r = conferir({ clienteNome: "CASTILHO" }, { clienteNome: "CONSTRUTORA CASTILHO" });
+    expect(r.divergencias).toHaveLength(0);
+    expect(r.veredito).toBe("BATE");
+  });
+
+  it("nome técnico do material não é outro material", () => {
+    // "MASSA DE ASFALTO" no cadastro, "C.B.U.Q. FAIXA C" impresso: mesmo
+    // produto, nomes diferentes. Quem manda no vínculo é o cadastro que o
+    // motorista escolheu, não o texto do ticket.
+    const r = conferir({ materialNome: "MASSA DE ASFALTO" }, { materialNome: "C.B.U.Q. FAIXA C" });
+    expect(r.divergencias).toHaveLength(0);
+    expect(r.veredito).toBe("BATE");
+  });
+
+  it("nome do cliente completamente diferente também não acusa", () => {
+    // Estes campos saíram do veredito de vez: o ticket traz nome de pedreira,
+    // de obra, de produto técnico. É informação pra quem confere, não chave.
+    const r = conferir({ clienteNome: "CASTILHO" }, { clienteNome: "PEDREIRA IRATI" });
+    expect(r.divergencias).toHaveLength(0);
+    expect(r.veredito).toBe("BATE");
+  });
+
+  it("zero à esquerda no ticket não é diferença", () => {
+    expect(conferir({ ticket: "043625" }, { ticket: "43625" }).veredito).toBe("BATE");
+  });
+
+  it("o que ainda PRECISA acusar continua acusando", () => {
+    // O afrouxamento não pode ter matado o propósito: peso e ticket de verdade
+    // diferentes seguem sendo divergência.
+    expect(conferir({ toneladas: 35.14 }, { toneladas: 30.5 }).veredito).toBe("DIVERGE");
+    expect(conferir({ ticket: "043625" }, { ticket: "TKB-999999" }).veredito).toBe("DIVERGE");
   });
 });

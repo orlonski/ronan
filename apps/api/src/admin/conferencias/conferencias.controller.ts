@@ -64,6 +64,17 @@ export class ConferenciasController {
    * porque cada viagem enfileirada é uma leitura paga — isso é gastar dinheiro,
    * não consultar.
    */
+  /**
+   * Reavalia o que já foi lido, com a regra atual. **Não gasta um token**: a
+   * leitura está guardada, só a comparação roda de novo. Por isso pede apenas
+   * `viagens.ver` — não é gastar dinheiro, é recalcular.
+   */
+  @Post("recomparar")
+  @RequerPermissao("viagens.ver")
+  recomparar() {
+    return this.fila.recompararTudo();
+  }
+
   @Post("reprocessar")
   @RequerPermissao("viagens.validar")
   reprocessar(

@@ -68,6 +68,7 @@ export default function ConferenciasPage() {
   const { temPermissao } = usePermissoes();
   const token = useAuthToken();
   const [enviando, setEnviando] = useState(false);
+  const [recomparando, setRecomparando] = useState(false);
   const resumo = useApiQuery<Resumo>("/admin/conferencias/resumo", {
     staleTime: 0,
     refetchInterval: 15_000,
@@ -81,6 +82,25 @@ export default function ConferenciasPage() {
   const pendentes = useApiQuery<{ pendentes: number }>("/admin/conferencias/pendentes", {
     refetchInterval: 30_000,
   });
+
+  async function recomparar() {
+    setRecomparando(true);
+    try {
+      const r = await fetchApi<{ total: number; mudaram: number; porVeredito: Record<string, number> }>(
+        "/admin/conferencias/recomparar",
+        { method: "POST", token, body: "{}" },
+      );
+      toast.success(`${r.mudaram} de ${r.total} mudaram de veredito`, {
+        description: "Sem custo: só a comparação rodou de novo, a leitura já estava guardada.",
+      });
+      void resumo.refetch();
+      void lista.refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não consegui recomparar.");
+    } finally {
+      setRecomparando(false);
+    }
+  }
 
   async function conferirPendentes() {
     setEnviando(true);
@@ -147,6 +167,22 @@ export default function ConferenciasPage() {
           </div>
           <Button onClick={() => void conferirPendentes()} disabled={enviando}>
             {enviando ? "Enfileirando…" : "Conferir as pendentes"}
+          </Button>
+        </Card>
+      )}
+
+      {(r?.ultimas24h ?? 0) > 0 && (
+        <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
+          <div>
+            <p className="text-sm font-medium">Reavaliar o que já foi lido</p>
+            <p className="text-sm text-muted-foreground">
+              Roda a comparação de novo, com as regras de hoje, em cima das leituras já guardadas.{" "}
+              <strong>Não gasta nada</strong> — a leitura é a parte cara e ela já foi feita. Serve
+              quando a regra fica mais esperta e o histórico precisa acompanhar.
+            </p>
+          </div>
+          <Button variant="outline" onClick={() => void recomparar()} disabled={recomparando}>
+            {recomparando ? "Recomparando…" : "Reavaliar sem custo"}
           </Button>
         </Card>
       )}

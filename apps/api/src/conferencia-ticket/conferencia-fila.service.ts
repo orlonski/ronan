@@ -9,7 +9,11 @@ import { PrismaService } from "../prisma/prisma.service";
 import { ConferenciaConfig } from "./conferencia.config";
 import { comoSistema, contaIdAtual } from "../common/conta/conta-context";
 import { STATUS_FORA_FECHAMENTO } from "../common/viagem-status";
-import type { Declarado } from "../common/conferencia-ticket";
+import {
+  compararDeclaradoComLido,
+  type Declarado,
+  type Lido,
+} from "../common/conferencia-ticket";
 
 /** Backoff exponencial (30s, 60s, 120s…) com teto de 15 min. */
 export function atrasoBackoffMs(tentativa: number): number {
@@ -386,6 +390,54 @@ export class ConferenciaFilaService {
         criadoEm: true,
       },
     });
+  }
+
+  /**
+   * Recompara conferências JÁ FEITAS, **sem chamar a IA de novo**.
+   *
+   * A leitura é a parte cara e ela está guardada (`leitura`), junto do que o
+   * motorista declarou (`declarado`). Quem estava errado na primeira rodada foi
+   * a COMPARAÇÃO — código puro. Então afinar a regra e reavaliar o acervo custa
+   * zero: nenhum token é gasto aqui.
+   *
+   * É o que torna seguro mexer nas tolerâncias: erra, ajusta, roda de novo.
+   */
+  async recompararTudo(): Promise<{
+    total: number;
+    mudaram: number;
+    porVeredito: Record<string, number>;
+  }> {
+    const feitas = await this.prisma.conferenciaTicket.findMany({
+      where: { status: "CONCLUIDA" },
+      select: { id: true, declarado: true, leitura: true, veredito: true },
+    });
+
+    let mudaram = 0;
+    const porVeredito: Record<string, number> = {};
+
+    for (const c of feitas) {
+      const declarado = c.declarado as unknown as Declarado;
+      const lido = c.leitura as unknown as Lido | null;
+      if (!lido || typeof lido.confianca !== "number") continue;
+
+      const r = compararDeclaradoComLido(declarado, lido);
+      porVeredito[r.veredito] = (porVeredito[r.veredito] ?? 0) + 1;
+
+      if (r.veredito !== c.veredito) {
+        mudaram++;
+        await this.prisma.conferenciaTicket.update({
+          where: { id: c.id },
+          data: {
+            veredito: r.veredito,
+            divergencias: r.divergencias as unknown as Prisma.InputJsonValue,
+            incertezas: r.incertezas as unknown as Prisma.InputJsonValue,
+          },
+        });
+      }
+    }
+
+    this.log.log(`Recomparação: ${mudaram} de ${feitas.length} mudaram de veredito (custo zero).`);
+    return { total: feitas.length, mudaram, porVeredito };
   }
 
   /** Só pra deixar explícito de qual conta é o resumo/lista (uso em log). */
