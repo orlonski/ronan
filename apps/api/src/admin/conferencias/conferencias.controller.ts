@@ -1,4 +1,6 @@
-import { Controller, Get, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { z } from "zod";
+import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
@@ -41,5 +43,33 @@ export class ConferenciasController {
   @RequerPermissao("viagens.ver")
   listar(@Query("limite") limite?: string) {
     return this.fila.listar(limite ? Number(limite) : 50);
+  }
+
+  /** Quantas viagens JÁ EXISTENTES ainda esperam conferência. */
+  @Get("pendentes")
+  @RequerPermissao("viagens.ver")
+  async pendentes() {
+    return { pendentes: await this.fila.contarPendentesDeConferencia() };
+  }
+
+  /** A conferência de uma viagem específica — alimenta o card no detalhe dela. */
+  @Get("viagem/:viagemId")
+  @RequerPermissao("viagens.ver")
+  daViagem(@Param("viagemId") viagemId: string) {
+    return this.fila.ultimaDaViagem(viagemId);
+  }
+
+  /**
+   * Manda o acervo pendente pra fila. Exige `viagens.validar` (e não só `ver`)
+   * porque cada viagem enfileirada é uma leitura paga — isso é gastar dinheiro,
+   * não consultar.
+   */
+  @Post("reprocessar")
+  @RequerPermissao("viagens.validar")
+  reprocessar(
+    @Body(new ZodValidationPipe(z.object({ limite: z.number().int().min(1).max(500).default(100) })))
+    body: { limite: number },
+  ) {
+    return this.fila.reprocessarPendentes(body.limite);
   }
 }

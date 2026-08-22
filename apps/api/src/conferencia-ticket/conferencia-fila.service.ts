@@ -307,6 +307,87 @@ export class ConferenciaFilaService {
     });
   }
 
+  /**
+   * Enfileira as viagens JÁ EXISTENTES que ainda esperam conferência.
+   *
+   * Sem isto o conferente só valeria daqui pra frente, e o acervo pendente —
+   * que é justamente o trabalho acumulado — ficaria de fora. Roda na conta de
+   * quem pediu.
+   *
+   * O limite existe porque cada viagem custa uma leitura: mandar 5.000 de uma
+   * vez é uma decisão de dinheiro, não um clique. As mais recentes primeiro,
+   * que são as que ainda importam pro fechamento em aberto.
+   */
+  async reprocessarPendentes(limite: number): Promise<{ enfileiradas: number; candidatas: number }> {
+    const conta = await this.prisma.conta.findUnique({
+      where: { id: contaIdAtual() },
+      select: { iaConferenciaTicket: true },
+    });
+    if (!conta?.iaConferenciaTicket) return { enfileiradas: 0, candidatas: 0 };
+
+    const teto = Math.min(500, Math.max(1, limite));
+
+    const candidatas = await this.prisma.viagem.findMany({
+      where: {
+        revisadoEm: null,
+        status: { in: [StatusViagem.ENVIADA, StatusViagem.AJUSTADA, StatusViagem.AGUARDANDO_PESO] },
+        fotos: { some: {} },
+        // Nunca reconfere o que já tem veredito: repetir leitura idêntica é
+        // pagar duas vezes pela mesma resposta.
+        conferenciasTicket: { none: { status: "CONCLUIDA" } },
+        matchesFechamento: { none: {} },
+      },
+      // Mais recentes primeiro: são as que ainda importam pro fechamento aberto.
+      orderBy: { sincronizadoEm: "desc" },
+      take: teto,
+      select: { id: true },
+    });
+
+    let enfileiradas = 0;
+    for (const v of candidatas) {
+      const antes = await this.prisma.conferenciaTicket.count({ where: { viagemId: v.id } });
+      await this.enfileirar(v.id, "reconferencia");
+      const depois = await this.prisma.conferenciaTicket.count({ where: { viagemId: v.id } });
+      if (depois > antes) enfileiradas++;
+    }
+
+    this.log.log(`Reprocessamento: ${enfileiradas} de ${candidatas.length} candidata(s) na fila.`);
+    return { enfileiradas, candidatas: candidatas.length };
+  }
+
+  /** Quantas viagens antigas ainda esperam conferência (pro botão do painel). */
+  async contarPendentesDeConferencia(): Promise<number> {
+    return this.prisma.viagem.count({
+      where: {
+        revisadoEm: null,
+        status: { in: [StatusViagem.ENVIADA, StatusViagem.AJUSTADA, StatusViagem.AGUARDANDO_PESO] },
+        fotos: { some: {} },
+        conferenciasTicket: { none: { status: "CONCLUIDA" } },
+        matchesFechamento: { none: {} },
+      },
+    });
+  }
+
+  /** A conferência mais recente de uma viagem — pro card na tela de detalhe. */
+  ultimaDaViagem(viagemId: string) {
+    return this.prisma.conferenciaTicket.findFirst({
+      where: { viagemId, status: "CONCLUIDA" },
+      orderBy: { criadoEm: "desc" },
+      select: {
+        id: true,
+        veredito: true,
+        confianca: true,
+        divergencias: true,
+        incertezas: true,
+        declarado: true,
+        leitura: true,
+        acao: true,
+        passadas: true,
+        criadoEm: true,
+      },
+    });
+  }
+
   /** Só pra deixar explícito de qual conta é o resumo/lista (uso em log). */
   contaAtual(): string {
     return contaIdAtual();

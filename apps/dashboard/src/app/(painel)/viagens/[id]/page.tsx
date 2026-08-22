@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ConferenciaViagemCard } from "@/components/conferencia-viagem";
 import {
   DivergenciasCard,
   type DivergenciaViagem,
@@ -747,6 +748,11 @@ export default function ViagemDetalhePage({
               lançamento do motorista — aceita e carimba o que falta, pra
               decisão ser tomada aqui, por quem tem os cadastros na mão. */}
           <DivergenciasCard divergencias={v.divergencias} />
+
+          {/* O que a leitura automática viu nesta foto, campo a campo. Fica
+              aqui, e não só na lista de conferências, porque é neste ponto que
+              a decisão é tomada — com a foto do ticket logo ao lado. */}
+          <ConferenciaViagemCard viagemId={v.id} />
 
           {/* Ticket repetido: antes isso era 409 e o motorista nem conseguia
               lançar. Agora entra e a decisão é aqui — com o link pra outra

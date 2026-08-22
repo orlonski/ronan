@@ -4,7 +4,10 @@ import Link from "next/link";
 import { ScanEye, Clock, Loader2, AlertTriangle, CheckCircle2, Eye } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useApiQuery } from "@/lib/client-api";
+import { useState } from "react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { fetchApi, useApiQuery, useAuthToken } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
 import { fmtDataHoraBR } from "@/lib/fechamento-helpers";
 
@@ -63,6 +66,8 @@ const VEREDITO = {
  */
 export default function ConferenciasPage() {
   const { temPermissao } = usePermissoes();
+  const token = useAuthToken();
+  const [enviando, setEnviando] = useState(false);
   const resumo = useApiQuery<Resumo>("/admin/conferencias/resumo", {
     staleTime: 0,
     refetchInterval: 15_000,
@@ -70,6 +75,32 @@ export default function ConferenciasPage() {
   const lista = useApiQuery<Conferencia[]>("/admin/conferencias?limite=50", {
     refetchInterval: 15_000,
   });
+  // Viagens que já existiam quando a conferência entrou no ar. Sem isso o
+  // conferente só valeria daqui pra frente, e o acervo pendente — que é o
+  // trabalho acumulado — ficaria de fora.
+  const pendentes = useApiQuery<{ pendentes: number }>("/admin/conferencias/pendentes", {
+    refetchInterval: 30_000,
+  });
+
+  async function conferirPendentes() {
+    setEnviando(true);
+    try {
+      const r = await fetchApi<{ enfileiradas: number; candidatas: number }>(
+        "/admin/conferencias/reprocessar",
+        { method: "POST", token, body: JSON.stringify({ limite: 100 }) },
+      );
+      toast.success(`${r.enfileiradas} viagem(ns) na fila`, {
+        description: "A conferência vai passando por elas nos próximos minutos.",
+      });
+      void resumo.refetch();
+      void lista.refetch();
+      void pendentes.refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não consegui enfileirar.");
+    } finally {
+      setEnviando(false);
+    }
+  }
 
   if (!temPermissao("viagens.ver")) {
     return <div className="p-6 text-sm text-muted-foreground">Você não tem acesso a esta tela.</div>;
@@ -100,6 +131,23 @@ export default function ConferenciasPage() {
           <strong>Modo observação.</strong> A conferência está lendo e registrando o que acha, mas{" "}
           <strong>não mexe nas viagens e não avisa ninguém</strong>. É de propósito: dá pra comparar o
           que ela decidiria com o que a conferência humana decidiu, antes de deixar ela agir.
+        </Card>
+      )}
+
+      {(pendentes.data?.pendentes ?? 0) > 0 && temPermissao("viagens.validar") && (
+        <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
+          <div>
+            <p className="text-sm font-medium">
+              {pendentes.data?.pendentes} viagem(ns) com foto ainda sem conferência
+            </p>
+            <p className="text-sm text-muted-foreground">
+              São as que já estavam aqui antes. Cada uma custa uma leitura (~R$ 0,03), então elas não
+              entram sozinhas — vão até 100 por vez, das mais recentes pras mais antigas.
+            </p>
+          </div>
+          <Button onClick={() => void conferirPendentes()} disabled={enviando}>
+            {enviando ? "Enfileirando…" : "Conferir as pendentes"}
+          </Button>
         </Card>
       )}
 
