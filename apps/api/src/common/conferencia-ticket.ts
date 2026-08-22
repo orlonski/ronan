@@ -50,6 +50,27 @@ export type Incerteza = {
 
 export type Veredito = "BATE" | "DIVERGE" | "INCERTO" | "NAO_APLICAVEL";
 
+/**
+ * O parecer da IA, campo a campo.
+ *
+ * Existe porque comparar NOME é problema semântico, não de string. "BRONZE
+ * PAVIMENTAÇÕES LTDA" e "Construtora Bronze" são a mesma empresa; "C.B.U.Q." e
+ * "MASSA DE ASFALTO" são o mesmo material; e qual número identifica o documento
+ * depende de ele ser ticket de balança ou nota fiscal. Nenhuma regra de texto
+ * cobre isso — cada heurística que se acrescenta abre um buraco novo, e foi
+ * exatamente o que aconteceu aqui, rodada após rodada.
+ *
+ * Então quem julga semântica é o modelo, que entende do assunto. O código fica
+ * com o que é objetivo (o número do peso) e com as travas de segurança — que é
+ * o que ele faz bem e de forma auditável.
+ */
+export type JulgamentoIa = Partial<
+  Record<
+    "numeroDocumento" | "toneladas" | "data" | "placa" | "cliente" | "material",
+    { confere: "sim" | "nao" | "incerto"; porque: string }
+  >
+>;
+
 export type Declarado = {
   toneladas?: number | null;
   ticket?: string | null;
@@ -74,6 +95,8 @@ export type Declarado = {
 };
 
 export type Lido = {
+  /** "ticket_balanca" | "nota_fiscal" | "romaneio" | "outro". */
+  tipoDocumento?: string | null;
   toneladas?: number | null;
   ticket?: string | null;
   placa?: string | null;
@@ -418,6 +441,108 @@ export function compararDeclaradoComLido(
     const lid = campo === "cliente" ? lido.clienteNome : lido.materialNome;
     if (!dec || !lid) continue;
     if (nomesCompativeis(dec, lid)) conferidos.push(campo);
+  }
+
+  return {
+    veredito: decidirVeredito(divergencias, incertezas, conferidos, lido.confianca, limiares),
+    divergencias,
+    incertezas,
+    conferidos,
+  };
+}
+
+
+/**
+ * Decide a partir do parecer da IA, mantendo as travas que o código faz melhor.
+ *
+ * Divisão de trabalho: o modelo julga semântica (nome de empresa, nome de
+ * material, qual número identifica o documento) porque isso não cabe em regra
+ * de texto. O código guarda três coisas que não se delega:
+ *
+ *   1. o PESO é conferido no número, aqui, porque é aritmética e é o que vira
+ *      dinheiro — e as armadilhas de bruto/tara e de unidade são conhecidas;
+ *   2. leitura fraca invalida qualquer conclusão, inclusive a de que está tudo
+ *      certo;
+ *   3. só peso e documento podem chegar ao motorista. Nome de cliente e de
+ *      material, mesmo com "nao" da IA, param na revisão humana — errar aí é
+ *      barato pra nós e caro pra ele.
+ */
+export function conferirComJulgamento(
+  declarado: Declarado,
+  lido: Lido,
+  julgamento: JulgamentoIa,
+  limiares: LimiaresConferencia = LIMIARES_PADRAO,
+): ResultadoConferencia {
+  const divergencias: Divergencia[] = [];
+  const incertezas: Incerteza[] = [];
+  const conferidos: CampoConferido[] = [];
+
+  // ── peso: número, e portanto do código ──
+  const podeConferirPeso =
+    declarado.pesoConferivel !== false &&
+    typeof declarado.toneladas === "number" &&
+    typeof lido.toneladas === "number";
+
+  if (podeConferirPeso) {
+    const dec = declarado.toneladas as number;
+    const lid = lido.toneladas as number;
+    conferidos.push("toneladas");
+    const tolerado = Math.max(limiares.toleranciaToneladas, dec * limiares.toleranciaPesoPct);
+
+    if (Math.abs(dec - lid) > tolerado) {
+      const suspeita = explicarPesoSuspeito(dec, lid);
+      if (suspeita) {
+        incertezas.push({ campo: "toneladas", declarado: fmtPeso(dec), lido: fmtPeso(lid), motivo: suspeita });
+      } else if (julgamento.toneladas?.confere === "sim") {
+        // A IA viu o papel e diz que confere apesar do número. Pode ter lido
+        // uma linha diferente da que usou pra julgar — não é o bastante pra
+        // acusar, mas também não é pra ignorar.
+        incertezas.push({
+          campo: "toneladas",
+          declarado: fmtPeso(dec),
+          lido: fmtPeso(lid),
+          motivo: julgamento.toneladas.porque || "a leitura diz que confere, mas os números não fecham",
+        });
+      } else {
+        divergencias.push({
+          campo: "toneladas",
+          declarado: fmtPeso(dec),
+          lido: fmtPeso(lid),
+          gravidade: "ALTA",
+          detalhe: `O documento mostra ${fmtPeso(lid)} e a viagem foi lançada com ${fmtPeso(dec)}.`,
+        });
+      }
+    }
+  }
+
+  // ── os demais campos: parecer da IA ──
+  const mapa: { campo: CampoConferido; chave: keyof JulgamentoIa; dec?: string | null; lid?: string | null; grave: boolean }[] = [
+    { campo: "ticket", chave: "numeroDocumento", dec: declarado.ticket, lid: lido.ticket, grave: true },
+    { campo: "placa", chave: "placa", dec: declarado.placa, lid: lido.placa, grave: false },
+    { campo: "data", chave: "data", dec: declarado.data ? soDia(declarado.data) : null, lid: lido.data, grave: false },
+    { campo: "cliente", chave: "cliente", dec: declarado.clienteNome, lid: lido.clienteNome, grave: false },
+    { campo: "material", chave: "material", dec: declarado.materialNome, lid: lido.materialNome, grave: false },
+  ];
+
+  for (const { campo, chave, dec, lid, grave } of mapa) {
+    const parecer = julgamento[chave];
+    if (!parecer || !dec) continue;
+    conferidos.push(campo);
+
+    if (parecer.confere === "sim") continue;
+
+    const registro = { campo, declarado: dec, lido: lid ?? "—" };
+    if (parecer.confere === "nao" && grave) {
+      divergencias.push({
+        ...registro,
+        gravidade: "ALTA",
+        detalhe: parecer.porque || `O documento não corresponde ao que foi lançado em ${campo}.`,
+      });
+    } else {
+      // "nao" em campo não-grave também para aqui: nome de cliente ou material
+      // é onde a leitura mais erra, e onde acusar sai mais caro que conferir.
+      incertezas.push({ ...registro, motivo: parecer.porque || "não deu pra confirmar" });
+    }
   }
 
   return {

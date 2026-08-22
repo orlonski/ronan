@@ -10,7 +10,7 @@ import { LeitorTicketService } from "./leitor-ticket.service";
 import { AplicarVereditoService } from "./aplicar-veredito.service";
 import { comConta, comoSistema } from "../common/conta/conta-context";
 import {
-  compararDeclaradoComLido,
+  conferirComJulgamento,
   precisaSegundaOpiniao,
   type Declarado,
   type ResultadoConferencia,
@@ -171,11 +171,16 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
 
     const mime = job.storageKey.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
     const fotoBase64 = buffer.toString("base64");
+    // Cliente e material vão junto: é sobre eles que o modelo precisa julgar
+    // se "BRONZE PAVIMENTAÇÕES LTDA" e "Construtora Bronze" são a mesma
+    // empresa. Sem mandar, ele não teria contra o que comparar.
     const paraOModelo = {
-      ticket: declarado.ticket,
+      numeroDocumento: declarado.ticket,
       toneladas: declarado.toneladas,
-      data: declarado.data,
+      data: declarado.data ? String(declarado.data).slice(0, 10) : null,
       placa: declarado.placa,
+      cliente: declarado.clienteNome,
+      material: declarado.materialNome,
     };
 
     let primeira;
@@ -193,7 +198,7 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
           incertezas: [],
           conferidos: [],
         },
-        leitura: primeira.lido,
+        leitura: { ...primeira.lido, julgamento: primeira.julgamento },
         custoUsd: primeira.custoUsd,
         modelo: primeira.modelo,
         passadas: 1,
@@ -201,7 +206,7 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
       };
     }
 
-    let resultado = compararDeclaradoComLido(declarado, primeira.lido);
+    let resultado = conferirComJulgamento(declarado, primeira.lido, primeira.julgamento);
     let custo = primeira.custoUsd;
     let modelo = primeira.modelo;
     let passadas = 1;
@@ -226,7 +231,7 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
         passadas = 2;
         escalou = true;
 
-        const rSegunda = compararDeclaradoComLido(declarado, segunda.lido);
+        const rSegunda = conferirComJulgamento(declarado, segunda.lido, segunda.julgamento);
         // Discordaram? Então nenhuma das duas é confiável o bastante pra
         // incomodar o motorista: humano decide.
         resultado =
@@ -239,7 +244,16 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    return { resultado, leitura: primeira.lido, custoUsd: custo, modelo, passadas, escalou };
+    // O julgamento vai junto: é o que permite recomparar depois sem pagar
+    // leitura de novo.
+    return {
+      resultado,
+      leitura: { ...primeira.lido, julgamento: primeira.julgamento },
+      custoUsd: custo,
+      modelo,
+      passadas,
+      escalou,
+    };
   }
 
   private async temCotaDeEscalada(): Promise<boolean> {

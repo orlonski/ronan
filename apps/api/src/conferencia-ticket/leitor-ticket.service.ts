@@ -3,7 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { ConfigService } from "@nestjs/config";
 import { UsoIaService } from "../ia/uso-ia.service";
 import { calcularUso } from "../common/ia/uso-ia";
-import type { Lido } from "../common/conferencia-ticket";
+import type { Lido, JulgamentoIa } from "../common/conferencia-ticket";
 
 /**
  * Lê um ticket já sabendo o que o motorista declarou.
@@ -21,50 +21,80 @@ const MODELO_PADRAO = "claude-haiku-4-5-20251001";
  * tokens e uma conferência inteira não chega perto —, então cada palavra aqui é
  * paga em toda leitura.
  */
-const INSTRUCOES = `Você confere tickets de pesagem (balança) de transporte de carga.
+const INSTRUCOES = `Você confere documentos de carga (ticket de balança, romaneio, nota fiscal) contra o que o motorista lançou no sistema.
 
-Recebe a FOTO de um ticket e o que o motorista LANÇOU no sistema. Sua tarefa é
-dizer o que está escrito no ticket — não julgar se o motorista errou. Quem
-compara é o sistema, depois de você.
+Recebe a FOTO do documento e os dados LANÇADOS. Sua tarefa é dizer, campo a
+campo, se o que está no papel corresponde ao que foi lançado — usando bom senso
+de quem trabalha com transporte, não comparação de texto.
 
 Responda APENAS um JSON puro (sem markdown, sem texto em volta):
 {
-  "ticket": "string ou null",       // número do ticket, como impresso
-  "toneladas": number ou null,      // PESO LÍQUIDO em toneladas
-  "data": "AAAA-MM-DD ou null",     // data da pesagem
-  "placa": "string ou null",        // placa do veículo no ticket
-  "cliente": "string ou null",      // nome do cliente/obra como está no ticket
-  "material": "string ou null",     // material como está no ticket
-  "legivel": true|false,            // false se a foto não dá pra ler
-  "confidence": number              // 0..1 — o quanto você confia NA SUA LEITURA
+  "tipoDocumento": "ticket_balanca" | "nota_fiscal" | "romaneio" | "outro",
+  "legivel": true|false,
+  "confidence": number,          // 0..1 — o quanto você confia na SUA LEITURA
+
+  "numeroDocumento": "string ou null",   // o número que IDENTIFICA este documento
+  "toneladas": number ou null,           // PESO LÍQUIDO em toneladas
+  "data": "AAAA-MM-DD ou null",
+  "placa": "string ou null",
+  "cliente": "string ou null",
+  "material": "string ou null",
+
+  "conferencia": {
+    "numeroDocumento": { "confere": "sim"|"nao"|"incerto", "porque": "frase curta" },
+    "toneladas":       { "confere": "sim"|"nao"|"incerto", "porque": "frase curta" },
+    "data":            { "confere": "sim"|"nao"|"incerto", "porque": "frase curta" },
+    "placa":           { "confere": "sim"|"nao"|"incerto", "porque": "frase curta" },
+    "cliente":         { "confere": "sim"|"nao"|"incerto", "porque": "frase curta" },
+    "material":        { "confere": "sim"|"nao"|"incerto", "porque": "frase curta" }
+  }
 }
+
+QUAL NÚMERO COMPARAR — depende do documento:
+- Ticket de balança: o número do ticket/romaneio/pesagem.
+- Nota fiscal: o número da NF. Não confunda com número de pedido, série, chave
+  de acesso ou número do ticket que às vezes vem impresso junto.
+- Se o papel traz VÁRIOS números e um deles é igual ao lançado, é quase certo
+  que o motorista digitou aquele: responda "sim" e diga qual era.
+- Prefixo de série, ponto, hífen e zero à esquerda são jeito de imprimir:
+  "TKB-043625" e "043625" são o mesmo documento.
+
+CLIENTE E MATERIAL — julgue como gente, não como texto:
+- Razão social contra nome curto é a MESMA empresa: "BRONZE PAVIMENTAÇÕES LTDA"
+  e "Construtora Bronze" conferem. "CASTILHO" e "CONSTRUTORA CASTILHO" conferem.
+- Nome técnico contra nome comercial é o MESMO material: "C.B.U.Q. FAIXA C" e
+  "MASSA DE ASFALTO" conferem (CBUQ é concreto betuminoso usinado a quente, que
+  é massa asfáltica). "BGS" e "BRITA GRADUADA SIMPLES" conferem.
+- Faixa, tipo, graduação e granulometria qualificam o material, não mudam o que
+  ele é: "BRITA 1" e "BRITA" conferem.
+- O documento costuma trazer o nome da PEDREIRA, da OBRA ou do destino, que não
+  é o cliente do frete. Nesse caso responda "incerto", não "nao".
+- Só responda "nao" quando forem claramente coisas diferentes — areia contra
+  asfalto, uma construtora contra outra construtora sem nenhuma relação.
 
 PESO — o erro mais caro:
 - O ticket mostra BRUTO, TARA e LÍQUIDO. Use SEMPRE o LÍQUIDO.
-- Rótulos variam: "LIQUIDO", "LÍQ.", "PESO LIQ", "NET", "CARGA" são o líquido.
+- Rótulos variam: "LIQUIDO", "LÍQ.", "PESO LIQ", "NET", "CARGA".
 - Só bruto e tara, sem líquido: calcule bruto − tara.
-- Converta kg para toneladas dividindo por 1000.
+- Ponto é separador de MILHAR e vírgula é DECIMAL: "32.500 KG" = 32500 kg =
+  32.5 toneladas. No JSON use ponto decimal, sem separador de milhar.
 - Caminhão carregado fica entre 5 e 50 toneladas. Fora disso, revise sua leitura.
+- Diferença de algumas dezenas de quilos é arredondamento de balança: "sim".
 
-NÚMEROS EM FORMATO BRASILEIRO:
-- Ponto é separador de MILHAR, vírgula é DECIMAL. "32.500" é trinta e dois mil e
-  quinhentos, não 32,5.
-- "32.500 KG" = 32500 kg = 32.5 toneladas. "32,500 T" = 32,5 toneladas.
-- No JSON use ponto decimal e nada de separador de milhar: 32.5.
+DATA: formato brasileiro DD/MM/AAAA. Um dia de diferença é rotina (pesagem à
+noite, lançamento no dia seguinte): responda "sim". Havendo várias datas,
+prefira a da PESAGEM/SAÍDA.
 
-DATA:
-- Formato brasileiro DD/MM/AAAA: "03/04/2026" é 3 de abril.
-- Havendo mais de uma data, prefira a da PESAGEM/SAÍDA.
+PLACA: ignore hífen e espaço. Se o documento traz a placa da CARRETA e o
+lançamento é do cavalo mecânico, responda "incerto" — não é caminhão errado.
 
-CONFIANÇA — leia com atenção, é o que protege o motorista:
-- confidence alta (0.8+) só quando você leu o campo com clareza.
-- Foto borrada, cortada, escura ou amassada: confidence baixa e "legivel": false
-  quando não der pra ler mesmo.
-- Campo que você NÃO conseguiu ler com certeza vai como null. Null é MUITO
-  melhor que um palpite: um palpite errado faz o sistema cobrar um motorista
-  que não errou nada.
-- Nunca copie um valor do que o motorista lançou só porque ele lançou. Se o
-  ticket não mostra, é null.`;
+REGRA QUE VALE MAIS QUE TODAS AS OUTRAS:
+Quem lê isto é um motorista parceiro, e ele pode estar certo mesmo quando o
+papel parece dizer outra coisa. Responda "nao" apenas quando tiver certeza de
+que o lançamento não corresponde ao documento. Na menor dúvida — foto ruim,
+campo cortado, nome que você não reconhece, número que aparece mais de uma vez —
+responda "incerto". Um "incerto" manda o caso pra um humano olhar, o que é
+barato. Um "nao" errado acusa alguém honesto, o que não é.`;
 
 @Injectable()
 export class LeitorTicketService {
@@ -94,7 +124,13 @@ export class LeitorTicketService {
     mime: string;
     declarado: Record<string, unknown>;
     modelo?: string;
-  }): Promise<{ lido: Lido; custoUsd: number; modelo: string; legivel: boolean }> {
+  }): Promise<{
+    lido: Lido;
+    julgamento: JulgamentoIa;
+    custoUsd: number;
+    modelo: string;
+    legivel: boolean;
+  }> {
     if (!this.client) throw new Error("ANTHROPIC_API_KEY não configurada");
     const modelo = args.modelo || MODELO_PADRAO;
     const t0 = Date.now();
@@ -144,6 +180,7 @@ export class LeitorTicketService {
         this.log.warn("Conferência: resposta sem JSON válido");
         return {
           lido: { confianca: 0 },
+          julgamento: {},
           custoUsd: uso.custoUsd ?? 0,
           modelo,
           legivel: false,
@@ -151,8 +188,10 @@ export class LeitorTicketService {
       }
 
       return {
+        julgamento: lerJulgamento(parsed.conferencia),
         lido: {
-          ticket: str(parsed.ticket),
+          tipoDocumento: str(parsed.tipoDocumento),
+          ticket: str(parsed.numeroDocumento) ?? str(parsed.ticket),
           toneladas: num(parsed.toneladas),
           data: str(parsed.data),
           placa: str(parsed.placa),
@@ -212,4 +251,29 @@ export function extrairJson(texto: string): Record<string, unknown> | null {
     }
     return null;
   }
+}
+
+/**
+ * O parecer da IA, campo a campo.
+ *
+ * Vem separado do que ela LEU de propósito: o que ela leu vai pra tela, pra
+ * pessoa comparar com os próprios olhos; o parecer é o que decide o veredito.
+ * Qualquer valor que não seja exatamente "sim" ou "nao" vira `incerto` — na
+ * dúvida, humano olha.
+ */
+function lerJulgamento(bruto: unknown): JulgamentoIa {
+  const j: JulgamentoIa = {};
+  if (!bruto || typeof bruto !== "object") return j;
+  const campos = ["numeroDocumento", "toneladas", "data", "placa", "cliente", "material"] as const;
+  for (const campo of campos) {
+    const item = (bruto as Record<string, unknown>)[campo];
+    if (!item || typeof item !== "object") continue;
+    const confere = (item as Record<string, unknown>).confere;
+    const porque = (item as Record<string, unknown>).porque;
+    j[campo] = {
+      confere: confere === "sim" ? "sim" : confere === "nao" ? "nao" : "incerto",
+      porque: typeof porque === "string" ? porque.slice(0, 300) : "",
+    };
+  }
+  return j;
 }

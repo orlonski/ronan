@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   compararDeclaradoComLido,
+  conferirComJulgamento,
   decidirVeredito,
   precisaSegundaOpiniao,
   explicarPesoSuspeito,
@@ -407,5 +408,122 @@ describe("auditoria dos demais campos (não só os que apareceram no relato)", (
   it("data virando o mês continua certa", () => {
     expect(conferir({ data: "2026-09-01" }, { data: "2026-08-31" }).veredito).toBe("BATE");
     expect(conferir({ data: "2026-01-01" }, { data: "2025-12-31" }).veredito).toBe("BATE");
+  });
+});
+
+/**
+ * A virada de desenho: comparar NOME é problema semântico, não de string.
+ * Depois de três rodadas empilhando heurística e abrindo um buraco novo a cada
+ * uma, quem julga nome e qual-número-é-o-do-documento passou a ser o modelo,
+ * que entende do assunto. O código ficou com o peso (aritmética) e com as
+ * travas de segurança.
+ */
+describe("conferência guiada pelo parecer da IA", () => {
+  const declarado: Declarado = {
+    toneladas: 35.14,
+    ticket: "198398",
+    placa: "AQF7758",
+    data: "2026-08-22",
+    clienteNome: "BRONZE PAVIMENTAÇÕES LTDA",
+    materialNome: "MASSA DE ASFALTO",
+  };
+  const lido: Lido = {
+    toneladas: 35.14,
+    ticket: "198398",
+    placa: "AQF7758",
+    data: "2026-08-22",
+    clienteNome: "Construtora Bronze",
+    materialNome: "C.B.U.Q. FAIXA C",
+    confianca: 0.92,
+  };
+  const ok = { confere: "sim" as const, porque: "" };
+
+  it("razão social diferente que a IA reconhece como a mesma empresa: BATE", () => {
+    const r = conferirComJulgamento(declarado, lido, {
+      numeroDocumento: ok,
+      toneladas: ok,
+      cliente: { confere: "sim", porque: "Bronze Pavimentações e Construtora Bronze são a mesma" },
+      material: { confere: "sim", porque: "CBUQ é massa asfáltica" },
+    });
+    expect(r.divergencias).toHaveLength(0);
+    expect(r.veredito).toBe("BATE");
+  });
+
+  it("a IA sabendo qual número é o do documento resolve o formato certo", () => {
+    // Nota fiscal traz número de NF, de pedido e às vezes do ticket. Qual deles
+    // corresponde ao lançado é ela quem diz.
+    const r = conferirComJulgamento(
+      declarado,
+      { ...lido, tipoDocumento: "nota_fiscal", ticket: "168395" },
+      { numeroDocumento: { confere: "sim", porque: "168395 é o pedido; a NF é 198398" }, toneladas: ok },
+    );
+    expect(r.divergencias).toHaveLength(0);
+    expect(r.veredito).toBe("BATE");
+  });
+
+  it("documento realmente de outro número continua divergindo", () => {
+    const r = conferirComJulgamento(declarado, { ...lido, ticket: "999999" }, {
+      numeroDocumento: { confere: "nao", porque: "o documento é o 999999" },
+      toneladas: ok,
+    });
+    expect(r.divergencias[0]).toMatchObject({ campo: "ticket", gravidade: "ALTA" });
+    expect(r.veredito).toBe("DIVERGE");
+  });
+
+  it("'nao' em cliente NÃO chega ao motorista — para na revisão", () => {
+    // Nome é onde a leitura mais erra, e onde acusar sai mais caro que conferir.
+    const r = conferirComJulgamento(declarado, lido, {
+      numeroDocumento: ok,
+      toneladas: ok,
+      cliente: { confere: "nao", porque: "empresas diferentes" },
+    });
+    expect(r.divergencias).toHaveLength(0);
+    expect(r.incertezas[0].campo).toBe("cliente");
+    expect(r.veredito).toBe("INCERTO");
+  });
+
+  it("o peso continua sendo julgado no número, não no parecer", () => {
+    // É aritmética e é o que vira dinheiro: não se delega.
+    const r = conferirComJulgamento(declarado, { ...lido, toneladas: 30.5 }, {
+      numeroDocumento: ok,
+      toneladas: { confere: "sim", porque: "achei que batia" },
+    });
+    // A IA disse que confere, mas os números não fecham: vira revisão, e não
+    // um "tudo certo" que deixaria passar diferença de carga.
+    expect(r.veredito).toBe("INCERTO");
+    expect(r.incertezas[0].campo).toBe("toneladas");
+  });
+
+  it("peso divergente sem aval da IA segue divergência ALTA", () => {
+    const r = conferirComJulgamento(declarado, { ...lido, toneladas: 30.5 }, {
+      numeroDocumento: ok,
+      toneladas: { confere: "nao", porque: "o ticket mostra 30,5" },
+    });
+    expect(r.divergencias[0]).toMatchObject({ campo: "toneladas", gravidade: "ALTA" });
+    expect(r.veredito).toBe("DIVERGE");
+  });
+
+  it("peso com cara de bruto continua sendo pego pelo código", () => {
+    const r = conferirComJulgamento(declarado, { ...lido, toneladas: 52 }, {
+      numeroDocumento: ok,
+      toneladas: { confere: "nao", porque: "diferente" },
+    });
+    expect(r.divergencias).toHaveLength(0);
+    expect(r.incertezas[0].motivo).toMatch(/bruto/);
+  });
+
+  it("leitura fraca invalida tudo, mesmo com a IA dizendo que confere", () => {
+    const r = conferirComJulgamento(declarado, { ...lido, confianca: 0.3 }, {
+      numeroDocumento: ok,
+      toneladas: ok,
+    });
+    expect(r.veredito).toBe("INCERTO");
+  });
+
+  it("sem parecer nenhum, não inventa conclusão", () => {
+    const r = conferirComJulgamento(declarado, lido, {});
+    expect(r.divergencias).toHaveLength(0);
+    // Só o peso foi conferível, e ele bate.
+    expect(r.conferidos).toEqual(["toneladas"]);
   });
 });

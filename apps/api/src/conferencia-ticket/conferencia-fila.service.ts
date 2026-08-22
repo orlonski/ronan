@@ -10,8 +10,9 @@ import { ConferenciaConfig } from "./conferencia.config";
 import { comoSistema, contaIdAtual } from "../common/conta/conta-context";
 import { STATUS_FORA_FECHAMENTO } from "../common/viagem-status";
 import {
-  compararDeclaradoComLido,
+  conferirComJulgamento,
   type Declarado,
+  type JulgamentoIa,
   type Lido,
 } from "../common/conferencia-ticket";
 
@@ -427,7 +428,10 @@ export class ConferenciaFilaService {
       const lido = c.leitura as unknown as Lido | null;
       if (!lido || typeof lido.confianca !== "number") continue;
 
-      const r = compararDeclaradoComLido(declarado, lido);
+      // O julgamento da IA foi guardado junto da leitura, então recomparar
+      // continua custando zero mesmo com a decisão sendo semântica.
+      const julgamento = (lido as unknown as { julgamento?: JulgamentoIa }).julgamento ?? {};
+      const r = conferirComJulgamento(declarado, lido, julgamento);
       porVeredito[r.veredito] = (porVeredito[r.veredito] ?? 0) + 1;
 
       if (r.veredito !== c.veredito) {
