@@ -16,6 +16,7 @@ type Linha = { motoristaId: string; contaNome: string; pendentes: number };
 export function EscolherEmpresaAbertura() {
   const qc = useQueryClient();
   const [linhas, setLinhas] = useState<Linha[]>([]);
+  const [erro, setErro] = useState<string | null>(null);
   const ativa = motoristaAtivoId();
 
   useEffect(() => {
@@ -29,6 +30,19 @@ export function EscolherEmpresaAbertura() {
       ),
     );
   }, []);
+
+  async function escolher(motoristaId: string) {
+    setErro(null);
+    try {
+      await trocarEmpresa(qc, motoristaId);
+      marcarEmpresaEscolhida();
+    } catch {
+      // Não entrou na empresa (faltou o token dela e não deu pra pedir outro
+      // agora). Segue perguntando: passar direto abriria o app na empresa
+      // errada — justamente o que esta tela existe pra impedir.
+      setErro("Não deu pra abrir essa empresa agora. Veja sua internet e tente de novo.");
+    }
+  }
 
   return (
     <div className="flex min-h-screen-safe flex-col bg-background">
@@ -44,13 +58,16 @@ export function EscolherEmpresaAbertura() {
           Tudo que você lançar vai pra empresa escolhida. Dá pra trocar depois, lá no topo da
           tela inicial.
         </p>
+        {erro && (
+          <p className="rounded-2xl border-2 border-destructive/50 bg-destructive/10 p-4 text-base font-medium text-foreground">
+            {erro}
+          </p>
+        )}
         {linhas.map((l) => (
           <button
             key={l.motoristaId}
             type="button"
-            onClick={() =>
-              void trocarEmpresa(qc, l.motoristaId).then(() => marcarEmpresaEscolhida())
-            }
+            onClick={() => void escolher(l.motoristaId)}
             className={`flex items-center gap-3 rounded-2xl border-2 p-5 text-left active:opacity-75 ${
               l.motoristaId === ativa ? "border-brand bg-brand/10" : "border-border bg-card"
             }`}

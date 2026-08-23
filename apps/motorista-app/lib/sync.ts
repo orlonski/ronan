@@ -61,7 +61,13 @@ import {
   type PendingViagemIniciar,
   type ZodIssueSaved,
 } from "@/db/database";
-import { api, ApiError, getUltimaFalhaRedeAt, humanizeApiError } from "./api";
+import {
+  api,
+  ApiError,
+  getUltimaFalhaRedeAt,
+  humanizeApiError,
+  SessaoTrocadaError,
+} from "./api";
 import { KeychainLockedError } from "./auth";
 
 type ApiErrorBody = { issues?: ZodIssueSaved[] };
@@ -1812,12 +1818,17 @@ class FotoPerdidaError extends Error {}
  *  - sem sinal / timeout (TypeError de traduzirErroFetch) — realidade de 4G ruim
  *    de caminhoneiro; um lançamento nunca deve morrer por falta de sinal;
  *  - servidor 5xx / 408 / 429 — problema momentâneo do backend;
- *  - Keychain travado (device bloqueado) — ver lib/auth.ts.
+ *  - Keychain travado (device bloqueado) — ver lib/auth.ts;
+ *  - troca de empresa no meio do envio (SessaoTrocadaError) — a resposta foi
+ *    descartada de propósito, o item continua intacto e sobe quando esta empresa
+ *    voltar a ser a ativa. Envio que já tinha chegado no servidor não duplica: o
+ *    backend é idempotente por clientId.
  * Só 4xx real (dado inválido, precisa editar) e erros desconhecidos consomem
  * tentativa até MAX_ATTEMPTS.
  */
 function isErroTransitorio(err: unknown): boolean {
   if (err instanceof KeychainLockedError) return true;
+  if (err instanceof SessaoTrocadaError) return true;
   if (err instanceof TypeError) return true; // rede/timeout
   if (err instanceof ApiError) {
     return err.status >= 500 || err.status === 408 || err.status === 429;

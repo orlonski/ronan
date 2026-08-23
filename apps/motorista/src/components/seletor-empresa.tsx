@@ -21,6 +21,7 @@ export function SeletorEmpresa() {
   const total = JSON.parse(versao).length as number;
   const [aberto, setAberto] = useState(false);
   const [linhas, setLinhas] = useState<Linha[]>([]);
+  const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
     if (!aberto) return;
@@ -34,6 +35,18 @@ export function SeletorEmpresa() {
       ),
     );
   }, [aberto]);
+
+  async function escolher(motoristaId: string) {
+    setErro(null);
+    try {
+      await trocarEmpresa(qc, motoristaId);
+      setAberto(false);
+    } catch {
+      // A troca não aconteceu: ele continua na empresa de antes (e o app segue
+      // mostrando o dado dela, que é o certo). Só avisa por que não deu.
+      setErro("Não deu pra trocar agora. Veja sua internet e tente de novo.");
+    }
+  }
 
   if (!ativa || (!ativa.contaNome && total <= 1)) return null;
 
@@ -67,6 +80,11 @@ export function SeletorEmpresa() {
               <X size={24} className="text-muted-foreground" />
             </button>
           </div>
+          {erro && (
+            <p className="mx-4 mt-4 rounded-2xl border-2 border-destructive/50 bg-destructive/10 p-4 text-base font-medium text-foreground">
+              {erro}
+            </p>
+          )}
           <div className="flex flex-col gap-3 p-4">
             {linhas.map((l) => {
               const atual = l.motoristaId === ativa.motoristaId;
@@ -74,9 +92,7 @@ export function SeletorEmpresa() {
                 <button
                   key={l.motoristaId}
                   type="button"
-                  onClick={() =>
-                    void trocarEmpresa(qc, l.motoristaId).then(() => setAberto(false))
-                  }
+                  onClick={() => void escolher(l.motoristaId)}
                   className={`flex items-center gap-3 rounded-2xl border-2 p-4 text-left active:opacity-75 ${
                     atual ? "border-brand bg-brand/10" : "border-border bg-card"
                   }`}

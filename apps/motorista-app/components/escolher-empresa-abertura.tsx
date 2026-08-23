@@ -22,6 +22,7 @@ export function EscolherEmpresaAbertura() {
   const [linhas, setLinhas] = useState<Linha[]>([]);
   const [ativa, setAtiva] = useState<string | null>(null);
   const [indo, setIndo] = useState<string | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
     let vivo = true;
@@ -44,10 +45,16 @@ export function EscolherEmpresaAbertura() {
 
   async function escolher(motoristaId: string) {
     setIndo(motoristaId);
+    setErro(null);
     try {
       await trocarEmpresa(qc, motoristaId);
-    } finally {
       marcarEmpresaEscolhida();
+    } catch {
+      // Não entrou na empresa (faltou o token dela e não deu pra pedir outro
+      // agora). Segue perguntando: passar direto abriria o app na empresa
+      // errada — justamente o que esta tela existe pra impedir.
+      setErro("Não deu pra abrir essa empresa agora. Veja sua internet e tente de novo.");
+      setIndo(null);
     }
   }
 
@@ -67,6 +74,12 @@ export function EscolherEmpresaAbertura() {
           Tudo que você lançar vai pra empresa escolhida. Dá pra trocar depois, lá no topo da
           tela inicial.
         </Text>
+
+        {erro && (
+          <View className="rounded-2xl border-2 border-destructive/50 bg-destructive/10 p-4">
+            <Text className="text-base font-medium text-foreground">{erro}</Text>
+          </View>
+        )}
 
         {linhas.map((l) => (
           <Pressable

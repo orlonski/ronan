@@ -117,6 +117,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     (segments[0]?.startsWith("signup") ?? false) ||
     (segments[0]?.startsWith("esqueci-senha") ?? false);
   const pendenteAprovacao = getCadastroStatus() === "PENDENTE_APROVACAO";
+  // Ele roda pra mais de uma empresa e ainda não disse pra qual vai hoje. Nada
+  // de negócio pode ir pra rede antes disso: a resposta chegaria carimbada com a
+  // empresa da última abertura e cairia no cache da que ele escolher agora.
+  const escolhendoEmpresa = precisaEscolherEmpresa();
 
   // Boot: lê tokens + status do SecureStore uma vez e atualiza os stores.
   useEffect(() => {
@@ -193,16 +197,19 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // velho). Best-effort (não trava nada).
   useEffect(() => {
     if (!loggedIn) return;
-    void prefetchDadosBase(queryClient);
+    // Enquanto a empresa do turno não estiver escolhida, o prefetch espera —
+    // quem o dispara depois é a própria troca (lib/troca-empresa.ts), já na
+    // empresa certa.
+    if (!escolhendoEmpresa) void prefetchDadosBase(queryClient);
     // Alinha as empresas dele com o servidor: nome da empresa (que a migração
     // não tinha como saber), aprovação que saiu do "em análise" e cadastro novo
     // numa segunda empresa. Best-effort — offline fica com o que já tem.
     void atualizarCadastros().catch(() => {});
     const unsub = NetInfo.addEventListener((s) => {
-      if (s.isConnected) void prefetchDadosBase(queryClient);
+      if (s.isConnected && !precisaEscolherEmpresa()) void prefetchDadosBase(queryClient);
     });
     return unsub;
-  }, [loggedIn]);
+  }, [loggedIn, escolhendoEmpresa]);
 
   // Quando logar, tenta enviar erros que ficaram pendentes localmente
   // (capturados antes do login ou quando estava offline).
@@ -415,7 +422,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   // Roda pra mais de uma empresa: escolhe a do turno antes de ver qualquer tela.
   // Uma vez por abertura do app (o marcador vive em memória).
-  if (loggedIn && precisaEscolherEmpresa()) return <EscolherEmpresaAbertura />;
+  if (loggedIn && escolhendoEmpresa) return <EscolherEmpresaAbertura />;
 
   // Versão abaixo do piso exigido: bloqueio duro até atualizar (decisão do
   // backend; some sozinho quando o app volta atualizado). Fail-open — offline

@@ -21,7 +21,7 @@ import {
   type PendingViagem,
   type ZodIssueSaved,
 } from "@/db/dexie";
-import { api, ApiError, humanizeApiError } from "./api";
+import { api, ApiError, humanizeApiError, SessaoTrocadaError } from "./api";
 import { reportarEvento } from "./event-reporter";
 
 type ApiErrorBody = { issues?: ZodIssueSaved[] };
@@ -387,6 +387,41 @@ function resgatarLancamento(
     });
 }
 
+/**
+ * Como o item fica depois de uma falha de envio.
+ *
+ * Trocar de empresa no meio do envio (`SessaoTrocadaError`) não é falha do
+ * lançamento: a resposta foi descartada de propósito, pra não gravar dado de uma
+ * empresa no espaço da outra. O item volta pra "pending" sem queimar tentativa e
+ * sobe quando esta empresa voltar a ser a ativa — sem duplicar, porque o backend
+ * é idempotente por clientId.
+ */
+function estadoDeFalha(
+  item: { attempts: number },
+  err: unknown,
+  permanente: boolean,
+  msg: string,
+  status: number | undefined,
+  issues: ZodIssueSaved[] | undefined,
+) {
+  if (err instanceof SessaoTrocadaError) {
+    return {
+      status: "pending" as const,
+      errorMsg: msg,
+      errorStatus: undefined,
+      errorIssues: undefined,
+      attempts: item.attempts,
+    };
+  }
+  return {
+    status: "error" as const,
+    errorMsg: msg,
+    errorStatus: status,
+    errorIssues: issues,
+    attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
+  };
+}
+
 async function drainFotos(): Promise<void> {
   const list = await listPendingFotos();
   for (const item of list) {
@@ -414,11 +449,7 @@ async function processFoto(item: PendingFoto): Promise<void> {
     const { msg, status, issues } = extractErrorDetails(err);
     await upsertPendingFoto({
       ...item,
-      status: "error",
-      errorMsg: msg,
-      errorStatus: status,
-      errorIssues: issues,
-      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
+      ...estadoDeFalha(item, err, permanente, msg, status, issues),
     });
   }
   notify();
@@ -448,11 +479,7 @@ async function processLocal(item: PendingLocal): Promise<void> {
     if (permanente) resgatarLancamento("local", item, msg, status);
     await upsertPendingLocal({
       ...item,
-      status: "error",
-      errorMsg: msg,
-      errorStatus: status,
-      errorIssues: issues,
-      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
+      ...estadoDeFalha(item, err, permanente, msg, status, issues),
     });
   }
   notify();
@@ -503,11 +530,7 @@ async function processViagem(item: PendingViagem): Promise<void> {
     if (permanente) resgatarLancamento("viagem", item, msg, status);
     await upsertPendingViagem({
       ...item,
-      status: "error",
-      errorMsg: msg,
-      errorStatus: status,
-      errorIssues: issues,
-      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
+      ...estadoDeFalha(item, err, permanente, msg, status, issues),
     });
   }
   notify();
@@ -537,11 +560,7 @@ async function processPedagio(item: PendingPedagio): Promise<void> {
     if (permanente) resgatarLancamento("pedagio", item, msg, status);
     await upsertPendingPedagio({
       ...item,
-      status: "error",
-      errorMsg: msg,
-      errorStatus: status,
-      errorIssues: issues,
-      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
+      ...estadoDeFalha(item, err, permanente, msg, status, issues),
     });
   }
   notify();
@@ -588,11 +607,7 @@ async function processAbastecimento(item: PendingAbastecimento): Promise<void> {
     if (permanente) resgatarLancamento("abastecimento", item, msg, status);
     await upsertPendingAbastecimento({
       ...item,
-      status: "error",
-      errorMsg: msg,
-      errorStatus: status,
-      errorIssues: issues,
-      attempts: permanente ? MAX_ATTEMPTS : item.attempts + 1,
+      ...estadoDeFalha(item, err, permanente, msg, status, issues),
     });
   }
   notify();

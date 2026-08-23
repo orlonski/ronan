@@ -192,6 +192,16 @@ export async function semSessaoLocal(cadastros: SessaoLocal[]): Promise<SessaoLo
   return cadastros.filter((c) => !conhecidos.has(c.motoristaId));
 }
 
+/**
+ * O token deste cadastro — conferindo que ele é MESMO deste cadastro.
+ *
+ * O `sub` do JWT diz de quem o token é. Se o que está no slot for de outro
+ * cadastro, o app estaria falando com a empresa errada achando que é esta: as
+ * telas mostrariam o dado de uma sob o nome da outra. Aconteceu por uma corrida
+ * na renovação (já fechada em `lib/api.ts`), mas o estrago fica gravado no
+ * aparelho — então o slot ruim é descartado aqui, e quem precisar do token pede
+ * outro em `/m/auth/trocar-empresa` (ver lib/troca-empresa.ts).
+ */
 export async function tokensDe(motoristaId: string): Promise<Tokens | null> {
   let raw: string | null;
   try {
@@ -201,11 +211,18 @@ export async function tokensDe(motoristaId: string): Promise<Tokens | null> {
     throw err;
   }
   if (!raw) return null;
+  let tokens: Tokens;
   try {
-    return JSON.parse(raw) as Tokens;
+    tokens = JSON.parse(raw) as Tokens;
   } catch {
     return null;
   }
+  const dono = subDoToken(tokens.accessToken) ?? subDoToken(tokens.refreshToken);
+  if (dono && dono !== motoristaId) {
+    await SecureStore.deleteItemAsync(chaveTokens(motoristaId), KEYCHAIN_OPTS).catch(() => {});
+    return null;
+  }
+  return tokens;
 }
 
 export async function salvarTokensDe(motoristaId: string, t: Tokens): Promise<void> {

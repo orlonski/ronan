@@ -12,6 +12,7 @@ import type {
 } from "@ronan/shared-types";
 import { API_URL } from "./api-url";
 import { clearTokens, loadTokens, saveTokens, type Tokens } from "./auth";
+import { motoristaAtivoId, salvarTokensDe, tokensDe } from "./sessoes";
 import { setAuthState } from "./auth-state";
 import { clearCadastroStatus, setCadastroStatus } from "./cadastro-status";
 import { humanizeZodIssues, type ZodIssueLite } from "./validation";
@@ -29,6 +30,32 @@ export type AuthResposta = Tokens & {
   /** Cadastro novo herdou a senha que ele já usava em outra empresa. */
   senhaHerdada?: boolean;
 };
+
+/**
+ * A resposta chegou DEPOIS que o motorista trocou de empresa.
+ *
+ * Toda request nasce amarrada ao cadastro ativo naquele instante (o token é
+ * dele). Se a troca acontece enquanto ela está em voo — o prefetch do boot, a
+ * revalidação em background de uma tela, um item do outbox —, o dado que volta é
+ * da empresa ANTERIOR, mas tudo que grava depois (cache em disco, React Query,
+ * outbox) já está no namespace da empresa NOVA. Era assim que a lista de uma
+ * empresa aparecia (ou sumia) na outra.
+ *
+ * Descartar é a única resposta certa: dado de empresa errada não se mostra e não
+ * se grava. Conta como falha transitória — ninguém desloga, nada vira erro do
+ * motorista, e a query/o outbox tenta de novo já na empresa certa.
+ */
+export class SessaoTrocadaError extends Error {
+  constructor() {
+    super("Você trocou de empresa; recarregando os dados da empresa certa.");
+  }
+}
+
+/** Estoura se a empresa ativa não for mais a que originou a request. */
+async function conferirDono(dono: string | null): Promise<void> {
+  if (!dono) return; // sessão legada (chave única): não há outra empresa aqui
+  if ((await motoristaAtivoId()) !== dono) throw new SessaoTrocadaError();
+}
 
 export class ApiError extends Error {
   constructor(public status: number, public body: unknown) {
@@ -116,13 +143,24 @@ type RefreshResult =
   | { status: "invalido" }
   | { status: "transitorio" };
 
-let refreshing: Promise<RefreshResult> | null = null;
+/**
+ * Uma renovação em voo POR CADASTRO, nunca uma só pro app.
+ *
+ * Com um singleton global, uma request da empresa B que caísse em 401 durante o
+ * refresh da empresa A reaproveitava a promise da A e saía com o token DELA —
+ * dado da empresa errada, do jeito mais silencioso possível.
+ */
+const refreshing = new Map<string, Promise<RefreshResult>>();
 
-async function refresh(): Promise<RefreshResult> {
-  if (refreshing) return refreshing;
-  const tokens = await loadTokens();
+async function refresh(dono: string | null): Promise<RefreshResult> {
+  const chave = dono ?? "@legado";
+  const emVoo = refreshing.get(chave);
+  if (emVoo) return emVoo;
+  // Os tokens vêm do cadastro que originou a request, não do que estiver ativo
+  // agora: quem renova é o dono do token que expirou.
+  const tokens = dono ? await tokensDe(dono) : await loadTokens();
   if (!tokens?.refreshToken) return { status: "invalido" };
-  refreshing = (async () => {
+  const promessa: Promise<RefreshResult> = (async () => {
     try {
       const res = await fetchComTimeout(
         `${API_URL}/m/auth/refresh`,
@@ -135,9 +173,16 @@ async function refresh(): Promise<RefreshResult> {
       );
       if (res.ok) {
         const fresh = (await res.json()) as Tokens & { status?: StatusMotorista };
-        await saveTokens(fresh);
-        // Reflete aprovação sem precisar relogar (modo "em análise" some sozinho).
-        if (fresh.status) setCadastroStatus(fresh.status);
+        // Grava no slot DESTE cadastro. `saveTokens` escreveria no da empresa
+        // ativa agora — que pode já ser outra, e aí a empresa nova passaria a
+        // rodar com o token da antiga.
+        if (dono) await salvarTokensDe(dono, fresh);
+        else await saveTokens(fresh);
+        // Reflete aprovação sem precisar relogar (modo "em análise" some
+        // sozinho). Só do cadastro que está na tela: o status é um só na UI.
+        if (fresh.status && (!dono || (await motoristaAtivoId()) === dono)) {
+          setCadastroStatus(fresh.status);
+        }
         return { status: "ok", tokens: fresh };
       }
       // Só 401/403 = refresh token realmente inválido/expirado → deslogar.
@@ -149,10 +194,11 @@ async function refresh(): Promise<RefreshResult> {
       // Erro de rede / timeout (sem sinal, túnel) → não desloga.
       return { status: "transitorio" };
     } finally {
-      refreshing = null;
+      refreshing.delete(chave);
     }
   })();
-  return refreshing;
+  refreshing.set(chave, promessa);
+  return promessa;
 }
 
 // Timeout default pra rede 3G/4G ruim. Sem isso, fetch fica pendurado pra
@@ -252,7 +298,10 @@ export async function request<T>(
   if (body !== undefined && !isFormData) headers["content-type"] = "application/json";
   // Aceita gzip — backend agora tem compression() middleware
   headers["accept-encoding"] = "gzip, deflate";
-  let tokens = auth ? await loadTokens() : null;
+  // De QUEM é esta request. A empresa ativa pode mudar no meio (o motorista roda
+  // pra mais de uma), e a resposta que voltar só vale pra quem a disparou.
+  const dono = auth ? await motoristaAtivoId() : null;
+  const tokens = auth ? (dono ? await tokensDe(dono) : await loadTokens()) : null;
   if (tokens) headers["authorization"] = `Bearer ${tokens.accessToken}`;
 
   const url = `${API_URL}${path}`;
@@ -280,7 +329,10 @@ export async function request<T>(
   }
 
   if (res.status === 401 && auth) {
-    const renov = await refresh();
+    // Trocou de empresa com a request em voo: o 401 é do token ANTIGO. Não
+    // renova nem desloga — a sessão nova não tem nada a ver com isso.
+    await conferirDono(dono);
+    const renov = await refresh(dono);
     if (renov.status === "ok") {
       headers["authorization"] = `Bearer ${renov.tokens.accessToken}`;
       try {
@@ -290,7 +342,10 @@ export async function request<T>(
         throw traduzirErroFetch(err);
       }
     } else if (renov.status === "invalido") {
-      // Sessão acabou de verdade — desloga.
+      // Sessão acabou de verdade — desloga. Só depois de conferir que a empresa
+      // ativa ainda é esta: derrubar o app por causa do token de uma empresa que
+      // ele acabou de deixar seria deslogar quem está logado.
+      await conferirDono(dono);
       await clearTokens();
       await clearCadastroStatus();
       setAuthState(false);
@@ -302,6 +357,11 @@ export async function request<T>(
       throw new TypeError("Sem conexão com o servidor. Tente de novo em instantes.");
     }
   }
+
+  // A resposta é do cadastro que originou a request. Se a empresa ativa mudou
+  // enquanto ela vinha, este dado é da empresa anterior — e quem grava depois
+  // (cache em disco, React Query, outbox) já está no namespace da nova. Descarta.
+  await conferirDono(dono);
 
   if (!res.ok) {
     let parsed: unknown;

@@ -12,6 +12,7 @@ import {
   motoristaAtivoId,
   semSessaoLocal,
   sincronizarLista,
+  tokensDe,
   type SessaoLocal,
 } from "./sessoes";
 import { drain } from "./sync";
@@ -27,6 +28,7 @@ import { drain } from "./sync";
 export async function trocarEmpresa(qc: QueryClient, motoristaId: string): Promise<void> {
   if ((await motoristaAtivoId()) === motoristaId) return;
 
+  await garantirSessao(motoristaId);
   await ativarSessao(motoristaId);
   // O status de aprovação é POR CADASTRO: aprovado numa empresa e em análise na
   // outra é situação normal. Sem trocar aqui, o AuthGate mostraria a tela errada.
@@ -40,6 +42,25 @@ export async function trocarEmpresa(qc: QueryClient, motoristaId: string): Promi
   void prefetchDadosBase(qc).catch(() => {});
   // O pendente desta empresa estava parado enquanto ela não era a ativa.
   void drain().catch(() => {});
+}
+
+/**
+ * Só vira a empresa ativa com token DELA guardado.
+ *
+ * Sem essa garantia, o app entraria na empresa nova sem conseguir falar com o
+ * servidor por ela — e, pior, no aparelho onde o slot guardava o token de outro
+ * cadastro (corrida antiga de renovação, ver `tokensDe`), a tela mostraria o
+ * dado da empresa errada. Quando falta, pede um novo com a sessão atual, que
+ * ainda é válida: é o mesmo caminho do cadastro aprovado depois do login.
+ *
+ * Sem internet e sem token guardado, a troca falha — e é o certo: melhor
+ * continuar na empresa de agora do que abrir uma que não responde.
+ */
+async function garantirSessao(motoristaId: string): Promise<void> {
+  const guardado = await tokensDe(motoristaId).catch(() => null);
+  if (guardado?.accessToken) return;
+  const sessao = await api.trocarEmpresa(motoristaId);
+  await guardarSessao(sessao, false);
 }
 
 /** O que ele perde de vista ao sair desta empresa agora. */

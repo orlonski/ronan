@@ -31,6 +31,7 @@ export function SeletorEmpresa() {
   const [linhas, setLinhas] = useState<Linha[]>([]);
   const [aviso, setAviso] = useState<AvisoTroca | null>(null);
   const [trocando, setTrocando] = useState<string | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => assinarSessoes(() => setVersao((v) => v + 1)), []);
 
@@ -56,9 +57,14 @@ export function SeletorEmpresa() {
       return;
     }
     setTrocando(motoristaId);
+    setErro(null);
     try {
       await trocarEmpresa(qc, motoristaId);
       setAberto(false);
+    } catch {
+      // A troca não aconteceu: ele continua na empresa de antes (e o app segue
+      // mostrando o dado dela, que é o certo). Só avisa por que não deu.
+      setErro("Não deu pra trocar agora. Veja sua internet e tente de novo.");
     } finally {
       setTrocando(null);
     }
@@ -112,6 +118,12 @@ export function SeletorEmpresa() {
                   Você tem uma viagem em andamento aqui. Finalize antes de trocar — senão ela
                   fica pela metade.
                 </Text>
+              </View>
+            )}
+
+            {erro && (
+              <View className="mx-4 mt-4 rounded-2xl border-2 border-destructive/50 bg-destructive/10 p-4">
+                <Text className="text-base font-medium text-foreground">{erro}</Text>
               </View>
             )}
 
