@@ -206,12 +206,15 @@ export function Sidebar({
         </div>
 
         {/* De qual empresa é o que está na tela. Com mais de uma no ar, saber
-            onde você está deixa de ser detalhe. */}
+            onde você está deixa de ser detalhe. Some quando há logo: a logo já
+            identifica a empresa, repetir o nome embaixo é redundante. */}
         {/* Mesma marca lembrada do logo: sem isso o nome aparecia do nada um
             segundo depois e empurrava o menu pra baixo. */}
-        <div className="mb-4 h-4 px-2 text-xs font-medium text-muted-foreground">
-          {marca?.nome ?? ""}
-        </div>
+        {!marca?.logoUrl && (
+          <div className="mb-4 h-4 px-2 text-xs font-medium text-muted-foreground">
+            {marca?.nome ?? ""}
+          </div>
+        )}
 
         <nav className="flex-1 space-y-2 overflow-y-auto">
           {/* Dashboard fora dos grupos — sempre visível */}
