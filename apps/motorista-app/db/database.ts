@@ -49,6 +49,27 @@ export async function cacheGetAt(key: string): Promise<number | null> {
   }
 }
 
+/**
+ * Joga fora TODO o cache de consultas do cadastro ativo — e só ele.
+ *
+ * É a reação a descobrir dado de outra empresa aqui dentro (ver a conferência do
+ * `/m/me` em `lib/queries.ts`): se um valor veio do namespace errado, os vizinhos
+ * podem ter vindo junto, e não dá pra escolher no que confiar. Tudo volta da
+ * rede, na empresa certa.
+ *
+ * NÃO toca no outbox: lançamento do motorista não se apaga por desconfiança de
+ * cache — ele é o trabalho dele, e sobe pra empresa a que sempre pertenceu.
+ */
+export async function limparCacheDeConsultas(): Promise<void> {
+  try {
+    const prefixo = chave("cache.");
+    const alvos = (await storage.getAllKeys()).filter((k) => k.startsWith(prefixo));
+    if (alvos.length > 0) await storage.multiRemove(alvos);
+  } catch {
+    /* sem storage: o cache velho segue, mas a rede já corrige na sequência */
+  }
+}
+
 export async function cacheDelete(key: string): Promise<void> {
   try {
     await storage.removeItem(chave(`cache.${key}`));

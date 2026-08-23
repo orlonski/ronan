@@ -159,6 +159,18 @@ export function tokensDe(motoristaId: string): Tokens | null {
   return tokens;
 }
 
+/**
+ * Ele continua logado em ALGUMA empresa?
+ *
+ * O boot não pode decidir isso só pelo token do cadastro ativo: esse slot pode
+ * ter sido descartado por guardar o token de outro cadastro (ver `tokensDe`), e
+ * mandar pro login quem tem sessão sã em outra empresa seria cobrar senha por um
+ * estrago que não é dele — o reparo (`repararSessaoAtiva`) repõe o que falta.
+ */
+export function temAlgumaSessaoComToken(): boolean {
+  return ler().lista.some((s) => !!tokensDe(s.motoristaId)?.accessToken);
+}
+
 export function salvarTokensDe(motoristaId: string, t: Tokens): void {
   localStorage.setItem(chaveTokens(motoristaId), JSON.stringify(t));
 }

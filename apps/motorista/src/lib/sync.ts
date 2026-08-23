@@ -21,7 +21,13 @@ import {
   type PendingViagem,
   type ZodIssueSaved,
 } from "@/db/dexie";
-import { api, ApiError, humanizeApiError, SessaoTrocadaError } from "./api";
+import {
+  api,
+  ApiError,
+  humanizeApiError,
+  SessaoIndisponivelError,
+  SessaoTrocadaError,
+} from "./api";
 import { reportarEvento } from "./event-reporter";
 
 type ApiErrorBody = { issues?: ZodIssueSaved[] };
@@ -404,7 +410,7 @@ function estadoDeFalha(
   status: number | undefined,
   issues: ZodIssueSaved[] | undefined,
 ) {
-  if (err instanceof SessaoTrocadaError) {
+  if (err instanceof SessaoTrocadaError || err instanceof SessaoIndisponivelError) {
     return {
       status: "pending" as const,
       errorMsg: msg,

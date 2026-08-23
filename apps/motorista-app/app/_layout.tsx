@@ -23,8 +23,12 @@ import { aplicarOtaAoVoltar, baixarUpdateNoBoot } from "@/lib/ota";
 import { loadTokens, migrarProtecaoKeychain } from "@/lib/auth";
 import { prepararSessoes } from "@/lib/boot-sessao";
 import { EscolherEmpresaAbertura } from "@/components/escolher-empresa-abertura";
-import { assinarSessoes, precisaEscolherEmpresa } from "@/lib/sessoes";
-import { atualizarCadastros } from "@/lib/troca-empresa";
+import {
+  assinarSessoes,
+  precisaEscolherEmpresa,
+  temAlgumaSessaoComToken,
+} from "@/lib/sessoes";
+import { atualizarCadastros, repararSessaoAtiva } from "@/lib/troca-empresa";
 import {
   getCadastroStatus,
   loadCadastroStatus,
@@ -136,10 +140,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       .catch(() => {
         /* nunca derruba o boot: sem migrar, o app cai no caminho antigo */
       })
-      .then(() => Promise.all([loadTokens(), loadCadastroStatus()]))
-      .then(([t]) => {
+      .then(() => Promise.all([loadTokens(), loadCadastroStatus(), temAlgumaSessaoComToken()]))
+      .then(([t, , temSessao]) => {
         if (!alive) return;
-        setAuthState(!!t?.accessToken);
+        // `temSessao` cobre o aparelho cujo slot ativo foi descartado por
+        // guardar o token de outra empresa: ele segue logado pela sessão sã que
+        // tem, e o reparo repõe a que falta.
+        setAuthState(!!t?.accessToken || temSessao);
         setReady(true);
       })
       .catch(() => {
@@ -201,10 +208,14 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     // quem o dispara depois é a própria troca (lib/troca-empresa.ts), já na
     // empresa certa.
     if (!escolhendoEmpresa) void prefetchDadosBase(queryClient);
-    // Alinha as empresas dele com o servidor: nome da empresa (que a migração
-    // não tinha como saber), aprovação que saiu do "em análise" e cadastro novo
-    // numa segunda empresa. Best-effort — offline fica com o que já tem.
-    void atualizarCadastros().catch(() => {});
+    // Repõe o token da empresa ativa se ele faltar (slot descartado por guardar
+    // o de outro cadastro) e só depois alinha as empresas com o servidor: nome
+    // da empresa, aprovação que saiu do "em análise" e cadastro novo numa
+    // segunda empresa. Best-effort — offline fica com o que já tem.
+    void repararSessaoAtiva()
+      .catch(() => {})
+      .then(() => atualizarCadastros())
+      .catch(() => {});
     const unsub = NetInfo.addEventListener((s) => {
       if (s.isConnected && !precisaEscolherEmpresa()) void prefetchDadosBase(queryClient);
     });

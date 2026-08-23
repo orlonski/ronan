@@ -66,6 +66,7 @@ import {
   ApiError,
   getUltimaFalhaRedeAt,
   humanizeApiError,
+  SessaoIndisponivelError,
   SessaoTrocadaError,
 } from "./api";
 import { KeychainLockedError } from "./auth";
@@ -1829,6 +1830,7 @@ class FotoPerdidaError extends Error {}
 function isErroTransitorio(err: unknown): boolean {
   if (err instanceof KeychainLockedError) return true;
   if (err instanceof SessaoTrocadaError) return true;
+  if (err instanceof SessaoIndisponivelError) return true;
   if (err instanceof TypeError) return true; // rede/timeout
   if (err instanceof ApiError) {
     return err.status >= 500 || err.status === 408 || err.status === 429;

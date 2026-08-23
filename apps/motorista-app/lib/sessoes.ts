@@ -225,6 +225,27 @@ export async function tokensDe(motoristaId: string): Promise<Tokens | null> {
   return tokens;
 }
 
+/**
+ * Ele continua logado em ALGUMA empresa?
+ *
+ * O boot não pode decidir isso só pelo token do cadastro ativo: esse slot pode
+ * ter sido descartado por guardar o token de outro cadastro (ver `tokensDe`), e
+ * mandar pro login quem tem sessão sã em outra empresa seria cobrar senha por um
+ * estrago que não é dele — o reparo (`repararSessaoAtiva`) repõe o que falta.
+ */
+export async function temAlgumaSessaoComToken(): Promise<boolean> {
+  for (const s of (await carregar()).lista) {
+    try {
+      if ((await tokensDe(s.motoristaId))?.accessToken) return true;
+    } catch {
+      // Keychain travado: não dá pra provar que NÃO tem sessão — e deslogar por
+      // dúvida é o pior desfecho. Trata como logado; a request cuida do resto.
+      return true;
+    }
+  }
+  return false;
+}
+
 export async function salvarTokensDe(motoristaId: string, t: Tokens): Promise<void> {
   await SecureStore.setItemAsync(chaveTokens(motoristaId), JSON.stringify(t), KEYCHAIN_OPTS);
 }

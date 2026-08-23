@@ -5,7 +5,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import type { ExtrairTicketResult, StatusMotorista } from "@ronan/shared-types";
-import { cacheGet, cachePut } from "@/db/dexie";
+import { cacheGet, cachePut, limparCacheDeConsultas } from "@/db/dexie";
 import { api, ApiError } from "./api";
 import {
   normalizarAbastecimento,
@@ -166,11 +166,27 @@ function offlineCacheQuery<T>(key: string, path: string, opts: { staleTime?: num
   };
 }
 
+/**
+ * Trava de contaminação: o `/m/me` tem que ser DO cadastro ativo.
+ *
+ * `me.id` é o id do cadastro — se o que chegou for de outro, alguma coisa
+ * escapou do carimbo por empresa e o problema não é o nome errado no cabeçalho:
+ * é dado de uma empresa dentro do espaço da outra. Aqui isso vira erro em vez de
+ * tela, o cache de consultas daquele cadastro é descartado inteiro (os vizinhos
+ * podem ter vindo pelo mesmo caminho) e tudo volta da rede na empresa certa.
+ */
+async function conferirMe(me: Me): Promise<Me> {
+  const ativo = motoristaAtivoId();
+  if (!ativo || me.id === ativo) return me;
+  await limparCacheDeConsultas();
+  throw new Error("Dados de outra empresa; recarregando.");
+}
+
 export function useMe() {
   const base = offlineCacheQuery<Me>("me", "/m/me");
   return useQuery({
     ...base,
-    queryFn: async () => normalizarMe(await base.queryFn()),
+    queryFn: async () => conferirMe(normalizarMe(await base.queryFn())),
   });
 }
 

@@ -8,8 +8,13 @@ import { enviarPendentes } from "@/lib/error-reporter";
 import { obterEEnviarPushToken } from "@/lib/notifications";
 import { EmAnalise } from "@/components/em-analise";
 import { EscolherEmpresaAbertura } from "@/components/escolher-empresa-abertura";
-import { assinarSessoes, listarSessoes, precisaEscolherEmpresa } from "@/lib/sessoes";
-import { atualizarCadastros, prepararSessoes } from "@/lib/troca-empresa";
+import {
+  assinarSessoes,
+  listarSessoes,
+  precisaEscolherEmpresa,
+  temAlgumaSessaoComToken,
+} from "@/lib/sessoes";
+import { atualizarCadastros, prepararSessoes, repararSessaoAtiva } from "@/lib/troca-empresa";
 
 /**
  * Gate de autenticação. Usa useSyncExternalStore pra evitar bug de ordem
@@ -41,8 +46,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
       })
       .then(() => {
         try {
+          // `temAlgumaSessaoComToken` cobre o aparelho cujo slot ativo foi
+          // descartado por guardar o token de outra empresa: ele segue logado
+          // pela sessão sã que tem, e o reparo repõe a que falta.
           const tokens = loadTokens();
-          setAuthState(!!tokens?.accessToken);
+          setAuthState(!!tokens?.accessToken || temAlgumaSessaoComToken());
         } catch {
           setAuthState(false);
         }
@@ -54,9 +62,13 @@ export function AuthGate({ children }: { children: ReactNode }) {
     if (state !== true) return;
     startAutoSync();
     void enviarPendentes();
-    // Alinha as empresas dele com o servidor: nome da empresa (que a migração
-    // não tinha como saber), aprovação e cadastro numa segunda empresa.
-    void atualizarCadastros().catch(() => {});
+    // Repõe o token da empresa ativa se ele faltar (slot descartado por guardar
+    // o de outro cadastro) e só depois alinha as empresas com o servidor: nome
+    // da empresa, aprovação e cadastro numa segunda empresa.
+    void repararSessaoAtiva()
+      .catch(() => {})
+      .then(() => atualizarCadastros())
+      .catch(() => {});
     if (typeof Notification !== "undefined" && Notification.permission === "granted") {
       void obterEEnviarPushToken();
     }

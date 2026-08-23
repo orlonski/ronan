@@ -51,9 +51,24 @@ export class SessaoTrocadaError extends Error {
   }
 }
 
+/**
+ * A empresa ativa está sem token guardado aqui.
+ *
+ * Acontece quando o slot foi descartado por não ser desta empresa (ver
+ * `tokensDe`) e ainda não deu pra pedir outro. Sair sem `Authorization` viraria
+ * 401 → refresh sem token → "sessão acabou" → app deslogado, quando na verdade
+ * só falta um token que o servidor entrega de graça pro mesmo CPF. Então isto é
+ * falha transitória: espera a rede e o reparo (`repararSessaoAtiva`).
+ */
+export class SessaoIndisponivelError extends Error {
+  constructor() {
+    super("Sessão desta empresa indisponível agora.");
+  }
+}
+
 /** Estoura se a empresa ativa não for mais a que originou a request. */
-async function conferirDono(dono: string | null): Promise<void> {
-  if (!dono) return; // sessão legada (chave única): não há outra empresa aqui
+async function conferirDono(dono: string | null, fixo = false): Promise<void> {
+  if (!dono || fixo) return; // sessão legada, ou request de um cadastro escolhido a dedo
   if ((await motoristaAtivoId()) !== dono) throw new SessaoTrocadaError();
 }
 
@@ -289,19 +304,34 @@ export async function request<T>(
     outbox?: boolean;
     /** Teto próprio, pra chamada que sabidamente demora mais que um GET. */
     timeoutMs?: number;
+    /**
+     * Fala em nome de OUTRO cadastro do mesmo CPF, não do ativo. Existe só pra
+     * emitir a sessão que falta (`/m/auth/trocar-empresa`) sem ter que ativar o
+     * outro cadastro por um instante — a resposta é gravada no slot certo por
+     * quem chamou, então trocar de empresa no meio não invalida esta chamada.
+     */
+    comoCadastro?: string;
   } = {
     auth: true,
   },
 ): Promise<T> {
-  const { body, isFormData = false, auth = true, outbox = false, timeoutMs: tetoProprio } = init;
+  const {
+    body,
+    isFormData = false,
+    auth = true,
+    outbox = false,
+    timeoutMs: tetoProprio,
+    comoCadastro,
+  } = init;
   const headers: Record<string, string> = { ...appVersionHeaders() };
   if (body !== undefined && !isFormData) headers["content-type"] = "application/json";
   // Aceita gzip — backend agora tem compression() middleware
   headers["accept-encoding"] = "gzip, deflate";
   // De QUEM é esta request. A empresa ativa pode mudar no meio (o motorista roda
   // pra mais de uma), e a resposta que voltar só vale pra quem a disparou.
-  const dono = auth ? await motoristaAtivoId() : null;
+  const dono = auth ? (comoCadastro ?? (await motoristaAtivoId())) : null;
   const tokens = auth ? (dono ? await tokensDe(dono) : await loadTokens()) : null;
+  if (auth && dono && !tokens?.accessToken) throw new SessaoIndisponivelError();
   if (tokens) headers["authorization"] = `Bearer ${tokens.accessToken}`;
 
   const url = `${API_URL}${path}`;
@@ -331,7 +361,7 @@ export async function request<T>(
   if (res.status === 401 && auth) {
     // Trocou de empresa com a request em voo: o 401 é do token ANTIGO. Não
     // renova nem desloga — a sessão nova não tem nada a ver com isso.
-    await conferirDono(dono);
+    await conferirDono(dono, !!comoCadastro);
     const renov = await refresh(dono);
     if (renov.status === "ok") {
       headers["authorization"] = `Bearer ${renov.tokens.accessToken}`;
@@ -345,7 +375,7 @@ export async function request<T>(
       // Sessão acabou de verdade — desloga. Só depois de conferir que a empresa
       // ativa ainda é esta: derrubar o app por causa do token de uma empresa que
       // ele acabou de deixar seria deslogar quem está logado.
-      await conferirDono(dono);
+      await conferirDono(dono, !!comoCadastro);
       await clearTokens();
       await clearCadastroStatus();
       setAuthState(false);
@@ -361,7 +391,7 @@ export async function request<T>(
   // A resposta é do cadastro que originou a request. Se a empresa ativa mudou
   // enquanto ela vinha, este dado é da empresa anterior — e quem grava depois
   // (cache em disco, React Query, outbox) já está no namespace da nova. Descarta.
-  await conferirDono(dono);
+  await conferirDono(dono, !!comoCadastro);
 
   if (!res.ok) {
     let parsed: unknown;
@@ -445,8 +475,12 @@ export const api = {
   /** Empresas em que este CPF tem cadastro (mantém o seletor em dia). */
   listarCadastros: () => request<CadastroEmpresa[]>("GET", "/m/auth/cadastros"),
   /** Sessão de outro cadastro do mesmo CPF, sem pedir senha. */
-  trocarEmpresa: (motoristaId: string) =>
-    request<SessaoEmpresa>("POST", "/m/auth/trocar-empresa", { body: { motoristaId } }),
+  /** `comoCadastro`: usar o token de outro cadastro do mesmo CPF (reparo). */
+  trocarEmpresa: (motoristaId: string, comoCadastro?: string) =>
+    request<SessaoEmpresa>("POST", "/m/auth/trocar-empresa", {
+      body: { motoristaId },
+      comoCadastro,
+    }),
   atualizarPushToken: (token: string) =>
     request<{ ok: true }>("POST", "/m/push-token", { body: { token } }),
   listarNotificacoes: (opts: { cursor?: string; limit?: number } = {}) => {

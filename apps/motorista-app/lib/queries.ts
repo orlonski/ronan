@@ -26,11 +26,13 @@ import {
   cacheGet,
   cacheGetAt,
   cachePut,
+  limparCacheDeConsultas,
   listPendingStories,
   type PendingStory,
   type FotoPendente,
 } from "@/db/database";
 import { api, ApiError } from "./api";
+import { motoristaAtivoId } from "./sessoes";
 import { reportarEvento } from "./event-reporter";
 import { haversineMetros } from "./geo";
 import {
@@ -404,12 +406,20 @@ async function cacheFirst<T>(
   cacheKey: string,
   buscarRede: () => Promise<T>,
   lerCache: (bruto: T) => T = (x) => x,
+  /**
+   * Confere que o valor guardado é mesmo da empresa ativa. Estourando, o cache é
+   * ignorado e a tela espera a rede — melhor um instante de espera do que um
+   * instante mostrando o dado da outra empresa.
+   */
+  conferir?: (valor: T) => Promise<T>,
 ): Promise<T> {
   let cached: T | null = null;
   try {
     cached = await cacheGet<T>(cacheKey);
+    if (cached != null && conferir) await conferir(lerCache(cached));
   } catch {
-    /* sqlite indisponivel */
+    /* storage indisponível, ou cache de outra empresa: cai na rede */
+    cached = null;
   }
   if (cached != null) {
     // Revalida em background — não trava a UI, a tela já tem o cache.
@@ -445,8 +455,44 @@ function offlineCacheQuery<T>(
   };
 }
 
+/**
+ * Trava de contaminação: o `/m/me` tem que ser DO cadastro ativo.
+ *
+ * `me.id` é o id do cadastro — se o que chegou for de outro, alguma coisa
+ * escapou do carimbo por empresa e o problema não é o nome errado no cabeçalho:
+ * é dado de uma empresa dentro do espaço da outra. Aqui isso vira erro em vez de
+ * tela, o cache de consultas daquele namespace é descartado inteiro (os vizinhos
+ * podem ter vindo pelo mesmo caminho) e tudo volta da rede na empresa certa.
+ */
+async function conferirMe(me: Me): Promise<Me> {
+  const ativo = await motoristaAtivoId();
+  if (!ativo || me.id === ativo) return me;
+  await limparCacheDeConsultas();
+  throw new Error("Dados de outra empresa; recarregando.");
+}
+
+/**
+ * Perfil do motorista NA empresa ativa — o nome do cabeçalho, as placas e as
+ * flags de feature saem daqui. Cache-first como o resto, com a conferência de
+ * dono acima tanto no que veio do disco quanto no que veio da rede.
+ */
+function meQuery() {
+  const cacheKey = "q:me";
+  const buscarRede = async (): Promise<Me> => {
+    const fresh = await conferirMe(normalizarMe(await api.get<Me>("/m/me")));
+    void cachePut(cacheKey, fresh).catch(() => {});
+    return fresh;
+  };
+  return {
+    queryKey: ["me"],
+    staleTime: 60_000,
+    queryFn: () =>
+      cacheFirst<Me>(["me"], cacheKey, buscarRede, normalizarMe, conferirMe),
+  };
+}
+
 export function useMe() {
-  return useQuery(offlineCacheQuery<Me>("me", "/m/me", { normalize: normalizarMe }));
+  return useQuery(meQuery());
 }
 
 /**
@@ -532,7 +578,7 @@ export async function prefetchDadosBase(qc: QueryClient): Promise<void> {
     staleTime: 5 * 60_000,
     normalize: normalizarCatalogos,
   });
-  const me = offlineCacheQuery<Me>("me", "/m/me", { normalize: normalizarMe });
+  const me = meQuery();
   const tipos = offlineCacheQuery<TipoEventoViagemApp[]>(
     "tipos-evento",
     "/m/viagem/tipos-evento",

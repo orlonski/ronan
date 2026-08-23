@@ -243,6 +243,27 @@ export async function cachePut<T>(key: string, value: T): Promise<void> {
   }
 }
 
+/**
+ * Joga fora TODO o cache de consultas do cadastro ativo — e só ele.
+ *
+ * É a reação a descobrir dado de outra empresa aqui dentro (ver a conferência do
+ * `/m/me` em `lib/queries.ts`): se um valor veio do namespace errado, os vizinhos
+ * podem ter vindo junto, e não dá pra escolher no que confiar. Tudo volta da
+ * rede, na empresa certa. NÃO toca no outbox: lançamento do motorista não se
+ * apaga por desconfiança de cache.
+ */
+export async function limparCacheDeConsultas(): Promise<void> {
+  try {
+    const id = motoristaAtivoId();
+    const prefixo = id ? `${CACHE_PREFIX}${id}:` : CACHE_PREFIX;
+    const chaves = (await db.cache.toCollection().primaryKeys()) as string[];
+    const alvos = chaves.filter((k) => k.startsWith(prefixo));
+    if (alvos.length > 0) await db.cache.bulkDelete(alvos);
+  } catch {
+    /* sem storage: o cache velho segue, mas a rede já corrige na sequência */
+  }
+}
+
 export async function cacheDelete(key: string): Promise<void> {
   try {
     await db.cache.delete(chaveCache(key));

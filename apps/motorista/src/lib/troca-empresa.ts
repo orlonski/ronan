@@ -54,6 +54,35 @@ async function garantirSessao(motoristaId: string): Promise<void> {
   guardarSessao(await api.trocarEmpresa(motoristaId), false);
 }
 
+/**
+ * Repõe o token da empresa ativa quando ele falta — sem pedir senha.
+ *
+ * O slot pode estar vazio porque guardava o token de OUTRO cadastro e foi
+ * descartado (ver `tokensDe`). Nesse estado o app fala com o servidor por
+ * ninguém: sem reparo, a primeira request viraria "sessão acabou" e o motorista
+ * seria deslogado por um estrago que não é dele.
+ *
+ * O caminho é o mesmo do cadastro aprovado depois do login: outro cadastro do
+ * MESMO CPF que ainda tenha token válido pede um token pra este — falando por
+ * ele, sem ativá-lo nem por um instante. Best-effort: sem internet, as requests
+ * falham como transitórias e o reparo tenta de novo na próxima abertura.
+ */
+export async function repararSessaoAtiva(): Promise<void> {
+  const ativo = motoristaAtivoId();
+  if (!ativo || tokensDe(ativo)?.accessToken) return;
+
+  for (const s of listarSessoes()) {
+    if (s.motoristaId === ativo) continue;
+    if (!tokensDe(s.motoristaId)?.accessToken) continue;
+    try {
+      guardarSessao(await api.trocarEmpresa(ativo, s.motoristaId), false);
+    } catch {
+      /* sem sinal ou recusado: tenta de novo na próxima abertura */
+    }
+    return;
+  }
+}
+
 /** Sessões + quantos lançamentos de cada uma estão esperando pra subir. */
 export async function sessoesComPendentes(): Promise<
   Array<SessaoLocal & { pendentes: number }>
