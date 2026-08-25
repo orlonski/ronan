@@ -2373,20 +2373,27 @@ model ConfiguracaoTracking {
 /// Singleton (id="default"): parâmetros do match por IA do fechamento.
 /// Lazy-create no primeiro acesso. Atualizada via /admin/ia-config.
 model ConfiguracaoIa {
-  contaId          String   @default("__SEM_CONTA__")
-  conta            Conta    @relation(fields: [contaId], references: [id])
-  id               String   @id @default(uuid())
+  contaId           String   @default("__SEM_CONTA__")
+  conta             Conta    @relation(fields: [contaId], references: [id])
+  id                String   @id @default(uuid())
   // 0.50–0.99 — quanto maior, mais conservador (menos auto-resolução)
-  confidenceMinimo Float    @default(0.85)
+  confidenceMinimo  Float    @default(0.85)
   // 1–14 — janela de datas pra filtrar viagens candidatas (mesma placa, ±N dias)
-  janelaDias       Int      @default(3)
+  janelaDias        Int      @default(3)
   // Modelo Claude usado nas chamadas (match + inferência de layout).
   // Trade-off custo vs qualidade. Valores: claude-haiku-4-5-20251001 (default),
   // claude-sonnet-4-6, claude-opus-4-7.
-  modelo           String   @default("claude-haiku-4-5-20251001")
-  alteradoEm       DateTime @updatedAt
-  alteradoPor      User?    @relation(fields: [alteradoPorId], references: [id])
-  alteradoPorId    String?
+  modelo            String   @default("claude-haiku-4-5-20251001")
+  /// Modelo do CONFERENTE de ticket. Nulo = usa CONFERENCIA_MODELO (env).
+  ///
+  /// Campo separado do `modelo` de propósito: o `modelo` acima roda no OCR que
+  /// o motorista espera na estrada, e o conferente roda numa fila assíncrona.
+  /// São riscos diferentes, então trocar um não pode arrastar o outro — é o que
+  /// permite avaliar fornecedor novo (MiniMax) só no lado que ninguém sente.
+  modeloConferencia String?
+  alteradoEm        DateTime @updatedAt
+  alteradoPor       User?    @relation(fields: [alteradoPorId], references: [id])
+  alteradoPorId     String?
 
   @@unique([contaId])
   @@map("configuracao_ia")

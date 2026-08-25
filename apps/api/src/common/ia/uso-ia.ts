@@ -15,10 +15,20 @@
 export type PrecoModelo = {
   entrada: number;
   saida: number;
+  /**
+   * Preço ABSOLUTO do token de cache, quando o fornecedor publica um em vez de
+   * um desconto sobre a entrada.
+   *
+   * Os multiplicadores abaixo nasceram da tabela da Anthropic, onde ler do
+   * cache é sempre 10% da entrada. Não é lei do universo: no MiniMax é 20%.
+   * Quem tiver preço próprio declara aqui; quem não tiver segue no multiplicador.
+   */
+  cacheLeitura?: number;
+  cacheEscrita?: number;
 };
 
 /**
- * Tabela de preços da API da Anthropic (conferida em 2026-08).
+ * Tabela de preços por modelo (conferida em 2026-08-24).
  *
  * As chaves são os ids exatos de modelo. Modelo que não estiver aqui não
  * quebra nada: o custo sai `null` e o resto do registro (tokens, duração) é
@@ -40,6 +50,18 @@ export const PRECOS_POR_MODELO: Record<string, PrecoModelo> = {
   "claude-opus-4-8": { entrada: 5, saida: 25 },
   "claude-opus-4-7": { entrada: 5, saida: 25 },
   "claude-opus-4-6": { entrada: 5, saida: 25 },
+
+  // MiniMax — fornecedor externo, API compatível com a da Anthropic. O M3 é o
+  // único da linha que enxerga imagem (os M2.x são só texto), então é o único
+  // que serve pra ticket.
+  //
+  // Preço de tabela ≤512k de input, tier padrão, com o desconto "Permanent 50%
+  // off" que eles anunciam já aplicado. Sem o desconto seria $0,60/$2,40 — que
+  // continua abaixo do Haiku. O cache de LEITURA tem preço próprio ($0,06/MTok,
+  // 20% da entrada e não 10%); o de ESCRITA eles não publicam pro M3, então cai
+  // no multiplicador de 1,25x, que erra pra cima — o mesmo lado seguro que o
+  // Sonnet já usa aqui.
+  "MiniMax-M3": { entrada: 0.3, saida: 1.2, cacheLeitura: 0.06 },
 };
 
 /**
@@ -110,16 +132,21 @@ export function calcularUso(modelo: string, usage: UsageAnthropic | null | undef
 
   const porMilhao = (tokens: number, precoUnitario: number) => (tokens / 1_000_000) * precoUnitario;
 
+  // Preço absoluto do fornecedor vence o multiplicador; sem ele, o desconto
+  // sobre a entrada, que é como a Anthropic cobra.
+  const precoCacheLeitura = preco.cacheLeitura ?? preco.entrada * MULT_CACHE_LEITURA;
+  const precoEscrita5m = preco.cacheEscrita ?? preco.entrada * MULT_CACHE_ESCRITA_5M;
+  const precoEscrita1h = preco.cacheEscrita ?? preco.entrada * MULT_CACHE_ESCRITA_1H;
+
   const custoEscrita =
     escritaDetalhada > 0
-      ? porMilhao(escrita5m, preco.entrada * MULT_CACHE_ESCRITA_5M) +
-        porMilhao(escrita1h, preco.entrada * MULT_CACHE_ESCRITA_1H)
-      : porMilhao(tokensCacheEscrita, preco.entrada * MULT_CACHE_ESCRITA_5M);
+      ? porMilhao(escrita5m, precoEscrita5m) + porMilhao(escrita1h, precoEscrita1h)
+      : porMilhao(tokensCacheEscrita, precoEscrita5m);
 
   const custoUsd =
     porMilhao(tokensEntrada, preco.entrada) +
     porMilhao(tokensSaida, preco.saida) +
-    porMilhao(tokensCacheLeitura, preco.entrada * MULT_CACHE_LEITURA) +
+    porMilhao(tokensCacheLeitura, precoCacheLeitura) +
     custoEscrita;
 
   return {

@@ -1,0 +1,17 @@
+-- Modelo do CONFERENTE de ticket, escolhido por empresa.
+--
+-- Até aqui o conferente usava uma constante dentro do próprio serviço, então
+-- trocar de modelo exigia deploy. Com o MiniMax entrando como alternativa mais
+-- barata ao Haiku, isso vira um problema prático: a única forma honesta de
+-- avaliar leitura de OCR é rodar contra ticket real, comparando, e voltar num
+-- clique se ficar ruim.
+--
+-- É um campo SEPARADO do `modelo` que já existe nesta tabela, de propósito. O
+-- `modelo` roda no OCR que o motorista espera na estrada; este roda numa fila
+-- assíncrona em modo sombra. São riscos diferentes, e um seletor só faria
+-- trocar o conferente arrastar junto o caminho do motorista.
+--
+-- Nulo (o default de toda linha existente) = usa CONFERENCIA_MODELO do ambiente,
+-- que por sua vez tem como default o mesmo Haiku de sempre. Ninguém muda de
+-- comportamento por causa desta migration.
+ALTER TABLE "configuracao_ia" ADD COLUMN "modeloConferencia" TEXT;

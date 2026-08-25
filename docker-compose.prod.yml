@@ -75,6 +75,9 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET:-ronan-tickets}
       VIACEP_URL: https://viacep.com.br/ws
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      MINIMAX_API_KEY: ${MINIMAX_API_KEY:-}
+      MINIMAX_BASE_URL: ${MINIMAX_BASE_URL:-}
+      CONFERENCIA_MODELO: ${CONFERENCIA_MODELO:-}
       CORS_ORIGINS: ${CORS_ORIGINS}
     networks: [ronan-net]
     expose:

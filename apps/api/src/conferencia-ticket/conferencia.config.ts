@@ -27,6 +27,10 @@ export class ConferenciaConfig {
     return Math.min(max, Math.max(min, n));
   }
 
+  private str(chave: string, padrao: string): string {
+    return this.config.get<string>(chave)?.trim() || padrao;
+  }
+
   private bool(chave: string, padrao: boolean): boolean {
     const bruto = this.config.get<string>(chave)?.trim().toLowerCase();
     if (bruto === undefined || bruto === "") return padrao;
@@ -102,6 +106,21 @@ export class ConferenciaConfig {
   }
 
   /**
+   * Modelo da PRIMEIRA passada, quando a empresa não escolheu um.
+   *
+   * Era uma constante dentro do leitor, o que fazia trocar de modelo exigir
+   * deploy. Virou config porque a única forma honesta de avaliar um fornecedor
+   * de OCR é rodar contra ticket real e comparar — e isso pede poder voltar
+   * atrás rápido. O default é o mesmo Haiku de sempre: quem não mexer em nada
+   * não muda de comportamento.
+   *
+   * `ConfiguracaoIa.modeloConferencia` da empresa vence isto quando existir.
+   */
+  get modeloPadrao(): string {
+    return this.str("CONFERENCIA_MODELO", "claude-haiku-4-5-20251001");
+  }
+
+  /**
    * Modelo da segunda opinião, quando o peso diverge ou a leitura foi fraca.
    * Vazio desliga a escada — fica só a primeira passada.
    */
@@ -129,6 +148,7 @@ export class ConferenciaConfig {
       JSON.stringify({
         evento: "conferencia-config",
         modo: this.modoSombra ? "SOMBRA (não mexe na viagem)" : "ATUANDO",
+        modelo: this.modeloPadrao,
         concorrencia: this.concorrencia,
         intervaloMs: this.intervaloMs,
         segundaOpiniao: this.modeloSegundaOpiniao || "desligada",

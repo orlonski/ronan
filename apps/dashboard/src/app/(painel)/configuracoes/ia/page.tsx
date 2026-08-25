@@ -12,6 +12,7 @@ type ConfigIa = {
   confidenceMinimo: number;
   janelaDias: number;
   modelo: string;
+  modeloConferencia: string | null;
   alteradoEm: string;
 };
 
@@ -47,6 +48,55 @@ const MODELOS: {
     icone: "🚀",
     custoLabel: "~R$ 0,30 por match",
     descricao: "Claude Opus — top de linha. Vale só pra fechamentos complexos onde o custo da revisão manual é maior que o custo da chamada.",
+  },
+];
+
+/**
+ * O conferente de ticket tem seletor próprio — e uma lista mais larga.
+ *
+ * O modelo de cima roda no OCR que o motorista espera na estrada; este roda
+ * numa fila, em modo sombra, onde uma leitura ruim não chega a ninguém. É onde
+ * dá pra experimentar fornecedor novo sem apostar nada — daí o MiniMax aparecer
+ * só aqui.
+ *
+ * `null` = usa o que estiver configurado no servidor.
+ */
+type ModeloConferenciaId = ModeloId | "claude-opus-5" | "MiniMax-M3";
+
+const MODELOS_CONFERENCIA: {
+  id: ModeloConferenciaId | null;
+  nome: string;
+  icone: string;
+  custoLabel: string;
+  descricao: string;
+}[] = [
+  {
+    id: null,
+    nome: "Padrão do sistema",
+    icone: "⚙️",
+    custoLabel: "o que o servidor definir",
+    descricao: "Deixa como está. É o que roda hoje em todas as empresas.",
+  },
+  {
+    id: "claude-haiku-4-5-20251001",
+    nome: "Claude Haiku",
+    icone: "💰",
+    custoLabel: "US$ 1,00 / 5,00 por milhão de tokens",
+    descricao: "O que lê os tickets hoje. Rápido, barato e já conhecido — é contra ele que os outros se comparam.",
+  },
+  {
+    id: "MiniMax-M3",
+    nome: "MiniMax M3",
+    icone: "🧪",
+    custoLabel: "US$ 0,30 / 1,20 por milhão de tokens",
+    descricao: "Em avaliação. Cerca de 3x mais barato que o Haiku, mas é outro fornecedor (a foto do ticket sai daqui) e ainda não sabemos se lê ticket amassado tão bem. A segunda opinião continua no Claude, então erro dele não vira acusação.",
+  },
+  {
+    id: "claude-sonnet-4-6",
+    nome: "Claude Sonnet",
+    icone: "⭐",
+    custoLabel: "US$ 3,00 / 15,00 por milhão de tokens",
+    descricao: "Lê melhor foto ruim, e custa 3x o Haiku em toda leitura.",
   },
 ];
 
@@ -111,12 +161,14 @@ export default function IaConfigPage() {
   const [confidence, setConfidence] = useState(0.85);
   const [dias, setDias] = useState(3);
   const [modelo, setModelo] = useState<ModeloId>("claude-haiku-4-5-20251001");
+  const [modeloConferencia, setModeloConferencia] = useState<ModeloConferenciaId | null>(null);
 
   useEffect(() => {
     if (cfg.data) {
       setConfidence(cfg.data.confidenceMinimo);
       setDias(cfg.data.janelaDias);
       setModelo(cfg.data.modelo as ModeloId);
+      setModeloConferencia((cfg.data.modeloConferencia as ModeloConferenciaId | null) ?? null);
     }
   }, [cfg.data]);
 
@@ -125,6 +177,7 @@ export default function IaConfigPage() {
       confidenceMinimo: number;
       janelaDias: number;
       modelo: ModeloId;
+      modeloConferencia: ModeloConferenciaId | null;
     }) =>
       fetchApi<ConfigIa>(PATH, {
         method: "PUT",
@@ -164,6 +217,7 @@ export default function IaConfigPage() {
       confidenceMinimo: confidence,
       janelaDias: dias,
       modelo,
+      modeloConferencia,
     });
   }
 
@@ -219,6 +273,52 @@ export default function IaConfigPage() {
             );
           })}
         </div>
+      </Card>
+
+      {/* Modelo do conferente de ticket */}
+      <Card className="space-y-3 p-5">
+        <div>
+          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+            Quem lê a foto do ticket?
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            É a leitura da Conferência de ticket, que roda sozinha depois que o
+            motorista lança. Quando a leitura sai fraca ou aponta divergência de
+            peso, o Claude Opus dá a segunda opinião — isso não muda aqui. Por
+            isso dá pra testar modelo barato sem risco: se ele errar, quem decide
+            continua sendo o modelo caro.
+          </p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          {MODELOS_CONFERENCIA.map((m) => {
+            const ativo = modeloConferencia === m.id;
+            return (
+              <button
+                key={m.id ?? "padrao"}
+                type="button"
+                onClick={() => setModeloConferencia(m.id)}
+                className={`rounded-lg border-2 p-4 text-left transition-colors ${
+                  ativo
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:border-primary/40"
+                }`}
+              >
+                <div className="mb-1 text-2xl">{m.icone}</div>
+                <div className="font-bold">{m.nome}</div>
+                <div className="text-xs text-muted-foreground">{m.custoLabel}</div>
+                <p className="mt-2 text-xs text-muted-foreground">{m.descricao}</p>
+                {ativo && <div className="mt-2 text-xs font-medium text-primary">✓ atual</div>}
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          O custo real de cada leitura aparece na tela de{" "}
+          <a href="/conferencias" className="underline underline-offset-2">
+            Conferência de ticket
+          </a>
+          , junto do modelo que leu — é lá que dá pra comparar de verdade.
+        </p>
       </Card>
 
       {/* Presets */}

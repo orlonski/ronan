@@ -15,10 +15,23 @@ const MODELOS_PERMITIDOS = [
   "claude-opus-4-7",
 ] as const;
 
+/**
+ * O conferente de ticket tem lista própria, e mais larga.
+ *
+ * O `modelo` acima roda no OCR que o motorista espera na estrada; este roda
+ * numa fila assíncrona, em modo sombra, onde uma leitura ruim não chega a
+ * ninguém. É o lugar certo pra experimentar fornecedor novo — daí o MiniMax
+ * aparecer só aqui. Se a leitura se provar, ele sobe pra lista de cima.
+ *
+ * `null` volta pro default do ambiente (CONFERENCIA_MODELO).
+ */
+const MODELOS_CONFERENCIA = [...MODELOS_PERMITIDOS, "claude-opus-5", "MiniMax-M3"] as const;
+
 const AtualizarIaConfigSchema = z.object({
   confidenceMinimo: z.number().min(0.5).max(0.99).optional(),
   janelaDias: z.number().int().min(1).max(14).optional(),
   modelo: z.enum(MODELOS_PERMITIDOS).optional(),
+  modeloConferencia: z.enum(MODELOS_CONFERENCIA).nullable().optional(),
 });
 
 @ApiTags("admin/ia-config")

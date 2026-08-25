@@ -3,7 +3,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { ExtrairTicketResult } from "@ronan/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
-import { contaIdAtual } from "../common/conta/conta-context";
+import { CachePorConta } from "../common/conta/cache-por-conta";
 import { UsoIaService } from "./uso-ia.service";
 
 // Default usado caso ConfiguracaoIa.modelo não esteja setada (raro).
@@ -72,42 +72,20 @@ export class IaService {
   /**
    * Lê o modelo da config da conta; cache curto pra não consultar a cada call.
    *
-   * O cache é POR CONTA. Já foi um campo único de instância — e como este
-   * provider é singleton (`IaModule` é `@Global`) enquanto a consulta filtra por
-   * `contaIdAtual()`, o valor da primeira conta era servido a todas as outras
-   * pelos 30s seguintes. Com tráfego de requisição isso era uma corrida
-   * ocasional; num worker que pula de conta a cada job vira quase certo.
+   * O cache é POR CONTA, e o `CachePorConta` guarda o porquê: era um campo
+   * único de instância num provider singleton, o que fazia a primeira conta a
+   * chamar fixar o modelo de todas as outras.
    */
-  private modeloCache = new Map<string, { value: string; until: number }>();
+  private readonly modeloCache = new CachePorConta<string>("ConfiguracaoIa.modelo");
   private async modeloAtual(): Promise<string> {
-    let contaId: string;
-    try {
-      contaId = contaIdAtual();
-    } catch (err) {
-      // Sem conta no contexto não há config pra ler — e engolir isso calado é
-      // como o bug acima passou despercebido. Avisa e cai no default.
-      this.log.warn(
-        `modeloAtual() sem conta no contexto, usando ${DEFAULT_MODEL}: ${(err as Error).message}`,
-      );
-      return DEFAULT_MODEL;
-    }
-
-    const cacheado = this.modeloCache.get(contaId);
-    if (cacheado && cacheado.until > Date.now()) return cacheado.value;
-
-    try {
+    return this.modeloCache.obter(async (contaId) => {
       const cfg = await this.prisma.configuracaoIa.upsert({
         where: { contaId },
         update: {},
         create: {},
       });
-      const value = cfg.modelo || DEFAULT_MODEL;
-      this.modeloCache.set(contaId, { value, until: Date.now() + 30_000 });
-      return value;
-    } catch (err) {
-      this.log.warn(`Falha ao ler ConfiguracaoIa de ${contaId}: ${(err as Error).message}`);
-      return DEFAULT_MODEL;
-    }
+      return cfg.modelo || DEFAULT_MODEL;
+    }, DEFAULT_MODEL);
   }
 
   get habilitada() {

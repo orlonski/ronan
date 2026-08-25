@@ -9,6 +9,8 @@ export type AtualizarIaConfigInput = {
   confidenceMinimo?: number;
   janelaDias?: number;
   modelo?: string;
+  /** `null` devolve o conferente ao default do ambiente. */
+  modeloConferencia?: string | null;
 };
 
 @Injectable()

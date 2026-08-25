@@ -80,6 +80,7 @@ MINIO_SECRET_KEY=SENHA_DO_MINIO
 MINIO_BUCKET=ronan-tickets
 VIACEP_URL=https://viacep.com.br/ws
 ANTHROPIC_API_KEY=sk-ant-api03-...
+MINIMAX_API_KEY=            # opcional — leitura de ticket em avaliação
 CORS_ORIGINS=https://painel.SEU-DOMINIO.com.br,https://app.SEU-DOMINIO.com.br
 PUBLIC_APP_URL=https://app.schaba.com.br
 ```
@@ -219,3 +220,14 @@ A API roda `prisma migrate deploy` automaticamente no `CMD` do container (ver `a
 ### IA não roda
 - Conferir `ANTHROPIC_API_KEY` configurada.
 - Sem ela, sistema funciona com matching determinístico apenas (já cobre ~70% dos casos).
+
+### Conferência de ticket não lê nada
+- A empresa pode ter escolhido **MiniMax-M3** em `/configuracoes/ia` sem que
+  `MINIMAX_API_KEY` exista no ambiente. O log mostra
+  `MINIMAX_API_KEY não configurada — modelo "MiniMax-M3" indisponível`, e a fila
+  retenta até estourar as tentativas.
+- Conserto imediato: voltar o seletor pra "Padrão do sistema" no painel (vale em
+  até 30s, sem deploy) ou preencher a chave.
+- O MiniMax é fornecedor externo com API compatível com a da Anthropic. A
+  segunda opinião (`CONFERENCIA_MODELO_2A_OPINIAO`) segue no Claude
+  independentemente do que a empresa escolher.

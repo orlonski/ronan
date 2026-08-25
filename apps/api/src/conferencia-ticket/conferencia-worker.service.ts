@@ -9,6 +9,7 @@ import { ConferenciaConfig } from "./conferencia.config";
 import { LeitorTicketService } from "./leitor-ticket.service";
 import { AplicarVereditoService } from "./aplicar-veredito.service";
 import { comConta, comoSistema } from "../common/conta/conta-context";
+import { CachePorConta } from "../common/conta/cache-por-conta";
 import {
   conferirComJulgamento,
   precisaSegundaOpiniao,
@@ -39,6 +40,18 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
   private emVoo = 0;
   private tickRodando = false;
   private laco?: NodeJS.Timeout;
+
+  /**
+   * Qual modelo lê o ticket desta empresa.
+   *
+   * Por conta, e não global, porque é assim que se avalia um fornecedor novo
+   * sem apostar a plataforma inteira: liga numa empresa, olha os vereditos e o
+   * custo na tela de Conferência por alguns dias, e volta num clique. Cache
+   * curto — o job dura segundos, e a troca no painel precisa valer rápido.
+   */
+  private readonly modeloCache = new CachePorConta<string | null>(
+    "ConfiguracaoIa.modeloConferencia",
+  );
 
   constructor(
     private readonly prisma: PrismaService,
@@ -185,7 +198,12 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
 
     let primeira;
     try {
-      primeira = await this.leitor.ler({ fotoBase64, mime, declarado: paraOModelo });
+      primeira = await this.leitor.ler({
+        fotoBase64,
+        mime,
+        declarado: paraOModelo,
+        modelo: await this.modeloDaConta(),
+      });
     } catch (err) {
       throw new FalhaInfra(`leitura: ${(err as Error).message}`);
     }
@@ -315,6 +333,26 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
       passadas,
       escalou,
     };
+  }
+
+  /**
+   * O modelo da primeira passada: escolha da empresa, senão o do ambiente.
+   *
+   * A SEGUNDA opinião não passa por aqui de propósito — ela segue no Claude
+   * forte, definido em `CONFERENCIA_MODELO_2A_OPINIAO`. É o que dá a
+   * comparação de graça: o modelo barato lê, e quando o veredito é fraco ou os
+   * dois discordam, quem julga é o modelo que já se sabe que acerta. Deixar a
+   * empresa trocar os dois de uma vez tiraria justamente a régua.
+   */
+  private async modeloDaConta(): Promise<string> {
+    const escolhido = await this.modeloCache.obter(async (contaId) => {
+      const cfg = await this.prisma.configuracaoIa.findUnique({
+        where: { contaId },
+        select: { modeloConferencia: true },
+      });
+      return cfg?.modeloConferencia?.trim() || null;
+    }, null);
+    return escolhido || this.config.modeloPadrao;
   }
 
   private async temCotaDeEscalada(): Promise<boolean> {
