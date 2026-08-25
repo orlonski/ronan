@@ -137,7 +137,7 @@ export default function ConferenciasPage() {
     }
   }
 
-  if (!temPermissao("viagens.ver")) {
+  if (!temPermissao("conferencia-ticket.ver")) {
     return <div className="p-6 text-sm text-muted-foreground">Você não tem acesso a esta tela.</div>;
   }
 
@@ -169,7 +169,7 @@ export default function ConferenciasPage() {
         </Card>
       )}
 
-      {(pendentes.data?.pendentes ?? 0) > 0 && temPermissao("viagens.validar") && (
+      {(pendentes.data?.pendentes ?? 0) > 0 && temPermissao("conferencia-ticket.reprocessar") && (
         <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
           <div>
             <p className="text-sm font-medium">

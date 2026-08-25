@@ -47,12 +47,19 @@ const CAMPOS: { chave: string; leituraChave: string; rotulo: string }[] = [
  * card serve pra decidir uma viagem.
  */
 export function ConferenciaViagemCard({ viagemId }: { viagemId: string }) {
-  const { data, isLoading, refetch } = useApiQuery<Conferencia | null>(
-    `/admin/conferencias/viagem/${viagemId}`,
-  );
   const { temPermissao } = usePermissoes();
+  // O gate mora AQUI, e não em quem monta a tela de viagem: o endpoint por trás
+  // é de plataforma, então pra um admin de empresa a chamada volta 403 e o card
+  // ficaria vazio sem explicar nada. Barrar antes de pedir evita o 403 de fundo
+  // — e vale automaticamente em qualquer tela que use este card depois.
+  const podeVer = temPermissao("conferencia-ticket.ver");
+  const { data, isLoading, refetch } = useApiQuery<Conferencia | null>(
+    podeVer ? `/admin/conferencias/viagem/${viagemId}` : undefined,
+  );
   const token = useAuthToken();
   const [relendo, setRelendo] = useState(false);
+
+  if (!podeVer) return null;
 
   async function reler() {
     setRelendo(true);
@@ -111,7 +118,7 @@ export function ConferenciaViagemCard({ viagemId }: { viagemId: string }) {
         {/* Pra quando a foto está boa e a leitura não deu certo assim mesmo.
             Sem isto o único caminho seria pedir foto nova ao motorista por um
             problema que não é dele. */}
-        {temPermissao("viagens.validar") && (
+        {temPermissao("conferencia-ticket.reprocessar") && (
           <button
             type="button"
             onClick={() => void reler()}

@@ -41,6 +41,7 @@ const ACAO_TITULO: Record<string, string> = {
   homologar: "Homologar / mesclar",
   importar: "Importar (OSM)",
   resolver: "Resolver",
+  reprocessar: "Mandar reler (gasta leitura paga)",
   avisar: "Publicar aviso",
   moderar: "Moderar denúncias",
   gerenciar: "Gerenciar",
@@ -112,6 +113,15 @@ const RESOURCE_DEFS: ResourceDef[] = [
   { recurso: "config-tracking", label: "Tracking GPS", modulo: "Sistema", acoes: ["ver", "editar"] },
   { recurso: "config-busca-locais", label: "Busca de locais", modulo: "Sistema", acoes: ["ver", "editar"] },
   { recurso: "config-ia", label: "Inteligência Artificial", modulo: "Sistema", acoes: ["ver", "editar"] },
+  // A tela que mostra o que o robô leu de cada ticket, o custo por leitura e a
+  // fila do worker. Estava gateada por `viagens.ver`, que todo mundo tem — daí
+  // aparecer no menu de quem não deveria e não ter linha própria na matriz.
+  {
+    recurso: "conferencia-ticket",
+    label: "Conferência de ticket (IA)",
+    modulo: "Sistema",
+    acoes: ["ver", "reprocessar"],
+  },
   { recurso: "config-agente", label: "Agente WhatsApp", modulo: "Sistema", acoes: ["ver", "editar"] },
   { recurso: "config-campos-layout", label: "Campos do layout", modulo: "Sistema", acoes: ["ver", "editar"] },
   { recurso: "config-forca-atualizacao", label: "Forçar atualização do app", modulo: "Sistema", acoes: ["ver", "editar"] },
@@ -144,6 +154,9 @@ export const TODAS_AS_CHAVES: string[] = CATALOGO_PERMISSOES.map((p) => p.chave)
  *   todas as empresas. O dono de uma delas desconectando a sessão derruba os
  *   avisos de todas — inclusive das outras.
  * - `config-ia`: as chaves de API e a conta que paga são da plataforma.
+ * - `conferencia-ticket`: cada leitura é uma chamada paga na conta da
+ *   plataforma, e a tela expõe o custo em dólar dessa conta. Mandar reler em
+ *   massa é gastar dinheiro que não é da empresa que assina.
  * - `config-forca-atualizacao`: decide qual versão do app é aceita, e o app é
  *   publicado nas lojas pela plataforma.
  * - `erros` e `diagnosticos`: telemetria técnica do sistema, não da operação.
@@ -155,6 +168,7 @@ export const RECURSOS_PLATAFORMA: string[] = [
   "whatsapp",
   "config-agente",
   "config-ia",
+  "conferencia-ticket",
   "config-forca-atualizacao",
   "erros",
   "diagnosticos",

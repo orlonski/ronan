@@ -27,7 +27,7 @@ export class ConferenciasController {
   ) {}
 
   @Get("resumo")
-  @RequerPermissao("viagens.ver")
+  @RequerPermissao("conferencia-ticket.ver")
   async resumo() {
     const r = await this.fila.resumo();
     return {
@@ -40,7 +40,7 @@ export class ConferenciasController {
   }
 
   @Get()
-  @RequerPermissao("viagens.ver")
+  @RequerPermissao("conferencia-ticket.ver")
   listar(@Query("limite") limite?: string) {
     return this.fila.listar(limite ? Number(limite) : 50);
   }
@@ -50,21 +50,21 @@ export class ConferenciasController {
    * adivinhar a partir de exemplos soltos.
    */
   @Get("diagnostico")
-  @RequerPermissao("viagens.ver")
+  @RequerPermissao("conferencia-ticket.ver")
   diagnostico() {
     return this.fila.diagnostico();
   }
 
   /** Quantas viagens JÁ EXISTENTES ainda esperam conferência. */
   @Get("pendentes")
-  @RequerPermissao("viagens.ver")
+  @RequerPermissao("conferencia-ticket.ver")
   async pendentes() {
     return { pendentes: await this.fila.contarPendentesDeConferencia() };
   }
 
   /** A conferência de uma viagem específica — alimenta o card no detalhe dela. */
   @Get("viagem/:viagemId")
-  @RequerPermissao("viagens.ver")
+  @RequerPermissao("conferencia-ticket.ver")
   daViagem(@Param("viagemId") viagemId: string) {
     return this.fila.ultimaDaViagem(viagemId);
   }
@@ -80,7 +80,7 @@ export class ConferenciasController {
    * `viagens.ver` — não é gastar dinheiro, é recalcular.
    */
   @Post("recomparar")
-  @RequerPermissao("viagens.ver")
+  @RequerPermissao("conferencia-ticket.ver")
   recomparar() {
     return this.fila.recompararTudo();
   }
@@ -91,13 +91,13 @@ export class ConferenciasController {
    * nosso. Custa uma leitura, daí exigir `viagens.validar`.
    */
   @Post("viagem/:viagemId/reler")
-  @RequerPermissao("viagens.validar")
+  @RequerPermissao("conferencia-ticket.reprocessar")
   reler(@Param("viagemId") viagemId: string) {
     return this.fila.relerViagem(viagemId);
   }
 
   @Post("reprocessar")
-  @RequerPermissao("viagens.validar")
+  @RequerPermissao("conferencia-ticket.reprocessar")
   reprocessar(
     @Body(new ZodValidationPipe(z.object({ limite: z.number().int().min(1).max(500).default(100) })))
     body: { limite: number },
