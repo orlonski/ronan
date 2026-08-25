@@ -1,8 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
-import Anthropic from "@anthropic-ai/sdk";
-import { ConfigService } from "@nestjs/config";
+import { ClienteIaFactory } from "../ia/cliente-ia";
 import { UsoIaService } from "../ia/uso-ia.service";
 import { calcularUso } from "../common/ia/uso-ia";
+import { provedorDoModelo } from "../common/ia/provedor-ia";
 import type { Lido, JulgamentoIa } from "../common/conferencia-ticket";
 
 /**
@@ -14,12 +14,21 @@ import type { Lido, JulgamentoIa } from "../common/conferencia-ticket";
  * É por isso que esta chamada é a mais barata das duas.
  */
 
+/**
+ * Último recurso, quando nem a empresa nem o ambiente escolheram modelo. Quem
+ * manda de verdade é `ConfiguracaoIa.modeloConferencia` → `CONFERENCIA_MODELO`,
+ * resolvidos pelo worker; isto só existe pra chamada solta (script) não quebrar.
+ */
 const MODELO_PADRAO = "claude-haiku-4-5-20251001";
 
 /**
  * Instruções fixas. Sem prompt caching — o mínimo cacheável do Haiku 4.5 é 4096
  * tokens e uma conferência inteira não chega perto —, então cada palavra aqui é
  * paga em toda leitura.
+ *
+ * O prompt é o MESMO nos dois fornecedores de propósito: é isso que faz a
+ * comparação entre eles valer alguma coisa. Ajustar o texto pra um deles
+ * transformaria a medição numa comparação de prompt, não de modelo.
  */
 const INSTRUCOES = `Você confere documentos de carga (ticket de balança, romaneio, nota fiscal) contra o que o motorista lançou no sistema.
 
@@ -72,14 +81,33 @@ CLIENTE E MATERIAL — julgue como gente, não como texto:
 - Só responda "nao" quando forem claramente coisas diferentes — areia contra
   asfalto, uma construtora contra outra construtora sem nenhuma relação.
 
+A FOTO PODE ESTAR EM QUALQUER POSIÇÃO:
+O motorista fotografa como dá, na beira da estrada — de pé, deitado, de cabeça
+para baixo, o papel no chão ou no banco. Antes de ler qualquer tabela, oriente o
+documento mentalmente e confirme de que coluna cada número veio. Ler a coluna
+vizinha por causa da inclinação é a forma mais comum de errar o peso.
+
 PESO — o erro mais caro:
 - O ticket mostra BRUTO, TARA e LÍQUIDO. Use SEMPRE o LÍQUIDO.
 - Rótulos variam: "LIQUIDO", "LÍQ.", "PESO LIQ", "NET", "CARGA".
 - Só bruto e tara, sem líquido: calcule bruto − tara.
+- Balança que imprime duas pesagens ("Pesagem Inicial" e "Pesagem Final", ou
+  "1ª/2ª pesagem"): o líquido é a diferença entre as duas.
+- **NUNCA use a coluna de M³, VOLUME ou METRO CÚBICO como peso.** Ela costuma
+  vir colada na coluna de toneladas e é sempre um número MENOR — pegar uma pela
+  outra faz a viagem ser faturada pela metade sem ninguém perceber.
+- CONFIRA A SUA PRÓPRIA LEITURA: havendo bruto e tara no papel, o líquido tem
+  que ser bruto − tara. Se o número que você escolheu não fecha essa conta, você
+  leu a coluna errada — volte e leia de novo.
 - Ponto é separador de MILHAR e vírgula é DECIMAL: "32.500 KG" = 32500 kg =
   32.5 toneladas. No JSON use ponto decimal, sem separador de milhar.
 - Caminhão carregado fica entre 5 e 50 toneladas. Fora disso, revise sua leitura.
 - Diferença de algumas dezenas de quilos é arredondamento de balança: "sim".
+
+CAMPO QUE VOCÊ NÃO CONSEGUE LER É null, NUNCA UM CHUTE:
+Faltou nitidez, o canto ficou fora do quadro, o carbono não marcou — responda
+null naquele campo e siga. Um null custa uma conferida humana; um número
+inventado com cara de certo entra no faturamento e ninguém revisa.
 
 DATA: formato brasileiro DD/MM/AAAA. Um dia de diferença é rotina (pesagem à
 noite, lançamento no dia seguinte): responda "sim". Havendo várias datas,
@@ -99,20 +127,22 @@ barato. Um "nao" errado acusa alguém honesto, o que não é.`;
 @Injectable()
 export class LeitorTicketService {
   private readonly log = new Logger(LeitorTicketService.name);
-  private client?: Anthropic;
 
   constructor(
-    private readonly config: ConfigService,
+    private readonly clientes: ClienteIaFactory,
     private readonly uso: UsoIaService,
-  ) {
-    const apiKey = this.config.get<string>("ANTHROPIC_API_KEY");
-    if (apiKey) {
-      this.client = new Anthropic({ apiKey, timeout: 60_000, maxRetries: 1 });
-    }
-  }
+  ) {}
 
+  /**
+   * Tem como ler alguma coisa? O worker pergunta antes de consumir a fila.
+   *
+   * É "existe chave de ALGUM fornecedor" e não "existe a da Anthropic": desde
+   * que o MiniMax entrou, uma instalação pode rodar só com a chave dele. Quem
+   * checa o fornecedor certo é a fábrica, no momento da chamada, porque só ali
+   * se sabe qual modelo a empresa escolheu.
+   */
   get disponivel(): boolean {
-    return !!this.client;
+    return this.clientes.algumProvedorConfigurado;
   }
 
   /**
@@ -141,14 +171,32 @@ export class LeitorTicketService {
      */
     falha: "resposta-invalida" | "foto-ilegivel" | null;
   }> {
-    if (!this.client) throw new Error("ANTHROPIC_API_KEY não configurada");
     const modelo = args.modelo || MODELO_PADRAO;
+    // Lança `ProvedorIaNaoConfigurado` com nome quando falta a chave daquele
+    // fornecedor — o worker trata como falha de infra e retenta.
+    const cliente = this.clientes.para(modelo);
     const t0 = Date.now();
 
     try {
-      const resp = await this.client.messages.create({
+      const resp = await cliente.messages.create({
         model: modelo,
-        max_tokens: 400,
+        // 400 era apertado demais: medindo leituras reais, a saída chega a 332
+        // tokens num ticket de 6 campos com o `porque` de cada julgamento. O
+        // teto cortava o JSON no meio, o parse caía no fallback de fechamento
+        // balanceado e, quando nem isso salvava, a leitura virava
+        // "resposta-invalida" — que RETENTA. Ou seja: economizar aqui pagava a
+        // leitura duas vezes. Saída só é cobrada pelo que é gerado; folga não
+        // custa nada.
+        max_tokens: 800,
+        // `max_tokens: 400` só cabe porque a resposta é o JSON e nada mais. No
+        // MiniMax o raciocínio vem desligado por default, mas default é coisa
+        // que muda do lado deles: um dia de "thinking" ligado consumiria os 400
+        // tokens antes do JSON começar, e toda leitura viraria truncada. Pedir
+        // explicitamente fecha a porta. O parâmetro não existe assim na
+        // Anthropic, daí ser condicional.
+        ...(provedorDoModelo(modelo) === "minimax"
+          ? ({ thinking: { type: "disabled" } } as unknown as Record<string, unknown>)
+          : {}),
         system: INSTRUCOES,
         messages: [
           {
