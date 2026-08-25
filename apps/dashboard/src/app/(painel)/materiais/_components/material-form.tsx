@@ -19,6 +19,7 @@ export type Material = {
   exigeTicket: boolean;
   permiteBotaFora: boolean;
   temComprovanteFoto: boolean;
+  dispensaConferencia: boolean;
 };
 
 const PATH = "/admin/materiais";
@@ -31,6 +32,7 @@ type MaterialBody = {
   exigeTicket: boolean;
   permiteBotaFora: boolean;
   temComprovanteFoto: boolean;
+  dispensaConferencia: boolean;
 };
 
 export function MaterialForm({ initial }: Props) {
@@ -43,6 +45,7 @@ export function MaterialForm({ initial }: Props) {
     exigeTicket: initial?.exigeTicket ?? true,
     permiteBotaFora: initial?.permiteBotaFora ?? false,
     temComprovanteFoto: initial?.temComprovanteFoto ?? true,
+    dispensaConferencia: initial?.dispensaConferencia ?? false,
   });
 
   async function onSubmit(e: React.FormEvent) {
@@ -95,6 +98,32 @@ export function MaterialForm({ initial }: Props) {
             pra materiais que não geram ticket (ex: concreto) — aí o campo some pro
             motorista e a viagem pode ser lançada sem ticket.
           </p>
+        </div>
+        <div className="space-y-2 rounded-lg border p-3">
+          <div className="flex items-center justify-between gap-3">
+            <Label htmlFor="dispensaConferencia">Não precisa de conferência</Label>
+            <StatusToggle
+              active={form.dispensaConferencia}
+              onChange={(next) => setForm({ ...form, dispensaConferencia: next })}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Desligado (padrão): a viagem entra aguardando alguém conferir, como
+            sempre. Ligue só para material que não gera documento nenhum (ex:
+            concreto) — aí a viagem já{" "}
+            <strong className="font-medium text-foreground">
+              entra aprovada, sem ninguém olhar
+            </strong>
+            , e vai direto pro fechamento. Fica registrado na conversa da viagem
+            que foi a regra do material que aprovou.
+          </p>
+          {form.dispensaConferencia && form.temComprovanteFoto && (
+            <p className="text-xs text-amber-600 dark:text-amber-500">
+              Atenção: este material está marcado como &ldquo;gera comprovante
+              fotografável&rdquo;. Se ele produz papel, alguém deveria conferir — vale
+              revisar as duas opções juntas.
+            </p>
+          )}
         </div>
         <div className="space-y-2 rounded-lg border p-3">
           <div className="flex items-center justify-between gap-3">

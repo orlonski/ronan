@@ -11,6 +11,10 @@ export const CriarMaterialInput = z.object({
   // false = material que não gera papel nenhum (concreto). Suprime a exigência
   // de foto da empresa — não dá pra cobrar foto de comprovante inexistente.
   temComprovanteFoto: z.boolean().default(true),
+  // true = a viagem desse material já entra APROVADA, sem passar por
+  // conferência. Independente de `temComprovanteFoto`: aquela decide a FOTO,
+  // esta decide a CONFERÊNCIA. Nasce desligada.
+  dispensaConferencia: z.boolean().default(false),
 });
 export type CriarMaterialInput = z.infer<typeof CriarMaterialInput>;
 
@@ -21,5 +25,6 @@ export const AtualizarMaterialInput = z.object({
   exigeTicket: z.boolean().optional(),
   permiteBotaFora: z.boolean().optional(),
   temComprovanteFoto: z.boolean().optional(),
+  dispensaConferencia: z.boolean().optional(),
 });
 export type AtualizarMaterialInput = z.infer<typeof AtualizarMaterialInput>;

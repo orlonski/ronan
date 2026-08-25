@@ -13,6 +13,13 @@ const ACAO_LABEL: Record<string, string> = {
   ESCOLHEU_ROTA: "Registrou a estrada",
   INFORMOU_PEDAGIO: "Informou o pedágio",
   ENVIOU_FOTO: "Enviou foto nova",
+  // Material que não gera documento: a viagem entra aprovada por regra.
+  DISPENSOU_CONFERENCIA: "Sem conferência (material)",
+  // As duas abaixo o backend já gravava, e não estavam aqui — mensagem com
+  // `acao` fora desta lista simplesmente não renderiza selo. A conferência
+  // automática vinha aparecendo sem nenhum.
+  CONFERIU: "Conferido pela IA",
+  CORRIGIU_TICKET: "Corrigiu o ticket",
 };
 
 /**

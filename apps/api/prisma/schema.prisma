@@ -1215,27 +1215,39 @@ model Cliente {
 }
 
 model Material {
-  contaId            String   @default("__SEM_CONTA__")
-  conta              Conta    @relation(fields: [contaId], references: [id])
-  id                 String   @id @default(uuid())
-  nome               String
+  contaId             String   @default("__SEM_CONTA__")
+  conta               Conta    @relation(fields: [contaId], references: [id])
+  id                  String   @id @default(uuid())
+  nome                String
   /// Apelidos/sinônimos pra busca fuzzy do agente WhatsApp.
-  apelidos           String[] @default([])
-  ativo              Boolean  @default(true)
+  apelidos            String[] @default([])
+  ativo               Boolean  @default(true)
   /// Se false, viagens desse material não exigem número de ticket (ex: concreto,
   /// que não gera ticket de pesagem). Controlado pelo admin, nunca pelo motorista.
-  exigeTicket        Boolean  @default(true)
+  exigeTicket         Boolean  @default(true)
   /// Esse material gera algum papel que dá pra fotografar (ticket de pesagem,
   /// canhoto, nota). false = não gera nada (concreto): suprime a exigência de
   /// foto da empresa, porque não dá pra cobrar foto de comprovante inexistente.
-  temComprovanteFoto Boolean  @default(true)
+  temComprovanteFoto  Boolean  @default(true)
+  /// Material que não gera documento nenhum pra conferir: a viagem já entra
+  /// APROVADA, sem passar pela fila de conferência.
+  ///
+  /// Independente de `temComprovanteFoto` de propósito. Aquela dispensa a FOTO;
+  /// esta dispensa a CONFERÊNCIA. Um material pode não ter foto e ainda assim
+  /// merecer o olho de alguém (nota fiscal digitada à mão, por exemplo), e o
+  /// contrário também existe.
+  ///
+  /// Nasce DESLIGADA. Ligar num material que na verdade gera papel faria viagens
+  /// entrarem no faturamento sem ninguém olhar — e ninguém revisa o que já está
+  /// aprovado. Ver common/conferencia-dispensada.ts para as travas.
+  dispensaConferencia Boolean  @default(false)
   /// Se true, o motorista pode marcar que precisou voltar pro bota-fora (limpeza):
   /// na última carga ele retorna ao local de carga pra descarregar a sobra. Isso
   /// adiciona a perna descarga→carga ao km faturável. Controlado pelo admin; o
   /// motorista só marca o fato. Ver Viagem.teveBotaFora.
-  permiteBotaFora    Boolean  @default(false)
-  criadoEm           DateTime @default(now())
-  alteradoEm         DateTime @updatedAt
+  permiteBotaFora     Boolean  @default(false)
+  criadoEm            DateTime @default(now())
+  alteradoEm          DateTime @updatedAt
 
   viagens      Viagem[]
   regrasMinimo RegraMinimo[]
@@ -1704,6 +1716,17 @@ model Viagem {
   /// Também é por aqui que se auditam as aprovações automáticas depois, e que
   /// dá pra desfazer em lote se a calibragem se mostrar errada.
   conferidoPorIaEm        DateTime?
+  /// Quando a viagem entrou já aprovada porque o MATERIAL dispensa conferência
+  /// (`Material.dispensaConferencia`) — concreto e afins, que não geram papel.
+  ///
+  /// Carimbo próprio, e não `conferidoPorIaEm`: aquele significa "a IA leu o
+  /// documento e aprovou", e aqui nada foi lido. Escrever ali faria a tela
+  /// mentir sobre o que aconteceu.
+  ///
+  /// Vem junto de `revisadoEm` (com `revisadoPorId` nulo) pela mesma razão que o
+  /// irmão acima: é `revisadoEm` que tira a viagem do contador "a conferir" e
+  /// faz o FechamentoProcessor preservar o status.
+  conferenciaDispensadaEm DateTime?
   revisadoPor             User?              @relation("RevisouViagem", fields: [revisadoPorId], references: [id], onDelete: SetNull)
   revisadoPorId           String?
   /// Texto obrigatório quando status foi marcado DIVERGENTE via pré-validação.

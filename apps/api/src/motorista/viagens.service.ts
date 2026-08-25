@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { AcaoAuditoria, MotivoDivergencia, Prisma, type StatusViagem } from "@prisma/client";
@@ -21,6 +22,11 @@ import { resolverTransportadora } from "../common/transportadora";
 import { contaIdAtual } from "../common/conta/conta-context";
 import { resolverModoServico, resolverPeriodo } from "../common/tipo-servico";
 import { exigeFotoDaViagem, resolverJustificativaSemFoto } from "../common/exige-foto";
+import {
+  carimbosDaDispensa,
+  dispensaConferencia,
+  textoDispensa,
+} from "../common/conferencia-dispensada";
 import { formatarDuracao } from "@ronan/shared-types";
 import {
   aplicarMinimos,
@@ -98,6 +104,61 @@ const VIAGEM_DETALHE_INCLUDE = {
 
 @Injectable()
 export class ViagensMotoristaService {
+  private readonly log = new Logger(ViagensMotoristaService.name);
+
+  /**
+   * O material desta viagem dispensa conferência, e a viagem está completa?
+   *
+   * Para quem NÃO tem o material já carregado — o `VIAGEM_INCLUDE` traz só
+   * `{ id, nome }` do material, sem as flags de regra.
+   */
+  private async dispensaDoMaterial(
+    materialId: string | null | undefined,
+    statusDesejado: StatusViagem,
+  ): Promise<{ dispensada: boolean; materialNome: string | null }> {
+    if (!materialId) return { dispensada: false, materialNome: null };
+    const m = await this.prisma.material.findUnique({
+      where: { id: materialId },
+      select: { nome: true, dispensaConferencia: true },
+    });
+    return {
+      dispensada: dispensaConferencia({
+        materialDispensa: m?.dispensaConferencia,
+        statusDesejado,
+      }),
+      materialNome: m?.nome ?? null,
+    };
+  }
+
+  /**
+   * Conta no chat da viagem por que ela já entrou aprovada.
+   *
+   * O chat é o único lugar que o motorista e o painel enxergam juntos. Sem
+   * isto o motorista veria a viagem aceita sem foto e ficaria na dúvida se
+   * esqueceu de mandar alguma coisa.
+   *
+   * Best-effort de propósito, no mesmo padrão da conferência automática: a
+   * viagem já está gravada e aprovada: o chat não pode derrubar isso.
+   */
+  private async anunciarDispensa(viagemId: string, materialNome: string | null): Promise<void> {
+    try {
+      await this.prisma.viagemMensagem.create({
+        data: {
+          viagemId,
+          autor: "ADMIN",
+          usuarioId: null,
+          autorNome: "Sistema",
+          texto: textoDispensa(materialNome),
+          acao: "DISPENSOU_CONFERENCIA",
+        },
+      });
+    } catch (err) {
+      this.log.warn(
+        `Não consegui escrever a dispensa no chat de ${viagemId}: ${(err as Error).message}`,
+      );
+    }
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly uploads: UploadsService,
@@ -1077,7 +1138,12 @@ export class ViagensMotoristaService {
     const material = materialId
       ? await this.prisma.material.findUnique({
           where: { id: materialId },
-          select: { permiteBotaFora: true, temComprovanteFoto: true },
+          select: {
+            nome: true,
+            permiteBotaFora: true,
+            temComprovanteFoto: true,
+            dispensaConferencia: true,
+          },
         })
       : null;
     if (materialId && !material) {
@@ -1182,6 +1248,23 @@ export class ViagensMotoristaService {
       veiculoId,
     );
 
+    // Material que não gera papel (concreto) entra APROVADO: não há documento
+    // pra conferir, e sem isto a viagem ficava presa no contador "a conferir"
+    // esperando um aval que ninguém tem motivo pra dar. A regra recusa sozinha
+    // quando o status desejado não é ENVIADA — INCOMPLETA e os "aguardando"
+    // continuam pedindo gente. Ver common/conferencia-dispensada.ts.
+    const statusBase = divs.statusFinal(
+      aguardandoPeso
+        ? "AGUARDANDO_PESO"
+        : periodo.aguardandoSaida
+          ? "AGUARDANDO_SAIDA"
+          : "ENVIADA",
+    );
+    const dispensada = dispensaConferencia({
+      materialDispensa: material?.dispensaConferencia,
+      statusDesejado: statusBase,
+    });
+
     const viagem = await this.prisma.viagem.create({
       data: {
         clientId,
@@ -1206,13 +1289,7 @@ export class ViagensMotoristaService {
         // painel completar. AGUARDANDO_PESO/SAIDA prevalecem: são fluxos
         // legítimos que já mantêm a viagem fora do fechamento e cuja semântica
         // o INCOMPLETA apagaria.
-        status: divs.statusFinal(
-          aguardandoPeso
-            ? "AGUARDANDO_PESO"
-            : periodo.aguardandoSaida
-              ? "AGUARDANDO_SAIDA"
-              : "ENVIADA",
-        ),
+        ...(dispensada ? carimbosDaDispensa(new Date()) : { status: statusBase }),
         ...(divs.paraCreateAninhado() ? { divergencias: divs.paraCreateAninhado() } : {}),
         ticket,
         // Número repetido: guarda QUAL viagem já usa, pro painel levar direto
@@ -1280,6 +1357,14 @@ export class ViagensMotoristaService {
     });
 
     void this.resgates.marcarQueSubiu(clientId);
+
+    // Por que a viagem já entrou aprovada, escrito onde os dois lados leem.
+    //
+    // O chat é o único lugar que o motorista e o painel enxergam juntos. Sem
+    // isto ele veria a viagem aceita sem foto e ficaria na dúvida se esqueceu
+    // de mandar alguma coisa. Best-effort como todo o resto daqui pra baixo: o
+    // chat nunca derruba um lançamento que já está gravado.
+    if (dispensada) await this.anunciarDispensa(viagem.id, material?.nome ?? null);
 
     // Backfill: eventos enviados antes da viagem chegar (offline) usam
     // viagemClientId. Agora que a viagem existe, linka viagemId pros eventos
@@ -1522,7 +1607,14 @@ export class ViagensMotoristaService {
   async encerrarDiaria(motoristaId: string, viagemId: string, input: { saidaEm: Date }) {
     const viagem = await this.prisma.viagem.findUnique({
       where: { id: viagemId },
-      select: { id: true, motoristaId: true, status: true, entradaEm: true, tipoServicoId: true },
+      select: {
+        id: true,
+        motoristaId: true,
+        status: true,
+        entradaEm: true,
+        tipoServicoId: true,
+        materialId: true,
+      },
     });
     if (!viagem) throw new NotFoundException("Viagem não encontrada.");
     if (viagem.motoristaId !== motoristaId) {
@@ -1544,15 +1636,22 @@ export class ViagensMotoristaService {
       saidaEm: input.saidaEm,
     });
 
+    // Diária normalmente nem tem material (`TipoServico.exigeMaterial = false`),
+    // mas quando tem, a regra é a mesma: a saída foi marcada, a viagem está
+    // completa, e material que não gera papel não precisa de conferência.
+    const { dispensada: dispensadaDiaria, materialNome: materialNomeDiaria } =
+      await this.dispensaDoMaterial(viagem.materialId, "ENVIADA");
+
     const atualizada = await this.prisma.viagem.update({
       where: { id: viagemId },
       data: {
         saidaEm: periodo.saidaEm,
         duracaoMinutos: periodo.duracaoMinutos,
-        status: "ENVIADA",
+        ...(dispensadaDiaria ? carimbosDaDispensa(new Date()) : { status: "ENVIADA" as const }),
       },
       include: VIAGEM_INCLUDE,
     });
+    if (dispensadaDiaria) await this.anunciarDispensa(atualizada.id, materialNomeDiaria);
 
     return serializarViagemComMinimos(atualizada, await this.regrasMinimoAtivas());
   }
@@ -1607,17 +1706,25 @@ export class ViagensMotoristaService {
       divs,
     );
 
+    // O peso chegou: a viagem sai de AGUARDANDO_PESO e só AGORA pode ser
+    // dispensada. É por isso que a regra recusa os status "aguardando" — a
+    // aprovação espera a viagem ficar completa, e este é o momento.
+    const statusBasePeso = divs.statusFinal("ENVIADA");
+    const { dispensada: dispensadaPeso, materialNome: materialNomePeso } =
+      await this.dispensaDoMaterial(viagem.materialId, statusBasePeso);
+
     const atualizada = await this.prisma.viagem.update({
       where: { id: viagemId },
       data: {
         toneladas: input.toneladas,
         ticket,
         ticketDuplicadoDeId: duplicadoDeId,
-        status: divs.statusFinal("ENVIADA"),
+        ...(dispensadaPeso ? carimbosDaDispensa(new Date()) : { status: statusBasePeso }),
       },
       include: VIAGEM_INCLUDE,
     });
     await aplicarDivergencias(this.prisma, atualizada.id, divs);
+    if (dispensadaPeso) await this.anunciarDispensa(atualizada.id, materialNomePeso);
 
     // Agora que virou ENVIADA e tem km, recalcula pelo trajeto real se preciso.
     void this.kmReprocessamento.reprocessar(atualizada.id);
@@ -1947,7 +2054,12 @@ export class ViagensMotoristaService {
     const materialFin = materialIdFin
       ? await this.prisma.material.findUnique({
           where: { id: materialIdFin },
-          select: { permiteBotaFora: true, temComprovanteFoto: true },
+          select: {
+            nome: true,
+            permiteBotaFora: true,
+            temComprovanteFoto: true,
+            dispensaConferencia: true,
+          },
         })
       : null;
     if (!materialIdFin) {
@@ -1974,6 +2086,15 @@ export class ViagensMotoristaService {
       viagem.localCargaId,
     );
 
+    // Mesma regra do create: material que não gera papel entra aprovado, desde
+    // que a viagem esteja completa. Carimbo bloqueante manda pra INCOMPLETA e a
+    // regra recusa sozinha.
+    const statusBaseFin = divs.statusFinal(aguardandoPeso ? "AGUARDANDO_PESO" : "ENVIADA");
+    const dispensadaFin = dispensaConferencia({
+      materialDispensa: materialFin?.dispensaConferencia,
+      statusDesejado: statusBaseFin,
+    });
+
     const localDescargaId = input.localDescargaId
       ? await this.garantirLocal({
           id: input.localDescargaId,
@@ -1988,7 +2109,7 @@ export class ViagensMotoristaService {
     const finalizada = await this.prisma.viagem.update({
       where: { id: viagem.id },
       data: {
-        status: divs.statusFinal(aguardandoPeso ? "AGUARDANDO_PESO" : "ENVIADA"),
+        ...(dispensadaFin ? carimbosDaDispensa(new Date()) : { status: statusBaseFin }),
         clienteId: clienteIdEfetivo,
         materialId: materialIdFin,
         data: input.data,
@@ -2035,6 +2156,7 @@ export class ViagensMotoristaService {
     // Carimbos vão DEPOIS do update: a viagem fechada é o que importa, o
     // carimbo é secundário (aplicarDivergencias nunca derruba o chamador).
     await aplicarDivergencias(this.prisma, finalizada.id, divs);
+    if (dispensadaFin) await this.anunciarDispensa(finalizada.id, materialFin?.nome ?? null);
 
     // Revalida locais + garante rota (best-effort, igual create).
     try {

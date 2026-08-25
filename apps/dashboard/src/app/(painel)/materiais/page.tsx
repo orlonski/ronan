@@ -27,6 +27,7 @@ type Material = {
   ativo: boolean;
   exigeTicket: boolean;
   permiteBotaFora: boolean;
+  dispensaConferencia: boolean;
   criadoEm: string;
   criadoPor: { id: string; nome: string } | null;
 };
@@ -90,6 +91,22 @@ export default function MateriaisPage() {
           row.original.permiteBotaFora ? (
             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
               permite
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          ),
+      },
+      {
+        id: "conferencia",
+        enableSorting: false,
+        size: 130,
+        header: "Conferência",
+        cell: ({ row }) =>
+          row.original.dispensaConferencia ? (
+            // Âmbar, não verde: a viagem entra no faturamento sem ninguém olhar.
+            // É informação que merece chamar atenção na lista, não passar batido.
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+              dispensada
             </span>
           ) : (
             <span className="text-xs text-muted-foreground">—</span>

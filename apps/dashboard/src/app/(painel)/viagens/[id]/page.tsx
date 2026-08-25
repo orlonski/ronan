@@ -208,6 +208,8 @@ type ViagemDetalhe = {
   revisadoEm: string | null;
   /** Preenchido quando quem aprovou foi a conferência automática. */
   conferidoPorIaEm: string | null;
+  /** Preenchido quando o MATERIAL dispensa conferência (concreto e afins). */
+  conferenciaDispensadaEm?: string | null;
   revisadoPor: { id: string; nome: string } | null;
   motivoStatus: string | null;
   ocrCampos: string[];
@@ -1041,7 +1043,9 @@ export default function ViagemDetalhePage({
                       {/* Sem dizer que foi automático, a viagem apareceria como
                           revisada e ninguém saberia por quem — pior que não
                           aprovar. */}
-                      por {v.conferidoPorIaEm ? "conferência automática" : (v.revisadoPor?.nome ?? "—")} em{" "}
+                      {v.conferenciaDispensadaEm
+                        ? "dispensada — o material não gera documento pra conferir, em "
+                        : `por ${v.conferidoPorIaEm ? "conferência automática" : (v.revisadoPor?.nome ?? "—")} em `}
                       {fmtDataHoraBR(v.revisadoEm)}
                     </span>
                   </p>
