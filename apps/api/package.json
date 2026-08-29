@@ -15,7 +15,8 @@
     "seed:admin": "ts-node -P tsconfig.json --transpile-only src/scripts/seed-admin.ts",
     "testar:ocr": "ts-node -P tsconfig.json --transpile-only src/scripts/testar-ocr-ticket.ts",
     "comparar:ticket": "ts-node -P tsconfig.json --transpile-only src/scripts/comparar-leitura-ticket.ts",
-    "dispensar:retroativo": "ts-node -P tsconfig.json --transpile-only src/scripts/dispensar-conferencia-retroativo.ts"
+    "dispensar:retroativo": "ts-node -P tsconfig.json --transpile-only src/scripts/dispensar-conferencia-retroativo.ts",
+    "aprovar:retroativo": "ts-node -P tsconfig.json --transpile-only src/scripts/aprovar-conferencias-retroativo.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",
