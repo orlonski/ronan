@@ -10,12 +10,13 @@ import { PrismaService } from "../prisma/prisma.service";
 import { PushService } from "../push/push.service";
 import { ConferenciaFilaService } from "./conferencia-fila.service";
 import { ConferenciaConfig } from "./conferencia.config";
+import { PreAprovacaoService } from "./pre-aprovacao.service";
 import { resumirConferencia, type ResultadoConferencia } from "../common/conferencia-ticket";
 
 /**
  * O que fazer com o veredito.
  *
- * Quatro regras governam este arquivo, e as quatro existem por motivo caro:
+ * Cinco regras governam este arquivo, e as cinco existem por motivo caro:
  *
  * 1. **`revisadoEm` só é escrito ao APROVAR, e sempre junto de
  *    `conferidoPorIaEm`.** Preencher `revisadoEm` é o que faz o
@@ -34,7 +35,13 @@ import { resumirConferencia, type ResultadoConferencia } from "../common/confere
  * 3. **Só `DIVERGE` chega ao motorista.** `INCERTO` para no painel. Nunca se
  *    cobra alguém na estrada por causa de uma leitura duvidosa.
  *
- * 4. **Modo sombra é o padrão.** Enquanto ele estiver ligado, nada disso é
+ * 4. **O ticket não aprova a viagem sozinho.** Ele fala da CARGA — do caminho
+ *    e do pedágio ele não sabe nada. Antes de aprovar, `PreAprovacaoService`
+ *    confere que o km está no padrão do trajeto e que o pedágio da rota foi
+ *    lançado num valor parecido com o das outras viagens do mesmo par. Ver
+ *    `pre-aprovacao.ts`.
+ *
+ * 5. **Modo sombra é o padrão.** Enquanto ele estiver ligado, nada disso é
  *    escrito: o veredito é gravado e mais nada. É assim que dá pra comparar o
  *    robô com o conferente humano antes de deixar ele agir.
  */
@@ -47,6 +54,7 @@ export class AplicarVereditoService {
     private readonly fila: ConferenciaFilaService,
     private readonly push: PushService,
     private readonly config: ConferenciaConfig,
+    private readonly preAprovacao: PreAprovacaoService,
   ) {}
 
   async aplicar(
@@ -137,9 +145,11 @@ export class AplicarVereditoService {
    * trás, e `conferidoPorIaEm` diz em voz alta quem foi — sem isso a viagem
    * apareceria como revisada e ninguém saberia por quem.
    *
-   * Três travas, porque aprovar errado é mais silencioso que acusar errado:
-   * leitura tem que estar bem confiante, um número mínimo de campos tem que ter
-   * sido realmente conferido, e nada de incerteza pendurada.
+   * Travas, porque aprovar errado é mais silencioso que acusar errado: leitura
+   * bem confiante, um número mínimo de campos realmente conferidos, nada de
+   * incerteza pendurada — e a viagem em si fechando com o trajeto (km no padrão
+   * do par, pedágio da rota lançado e na média). As três primeiras olham o
+   * papel; a última olha a viagem, que é o que o papel não mostra.
    */
   private async aprovarSeCabivel(
     job: ConferenciaTicket,
@@ -150,6 +160,22 @@ export class AplicarVereditoService {
     if (confianca < this.config.confiancaParaAprovar) return "NENHUMA";
     if (r.conferidos.length < this.config.minCamposParaAprovar) return "NENHUMA";
     if (r.incertezas.length > 0 || r.divergencias.length > 0) return "NENHUMA";
+
+    // O documento confere. Falta a viagem em si: km no padrão do trajeto e
+    // pedágio da rota lançado num valor plausível. Nada disso está no papel.
+    const pre = await this.preAprovacao.avaliar(job.viagemId);
+    if (!pre.aprova) {
+      // Fica no log pra calibrar depois: é este motivo que diz se a régua está
+      // barrando erro de verdade ou só viagem sem histórico.
+      this.log.log(
+        JSON.stringify({
+          evento: "conferencia-nao-aprovou",
+          viagemId: job.viagemId,
+          motivo: pre.motivo,
+        }),
+      );
+      return "NENHUMA";
+    }
 
     const alterou = await this.prisma.viagem.updateMany({
       where: {
@@ -178,7 +204,13 @@ export class AplicarVereditoService {
           autor: "ADMIN",
           usuarioId: null,
           autorNome: "Conferência automática",
-          texto: `Confere com o documento (${r.conferidos.length} campos verificados, leitura ${Math.round(confianca * 100)}%).`,
+          // Diz em voz alta que foi aprovação automática, e com base em quê:
+          // quem abrir a viagem depois precisa saber que não houve olho humano
+          // aqui — e o que o sistema olhou antes de decidir.
+          texto: [
+            `Aprovada automaticamente. Confere com o documento (${r.conferidos.length} campos verificados, leitura ${Math.round(confianca * 100)}%).`,
+            ...pre.resumo,
+          ].join(" "),
           acao: "CONFERIU",
         },
       });

@@ -85,6 +85,54 @@ export class ConferenciaConfig {
     return this.num("CONFERENCIA_MIN_CAMPOS_APROVAR", 3, 1, 6);
   }
 
+  /**
+   * A viagem também precisa fechar com o que a frota já rodou no trajeto: km
+   * dentro do padrão do par de locais (`Viagem.kmForaDoPadrao`).
+   *
+   * O ticket fala da CARGA — ele não sabe nada sobre o caminho. Uma leitura
+   * impecável convive com um km fora de qualquer padrão do trajeto, e aprovar
+   * pelo papel deixaria isso passar direto pro fechamento.
+   *
+   * "Não avaliado" conta como reprovado: sem referência não dá pra dizer que o
+   * km está na média, e a viagem só continua onde já estaria — na fila de quem
+   * confere.
+   */
+  get exigirKmNoPadrao(): boolean {
+    return this.bool("CONFERENCIA_APROVAR_EXIGE_KM_PADRAO", true);
+  }
+
+  /**
+   * Se a rota passa por praça de pedágio, a viagem tem que trazer o valor — e
+   * um valor parecido com o que as outras viagens do mesmo trajeto trazem.
+   *
+   * Desligar só faz sentido pra empresa que não usa o cadastro de praças: sem
+   * praça cadastrada a checagem responde "não sei" e nada é aprovado sozinho.
+   */
+  get exigirPedagioCoerente(): boolean {
+    return this.bool("CONFERENCIA_APROVAR_EXIGE_PEDAGIO", true);
+  }
+
+  /**
+   * Quanto o valor do pedágio pode fugir da mediana do trajeto, em %.
+   *
+   * Folgado de propósito: praça reajusta, tag dá desconto, o motorista pega um
+   * desvio. A régua existe pra pegar o zero digitado errado e o valor de outra
+   * viagem, não pra brigar por alguns reais.
+   */
+  get desvioPedagioPct(): number {
+    return this.num("CONFERENCIA_PEDAGIO_DESVIO_PCT", 40, 5, 300);
+  }
+
+  /** Abaixo disto a mediana de pedágio não é afirmável — e não bloqueia nada. */
+  get amostraMinimaPedagio(): number {
+    return this.num("CONFERENCIA_PEDAGIO_AMOSTRA_MIN", 3, 2, 50);
+  }
+
+  /** Janela da amostra de pedágio do par, em dias. */
+  get janelaDiasPedagio(): number {
+    return this.num("CONFERENCIA_PEDAGIO_JANELA_DIAS", 180, 7, 1825);
+  }
+
   /** Quantas conferências ao mesmo tempo no processo. */
   get concorrencia(): number {
     return this.num("CONFERENCIA_CONCORRENCIA", 2, 1, 10);
@@ -154,6 +202,10 @@ export class ConferenciaConfig {
         segundaOpiniao: this.modeloSegundaOpiniao || "desligada",
         autoAprovar: this.autoAprovar
           ? `sim (confiança ≥ ${this.confiancaParaAprovar}, ≥ ${this.minCamposParaAprovar} campos)`
+          : "não",
+        exigeKmNoPadrao: this.exigirKmNoPadrao,
+        exigePedagio: this.exigirPedagioCoerente
+          ? `sim (desvio ≤ ${this.desvioPedagioPct}% com ≥ ${this.amostraMinimaPedagio} viagens)`
           : "não",
       }),
     );

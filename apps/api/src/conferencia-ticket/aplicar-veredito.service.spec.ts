@@ -5,6 +5,7 @@ import type { PrismaService } from "../prisma/prisma.service";
 import type { PushService } from "../push/push.service";
 import type { ConferenciaFilaService } from "./conferencia-fila.service";
 import type { ConferenciaConfig } from "./conferencia.config";
+import type { PreAprovacaoService } from "./pre-aprovacao.service";
 import type { ResultadoConferencia } from "../common/conferencia-ticket";
 
 const JOB = { id: "j1", viagemId: "v1", contaId: "c1" } as never;
@@ -30,7 +31,16 @@ const DIVERGE = resultado({
   ],
 });
 
-function montar(cfg: Partial<{ autoAprovar: boolean; confiancaParaAprovar: number; minCamposParaAprovar: number }> = {}) {
+function montar(
+  cfg: Partial<{
+    autoAprovar: boolean;
+    confiancaParaAprovar: number;
+    minCamposParaAprovar: number;
+    /** O que a checagem da VIAGEM (km + pedágio) respondeu. Ver pre-aprovacao.ts. */
+    preAprova: boolean;
+    preMotivo: string;
+  }> = {},
+) {
   const updateMany = vi.fn().mockResolvedValue({ count: 1 });
   const prisma = {
     viagem: {
@@ -46,7 +56,21 @@ function montar(cfg: Partial<{ autoAprovar: boolean; confiancaParaAprovar: numbe
     confiancaParaAprovar: cfg.confiancaParaAprovar ?? 0.9,
     minCamposParaAprovar: cfg.minCamposParaAprovar ?? 3,
   } as ConferenciaConfig;
-  return { svc: new AplicarVereditoService(prisma, fila, push, config), prisma, fila, push, updateMany };
+  const preAprovacao = {
+    avaliar: vi.fn().mockResolvedValue({
+      aprova: cfg.preAprova ?? true,
+      motivo: cfg.preAprova === false ? (cfg.preMotivo ?? "km fora do padrão do trajeto") : null,
+      resumo: ["Km na média do trajeto (referência 120,0 km).", "A rota não passa por praça de pedágio."],
+    }),
+  } as unknown as PreAprovacaoService;
+  return {
+    svc: new AplicarVereditoService(prisma, fila, push, config, preAprovacao),
+    prisma,
+    fila,
+    push,
+    updateMany,
+    preAprovacao,
+  };
 }
 
 const dados = (r: ResultadoConferencia) => ({
@@ -252,6 +276,36 @@ describe("aprovação automática", () => {
     const { svc, updateMany } = montar({ autoAprovar: true });
     await svc.aplicar(JOB, comConfianca(BATE, 0.95), false);
     expect(updateMany.mock.calls[0][0].where.revisadoEm).toBeNull();
+  });
+
+  it("não aprova quando a VIAGEM não fecha, por mais que o papel confira", async () => {
+    // O ticket fala da carga; km e pedágio não estão nele. Documento perfeito
+    // com km fora do padrão do trajeto continua sendo caso de conferente.
+    const { svc, updateMany, fila } = montar({ autoAprovar: true, preAprova: false });
+
+    await svc.aplicar(JOB, comConfianca(BATE, 0.97), false);
+
+    expect(updateMany).not.toHaveBeenCalled();
+    expect((fila.finalizar as ReturnType<typeof vi.fn>).mock.calls[0][1].acao).toBe("NENHUMA");
+  });
+
+  it("só checa a viagem depois de o documento passar — não gasta rota à toa", async () => {
+    const { svc, preAprovacao } = montar({ autoAprovar: true, confiancaParaAprovar: 0.9 });
+    await svc.aplicar(JOB, comConfianca(BATE, 0.5), false);
+    expect(preAprovacao.avaliar).not.toHaveBeenCalled();
+  });
+
+  it("o chat diz que foi aprovação automática e com base em quê", async () => {
+    // Quem abre a viagem depois precisa ver que não houve olho humano aqui, e
+    // o que o sistema olhou antes de decidir.
+    const { svc, prisma } = montar({ autoAprovar: true });
+
+    await svc.aplicar(JOB, comConfianca(BATE, 0.95), false);
+
+    const msg = (prisma.viagemMensagem.create as ReturnType<typeof vi.fn>).mock.calls[0][0].data;
+    expect(msg.texto).toMatch(/Aprovada automaticamente/);
+    expect(msg.texto).toMatch(/Km na média do trajeto/);
+    expect(msg.texto).toMatch(/praça de pedágio/);
   });
 
   it("desligada, não aprova nada", async () => {

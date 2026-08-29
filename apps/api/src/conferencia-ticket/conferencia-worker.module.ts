@@ -2,11 +2,14 @@ import { Module } from "@nestjs/common";
 import { PrismaModule } from "../prisma/prisma.module";
 import { UploadsModule } from "../uploads/uploads.module";
 import { PushModule } from "../push/push.module";
+import { KmAtipicoModule } from "../km-atipico/km-atipico.module";
+import { PedagiosRodoviaModule } from "../admin/pedagios-rodovia/pedagios-rodovia.module";
 import { ConferenciaConfig } from "./conferencia.config";
 import { ConferenciaFilaService } from "./conferencia-fila.service";
 import { ConferenciaWorkerService } from "./conferencia-worker.service";
 import { LeitorTicketService } from "./leitor-ticket.service";
 import { AplicarVereditoService } from "./aplicar-veredito.service";
+import { PreAprovacaoService } from "./pre-aprovacao.service";
 
 /**
  * Fila + worker. É este que faz o laço rodar.
@@ -17,11 +20,15 @@ import { AplicarVereditoService } from "./aplicar-veredito.service";
  * processo separado sem mudar mais nada.
  */
 @Module({
-  imports: [PrismaModule, UploadsModule, PushModule],
+  // KmAtipico e PedagiosRodovia entram porque aprovar sozinho não se decide só
+  // pelo papel: o km precisa estar no padrão do trajeto e o pedágio da rota
+  // precisa ter sido lançado. Ver `pre-aprovacao.ts`.
+  imports: [PrismaModule, UploadsModule, PushModule, KmAtipicoModule, PedagiosRodoviaModule],
   providers: [
     ConferenciaConfig,
     ConferenciaFilaService,
     LeitorTicketService,
+    PreAprovacaoService,
     AplicarVereditoService,
     ConferenciaWorkerService,
   ],
