@@ -5,6 +5,12 @@
  *   cd apps/api && pnpm aprovar:retroativo -- --aplicar     # escreve de verdade
  *   cd apps/api && pnpm aprovar:retroativo -- --conta schaba --dias 90
  *
+ * Dentro do container (Easypanel), onde não existe pnpm nem ts-node, é o mesmo
+ * script já compilado — e as flags vão direto, sem o `--`:
+ *
+ *   cd /repo/apps/api && node dist/scripts/aprovar-conferencias-retroativo.js
+ *   cd /repo/apps/api && node dist/scripts/aprovar-conferencias-retroativo.js --aplicar
+ *
  * Enquanto a conferência roda em MODO SOMBRA (ou com a aprovação automática
  * desligada), o veredito é gravado e ninguém age: a viagem segue parada no
  * contador "a conferir" mesmo com o documento batendo. Este script pega esse
@@ -25,7 +31,15 @@
  * Nunca toca em viagem que já tem decisão humana, que não está mais em
  * ENVIADA/AJUSTADA, ou que já entrou num fechamento.
  */
-import "dotenv/config";
+// O `.env` é coisa de dev; na imagem de produção as variáveis já vêm do
+// ambiente e o `dotenv` nem está instalado. Por isso o carregamento é
+// tolerante: sem isto o script morre com MODULE_NOT_FOUND justamente onde ele
+// mais serve — dentro do container, contra o banco de verdade.
+try {
+  require("dotenv/config");
+} catch {
+  /* segue com as variáveis do ambiente */
+}
 import { Module } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { ConfigModule } from "@nestjs/config";
