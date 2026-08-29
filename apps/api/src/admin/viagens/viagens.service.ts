@@ -667,19 +667,22 @@ export class ViagensAdminService {
     // Viagem lançada sem peso (AGUARDANDO_PESO): quando o admin preenche as
     // toneladas pelo dashboard, ela sai de "aguardando peso" e entra no fluxo
     // normal (ENVIADA) — passando a contar em conferência/fechamento/KPIs.
-    const dataUpdate: Prisma.ViagemUpdateInput = { ...campos };
+    // Unchecked de propósito: o input do painel traz FK como id cru
+    // (clienteId, veiculoId, materialId...). Misturar isso com escrita aninhada
+    // (`{ connect }`/`{ disconnect }`) faz o Prisma escolher o input CHECKED, que
+    // não conhece os *Id — e o update explode em runtime ("Unknown argument
+    // clienteId"), sem o typecheck acusar nada. Aqui é tudo id cru.
+    const dataUpdate: Prisma.ViagemUncheckedUpdateInput = { ...campos };
     // Carimbo da alteração de km: quem, quando e por quê. kmMotorista NUNCA é
     // tocado aqui. kmAlteradoEm também tira a viagem da fila do reprocessamento
     // (o cron não desfaz decisão justificada de humano).
     if (kmMudou) {
       dataUpdate.kmAlteradoEm = new Date();
-      dataUpdate.kmAlteradoPor = { connect: { id: usuarioId } };
+      dataUpdate.kmAlteradoPorId = usuarioId;
       dataUpdate.kmAlteracaoMotivo = motivoKm ?? null;
     }
     if (duplicadoDeId !== undefined) {
-      dataUpdate.ticketDuplicadoDe = duplicadoDeId
-        ? { connect: { id: duplicadoDeId } }
-        : { disconnect: true };
+      dataUpdate.ticketDuplicadoDeId = duplicadoDeId;
       // Ticket novo = duplicidade nova: o aceite anterior não vale mais.
       dataUpdate.duplicidadeAceitaEm = null;
     }
