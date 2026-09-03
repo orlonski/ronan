@@ -80,6 +80,7 @@ export class DashboardService {
       pendentesConferencia,
       conferidas14d,
       leadTimeRows,
+      analisesRows,
     ] = await Promise.all([
       this.prisma.viagem.count({ where: { data: { gte: hoje00, lt: amanha00 }, ...foraFechamento, ...frota } }),
       this.prisma.viagem.aggregate({
@@ -177,6 +178,14 @@ export class DashboardService {
           AND "revisadoEm" >= ${inicio14dInst}
         ${escopo ? Prisma.sql`AND "transportadoraId" = ANY(${escopo.transportadoraIds}::text[])` : Prisma.empty}
       `,
+      // Quem revisou cada viagem nos últimos 14 dias: `revisadoPorId` preenchido
+      // é uma pessoa; nulo é o sistema (IA aprovando sozinha ou material que
+      // dispensa conferência) — ver `conferidoPorIaEm`/`conferenciaDispensadaEm`
+      // no schema e o cabeçalho de `aplicar-veredito.service.ts`.
+      this.prisma.viagem.findMany({
+        where: { revisadoEm: { gte: inicio14dInst }, ...frota },
+        select: { revisadoEm: true, revisadoPorId: true },
+      }),
     ]);
 
     // Viagens lançadas sem peso, aguardando o romaneio. Vira badge/lista no
@@ -269,6 +278,7 @@ export class DashboardService {
         tempoMedioDias,
       },
       tendenciaViagens: preencherDias(tendenciaRows, inicio14d, 14),
+      analisesPorDia: preencherAnalisesPorDia(analisesRows, inicio14dInst, 14),
       rankings: {
         motoristas: rankingMotoristasRaw.map((r) => ({
           id: r.motoristaId,
@@ -323,6 +333,40 @@ function preencherDias(
     const porStatus = mapa.get(k) ?? {};
     const total = Object.values(porStatus).reduce((a, b) => a + b, 0);
     out.push({ dia: k, total, porStatus });
+  }
+  return out;
+}
+
+/**
+ * Mesma ideia de `preencherDias`, mas pra uma coluna timestamp (`revisadoEm`,
+ * não `@db.Date`): a chave do dia sai de `ymdSaoPaulo`, não de fatiar o ISO,
+ * senão uma revisão feita à noite em SP (já virado em UTC) cairia no dia
+ * seguinte.
+ */
+function preencherAnalisesPorDia(
+  linhas: Array<{ revisadoEm: Date | null; revisadoPorId: string | null }>,
+  inicioInst: Date,
+  n: number,
+): Array<{ dia: string; humano: number; automatico: number }> {
+  const chave = (d: Date) => {
+    const [y, m, dia] = ymdSaoPaulo(d);
+    return `${y}-${String(m).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+  };
+
+  const mapa = new Map<string, { humano: number; automatico: number }>();
+  for (const r of linhas) {
+    if (!r.revisadoEm) continue;
+    const k = chave(r.revisadoEm);
+    const bucket = mapa.get(k) ?? { humano: 0, automatico: 0 };
+    if (r.revisadoPorId) bucket.humano += 1;
+    else bucket.automatico += 1;
+    mapa.set(k, bucket);
+  }
+
+  const out: Array<{ dia: string; humano: number; automatico: number }> = [];
+  for (let i = 0; i < n; i++) {
+    const k = chave(new Date(inicioInst.getTime() + i * 86400000));
+    out.push({ dia: k, ...(mapa.get(k) ?? { humano: 0, automatico: 0 }) });
   }
   return out;
 }

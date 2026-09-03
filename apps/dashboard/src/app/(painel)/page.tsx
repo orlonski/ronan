@@ -25,6 +25,7 @@ import { Card } from "@/components/ui/card";
 import { InfoHint } from "@/components/ui/info-hint";
 import { LoadingCard } from "@/components/loading";
 import { TendenciaChart } from "@/components/tendencia-chart";
+import { AnalisesChart } from "@/components/analises-chart";
 import { StatCard } from "@/components/stat-card";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { fmtBRL, fmtNum } from "@/lib/fechamento-helpers";
@@ -59,6 +60,7 @@ type Snapshot = {
     tempoMedioDias: number | null;
   };
   tendenciaViagens: Array<{ dia: string; total: number; porStatus: Record<string, number> }>;
+  analisesPorDia: Array<{ dia: string; humano: number; automatico: number }>;
   rankings: {
     motoristas: Array<{ id: string; nome: string; toneladas: string }>;
     clientes: Array<{ id: string; nome: string; viagens: number }>;
@@ -263,6 +265,13 @@ function BlocoConferencia({ d }: { d: Snapshot }) {
             info="Quanto tempo, em média, uma viagem fica esperando desde que é registrada até alguém conferir."
             tone="default"
           />
+        </div>
+        <div>
+          <p className="mb-2 flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
+            Análises por dia — usuário x agente automático
+            <InfoHint text="Quantas viagens foram conferidas por dia, separando o que foi decisão de alguém da equipe do que o sistema resolveu sozinho (IA aprovando automaticamente ou material que dispensa conferência). Ajuda a enxergar quanto do volume já anda sem gente no meio." />
+          </p>
+          <AnalisesChart data={d.analisesPorDia} />
         </div>
       </Card>
     </section>
