@@ -1,8 +1,9 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useRef, useState } from "react";
-import { CameraView, useCameraPermissions } from "expo-camera";
+import { CameraView, type FlashMode, useCameraPermissions } from "expo-camera";
 import * as ImageManipulator from "expo-image-manipulator";
 import { ImageManipulator as Manip } from "expo-image-manipulator";
-import { Camera, Crop, RotateCcw, RotateCw, X } from "lucide-react-native";
+import { Camera, Crop, RotateCcw, RotateCw, X, Zap, ZapOff } from "lucide-react-native";
 import {
   ActivityIndicator,
   Image,
@@ -26,6 +27,23 @@ import { Button } from "@/components/ui/button";
 
 export type CapturedPhoto = { uri: string; mime: string };
 
+/**
+ * Preferência de flash do APARELHO, não da empresa: fica fora do namespace
+ * carimbado do `lib/storage.ts` (mesma lógica das chaves `tutorial.seen.*`).
+ * Motorista que carrega de madrugada não quer religar o flash a cada foto.
+ */
+const CHAVE_FLASH = "camera.flash.v1";
+
+const ROTULO_FLASH: Record<FlashMode, string> = {
+  auto: "Flash auto",
+  on: "Flash ligado",
+  off: "Flash desligado",
+};
+
+function proximoFlash(atual: FlashMode): FlashMode {
+  return atual === "auto" ? "on" : atual === "on" ? "off" : "auto";
+}
+
 export function PhotoCapture({
   value,
   onChange,
@@ -45,10 +63,33 @@ export function PhotoCapture({
   const [open, setOpen] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
   const [taking, setTaking] = useState(false);
+  const [flash, setFlash] = useState<FlashMode>("auto");
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [cropping, setCropping] = useState(false);
   const cameraRef = useRef<CameraView>(null);
   const jaAutoAbriu = useRef(false);
+
+  // Preferência de flash guardada no aparelho (default: auto — ticket
+  // plastificado estoura com flash sempre ligado e o número some).
+  useEffect(() => {
+    void AsyncStorage.getItem(CHAVE_FLASH)
+      .then((v) => {
+        if (v === "auto" || v === "on" || v === "off") setFlash(v);
+      })
+      .catch(() => {});
+  }, []);
+
+  function ciclarFlash() {
+    const proximo = proximoFlash(flash);
+    setFlash(proximo);
+    void AsyncStorage.setItem(CHAVE_FLASH, proximo).catch(() => {});
+  }
+
+  // Lanterna acesa enquanto o motorista MIRA (só serve pra isso: no escuro o
+  // flash sozinho ilumina depois que a foto já saiu torta). Apaga durante o
+  // disparo — em vários Android o torch contínuo "engole" o flash e a foto
+  // sai com a luz fraca. Derivado, sem estado próprio pra não dessincronizar.
+  const torchAceso = open && !previewUri && !cropping && flash === "on" && !taking;
 
   async function abrir(): Promise<boolean> {
     if (!permission?.granted) {
@@ -77,6 +118,9 @@ export function PhotoCapture({
     if (!cameraRef.current || taking) return;
     setTaking(true);
     try {
+      // `taking` já apagou a lanterna no render acima; esperar o commit chegar
+      // no nativo antes de disparar, senão o flash não pega.
+      if (flash === "on") await new Promise((r) => setTimeout(r, 250));
       const shot = await cameraRef.current.takePictureAsync({ quality: 0.85 });
       if (!shot?.uri) return;
       // Comprime + redimensiona pra max 1920px largura (foto de ticket nao precisa mais)
@@ -178,6 +222,9 @@ export function PhotoCapture({
             <CaptureMode
               cameraRef={cameraRef}
               taking={taking}
+              flash={flash}
+              torchAceso={torchAceso}
+              onCiclarFlash={ciclarFlash}
               onCapturar={capturar}
               onCancelar={descartar}
               hasPermission={permission?.granted ?? false}
@@ -193,6 +240,9 @@ export function PhotoCapture({
 function CaptureMode({
   cameraRef,
   taking,
+  flash,
+  torchAceso,
+  onCiclarFlash,
   onCapturar,
   onCancelar,
   hasPermission,
@@ -200,6 +250,9 @@ function CaptureMode({
 }: {
   cameraRef: React.RefObject<CameraView | null>;
   taking: boolean;
+  flash: FlashMode;
+  torchAceso: boolean;
+  onCiclarFlash: () => void;
   onCapturar: () => void;
   onCancelar: () => void;
   hasPermission: boolean;
@@ -226,14 +279,35 @@ function CaptureMode({
         ref={cameraRef}
         style={{ flex: 1 }}
         facing="back"
+        flash={flash}
+        enableTorch={torchAceso}
       />
       <SafeAreaView edges={["top"]} className="absolute left-0 right-0 top-0">
-        <View className="px-4 pt-2">
+        <View className="flex-row items-center justify-between px-4 pt-2">
           <Pressable
             onPress={onCancelar}
             className="h-10 w-10 items-center justify-center rounded-full bg-black/50"
           >
             <X size={20} color="white" />
+          </Pressable>
+          <Pressable
+            onPress={onCiclarFlash}
+            disabled={taking}
+            accessibilityRole="button"
+            accessibilityLabel={ROTULO_FLASH[flash]}
+            className="h-10 flex-row items-center gap-2 rounded-full bg-black/50 px-4"
+          >
+            {flash === "off" ? (
+              <ZapOff size={18} color="#fff" />
+            ) : (
+              <Zap size={18} color={flash === "on" ? "#fbbf24" : "#fff"} />
+            )}
+            <Text
+              className="text-sm font-medium"
+              style={{ color: flash === "on" ? "#fbbf24" : "#fff" }}
+            >
+              {ROTULO_FLASH[flash]}
+            </Text>
           </Pressable>
         </View>
       </SafeAreaView>
