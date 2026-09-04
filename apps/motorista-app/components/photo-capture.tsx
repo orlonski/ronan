@@ -32,7 +32,11 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
 } from "react-native-reanimated";
-import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaProvider,
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
 import { showAlert } from "@/lib/alert";
 
@@ -57,6 +61,11 @@ function proximoFlash(atual: FlashMode): FlashMode {
 
 /** Foto de ticket não precisa de mais que isso, e o motorista sobe em 4G ruim. */
 const MAX_LARGURA = 1920;
+
+/** Altura da barra flutuante de cima (botão h-10 + pt-2). */
+const BARRA_TOPO = 48;
+/** Piso de respiro nas bordas quando o aparelho não tem inset (Android antigo). */
+const RESPIRO = 12;
 
 /**
  * Mesma compressão pra foto tirada e pra foto escolhida da galeria.
@@ -471,9 +480,16 @@ function PreviewMode({
   onConfirmar: () => void;
   onCancelar: () => void;
 }) {
+  const insets = useSafeAreaInsets();
   return (
     <>
-      <View className="flex-1">
+      {/* A foto para embaixo da barra de cima. Full-bleed ela passava por cima
+          do relógio e da Dynamic Island; como é `contain`, encolher a caixa não
+          corta nada da imagem — só reposiciona. */}
+      <View
+        className="flex-1"
+        style={{ paddingTop: Math.max(insets.top, RESPIRO) + BARRA_TOPO }}
+      >
         <Image source={{ uri }} style={{ flex: 1 }} resizeMode="contain" />
       </View>
       <SafeAreaView edges={["top"]} className="absolute left-0 right-0 top-0">
@@ -486,7 +502,10 @@ function PreviewMode({
           </Pressable>
         </View>
       </SafeAreaView>
-      <SafeAreaView edges={["bottom"]} className="bg-black">
+      <View
+        className="bg-black"
+        style={{ paddingBottom: Math.max(insets.bottom, RESPIRO) + 8 }}
+      >
         <View className="flex-row gap-3 px-4 py-4">
           <Button variant="outline" className="flex-1 bg-transparent" onPress={onRefazer}>
             <RotateCcw size={18} color="white" />
@@ -500,12 +519,13 @@ function PreviewMode({
             Usar foto
           </Button>
         </View>
-      </SafeAreaView>
+      </View>
     </>
   );
 }
 
-const HANDLE = 28; // raio do alvo de toque da alca (px)
+const ALVO = 44; // area de toque da alca (px) — dedo de motorista, nao mouse
+const PONTO = 26; // bolinha visivel da alca (px)
 const MIN_CROP = 64; // tamanho minimo do retangulo de recorte (px de tela)
 
 // Recortador interativo: imagem em "contain" + retangulo de recorte com 4 alcas.
@@ -520,6 +540,7 @@ function CropMode({
   onDone: (uri: string) => void;
   onCancelar: () => void;
 }) {
+  const insets = useSafeAreaInsets();
   // Imagem normalizada (orientacao EXIF "assada" nos pixels) que e exibida e recortada.
   // Derivada sempre do original `uri` + rotacao absoluta — sem perda acumulada e sem
   // discrepancia de EXIF (no Android Image.getSize/<Image>/crop divergiam, recortando errado).
@@ -696,20 +717,20 @@ function CropMode({
     height: h.value,
   }));
   const hTL = useAnimatedStyle(() => ({
-    left: x.value - HANDLE / 2,
-    top: y.value - HANDLE / 2,
+    left: x.value - ALVO / 2,
+    top: y.value - ALVO / 2,
   }));
   const hTR = useAnimatedStyle(() => ({
-    left: x.value + w.value - HANDLE / 2,
-    top: y.value - HANDLE / 2,
+    left: x.value + w.value - ALVO / 2,
+    top: y.value - ALVO / 2,
   }));
   const hBL = useAnimatedStyle(() => ({
-    left: x.value - HANDLE / 2,
-    top: y.value + h.value - HANDLE / 2,
+    left: x.value - ALVO / 2,
+    top: y.value + h.value - ALVO / 2,
   }));
   const hBR = useAnimatedStyle(() => ({
-    left: x.value + w.value - HANDLE / 2,
-    top: y.value + h.value - HANDLE / 2,
+    left: x.value + w.value - ALVO / 2,
+    top: y.value + h.value - ALVO / 2,
   }));
 
   function girar() {
@@ -745,78 +766,95 @@ function CropMode({
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <View className="flex-1" onLayout={onContainerLayout}>
-        {normUri ? (
-          <Image
-            source={{ uri: normUri }}
-            style={{ flex: 1 }}
-            resizeMode="contain"
-          />
-        ) : null}
-        {disp && normUri ? (
-          <>
-            <Animated.View
-              pointerEvents="none"
-              style={[{ position: "absolute", backgroundColor: "rgba(0,0,0,0.6)" }, dimTop]}
+      {/* O retângulo de recorte nasce cobrindo a imagem INTEIRA. Sem esse recuo
+          as alças de cima nascem debaixo da barra de X/Girar e da Dynamic
+          Island — dá pra ver, mas não dá pra pegar. */}
+      <View
+        style={{
+          flex: 1,
+          paddingTop: Math.max(insets.top, RESPIRO) + BARRA_TOPO,
+          paddingBottom: RESPIRO,
+        }}
+      >
+        <View className="flex-1" onLayout={onContainerLayout}>
+          {normUri ? (
+            <Image
+              source={{ uri: normUri }}
+              style={{ flex: 1 }}
+              resizeMode="contain"
             />
-            <Animated.View
-              pointerEvents="none"
-              style={[{ position: "absolute", backgroundColor: "rgba(0,0,0,0.6)" }, dimBottom]}
-            />
-            <Animated.View
-              pointerEvents="none"
-              style={[{ position: "absolute", backgroundColor: "rgba(0,0,0,0.6)" }, dimLeft]}
-            />
-            <Animated.View
-              pointerEvents="none"
-              style={[{ position: "absolute", backgroundColor: "rgba(0,0,0,0.6)" }, dimRight]}
-            />
-            <GestureDetector gesture={moveGesture}>
+          ) : null}
+          {disp && normUri ? (
+            <>
               <Animated.View
-                style={[
-                  {
-                    position: "absolute",
-                    borderWidth: 2,
-                    borderColor: "white",
-                  },
-                  rectStyle,
-                ]}
+                pointerEvents="none"
+                style={[{ position: "absolute", backgroundColor: "rgba(0,0,0,0.6)" }, dimTop]}
               />
-            </GestureDetector>
-            {(
-              [
-                [hTL, tl],
-                [hTR, tr],
-                [hBL, bl],
-                [hBR, br],
-              ] as const
-            ).map(([style, gesture], i) => (
-              <GestureDetector key={i} gesture={gesture}>
+              <Animated.View
+                pointerEvents="none"
+                style={[{ position: "absolute", backgroundColor: "rgba(0,0,0,0.6)" }, dimBottom]}
+              />
+              <Animated.View
+                pointerEvents="none"
+                style={[{ position: "absolute", backgroundColor: "rgba(0,0,0,0.6)" }, dimLeft]}
+              />
+              <Animated.View
+                pointerEvents="none"
+                style={[{ position: "absolute", backgroundColor: "rgba(0,0,0,0.6)" }, dimRight]}
+              />
+              <GestureDetector gesture={moveGesture}>
                 <Animated.View
                   style={[
-                    { position: "absolute", width: HANDLE, height: HANDLE },
-                    style,
-                  ]}
-                >
-                  <View
-                    style={{
-                      width: HANDLE,
-                      height: HANDLE,
-                      borderRadius: HANDLE / 2,
-                      backgroundColor: "white",
+                    {
+                      position: "absolute",
                       borderWidth: 2,
-                      borderColor: "#0f172a",
-                    }}
-                  />
-                </Animated.View>
+                      borderColor: "white",
+                    },
+                    rectStyle,
+                  ]}
+                />
               </GestureDetector>
-            ))}
-          </>
-        ) : (
-          <View className="absolute inset-0 items-center justify-center">
-            <ActivityIndicator color="white" />
-          </View>
-        )}
+              {(
+                [
+                  [hTL, tl],
+                  [hTR, tr],
+                  [hBL, bl],
+                  [hBR, br],
+                ] as const
+              ).map(([style, gesture], i) => (
+                <GestureDetector key={i} gesture={gesture}>
+                  <Animated.View
+                    style={[
+                      {
+                        position: "absolute",
+                        width: ALVO,
+                        height: ALVO,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      },
+                      style,
+                    ]}
+                  >
+                    <View
+                      style={{
+                        width: PONTO,
+                        height: PONTO,
+                        borderRadius: PONTO / 2,
+                        backgroundColor: "white",
+                        borderWidth: 2,
+                        borderColor: "#0f172a",
+                      }}
+                    />
+                  </Animated.View>
+                </GestureDetector>
+              ))}
+            </>
+          ) : (
+            <View className="absolute inset-0 items-center justify-center">
+              <ActivityIndicator color="white" />
+            </View>
+          )}
+        </View>
       </View>
       <SafeAreaView edges={["top"]} className="absolute left-0 right-0 top-0">
         <View className="flex-row items-center justify-between px-4 pt-2">
@@ -836,7 +874,10 @@ function CropMode({
           </Pressable>
         </View>
       </SafeAreaView>
-      <SafeAreaView edges={["bottom"]} className="bg-black">
+      <View
+        className="bg-black"
+        style={{ paddingBottom: Math.max(insets.bottom, RESPIRO) + 8 }}
+      >
         <View className="flex-row gap-3 px-4 py-4">
           <Button
             variant="outline"
@@ -851,7 +892,7 @@ function CropMode({
             Aplicar
           </Button>
         </View>
-      </SafeAreaView>
+      </View>
     </GestureHandlerRootView>
   );
 }
