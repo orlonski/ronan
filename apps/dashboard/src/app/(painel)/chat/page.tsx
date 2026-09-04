@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   Clock,
   Flag,
@@ -23,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { fetchApi, useApiQuery, useAuthToken } from "@/lib/client-api";
+import { comprimirImagem, formatarBytes } from "@/lib/imagem";
 import { usePermissoes } from "@/lib/permissoes";
 import { fmtDataHoraBR } from "@/lib/fechamento-helpers";
 
@@ -39,7 +41,10 @@ type ListaAvisos = {
   }[];
 };
 
+/** Teto do que a API aceita — o arquivo que sobe já é o comprimido. */
 const MAX_FOTO_MB = 10;
+/** Teto do arquivo de ENTRADA: só pra não travar o navegador num absurdo. */
+const MAX_ORIGINAL_MB = 40;
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 /**
@@ -122,6 +127,7 @@ function AbaAvisos({ podeAvisar }: { podeAvisar: boolean }) {
   const qc = useQueryClient();
   const [texto, setTexto] = useState("");
   const [foto, setFoto] = useState<File | null>(null);
+  const [tamanhos, setTamanhos] = useState<{ de: number; para: number } | null>(null);
   const [previa, setPrevia] = useState<string | null>(null);
   const [tambemStory, setTambemStory] = useState(true);
   const inputFoto = useRef<HTMLInputElement>(null);
@@ -139,17 +145,36 @@ function AbaAvisos({ podeAvisar }: { podeAvisar: boolean }) {
     return () => URL.revokeObjectURL(url);
   }, [foto]);
 
-  function escolherFoto(arquivo: File | undefined) {
+  /**
+   * Comprime ANTES de validar tamanho: essa imagem vai ser baixada por dezenas
+   * de celulares em 4G de estrada, no chat e no story, então o que importa é o
+   * peso do arquivo que SOBE — recusar uma foto de 12 MB que viraria 300 KB
+   * seria barrar o admin por um problema que a compressão já resolveu.
+   */
+  async function escolherFoto(arquivo: File | undefined) {
     if (!arquivo) return;
-    if (arquivo.size > MAX_FOTO_MB * 1024 * 1024) {
-      alert(`A foto precisa ter no máximo ${MAX_FOTO_MB} MB.`);
+    if (arquivo.size > MAX_ORIGINAL_MB * 1024 * 1024) {
+      toast.error(`Essa imagem tem mais de ${MAX_ORIGINAL_MB} MB — escolha outra.`);
       return;
     }
-    setFoto(arquivo);
+    try {
+      const { arquivo: leve, bytesOriginais, bytesFinais } = await comprimirImagem(arquivo);
+      setFoto(leve);
+      setTamanhos({ de: bytesOriginais, para: bytesFinais });
+    } catch {
+      // Navegador sem canvas utilizável: manda como veio, se couber no teto.
+      if (arquivo.size > MAX_FOTO_MB * 1024 * 1024) {
+        toast.error(`Não consegui otimizar a foto aqui, e ela passa de ${MAX_FOTO_MB} MB.`);
+        return;
+      }
+      setFoto(arquivo);
+      setTamanhos(null);
+    }
   }
 
   function limparFoto() {
     setFoto(null);
+    setTamanhos(null);
     if (inputFoto.current) inputFoto.current.value = "";
   }
 
@@ -218,7 +243,7 @@ function AbaAvisos({ podeAvisar }: { podeAvisar: boolean }) {
             type="file"
             accept="image/jpeg,image/png,image/webp"
             className="hidden"
-            onChange={(e) => escolherFoto(e.target.files?.[0])}
+            onChange={(e) => void escolherFoto(e.target.files?.[0])}
           />
           {previa ? (
             <div className="flex items-start gap-3 rounded-lg border p-3">
@@ -244,10 +269,18 @@ function AbaAvisos({ podeAvisar }: { podeAvisar: boolean }) {
                     </span>
                   </span>
                 </label>
-                <Button variant="outline" size="sm" onClick={limparFoto}>
-                  <X className="mr-2 h-4 w-4" />
-                  Tirar a foto
-                </Button>
+                <div className="flex items-center gap-3">
+                  <Button variant="outline" size="sm" onClick={limparFoto}>
+                    <X className="mr-2 h-4 w-4" />
+                    Tirar a foto
+                  </Button>
+                  {tamanhos ? (
+                    <span className="text-xs text-muted-foreground">
+                      Otimizada pro 4G: {formatarBytes(tamanhos.de)} →{" "}
+                      <strong>{formatarBytes(tamanhos.para)}</strong>
+                    </span>
+                  ) : null}
+                </div>
               </div>
             </div>
           ) : (
