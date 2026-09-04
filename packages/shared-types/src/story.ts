@@ -33,7 +33,8 @@ export type ReagirStoryInput = z.infer<typeof ReagirStoryInput>;
 /** Um story individual, do ponto de vista do motorista logado. */
 export interface StoryItem {
   id: string;
-  motoristaId: string;
+  /** null no story oficial (publicado pela transportadora, não por motorista). */
+  motoristaId: string | null;
   legenda: string | null;
   criadoEm: string; // ISO
   expiraEm: string; // ISO
@@ -45,9 +46,18 @@ export interface StoryItem {
   totalVistos?: number;
 }
 
+/** Id sintético do grupo oficial no feed — não é id de motorista. */
+export const STORY_AUTOR_OFICIAL = "oficial";
+
 /** Grupo de stories de um autor — a "bolinha" do feed. */
 export interface StoryFeedGrupo {
+  /** No grupo oficial, `id` é `STORY_AUTOR_OFICIAL` e `nome` é o da empresa. */
   autor: { id: string; nome: string };
+  /**
+   * Story publicado pela transportadora (aviso do painel), não por um
+   * motorista: vem sempre primeiro no feed e ninguém pode apagar pelo app.
+   */
+  oficial: boolean;
   /** true se sou o autor deste grupo. */
   ehMeu: boolean;
   /** true se há ao menos um story ainda não visto (anel colorido). */

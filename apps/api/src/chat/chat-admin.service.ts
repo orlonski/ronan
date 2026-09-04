@@ -6,6 +6,7 @@ import type {
   PublicarAvisoInput,
   ResolverDenunciaInput,
 } from "@ronan/shared-types";
+import { contaIdAtual } from "../common/conta/conta-context";
 import { PrismaService } from "../prisma/prisma.service";
 import { PushService } from "../push/push.service";
 import { UploadsService } from "../uploads/uploads.service";
@@ -13,6 +14,21 @@ import { ChatService } from "./chat.service";
 
 /** Quantas mensagens ao redor da denunciada acompanham a denúncia. */
 const CONTEXTO_ANTES = 4;
+
+/** Story dura 24h, igual ao do motorista. */
+const DURACAO_STORY_MS = 24 * 60 * 60 * 1000;
+
+/** Teto da legenda do story (o aviso pode ser bem mais longo que isso). */
+const MAX_LEGENDA_STORY = 140;
+
+/** Legenda do story a partir do texto do aviso, sem cortar no meio da palavra. */
+function legendaDoAviso(texto: string): string {
+  const t = texto.trim();
+  if (t.length <= MAX_LEGENDA_STORY) return t;
+  const corte = t.slice(0, MAX_LEGENDA_STORY - 1);
+  const espaco = corte.lastIndexOf(" ");
+  return `${(espaco > 60 ? corte.slice(0, espaco) : corte).trimEnd()}…`;
+}
 
 /**
  * O lado da operação no chat: publicar aviso no canal e tratar denúncia.
@@ -46,8 +62,17 @@ export class ChatAdminService {
         texto: true,
         criadoEm: true,
         apagadaEm: true,
+        fotoKey: true,
+        storyOficial: {
+          select: {
+            id: true,
+            expiraEm: true,
+            _count: { select: { visualizacoes: true } },
+          },
+        },
       },
     });
+    const agora = new Date();
     const alcance = await this.prisma.conversaParticipante.count({
       where: { conversaId: canalId },
     });
@@ -59,14 +84,56 @@ export class ChatAdminService {
         texto: m.apagadaEm ? null : m.texto,
         apagada: m.apagadaEm !== null,
         criadoEm: m.criadoEm.toISOString(),
+        temFoto: !m.apagadaEm && m.fotoKey !== null,
+        story: m.storyOficial
+          ? {
+              id: m.storyOficial.id,
+              expiraEm: m.storyOficial.expiraEm.toISOString(),
+              /** Já passou das 24h: o story sumiu do app sozinho. */
+              expirado: m.storyOficial.expiraEm <= agora,
+              vistos: m.storyOficial._count.visualizacoes,
+            }
+          : null,
       })),
     };
+  }
+
+  /**
+   * Sobe a foto do aviso e devolve a chave. Dois passos, igual ao story e ao
+   * áudio: arquivo primeiro, publicação depois — assim o admin vê a prévia
+   * antes de mandar o recado pra frota inteira.
+   */
+  async subirFoto(usuarioId: string, arquivo: Express.Multer.File): Promise<{ fotoKey: string }> {
+    const fotoKey = await this.uploads.putAvisoFoto(
+      arquivo.buffer,
+      arquivo.mimetype,
+      usuarioId,
+    );
+    return { fotoKey };
+  }
+
+  /** Bytes da foto de um aviso, pro painel mostrar a miniatura. */
+  async fotoBuffer(avisoId: string): Promise<{ buffer: Buffer; contentType: string }> {
+    const canalId = await this.chat.garantirCanalAvisos();
+    const aviso = await this.prisma.mensagemChat.findFirst({
+      where: { id: avisoId, conversaId: canalId, apagadaEm: null },
+      select: { fotoKey: true },
+    });
+    if (!aviso?.fotoKey) throw new NotFoundException("Foto não disponível.");
+    const buffer = await this.uploads.getObjectBuffer(aviso.fotoKey);
+    const ext = aviso.fotoKey.split(".").pop()?.toLowerCase();
+    return { buffer, contentType: ext === "png" ? "image/png" : "image/jpeg" };
   }
 
   /**
    * Publica no canal de Avisos: grava a mensagem, garante que todo motorista
    * habilitado é participante (motorista novo entra aqui), soma o não-lido e
    * dispara a push. Fan-out em código porque é dezenas de linhas, não milhares.
+   *
+   * Com `fotoKey`, o aviso leva imagem; com `tambemStory`, a MESMA imagem vira
+   * story oficial (24h). São dois lugares e uma publicação só — e uma push só,
+   * porque duas notificações do mesmo recado é o jeito rápido de o motorista
+   * silenciar o canal.
    */
   async publicarAviso(usuarioId: string, input: PublicarAvisoInput) {
     const canalId = await this.chat.garantirCanalAvisos();
@@ -87,17 +154,44 @@ export class ChatAdminService {
         autor: "ADMIN",
         usuarioId,
         autorNome: autor?.nome ?? "Avisos",
-        tipo: "TEXTO",
+        tipo: input.fotoKey ? "FOTO" : "TEXTO",
         texto: input.texto,
+        fotoKey: input.fotoKey ?? null,
       },
       select: { id: true, criadoEm: true },
     });
+
+    // Story oficial: mesma foto, mesmo texto (recortado), 24h. Nasce depois da
+    // mensagem porque aponta pra ela — remover o aviso remove o story junto.
+    let storyId: string | null = null;
+    if (input.tambemStory && input.fotoKey) {
+      const conta = await this.prisma.conta.findUnique({
+        where: { id: contaIdAtual() },
+        select: { nome: true },
+      });
+      const story = await this.prisma.story.create({
+        data: {
+          clientId: randomUUID(),
+          oficial: true,
+          usuarioId,
+          // O motorista lê o nome da EMPRESA na bolinha, não o de quem publicou.
+          autorNome: conta?.nome ?? "Avisos",
+          storageKey: input.fotoKey,
+          legenda: legendaDoAviso(input.texto),
+          avisoMensagemId: mensagem.id,
+          criadoEm: mensagem.criadoEm,
+          expiraEm: new Date(mensagem.criadoEm.getTime() + DURACAO_STORY_MS),
+        },
+        select: { id: true },
+      });
+      storyId = story.id;
+    }
 
     await this.prisma.conversa.update({
       where: { id: canalId },
       data: {
         ultimaMensagemEm: mensagem.criadoEm,
-        ultimaMensagemTexto: input.texto.slice(0, 120),
+        ultimaMensagemTexto: (input.fotoKey ? `📷 ${input.texto}` : input.texto).slice(0, 120),
       },
     });
 
@@ -138,21 +232,42 @@ export class ChatAdminService {
       }
     }
 
-    return { id: mensagem.id, destinatarios: destinatarios.length, pushEnviadas: enviados };
+    return {
+      id: mensagem.id,
+      destinatarios: destinatarios.length,
+      pushEnviadas: enviados,
+      storyId,
+    };
   }
 
-  /** Remove um aviso do canal (some pros motoristas na próxima carga). */
+  /**
+   * Remove um aviso do canal (some pros motoristas na próxima carga). Leva
+   * junto o story oficial que nasceu com ele e a foto no MinIO — tirar o aviso
+   * e deixar a mesma imagem rodando no story seria o pior dos dois mundos.
+   */
   async removerAviso(usuarioId: string, avisoId: string): Promise<void> {
     const canalId = await this.chat.garantirCanalAvisos();
     const aviso = await this.prisma.mensagemChat.findFirst({
       where: { id: avisoId, conversaId: canalId },
-      select: { id: true },
+      select: { id: true, fotoKey: true },
     });
     if (!aviso) throw new NotFoundException("Aviso não encontrado.");
+
+    await this.prisma.story.deleteMany({ where: { avisoMensagemId: avisoId } });
     await this.prisma.mensagemChat.update({
       where: { id: avisoId },
-      data: { apagadaEm: new Date(), texto: null, removidaPorId: usuarioId },
+      data: {
+        apagadaEm: new Date(),
+        texto: null,
+        fotoKey: null,
+        removidaPorId: usuarioId,
+      },
     });
+    if (aviso.fotoKey) {
+      await this.uploads.removeObject(aviso.fotoKey).catch(() => {
+        this.log.warn(`Foto do aviso ${avisoId} não saiu do storage.`);
+      });
+    }
   }
 
   // ── Denúncias ─────────────────────────────────────────────────────────────

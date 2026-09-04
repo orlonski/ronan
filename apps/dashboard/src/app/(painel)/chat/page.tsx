@@ -1,8 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Flag, Megaphone, Send, ShieldAlert, Trash2 } from "lucide-react";
+import {
+  Clock,
+  Flag,
+  ImagePlus,
+  Megaphone,
+  Send,
+  ShieldAlert,
+  Trash2,
+  X,
+} from "lucide-react";
 import {
   MOTIVO_DENUNCIA_LABEL,
   type DenunciaChatAdmin,
@@ -25,8 +34,13 @@ type ListaAvisos = {
     texto: string | null;
     apagada: boolean;
     criadoEm: string;
+    temFoto: boolean;
+    story: { id: string; expiraEm: string; expirado: boolean; vistos: number } | null;
   }[];
 };
+
+const MAX_FOTO_MB = 10;
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 /**
  * O lado da operação no chat dos motoristas.
@@ -107,17 +121,68 @@ function AbaAvisos({ podeAvisar }: { podeAvisar: boolean }) {
   const token = useAuthToken();
   const qc = useQueryClient();
   const [texto, setTexto] = useState("");
+  const [foto, setFoto] = useState<File | null>(null);
+  const [previa, setPrevia] = useState<string | null>(null);
+  const [tambemStory, setTambemStory] = useState(true);
+  const inputFoto = useRef<HTMLInputElement>(null);
   const q = useApiQuery<ListaAvisos>("/admin/chat/avisos");
 
+  // A prévia é um object URL local: revogar ao trocar de foto evita segurar
+  // o arquivo inteiro na memória a cada anexo.
+  useEffect(() => {
+    if (!foto) {
+      setPrevia(null);
+      return;
+    }
+    const url = URL.createObjectURL(foto);
+    setPrevia(url);
+    return () => URL.revokeObjectURL(url);
+  }, [foto]);
+
+  function escolherFoto(arquivo: File | undefined) {
+    if (!arquivo) return;
+    if (arquivo.size > MAX_FOTO_MB * 1024 * 1024) {
+      alert(`A foto precisa ter no máximo ${MAX_FOTO_MB} MB.`);
+      return;
+    }
+    setFoto(arquivo);
+  }
+
+  function limparFoto() {
+    setFoto(null);
+    if (inputFoto.current) inputFoto.current.value = "";
+  }
+
   const publicar = useMutation({
-    mutationFn: (t: string) =>
-      fetchApi<{ destinatarios: number; pushEnviadas: number }>("/admin/chat/avisos", {
-        method: "POST",
-        body: JSON.stringify({ texto: t }),
-        token,
-      }),
+    mutationFn: async (t: string) => {
+      // A foto sobe antes; só com a chave em mãos o aviso é publicado. Assim um
+      // upload que falha no 4G do escritório não vira aviso sem imagem.
+      let fotoKey: string | undefined;
+      if (foto) {
+        const form = new FormData();
+        form.append("foto", foto);
+        const r = await fetchApi<{ fotoKey: string }>("/admin/chat/avisos/foto", {
+          method: "POST",
+          body: form,
+          token,
+        });
+        fotoKey = r.fotoKey;
+      }
+      return fetchApi<{ destinatarios: number; pushEnviadas: number; storyId: string | null }>(
+        "/admin/chat/avisos",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            texto: t,
+            ...(fotoKey ? { fotoKey, tambemStory } : {}),
+          }),
+          token,
+        },
+      );
+    },
     onSuccess: () => {
       setTexto("");
+      limparFoto();
       void qc.invalidateQueries({ queryKey: ["/admin/chat/avisos"] });
     },
   });
@@ -146,6 +211,52 @@ function AbaAvisos({ podeAvisar }: { podeAvisar: boolean }) {
             maxLength={2000}
             placeholder="Ex.: Amanhã a balança da pedreira abre às 6h."
           />
+
+          {/* Foto opcional — e, com ela, o story. */}
+          <input
+            ref={inputFoto}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={(e) => escolherFoto(e.target.files?.[0])}
+          />
+          {previa ? (
+            <div className="flex items-start gap-3 rounded-lg border p-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={previa}
+                alt="Prévia da foto do aviso"
+                className="h-24 w-24 rounded object-cover"
+              />
+              <div className="flex-1 space-y-2">
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={tambemStory}
+                    onChange={(e) => setTambemStory(e.target.checked)}
+                    className="mt-0.5 h-4 w-4"
+                  />
+                  <span>
+                    Publicar também no story
+                    <span className="block text-xs text-muted-foreground">
+                      A foto aparece por 24h no topo do app, com o nome da empresa. Só
+                      quem tem stories liberado vê.
+                    </span>
+                  </span>
+                </label>
+                <Button variant="outline" size="sm" onClick={limparFoto}>
+                  <X className="mr-2 h-4 w-4" />
+                  Tirar a foto
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button variant="outline" size="sm" onClick={() => inputFoto.current?.click()}>
+              <ImagePlus className="mr-2 h-4 w-4" />
+              Anexar foto
+            </Button>
+          )}
+
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">
               {texto.trim().length}/2000
@@ -155,13 +266,18 @@ function AbaAvisos({ podeAvisar }: { podeAvisar: boolean }) {
               disabled={texto.trim().length === 0 || publicar.isPending}
             >
               <Send className="mr-2 h-4 w-4" />
-              {publicar.isPending ? "Publicando…" : "Publicar aviso"}
+              {publicar.isPending
+                ? "Publicando…"
+                : foto && tambemStory
+                  ? "Publicar aviso e story"
+                  : "Publicar aviso"}
             </Button>
           </div>
           {publicar.isSuccess ? (
             <p className="text-xs text-emerald-600">
               Publicado — {publicar.data.pushEnviadas} de {publicar.data.destinatarios}{" "}
               receberam a notificação agora (o resto vê ao abrir o app).
+              {publicar.data.storyId ? " O story fica no ar por 24h." : ""}
             </p>
           ) : null}
           {publicar.isError ? (
@@ -183,6 +299,7 @@ function AbaAvisos({ podeAvisar }: { podeAvisar: boolean }) {
           q.data!.avisos.map((a) => (
             <Card key={a.id} className="flex items-start gap-3 p-4">
               <Megaphone className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              {a.temFoto ? <FotoAviso avisoId={a.id} /> : null}
               <div className="flex-1">
                 <p
                   className={`text-sm ${a.apagada ? "italic text-muted-foreground" : ""}`}
@@ -192,6 +309,14 @@ function AbaAvisos({ podeAvisar }: { podeAvisar: boolean }) {
                 <p className="mt-1 text-xs text-muted-foreground">
                   {a.autorNome} · {fmtDataHoraBR(a.criadoEm)}
                 </p>
+                {a.story ? (
+                  <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                    <Clock className="h-3 w-3 text-primary" />
+                    {a.story.expirado
+                      ? `Story encerrado · visto por ${a.story.vistos}`
+                      : `No story até ${fmtDataHoraBR(a.story.expiraEm)} · visto por ${a.story.vistos}`}
+                  </p>
+                ) : null}
               </div>
               {podeAvisar && !a.apagada ? (
                 <Button
@@ -209,6 +334,42 @@ function AbaAvisos({ podeAvisar }: { podeAvisar: boolean }) {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Miniatura da foto do aviso. A rota é autenticada por Bearer, e `<img src>`
+ * não manda header — então baixa por fetch e vira object URL, igual às fotos
+ * de ticket na tela de viagem.
+ */
+function FotoAviso({ avisoId }: { avisoId: string }) {
+  const token = useAuthToken();
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    let objectUrl: string | null = null;
+    let vivo = true;
+    void fetch(`${API_URL}/admin/chat/avisos/${avisoId}/foto`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+      .then((r) => (r.ok ? r.blob() : null))
+      .then((blob) => {
+        if (!blob || !vivo) return;
+        objectUrl = URL.createObjectURL(blob);
+        setUrl(objectUrl);
+      })
+      .catch(() => {});
+    return () => {
+      vivo = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [avisoId, token]);
+
+  if (!url) return <div className="h-16 w-16 shrink-0 rounded bg-muted" />;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={url} alt="Foto do aviso" className="h-16 w-16 shrink-0 rounded object-cover" />
   );
 }
 

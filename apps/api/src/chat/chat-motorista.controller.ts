@@ -109,6 +109,19 @@ export class ChatMotoristaController {
     res.send(buffer);
   }
 
+  /** Foto do aviso (canal de Avisos). Mesmo gate de participação do áudio. */
+  @Get("mensagens/:id/foto")
+  async foto(
+    @CurrentUser() user: AuthMotorista,
+    @Param("id") id: string,
+    @Res() res: Response,
+  ) {
+    const { buffer, contentType } = await this.service.fotoBuffer(user.id, id);
+    res.set("Content-Type", contentType);
+    res.set("Cache-Control", "private, max-age=86400");
+    res.send(buffer);
+  }
+
   @Post("conversas/:id/lida")
   @HttpCode(204)
   lida(@CurrentUser() user: AuthMotorista, @Param("id") id: string) {

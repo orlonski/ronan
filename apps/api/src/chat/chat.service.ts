@@ -51,6 +51,7 @@ function primeiroNome(nome: string): string {
 
 /** Prévia curta pra lista de conversas. Áudio não tem texto — vira rótulo. */
 function previaDe(m: { tipo: string; texto: string | null; audioSegundos: number | null }): string {
+  if (m.tipo === "FOTO") return `📷 ${(m.texto ?? "Foto").slice(0, 118)}`;
   if (m.tipo === "AUDIO") {
     const s = m.audioSegundos ?? 0;
     const mm = Math.floor(s / 60);
@@ -62,6 +63,8 @@ function previaDe(m: { tipo: string; texto: string | null; audioSegundos: number
 
 const MENSAGEM_REMOVIDA = "Mensagem removida por violar as regras.";
 const MENSAGEM_APAGADA = "Mensagem apagada.";
+/** No canal de Avisos quem remove é a própria operação — não é moderação. */
+const AVISO_REMOVIDO = "Aviso removido.";
 
 type MensagemComAutor = Prisma.MensagemChatGetPayload<{
   select: {
@@ -73,6 +76,7 @@ type MensagemComAutor = Prisma.MensagemChatGetPayload<{
     autorNome: true;
     tipo: true;
     texto: true;
+    fotoKey: true;
     audioKey: true;
     audioSegundos: true;
     transcricao: true;
@@ -91,6 +95,7 @@ const SELECT_MENSAGEM = {
   autorNome: true,
   tipo: true,
   texto: true,
+  fotoKey: true,
   audioKey: true,
   audioSegundos: true,
   transcricao: true,
@@ -377,15 +382,23 @@ export class ChatService {
       autorNome: m.autorNome,
       meu: m.autor === "MOTORISTA" && m.motoristaId === euId,
       tipo: m.tipo,
-      texto: apagada ? (removida ? MENSAGEM_REMOVIDA : MENSAGEM_APAGADA) : m.texto,
+      texto: apagada
+        ? m.autor === "ADMIN"
+          ? AVISO_REMOVIDO
+          : removida
+            ? MENSAGEM_REMOVIDA
+            : MENSAGEM_APAGADA
+        : m.texto,
       audioSegundos: apagada ? null : m.audioSegundos,
       // Passados os 60 dias de retenção o arquivo sai do MinIO e audioKey vira
       // null — a bolha continua, mas só com a transcrição.
       audioDisponivel: !apagada && m.audioKey !== null,
+      fotoDisponivel: !apagada && m.fotoKey !== null,
       transcricao: apagada ? null : m.transcricao,
       criadoEm: m.criadoEm.toISOString(),
       apagada,
-      removidaPelaOperacao: removida,
+      // Aviso que a operação tirou do ar não é mensagem moderada.
+      removidaPelaOperacao: removida && m.autor !== "ADMIN",
     };
   }
 
@@ -604,6 +617,25 @@ export class ChatService {
             ? "audio/webm"
             : "audio/mp4";
     return { buffer, contentType };
+  }
+
+  /**
+   * Bytes da foto de um aviso. Mesma checagem de participação do áudio: a URL
+   * não pode ser a porta dos fundos do canal.
+   */
+  async fotoBuffer(
+    motoristaId: string,
+    mensagemId: string,
+  ): Promise<{ buffer: Buffer; contentType: string }> {
+    const m = await this.prisma.mensagemChat.findUnique({
+      where: { id: mensagemId },
+      select: { conversaId: true, fotoKey: true, apagadaEm: true },
+    });
+    if (!m?.fotoKey || m.apagadaEm) throw new NotFoundException("Foto não disponível.");
+    await this.exigirParticipacao(motoristaId, m.conversaId);
+    const buffer = await this.uploads.getObjectBuffer(m.fotoKey);
+    const ext = m.fotoKey.split(".").pop()?.toLowerCase();
+    return { buffer, contentType: ext === "png" ? "image/png" : "image/jpeg" };
   }
 
   private async notificar(

@@ -12,6 +12,7 @@ import type {
   StoryItem,
   StoryVisualizador,
 } from "@ronan/shared-types";
+import { STORY_AUTOR_OFICIAL } from "@ronan/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
 import { PushService } from "../push/push.service";
@@ -26,7 +27,13 @@ export class StoriesMotoristaService {
     private readonly push: PushService,
   ) {}
 
-  /** Feed de stories ativos (expiraEm > agora) agrupados por autor. */
+  /**
+   * Feed de stories ativos (expiraEm > agora) agrupados por autor.
+   *
+   * Os stories OFICIAIS (publicados pelo painel junto de um aviso) entram num
+   * grupo só, com o nome da empresa, e vêm sempre primeiro: é recado da
+   * transportadora, não conversa de estrada.
+   */
   async feed(motoristaId: string): Promise<StoryFeedResponse> {
     const agora = new Date();
     const stories = await this.prisma.story.findMany({
@@ -42,7 +49,7 @@ export class StoriesMotoristaService {
 
     const porAutor = new Map<string, StoryFeedGrupo>();
     for (const s of stories) {
-      const ehMeu = s.motoristaId === motoristaId;
+      const ehMeu = s.motoristaId !== null && s.motoristaId === motoristaId;
       const visto = s.visualizacoes.length > 0;
       const item: StoryItem = {
         id: s.id,
@@ -54,16 +61,21 @@ export class StoriesMotoristaService {
         minhaReacao: (s.reacoes[0]?.emoji as StoryEmoji) ?? null,
         ...(ehMeu ? { totalVistos: s._count.visualizacoes } : {}),
       };
-      let grupo = porAutor.get(s.motoristaId);
+      // Story oficial não tem motorista: todos caem num grupo só.
+      const chave = s.oficial ? STORY_AUTOR_OFICIAL : (s.motoristaId as string);
+      let grupo = porAutor.get(chave);
       if (!grupo) {
         grupo = {
-          autor: { id: s.motorista.id, nome: s.motorista.nome },
+          autor: s.oficial
+            ? { id: STORY_AUTOR_OFICIAL, nome: s.autorNome ?? "Avisos" }
+            : { id: s.motorista!.id, nome: s.motorista!.nome },
+          oficial: s.oficial,
           ehMeu,
           temNaoVisto: false,
           ultimoEm: item.criadoEm,
           stories: [],
         };
-        porAutor.set(s.motoristaId, grupo);
+        porAutor.set(chave, grupo);
       }
       grupo.stories.push(item);
       grupo.ultimoEm = item.criadoEm; // stories vêm asc, último sobrescreve
@@ -72,6 +84,8 @@ export class StoriesMotoristaService {
     }
 
     const grupos = [...porAutor.values()].sort((a, b) => {
+      // Recado da transportadora na frente de tudo, inclusive do meu story.
+      if (a.oficial !== b.oficial) return a.oficial ? -1 : 1;
       if (a.ehMeu !== b.ehMeu) return a.ehMeu ? -1 : 1;
       if (a.temNaoVisto !== b.temNaoVisto) return a.temNaoVisto ? -1 : 1;
       return b.ultimoEm.localeCompare(a.ultimoEm);
@@ -151,8 +165,9 @@ export class StoriesMotoristaService {
       update: { emoji: input.emoji },
     });
     // Avisa o dono do story só na PRIMEIRA reação de alguém (não em troca) e
-    // nunca a si mesmo. Best-effort — não trava a resposta.
-    if (!jaReagiu && story.motoristaId !== motoristaId) {
+    // nunca a si mesmo. Story oficial não tem dono motorista: ninguém é
+    // notificado (a operação lê a contagem no painel). Best-effort.
+    if (!jaReagiu && story.motoristaId !== null && story.motoristaId !== motoristaId) {
       void this.notificarReacao(story.motoristaId, motoristaId, storyId, input.emoji);
     }
   }

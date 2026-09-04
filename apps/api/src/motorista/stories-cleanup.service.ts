@@ -28,12 +28,19 @@ export class StoriesCleanupService {
   private async limparDaVez(): Promise<void> {
     const expirados = await this.prisma.story.findMany({
       where: { expiraEm: { lte: new Date() } },
-      select: { id: true, storageKey: true },
+      select: { id: true, storageKey: true, oficial: true },
       take: 500,
     });
     if (expirados.length === 0) return;
     this.log.log(`limpando ${expirados.length} story(ies) expirado(s)`);
-    await Promise.all(expirados.map((s) => this.uploads.removeObject(s.storageKey)));
+    // A foto do story OFICIAL é a mesma foto do aviso no canal, que não expira:
+    // apagar o objeto aqui deixaria a bolha do aviso quebrada pra sempre. Some
+    // só o story; quem manda no arquivo é a remoção do aviso.
+    await Promise.all(
+      expirados
+        .filter((s) => !s.oficial)
+        .map((s) => this.uploads.removeObject(s.storageKey)),
+    );
     await this.prisma.story.deleteMany({
       where: { id: { in: expirados.map((s) => s.id) } },
     });

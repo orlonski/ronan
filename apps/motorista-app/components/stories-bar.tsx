@@ -95,8 +95,16 @@ export function StoriesBar() {
               ring={g.ehMeu ? "seen" : g.temNaoVisto ? "unseen" : "seen"}
               fotoUri={capaDoGrupo(g.stories)}
             />
-            <Text className="mt-1 text-xs text-foreground" numberOfLines={1}>
-              {g.ehMeu ? "Seu story" : g.autor.nome.split(/\s+/)[0]}
+            <Text
+              className={
+                g.oficial
+                  ? "mt-1 text-xs font-semibold text-foreground"
+                  : "mt-1 text-xs text-foreground"
+              }
+              numberOfLines={1}
+            >
+              {/* No oficial o nome da empresa vai inteiro: "Movatruck", não "Mova". */}
+              {g.oficial ? g.autor.nome : g.ehMeu ? "Seu story" : g.autor.nome.split(/\s+/)[0]}
             </Text>
           </Pressable>
         ))}

@@ -502,6 +502,7 @@ model User {
   mensagensViagem             ViagemMensagem[]                   @relation("MensagensViagem")
   mensagensChat               MensagemChat[]                     @relation("MensagensChat")
   mensagensChatRemovidas      MensagemChat[]                     @relation("RemoveuMensagemChat")
+  storiesOficiais             Story[]                            @relation("StoriesOficiais")
   denunciasChatResolvidas     DenunciaMensagemChat[]             @relation("ResolveuDenunciaChat")
   whatsappSessao              WhatsappSessao?
   whatsappConvites            WhatsappConvite[]
@@ -2088,20 +2089,31 @@ enum ResolucaoResgate {
 }
 
 model Story {
-  contaId       String              @default("__SEM_CONTA__")
-  conta         Conta               @relation(fields: [contaId], references: [id])
-  id            String              @id @default(uuid())
-  clientId      String              @unique // gerado no app (outbox)
-  motorista     Motorista           @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
-  motoristaId   String
-  storageKey    String // chave no MinIO
-  legenda       String?
-  lat           Float?
-  lng           Float?
-  criadoEm      DateTime            @default(now())
-  expiraEm      DateTime // = criadoEm + 24h
-  visualizacoes StoryVisualizacao[]
-  reacoes       StoryReacao[]
+  contaId         String              @default("__SEM_CONTA__")
+  conta           Conta               @relation(fields: [contaId], references: [id])
+  id              String              @id @default(uuid())
+  clientId        String              @unique // gerado no app (outbox)
+  /// Autor motorista. Null no story OFICIAL — o que a transportadora publica
+  /// pelo painel junto de um aviso. Ninguém apaga story oficial pelo app.
+  motorista       Motorista?          @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  motoristaId     String?
+  /// Só no story oficial: quem publicou (usuário do painel) e o nome que o
+  /// motorista lê na bolinha — o da EMPRESA, não o da pessoa do escritório.
+  oficial         Boolean             @default(false)
+  usuario         User?               @relation("StoriesOficiais", fields: [usuarioId], references: [id], onDelete: SetNull)
+  usuarioId       String?
+  autorNome       String?
+  /// Aviso que originou o story oficial: remover o aviso remove o story.
+  avisoMensagem   MensagemChat?       @relation("AvisoStory", fields: [avisoMensagemId], references: [id], onDelete: SetNull)
+  avisoMensagemId String?             @unique
+  storageKey      String // chave no MinIO
+  legenda         String?
+  lat             Float?
+  lng             Float?
+  criadoEm        DateTime            @default(now())
+  expiraEm        DateTime // = criadoEm + 24h
+  visualizacoes   StoryVisualizacao[]
+  reacoes         StoryReacao[]
 
   @@index([expiraEm])
   @@index([motoristaId, criadoEm])
@@ -3062,6 +3074,8 @@ enum TipoConversa {
 enum TipoMensagemChat {
   TEXTO
   AUDIO
+  /// Só no canal de Avisos, hoje: a operação publica um aviso com imagem.
+  FOTO
 }
 
 enum StatusDenunciaChat {
@@ -3146,6 +3160,11 @@ model MensagemChat {
   audioKey      String?
   audioSegundos Int?
   transcricao   String?          @db.Text
+  /// Foto do aviso (canal de Avisos): chave no MinIO. Quando o mesmo aviso
+  /// também virou story, os dois apontam pra ESTA chave — o arquivo é um só.
+  fotoKey       String?
+  /// O story oficial que nasceu junto deste aviso, quando houve.
+  storyOficial  Story?           @relation("AvisoStory")
 
   criadoEm      DateTime  @default(now())
   /// Soft delete. Preenchido tanto por "apagar pra todos" do autor quanto por

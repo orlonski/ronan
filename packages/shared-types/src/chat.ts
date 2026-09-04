@@ -14,7 +14,7 @@ export const MAX_TEXTO_MENSAGEM = 2000;
 export const TipoConversaEnum = z.enum(["DIRETA", "AVISOS"]);
 export type TipoConversa = z.infer<typeof TipoConversaEnum>;
 
-export const TipoMensagemChatEnum = z.enum(["TEXTO", "AUDIO"]);
+export const TipoMensagemChatEnum = z.enum(["TEXTO", "AUDIO", "FOTO"]);
 export type TipoMensagemChat = z.infer<typeof TipoMensagemChatEnum>;
 
 /** Motivos de denúncia. Lista fixa — vira botão na UI, não campo livre. */
@@ -84,10 +84,24 @@ export const BloquearMotoristaInput = z.object({
 });
 export type BloquearMotoristaInput = z.infer<typeof BloquearMotoristaInput>;
 
-/** Aviso da operação pro canal (dashboard). */
-export const PublicarAvisoInput = z.object({
-  texto: z.string().trim().min(1).max(MAX_TEXTO_MENSAGEM),
-});
+/**
+ * Aviso da operação pro canal (dashboard).
+ *
+ * A foto é opcional e sobe antes, em `/admin/chat/avisos/foto` — igual ao
+ * story e ao áudio, o arquivo nunca viaja junto do JSON. Com `tambemStory`, a
+ * MESMA foto vira story oficial (24h no topo do app): é o aviso aparecendo nos
+ * dois lugares com uma publicação só. Sem foto não há story — story é imagem.
+ */
+export const PublicarAvisoInput = z
+  .object({
+    texto: z.string().trim().min(1).max(MAX_TEXTO_MENSAGEM),
+    fotoKey: z.string().min(1).optional(),
+    tambemStory: z.boolean().optional(),
+  })
+  .refine((v) => !v.tambemStory || !!v.fotoKey, {
+    message: "Pra publicar no story é preciso anexar uma foto.",
+    path: ["fotoKey"],
+  });
 export type PublicarAvisoInput = z.infer<typeof PublicarAvisoInput>;
 
 export const ResolverDenunciaInput = z.object({
@@ -125,6 +139,8 @@ export interface MensagemChatItem {
   audioSegundos: number | null;
   /** false = áudio expirou (passou da retenção) ou foi apagado; só resta o texto. */
   audioDisponivel: boolean;
+  /** true quando a mensagem tem foto pra baixar (`/m/chat/mensagens/:id/foto`). */
+  fotoDisponivel: boolean;
   transcricao: string | null;
   criadoEm: string; // ISO
   apagada: boolean;

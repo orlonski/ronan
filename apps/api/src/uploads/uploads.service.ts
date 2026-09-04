@@ -90,6 +90,20 @@ export class UploadsService implements OnModuleInit {
   }
 
   /**
+   * Foto do aviso publicado pelo painel. Mesmo arquivo serve o canal de Avisos
+   * e o story oficial — por isso a chave não fica embaixo de "stories": a foto
+   * do aviso sobrevive ao story, que expira em 24h.
+   */
+  async putAvisoFoto(buffer: Buffer, mimetype: string, usuarioId: string): Promise<string> {
+    const ext = mimetype.includes("png") ? "png" : "jpg";
+    const key = `${contaIdAtual()}/avisos/${new Date().toISOString().slice(0, 10)}/${usuarioId}/${randomUUID()}.${ext}`;
+    await this.client.putObject(this.bucket, key, buffer, buffer.length, {
+      "Content-Type": mimetype,
+    });
+    return key;
+  }
+
+  /**
    * Áudio de mensagem do chat. Guarda a extensão real (o app grava m4a; o
    * Whisper e o <audio> do player precisam do content-type certo pra decodificar).
    */

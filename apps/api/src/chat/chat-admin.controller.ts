@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -7,9 +8,14 @@ import {
   Param,
   Post,
   Query,
+  Res,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import type { Response } from "express";
 import { z } from "zod";
 import { PublicarAvisoInput, ResolverDenunciaInput } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
@@ -19,6 +25,10 @@ import { RequerPermissao } from "../auth/decorators/requer-permissao.decorator";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { AuthAdminUser } from "../auth/types";
 import { ChatAdminService } from "./chat-admin.service";
+
+/** Mesma lista das fotos do motorista — o app já sabe exibir esses três. */
+const IMAGEM_PERMITIDA = ["image/jpeg", "image/png", "image/webp"];
+const MAX_FOTO_BYTES = 10 * 1024 * 1024;
 
 const StatusQuery = z.object({
   status: z.enum(["ABERTA", "ARQUIVADA", "REMOVIDA"]).optional(),
@@ -41,6 +51,33 @@ export class ChatAdminController {
   @Get("avisos")
   avisos() {
     return this.service.listarAvisos();
+  }
+
+  @RequerPermissao("chat.ver")
+  @Get("avisos/:id/foto")
+  async foto(@Param("id") id: string, @Res() res: Response) {
+    const { buffer, contentType } = await this.service.fotoBuffer(id);
+    res.set("Content-Type", contentType);
+    res.set("Cache-Control", "private, max-age=86400");
+    res.send(buffer);
+  }
+
+  /** Foto do aviso (e do story, quando for o caso). Sobe antes de publicar. */
+  @RequerPermissao("chat.avisar")
+  @Post("avisos/foto")
+  @UseInterceptors(FileInterceptor("foto"))
+  subirFoto(
+    @CurrentUser() user: AuthAdminUser,
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ) {
+    if (!file) throw new BadRequestException("Foto não enviada");
+    if (!IMAGEM_PERMITIDA.includes(file.mimetype)) {
+      throw new BadRequestException(`Tipo não permitido: ${file.mimetype}`);
+    }
+    if (file.size > MAX_FOTO_BYTES) {
+      throw new BadRequestException("Foto maior que 10MB");
+    }
+    return this.service.subirFoto(user.id, file);
   }
 
   @RequerPermissao("chat.avisar")

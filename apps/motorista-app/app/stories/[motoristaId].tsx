@@ -221,9 +221,16 @@ export default function VisualizadorStoryScreen() {
             <Text className="text-sm font-bold text-white" numberOfLines={1}>
               {ehMeu ? "Seu story" : grupo.autor.nome}
             </Text>
-            <Text className="text-xs text-white/70">
-              {tempoRelativo(atual.criadoEm)}
-            </Text>
+            <View className="flex-row items-center gap-1.5">
+              {grupo.oficial ? (
+                <View className="rounded-full bg-white/25 px-2 py-0.5">
+                  <Text className="text-[10px] font-bold text-white">AVISO</Text>
+                </View>
+              ) : null}
+              <Text className="text-xs text-white/70">
+                {tempoRelativo(atual.criadoEm)}
+              </Text>
+            </View>
           </View>
           {ehMeu && (
             <Pressable

@@ -3,10 +3,12 @@ import { router, useLocalSearchParams } from "expo-router";
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Pressable,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -18,6 +20,7 @@ import {
   RefreshCw,
   Send,
   TriangleAlert,
+  X,
 } from "lucide-react-native";
 import {
   MAX_TEXTO_MENSAGEM,
@@ -27,6 +30,8 @@ import {
   type MotivoDenuncia,
 } from "@ronan/shared-types";
 import { showAlert, showConfirm } from "@/lib/alert";
+import { API_URL } from "@/lib/api-url";
+import { loadTokens } from "@/lib/auth";
 import { fmtDataHoraCurta } from "@/lib/datetime";
 import { humanizeApiError } from "@/lib/api";
 import type { PendingMensagemChat } from "@/db/database";
@@ -68,7 +73,17 @@ export default function ConversaScreen() {
   const apagar = useApagarMensagem(conversaId);
 
   const [texto, setTexto] = useState("");
+  // Token pro <Image> das fotos de aviso: o header tem que vir já na primeira
+  // request, senão o Fresco (Android) cacheia o 401 e a bolha fica preta.
+  const [token, setToken] = useState<string | null>(null);
+  // Foto aberta em tela cheia. Overlay na própria tela, não <Modal>: modal de
+  // tela cheia briga com o AlertHost e abre confirmação atrás dele.
+  const [fotoAberta, setFotoAberta] = useState<string | null>(null);
   const listaRef = useRef<FlatList<Linha>>(null);
+
+  useEffect(() => {
+    void loadTokens().then((t) => setToken(t?.accessToken ?? null));
+  }, []);
 
   useNovidadesConversa(conversaId, true);
 
@@ -260,7 +275,12 @@ export default function ConversaScreen() {
             }
             renderItem={({ item }) =>
               item.tipo === "servidor" ? (
-                <Bolha m={item.m} onLongPress={() => void menuDaMensagem(item.m)} />
+                <Bolha
+                  m={item.m}
+                  token={token}
+                  onAbrirFoto={() => setFotoAberta(item.m.id)}
+                  onLongPress={() => void menuDaMensagem(item.m)}
+                />
               ) : (
                 <BolhaPendente p={item.p} onPress={() => void menuDaPendente(item.p)} />
               )
@@ -298,6 +318,14 @@ export default function ConversaScreen() {
           </View>
         )}
       </KeyboardAvoidingView>
+
+      {fotoAberta && token ? (
+        <FotoEmTelaCheia
+          mensagemId={fotoAberta}
+          token={token}
+          onFechar={() => setFotoAberta(null)}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -308,9 +336,13 @@ type Linha =
 
 function Bolha({
   m,
+  token,
+  onAbrirFoto,
   onLongPress,
 }: {
   m: MensagemChatItem;
+  token: string | null;
+  onAbrirFoto: () => void;
   onLongPress: () => void;
 }) {
   const meu = m.meu;
@@ -324,6 +356,18 @@ function Bolha({
     >
       {!meu && m.autor === "MOTORISTA" ? (
         <Text className="mb-0.5 text-xs font-bold text-primary">{m.autorNome}</Text>
+      ) : null}
+      {m.fotoDisponivel && token ? (
+        <Pressable onPress={onAbrirFoto} className="mb-1.5 active:opacity-80">
+          <Image
+            source={{
+              uri: `${API_URL}/m/chat/mensagens/${m.id}/foto`,
+              headers: { Authorization: `Bearer ${token}` },
+            }}
+            style={{ width: 232, height: 232, borderRadius: 12, backgroundColor: "#0f172a" }}
+            resizeMode="cover"
+          />
+        </Pressable>
       ) : null}
       <Text
         className={`text-base ${
@@ -346,6 +390,40 @@ function Bolha({
         {fmtDataHoraCurta(m.criadoEm)}
       </Text>
     </Pressable>
+  );
+}
+
+/** Foto do aviso aberta em tela cheia — toca em qualquer lugar pra fechar. */
+function FotoEmTelaCheia({
+  mensagemId,
+  token,
+  onFechar,
+}: {
+  mensagemId: string;
+  token: string;
+  onFechar: () => void;
+}) {
+  const { width, height } = useWindowDimensions();
+  return (
+    <View className="absolute inset-0 bg-black" style={{ zIndex: 30 }}>
+      <Pressable className="flex-1 items-center justify-center" onPress={onFechar}>
+        <Image
+          source={{
+            uri: `${API_URL}/m/chat/mensagens/${mensagemId}/foto`,
+            headers: { Authorization: `Bearer ${token}` },
+          }}
+          style={{ width, height: height * 0.8 }}
+          resizeMode="contain"
+        />
+      </Pressable>
+      <Pressable
+        onPress={onFechar}
+        accessibilityLabel="Fechar foto"
+        className="absolute right-4 top-14 h-11 w-11 items-center justify-center rounded-full bg-white/20 active:bg-white/30"
+      >
+        <X size={24} color="white" />
+      </Pressable>
+    </View>
   );
 }
 
