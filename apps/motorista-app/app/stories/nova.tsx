@@ -89,6 +89,7 @@ export default function NovaStoryScreen() {
           onChange={aoEscolherFoto}
           autoOpen
           hidePlaceholder
+          permitirGaleria={false}
           onCancel={() => router.back()}
         />
       </View>

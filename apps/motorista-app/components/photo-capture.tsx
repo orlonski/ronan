@@ -2,8 +2,18 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useRef, useState } from "react";
 import { CameraView, type FlashMode, useCameraPermissions } from "expo-camera";
 import * as ImageManipulator from "expo-image-manipulator";
+import * as ImagePicker from "expo-image-picker";
 import { ImageManipulator as Manip } from "expo-image-manipulator";
-import { Camera, Crop, RotateCcw, RotateCw, X, Zap, ZapOff } from "lucide-react-native";
+import {
+  Camera,
+  Crop,
+  Image as ImageIcon,
+  RotateCcw,
+  RotateCw,
+  X,
+  Zap,
+  ZapOff,
+} from "lucide-react-native";
 import {
   ActivityIndicator,
   Image,
@@ -24,6 +34,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
+import { showAlert } from "@/lib/alert";
 
 export type CapturedPhoto = { uri: string; mime: string };
 
@@ -44,12 +55,31 @@ function proximoFlash(atual: FlashMode): FlashMode {
   return atual === "auto" ? "on" : atual === "on" ? "off" : "auto";
 }
 
+/** Foto de ticket não precisa de mais que isso, e o motorista sobe em 4G ruim. */
+const MAX_LARGURA = 1920;
+
+/**
+ * Mesma compressão pra foto tirada e pra foto escolhida da galeria.
+ * `redimensionar` fica falso quando a imagem já é menor que o teto — sem isso
+ * uma foto de 800px vinda do WhatsApp seria AMPLIADA pra 1920 e ficaria maior
+ * em bytes sem ganhar um pixel de informação.
+ */
+async function comprimir(uri: string, redimensionar: boolean): Promise<string> {
+  const r = await ImageManipulator.manipulateAsync(
+    uri,
+    redimensionar ? [{ resize: { width: MAX_LARGURA } }] : [],
+    { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
+  );
+  return r.uri;
+}
+
 export function PhotoCapture({
   value,
   onChange,
   autoOpen = false,
   onCancel,
   hidePlaceholder = false,
+  permitirGaleria = true,
 }: {
   value: CapturedPhoto | null;
   onChange: (p: CapturedPhoto | null) => void;
@@ -57,14 +87,19 @@ export function PhotoCapture({
   autoOpen?: boolean;
   /** Chamado quando fecha a câmera sem foto (cancelou / permissão negada). */
   onCancel?: () => void;
-  /** Esconde a caixa "Tocar para abrir a câmera" quando não há foto. */
+  /** Esconde a caixa de abrir a câmera quando não há foto. */
   hidePlaceholder?: boolean;
+  /** Oferece "Da galeria" ao lado de "Tirar foto". Story é foto do momento,
+   *  então lá vem desligado. */
+  permitirGaleria?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
   const [taking, setTaking] = useState(false);
   const [flash, setFlash] = useState<FlashMode>("auto");
+  const [escolhendo, setEscolhendo] = useState(false);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
+  const [daGaleria, setDaGaleria] = useState(false);
   const [cropping, setCropping] = useState(false);
   const cameraRef = useRef<CameraView>(null);
   const jaAutoAbriu = useRef(false);
@@ -97,6 +132,7 @@ export function PhotoCapture({
       if (!r.granted) return false;
     }
     setPreviewUri(null);
+    setDaGaleria(false);
     setCropping(false);
     setOpen(true);
     return true;
@@ -123,20 +159,58 @@ export function PhotoCapture({
       if (flash === "on") await new Promise((r) => setTimeout(r, 250));
       const shot = await cameraRef.current.takePictureAsync({ quality: 0.85 });
       if (!shot?.uri) return;
-      // Comprime + redimensiona pra max 1920px largura (foto de ticket nao precisa mais)
-      const compressed = await ImageManipulator.manipulateAsync(
-        shot.uri,
-        [{ resize: { width: 1920 } }],
-        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
-      );
-      setPreviewUri(compressed.uri);
+      setDaGaleria(false);
+      setPreviewUri(await comprimir(shot.uri, true));
     } finally {
       setTaking(false);
     }
   }
 
+  async function escolherDaGaleria() {
+    if (escolhendo) return;
+    setEscolhendo(true);
+    const modalAberto = open;
+    try {
+      // Fecha a câmera ANTES de pedir o seletor: no iOS o picker do sistema é
+      // apresentado pela tela de baixo e abriria ATRÁS do nosso <Modal> de tela
+      // cheia (mesma armadilha que engoliu o showConfirm). A espera é a
+      // animação de dismiss — apresentar durante ela o iOS recusa em silêncio.
+      if (modalAberto) {
+        setOpen(false);
+        await new Promise((r) => setTimeout(r, 350));
+      }
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+      });
+      const asset = res.canceled ? null : res.assets?.[0];
+      if (!asset?.uri) {
+        if (modalAberto) setOpen(true); // desistiu: volta pra onde estava
+        return;
+      }
+      setPreviewUri(await comprimir(asset.uri, (asset.width ?? 0) > MAX_LARGURA));
+      setDaGaleria(true);
+      setCropping(false);
+      setOpen(true);
+    } catch {
+      // Sem reabrir a câmera de propósito: o alerta é um Modal e ficaria ATRÁS
+      // dela. O motorista cai de volta no formulário, com o aviso na frente.
+      void showAlert({
+        title: "Não deu pra abrir a galeria",
+        message: "Tente de novo, ou tire a foto pela câmera.",
+        variant: "warning",
+      });
+    } finally {
+      setEscolhendo(false);
+    }
+  }
+
   function refazer() {
     setCropping(false);
+    // Veio da galeria: "Refazer" devolve pra galeria, não pra câmera.
+    if (daGaleria) {
+      void escolherDaGaleria();
+      return;
+    }
     setPreviewUri(null);
   }
 
@@ -146,12 +220,14 @@ export function PhotoCapture({
     setOpen(false);
     setCropping(false);
     setPreviewUri(null);
+    setDaGaleria(false);
   }
 
   function descartar() {
     setOpen(false);
     setCropping(false);
     setPreviewUri(null);
+    setDaGaleria(false);
     if (!value) onCancel?.(); // fechou a câmera sem escolher foto
   }
 
@@ -183,15 +259,33 @@ export function PhotoCapture({
           </View>
         </View>
       ) : hidePlaceholder ? null : (
-        <Pressable
-          onPress={abrir}
-          className="h-32 items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border bg-muted/30"
-        >
-          <Camera size={28} color="#64748b" />
-          <Text className="text-sm font-medium text-muted-foreground">
-            Tocar para abrir a câmera
-          </Text>
-        </Pressable>
+        <View className="flex-row gap-3">
+          <Pressable
+            onPress={abrir}
+            className="h-32 flex-1 items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border bg-muted/30"
+          >
+            <Camera size={28} color="#64748b" />
+            <Text className="text-sm font-medium text-muted-foreground">
+              Tirar foto
+            </Text>
+          </Pressable>
+          {permitirGaleria ? (
+            <Pressable
+              onPress={() => void escolherDaGaleria()}
+              disabled={escolhendo}
+              className="h-32 flex-1 items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border bg-muted/30"
+            >
+              {escolhendo ? (
+                <ActivityIndicator color="#64748b" />
+              ) : (
+                <ImageIcon size={28} color="#64748b" />
+              )}
+              <Text className="text-sm font-medium text-muted-foreground">
+                Da galeria
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
       )}
 
       <Modal
@@ -229,6 +323,9 @@ export function PhotoCapture({
                 flash={flash}
                 torchAceso={torchAceso}
                 onCiclarFlash={ciclarFlash}
+                permitirGaleria={permitirGaleria}
+                escolhendo={escolhendo}
+                onGaleria={() => void escolherDaGaleria()}
                 onCapturar={capturar}
                 onCancelar={descartar}
                 hasPermission={permission?.granted ?? false}
@@ -248,6 +345,9 @@ function CaptureMode({
   flash,
   torchAceso,
   onCiclarFlash,
+  permitirGaleria,
+  escolhendo,
+  onGaleria,
   onCapturar,
   onCancelar,
   hasPermission,
@@ -258,6 +358,9 @@ function CaptureMode({
   flash: FlashMode;
   torchAceso: boolean;
   onCiclarFlash: () => void;
+  permitirGaleria: boolean;
+  escolhendo: boolean;
+  onGaleria: () => void;
   onCapturar: () => void;
   onCancelar: () => void;
   hasPermission: boolean;
@@ -317,7 +420,26 @@ function CaptureMode({
         </View>
       </SafeAreaView>
       <SafeAreaView edges={["bottom"]} className="absolute bottom-0 left-0 right-0">
-        <View className="items-center pb-6">
+        {/* Colunas laterais de mesma largura pro botão de disparo ficar no
+            centro exato da tela, com ou sem o atalho da galeria. */}
+        <View className="flex-row items-center justify-center gap-8 pb-6">
+          <View className="w-14 items-center">
+            {permitirGaleria ? (
+              <Pressable
+                onPress={onGaleria}
+                disabled={taking || escolhendo}
+                accessibilityRole="button"
+                accessibilityLabel="Escolher da galeria"
+                className="h-14 w-14 items-center justify-center rounded-full bg-black/50"
+              >
+                {escolhendo ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <ImageIcon size={24} color="white" />
+                )}
+              </Pressable>
+            ) : null}
+          </View>
           <Pressable
             onPress={onCapturar}
             disabled={taking}
@@ -329,6 +451,7 @@ function CaptureMode({
               <View className="h-16 w-16 rounded-full bg-white" />
             )}
           </Pressable>
+          <View className="w-14" />
         </View>
       </SafeAreaView>
     </>
