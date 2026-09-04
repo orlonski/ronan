@@ -22,7 +22,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
 } from "react-native-reanimated";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
 
 export type CapturedPhoto = { uri: string; mime: string };
@@ -200,38 +200,43 @@ export function PhotoCapture({
         onRequestClose={descartar}
         statusBarTranslucent
       >
-        <View className="flex-1 bg-black">
-          {previewUri && cropping ? (
-            <CropMode
-              uri={previewUri}
-              onDone={(novaUri) => {
-                setPreviewUri(novaUri);
-                setCropping(false);
-              }}
-              onCancelar={() => setCropping(false)}
-            />
-          ) : previewUri ? (
-            <PreviewMode
-              uri={previewUri}
-              onRefazer={refazer}
-              onRecortar={() => setCropping(true)}
-              onConfirmar={confirmar}
-              onCancelar={descartar}
-            />
-          ) : (
-            <CaptureMode
-              cameraRef={cameraRef}
-              taking={taking}
-              flash={flash}
-              torchAceso={torchAceso}
-              onCiclarFlash={ciclarFlash}
-              onCapturar={capturar}
-              onCancelar={descartar}
-              hasPermission={permission?.granted ?? false}
-              onRequestPermission={requestPermission}
-            />
-          )}
-        </View>
+        {/* SafeAreaProvider dentro do Modal: no iOS o inset do topo não propaga
+            pro conteúdo do Modal sem isso, e os botões subiam pra baixo da barra
+            de status / Dynamic Island. Mesmo motivo do buscar-local-modal. */}
+        <SafeAreaProvider>
+          <View className="flex-1 bg-black">
+            {previewUri && cropping ? (
+              <CropMode
+                uri={previewUri}
+                onDone={(novaUri) => {
+                  setPreviewUri(novaUri);
+                  setCropping(false);
+                }}
+                onCancelar={() => setCropping(false)}
+              />
+            ) : previewUri ? (
+              <PreviewMode
+                uri={previewUri}
+                onRefazer={refazer}
+                onRecortar={() => setCropping(true)}
+                onConfirmar={confirmar}
+                onCancelar={descartar}
+              />
+            ) : (
+              <CaptureMode
+                cameraRef={cameraRef}
+                taking={taking}
+                flash={flash}
+                torchAceso={torchAceso}
+                onCiclarFlash={ciclarFlash}
+                onCapturar={capturar}
+                onCancelar={descartar}
+                hasPermission={permission?.granted ?? false}
+                onRequestPermission={requestPermission}
+              />
+            )}
+          </View>
+        </SafeAreaProvider>
       </Modal>
     </>
   );
