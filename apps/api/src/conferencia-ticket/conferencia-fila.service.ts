@@ -5,6 +5,7 @@ import {
   StatusViagem,
   TipoDivergencia,
   type ConferenciaTicket,
+  type VereditoConferencia,
 } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { ConferenciaConfig } from "./conferencia.config";
@@ -30,6 +31,18 @@ export type OrigemConferencia =
   | "foto-avulsa"
   | "foto-divergente"
   | "reconferencia";
+
+/**
+ * O recorte da lista do painel. `tipo` sozinho não filtra nada: os grupos do
+ * diagnóstico são sempre campo+tipo, e "só as divergências" já é o filtro por
+ * veredito.
+ */
+export type FiltroConferencia = {
+  limite?: number;
+  veredito?: VereditoConferencia;
+  campo?: string;
+  tipo?: "divergencia" | "incerteza";
+};
 
 /** As colunas da viagem de que o `Declarado` precisa. */
 export type ViagemParaDeclarado = {
@@ -323,11 +336,34 @@ export class ConferenciaFilaService {
     };
   }
 
-  /** Lista pro painel, mais recentes primeiro. */
-  listar(limite = 50) {
+  /**
+   * Lista pro painel, mais recentes primeiro — com o mesmo recorte que o
+   * diagnóstico usa pra agrupar.
+   *
+   * O filtro por campo existe porque agrupar sem deixar abrir é meio caminho:
+   * a tela dizia "placa: 23x" e a única saída era rolar a lista inteira
+   * procurando quais eram. `array_contains` vira `@>` no jsonb, que faz
+   * containment PARCIAL dentro do array — casa `{campo}` sem precisar
+   * reproduzir o objeto inteiro da divergência.
+   */
+  listar(f: FiltroConferencia = {}) {
+    const where: Prisma.ConferenciaTicketWhereInput = {};
+    if (f.veredito) where.veredito = f.veredito;
+
+    if (f.campo) {
+      const naDivergencia = { divergencias: { array_contains: [{ campo: f.campo }] } };
+      const naIncerteza = { incertezas: { array_contains: [{ campo: f.campo }] } };
+      // Sem tipo, o campo vale nos dois lados: quem clica em "placa" quer as
+      // conferências que falam de placa, não uma metade delas.
+      if (f.tipo === "divergencia") Object.assign(where, naDivergencia);
+      else if (f.tipo === "incerteza") Object.assign(where, naIncerteza);
+      else where.OR = [naDivergencia, naIncerteza];
+    }
+
     return this.prisma.conferenciaTicket.findMany({
+      where,
       orderBy: { criadoEm: "desc" },
-      take: Math.min(200, Math.max(1, limite)),
+      take: Math.min(200, Math.max(1, f.limite ?? 50)),
       select: {
         id: true,
         viagemId: true,

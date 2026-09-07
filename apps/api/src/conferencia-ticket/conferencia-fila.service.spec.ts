@@ -283,3 +283,60 @@ describe("recompararViagem — de graça, e desfazendo o que o robô fez", () =>
     expect(r.motivo).toContain("ainda não foi lida");
   });
 });
+
+/**
+ * Agrupar sem deixar abrir é meio caminho: a tela dizia "placa: 23x" e a única
+ * saída era rolar a lista procurando quais eram.
+ */
+describe("listar — o filtro que abre os grupos do diagnóstico", () => {
+  function montarLista() {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const prisma = { conferenciaTicket: { findMany } } as unknown as PrismaService;
+    return { fila: new ConferenciaFilaService(prisma, config), findMany };
+  }
+
+  const whereDe = async (filtro: Parameters<ConferenciaFilaService["listar"]>[0]) => {
+    const { fila, findMany } = montarLista();
+    await comConta("conta-a", () => fila.listar(filtro));
+    return findMany.mock.calls[0][0].where;
+  };
+
+  it("sem filtro não recorta nada", async () => {
+    expect(await whereDe({})).toEqual({});
+  });
+
+  it("campo com tipo procura só naquele lado", async () => {
+    expect(await whereDe({ campo: "placa", tipo: "incerteza" })).toEqual({
+      incertezas: { array_contains: [{ campo: "placa" }] },
+    });
+    expect(await whereDe({ campo: "toneladas", tipo: "divergencia" })).toEqual({
+      divergencias: { array_contains: [{ campo: "toneladas" }] },
+    });
+  });
+
+  it("campo sem tipo vale nos dois lados", async () => {
+    // Quem clica em "placa" quer as conferências que falam de placa, não uma
+    // metade delas.
+    expect(await whereDe({ campo: "placa" })).toEqual({
+      OR: [
+        { divergencias: { array_contains: [{ campo: "placa" }] } },
+        { incertezas: { array_contains: [{ campo: "placa" }] } },
+      ],
+    });
+  });
+
+  it("veredito e campo se somam", async () => {
+    expect(await whereDe({ veredito: "INCERTO", campo: "placa", tipo: "incerteza" })).toEqual({
+      veredito: "INCERTO",
+      incertezas: { array_contains: [{ campo: "placa" }] },
+    });
+  });
+
+  it("limite tem teto e piso", async () => {
+    const { fila, findMany } = montarLista();
+    await comConta("conta-a", () => fila.listar({ limite: 9_999 }));
+    expect(findMany.mock.calls[0][0].take).toBe(200);
+    await comConta("conta-a", () => fila.listar({ limite: 0 }));
+    expect(findMany.mock.calls[1][0].take).toBe(1);
+  });
+});

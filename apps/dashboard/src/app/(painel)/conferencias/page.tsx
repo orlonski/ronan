@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ScanEye, Clock, Loader2, AlertTriangle, CheckCircle2, Eye } from "lucide-react";
+import { ScanEye, Clock, Loader2, AlertTriangle, CheckCircle2, Eye, Filter, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
@@ -64,6 +64,13 @@ type Resumo = {
   ativa: boolean;
 };
 
+/** O que a tela está mostrando. Vazio = tudo. */
+type Filtro = {
+  veredito?: keyof typeof VEREDITO;
+  campo?: string;
+  tipo?: "divergencia" | "incerteza";
+};
+
 const VEREDITO = {
   BATE: { rotulo: "Confere", cor: "border-emerald-200 bg-emerald-50 text-emerald-800", icone: CheckCircle2 },
   DIVERGE: { rotulo: "Diverge", cor: "border-red-200 bg-red-50 text-red-800", icone: AlertTriangle },
@@ -85,7 +92,14 @@ export default function ConferenciasPage() {
     staleTime: 0,
     refetchInterval: 15_000,
   });
-  const lista = useApiQuery<Conferencia[]>("/admin/conferencias?limite=50", {
+  // O recorte da lista. Mora aqui, e não na URL, porque é um clique de
+  // triagem: quem filtrou está lendo esta tela agora, não montando um link.
+  const [filtro, setFiltro] = useState<Filtro>({});
+  const qs = new URLSearchParams({ limite: "50" });
+  if (filtro.veredito) qs.set("veredito", filtro.veredito);
+  if (filtro.campo) qs.set("campo", filtro.campo);
+  if (filtro.tipo) qs.set("tipo", filtro.tipo);
+  const lista = useApiQuery<Conferencia[]>(`/admin/conferencias?${qs}`, {
     refetchInterval: 15_000,
   });
   // Viagens que já existiam quando a conferência entrou no ar. Sem isso o
@@ -236,12 +250,57 @@ export default function ConferenciasPage() {
         <div className="flex flex-wrap gap-2">
           {Object.entries(r.porVeredito).map(([v, n]) => {
             const meta = VEREDITO[v as keyof typeof VEREDITO];
+            const ativo = filtro.veredito === v;
             return (
-              <span key={v} className={`rounded border px-2 py-1 text-xs ${meta?.cor ?? ""}`}>
+              <button
+                key={v}
+                type="button"
+                onClick={() =>
+                  setFiltro((f) => ({
+                    ...f,
+                    veredito: ativo ? undefined : (v as keyof typeof VEREDITO),
+                  }))
+                }
+                className={`rounded border px-2 py-1 text-xs transition hover:brightness-95 ${
+                  meta?.cor ?? ""
+                } ${ativo ? "ring-2 ring-offset-1 ring-current" : ""}`}
+              >
                 {meta?.rotulo ?? v}: <strong>{n}</strong>
-              </span>
+              </button>
             );
           })}
+        </div>
+      )}
+
+      {/* O que está sendo mostrado, e a saída. Filtro sem jeito visível de
+          desfazer é a forma mais rápida de alguém achar que a lista esvaziou. */}
+      {(filtro.veredito || filtro.campo) && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+          <Filter className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span>
+            Mostrando{" "}
+            <strong>
+              {filtro.campo
+                ? `${filtro.campo}${
+                    filtro.tipo ? (filtro.tipo === "divergencia" ? " que diverge" : " a revisar") : ""
+                  }`
+                : "tudo"}
+            </strong>
+            {filtro.veredito && (
+              <>
+                {" · "}
+                <strong>{VEREDITO[filtro.veredito]?.rotulo ?? filtro.veredito}</strong>
+              </>
+            )}
+          </span>
+          <button
+            type="button"
+            onClick={() => setFiltro({})}
+            className="ml-auto flex items-center gap-1 rounded border bg-background px-2 py-0.5 text-xs hover:bg-muted"
+          >
+            <X className="h-3 w-3" />
+            limpar filtro
+          </button>
         </div>
       )}
 
@@ -249,12 +308,28 @@ export default function ConferenciasPage() {
         <Card className="p-4">
           <p className="text-sm font-medium">Onde estão as diferenças</p>
           <p className="mb-3 text-sm text-muted-foreground">
-            Agrupado por campo. Um padrão que aparece muito costuma ser regra a afinar, não
-            motorista errando — e afinar não custa nada, é só reavaliar depois.
+            Agrupado por campo — <strong>clique num grupo pra ver só essas conferências</strong>. Um
+            padrão que aparece muito costuma ser regra a afinar, não motorista errando — e afinar
+            não custa nada, é só reavaliar depois.
           </p>
           <div className="space-y-3">
-            {diag.data!.porCampo.map((g) => (
-              <div key={`${g.tipo}:${g.campo}`} className="rounded border p-3">
+            {diag.data!.porCampo.map((g) => {
+              const ativo = filtro.campo === g.campo && filtro.tipo === g.tipo;
+              return (
+              <button
+                key={`${g.tipo}:${g.campo}`}
+                type="button"
+                onClick={() =>
+                  setFiltro((f) =>
+                    ativo
+                      ? { ...f, campo: undefined, tipo: undefined }
+                      : { ...f, campo: g.campo, tipo: g.tipo },
+                  )
+                }
+                className={`block w-full rounded border p-3 text-left transition hover:bg-muted/50 ${
+                  ativo ? "border-primary bg-primary/5 ring-1 ring-primary" : ""
+                }`}
+              >
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{g.campo}</span>
                   <span
@@ -267,6 +342,9 @@ export default function ConferenciasPage() {
                     {g.tipo === "divergencia" ? "diverge" : "revisar"}
                   </span>
                   <span className="text-sm text-muted-foreground">{g.quantidade}x</span>
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    {ativo ? "mostrando estas" : "ver estas"}
+                  </span>
                 </div>
                 <ul className="mt-1.5 space-y-0.5">
                   {g.exemplos.map((e, i) => (
@@ -277,8 +355,9 @@ export default function ConferenciasPage() {
                     </li>
                   ))}
                 </ul>
-              </div>
-            ))}
+              </button>
+              );
+            })}
           </div>
         </Card>
       )}
@@ -288,10 +367,25 @@ export default function ConferenciasPage() {
       ) : (lista.data ?? []).length === 0 ? (
         <Card className="p-8 text-center">
           <ScanEye className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
-          <p className="text-sm font-medium">Nenhuma conferência ainda</p>
-          <p className="text-sm text-muted-foreground">
-            Elas aparecem sozinhas quando um motorista lança viagem com foto do ticket.
-          </p>
+          {filtro.veredito || filtro.campo ? (
+            <>
+              <p className="text-sm font-medium">Nada com esse filtro</p>
+              <p className="text-sm text-muted-foreground">
+                O agrupamento olha todo o acervo e a lista traz as 50 mais recentes — pode ser que
+                as desse grupo sejam mais antigas.
+              </p>
+              <Button variant="outline" className="mt-3" onClick={() => setFiltro({})}>
+                Limpar filtro
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium">Nenhuma conferência ainda</p>
+              <p className="text-sm text-muted-foreground">
+                Elas aparecem sozinhas quando um motorista lança viagem com foto do ticket.
+              </p>
+            </>
+          )}
         </Card>
       ) : (
         <div className="space-y-2">

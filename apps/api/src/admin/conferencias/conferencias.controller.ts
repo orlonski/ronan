@@ -7,6 +7,17 @@ import { RolesGuard } from "../../auth/guards/roles.guard";
 import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import { ConferenciaFilaService } from "../../conferencia-ticket/conferencia-fila.service";
 import { ConferenciaConfig } from "../../conferencia-ticket/conferencia.config";
+import type { VereditoConferencia } from "@prisma/client";
+
+/** O que a tela pode pedir. Fora daqui o filtro é descartado. */
+const VEREDITOS: VereditoConferencia[] = [
+  "BATE",
+  "DIVERGE",
+  "INCERTO",
+  "ILEGIVEL",
+  "NAO_APLICAVEL",
+];
+const CAMPOS = ["toneladas", "ticket", "placa", "data", "cliente", "material"];
 
 /**
  * O que a conferência automática andou fazendo. Leitura pura — quem decide
@@ -39,10 +50,29 @@ export class ConferenciasController {
     };
   }
 
+  /**
+   * A lista, com o mesmo recorte que o diagnóstico agrupa.
+   *
+   * Parâmetro fora do catálogo é ignorado, não vira 400: o filtro nasce de um
+   * clique na tela, e devolver erro pra quem clicou num grupo que já não
+   * existe seria trocar um resultado vazio por uma tela quebrada.
+   */
   @Get()
   @RequerPermissao("conferencia-ticket.ver")
-  listar(@Query("limite") limite?: string) {
-    return this.fila.listar(limite ? Number(limite) : 50);
+  listar(
+    @Query("limite") limite?: string,
+    @Query("veredito") veredito?: string,
+    @Query("campo") campo?: string,
+    @Query("tipo") tipo?: string,
+  ) {
+    return this.fila.listar({
+      limite: limite ? Number(limite) : 50,
+      veredito: VEREDITOS.includes(veredito as VereditoConferencia)
+        ? (veredito as VereditoConferencia)
+        : undefined,
+      campo: CAMPOS.includes(campo ?? "") ? campo : undefined,
+      tipo: tipo === "divergencia" || tipo === "incerteza" ? tipo : undefined,
+    });
   }
 
   /**
