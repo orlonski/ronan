@@ -254,14 +254,21 @@ export class ConferenciaFilaService {
     aguardando: number;
     executando: number;
     ultimas24h: number;
+    /**
+     * Todo o acervo já lido, sem recorte de tempo. É o que diz se há o que
+     * reavaliar de graça — a janela de 24h esconderia o histórico antigo, que é
+     * justamente o que se quer recomparar quando a regra fica mais esperta.
+     */
+    concluidas: number;
     custoUsd24h: number;
     porVeredito: Record<string, number>;
   }> {
     const desde = new Date(Date.now() - 24 * 3_600_000);
-    const [aguardando, executando, ultimas24h, agregado, grupos] = await Promise.all([
+    const [aguardando, executando, ultimas24h, concluidas, agregado, grupos] = await Promise.all([
       this.prisma.conferenciaTicket.count({ where: { status: "PENDENTE" } }),
       this.prisma.conferenciaTicket.count({ where: { status: "EXECUTANDO" } }),
       this.prisma.conferenciaTicket.count({ where: { criadoEm: { gte: desde } } }),
+      this.prisma.conferenciaTicket.count({ where: { status: "CONCLUIDA" } }),
       this.prisma.conferenciaTicket.aggregate({
         where: { criadoEm: { gte: desde } },
         _sum: { custoUsd: true },
@@ -280,6 +287,7 @@ export class ConferenciaFilaService {
       aguardando,
       executando,
       ultimas24h,
+      concluidas,
       custoUsd24h: Number(agregado._sum.custoUsd ?? 0),
       porVeredito,
     };

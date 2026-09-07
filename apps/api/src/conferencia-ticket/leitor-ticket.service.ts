@@ -113,7 +113,12 @@ DATA: formato brasileiro DD/MM/AAAA. Um dia de diferença é rotina (pesagem à
 noite, lançamento no dia seguinte): responda "sim". Havendo várias datas,
 prefira a da PESAGEM/SAÍDA.
 
-PLACA: ignore hífen e espaço. Se o documento traz a placa da CARRETA e o
+PLACA: ignore hífen e espaço. Dois formatos convivem hoje: o antigo (ABC-1234)
+e o Mercosul (ABC1D23), que só troca o 5º caractere por uma letra. Balança com
+sistema antigo imprime tudo no formato velho, e leitor de placa costuma trocar
+a letra pelo número parecido (B por 6 ou 8, G por 6, S por 5, I por 1, O por 0).
+Se as três letras e os três últimos dígitos batem e só o 5º caractere muda, é o
+MESMO caminhão: responda "sim". Se o documento traz a placa da CARRETA e o
 lançamento é do cavalo mecânico, responda "incerto" — não é caminhão errado.
 
 REGRA QUE VALE MAIS QUE TODAS AS OUTRAS:

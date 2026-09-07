@@ -208,6 +208,68 @@ export function normalizarPlaca(s: string): string {
   return s.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
+/** Formato antigo: LLL + 4 dígitos. */
+const RE_PLACA_ANTIGA = /^[A-Z]{3}\d{4}$/;
+/** Formato Mercosul: LLL + dígito + LETRA + 2 dígitos. */
+const RE_PLACA_MERCOSUL = /^[A-Z]{3}\d[A-Z]\d{2}$/;
+
+/**
+ * A conversão oficial: ao migrar pro Mercosul, só o 5º caractere muda, e o
+ * dígito vira a letra da mesma posição do alfabeto. 0→A, 1→B, … 9→J.
+ */
+const DIGITO_PARA_LETRA = "ABCDEFGHIJ";
+
+/**
+ * Como as duas placas se relacionam. `null` = são placas diferentes mesmo.
+ *
+ * - `IDENTICA` — a mesma string depois de tirar hífen, espaço e caixa.
+ * - `MERCOSUL` — uma é a conversão oficial da outra ("ABC1D23" ↔ "ABC1323").
+ * - `MERCOSUL_OCR` — mesma placa nos dois formatos, mas o dígito no lugar da
+ *   letra não é o da conversão: quem imprimiu leu a letra como o número
+ *   parecido (B↔6/8, G↔6, S↔5, I↔1, O↔0).
+ */
+export type EquivalenciaPlaca = "IDENTICA" | "MERCOSUL" | "MERCOSUL_OCR" | null;
+
+/**
+ * Mesma placa escrita nos dois mundos?
+ *
+ * O caso real que trouxe isto: viagem lançada em **ATN3B14** (Mercosul) e o
+ * ticket impresso como **ATN-3614**. O papel sai de balança com sistema antigo,
+ * que só sabe imprimir LLL-NNNN, ou de OCR que leu a letra como o dígito
+ * parecido — e nos dois casos é o mesmo caminhão. Sem esta regra toda placa
+ * Mercosul da frota vira incerteza e enche a fila de revisão com trabalho que
+ * não existe.
+ *
+ * A trava que segura a regra: **só o 5º caractere pode diferir**, e ele tem que
+ * ser letra de um lado e dígito do outro. As outras 6 posições (3 letras + 3
+ * dígitos) batendo já identificam a placa — dois veículos que só se distinguem
+ * por essa posição são cobertos pela checagem de `placasConhecidas`, que roda
+ * antes de tratar como divergência.
+ */
+export function equivalenciaPlaca(a: string, b: string): EquivalenciaPlaca {
+  const x = normalizarPlaca(a);
+  const y = normalizarPlaca(b);
+  if (!x || !y) return null;
+  if (x === y) return "IDENTICA";
+
+  // A regra só existe entre os DOIS formatos: Mercosul de um lado, antiga do
+  // outro. Duas antigas (ou duas Mercosul) diferentes são placas diferentes.
+  const mercosul = RE_PLACA_MERCOSUL.test(x) ? x : RE_PLACA_MERCOSUL.test(y) ? y : null;
+  const antiga = RE_PLACA_ANTIGA.test(x) ? x : RE_PLACA_ANTIGA.test(y) ? y : null;
+  if (!mercosul || !antiga) return null;
+
+  // Tudo fora do 5º caractere tem que ser idêntico.
+  if (mercosul.slice(0, 4) !== antiga.slice(0, 4)) return null;
+  if (mercosul.slice(5) !== antiga.slice(5)) return null;
+
+  return DIGITO_PARA_LETRA[Number(antiga[4])] === mercosul[4] ? "MERCOSUL" : "MERCOSUL_OCR";
+}
+
+/** Atalho pra quem só quer saber se é o mesmo caminhão. */
+export function placasEquivalentes(a: string, b: string): boolean {
+  return equivalenciaPlaca(a, b) !== null;
+}
+
 /**
  * Distância de edição, com corte cedo: só interessa saber se é 0, 1 ou "mais
  * que isso" — não vale percorrer a matriz inteira pra descobrir que são 9.
@@ -378,7 +440,9 @@ export function compararDeclaradoComLido(
     conferidos.push("placa");
     const dec = normalizarPlaca(declarado.placa);
     const lid = normalizarPlaca(lido.placa);
-    if (dec !== lid) {
+    // Mesma placa nos dois formatos (Mercosul × antiga) não é diferença
+    // nenhuma: é a balança imprimindo do jeito que ela sabe.
+    if (dec !== lid && !equivalenciaPlaca(dec, lid)) {
       const perto = distanciaEdicao(dec, lid, 1) <= 1;
 
       // Só é "viagem no caminhão errado" se a placa lida for de OUTRO veículo
@@ -540,6 +604,12 @@ export function conferirComJulgamento(
     conferidos.push(campo);
 
     if (parecer.confere === "sim") continue;
+
+    // Placa é o único campo desta lista que tem forma canônica: a mesma placa
+    // pode estar escrita nos dois formatos ("ATN3B14" no cadastro, "ATN-3614"
+    // no ticket) e nenhum modelo precisa opinar sobre isso. Quando o código
+    // consegue provar que é o mesmo caminhão, a prova vale mais que o parecer.
+    if (campo === "placa" && lid && equivalenciaPlaca(dec, lid)) continue;
 
     const registro = { campo, declarado: dec, lido: lid ?? "—" };
     if (parecer.confere === "nao" && grave) {

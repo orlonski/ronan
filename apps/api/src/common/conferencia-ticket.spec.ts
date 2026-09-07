@@ -7,6 +7,7 @@ import {
   explicarPesoSuspeito,
   normalizarTicket,
   normalizarPlaca,
+  equivalenciaPlaca,
   distanciaEdicao,
   LIMIARES_PADRAO,
   type Declarado,
@@ -155,6 +156,45 @@ describe("placa", () => {
   it("hífen não conta como diferença", () => {
     const r = conferir({ placa: "AQF-7758" }, { placa: "AQF7758" });
     expect(r.veredito).toBe("BATE");
+  });
+});
+
+describe("placa Mercosul × formato antigo", () => {
+  it("o caso real: ATN3B14 lançada, ATN-3614 no ticket", () => {
+    // A balança imprime no formato velho e lê a letra como o número parecido.
+    // É o mesmo caminhão — não pode virar revisão humana.
+    expect(equivalenciaPlaca("ATN3B14", "ATN-3614")).toBe("MERCOSUL_OCR");
+    const r = conferir({ placa: "ATN3B14" }, { placa: "ATN-3614" });
+    expect(r.divergencias).toHaveLength(0);
+    expect(r.incertezas).toHaveLength(0);
+    expect(r.conferidos).toContain("placa");
+    expect(r.veredito).toBe("BATE");
+  });
+
+  it("reconhece a conversão oficial (5º caractere: 0→A … 9→J)", () => {
+    expect(equivalenciaPlaca("ABC1D23", "ABC-1323")).toBe("MERCOSUL");
+    expect(equivalenciaPlaca("ABC1A23", "ABC0231")).toBeNull();
+  });
+
+  it("espaço, traço e caixa não importam nos dois sentidos", () => {
+    expect(equivalenciaPlaca("atn 3614", "ATN-3B14")).toBe("MERCOSUL_OCR");
+    expect(equivalenciaPlaca("ATN3B14", "ATN3B14")).toBe("IDENTICA");
+  });
+
+  it("a regra só vale entre formatos diferentes — não afrouxa duas Mercosul", () => {
+    expect(equivalenciaPlaca("ATN3B14", "ATN3C14")).toBeNull();
+    expect(equivalenciaPlaca("ATN3614", "ATN3714")).toBeNull();
+  });
+
+  it("qualquer outra posição diferente é outra placa", () => {
+    expect(equivalenciaPlaca("ATN3B14", "ATM3614")).toBeNull();
+    expect(equivalenciaPlaca("ATN3B14", "ATN3615")).toBeNull();
+    expect(equivalenciaPlaca("ATN3B14", "ATN4614")).toBeNull();
+  });
+
+  it("placa fora de formato conhecido não entra na regra", () => {
+    expect(equivalenciaPlaca("ATN3B1", "ATN361")).toBeNull();
+    expect(equivalenciaPlaca("", "ATN3614")).toBeNull();
   });
 });
 
@@ -447,6 +487,37 @@ describe("conferência guiada pelo parecer da IA", () => {
     });
     expect(r.divergencias).toHaveLength(0);
     expect(r.veredito).toBe("BATE");
+  });
+
+  it("placa Mercosul lida no formato antigo: o código vence o parecer da IA", () => {
+    // A IA olhou "ATN3B14" contra "ATN-3614" e não se arriscou. Mas isso não é
+    // semântica, é forma canônica — e o código consegue provar que é o mesmo
+    // caminhão. Sem esta trava, toda placa Mercosul da frota cai em revisão.
+    const r = conferirComJulgamento(
+      { ...declarado, placa: "ATN3B14" },
+      { ...lido, placa: "ATN-3614" },
+      {
+        numeroDocumento: ok,
+        toneladas: ok,
+        placa: { confere: "nao", porque: "o ticket é do ATN-3614" },
+        cliente: ok,
+        material: ok,
+      },
+    );
+    expect(r.divergencias).toHaveLength(0);
+    expect(r.incertezas).toHaveLength(0);
+    expect(r.conferidos).toContain("placa");
+    expect(r.veredito).toBe("BATE");
+  });
+
+  it("placa de outra placa mesmo continua caindo em revisão", () => {
+    const r = conferirComJulgamento(
+      { ...declarado, placa: "ATN3B14" },
+      { ...lido, placa: "XYZ1234" },
+      { numeroDocumento: ok, toneladas: ok, placa: { confere: "nao", porque: "outra placa" } },
+    );
+    expect(r.incertezas[0]).toMatchObject({ campo: "placa" });
+    expect(r.veredito).toBe("INCERTO");
   });
 
   it("a IA sabendo qual número é o do documento resolve o formato certo", () => {

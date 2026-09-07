@@ -57,6 +57,7 @@ type Resumo = {
   aguardando: number;
   executando: number;
   ultimas24h: number;
+  concluidas: number;
   custoUsd24h: number;
   porVeredito: Record<string, number>;
   modoSombra: boolean;
@@ -186,7 +187,10 @@ export default function ConferenciasPage() {
         </Card>
       )}
 
-      {(r?.ultimas24h ?? 0) > 0 && (
+      {/* O acervo INTEIRO, não só as 24h: reavaliar existe pro histórico antigo
+          acompanhar a regra nova, e é exatamente aí que a janela curta
+          escondia o botão. */}
+      {(r?.concluidas ?? 0) > 0 && (
         <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
           <div>
             <p className="text-sm font-medium">Reavaliar o que já foi lido</p>
