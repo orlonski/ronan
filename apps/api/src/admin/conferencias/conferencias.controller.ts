@@ -86,6 +86,22 @@ export class ConferenciasController {
   }
 
   /**
+   * Reavalia UMA viagem com a regra de hoje, contra os dados lançados AGORA.
+   * Mesmo custo zero do `recomparar` em lote — só a comparação roda de novo —,
+   * e por isso a mesma permissão de leitura.
+   *
+   * Existe separado do lote porque o lote responde "o acervo acompanhou a
+   * regra nova?" e este responde "corrigi ESTA viagem, e daí?". Quem está
+   * decidindo uma viagem não deveria ter que ir noutra tela mandar recomparar
+   * o mundo inteiro pra ver o efeito.
+   */
+  @Post("viagem/:viagemId/recomparar")
+  @RequerPermissao("conferencia-ticket.ver")
+  recompararViagem(@Param("viagemId") viagemId: string) {
+    return this.fila.recompararViagem(viagemId);
+  }
+
+  /**
    * Relê a foto de uma viagem. Pro caso em que a foto está boa e a leitura não
    * deu certo — pedir foto nova ao motorista seria cobrar dele um problema
    * nosso. Custa uma leitura, daí exigir `viagens.validar`.

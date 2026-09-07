@@ -102,12 +102,19 @@ export default function ConferenciasPage() {
   async function recomparar() {
     setRecomparando(true);
     try {
-      const r = await fetchApi<{ total: number; mudaram: number; porVeredito: Record<string, number> }>(
-        "/admin/conferencias/recomparar",
-        { method: "POST", token, body: "{}" },
-      );
+      const r = await fetchApi<{
+        total: number;
+        mudaram: number;
+        reverteram: number;
+        porVeredito: Record<string, number>;
+      }>("/admin/conferencias/recomparar", { method: "POST", token, body: "{}" });
+      // Quantas SAÍRAM da revisão é o que a pessoa foi ali buscar: veredito
+      // mudado na tabela, com a viagem parada no mesmo lugar, parece que nada
+      // aconteceu.
       toast.success(`${r.mudaram} de ${r.total} mudaram de veredito`, {
-        description: "Sem custo: só a comparação rodou de novo, a leitura já estava guardada.",
+        description: r.reverteram
+          ? `${r.reverteram} viagem(ns) saíram da revisão. Sem custo: a leitura já estava guardada.`
+          : "Sem custo: só a comparação rodou de novo, a leitura já estava guardada.",
       });
       void resumo.refetch();
       void lista.refetch();

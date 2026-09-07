@@ -3,6 +3,7 @@ import {
   Prisma,
   StatusConferenciaTicket,
   StatusViagem,
+  TipoDivergencia,
   type ConferenciaTicket,
 } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
@@ -29,6 +30,53 @@ export type OrigemConferencia =
   | "foto-avulsa"
   | "foto-divergente"
   | "reconferencia";
+
+/** As colunas da viagem de que o `Declarado` precisa. */
+export type ViagemParaDeclarado = {
+  status: StatusViagem;
+  ticket: string | null;
+  toneladas: Prisma.Decimal | null;
+  data: Date | null;
+  veiculo: { placa: string } | null;
+  cliente: { nome: string } | null;
+  material: { nome: string } | null;
+};
+
+/** O `select` que preenche `ViagemParaDeclarado`. */
+const SELECT_DECLARADO = {
+  status: true,
+  ticket: true,
+  toneladas: true,
+  data: true,
+  veiculo: { select: { placa: true } },
+  cliente: { select: { nome: true } },
+  material: { select: { nome: true } },
+} as const;
+
+/**
+ * O lado esquerdo da conferência: o que está lançado na viagem AGORA.
+ *
+ * Vive fora do `enfileirar` porque a reavaliação sem custo precisa montar o
+ * mesmo objeto — e montar diferente dos dois lados é como o card passaria a
+ * mostrar um "Lançado" que não existe mais em lugar nenhum.
+ */
+export function montarDeclarado(v: ViagemParaDeclarado, placasConhecidas: string[]): Declarado {
+  return {
+    toneladas: v.toneladas ? Number(v.toneladas) : null,
+    ticket: v.ticket,
+    placa: v.veiculo?.placa ?? null,
+    data: v.data,
+    clienteNome: v.cliente?.nome ?? null,
+    materialNome: v.material?.nome ?? null,
+    // Sem isto o comparador não distingue "ticket de outro caminhão da
+    // frota" de "não reconheci a placa" — e o segundo caso, que costuma ser
+    // a carreta, viraria acusação.
+    placasConhecidas,
+    // Sem peso ainda não há o que conferir nesse campo — e sem esta linha o
+    // sistema acusaria TODO motorista que lançou esperando o romaneio.
+    pesoConferivel: v.status !== StatusViagem.AGUARDANDO_PESO && v.toneladas != null,
+  };
+}
 
 /**
  * A fila da conferência. Vive no Postgres pelos mesmos motivos da fila do
@@ -93,25 +141,7 @@ export class ConferenciaFilaService {
       }
 
       const foto = viagem.fotos[0];
-      const placas = (
-        await this.prisma.veiculo.findMany({ select: { placa: true } })
-      ).map((v) => v.placa);
-      const declarado: Declarado = {
-        toneladas: viagem.toneladas ? Number(viagem.toneladas) : null,
-        ticket: viagem.ticket,
-        placa: viagem.veiculo?.placa ?? null,
-        data: viagem.data,
-        clienteNome: viagem.cliente?.nome ?? null,
-        materialNome: viagem.material?.nome ?? null,
-        // Sem isto o comparador não distingue "ticket de outro caminhão da
-        // frota" de "não reconheci a placa" — e o segundo caso, que costuma ser
-        // a carreta, viraria acusação.
-        placasConhecidas: placas,
-        // Sem peso ainda não há o que conferir nesse campo — e sem esta linha o
-        // sistema acusaria TODO motorista que lançou esperando o romaneio.
-        pesoConferivel:
-          viagem.status !== StatusViagem.AGUARDANDO_PESO && viagem.toneladas != null,
-      };
+      const declarado = montarDeclarado(viagem, await this.placasDaFrota());
 
       await this.prisma.conferenciaTicket.create({
         data: {
@@ -388,9 +418,16 @@ export class ConferenciaFilaService {
     });
   }
 
-  /** A conferência mais recente de uma viagem — pro card na tela de detalhe. */
-  ultimaDaViagem(viagemId: string) {
-    return this.prisma.conferenciaTicket.findFirst({
+  /**
+   * A conferência mais recente de uma viagem — pro card na tela de detalhe.
+   *
+   * Vem com `desatualizada`: o `declarado` é o congelado no enfileiramento, e
+   * quem edita a viagem depois via o card teimar no valor velho sem entender
+   * por quê. O flag é o que deixa a tela oferecer a reavaliação em vez de
+   * mostrar uma comparação que não vale mais.
+   */
+  async ultimaDaViagem(viagemId: string) {
+    const c = await this.prisma.conferenciaTicket.findFirst({
       where: { viagemId, status: "CONCLUIDA" },
       orderBy: { criadoEm: "desc" },
       select: {
@@ -406,6 +443,154 @@ export class ConferenciaFilaService {
         criadoEm: true,
       },
     });
+    if (!c) return null;
+
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { id: viagemId },
+      select: SELECT_DECLARADO,
+    });
+    const congelado = c.declarado as unknown as Declarado | null;
+    const desatualizada = !!viagem && !!congelado && !mesmoLancamento(congelado, viagem);
+
+    return { ...c, desatualizada };
+  }
+
+  /** As placas da frota, pro comparador saber o que é caminhão de casa. */
+  private async placasDaFrota(): Promise<string[]> {
+    const veiculos = await this.prisma.veiculo.findMany({ select: { placa: true } });
+    return veiculos.map((v) => v.placa);
+  }
+
+  /**
+   * Reavalia UMA viagem com a regra de hoje, **sem chamar a IA**.
+   *
+   * O que muda em relação ao lote: o lado esquerdo é remontado a partir da
+   * viagem AGORA, não do snapshot do enfileiramento. É o que faz "corrigi o
+   * lançamento e reavaliei" dar o resultado que a pessoa espera — comparar
+   * contra o valor velho responderia uma pergunta que ninguém fez.
+   */
+  async recompararViagem(viagemId: string): Promise<{
+    recomparada: boolean;
+    motivo?: string;
+    veredito?: string;
+    mudou?: boolean;
+    reverteu?: boolean;
+  }> {
+    const c = await this.prisma.conferenciaTicket.findFirst({
+      where: { viagemId, status: "CONCLUIDA" },
+      orderBy: { criadoEm: "desc" },
+      select: { id: true, viagemId: true, leitura: true, veredito: true, acao: true },
+    });
+    if (!c) return { recomparada: false, motivo: "esta viagem ainda não foi lida" };
+
+    const r = await this.recompararUma(c, await this.placasDaFrota());
+    if (!r) return { recomparada: false, motivo: "a leitura guardada não serve pra comparar" };
+    return { recomparada: true, ...r };
+  }
+
+  /**
+   * O miolo da reavaliação: recompara e, quando o veredito melhora, desfaz o
+   * que o robô tinha feito com a viagem.
+   */
+  private async recompararUma(
+    c: { id: string; viagemId: string; leitura: unknown; veredito: string | null; acao: string | null },
+    placas: string[],
+  ): Promise<{ veredito: string; mudou: boolean; reverteu: boolean } | null> {
+    const lido = c.leitura as unknown as Lido | null;
+    if (!lido || typeof lido.confianca !== "number") return null;
+
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { id: c.viagemId },
+      select: SELECT_DECLARADO,
+    });
+    if (!viagem) return null;
+    const declarado = montarDeclarado(viagem, placas);
+
+    // O julgamento da IA foi guardado junto da leitura, então recomparar
+    // continua custando zero mesmo com a decisão sendo semântica.
+    const julgamento = (lido as unknown as { julgamento?: JulgamentoIa }).julgamento ?? {};
+    const r = conferirComJulgamento(declarado, lido, julgamento);
+    const mudou = r.veredito !== c.veredito;
+
+    await this.prisma.conferenciaTicket.update({
+      where: { id: c.id },
+      data: {
+        veredito: r.veredito,
+        divergencias: r.divergencias as unknown as Prisma.InputJsonValue,
+        incertezas: r.incertezas as unknown as Prisma.InputJsonValue,
+        // O snapshot acompanha: é o que o card mostra como "Lançado", e depois
+        // de reavaliar ele tem que falar do lançamento que foi comparado.
+        declarado: declarado as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    const reverteu = mudou ? await this.desfazerAcao(c, r.veredito) : false;
+    return { veredito: r.veredito, mudou, reverteu };
+  }
+
+  /**
+   * Devolve a viagem ao estado anterior quando a regra nova diz que estava
+   * tudo certo.
+   *
+   * Sem isto a correção de uma regra não tem efeito nenhum: o veredito na
+   * tabela muda, a viagem segue parada em "Em conferência" e quem clicou em
+   * reavaliar conclui, com razão, que não funcionou.
+   *
+   * Três travas: só desfaz quando o novo veredito é benigno, só toca no status
+   * que o próprio robô escreveu, e nunca em viagem com `revisadoEm` — decisão
+   * de gente não se desfaz sozinha. `PEDIU_FOTO` fica de fora de propósito:
+   * foto ilegível não é matéria de regra, é de foto.
+   */
+  private async desfazerAcao(
+    c: { viagemId: string; acao: string | null },
+    veredito: string,
+  ): Promise<boolean> {
+    if (veredito !== "BATE" && veredito !== "NAO_APLICAVEL") return false;
+
+    const de =
+      c.acao === "FILA_REVISAO"
+        ? StatusViagem.EM_CONFERENCIA
+        : c.acao === "AVISOU_MOTORISTA"
+          ? StatusViagem.DIVERGENTE
+          : null;
+    if (!de) return false;
+
+    const alterou = await this.prisma.viagem.updateMany({
+      where: {
+        id: c.viagemId,
+        status: de,
+        revisadoEm: null,
+        // Divergência de foto ilegível tem outro dono: o motorista, que já foi
+        // chamado pra mandar outra. Não se desfaz por trás dele.
+        ...(de === StatusViagem.DIVERGENTE
+          ? { tipoDivergencia: { not: TipoDivergencia.FOTO_ILEGIVEL } }
+          : {}),
+      },
+      data: { status: StatusViagem.ENVIADA, motivoStatus: null, tipoDivergencia: null },
+    });
+    if (alterou.count === 0) return false;
+
+    try {
+      await this.prisma.viagemMensagem.create({
+        data: {
+          viagemId: c.viagemId,
+          autor: "ADMIN",
+          usuarioId: null,
+          autorNome: "Conferência automática",
+          texto:
+            "Reavaliei esta leitura com a regra de hoje e o documento confere. " +
+            "A viagem voltou pra fila normal, sem custo de leitura nova.",
+          acao: "CONFERIU",
+        },
+      });
+    } catch {
+      /* o registro no chat é conveniência; a reversão já está gravada */
+    }
+    await this.prisma.conferenciaTicket.updateMany({
+      where: { viagemId: c.viagemId, status: "CONCLUIDA" },
+      data: { acao: "REVERTEU_REVISAO", aplicadoEm: new Date() },
+    });
+    return true;
   }
 
   /**
@@ -421,42 +606,36 @@ export class ConferenciaFilaService {
   async recompararTudo(): Promise<{
     total: number;
     mudaram: number;
+    /** Quantas viagens o robô tinha mexido e agora devolveu ao estado normal. */
+    reverteram: number;
     porVeredito: Record<string, number>;
   }> {
     const feitas = await this.prisma.conferenciaTicket.findMany({
       where: { status: "CONCLUIDA" },
-      select: { id: true, declarado: true, leitura: true, veredito: true },
+      select: { id: true, viagemId: true, leitura: true, veredito: true, acao: true },
     });
 
+    // As placas da frota são as mesmas pra todas: uma consulta, não uma por
+    // conferência.
+    const placas = await this.placasDaFrota();
+
     let mudaram = 0;
+    let reverteram = 0;
     const porVeredito: Record<string, number> = {};
 
     for (const c of feitas) {
-      const declarado = c.declarado as unknown as Declarado;
-      const lido = c.leitura as unknown as Lido | null;
-      if (!lido || typeof lido.confianca !== "number") continue;
-
-      // O julgamento da IA foi guardado junto da leitura, então recomparar
-      // continua custando zero mesmo com a decisão sendo semântica.
-      const julgamento = (lido as unknown as { julgamento?: JulgamentoIa }).julgamento ?? {};
-      const r = conferirComJulgamento(declarado, lido, julgamento);
+      const r = await this.recompararUma(c, placas);
+      if (!r) continue;
       porVeredito[r.veredito] = (porVeredito[r.veredito] ?? 0) + 1;
-
-      if (r.veredito !== c.veredito) {
-        mudaram++;
-        await this.prisma.conferenciaTicket.update({
-          where: { id: c.id },
-          data: {
-            veredito: r.veredito,
-            divergencias: r.divergencias as unknown as Prisma.InputJsonValue,
-            incertezas: r.incertezas as unknown as Prisma.InputJsonValue,
-          },
-        });
-      }
+      if (r.mudou) mudaram++;
+      if (r.reverteu) reverteram++;
     }
 
-    this.log.log(`Recomparação: ${mudaram} de ${feitas.length} mudaram de veredito (custo zero).`);
-    return { total: feitas.length, mudaram, porVeredito };
+    this.log.log(
+      `Recomparação: ${mudaram} de ${feitas.length} mudaram de veredito, ` +
+        `${reverteram} viagem(ns) saíram da revisão (custo zero).`,
+    );
+    return { total: feitas.length, mudaram, reverteram, porVeredito };
   }
 
   /**
@@ -570,4 +749,23 @@ export class ConferenciaFilaService {
 
   /** Status que nunca deveriam entrar na fila — exportado pra teste. */
   static readonly STATUS_QUE_NAO_CONFEREM = STATUS_FORA_FECHAMENTO;
+}
+
+/**
+ * O lançamento ainda é o que estava lançado quando a leitura foi comparada?
+ *
+ * Só os campos que entram na conferência — mexer no km ou no pedágio não torna
+ * a leitura do ticket obsoleta.
+ */
+function mesmoLancamento(congelado: Declarado, v: ViagemParaDeclarado): boolean {
+  const dia = (d: Date | string | null | undefined) =>
+    d ? (typeof d === "string" ? d : d.toISOString()).slice(0, 10) : null;
+  return (
+    (congelado.ticket ?? null) === (v.ticket ?? null) &&
+    Number(congelado.toneladas ?? 0) === Number(v.toneladas ?? 0) &&
+    (congelado.placa ?? null) === (v.veiculo?.placa ?? null) &&
+    dia(congelado.data) === dia(v.data) &&
+    (congelado.clienteNome ?? null) === (v.cliente?.nome ?? null) &&
+    (congelado.materialNome ?? null) === (v.material?.nome ?? null)
+  );
 }

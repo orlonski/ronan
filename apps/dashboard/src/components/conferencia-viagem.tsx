@@ -26,6 +26,8 @@ type Conferencia = {
   acao: string | null;
   passadas: number;
   criadoEm: string;
+  /** O lançamento mudou depois desta leitura — a comparação está velha. */
+  desatualizada: boolean;
 };
 
 const CAMPOS: { chave: string; leituraChave: string; rotulo: string }[] = [
@@ -58,8 +60,46 @@ export function ConferenciaViagemCard({ viagemId }: { viagemId: string }) {
   );
   const token = useAuthToken();
   const [relendo, setRelendo] = useState(false);
+  const [reavaliando, setReavaliando] = useState(false);
 
   if (!podeVer) return null;
+
+  /**
+   * Reavaliar é o botão barato, e por isso vem antes do "ler de novo" na
+   * cabeça de quem confere: compara de novo contra o que está lançado agora,
+   * usando a leitura que já foi paga.
+   */
+  async function reavaliar() {
+    setReavaliando(true);
+    try {
+      const r = await fetchApi<{
+        recomparada: boolean;
+        motivo?: string;
+        mudou?: boolean;
+        reverteu?: boolean;
+      }>(`/admin/conferencias/viagem/${viagemId}/recomparar`, {
+        method: "POST",
+        token,
+        body: "{}",
+      });
+      if (!r.recomparada) {
+        toast.error(r.motivo ?? "Não consegui reavaliar.");
+      } else if (r.reverteu) {
+        toast.success("Confere — a viagem saiu da revisão", {
+          description: "Sem custo: só a comparação rodou de novo.",
+        });
+      } else {
+        toast.success(r.mudou ? "Reavaliei e o resultado mudou" : "Reavaliei — o resultado é o mesmo", {
+          description: "Sem custo: a leitura já estava guardada.",
+        });
+      }
+      void refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não consegui reavaliar.");
+    } finally {
+      setReavaliando(false);
+    }
+  }
 
   async function reler() {
     setRelendo(true);
@@ -115,6 +155,20 @@ export function ConferenciaViagemCard({ viagemId }: { viagemId: string }) {
           </span>
         )}
 
+        {/* Compara de novo com as regras de hoje, contra o que está lançado
+            agora. Não gasta leitura — daí vir antes do "ler de novo" e não
+            pedir a permissão de reprocessar. */}
+        <button
+          type="button"
+          onClick={() => void reavaliar()}
+          disabled={reavaliando}
+          title="Compara de novo com o que está lançado agora. Não gasta leitura."
+          className="ml-auto flex items-center gap-1 rounded border border-current/20 bg-white/60 px-2 py-0.5 text-[11px] hover:bg-white disabled:opacity-50"
+        >
+          <ScanEye className={`h-3 w-3 ${reavaliando ? "animate-pulse" : ""}`} />
+          {reavaliando ? "reavaliando…" : "reavaliar sem custo"}
+        </button>
+
         {/* Pra quando a foto está boa e a leitura não deu certo assim mesmo.
             Sem isto o único caminho seria pedir foto nova ao motorista por um
             problema que não é dele. */}
@@ -124,13 +178,23 @@ export function ConferenciaViagemCard({ viagemId }: { viagemId: string }) {
             onClick={() => void reler()}
             disabled={relendo}
             title="A foto está boa e a leitura não pegou? Manda ler de novo."
-            className="ml-auto flex items-center gap-1 rounded border border-current/20 bg-white/60 px-2 py-0.5 text-[11px] hover:bg-white disabled:opacity-50"
+            className="flex items-center gap-1 rounded border border-current/20 bg-white/60 px-2 py-0.5 text-[11px] hover:bg-white disabled:opacity-50"
           >
             <RefreshCw className={`h-3 w-3 ${relendo ? "animate-spin" : ""}`} />
             {relendo ? "lendo…" : "ler de novo"}
           </button>
         )}
       </div>
+
+      {/* O "Lançado" abaixo é o que estava lançado quando a leitura foi
+          comparada. Editar a viagem não refaz a conferência sozinho, e sem
+          este aviso a tabela parecia teimar num valor que já não existe. */}
+      {data.desatualizada && (
+        <p className="mt-2 rounded border border-current/20 bg-white/60 px-2 py-1 text-xs">
+          O lançamento mudou depois desta leitura. A comparação abaixo é da versão
+          anterior — use <strong>reavaliar sem custo</strong> pra conferir com os dados de agora.
+        </p>
+      )}
 
       {/* A comparação campo a campo. É o que responde "e daí?": mostra
           exatamente onde olhar na foto, em vez de só dar um parecer. */}

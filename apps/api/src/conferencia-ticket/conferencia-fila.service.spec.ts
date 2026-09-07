@@ -162,3 +162,124 @@ describe("trava da plataforma", () => {
     expect(create).toHaveBeenCalledOnce();
   });
 });
+
+/**
+ * Reavaliar existe pra corrigir o passado quando a regra fica mais esperta.
+ * Se o veredito mudar mas a viagem continuar presa em "Em conferência", quem
+ * clicou conclui — com razão — que não funcionou.
+ */
+describe("recompararViagem — de graça, e desfazendo o que o robô fez", () => {
+  /** Leitura guardada: placa Mercosul impressa no formato antigo. */
+  const LEITURA = {
+    ticket: "3174",
+    toneladas: 35.14,
+    data: "2026-08-22",
+    placa: "ATN-3614",
+    clienteNome: "TRIPOLONI",
+    materialNome: "PÓ DE PEDRA",
+    confianca: 0.93,
+    julgamento: {
+      numeroDocumento: { confere: "sim", porque: "" },
+      toneladas: { confere: "sim", porque: "" },
+      placa: { confere: "nao", porque: "o ticket é do ATN-3614" },
+    },
+  };
+
+  const VIAGEM_MERCOSUL = { ...VIAGEM_OK, veiculo: { placa: "ATN3B14" } };
+
+  function montarRecompara(
+    conferencia: Record<string, unknown> | null,
+    viagem: unknown = VIAGEM_MERCOSUL,
+  ) {
+    const updateConferencia = vi.fn();
+    const updateManyConferencia = vi.fn();
+    const updateManyViagem = vi.fn().mockResolvedValue({ count: 1 });
+    const criarMensagem = vi.fn();
+    const prisma = {
+      conferenciaTicket: {
+        findFirst: vi.fn().mockResolvedValue(conferencia),
+        update: updateConferencia,
+        updateMany: updateManyConferencia,
+      },
+      viagem: { findUnique: vi.fn().mockResolvedValue(viagem), updateMany: updateManyViagem },
+      veiculo: { findMany: vi.fn().mockResolvedValue([{ placa: "ATN3B14" }]) },
+      viagemMensagem: { create: criarMensagem },
+    } as unknown as PrismaService;
+    return {
+      fila: new ConferenciaFilaService(prisma, config),
+      updateConferencia,
+      updateManyConferencia,
+      updateManyViagem,
+      criarMensagem,
+    };
+  }
+
+  it("placa Mercosul lida como antiga passa a bater e a viagem sai da revisão", async () => {
+    const m = montarRecompara({
+      id: "c1",
+      viagemId: "v1",
+      leitura: LEITURA,
+      veredito: "INCERTO",
+      acao: "FILA_REVISAO",
+    });
+
+    const r = await comConta("conta-a", () => m.fila.recompararViagem("v1"));
+
+    expect(r).toMatchObject({ recomparada: true, veredito: "BATE", mudou: true, reverteu: true });
+    expect(m.updateManyViagem).toHaveBeenCalledOnce();
+    const chamada = m.updateManyViagem.mock.calls[0][0];
+    // Só desfaz o que o próprio robô escreveu, e nunca por cima de gente.
+    expect(chamada.where).toMatchObject({
+      id: "v1",
+      status: StatusViagem.EM_CONFERENCIA,
+      revisadoEm: null,
+    });
+    expect(chamada.data.status).toBe(StatusViagem.ENVIADA);
+    // Fica registrado no chat da viagem: quem abrir depois entende o que houve.
+    expect(m.criarMensagem).toHaveBeenCalledOnce();
+  });
+
+  it("compara contra o lançamento de AGORA, não contra o snapshot", async () => {
+    const m = montarRecompara({
+      id: "c1",
+      viagemId: "v1",
+      leitura: LEITURA,
+      veredito: "INCERTO",
+      acao: "FILA_REVISAO",
+    });
+
+    await comConta("conta-a", () => m.fila.recompararViagem("v1"));
+
+    // O `declarado` regravado é o da viagem atual — é o que o card mostra como
+    // "Lançado", e mostrar o valor velho ali foi a confusão que originou isto.
+    expect(m.updateConferencia.mock.calls[0][0].data.declarado).toMatchObject({
+      placa: "ATN3B14",
+      ticket: "3174",
+    });
+  });
+
+  it("não mexe na viagem quando o veredito continua pedindo humano", async () => {
+    const m = montarRecompara(
+      {
+        id: "c1",
+        viagemId: "v1",
+        leitura: { ...LEITURA, placa: "XYZ1234" },
+        veredito: "INCERTO",
+        acao: "FILA_REVISAO",
+      },
+      VIAGEM_MERCOSUL,
+    );
+
+    const r = await comConta("conta-a", () => m.fila.recompararViagem("v1"));
+
+    expect(r).toMatchObject({ veredito: "INCERTO", mudou: false, reverteu: false });
+    expect(m.updateManyViagem).not.toHaveBeenCalled();
+  });
+
+  it("viagem nunca lida não vira erro — vira recado", async () => {
+    const m = montarRecompara(null);
+    const r = await comConta("conta-a", () => m.fila.recompararViagem("v1"));
+    expect(r.recomparada).toBe(false);
+    expect(r.motivo).toContain("ainda não foi lida");
+  });
+});
