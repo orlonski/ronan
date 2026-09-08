@@ -10,6 +10,8 @@ import type {
   DocumentoPessoal,
   SalvarDocumentoPessoalInput,
   CriarViagemPessoalInput,
+  EditarLancamentoPessoalInput,
+  EditarViagemPessoalInput,
   EstimarFreteInput,
   EstimativaFrete,
   NavegarPessoalInput,
@@ -587,6 +589,13 @@ export const api = {
   },
   // ---- A pessoa (vale com ou sem empresa) ----
   meuPerfil: () => request<MeuPerfil>("GET", "/m/eu", { comoIdentidade: true }),
+  /** As placas que ele diz rodar. O endpoint existia e nenhuma tela chamava —
+   *  quem pulou a placa no cadastro nunca mais conseguia adicionar. */
+  salvarMinhasPlacas: (placas: { placa: string; modelo?: string }[], placaDefault?: string | null) =>
+    request<MeuPerfil>("PATCH", "/m/eu/placas", {
+      body: { placas, placaDefault },
+      comoIdentidade: true,
+    }),
   /** Troca de senha pela PESSOA — quem não tem empresa não tem a outra porta. */
   trocarSenhaPessoa: (senhaAtual: string, novaSenha: string) =>
     request<{ ok: true }>("POST", "/m/eu/trocar-senha", {
@@ -611,6 +620,9 @@ export const api = {
     request<ViagemPessoal[]>("GET", `/m/eu/viagens?mes=${mes}`, { comoIdentidade: true }),
   criarViagemPessoal: (body: CriarViagemPessoalInput) =>
     request<ViagemPessoal>("POST", "/m/eu/viagens", { body, comoIdentidade: true }),
+  /** Corrigir um frete já gravado — é o que fecha o que nasceu do GPS guiado. */
+  editarViagemPessoal: (id: string, body: EditarViagemPessoalInput) =>
+    request<ViagemPessoal>("PUT", `/m/eu/viagens/${id}`, { body, comoIdentidade: true }),
   apagarViagemPessoal: (id: string) =>
     request<{ ok: true }>("DELETE", `/m/eu/viagens/${id}`, { comoIdentidade: true }),
   /** Navegação guiada até um ponto — o mesmo Valhalla da viagem da empresa. */
@@ -677,10 +689,24 @@ export const api = {
       `/geocoding/place?placeId=${encodeURIComponent(placeId)}`,
       { comoIdentidade: true },
     ),
+  /** Coordenada → nome do lugar. É o que preenche "de onde eu saí" sozinho. */
+  enderecoDaCoordenada: (lat: number, lng: number) =>
+    request<{ cidade?: string; uf?: string; bairro?: string; logradouro?: string } | null>(
+      "GET",
+      `/geocoding/reverso?lat=${lat}&lng=${lng}`,
+      { comoIdentidade: true },
+    ),
   criarLancamentoPessoal: (body: CriarLancamentoPessoalInput) =>
     request<LancamentoPessoal>("POST", "/m/eu/lancamentos", { body, comoIdentidade: true }),
+  editarLancamentoPessoal: (id: string, body: EditarLancamentoPessoalInput) =>
+    request<LancamentoPessoal>("PUT", `/m/eu/lancamentos/${id}`, { body, comoIdentidade: true }),
   apagarLancamentoPessoal: (id: string) =>
     request<{ ok: true }>("DELETE", `/m/eu/lancamentos/${id}`, { comoIdentidade: true }),
+  /** Apagar a conta — exigência da App Store, e a pessoa é dona do que é dela. */
+  excluirMinhaConta: () =>
+    request<{ ok: true; vinculosDesligados: number }>("DELETE", "/m/eu", {
+      comoIdentidade: true,
+    }),
   recusarConvite: (motoristaId: string) =>
     request<{ ok: true }>("POST", `/m/eu/convites/${motoristaId}/recusar`, {
       body: {},

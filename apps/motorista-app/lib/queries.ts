@@ -41,6 +41,7 @@ import {
   type PedagioCadastrado,
 } from "./pedagios-offline";
 import { getRotaCache, setRotaCache } from "./rota-cache";
+import { useSemEmpresa } from "./visao";
 import { getKmReferenciaCache, setKmReferenciaCache } from "./km-referencia-cache";
 import {
   drainLocais,
@@ -493,7 +494,10 @@ function meQuery() {
 }
 
 export function useMe() {
-  return useQuery(meQuery());
+  // `enabled` desligado pra quem não está em empresa nenhuma: `/m/me` é rota de
+  // MOTORISTA e, pra ele, só pode falhar — a cada foco do app.
+  const semEmpresa = useSemEmpresa();
+  return useQuery({ ...meQuery(), enabled: !semEmpresa });
 }
 
 /**

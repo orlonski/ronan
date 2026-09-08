@@ -1,7 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
 import { Pressable, RefreshControl, ScrollView, Share, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { CloudOff, Fuel, Receipt, Send, Truck, Utensils, Wrench } from "lucide-react-native";
+import {
+  ChevronRight,
+  CloudOff,
+  Fuel,
+  Receipt,
+  Send,
+  TriangleAlert,
+  Truck,
+  Utensils,
+  Wrench,
+} from "lucide-react-native";
 import {
   ROTULO_LANCAMENTO_PESSOAL,
   ehGanho,
@@ -63,11 +74,16 @@ export function HistoricoPessoal() {
     }
   }, [mes]);
 
-  useEffect(() => {
-    void cacheViagens(mes).then(setViagens);
-    void cacheDoMes(mes).then(setGastos);
-    void drenar().then(recarregar);
-  }, [mes, recarregar]);
+  // `useFocusEffect`, não `useEffect`: a aba nunca desmonta, então voltar de uma
+  // correção (ou de um lançamento novo) não recarregava nada — ele via o número
+  // velho e lançava de novo achando que não tinha entrado.
+  useFocusEffect(
+    useCallback(() => {
+      void cacheViagens(mes).then(setViagens);
+      void cacheDoMes(mes).then(setGastos);
+      void drenar().then(recarregar);
+    }, [mes, recarregar]),
+  );
 
   const dias = useMemo(() => agruparPorDia(viagens, gastos), [viagens, gastos]);
 
@@ -116,13 +132,13 @@ export function HistoricoPessoal() {
               <Pressable
                 key={m.chave}
                 onPress={() => setMes(m.chave)}
-                className={`mx-1 rounded-full px-4 py-2 ${
+                className={`mx-1 rounded-full px-4 py-3 ${
                   mes === m.chave ? "bg-white" : "bg-white/15"
                 }`}
               >
                 <Text
-                  className={`text-sm font-bold ${
-                    mes === m.chave ? "text-primary" : "text-white/80"
+                  className={`text-base font-bold ${
+                    mes === m.chave ? "text-primary" : "text-white"
                   }`}
                 >
                   {m.label}
@@ -141,38 +157,46 @@ export function HistoricoPessoal() {
       >
         {resumo && (
           <View className="rounded-2xl border-2 border-border bg-card p-4">
-            <View className="flex-row items-start justify-between">
-              <View className="flex-1">
-                <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  {fmtMesLongo(mes)}
-                </Text>
-                <Text
-                  className="mt-1 text-3xl font-extrabold text-foreground"
-                  style={{ fontVariant: ["tabular-nums"] }}
-                >
-                  {dinheiro(resumo.saldo)}
-                </Text>
-                <Text className="text-sm text-muted-foreground">
-                  {dinheiro(resumo.ganhos)} recebidos · {dinheiro(resumo.gastos)} gastos
-                </Text>
-                {resumo.viagens > 0 && (
-                  <Text className="mt-0.5 text-sm text-muted-foreground">
-                    {resumo.viagens} {resumo.viagens === 1 ? "frete" : "fretes"}
-                    {resumo.km > 0 ? ` · ${resumo.km.toLocaleString("pt-BR")} km` : ""}
-                  </Text>
-                )}
-              </View>
-              {viagens.length > 0 && (
-                <Pressable
-                  onPress={() => void enviarComprovante()}
-                  className="flex-row items-center gap-1.5 rounded-full bg-secondary px-3 py-2 active:opacity-70"
-                >
-                  <Send size={14} color="#13316b" />
-                  <Text className="text-sm font-bold text-primary">Comprovante</Text>
-                </Pressable>
-              )}
-            </View>
+            <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              {fmtMesLongo(mes)}
+            </Text>
+            <Text
+              className="mt-1 text-3xl font-extrabold text-foreground"
+              style={{ fontVariant: ["tabular-nums"] }}
+            >
+              {dinheiro(resumo.saldo)}
+            </Text>
+            <Text className="text-sm text-muted-foreground">
+              {dinheiro(resumo.ganhos)} recebidos · {dinheiro(resumo.gastos)} gastos
+            </Text>
+            {resumo.viagens > 0 && (
+              <Text className="mt-0.5 text-sm text-muted-foreground">
+                {resumo.viagens} {resumo.viagens === 1 ? "frete" : "fretes"}
+                {resumo.km > 0 ? ` · ${resumo.km.toLocaleString("pt-BR")} km` : ""}
+              </Text>
+            )}
           </View>
+        )}
+
+        {/* Linha própria, e o rótulo diz o que faz. Como pílula de 14px encostada
+            no canto do card, ninguém entendia que era o link pro contratante. */}
+        {viagens.length > 0 && (
+          <Pressable
+            onPress={() => void enviarComprovante()}
+            className="flex-row items-center gap-3 rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
+          >
+            <View className="h-11 w-11 items-center justify-center rounded-2xl bg-secondary">
+              <Send size={22} color="#13316b" strokeWidth={2.5} />
+            </View>
+            <View className="flex-1">
+              <Text className="text-base font-bold text-foreground">
+                Mandar o que rodei em {fmtMesCurto(mes)}
+              </Text>
+              <Text className="text-sm text-muted-foreground">
+                Gera um link com seus fretes do mês pra quem vai pagar
+              </Text>
+            </View>
+          </Pressable>
         )}
 
         {dias.length === 0 && !carregando && (
@@ -192,9 +216,19 @@ export function HistoricoPessoal() {
               {fmtDia(data)}
             </Text>
             {linhas.map((l) => (
-              <View
+              // A linha ABRE. Antes era uma `View`: um valor errado não tinha
+              // como ser corrigido nem apagado, e ficava mentindo no resumo do
+              // mês e no comprovante que ele manda pra quem paga.
+              <Pressable
                 key={l.tipo === "frete" ? l.item.clientId : `g-${l.item.clientId}`}
-                className="flex-row items-center gap-3 rounded-2xl border-2 border-border bg-card p-4"
+                onPress={() =>
+                  router.push(
+                    l.tipo === "frete"
+                      ? `/editar-frete?clientId=${encodeURIComponent(l.item.clientId)}&mes=${mes}`
+                      : `/editar-gasto?clientId=${encodeURIComponent(l.item.clientId)}&mes=${mes}`,
+                  )
+                }
+                className="flex-row items-center gap-3 rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
               >
                 <View className="h-11 w-11 items-center justify-center rounded-2xl bg-secondary">
                   {l.tipo === "frete" ? (
@@ -210,31 +244,40 @@ export function HistoricoPessoal() {
                         ? `${l.item.origem} → ${l.item.destino}`
                         : ROTULO_LANCAMENTO_PESSOAL[l.item.tipo]}
                     </Text>
-                    {l.item.pendente && (
-                      <View className="flex-row items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5">
-                        <CloudOff size={11} color="#b45309" />
-                        <Text className="text-xs font-semibold text-amber-700">vai subir</Text>
+                    {l.item.erro ? (
+                      <View className="flex-row items-center gap-1 rounded-full bg-destructive/10 px-2 py-1">
+                        <TriangleAlert size={16} color="#dc2626" />
+                        <Text className="text-sm font-bold text-destructive">não subiu</Text>
                       </View>
+                    ) : (
+                      l.item.pendente && (
+                        <View className="flex-row items-center gap-1 rounded-full bg-warning/15 px-2 py-1">
+                          <CloudOff size={16} color="#b45309" />
+                          <Text className="text-sm font-semibold text-foreground">vai subir</Text>
+                        </View>
+                      )
                     )}
                   </View>
                   <Text className="text-sm text-muted-foreground" numberOfLines={1}>
-                    {l.tipo === "frete"
-                      ? [
-                          l.item.carga,
-                          l.item.km ? `${l.item.km.toLocaleString("pt-BR")} km` : null,
-                          l.item.peso ? `${l.item.peso.toLocaleString("pt-BR")} t` : null,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ") || "sem detalhes"
-                      : [l.item.descricao, l.item.litros ? `${l.item.litros} L` : null]
-                          .filter(Boolean)
-                          .join(" · ") || "—"}
+                    {l.item.erro
+                      ? l.item.erro
+                      : l.tipo === "frete"
+                        ? [
+                            l.item.carga,
+                            l.item.km ? `${l.item.km.toLocaleString("pt-BR")} km` : null,
+                            l.item.peso ? `${l.item.peso.toLocaleString("pt-BR")} t` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || "sem detalhes"
+                        : [l.item.descricao, l.item.litros ? `${l.item.litros} L` : null]
+                            .filter(Boolean)
+                            .join(" · ") || "—"}
                   </Text>
                 </View>
                 <Text
                   className={`text-base font-bold ${
                     l.tipo === "frete" || ehGanho(l.item.tipo)
-                      ? "text-green-700"
+                      ? "text-success"
                       : "text-foreground"
                   }`}
                   style={{ fontVariant: ["tabular-nums"] }}
@@ -242,10 +285,11 @@ export function HistoricoPessoal() {
                   {l.tipo === "frete"
                     ? l.item.valorRecebido != null
                       ? `+ ${dinheiro(l.item.valorRecebido)}`
-                      : "—"
+                      : "falta o valor"
                     : `${ehGanho(l.item.tipo) ? "+" : "−"} ${dinheiro(l.item.valor)}`}
                 </Text>
-              </View>
+                <ChevronRight size={20} color="#94a3b8" />
+              </Pressable>
             ))}
           </View>
         ))}
@@ -299,6 +343,15 @@ function fmtMesLongo(mes: string): string {
     "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
   ];
   return `${nomes[(m ?? 1) - 1]} de ${ano}`;
+}
+
+function fmtMesCurto(mes: string): string {
+  const [, m] = mes.split("-").map(Number);
+  const nomes = [
+    "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+    "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+  ];
+  return nomes[(m ?? 1) - 1] ?? mes;
 }
 
 function fmtDia(iso: string): string {

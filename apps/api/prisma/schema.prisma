@@ -677,6 +677,7 @@ model MotoristaIdentidade {
   viagensPessoais ViagemPessoal[]
   comprovantes    ComprovantePessoal[]
   documentos      DocumentoPessoal[]
+  redefinicaoSenha RedefinicaoSenhaPendente?
 
   @@index([ativo])
   @@map("motorista_identidades")
@@ -1130,14 +1131,22 @@ model CadastroMotoristaPendente {
 }
 
 /// Pedido de redefinição de senha do motorista verificado por código no
-/// WhatsApp (fluxo "esqueci minha senha"). Chave por motorista (1 pendente por
-/// vez). Curto prazo: criado no "esqueci", apagado ao redefinir/expirar.
+/// WhatsApp (fluxo "esqueci minha senha"). Um pendente por vez. Curto prazo:
+/// criado no "esqueci", apagado ao redefinir/expirar.
+///
+/// O dono é `motoristaId` OU `identidadeId`, nunca os dois. O segundo existe
+/// porque a senha sempre foi da PESSOA, e quem se cadastra pelo app sem empresa
+/// não tem vínculo onde pendurar o pedido — sem ele, esquecer a senha trancava
+/// a conta pra sempre. `contaId` acompanha: pedido de identidade não é de
+/// empresa nenhuma, e a FK recusaria o `__SEM_CONTA__`.
 model RedefinicaoSenhaPendente {
-  contaId       String    @default("__SEM_CONTA__")
-  conta         Conta     @relation(fields: [contaId], references: [id])
+  contaId       String?
+  conta         Conta?     @relation(fields: [contaId], references: [id])
   id            String    @id @default(uuid())
-  motoristaId   String    @unique
-  motorista     Motorista @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  motoristaId   String?    @unique
+  motorista     Motorista? @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  identidadeId  String?              @unique
+  identidade    MotoristaIdentidade? @relation(fields: [identidadeId], references: [id], onDelete: Cascade)
   /// Número de destino do código (já normalizado pra dígitos com DDD).
   telefone      String
   /// Quando true, o telefone acima deve ser GRAVADO no cadastro do motorista

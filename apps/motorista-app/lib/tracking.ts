@@ -25,14 +25,21 @@ export async function isTrackingAtivo(): Promise<boolean> {
  * Apple exige isso na review da App Store; também melhora a taxa de aceitação
  * no Android. Retorna true se motorista aceitou continuar (vai disparar o
  * popup nativo logo em seguida), false se cancelou.
+ *
+ * O destino do dado MUDA entre os dois fluxos, e dizer errado é grave: no frete
+ * por conta própria nenhum ponto sai do aparelho (só o km vai junto do frete),
+ * e o texto antigo — "seus dados vão SOMENTE pro servidor da empresa" — era
+ * falso pra quem não tem empresa nenhuma, além de ser exatamente a frase que a
+ * Apple cita numa recusa por localização em segundo plano.
  */
-function prePromptBackgroundLocation(): Promise<boolean> {
+function prePromptBackgroundLocation(pessoal: boolean): Promise<boolean> {
   return showConfirm({
-    title: "Permitir localização o tempo todo?",
-    message:
-      'Pra rastrear o trajeto da sua viagem mesmo com o app fechado ou celular bloqueado, precisamos da sua localização em segundo plano.\n\nSeus dados vão SOMENTE pro servidor da empresa — não compartilhamos com terceiros. A captura para automaticamente quando você finaliza a viagem.\n\nNa próxima tela, escolha "Permitir o tempo todo".',
+    title: "Medir o km com a tela apagada?",
+    message: pessoal
+      ? 'O app usa o GPS pra medir quantos km você rodou neste frete, mesmo com o celular no bolso ou a tela bloqueada.\n\nO trajeto fica no seu aparelho — nenhuma empresa vê. Do frete, só fica o km que você registrar. A medição para sozinha quando você toca em "Cheguei".\n\nNa próxima tela, escolha "Permitir o tempo todo".'
+      : 'Pra registrar o trajeto da sua viagem mesmo com o celular no bolso ou a tela bloqueada, o app precisa da localização em segundo plano.\n\nO trajeto vai só pro sistema da transportadora pra qual essa viagem é, e não é compartilhado com terceiros. A captura para automaticamente quando você finaliza a viagem.\n\nNa próxima tela, escolha "Permitir o tempo todo".',
     confirmLabel: "Continuar",
-    cancelLabel: "Cancelar",
+    cancelLabel: "Agora não",
   });
 }
 
@@ -56,6 +63,13 @@ type IniciarOpts = {
   precisaoAlta?: boolean;
   accuracyMaxMetros?: number;
   velocidadeMaxKmh?: number;
+  /**
+   * Frete por conta própria: muda o texto da permissão e o da notificação, e
+   * guarda o destino junto do trajeto pra tela conseguir se recuperar depois de
+   * o SO matar o app.
+   */
+  pessoal?: boolean;
+  destino?: { texto: string; lat: number; lng: number };
 };
 
 /**
@@ -63,7 +77,7 @@ type IniciarOpts = {
  * saber se ele NEGOU (aí o caminho é os Ajustes do sistema) ou se só recusou o
  * "o tempo todo" (aí dá pra rodar com o app aberto).
  */
-export type FalhaTracking = "sem-permissao-uso" | "sem-permissao-sempre";
+export type FalhaTracking = "sem-permissao-uso" | "sem-permissao-sempre" | "ja-tem-frete";
 
 export async function iniciarTracking(opts: IniciarOpts = {}): Promise<boolean> {
   return (await iniciarTrackingDetalhado(opts)) === true;
@@ -98,7 +112,7 @@ export async function iniciarTrackingDetalhado(
   const exigirSempre = opts.exigirSempre !== false;
   const bg = await Location.getBackgroundPermissionsAsync();
   if (bg.status !== "granted") {
-    const aceitou = await prePromptBackgroundLocation();
+    const aceitou = await prePromptBackgroundLocation(opts.pessoal === true);
     if (!aceitou && exigirSempre) return "sem-permissao-sempre";
     if (aceitou) {
       const r = await Location.requestBackgroundPermissionsAsync();
@@ -109,6 +123,23 @@ export async function iniciarTrackingDetalhado(
   // 3) cria registro local da viagem em andamento (com config snapshot
   //    pra task de background filtrar consistente, mesmo se config mudar
   //    durante a viagem).
+  //
+  // Antes de escrever: se já existe uma corrida com trajeto, PERGUNTA. Sem esta
+  // trava, quem voltasse pro app depois de o SO matá-lo e tocasse em "Começar"
+  // apagava horas de km medido sem nem ver um aviso.
+  const emCurso = await getViagemAndamento();
+  if (emCurso && emCurso.pontos.length > 0) {
+    const km = somarKm(emCurso.pontos);
+    const trocar = await showConfirm({
+      title: "Já tem um frete rodando",
+      message: `O GPS mediu ${km.toFixed(1)} km neste frete. Começar outro agora descarta esse trajeto.`,
+      confirmLabel: "Descartar e começar",
+      cancelLabel: "Voltar pro frete",
+      destructive: true,
+    });
+    if (!trocar) return "ja-tem-frete";
+  }
+
   const novo: ViagemEmAndamento = {
     id: makeUuid(),
     iniciadoEm: new Date().toISOString(),
@@ -117,6 +148,7 @@ export async function iniciarTrackingDetalhado(
       accuracyMaxMetros: opts.accuracyMaxMetros ?? 100,
       velocidadeMaxKmh: opts.velocidadeMaxKmh ?? 200,
     },
+    ...(opts.destino ? { destino: opts.destino } : {}),
   };
   await setViagemAndamento(novo);
 
@@ -140,8 +172,13 @@ export async function iniciarTrackingDetalhado(
     pausesUpdatesAutomatically: false,
     showsBackgroundLocationIndicator: true,
     foregroundService: {
-      notificationTitle: "Viagem em andamento",
-      notificationBody: NOTIFICATION_BODY_INICIAL,
+      // "Tocando KM real percorrido" é jargão de quem escreveu o código. Na
+      // barra de notificação de quem trabalha por conta própria, o que faz
+      // sentido é o que ele está fazendo: um frete rodando.
+      notificationTitle: opts.pessoal ? "Frete em andamento" : "Viagem em andamento",
+      notificationBody: opts.pessoal
+        ? "Medindo o km do seu frete. Toque pra abrir."
+        : NOTIFICATION_BODY_INICIAL,
       notificationColor: "#ea580c",
     },
   });

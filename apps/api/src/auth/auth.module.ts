@@ -15,6 +15,7 @@ import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { PermissaoGuard } from "./guards/permissao.guard";
 import { EvolutionModule } from "../whatsapp/evolution.module";
 import { AdminInboxModule } from "../admin/inbox/inbox.module";
+import { UploadsModule } from "../uploads/uploads.module";
 
 @Module({
   imports: [
@@ -22,6 +23,8 @@ import { AdminInboxModule } from "../admin/inbox/inbox.module";
     JwtModule.register({}),
     EvolutionModule,
     AdminInboxModule,
+    // Apagar a conta apaga também as fotos dos documentos no MinIO.
+    UploadsModule,
   ],
   controllers: [AuthController, EuController],
   providers: [

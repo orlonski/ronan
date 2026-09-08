@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { router } from "expo-router";
+import { useCallback, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
@@ -53,30 +53,44 @@ export function HomePessoal() {
 
   const recarregar = useCallback(async () => {
     setCarregando(true);
-    try {
-      setViagens(await carregarViagens(mes));
-      setResumo(await carregarResumo(mes));
-      setConvites(await api.meusConvites().catch(() => []));
-      setPerfil((await api.meuPerfil().catch(() => null))?.nome ?? null);
-      const docs = await api.meusDocumentos().catch(() => []);
+    // As cinco chamadas em PARALELO e cada uma com o seu resultado. Em série,
+    // com 4G ruim, eram até 40s de spinner na home — e o `catch` único fazia a
+    // primeira falha matar as quatro seguintes (o alerta de CNH vencida sumia
+    // porque o resumo do mês não respondeu).
+    const [v, r, c, p, docs] = await Promise.all([
+      carregarViagens(mes).catch(() => null),
+      carregarResumo(mes).catch(() => null),
+      api.meusConvites().catch(() => null),
+      api.meuPerfil().catch(() => null),
+      api.meusDocumentos().catch(() => null),
+    ]);
+    if (v) setViagens(v);
+    if (r) setResumo(r);
+    if (c) setConvites(c);
+    if (p) setPerfil(p.nome);
+    if (docs) {
       // Um alerta só, e o mais grave: vencido ganha de vencendo. Lista de
       // pendência na home vira ruído — o detalhe está na tela de documentos.
       const pior =
         docs.find((d) => d.status === "VENCIDO") ?? docs.find((d) => d.status === "VENCENDO");
       setDocsAlerta(
-        pior ? { nome: ROTULO_DOCUMENTO_PESSOAL[pior.tipo], vencido: pior.status === "VENCIDO" } : null,
+        pior
+          ? { nome: ROTULO_DOCUMENTO_PESSOAL[pior.tipo], vencido: pior.status === "VENCIDO" }
+          : null,
       );
-    } catch {
-      /* sem sinal: fica o que já está na tela */
-    } finally {
-      setCarregando(false);
     }
+    setCarregando(false);
   }, [mes]);
 
-  useEffect(() => {
-    void cacheViagens(mes).then(setViagens);
-    void drenar().then(recarregar);
-  }, [mes, recarregar]);
+  // `useFocusEffect`: a aba Início nunca desmonta, então voltar de um
+  // lançamento não recarregava nada — ele lançava R$ 800 de diesel, voltava, e
+  // "Seu mês" seguia mostrando o número velho. É assim que se lança duas vezes.
+  useFocusEffect(
+    useCallback(() => {
+      void cacheViagens(mes).then(setViagens);
+      void drenar().then(recarregar);
+    }, [mes, recarregar]),
+  );
 
   return (
     <View className="flex-1 bg-background">
@@ -133,12 +147,12 @@ export function HomePessoal() {
             className={`flex-row items-center gap-3 rounded-2xl border-2 p-4 active:opacity-75 ${
               docsAlerta.vencido
                 ? "border-destructive/40 bg-destructive/10"
-                : "border-amber-500/40 bg-amber-500/15"
+                : "border-warning bg-warning/15"
             }`}
           >
             <View
               className={`h-12 w-12 items-center justify-center rounded-full ${
-                docsAlerta.vencido ? "bg-destructive" : "bg-amber-500"
+                docsAlerta.vencido ? "bg-destructive" : "bg-warning"
               }`}
             >
               <AlertTriangle size={22} color="white" />
@@ -187,6 +201,28 @@ export function HomePessoal() {
           </View>
         </Pressable>
 
+        {/* "Quanto sobrou este mês" vem ANTES das ações: é a segunda pergunta do
+            dia dele, e com um banner de convite ou de documento vencendo em cima
+            ela caía abaixo da dobra num iPhone comum. As quatro ações se
+            reconhecem pelo ícone mesmo rolando um dedo. */}
+        {resumo && resumo.viagens + resumo.gastos > 0 && (
+          <View className="rounded-2xl border-2 border-border bg-card p-4">
+            <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              Seu mês
+            </Text>
+            <View className="mt-3 flex-row gap-3">
+              <Stat rotulo="Recebi" valor={dinheiro(resumo.ganhos)} />
+              <Stat rotulo="Gastei" valor={dinheiro(resumo.gastos)} />
+              <Stat rotulo="Sobrou" valor={dinheiro(resumo.saldo)} destaque />
+            </View>
+            <Text className="mt-3 text-sm text-muted-foreground">
+              {resumo.viagens} {resumo.viagens === 1 ? "frete" : "fretes"}
+              {resumo.km > 0 ? ` · ${resumo.km.toLocaleString("pt-BR")} km` : ""}
+              {resumo.ganhoPorKm != null ? ` · ${dinheiro(resumo.ganhoPorKm)}/km` : ""}
+            </Text>
+          </View>
+        )}
+
         {/* Ações em grade: cabem na tela sem rolar, e o polegar alcança as
             quatro. Lista vertical de cards empurrava o resumo do mês pra fora. */}
         <View className="flex-row gap-3">
@@ -218,45 +254,34 @@ export function HomePessoal() {
           />
         </View>
 
-        {/* Resumo do mês — mesmo lugar e mesmo formato do resumo de quem tem
-            empresa, com os números dele. */}
-        {resumo && resumo.viagens + resumo.gastos > 0 && (
-          <View className="mt-3 rounded-2xl border-2 border-border bg-card p-4">
-            <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              Seu mês
-            </Text>
-            <View className="mt-3 flex-row gap-3">
-              <Stat rotulo="Recebi" valor={dinheiro(resumo.ganhos)} />
-              <Stat rotulo="Gastei" valor={dinheiro(resumo.gastos)} />
-              <Stat rotulo="Sobrou" valor={dinheiro(resumo.saldo)} destaque />
-            </View>
-            <Text className="mt-3 text-sm text-muted-foreground">
-              {resumo.viagens} {resumo.viagens === 1 ? "frete" : "fretes"}
-              {resumo.km > 0 ? ` · ${resumo.km.toLocaleString("pt-BR")} km` : ""}
-              {resumo.ganhoPorKm != null ? ` · ${dinheiro(resumo.ganhoPorKm)}/km` : ""}
-            </Text>
-          </View>
-        )}
-
         {/* Os três últimos, e só. A lista inteira é a aba Histórico — repetir
-            aqui faria a home crescer sem fim e competir com ela. */}
+            aqui faria a home crescer sem fim e competir com ela. Tocar abre a
+            correção: é aqui que ele completa o valor do frete que acabou. */}
         {viagens.slice(0, 3).map((v) => (
-          <View key={v.clientId} className="rounded-2xl border-2 border-border bg-card p-4">
+          <Pressable
+            key={v.clientId}
+            onPress={() =>
+              router.push(`/editar-frete?clientId=${encodeURIComponent(v.clientId)}&mes=${mes}`)
+            }
+            className="rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
+          >
             <View className="flex-row items-center gap-2">
               <Text className="font-bold text-foreground">{v.origem}</Text>
-              <ArrowRight size={14} color="#64748b" />
+              <ArrowRight size={16} color="#64748b" />
               <Text className="flex-1 font-bold text-foreground">{v.destino}</Text>
-              {v.valorRecebido != null && (
-                <Text className="text-base font-bold text-green-700">
+              {v.valorRecebido != null ? (
+                <Text className="text-base font-bold text-success">
                   {dinheiro(v.valorRecebido)}
                 </Text>
+              ) : (
+                <Text className="text-base font-bold text-warning">falta o valor</Text>
               )}
             </View>
             <Text className="mt-0.5 text-sm text-muted-foreground">
               {v.data.split("-").reverse().join("/")}
               {v.km ? ` · ${v.km.toLocaleString("pt-BR")} km` : ""}
             </Text>
-          </View>
+          </Pressable>
         ))}
 
         {viagens.length === 0 && !tracking.data && (
@@ -323,7 +348,7 @@ function Stat({
         {rotulo}
       </Text>
       <Text
-        className={`mt-0.5 text-base font-bold ${destaque ? "text-green-700" : "text-foreground"}`}
+        className={`mt-0.5 text-base font-bold ${destaque ? "text-success" : "text-foreground"}`}
         style={{ fontVariant: ["tabular-nums"] }}
       >
         {valor}

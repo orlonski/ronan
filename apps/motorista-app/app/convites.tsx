@@ -136,15 +136,18 @@ export default function ConvitesScreen() {
             </View>
           ) : (
             <View className="gap-3">
-              <Text className="text-2xl font-bold text-foreground">
-                Falta você entrar numa empresa
+              {/* Antes dizia "Falta você entrar numa empresa". Quem chega aqui
+                  pelo banner da Início, com o app já sendo dele, lia que o
+                  cadastro estava incompleto — e não está: o app é dele com ou
+                  sem transportadora. */}
+              <Text className="text-2xl font-bold text-foreground">Nenhum convite agora</Text>
+              <Text className="text-base leading-6 text-muted-foreground">
+                Se uma transportadora quiser te chamar, é o seu CPF que ela usa. O convite
+                aparece aqui pra você aceitar ou recusar.
               </Text>
               <Text className="text-base leading-6 text-muted-foreground">
-                Seu cadastro já está feito e é seu. Pra começar a lançar viagens, uma
-                transportadora precisa te adicionar — passe o seu CPF pra ela.
-              </Text>
-              <Text className="text-base leading-6 text-muted-foreground">
-                Quando ela fizer isso, o convite aparece aqui pra você aceitar.
+                Até lá — e depois também — o app segue sendo seu: os fretes que você rodar e o
+                que gastar ficam no seu histórico, e nenhuma empresa vê.
               </Text>
             </View>
           )}
@@ -152,16 +155,16 @@ export default function ConvitesScreen() {
           {/* O caderninho é dele e existe antes de qualquer empresa — é o que dá
               o que fazer no app enquanto ninguém o chamou. */}
           <Pressable
-            onPress={() => router.push("/meus-gastos")}
+            onPress={() => router.push("/novo-frete")}
             className="flex-row items-center gap-4 rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
           >
             <View className="h-14 w-14 items-center justify-center rounded-2xl bg-secondary">
               <Wallet size={26} color="#13316b" strokeWidth={2.5} />
             </View>
             <View className="flex-1">
-              <Text className="text-lg font-bold text-foreground">Meu caderno</Text>
+              <Text className="text-lg font-bold text-foreground">Vale a pena?</Text>
               <Text className="text-sm text-muted-foreground">
-                Veja se um frete vale a pena e anote o que rodou
+                Faça a conta do frete antes de aceitar
               </Text>
             </View>
           </Pressable>

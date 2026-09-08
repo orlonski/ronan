@@ -9,11 +9,12 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ArrowLeft, ArrowRight, MapPin, Search } from "lucide-react-native";
+import { ArrowRight, MapPin, Search } from "lucide-react-native";
 import type { EstimativaFrete } from "@ronan/shared-types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ScreenHeader } from "@/components/screen-header";
 import { api } from "@/lib/api";
 import { hojeISO, lancarViagem } from "@/lib/pessoal";
 
@@ -93,7 +94,12 @@ export default function NovoFreteScreen() {
         peso: peso ? Number(peso.replace(",", ".")) : undefined,
         valorRecebido: valor ?? undefined,
       });
-      router.replace("/meus-gastos");
+      // Volta pra Início, onde o frete recém-criado aparece no topo dos
+      // últimos. Antes ia pra "/meus-gastos", que deixou de ser o caderno e
+      // virou o formulário de LANÇAR GASTO: ele confirmava o frete e caía num
+      // campo "Valor" em branco com o teclado aberto, parecendo que o app pediu
+      // mais uma coisa ou que o frete não salvou.
+      router.replace("/");
     } catch (e) {
       setErro((e as Error).message);
     } finally {
@@ -108,23 +114,12 @@ export default function NovoFreteScreen() {
           contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }}
           keyboardShouldPersistTaps="handled"
         >
-          <View className="bg-brand px-6 pb-6 pt-14">
-            <View className="flex-row items-center gap-3">
-              <Pressable onPress={() => router.back()} hitSlop={12}>
-                <ArrowLeft size={24} color="#fff" />
-              </Pressable>
-              <View className="flex-1">
-                <Text className="text-2xl font-extrabold tracking-tight text-white">
-                  Vale a pena?
-                </Text>
-                <Text className="text-sm font-medium text-white/80">
-                  Veja o que sobra antes de aceitar o frete
-                </Text>
-              </View>
-            </View>
-          </View>
+          <ScreenHeader
+            title="Vale a pena?"
+            subtitle="Veja o que sobra antes de aceitar o frete"
+          />
 
-          <View className="flex-1 gap-5 px-6 py-6">
+          <View className="flex-1 gap-5 px-5 py-6">
             <BuscaLocal rotulo="Saio de" ponto={origem} onEscolher={setOrigem} />
             <BuscaLocal rotulo="Levo para" ponto={destino} onEscolher={setDestino} />
 
@@ -165,12 +160,12 @@ export default function NovoFreteScreen() {
                 </View>
 
                 {estimativa.diesel != null ? (
-                  <Text className="text-xs text-muted-foreground">
+                  <Text className="text-sm text-muted-foreground">
                     Pelo SEU consumo: {estimativa.consumoKmPorLitro?.toLocaleString("pt-BR")} km/L
                     a {dinheiro(estimativa.precoLitro!)} o litro, dos últimos 90 dias.
                   </Text>
                 ) : (
-                  <Text className="text-xs text-muted-foreground">
+                  <Text className="text-sm text-muted-foreground">
                     Pra estimar o diesel, lance seus abastecimentos (com litros) e os fretes com
                     km no caderno — a conta sai com os SEUS números, não com média de mercado.
                   </Text>
@@ -185,7 +180,11 @@ export default function NovoFreteScreen() {
               </Text>
             )}
 
-            {!temCoordenadas && (
+            {/* O campo aparece SEMPRE que não houver km calculado — não só
+                quando faltam coordenadas. Antes, com endereço resolvido mas o
+                servidor de rotas fora do ar, a tela mandava "informe o km" e o
+                campo pra informar não estava lá. */}
+            {estimativa?.km == null && (
               <View className="gap-2">
                 <Label>Km (se souber)</Label>
                 <Input
@@ -210,25 +209,25 @@ export default function NovoFreteScreen() {
             {sobra != null && (
               <View
                 className={`rounded-2xl border-2 p-4 ${
-                  sobra > 0 ? "border-green-600 bg-green-50" : "border-destructive bg-destructive/10"
+                  sobra > 0 ? "border-success bg-success/10" : "border-destructive bg-destructive/10"
                 }`}
               >
                 <Text
                   className={`text-base font-medium ${
-                    sobra > 0 ? "text-green-900" : "text-destructive"
+                    sobra > 0 ? "text-foreground" : "text-destructive"
                   }`}
                 >
                   Tirando o diesel, sobram
                 </Text>
                 <Text
                   className={`text-3xl font-extrabold ${
-                    sobra > 0 ? "text-green-700" : "text-destructive"
+                    sobra > 0 ? "text-success" : "text-destructive"
                   }`}
                 >
                   {dinheiro(sobra)}
                 </Text>
                 <Text
-                  className={`mt-1 text-xs ${sobra > 0 ? "text-green-900" : "text-destructive"}`}
+                  className={`mt-1 text-sm ${sobra > 0 ? "text-muted-foreground" : "text-destructive"}`}
                 >
                   {estimativa?.pedagios.length
                     ? "Ainda falta descontar o pedágio das praças acima."
@@ -261,12 +260,12 @@ export default function NovoFreteScreen() {
               </View>
             )}
 
-            <Button size="lg" className="h-16 bg-green-600" loading={salvando} onPress={registrar}>
-              <Text className="text-lg font-bold text-white">
+            <Button size="lg" variant="success" className="h-16" loading={salvando} onPress={registrar}>
+              <Text className="text-lg font-bold text-success-foreground">
                 {salvando ? "Salvando..." : "Peguei esse frete"}
               </Text>
             </Button>
-            <Text className="text-center text-xs text-muted-foreground">
+            <Text className="text-center text-sm text-muted-foreground">
               Fica no seu caderno. Nenhuma empresa vê.
             </Text>
           </View>
@@ -341,13 +340,13 @@ function BuscaLocal({
       {ponto.lat != null && (
         <View className="flex-row items-center gap-1">
           <MapPin size={14} color="#16a34a" />
-          <Text className="text-xs font-medium text-green-700">no mapa</Text>
+          <Text className="text-sm font-medium text-success">no mapa</Text>
         </View>
       )}
       {buscando && (
         <View className="flex-row items-center gap-2">
           <Search size={14} color="#64748b" />
-          <Text className="text-xs text-muted-foreground">procurando…</Text>
+          <Text className="text-sm text-muted-foreground">procurando…</Text>
         </View>
       )}
       {sugestoes.map((s) => (

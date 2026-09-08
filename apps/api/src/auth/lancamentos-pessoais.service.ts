@@ -3,6 +3,8 @@ import { Prisma } from "@prisma/client";
 import type {
   CriarLancamentoPessoalInput,
   CriarViagemPessoalInput,
+  EditarLancamentoPessoalInput,
+  EditarViagemPessoalInput,
   LancamentoPessoal,
   ResumoMesPessoal,
   TipoLancamentoPessoal,
@@ -67,6 +69,38 @@ export class LancamentosPessoaisService {
     return saida(criado);
   }
 
+  /**
+   * Corrige um lançamento dele. Nunca o de outra pessoa.
+   *
+   * O `updateMany` com `identidadeId` no where é o que garante isso: um `update`
+   * por id sozinho aceitaria o id do caderno alheio (a trava de conta não
+   * protege aqui — `LancamentoPessoal` é global de propósito).
+   */
+  async editar(
+    identidadeId: string,
+    id: string,
+    input: EditarLancamentoPessoalInput,
+  ): Promise<LancamentoPessoal> {
+    const alteradas = await comoSistema(() =>
+      this.prisma.lancamentoPessoal.updateMany({
+        where: { id, identidadeId },
+        data: {
+          tipo: input.tipo,
+          data: new Date(`${input.data}T00:00:00.000Z`),
+          valor: new Prisma.Decimal(input.valor),
+          litros: input.litros === undefined ? null : new Prisma.Decimal(input.litros),
+          odometro: input.odometro ?? null,
+          descricao: input.descricao ?? null,
+        },
+      }),
+    );
+    if (alteradas.count === 0) throw new NotFoundException("Lançamento não encontrado.");
+    const atual = await comoSistema(() =>
+      this.prisma.lancamentoPessoal.findUniqueOrThrow({ where: { id } }),
+    );
+    return saida(atual);
+  }
+
   /** Os lançamentos de um mês (YYYY-MM), do mais recente pro mais antigo. */
   async listar(identidadeId: string, mes: string): Promise<LancamentoPessoal[]> {
     const { inicio, fim } = faixaDoMes(mes);
@@ -125,6 +159,41 @@ export class LancamentosPessoaisService {
       }),
     );
     return itens.map(saidaViagem);
+  }
+
+  /**
+   * Corrige um frete dele. Nunca o de outra pessoa.
+   *
+   * É o que fecha o frete que nasceu do GPS guiado: ele começa sem saber de
+   * onde saiu nem quanto vai receber, e sem esta rota o "recebi R$ 0,00" ficava
+   * gravado pra sempre — inclusive no comprovante que ele manda pra quem paga.
+   */
+  async editarViagem(
+    identidadeId: string,
+    id: string,
+    input: EditarViagemPessoalInput,
+  ): Promise<ViagemPessoal> {
+    const alteradas = await comoSistema(() =>
+      this.prisma.viagemPessoal.updateMany({
+        where: { id, identidadeId },
+        data: {
+          data: new Date(`${input.data}T00:00:00.000Z`),
+          origem: input.origem,
+          destino: input.destino,
+          carga: input.carga ?? null,
+          km: input.km === undefined ? null : new Prisma.Decimal(input.km),
+          peso: input.peso === undefined ? null : new Prisma.Decimal(input.peso),
+          valorRecebido:
+            input.valorRecebido === undefined ? null : new Prisma.Decimal(input.valorRecebido),
+          observacao: input.observacao ?? null,
+        },
+      }),
+    );
+    if (alteradas.count === 0) throw new NotFoundException("Frete não encontrado.");
+    const atual = await comoSistema(() =>
+      this.prisma.viagemPessoal.findUniqueOrThrow({ where: { id } }),
+    );
+    return saidaViagem(atual);
   }
 
   /** Apaga uma viagem dela. Nunca a de outra pessoa. */

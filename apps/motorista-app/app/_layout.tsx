@@ -227,13 +227,36 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // velho). Best-effort (não trava nada).
   useEffect(() => {
     if (!loggedIn) return;
+    // Quem não está em empresa nenhuma não tem o que reparar nem o que alinhar:
+    // esses endpoints falam pelo cadastro numa empresa. O `prefetchDadosBase`
+    // entra AQUI DENTRO por isso — ele bate em `/m/catalogos`, `/m/me`,
+    // `/m/viagem/tipos-evento` e `/m/busca-locais-config`, todas `@Roles
+    // ("MOTORISTA")`, que pra ele só podem falhar.
+    if (semEmpresa) {
+      // O caderno dele, esse sim, precisa subir — e nos mesmos gatilhos do
+      // outbox da empresa. A fila pessoal só drenava quando a Home era montada,
+      // ou seja, uma vez por abertura do app: ele lançava um frete às 10h sem
+      // sinal, pegava sinal às 11h, e o item seguia "vai subir" até fechar e
+      // reabrir. O comprovante que ele manda pra quem paga saía sem esse frete.
+      const drenarPessoal = () => void import("@/lib/pessoal").then((p) => p.drenar());
+      drenarPessoal();
+      const semRede = NetInfo.addEventListener((s) => {
+        if (s.isConnected) drenarPessoal();
+      });
+      const voltou = AppState.addEventListener("change", (p) => {
+        if (p === "active") drenarPessoal();
+      });
+      const relogio = setInterval(drenarPessoal, 60_000);
+      return () => {
+        semRede();
+        voltou.remove();
+        clearInterval(relogio);
+      };
+    }
     // Enquanto a empresa do turno não estiver escolhida, o prefetch espera —
     // quem o dispara depois é a própria troca (lib/troca-empresa.ts), já na
     // empresa certa.
     if (!escolhendoEmpresa) void prefetchDadosBase(queryClient);
-    // Quem não está em empresa nenhuma não tem o que reparar nem o que alinhar:
-    // esses endpoints falam pelo cadastro numa empresa.
-    if (semEmpresa) return;
     // Repõe a sessão da PESSOA pra quem já estava logado antes dela existir.
     void garantirSessaoDaPessoa();
     // Repõe o token da empresa ativa se ele faltar (slot descartado por guardar
@@ -248,7 +271,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       if (s.isConnected && !precisaEscolherEmpresa()) void prefetchDadosBase(queryClient);
     });
     return unsub;
-  }, [loggedIn, escolhendoEmpresa]);
+  }, [loggedIn, escolhendoEmpresa, semEmpresa]);
 
   // Quando logar, tenta enviar erros que ficaram pendentes localmente
   // (capturados antes do login ou quando estava offline).
@@ -312,42 +335,57 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         const { registerTrackingTask } = await import("@/lib/tracking-task");
         await registerTrackingTask();
 
-        const { registrarWatchdog } = await import("@/lib/tracking-watchdog");
-        await registrarWatchdog();
+        // O bloco abaixo é TUDO da relação com uma transportadora: o watchdog do
+        // rastreio, o geofence passivo de locais e a captura periódica de
+        // posição ("controle de frota"). Quem trabalha por conta própria não
+        // pode ter nada disso ligado — e não é só desperdício de bateria:
+        // nossa política de privacidade diz que a localização em segundo plano
+        // serve pra registrar o trajeto DA VIAGEM e para quando ela acaba.
+        // Deixar geofence e captura periódica rodando pra quem não tem viagem
+        // nenhuma contradiz o texto que a própria Apple lê na review — e é
+        // exatamente o 2.5.4 que já nos recusou uma vez.
+        //
+        // O push, logo abaixo, continua valendo pros dois: é por ele que o
+        // convite de uma empresa chega no aparelho de quem ainda não tem
+        // nenhuma.
+        if (!semEmpresa) {
+          const { registrarWatchdog } = await import("@/lib/tracking-watchdog");
+          await registrarWatchdog();
 
-        // Geofence passivo: registra task + sincroniza locais em validação.
-        // Roda em background sem precisar de "Iniciar viagem".
-        const geofence = await import("@/lib/geofence-locais");
-        await geofence.registerGeofenceTask();
-        void geofence.sincronizarGeofences();
-        void geofence.drenarFila();
+          // Geofence passivo: registra task + sincroniza locais em validação.
+          // Roda em background sem precisar de "Iniciar viagem".
+          const geofence = await import("@/lib/geofence-locais");
+          await geofence.registerGeofenceTask();
+          void geofence.sincronizarGeofences();
+          void geofence.drenarFila();
 
-        // Captura periódica de posição (controle de frota — opt-in).
-        // Sempre registra a task; só inicia o foreground service se o
-        // motorista ativou. Refetch da config + start serve pra cobrir
-        // reabertura do app (task pode ter sido morta pelo SO).
-        const posicao = await import("@/lib/posicao-periodica");
-        await posicao.registerPosicaoTask();
-        // Reconcilia JÁ pelo cache local (funciona offline) — garante que o
-        // serviço/notificação batem com a última config conhecida mesmo sem
-        // rede. Antes, o "parar" só rodava se o GET desse certo → offline
-        // deixava a notificação fantasma presa.
-        await posicao.reconciliarCapturaPeriodica();
-        void (async () => {
-          try {
-            const { api } = await import("@/lib/api");
-            const cfg = await api.get<{
-              ativada: boolean;
-              horarioInicio: number | null;
-              horarioFim: number | null;
-            }>("/m/posicao-config");
-            await posicao.setConfigLocal(cfg);
-            // Reconcilia de novo com a config fresca do servidor.
-            await posicao.reconciliarCapturaPeriodica();
-          } catch {
-            // Offline ou erro de rede — o reconcile pelo cache acima já rodou.
-          }
-        })();
+          // Captura periódica de posição (controle de frota — opt-in).
+          // Sempre registra a task; só inicia o foreground service se o
+          // motorista ativou. Refetch da config + start serve pra cobrir
+          // reabertura do app (task pode ter sido morta pelo SO).
+          const posicao = await import("@/lib/posicao-periodica");
+          await posicao.registerPosicaoTask();
+          // Reconcilia JÁ pelo cache local (funciona offline) — garante que o
+          // serviço/notificação batem com a última config conhecida mesmo sem
+          // rede. Antes, o "parar" só rodava se o GET desse certo → offline
+          // deixava a notificação fantasma presa.
+          await posicao.reconciliarCapturaPeriodica();
+          void (async () => {
+            try {
+              const { api } = await import("@/lib/api");
+              const cfg = await api.get<{
+                ativada: boolean;
+                horarioInicio: number | null;
+                horarioFim: number | null;
+              }>("/m/posicao-config");
+              await posicao.setConfigLocal(cfg);
+              // Reconcilia de novo com a config fresca do servidor.
+              await posicao.reconciliarCapturaPeriodica();
+            } catch {
+              // Offline ou erro de rede — o reconcile pelo cache acima já rodou.
+            }
+          })();
+        }
 
         // Push remoto: pede permissão, pega o ExpoPushToken e manda pro backend.
         // Fire-and-forget — falha silenciosa (não pode bloquear o app).
@@ -437,7 +475,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       subRecv?.remove();
       subAppState?.remove();
     };
-  }, [loggedIn]);
+  }, [loggedIn, semEmpresa]);
 
   // Esconde o splash so depois de ready (proxima tela ja decidida).
   useEffect(() => {

@@ -26,6 +26,16 @@ export type ViagemEmAndamento = {
     accuracyMaxMetros: number;
     velocidadeMaxKmh: number;
   };
+  /**
+   * Pra onde ele estava indo, no frete por conta própria.
+   *
+   * Opcional e aditivo (a viagem da empresa não usa). Existe porque o destino
+   * morava só no `useState` da tela: o SO mata o app na estrada — 6h de viagem,
+   * é o normal — e na volta não havia como voltar ao frete que ainda estava
+   * rodando. Ele caía no seletor de destino, e começar de novo apagava o
+   * trajeto inteiro em silêncio.
+   */
+  destino?: { texto: string; lat: number; lng: number };
 };
 
 const KEY = "ronan.viagem-em-andamento";

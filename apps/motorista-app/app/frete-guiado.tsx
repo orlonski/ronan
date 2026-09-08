@@ -1,12 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { router } from "expo-router";
-import { ActivityIndicator, Linking, Pressable, ScrollView, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Linking,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
-import { ArrowLeft, Flag, MapPin, Navigation, Search } from "lucide-react-native";
+import { ArrowLeft, CloudOff, Flag, History, MapPin, Navigation, Search } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ScreenHeader } from "@/components/screen-header";
 import { MapaViagem } from "@/components/mapa-viagem";
 import { BannerManobra } from "@/components/banner-manobra";
 import { api } from "@/lib/api";
@@ -20,6 +31,7 @@ import {
   pararTracking,
   useViagemAndamento,
 } from "@/lib/tracking";
+import { clearViagemAndamento, getViagemAndamento } from "@/lib/tracking-storage";
 import { hojeISO, lancarViagem } from "@/lib/pessoal";
 
 /** Mesmos cortes da viagem guiada da empresa — chegada é parar perto, não passar perto. */
@@ -27,7 +39,33 @@ const CHEGADA_RAIO_M = 90;
 const CHEGADA_VEL_MAX = 2.8;
 const CHEGADA_PERMANENCIA_MS = 8000;
 
+/** Os últimos destinos dele. Autônomo repete par de cidades — e sem sinal a
+ *  busca por texto não existe, então isto é o único caminho que sobra. */
+const KEY_RECENTES = "ronan.eu.destinos-recentes";
+const MAX_RECENTES = 8;
+
 type Destino = { texto: string; lat: number; lng: number };
+
+async function lerRecentes(): Promise<Destino[]> {
+  try {
+    const raw = await AsyncStorage.getItem(KEY_RECENTES);
+    return raw ? (JSON.parse(raw) as Destino[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function guardarRecente(d: Destino): Promise<void> {
+  try {
+    const atuais = (await lerRecentes()).filter((r) => r.texto !== d.texto);
+    await AsyncStorage.setItem(
+      KEY_RECENTES,
+      JSON.stringify([d, ...atuais].slice(0, MAX_RECENTES)),
+    );
+  } catch {
+    /* nada aqui pode atrapalhar ele sair */
+  }
+}
 
 /**
  * O frete guiado do motorista por conta própria: o app leva ele até o destino e
@@ -49,13 +87,40 @@ export default function FreteGuiadoScreen() {
     { placeId: string; nome: string; textoCompleto: string }[]
   >([]);
   const [buscando, setBuscando] = useState(false);
+  const [semRede, setSemRede] = useState(false);
+  const [recentes, setRecentes] = useState<Destino[]>([]);
   const [rota, setRota] = useState<RotaNav | null>(null);
   const [rodando, setRodando] = useState(false);
-  const [finalizando, setFinalizando] = useState(false);
+  /** Carregou o storage? Enquanto não, não dá pra decidir qual tela mostrar. */
+  const [pronto, setPronto] = useState(false);
+  const [fechando, setFechando] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const pos = usePosicaoAoVivo(true);
+  // O GPS só liga quando o frete está rodando. Antes ele ligava no mount: o
+  // popup de permissão do sistema aparecia sobre uma tela que só dizia "Pra
+  // onde você vai" — permissão pedida antes de o motivo existir, que é
+  // exatamente o que a review da Apple marca.
+  const pos = usePosicaoAoVivo(rodando);
   const tracking = useViagemAndamento(rodando);
+
+  /**
+   * Retoma o frete que já estava rodando.
+   *
+   * O serviço de GPS é do sistema e sobrevive ao app ser morto — 6h de estrada
+   * é o normal. Sem esta leitura, a home dizia "frete em andamento, 214 km" e o
+   * toque caía no seletor de destino, sem caminho nenhum pra finalizar.
+   */
+  useEffect(() => {
+    void (async () => {
+      const emCurso = await getViagemAndamento();
+      if (emCurso) {
+        if (emCurso.destino) setDestino(emCurso.destino);
+        setRodando(true);
+      }
+      setRecentes(await lerRecentes());
+      setPronto(true);
+    })();
+  }, []);
 
   const recalcular = useCallback(async () => {
     if (!destino || !pos) return;
@@ -74,6 +139,12 @@ export default function FreteGuiadoScreen() {
       setRota(nova);
     }
   }, [destino, pos]);
+
+  // A rota é traçada quando o GPS acha o primeiro ponto — inclusive na volta de
+  // um frete retomado, em que a rota se perdeu junto com o processo.
+  useEffect(() => {
+    if (rodando && pos && destino && !rota) void recalcular();
+  }, [rodando, pos, destino, rota, recalcular]);
 
   const guia = useGuiaNavegacao(rodando ? rota : null, pos, recalcular);
 
@@ -110,6 +181,7 @@ export default function FreteGuiadoScreen() {
 
   function digitou(texto: string) {
     setBusca(texto);
+    setSemRede(false);
     if (timer.current) clearTimeout(timer.current);
     if (texto.trim().length < 3) return setSugestoes([]);
     timer.current = setTimeout(async () => {
@@ -117,12 +189,18 @@ export default function FreteGuiadoScreen() {
       try {
         setSugestoes(await api.buscarEndereco(texto.trim()));
       } catch {
+        // Antes ficava só "procurando…" e depois nada, pra sempre. O app é
+        // offline-first e é na estrada que o sinal some: dizer isso, e abrir a
+        // saída de rodar sem destino, é o mínimo.
         setSugestoes([]);
+        setSemRede(true);
       } finally {
         setBuscando(false);
       }
     }, 450);
   }
+
+  useEffect(() => () => (timer.current ? clearTimeout(timer.current) : undefined), []);
 
   async function escolher(s: { placeId: string; nome: string; textoCompleto: string }) {
     setSugestoes([]);
@@ -138,13 +216,19 @@ export default function FreteGuiadoScreen() {
     setDestino({ texto: s.textoCompleto || s.nome, lat: lugar.lat, lng: lugar.lng });
   }
 
-  async function comecar() {
-    if (!destino) return;
-    // O rastreamento é o odômetro. `exigirSempre: false` porque no iPhone a
-    // primeira resposta é sempre "Durante o uso do app" — exigir o "Sempre"
-    // deixava ele sem medir km NENHUM, quando medir com o app aberto já resolve
-    // boa parte do frete.
-    const r = await iniciarTrackingDetalhado({ precisaoAlta: true, exigirSempre: false });
+  /** Liga o odômetro. `alvo` nulo = só medir km, sem guia (caminho offline). */
+  async function comecar(alvo: Destino | null) {
+    // `exigirSempre: false` porque no iPhone a primeira resposta é sempre
+    // "Durante o uso do app" — exigir o "Sempre" deixava ele sem medir km
+    // NENHUM, quando medir com o app aberto já resolve boa parte do frete.
+    const r = await iniciarTrackingDetalhado({
+      precisaoAlta: true,
+      exigirSempre: false,
+      pessoal: true,
+      ...(alvo ? { destino: alvo } : {}),
+    });
+
+    if (r === "ja-tem-frete") return; // ele escolheu voltar pro frete que roda
 
     if (r === "sem-permissao-uso") {
       // Negou de vez: o único caminho é os Ajustes do sistema. Antes a tela
@@ -167,44 +251,76 @@ export default function FreteGuiadoScreen() {
           "Você permitiu a localização só durante o uso. O km conta enquanto o app estiver na tela; pra contar com o celular no bolso, ligue “Sempre” nos Ajustes.",
       });
     }
-    if (pos) {
-      const r = await api
-        .navegarPessoal({
-          origemLat: pos.lat,
-          origemLng: pos.lng,
-          destinoLat: destino.lat,
-          destinoLng: destino.lng,
-        })
-        .catch(() => null);
-      if (r && !("erro" in r)) setRota(r);
+
+    if (alvo) {
+      setDestino(alvo);
+      void guardarRecente(alvo);
     }
     setRodando(true);
-    anunciar("Frete iniciado.");
+    anunciar(alvo ? "Frete iniciado." : "Medindo seu km.");
   }
 
-  async function finalizar() {
-    setFinalizando(true);
+  /**
+   * Fecha o frete: para o GPS e abre a folha de "Cheguei".
+   *
+   * O que era isto antes: gravava direto `origem: "Início do frete"`, sem valor,
+   * e mandava ele "completar no caderno" — um lugar que não existia. Quem só
+   * usava o GPS fechava o mês com "Recebi R$ 0,00", e o texto "Início do frete"
+   * ainda vazava no link que ele manda pra quem paga.
+   */
+  const [fecharAberto, setFecharAberto] = useState(false);
+  const [kmFinal, setKmFinal] = useState("");
+  const [origemFinal, setOrigemFinal] = useState("");
+  const [valorFinal, setValorFinal] = useState("");
+  const [cargaFinal, setCargaFinal] = useState("");
+  const [erroFechar, setErroFechar] = useState<string | null>(null);
+
+  async function abrirFechamento() {
+    const resumo = await pararTracking();
+    const km = resumo?.kmReal ? Number(resumo.kmReal.toFixed(1)) : null;
+    setKmFinal(km ? String(km).replace(".", ",") : "");
+    setFecharAberto(true);
+
+    // De onde ele saiu: o primeiro ponto da trilha vira nome de lugar. Melhor
+    // que campo vazio, e ele pode corrigir. Sem sinal, fica em branco.
+    const primeiro = resumo?.pontos?.[0];
+    if (primeiro) {
+      const lugar = await api
+        .enderecoDaCoordenada(primeiro.lat, primeiro.lng)
+        .catch(() => null);
+      const nome = [lugar?.bairro, lugar?.cidade, lugar?.uf].filter(Boolean).join(", ");
+      if (nome) setOrigemFinal((atual) => atual || nome);
+    }
+  }
+
+  async function registrar() {
+    setErroFechar(null);
+    const km = Number(kmFinal.replace(/\./g, "").replace(",", "."));
+    if (!km || km <= 0) return setErroFechar("Quantos km você rodou?");
+    if (origemFinal.trim().length < 2) return setErroFechar("De onde você saiu?");
+    const valor = valorFinal
+      ? Number(valorFinal.replace(/\./g, "").replace(",", "."))
+      : undefined;
+
+    setFechando(true);
     try {
-      const resumo = await pararTracking();
-      const km = resumo?.kmReal ? Number(resumo.kmReal.toFixed(1)) : undefined;
       await lancarViagem({
         clientId: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
         data: hojeISO(),
-        origem: "Início do frete",
-        destino: destino?.texto ?? "Destino",
+        origem: origemFinal.trim(),
+        destino: destino?.texto ?? busca.trim() ?? "Destino",
         km,
+        ...(valor ? { valorRecebido: valor } : {}),
+        ...(cargaFinal.trim() ? { carga: cargaFinal.trim() } : {}),
       });
-      void showAlert({
-        title: "Frete registrado",
-        message: km
-          ? `${km.toLocaleString("pt-BR")} km medidos pelo GPS. Complete o que recebeu no seu caderno.`
-          : "Complete o km e o valor no seu caderno.",
-      });
+      // Só agora o frete deixa de estar "em andamento". Sem isto, a home dizia
+      // "frete rodando" com o km de um frete já registrado — pra sempre.
+      await clearViagemAndamento();
       router.replace("/");
     } catch (e) {
-      void showAlert({ title: "Não deu pra registrar", message: (e as Error).message });
+      setErroFechar((e as Error).message);
     } finally {
-      setFinalizando(false);
+      setFechando(false);
     }
   }
 
@@ -222,28 +338,119 @@ export default function FreteGuiadoScreen() {
 
   const kmAoVivo = tracking.resumo?.kmReal ?? 0;
 
+  if (!pronto) {
+    return (
+      <View className="flex-1 items-center justify-center bg-background">
+        <ActivityIndicator />
+      </View>
+    );
+  }
+
+  // ---- Fechamento: o que faltava pro frete valer alguma coisa ----
+  if (fecharAberto) {
+    return (
+      <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
+        <KeyboardAvoidingView behavior="padding" className="flex-1">
+          <ScrollView
+            contentContainerStyle={{ flexGrow: 1, paddingBottom: 32 }}
+            keyboardShouldPersistTaps="handled"
+          >
+            <ScreenHeader title="Cheguei" subtitle="Confira e registre o frete" semVoltar />
+
+            <View className="flex-1 gap-5 px-5 py-6">
+              <View className="gap-2">
+                <Label>De onde você saiu</Label>
+                <Input
+                  value={origemFinal}
+                  onChangeText={setOrigemFinal}
+                  placeholder="Cidade ou o nome do lugar"
+                  editable={!fechando}
+                />
+              </View>
+
+              <View className="gap-2">
+                <Label>Pra onde levou</Label>
+                <Input
+                  value={destino?.texto ?? busca}
+                  editable={false}
+                  onChangeText={() => {}}
+                />
+              </View>
+
+              <View className="gap-2">
+                <Label>Km rodados</Label>
+                <Input
+                  value={kmFinal}
+                  onChangeText={(v) => setKmFinal(v.replace(/[^\d.,]/g, ""))}
+                  keyboardType="decimal-pad"
+                  placeholder="0"
+                  editable={!fechando}
+                />
+                <Text className="text-sm text-muted-foreground">
+                  {kmAoVivo > 0
+                    ? "Medido pelo GPS. Se o sinal falhou em algum trecho, corrija aqui."
+                    : "O GPS não conseguiu medir. Coloque o km do painel do caminhão."}
+                </Text>
+              </View>
+
+              <View className="gap-2">
+                <Label>Quanto você vai receber (opcional)</Label>
+                <Input
+                  value={valorFinal}
+                  onChangeText={(v) => setValorFinal(v.replace(/[^\d.,]/g, ""))}
+                  keyboardType="decimal-pad"
+                  placeholder="0,00"
+                  editable={!fechando}
+                />
+                <Text className="text-sm text-muted-foreground">
+                  É este número que faz o "sobrou" do seu mês bater com o bolso. Dá pra
+                  preencher depois, no Histórico.
+                </Text>
+              </View>
+
+              <View className="gap-2">
+                <Label>O que você levou (opcional)</Label>
+                <Input
+                  value={cargaFinal}
+                  onChangeText={setCargaFinal}
+                  placeholder="Areia, brita, mudança…"
+                  editable={!fechando}
+                />
+              </View>
+
+              {erroFechar && (
+                <View className="rounded-xl border-2 border-destructive bg-destructive/10 p-3">
+                  <Text className="text-base font-medium text-destructive">{erroFechar}</Text>
+                </View>
+              )}
+
+              <Button
+                size="lg"
+                variant="success"
+                className="h-16"
+                loading={fechando}
+                onPress={() => void registrar()}
+              >
+                <Flag size={20} color="#fff" />
+                <Text className="text-lg font-bold text-success-foreground">
+                  {fechando ? "Registrando..." : "Registrar frete"}
+                </Text>
+              </Button>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    );
+  }
+
   // ---- Escolha do destino (antes de começar) ----
   if (!rodando) {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-          <View className="bg-brand px-6 pb-6 pt-14">
-            <View className="flex-row items-center gap-3">
-              <Pressable onPress={() => router.back()} hitSlop={12}>
-                <ArrowLeft size={24} color="#fff" />
-              </Pressable>
-              <View className="flex-1">
-                <Text className="text-2xl font-extrabold tracking-tight text-white">
-                  Iniciar frete
-                </Text>
-                <Text className="text-sm font-medium text-white/80">
-                  O app te guia até lá e mede seu km
-                </Text>
-              </View>
-            </View>
-          </View>
+          <ScreenHeader title="Iniciar frete" subtitle="O app te guia até lá e mede seu km" />
 
-          <View className="flex-1 gap-5 px-6 py-6">
+          <View className="flex-1 gap-5 px-5 py-6">
             <View className="gap-2">
               <Label>Pra onde você vai</Label>
               <Input
@@ -254,17 +461,17 @@ export default function FreteGuiadoScreen() {
               />
               {buscando && (
                 <View className="flex-row items-center gap-2">
-                  <Search size={14} color="#64748b" />
-                  <Text className="text-xs text-muted-foreground">procurando…</Text>
+                  <Search size={16} color="#64748b" />
+                  <Text className="text-sm text-muted-foreground">procurando…</Text>
                 </View>
               )}
               {sugestoes.map((s) => (
                 <Pressable
                   key={s.placeId}
                   onPress={() => void escolher(s)}
-                  className="flex-row items-center gap-2 rounded-xl border border-border bg-card p-3 active:opacity-70"
+                  className="flex-row items-center gap-3 rounded-xl border border-border bg-card p-4 active:opacity-70"
                 >
-                  <MapPin size={16} color="#64748b" />
+                  <MapPin size={18} color="#64748b" />
                   <Text className="flex-1 text-base text-foreground">
                     {s.textoCompleto || s.nome}
                   </Text>
@@ -272,26 +479,69 @@ export default function FreteGuiadoScreen() {
               ))}
             </View>
 
+            {semRede && (
+              <View className="gap-3 rounded-2xl border-2 border-warning bg-warning/10 p-4">
+                <View className="flex-row items-center gap-2">
+                  <CloudOff size={18} color="#b45309" />
+                  <Text className="flex-1 text-base font-bold text-foreground">
+                    Sem internet pra buscar o endereço
+                  </Text>
+                </View>
+                <Text className="text-sm text-muted-foreground">
+                  Dá pra rodar assim mesmo: o app mede seu km sem precisar de sinal. O guia de
+                  voz é que não vai ter.
+                </Text>
+                <Button size="lg" onPress={() => void comecar(null)}>
+                  <Navigation size={20} color="#fff" />
+                  <Text className="text-base font-bold text-primary-foreground">
+                    Só medir meu km
+                  </Text>
+                </Button>
+              </View>
+            )}
+
+            {!destino && sugestoes.length === 0 && recentes.length > 0 && (
+              <View className="gap-2">
+                <View className="flex-row items-center gap-2">
+                  <History size={16} color="#64748b" />
+                  <Text className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
+                    Onde você já foi
+                  </Text>
+                </View>
+                {recentes.map((r) => (
+                  <Pressable
+                    key={r.texto}
+                    onPress={() => {
+                      setDestino(r);
+                      setBusca(r.texto);
+                    }}
+                    className="flex-row items-center gap-3 rounded-xl border border-border bg-card p-4 active:opacity-70"
+                  >
+                    <MapPin size={18} color="#64748b" />
+                    <Text className="flex-1 text-base text-foreground">{r.texto}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+
             {destino && (
-              <View className="flex-row items-center gap-3 rounded-2xl border-2 border-primary bg-card p-4">
+              <Card className="flex-row items-center gap-3 border-primary p-4">
                 <Flag size={22} color="#13316b" />
                 <Text className="flex-1 text-base font-bold text-foreground">{destino.texto}</Text>
-              </View>
+              </Card>
             )}
 
             <Button
               size="lg"
               className="h-16"
               disabled={!destino}
-              onPress={() => void comecar()}
+              onPress={() => void comecar(destino)}
             >
               <Navigation size={22} color="#fff" />
-              <Text className="text-lg font-bold text-primary-foreground">
-                Começar e me guiar
-              </Text>
+              <Text className="text-lg font-bold text-primary-foreground">Começar e me guiar</Text>
             </Button>
 
-            <Text className="text-center text-xs text-muted-foreground">
+            <Text className="text-center text-sm text-muted-foreground">
               O app segue medindo com a tela bloqueada — é assim que o km sai certo. Você para
               quando quiser, aqui mesmo.
             </Text>
@@ -311,17 +561,36 @@ export default function FreteGuiadoScreen() {
         pos={pos}
       />
 
-      {guia && (
-        <BannerManobra
-          manobra={guia.manobra}
-          distProxM={guia.distProxM}
-          restanteM={guia.restanteM}
-          foraDaRota={guia.foraDaRota}
-        />
-      )}
+      {/* O topo tem que respeitar a Dynamic Island: o banner de manobra passava
+          por baixo dela, e com o guia ainda nulo sobrava mapa claro sob os
+          ícones brancos do sistema. */}
+      <SafeAreaView
+        edges={["top"]}
+        pointerEvents="box-none"
+        className="absolute inset-x-0 top-0"
+      >
+        <View className="flex-row items-start gap-2 px-3 pt-2" pointerEvents="box-none">
+          <Pressable
+            onPress={() => router.back()}
+            className="h-11 w-11 items-center justify-center rounded-full bg-background/95 shadow-md active:opacity-80"
+          >
+            <ArrowLeft size={22} color="#0f172a" />
+          </Pressable>
+          <View className="flex-1" pointerEvents="box-none">
+            {guia && (
+              <BannerManobra
+                manobra={guia.manobra}
+                distProxM={guia.distProxM}
+                restanteM={guia.restanteM}
+                foraDaRota={guia.foraDaRota}
+              />
+            )}
+          </View>
+        </View>
+      </SafeAreaView>
 
       <SafeAreaView edges={["bottom"]} className="absolute bottom-0 left-0 right-0">
-        <View className="m-4 gap-3 rounded-2xl border-2 border-border bg-card p-4">
+        <Card className="m-4 gap-3 p-4">
           <View className="flex-row items-center justify-between">
             <View>
               <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
@@ -335,30 +604,28 @@ export default function FreteGuiadoScreen() {
               </Text>
             </View>
             {chegou && (
-              <View className="rounded-full bg-green-100 px-3 py-1.5">
-                <Text className="text-sm font-bold text-green-800">Você chegou</Text>
+              <View className="rounded-full bg-success/15 px-3 py-2">
+                <Text className="text-sm font-bold text-success">Você chegou</Text>
               </View>
             )}
           </View>
 
           <Button
             size="lg"
-            className={chegou ? "h-16 bg-green-600" : "h-16"}
-            loading={finalizando}
-            onPress={() => void finalizar()}
+            className="h-16"
+            variant={chegou ? "success" : "default"}
+            onPress={() => void abrirFechamento()}
           >
             <Flag size={20} color="#fff" />
-            <Text className="text-lg font-bold text-white">
-              {finalizando ? "Registrando..." : "Cheguei — registrar frete"}
-            </Text>
+            <Text className="text-lg font-bold text-white">Cheguei — registrar frete</Text>
           </Button>
 
-          <Pressable onPress={() => void desistir()} className="py-1">
-            <Text className="text-center text-base font-medium text-muted-foreground">
-              Cancelar frete
-            </Text>
-          </Pressable>
-        </View>
+          {/* Cancelar DESCARTA o km medido: ação destrutiva não pode ser um
+              texto cinza de 26px de altura. */}
+          <Button size="lg" variant="outline" onPress={() => void desistir()}>
+            <Text className="text-base font-semibold text-foreground">Cancelar frete</Text>
+          </Button>
+        </Card>
       </SafeAreaView>
 
       {!pos && (

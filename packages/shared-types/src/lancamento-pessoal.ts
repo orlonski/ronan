@@ -64,8 +64,7 @@ const OpcionalPositivo = z.preprocess(
  * resto ele preenche se tiver, e um frete anotado pela metade continua sendo
  * melhor que frete nenhum anotado.
  */
-export const CriarViagemPessoalInput = z.object({
-  clientId: z.string().min(8).max(64),
+const CamposViagemPessoal = {
   data: DataSchema,
   origem: z.string().trim().min(2, "De onde você saiu?").max(120),
   destino: z.string().trim().min(2, "Pra onde você levou?").max(120),
@@ -74,8 +73,24 @@ export const CriarViagemPessoalInput = z.object({
   peso: OpcionalPositivo,
   valorRecebido: OpcionalPositivo,
   observacao: z.string().trim().max(200).optional(),
+};
+
+export const CriarViagemPessoalInput = z.object({
+  clientId: z.string().min(8).max(64),
+  ...CamposViagemPessoal,
 });
 export type CriarViagemPessoalInput = z.infer<typeof CriarViagemPessoalInput>;
+
+/**
+ * Corrigir um frete já gravado.
+ *
+ * Sem `clientId`: quem edita já sabe qual linha é (vai pela URL), e deixar o id
+ * do aparelho ser reescrito quebraria a idempotência do outbox. O frete que
+ * nasce do GPS guiado entra sem origem e sem valor — sem esta rota, "recebi
+ * R$ 0" ficava gravado pra sempre.
+ */
+export const EditarViagemPessoalInput = z.object(CamposViagemPessoal);
+export type EditarViagemPessoalInput = z.infer<typeof EditarViagemPessoalInput>;
 
 export type ViagemPessoal = {
   id: string;
@@ -91,32 +106,47 @@ export type ViagemPessoal = {
   criadoEm: string;
 };
 
+const CamposLancamentoPessoal = {
+  tipo: z.enum(TIPOS_LANCAMENTO_PESSOAL),
+  data: DataSchema,
+  valor: ValorSchema,
+  litros: OpcionalPositivo,
+  odometro: z.preprocess(
+    (v) => (v === "" || v === null ? undefined : v),
+    z.coerce.number().int().positive().max(9_999_999).optional(),
+  ),
+  descricao: z.string().trim().max(200).optional(),
+};
+
+/** Litro em pedágio ou almoço não quer dizer nada — e aceitar em silêncio faria
+ *  a média de consumo mentir. */
+const litroSoEmAbastecimento = (
+  v: { litros?: number; tipo: TipoLancamentoPessoal },
+  ctx: z.RefinementCtx,
+) => {
+  if (v.litros !== undefined && v.tipo !== "ABASTECIMENTO") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["litros"],
+      message: "Litros só valem em abastecimento",
+    });
+  }
+};
+
 export const CriarLancamentoPessoalInput = z
   .object({
     /** Gerado no aparelho: é o que faz o reenvio do outbox não virar duplicata. */
     clientId: z.string().min(8).max(64),
-    tipo: z.enum(TIPOS_LANCAMENTO_PESSOAL),
-    data: DataSchema,
-    valor: ValorSchema,
-    litros: OpcionalPositivo,
-    odometro: z.preprocess(
-      (v) => (v === "" || v === null ? undefined : v),
-      z.coerce.number().int().positive().max(9_999_999).optional(),
-    ),
-    descricao: z.string().trim().max(200).optional(),
+    ...CamposLancamentoPessoal,
   })
-  .superRefine((v, ctx) => {
-    // Litro em pedágio ou almoço não quer dizer nada — e aceitar em silêncio
-    // faria a média de consumo mentir.
-    if (v.litros !== undefined && v.tipo !== "ABASTECIMENTO") {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["litros"],
-        message: "Litros só valem em abastecimento",
-      });
-    }
-  });
+  .superRefine(litroSoEmAbastecimento);
 export type CriarLancamentoPessoalInput = z.infer<typeof CriarLancamentoPessoalInput>;
+
+/** Corrigir um gasto já gravado. Sem `clientId`, pelo mesmo motivo do frete. */
+export const EditarLancamentoPessoalInput = z
+  .object(CamposLancamentoPessoal)
+  .superRefine(litroSoEmAbastecimento);
+export type EditarLancamentoPessoalInput = z.infer<typeof EditarLancamentoPessoalInput>;
 
 export type LancamentoPessoal = {
   id: string;

@@ -6,6 +6,7 @@ import { lerPlacasJson, vincularPlacas } from "../common/placas";
 import { VINCULO_CONVITE_PENDENTE, VINCULO_VIVO } from "../common/vinculo";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditoriaService } from "../auditoria/auditoria.service";
+import { UploadsService } from "../uploads/uploads.service";
 import { AuthService } from "./auth.service";
 import { IdentidadeService } from "./identidade.service";
 
@@ -26,6 +27,7 @@ export class EuService {
     private readonly auth: AuthService,
     private readonly identidades: IdentidadeService,
     private readonly auditoria: AuditoriaService,
+    private readonly uploads: UploadsService,
   ) {}
 
   async perfil(identidadeId: string) {
@@ -243,5 +245,79 @@ export class EuService {
       );
     }
     return this.perfil(identidadeId);
+  }
+
+  /**
+   * Apagar a conta — de verdade, e a partir do próprio app.
+   *
+   * A App Store exige (5.1.1-v) que quem cria conta no app consiga apagá-la por
+   * lá, sem e-mail nem telefone pro suporte. Faltava, e era recusa na triagem.
+   *
+   * O que some: a PESSOA e tudo que é dela — caderno, fretes por conta própria,
+   * comprovantes, documentos (inclusive os arquivos no MinIO) e o pedido de
+   * senha pendente. Cascata do banco cuida das tabelas; os arquivos a gente
+   * apaga antes, porque MinIO não tem FK.
+   *
+   * O que FICA: as viagens que ele rodou pra uma transportadora. São documento
+   * fiscal dela, não dado pessoal dele — apagar seria destruir o registro de um
+   * terceiro. O vínculo em si é DESLIGADO (`ativo: false`) e a auditoria conta o
+   * porquê, então a empresa vê o que aconteceu e consegue reativar se foi
+   * engano. Desligar é obrigatório, não cosmético: `garantirPorCpf` recria a
+   * identidade a partir de um vínculo vivo, e sem isso a conta ressuscitaria no
+   * próximo login.
+   */
+  async excluirConta(identidadeId: string) {
+    const eu = await comoSistema(() =>
+      this.prisma.motoristaIdentidade.findUniqueOrThrow({
+        where: { id: identidadeId },
+        select: { id: true, nome: true, cpf: true },
+      }),
+    );
+
+    const vinculos = await comoSistema(() =>
+      this.prisma.motorista.findMany({
+        where: { identidadeId },
+        select: { id: true, contaId: true, ativo: true },
+      }),
+    );
+
+    // Arquivos primeiro: se o banco cair no meio, sobra objeto órfão no bucket
+    // (barato de varrer) em vez de linha apontando pra arquivo que já não existe.
+    const documentos = await comoSistema(() =>
+      this.prisma.documentoPessoal.findMany({
+        where: { identidadeId },
+        select: { arquivoKey: true },
+      }),
+    );
+    for (const d of documentos) {
+      if (d.arquivoKey) await this.uploads.removerObjeto(d.arquivoKey);
+    }
+
+    for (const v of vinculos.filter((v) => v.ativo)) {
+      await comConta(v.contaId, async () => {
+        await this.prisma.motorista.update({
+          where: { id: v.id },
+          data: { ativo: false },
+        });
+        await this.auditoria.log({
+          entidade: "Motorista",
+          entidadeId: v.id,
+          acao: AcaoAuditoria.DELETE,
+          campo: "ativo",
+          valorAntes: "true",
+          valorDepois: "false (o motorista apagou a conta dele no app)",
+        });
+      });
+    }
+
+    await comoSistema(() =>
+      this.prisma.motoristaIdentidade.delete({ where: { id: identidadeId } }),
+    );
+
+    this.log.log(
+      `Identidade ${eu.id} apagada a pedido do próprio motorista ` +
+        `(${vinculos.length} vínculo(s) desligado(s))`,
+    );
+    return { ok: true as const, vinculosDesligados: vinculos.filter((v) => v.ativo).length };
   }
 }

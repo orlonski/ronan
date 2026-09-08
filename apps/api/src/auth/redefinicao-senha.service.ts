@@ -71,12 +71,112 @@ export class RedefinicaoSenhaService {
     return (porTelefone ?? candidatos[0]!).contaId;
   }
 
+  /**
+   * Existe uma PESSOA com esse CPF e nenhum vínculo? Então o pedido é dela.
+   *
+   * Antes disto, tudo era resolvido por `Motorista` (o vínculo). Quem se
+   * cadastrou pelo app e ainda não foi convidado por ninguém recebia
+   * "CPF não cadastrado" no próprio CPF — e ficava trancado do lado de fora
+   * pra sempre, porque a senha dele mora na identidade.
+   */
+  private async identidadeSemVinculo(cpf: string) {
+    return comoSistema(() =>
+      this.prisma.motoristaIdentidade.findUnique({
+        where: { cpf },
+        select: { id: true, nome: true, telefone: true, ativo: true },
+      }),
+    );
+  }
+
   async esqueci(cpf: string, telefoneInput: string) {
     const contaId = await this.resolverConta(cpf, telefoneInput);
-    // CPF sem cadastro nenhum: o fluxo abaixo já trata (mensagem clara pro app
-    // oferecer o cadastro), então roda numa conta qualquer só pra ter contexto.
-    if (!contaId) return comoSistema(() => this.esqueciNaConta(cpf, telefoneInput));
-    return comConta(contaId, () => this.esqueciNaConta(cpf, telefoneInput));
+    if (contaId) return comConta(contaId, () => this.esqueciNaConta(cpf, telefoneInput));
+
+    const identidade = await this.identidadeSemVinculo(cpf);
+    if (identidade) return comoSistema(() => this.esqueciDaPessoa(identidade, telefoneInput));
+
+    // CPF que não existe em lugar nenhum: o fluxo antigo já tem a mensagem que
+    // manda o app oferecer o cadastro.
+    return comoSistema(() => this.esqueciNaConta(cpf, telefoneInput));
+  }
+
+  /**
+   * Mesmo fluxo do `esqueciNaConta`, com a PESSOA no lugar do vínculo.
+   *
+   * Duplicação assumida em vez de generalizar: os dois lados divergem no que
+   * checam (telefone livre entre identidades vs. entre motoristas da conta) e
+   * no que escrevem, e um helper genérico esconderia justamente essa diferença.
+   */
+  private async esqueciDaPessoa(
+    identidade: { id: string; telefone: string | null; ativo: boolean },
+    telefoneInput: string,
+  ) {
+    const telefone = telefoneDigits(telefoneInput);
+    if (!identidade.ativo) {
+      throw new BadRequestException({
+        code: "CADASTRO_INATIVO",
+        message: "Seu cadastro não está ativo. Fale com o pessoal do administrativo.",
+      });
+    }
+
+    let destino: string;
+    let vincular: boolean;
+    if (identidade.telefone) {
+      if (telefoneDigits(identidade.telefone) !== telefone) {
+        throw new BadRequestException({
+          code: "CELULAR_DIVERGENTE",
+          message:
+            "O celular informado não confere com o do seu cadastro. Se você trocou de número, é por ele que o código sai — não temos como mandar pra outro.",
+        });
+      }
+      destino = identidade.telefone;
+      vincular = false;
+    } else {
+      const emUso = await this.prisma.motoristaIdentidade.findFirst({
+        where: { telefone, id: { not: identidade.id } },
+        select: { id: true },
+      });
+      if (emUso) {
+        throw new ConflictException("Esse celular já está em uso por outro cadastro.");
+      }
+      destino = telefone;
+      vincular = true;
+    }
+
+    const existente = await this.prisma.redefinicaoSenhaPendente.findUnique({
+      where: { identidadeId: identidade.id },
+      select: { ultimoEnvioEm: true },
+    });
+    if (existente && (Date.now() - existente.ultimoEnvioEm.getTime()) / 1000 < REENVIO_COOLDOWN_S) {
+      return RESPOSTA_GENERICA;
+    }
+
+    const codigo = gerarCodigo();
+    const expiraEm = new Date(Date.now() + CODIGO_TTL_MIN * 60_000);
+    // Envia antes de gravar, pela mesma razão do outro lado: WhatsApp que falha
+    // não pode deixar "código enviado" sem código.
+    await this.enviarCodigo(destino, codigo);
+    await this.prisma.redefinicaoSenhaPendente.upsert({
+      where: { identidadeId: identidade.id },
+      create: {
+        identidadeId: identidade.id,
+        contaId: null,
+        telefone: destino,
+        vincular,
+        codigo,
+        expiraEm,
+      },
+      update: {
+        telefone: destino,
+        vincular,
+        codigo,
+        expiraEm,
+        tentativas: 0,
+        reenvios: 0,
+        ultimoEnvioEm: new Date(),
+      },
+    });
+    return RESPOSTA_GENERICA;
   }
 
   private async esqueciNaConta(cpf: string, telefoneInput: string) {
@@ -164,12 +264,30 @@ export class RedefinicaoSenhaService {
 
   async reenviar(cpf: string) {
     const contaId = await this.resolverConta(cpf);
-    if (!contaId) throw new BadRequestException("Nenhum pedido de redefinição pra esse CPF. Comece de novo.");
-    return comConta(contaId, () => this.reenviarNaConta(cpf));
+    if (contaId) return comConta(contaId, () => this.reenviarNaConta(cpf));
+
+    const identidade = await this.identidadeSemVinculo(cpf);
+    if (!identidade) {
+      throw new BadRequestException(
+        "Nenhum pedido de redefinição pra esse CPF. Comece de novo.",
+      );
+    }
+    return comoSistema(async () => {
+      const pendente = await this.prisma.redefinicaoSenhaPendente.findUnique({
+        where: { identidadeId: identidade.id },
+      });
+      return this.reenviarPendente(pendente);
+    });
   }
 
   private async reenviarNaConta(cpf: string) {
-    const pendente = await this.buscarPendente(cpf);
+    return this.reenviarPendente(await this.buscarPendente(cpf));
+  }
+
+  /** O reenvio em si: vale igual pro pedido do vínculo e pro da pessoa. */
+  private async reenviarPendente(
+    pendente: { id: string; telefone: string; ultimoEnvioEm: Date; reenvios: number } | null,
+  ) {
     if (!pendente) {
       throw new BadRequestException(
         "Nenhum pedido de redefinição pra esse CPF. Comece de novo.",
@@ -205,16 +323,23 @@ export class RedefinicaoSenhaService {
 
   async redefinir(cpf: string, codigo: string, novaSenha: string) {
     const contaId = await this.resolverConta(cpf);
-    if (!contaId) throw new BadRequestException("Não foi possível redefinir. Comece de novo.");
-    return comConta(contaId, () => this.redefinirNaConta(cpf, codigo, novaSenha));
+    if (contaId) return comConta(contaId, () => this.redefinirNaConta(cpf, codigo, novaSenha));
+
+    const identidade = await this.identidadeSemVinculo(cpf);
+    if (!identidade) throw new BadRequestException("Não foi possível redefinir. Comece de novo.");
+    return comoSistema(() => this.redefinirDaPessoa(identidade.id, codigo, novaSenha));
   }
 
-  private async redefinirNaConta(cpf: string, codigo: string, novaSenha: string) {
-    const pendente = await this.buscarPendente(cpf);
+  /**
+   * Confere código, prazo e tentativas. Erra → lança; acerta → devolve o
+   * pendente pra quem chamou gravar a senha do seu jeito.
+   */
+  private async conferirCodigo<
+    T extends { id: string; codigo: string; expiraEm: Date; tentativas: number },
+  >(pendente: T | null, codigo: string): Promise<T> {
     if (!pendente) {
       throw new BadRequestException("Não foi possível redefinir. Comece de novo.");
     }
-
     if (pendente.expiraEm < new Date()) {
       await this.prisma.redefinicaoSenhaPendente.delete({ where: { id: pendente.id } });
       throw new BadRequestException("O código expirou. Peça um novo.");
@@ -230,6 +355,46 @@ export class RedefinicaoSenhaService {
       });
       throw new BadRequestException("Código incorreto. Confira e tente de novo.");
     }
+    return pendente;
+  }
+
+  /** Redefinição de quem ainda não está em empresa nenhuma. */
+  private async redefinirDaPessoa(identidadeId: string, codigo: string, novaSenha: string) {
+    const pendente = await this.conferirCodigo(
+      await this.prisma.redefinicaoSenhaPendente.findUnique({ where: { identidadeId } }),
+      codigo,
+    );
+
+    const senhaHash = await AuthService.hashPassword(novaSenha);
+    await this.prisma.$transaction(async (tx) => {
+      if (pendente.vincular) {
+        const emUso = await tx.motoristaIdentidade.findFirst({
+          where: { telefone: pendente.telefone, id: { not: identidadeId } },
+          select: { id: true },
+        });
+        if (emUso) {
+          throw new ConflictException("Esse celular passou a ser usado por outro cadastro.");
+        }
+      }
+      await tx.motoristaIdentidade.update({
+        where: { id: identidadeId },
+        data: {
+          senhaHash,
+          tentativasLogin: 0,
+          bloqueadoAte: null,
+          ...(pendente!.vincular ? { telefone: pendente!.telefone } : {}),
+        },
+      });
+      await tx.redefinicaoSenhaPendente.delete({ where: { id: pendente!.id } });
+    });
+
+    // Mesma forma do login sem empresa: `cadastros` vazio e a sessão da pessoa.
+    // O app já sabe ler isso (`AuthResposta.identidade`) e entra direto.
+    return { cadastros: [], identidade: await this.auth.issueIdentidadeTokens(identidadeId) };
+  }
+
+  private async redefinirNaConta(cpf: string, codigo: string, novaSenha: string) {
+    const pendente = await this.conferirCodigo(await this.buscarPendente(cpf), codigo);
 
     const senhaHash = await AuthService.hashPassword(novaSenha);
     await this.prisma.$transaction(async (tx) => {
@@ -294,19 +459,31 @@ export class RedefinicaoSenhaService {
       void this.avisoGrupo.anunciarCadastro(pendente.motoristaId);
     }
     const tokens = await this.auth.issueMotoristaTokens(pendente.motoristaId);
-    return { ...tokens, status: motorista.status };
+    // A sessão da PESSOA vem junto: sem ela o app entra na empresa mas não abre
+    // nada de `m/eu/*` (documentos, caderno) até o próximo boot repor.
+    const identidade = await this.auth
+      .identidadeDoMotorista(pendente.motoristaId)
+      .catch(() => undefined);
+    return { ...tokens, status: motorista.status, identidade };
   }
 
-  /** Resolve o pendente a partir do CPF (1 pendente por motorista). */
+  /**
+   * Resolve o pendente a partir do CPF (1 pendente por motorista).
+   *
+   * Devolve o `motoristaId` por fora: na tabela ele é opcional desde que o
+   * pedido também pode ser da pessoa sem empresa, mas aqui a busca partiu do
+   * vínculo, então ele existe — e o resto do fluxo depende disso.
+   */
   private async buscarPendente(cpf: string) {
     const motorista = await this.prisma.motorista.findFirst({
       where: { cpf },
       select: { id: true },
     });
     if (!motorista) return null;
-    return this.prisma.redefinicaoSenhaPendente.findUnique({
+    const pendente = await this.prisma.redefinicaoSenhaPendente.findUnique({
       where: { motoristaId: motorista.id },
     });
+    return pendente && { ...pendente, motoristaId: motorista.id };
   }
 
   private async checarTelefoneLivre(telefone: string, motoristaId: string) {

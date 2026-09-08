@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from "@nestjs/common";
@@ -17,6 +18,8 @@ import {
   AtualizarPlacasInput,
   CriarLancamentoPessoalInput,
   CriarViagemPessoalInput,
+  EditarLancamentoPessoalInput,
+  EditarViagemPessoalInput,
   RegistrarPushTokenInput,
 } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
@@ -58,6 +61,19 @@ export class EuController {
     @Body(new ZodValidationPipe(AtualizarPerfilInput)) body: AtualizarPerfilInput,
   ) {
     return this.service.atualizarPerfil(user.id, body);
+  }
+
+  /**
+   * Apagar a conta pelo próprio app — exigência da App Store (5.1.1-v).
+   *
+   * Sem corpo e sem confirmação no servidor: quem chega aqui já tem o token da
+   * pessoa, e a confirmação é da tela (ele digita APAGAR). O que fica de fora é
+   * a viagem rodada pra transportadora, que é documento fiscal dela — a resposta
+   * diz quantos vínculos foram desligados pra tela poder contar isso pra ele.
+   */
+  @Delete()
+  excluirConta(@CurrentUser() user: AuthIdentidade) {
+    return this.service.excluirConta(user.id);
   }
 
   @Get("empresas")
@@ -112,6 +128,16 @@ export class EuController {
     return this.lancamentos.criar(user.id, body);
   }
 
+  /** Corrigir um gasto já lançado — o valor errado envenenava o mês pra sempre. */
+  @Put("lancamentos/:id")
+  editarLancamento(
+    @CurrentUser() user: AuthIdentidade,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(EditarLancamentoPessoalInput)) body: EditarLancamentoPessoalInput,
+  ) {
+    return this.lancamentos.editar(user.id, id, body);
+  }
+
   @Delete("lancamentos/:id")
   apagarLancamento(@CurrentUser() user: AuthIdentidade, @Param("id") id: string) {
     return this.lancamentos.apagar(user.id, id);
@@ -131,6 +157,21 @@ export class EuController {
     @Body(new ZodValidationPipe(CriarViagemPessoalInput)) body: CriarViagemPessoalInput,
   ) {
     return this.lancamentos.criarViagem(user.id, body);
+  }
+
+  /**
+   * Corrigir um frete já gravado.
+   *
+   * É o que fecha o frete aberto pelo GPS guiado: ele nasce sem origem e sem
+   * valor, e até existir esta rota não havia caminho nenhum pra completar.
+   */
+  @Put("viagens/:id")
+  editarViagem(
+    @CurrentUser() user: AuthIdentidade,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(EditarViagemPessoalInput)) body: EditarViagemPessoalInput,
+  ) {
+    return this.lancamentos.editarViagem(user.id, id, body);
   }
 
   @Delete("viagens/:id")

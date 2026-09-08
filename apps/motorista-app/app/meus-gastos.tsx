@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { KeyboardAvoidingView, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ArrowLeft, CloudOff } from "lucide-react-native";
+import { CloudOff } from "lucide-react-native";
 import {
   ROTULO_LANCAMENTO_PESSOAL,
   TIPOS_LANCAMENTO_PESSOAL,
@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ScreenHeader } from "@/components/screen-header";
 import { cacheDoMes, hojeISO, lancar, mesAtual, type ItemPessoal } from "@/lib/pessoal";
 
 const dinheiro = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -77,35 +78,24 @@ export default function LancarGastoScreen() {
           contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }}
           keyboardShouldPersistTaps="handled"
         >
-          <View className="bg-brand px-6 pb-6 pt-14">
-            <View className="flex-row items-center gap-3">
-              <Pressable onPress={() => router.back()} hitSlop={12}>
-                <ArrowLeft size={24} color="#fff" />
-              </Pressable>
-              <View className="flex-1">
-                <Text className="text-2xl font-extrabold tracking-tight text-white">
-                  Lançar gasto
-                </Text>
-                <Text className="text-sm font-medium text-white/80">
-                  Entra no seu histórico — nenhuma empresa vê
-                </Text>
-              </View>
-            </View>
-          </View>
+          <ScreenHeader
+            title="Lançar gasto"
+            subtitle="Entra no seu histórico — nenhuma empresa vê"
+          />
 
-          <View className="flex-1 gap-5 px-6 py-6">
+          <View className="flex-1 gap-5 px-5 py-6">
             <View className="flex-row flex-wrap gap-2">
               {TIPOS_LANCAMENTO_PESSOAL.map((t) => (
                 <Pressable
                   key={t}
                   onPress={() => setTipo(t)}
-                  className={`rounded-xl border-2 px-3 py-2 ${
-                    tipo === t ? "border-primary bg-primary/10" : "border-border"
+                  className={`rounded-xl border-2 px-4 py-3 ${
+                    tipo === t ? "border-primary bg-primary/10" : "border-border bg-card"
                   }`}
                 >
                   <Text
-                    className={`text-sm font-bold ${
-                      tipo === t ? "text-primary" : "text-muted-foreground"
+                    className={`text-base font-bold ${
+                      tipo === t ? "text-primary" : "text-foreground"
                     }`}
                   >
                     {ROTULO_LANCAMENTO_PESSOAL[t]}
@@ -136,12 +126,28 @@ export default function LancarGastoScreen() {
                   placeholder="0"
                   editable={!salvando}
                 />
-                <Text className="text-xs text-muted-foreground">
+                <Text className="text-sm text-muted-foreground">
                   Com os litros o app calcula seu consumo — e é ele que estima o diesel dos
                   seus fretes.
                 </Text>
               </View>
             )}
+
+            {erro && (
+              <View className="rounded-xl border-2 border-destructive bg-destructive/10 p-3">
+                <Text className="text-base font-medium text-destructive">{erro}</Text>
+              </View>
+            )}
+
+            {/* "Salvar" ANTES da observação: o campo Valor abre com o teclado em
+                cima (autoFocus), e com o botão lá embaixo o lançamento mais
+                repetido do dia terminava com ele procurando onde confirmar, no
+                posto, com o caminhão ligado. O opcional fica depois. */}
+            <Button size="lg" className="h-16" loading={salvando} onPress={salvar}>
+              <Text className="text-lg font-bold text-primary-foreground">
+                {salvando ? "Salvando..." : "Salvar"}
+              </Text>
+            </Button>
 
             <View className="gap-2">
               <Label>Observação (opcional)</Label>
@@ -152,18 +158,6 @@ export default function LancarGastoScreen() {
                 editable={!salvando}
               />
             </View>
-
-            {erro && (
-              <View className="rounded-xl border-2 border-destructive bg-destructive/10 p-3">
-                <Text className="text-base font-medium text-destructive">{erro}</Text>
-              </View>
-            )}
-
-            <Button size="lg" className="h-16 bg-green-600" loading={salvando} onPress={salvar}>
-              <Text className="text-lg font-bold text-white">
-                {salvando ? "Salvando..." : "Salvar"}
-              </Text>
-            </Button>
 
             {ultimos.length > 0 && (
               <View className="gap-2">
@@ -181,9 +175,9 @@ export default function LancarGastoScreen() {
                           {ROTULO_LANCAMENTO_PESSOAL[i.tipo]}
                         </Text>
                         {i.pendente && (
-                          <View className="flex-row items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5">
-                            <CloudOff size={11} color="#b45309" />
-                            <Text className="text-xs font-semibold text-amber-700">vai subir</Text>
+                          <View className="flex-row items-center gap-1 rounded-full bg-warning/15 px-2 py-1">
+                            <CloudOff size={16} color="#b45309" />
+                            <Text className="text-sm font-semibold text-foreground">vai subir</Text>
                           </View>
                         )}
                       </View>
@@ -194,7 +188,7 @@ export default function LancarGastoScreen() {
                     </View>
                     <Text
                       className={`font-bold ${
-                        ehGanho(i.tipo) ? "text-green-700" : "text-foreground"
+                        ehGanho(i.tipo) ? "text-success" : "text-foreground"
                       }`}
                     >
                       {ehGanho(i.tipo) ? "+" : "−"} {dinheiro(i.valor)}

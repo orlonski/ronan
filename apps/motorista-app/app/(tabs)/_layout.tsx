@@ -3,11 +3,19 @@ import { Calendar, House, MessageCircle, User } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBadgeChat } from "@/lib/chat";
 import { useMe } from "@/lib/queries";
+import { useSemEmpresa } from "@/lib/visao";
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const semEmpresa = useSemEmpresa();
   // Rollout gradual: sem a flag, a aba nem existe (e a API responde 403).
-  const podeChat = useMe().data?.podeChat ?? false;
+  //
+  // Quem não está em empresa nenhuma não tem com quem conversar: `/m/me` é
+  // rota de MOTORISTA e pra ele só pode falhar. Pior, `conferirMe` devolve o
+  // cache quando não há sessão ativa — um `me` velho podia reacender a aba
+  // "Conversas" pra quem saiu da última empresa.
+  const me = useMe();
+  const podeChat = !semEmpresa && (me.data?.podeChat ?? false);
   const naoLidas = useBadgeChat(podeChat).data ?? 0;
 
   return (

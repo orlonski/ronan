@@ -10,7 +10,15 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { AlertTriangle, ArrowLeft, Camera, Check, Plus, Send, Trash2 } from "lucide-react-native";
+import {
+  AlertTriangle,
+  Camera,
+  Check,
+  ChevronRight,
+  Plus,
+  Send,
+  Trash2,
+} from "lucide-react-native";
 import {
   AJUDA_DOCUMENTO_PESSOAL,
   DOCUMENTO_POR_PLACA,
@@ -24,9 +32,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
+import { ScreenHeader } from "@/components/screen-header";
 import { api } from "@/lib/api";
 import { API_URL } from "@/lib/api-url";
 import { showAlert, showConfirm } from "@/lib/alert";
+import { cacheDocumentos, carregarDocumentos } from "@/lib/pessoal";
 
 /**
  * A carteira do motorista: o que a transportadora e a gerenciadora de risco
@@ -44,15 +54,21 @@ export default function MeusDocumentosScreen() {
   const recarregar = useCallback(async () => {
     setCarregando(true);
     try {
-      setDocs(await api.meusDocumentos());
+      setDocs(await carregarDocumentos());
     } catch {
-      /* sem sinal: fica o que está na tela */
+      /* sem sinal: fica o cache, que já está na tela */
     } finally {
       setCarregando(false);
     }
   }, []);
 
+  // Cache primeiro, rede depois. A tela era 100% online: offline ela abria
+  // VAZIA — e é na estrada, sem sinal, que ele precisa conferir se a CNH
+  // venceu antes de aceitar a carga.
   useEffect(() => {
+    void cacheDocumentos().then((c) => {
+      if (c.length) setDocs(c);
+    });
     void recarregar();
   }, [recarregar]);
 
@@ -103,6 +119,10 @@ export default function MeusDocumentosScreen() {
           setEditando(null);
           await recarregar();
         }}
+        onApagar={async (d) => {
+          await apagar(d);
+          setEditando(null);
+        }}
       />
     );
   }
@@ -115,25 +135,16 @@ export default function MeusDocumentosScreen() {
           <RefreshControl refreshing={carregando} onRefresh={() => void recarregar()} />
         }
       >
-        <View className="bg-brand px-6 pb-6 pt-14">
-          <View className="flex-row items-center gap-3">
-            <Pressable onPress={() => router.back()} hitSlop={12}>
-              <ArrowLeft size={24} color="#fff" />
-            </Pressable>
-            <View className="flex-1">
-              <Text className="text-2xl font-extrabold tracking-tight text-white">
-                Meus documentos
-              </Text>
-              <Text className="text-sm font-medium text-white/80">
-                O que a transportadora pede pra liberar carga
-              </Text>
-            </View>
-          </View>
+        <View>
+          <ScreenHeader
+            title="Meus documentos"
+            subtitle="O que a transportadora pede pra liberar carga"
+          />
 
           {(vencidos.length > 0 || vencendo.length > 0) && (
-            <View className="mt-5 flex-row items-center gap-2 rounded-xl bg-white/20 p-3">
+            <View className="-mt-1 flex-row items-center gap-2 bg-brand px-4 pb-4">
               <AlertTriangle size={20} color="#fff" />
-              <Text className="flex-1 text-sm font-semibold text-white">
+              <Text className="flex-1 rounded-xl bg-white/20 p-3 text-sm font-semibold text-white">
                 {vencidos.length > 0
                   ? `${vencidos.length} ${vencidos.length === 1 ? "documento vencido" : "documentos vencidos"}`
                   : `${vencendo.length} ${vencendo.length === 1 ? "documento vencendo" : "documentos vencendo"}`}
@@ -143,7 +154,7 @@ export default function MeusDocumentosScreen() {
           )}
         </View>
 
-        <View className="flex-1 gap-3 px-6 py-6">
+        <View className="flex-1 gap-3 px-5 py-6">
           <Button size="lg" className="h-16" onPress={() => setEditando("novo")}>
             <Plus size={22} color="#fff" />
             <Text className="text-lg font-bold text-primary-foreground">Adicionar documento</Text>
@@ -187,16 +198,29 @@ export default function MeusDocumentosScreen() {
                   {d.numero && d.validade ? " · " : ""}
                   {textoValidade(d)}
                 </Text>
-                {d.temArquivo && (
-                  <View className="mt-1 flex-row items-center gap-1">
-                    <Camera size={12} color="#16a34a" />
-                    <Text className="text-xs font-medium text-green-700">foto guardada</Text>
-                  </View>
-                )}
               </View>
-              <Pressable onPress={() => void apagar(d)} hitSlop={10}>
-                <Trash2 size={18} color="#64748b" />
-              </Pressable>
+              {/* A foto ABRE. Antes o upload entrava e nunca voltava: ele
+                  fotografava a CNH e não conseguia mais mandar pra quem pediu,
+                  que é a razão de a carteira existir. A lixeira saiu daqui —
+                  ação destrutiva de 18px em cinza, aninhada dentro de outro
+                  toque, com caminhão sacudindo, é acidente esperando. Apagar
+                  agora fica dentro do formulário de edição. */}
+              {d.temArquivo && (
+                <Pressable
+                  onPress={() =>
+                    router.push(
+                      `/documento-foto?id=${d.id}&titulo=${encodeURIComponent(
+                        ROTULO_DOCUMENTO_PESSOAL[d.tipo],
+                      )}`,
+                    )
+                  }
+                  hitSlop={8}
+                  className="h-12 w-12 items-center justify-center rounded-full bg-success/15 active:opacity-70"
+                >
+                  <Camera size={22} color="#1d9a53" />
+                </Pressable>
+              )}
+              <ChevronRight size={20} color="#94a3b8" />
             </Pressable>
           ))}
         </View>
@@ -241,10 +265,12 @@ function Formulario({
   documento,
   onFechar,
   onSalvo,
+  onApagar,
 }: {
   documento: DocumentoPessoal | null;
   onFechar: () => void;
   onSalvo: () => void;
+  onApagar: (d: DocumentoPessoal) => void | Promise<void>;
 }) {
   const [tipo, setTipo] = useState<TipoDocumentoPessoal>(documento?.tipo ?? "CNH");
   const [numero, setNumero] = useState(documento?.numero ?? "");
@@ -284,7 +310,20 @@ function Formulario({
             validade: iso,
             placa: pedePlaca ? placa.trim().toUpperCase() : undefined,
           });
-      if (foto) await api.anexarArquivoDocumento(salvo.id, foto.uri).catch(() => {});
+      // O upload da foto não pode falhar calado: antes era `.catch(() => {})`
+      // — sumia o "foto guardada" e nenhum erro aparecia, então ele achava que
+      // a CNH estava lá.
+      if (foto) {
+        try {
+          await api.anexarArquivoDocumento(salvo.id, foto.uri);
+        } catch {
+          void showAlert({
+            title: "O documento foi salvo, mas a foto não subiu",
+            message:
+              "Confira sua internet e anexe a foto de novo abrindo este documento. O resto já está guardado.",
+          });
+        }
+      }
       onSalvo();
     } catch (e) {
       setErro((e as Error).message);
@@ -300,18 +339,9 @@ function Formulario({
           contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }}
           keyboardShouldPersistTaps="handled"
         >
-          <View className="bg-brand px-6 pb-6 pt-14">
-            <View className="flex-row items-center gap-3">
-              <Pressable onPress={onFechar} hitSlop={12}>
-                <ArrowLeft size={24} color="#fff" />
-              </Pressable>
-              <Text className="text-2xl font-extrabold tracking-tight text-white">
-                {documento ? "Editar documento" : "Novo documento"}
-              </Text>
-            </View>
-          </View>
+          <ScreenHeader title={documento ? "Editar documento" : "Novo documento"} />
 
-          <View className="flex-1 gap-5 px-6 py-6">
+          <View className="flex-1 gap-5 px-5 py-6">
             {!documento && (
               <View className="gap-2">
                 <Label>Qual documento</Label>
@@ -320,13 +350,13 @@ function Formulario({
                     <Pressable
                       key={t}
                       onPress={() => setTipo(t)}
-                      className={`rounded-xl border-2 px-3 py-2 ${
-                        tipo === t ? "border-primary bg-primary/10" : "border-border"
+                      className={`rounded-xl border-2 px-4 py-3 ${
+                        tipo === t ? "border-primary bg-primary/10" : "border-border bg-card"
                       }`}
                     >
                       <Text
-                        className={`text-sm font-bold ${
-                          tipo === t ? "text-primary" : "text-muted-foreground"
+                        className={`text-base font-bold ${
+                          tipo === t ? "text-primary" : "text-foreground"
                         }`}
                       >
                         {ROTULO_DOCUMENTO_PESSOAL[t]}
@@ -404,12 +434,19 @@ function Formulario({
               <Button variant="outline" className="flex-1" onPress={onFechar} disabled={salvando}>
                 <Text className="text-base font-semibold text-foreground">Cancelar</Text>
               </Button>
-              <Button className="flex-1 bg-green-600" loading={salvando} onPress={salvar}>
-                <Text className="text-base font-bold text-white">
+              <Button className="flex-1" loading={salvando} onPress={salvar}>
+                <Text className="text-base font-bold text-primary-foreground">
                   {salvando ? "Salvando..." : "Salvar"}
                 </Text>
               </Button>
             </View>
+
+            {documento && (
+              <Button size="lg" variant="destructive" onPress={() => void onApagar(documento)}>
+                <Trash2 size={20} color="#fff" />
+                <Text className="text-base font-bold text-white">Apagar documento</Text>
+              </Button>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
