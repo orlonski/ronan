@@ -64,7 +64,11 @@ export async function obterEEnviarPushToken(): Promise<void> {
     // Envia o objeto inteiro (endpoint + keys) como JSON serializado.
     // Backend desserializa e armazena por motorista + provider.
     const json = JSON.stringify(sub.toJSON());
-    await api.atualizarPushToken(json, "webpush");
+    // Vai pros DOIS donos possíveis do mesmo aparelho: o cadastro na empresa
+    // ativa e a PESSOA. É o token da identidade que faz o convite chegar —
+    // quem foi convidado ainda não tem vínculo vivo pra receber push por ele.
+    await api.atualizarPushToken(json, "webpush").catch(() => {});
+    await api.atualizarPushTokenIdentidade(json).catch(() => {});
   } catch {
     /* sem internet / sw indisponível — não bloqueia o app */
   }

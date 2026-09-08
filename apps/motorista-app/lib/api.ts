@@ -632,6 +632,9 @@ export const api = {
     }),
   atualizarPushToken: (token: string) =>
     request<{ ok: true }>("POST", "/m/push-token", { body: { token } }),
+  /** O mesmo token, na PESSOA — é por ele que o convite de empresa chega. */
+  atualizarPushTokenIdentidade: (token: string) =>
+    request<{ ok: true }>("POST", "/m/eu/push-token", { body: { token }, comoIdentidade: true }),
   listarNotificacoes: (opts: { cursor?: string; limit?: number } = {}) => {
     const qs = new URLSearchParams();
     if (opts.cursor) qs.set("cursor", opts.cursor);

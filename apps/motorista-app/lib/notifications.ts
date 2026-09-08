@@ -169,7 +169,12 @@ export async function obterEEnviarPushToken(): Promise<void> {
     if (!token) return;
 
     const { api } = await import("./api");
-    await api.atualizarPushToken(token);
+    // Vai pros DOIS donos possíveis do mesmo aparelho: o cadastro na empresa
+    // ativa e a PESSOA. É o token da identidade que faz o convite chegar —
+    // quem foi convidado ainda não tem vínculo vivo pra receber push por ele.
+    // Nunca cacheia: token cacheado por aparelho já travou push em silêncio.
+    await api.atualizarPushToken(token).catch(() => {});
+    await api.atualizarPushTokenIdentidade(token).catch(() => {});
   } catch {
     /* silencioso — push não pode quebrar o boot do app */
   }

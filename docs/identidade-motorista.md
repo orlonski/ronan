@@ -177,7 +177,14 @@ novo e tenta entrar num aparelho desatualizado.
   não disse sim.
 - Avisa por WhatsApp (rota nova `CONVITE_EMPRESA`, categoria `utility`,
   `critica: false`, decisão de provedor **por empresa** — é mensagem sobre a
-  operação dela) e por push, se a identidade tiver token.
+  operação dela).
+
+  **E por push** (`PushService.enviarParaIdentidade`): quem foi convidado ainda
+  não tem vínculo vivo, então não há `motoristaId` pra usar nem central de
+  notificações onde gravar (o sininho é por empresa). Por isso esse caminho é
+  enxuto — manda e pronto; o convite já está no banco e aparece na tela dele com
+  ou sem push. Os dois apps passaram a mandar o MESMO token do aparelho pros
+  dois donos possíveis: o cadastro na empresa ativa e a pessoa.
 - Auditoria (`ADMIN_CONVIDOU_MOTORISTA`) e limite de convites por hora: o
   endpoint é um oráculo de "esse CPF existe aqui?" e não pode virar varredura.
 

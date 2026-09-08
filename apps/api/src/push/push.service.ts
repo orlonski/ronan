@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { Expo, type ExpoPushMessage, type ExpoPushTicket } from "expo-server-sdk";
 import { NotificacoesService } from "../notificacoes/notificacoes.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { comoSistema } from "../common/conta/conta-context";
 
 const RETRY_DELAYS_MS = [500, 1500, 3000];
 
@@ -132,20 +133,7 @@ export class PushService {
       channelId: "default",
     };
 
-    let ticket: ExpoPushTicket | undefined;
-    let ultimoErro: unknown;
-    for (let tentativa = 0; tentativa <= RETRY_DELAYS_MS.length; tentativa++) {
-      try {
-        const [resultado] = await this.expo.sendPushNotificationsAsync([message]);
-        ticket = resultado;
-        break;
-      } catch (e) {
-        ultimoErro = e;
-        if (!isErroTransitorio(e)) break;
-        if (tentativa === RETRY_DELAYS_MS.length) break;
-        await delay(RETRY_DELAYS_MS[tentativa]);
-      }
-    }
+    const { ticket, ultimoErro } = await this.despachar(message);
 
     if (!ticket) {
       const msg = ultimoErro instanceof Error ? ultimoErro.message : "Falha ao enviar";
@@ -224,5 +212,83 @@ export class PushService {
       this.log.warn(`Push receipt consulta falhou motoristaId=${args.motoristaId}: ${e}`);
       return { enviado: true };
     }
+  }
+
+  /**
+   * Manda pro Expo com retry em erro transitório. Sem efeito colateral nenhum —
+   * quem interpreta ticket, receipt e limpeza de token é quem chamou.
+   */
+  private async despachar(
+    message: ExpoPushMessage,
+  ): Promise<{ ticket?: ExpoPushTicket; ultimoErro?: unknown }> {
+    let ticket: ExpoPushTicket | undefined;
+    let ultimoErro: unknown;
+    for (let tentativa = 0; tentativa <= RETRY_DELAYS_MS.length; tentativa++) {
+      try {
+        const [resultado] = await this.expo.sendPushNotificationsAsync([message]);
+        ticket = resultado;
+        break;
+      } catch (e) {
+        ultimoErro = e;
+        if (!isErroTransitorio(e)) break;
+        if (tentativa === RETRY_DELAYS_MS.length) break;
+        await delay(RETRY_DELAYS_MS[tentativa]);
+      }
+    }
+    return { ticket, ultimoErro };
+  }
+
+  /**
+   * Push pra PESSOA, não pro cadastro numa empresa.
+   *
+   * É o que faz o convite chegar: quem foi convidado ainda não tem vínculo vivo,
+   * então não há `motoristaId` pra usar, nem central de notificações onde
+   * gravar (o sininho do app é por empresa). Por isso este caminho é enxuto —
+   * manda e pronto; o convite em si já está guardado no banco e aparece na tela
+   * de convites quando ele abrir o app, com ou sem push.
+   *
+   * Best-effort de propósito: falhar aqui não pode derrubar o convite.
+   */
+  async enviarParaIdentidade(args: {
+    identidadeId: string;
+    titulo: string;
+    corpo: string;
+    dados?: Record<string, unknown>;
+  }): Promise<EnviarResultado> {
+    const identidade = await comoSistema(() =>
+      this.prisma.motoristaIdentidade.findUnique({
+        where: { id: args.identidadeId },
+        select: { expoPushToken: true },
+      }),
+    );
+    const token = identidade?.expoPushToken;
+    // Sem token não é erro: ele pode não ter o app instalado ainda, e o convite
+    // continua esperando na tela dele.
+    if (!token) return { enviado: false, motivo: "Sem token de push." };
+    if (!Expo.isExpoPushToken(token)) return { enviado: false, motivo: "Token inválido" };
+
+    const { ticket } = await this.despachar({
+      to: token,
+      title: args.titulo,
+      body: args.corpo,
+      data: { ...(args.dados ?? {}), kind: args.dados?.kind ?? "convite-empresa" },
+      sound: "ding",
+      priority: "high",
+      channelId: "default",
+    });
+    if (!ticket) return { enviado: false, motivo: "Não foi possível enviar agora." };
+    if (ticket.status === "error") {
+      if (ticket.details?.error === "DeviceNotRegistered") {
+        // Limpa o token DELA — não o de um vínculo, que aqui nem existe.
+        await comoSistema(() =>
+          this.prisma.motoristaIdentidade.update({
+            where: { id: args.identidadeId },
+            data: { expoPushToken: null, pushTokenAtualizadoEm: null },
+          }),
+        );
+      }
+      return { enviado: false, motivo: ticket.message ?? "Erro do Expo" };
+    }
+    return { enviado: true };
   }
 }

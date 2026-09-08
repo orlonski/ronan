@@ -381,7 +381,7 @@ export class MotoristasService {
         valorDepois: "PENDENTE",
         metadata: { cpf: data.cpf, origem: "novo-motorista" },
       });
-      void this.avisarConvite(identidade.telefone);
+      void this.avisarConvite(identidade.id, identidade.telefone);
     }
     return this.flatten(created);
   }
@@ -481,17 +481,30 @@ export class MotoristasService {
       valorDepois: "PENDENTE",
       metadata: { cpf },
     });
-    void this.avisarConvite(identidade.telefone);
+    void this.avisarConvite(identidade.id, identidade.telefone);
     return this.flatten(motorista);
   }
 
   /**
-   * Avisa o motorista que foi convidado. Best-effort: se o WhatsApp falhar, o
-   * convite continua esperando na tela de convites do app.
+   * Avisa o motorista que foi convidado — no app e no WhatsApp.
+   *
+   * Best-effort nos dois: se falharem, o convite continua esperando na tela de
+   * convites, que é onde ele vive de verdade. O push vai pra PESSOA (ela ainda
+   * não tem vínculo vivo, então não há `motoristaId` pra usar).
    */
-  private async avisarConvite(telefone: string | null) {
-    if (!telefone) return;
+  private async avisarConvite(identidadeId: string, telefone: string | null) {
     const conta = await this.prisma.conta.findFirstOrThrow({ select: { nome: true } });
+
+    void this.push
+      .enviarParaIdentidade({
+        identidadeId,
+        titulo: `${conta.nome} quer te adicionar`,
+        corpo: "Abra o app pra aceitar ou recusar o convite.",
+        dados: { kind: "convite-empresa" },
+      })
+      .catch(() => {});
+
+    if (!telefone) return;
     await this.envio.tentarEnviar({
       destino: { tipo: "TELEFONE", numero: SessaoService.normalizar(telefone) },
       rota: "CONVITE_EMPRESA",
