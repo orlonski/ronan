@@ -50,3 +50,23 @@ export function esquecerIdentidade(): void {
   localStorage.removeItem(KEY);
   avisar();
 }
+
+/**
+ * Garante a sessão da PESSOA quando só existe a da empresa.
+ *
+ * O caso é de quem já estava logado quando a identidade entrou no ar: a sessão
+ * dela só nascia no login, no cadastro e no reset de senha, e ninguém vai
+ * deslogar a frota inteira pra corrigir isso. Sem ela, "Meus gastos" abre vazio
+ * pra sempre e o convite nunca chega — em silêncio, que é o pior jeito de falhar.
+ *
+ * Best-effort: sem rede, tenta de novo na próxima abertura.
+ */
+export async function garantirSessaoDaPessoa(): Promise<void> {
+  try {
+    if (temIdentidade()) return;
+    const { api } = await import("./api");
+    salvarIdentidade(await api.sessaoDaPessoa());
+  } catch {
+    /* silencioso — não pode atrapalhar o boot nem o trabalho dele */
+  }
+}

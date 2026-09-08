@@ -391,6 +391,33 @@ export class AuthService {
     });
   }
 
+  /**
+   * Emite a sessão da PESSOA pra quem já está logado numa empresa.
+   *
+   * Os tokens da identidade só nasciam no login, no cadastro e no reset de
+   * senha — então quem JÁ ESTAVA LOGADO quando isto entrou no ar ficou sem ela,
+   * e sem ela o app não abre `m/eu/*`: "Meus gastos" ficava vazio pra sempre e o
+   * token de push nunca chegava à pessoa (o convite não tocava o aparelho). Como
+   * ninguém vai deslogar a frota pra corrigir isso, o app pede aqui.
+   *
+   * Não amplia acesso nenhum: o token de MOTORISTA já prova que ele é essa
+   * pessoa — a identidade é justamente a dona daquele cadastro.
+   */
+  async identidadeDoMotorista(motoristaId: string) {
+    const motorista = await comoSistema(() =>
+      this.prisma.motorista.findUniqueOrThrow({
+        where: { id: motoristaId },
+        select: { identidadeId: true, cpf: true },
+      }),
+    );
+    // Vínculo anterior à separação pessoa/vínculo ainda pode estar sem dono —
+    // `garantirPorCpf` cria a identidade a partir do que a empresa já tinha.
+    const identidadeId =
+      motorista.identidadeId ?? (await this.identidades.garantirPorCpf(motorista.cpf))?.id;
+    if (!identidadeId) throw new UnauthorizedException("Cadastro não encontrado");
+    return this.issueIdentidadeTokens(identidadeId);
+  }
+
   /** Emite tokens da PESSOA — é o que o cadastro sem empresa devolve. */
   async issueIdentidadeTokens(identidadeId: string) {
     return this.issueTokens({ sub: identidadeId, kind: "IDENTIDADE" });

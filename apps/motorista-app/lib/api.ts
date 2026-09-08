@@ -623,6 +623,13 @@ export const api = {
   // ---- Empresas do motorista ----
   /** Empresas em que este CPF tem cadastro (mantém o seletor em dia). */
   listarCadastros: () => request<CadastroEmpresa[]>("GET", "/m/auth/cadastros"),
+  /**
+   * A sessão da PESSOA pra quem já está logado numa empresa.
+   *
+   * Quem entrou antes desta versão não tem uma — os tokens da identidade só
+   * nasciam no login/cadastro/reset — e sem ela nada de `m/eu/*` funciona.
+   */
+  sessaoDaPessoa: () => request<Tokens>("POST", "/m/auth/identidade", { body: {} }),
   /** Sessão de outro cadastro do mesmo CPF, sem pedir senha. */
   /** `comoCadastro`: usar o token de outro cadastro do mesmo CPF (reparo). */
   trocarEmpresa: (motoristaId: string, comoCadastro?: string) =>

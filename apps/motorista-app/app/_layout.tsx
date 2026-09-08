@@ -40,6 +40,7 @@ import { SemEmpresa } from "@/components/sem-empresa";
 import {
   assinarIdentidade,
   carregarIdentidade,
+  garantirSessaoDaPessoa,
   temIdentidadeSync,
 } from "@/lib/identidade";
 import { AtualizacaoObrigatoria } from "@/components/atualizacao-obrigatoria";
@@ -234,6 +235,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     // Quem não está em empresa nenhuma não tem o que reparar nem o que alinhar:
     // esses endpoints falam pelo cadastro numa empresa.
     if (semEmpresa) return;
+    // Repõe a sessão da PESSOA pra quem já estava logado antes dela existir.
+    void garantirSessaoDaPessoa();
     // Repõe o token da empresa ativa se ele faltar (slot descartado por guardar
     // o de outro cadastro) e só depois alinha as empresas com o servidor: nome
     // da empresa, aprovação que saiu do "em análise" e cadastro novo numa

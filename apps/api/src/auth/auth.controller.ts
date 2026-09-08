@@ -122,6 +122,21 @@ export class AuthController {
     return this.auth.cadastrosDoMotorista(user.id);
   }
 
+  /**
+   * A sessão da PESSOA pra quem já está logado numa empresa.
+   *
+   * O app chama quando tem sessão de empresa mas não tem a da pessoa — o caso de
+   * quem já estava logado antes desta versão. Ver `identidadeDoMotorista`.
+   */
+  @ApiBearerAuth()
+  @UseGuards(RolesGuard)
+  @Roles("MOTORISTA")
+  @HttpCode(200)
+  @Post("m/auth/identidade")
+  async identidade(@CurrentUser() user: AuthMotorista) {
+    return this.auth.identidadeDoMotorista(user.id);
+  }
+
   /** Troca a empresa ativa sem pedir senha (só entre cadastros do mesmo CPF). */
   @ApiBearerAuth()
   @UseGuards(RolesGuard)

@@ -140,6 +140,18 @@ administrativo atualizar" não resolveria nada — o código continuaria indo pr
 número velho). Depois que ele entra, o telefone é dele: o painel passa a mexer só
 na cópia da empresa.
 
+### 1.b Quem já estava logado quando isto entrou no ar
+
+Os tokens da identidade nascem no login, no cadastro e no reset de senha — e
+ninguém vai deslogar a frota pra distribuí-los. Quem já estava logado ficou,
+portanto, **sem sessão de pessoa**: `m/eu/*` respondia 401, "Meus gastos" abria
+vazio pra sempre e o token de push nunca chegava à pessoa (o convite não tocava
+o aparelho). Tudo em silêncio, que é o pior jeito de falhar.
+
+`POST /m/auth/identidade` fecha isso: com o token de MOTORISTA — que já prova
+que ele é aquela pessoa — devolve a sessão da identidade. Os dois apps chamam no
+boot quando têm sessão de empresa e não têm a da pessoa, best-effort.
+
 ### 2. Login
 
 Autentica na identidade (um `findUnique` por CPF, em vez do `findMany` +

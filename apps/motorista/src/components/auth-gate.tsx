@@ -8,7 +8,7 @@ import { enviarPendentes } from "@/lib/error-reporter";
 import { obterEEnviarPushToken } from "@/lib/notifications";
 import { EmAnalise } from "@/components/em-analise";
 import { SemEmpresa } from "@/components/sem-empresa";
-import { assinarIdentidade, temIdentidade } from "@/lib/identidade";
+import { assinarIdentidade, garantirSessaoDaPessoa, temIdentidade } from "@/lib/identidade";
 import { EscolherEmpresaAbertura } from "@/components/escolher-empresa-abertura";
 import {
   assinarSessoes,
@@ -72,6 +72,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
     // esses endpoints falam pelo cadastro numa empresa, e chamá-los sem sessão
     // era o caminho pro 401 que deslogava o recém-cadastrado.
     if (listarSessoes().length === 0) return;
+    // Repõe a sessão da PESSOA pra quem já estava logado antes dela existir.
+    void garantirSessaoDaPessoa();
     // Repõe o token da empresa ativa se ele faltar (slot descartado por guardar
     // o de outro cadastro) e só depois alinha as empresas com o servidor: nome
     // da empresa, aprovação e cadastro numa segunda empresa.
