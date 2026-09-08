@@ -30,6 +30,18 @@ export const LoginMotoristaInput = z.object({
     .transform(cpfDigits)
     .refine((v) => v.length === 11, "CPF deve ter 11 dígitos"),
   senha: z.string().min(6),
+  /**
+   * O app sabe lidar com quem não está em empresa nenhuma?
+   *
+   * Versão antiga não sabe: ela lê `accessToken` do topo da resposta e, sem
+   * vínculo, não haveria token nenhum ali — ela guardaria `undefined` e ficaria
+   * num limbo sem mensagem. Então quem não manda esta flag recebe um 403 que
+   * explica o que fazer, em vez de uma tela quebrada.
+   *
+   * É explícito em vez de comparar versão de propósito: quem sabe lidar é quem
+   * diz que sabe.
+   */
+  suportaIdentidade: z.boolean().optional(),
 });
 export type LoginMotoristaInput = z.infer<typeof LoginMotoristaInput>;
 
@@ -75,6 +87,24 @@ export const SessaoEmpresa = CadastroEmpresa.extend({
   refreshToken: z.string(),
 });
 export type SessaoEmpresa = z.infer<typeof SessaoEmpresa>;
+
+/**
+ * A resposta do login.
+ *
+ * O formato antigo continua no TOPO (accessToken/refreshToken/status) pro app
+ * que ainda não recebeu o OTA — ele lê exatamente esses campos e ignora o resto.
+ * `identidade` é o par de tokens da PESSOA, que existe mesmo sem vínculo nenhum
+ * e é o que dá acesso a `m/eu/*` (perfil, convites). Ver
+ * docs/identidade-motorista.md.
+ */
+export const LoginMotoristaOutput = z.object({
+  accessToken: z.string().optional(),
+  refreshToken: z.string().optional(),
+  status: z.enum(["PENDENTE_APROVACAO", "APROVADO", "REJEITADO"]).optional(),
+  cadastros: z.array(SessaoEmpresa),
+  identidade: TokensOutput,
+});
+export type LoginMotoristaOutput = z.infer<typeof LoginMotoristaOutput>;
 
 /**
  * Troca a empresa ativa sem pedir senha de novo. Só emite token pra cadastro do

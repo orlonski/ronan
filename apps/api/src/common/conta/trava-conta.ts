@@ -26,6 +26,14 @@ import { contaAtual } from "./conta-context";
  */
 const MODELS_GLOBAIS = new Set<string>([
   "Conta", // o próprio tenant
+  // A PESSOA (CPF), que existe antes e independente de qualquer empresa — é o
+  // que permite cadastro no app sem vínculo. Como a trava não filtra nada aqui,
+  // toda consulta precisa levar `id`/`cpf` no where, e o que sai pra fora se
+  // monta campo a campo. Ver docs/identidade-motorista.md.
+  "MotoristaIdentidade",
+  // O cadastro pendente é dessa mesma pessoa, antes dela existir: quem se
+  // cadastra pelo app não diz de qual empresa é.
+  "CadastroMotoristaPendente",
   "Permissao", // catálogo de chaves do RBAC, semeado no boot
   "PedagioRodovia", // praças de pedágio vindas do OSM (dado público)
   "GeocodingCache", // endereço → coordenada

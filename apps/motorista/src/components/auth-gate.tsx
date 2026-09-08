@@ -7,6 +7,8 @@ import { startAutoSync } from "@/lib/sync";
 import { enviarPendentes } from "@/lib/error-reporter";
 import { obterEEnviarPushToken } from "@/lib/notifications";
 import { EmAnalise } from "@/components/em-analise";
+import { SemEmpresa } from "@/components/sem-empresa";
+import { assinarIdentidade, temIdentidade } from "@/lib/identidade";
 import { EscolherEmpresaAbertura } from "@/components/escolher-empresa-abertura";
 import {
   assinarSessoes,
@@ -31,6 +33,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
   );
   // Re-renderiza ao trocar/escolher empresa (o gate de escolha some).
   useSyncExternalStore(assinarSessoes, () => JSON.stringify(listarSessoes()));
+  // Re-renderiza quando a sessão da pessoa aparece/some (cadastro novo, logout).
+  const comIdentidade = useSyncExternalStore(assinarIdentidade, temIdentidade, () => false);
   const location = useLocation();
 
   // Boot único: lê tokens e popula auth-state. useSyncExternalStore re-renderiza
@@ -50,7 +54,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
           // descartado por guardar o token de outra empresa: ele segue logado
           // pela sessão sã que tem, e o reparo repõe a que falta.
           const tokens = loadTokens();
-          setAuthState(!!tokens?.accessToken || temAlgumaSessaoComToken());
+          // A sessão da PESSOA também conta como "logado": é quem se cadastrou
+          // e ainda não foi convidado por ninguém.
+          setAuthState(!!tokens?.accessToken || temAlgumaSessaoComToken() || temIdentidade());
         } catch {
           setAuthState(false);
         }
@@ -62,6 +68,10 @@ export function AuthGate({ children }: { children: ReactNode }) {
     if (state !== true) return;
     startAutoSync();
     void enviarPendentes();
+    // Quem não está em empresa nenhuma não tem o que reparar nem o que alinhar:
+    // esses endpoints falam pelo cadastro numa empresa, e chamá-los sem sessão
+    // era o caminho pro 401 que deslogava o recém-cadastrado.
+    if (listarSessoes().length === 0) return;
     // Repõe o token da empresa ativa se ele faltar (slot descartado por guardar
     // o de outro cadastro) e só depois alinha as empresas com o servidor: nome
     // da empresa, aprovação e cadastro numa segunda empresa.
@@ -80,6 +90,13 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const onAuthScreen = location.pathname === "/login" || location.pathname.startsWith("/signup");
   if (!state && !onAuthScreen) return <Navigate to="/login" replace />;
   if (state && onAuthScreen) return <Navigate to="/" replace />;
+
+  // Logado, mas em empresa nenhuma: cobre o app com a tela de convites. Vem
+  // ANTES do "em análise" porque sem vínculo não há aprovação pendente — o
+  // status guardado pode ser sobra de um cadastro anterior. A checagem exige a
+  // identidade porque quem entrou antes das sessões por empresa também tem
+  // lista vazia e roda pelo token legado.
+  if (state && comIdentidade && listarSessoes().length === 0) return <SemEmpresa />;
 
   // Logado mas cadastro ainda em análise: cobre o app inteiro com a tela de
   // espera (some sozinho quando o status vira APROVADO).

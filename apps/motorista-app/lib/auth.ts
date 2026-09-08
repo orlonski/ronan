@@ -7,6 +7,7 @@ import {
   ehKeychainBloqueado,
   type Tokens,
 } from "./keychain";
+import { esquecerIdentidade } from "./identidade";
 import { esquecerTudo, motoristaAtivoId, salvarTokensDe, tokensDe } from "./sessoes";
 
 export { KeychainLockedError };
@@ -47,9 +48,15 @@ export async function loadTokens(): Promise<Tokens | null> {
   }
 }
 
-/** Sai de TODAS as empresas (botão "Sair"). */
+/**
+ * Sai de TODAS as empresas E do cadastro da pessoa (botão "Sair").
+ *
+ * A sessão da pessoa sai junto de propósito: deixá-la pra trás faria o app
+ * reabrir na tela de convites em vez do login, como se ele não tivesse saído.
+ */
 export async function clearTokens() {
   await esquecerTudo();
+  await esquecerIdentidade();
   await SecureStore.deleteItemAsync(KEY_LEGADA, KEYCHAIN_OPTS).catch(() => {});
 }
 

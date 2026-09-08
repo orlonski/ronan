@@ -56,10 +56,14 @@ export default function LoginPage() {
         salvarSessoesDoLogin(cadastros, cadastros[0]!.motoristaId);
         await resolverLegadoAposLogin(cadastros[0]!.motoristaId);
         marcarEmpresaEscolhida();
-      } else {
+      } else if (resp.accessToken && resp.refreshToken) {
         // Backend antigo (deploy ainda não chegou): guarda como antes.
-        saveTokens(resp);
+        saveTokens({ accessToken: resp.accessToken, refreshToken: resp.refreshToken });
       }
+      // Sem nenhuma empresa ele entra assim mesmo: a sessão da PESSOA já foi
+      // guardada pelo cliente de API, e o app abre no modo sem empresa (com os
+      // convites, se houver). Mandar de volta pro login seria dizer "sua senha
+      // está certa, mas volte pro começo".
       setAuthState(true);
       navigate("/", { replace: true });
     } catch (err) {

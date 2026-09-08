@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import type { Prisma } from "@prisma/client";
+import { AcaoAuditoria, type Prisma } from "@prisma/client";
 import type {
   CriarMotoristaInput,
   AtualizarMotoristaInput,
@@ -13,9 +13,10 @@ import type {
   EnviarPushResultado,
   StatusMotorista,
 } from "@ronan/shared-types";
+import { NOME_PLATAFORMA } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
-import { comoSistema } from "../../common/conta/conta-context";
 import { AuthService } from "../../auth/auth.service";
+import { IdentidadeService } from "../../auth/identidade.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { PushService } from "../../push/push.service";
 import { EnvioWhatsappService } from "../../whatsapp/envio/envio-whatsapp.service";
@@ -24,12 +25,22 @@ import { paginate, type Paginated, type PaginationQuery } from "../../common/pag
 import { ymdSaoPaulo } from "../../common/timezone";
 import { adotarLancamentosOrfaos } from "../../common/transportadora";
 import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
+import { AuditoriaService } from "../../auditoria/auditoria.service";
 import { EasUpdateService } from "./eas-update.service";
+
+/**
+ * Buscas por CPF por usuário, pra segurar varredura. Em memória de propósito:
+ * é uma trava grosseira contra abuso óbvio, não contabilidade — reiniciar a API
+ * e zerar isso não tem consequência.
+ */
+const BUSCAS_CPF = new Map<string, number[]>();
 
 // Valor especial do filtro: motoristas que nunca reportaram versão (appVersion null).
 const SEM_VERSAO = "sem-versao";
 
 type ListMotoristasParams = PaginationQuery & {
+  /** `PENDENTE` = a aba de convites enviados. Omitido = todo mundo, menos eles. */
+  aceite?: "PENDENTE" | "ACEITO" | "RECUSADO";
   ativo?: "true" | "false";
   status?: StatusMotorista;
   appVersion?: string;
@@ -68,6 +79,9 @@ const SAFE_SELECT = {
   modalidade: { select: { id: true, nome: true } },
   ativo: true,
   status: true,
+  aceite: true,
+  convidadoEm: true,
+  convidadoPor: { select: { id: true, nome: true } },
   aprovadoEm: true,
   aprovadoPor: { select: { id: true, nome: true } },
   ultimoLoginEm: true,
@@ -103,6 +117,8 @@ export class MotoristasService {
     private readonly push: PushService,
     private readonly eas: EasUpdateService,
     private readonly envio: EnvioWhatsappService,
+    private readonly identidades: IdentidadeService,
+    private readonly auditoria: AuditoriaService,
   ) {}
 
   /**
@@ -142,7 +158,10 @@ export class MotoristasService {
     params: ListMotoristasParams,
     escopo: EscopoAdmin,
   ): Promise<Paginated<Record<string, unknown>>> {
-    const where: Prisma.MotoristaWhereInput = {};
+    // Convite ainda não respondido NÃO é motorista da empresa: ele não aceitou,
+    // não lança nada e não devia aparecer na lista como se fosse do time. Vive na
+    // aba de convites (`aceite=PENDENTE`).
+    const where: Prisma.MotoristaWhereInput = { aceite: params.aceite ?? { not: "PENDENTE" } };
     if (params.ativo === "true") where.ativo = true;
     if (params.ativo === "false") where.ativo = false;
     if (params.status) where.status = params.status;
@@ -291,19 +310,30 @@ export class MotoristasService {
     const exists = await this.prisma.motorista.findFirst({ where: { cpf: data.cpf } });
     if (exists) throw new ConflictException("CPF já cadastrado");
 
-    // Já roda pra outra empresa? Então ele já tem senha — herda o hash e ignora
-    // o que vier no corpo. A senha é da PESSOA (ver AuthService.propagarSenha);
+    // Essa pessoa já existe na plataforma (roda pra outra empresa, ou se
+    // cadastrou pelo app)? Então ela já tem senha — o cadastro se pendura na
+    // identidade dela e o que vier no corpo é ignorado. A senha é da PESSOA;
     // criar outra aqui daria duas senhas pro mesmo CPF e uma delas pararia de
     // funcionar na primeira troca. O painel nem mostra o campo nesse caso.
-    const herdado = await this.senhaExistenteDoCpf(data.cpf);
-    if (!herdado && !data.senha) {
+    const existente = await this.identidades.garantirPorCpf(data.cpf);
+    if (!existente && !data.senha) {
       throw new BadRequestException("Informe a senha inicial do motorista.");
     }
-    const senhaHash = herdado ?? (await AuthService.hashPassword(data.senha!));
+    const senhaHash = existente?.senhaHash ?? (await AuthService.hashPassword(data.senha!));
+    const identidade =
+      existente ??
+      (await this.identidades.criar({
+        cpf: data.cpf,
+        nome: data.nome,
+        telefone: data.telefone,
+        email: data.email,
+        senhaHash,
+      }));
 
     const created = await this.prisma.$transaction(async (tx) => {
       const motorista = await tx.motorista.create({
         data: {
+          identidadeId: identidade.id,
           nome: data.nome,
           cpf: data.cpf,
           senhaHash,
@@ -333,26 +363,148 @@ export class MotoristasService {
   }
 
   /**
-   * Esse CPF já tem cadastro em outra empresa?
+   * Procura uma PESSOA pelo CPF pra empresa poder convidá-la.
    *
-   * Responde SÓ isso — nunca em qual. Quem cadastra precisa saber que não deve
+   * Exige o CPF inteiro e bate exato: nunca lista, nunca busca por nome nem por
+   * parte do número. É a mesma linha do `checarCpf` — responde sobre um CPF que
+   * quem pergunta já digitou por completo, e nada além disso. Devolve o nome
+   * (pra conferir que é a pessoa certa) e o celular MASCARADO; em qual outra
+   * empresa ela roda não é assunto de quem está do lado de cá.
+   */
+  async procurarPorCpf(cpf: string, usuarioId: string) {
+    this.limitarBusca(usuarioId);
+    const identidade = await this.identidades.porCpf(cpf);
+    if (!identidade) return { encontrado: false as const };
+
+    // Já é da casa? Então não é convite, é a lista de motoristas.
+    const jaAqui = await this.prisma.motorista.findFirst({
+      where: { cpf },
+      select: { id: true, aceite: true, ativo: true },
+    });
+    return {
+      encontrado: true as const,
+      nome: identidade.nome,
+      telefoneMascarado: mascararCelular(identidade.telefone),
+      jaVinculado: jaAqui ? { motoristaId: jaAqui.id, aceite: jaAqui.aceite, ativo: jaAqui.ativo } : null,
+    };
+  }
+
+  /**
+   * Convida a pessoa pra rodar pra esta empresa.
+   *
+   * O vínculo nasce APROVADO do lado da empresa (foi ela que chamou) e PENDENTE
+   * do lado dele — e enquanto ele não aceitar, não aparece na lista de
+   * motoristas nem consegue lançar nada. Ninguém entra na conta de ninguém sem
+   * dizer sim.
+   */
+  async convidar(cpf: string, usuarioId: string) {
+    const identidade = await this.identidades.porCpf(cpf);
+    if (!identidade || !identidade.ativo) {
+      throw new NotFoundException({
+        code: "CPF_NAO_ENCONTRADO",
+        message:
+          "Não encontramos ninguém com esse CPF na plataforma. Se ele ainda não usa o app, cadastre pelo botão “Novo motorista”.",
+      });
+    }
+
+    const existente = await this.prisma.motorista.findFirst({ where: { cpf } });
+    if (existente && existente.aceite === "PENDENTE") {
+      throw new ConflictException("Você já convidou esse motorista. Ele ainda não respondeu.");
+    }
+    if (existente && existente.aceite === "ACEITO" && existente.ativo) {
+      throw new ConflictException("Esse motorista já está na sua equipe.");
+    }
+
+    // Convite recusado (ou vínculo desligado) pode ser refeito: gente muda de
+    // ideia, e recomeçar do zero criaria um segundo cadastro pro mesmo CPF.
+    const motorista = existente
+      ? await this.prisma.motorista.update({
+          where: { id: existente.id },
+          data: {
+            ativo: true,
+            status: "APROVADO",
+            aceite: "PENDENTE",
+            aceiteEm: null,
+            convidadoPorId: usuarioId,
+            convidadoEm: new Date(),
+          },
+          select: SAFE_SELECT,
+        })
+      : await this.prisma.motorista.create({
+          data: {
+            identidadeId: identidade.id,
+            nome: identidade.nome,
+            cpf: identidade.cpf,
+            telefone: identidade.telefone,
+            email: identidade.email,
+            senhaHash: identidade.senhaHash,
+            status: "APROVADO",
+            aceite: "PENDENTE",
+            convidadoPorId: usuarioId,
+            convidadoEm: new Date(),
+            criadoPorId: usuarioId,
+          },
+          select: SAFE_SELECT,
+        });
+
+    await this.auditoria.log({
+      usuarioId,
+      entidade: "Motorista",
+      entidadeId: motorista.id,
+      acao: AcaoAuditoria.ADMIN_CONVIDOU_MOTORISTA,
+      campo: "aceite",
+      valorAntes: existente?.aceite ?? null,
+      valorDepois: "PENDENTE",
+      metadata: { cpf },
+    });
+    void this.avisarConvite(identidade.telefone);
+    return this.flatten(motorista);
+  }
+
+  /**
+   * Avisa o motorista que foi convidado. Best-effort: se o WhatsApp falhar, o
+   * convite continua esperando na tela de convites do app.
+   */
+  private async avisarConvite(telefone: string | null) {
+    if (!telefone) return;
+    const conta = await this.prisma.conta.findFirstOrThrow({ select: { nome: true } });
+    await this.envio.tentarEnviar({
+      destino: { tipo: "TELEFONE", numero: SessaoService.normalizar(telefone) },
+      rota: "CONVITE_EMPRESA",
+      texto: `A ${conta.nome} quer te adicionar como motorista no ${NOME_PLATAFORMA}. Abra o app pra aceitar ou recusar.`,
+      params: [conta.nome, NOME_PLATAFORMA],
+    });
+  }
+
+  /**
+   * Teto de buscas por CPF por usuário.
+   *
+   * O endpoint responde "essa pessoa existe e se chama fulano" — em volume,
+   * isso é varredura de CPF. O teto é grosseiro de propósito: quem cadastra
+   * motorista faz isso algumas vezes por dia, não centenas.
+   */
+  private limitarBusca(usuarioId: string) {
+    const agora = Date.now();
+    const janela = agora - 60 * 60_000;
+    const feitas = (BUSCAS_CPF.get(usuarioId) ?? []).filter((t) => t > janela);
+    if (feitas.length >= 30) {
+      throw new BadRequestException(
+        "Muitas buscas por CPF na última hora. Tente de novo mais tarde.",
+      );
+    }
+    feitas.push(agora);
+    BUSCAS_CPF.set(usuarioId, feitas);
+  }
+
+  /**
+   * Essa pessoa já existe na plataforma?
+   *
+   * Responde SÓ isso — nunca onde. Quem cadastra precisa saber que não deve
    * inventar uma senha nova, e nada além disso: pra qual outra empresa o
    * motorista roda não é assunto de quem está do lado de cá.
    */
   async cpfEmOutraEmpresa(cpf: string): Promise<boolean> {
-    return (await this.senhaExistenteDoCpf(cpf)) !== null;
-  }
-
-  /** O hash que este CPF já tem em outra empresa, se tiver. Atravessa contas. */
-  private async senhaExistenteDoCpf(cpf: string): Promise<string | null> {
-    const existente = await comoSistema(() =>
-      this.prisma.motorista.findFirst({
-        where: { cpf, ativo: true },
-        select: { senhaHash: true },
-        orderBy: { criadoEm: "desc" },
-      }),
-    );
-    return existente?.senhaHash ?? null;
+    return (await this.identidades.porCpf(cpf)) !== null;
   }
 
   async update(id: string, data: AtualizarMotoristaInput) {
@@ -420,6 +572,19 @@ export class MotoristasService {
         cpfParaSenha,
         await AuthService.hashPassword(novaSenha),
       );
+    }
+
+    // Celular corrigido pelo painel de quem AINDA NÃO entrou no app vale também
+    // pra pessoa. É o que destrava o cadastro dele: o código de confirmação vai
+    // pro número que a empresa tem em ficha, então número errado aqui deixava o
+    // motorista sem caminho nenhum — e o recado "peça pro administrativo
+    // atualizar" não resolvia nada. Depois que ele entra, o telefone é dele: o
+    // painel muda só a cópia da empresa.
+    if (rest.telefone !== undefined) {
+      const identidade = await this.identidades.porCpf(rest.cpf ?? atual.cpf);
+      if (identidade && identidade.ultimoLoginEm === null) {
+        await this.identidades.definirTelefone(identidade.id, rest.telefone ?? null);
+      }
     }
 
     // Classificou um motorista que ainda não tinha frota: adota o histórico dele
@@ -635,4 +800,11 @@ export class MotoristasService {
       criadoPorId: usuarioId,
     });
   }
+}
+
+/** Só os 4 últimos dígitos — o suficiente pra conferir que é a pessoa certa. */
+function mascararCelular(telefone: string | null): string | null {
+  if (!telefone) return null;
+  const d = telefone.replace(/\D/g, "");
+  return d.length < 4 ? "••••" : `••••-${d.slice(-4)}`;
 }

@@ -195,7 +195,7 @@ export function MotoristaForm({ initial }: Props) {
    * O mesmo motorista pode rodar pra mais de uma, e a senha é da PESSOA, não do
    * cadastro: ele entra em todas com a mesma. Então aqui a senha não é pedida —
    * inventar uma segunda deixaria uma delas parando de funcionar na primeira
-   * troca. Qual é a outra empresa não se diz: não é assunto de quem cadastra.
+   * troca. Onde mais ela tem cadastro não se diz: não é assunto de quem cadastra.
    */
   const [cpfEmOutraEmpresa, setCpfEmOutraEmpresa] = useState(false);
   const cpfDigitado = cpfDigits(form.cpf);
@@ -306,8 +306,8 @@ export function MotoristaForm({ initial }: Props) {
       await create.mutateAsync({
         nome: form.nome,
         cpf: cpfDigitos,
-        // Sem senha quando ele já tem cadastro em outra empresa — o backend
-        // herda a que ele já usa (e ignora qualquer coisa mandada aqui).
+        // Sem senha quando a pessoa já existe na plataforma — o backend pendura o
+        // cadastro na identidade dela (e ignora qualquer senha mandada aqui).
         senha: cpfEmOutraEmpresa ? undefined : form.senha,
         telefone: telDigitos || undefined,
         email: emailTrim || undefined,
@@ -349,8 +349,9 @@ export function MotoristaForm({ initial }: Props) {
             <div className="space-y-2">
               <Label>Senha</Label>
               <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                Esse CPF já tem cadastro em outra empresa. Ele entra com a senha que já usa —
-                não precisa definir nenhuma aqui.
+                Essa pessoa já usa o Movatruck. Ela entra com a senha que já tem — não
+                precisa definir nenhuma aqui. Se ela ainda não roda pra você, o caminho é
+                “Convidar por CPF”: assim ela escolhe entrar.
               </p>
             </div>
           ) : (

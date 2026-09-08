@@ -32,9 +32,6 @@ export default function SignupScreen() {
   // Pode chegar com o CPF já preenchido (ex: veio do "esqueci minha senha" que
   // detectou "CPF não cadastrado").
   const params = useLocalSearchParams<{ cpf?: string }>();
-  // Código que a empresa passa pro motorista. É ele que decide em qual
-  // empresa o cadastro entra — o app é o mesmo pra todas.
-  const [codigoEmpresa, setCodigoEmpresa] = useState("");
   const [nome, setNome] = useState("");
   const [cpf, setCpf] = useState(() => (params.cpf ? maskCpf(params.cpf) : ""));
   const [celular, setCelular] = useState("");
@@ -71,20 +68,15 @@ export default function SignupScreen() {
     const celularDigitos = telefoneDigits(celular);
     const placasLimpa = placas.map((p) => p.trim()).filter(Boolean);
 
-    if (codigoEmpresa.trim().length < 3) {
-      return setErro("Informe o código da empresa pra quem você roda.");
-    }
     if (nome.trim().length < 2) return setErro("Informe seu nome completo.");
     if (cpfDigitos.length !== 11) return setErro("CPF precisa ter 11 dígitos.");
     if (celularDigitos.length < 10) return setErro("Informe um celular válido com DDD.");
     if (senha.length < 6) return setErro("A senha precisa ter ao menos 6 caracteres.");
     if (senha !== confirmar) return setErro("As senhas não conferem.");
-    if (placasLimpa.length === 0) return setErro("Informe ao menos uma placa.");
 
     setSubmitting(true);
     try {
-      await api.iniciarCadastro({
-        codigoEmpresa: codigoEmpresa.trim(),
+      const res = await api.iniciarCadastro({
         nome: nome.trim(),
         cpf: cpfDigitos,
         telefone: celularDigitos,
@@ -96,7 +88,14 @@ export default function SignupScreen() {
       });
       router.push({
         pathname: "/signup-codigo",
-        params: { cpf: cpfDigitos, celular: celularDigitos, codigoEmpresa: codigoEmpresa.trim() },
+        params: {
+          cpf: cpfDigitos,
+          celular: celularDigitos,
+          // Pra onde o código REALMENTE foi. Quando a empresa já tinha
+          // cadastrado ele, vai pro número dela, não pro que ele digitou aqui.
+          destino: res.destinoMascarado ?? "",
+          reivindicacao: res.reivindicacao ? "1" : "",
+        },
       });
     } catch (err) {
       setErro(humanizeApiError(err));
@@ -131,22 +130,6 @@ export default function SignupScreen() {
           </View>
 
           <View className="flex-1 gap-5 px-6 py-7">
-            <View className="gap-2">
-              <Label>Código da empresa</Label>
-              <Input
-                value={codigoEmpresa}
-                onChangeText={(v) => setCodigoEmpresa(v.toUpperCase())}
-                placeholder="Ex.: FREITAS-K9M4TX"
-                autoCapitalize="characters"
-                autoCorrect={false}
-                editable={!submitting}
-              />
-              <Text className="text-xs text-muted-foreground">
-                Peça esse código para a empresa pra quem você roda. É ele que faz seu cadastro
-                chegar até ela.
-              </Text>
-            </View>
-
             <View className="gap-2">
               <Label>Nome completo</Label>
               <Input
@@ -199,7 +182,11 @@ export default function SignupScreen() {
             </View>
 
             <View className="gap-2">
-              <Label>Placa do veículo</Label>
+              <Label>Placa do veículo (opcional)</Label>
+              <Text className="text-sm text-muted-foreground">
+                Se você já sabe com qual caminhão vai rodar, coloque aqui. Dá pra
+                cadastrar depois.
+              </Text>
               {placas.map((p, i) => (
                 <View key={i} className="flex-row items-center gap-2">
                   <Input

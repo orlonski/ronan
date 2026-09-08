@@ -155,31 +155,33 @@ export const AtualizarMotoristaInput = z
 export type AtualizarMotoristaInput = z.infer<typeof AtualizarMotoristaInput>;
 
 /**
- * Auto-cadastro feito pelo próprio motorista no app (pré-login). Diferente do
+ * Cadastro feito pelo próprio motorista no app (pré-login). Diferente do
  * CriarMotoristaInput (admin): celular é OBRIGATÓRIO (recebe o código por
- * WhatsApp) e exige ao menos uma placa. A senha é definida pelo motorista.
+ * WhatsApp) e a senha é definida por ele.
+ *
+ * Não pede empresa: desde 09/2026 quem se cadastra pelo app cria uma
+ * IDENTIDADE, e entrar numa transportadora é um segundo momento, sempre por
+ * convite dela. Ver docs/identidade-motorista.md.
  */
-/**
- * Código que a empresa dá ao motorista (ex.: `FREITAS-K9M4TX`). É o que diz em
- * qual empresa o cadastro entra — o app das lojas é um só e não tem como saber.
- * Aceita com ou sem hífen, em qualquer caixa: o backend normaliza.
- */
-export const CodigoEmpresaSchema = z
-  .string()
-  .trim()
-  .min(3, "Digite o código da empresa")
-  .max(40)
-  .transform((s) => s.toUpperCase().replace(/\s+/g, ""));
-
 export const CadastroMotoristaInput = z
   .object({
-    codigoEmpresa: CodigoEmpresaSchema,
+    /**
+     * Legado: o código que a empresa dava ao motorista. Continua aceito e
+     * IGNORADO pra que o app antigo, que ainda manda o campo, não tome 400 no
+     * cadastro. Sai quando a frota estiver toda atualizada.
+     */
+    codigoEmpresa: z.string().optional(),
     nome: z.string().min(2, "Nome muito curto").max(120),
     cpf: CpfSchema,
     telefone: TelefoneObrigatorioSchema,
     email: EmailOpcionalSchema,
     senha: z.string().min(6, "Senha deve ter ao menos 6 caracteres").max(80),
-    placas: z.array(PlacaInput).min(1, "Informe ao menos uma placa"),
+    /**
+     * Opcional: placa é coisa do trabalho, e nesse momento ainda não há
+     * trabalho. Fica guardada na pessoa e vira veículo quando ela entra numa
+     * empresa.
+     */
+    placas: z.array(PlacaInput).default([]),
     /** Placa default — string (não id). Backend resolve pro id após upsert. */
     placaDefault: z
       .string()
@@ -203,7 +205,8 @@ export type CadastroMotoristaInput = z.infer<typeof CadastroMotoristaInput>;
 
 /** Confirma o código de 6 dígitos enviado por WhatsApp e finaliza o cadastro. */
 export const ConfirmarCadastroInput = z.object({
-  codigoEmpresa: CodigoEmpresaSchema,
+  /** Legado, ignorado — ver CadastroMotoristaInput. */
+  codigoEmpresa: z.string().optional(),
   cpf: CpfSchema,
   codigo: z
     .string()
@@ -214,10 +217,58 @@ export type ConfirmarCadastroInput = z.infer<typeof ConfirmarCadastroInput>;
 
 /** Reenvia o código de verificação pro cadastro pendente daquele CPF. */
 export const ReenviarCodigoInput = z.object({
-  codigoEmpresa: CodigoEmpresaSchema,
+  /** Legado, ignorado — ver CadastroMotoristaInput. */
+  codigoEmpresa: z.string().optional(),
   cpf: CpfSchema,
 });
 export type ReenviarCodigoInput = z.infer<typeof ReenviarCodigoInput>;
+
+/**
+ * O motorista editando os próprios dados (tela de perfil, com token de
+ * identidade). O CPF não está aqui de propósito: é a chave da pessoa na
+ * plataforma e trocá-lo seria virar outra pessoa.
+ */
+export const AtualizarPerfilInput = z
+  .object({
+    nome: z.string().min(2, "Nome muito curto").max(120).optional(),
+    telefone: TelefoneOpcionalSchema,
+    email: EmailOpcionalSchema,
+  })
+  .refine((v) => v.nome !== undefined || v.telefone !== undefined || v.email !== undefined, {
+    message: "Nada pra atualizar.",
+  });
+export type AtualizarPerfilInput = z.infer<typeof AtualizarPerfilInput>;
+
+/** As placas que ele diz rodar. Viram veículo quando ele entra numa empresa. */
+export const AtualizarPlacasInput = z
+  .object({
+    placas: z.array(PlacaInput).max(10),
+    placaDefault: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(placaRegex)
+      .nullable()
+      .optional(),
+  })
+  .superRefine((v, ctx) => {
+    placasSemDuplicatas(v.placas, ctx);
+    if (v.placaDefault && !v.placas.some((p) => p.placa === v.placaDefault)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["placaDefault"],
+        message: "Placa padrão precisa estar na lista de placas",
+      });
+    }
+  });
+export type AtualizarPlacasInput = z.infer<typeof AtualizarPlacasInput>;
+
+/**
+ * A empresa convidando alguém que já existe na plataforma, pelo CPF. Não pede
+ * mais nada: o resto dos dados é da pessoa, não da empresa.
+ */
+export const ConvidarMotoristaInput = z.object({ cpf: CpfSchema });
+export type ConvidarMotoristaInput = z.infer<typeof ConvidarMotoristaInput>;
 
 /** Admin aprova ou rejeita um cadastro pendente. */
 export const AprovarMotoristaInput = z.object({

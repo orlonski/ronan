@@ -8,6 +8,7 @@ import type {
 import { API_URL } from "./api-url";
 import { clearTokens, loadTokens, saveTokens, type Tokens } from "./auth";
 import { motoristaAtivoId, salvarTokensDe, tokensDe } from "./sessoes";
+import { esquecerIdentidade, salvarIdentidade, tokensIdentidade } from "./identidade";
 import { setAuthState } from "./auth-state";
 import { clearCadastroStatus, setCadastroStatus } from "./cadastro-status";
 import { humanizeZodIssues, type ZodIssueLite } from "./validation";
@@ -18,11 +19,48 @@ import { humanizeZodIssues, type ZodIssueLite } from "./validation";
  * POR EMPRESA pra quem roda pra mais de uma — é o que deixa trocar de empresa
  * depois sem digitar senha, inclusive sem sinal.
  */
-export type AuthResposta = Tokens & {
-  status: StatusMotorista;
+export type AuthResposta = Partial<Tokens> & {
+  status?: StatusMotorista;
   cadastros?: SessaoEmpresa[];
-  /** Cadastro novo herdou a senha que ele já usava em outra empresa. */
-  senhaHerdada?: boolean;
+  /**
+   * Tokens da PESSOA. Vêm sempre — inclusive (e principalmente) quando
+   * `cadastros` está vazio, que é quem se cadastrou e ainda não foi convidado.
+   */
+  identidade?: Tokens;
+};
+
+/** O que o `iniciar`/`reenviar` do cadastro devolve. */
+export type CadastroIniciado = {
+  ok: true;
+  expiraEmSegundos: number;
+  /**
+   * O código foi pro número que a EMPRESA tem em ficha (ele já tinha cadastro
+   * feito pelo painel), não pro que ele digitou. A tela precisa dizer isso — do
+   * contrário ele fica esperando um WhatsApp que não chega nesse aparelho.
+   */
+  reivindicacao?: boolean;
+  destinoMascarado?: string;
+};
+
+export type MeuPerfil = {
+  id: string;
+  nome: string;
+  cpf: string;
+  telefone: string | null;
+  email: string | null;
+  placas: { placa: string; modelo?: string }[];
+  placaDefault: string | null;
+  empresas: CadastroEmpresa[];
+  convites: ConviteEmpresa[];
+};
+
+/** Um convite de empresa esperando resposta dele. */
+export type ConviteEmpresa = {
+  motoristaId: string;
+  contaId: string;
+  contaNome: string;
+  contaLogoUrl: string | null;
+  convidadoEm: string | null;
 };
 
 /**
@@ -160,6 +198,44 @@ async function refresh(dono: string | null): Promise<RefreshResult> {
   return promessa;
 }
 
+/**
+ * Renova a sessão da PESSOA. Mesmo endpoint (`/m/auth/refresh` aceita os dois
+ * tipos de token) e mesma regra de ouro: só 401/403 do refresh é sessão morta;
+ * rede e 5xx são transitórios e não deslogam ninguém.
+ */
+let refreshIdentidadeEmVoo: Promise<RefreshResult> | null = null;
+
+async function refreshIdentidade(): Promise<RefreshResult> {
+  if (refreshIdentidadeEmVoo) return refreshIdentidadeEmVoo;
+  const tokens = tokensIdentidade();
+  if (!tokens?.refreshToken) return { status: "invalido" };
+  refreshIdentidadeEmVoo = (async () => {
+    try {
+      const res = await fetchComTimeout(
+        `${API_URL}/m/auth/refresh`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ refreshToken: tokens.refreshToken }),
+        },
+        REQUEST_TIMEOUT_MS,
+      );
+      if (res.ok) {
+        salvarIdentidade((await res.json()) as Tokens);
+        return { status: "ok", tokens: tokensIdentidade()! };
+      }
+      return res.status === 401 || res.status === 403
+        ? { status: "invalido" }
+        : { status: "transitorio" };
+    } catch {
+      return { status: "transitorio" };
+    } finally {
+      refreshIdentidadeEmVoo = null;
+    }
+  })();
+  return refreshIdentidadeEmVoo;
+}
+
 const REQUEST_TIMEOUT_MS = 20_000;
 const UPLOAD_TIMEOUT_MS = 60_000;
 
@@ -193,6 +269,12 @@ export async function request<T>(
      * quem chamou, então trocar de empresa no meio não invalida esta chamada.
      */
     comoCadastro?: string;
+    /**
+     * Fala como a PESSOA, não como o cadastro numa empresa. É o token das rotas
+     * `m/eu/*` (perfil, convites) — as únicas que funcionam pra quem ainda não
+     * está em empresa nenhuma.
+     */
+    comoIdentidade?: boolean;
   } = { auth: true },
 ): Promise<T> {
   const {
@@ -201,14 +283,27 @@ export async function request<T>(
     auth = true,
     timeoutMs: tetoProprio,
     comoCadastro,
+    comoIdentidade = false,
   } = init;
   const headers: Record<string, string> = {};
   if (body !== undefined && !isFormData) headers["content-type"] = "application/json";
   // De QUEM é esta request. A empresa ativa pode mudar no meio (o motorista roda
   // pra mais de uma), e a resposta que voltar só vale pra quem a disparou.
-  const dono = auth ? (comoCadastro ?? motoristaAtivoId()) : null;
-  const tokens = auth ? (dono ? tokensDe(dono) : loadTokens()) : null;
-  if (auth && dono && !tokens?.accessToken) throw new SessaoIndisponivelError();
+  // A identidade não pertence a empresa nenhuma: não tem dono, e por isso
+  // também não é descartada quando ele troca de empresa no meio da chamada.
+  const dono = auth && !comoIdentidade ? (comoCadastro ?? motoristaAtivoId()) : null;
+  const tokens = !auth
+    ? null
+    : comoIdentidade
+      ? tokensIdentidade()
+      : dono
+        ? tokensDe(dono)
+        : loadTokens();
+  // Sem token nenhum não se sai pra rede: a request iria sem `Authorization`,
+  // voltaria 401 e o tratamento de 401 a leria como "a sessão morreu" —
+  // deslogando quem, no fundo, só não tinha sessão DE EMPRESA (o recém-cadastrado
+  // que ainda não foi convidado). Falta de token é indisponibilidade, não expulsão.
+  if (auth && !tokens?.accessToken) throw new SessaoIndisponivelError();
   if (tokens) headers["authorization"] = `Bearer ${tokens.accessToken}`;
 
   const url = `${API_URL}${path}`;
@@ -232,7 +327,7 @@ export async function request<T>(
     // Trocou de empresa com a request em voo: o 401 é do token ANTIGO. Não
     // renova nem desloga — a sessão nova não tem nada a ver com isso.
     conferirDono(dono, !!comoCadastro);
-    const renov = await refresh(dono);
+    const renov = comoIdentidade ? await refreshIdentidade() : await refresh(dono);
     if (renov.status === "ok") {
       headers["authorization"] = `Bearer ${renov.tokens.accessToken}`;
       try {
@@ -242,6 +337,16 @@ export async function request<T>(
         if (isTimeout) throw new TypeError("Tempo esgotado. Verifique sua conexão.");
         throw err;
       }
+    } else if (renov.status === "invalido" && comoIdentidade) {
+      // A sessão da pessoa morreu. Só derruba o app se não sobrar sessão de
+      // empresa nenhuma — quem está rodando pra alguém continua trabalhando.
+      esquecerIdentidade();
+      if (!motoristaAtivoId()) {
+        clearTokens();
+        clearCadastroStatus();
+        setAuthState(false);
+      }
+      throw new ApiError(401, null);
     } else if (renov.status === "invalido") {
       // Sessão acabou de verdade — desloga. Só depois de conferir que a empresa
       // ativa ainda é esta: derrubar o app por causa do token de uma empresa que
@@ -277,6 +382,16 @@ export async function request<T>(
   return (await res.json()) as T;
 }
 
+/**
+ * Guarda a sessão da PESSOA que veio no login/cadastro.
+ *
+ * Sem isso, quem não está em empresa nenhuma ficaria com uma resposta sem token
+ * de topo e cairia direto no login de novo, sem entender por quê.
+ */
+function guardarIdentidade(res: AuthResposta): void {
+  if (res.identidade?.accessToken) salvarIdentidade(res.identidade);
+}
+
 export const api = {
   get: <T>(path: string) => request<T>("GET", path),
   post: <T>(path: string, body: unknown, opts?: { timeoutMs?: number }) =>
@@ -287,20 +402,20 @@ export const api = {
     request<T>("POST", path, { body, isFormData: true }),
   loginMotorista: async (cpf: string, senha: string) => {
     const res = await request<AuthResposta>("POST", "/m/auth/login", {
-      body: { cpf, senha },
+      // Diz ao servidor que esta versão sabe entrar sem empresa nenhuma. Sem a
+      // flag ele recusa com um recado pedindo pra atualizar.
+      body: { cpf, senha, suportaIdentidade: true },
       auth: false,
     });
-    setCadastroStatus(res.status);
+    guardarIdentidade(res);
+    if (res.status) setCadastroStatus(res.status);
     return res;
   },
   iniciarCadastro: (body: CadastroMotoristaInput) =>
-    request<{ ok: true; expiraEmSegundos: number }>("POST", "/m/auth/cadastro/iniciar", {
-      body,
-      auth: false,
-    }),
-  reenviarCodigoCadastro: (cpf: string, codigoEmpresa: string) =>
-    request<{ ok: true; expiraEmSegundos: number }>("POST", "/m/auth/cadastro/reenviar", {
-      body: { cpf, codigoEmpresa },
+    request<CadastroIniciado>("POST", "/m/auth/cadastro/iniciar", { body, auth: false }),
+  reenviarCodigoCadastro: (cpf: string) =>
+    request<CadastroIniciado>("POST", "/m/auth/cadastro/reenviar", {
+      body: { cpf },
       auth: false,
     }),
   confirmarCadastro: async (body: ConfirmarCadastroInput) => {
@@ -308,9 +423,24 @@ export const api = {
       body,
       auth: false,
     });
-    setCadastroStatus(res.status);
+    guardarIdentidade(res);
+    if (res.status) setCadastroStatus(res.status);
     return res;
   },
+  // ---- A pessoa (vale com ou sem empresa) ----
+  meuPerfil: () => request<MeuPerfil>("GET", "/m/eu", { comoIdentidade: true }),
+  meusConvites: () =>
+    request<ConviteEmpresa[]>("GET", "/m/eu/convites", { comoIdentidade: true }),
+  aceitarConvite: (motoristaId: string) =>
+    request<SessaoEmpresa>("POST", `/m/eu/convites/${motoristaId}/aceitar`, {
+      body: {},
+      comoIdentidade: true,
+    }),
+  recusarConvite: (motoristaId: string) =>
+    request<{ ok: true }>("POST", `/m/eu/convites/${motoristaId}/recusar`, {
+      body: {},
+      comoIdentidade: true,
+    }),
   // ---- Empresas do motorista ----
   /** Empresas em que este CPF tem cadastro (mantém o seletor em dia). */
   listarCadastros: () => request<CadastroEmpresa[]>("GET", "/m/auth/cadastros"),

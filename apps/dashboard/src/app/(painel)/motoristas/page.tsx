@@ -15,6 +15,7 @@ import { StatusCadastroBadge } from "@/components/status-cadastro-badge";
 import { AprovacaoMotoristaButtons } from "@/components/aprovacao-motorista-buttons";
 import { ExcluirButton } from "@/components/excluir-button";
 import { ConviteWhatsappButton } from "@/components/convite-whatsapp-button";
+import { ConvidarMotoristaDialog } from "@/components/convidar-motorista-dialog";
 import { EnviarPushButton } from "@/components/enviar-push-button";
 import { EnviarWhatsappButton } from "@/components/enviar-whatsapp-button";
 import { EnviarResumoMotoristaButton } from "@/components/enviar-resumo-motorista-button";
@@ -48,6 +49,9 @@ type Motorista = AppVersaoInfo & {
   email: string | null;
   ativo: boolean;
   status: StatusMotorista;
+  /** Lado do MOTORISTA: convite que ele ainda não respondeu não é da equipe. */
+  aceite: "PENDENTE" | "ACEITO" | "RECUSADO";
+  convidadoEm: string | null;
   aprovadoEm: string | null;
   transportadoraId: string | null;
   transportadora: { id: string; nome: string } | null;
@@ -69,6 +73,19 @@ type ResumoVersoes = {
 type VersaoDisponivel = { versao: string | null; total: number };
 const PATH = "/admin/motoristas";
 const SEM_VERSAO = "sem-versao";
+
+/**
+ * O lado do MOTORISTA no vínculo. Só aparece quando ele não disse sim: na lista
+ * de todo dia, o normal é ser da equipe e o badge só faria ruído.
+ */
+function AceiteBadge({ aceite }: { aceite: Motorista["aceite"] }) {
+  if (aceite === "ACEITO") return null;
+  return aceite === "PENDENTE" ? (
+    <Badge className="border-amber-200 bg-amber-50 text-amber-700">Convite enviado</Badge>
+  ) : (
+    <Badge className="border-border bg-muted text-muted-foreground">Recusou</Badge>
+  );
+}
 
 export default function MotoristasPage() {
   const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
@@ -110,7 +127,11 @@ export default function MotoristasPage() {
         id: "nome",
         accessorKey: "nome",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Nome" />,
-        cell: ({ row }) => <span className="font-medium">{row.original.nome}</span>,
+        cell: ({ row }) => (
+          <span className="flex items-center gap-2">
+            <span className="font-medium">{row.original.nome}</span>
+          </span>
+        ),
       },
       {
         id: "cpf",
@@ -233,7 +254,15 @@ export default function MotoristasPage() {
         enableSorting: false,
         size: 96,
         header: "Cadastro",
-        cell: ({ row }) => <StatusCadastroBadge status={row.original.status} />,
+        // Convite pendente não mostra o selo de aprovação: ele nasce APROVADO
+        // do lado da empresa por construção, e "Aprovado" ao lado de "Convite
+        // enviado" faz parecer que ele já é da equipe.
+        cell: ({ row }) =>
+          row.original.aceite === "ACEITO" ? (
+            <StatusCadastroBadge status={row.original.status} />
+          ) : (
+            <AceiteBadge aceite={row.original.aceite} />
+          ),
       },
       {
         id: "ativo",
@@ -332,6 +361,9 @@ export default function MotoristasPage() {
         <div className="flex items-center gap-2">
           <ViewModeToggle value={viewMode} onChange={setViewMode} />
           <Permitido chave="motoristas.criar">
+            <ConvidarMotoristaDialog />
+          </Permitido>
+          <Permitido chave="motoristas.criar">
             <Link href="/motoristas/novo">
               <Button>
                 <Plus className="h-4 w-4" /> Novo motorista
@@ -363,6 +395,17 @@ export default function MotoristasPage() {
                     { value: "PENDENTE_APROVACAO", label: "Pendentes" },
                     { value: "APROVADO", label: "Aprovados" },
                     { value: "REJEITADO", label: "Rejeitados" },
+                  ]}
+                />
+                <Combobox
+                  value={tableState.filters.aceite}
+                  onChange={(v) => tableState.setFilter("aceite", v)}
+                  placeholder="Vínculo"
+                  showSearch={false}
+                  options={[
+                    { value: "PENDENTE", label: "Convites enviados" },
+                    { value: "RECUSADO", label: "Convites recusados" },
+                    { value: "ACEITO", label: "Na equipe" },
                   ]}
                 />
                 <Combobox
@@ -416,7 +459,11 @@ export default function MotoristasPage() {
                 <div className="flex items-center gap-2 text-sm">
                   <HardHat className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   <span className="truncate font-medium">{m.nome}</span>
-                  <StatusCadastroBadge status={m.status} />
+                  {m.aceite === "ACEITO" ? (
+                    <StatusCadastroBadge status={m.status} />
+                  ) : (
+                    <AceiteBadge aceite={m.aceite} />
+                  )}
                 </div>
                 {m.status === "PENDENTE_APROVACAO" && (
                   <AprovacaoMotoristaButtons id={m.id} nome={m.nome} />

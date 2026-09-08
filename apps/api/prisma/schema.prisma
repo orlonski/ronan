@@ -213,6 +213,13 @@ enum AcaoAuditoria {
   COMPARTILHAR_VIAGEM
   REVOGAR_COMPARTILHAMENTO
   ENVIAR_COMPARTILHAMENTO
+  /// A empresa puxou um CPF e convidou a pessoa pra rodar pra ela. Fica no
+  /// histórico porque o endpoint responde "essa pessoa existe e se chama
+  /// fulano": quem perguntou, por qual CPF e quando precisa ter rastro.
+  ADMIN_CONVIDOU_MOTORISTA
+  /// O motorista respondeu ao convite, no app dele.
+  MOTORISTA_ACEITOU_VINCULO
+  MOTORISTA_RECUSOU_VINCULO
 }
 
 /// Qual comprovante a foto do abastecimento é.
@@ -390,7 +397,6 @@ model Conta {
   papeis                        Papel[]
   adminNotificacoes             AdminNotificacao[]
   motoristas                    Motorista[]
-  cadastrosMotoristaPendentes   CadastroMotoristaPendente[]
   redefinicoesSenhaPendentes    RedefinicaoSenhaPendente[]
   motoristaPosicaoConfigs       MotoristaPosicaoConfig[]
   motoristaPosicoes             MotoristaPosicao[]
@@ -527,6 +533,7 @@ model User {
   transportadorasCriadas Transportadora[]      @relation("CriouTransportadora")
   motoristasCriados      Motorista[]           @relation("CriouMotorista")
   motoristasAprovados    Motorista[]           @relation("AprovouMotorista")
+  motoristasConvidados   Motorista[]           @relation("ConvidouMotorista")
   empresasCriadas        Empresa[]             @relation("CriouEmpresa")
   regrasMinimoCriadas    RegraMinimo[]         @relation("CriouRegraMinimo")
   tiposEventoCriados     TipoEventoViagem[]    @relation("CriouTipoEventoViagem")
@@ -608,6 +615,69 @@ model AdminNotificacao {
   @@map("admin_notificacoes")
 }
 
+/// A PESSOA — uma linha por CPF na plataforma inteira.
+///
+/// `Motorista` é o VÍNCULO com uma transportadora; esta tabela é quem ele é.
+/// Separar as duas é o que permite alguém se cadastrar pelo app sem pertencer a
+/// empresa nenhuma, e o que faz a senha ter um dono só: antes ela morava no
+/// vínculo e precisava ser copiada pra todas as linhas do mesmo CPF
+/// (`AuthService.propagarSenha`), com o risco permanente de uma delas ficar pra
+/// trás. Desenho completo em docs/identidade-motorista.md.
+///
+/// NÃO tem `contaId`: está em `MODELS_GLOBAIS` no trava-conta.ts, por decisão
+/// consciente. Ou seja, a trava não protege nada aqui — toda consulta filtra por
+/// `id`/`cpf` na mão, e o que sai pra fora se monta campo a campo.
+model MotoristaIdentidade {
+  id        String @id @default(uuid())
+  /// 11 dígitos, sem máscara. É o login e a chave da pessoa na plataforma —
+  /// único de verdade, ao contrário de `Motorista.cpf`, que é único só dentro
+  /// da conta.
+  cpf       String @unique
+  nome      String
+  /// Celular do WhatsApp: é pra cá que vai o código de cadastro e o convite.
+  ///
+  /// Sem `@unique` de propósito. A checagem de celular repetido sempre rodou
+  /// DENTRO da conta (a trava filtra o `findFirst`), então a base já pode ter o
+  /// mesmo número em contas diferentes — uma constraint global derrubaria a
+  /// migration em produção.
+  ///
+  /// Opcional só por causa do passado: quem se cadastra pelo app sempre informa
+  /// (é onde o código chega), mas cadastro antigo feito pelo painel podia não
+  /// ter telefone. Sem número, o caminho de adoção não roda e o motorista
+  /// precisa que a empresa corrija o cadastro.
+  telefone  String?
+  email     String?
+  /// A senha é da PESSOA. Trocar aqui vale pra todas as empresas dela.
+  senhaHash String
+  /// As placas que ela disse rodar, no formato { placa, modelo?, default }.
+  ///
+  /// Fica aqui porque `Veiculo` é da empresa, e no cadastro ainda não há
+  /// empresa nenhuma. Vira veículo de verdade quando ela entra numa: sem isso,
+  /// quem se cadastra hoje e é convidado semana que vem começaria sem placa
+  /// nenhuma e não conseguiria lançar.
+  placas    Json?
+
+  ativo           Boolean   @default(true)
+  ultimoLoginEm   DateTime?
+  /// Bloqueio por tentativa erra é da pessoa, não do cadastro: contar por
+  /// vínculo deixaria alternar de empresa pra fugir do bloqueio.
+  tentativasLogin Int       @default(0)
+  bloqueadoAte    DateTime?
+
+  /// O aparelho é da pessoa, não da empresa. Fica aqui pra quem ainda não tem
+  /// vínculo nenhum conseguir receber o push do convite.
+  expoPushToken         String?
+  pushTokenAtualizadoEm DateTime?
+
+  criadoEm  DateTime @default(now())
+  alteradoEm DateTime @updatedAt
+
+  vinculos Motorista[]
+
+  @@index([ativo])
+  @@map("motorista_identidades")
+}
+
 /// Ciclo de aprovação do cadastro do motorista.
 /// PENDENTE_APROVACAO: auto-cadastro recém-criado, aguardando admin validar.
 /// APROVADO: pode usar o app normalmente (criados pelo admin nascem aqui).
@@ -618,12 +688,38 @@ enum StatusMotorista {
   REJEITADO
 }
 
+/// O lado do MOTORISTA na relação com a empresa.
+///
+/// Ortogonal ao `StatusMotorista`, que é o lado da EMPRESA. O vínculo só vale
+/// com os dois verdes — a regra mora num lugar só, em common/vinculo.ts.
+/// PENDENTE: a empresa puxou o CPF dele e ele ainda não respondeu.
+/// ACEITO: ele topou (ou o vínculo nasceu dele, pedindo pra entrar).
+/// RECUSADO: ele disse não. Some da vista dos dois lados.
+enum AceiteVinculo {
+  PENDENTE
+  ACEITO
+  RECUSADO
+}
+
 model Motorista {
   contaId                 String               @default("__SEM_CONTA__")
   conta                   Conta                @relation(fields: [contaId], references: [id])
   id                      String               @id @default(uuid())
+  /// A PESSOA dona deste vínculo (ver MotoristaIdentidade).
+  ///
+  /// Opcional só enquanto a migração roda; depois do backfill vira obrigatória.
+  /// Vínculo sem identidade é cadastro criado pelo painel antes desta mudança —
+  /// ele ganha uma quando o motorista baixar o app e confirmar o código.
+  identidade              MotoristaIdentidade? @relation(fields: [identidadeId], references: [id])
+  identidadeId            String?
+  /// Cópia do nome/CPF/telefone da identidade, mantida em sincronia por
+  /// `sincronizarVinculos`. A fonte da verdade é a identidade — isto aqui existe
+  /// porque ~200 consultas do painel, dos relatórios e do export fazem
+  /// `select: { nome, cpf }` direto no vínculo.
   nome                    String
-  cpf                     String // 11 dígitos (sem máscara) — também é o login
+  cpf                     String // 11 dígitos (sem máscara) — único DENTRO da conta
+  /// Legado: a senha mora na identidade desde 09/2026. Fica um ciclo como rede
+  /// de segurança e some depois — nada mais LÊ este campo.
   senhaHash               String
   telefone                String?
   email                   String?
@@ -636,6 +732,18 @@ model Motorista {
   aprovadoEm              DateTime?
   aprovadoPor             User?                @relation("AprovouMotorista", fields: [aprovadoPorId], references: [id], onDelete: SetNull)
   aprovadoPorId           String?
+  /// O lado DELE: a empresa puxou o CPF e ele ainda não respondeu?
+  ///
+  /// Default ACEITO porque é o que todo vínculo que já existia é — foi ele que
+  /// se cadastrou, ou foi combinado por fora antes do painel cadastrar. Só o
+  /// convite por CPF nasce PENDENTE, e enquanto estiver assim o motorista NÃO
+  /// aparece na lista do painel (só na aba de convites): a empresa não começa a
+  /// operar com alguém que ainda não disse sim.
+  aceite                  AceiteVinculo        @default(ACEITO)
+  convidadoPor            User?                @relation("ConvidouMotorista", fields: [convidadoPorId], references: [id], onDelete: SetNull)
+  convidadoPorId          String?
+  convidadoEm             DateTime?
+  aceiteEm                DateTime?
   ativo                   Boolean              @default(true)
   ultimoLoginEm           DateTime?
   tentativasLogin         Int                  @default(0)
@@ -763,20 +871,42 @@ model Motorista {
   @@index([contaId])
   @@index([contaId, ativo])
   @@index([contaId, status])
+  /// Login e troca de empresa varrem os vínculos de uma identidade.
+  @@index([identidadeId])
+  /// A lista do painel e a aba de convites filtram por aceite.
+  @@index([contaId, aceite])
   @@map("motoristas")
 }
 
-/// Cadastro de motorista iniciado pelo app, aguardando verificação do código
-/// enviado por WhatsApp. Guarda os dados do formulário (com senha já hasheada)
-/// antes do Motorista existir; vira Motorista ao confirmar o código e é apagado.
+/// Cadastro iniciado pelo app, aguardando verificação do código enviado por
+/// WhatsApp. Guarda os dados do formulário (com senha já hasheada) antes da
+/// pessoa existir; vira MotoristaIdentidade ao confirmar o código e é apagado.
 /// Espelha o padrão de WhatsappConvite (código curto + expiração).
+///
+/// NÃO tem conta desde 09/2026: quem se cadastra não diz mais de qual empresa é
+/// (não há mais código de empresa), então não há o que carimbar. Está em
+/// `MODELS_GLOBAIS` e a chave passou a ser o CPF, que é único na plataforma —
+/// como a identidade que ele vai virar.
 model CadastroMotoristaPendente {
-  contaId       String   @default("__SEM_CONTA__")
-  conta         Conta    @relation(fields: [contaId], references: [id])
   id            String   @id @default(uuid())
-  cpf           String // 11 dígitos (sem máscara) — chave do cadastro
+  cpf           String   @unique // 11 dígitos (sem máscara) — chave do cadastro
   nome          String
-  telefone      String // celular onde o código é enviado
+  telefone      String // celular que ELE digitou no formulário
+  /// Empresa em que o cadastro deve entrar, quando ele veio do app ANTIGO.
+  ///
+  /// Compatibilidade de transição: a versão anterior manda `codigoEmpresa` no
+  /// formulário e espera sair do cadastro já dentro da empresa, com token. Se
+  /// ignorássemos o código, esse app receberia uma resposta sem token e
+  /// quebraria — e ele é o que está no bolso de todo mundo até o OTA chegar.
+  /// Some quando a frota estiver atualizada.
+  contaConvite  String?
+  /// Pra onde o código foi de verdade.
+  ///
+  /// Difere do `telefone` quando o CPF já tem cadastro criado pelo painel: aí o
+  /// código vai pro número que a EMPRESA tem em ficha, não pro digitado — é o
+  /// que prova que quem está do outro lado é mesmo ele, e não alguém que sabe
+  /// um CPF. Null = foi pro mesmo número do formulário.
+  telefoneDestino String?
   email         String?
   senhaHash     String
   /// Lista de placas do formulário: { placa, modelo?, default }
@@ -788,8 +918,6 @@ model CadastroMotoristaPendente {
   ultimoEnvioEm DateTime @default(now())
   criadoEm      DateTime @default(now())
 
-  @@unique([contaId, cpf])
-  @@index([contaId])
   @@map("cadastros_motorista_pendentes")
 }
 

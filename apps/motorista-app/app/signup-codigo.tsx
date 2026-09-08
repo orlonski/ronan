@@ -8,9 +8,9 @@ import { Label } from "@/components/ui/label";
 import { formatCpf } from "@ronan/shared-types";
 import { showAlert } from "@/lib/alert";
 import { api, humanizeApiError } from "@/lib/api";
-import { saveTokens } from "@/lib/auth";
 import { setAuthState } from "@/lib/auth-state";
-import { migrarSessaoLegada } from "@/lib/sessoes";
+import { setCadastroStatus } from "@/lib/cadastro-status";
+import { marcarEmpresaEscolhida, salvarSessoesDoLogin } from "@/lib/sessoes";
 
 const COOLDOWN_S = 60;
 
@@ -22,9 +22,20 @@ function mascararCelular(c: string): string {
 }
 
 export default function SignupCodigoScreen() {
-  const params = useLocalSearchParams<{ cpf?: string; celular?: string; codigoEmpresa?: string }>();
+  const params = useLocalSearchParams<{
+    cpf?: string;
+    celular?: string;
+    /** Máscara do número pra onde o código foi de verdade (vem do backend). */
+    destino?: string;
+    reivindicacao?: string;
+  }>();
   const cpf = params.cpf ?? "";
   const celular = params.celular ?? "";
+  // Ele já tinha cadastro criado pela empresa: o código foi pro número que ELA
+  // tem em ficha, que pode não ser o que ele acabou de digitar. Sem dizer isso,
+  // ele fica olhando pro WhatsApp errado.
+  const reivindicacao = params.reivindicacao === "1";
+  const [destino, setDestino] = useState(params.destino ?? "");
 
   const [codigo, setCodigo] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -47,24 +58,22 @@ export default function SignupCodigoScreen() {
     if (codigo.trim().length !== 6) return setErro("Digite os 6 dígitos do código.");
     setSubmitting(true);
     try {
-      const res = await api.confirmarCadastro({
-        cpf,
-        codigo: codigo.trim(),
-        // Vem da tela anterior: confirmar precisa saber a mesma empresa do início,
-        // senão o cadastro pendente não é encontrado.
-        codigoEmpresa: params.codigoEmpresa ?? "",
-      });
-      await saveTokens(res);
-      // Transforma o token recém-gravado em sessão de empresa (o cadastro sabe
-      // dizer de quem é pelo próprio token). Sem isso o app entraria pelo
-      // caminho legado e o seletor não teria o que mostrar.
-      await migrarSessaoLegada();
+      const res = await api.confirmarCadastro({ cpf, codigo: codigo.trim() });
+      const cadastros = res.cadastros ?? [];
+      if (cadastros.length > 0) {
+        // Reivindicou o cadastro que a empresa já tinha: entra direto nela.
+        await salvarSessoesDoLogin(cadastros, cadastros[0]!.motoristaId);
+        marcarEmpresaEscolhida();
+        setCadastroStatus(cadastros[0]!.status);
+      }
+      // Sem empresa nenhuma ele entra do mesmo jeito: a sessão da PESSOA já foi
+      // guardada pelo cliente de API, e o app abre no modo sem empresa.
       setAuthState(true);
-      if (res.senhaHerdada) {
+      if (cadastros.length > 0 && reivindicacao) {
         void showAlert({
-          title: "Você já usa o app",
+          title: `Bem-vindo à ${cadastros[0]!.contaNome}`,
           message:
-            "Como você já tem cadastro em outra empresa, continua entrando com a MESMA senha de sempre — a que você digitou agora não foi usada.",
+            "Você já tinha cadastro nessa empresa. Agora a senha é a que você acabou de escolher.",
         });
       }
       router.replace("/");
@@ -80,7 +89,8 @@ export default function SignupCodigoScreen() {
     setErro(null);
     setReenviando(true);
     try {
-      await api.reenviarCodigoCadastro(cpf, params.codigoEmpresa ?? "");
+      const res = await api.reenviarCodigoCadastro(cpf);
+      if (res.destinoMascarado) setDestino(res.destinoMascarado);
       setCodigo("");
       setCooldown(COOLDOWN_S);
     } catch (err) {
@@ -102,7 +112,7 @@ export default function SignupCodigoScreen() {
               Confirme o código
             </Text>
             <Text className="mt-2 text-base font-medium text-white/80">
-              Enviamos um código no seu WhatsApp {celular ? mascararCelular(celular) : ""}
+              Enviamos um código no WhatsApp {destino || (celular ? mascararCelular(celular) : "")}
             </Text>
           </View>
 
@@ -112,6 +122,19 @@ export default function SignupCodigoScreen() {
                 Cadastro do CPF {formatCpf(cpf)}
               </Text>
             ) : null}
+
+            {reivindicacao && (
+              <View className="rounded-xl border-2 border-amber-300 bg-amber-50 p-3">
+                <Text className="text-base font-semibold text-amber-900">
+                  Você já tem cadastro numa empresa
+                </Text>
+                <Text className="mt-1 text-base text-amber-900">
+                  Por segurança, o código foi pro número que ela tem no seu cadastro
+                  {destino ? ` (${destino})` : ""} — não pro que você digitou agora. Se esse
+                  número não é mais seu, peça pro administrativo dela atualizar.
+                </Text>
+              </View>
+            )}
 
             <View className="gap-2">
               <Label>Código de 6 dígitos</Label>

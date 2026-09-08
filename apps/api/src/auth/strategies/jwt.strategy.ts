@@ -3,6 +3,7 @@ import { PassportStrategy } from "@nestjs/passport";
 import { ExtractJwt, Strategy } from "passport-jwt";
 import { ConfigService } from "@nestjs/config";
 import { comoSistema, definirConta } from "../../common/conta/conta-context";
+import { vinculoVivo } from "../../common/vinculo";
 import { PrismaService } from "../../prisma/prisma.service";
 import type { AuthUser, JwtPayload } from "../types";
 
@@ -74,6 +75,21 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       };
     }
 
+    if (payload.kind === "IDENTIDADE") {
+      const identidade = await comoSistema(() =>
+        this.prisma.motoristaIdentidade.findUnique({
+          where: { id: payload.sub },
+          select: { id: true, nome: true, cpf: true, ativo: true },
+        }),
+      );
+      if (!identidade || !identidade.ativo) throw new UnauthorizedException("Cadastro inativo");
+      // NÃO chama definirConta: a pessoa não pertence a empresa nenhuma. O
+      // contexto fica vazio e a trava recusa qualquer leitura de dado de
+      // negócio — que é o certo, e sai de graça. Só as rotas `m/eu/*`
+      // (perfil, convites, registros pessoais) funcionam com este token.
+      return { kind: "IDENTIDADE", id: identidade.id, nome: identidade.nome, cpf: identidade.cpf };
+    }
+
     const motorista = await comoSistema(() =>
       this.prisma.motorista.findUnique({
         where: { id: payload.sub },
@@ -82,6 +98,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     );
     if (!motorista || !motorista.ativo) throw new UnauthorizedException("Motorista inativo");
     if (!motorista.conta.ativa) throw new UnauthorizedException("Empresa desativada");
+    // Recusar o convite (ou ter o vínculo desfeito) tem que valer NA HORA, e não
+    // quando o access token expirar: quem não aceitou não opera pela empresa.
+    if (!vinculoVivo(motorista)) {
+      throw new UnauthorizedException("Esse vínculo com a empresa não está ativo");
+    }
 
     definirConta(motorista.contaId);
     return {

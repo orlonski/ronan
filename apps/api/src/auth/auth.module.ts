@@ -4,6 +4,9 @@ import { PassportModule } from "@nestjs/passport";
 import { APP_GUARD } from "@nestjs/core";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
+import { IdentidadeService } from "./identidade.service";
+import { EuController } from "./eu.controller";
+import { EuService } from "./eu.service";
 import { CadastroMotoristaService } from "./cadastro-motorista.service";
 import { RedefinicaoSenhaService } from "./redefinicao-senha.service";
 import { JwtStrategy } from "./strategies/jwt.strategy";
@@ -19,9 +22,11 @@ import { AdminInboxModule } from "../admin/inbox/inbox.module";
     EvolutionModule,
     AdminInboxModule,
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, EuController],
   providers: [
     AuthService,
+    IdentidadeService,
+    EuService,
     CadastroMotoristaService,
     RedefinicaoSenhaService,
     JwtStrategy,
@@ -29,6 +34,6 @@ import { AdminInboxModule } from "../admin/inbox/inbox.module";
     // Roda global; só bloqueia onde houver @RequerPermissao (senão libera).
     { provide: APP_GUARD, useClass: PermissaoGuard },
   ],
-  exports: [AuthService],
+  exports: [AuthService, IdentidadeService],
 })
 export class AuthModule {}

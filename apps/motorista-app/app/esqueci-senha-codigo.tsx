@@ -52,7 +52,9 @@ export default function EsqueciSenhaCodigoScreen() {
     setSubmitting(true);
     try {
       const res = await api.redefinirSenha({ cpf, codigo: codigo.trim(), novaSenha: senha });
-      await saveTokens(res);
+      if (res.accessToken && res.refreshToken) {
+        await saveTokens({ accessToken: res.accessToken, refreshToken: res.refreshToken });
+      }
       // Vira sessão de empresa (o token diz de qual cadastro é). A senha nova
       // vale nas outras empresas dele também — quem propaga é o backend.
       await migrarSessaoLegada();

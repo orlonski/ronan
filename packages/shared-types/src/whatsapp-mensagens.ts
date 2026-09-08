@@ -101,6 +101,18 @@ export const ROTAS_WHATSAPP = [
     escopo: "plataforma",
   },
   {
+    chave: "CONVITE_EMPRESA",
+    rotulo: "Convite da empresa",
+    descricao:
+      "Avisa o motorista que uma transportadora o convidou pra rodar pra ela (ele aceita no app).",
+    categoria: "utility",
+    provedores: ["evolution", "meta"],
+    // Se falhar, ninguém fica travado: o convite continua esperando na tela de
+    // convites do app, e ele vê na próxima vez que abrir.
+    critica: false,
+    escopo: "empresa",
+  },
+  {
     chave: "AVISO_GRUPO",
     rotulo: "Aviso no grupo",
     descricao: "Anuncia no grupo da empresa que um motorista acabou de entrar no app.",
@@ -336,6 +348,17 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
     botao: { tipo: "COPIAR_CODIGO", param: 0 },
     textoAprovacao: "Seu código de verificação é {{1}}.\nPara sua segurança, não o compartilhe.",
     exemplo: ["482913", "10"],
+  },
+  CONVITE_EMPRESA: {
+    nome: "convite_empresa",
+    idioma: "pt_BR",
+    corpo: [0, 1],
+    textoAprovacao: [
+      "🚛 *{{1}} quer te adicionar como motorista*",
+      "",
+      "Abra o {{2}} pra aceitar ou recusar o convite. Enquanto você não aceitar, a empresa não vê nada seu.",
+    ].join("\n"),
+    exemplo: ["Transportes Schaba", "Movatruck"],
   },
   AVISO_PESO: {
     nome: "aviso_peso",

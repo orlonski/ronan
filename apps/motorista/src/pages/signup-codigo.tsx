@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api, humanizeApiError } from "@/lib/api";
-import { saveTokens } from "@/lib/auth";
-import { migrarSessaoLegada } from "@/lib/sessoes";
+import { marcarEmpresaEscolhida, salvarSessoesDoLogin } from "@/lib/sessoes";
 import { setAuthState } from "@/lib/auth-state";
+import { setCadastroStatus } from "@/lib/cadastro-status";
 
 const COOLDOWN_S = 60;
 
@@ -21,8 +21,12 @@ export default function SignupCodigoPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const cpf = params.get("cpf") ?? "";
-  const empresa = params.get("empresa") ?? "";
   const celular = params.get("celular") ?? "";
+  // Ele já tinha cadastro criado pela empresa: o código foi pro número que ELA
+  // tem em ficha, que pode não ser o que ele acabou de digitar. Sem dizer isso,
+  // ele fica olhando pro WhatsApp errado.
+  const reivindicacao = params.get("reivindicacao") === "1";
+  const [destino, setDestino] = useState(params.get("destino") ?? "");
 
   const [codigo, setCodigo] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -33,8 +37,8 @@ export default function SignupCodigoPage() {
 
   useEffect(() => {
     // Sem cpf na URL não dá pra confirmar — volta pro cadastro.
-    if (!cpf || !empresa) navigate("/signup", { replace: true });
-  }, [cpf, empresa, navigate]);
+    if (!cpf) navigate("/signup", { replace: true });
+  }, [cpf, navigate]);
 
   useEffect(() => {
     timer.current = setInterval(() => {
@@ -51,21 +55,20 @@ export default function SignupCodigoPage() {
     if (codigo.trim().length !== 6) return setErro("Digite os 6 dígitos do código.");
     setSubmitting(true);
     try {
-      const res = await api.confirmarCadastro({
-        cpf,
-        codigo: codigo.trim(),
-        // Vem da tela anterior: confirmar precisa da mesma empresa do início,
-        // senão o cadastro pendente não é encontrado.
-        codigoEmpresa: empresa,
-      });
-      saveTokens(res);
-      // Transforma o token recém-gravado em sessão de empresa (o token diz de
-      // qual cadastro é). Sem isso o app entraria pelo caminho legado.
-      migrarSessaoLegada();
+      const res = await api.confirmarCadastro({ cpf, codigo: codigo.trim() });
+      const cadastros = res.cadastros ?? [];
+      if (cadastros.length > 0) {
+        // Reivindicou o cadastro que a empresa já tinha: entra direto nela.
+        salvarSessoesDoLogin(cadastros, cadastros[0]!.motoristaId);
+        marcarEmpresaEscolhida();
+        setCadastroStatus(cadastros[0]!.status);
+      }
+      // Sem empresa nenhuma ele entra do mesmo jeito: a sessão da PESSOA já foi
+      // guardada pelo cliente de API, e o app abre no modo sem empresa.
       setAuthState(true);
-      if (res.senhaHerdada) {
+      if (cadastros.length > 0 && reivindicacao) {
         alert(
-          "Como você já tem cadastro em outra empresa, continua entrando com a MESMA senha de sempre — a que você digitou agora não foi usada.",
+          `Você já tinha cadastro na ${cadastros[0]!.contaNome}. Agora a senha é a que você acabou de escolher.`,
         );
       }
       navigate("/", { replace: true });
@@ -81,7 +84,8 @@ export default function SignupCodigoPage() {
     setErro(null);
     setReenviando(true);
     try {
-      await api.reenviarCodigoCadastro(cpf, empresa);
+      const res = await api.reenviarCodigoCadastro(cpf);
+      if (res.destinoMascarado) setDestino(res.destinoMascarado);
       setCodigo("");
       setCooldown(COOLDOWN_S);
     } catch (err) {
@@ -97,7 +101,7 @@ export default function SignupCodigoPage() {
         <div className="pt-12">
           <h1 className="text-4xl font-extrabold tracking-tight text-white">Confirme o código</h1>
           <p className="mt-2 text-base font-medium text-white/80">
-            Enviamos um código no seu WhatsApp {celular ? mascararCelular(celular) : ""}
+            Enviamos um código no WhatsApp {destino || (celular ? mascararCelular(celular) : "")}
           </p>
         </div>
       </div>
@@ -105,6 +109,19 @@ export default function SignupCodigoPage() {
       <form onSubmit={confirmar} className="flex flex-1 flex-col gap-6 px-6 py-8">
         {cpf && (
           <p className="text-base text-muted-foreground">Cadastro do CPF {formatCpf(cpf)}</p>
+        )}
+
+        {reivindicacao && (
+          <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-3">
+            <p className="text-base font-semibold text-amber-900">
+              Você já tem cadastro numa empresa
+            </p>
+            <p className="mt-1 text-base text-amber-900">
+              Por segurança, o código foi pro número que ela tem no seu cadastro
+              {destino ? ` (${destino})` : ""} — não pro que você digitou agora. Se esse número
+              não é mais seu, peça pro administrativo dela atualizar.
+            </p>
+          </div>
         )}
 
         <div className="space-y-2">

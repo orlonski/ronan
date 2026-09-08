@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { AuthModule } from "../../auth/auth.module";
 import { UploadsModule } from "../../uploads/uploads.module";
 import { PushModule } from "../../push/push.module";
 import { EvolutionModule } from "../../whatsapp/evolution.module";
@@ -12,7 +13,7 @@ import { AppUpdateNotifierService } from "./app-update-notifier.service";
 import { AppDeployController } from "./app-deploy.controller";
 
 @Module({
-  imports: [UploadsModule, PushModule, EvolutionModule, ResumoMotoristaModule],
+  imports: [AuthModule, UploadsModule, PushModule, EvolutionModule, ResumoMotoristaModule],
   controllers: [MotoristasController, MotoristasDocumentosController, AppDeployController],
   providers: [
     MotoristasService,

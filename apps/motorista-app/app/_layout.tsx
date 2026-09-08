@@ -26,6 +26,7 @@ import { EscolherEmpresaAbertura } from "@/components/escolher-empresa-abertura"
 import {
   assinarSessoes,
   precisaEscolherEmpresa,
+  sessoesSync,
   temAlgumaSessaoComToken,
 } from "@/lib/sessoes";
 import { atualizarCadastros, repararSessaoAtiva } from "@/lib/troca-empresa";
@@ -35,6 +36,12 @@ import {
   subscribeCadastroStatus,
 } from "@/lib/cadastro-status";
 import { EmAnalise } from "@/components/em-analise";
+import { SemEmpresa } from "@/components/sem-empresa";
+import {
+  assinarIdentidade,
+  carregarIdentidade,
+  temIdentidadeSync,
+} from "@/lib/identidade";
 import { AtualizacaoObrigatoria } from "@/components/atualizacao-obrigatoria";
 import {
   checarVersaoApp,
@@ -125,6 +132,11 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // de negócio pode ir pra rede antes disso: a resposta chegaria carimbada com a
   // empresa da última abertura e cairia no cache da que ele escolher agora.
   const escolhendoEmpresa = precisaEscolherEmpresa();
+  // Tem cadastro (a sessão da PESSOA) mas não está em empresa nenhuma. O
+  // `sessoesSync().length === 0` sozinho não serve: quem entrou antes das
+  // sessões por empresa também tem lista vazia e roda pelo token legado — por
+  // isso a condição exige a identidade, que só existe nesta versão pra frente.
+  const semEmpresa = temIdentidadeSync() === true && sessoesSync().length === 0;
 
   // Boot: lê tokens + status do SecureStore uma vez e atualiza os stores.
   useEffect(() => {
@@ -140,13 +152,22 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       .catch(() => {
         /* nunca derruba o boot: sem migrar, o app cai no caminho antigo */
       })
-      .then(() => Promise.all([loadTokens(), loadCadastroStatus(), temAlgumaSessaoComToken()]))
-      .then(([t, , temSessao]) => {
+      .then(() =>
+        Promise.all([
+          loadTokens(),
+          loadCadastroStatus(),
+          temAlgumaSessaoComToken(),
+          carregarIdentidade(),
+        ]),
+      )
+      .then(([t, , temSessao, identidade]) => {
         if (!alive) return;
         // `temSessao` cobre o aparelho cujo slot ativo foi descartado por
         // guardar o token de outra empresa: ele segue logado pela sessão sã que
         // tem, e o reparo repõe a que falta.
-        setAuthState(!!t?.accessToken || temSessao);
+        // A sessão da PESSOA também conta como "logado": é quem se cadastrou e
+        // ainda não foi convidado por ninguém.
+        setAuthState(!!t?.accessToken || temSessao || !!identidade?.accessToken);
         setReady(true);
       })
       .catch(() => {
@@ -182,6 +203,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // Re-renderiza ao trocar/escolher empresa (o gate de escolha some).
   useEffect(() => assinarSessoes(() => setVersion((v) => v + 1)), []);
   useEffect(() => subscribeCadastroStatus(() => setVersion((v) => v + 1)), []);
+  // Re-renderiza quando a sessão da pessoa aparece/some (cadastro novo, logout).
+  useEffect(() => assinarIdentidade(() => setVersion((v) => v + 1)), []);
   // Re-renderiza quando a decisão de força-atualização muda (pra cobrir/liberar
   // o app com a tela de bloqueio).
   useEffect(() => subscribeVersaoApp(() => setVersion((v) => v + 1)), []);
@@ -208,6 +231,9 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     // quem o dispara depois é a própria troca (lib/troca-empresa.ts), já na
     // empresa certa.
     if (!escolhendoEmpresa) void prefetchDadosBase(queryClient);
+    // Quem não está em empresa nenhuma não tem o que reparar nem o que alinhar:
+    // esses endpoints falam pelo cadastro numa empresa.
+    if (semEmpresa) return;
     // Repõe o token da empresa ativa se ele faltar (slot descartado por guardar
     // o de outro cadastro) e só depois alinha as empresas com o servidor: nome
     // da empresa, aprovação que saiu do "em análise" e cadastro novo numa
@@ -426,6 +452,11 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // Evita double-mount da rota destino.
   if (!loggedIn && !onAuthScreen) return <Redirect href="/login" />;
   if (loggedIn && onAuthScreen) return <Redirect href="/" />;
+
+  // Logado, mas em empresa nenhuma: cobre o app com a tela de convites. Vem
+  // ANTES do "em análise" porque sem vínculo não há aprovação pendente — o
+  // status guardado pode ser sobra de um cadastro anterior.
+  if (loggedIn && semEmpresa) return <SemEmpresa />;
 
   // Logado mas cadastro ainda em análise: cobre o app inteiro com a tela de
   // espera (some sozinho quando o status vira APROVADO).

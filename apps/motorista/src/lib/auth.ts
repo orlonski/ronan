@@ -5,6 +5,7 @@ import {
   salvarTokensDe,
   tokensDe,
 } from "./sessoes";
+import { esquecerIdentidade } from "./identidade";
 
 export type Tokens = { accessToken: string; refreshToken: string };
 
@@ -33,9 +34,15 @@ export function loadTokens(): Tokens | null {
   }
 }
 
-/** Sai de TODAS as empresas. */
+/**
+ * Sai de TODAS as empresas E do cadastro da pessoa.
+ *
+ * A sessão da pessoa sai junto de propósito: deixá-la pra trás faria o app
+ * reabrir na tela de convites em vez do login, como se ele não tivesse saído.
+ */
 export function clearTokens() {
   esquecerTudo();
+  esquecerIdentidade();
   localStorage.removeItem(KEY_LEGADA);
 }
 

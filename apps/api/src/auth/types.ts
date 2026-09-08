@@ -38,10 +38,26 @@ export type AuthMotorista = {
   contaId: string;
 };
 
-export type AuthUser = AuthAdminUser | AuthMotorista;
+/**
+ * A PESSOA, sem empresa nenhuma — quem se cadastrou pelo app e ainda não foi
+ * vinculado (ou recusou todos os convites).
+ *
+ * Não tem `contaId` de propósito: o `JwtStrategy` não define conta pra este
+ * tipo, então a trava recusa qualquer leitura de dado de negócio. É o
+ * comportamento certo — quem não está em empresa nenhuma não tem dado de
+ * empresa nenhuma. Ver docs/identidade-motorista.md.
+ */
+export type AuthIdentidade = {
+  kind: "IDENTIDADE";
+  id: string;
+  nome: string;
+  cpf: string;
+};
+
+export type AuthUser = AuthAdminUser | AuthMotorista | AuthIdentidade;
 
 export type JwtPayload = {
   sub: string;
-  kind: "ADMIN_USER" | "MOTORISTA";
+  kind: "ADMIN_USER" | "MOTORISTA" | "IDENTIDADE";
   type: "access" | "refresh";
 };

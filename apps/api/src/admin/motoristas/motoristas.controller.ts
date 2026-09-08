@@ -1,9 +1,21 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
 import {
   AprovarMotoristaInput,
   AtualizarMotoristaInput,
+  ConvidarMotoristaInput,
   CriarMotoristaInput,
   EnviarPushInput,
   cpfDigits,
@@ -21,6 +33,8 @@ import { ResumoMotoristaService } from "../../motorista/resumo-motorista.service
 
 const ListMotoristasQuery = paginationQuerySchema.extend({
   ativo: z.enum(["true", "false"]).optional(),
+  // A aba de convites enviados. Sem o filtro, quem ainda não aceitou não vem.
+  aceite: z.enum(["PENDENTE", "ACEITO", "RECUSADO"]).optional(),
   status: z.enum(["PENDENTE_APROVACAO", "APROVADO", "REJEITADO"]).optional(),
   // Filtra pela versão do app reportada. "sem-versao" = nunca abriu o app.
   appVersion: z.string().min(1).optional(),
@@ -99,6 +113,29 @@ export class MotoristasController {
     const digitos = cpfDigits(cpf ?? "");
     if (digitos.length !== 11) return { existeEmOutraEmpresa: false };
     return { existeEmOutraEmpresa: await this.service.cpfEmOutraEmpresa(digitos) };
+  }
+
+  /**
+   * Procura uma pessoa pelo CPF pra convidar. CPF inteiro, busca exata — ver
+   * `procurarPorCpf`.
+   */
+  @RequerPermissao("motoristas.criar")
+  @Get("procurar-cpf")
+  async procurarCpf(@Query("cpf") cpf: string | undefined, @CurrentUser() user: AuthAdminUser) {
+    const digitos = cpfDigits(cpf ?? "");
+    if (digitos.length !== 11) return { encontrado: false as const };
+    return this.service.procurarPorCpf(digitos, user.id);
+  }
+
+  /** Convida a pessoa desse CPF pra rodar pra esta empresa (ela aceita no app). */
+  @RequerPermissao("motoristas.criar")
+  @HttpCode(200)
+  @Post("convidar")
+  convidar(
+    @Body(new ZodValidationPipe(ConvidarMotoristaInput)) body: ConvidarMotoristaInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.convidar(body.cpf, user.id);
   }
 
   @EscopoPor("motorista")

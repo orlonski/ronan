@@ -47,7 +47,7 @@ export class AuthController {
   async reenviarCodigo(
     @Body(new ZodValidationPipe(ReenviarCodigoInput)) body: ReenviarCodigoInput,
   ) {
-    return this.cadastro.reenviar(body.cpf, body.codigoEmpresa);
+    return this.cadastro.reenviar(body.cpf);
   }
 
   @Public()
@@ -56,7 +56,7 @@ export class AuthController {
   async confirmarCadastro(
     @Body(new ZodValidationPipe(ConfirmarCadastroInput)) body: ConfirmarCadastroInput,
   ) {
-    return this.cadastro.confirmar(body.cpf, body.codigo, body.codigoEmpresa);
+    return this.cadastro.confirmar(body.cpf, body.codigo);
   }
 
   @Public()
@@ -100,7 +100,7 @@ export class AuthController {
   async loginMotorista(
     @Body(new ZodValidationPipe(LoginMotoristaInput)) body: LoginMotoristaInput,
   ) {
-    return this.auth.loginMotorista(body.cpf, body.senha);
+    return this.auth.loginMotorista(body.cpf, body.senha, body.suportaIdentidade ?? false);
   }
 
   @Public()
