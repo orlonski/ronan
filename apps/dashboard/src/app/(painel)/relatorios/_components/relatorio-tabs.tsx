@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { usePathname } from "next/navigation";
-import { Fuel, Truck } from "lucide-react";
+import { Fuel, Timer, Truck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 const ABAS = [
   { href: "/relatorios/viagens", label: "Viagens", icon: Truck },
   { href: "/relatorios/abastecimentos", label: "Abastecimentos", icon: Fuel },
+  { href: "/relatorios/conferencia", label: "Conferência", icon: Timer },
 ] as const;
 
 export function RelatorioTabs({ de, ate }: { de?: string; ate?: string }) {

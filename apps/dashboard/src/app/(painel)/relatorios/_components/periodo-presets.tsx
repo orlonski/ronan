@@ -50,7 +50,19 @@ const PRESETS: { label: string; calcular: () => { de: string; ate: string } }[] 
       return { de: `${ano}-01-01`, ate: `${ano}-12-31` };
     },
   },
+  // Janela do histórico (tempo de conferência mês a mês). São ~365 dias, dentro
+  // do teto de MAX_DIAS_RELATORIO — "24 meses" não caberia.
+  { label: "Últimos 12 meses", calcular: ultimos12Meses },
 ];
+
+export function ultimos12Meses(): { de: string; ate: string } {
+  const [ano, mes] = ymdSaoPaulo();
+  const inicio = new Date(Date.UTC(ano, mes - 12, 1));
+  return {
+    de: `${inicio.getUTCFullYear()}-${pad(inicio.getUTCMonth() + 1)}-01`,
+    ate: ymdString(),
+  };
+}
 
 export function PeriodoPresets({
   de,

@@ -1792,6 +1792,11 @@ model Viagem {
   @@index([contaId])
   @@index([contaId, data])
   @@index([contaId, status])
+  /// O relatório de tempo de conferência varre meses inteiros por `revisadoEm`
+  /// (e o dashboard já fazia isso em 14 dias, com seq scan). Parcial não dá pra
+  /// declarar aqui, mas a maioria das viagens antigas tem `revisadoEm` nulo e o
+  /// Postgres não indexa nada mais barato que isso sem SQL cru.
+  @@index([contaId, revisadoEm])
   @@map("viagens")
 }
 

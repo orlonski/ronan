@@ -4,6 +4,7 @@ import type { Response } from "express";
 import {
   RelatorioAbastecimentosExportQuery,
   RelatorioAbastecimentosQuery,
+  RelatorioConferenciaQuery,
   RelatorioViagensExportQuery,
   RelatorioViagensQuery,
 } from "@ronan/shared-types";
@@ -18,6 +19,7 @@ import { RelatoriosViagensService } from "./relatorios-viagens.service";
 import { RelatoriosExportService } from "./relatorios-export.service";
 import { RelatoriosAbastecimentosService } from "./relatorios-abastecimentos.service";
 import { RelatoriosAbastecimentosExportService } from "./relatorios-abastecimentos-export.service";
+import { RelatoriosConferenciaService } from "./relatorios-conferencia.service";
 import { exigirComercialParaDimensao, podeVerComercial } from "./comercial-relatorio";
 import { exigirComercialParaFiltros } from "../viagens/comercial";
 
@@ -35,6 +37,7 @@ export class RelatoriosController {
     private readonly exportar: RelatoriosExportService,
     private readonly abastecimentos: RelatoriosAbastecimentosService,
     private readonly exportarAbastecimentos: RelatoriosAbastecimentosExportService,
+    private readonly conferencia: RelatoriosConferenciaService,
   ) {}
 
   @EscopoPor("viagem")
@@ -113,6 +116,25 @@ export class RelatoriosController {
       : await this.exportarAbastecimentos.xlsx(relatorio, detalhe, query);
 
     responderArquivo(res, buffer, `relatorio-abastecimentos-${query.de}_${query.ate}`, pdf);
+  }
+
+  /**
+   * Tempo de conferência ao longo do tempo — o "antes e depois" da conferência
+   * automática.
+   *
+   * Fica sob `relatorios.ver` e não sob `conferencia-ticket.ver` de propósito:
+   * aquela chave é de plataforma (a tela dela mostra o custo em dólar da conta
+   * da Movatruck) e não chega ao admin da empresa cliente. O que este endpoint
+   * devolve é tempo, não dinheiro — é operação da empresa, e é dela.
+   */
+  @EscopoPor("viagem")
+  @RequerPermissao("relatorios.ver")
+  @Get("conferencia")
+  resumoConferencia(
+    @Query(new ZodValidationPipe(RelatorioConferenciaQuery)) query: RelatorioConferenciaQuery,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.conferencia.resumo(query, user.escopo);
   }
 }
 

@@ -24,6 +24,7 @@ export * from "./tipo-servico";
 export * from "./regra-minimo";
 export * from "./relatorio";
 export * from "./relatorio-abastecimento";
+export * from "./relatorio-conferencia";
 export * from "./km-atipico";
 export * from "./user";
 export * from "./permissoes";
