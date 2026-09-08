@@ -7,6 +7,7 @@ import { AuthService } from "./auth.service";
 import { IdentidadeService } from "./identidade.service";
 import { EuController } from "./eu.controller";
 import { EuService } from "./eu.service";
+import { LancamentosPessoaisService } from "./lancamentos-pessoais.service";
 import { CadastroMotoristaService } from "./cadastro-motorista.service";
 import { RedefinicaoSenhaService } from "./redefinicao-senha.service";
 import { JwtStrategy } from "./strategies/jwt.strategy";
@@ -27,6 +28,7 @@ import { AdminInboxModule } from "../admin/inbox/inbox.module";
     AuthService,
     IdentidadeService,
     EuService,
+    LancamentosPessoaisService,
     CadastroMotoristaService,
     RedefinicaoSenhaService,
     JwtStrategy,

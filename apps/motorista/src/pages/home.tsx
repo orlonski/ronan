@@ -8,6 +8,7 @@ import {
   Receipt,
   Trash2,
   Truck,
+  Wallet,
   WifiOff,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -94,7 +95,23 @@ export default function HomePage() {
             {me.isLoading && (
               <p className="mt-1 text-sm text-white/70">Carregando...</p>
             )}
-            {me.data && (
+            <button
+          type="button"
+          onClick={() => navigate("/meus-gastos")}
+          className="flex w-full items-center gap-4 rounded-2xl border-2 border-border bg-card p-4 text-left active:opacity-75"
+        >
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-secondary">
+            <Wallet size={26} color="#13316b" strokeWidth={2.5} />
+          </div>
+          <div className="flex-1">
+            <p className="text-lg font-bold text-foreground">Meus gastos</p>
+            <p className="text-sm text-muted-foreground">
+              Seu caderninho — nenhuma empresa vê
+            </p>
+          </div>
+        </button>
+
+        {me.data && (
               <>
                 <p className="mt-0.5 text-2xl font-bold text-white">{me.data.nome}</p>
                 {me.data.veiculoDefault && (

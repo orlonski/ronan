@@ -1,9 +1,9 @@
 import { useCallback, useState } from "react";
-import { RefreshControl, ScrollView, Text, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, LogOut, RefreshCw } from "lucide-react-native";
+import { Building2, LogOut, RefreshCw, Wallet } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { api, type ConviteEmpresa } from "@/lib/api";
 import { clearTokens } from "@/lib/auth";
@@ -148,6 +148,23 @@ export function SemEmpresa() {
               </Text>
             </View>
           )}
+
+          {/* O caderninho é dele e existe antes de qualquer empresa — é o que dá
+              o que fazer no app enquanto ninguém o chamou. */}
+          <Pressable
+            onPress={() => router.push("/meus-gastos")}
+            className="flex-row items-center gap-4 rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
+          >
+            <View className="h-14 w-14 items-center justify-center rounded-2xl bg-secondary">
+              <Wallet size={26} color="#13316b" strokeWidth={2.5} />
+            </View>
+            <View className="flex-1">
+              <Text className="text-lg font-bold text-foreground">Meus gastos</Text>
+              <Text className="text-sm text-muted-foreground">
+                Anote o diesel, o pedágio e o que você recebeu
+              </Text>
+            </View>
+          </Pressable>
 
           <View className="gap-3">
             <Button

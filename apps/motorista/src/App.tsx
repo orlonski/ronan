@@ -15,6 +15,7 @@ import NovaViagemPage from "@/pages/nova-viagem";
 import NovoPedagioPage from "@/pages/novo-pedagio";
 import NovoAbastecimentoPage from "@/pages/novo-abastecimento";
 import PendentesPage from "@/pages/pendentes";
+import MeusGastosPage from "@/pages/meus-gastos";
 import NotificacoesPage from "@/pages/notificacoes";
 
 // Detalhe da viagem usa Leaflet — chunk separado.
@@ -49,6 +50,7 @@ export default function App() {
             <Route path="/novo-pedagio/:clientId" element={<NovoPedagioPage />} />
             <Route path="/novo-abastecimento" element={<NovoAbastecimentoPage />} />
             <Route path="/pendentes" element={<PendentesPage />} />
+            <Route path="/meus-gastos" element={<MeusGastosPage />} />
             <Route path="/notificacoes" element={<NotificacoesPage />} />
             <Route
               path="/viagens/:id"

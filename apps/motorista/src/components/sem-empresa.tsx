@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, LogOut, RefreshCw } from "lucide-react";
+import { Building2, LogOut, RefreshCw, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api, type ConviteEmpresa } from "@/lib/api";
 import { clearTokens } from "@/lib/auth";
@@ -144,6 +144,24 @@ export function SemEmpresa() {
             <p className="text-base font-medium text-destructive">{erro}</p>
           </div>
         )}
+
+        {/* O caderninho é dele e existe antes de qualquer empresa — é o que dá
+            o que fazer no app enquanto ninguém o chamou. */}
+        <button
+          type="button"
+          onClick={() => navigate("/meus-gastos")}
+          className="flex w-full items-center gap-4 rounded-2xl border-2 border-border bg-card p-4 text-left"
+        >
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-secondary">
+            <Wallet className="h-6 w-6" />
+          </div>
+          <div className="flex-1">
+            <p className="text-lg font-bold text-foreground">Meus gastos</p>
+            <p className="text-sm text-muted-foreground">
+              Anote o diesel, o pedágio e o que você recebeu
+            </p>
+          </div>
+        </button>
 
         <div className="space-y-3">
           <Button

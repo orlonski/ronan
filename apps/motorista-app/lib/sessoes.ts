@@ -306,7 +306,7 @@ export async function migrarSessaoLegada(): Promise<void> {
 
 /** O `sub` (id do motorista) de dentro do JWT. Sem verificar assinatura — só pra
  * saber de quem é o token que já está no aparelho; quem valida é o servidor. */
-function subDoToken(jwt: string | undefined): string | null {
+export function subDoToken(jwt: string | undefined): string | null {
   if (!jwt) return null;
   const payload = jwt.split(".")[1];
   if (!payload) return null;

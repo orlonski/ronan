@@ -1,11 +1,30 @@
-import { Body, Controller, Get, HttpCode, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { AtualizarPerfilInput, AtualizarPlacasInput, RegistrarPushTokenInput } from "@ronan/shared-types";
+import {
+  AtualizarPerfilInput,
+  AtualizarPlacasInput,
+  CriarLancamentoPessoalInput,
+  RegistrarPushTokenInput,
+} from "@ronan/shared-types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
+import { ymdSaoPaulo } from "../common/timezone";
 import { CurrentUser } from "./decorators/current-user.decorator";
 import { Roles } from "./decorators/roles.decorator";
 import { RolesGuard } from "./guards/roles.guard";
 import { EuService } from "./eu.service";
+import { LancamentosPessoaisService } from "./lancamentos-pessoais.service";
 import type { AuthIdentidade } from "./types";
 
 /**
@@ -22,7 +41,10 @@ import type { AuthIdentidade } from "./types";
 @Roles("IDENTIDADE")
 @Controller("m/eu")
 export class EuController {
-  constructor(private readonly service: EuService) {}
+  constructor(
+    private readonly service: EuService,
+    private readonly lancamentos: LancamentosPessoaisService,
+  ) {}
 
   @Get()
   perfil(@CurrentUser() user: AuthIdentidade) {
@@ -67,6 +89,33 @@ export class EuController {
     return this.service.atualizarPlacas(user.id, body.placas, body.placaDefault);
   }
 
+  // ---- O caderninho dele (gastos e recebimentos do próprio bolso) ----
+
+  /** Lançamentos do mês (`?mes=YYYY-MM`; sem o parâmetro, o mês corrente). */
+  @Get("lancamentos")
+  lancamentosDoMes(@CurrentUser() user: AuthIdentidade, @Query("mes") mes?: string) {
+    return this.lancamentos.listar(user.id, mesValido(mes));
+  }
+
+  @Get("lancamentos/resumo")
+  resumoDoMes(@CurrentUser() user: AuthIdentidade, @Query("mes") mes?: string) {
+    return this.lancamentos.resumo(user.id, mesValido(mes));
+  }
+
+  @HttpCode(200)
+  @Post("lancamentos")
+  criarLancamento(
+    @CurrentUser() user: AuthIdentidade,
+    @Body(new ZodValidationPipe(CriarLancamentoPessoalInput)) body: CriarLancamentoPessoalInput,
+  ) {
+    return this.lancamentos.criar(user.id, body);
+  }
+
+  @Delete("lancamentos/:id")
+  apagarLancamento(@CurrentUser() user: AuthIdentidade, @Param("id") id: string) {
+    return this.lancamentos.apagar(user.id, id);
+  }
+
   @HttpCode(200)
   @Post("push-token")
   pushToken(
@@ -75,4 +124,23 @@ export class EuController {
   ) {
     return this.service.registrarPushToken(user.id, body.token);
   }
+}
+
+/**
+ * O mês pedido, ou o corrente.
+ *
+ * O corrente é ancorado em **São Paulo**: o container roda em UTC e, na virada
+ * do mês, "hoje" pelo relógio do servidor já é dia 1º enquanto o motorista
+ * ainda está no dia 30 — e ele veria o mês novo vazio no lugar do fechamento
+ * do que acabou de rodar.
+ */
+function mesValido(mes?: string): string {
+  if (mes) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mes)) {
+      throw new BadRequestException("Mês inválido. Use o formato AAAA-MM.");
+    }
+    return mes;
+  }
+  const [ano, m] = ymdSaoPaulo();
+  return `${ano}-${String(m).padStart(2, "0")}`;
 }

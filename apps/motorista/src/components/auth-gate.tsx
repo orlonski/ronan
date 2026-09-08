@@ -96,7 +96,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
   // status guardado pode ser sobra de um cadastro anterior. A checagem exige a
   // identidade porque quem entrou antes das sessões por empresa também tem
   // lista vazia e roda pelo token legado.
-  if (state && comIdentidade && listarSessoes().length === 0) return <SemEmpresa />;
+  // O caderninho é dele e não depende de empresa nenhuma — é a única tela que
+  // escapa da cobertura, senão o botão "Meus gastos" não levaria a lugar algum.
+  const emRotaPessoal = location.pathname.startsWith("/meus-gastos");
+  if (state && comIdentidade && listarSessoes().length === 0 && !emRotaPessoal) {
+    return <SemEmpresa />;
+  }
 
   // Logado mas cadastro ainda em análise: cobre o app inteiro com a tela de
   // espera (some sozinho quando o status vira APROVADO).

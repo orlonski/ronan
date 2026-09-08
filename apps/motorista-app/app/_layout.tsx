@@ -456,7 +456,9 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // Logado, mas em empresa nenhuma: cobre o app com a tela de convites. Vem
   // ANTES do "em análise" porque sem vínculo não há aprovação pendente — o
   // status guardado pode ser sobra de um cadastro anterior.
-  if (loggedIn && semEmpresa) return <SemEmpresa />;
+  // O caderninho é dele e não depende de empresa nenhuma — é a única tela que
+  // escapa da cobertura, senão o botão "Meus gastos" não levaria a lugar algum.
+  if (loggedIn && semEmpresa && segments[0] !== "meus-gastos") return <SemEmpresa />;
 
   // Logado mas cadastro ainda em análise: cobre o app inteiro com a tela de
   // espera (some sozinho quando o status vira APROVADO).

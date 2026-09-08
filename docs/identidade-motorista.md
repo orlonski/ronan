@@ -288,8 +288,23 @@ sem esse filtro.
    opcional, aviso de reivindicação na tela do código, tela "sem empresa" com os
    convites (aceitar/recusar) e a sessão da pessoa em `lib/identidade.ts`.
 
-**Fase 2 — app pessoal**: `GastoPessoal`/`CorridaPessoal`, telas nos dois apps,
-outbox com namespace por identidade, resumo do mês.
+**Fase 2 — o caderninho dele** ✅ (09/09/2026)
+- `LancamentoPessoal`: UMA tabela, não duas. `tipo` distingue o que entrou
+  (`GANHO`) do que saiu, e o resto (litros, odômetro, descrição) é opcional —
+  duas tabelas dariam duas listas, dois formulários e dois resumos pra somar no
+  fim. Sem `contaId`, chaveada por `identidadeId`, em `MODELS_GLOBAIS`.
+- `clientId` único **por pessoa**: idempotência do outbox sem que o id de um
+  caderninho possa colidir com o de outro (colisão global viraria 500).
+- Rotas em `m/eu/lancamentos` (listar, resumo do mês, criar, apagar). Nenhum
+  endpoint de admin: **nenhuma empresa lê isto**, nem quando ela o vincula.
+- Nos dois apps: tela "Meus gastos" com o mês (recebi / gastei / sobrou + R$ por
+  litro), lançamento offline com selo "Vai subir depois", e drain ao abrir.
+  Namespace por PESSOA (`ronan.eu.<id>.*`), não pelo storage carimbado por
+  empresa — gasto do próprio bolso não some quando ele troca de transportadora.
+- Sem feature flag de propósito: não é lançamento da empresa, é o dinheiro dele.
+
+Pendente da Fase 2: foto do comprovante (exige upload por identidade, fora do
+MinIO por conta) e edição de um lançamento já enviado (hoje: apagar e relançar).
 
 ## Ficou decidido depois
 

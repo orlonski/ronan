@@ -6,6 +6,9 @@ import type {
   CadastroEmpresa,
   CadastroMotoristaInput,
   ConfirmarCadastroInput,
+  CriarLancamentoPessoalInput,
+  LancamentoPessoal,
+  ResumoMesPessoal,
   RedefinirSenhaInput,
   SessaoEmpresa,
   StatusMotorista,
@@ -581,6 +584,17 @@ export const api = {
       body: {},
       comoIdentidade: true,
     }),
+  // ---- O caderninho dele ----
+  lancamentosPessoais: (mes: string) =>
+    request<LancamentoPessoal[]>("GET", `/m/eu/lancamentos?mes=${mes}`, { comoIdentidade: true }),
+  resumoPessoal: (mes: string) =>
+    request<ResumoMesPessoal>("GET", `/m/eu/lancamentos/resumo?mes=${mes}`, {
+      comoIdentidade: true,
+    }),
+  criarLancamentoPessoal: (body: CriarLancamentoPessoalInput) =>
+    request<LancamentoPessoal>("POST", "/m/eu/lancamentos", { body, comoIdentidade: true }),
+  apagarLancamentoPessoal: (id: string) =>
+    request<{ ok: true }>("DELETE", `/m/eu/lancamentos/${id}`, { comoIdentidade: true }),
   recusarConvite: (motoristaId: string) =>
     request<{ ok: true }>("POST", `/m/eu/convites/${motoristaId}/recusar`, {
       body: {},

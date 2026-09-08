@@ -20,6 +20,7 @@ import {
   Scale,
   Trash2,
   Truck,
+  Wallet,
   WifiOff,
 } from "lucide-react-native";
 import { fmtHoraBR } from "@/lib/datetime";
@@ -676,6 +677,23 @@ export default function Home() {
               </Pressable>
               </CoachTarget>
             )}
+
+            {/* O caderninho dele. Sem feature flag: não é lançamento da empresa,
+                é o dinheiro do próprio bolso — não é a empresa que libera. */}
+            <Pressable
+              onPress={() => router.push("/meus-gastos")}
+              className="flex-row items-center gap-4 rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
+            >
+              <View className="h-14 w-14 items-center justify-center rounded-2xl bg-secondary">
+                <Wallet size={26} color="#13316b" strokeWidth={2.5} />
+              </View>
+              <View className="flex-1">
+                <Text className="text-lg font-bold text-foreground">Meus gastos</Text>
+                <Text className="text-sm text-muted-foreground">
+                  Seu caderninho — nenhuma empresa vê
+                </Text>
+              </View>
+            </Pressable>
 
             {/* Empty state se todas as 4 funcionalidades estão desabilitadas */}
             {me.data &&
