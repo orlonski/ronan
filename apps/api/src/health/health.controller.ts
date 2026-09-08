@@ -3,6 +3,15 @@ import { ApiTags } from "@nestjs/swagger";
 import { PrismaService } from "../prisma/prisma.service";
 import { Public } from "../auth/decorators/public.decorator";
 
+/**
+ * Quando este processo subiu.
+ *
+ * Módulo, não campo de instância: é o instante em que o Node carregou o
+ * arquivo, e é o que responde "o deploy trocou o container?" — a pergunta que
+ * sobra quando o push não traz migration nova nem rota nova pra sondar.
+ */
+const INICIADO_EM = new Date().toISOString();
+
 @ApiTags("health")
 @Controller("health")
 export class HealthController {
@@ -37,6 +46,8 @@ export class HealthController {
        * versão sem contar pra quem perguntar o que foi feito nela.
        */
       migracao,
+      /** Reiniciou depois do seu push? Então o deploy subiu. */
+      iniciadoEm: INICIADO_EM,
       time: new Date().toISOString(),
     };
   }
