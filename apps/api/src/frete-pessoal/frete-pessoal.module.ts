@@ -6,6 +6,10 @@ import {
   FretePessoalController,
 } from "./frete-pessoal.controller";
 import { FretePessoalService } from "./frete-pessoal.service";
+import { DocumentosPessoaisService } from "./documentos-pessoais.service";
+import { AvisoDocumentosService } from "./aviso-documentos.service";
+import { PushModule } from "../push/push.module";
+import { UploadsModule } from "../uploads/uploads.module";
 
 /**
  * O trabalho por conta própria do motorista: estimar um frete e comprovar o que
@@ -13,8 +17,8 @@ import { FretePessoalService } from "./frete-pessoal.service";
  * a ver com auth, que é onde o resto de `m/eu` mora.
  */
 @Module({
-  imports: [RoteamentoModule, PedagiosRodoviaModule],
+  imports: [RoteamentoModule, PedagiosRodoviaModule, UploadsModule, PushModule],
   controllers: [FretePessoalController, ComprovantePessoalPublicoController],
-  providers: [FretePessoalService],
+  providers: [FretePessoalService, DocumentosPessoaisService, AvisoDocumentosService],
 })
 export class FretePessoalModule {}

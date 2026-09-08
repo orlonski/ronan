@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ArrowLeft, ArrowRight, CloudOff, Plus, Send, Trash2 } from "lucide-react-native";
+import { ArrowLeft, ArrowRight, CloudOff, FileText, Plus, Send, Trash2 } from "lucide-react-native";
 import {
   ROTULO_LANCAMENTO_PESSOAL,
   TIPOS_LANCAMENTO_PESSOAL,
@@ -121,6 +121,7 @@ export default function MeuCadernoScreen() {
       const [ano, m] = mes.split("-").map(Number);
       const ultimoDia = new Date(Date.UTC(ano!, m!, 0)).getUTCDate();
       const c = await api.criarComprovantePessoal({
+        tipo: "FRETES",
         inicio: `${mes}-01`,
         fim: `${mes}-${String(ultimoDia).padStart(2, "0")}`,
       });
@@ -209,6 +210,17 @@ export default function MeuCadernoScreen() {
                 <Button size="lg" className="h-16" onPress={() => router.push("/novo-frete")}>
                   <Plus size={22} color="#fff" />
                   <Text className="text-lg font-bold text-primary-foreground">Novo frete</Text>
+                </Button>
+
+                <Button
+                  size="lg"
+                  variant="outline"
+                  onPress={() => router.push("/meus-documentos")}
+                >
+                  <FileText size={18} color="#0f172a" />
+                  <Text className="text-base font-semibold text-foreground">
+                    Meus documentos
+                  </Text>
                 </Button>
 
                 {viagens.length > 0 && (

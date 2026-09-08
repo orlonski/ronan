@@ -464,7 +464,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // O caderno e a calculadora de frete são dele e não dependem de empresa
   // nenhuma — são as telas que escapam da cobertura, senão os botões não
   // levariam a lugar algum.
-  const emTelaPropria = segments[0] === "meus-gastos" || segments[0] === "novo-frete";
+  const emTelaPropria =
+    segments[0] === "meus-gastos" ||
+    segments[0] === "novo-frete" ||
+    segments[0] === "meus-documentos";
   if (loggedIn && semEmpresa && !emTelaPropria) return <SemEmpresa />;
 
   // Logado mas cadastro ainda em análise: cobre o app inteiro com a tela de

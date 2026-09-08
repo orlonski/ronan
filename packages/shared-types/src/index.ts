@@ -15,6 +15,7 @@ export * from "./cliente";
 export * from "./empresa";
 export * from "./minha-empresa";
 export * from "./transportadora";
+export * from "./documento-pessoal";
 export * from "./lancamento-pessoal";
 export * from "./motorista";
 export * from "./motorista-documento";

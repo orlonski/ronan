@@ -141,6 +141,32 @@ sendo onde entra o que não é frete.
 
 **Depois**, na ordem: C (comprovante), D (documentos), E (fotos).
 
+## 7. A carteira (entregue em 09/09/2026)
+
+Pesquisa do que é exigido de fato pra pegar carga, e não do que parece:
+
+- **Autônomo tem cadastro/liberação refeitos A CADA VIAGEM** (agregado é
+  semestral, frota é anual). Ele reenvia os mesmos documentos pra toda
+  transportadora, toda carga — é esse atrito que faz ele perder frete.
+- **Toxicológico**: vale 2 anos e 6 meses, e a multa do art. 165-D é
+  **automática 30 dias depois do vencimento** — ele é multado sem ser parado.
+  Por isso o aviso dele sai com 60 dias, e não com 30 como os outros.
+- **Cronotacógrafo**: verificação a cada 24 meses acima de 4.536 kg de PBT (todo
+  caminhão de carga).
+- **Quem cadastra na gerenciadora (Buonny/Apisul) é a CONTRATANTE**, não ele —
+  então o que resolve o problema dele não é integrar com elas, é ter tudo em
+  mãos, em dia, pra mandar rápido.
+
+O que foi feito: `DocumentoPessoal` (CNH, toxicológico, RNTRC, CRLV por placa,
+cronotacógrafo, MOPP, antecedentes, residência, RG/CPF), com validade, foto e
+situação calculada (em dia / vencendo / vencido); cron diário que avisa por push
+uma vez por ciclo; e o link do **cadastro** — o mesmo mecanismo do comprovante,
+com `tipo: CADASTRO`.
+
+**A foto do documento NÃO sai no link.** Ele mostra documento, número, validade
+e situação. Mandar CNH escaneada por link público é exatamente como documento de
+gente vaza; quem precisar do arquivo pede, e ele manda pelo canal que quiser.
+
 ## 6. O que isso toca no que já existe
 
 Prometido: nada muda de forma.

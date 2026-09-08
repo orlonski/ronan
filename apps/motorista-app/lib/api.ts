@@ -6,8 +6,9 @@ import type {
   CadastroEmpresa,
   CadastroMotoristaInput,
   ConfirmarCadastroInput,
-  CriarComprovantePessoalInput,
   CriarLancamentoPessoalInput,
+  DocumentoPessoal,
+  SalvarDocumentoPessoalInput,
   CriarViagemPessoalInput,
   EstimarFreteInput,
   EstimativaFrete,
@@ -605,8 +606,39 @@ export const api = {
   /** "Vale a pena esse frete?" — km, praças na rota e diesel pelo consumo dele. */
   estimarFrete: (body: EstimarFreteInput) =>
     request<EstimativaFrete>("POST", "/m/eu/frete/estimar", { body, comoIdentidade: true }),
+  // ---- A carteira dele (documentos pra pegar carga) ----
+  meusDocumentos: () =>
+    request<DocumentoPessoal[]>("GET", "/m/eu/frete/documentos", { comoIdentidade: true }),
+  salvarDocumento: (body: SalvarDocumentoPessoalInput) =>
+    request<DocumentoPessoal>("POST", "/m/eu/frete/documentos", { body, comoIdentidade: true }),
+  atualizarDocumento: (id: string, body: SalvarDocumentoPessoalInput) =>
+    request<DocumentoPessoal>("PUT", `/m/eu/frete/documentos/${id}`, {
+      body,
+      comoIdentidade: true,
+    }),
+  apagarDocumento: (id: string) =>
+    request<{ ok: true }>("DELETE", `/m/eu/frete/documentos/${id}`, { comoIdentidade: true }),
+  /** A foto do documento. Timeout de upload — foto de celular não cabe nos 8s. */
+  anexarArquivoDocumento: (id: string, uri: string) => {
+    const form = new FormData();
+    form.append("arquivo", {
+      uri,
+      name: `documento-${id}.jpg`,
+      type: "image/jpeg",
+    } as unknown as Blob);
+    return request<DocumentoPessoal>("POST", `/m/eu/frete/documentos/${id}/arquivo`, {
+      body: form,
+      isFormData: true,
+      comoIdentidade: true,
+    });
+  },
   /** Link do período pra mandar pra quem vai pagar. */
-  criarComprovantePessoal: (body: CriarComprovantePessoalInput) =>
+  criarComprovantePessoal: (body: {
+    tipo: "FRETES" | "CADASTRO";
+    inicio: string;
+    fim: string;
+    destinatario?: string;
+  }) =>
     request<{ token: string; inicio: string; fim: string; destinatario: string | null }>(
       "POST",
       "/m/eu/frete/comprovante",

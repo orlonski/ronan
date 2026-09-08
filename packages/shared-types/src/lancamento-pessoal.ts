@@ -203,6 +203,12 @@ export type EstimativaFrete = {
 /** O período que ele manda pra quem vai pagar. */
 export const CriarComprovantePessoalInput = z
   .object({
+    /**
+     * `FRETES` = o que ele rodou no período (pra quem vai pagar).
+     * `CADASTRO` = quem ele é: documentos e validades (pra transportadora que
+     * vai liberar a carga). Mesmo mecanismo de link, conteúdo diferente.
+     */
+    tipo: z.enum(["FRETES", "CADASTRO"]).default("FRETES"),
     inicio: DataSchema,
     fim: DataSchema,
     destinatario: z.string().trim().max(120).optional(),

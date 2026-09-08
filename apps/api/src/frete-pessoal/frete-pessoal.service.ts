@@ -1,10 +1,15 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { randomBytes } from "node:crypto";
-import type { EstimativaFrete, ComprovantePessoalPublico } from "@ronan/shared-types";
+import type {
+  CadastroPessoalPublico,
+  ComprovantePessoalPublico,
+  EstimativaFrete,
+} from "@ronan/shared-types";
 import { comoSistema } from "../common/conta/conta-context";
 import { PrismaService } from "../prisma/prisma.service";
 import { RoteamentoService } from "../roteamento/roteamento.service";
 import { PedagiosRodoviaConsultaService } from "../admin/pedagios-rodovia/pedagios-rodovia-consulta.service";
+import { DocumentosPessoaisService } from "./documentos-pessoais.service";
 
 /** Janela do histórico que alimenta consumo e preço do litro. */
 const DIAS_HISTORICO = 90;
@@ -26,6 +31,7 @@ export class FretePessoalService {
     private readonly prisma: PrismaService,
     private readonly roteamento: RoteamentoService,
     private readonly pedagios: PedagiosRodoviaConsultaService,
+    private readonly documentos: DocumentosPessoaisService,
   ) {}
 
   async estimar(
@@ -118,21 +124,24 @@ export class FretePessoalService {
     inicio: string,
     fim: string,
     destinatario?: string,
+    tipo: "FRETES" | "CADASTRO" = "FRETES",
   ) {
     const criado = await comoSistema(() =>
       this.prisma.comprovantePessoal.create({
         data: {
           identidadeId,
+          tipo,
           token: randomBytes(16).toString("base64url"),
           inicio: new Date(`${inicio}T00:00:00.000Z`),
           fim: new Date(`${fim}T00:00:00.000Z`),
           destinatario: destinatario ?? null,
         },
-        select: { token: true, inicio: true, fim: true, destinatario: true, criadoEm: true },
+        select: { token: true, tipo: true, inicio: true, fim: true, destinatario: true },
       }),
     );
     return {
       token: criado.token,
+      tipo: criado.tipo,
       inicio: criado.inicio.toISOString().slice(0, 10),
       fim: criado.fim.toISOString().slice(0, 10),
       destinatario: criado.destinatario,
@@ -160,12 +169,15 @@ export class FretePessoalService {
    * campo: o nome dela, o período, e os fretes. Nada de CPF, telefone, gasto ou
    * qualquer empresa em que ela rode.
    */
-  async comprovantePublico(token: string): Promise<ComprovantePessoalPublico> {
+  async comprovantePublico(
+    token: string,
+  ): Promise<ComprovantePessoalPublico | CadastroPessoalPublico> {
     const comprovante = await comoSistema(() =>
       this.prisma.comprovantePessoal.findUnique({
         where: { token },
         select: {
           identidadeId: true,
+          tipo: true,
           inicio: true,
           fim: true,
           destinatario: true,
@@ -178,6 +190,15 @@ export class FretePessoalService {
     // descobre se ele já existiu.
     if (!comprovante || comprovante.revogadoEm) {
       throw new NotFoundException("Esse comprovante não está mais disponível.");
+    }
+
+    // O mesmo link serve a dois conteúdos: o que ele rodou, e quem ele é.
+    if (comprovante.tipo === "CADASTRO") {
+      return this.documentos.cadastroPublico(
+        comprovante.identidadeId,
+        comprovante.identidade.nome,
+        comprovante.destinatario,
+      );
     }
 
     const viagens = await comoSistema(() =>

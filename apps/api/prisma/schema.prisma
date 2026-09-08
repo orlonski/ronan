@@ -676,6 +676,7 @@ model MotoristaIdentidade {
   lancamentos     LancamentoPessoal[]
   viagensPessoais ViagemPessoal[]
   comprovantes    ComprovantePessoal[]
+  documentos      DocumentoPessoal[]
 
   @@index([ativo])
   @@map("motorista_identidades")
@@ -736,6 +737,69 @@ model ViagemPessoal {
   @@map("viagens_pessoais")
 }
 
+/// Os documentos que o motorista precisa ter em dia pra conseguir carga.
+///
+/// A lista não é invenção: é o que a transportadora e a gerenciadora de risco
+/// pedem antes de liberar um frete (CNH com EAR, toxicológico, RNTRC, CRLV do
+/// cavalo e da carreta, cronotacógrafo…). O autônomo refaz esse cadastro A CADA
+/// VIAGEM — agregado é semestral, frota é anual, e ele é a cada carga —, então
+/// ter tudo junto e em dia é a diferença entre pegar e perder o frete.
+///
+/// É da PESSOA: acompanha ele de transportadora em transportadora. Não confundir
+/// com `MotoristaDocumento`, que é o documento que UMA empresa guarda do
+/// motorista dela, dentro da conta dela.
+enum TipoDocumentoPessoal {
+  CNH
+  /// A cada 2 anos e 6 meses. A multa do art. 165-D é AUTOMÁTICA 30 dias depois
+  /// do vencimento — ele é multado sem ser parado na estrada. Por isso o aviso
+  /// deste aqui sai mais cedo que o dos outros.
+  EXAME_TOXICOLOGICO
+  /// Registro na ANTT (TAC). Sem ele o autônomo não emite CIOT nem pega carga.
+  RNTRC
+  /// Licenciamento — um por placa (cavalo e cada carreta).
+  CRLV
+  /// Produtos perigosos.
+  MOPP
+  /// Verificação do cronotacógrafo (24 meses, PBT acima de 4.536 kg).
+  CERTIFICADO_TACOGRAFO
+  ANTECEDENTES
+  COMPROVANTE_RESIDENCIA
+  IDENTIDADE_CPF
+  OUTRO
+}
+
+model DocumentoPessoal {
+  id           String               @id @default(uuid())
+  identidade   MotoristaIdentidade  @relation(fields: [identidadeId], references: [id], onDelete: Cascade)
+  identidadeId String
+  tipo         TipoDocumentoPessoal
+  numero       String?
+  /// Null = documento que não vence (CPF, comprovante de residência).
+  validade     DateTime?            @db.Date
+  /// CRLV e cronotacógrafo são POR VEÍCULO — a placa é o que distingue duas
+  /// linhas do mesmo tipo.
+  placa        String?
+  observacao   String?
+
+  /// A foto/PDF no MinIO. Fica PRIVADA: o link que ele manda pra transportadora
+  /// mostra que o documento existe e está em dia, não a imagem — mandar CNH
+  /// escaneada por link público é exatamente como documento de gente vaza.
+  arquivoKey   String?
+  arquivoMime  String?
+  arquivoNome  String?
+
+  /// Quando o aviso de vencimento foi disparado — trava de envio único por
+  /// ciclo, pra não virar push todo dia sobre o mesmo documento.
+  avisadoEm    DateTime?
+
+  criadoEm     DateTime             @default(now())
+  alteradoEm   DateTime             @updatedAt
+
+  @@index([identidadeId, tipo])
+  @@index([validade])
+  @@map("documentos_pessoais")
+}
+
 /// O link que ele manda pra quem vai pagar: os fretes de um período.
 ///
 /// Espelha a ideia do `ViagemCompartilhamento` (o comprovante da viagem da
@@ -745,10 +809,19 @@ model ViagemPessoal {
 /// Token em claro de propósito, como o outro: quem tem o link vê, e é isso que
 /// permite mandar por WhatsApp pra alguém que não tem cadastro em lugar nenhum.
 /// Por isso ele é revogável e o que a página mostra é montado campo a campo.
+enum TipoComprovantePessoal {
+  /// O que ele rodou no período — pra quem vai pagar.
+  FRETES
+  /// Quem ele é: documentos e validades — pra transportadora que vai liberar a
+  /// carga. Mesmo mecanismo (token + revogação), conteúdo diferente.
+  CADASTRO
+}
+
 model ComprovantePessoal {
   id           String              @id @default(uuid())
   identidade   MotoristaIdentidade @relation(fields: [identidadeId], references: [id], onDelete: Cascade)
   identidadeId String
+  tipo         TipoComprovantePessoal @default(FRETES)
   token        String              @unique
   /// Período coberto (dias civis).
   inicio       DateTime            @db.Date

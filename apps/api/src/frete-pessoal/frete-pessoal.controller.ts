@@ -1,6 +1,26 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, Query, UseGuards } from "@nestjs/common";
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Put,
+  Res,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import type { Response } from "express";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { CriarComprovantePessoalInput, EstimarFreteInput } from "@ronan/shared-types";
+import {
+  CriarComprovantePessoalInput,
+  EstimarFreteInput,
+  SalvarDocumentoPessoalInput,
+} from "@ronan/shared-types";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { Public } from "../auth/decorators/public.decorator";
 import { Roles } from "../auth/decorators/roles.decorator";
@@ -8,6 +28,10 @@ import { RolesGuard } from "../auth/guards/roles.guard";
 import type { AuthIdentidade } from "../auth/types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { FretePessoalService } from "./frete-pessoal.service";
+import { DocumentosPessoaisService } from "./documentos-pessoais.service";
+
+/** 8 MB: foto de documento tirada pelo celular cabe com folga. */
+const TAMANHO_MAX = 8 * 1024 * 1024;
 
 /**
  * "Vale a pena esse frete?" e o comprovante do que ele rodou.
@@ -21,7 +45,10 @@ import { FretePessoalService } from "./frete-pessoal.service";
 @Roles("IDENTIDADE")
 @Controller("m/eu/frete")
 export class FretePessoalController {
-  constructor(private readonly service: FretePessoalService) {}
+  constructor(
+    private readonly service: FretePessoalService,
+    private readonly documentos: DocumentosPessoaisService,
+  ) {}
 
   @HttpCode(200)
   @Post("estimar")
@@ -43,12 +70,73 @@ export class FretePessoalController {
     @Body(new ZodValidationPipe(CriarComprovantePessoalInput))
     body: CriarComprovantePessoalInput,
   ) {
-    return this.service.criarComprovante(user.id, body.inicio, body.fim, body.destinatario);
+    return this.service.criarComprovante(
+      user.id,
+      body.inicio,
+      body.fim,
+      body.destinatario,
+      body.tipo,
+    );
   }
 
   @Delete("comprovante/:token")
   revogarComprovante(@CurrentUser() user: AuthIdentidade, @Param("token") token: string) {
     return this.service.revogarComprovante(user.id, token);
+  }
+
+  // ---- A carteira dele ----
+
+  @Get("documentos")
+  documentosDele(@CurrentUser() user: AuthIdentidade) {
+    return this.documentos.listar(user.id);
+  }
+
+  @HttpCode(200)
+  @Post("documentos")
+  salvarDocumento(
+    @CurrentUser() user: AuthIdentidade,
+    @Body(new ZodValidationPipe(SalvarDocumentoPessoalInput)) body: SalvarDocumentoPessoalInput,
+  ) {
+    return this.documentos.salvar(user.id, body);
+  }
+
+  @Put("documentos/:id")
+  atualizarDocumento(
+    @CurrentUser() user: AuthIdentidade,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(SalvarDocumentoPessoalInput)) body: SalvarDocumentoPessoalInput,
+  ) {
+    return this.documentos.salvar(user.id, body, id);
+  }
+
+  @Delete("documentos/:id")
+  apagarDocumento(@CurrentUser() user: AuthIdentidade, @Param("id") id: string) {
+    return this.documentos.apagar(user.id, id);
+  }
+
+  /** A foto/PDF do documento. Fica privada — nunca sai pelo link público. */
+  @HttpCode(200)
+  @Post("documentos/:id/arquivo")
+  @UseInterceptors(FileInterceptor("arquivo", { limits: { fileSize: TAMANHO_MAX } }))
+  anexarArquivo(
+    @CurrentUser() user: AuthIdentidade,
+    @Param("id") id: string,
+    @UploadedFile() arquivo?: Express.Multer.File,
+  ) {
+    if (!arquivo) throw new BadRequestException("Nenhum arquivo enviado.");
+    return this.documentos.anexarArquivo(user.id, id, arquivo);
+  }
+
+  @Get("documentos/:id/arquivo")
+  async baixarArquivo(
+    @CurrentUser() user: AuthIdentidade,
+    @Param("id") id: string,
+    @Res() res: Response,
+  ) {
+    const { stream, mime, nome } = await this.documentos.arquivo(user.id, id);
+    res.setHeader("content-type", mime);
+    res.setHeader("content-disposition", `inline; filename="${nome}"`);
+    stream.pipe(res);
   }
 }
 

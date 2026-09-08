@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import type { ComprovantePessoalPublico } from "@ronan/shared-types";
 import { FretePessoalService } from "./frete-pessoal.service";
 import type { PrismaService } from "../prisma/prisma.service";
 import type { RoteamentoService } from "../roteamento/roteamento.service";
 import type { PedagiosRodoviaConsultaService } from "../admin/pedagios-rodovia/pedagios-rodovia-consulta.service";
+import type { DocumentosPessoaisService } from "./documentos-pessoais.service";
 
 const EU = "identidade-do-motorista";
 const OUTRO = "identidade-de-outra-pessoa";
@@ -53,7 +55,12 @@ function montar(opts: {
     pedagiosNaGeometria: vi.fn(async () => opts.pedagios ?? []),
   } as unknown as PedagiosRodoviaConsultaService;
 
-  return { service: new FretePessoalService(prisma, roteamento, pedagios), prisma };
+  // A carteira só é consultada no link do tipo CADASTRO — nestes testes o
+  // comprovante é sempre de FRETES.
+  const documentos = {
+    cadastroPublico: vi.fn(async () => ({ motorista: "", destinatario: null, documentos: [], tudoEmDia: false })),
+  } as unknown as DocumentosPessoaisService;
+  return { service: new FretePessoalService(prisma, roteamento, pedagios, documentos), prisma };
 }
 
 const ORIGEM = { lat: -25.09, lng: -50.16 };
@@ -120,6 +127,7 @@ describe("vale a pena esse frete?", () => {
 describe("comprovante pra quem vai pagar", () => {
   const comprovante = {
     identidadeId: EU,
+    tipo: "FRETES" as const,
     inicio: new Date("2026-09-01T00:00:00.000Z"),
     fim: new Date("2026-09-30T00:00:00.000Z"),
     destinatario: "Construtora Alvorada",
@@ -138,7 +146,7 @@ describe("comprovante pra quem vai pagar", () => {
 
   it("a página pública mostra o frete e soma o período", async () => {
     const { service } = montar({ comprovante, viagens: [viagem] });
-    const p = await service.comprovantePublico("tok");
+    const p = (await service.comprovantePublico("tok")) as ComprovantePessoalPublico;
     expect(p.motorista).toBe("João da Silva");
     expect(p.viagens).toHaveLength(1);
     expect(p.totalKm).toBe(118.4);
@@ -147,7 +155,7 @@ describe("comprovante pra quem vai pagar", () => {
 
   it("não vaza CPF, telefone nem gasto pra quem abre o link", async () => {
     const { service } = montar({ comprovante, viagens: [viagem] });
-    const p = await service.comprovantePublico("tok");
+    const p = (await service.comprovantePublico("tok")) as ComprovantePessoalPublico;
     const texto = JSON.stringify(p);
     expect(texto).not.toContain("cpf");
     expect(texto).not.toContain("telefone");

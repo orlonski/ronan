@@ -168,6 +168,30 @@ export class UploadsService implements OnModuleInit {
   }
 
   /**
+   * Foto/PDF de um documento da CARTEIRA do motorista.
+   *
+   * Chave sob `pessoal/<identidadeId>/` — fora do prefixo de conta, porque o
+   * documento é da PESSOA e a acompanha de transportadora em transportadora
+   * (`locais/img/` já abria esse precedente de chave sem conta). Determinística
+   * por tipo+placa: documento renovado substitui o anterior em vez de acumular
+   * cópias antigas do mesmo papel.
+   */
+  async putDocumentoPessoal(
+    buffer: Buffer,
+    mimetype: string,
+    identidadeId: string,
+    tipo: string,
+    nomeOriginal: string,
+  ): Promise<string> {
+    const ext = (nomeOriginal.split(".").pop() ?? "bin").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const key = `pessoal/${identidadeId}/documentos/${tipo}-${randomUUID()}.${ext || "bin"}`;
+    await this.client.putObject(this.bucket, key, buffer, buffer.length, {
+      "Content-Type": mimetype,
+    });
+    return key;
+  }
+
+  /**
    * Imagem do local (Street View / satélite) cacheada por COORDENADA. Chave
    * determinística (sobrescreve, sem uuid) — o custo na API do Google vira
    * único por ponto. `chaveCoord` já vem normalizada (ex: "-25.42840_-49.27330").
