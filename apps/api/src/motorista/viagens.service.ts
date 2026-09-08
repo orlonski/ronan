@@ -201,6 +201,7 @@ export class ViagensMotoristaService {
       | "resposta-divergencia-pedagio"
       | "resposta-divergencia-km"
       | "resposta-divergencia-ticket"
+      | "resposta-divergencia-material"
       | "resposta-divergencia-foto"
       | "nova-mensagem-viagem"
       | "foto-anexada",
@@ -633,6 +634,121 @@ export class ViagensMotoristaService {
       mudou
         ? `Corrigiu para ${ticketNovo} — viagem aguardando sua revisão`
         : `Explicou o número repetido — viagem aguardando sua revisão`,
+      { viagemId, motoristaId, justificativa },
+    );
+
+    return this.detalhe(motoristaId, viagemId);
+  }
+
+  /**
+   * Motorista responde a viagem marcada por MATERIAL DIVERGENTE: o material que
+   * ele escolheu na lista não é o que está escrito no ticket.
+   *
+   * Molde do responderTicketDuplicado, com uma diferença que importa: trocar o
+   * material muda o que a viagem vale (o mínimo faturado é resolvido por
+   * empresa+material+faixa de km, ver common/viagem-minimos.ts). Por isso a
+   * troca é auditada com nome antes/depois — o painel precisa conseguir ler
+   * depois por que aquela viagem passou a valer outra coisa.
+   *
+   * O material é OPCIONAL de propósito: quem está com o papel na mão é o
+   * motorista, e ele pode estar certo (a leitura do ticket é que pode ter
+   * falhado). Nesse caso ele só explica, e quem decide é o conferente.
+   */
+  async responderMaterialDivergente(
+    motoristaId: string,
+    viagemId: string,
+    input: { materialId?: string; justificativa: string },
+  ) {
+    const viagem = await this.prisma.viagem.findUnique({
+      where: { id: viagemId },
+      select: {
+        id: true,
+        motoristaId: true,
+        status: true,
+        tipoDivergencia: true,
+        materialId: true,
+        material: { select: { nome: true } },
+      },
+    });
+    if (!viagem) throw new NotFoundException("Viagem não encontrada.");
+    if (viagem.motoristaId !== motoristaId) {
+      throw new ForbiddenException("Esta viagem não é sua.");
+    }
+    if (viagem.status !== "DIVERGENTE" || viagem.tipoDivergencia !== "MATERIAL_DIVERGENTE") {
+      throw new ConflictException("Essa viagem não está aguardando conferência do material.");
+    }
+    const justificativa = input.justificativa.trim();
+    if (justificativa.length < 5) {
+      throw new ConflictException("Explique em poucas palavras qual é o material certo.");
+    }
+
+    const materialNovoId = input.materialId?.trim() || null;
+    const mudou = materialNovoId != null && materialNovoId !== viagem.materialId;
+
+    // Material que sumiu do catálogo (cache velho no celular) vira 4xx, nunca
+    // 500: 500 aqui trava o app tentando de novo em loop.
+    let nomeNovo: string | null = null;
+    if (mudou) {
+      const material = await this.prisma.material.findUnique({
+        where: { id: materialNovoId },
+        select: { nome: true },
+      });
+      if (!material) {
+        throw new BadRequestException("Esse material não existe mais. Atualize o app e tente de novo.");
+      }
+      nomeNovo = material.nome;
+    }
+
+    const nomeAntes = viagem.material?.nome ?? "sem material";
+    const nomeMot = (
+      await this.prisma.motorista.findUnique({
+        where: { id: motoristaId },
+        select: { nome: true },
+      })
+    )?.nome;
+
+    await this.prisma.viagem.update({
+      where: { id: viagemId },
+      data: {
+        status: "AJUSTADA",
+        tipoDivergencia: null,
+        ...(mudou ? { materialId: materialNovoId } : {}),
+      },
+    });
+
+    await this.mensagens.criar({
+      viagemId,
+      autor: "MOTORISTA",
+      motoristaId,
+      autorNome: nomeMot ?? "Motorista",
+      texto: mudou
+        ? `Corrigi o material de ${nomeAntes} para ${nomeNovo}. ${justificativa}`
+        : justificativa,
+      acao: "CORRIGIU_MATERIAL",
+    });
+
+    try {
+      await this.auditoria.log({
+        usuarioId: null,
+        entidade: "Viagem",
+        entidadeId: viagemId,
+        acao: AcaoAuditoria.UPDATE,
+        campo: "materialId",
+        valorAntes: nomeAntes,
+        valorDepois: mudou ? nomeNovo : nomeAntes,
+        motivo: `Motorista respondeu o material${mudou ? ` (corrigiu para ${nomeNovo})` : ""}: ${justificativa}`,
+        metadata: { motoristaId, mudou, justificativa },
+      });
+    } catch {
+      // best-effort
+    }
+
+    void this.notificarAdmins(
+      "resposta-divergencia-material",
+      `${nomeMot ?? "Motorista"} respondeu o material`,
+      mudou
+        ? `Corrigiu para ${nomeNovo} — viagem aguardando sua revisão`
+        : `Manteve ${nomeAntes} e explicou — viagem aguardando sua revisão`,
       { viagemId, motoristaId, justificativa },
     );
 

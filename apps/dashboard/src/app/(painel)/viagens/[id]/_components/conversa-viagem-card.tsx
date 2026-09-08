@@ -31,6 +31,7 @@ const ACAO_LABEL: Record<string, string> = {
   // automática vinha aparecendo sem nenhum.
   CONFERIU: "Conferido pela IA",
   CORRIGIU_TICKET: "Corrigiu o ticket",
+  CORRIGIU_MATERIAL: "Respondeu o material",
 };
 
 /**

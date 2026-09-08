@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   AlertTriangle,
@@ -13,6 +13,7 @@ import { AuthedImage } from "@/components/authed-image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Select, type SelectOption } from "@/components/ui/select";
 import { PhotoCapture } from "@/components/photo-capture";
 import { usePendingFotosViagem } from "@/hooks/use-pending-fotos-viagem";
 import { showAlert, showConfirm } from "@/lib/alert";
@@ -25,7 +26,9 @@ import {
   useExcluirViagem,
   useInformarValorPedagio,
   usePedagiosNaRota,
+  useCatalogos,
   useResponderFotoDivergente,
+  useResponderMaterialDivergente,
   useViagemDetalhe,
 } from "@/lib/queries";
 
@@ -67,10 +70,21 @@ export default function ViagemDetalhePage() {
   const excluir = useExcluirViagem();
   const informarPedagio = useInformarValorPedagio();
   const responderFoto = useResponderFotoDivergente();
+  const responderMaterial = useResponderMaterialDivergente();
+  // Lista do catálogo offline: o card do material precisa dela pra oferecer a
+  // troca (o envio em si é online).
+  const catalogos = useCatalogos();
+  const [materialNovoId, setMaterialNovoId] = useState("");
+  const [justificativaMaterialStr, setJustificativaMaterialStr] = useState("");
   const [valorPedagioStr, setValorPedagioStr] = useState("");
   const [novaFotoDivergente, setNovaFotoDivergente] =
     useState<FotoComprimida | null>(null);
   const pendingFotos = usePendingFotosViagem(detalhe.data?.id);
+
+  const materialOptions: SelectOption[] = useMemo(
+    () => (catalogos.data?.materiais ?? []).map((m) => ({ value: m.id, label: m.nome })),
+    [catalogos.data?.materiais],
+  );
 
   async function onFotoCapturada(foto: FotoComprimida | null) {
     if (!foto || !detalhe.data) return;
@@ -272,9 +286,93 @@ export default function ViagemDetalhePage() {
             </Card>
           )}
 
+          {d.status === "DIVERGENTE" && d.tipoDivergencia === "MATERIAL_DIVERGENTE" && (
+            <Card className="border-2 border-warning bg-warning/10 p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle size={20} className="text-warning mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-base font-bold text-foreground">
+                    Confira o material da viagem
+                  </p>
+                  <p className="mt-1 text-sm text-foreground">
+                    O material lançado{d.material ? ` (${d.material.nome})` : ""} parece
+                    diferente do que está no ticket. Se for outro, escolha na lista. Se o
+                    seu estiver certo, é só explicar.
+                  </p>
+                  {d.motivoStatus && (
+                    <p className="mt-2 text-sm text-muted-foreground">{d.motivoStatus}</p>
+                  )}
+
+                  <p className="mt-3 text-sm font-medium text-foreground">
+                    Material do ticket (se for outro)
+                  </p>
+                  <div className="mt-1">
+                    <Select
+                      value={materialNovoId}
+                      onChange={setMaterialNovoId}
+                      options={materialOptions}
+                      placeholder="Deixe em branco se o seu está certo"
+                      title="Material"
+                      searchable
+                    />
+                  </div>
+
+                  <p className="mt-3 text-sm font-medium text-foreground">
+                    O que houve? (obrigatório)
+                  </p>
+                  <textarea
+                    value={justificativaMaterialStr}
+                    onChange={(e) => setJustificativaMaterialStr(e.target.value)}
+                    placeholder="Ex.: carreguei brita 1, o ticket saiu errado"
+                    rows={3}
+                    maxLength={500}
+                    className="mt-1 w-full rounded-xl border-2 border-border bg-background p-3 text-[17px] font-medium text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                  />
+
+                  <Button
+                    className="mt-3 w-full"
+                    loading={responderMaterial.isPending}
+                    disabled={responderMaterial.isPending}
+                    onClick={async () => {
+                      if (justificativaMaterialStr.trim().length < 5) {
+                        void showAlert({
+                          title: "Falta explicar",
+                          message: "Escreva o que houve com o material.",
+                        });
+                        return;
+                      }
+                      try {
+                        await responderMaterial.mutateAsync({
+                          viagemId: d.id,
+                          materialId: materialNovoId || undefined,
+                          justificativa: justificativaMaterialStr.trim(),
+                        });
+                        setMaterialNovoId("");
+                        setJustificativaMaterialStr("");
+                        void showAlert({
+                          title: "Obrigado!",
+                          message: "Resposta enviada — viagem foi marcada como ajustada.",
+                        });
+                      } catch (err) {
+                        void showAlert({
+                          title: "Erro",
+                          message: humanizeApiError(err),
+                          variant: "destructive",
+                        });
+                      }
+                    }}
+                  >
+                    Responder
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
+
           {d.status === "DIVERGENTE" &&
             d.tipoDivergencia !== "PEDAGIO_SEM_VALOR" &&
             d.tipoDivergencia !== "FOTO_ILEGIVEL" &&
+            d.tipoDivergencia !== "MATERIAL_DIVERGENTE" &&
             d.motivoStatus && (
               <Card className="border-2 border-destructive bg-destructive/10 p-4">
                 <div className="flex items-start gap-3">

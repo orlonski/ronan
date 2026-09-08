@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
@@ -31,6 +31,7 @@ import { ScreenHeader } from "@/components/screen-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Select, type SelectOption } from "@/components/ui/select";
 import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { usePendingFotosViagem } from "@/hooks/use-pending-fotos-viagem";
 import { showAlert, showConfirm } from "@/lib/alert";
@@ -45,7 +46,9 @@ import {
   usePedagiosNaRota,
   useResponderFotoDivergente,
   useResponderKmDivergente,
+  useResponderMaterialDivergente,
   useResponderTicketDuplicado,
+  useCatalogos,
   useViagemDetalhe,
 } from "@/lib/queries";
 import { enqueueFoto } from "@/lib/sync";
@@ -86,6 +89,12 @@ export default function ViagemDetalheScreen() {
   const responderFoto = useResponderFotoDivergente();
   const responderKm = useResponderKmDivergente();
   const responderTicket = useResponderTicketDuplicado();
+  const responderMaterial = useResponderMaterialDivergente();
+  // Só pro card de material divergente: a lista vem do catálogo offline, então
+  // ele responde sem sinal também (a resposta em si precisa de rede).
+  const catalogos = useCatalogos();
+  const [materialNovoId, setMaterialNovoId] = useState("");
+  const [justificativaMaterialStr, setJustificativaMaterialStr] = useState("");
   const [ticketNovoStr, setTicketNovoStr] = useState("");
   const [justificativaTicketStr, setJustificativaTicketStr] = useState("");
   const [valorPedagioStr, setValorPedagioStr] = useState("");
@@ -108,6 +117,12 @@ export default function ViagemDetalheScreen() {
       setKmDivergenteStr(String(kmAtualDivergente).replace(".", ","));
     }
   }, [kmAtualDivergente, kmDivergenteStr]);
+
+  const materialOptions: SelectOption[] = useMemo(
+    () =>
+      (catalogos.data?.materiais ?? []).map((m) => ({ value: m.id, label: m.nome })),
+    [catalogos.data?.materiais],
+  );
 
   async function onFotoCapturada(foto: CapturedPhoto | null) {
     // Motorista cancelou (descartou no PhotoCapture). Ignora.
@@ -462,6 +477,93 @@ export default function ViagemDetalheScreen() {
                           });
                           setJustificativaTicketStr("");
                           setTicketNovoStr("");
+                          void showAlert({
+                            title: "Obrigado!",
+                            message:
+                              "Resposta enviada — viagem foi marcada como ajustada.",
+                          });
+                        } catch (err) {
+                          void showAlert({
+                            title: "Erro",
+                            message: humanizeApiError(err),
+                          });
+                        }
+                      }}
+                    >
+                      Responder
+                    </Button>
+                  </View>
+                </View>
+              </Card>
+            )}
+
+          {detalhe.data.status === "DIVERGENTE" &&
+            detalhe.data.tipoDivergencia === "MATERIAL_DIVERGENTE" && (
+              <Card className="border-2 border-orange-500 bg-orange-50">
+                <View className="flex-row items-start gap-3">
+                  <AlertTriangle size={20} color="#ea580c" />
+                  <View className="flex-1">
+                    <Text className="text-base font-bold text-orange-900">
+                      Confira o material da viagem
+                    </Text>
+                    <Text className="mt-1 text-sm text-orange-900">
+                      O material lançado
+                      {detalhe.data.material ? ` (${detalhe.data.material.nome})` : ""} parece
+                      diferente do que está no ticket. Se for outro, escolha na lista.
+                      Se o seu estiver certo, é só explicar.
+                    </Text>
+                    {detalhe.data.motivoStatus ? (
+                      <Text className="mt-2 text-sm text-orange-800">
+                        {detalhe.data.motivoStatus}
+                      </Text>
+                    ) : null}
+
+                    <Text className="mt-3 text-sm font-medium text-foreground">
+                      Material do ticket (se for outro)
+                    </Text>
+                    <View className="mt-1">
+                      <Select
+                        value={materialNovoId}
+                        onChange={setMaterialNovoId}
+                        options={materialOptions}
+                        placeholder="Deixe em branco se o seu está certo"
+                        title="Material"
+                        searchable
+                      />
+                    </View>
+
+                    <Text className="mt-3 text-sm font-medium text-foreground">
+                      O que houve? (obrigatório)
+                    </Text>
+                    <TextInput
+                      value={justificativaMaterialStr}
+                      onChangeText={setJustificativaMaterialStr}
+                      placeholder="Ex.: carreguei brita 1, o ticket saiu errado"
+                      multiline
+                      maxLength={500}
+                      className="mt-1 min-h-16 rounded-md border border-input bg-white px-3 py-2 text-base text-foreground"
+                    />
+
+                    <Button
+                      className="mt-3"
+                      loading={responderMaterial.isPending}
+                      disabled={responderMaterial.isPending}
+                      onPress={async () => {
+                        if (justificativaMaterialStr.trim().length < 5) {
+                          void showAlert({
+                            title: "Falta explicar",
+                            message: "Escreva o que houve com o material.",
+                          });
+                          return;
+                        }
+                        try {
+                          await responderMaterial.mutateAsync({
+                            viagemId: detalhe.data!.id,
+                            materialId: materialNovoId || undefined,
+                            justificativa: justificativaMaterialStr.trim(),
+                          });
+                          setMaterialNovoId("");
+                          setJustificativaMaterialStr("");
                           void showAlert({
                             title: "Obrigado!",
                             message:

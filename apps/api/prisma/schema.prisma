@@ -143,6 +143,11 @@ enum TipoDivergencia {
   /// custa mais caro que conferir depois) — o painel sinaliza e, se estiver
   /// errado mesmo, o conferente reprova por aqui. App mostra card dedicado.
   TICKET_DUPLICADO
+  /// O material declarado não é o que está escrito no ticket. Caso mais comum
+  /// de erro honesto de lançamento (o motorista escolhe na lista antes de ver
+  /// o papel) e o que a conferência automática mais detecta sozinha. App
+  /// mostra card dedicado com a lista de materiais + campo pra explicar.
+  MATERIAL_DIVERGENTE
   /// Qualquer outro motivo. Motorista corrige editando a viagem normal.
   OUTRO
 }

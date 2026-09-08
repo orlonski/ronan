@@ -237,6 +237,7 @@ export type Viagem = {
     | "FOTO_ILEGIVEL"
     | "KM_DIVERGENTE"
     | "TICKET_DUPLICADO"
+    | "MATERIAL_DIVERGENTE"
     | "OUTRO"
     | null;
   sincronizadoEm: string;
@@ -1715,6 +1716,31 @@ export function useResponderTicketDuplicado() {
       return await api.post<ViagemDetalhe>(
         `/m/viagens/${args.viagemId}/responder-ticket-duplicado`,
         { ticket: args.ticket, justificativa: args.justificativa },
+      );
+    },
+    onSuccess: (atualizada) => {
+      qc.setQueryData(["viagem-detalhe", atualizada.id], atualizada);
+      void qc.invalidateQueries({ queryKey: ["viagens"] });
+      void qc.invalidateQueries({ queryKey: ["viagens-filtradas"] });
+      void qc.invalidateQueries({ queryKey: ["viagem-mensagens", atualizada.id] });
+    },
+  });
+}
+
+/** Responde uma divergência MATERIAL_DIVERGENTE: escolhe o material certo
+ *  (opcional — ele pode estar certo e só precisar explicar) e justifica.
+ *  A viagem vira AJUSTADA pro conferente revisar. */
+export function useResponderMaterialDivergente() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      viagemId: string;
+      materialId?: string;
+      justificativa: string;
+    }) => {
+      return await api.post<ViagemDetalhe>(
+        `/m/viagens/${args.viagemId}/responder-material-divergente`,
+        { materialId: args.materialId, justificativa: args.justificativa },
       );
     },
     onSuccess: (atualizada) => {

@@ -65,6 +65,13 @@ const ResponderTicketDuplicadoInput = z.object({
   justificativa: z.string().min(5).max(500),
 });
 
+const ResponderMaterialDivergenteInput = z.object({
+  // Opcional: quem está com o papel na mão é o motorista — ele pode estar certo
+  // e só precisar explicar (a leitura do ticket é que pode ter falhado).
+  materialId: z.string().min(1).max(64).optional(),
+  justificativa: z.string().min(5).max(500),
+});
+
 const EnviarMensagemInput = z.object({
   texto: z.string().min(1).max(1000),
 });
@@ -288,6 +295,22 @@ export class ViagensMotoristaController {
     body: z.infer<typeof ResponderTicketDuplicadoInput>,
   ) {
     return this.service.responderTicketDuplicado(user.id, id, body);
+  }
+
+  /**
+   * Motorista responde a uma divergência tipo MATERIAL_DIVERGENTE: escolhe o
+   * material certo (opcional) e explica. A viagem vira AJUSTADA pro conferente
+   * revisar — trocar o material pode mudar o mínimo faturado, então quem fecha
+   * a conta continua sendo gente.
+   */
+  @Post(":id/responder-material-divergente")
+  responderMaterialDivergente(
+    @CurrentUser() user: AuthMotorista,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(ResponderMaterialDivergenteInput))
+    body: z.infer<typeof ResponderMaterialDivergenteInput>,
+  ) {
+    return this.service.responderMaterialDivergente(user.id, id, body);
   }
 
   /** Chat da viagem: histórico de mensagens. */

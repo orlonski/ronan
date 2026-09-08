@@ -102,7 +102,14 @@ export type Viagem = {
   /** Texto explicando a divergência quando admin marca status=DIVERGENTE. */
   motivoStatus: string | null;
   /** Quando preenchido, app mostra UI dedicada pra resolver. */
-  tipoDivergencia: "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "OUTRO" | null;
+  tipoDivergencia:
+    | "PEDAGIO_SEM_VALOR"
+    | "FOTO_ILEGIVEL"
+    | "KM_DIVERGENTE"
+    | "TICKET_DUPLICADO"
+    | "MATERIAL_DIVERGENTE"
+    | "OUTRO"
+    | null;
   sincronizadoEm: string;
   veiculo: Veiculo;
   cliente: { id: string; nome: string };
@@ -785,6 +792,33 @@ export function useResponderFotoDivergente() {
       return await api.post<ViagemDetalhe>(
         `/m/viagens/${args.viagemId}/responder-foto-divergente`,
         { fotoKey: up.storageKey },
+      );
+    },
+    onSuccess: (atualizada) => {
+      qc.setQueryData(["viagem-detalhe", atualizada.id], atualizada);
+      void qc.invalidateQueries({ queryKey: ["viagens"] });
+      void qc.invalidateQueries({ queryKey: ["viagens-filtradas"] });
+      void qc.invalidateQueries({ queryKey: ["resumo-mes"] });
+    },
+  });
+}
+
+/**
+ * Responde divergência MATERIAL_DIVERGENTE: escolhe o material certo (opcional
+ * — quem está com o ticket na mão é o motorista, e ele pode estar certo) e
+ * explica. Backend muda pra AJUSTADA e limpa o tipoDivergencia.
+ */
+export function useResponderMaterialDivergente() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      viagemId: string;
+      materialId?: string;
+      justificativa: string;
+    }) => {
+      return await api.post<ViagemDetalhe>(
+        `/m/viagens/${args.viagemId}/responder-material-divergente`,
+        { materialId: args.materialId, justificativa: args.justificativa },
       );
     },
     onSuccess: (atualizada) => {

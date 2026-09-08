@@ -881,7 +881,13 @@ export class ViagensAdminService {
     input: {
       status: "OK" | "DIVERGENTE" | "DESFAZER";
       motivo?: string;
-      tipo?: "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "KM_DIVERGENTE" | "TICKET_DUPLICADO" | "OUTRO";
+      tipo?:
+        | "PEDAGIO_SEM_VALOR"
+        | "FOTO_ILEGIVEL"
+        | "KM_DIVERGENTE"
+        | "TICKET_DUPLICADO"
+        | "MATERIAL_DIVERGENTE"
+        | "OUTRO";
     },
     usuarioId: string,
   ) {

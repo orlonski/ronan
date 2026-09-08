@@ -31,6 +31,20 @@ const DIVERGE = resultado({
   ],
 });
 
+/** Só o material fora — o caso que ganhou card dedicado nos dois apps. */
+const SO_MATERIAL = resultado({
+  veredito: "DIVERGE",
+  divergencias: [
+    {
+      campo: "material",
+      declarado: "Brita 0",
+      lido: "Brita 1",
+      gravidade: "ALTA",
+      detalhe: "O ticket é de Brita 1 e a viagem foi lançada com Brita 0.",
+    },
+  ],
+});
+
 function montar(
   cfg: Partial<{
     autoAprovar: boolean;
@@ -206,6 +220,51 @@ describe("atuando", () => {
  * incomoda alguém que reclama, aprovar errado passa dinheiro adiante e ninguém
  * revisa o que já está aprovado. Daí os limiares próprios.
  */
+describe("material que não bate com o ticket", () => {
+  it("aponta pro card dedicado em vez de mandar reeditar a viagem", async () => {
+    const { svc, updateMany } = montar();
+
+    await svc.aplicar(JOB, dados(SO_MATERIAL), false);
+
+    expect(updateMany.mock.calls[0][0].data.tipoDivergencia).toBe("MATERIAL_DIVERGENTE");
+  });
+
+  it("com outra coisa fora junto, volta pro genérico", async () => {
+    // O card do material resolveria só um pedaço, e a viagem voltaria AJUSTADA
+    // parecendo resolvida.
+    const misto = resultado({
+      veredito: "DIVERGE",
+      divergencias: [...SO_MATERIAL.divergencias, ...DIVERGE.divergencias],
+    });
+    const { svc, updateMany } = montar();
+
+    await svc.aplicar(JOB, dados(misto), false);
+
+    expect(updateMany.mock.calls[0][0].data.tipoDivergencia).toBe("OUTRO");
+  });
+
+  it("incerteza pendurada também derruba o card — quem decide é gente", async () => {
+    const comIncerteza = resultado({
+      veredito: "DIVERGE",
+      divergencias: SO_MATERIAL.divergencias,
+      incertezas: [
+        { campo: "placa", declarado: "ABC1D23", lido: "A8C1D23", motivo: "leitura duvidosa" },
+      ],
+    });
+    const { svc, updateMany } = montar();
+
+    await svc.aplicar(JOB, dados(comIncerteza), false);
+
+    expect(updateMany.mock.calls[0][0].data.tipoDivergencia).toBe("OUTRO");
+  });
+
+  it("continua sem tocar em revisadoEm", async () => {
+    const { svc, updateMany } = montar();
+    await svc.aplicar(JOB, dados(SO_MATERIAL), false);
+    expect(updateMany.mock.calls[0][0].data).not.toHaveProperty("revisadoEm");
+  });
+});
+
 describe("aprovação automática", () => {
   const BATE = resultado({
     veredito: "BATE",

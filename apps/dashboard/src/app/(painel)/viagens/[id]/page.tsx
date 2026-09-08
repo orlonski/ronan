@@ -246,6 +246,16 @@ type DuplicatasGeoResp = { raioM: number; grupos: GeoGrupoDup[] };
 
 type Tab = "dados" | "historico" | "diagnostico";
 
+/** Tipos de divergência que o painel oferece. Espelha o enum do backend —
+ *  cada um (menos OUTRO) tem card dedicado no app do motorista. */
+type TipoDivergenciaUI =
+  | "PEDAGIO_SEM_VALOR"
+  | "FOTO_ILEGIVEL"
+  | "KM_DIVERGENTE"
+  | "TICKET_DUPLICADO"
+  | "MATERIAL_DIVERGENTE"
+  | "OUTRO";
+
 /**
  * Card "Voltou pro bota-fora?" — DESLIGADO em 2026-07-17, mesmo dia em que subiu.
  *
@@ -450,7 +460,7 @@ export default function ViagemDetalhePage({
     mutationFn: (body: {
       status: "OK" | "DIVERGENTE" | "DESFAZER";
       motivo?: string;
-      tipo?: "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "KM_DIVERGENTE" | "TICKET_DUPLICADO" | "OUTRO";
+      tipo?: TipoDivergenciaUI;
     }) =>
       fetchApi<{ ok: true }>(`/admin/viagens/${id}/pre-validar`, {
         method: "POST",
@@ -471,9 +481,7 @@ export default function ViagemDetalhePage({
   const [tab, setTab] = useState<Tab>("dados");
   const [dialogDivergente, setDialogDivergente] = useState(false);
   const [motivoTexto, setMotivoTexto] = useState("");
-  const [tipoDivergencia, setTipoDivergencia] = useState<
-    "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "KM_DIVERGENTE" | "TICKET_DUPLICADO" | "OUTRO"
-  >("OUTRO");
+  const [tipoDivergencia, setTipoDivergencia] = useState<TipoDivergenciaUI>("OUTRO");
   const [motivoFoiEditado, setMotivoFoiEditado] = useState(false);
 
   // Props do mapa memoizadas (referência estável) pra o MapaTrajetoViagem (memo)
@@ -544,7 +552,7 @@ export default function ViagemDetalhePage({
     : "";
 
   function motivoSugeridoPorTipo(
-    tipo: "PEDAGIO_SEM_VALOR" | "FOTO_ILEGIVEL" | "KM_DIVERGENTE" | "TICKET_DUPLICADO" | "OUTRO",
+    tipo: TipoDivergenciaUI,
   ): string {
     if (tipo === "PEDAGIO_SEM_VALOR") return motivoSugeridoPedagio;
     if (tipo === "FOTO_ILEGIVEL")
@@ -553,6 +561,8 @@ export default function ViagemDetalhePage({
       return `O km lançado (${fmtNum(v.km, 2)} km) parece divergir do trajeto. Confira o valor e, se estiver certo, explique o porquê (desvio, obra, etc.).`;
     if (tipo === "TICKET_DUPLICADO")
       return `O ticket ${v.ticket ?? ""} já tinha sido lançado nesta empresa. Confira o número no romaneio e corrija, ou explique por que ele se repete.`.trim();
+    if (tipo === "MATERIAL_DIVERGENTE")
+      return `O material lançado${v.material ? ` (${v.material.nome})` : ""} parece diferente do que está escrito no ticket. Confira o papel e, se for outro, corrija; se estiver certo, explique.`;
     return "";
   }
 
@@ -1409,6 +1419,9 @@ export default function ViagemDetalhePage({
                 </option>
                 <option value="TICKET_DUPLICADO">
                   Ticket repetido (motorista confere o número)
+                </option>
+                <option value="MATERIAL_DIVERGENTE">
+                  Material diferente do ticket (motorista corrige)
                 </option>
                 <option value="OUTRO">Outro motivo</option>
               </Select>

@@ -296,20 +296,30 @@ export class AplicarVereditoService {
    * Marca divergente e avisa. Reusa o caminho que o motorista já conhece:
    * status `DIVERGENTE` + `tipoDivergencia` + mensagem no chat da viagem + push.
    *
-   * `tipoDivergencia` é `OUTRO` por ora — o motorista corrige editando a viagem
-   * normal, e o texto do chat diz exatamente o quê. Um tipo próprio exigiria
-   * card novo nos dois apps (e um fallback genérico no nativo, que hoje não
-   * tem), o que é trabalho de app, não de servidor.
+   * `tipoDivergencia` é `OUTRO` na maioria dos casos — o motorista corrige
+   * editando a viagem normal, e o texto do chat diz exatamente o quê. A exceção
+   * é material: quando a ÚNICA coisa que não bate é ele, o desfecho tem card
+   * dedicado nos dois apps (escolhe o material certo e explica), então vale
+   * apontar pra lá em vez de mandar o motorista reeditar a viagem inteira.
+   *
+   * A regra é "única divergência" de propósito: com peso ou placa também fora,
+   * o card do material resolveria só um pedaço e a viagem voltaria AJUSTADA
+   * parecendo resolvida.
    */
   private async avisarMotorista(job: ConferenciaTicket, r: ResultadoConferencia): Promise<void> {
     const texto = resumirConferencia(r);
+    const soMaterial =
+      r.divergencias.length === 1 &&
+      r.divergencias[0].campo === "material" &&
+      r.incertezas.length === 0;
+    const tipo = soMaterial ? TipoDivergencia.MATERIAL_DIVERGENTE : TipoDivergencia.OUTRO;
 
     const alterou = await this.prisma.viagem.updateMany({
       where: { id: job.viagemId, status: { in: [StatusViagem.ENVIADA, StatusViagem.AJUSTADA] } },
       data: {
         status: StatusViagem.DIVERGENTE,
         motivoStatus: texto,
-        tipoDivergencia: TipoDivergencia.OUTRO,
+        tipoDivergencia: tipo,
         // NUNCA revisadoEm/revisadoPor aqui — ver o cabeçalho do arquivo.
       },
     });
@@ -344,12 +354,15 @@ export class AplicarVereditoService {
       await this.push.enviar({
         motoristaId: viagem.motoristaId,
         token: viagem.motorista?.expoPushToken ?? "",
-        titulo: "Dá uma conferida nessa viagem",
+        titulo: soMaterial ? "Dá uma conferida no material" : "Dá uma conferida nessa viagem",
         // Tom: parceiro autônomo, não funcionário. "Dá uma conferida",
         // nunca "você lançou errado" — quem lê está na estrada e pode estar
         // certo (a leitura é que pode ter falhado).
         corpo: texto,
-        dados: { viagemId: job.viagemId, rota: "conferencia-ticket" },
+        dados: {
+          viagemId: job.viagemId,
+          rota: soMaterial ? "material-divergente" : "conferencia-ticket",
+        },
         tipo: "viagem-divergente",
         criadoPorId: null,
       });
