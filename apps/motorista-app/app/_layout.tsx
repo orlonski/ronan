@@ -461,7 +461,11 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // status guardado pode ser sobra de um cadastro anterior.
   // O caderninho é dele e não depende de empresa nenhuma — é a única tela que
   // escapa da cobertura, senão o botão "Meus gastos" não levaria a lugar algum.
-  if (loggedIn && semEmpresa && segments[0] !== "meus-gastos") return <SemEmpresa />;
+  // O caderno e a calculadora de frete são dele e não dependem de empresa
+  // nenhuma — são as telas que escapam da cobertura, senão os botões não
+  // levariam a lugar algum.
+  const emTelaPropria = segments[0] === "meus-gastos" || segments[0] === "novo-frete";
+  if (loggedIn && semEmpresa && !emTelaPropria) return <SemEmpresa />;
 
   // Logado mas cadastro ainda em análise: cobre o app inteiro com a tela de
   // espera (some sozinho quando o status vira APROVADO).

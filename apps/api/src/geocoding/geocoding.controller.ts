@@ -7,7 +7,10 @@ import { GeocodingService } from "./geocoding.service";
 @ApiTags("geocoding")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
-@Roles("ADMIN_USER", "MOTORISTA")
+// IDENTIDADE entra porque o geocoding é utilitário global (`GeocodingCache` já
+// está em MODELS_GLOBAIS) e é o que transforma "Curitiba" em coordenada pro
+// motorista que não está em empresa nenhuma. Não abre dado de empresa nenhuma.
+@Roles("ADMIN_USER", "MOTORISTA", "IDENTIDADE")
 @Controller("geocoding")
 export class GeocodingController {
   constructor(private readonly service: GeocodingService) {}

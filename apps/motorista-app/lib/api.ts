@@ -6,9 +6,14 @@ import type {
   CadastroEmpresa,
   CadastroMotoristaInput,
   ConfirmarCadastroInput,
+  CriarComprovantePessoalInput,
   CriarLancamentoPessoalInput,
+  CriarViagemPessoalInput,
+  EstimarFreteInput,
+  EstimativaFrete,
   LancamentoPessoal,
   ResumoMesPessoal,
+  ViagemPessoal,
   RedefinirSenhaInput,
   SessaoEmpresa,
   StatusMotorista,
@@ -591,6 +596,39 @@ export const api = {
     request<ResumoMesPessoal>("GET", `/m/eu/lancamentos/resumo?mes=${mes}`, {
       comoIdentidade: true,
     }),
+  viagensPessoais: (mes: string) =>
+    request<ViagemPessoal[]>("GET", `/m/eu/viagens?mes=${mes}`, { comoIdentidade: true }),
+  criarViagemPessoal: (body: CriarViagemPessoalInput) =>
+    request<ViagemPessoal>("POST", "/m/eu/viagens", { body, comoIdentidade: true }),
+  apagarViagemPessoal: (id: string) =>
+    request<{ ok: true }>("DELETE", `/m/eu/viagens/${id}`, { comoIdentidade: true }),
+  /** "Vale a pena esse frete?" — km, praças na rota e diesel pelo consumo dele. */
+  estimarFrete: (body: EstimarFreteInput) =>
+    request<EstimativaFrete>("POST", "/m/eu/frete/estimar", { body, comoIdentidade: true }),
+  /** Link do período pra mandar pra quem vai pagar. */
+  criarComprovantePessoal: (body: CriarComprovantePessoalInput) =>
+    request<{ token: string; inicio: string; fim: string; destinatario: string | null }>(
+      "POST",
+      "/m/eu/frete/comprovante",
+      { body, comoIdentidade: true },
+    ),
+  /**
+   * Busca cidade/endereço (geocoding global — não depende de empresa nenhuma).
+   * Devolve só sugestões; as coordenadas vêm do `resolverEndereco`.
+   */
+  buscarEndereco: (q: string) =>
+    request<{ placeId: string; nome: string; textoCompleto: string }[]>(
+      "GET",
+      `/geocoding/buscar?q=${encodeURIComponent(q)}`,
+      { comoIdentidade: true },
+    ),
+  /** Sugestão escolhida → coordenada. É o que alimenta a estimativa. */
+  resolverEndereco: (placeId: string) =>
+    request<{ nome?: string; textoCompleto?: string; lat?: number; lng?: number } | null>(
+      "GET",
+      `/geocoding/place?placeId=${encodeURIComponent(placeId)}`,
+      { comoIdentidade: true },
+    ),
   criarLancamentoPessoal: (body: CriarLancamentoPessoalInput) =>
     request<LancamentoPessoal>("POST", "/m/eu/lancamentos", { body, comoIdentidade: true }),
   apagarLancamentoPessoal: (id: string) =>

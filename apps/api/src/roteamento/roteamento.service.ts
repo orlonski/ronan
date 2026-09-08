@@ -88,6 +88,41 @@ export class RoteamentoService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Rota entre duas COORDENADAS, sem passar por `Local`.
+   *
+   * O caminho de sempre (`calcularKm`) recebe ids de `Local` — catálogo da
+   * empresa — e guarda no `rotaCache`, que é chaveado por par de locais. Nada
+   * disso existe pro motorista que não está em empresa nenhuma: ele digita
+   * "Curitiba" e "Joinville", o geocoding vira coordenada, e é isso que chega
+   * aqui.
+   *
+   * Sem cache de propósito: o `rotaCache` é por par de `Local` e não tem onde
+   * guardar um par de coordenadas soltas — inventar chave sintética ali sujaria
+   * uma tabela que a operação da empresa usa. O geocoding já é cacheado, que é
+   * a parte cara.
+   */
+  async calcularEntreCoordenadas(
+    origem: { lat: number; lng: number },
+    destino: { lat: number; lng: number },
+  ): Promise<RotaResult> {
+    if (!this.osrmUrl) {
+      return { km: null, erro: "Servidor de rotas não configurado." };
+    }
+    try {
+      const rota = await this.consultarOsrm(origem.lat, origem.lng, destino.lat, destino.lng);
+      return {
+        km: (rota.distance / 1000).toFixed(2),
+        duracaoSegundos: Math.round(rota.duration),
+        geometria: rota.geometry ?? null,
+        fonte: "osrm",
+      };
+    } catch (e) {
+      this.logger.warn(`Rota por coordenada falhou: ${(e as Error).message}`);
+      return { km: null, erro: "Não deu pra calcular a rota agora." };
+    }
+  }
+
   async calcularKm(
     localOrigemId: string,
     localDestinoId: string,

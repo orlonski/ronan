@@ -16,6 +16,7 @@ import {
   AtualizarPerfilInput,
   AtualizarPlacasInput,
   CriarLancamentoPessoalInput,
+  CriarViagemPessoalInput,
   RegistrarPushTokenInput,
 } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
@@ -114,6 +115,27 @@ export class EuController {
   @Delete("lancamentos/:id")
   apagarLancamento(@CurrentUser() user: AuthIdentidade, @Param("id") id: string) {
     return this.lancamentos.apagar(user.id, id);
+  }
+
+  // ---- As viagens que ele faz por conta própria ----
+
+  @Get("viagens")
+  viagensDoMes(@CurrentUser() user: AuthIdentidade, @Query("mes") mes?: string) {
+    return this.lancamentos.listarViagens(user.id, mesValido(mes));
+  }
+
+  @HttpCode(200)
+  @Post("viagens")
+  criarViagem(
+    @CurrentUser() user: AuthIdentidade,
+    @Body(new ZodValidationPipe(CriarViagemPessoalInput)) body: CriarViagemPessoalInput,
+  ) {
+    return this.lancamentos.criarViagem(user.id, body);
+  }
+
+  @Delete("viagens/:id")
+  apagarViagem(@CurrentUser() user: AuthIdentidade, @Param("id") id: string) {
+    return this.lancamentos.apagarViagem(user.id, id);
   }
 
   @HttpCode(200)

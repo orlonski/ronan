@@ -5,11 +5,12 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  Share,
   Text,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ArrowLeft, CloudOff, Plus, Trash2 } from "lucide-react-native";
+import { ArrowLeft, ArrowRight, CloudOff, Plus, Send, Trash2 } from "lucide-react-native";
 import {
   ROTULO_LANCAMENTO_PESSOAL,
   TIPOS_LANCAMENTO_PESSOAL,
@@ -21,29 +22,40 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
-import { showConfirm } from "@/lib/alert";
+import { showAlert, showConfirm } from "@/lib/alert";
+import { API_URL } from "@/lib/api-url";
 import {
   cacheDoMes,
+  cacheViagens,
   carregarMes,
   carregarResumo,
+  carregarViagens,
   drenar,
   hojeISO,
   lancar,
   mesAtual,
   type ItemPessoal,
+  type ItemViagem,
 } from "@/lib/pessoal";
 
 const dinheiro = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const dia = (iso: string) => iso.split("-").reverse().join("/");
+
+type Aba = "fretes" | "gastos";
 
 /**
- * O caderninho do motorista: o que ele gastou e recebeu, do bolso dele.
+ * O caderno de trabalho do motorista por conta própria: os fretes que ele fez e
+ * o que gastou/recebeu do próprio bolso.
  *
- * Vale com ou sem empresa — é dele. Nenhuma transportadora vê isto, e é por isso
- * que a tela fala "seu" e não "da empresa". Ver docs/identidade-motorista.md.
+ * Vale com ou sem empresa — é dele, e nenhuma transportadora vê. Os fretes aqui
+ * não são as viagens da empresa: sem catálogo, origem e destino são texto livre.
+ * Ver docs/motorista-sem-empresa.md.
  */
-export default function MeusGastosScreen() {
+export default function MeuCadernoScreen() {
   const [mes] = useState(mesAtual());
+  const [aba, setAba] = useState<Aba>("fretes");
   const [itens, setItens] = useState<ItemPessoal[]>([]);
+  const [viagens, setViagens] = useState<ItemViagem[]>([]);
   const [resumo, setResumo] = useState<ResumoMesPessoal | null>(null);
   const [form, setForm] = useState(false);
   const [carregando, setCarregando] = useState(false);
@@ -51,6 +63,7 @@ export default function MeusGastosScreen() {
   const recarregar = useCallback(async () => {
     setCarregando(true);
     try {
+      setViagens(await carregarViagens(mes));
       setItens(await carregarMes(mes));
       setResumo(await carregarResumo(mes));
     } catch {
@@ -61,13 +74,14 @@ export default function MeusGastosScreen() {
   }, [mes]);
 
   useEffect(() => {
-    // Cache primeiro: a lista aparece na hora, mesmo sem sinal, e o servidor
+    // Cache primeiro: as listas aparecem na hora, mesmo sem sinal, e o servidor
     // corrige por trás. Igual ao resto do app.
+    void cacheViagens(mes).then(setViagens);
     void cacheDoMes(mes).then(setItens);
     void drenar().then(recarregar);
   }, [mes, recarregar]);
 
-  async function apagar(item: ItemPessoal) {
+  async function apagarGasto(item: ItemPessoal) {
     if (item.pendente) return;
     const ok = await showConfirm({
       title: "Apagar este lançamento?",
@@ -77,6 +91,49 @@ export default function MeusGastosScreen() {
     if (!ok) return;
     await api.apagarLancamentoPessoal(item.id).catch(() => {});
     await recarregar();
+  }
+
+  async function apagarFrete(v: ItemViagem) {
+    if (v.pendente) return;
+    const ok = await showConfirm({
+      title: "Apagar este frete?",
+      confirmLabel: "Apagar",
+      destructive: true,
+    });
+    if (!ok) return;
+    await api.apagarViagemPessoal(v.id).catch(() => {});
+    await recarregar();
+  }
+
+  /**
+   * Gera o link do mês e abre o compartilhamento do sistema — é assim que ele
+   * manda pro WhatsApp de quem vai pagar.
+   */
+  async function mandarComprovante() {
+    if (viagens.length === 0) {
+      void showAlert({
+        title: "Nenhum frete neste mês",
+        message: "Registre os fretes primeiro — o comprovante mostra o que você rodou.",
+      });
+      return;
+    }
+    try {
+      const [ano, m] = mes.split("-").map(Number);
+      const ultimoDia = new Date(Date.UTC(ano!, m!, 0)).getUTCDate();
+      const c = await api.criarComprovantePessoal({
+        inicio: `${mes}-01`,
+        fim: `${mes}-${String(ultimoDia).padStart(2, "0")}`,
+      });
+      const link = `${API_URL}/publico/comprovante/${c.token}`;
+      await Share.share({
+        message: `Fretes que rodei de ${dia(c.inicio)} a ${dia(c.fim)}: ${link}`,
+      });
+    } catch {
+      void showAlert({
+        title: "Não deu pra gerar o comprovante",
+        message: "Precisa de internet pra criar o link. Tente de novo quando tiver sinal.",
+      });
+    }
   }
 
   return (
@@ -94,99 +151,172 @@ export default function MeusGastosScreen() {
               <Pressable onPress={() => router.back()} hitSlop={12}>
                 <ArrowLeft size={24} color="#fff" />
               </Pressable>
-              <View>
+              <View className="flex-1">
                 <Text className="text-2xl font-extrabold tracking-tight text-white">
-                  Meus gastos
+                  Meu caderno
                 </Text>
                 <Text className="text-sm font-medium text-white/80">
-                  Só seu — nenhuma empresa vê isto
+                  Seus fretes e seus gastos — nenhuma empresa vê
                 </Text>
               </View>
             </View>
 
             {resumo && (
-              <View className="mt-5 flex-row gap-2">
-                <Resumo rotulo="Recebi" valor={resumo.ganhos} />
-                <Resumo rotulo="Gastei" valor={resumo.gastos} />
-                <Resumo rotulo="Sobrou" valor={resumo.saldo} destaque />
-              </View>
-            )}
-            {resumo?.precoMedioLitro != null && (
-              <Text className="mt-3 text-sm font-medium text-white/80">
-                Combustível: {dinheiro(resumo.precoMedioLitro)}/litro em{" "}
-                {resumo.litros.toLocaleString("pt-BR")} litros
-              </Text>
+              <>
+                <View className="mt-5 flex-row gap-2">
+                  <Resumo rotulo="Recebi" valor={dinheiro(resumo.ganhos)} />
+                  <Resumo rotulo="Gastei" valor={dinheiro(resumo.gastos)} />
+                  <Resumo rotulo="Sobrou" valor={dinheiro(resumo.saldo)} destaque />
+                </View>
+                <Text className="mt-3 text-sm font-medium text-white/80">
+                  {resumo.viagens} {resumo.viagens === 1 ? "frete" : "fretes"}
+                  {resumo.km > 0 ? ` · ${resumo.km.toLocaleString("pt-BR")} km` : ""}
+                  {resumo.ganhoPorKm != null ? ` · ${dinheiro(resumo.ganhoPorKm)}/km` : ""}
+                  {resumo.precoMedioLitro != null
+                    ? ` · ${dinheiro(resumo.precoMedioLitro)}/litro`
+                    : ""}
+                </Text>
+              </>
             )}
           </View>
 
-          <View className="flex-1 gap-4 px-6 py-6">
-            {form ? (
-              <Formulario
-                onCancelar={() => setForm(false)}
-                onPronto={async () => {
+          <View className="flex-row gap-2 border-b border-border px-6 pt-4">
+            {(["fretes", "gastos"] as const).map((a) => (
+              <Pressable
+                key={a}
+                onPress={() => {
+                  setAba(a);
                   setForm(false);
-                  setItens(await cacheDoMes(mes));
-                  await recarregar();
                 }}
-              />
-            ) : (
-              <Button size="lg" className="h-16" onPress={() => setForm(true)}>
-                <Plus size={22} color="#fff" />
-                <Text className="text-lg font-bold text-primary-foreground">Lançar</Text>
-              </Button>
-            )}
-
-            {itens.length === 0 && !form && (
-              <View className="rounded-2xl border-2 border-dashed border-border p-6">
-                <Text className="text-center text-base font-semibold text-foreground">
-                  Nada lançado neste mês
-                </Text>
-                <Text className="mt-1 text-center text-sm text-muted-foreground">
-                  Anote o diesel, o pedágio, a refeição — e o que você recebeu. Serve pra você
-                  saber quanto sobrou no fim do mês.
-                </Text>
-              </View>
-            )}
-
-            {itens.map((i) => (
-              <View
-                key={i.clientId}
-                className="flex-row items-center gap-3 rounded-2xl border-2 border-border bg-card p-4"
+                className={`border-b-2 px-3 pb-3 ${
+                  aba === a ? "border-primary" : "border-transparent"
+                }`}
               >
-                <View className="flex-1">
-                  <View className="flex-row items-center gap-2">
-                    <Text className="font-bold text-foreground">
-                      {ROTULO_LANCAMENTO_PESSOAL[i.tipo]}
-                    </Text>
-                    {i.pendente && (
-                      <View className="flex-row items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5">
-                        <CloudOff size={12} color="#b45309" />
-                        <Text className="text-xs font-semibold text-amber-700">
-                          Vai subir depois
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                  <Text className="text-sm text-muted-foreground">
-                    {i.data.split("-").reverse().join("/")}
-                    {i.descricao ? ` · ${i.descricao}` : ""}
-                    {i.litros ? ` · ${i.litros} L` : ""}
-                  </Text>
-                </View>
                 <Text
-                  className={`text-lg font-bold ${
-                    ehGanho(i.tipo) ? "text-green-700" : "text-foreground"
+                  className={`text-base font-bold ${
+                    aba === a ? "text-primary" : "text-muted-foreground"
                   }`}
                 >
-                  {ehGanho(i.tipo) ? "+" : "−"} {dinheiro(i.valor)}
+                  {a === "fretes" ? "Fretes" : "Gastos"}
                 </Text>
-                {!i.pendente && (
-                  <Pressable onPress={() => void apagar(i)} hitSlop={10}>
-                    <Trash2 size={18} color="#64748b" />
-                  </Pressable>
-                )}
-              </View>
+              </Pressable>
             ))}
+          </View>
+
+          <View className="flex-1 gap-4 px-6 py-6">
+            {aba === "fretes" ? (
+              <>
+                <Button size="lg" className="h-16" onPress={() => router.push("/novo-frete")}>
+                  <Plus size={22} color="#fff" />
+                  <Text className="text-lg font-bold text-primary-foreground">Novo frete</Text>
+                </Button>
+
+                {viagens.length > 0 && (
+                  <Button size="lg" variant="outline" onPress={() => void mandarComprovante()}>
+                    <Send size={18} color="#0f172a" />
+                    <Text className="text-base font-semibold text-foreground">
+                      Mandar comprovante do mês
+                    </Text>
+                  </Button>
+                )}
+
+                {viagens.length === 0 && (
+                  <Vazio
+                    titulo="Nenhum frete neste mês"
+                    texto="Toque em Novo frete: o app calcula o km e as praças de pedágio do caminho, e mostra o que sobra antes de você aceitar."
+                  />
+                )}
+
+                {viagens.map((v) => (
+                  <View key={v.clientId} className="rounded-2xl border-2 border-border bg-card p-4">
+                    <View className="flex-row items-start gap-3">
+                      <View className="flex-1">
+                        <View className="flex-row flex-wrap items-center gap-x-2 gap-y-1">
+                          <Text className="font-bold text-foreground">{v.origem}</Text>
+                          <ArrowRight size={14} color="#64748b" />
+                          <Text className="font-bold text-foreground">{v.destino}</Text>
+                          {v.pendente && <Pendente />}
+                        </View>
+                        <Text className="mt-0.5 text-sm text-muted-foreground">
+                          {dia(v.data)}
+                          {v.carga ? ` · ${v.carga}` : ""}
+                          {v.km ? ` · ${v.km.toLocaleString("pt-BR")} km` : ""}
+                          {v.peso ? ` · ${v.peso.toLocaleString("pt-BR")} t` : ""}
+                        </Text>
+                      </View>
+                      {v.valorRecebido != null && (
+                        <Text className="text-lg font-bold text-green-700">
+                          + {dinheiro(v.valorRecebido)}
+                        </Text>
+                      )}
+                      {!v.pendente && (
+                        <Pressable onPress={() => void apagarFrete(v)} hitSlop={10}>
+                          <Trash2 size={18} color="#64748b" />
+                        </Pressable>
+                      )}
+                    </View>
+                  </View>
+                ))}
+              </>
+            ) : (
+              <>
+                {form ? (
+                  <FormGasto
+                    onCancelar={() => setForm(false)}
+                    onPronto={async () => {
+                      setForm(false);
+                      setItens(await cacheDoMes(mes));
+                      await recarregar();
+                    }}
+                  />
+                ) : (
+                  <Button size="lg" className="h-16" onPress={() => setForm(true)}>
+                    <Plus size={22} color="#fff" />
+                    <Text className="text-lg font-bold text-primary-foreground">Lançar gasto</Text>
+                  </Button>
+                )}
+
+                {itens.length === 0 && !form && (
+                  <Vazio
+                    titulo="Nada lançado neste mês"
+                    texto="Anote o diesel, o pedágio, a refeição. Os abastecimentos com litros são o que deixam o app calcular o diesel dos seus fretes."
+                  />
+                )}
+
+                {itens.map((i) => (
+                  <View
+                    key={i.clientId}
+                    className="flex-row items-center gap-3 rounded-2xl border-2 border-border bg-card p-4"
+                  >
+                    <View className="flex-1">
+                      <View className="flex-row items-center gap-2">
+                        <Text className="font-bold text-foreground">
+                          {ROTULO_LANCAMENTO_PESSOAL[i.tipo]}
+                        </Text>
+                        {i.pendente && <Pendente />}
+                      </View>
+                      <Text className="text-sm text-muted-foreground">
+                        {dia(i.data)}
+                        {i.descricao ? ` · ${i.descricao}` : ""}
+                        {i.litros ? ` · ${i.litros} L` : ""}
+                      </Text>
+                    </View>
+                    <Text
+                      className={`text-lg font-bold ${
+                        ehGanho(i.tipo) ? "text-green-700" : "text-foreground"
+                      }`}
+                    >
+                      {ehGanho(i.tipo) ? "+" : "−"} {dinheiro(i.valor)}
+                    </Text>
+                    {!i.pendente && (
+                      <Pressable onPress={() => void apagarGasto(i)} hitSlop={10}>
+                        <Trash2 size={18} color="#64748b" />
+                      </Pressable>
+                    )}
+                  </View>
+                ))}
+              </>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -194,16 +324,34 @@ export default function MeusGastosScreen() {
   );
 }
 
-function Resumo({ rotulo, valor, destaque }: { rotulo: string; valor: number; destaque?: boolean }) {
+function Pendente() {
   return (
-    <View className={`flex-1 rounded-xl p-3 ${destaque ? "bg-white/20" : "bg-white/10"}`}>
-      <Text className="text-xs font-medium uppercase tracking-wide text-white/70">{rotulo}</Text>
-      <Text className="mt-0.5 text-base font-bold text-white">{dinheiro(valor)}</Text>
+    <View className="flex-row items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5">
+      <CloudOff size={12} color="#b45309" />
+      <Text className="text-xs font-semibold text-amber-700">Vai subir depois</Text>
     </View>
   );
 }
 
-function Formulario({ onCancelar, onPronto }: { onCancelar: () => void; onPronto: () => void }) {
+function Vazio({ titulo, texto }: { titulo: string; texto: string }) {
+  return (
+    <View className="rounded-2xl border-2 border-dashed border-border p-6">
+      <Text className="text-center text-base font-semibold text-foreground">{titulo}</Text>
+      <Text className="mt-1 text-center text-sm text-muted-foreground">{texto}</Text>
+    </View>
+  );
+}
+
+function Resumo({ rotulo, valor, destaque }: { rotulo: string; valor: string; destaque?: boolean }) {
+  return (
+    <View className={`flex-1 rounded-xl p-3 ${destaque ? "bg-white/20" : "bg-white/10"}`}>
+      <Text className="text-xs font-medium uppercase tracking-wide text-white/70">{rotulo}</Text>
+      <Text className="mt-0.5 text-base font-bold text-white">{valor}</Text>
+    </View>
+  );
+}
+
+function FormGasto({ onCancelar, onPronto }: { onCancelar: () => void; onPronto: () => void }) {
   const [tipo, setTipo] = useState<TipoLancamentoPessoal>("ABASTECIMENTO");
   const [valor, setValor] = useState("");
   const [litros, setLitros] = useState("");
@@ -278,7 +426,7 @@ function Formulario({ onCancelar, onPronto }: { onCancelar: () => void; onPronto
             editable={!salvando}
           />
           <Text className="text-xs text-muted-foreground">
-            Com os litros dá pra ver quanto você está pagando por litro no mês.
+            Com os litros o app calcula seu consumo — e é ele que estima o diesel dos fretes.
           </Text>
         </View>
       )}

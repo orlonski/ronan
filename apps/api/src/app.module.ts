@@ -6,6 +6,7 @@ import { PrismaModule } from "./prisma/prisma.module";
 import { EscopoModule } from "./common/escopo/escopo.module";
 import { HealthModule } from "./health/health.module";
 import { AuthModule } from "./auth/auth.module";
+import { FretePessoalModule } from "./frete-pessoal/frete-pessoal.module";
 import { AdminModule } from "./admin/admin.module";
 import { LancamentosResgatadosModule } from "./lancamentos-resgatados/lancamentos-resgatados.module";
 import { GeocodingModule } from "./geocoding/geocoding.module";
@@ -36,6 +37,7 @@ import { PrismaExceptionFilter } from "./common/prisma-exception.filter";
     AuditoriaModule,
     IaModule,
     AuthModule,
+    FretePessoalModule,
     AdminModule,
     LancamentosResgatadosModule,
     MotoristaModule,

@@ -159,9 +159,9 @@ export function SemEmpresa() {
               <Wallet size={26} color="#13316b" strokeWidth={2.5} />
             </View>
             <View className="flex-1">
-              <Text className="text-lg font-bold text-foreground">Meus gastos</Text>
+              <Text className="text-lg font-bold text-foreground">Meu caderno</Text>
               <Text className="text-sm text-muted-foreground">
-                Anote o diesel, o pedágio e o que você recebeu
+                Veja se um frete vale a pena e anote o que rodou
               </Text>
             </View>
           </Pressable>

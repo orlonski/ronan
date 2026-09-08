@@ -2,9 +2,11 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import type {
   CriarLancamentoPessoalInput,
+  CriarViagemPessoalInput,
   LancamentoPessoal,
   ResumoMesPessoal,
   TipoLancamentoPessoal,
+  ViagemPessoal,
 } from "@ronan/shared-types";
 import { ehGanho, TIPOS_LANCAMENTO_PESSOAL } from "@ronan/shared-types";
 import { comoSistema } from "../common/conta/conta-context";
@@ -77,8 +79,66 @@ export class LancamentosPessoaisService {
     return itens.map(saida);
   }
 
+  // ---- Viagens dele ----
+
+  /**
+   * Cria (ou reencontra) uma viagem. Mesma idempotência por `clientId` do
+   * caderninho: o app é offline-first e reenvia quando a rede cai no meio.
+   */
+  async criarViagem(
+    identidadeId: string,
+    input: CriarViagemPessoalInput,
+  ): Promise<ViagemPessoal> {
+    const existente = await comoSistema(() =>
+      this.prisma.viagemPessoal.findUnique({
+        where: { identidadeId_clientId: { identidadeId, clientId: input.clientId } },
+      }),
+    );
+    if (existente) return saidaViagem(existente);
+
+    const criada = await comoSistema(() =>
+      this.prisma.viagemPessoal.create({
+        data: {
+          identidadeId,
+          clientId: input.clientId,
+          data: new Date(`${input.data}T00:00:00.000Z`),
+          origem: input.origem,
+          destino: input.destino,
+          carga: input.carga ?? null,
+          km: input.km === undefined ? null : new Prisma.Decimal(input.km),
+          peso: input.peso === undefined ? null : new Prisma.Decimal(input.peso),
+          valorRecebido:
+            input.valorRecebido === undefined ? null : new Prisma.Decimal(input.valorRecebido),
+          observacao: input.observacao ?? null,
+        },
+      }),
+    );
+    return saidaViagem(criada);
+  }
+
+  async listarViagens(identidadeId: string, mes: string): Promise<ViagemPessoal[]> {
+    const { inicio, fim } = faixaDoMes(mes);
+    const itens = await comoSistema(() =>
+      this.prisma.viagemPessoal.findMany({
+        where: { identidadeId, data: { gte: inicio, lt: fim } },
+        orderBy: [{ data: "desc" }, { criadoEm: "desc" }],
+      }),
+    );
+    return itens.map(saidaViagem);
+  }
+
+  /** Apaga uma viagem dela. Nunca a de outra pessoa. */
+  async apagarViagem(identidadeId: string, id: string): Promise<{ ok: true }> {
+    const apagadas = await comoSistema(() =>
+      this.prisma.viagemPessoal.deleteMany({ where: { id, identidadeId } }),
+    );
+    if (apagadas.count === 0) throw new NotFoundException("Viagem não encontrada.");
+    return { ok: true };
+  }
+
   async resumo(identidadeId: string, mes: string): Promise<ResumoMesPessoal> {
     const itens = await this.listar(identidadeId, mes);
+    const viagens = await this.listarViagens(identidadeId, mes);
     let ganhos = 0;
     let gastos = 0;
     let litros = 0;
@@ -96,11 +156,23 @@ export class LancamentosPessoaisService {
       porTipo.set(i.tipo, { total: atual.total + i.valor, quantidade: atual.quantidade + 1 });
     }
 
+    // O frete das viagens conta como ganho junto com os recebimentos avulsos:
+    // nem todo dinheiro que entra vem de viagem anotada, e nem toda viagem
+    // anotada tem valor preenchido. Somar as duas fontes é o que faz o "sobrou"
+    // bater com o bolso dele.
+    const freteDasViagens = viagens.reduce((soma, v) => soma + (v.valorRecebido ?? 0), 0);
+    const kmRodado = viagens.reduce((soma, v) => soma + (v.km ?? 0), 0);
+    const ganhosTotais = ganhos + freteDasViagens;
+
     return {
       mes,
-      ganhos: arredondar(ganhos),
+      viagens: viagens.length,
+      km: arredondar(kmRodado),
+      // Só com km E dinheiro informados — sem um dos dois a conta mentiria.
+      ganhoPorKm: kmRodado > 0 && ganhosTotais > 0 ? arredondar(ganhosTotais / kmRodado) : null,
+      ganhos: arredondar(ganhosTotais),
       gastos: arredondar(gastos),
-      saldo: arredondar(ganhos - gastos),
+      saldo: arredondar(ganhosTotais - gastos),
       litros: arredondar(litros),
       // Só com litro informado — sem isso a média viraria o preço de um tanque
       // dividido por zero, ou pior, um número que parece certo e não é.
@@ -176,4 +248,35 @@ function faixaDoMes(mes: string): { inicio: Date; fim: Date } {
 /** Centavos, não dízima: soma de float em dinheiro sempre vaza no fim. */
 function arredondar(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+type LinhaViagem = {
+  id: string;
+  clientId: string;
+  data: Date;
+  origem: string;
+  destino: string;
+  carga: string | null;
+  km: Prisma.Decimal | null;
+  peso: Prisma.Decimal | null;
+  valorRecebido: Prisma.Decimal | null;
+  observacao: string | null;
+  criadoEm: Date;
+};
+
+/** Campo a campo, como o irmão acima — `identidadeId` não sai. */
+function saidaViagem(v: LinhaViagem): ViagemPessoal {
+  return {
+    id: v.id,
+    clientId: v.clientId,
+    data: v.data.toISOString().slice(0, 10),
+    origem: v.origem,
+    destino: v.destino,
+    carga: v.carga,
+    km: v.km === null ? null : Number(v.km),
+    peso: v.peso === null ? null : Number(v.peso),
+    valorRecebido: v.valorRecebido === null ? null : Number(v.valorRecebido),
+    observacao: v.observacao,
+    criadoEm: v.criadoEm.toISOString(),
+  };
 }

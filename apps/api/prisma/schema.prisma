@@ -672,8 +672,10 @@ model MotoristaIdentidade {
   criadoEm  DateTime @default(now())
   alteradoEm DateTime @updatedAt
 
-  vinculos    Motorista[]
-  lancamentos LancamentoPessoal[]
+  vinculos       Motorista[]
+  lancamentos     LancamentoPessoal[]
+  viagensPessoais ViagemPessoal[]
+  comprovantes    ComprovantePessoal[]
 
   @@index([ativo])
   @@map("motorista_identidades")
@@ -691,6 +693,73 @@ enum TipoLancamentoPessoal {
   ALIMENTACAO
   OUTRO_GASTO
   GANHO
+}
+
+/// A viagem que ele fez POR CONTA PRÓPRIA.
+///
+/// Não é a `Viagem` da transportadora e não tenta ser: aquela existe dentro de
+/// uma conta e se apoia no catálogo dela (cliente, material, local, veículo,
+/// modo de serviço, regras de mínimo). Aqui não há empresa nenhuma, então o que
+/// lá é FK vira texto livre — ele digita de onde saiu, pra onde levou e o que
+/// carregou, sem depender de ninguém ter cadastrado nada.
+///
+/// É a metade que faltava do trabalho dele no app: com esta e com
+/// `LancamentoPessoal`, o autônomo fecha o mês sozinho — quanto rodou, quanto
+/// recebeu e quanto gastou. Ver docs/identidade-motorista.md.
+model ViagemPessoal {
+  id           String              @id @default(uuid())
+  identidade   MotoristaIdentidade @relation(fields: [identidadeId], references: [id], onDelete: Cascade)
+  identidadeId String
+  /// Id do aparelho — idempotência do outbox, único POR PESSOA.
+  clientId     String
+  /// Dia civil da viagem (ele pode lançar hoje a viagem de ontem).
+  data         DateTime            @db.Date
+  /// De onde e pra onde, como ele escreve. Sem `Local`: local é da empresa.
+  origem       String
+  destino      String
+  /// O que levou. Sem `Material` pelo mesmo motivo.
+  carga        String?
+  km           Decimal?            @db.Decimal(10, 2)
+  /// Toneladas, quando teve balança.
+  peso         Decimal?            @db.Decimal(10, 3)
+  /// Quanto ele recebeu pelo frete. Entra no resumo do mês como ganho.
+  valorRecebido Decimal?           @db.Decimal(12, 2)
+  observacao   String?
+  criadoEm     DateTime            @default(now())
+  alteradoEm   DateTime            @updatedAt
+
+  /// Os gastos que ele amarrou nesta viagem (diesel do trecho, pedágio…).
+  gastos LancamentoPessoal[]
+
+  @@unique([identidadeId, clientId])
+  @@index([identidadeId, data])
+  @@map("viagens_pessoais")
+}
+
+/// O link que ele manda pra quem vai pagar: os fretes de um período.
+///
+/// Espelha a ideia do `ViagemCompartilhamento` (o comprovante da viagem da
+/// empresa), mas é da PESSOA e cobre um período em vez de uma viagem — o que o
+/// autônomo precisa mandar é "o que eu rodei pra você no mês", não uma corrida.
+///
+/// Token em claro de propósito, como o outro: quem tem o link vê, e é isso que
+/// permite mandar por WhatsApp pra alguém que não tem cadastro em lugar nenhum.
+/// Por isso ele é revogável e o que a página mostra é montado campo a campo.
+model ComprovantePessoal {
+  id           String              @id @default(uuid())
+  identidade   MotoristaIdentidade @relation(fields: [identidadeId], references: [id], onDelete: Cascade)
+  identidadeId String
+  token        String              @unique
+  /// Período coberto (dias civis).
+  inicio       DateTime            @db.Date
+  fim          DateTime            @db.Date
+  /// Pra quem ele disse que é — só rótulo, aparece na página.
+  destinatario String?
+  criadoEm     DateTime            @default(now())
+  revogadoEm   DateTime?
+
+  @@index([identidadeId, criadoEm])
+  @@map("comprovantes_pessoais")
 }
 
 /// O caderninho do motorista: o que ele gastou e o que recebeu, do bolso dele.
@@ -731,6 +800,11 @@ model LancamentoPessoal {
   /// Texto livre: o posto, a praça, quem pagou o frete. Sem catálogo: catálogo é
   /// coisa de empresa, e aqui não tem empresa.
   descricao    String?
+  /// Amarra o gasto a uma viagem dele, quando fizer sentido (o diesel daquele
+  /// trecho, o pedágio daquela estrada). Opcional: a maioria dos gastos do dia
+  /// não pertence a viagem nenhuma.
+  viagem       ViagemPessoal?        @relation(fields: [viagemPessoalId], references: [id], onDelete: SetNull)
+  viagemPessoalId String?
   criadoEm     DateTime              @default(now())
   alteradoEm   DateTime              @updatedAt
 

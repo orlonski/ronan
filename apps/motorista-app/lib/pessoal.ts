@@ -1,8 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type {
   CriarLancamentoPessoalInput,
+  CriarViagemPessoalInput,
   LancamentoPessoal,
   ResumoMesPessoal,
+  ViagemPessoal,
 } from "@ronan/shared-types";
 import { api } from "./api";
 import { tokensIdentidade } from "./identidade";
@@ -22,7 +24,9 @@ import { subDoToken } from "./sessoes";
  */
 
 type Pendente = CriarLancamentoPessoalInput & { criadoEm: number };
+type PendenteViagem = CriarViagemPessoalInput & { criadoEm: number };
 export type ItemPessoal = LancamentoPessoal & { pendente?: boolean };
+export type ItemViagem = ViagemPessoal & { pendente?: boolean };
 
 async function raiz(sufixo: string): Promise<string> {
   const tokens = await tokensIdentidade().catch(() => null);
@@ -68,8 +72,9 @@ export async function lancar(input: CriarLancamentoPessoalInput): Promise<void> 
   await drenar();
 }
 
-/** Manda o que está na fila. Silencioso: sem rede, fica pra próxima. */
+/** Manda o que está nas filas (fretes e gastos). Sem rede, fica pra próxima. */
 export async function drenar(): Promise<void> {
+  await drenarViagens();
   const fila = await pendentes();
   if (fila.length === 0) return;
   const sobraram: Pendente[] = [];
@@ -87,6 +92,24 @@ export async function drenar(): Promise<void> {
     }
   }
   await gravar("pendentes", sobraram);
+}
+
+async function drenarViagens(): Promise<void> {
+  const fila = await viagensPendentes();
+  if (fila.length === 0) return;
+  const sobraram: PendenteViagem[] = [];
+  for (const item of fila) {
+    try {
+      const { criadoEm: _ignorado, ...payload } = item;
+      await api.criarViagemPessoal(payload);
+    } catch (err) {
+      // Mesma regra do caderninho: sem status ou 5xx volta pra fila; 4xx é item
+      // corrompido no aparelho (o formulário valida com o mesmo schema).
+      const status = (err as { status?: number }).status;
+      if (!status || status >= 500) sobraram.push(item);
+    }
+  }
+  await gravar("viagens-pendentes", sobraram);
 }
 
 // ---- Cache do mês ----
@@ -148,4 +171,58 @@ export function hojeISO(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
     d.getDate(),
   ).padStart(2, "0")}`;
+}
+
+// ---- Os fretes dele ----
+//
+// Mesma mecânica do caderninho (fila + cache por mês, namespace da pessoa): ele
+// lança o frete no pátio, sem sinal, e sobe quando der.
+
+export function viagensPendentes(): Promise<PendenteViagem[]> {
+  return ler<PendenteViagem[]>("viagens-pendentes", []);
+}
+
+export async function lancarViagem(input: CriarViagemPessoalInput): Promise<void> {
+  const fila = await viagensPendentes();
+  await gravar("viagens-pendentes", [...fila, { ...input, criadoEm: Date.now() }]);
+  const mes = input.data.slice(0, 7);
+  await gravar(`viagens.${mes}`, [
+    { ...viagemParaLocal(input), pendente: true },
+    ...(await cacheViagens(mes)),
+  ]);
+  await drenar();
+}
+
+export function cacheViagens(mes: string): Promise<ItemViagem[]> {
+  return ler<ItemViagem[]>(`viagens.${mes}`, []);
+}
+
+function viagemParaLocal(input: CriarViagemPessoalInput): ViagemPessoal {
+  return {
+    id: `local:${input.clientId}`,
+    clientId: input.clientId,
+    data: input.data,
+    origem: input.origem,
+    destino: input.destino,
+    carga: input.carga ?? null,
+    km: input.km ?? null,
+    peso: input.peso ?? null,
+    valorRecebido: input.valorRecebido ?? null,
+    observacao: input.observacao ?? null,
+    criadoEm: new Date().toISOString(),
+  };
+}
+
+export async function carregarViagens(mes: string): Promise<ItemViagem[]> {
+  const daRede = await api.viagensPessoais(mes);
+  const naFila = (await viagensPendentes()).filter((p) => p.data.startsWith(mes));
+  const idsNaRede = new Set(daRede.map((v) => v.clientId));
+  const itens: ItemViagem[] = [
+    ...naFila
+      .filter((p) => !idsNaRede.has(p.clientId))
+      .map((p) => ({ ...viagemParaLocal(p), pendente: true })),
+    ...daRede,
+  ];
+  await gravar(`viagens.${mes}`, itens);
+  return itens;
 }

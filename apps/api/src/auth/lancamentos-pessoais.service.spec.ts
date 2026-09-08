@@ -41,6 +41,7 @@ function fakePrisma(itens: ReturnType<typeof linha>[] = []) {
         chamadas.push(args);
         return linha(args.data);
       }),
+      // Sem viagem nenhuma por padrão — os testes de viagem sobrescrevem.
       deleteMany: vi.fn(async (args: { where: { id: string; identidadeId: string } }) => {
         chamadas.push(args);
         const alvo = itens.filter(
@@ -49,6 +50,7 @@ function fakePrisma(itens: ReturnType<typeof linha>[] = []) {
         return { count: alvo.length };
       }),
     },
+    viagemPessoal: { findMany: vi.fn(async () => []) },
   } as unknown as PrismaService;
   return { prisma, chamadas };
 }
@@ -144,5 +146,58 @@ describe("caderninho do motorista", () => {
     expect(item).not.toHaveProperty("identidadeId");
     expect(item!.data).toBe("2026-09-10");
     expect(item!.valor).toBe(10);
+  });
+});
+
+describe("as viagens dele", () => {
+  it("o frete das viagens entra no ganho do mês, junto com os avulsos", async () => {
+    const { prisma } = fakePrisma([linha({ tipo: "GANHO", valor: new Prisma.Decimal("500.00") })]);
+    (prisma as unknown as { viagemPessoal: unknown }).viagemPessoal = {
+      findMany: async () => [
+        {
+          id: "v1",
+          clientId: "cv1",
+          data: new Date("2026-09-05T00:00:00.000Z"),
+          origem: "Curitiba",
+          destino: "Joinville",
+          carga: null,
+          km: new Prisma.Decimal("130.00"),
+          peso: null,
+          valorRecebido: new Prisma.Decimal("1300.00"),
+          observacao: null,
+          criadoEm: new Date(),
+        },
+      ],
+    };
+    const r = await new LancamentosPessoaisService(prisma).resumo(EU, "2026-09");
+    expect(r.ganhos).toBe(1800); // 500 avulso + 1300 de frete
+    expect(r.viagens).toBe(1);
+    expect(r.km).toBe(130);
+    // 1800 / 130 km
+    expect(r.ganhoPorKm).toBe(13.85);
+  });
+
+  it("sem km informado não inventa R$ por km", async () => {
+    const { prisma } = fakePrisma([]);
+    (prisma as unknown as { viagemPessoal: unknown }).viagemPessoal = {
+      findMany: async () => [
+        {
+          id: "v1",
+          clientId: "cv1",
+          data: new Date("2026-09-05T00:00:00.000Z"),
+          origem: "A",
+          destino: "B",
+          carga: null,
+          km: null,
+          peso: null,
+          valorRecebido: new Prisma.Decimal("900.00"),
+          observacao: null,
+          criadoEm: new Date(),
+        },
+      ],
+    };
+    const r = await new LancamentosPessoaisService(prisma).resumo(EU, "2026-09");
+    expect(r.ganhoPorKm).toBeNull();
+    expect(r.ganhos).toBe(900);
   });
 });

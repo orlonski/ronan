@@ -34,6 +34,12 @@ const MODELS_GLOBAIS = new Set<string>([
   // O cadastro pendente é dessa mesma pessoa, antes dela existir: quem se
   // cadastra pelo app não diz de qual empresa é.
   "CadastroMotoristaPendente",
+  // O trabalho por conta própria dele: frete, caderninho e o comprovante que ele
+  // manda pra quem vai pagar. É da PESSOA — nenhuma empresa lê. O isolamento é
+  // o `identidadeId` em toda consulta (LancamentosPessoaisService).
+  "ViagemPessoal",
+  "LancamentoPessoal",
+  "ComprovantePessoal",
   "Permissao", // catálogo de chaves do RBAC, semeado no boot
   "PedagioRodovia", // praças de pedágio vindas do OSM (dado público)
   "GeocodingCache", // endereço → coordenada
