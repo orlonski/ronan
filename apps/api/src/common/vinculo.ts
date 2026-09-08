@@ -36,3 +36,25 @@ export function vinculoVivo(v: {
 }): boolean {
   return v.ativo && v.status !== "REJEITADO" && v.aceite === "ACEITO";
 }
+
+/**
+ * A empresa está ADICIONANDO alguém, ou CONVIDANDO?
+ *
+ * É a mesma ação do ponto de vista dela — digitar um CPF —, e por isso não pode
+ * depender de qual botão ela usou: "Novo motorista" e "Convidar por CPF"
+ * resolvem no mesmo lugar. Quem decide é o outro lado:
+ *
+ * - A pessoa **usa o app** → é convite. Ela está com o telefone na mão e tem
+ *   como dizer sim ou não; colocá-la na equipe sem perguntar seria decidir por
+ *   ela.
+ * - A pessoa **nunca entrou no app** (ou nem existe ainda) → é cadastro. Não há
+ *   ninguém pra responder, e um convite ficaria pendurado pra sempre; ela assume
+ *   o cadastro quando baixar o app (a reivindicação, em
+ *   `CadastroMotoristaService`).
+ *
+ * O corte é o mesmo dos dois lados — `ultimoLoginEm` — de propósito: uma regra
+ * só, lida do mesmo jeito no cadastro e no convite.
+ */
+export function nasceComoConvite(identidade: { ultimoLoginEm: Date | null } | null): boolean {
+  return identidade?.ultimoLoginEm != null;
+}

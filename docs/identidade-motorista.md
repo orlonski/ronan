@@ -185,6 +185,31 @@ CPF que não existe na plataforma continua tendo o caminho de hoje: cadastrar pe
 painel com senha inicial — que agora cria a pessoa junto. Quando ela baixar o
 app, cai na **reivindicação**.
 
+### "Novo motorista" e "Convidar por CPF" são a MESMA ação
+
+Do ponto de vista da empresa, as duas coisas são "digitar um CPF e adicionar
+alguém". Exigir que ela cadastre num lugar e convide em outro não faz sentido —
+e foi assim que a primeira versão saiu: pelo formulário de cadastro o vínculo
+nascia `ACEITO`, colocando na equipe alguém que nunca disse sim, enquanto o
+convite pedia o aceite. Duas portas, duas regras de consentimento.
+
+Agora quem decide não é o botão, é **o outro lado** (`nasceComoConvite`, em
+`common/vinculo.ts`):
+
+| a pessoa | o que acontece | por quê |
+|---|---|---|
+| **usa o app** (`ultimoLoginEm != null`) | vira **convite**: `aceite: PENDENTE`, aviso no WhatsApp, e ela só entra na equipe quando aceitar | ela está com o telefone na mão e tem como responder; decidir por ela seria passar por cima |
+| **nunca entrou no app** | vira **cadastro** normal, valendo na hora | não há ninguém pra responder — o convite ficaria pendurado pra sempre. Ela assume quando baixar o app |
+
+O corte é o mesmo `ultimoLoginEm` da reivindicação, de propósito: uma regra só,
+lida do mesmo jeito nos dois fluxos. O formulário avisa ("isto aqui vira um
+convite") e o botão passa a dizer **Enviar convite**; ao salvar, o painel leva
+direto pra aba de convites, senão o admin cadastraria e não encontraria ninguém
+na lista.
+
+O diálogo "Convidar por CPF" continua existindo como atalho — não pede nome,
+telefone nem placa, porque esses dados são dela.
+
 ### 4. O motorista aceita
 
 Rotas novas sob token de identidade:

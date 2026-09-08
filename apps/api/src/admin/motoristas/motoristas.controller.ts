@@ -103,16 +103,20 @@ export class MotoristasController {
   }
 
   /**
-   * Esse CPF já tem cadastro em outra empresa? Serve pro form esconder o campo
-   * de senha (ele já tem uma). Devolve só o booleano — nunca qual empresa.
-   * Antes do :id pra não ser capturado como id.
+   * Essa pessoa já existe na plataforma, e ela usa o app?
+   *
+   * Serve pro formulário esconder o campo de senha (ela já tem uma) e, quando
+   * ela usa o app, avisar que aquilo ali virou um CONVITE — ela entra na equipe
+   * quando aceitar. Devolve só os dois booleanos: onde mais ela roda não é
+   * assunto de quem está do lado de cá. Antes do :id pra não ser capturado como id.
    */
   @RequerPermissao("motoristas.criar")
   @Get("checar-cpf")
   async checarCpf(@Query("cpf") cpf?: string) {
     const digitos = cpfDigits(cpf ?? "");
-    if (digitos.length !== 11) return { existeEmOutraEmpresa: false };
-    return { existeEmOutraEmpresa: await this.service.cpfEmOutraEmpresa(digitos) };
+    if (digitos.length !== 11) return { existeEmOutraEmpresa: false, usaOApp: false };
+    const r = await this.service.cpfEmOutraEmpresa(digitos);
+    return { existeEmOutraEmpresa: r.existe, usaOApp: r.usaOApp };
   }
 
   /**

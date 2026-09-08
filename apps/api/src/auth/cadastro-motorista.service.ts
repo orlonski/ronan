@@ -266,6 +266,11 @@ export class CadastroMotoristaService {
               senhaHash: pendente.senhaHash,
               tentativasLogin: 0,
               bloqueadoAte: null,
+              // A partir daqui ela USA o app (o cadastro já entrega sessão). É o
+              // que faz uma empresa que a adicione depois ter que pedir o SIM
+              // dela, em vez de pendurá-la na equipe direto. Ver o `ehConvite`
+              // em admin/motoristas.service.ts.
+              ultimoLoginEm: new Date(),
               ...(pendente.placas ? { placas: pendente.placas } : {}),
             },
           }),
@@ -280,6 +285,18 @@ export class CadastroMotoristaService {
           // admite null em JSON — o `??` é só pra fazer os dois concordarem.
           placas: pendente.placas ?? [],
         });
+
+    if (!jaExiste) {
+      // Idem do lado de quem nasce agora: o cadastro pelo app já entrega
+      // sessão, então ela usa o app a partir deste instante — e uma empresa que
+      // a adicione depois vai precisar do aceite dela.
+      await comoSistema(() =>
+        this.prisma.motoristaIdentidade.update({
+          where: { id: identidade.id },
+          data: { ultimoLoginEm: new Date() },
+        }),
+      );
+    }
 
     if (jaExiste) {
       await AuthService.propagarSenha(this.prisma, cpf, pendente.senhaHash);

@@ -198,6 +198,14 @@ export function MotoristaForm({ initial }: Props) {
    * troca. Onde mais ela tem cadastro não se diz: não é assunto de quem cadastra.
    */
   const [cpfEmOutraEmpresa, setCpfEmOutraEmpresa] = useState(false);
+  /**
+   * Ela usa o app — então isto aqui não é um cadastro, é um CONVITE.
+   *
+   * Quem está do outro lado com o app na mão decide se entra: o vínculo nasce
+   * esperando o sim dela. Não existe "cadastrar aqui e convidar depois" — é a
+   * mesma ação, e o formulário de sempre já a resolve.
+   */
+  const [usaOApp, setUsaOApp] = useState(false);
   const cpfDigitado = cpfDigits(form.cpf);
   useEffect(() => {
     if (initial || cpfDigitado.length !== 11 || !token) {
@@ -205,16 +213,21 @@ export function MotoristaForm({ initial }: Props) {
       return;
     }
     let vivo = true;
-    void fetchApi<{ existeEmOutraEmpresa: boolean }>(
+    void fetchApi<{ existeEmOutraEmpresa: boolean; usaOApp: boolean }>(
       `${PATH}/checar-cpf?cpf=${cpfDigitado}`,
       { token },
     )
       .then((r) => {
-        if (vivo) setCpfEmOutraEmpresa(r.existeEmOutraEmpresa);
+        if (!vivo) return;
+        setCpfEmOutraEmpresa(r.existeEmOutraEmpresa);
+        setUsaOApp(r.usaOApp);
       })
       .catch(() => {
         // Falhou a checagem: mostra o campo de senha (comportamento de sempre).
-        if (vivo) setCpfEmOutraEmpresa(false);
+        if (vivo) {
+          setCpfEmOutraEmpresa(false);
+          setUsaOApp(false);
+        }
       });
     return () => {
       vivo = false;
@@ -316,6 +329,16 @@ export function MotoristaForm({ initial }: Props) {
         modalidadeId: form.modalidadeId ?? null,
         placaDefault,
       });
+      if (usaOApp) {
+        // Sem isto o admin "cadastra" e não encontra ninguém na lista: quem
+        // ainda não aceitou vive na aba de convites, não entre os motoristas.
+        toast.success("Convite enviado", {
+          description:
+            "Ele entra na sua equipe quando aceitar no app. Até lá, fica em “Convites enviados”.",
+        });
+        router.push("/motoristas?aceite=PENDENTE");
+        return;
+      }
     }
     router.push("/motoristas");
   }
@@ -349,9 +372,19 @@ export function MotoristaForm({ initial }: Props) {
             <div className="space-y-2">
               <Label>Senha</Label>
               <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                Essa pessoa já usa o Movatruck. Ela entra com a senha que já tem — não
-                precisa definir nenhuma aqui. Se ela ainda não roda pra você, o caminho é
-                “Convidar por CPF”: assim ela escolhe entrar.
+                {usaOApp ? (
+                  <>
+                    Essa pessoa já usa o Movatruck, então isto aqui vira um{" "}
+                    <strong>convite</strong>: ela recebe no app e entra na sua equipe quando
+                    aceitar. Até lá ela não aparece na lista — fica em “Convites enviados”. O
+                    nome, o celular e a senha são os dela.
+                  </>
+                ) : (
+                  <>
+                    Essa pessoa já tem cadastro na plataforma. Ela entra com a senha que já
+                    tem — não precisa definir nenhuma aqui.
+                  </>
+                )}
               </p>
             </div>
           ) : (
@@ -608,7 +641,7 @@ export function MotoristaForm({ initial }: Props) {
           </Button>
         </Link>
         <Button type="submit" disabled={saving}>
-          Salvar
+          {!initial && usaOApp ? "Enviar convite" : "Salvar"}
         </Button>
       </div>
     </form>

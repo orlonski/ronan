@@ -25,6 +25,7 @@ import { paginate, type Paginated, type PaginationQuery } from "../../common/pag
 import { ymdSaoPaulo } from "../../common/timezone";
 import { adotarLancamentosOrfaos } from "../../common/transportadora";
 import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
+import { nasceComoConvite } from "../../common/vinculo";
 import { AuditoriaService } from "../../auditoria/auditoria.service";
 import { EasUpdateService } from "./eas-update.service";
 
@@ -316,6 +317,11 @@ export class MotoristasService {
     // criar outra aqui daria duas senhas pro mesmo CPF e uma delas pararia de
     // funcionar na primeira troca. O painel nem mostra o campo nesse caso.
     const existente = await this.identidades.garantirPorCpf(data.cpf);
+
+    // "Novo motorista" e "Convidar por CPF" são a mesma ação e resolvem no
+    // mesmo lugar: quem decide se é cadastro ou convite é o outro lado, não o
+    // botão que a empresa apertou. Ver common/vinculo.ts.
+    const ehConvite = nasceComoConvite(existente);
     if (!existente && !data.senha) {
       throw new BadRequestException("Informe a senha inicial do motorista.");
     }
@@ -334,12 +340,17 @@ export class MotoristasService {
       const motorista = await tx.motorista.create({
         data: {
           identidadeId: identidade.id,
-          nome: data.nome,
+          // Convite: o nome e o telefone são os DELA, não os que o admin
+          // digitou — quem já usa o app é dona do próprio cadastro.
+          nome: ehConvite ? identidade.nome : data.nome,
           cpf: data.cpf,
           senhaHash,
-          telefone: data.telefone,
-          email: data.email,
+          telefone: ehConvite ? identidade.telefone : data.telefone,
+          email: ehConvite ? identidade.email : data.email,
           transportadoraId: data.transportadoraId ?? null,
+          ...(ehConvite
+            ? { aceite: "PENDENTE" as const, convidadoPorId: usuarioId, convidadoEm: new Date() }
+            : {}),
           criadoPorId: usuarioId,
         },
       });
@@ -359,6 +370,19 @@ export class MotoristasService {
       }
       return tx.motorista.findUniqueOrThrow({ where: { id: motorista.id }, select: SAFE_SELECT });
     });
+
+    if (ehConvite) {
+      await this.auditoria.log({
+        usuarioId,
+        entidade: "Motorista",
+        entidadeId: created.id,
+        acao: AcaoAuditoria.ADMIN_CONVIDOU_MOTORISTA,
+        campo: "aceite",
+        valorDepois: "PENDENTE",
+        metadata: { cpf: data.cpf, origem: "novo-motorista" },
+      });
+      void this.avisarConvite(identidade.telefone);
+    }
     return this.flatten(created);
   }
 
@@ -503,8 +527,14 @@ export class MotoristasService {
    * inventar uma senha nova, e nada além disso: pra qual outra empresa o
    * motorista roda não é assunto de quem está do lado de cá.
    */
-  async cpfEmOutraEmpresa(cpf: string): Promise<boolean> {
-    return (await this.identidades.porCpf(cpf)) !== null;
+  async cpfEmOutraEmpresa(cpf: string): Promise<{ existe: boolean; usaOApp: boolean }> {
+    const identidade = await this.identidades.porCpf(cpf);
+    return {
+      existe: identidade !== null,
+      // Usa o app = tem alguém do outro lado pra aceitar. Muda o que o
+      // formulário faz: cadastro vira convite (ver `create`).
+      usaOApp: identidade?.ultimoLoginEm != null,
+    };
   }
 
   async update(id: string, data: AtualizarMotoristaInput) {
