@@ -48,6 +48,19 @@ export class HealthController {
       migracao,
       /** Reiniciou depois do seu push? Então o deploy subiu. */
       iniciadoEm: INICIADO_EM,
+      /**
+       * Os dois serviços de estrada estão configurados?
+       *
+       * Só `true`/`false` — nunca a URL. Existe porque a falta deles não dá
+       * erro em lugar nenhum: sem `OSRM_URL` todo km volta como "servidor de
+       * rotas não configurado", e sem `VALHALLA_URL` a viagem guiada abre o
+       * mapa SEM a linha da rota e sem voz, calada. Passei mais tempo do que
+       * devia procurando isso no app quando a resposta estava numa env var.
+       */
+      rotas: {
+        osrm: !!process.env.OSRM_URL,
+        navegacao: !!process.env.VALHALLA_URL,
+      },
       time: new Date().toISOString(),
     };
   }

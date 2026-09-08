@@ -70,6 +70,8 @@ type IniciarOpts = {
    */
   pessoal?: boolean;
   destino?: { texto: string; lat: number; lng: number };
+  /** A tela já conversou sobre o "o tempo todo" — não repetir o pedido aqui. */
+  pularPedidoSempre?: boolean;
 };
 
 /**
@@ -77,7 +79,60 @@ type IniciarOpts = {
  * saber se ele NEGOU (aí o caminho é os Ajustes do sistema) ou se só recusou o
  * "o tempo todo" (aí dá pra rodar com o app aberto).
  */
-export type FalhaTracking = "sem-permissao-uso" | "sem-permissao-sempre" | "ja-tem-frete";
+export type FalhaTracking =
+  | "sem-permissao-uso"
+  | "sem-permissao-sempre"
+  /** O SO não pergunta mais: só ligando na mão, nos Ajustes. */
+  | "sempre-so-nos-ajustes"
+  | "ja-tem-frete";
+
+/**
+ * Dá pra conseguir o "o tempo todo" a partir daqui?
+ *
+ * O iPhone mostra o alerta de "Permitir sempre" **uma vez só**. Depois disso,
+ * `requestBackgroundPermissionsAsync()` retorna na hora, sem desenhar nada na
+ * tela — foi o "cliquei em continuar e não muda nada". Quando é esse o caso, o
+ * único caminho honesto é mandar o motorista pros Ajustes, não repetir um
+ * pedido que o sistema já decidiu ignorar.
+ */
+/**
+ * A permissão de uso (foreground) — a que realmente decide se há km ou não.
+ *
+ * Vem SEMPRE antes do "o tempo todo": o iOS não concede o "Sempre" a quem não
+ * tem o "Durante o uso", e pedir na ordem errada faz o sistema mostrar só o
+ * primeiro alerta — o motorista responde uma coisa e acha que respondeu outra.
+ */
+export async function garantirPermissaoUso(): Promise<
+  "concedido" | "negado" | "so-nos-ajustes"
+> {
+  const Location = await import("expo-location");
+  const atual = await Location.getForegroundPermissionsAsync();
+  if (atual.status === "granted") return "concedido";
+  if (!atual.canAskAgain) return "so-nos-ajustes";
+  const r = await Location.requestForegroundPermissionsAsync();
+  if (r.status === "granted") return "concedido";
+  return r.canAskAgain ? "negado" : "so-nos-ajustes";
+}
+
+export async function estadoPermissaoSempre(): Promise<
+  "concedido" | "pode-pedir" | "so-nos-ajustes"
+> {
+  const Location = await import("expo-location");
+  const bg = await Location.getBackgroundPermissionsAsync();
+  if (bg.status === "granted") return "concedido";
+  return bg.canAskAgain ? "pode-pedir" : "so-nos-ajustes";
+}
+
+/**
+ * Mostra o pre-prompt e, se ele topar, o pedido do sistema.
+ * Devolve se o "o tempo todo" ficou concedido.
+ */
+export async function pedirPermissaoSempre(pessoal: boolean): Promise<boolean> {
+  const Location = await import("expo-location");
+  if (!(await prePromptBackgroundLocation(pessoal))) return false;
+  const r = await Location.requestBackgroundPermissionsAsync();
+  return r.status === "granted";
+}
 
 export async function iniciarTracking(opts: IniciarOpts = {}): Promise<boolean> {
   return (await iniciarTrackingDetalhado(opts)) === true;
@@ -109,14 +164,26 @@ export async function iniciarTrackingDetalhado(
   // 2) background — Android pede tela "Permitir o tempo todo".
   // Antes de mostrar o popup do sistema, explica POR QUÊ — Apple exige
   // pre-prompt explicativo, e melhora taxa de aceitação no Android também.
+  //
+  // `pularPedidoSempre` existe pra quem já negociou isso na tela: mostrar o
+  // pre-prompt aqui de novo daria dois diálogos seguidos pedindo a mesma coisa.
   const exigirSempre = opts.exigirSempre !== false;
-  const bg = await Location.getBackgroundPermissionsAsync();
-  if (bg.status !== "granted") {
-    const aceitou = await prePromptBackgroundLocation(opts.pessoal === true);
-    if (!aceitou && exigirSempre) return "sem-permissao-sempre";
-    if (aceitou) {
-      const r = await Location.requestBackgroundPermissionsAsync();
-      if (r.status !== "granted" && exigirSempre) return "sem-permissao-sempre";
+  if (!opts.pularPedidoSempre) {
+    const estado = await estadoPermissaoSempre();
+    if (estado === "so-nos-ajustes") {
+      // O SO NÃO vai mostrar popup nenhum. Insistir aqui é o que fazia o
+      // "Continuar" não fazer nada: o pre-prompt aparecia, ele aceitava, e
+      // `requestBackgroundPermissionsAsync` voltava calado, sem UI nenhuma.
+      if (exigirSempre) return "sempre-so-nos-ajustes";
+    } else if (estado === "pode-pedir") {
+      const aceitou = await prePromptBackgroundLocation(opts.pessoal === true);
+      if (!aceitou && exigirSempre) return "sem-permissao-sempre";
+      if (aceitou) {
+        const r = await Location.requestBackgroundPermissionsAsync();
+        if (r.status !== "granted" && exigirSempre) {
+          return r.canAskAgain ? "sem-permissao-sempre" : "sempre-so-nos-ajustes";
+        }
+      }
     }
   }
 

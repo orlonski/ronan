@@ -27,8 +27,11 @@ import { anunciar, usePosicaoAoVivo, useGuiaNavegacao } from "@/lib/navegacao";
 import type { RotaNav } from "@/lib/queries";
 import {
   cancelarTracking,
+  estadoPermissaoSempre,
+  garantirPermissaoUso,
   iniciarTrackingDetalhado,
   pararTracking,
+  pedirPermissaoSempre,
   useViagemAndamento,
 } from "@/lib/tracking";
 import { clearViagemAndamento, getViagemAndamento } from "@/lib/tracking-storage";
@@ -122,6 +125,9 @@ export default function FreteGuiadoScreen() {
     })();
   }, []);
 
+  /** Por que não há linha no mapa. `null` = tem rota, ou nem tentou ainda. */
+  const [semGuia, setSemGuia] = useState<string | null>(null);
+
   const recalcular = useCallback(async () => {
     if (!destino || !pos) return;
     const nova = await api
@@ -137,13 +143,29 @@ export default function FreteGuiadoScreen() {
     if (nova && !("erro" in nova)) {
       anunciar("Recalculando.");
       setRota(nova);
+      setSemGuia(null);
+      return;
     }
+    // O mapa abria SEM linha nenhuma e sem uma palavra — o motorista fica
+    // olhando pra um mapa mudo sem saber se quebrou, se é o sinal, ou se ele
+    // fez algo errado. O km segue sendo medido nos dois casos, e é isso que
+    // ele precisa ouvir.
+    setSemGuia(
+      nova && "erro" in nova
+        ? nova.erro
+        : "Sem internet pra traçar o caminho agora.",
+    );
   }, [destino, pos]);
 
   // A rota é traçada quando o GPS acha o primeiro ponto — inclusive na volta de
-  // um frete retomado, em que a rota se perdeu junto com o processo.
+  // um frete retomado, em que a rota se perdeu junto com o processo. O
+  // `tentouRota` evita refazer a chamada a cada leitura do GPS (1/s) enquanto
+  // ela estiver falhando; quem tenta de novo é o botão do aviso.
+  const tentouRota = useRef(false);
   useEffect(() => {
-    if (rodando && pos && destino && !rota) void recalcular();
+    if (!rodando || !pos || !destino || rota || tentouRota.current) return;
+    tentouRota.current = true;
+    void recalcular();
   }, [rodando, pos, destino, rota, recalcular]);
 
   const guia = useGuiaNavegacao(rodando ? rota : null, pos, recalcular);
@@ -218,6 +240,55 @@ export default function FreteGuiadoScreen() {
 
   /** Liga o odômetro. `alvo` nulo = só medir km, sem guia (caminho offline). */
   async function comecar(alvo: Destino | null) {
+    // 1) A permissão de USO primeiro — é ela que decide se existe km. O iOS não
+    //    dá o "Sempre" pra quem não tem o "Durante o uso", e pedir fora de ordem
+    //    faz o sistema mostrar só o primeiro alerta.
+    const uso = await garantirPermissaoUso();
+    if (uso !== "concedido") {
+      const abrir = await showConfirm({
+        title: "O app precisa da sua localização",
+        message:
+          uso === "so-nos-ajustes"
+            ? "É com ela que medimos o km do seu frete, e o iPhone já não pergunta mais aqui dentro. Ligue em Ajustes › Movatruck › Localização."
+            : "É com ela que medimos o km do seu frete. Sem isso não tem como saber quanto você rodou.",
+        confirmLabel: "Abrir os Ajustes",
+      });
+      if (abrir) await Linking.openSettings().catch(() => {});
+      return;
+    }
+
+    // 2) O "o tempo todo" é UPGRADE, nunca bloqueio.
+    //
+    // O iPhone mostra aquele alerta uma vez só. Depois disso o pedido volta na
+    // hora, sem desenhar nada — que era o "cliquei em Continuar e não muda
+    // nada". Quando é esse o caso, o único caminho é os Ajustes, e insistir com
+    // um pop-up nosso é enganação.
+    const estado = await estadoPermissaoSempre();
+    if (estado === "pode-pedir") {
+      const deu = await pedirPermissaoSempre(true);
+      if (!deu) {
+        void showAlert({
+          title: "Vou medir com o app aberto",
+          message:
+            "Sem o “o tempo todo”, o km conta enquanto o app estiver na tela. Já resolve boa parte do frete — e dá pra ligar depois nos Ajustes.",
+        });
+      }
+    } else if (estado === "so-nos-ajustes") {
+      const ir = await showConfirm({
+        title: "Pra medir com a tela apagada",
+        message:
+          "O iPhone só pergunta isso uma vez, e já perguntou. Pra ele contar o km com o celular no bolso, abra os Ajustes e escolha “Sempre” em Movatruck › Localização.\n\nSe preferir, dá pra começar agora do mesmo jeito — aí o km conta enquanto o app estiver na tela.",
+        confirmLabel: "Abrir os Ajustes",
+        cancelLabel: "Começar assim mesmo",
+      });
+      // Ele vai sair do app: não faz sentido abrir o frete agora. Quando voltar,
+      // toca em começar de novo — e aí já com a permissão certa.
+      if (ir) {
+        await Linking.openSettings().catch(() => {});
+        return;
+      }
+    }
+
     // `exigirSempre: false` porque no iPhone a primeira resposta é sempre
     // "Durante o uso do app" — exigir o "Sempre" deixava ele sem medir km
     // NENHUM, quando medir com o app aberto já resolve boa parte do frete.
@@ -225,31 +296,24 @@ export default function FreteGuiadoScreen() {
       precisaoAlta: true,
       exigirSempre: false,
       pessoal: true,
+      pularPedidoSempre: true,
       ...(alvo ? { destino: alvo } : {}),
     });
 
     if (r === "ja-tem-frete") return; // ele escolheu voltar pro frete que roda
 
-    if (r === "sem-permissao-uso") {
-      // Negou de vez: o único caminho é os Ajustes do sistema. Antes a tela
-      // dizia "sem a localização o app não mede o km" e parava ali — sem dizer
-      // como resolver, que é a definição de beco sem saída.
+    if (r !== true) {
+      // A permissão já foi negociada acima, então chegar aqui é caso de borda
+      // (ele revogou entre um passo e outro). Mesmo assim: nunca parar sem
+      // dizer como resolver — beco sem saída foi o problema original.
       const abrir = await showConfirm({
         title: "O app precisa da sua localização",
         message:
-          "É com ela que medimos o km do seu frete. Você negou a permissão — dá pra ligar nos Ajustes do iPhone, em Movatruck › Localização.",
+          "É com ela que medimos o km do seu frete. Ligue nos Ajustes do iPhone, em Movatruck › Localização.",
         confirmLabel: "Abrir os Ajustes",
       });
       if (abrir) await Linking.openSettings().catch(() => {});
       return;
-    }
-
-    if (r !== true) {
-      void showAlert({
-        title: "Vou medir com o app aberto",
-        message:
-          "Você permitiu a localização só durante o uso. O km conta enquanto o app estiver na tela; pra contar com o celular no bolso, ligue “Sempre” nos Ajustes.",
-      });
     }
 
     if (alvo) {
@@ -577,13 +641,34 @@ export default function FreteGuiadoScreen() {
             <ArrowLeft size={22} color="#0f172a" />
           </Pressable>
           <View className="flex-1" pointerEvents="box-none">
-            {guia && (
+            {guia ? (
               <BannerManobra
                 manobra={guia.manobra}
                 distProxM={guia.distProxM}
                 restanteM={guia.restanteM}
                 foraDaRota={guia.foraDaRota}
               />
+            ) : (
+              semGuia && (
+                <View className="gap-2 rounded-2xl border-2 border-warning bg-card p-4 shadow-md">
+                  <Text className="text-base font-bold text-foreground">
+                    Sem o caminho desenhado
+                  </Text>
+                  <Text className="text-sm text-muted-foreground">
+                    {semGuia} O seu km continua sendo medido normalmente — é ele que vai pro
+                    frete.
+                  </Text>
+                  <Pressable
+                    onPress={() => {
+                      tentouRota.current = true;
+                      void recalcular();
+                    }}
+                    className="self-start rounded-xl bg-secondary px-4 py-3 active:opacity-70"
+                  >
+                    <Text className="text-base font-bold text-primary">Tentar de novo</Text>
+                  </Pressable>
+                </View>
+              )
             )}
           </View>
         </View>
