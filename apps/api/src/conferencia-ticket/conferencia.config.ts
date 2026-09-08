@@ -154,6 +154,22 @@ export class ConferenciaConfig {
   }
 
   /**
+   * Depois de quanto tempo uma conferência que caiu por falha TRANSITÓRIA volta
+   * pra fila, uma única vez.
+   *
+   * As tentativas normais cabem em ~4 minutos, o que não cobre uma queda de
+   * conexão de dez. Sem esta segunda janela, tudo que estiver na fila durante a
+   * instabilidade morre em `FALHOU` e nunca mais é lido — e ninguém percebe,
+   * porque a viagem segue normal na fila de quem confere.
+   *
+   * Não custa leitura a mais: numa falha de conexão a chamada não chegou ao
+   * provedor. Zero desliga.
+   */
+  get ressuscitarAposMs(): number {
+    return this.num("CONFERENCIA_RESSUSCITAR_APOS_MS", 20 * 60_000, 0, 6 * 3_600_000);
+  }
+
+  /**
    * Modelo da PRIMEIRA passada, quando a empresa não escolheu um.
    *
    * Era uma constante dentro do leitor, o que fazia trocar de modelo exigir

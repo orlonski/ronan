@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle2, Eye, RefreshCw, ScanEye } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Eye, PlugZap, RefreshCw, ScanEye } from "lucide-react";
 import { fetchApi, useApiQuery, useAuthToken } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
+import { fmtDataHoraBR } from "@/lib/fechamento-helpers";
+import { humanizarErroConferencia, rotuloStatusConferencia } from "@/lib/conferencia-erro";
 
 type Divergencia = {
   campo: string;
@@ -15,8 +17,23 @@ type Divergencia = {
 };
 type Incerteza = { campo: string; declarado: string; lido: string; motivo: string };
 
-type Conferencia = {
+/** Uma passada da leitura — o que a linha do tempo da viagem mostra. */
+type Tentativa = {
   id: string;
+  status: string;
+  veredito: string | null;
+  confianca: number | null;
+  origem: string;
+  erro: string | null;
+  modelo: string | null;
+  passadas: number;
+  duracaoMs: number | null;
+  criadoEm: string;
+  finalizadoEm: string | null;
+};
+
+type Conferencia = {
+  id: string | null;
   veredito: "BATE" | "DIVERGE" | "INCERTO" | "ILEGIVEL" | "NAO_APLICAVEL" | null;
   confianca: number | null;
   divergencias: Divergencia[] | null;
@@ -28,6 +45,17 @@ type Conferencia = {
   criadoEm: string;
   /** O lançamento mudou depois desta leitura — a comparação está velha. */
   desatualizada: boolean;
+  /** Tem leitura na fila agora. */
+  naFila: { status: string; tentativas: number; criadoEm: string } | null;
+  /** A última tentativa caiu — e ainda não houve leitura boa depois dela. */
+  falha: {
+    erro: string | null;
+    tentativas: number;
+    /** O erro tem cara de transitório e o sistema ainda vai tentar sozinho. */
+    ressuscitavel: boolean;
+    finalizadoEm: string | null;
+  } | null;
+  historico: Tentativa[];
 };
 
 const CAMPOS: { chave: string; leituraChave: string; rotulo: string }[] = [
@@ -121,7 +149,75 @@ export function ConferenciaViagemCard({ viagemId }: { viagemId: string }) {
     }
   }
 
-  if (isLoading || !data || !data.veredito) return null;
+  if (isLoading || !data) return null;
+
+  const historico = data.historico ?? [];
+
+  // Pra quando a foto está boa e a leitura não deu certo assim mesmo. Sem isto
+  // o único caminho seria pedir foto nova ao motorista por um problema que não
+  // é dele. Fica numa variável porque os três estados do card oferecem o mesmo
+  // botão — inclusive o de falha, que é justamente onde ele mais serve.
+  const botaoReler = temPermissao("conferencia-ticket.reprocessar") ? (
+    <button
+      type="button"
+      onClick={() => void reler()}
+      disabled={relendo}
+      title="A foto está boa e a leitura não pegou? Manda ler de novo."
+      className="flex items-center gap-1 rounded border border-current/20 bg-white/60 px-2 py-0.5 text-[11px] hover:bg-white disabled:opacity-50"
+    >
+      <RefreshCw className={`h-3 w-3 ${relendo ? "animate-spin" : ""}`} />
+      {relendo ? "lendo…" : "ler de novo"}
+    </button>
+  ) : null;
+
+  // Ainda não houve leitura concluída — e mesmo assim há o que contar: tem uma
+  // na fila, ou a última caiu. Antes disto o card sumia por completo, e a
+  // viagem ficava igual à de quem nunca teve conferência: sem sinal de que
+  // houve tentativa e sem o botão de mandar ler de novo.
+  if (!data.veredito) {
+    if (data.naFila) {
+      return (
+        <div className="rounded-lg border border-border bg-muted/30 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Clock className="h-4 w-4 shrink-0" />
+            <span className="text-sm font-medium">Leitura do ticket: na fila</span>
+            <span className="text-xs text-muted-foreground">
+              desde {fmtDataHoraBR(data.naFila.criadoEm)}
+            </span>
+          </div>
+          <HistoricoLeituras tentativas={historico} />
+        </div>
+      );
+    }
+
+    if (data.falha) {
+      return (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+          <div className="flex flex-wrap items-center gap-2 text-amber-900">
+            <PlugZap className="h-4 w-4 shrink-0" />
+            <span className="text-sm font-medium">Leitura do ticket: não deu pra ler</span>
+            <span className="ml-auto">{botaoReler}</span>
+          </div>
+          <p className="mt-2 text-sm text-amber-900">
+            {humanizarErroConferencia(data.falha.erro) ?? "a leitura falhou."}
+          </p>
+          {/* Dizer que a viagem não foi tocada importa tanto quanto dizer que
+              falhou: sem isso, quem confere fica sem saber se precisa desfazer
+              alguma coisa antes de decidir. */}
+          <p className="mt-1 text-xs text-muted-foreground">
+            {data.falha.ressuscitavel
+              ? "Vou tentar de novo sozinho mais tarde — falha de conexão não chega a custar leitura. "
+              : "Não vou tentar sozinho de novo: use ler de novo quando quiser. "}
+            A viagem não foi alterada e o motorista não foi avisado; ela segue na fila normal de
+            conferência.
+          </p>
+          <HistoricoLeituras tentativas={historico} />
+        </div>
+      );
+    }
+
+    return null;
+  }
 
   const divs = data.divergencias ?? [];
   const incs = data.incertezas ?? [];
@@ -169,22 +265,19 @@ export function ConferenciaViagemCard({ viagemId }: { viagemId: string }) {
           {reavaliando ? "reavaliando…" : "reavaliar sem custo"}
         </button>
 
-        {/* Pra quando a foto está boa e a leitura não deu certo assim mesmo.
-            Sem isto o único caminho seria pedir foto nova ao motorista por um
-            problema que não é dele. */}
-        {temPermissao("conferencia-ticket.reprocessar") && (
-          <button
-            type="button"
-            onClick={() => void reler()}
-            disabled={relendo}
-            title="A foto está boa e a leitura não pegou? Manda ler de novo."
-            className="flex items-center gap-1 rounded border border-current/20 bg-white/60 px-2 py-0.5 text-[11px] hover:bg-white disabled:opacity-50"
-          >
-            <RefreshCw className={`h-3 w-3 ${relendo ? "animate-spin" : ""}`} />
-            {relendo ? "lendo…" : "ler de novo"}
-          </button>
-        )}
+        {botaoReler}
       </div>
+
+      {/* Houve tentativa depois desta leitura, e ela caiu. Sem esta linha o
+          card mostraria só o resultado velho, e uma releitura que não chegou a
+          acontecer passaria por leitura feita. */}
+      {data.falha && (
+        <p className="mt-2 rounded border border-current/20 bg-white/60 px-2 py-1 text-xs">
+          A última tentativa de reler (
+          {fmtDataHoraBR(data.falha.finalizadoEm)}) falhou:{" "}
+          {humanizarErroConferencia(data.falha.erro)} O que está abaixo é a leitura anterior.
+        </p>
+      )}
 
       {/* O "Lançado" abaixo é o que estava lançado quando a leitura foi
           comparada. Editar a viagem não refaz a conferência sozinho, e sem
@@ -259,7 +352,47 @@ export function ConferenciaViagemCard({ viagemId }: { viagemId: string }) {
           foi avisado.
         </p>
       )}
+
+      <HistoricoLeituras tentativas={historico} />
     </div>
+  );
+}
+
+/**
+ * Toda tentativa de leitura desta viagem, da mais nova pra mais velha.
+ *
+ * Fica fechado por padrão porque o normal é ter uma linha só e ela já está
+ * contada acima. O valor está no caso torto: leitura que caiu, voltou sozinha e
+ * deu certo na segunda; releitura pedida por alguém; troca de modelo no meio.
+ * Sem isto, nada disso deixava rastro na viagem — e a única forma de reconstruir
+ * o que houve era abrir a tela de Conferências e caçar pelo ticket.
+ */
+function HistoricoLeituras({ tentativas }: { tentativas: Tentativa[] }) {
+  if (tentativas.length < 2) return null;
+
+  return (
+    <details className="mt-3 text-xs">
+      <summary className="cursor-pointer text-muted-foreground hover:underline">
+        {tentativas.length} tentativas de leitura
+      </summary>
+      <ul className="mt-2 space-y-1">
+        {tentativas.map((t) => {
+          const erro = humanizarErroConferencia(t.erro);
+          return (
+            <li key={t.id} className="border-t border-current/10 pt-1">
+              <span className="tabular-nums text-muted-foreground">{fmtDataHoraBR(t.criadoEm)}</span>{" "}
+              · {rotuloStatusConferencia(t.status, t.veredito)}
+              {t.confianca != null && t.status === "CONCLUIDA" && (
+                <> · leitura {Math.round(t.confianca * 100)}%</>
+              )}
+              {t.passadas > 1 && <> · 2ª opinião</>}
+              {t.duracaoMs != null && <> · {(t.duracaoMs / 1000).toFixed(1)}s</>}
+              {erro && <span className="text-amber-800"> — {erro}</span>}
+            </li>
+          );
+        })}
+      </ul>
+    </details>
   );
 }
 

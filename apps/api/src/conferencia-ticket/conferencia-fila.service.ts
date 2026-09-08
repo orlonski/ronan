@@ -18,6 +18,17 @@ import {
   type Lido,
 } from "../common/conferencia-ticket";
 
+/**
+ * Falha que o tempo resolve: a chamada não chegou ao provedor, ou ele estava
+ * fora do ar. Vale uma volta na fila mais tarde.
+ *
+ * Deliberadamente estreita. O que não casa aqui — bug nosso, resposta fora do
+ * formato, foto que sumiu — fica parado em `FALHOU`, visível na tela, esperando
+ * gente decidir. Retentar um defeito de código é só gastar leitura em silêncio.
+ */
+export const ERRO_TRANSITORIO =
+  /connection error|econnreset|econnrefused|enotfound|eai_again|epipe|socket hang up|fetch failed|network|timeout|etimedout|passou de \d+s|overloaded|rate.?limit|\b(429|500|502|503|504)\b/i;
+
 /** Backoff exponencial (30s, 60s, 120s…) com teto de 15 min. */
 export function atrasoBackoffMs(tentativa: number): number {
   const base = 30_000 * 2 ** Math.max(0, tentativa - 1);
@@ -256,6 +267,12 @@ export class ConferenciaFilaService {
     await this.prisma.conferenciaTicket.update({
       where: { id: job.id },
       data: {
+        // O `erro` de uma tentativa anterior morre aqui, a menos que quem
+        // finaliza passe um novo. Sem esta linha, a conferência que caiu por
+        // queda de conexão e deu certo na retentativa ficava para sempre com o
+        // erro antigo pendurado — e a tela mostrava "Confere" com uma falha
+        // vermelha embaixo, o que faz qualquer um duvidar do resultado bom.
+        erro: null,
         ...dados,
         viagemAtiva: null,
         finalizadoEm: new Date(),
@@ -281,6 +298,84 @@ export class ConferenciaFilaService {
         erro: erro.slice(0, 2_000),
       },
     });
+  }
+
+  /**
+   * Devolve pra fila as conferências que morreram por falha TRANSITÓRIA.
+   *
+   * As 3 tentativas do worker cabem em ~4 minutos (30s+60s+120s de backoff).
+   * Uma instabilidade de rede de dez minutos mata todo job que estiver na fila
+   * naquela janela — e `FALHOU` é fim de linha: nada reenfileira sozinho, então
+   * a viagem simplesmente nunca é lida e ninguém fica sabendo.
+   *
+   * Retentar isso não gasta nada a mais: numa falha de conexão a chamada não
+   * chegou ao provedor, então a leitura que se paga aqui é a que já deveria ter
+   * sido paga. O que impede o loop é `ressurreicoes`: uma volta por job, e só
+   * pra erro com cara de transitório — bug nosso continua parado, visível, em
+   * vez de bater de hora em hora pra sempre.
+   */
+  async ressuscitarFalhasDeInfra(aposMs: number): Promise<number> {
+    if (aposMs <= 0) return 0;
+    const agora = Date.now();
+    const candidatas = await comoSistema(() =>
+      this.prisma.conferenciaTicket.findMany({
+        where: {
+          status: StatusConferenciaTicket.FALHOU,
+          ressurreicoes: 0,
+          finalizadoEm: {
+            lt: new Date(agora - aposMs),
+            // Acervo velho não volta sozinho: se ficou um dia parado, quem
+            // decide gastar é gente, pelo botão de reler.
+            gt: new Date(agora - 24 * 3_600_000),
+          },
+          // Nada de reler o que já foi resolvido por outro caminho (o botão
+          // "ler de novo", ou o reprocessamento em lote).
+          viagem: {
+            conferenciasTicket: { none: { status: StatusConferenciaTicket.CONCLUIDA } },
+          },
+        },
+        orderBy: { finalizadoEm: "asc" },
+        take: 50,
+        select: { id: true, viagemId: true, erro: true },
+      }),
+    );
+
+    let devolvidas = 0;
+    for (const c of candidatas) {
+      if (!ERRO_TRANSITORIO.test(c.erro ?? "")) continue;
+      try {
+        await comoSistema(() =>
+          this.prisma.conferenciaTicket.update({
+            where: { id: c.id },
+            data: {
+              status: StatusConferenciaTicket.PENDENTE,
+              ressurreicoes: { increment: 1 },
+              // Orçamento cheio de novo: a queda de rede não é culpa do job.
+              tentativas: 0,
+              proximaTentativaEm: null,
+              workerId: null,
+              reivindicadoEm: null,
+              finalizadoEm: null,
+              duracaoMs: null,
+              // Retoma o mutex da viagem, senão um lançamento editado no meio
+              // do caminho criaria um segundo job e a leitura sairia duplicada.
+              viagemAtiva: c.viagemId,
+            },
+          }),
+        );
+        devolvidas++;
+      } catch (err) {
+        // P2002 = já existe conferência viva pra essa viagem. Ótimo: alguém
+        // chegou antes, e é ela que vai ler.
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") continue;
+        this.log.warn(`Não consegui devolver a conferência ${c.id} pra fila: ${(err as Error).message}`);
+      }
+    }
+
+    if (devolvidas > 0) {
+      this.log.log(`${devolvidas} conferência(s) que caíram por falha transitória voltaram pra fila.`);
+    }
+    return devolvidas;
   }
 
   /** Quantas segundas opiniões já foram gastas na última hora (teto de custo). */
@@ -455,19 +550,32 @@ export class ConferenciaFilaService {
   }
 
   /**
-   * A conferência mais recente de uma viagem — pro card na tela de detalhe.
+   * O que aconteceu com a leitura desta viagem — pro card na tela de detalhe.
    *
-   * Vem com `desatualizada`: o `declarado` é o congelado no enfileiramento, e
-   * quem edita a viagem depois via o card teimar no valor velho sem entender
-   * por quê. O flag é o que deixa a tela oferecer a reavaliação em vez de
-   * mostrar uma comparação que não vale mais.
+   * Devolve a última leitura CONCLUÍDA (que é o que o card compara campo a
+   * campo) e, junto, o que a viagem não conseguia contar antes: que tem leitura
+   * na fila agora, que a última tentativa caiu, e o histórico das tentativas.
+   *
+   * Isso existe porque antes daqui só saía conferência concluída — então uma
+   * viagem cuja leitura falhou não mostrava card nenhum. Quem abria a viagem
+   * via a mesma tela de quem nunca teve conferência, sem jeito de saber que
+   * houve tentativa, e sem o botão de mandar ler de novo.
+   *
+   * `desatualizada`: o `declarado` é o congelado no enfileiramento, e quem
+   * edita a viagem depois via o card teimar no valor velho sem entender por
+   * quê. O flag é o que deixa a tela oferecer a reavaliação em vez de mostrar
+   * uma comparação que não vale mais.
    */
   async ultimaDaViagem(viagemId: string) {
-    const c = await this.prisma.conferenciaTicket.findFirst({
-      where: { viagemId, status: "CONCLUIDA" },
+    const historico = await this.prisma.conferenciaTicket.findMany({
+      where: { viagemId },
       orderBy: { criadoEm: "desc" },
+      // Teto pra viagem que já foi relida muitas vezes não virar payload grande
+      // — o card mostra a linha do tempo, não uma auditoria completa.
+      take: 10,
       select: {
         id: true,
+        status: true,
         veredito: true,
         confianca: true,
         divergencias: true,
@@ -476,19 +584,78 @@ export class ConferenciaFilaService {
         leitura: true,
         acao: true,
         passadas: true,
+        modelo: true,
+        origem: true,
+        tentativas: true,
+        ressurreicoes: true,
+        erro: true,
         criadoEm: true,
+        finalizadoEm: true,
+        duracaoMs: true,
       },
     });
-    if (!c) return null;
+    if (historico.length === 0) return null;
 
-    const viagem = await this.prisma.viagem.findUnique({
-      where: { id: viagemId },
-      select: SELECT_DECLARADO,
-    });
-    const congelado = c.declarado as unknown as Declarado | null;
-    const desatualizada = !!viagem && !!congelado && !mesmoLancamento(congelado, viagem);
+    const concluida = historico.find((h) => h.status === "CONCLUIDA") ?? null;
+    const naFila =
+      historico.find((h) => h.status === "PENDENTE" || h.status === "EXECUTANDO") ?? null;
+    // Só interessa a falha que veio DEPOIS da última leitura boa: uma queda de
+    // conexão antes de um resultado bem-sucedido é história, não pendência.
+    const falha =
+      historico.find(
+        (h) =>
+          h.status === "FALHOU" && (!concluida || h.criadoEm.getTime() > concluida.criadoEm.getTime()),
+      ) ?? null;
 
-    return { ...c, desatualizada };
+    let desatualizada = false;
+    if (concluida) {
+      const viagem = await this.prisma.viagem.findUnique({
+        where: { id: viagemId },
+        select: SELECT_DECLARADO,
+      });
+      const congelado = concluida.declarado as unknown as Declarado | null;
+      desatualizada = !!viagem && !!congelado && !mesmoLancamento(congelado, viagem);
+    }
+
+    return {
+      // A leitura que vale. Tudo null quando ainda não houve nenhuma completa —
+      // e aí é `naFila`/`falha` que contam a história.
+      id: concluida?.id ?? null,
+      veredito: concluida?.veredito ?? null,
+      confianca: concluida?.confianca ?? null,
+      divergencias: concluida?.divergencias ?? null,
+      incertezas: concluida?.incertezas ?? null,
+      declarado: concluida?.declarado ?? null,
+      leitura: concluida?.leitura ?? null,
+      acao: concluida?.acao ?? null,
+      passadas: concluida?.passadas ?? 0,
+      criadoEm: concluida?.criadoEm ?? historico[0].criadoEm,
+      desatualizada,
+      naFila: naFila && {
+        status: naFila.status,
+        tentativas: naFila.tentativas,
+        criadoEm: naFila.criadoEm,
+      },
+      falha: falha && {
+        erro: falha.erro,
+        tentativas: falha.tentativas,
+        ressuscitavel: falha.ressurreicoes === 0 && ERRO_TRANSITORIO.test(falha.erro ?? ""),
+        finalizadoEm: falha.finalizadoEm,
+      },
+      historico: historico.map((h) => ({
+        id: h.id,
+        status: h.status,
+        veredito: h.veredito,
+        confianca: h.confianca,
+        origem: h.origem,
+        erro: h.erro,
+        modelo: h.modelo,
+        passadas: h.passadas,
+        duracaoMs: h.duracaoMs,
+        criadoEm: h.criadoEm,
+        finalizadoEm: h.finalizadoEm,
+      })),
+    };
   }
 
   /** As placas da frota, pro comparador saber o que é caminhão de casa. */

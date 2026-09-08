@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { fetchApi, useApiQuery, useAuthToken } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
 import { fmtDataHoraBR } from "@/lib/fechamento-helpers";
+import { humanizarErroConferencia } from "@/lib/conferencia-erro";
 
 type Divergencia = {
   campo: string;
@@ -479,7 +480,12 @@ function LinhaConferencia({ c }: { c: Conferencia }) {
             </ul>
           )}
 
-          {c.erro && <p className="mt-2 text-sm text-red-700">{c.erro}</p>}
+          {/* A mensagem crua do SDK ("Connection error.") lia-se como defeito
+              da foto. É o contrário: a chamada nem saiu daqui, e não há nada
+              pra corrigir na viagem. O texto técnico segue no banco. */}
+          {c.erro && (
+            <p className="mt-2 text-sm text-red-700">{humanizarErroConferencia(c.erro)}</p>
+          )}
 
           <p className="mt-2 text-xs text-muted-foreground">
             {fmtDataHoraBR(c.criadoEm)}

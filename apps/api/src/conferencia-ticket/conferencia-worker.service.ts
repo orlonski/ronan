@@ -81,6 +81,9 @@ export class ConferenciaWorkerService implements OnModuleInit, OnModuleDestroy {
     this.tickRodando = true;
     try {
       await this.fila.recuperarPresas();
+      // Segunda chance pro que caiu por queda de conexão: as 3 tentativas
+      // normais cabem em 4 minutos e não cobrem uma instabilidade maior.
+      await this.fila.ressuscitarFalhasDeInfra(this.config.ressuscitarAposMs);
 
       const vagas = this.config.concorrencia - this.emVoo;
       const jobs = await this.fila.reivindicar(this.workerId, vagas);

@@ -2561,6 +2561,14 @@ model ConferenciaTicket {
   proximaTentativaEm DateTime?
   workerId           String?
   reivindicadoEm     DateTime?
+  /// Quantas vezes este job já voltou pra fila DEPOIS de ter falhado.
+  ///
+  /// Falha de conexão com o provedor não custou nada (a chamada não chegou lá) e
+  /// costuma ser janela de instabilidade — mas as 3 tentativas cabem em 4
+  /// minutos, então uma queda de 10 min mata tudo que entrou na fila e ninguém
+  /// nunca mais olha. O contador é o que deixa ressuscitar sem virar loop: uma
+  /// volta por job, e só quando o erro tem cara de transitório.
+  ressurreicoes      Int       @default(0)
 
   iniciadoEm   DateTime?
   finalizadoEm DateTime?

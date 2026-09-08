@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { Prisma, StatusViagem } from "@prisma/client";
-import { ConferenciaFilaService, atrasoBackoffMs } from "./conferencia-fila.service";
+import {
+  ConferenciaFilaService,
+  atrasoBackoffMs,
+  ERRO_TRANSITORIO,
+} from "./conferencia-fila.service";
 import { comConta } from "../common/conta/conta-context";
 import type { PrismaService } from "../prisma/prisma.service";
 import type { ConferenciaConfig } from "./conferencia.config";
@@ -132,20 +136,114 @@ describe("atrasoBackoffMs", () => {
 });
 
 describe("finalizar", () => {
-  it("libera a viagem pra uma conferência futura", async () => {
+  const finalizar = async (dados: Record<string, unknown>) => {
     const update = vi.fn().mockResolvedValue({});
     const prisma = { conferenciaTicket: { update } } as unknown as PrismaService;
     const fila = new ConferenciaFilaService(prisma, config);
-
     await fila.finalizar(
       { id: "j1", iniciadoEm: new Date(Date.now() - 3000), criadoEm: new Date() } as never,
-      { status: "CONCLUIDA" },
+      dados as never,
     );
+    return update.mock.calls[0][0].data;
+  };
 
-    const dados = update.mock.calls[0][0].data;
+  it("libera a viagem pra uma conferência futura", async () => {
+    const dados = await finalizar({ status: "CONCLUIDA" });
     // Sem isto o índice único bloquearia toda conferência seguinte da viagem.
     expect(dados.viagemAtiva).toBeNull();
     expect(dados.duracaoMs).toBeGreaterThan(0);
+  });
+
+  it("concluir apaga o erro da tentativa que caiu antes", async () => {
+    // A leitura que caiu por queda de conexão e deu certo na retentativa ficava
+    // com o erro velho pendurado — e a tela mostrava "Confere" com uma falha
+    // vermelha embaixo, o que faz duvidar do resultado bom.
+    expect((await finalizar({ status: "CONCLUIDA", veredito: "BATE" })).erro).toBeNull();
+  });
+
+  it("quem falha continua gravando o próprio erro", async () => {
+    const dados = await finalizar({ status: "FALHOU", erro: "leitura: Connection error." });
+    expect(dados.erro).toBe("leitura: Connection error.");
+  });
+});
+
+/**
+ * As 3 tentativas do worker cabem em ~4 minutos. Uma queda de conexão de dez
+ * matava tudo que estivesse na fila naquela janela, e `FALHOU` é fim de linha:
+ * a viagem nunca mais seria lida e ninguém ficaria sabendo.
+ */
+describe("ressuscitarFalhasDeInfra", () => {
+  function montarRessurreicao(candidatas: { id: string; viagemId: string; erro: string }[]) {
+    const update = vi.fn().mockResolvedValue({});
+    const findMany = vi.fn().mockResolvedValue(candidatas);
+    const prisma = {
+      conferenciaTicket: { findMany, update },
+    } as unknown as PrismaService;
+    return { fila: new ConferenciaFilaService(prisma, config), update, findMany };
+  }
+
+  it("falha de conexão volta pra fila com o orçamento de tentativas cheio", async () => {
+    const m = montarRessurreicao([
+      { id: "c1", viagemId: "v1", erro: "leitura: Connection error." },
+    ]);
+
+    expect(await m.fila.ressuscitarFalhasDeInfra(20 * 60_000)).toBe(1);
+    const dados = m.update.mock.calls[0][0].data;
+    expect(dados.status).toBe("PENDENTE");
+    expect(dados.tentativas).toBe(0);
+    expect(dados.ressurreicoes).toEqual({ increment: 1 });
+    // Retoma o mutex: sem isto um lançamento editado no meio do caminho criaria
+    // um segundo job e a leitura sairia (e seria cobrada) duas vezes.
+    expect(dados.viagemAtiva).toBe("v1");
+  });
+
+  it("só busca o que ainda não voltou nenhuma vez — uma volta por job", async () => {
+    const m = montarRessurreicao([]);
+    await m.fila.ressuscitarFalhasDeInfra(20 * 60_000);
+    expect(m.findMany.mock.calls[0][0].where.ressurreicoes).toBe(0);
+    // E nunca o que já foi resolvido por outro caminho.
+    expect(m.findMany.mock.calls[0][0].where.viagem).toMatchObject({
+      conferenciasTicket: { none: { status: "CONCLUIDA" } },
+    });
+  });
+
+  it("defeito nosso fica parado e visível, não vira loop de retentativa", async () => {
+    const m = montarRessurreicao([
+      { id: "c1", viagemId: "v1", erro: "Cannot read properties of undefined" },
+    ]);
+    expect(await m.fila.ressuscitarFalhasDeInfra(20 * 60_000)).toBe(0);
+    expect(m.update).not.toHaveBeenCalled();
+  });
+
+  it("zero desliga", async () => {
+    const m = montarRessurreicao([{ id: "c1", viagemId: "v1", erro: "Connection error." }]);
+    expect(await m.fila.ressuscitarFalhasDeInfra(0)).toBe(0);
+    expect(m.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("ERRO_TRANSITORIO", () => {
+  it("reconhece o que o tempo resolve", () => {
+    for (const erro of [
+      "leitura: Connection error.",
+      "leitura: ECONNRESET",
+      "storage: socket hang up",
+      "passou de 120s",
+      "leitura: 529 overloaded_error",
+      "leitura: 429 rate_limit_error",
+    ]) {
+      expect(ERRO_TRANSITORIO.test(erro), erro).toBe(true);
+    }
+  });
+
+  it("não reconhece o que retentar não resolve", () => {
+    for (const erro of [
+      "o modelo respondeu fora do formato pedido",
+      "Cannot read properties of undefined (reading 'lido')",
+      "a foto não está mais no storage",
+    ]) {
+      expect(ERRO_TRANSITORIO.test(erro), erro).toBe(false);
+    }
   });
 });
 
