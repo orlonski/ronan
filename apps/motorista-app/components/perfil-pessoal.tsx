@@ -76,7 +76,16 @@ export function PerfilPessoal() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
+    <View className="flex-1 bg-background">
+      {/* Cabeçalho azul: a barra de status do iPhone é branca (ver _layout), e
+          topo claro apagaria hora, sinal e bateria. */}
+      <SafeAreaView edges={["top"]} className="bg-brand">
+        <View className="px-4 pb-4 pt-2">
+          <Text className="text-2xl font-extrabold tracking-tight text-white">Perfil</Text>
+          <Text className="text-sm font-medium text-white/80">Seus dados e documentos</Text>
+        </View>
+      </SafeAreaView>
+
       <ScrollView
         contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 32 }}
         keyboardShouldPersistTaps="handled"
@@ -84,7 +93,6 @@ export function PerfilPessoal() {
           <RefreshControl refreshing={carregando} onRefresh={() => void recarregar()} />
         }
       >
-        <Text className="mb-1 text-2xl font-extrabold tracking-tight text-foreground">Perfil</Text>
 
         <View className="gap-3 rounded-2xl border-2 border-border bg-card p-4">
           <View className="flex-row items-center gap-3">
@@ -184,6 +192,6 @@ export function PerfilPessoal() {
           <Text className="text-base font-semibold text-foreground">Sair</Text>
         </Button>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }

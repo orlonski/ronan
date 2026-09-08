@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { router } from "expo-router";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { ArrowLeft, Flag, MapPin, Navigation, Search } from "lucide-react-native";
@@ -16,7 +16,7 @@ import { anunciar, usePosicaoAoVivo, useGuiaNavegacao } from "@/lib/navegacao";
 import type { RotaNav } from "@/lib/queries";
 import {
   cancelarTracking,
-  iniciarTracking,
+  iniciarTrackingDetalhado,
   pararTracking,
   useViagemAndamento,
 } from "@/lib/tracking";
@@ -140,16 +140,32 @@ export default function FreteGuiadoScreen() {
 
   async function comecar() {
     if (!destino) return;
-    // O rastreamento é o odômetro: sem ele não há km medido, e o frete voltaria
-    // a ser digitado à mão. Se ele recusar a permissão, seguimos só com o guia.
-    const ok = await iniciarTracking({ precisaoAlta: true });
-    if (!ok) {
-      const seguir = await showConfirm({
-        title: "Sem a localização o app não mede o km",
-        message: "Dá pra seguir só com o guia na tela, e você informa o km no fim.",
-        confirmLabel: "Seguir assim",
+    // O rastreamento é o odômetro. `exigirSempre: false` porque no iPhone a
+    // primeira resposta é sempre "Durante o uso do app" — exigir o "Sempre"
+    // deixava ele sem medir km NENHUM, quando medir com o app aberto já resolve
+    // boa parte do frete.
+    const r = await iniciarTrackingDetalhado({ precisaoAlta: true, exigirSempre: false });
+
+    if (r === "sem-permissao-uso") {
+      // Negou de vez: o único caminho é os Ajustes do sistema. Antes a tela
+      // dizia "sem a localização o app não mede o km" e parava ali — sem dizer
+      // como resolver, que é a definição de beco sem saída.
+      const abrir = await showConfirm({
+        title: "O app precisa da sua localização",
+        message:
+          "É com ela que medimos o km do seu frete. Você negou a permissão — dá pra ligar nos Ajustes do iPhone, em Movatruck › Localização.",
+        confirmLabel: "Abrir os Ajustes",
       });
-      if (!seguir) return;
+      if (abrir) await Linking.openSettings().catch(() => {});
+      return;
+    }
+
+    if (r !== true) {
+      void showAlert({
+        title: "Vou medir com o app aberto",
+        message:
+          "Você permitiu a localização só durante o uso. O km conta enquanto o app estiver na tela; pra contar com o celular no bolso, ligue “Sempre” nos Ajustes.",
+      });
     }
     if (pos) {
       const r = await api

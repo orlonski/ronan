@@ -47,6 +47,7 @@ export function HomePessoal() {
   const [resumo, setResumo] = useState<ResumoMesPessoal | null>(null);
   const [convites, setConvites] = useState<ConviteEmpresa[]>([]);
   const [docsAlerta, setDocsAlerta] = useState<{ nome: string; vencido: boolean } | null>(null);
+  const [perfil, setPerfil] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
   const tracking = useViagemAndamento(true);
 
@@ -56,6 +57,7 @@ export function HomePessoal() {
       setViagens(await carregarViagens(mes));
       setResumo(await carregarResumo(mes));
       setConvites(await api.meusConvites().catch(() => []));
+      setPerfil((await api.meuPerfil().catch(() => null))?.nome ?? null);
       const docs = await api.meusDocumentos().catch(() => []);
       // Um alerta só, e o mais grave: vencido ganha de vencendo. Lista de
       // pendência na home vira ruído — o detalhe está na tela de documentos.
@@ -77,19 +79,31 @@ export function HomePessoal() {
   }, [mes, recarregar]);
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
+    <View className="flex-1 bg-background">
+      {/* Cabeçalho AZUL, como todas as outras telas do app.
+          Não é enfeite: a barra de status do iPhone é branca (`StatusBar
+          style="light"` no _layout), então uma tela com topo claro apaga a
+          hora, o sinal e a bateria — foi o "sumiram os ícones do iPhone". */}
+      <SafeAreaView edges={["top"]} className="bg-brand">
+        <View className="flex-row items-end justify-between px-4 pb-4 pt-2">
+          <View>
+            <Text className="text-2xl font-extrabold tracking-tight text-white">
+              Seu trabalho
+            </Text>
+            <Text className="text-sm font-medium text-white/80">
+              {perfil ? primeiroNome(perfil) : "Por conta própria"}
+            </Text>
+          </View>
+          <Badge variant="success">Autônomo</Badge>
+        </View>
+      </SafeAreaView>
+
       <ScrollView
         contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 32 }}
         refreshControl={
           <RefreshControl refreshing={carregando} onRefresh={() => void recarregar()} />
         }
       >
-        <View className="mb-1 flex-row items-center justify-between">
-          <Text className="text-2xl font-extrabold tracking-tight text-foreground">
-            Seu trabalho
-          </Text>
-          <Badge variant="success">Por conta própria</Badge>
-        </View>
 
         {/* Convite de empresa: era a tela inteira, virou banner. */}
         {convites.map((c) => (
@@ -257,8 +271,13 @@ export function HomePessoal() {
           </View>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
+}
+
+/** "Bom trabalho, João" é melhor que "Bom trabalho, João Carlos da Silva". */
+function primeiroNome(nome: string): string {
+  return nome.trim().split(/\s+/)[0] ?? nome;
 }
 
 /** Card quadrado da grade de ações — dois por linha, alcance de polegar. */

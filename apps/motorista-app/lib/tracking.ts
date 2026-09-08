@@ -58,7 +58,29 @@ type IniciarOpts = {
   velocidadeMaxKmh?: number;
 };
 
+/**
+ * Por que o rastreio não começou. Boolean sozinho não bastava: a tela precisa
+ * saber se ele NEGOU (aí o caminho é os Ajustes do sistema) ou se só recusou o
+ * "o tempo todo" (aí dá pra rodar com o app aberto).
+ */
+export type FalhaTracking = "sem-permissao-uso" | "sem-permissao-sempre";
+
 export async function iniciarTracking(opts: IniciarOpts = {}): Promise<boolean> {
+  return (await iniciarTrackingDetalhado(opts)) === true;
+}
+
+/**
+ * Igual, mas dizendo o que houve — e podendo seguir sem a permissão "o tempo
+ * todo" (`exigirSempre: false`).
+ *
+ * No iPhone a primeira resposta é sempre "Durante o uso do app": o "Sempre" só
+ * aparece depois, e muita gente toca em "Permitir uma vez". Tratar isso como
+ * falha e parar ali deixava o motorista sem medir km NENHUM, quando medir com o
+ * app aberto já resolve boa parte do frete.
+ */
+export async function iniciarTrackingDetalhado(
+  opts: IniciarOpts & { exigirSempre?: boolean } = {},
+): Promise<true | FalhaTracking> {
   // Garante que a task está registrada (idempotente)
   await registerTrackingTask();
   const Location = await import("expo-location");
@@ -67,18 +89,21 @@ export async function iniciarTracking(opts: IniciarOpts = {}): Promise<boolean> 
   const fg = await Location.getForegroundPermissionsAsync();
   if (fg.status !== "granted") {
     const r = await Location.requestForegroundPermissionsAsync();
-    if (r.status !== "granted") return false;
+    if (r.status !== "granted") return "sem-permissao-uso";
   }
 
   // 2) background — Android pede tela "Permitir o tempo todo".
   // Antes de mostrar o popup do sistema, explica POR QUÊ — Apple exige
   // pre-prompt explicativo, e melhora taxa de aceitação no Android também.
+  const exigirSempre = opts.exigirSempre !== false;
   const bg = await Location.getBackgroundPermissionsAsync();
   if (bg.status !== "granted") {
     const aceitou = await prePromptBackgroundLocation();
-    if (!aceitou) return false;
-    const r = await Location.requestBackgroundPermissionsAsync();
-    if (r.status !== "granted") return false;
+    if (!aceitou && exigirSempre) return "sem-permissao-sempre";
+    if (aceitou) {
+      const r = await Location.requestBackgroundPermissionsAsync();
+      if (r.status !== "granted" && exigirSempre) return "sem-permissao-sempre";
+    }
   }
 
   // 3) cria registro local da viagem em andamento (com config snapshot

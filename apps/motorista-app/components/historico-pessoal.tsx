@@ -103,31 +103,35 @@ export function HistoricoPessoal() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
-      <View className="border-b border-border px-4 pb-3 pt-2">
-        <Text className="mb-3 text-2xl font-extrabold tracking-tight text-foreground">
-          Histórico
-        </Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-1">
-          {meses.map((m) => (
-            <Pressable
-              key={m.chave}
-              onPress={() => setMes(m.chave)}
-              className={`mx-1 rounded-full px-4 py-2 ${
-                mes === m.chave ? "bg-primary" : "bg-secondary"
-              }`}
-            >
-              <Text
-                className={`text-sm font-bold ${
-                  mes === m.chave ? "text-primary-foreground" : "text-muted-foreground"
+    <View className="flex-1 bg-background">
+      {/* Cabeçalho azul: a barra de status do iPhone é branca (ver _layout), e
+          topo claro apagaria hora, sinal e bateria. */}
+      <SafeAreaView edges={["top"]} className="bg-brand">
+        <View className="px-4 pb-4 pt-2">
+          <Text className="mb-3 text-2xl font-extrabold tracking-tight text-white">
+            Histórico
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-1">
+            {meses.map((m) => (
+              <Pressable
+                key={m.chave}
+                onPress={() => setMes(m.chave)}
+                className={`mx-1 rounded-full px-4 py-2 ${
+                  mes === m.chave ? "bg-white" : "bg-white/15"
                 }`}
               >
-                {m.label}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      </View>
+                <Text
+                  className={`text-sm font-bold ${
+                    mes === m.chave ? "text-primary" : "text-white/80"
+                  }`}
+                >
+                  {m.label}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      </SafeAreaView>
 
       <ScrollView
         contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 32 }}
@@ -246,7 +250,7 @@ export function HistoricoPessoal() {
           </View>
         ))}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
