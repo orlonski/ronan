@@ -24,6 +24,9 @@ import {
   WifiOff,
 } from "lucide-react-native";
 import { fmtHoraBR } from "@/lib/datetime";
+import { HomePessoal } from "@/components/home-pessoal";
+import { semEmpresaSync } from "@/lib/sessoes";
+import { temIdentidadeSync } from "@/lib/identidade";
 import {
   ActivityIndicator,
   FlatList,

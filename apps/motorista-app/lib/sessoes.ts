@@ -351,3 +351,14 @@ export async function donoLegado(): Promise<string | null> {
 export async function limparDonoLegado(): Promise<void> {
   await AsyncStorage.removeItem(KEY_DONO_LEGADO).catch(() => {});
 }
+
+/**
+ * Ele tem cadastro (sessão da PESSOA) e não está em empresa nenhuma.
+ *
+ * Uma função só porque a resposta decide QUAL APP ele vê: a home do trabalho
+ * por conta própria ou a da transportadora. Espalhar essa condição faria as duas
+ * telas discordarem uma da outra em algum canto.
+ */
+export function semEmpresaSync(temIdentidade: boolean | null): boolean {
+  return temIdentidade === true && (estado?.lista.length ?? 0) === 0;
+}

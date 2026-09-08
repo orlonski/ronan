@@ -52,6 +52,17 @@ type Aba = "fretes" | "gastos";
  * Ver docs/motorista-sem-empresa.md.
  */
 export default function MeuCadernoScreen() {
+  return <Caderno />;
+}
+
+/**
+ * O caderno em si.
+ *
+ * `comoAba` tira o botão de voltar: quem não tem empresa vê isto como a aba
+ * Histórico (é o histórico DELE), e quem tem empresa chega aqui pelo card da
+ * home. Mesmo conteúdo, dois caminhos.
+ */
+export function Caderno({ comoAba = false }: { comoAba?: boolean }) {
   const [mes] = useState(mesAtual());
   const [aba, setAba] = useState<Aba>("fretes");
   const [itens, setItens] = useState<ItemPessoal[]>([]);
@@ -149,9 +160,11 @@ export default function MeuCadernoScreen() {
         >
           <View className="bg-brand px-6 pb-6 pt-14">
             <View className="flex-row items-center gap-3">
-              <Pressable onPress={() => router.back()} hitSlop={12}>
-                <ArrowLeft size={24} color="#fff" />
-              </Pressable>
+              {!comoAba && (
+                <Pressable onPress={() => router.back()} hitSlop={12}>
+                  <ArrowLeft size={24} color="#fff" />
+                </Pressable>
+              )}
               <View className="flex-1">
                 <Text className="text-2xl font-extrabold tracking-tight text-white">
                   Meu caderno

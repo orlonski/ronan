@@ -21,7 +21,7 @@ import { Public } from "./decorators/public.decorator";
 import { Roles } from "./decorators/roles.decorator";
 import { CurrentUser } from "./decorators/current-user.decorator";
 import { RolesGuard } from "./guards/roles.guard";
-import type { AuthMotorista } from "./types";
+import type { AuthIdentidade, AuthMotorista } from "./types";
 
 @ApiTags("auth")
 @Controller()
@@ -148,6 +148,23 @@ export class AuthController {
     @Body(new ZodValidationPipe(TrocarEmpresaInput)) body: TrocarEmpresaInput,
   ) {
     return this.auth.trocarEmpresa(user.id, body.motoristaId);
+  }
+
+  /**
+   * Troca de senha pela PESSOA — quem não está em empresa nenhuma não tem token
+   * de MOTORISTA, e sem isto ficaria sem como trocar a própria senha.
+   * A senha sempre foi da pessoa; só faltava a porta.
+   */
+  @ApiBearerAuth()
+  @UseGuards(RolesGuard)
+  @Roles("IDENTIDADE")
+  @Post("m/eu/trocar-senha")
+  async trocarSenhaPessoa(
+    @CurrentUser() user: AuthIdentidade,
+    @Body(new ZodValidationPipe(TrocarSenhaInput)) body: TrocarSenhaInput,
+  ) {
+    await this.auth.trocarSenhaIdentidade(user.id, body.senhaAtual, body.novaSenha);
+    return { ok: true };
   }
 
   @ApiBearerAuth()

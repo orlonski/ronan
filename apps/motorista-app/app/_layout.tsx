@@ -36,7 +36,6 @@ import {
   subscribeCadastroStatus,
 } from "@/lib/cadastro-status";
 import { EmAnalise } from "@/components/em-analise";
-import { SemEmpresa } from "@/components/sem-empresa";
 import {
   assinarIdentidade,
   carregarIdentidade,
@@ -456,23 +455,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   if (!loggedIn && !onAuthScreen) return <Redirect href="/login" />;
   if (loggedIn && onAuthScreen) return <Redirect href="/" />;
 
-  // Logado, mas em empresa nenhuma: cobre o app com a tela de convites. Vem
-  // ANTES do "em análise" porque sem vínculo não há aprovação pendente — o
-  // status guardado pode ser sobra de um cadastro anterior.
-  // O caderninho é dele e não depende de empresa nenhuma — é a única tela que
-  // escapa da cobertura, senão o botão "Meus gastos" não levaria a lugar algum.
-  // O caderno e a calculadora de frete são dele e não dependem de empresa
-  // nenhuma — são as telas que escapam da cobertura, senão os botões não
-  // levariam a lugar algum.
-  const emTelaPropria =
-    segments[0] === "meus-gastos" ||
-    segments[0] === "novo-frete" ||
-    segments[0] === "meus-documentos";
-  if (loggedIn && semEmpresa && !emTelaPropria) return <SemEmpresa />;
-
-  // Logado mas cadastro ainda em análise: cobre o app inteiro com a tela de
-  // espera (some sozinho quando o status vira APROVADO).
-  if (loggedIn && pendenteAprovacao) return <EmAnalise />;
+  // Cadastro em análise numa empresa: cobre o app com a tela de espera (some
+  // sozinho quando o status vira APROVADO).
+  //
+  // Só vale pra quem TEM vínculo. Quem não está em empresa nenhuma não tem
+  // aprovação pendente de ninguém — o app é dele, e a home dele é a do trabalho
+  // por conta própria.
+  if (loggedIn && !semEmpresa && pendenteAprovacao) return <EmAnalise />;
 
   // Roda pra mais de uma empresa: escolhe a do turno antes de ver qualquer tela.
   // Uma vez por abertura do app (o marcador vive em memória).

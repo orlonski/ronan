@@ -352,6 +352,21 @@ export class AuthService {
     return tokens;
   }
 
+  /** Idem, a partir da PESSOA — mesma regra, outra porta. */
+  async trocarSenhaIdentidade(identidadeId: string, senhaAtual: string, novaSenha: string) {
+    const identidade = await comoSistema(() =>
+      this.prisma.motoristaIdentidade.findUniqueOrThrow({ where: { id: identidadeId } }),
+    );
+    if (!(await this.conferirSenha(identidade, senhaAtual))) {
+      throw new UnauthorizedException("Senha atual incorreta");
+    }
+    await AuthService.propagarSenha(
+      this.prisma,
+      identidade.cpf,
+      await AuthService.hashPassword(novaSenha),
+    );
+  }
+
   async trocarSenhaMotorista(motoristaId: string, senhaAtual: string, novaSenha: string) {
     const motorista = await this.prisma.motorista.findUniqueOrThrow({ where: { id: motoristaId } });
     const identidade = await this.identidades.garantirPorCpf(motorista.cpf);

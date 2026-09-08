@@ -34,6 +34,9 @@ import { sessaoAtivaSync, sessoesSync } from "@/lib/sessoes";
 import { clearCadastroStatus } from "@/lib/cadastro-status";
 import { setAuthState } from "@/lib/auth-state";
 import { useMe, useSalvarPreferenciasNotificacao } from "@/lib/queries";
+import { PerfilPessoal } from "@/components/perfil-pessoal";
+import { semEmpresaSync } from "@/lib/sessoes";
+import { temIdentidadeSync } from "@/lib/identidade";
 import { replayHomeTutorial } from "@/lib/home-tutorial";
 import {
   obterEEnviarPushToken,
@@ -43,6 +46,13 @@ import {
 } from "@/lib/notifications";
 
 export default function Perfil() {
+  // Sem empresa, o perfil é o DELE: dados, placas, documentos e senha. O perfil
+  // da empresa mostra o que ELA liberou — não faz sentido pra quem não tem uma.
+  if (semEmpresaSync(temIdentidadeSync())) return <PerfilPessoal />;
+  return <PerfilDaEmpresa />;
+}
+
+function PerfilDaEmpresa() {
   const me = useMe();
   const salvarPrefs = useSalvarPreferenciasNotificacao();
   const [showChange, setShowChange] = useState(false);

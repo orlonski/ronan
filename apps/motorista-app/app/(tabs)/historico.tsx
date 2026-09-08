@@ -1,4 +1,7 @@
 import { useMemo, useState } from "react";
+import { Caderno } from "@/app/meus-gastos";
+import { semEmpresaSync } from "@/lib/sessoes";
+import { temIdentidadeSync } from "@/lib/identidade";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
@@ -82,6 +85,13 @@ const FILTROS: { key: "TODAS" | GrupoStatus; label: string }[] = [
 ];
 
 export default function HistoricoScreen() {
+  // Sem empresa, o histórico DELE é o caderno: os fretes que rodou e o que
+  // gastou. Mesmo componente da tela cheia, sem o botão de voltar.
+  if (semEmpresaSync(temIdentidadeSync())) return <Caderno comoAba />;
+  return <HistoricoDaEmpresa />;
+}
+
+function HistoricoDaEmpresa() {
   const meses = useMemo(() => ultimosMeses(6), []);
   const [mesSelecionado, setMesSelecionado] = useState(meses[0].chave);
   const [aba, setAba] = useState<Aba>("viagens");

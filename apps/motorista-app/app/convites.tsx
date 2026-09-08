@@ -11,19 +11,19 @@ import { setAuthState } from "@/lib/auth-state";
 import { clearCadastroStatus, setCadastroStatus } from "@/lib/cadastro-status";
 import { marcarEmpresaEscolhida, guardarSessao } from "@/lib/sessoes";
 import { showAlert, showConfirm } from "@/lib/alert";
-import { MovatruckLogo } from "./movatruck-logo";
+import { MovatruckLogo } from "@/components/movatruck-logo";
 
 /**
- * Cobre o app inteiro quando ele tem cadastro mas não está em empresa nenhuma.
+ * Os convites de empresa que chegaram pra ele.
  *
- * Não é uma tela de erro: é o estado normal de quem acabou de se cadastrar. O
- * app é dele antes de ser de qualquer transportadora — o que falta é uma
- * empresa dizer "vem rodar comigo", e é isso que aparece aqui quando chega.
+ * Já foi a tela que cobria o app inteiro de quem não tinha vínculo — e era ela
+ * que fazia o app parecer uma sala de espera. Hoje o app é dele desde o primeiro
+ * dia, e o convite é um banner na home que leva até aqui.
  *
- * A entrada é sempre por convite: ele não procura empresa nem digita código.
- * Ver docs/identidade-motorista.md.
+ * A entrada numa empresa é sempre por convite: ele não procura empresa nem
+ * digita código. Ver docs/identidade-motorista.md.
  */
-export function SemEmpresa() {
+export default function ConvitesScreen() {
   const queryClient = useQueryClient();
   const [aceitando, setAceitando] = useState<string | null>(null);
 

@@ -12,6 +12,7 @@ import type {
   CriarViagemPessoalInput,
   EstimarFreteInput,
   EstimativaFrete,
+  NavegarPessoalInput,
   LancamentoPessoal,
   ResumoMesPessoal,
   ViagemPessoal,
@@ -20,6 +21,9 @@ import type {
   StatusMotorista,
 } from "@ronan/shared-types";
 import { API_URL } from "./api-url";
+// Só o TIPO da rota do guia — `import type` some no runtime, então não cria
+// ciclo com `queries.ts`, que importa este módulo.
+import type { RotaNav } from "./queries";
 import { clearTokens, loadTokens, saveTokens, type Tokens } from "./auth";
 import { motoristaAtivoId, salvarTokensDe, tokensDe } from "./sessoes";
 import { esquecerIdentidade, salvarIdentidade, tokensIdentidade } from "./identidade";
@@ -583,6 +587,12 @@ export const api = {
   },
   // ---- A pessoa (vale com ou sem empresa) ----
   meuPerfil: () => request<MeuPerfil>("GET", "/m/eu", { comoIdentidade: true }),
+  /** Troca de senha pela PESSOA — quem não tem empresa não tem a outra porta. */
+  trocarSenhaPessoa: (senhaAtual: string, novaSenha: string) =>
+    request<{ ok: true }>("POST", "/m/eu/trocar-senha", {
+      body: { senhaAtual, novaSenha },
+      comoIdentidade: true,
+    }),
   meusConvites: () =>
     request<ConviteEmpresa[]>("GET", "/m/eu/convites", { comoIdentidade: true }),
   aceitarConvite: (motoristaId: string) =>
@@ -603,6 +613,12 @@ export const api = {
     request<ViagemPessoal>("POST", "/m/eu/viagens", { body, comoIdentidade: true }),
   apagarViagemPessoal: (id: string) =>
     request<{ ok: true }>("DELETE", `/m/eu/viagens/${id}`, { comoIdentidade: true }),
+  /** Navegação guiada até um ponto — o mesmo Valhalla da viagem da empresa. */
+  navegarPessoal: (body: NavegarPessoalInput) =>
+    request<RotaNav | { erro: string }>("POST", "/m/eu/frete/navegar", {
+      body,
+      comoIdentidade: true,
+    }),
   /** "Vale a pena esse frete?" — km, praças na rota e diesel pelo consumo dele. */
   estimarFrete: (body: EstimarFreteInput) =>
     request<EstimativaFrete>("POST", "/m/eu/frete/estimar", { body, comoIdentidade: true }),

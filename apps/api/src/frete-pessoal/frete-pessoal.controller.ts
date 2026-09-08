@@ -19,6 +19,7 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import {
   CriarComprovantePessoalInput,
   EstimarFreteInput,
+  NavegarPessoalInput,
   SalvarDocumentoPessoalInput,
 } from "@ronan/shared-types";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
@@ -29,6 +30,7 @@ import type { AuthIdentidade } from "../auth/types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { FretePessoalService } from "./frete-pessoal.service";
 import { DocumentosPessoaisService } from "./documentos-pessoais.service";
+import { NavegacaoService } from "../roteamento/navegacao.service";
 
 /** 8 MB: foto de documento tirada pelo celular cabe com folga. */
 const TAMANHO_MAX = 8 * 1024 * 1024;
@@ -48,6 +50,7 @@ export class FretePessoalController {
   constructor(
     private readonly service: FretePessoalService,
     private readonly documentos: DocumentosPessoaisService,
+    private readonly navegacao: NavegacaoService,
   ) {}
 
   @HttpCode(200)
@@ -60,6 +63,27 @@ export class FretePessoalController {
       user.id,
       { lat: body.origemLat, lng: body.origemLng },
       { lat: body.destinoLat, lng: body.destinoLng },
+    );
+  }
+
+  /**
+   * Navegação guiada até um ponto — o "tipo Waze" pro frete dele.
+   *
+   * O caminho da empresa (`m/rotas/navegar`) recebe id de `Local`; aqui o
+   * destino é coordenada, que é o que o geocoding devolve. O serviço por baixo
+   * é o MESMO (`NavegacaoService.navegar` sempre foi por coordenada — o wrapper
+   * por `Local` é que era o atalho).
+   */
+  @HttpCode(200)
+  @Post("navegar")
+  navegar(
+    @Body(new ZodValidationPipe(NavegarPessoalInput)) body: NavegarPessoalInput,
+  ) {
+    return this.navegacao.navegar(
+      body.origemLat,
+      body.origemLng,
+      body.destinoLat,
+      body.destinoLng,
     );
   }
 

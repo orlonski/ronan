@@ -171,6 +171,15 @@ export const EstimarFreteInput = z.object({
 });
 export type EstimarFreteInput = z.infer<typeof EstimarFreteInput>;
 
+/** Navegação guiada até um ponto — origem é a posição AO VIVO dele. */
+export const NavegarPessoalInput = z.object({
+  origemLat: z.number().min(-90).max(90),
+  origemLng: z.number().min(-180).max(180),
+  destinoLat: z.number().min(-90).max(90),
+  destinoLng: z.number().min(-180).max(180),
+});
+export type NavegarPessoalInput = z.infer<typeof NavegarPessoalInput>;
+
 export type PracaNaRota = {
   id: string;
   nome: string;

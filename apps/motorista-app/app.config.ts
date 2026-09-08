@@ -98,10 +98,13 @@ const config: ExpoConfig = {
     [
       "expo-location",
       {
+        // O texto é o que o revisor da Apple lê primeiro, e é o que separa
+        // "app mede o km DELE" de "empresa rastreia funcionário" — que foi o
+        // motivo da recusa por 2.5.4. Quem inicia é ele, quem para é ele.
         locationAlwaysAndWhenInUsePermission:
-          "Para registrar o trajeto da viagem em segundo plano (KM real percorrido).",
+          "Para medir o KM do seu frete enquanto você dirige, mesmo com a tela bloqueada. Você inicia e para quando quiser.",
         locationWhenInUsePermission:
-          "Para registrar onde a viagem foi lançada.",
+          "Para marcar no mapa onde seu frete começou e terminou.",
         isAndroidBackgroundLocationEnabled: true,
         isIosBackgroundLocationEnabled: true,
       },
