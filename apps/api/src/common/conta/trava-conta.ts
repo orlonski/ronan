@@ -40,6 +40,11 @@ const MODELS_GLOBAIS = new Set<string>([
   "ViagemPessoal",
   "LancamentoPessoal",
   "ComprovantePessoal",
+  // A carteira dela: CNH, toxicológico, RNTRC. Documento de pessoa é da pessoa —
+  // ela leva de uma transportadora pra outra. Estava faltando aqui e só não
+  // quebrou porque todo acesso passa por `comoSistema`: a tabela nem tem coluna
+  // `contaId`, então uma consulta dentro de `comConta` derrubaria no Prisma.
+  "DocumentoPessoal",
   "Permissao", // catálogo de chaves do RBAC, semeado no boot
   "PedagioRodovia", // praças de pedágio vindas do OSM (dado público)
   "GeocodingCache", // endereço → coordenada
