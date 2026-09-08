@@ -184,7 +184,7 @@ export default function FreteGuiadoScreen() {
           ? `${km.toLocaleString("pt-BR")} km medidos pelo GPS. Complete o que recebeu no seu caderno.`
           : "Complete o km e o valor no seu caderno.",
       });
-      router.replace("/meus-gastos");
+      router.replace("/");
     } catch (e) {
       void showAlert({ title: "Não deu pra registrar", message: (e as Error).message });
     } finally {

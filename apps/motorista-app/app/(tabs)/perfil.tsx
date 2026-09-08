@@ -35,8 +35,7 @@ import { clearCadastroStatus } from "@/lib/cadastro-status";
 import { setAuthState } from "@/lib/auth-state";
 import { useMe, useSalvarPreferenciasNotificacao } from "@/lib/queries";
 import { PerfilPessoal } from "@/components/perfil-pessoal";
-import { semEmpresaSync } from "@/lib/sessoes";
-import { temIdentidadeSync } from "@/lib/identidade";
+import { useSemEmpresa } from "@/lib/visao";
 import { replayHomeTutorial } from "@/lib/home-tutorial";
 import {
   obterEEnviarPushToken,
@@ -48,7 +47,7 @@ import {
 export default function Perfil() {
   // Sem empresa, o perfil é o DELE: dados, placas, documentos e senha. O perfil
   // da empresa mostra o que ELA liberou — não faz sentido pra quem não tem uma.
-  if (semEmpresaSync(temIdentidadeSync())) return <PerfilPessoal />;
+  if (useSemEmpresa()) return <PerfilPessoal />;
   return <PerfilDaEmpresa />;
 }
 

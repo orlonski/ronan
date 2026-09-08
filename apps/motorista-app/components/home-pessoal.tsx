@@ -11,6 +11,7 @@ import {
   FileText,
   Fuel,
   Play,
+  Receipt,
   Route,
 } from "lucide-react-native";
 import { ROTULO_DOCUMENTO_PESSOAL, type ResumoMesPessoal } from "@ronan/shared-types";
@@ -112,27 +113,6 @@ export function HomePessoal() {
           </Pressable>
         ))}
 
-        {/* Frete em andamento — mesmo banner da viagem da empresa. */}
-        {tracking.data && (
-          <Pressable
-            onPress={() => router.push("/frete-guiado")}
-            className="flex-row items-center gap-3 rounded-2xl border-2 border-primary bg-primary/15 p-4 active:opacity-75"
-          >
-            <View className="h-12 w-12 items-center justify-center rounded-full bg-primary">
-              <Activity size={22} color="white" />
-            </View>
-            <View className="flex-1">
-              <Text className="text-base font-bold text-foreground">Frete em andamento</Text>
-              <Text
-                className="text-sm text-muted-foreground"
-                style={{ fontVariant: ["tabular-nums"] }}
-              >
-                {tracking.resumo?.kmReal.toFixed(1) ?? "0,0"} km · toque pra ver
-              </Text>
-            </View>
-          </Pressable>
-        )}
-
         {docsAlerta && (
           <Pressable
             onPress={() => router.push("/meus-documentos")}
@@ -160,74 +140,69 @@ export function HomePessoal() {
           </Pressable>
         )}
 
-        {/* Herói: o frete guiado. Mesmo peso visual do "Iniciar viagem" de quem
-            tem empresa — é a ação principal do dia dele também. */}
-        {!tracking.data && (
-          <Pressable
-            onPress={() => router.push("/frete-guiado")}
-            className="overflow-hidden rounded-2xl bg-primary active:opacity-85"
-          >
-            <View className="flex-row items-center gap-4 p-5">
-              <View className="h-16 w-16 items-center justify-center rounded-2xl bg-white/20">
+        {/* O HERÓI NUNCA SOME.
+            Antes ele era escondido quando havia frete rodando, e a tela ficava
+            sem a ação principal — quem abrisse o app com um frete aberto não
+            achava mais o botão. Agora o mesmo lugar diz "continuar". */}
+        <Pressable
+          onPress={() => router.push("/frete-guiado")}
+          className="overflow-hidden rounded-2xl bg-primary active:opacity-85"
+        >
+          <View className="flex-row items-center gap-4 p-5">
+            <View className="h-16 w-16 items-center justify-center rounded-2xl bg-white/20">
+              {tracking.data ? (
+                <Activity size={32} color="white" strokeWidth={2.5} />
+              ) : (
                 <Route size={32} color="white" strokeWidth={2.5} />
-              </View>
-              <View className="flex-1">
-                <Text className="text-2xl font-extrabold text-primary-foreground">
-                  Iniciar frete
-                </Text>
-                <Text className="mt-0.5 text-base font-medium text-primary-foreground/85">
-                  O app te guia e mede seu km
-                </Text>
-              </View>
-              <Play size={26} color="white" strokeWidth={2.5} fill="white" />
+              )}
             </View>
-          </Pressable>
-        )}
-
-        <Pressable
-          onPress={() => router.push("/novo-frete")}
-          className="flex-row items-center gap-4 rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
-        >
-          <View className="h-14 w-14 items-center justify-center rounded-2xl bg-secondary">
-            <Calculator size={26} color="#13316b" strokeWidth={2.5} />
-          </View>
-          <View className="flex-1">
-            <Text className="text-lg font-bold text-foreground">Vale a pena?</Text>
-            <Text className="text-sm text-muted-foreground">
-              Km, pedágio e diesel antes de aceitar
-            </Text>
-          </View>
-        </Pressable>
-
-        <Pressable
-          onPress={() => router.push("/meus-gastos")}
-          className="flex-row items-center gap-4 rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
-        >
-          <View className="h-14 w-14 items-center justify-center rounded-2xl bg-secondary">
-            <Fuel size={26} color="#13316b" strokeWidth={2.5} />
-          </View>
-          <View className="flex-1">
-            <Text className="text-lg font-bold text-foreground">Abastecimento e gastos</Text>
-            <Text className="text-sm text-muted-foreground">
-              Diesel, pedágio, refeição — e o que sobrou
-            </Text>
+            <View className="flex-1">
+              <Text className="text-2xl font-extrabold text-primary-foreground">
+                {tracking.data ? "Frete em andamento" : "Iniciar frete"}
+              </Text>
+              <Text
+                className="mt-0.5 text-base font-medium text-primary-foreground/85"
+                style={tracking.data ? { fontVariant: ["tabular-nums"] } : undefined}
+              >
+                {tracking.data
+                  ? `${tracking.resumo?.kmReal.toFixed(1) ?? "0,0"} km rodados · toque pra ver`
+                  : "O app te guia e mede seu km"}
+              </Text>
+            </View>
+            <Play size={26} color="white" strokeWidth={2.5} fill="white" />
           </View>
         </Pressable>
 
-        <Pressable
-          onPress={() => router.push("/meus-documentos")}
-          className="flex-row items-center gap-4 rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
-        >
-          <View className="h-14 w-14 items-center justify-center rounded-2xl bg-secondary">
-            <FileText size={26} color="#13316b" strokeWidth={2.5} />
-          </View>
-          <View className="flex-1">
-            <Text className="text-lg font-bold text-foreground">Meus documentos</Text>
-            <Text className="text-sm text-muted-foreground">
-              CNH, toxicológico, RNTRC, CRLV — em dia
-            </Text>
-          </View>
-        </Pressable>
+        {/* Ações em grade: cabem na tela sem rolar, e o polegar alcança as
+            quatro. Lista vertical de cards empurrava o resumo do mês pra fora. */}
+        <View className="flex-row gap-3">
+          <AcaoRapida
+            icone={<Calculator size={26} color="#13316b" strokeWidth={2.5} />}
+            titulo="Vale a pena?"
+            legenda="Antes de aceitar"
+            onPress={() => router.push("/novo-frete")}
+          />
+          <AcaoRapida
+            icone={<Fuel size={26} color="#13316b" strokeWidth={2.5} />}
+            titulo="Abastecer"
+            legenda="Diesel e litros"
+            onPress={() => router.push("/meus-gastos?tipo=ABASTECIMENTO")}
+          />
+        </View>
+        <View className="flex-row gap-3">
+          <AcaoRapida
+            icone={<Receipt size={26} color="#13316b" strokeWidth={2.5} />}
+            titulo="Lançar gasto"
+            legenda="Pedágio, comida"
+            onPress={() => router.push("/meus-gastos?tipo=PEDAGIO")}
+          />
+          <AcaoRapida
+            icone={<FileText size={26} color="#13316b" strokeWidth={2.5} />}
+            titulo="Documentos"
+            legenda="CNH, RNTRC"
+            onPress={() => router.push("/meus-documentos")}
+          />
+        </View>
 
         {/* Resumo do mês — mesmo lugar e mesmo formato do resumo de quem tem
             empresa, com os números dele. */}
@@ -249,7 +224,9 @@ export function HomePessoal() {
           </View>
         )}
 
-        {viagens.slice(0, 5).map((v) => (
+        {/* Os três últimos, e só. A lista inteira é a aba Histórico — repetir
+            aqui faria a home crescer sem fim e competir com ela. */}
+        {viagens.slice(0, 3).map((v) => (
           <View key={v.clientId} className="rounded-2xl border-2 border-border bg-card p-4">
             <View className="flex-row items-center gap-2">
               <Text className="font-bold text-foreground">{v.origem}</Text>
@@ -274,13 +251,41 @@ export function HomePessoal() {
               Comece pelo primeiro frete
             </Text>
             <Text className="mt-1 text-center text-sm text-muted-foreground">
-              Toque em Iniciar frete e o app te guia até o destino contando o km. No fim, ele
-              entra no seu caderno.
+              Toque em Iniciar frete: o app te guia até o destino contando o km, e no fim ele
+              entra no seu histórico.
             </Text>
           </View>
         )}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+/** Card quadrado da grade de ações — dois por linha, alcance de polegar. */
+function AcaoRapida({
+  icone,
+  titulo,
+  legenda,
+  onPress,
+}: {
+  icone: React.ReactNode;
+  titulo: string;
+  legenda: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      className="flex-1 gap-2 rounded-2xl border-2 border-border bg-card p-4 active:opacity-75"
+    >
+      <View className="h-12 w-12 items-center justify-center rounded-2xl bg-secondary">
+        {icone}
+      </View>
+      <View>
+        <Text className="text-base font-bold text-foreground">{titulo}</Text>
+        <Text className="text-xs text-muted-foreground">{legenda}</Text>
+      </View>
+    </Pressable>
   );
 }
 

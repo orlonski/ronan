@@ -25,8 +25,7 @@ import {
 } from "lucide-react-native";
 import { fmtHoraBR } from "@/lib/datetime";
 import { HomePessoal } from "@/components/home-pessoal";
-import { semEmpresaSync } from "@/lib/sessoes";
-import { temIdentidadeSync } from "@/lib/identidade";
+import { useSemEmpresa } from "@/lib/visao";
 import {
   ActivityIndicator,
   FlatList,
@@ -95,6 +94,14 @@ const statusLabel: Record<string, string> = {
 };
 
 export default function Home() {
+  // Sem empresa, a home é a DELE: frete guiado, "vale a pena?", gastos e
+  // documentos. A da empresa não faz sentido pra quem não tem uma — ela fica
+  // vazia, porque tudo ali depende do `/m/me` que ele não alcança.
+  if (useSemEmpresa()) return <HomePessoal />;
+  return <HomeDaEmpresa />;
+}
+
+function HomeDaEmpresa() {
   const me = useMe();
   const viagens = useViagens();
   const resumo = useResumoMes();
