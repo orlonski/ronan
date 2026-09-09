@@ -125,6 +125,15 @@ export class AdminRoteamentoWhatsappController {
   }
 
   /**
+   * Tira o `override_callback_uri` da WABA e devolve a entrega pra URL do app.
+   * Use quando uma ferramenta externa apontar o webhook pra ela mesma.
+   */
+  @Post("restaurar-webhook")
+  restaurarWebhook(@Query("wabaId") wabaId: string) {
+    return this.service.restaurarWebhook(wabaId);
+  }
+
+  /**
    * Registra o número na Cloud API. É a chamada que o botão do console
    * embrulha — aqui o erro da Meta volta por escrito em vez de sumir.
    *

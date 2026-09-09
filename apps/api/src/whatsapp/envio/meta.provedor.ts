@@ -226,6 +226,25 @@ export class MetaProvedor implements ProvedorWhatsappClient {
   }
 
   /**
+   * Devolve a entrega dos webhooks pra URL do APP, largando qualquer
+   * `override_callback_uri` que a WABA carregue.
+   *
+   * Existe porque uma ferramenta de atendimento, ao conectar o número, escreve
+   * um override apontando pra si — e sem alarde: a inscrição continua lá, a URL
+   * do app segue configurada e passando no teste do console, mas evento nenhum
+   * chega. Um override que não vinga não cai de volta pro app; simplesmente
+   * ninguém recebe.
+   *
+   * DELETE + POST porque a Meta não tem "apagar só o override": o POST sem
+   * parâmetro não limpa o que já está lá.
+   */
+  async restaurarWebhookDoApp(wabaId: string): Promise<Record<string, unknown>> {
+    const removido = await this.chamar(`/${wabaId}/subscribed_apps`, "DELETE");
+    const inscrito = await this.chamar(`/${wabaId}/subscribed_apps`, "POST");
+    return { removido, inscrito };
+  }
+
+  /**
    * Os templates que a Meta REALMENTE tem, com nome e idioma exatos.
    *
    * Existe porque a tela da Meta mostrou "Portuguese (BR) · Ativo" enquanto o
@@ -248,7 +267,7 @@ export class MetaProvedor implements ProvedorWhatsappClient {
    */
   private async chamar(
     caminho: string,
-    metodo: "GET" | "POST",
+    metodo: "GET" | "POST" | "DELETE",
     corpo?: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
     if (!this.configurado()) {

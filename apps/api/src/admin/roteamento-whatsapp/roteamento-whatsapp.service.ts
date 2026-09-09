@@ -235,6 +235,10 @@ export class AdminRoteamentoWhatsappService {
     return this.meta.inscreverApp(wabaId);
   }
 
+  restaurarWebhook(wabaId: string) {
+    return this.meta.restaurarWebhookDoApp(wabaId);
+  }
+
   /**
    * Registra o número na Cloud API.
    *
