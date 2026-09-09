@@ -81,7 +81,15 @@ export class GeminiProvider implements AgentProvider {
           config: {
             systemInstruction: systemText,
             tools: [{ functionDeclarations }],
-            maxOutputTokens: 1500,
+            // No 2.5 o "pensamento" sai do MESMO orçamento da resposta. Com
+            // 1500 no total, o modelo pensava sobre o resultado da tool,
+            // estourava, e devolvia zero token de texto — o que virava
+            // "Não consegui formular uma resposta" logo depois de a consulta
+            // ter dado certo. Teto folgado pra saída e rédea curta no
+            // pensamento: aqui ninguém precisa filosofar, precisa contar o que
+            // achou no banco.
+            maxOutputTokens: 8192,
+            thinkingConfig: { thinkingBudget: 512 },
           },
         }),
       );
@@ -91,6 +99,7 @@ export class GeminiProvider implements AgentProvider {
         `[loop ${i}] candidates=${resp.candidates?.length ?? 0} ` +
           `tokens_in=${usage?.promptTokenCount ?? 0} ` +
           `tokens_out=${usage?.candidatesTokenCount ?? 0} ` +
+          `pensamento=${usage?.thoughtsTokenCount ?? 0} ` +
           `cached=${usage?.cachedContentTokenCount ?? 0}`,
       );
 

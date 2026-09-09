@@ -147,9 +147,13 @@ export class ChatwootAgenteService {
       } else {
         await this.chatwoot.passarParaHumano(contaChatwoot, conversaId);
       }
-    });
 
-    await this.sessao.marcarMensagemRecebida(identidade.sessaoId);
+      // Dentro do `comConta`: `WhatsappSessao` é dado de negócio e a trava
+      // recusa a escrita fora do contexto. Estava aqui fora, e explodia depois
+      // de responder — o motorista recebia a mensagem e o log guardava um erro
+      // que parecia falha de envio.
+      await this.sessao.marcarMensagemRecebida(identidade.sessaoId);
+    });
   }
 
   /**
