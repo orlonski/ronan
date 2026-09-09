@@ -41,19 +41,26 @@ Pra regerar depois de trocar alguma tela, da raiz do repositório:
 python3 apps/site/scripts/gerar-telas.py
 ```
 
-O script faz uma coisa que não é óbvia: as capturas do app saíram num viewport
-curto (1170x1992 = **0,587**), muito mais larga que a proporção real de um
-iPhone (**0,462**). Dentro de uma moldura de celular isso vira um "celular
-gordo". Como o topo é azul sólido e a base é branca sólida em todas elas, o
-script estende a imagem com a própria cor da borda — sem inventar conteúdo — e
-devolve a silhueta certa. O acréscimo vai quase todo no topo, porque as telas
-com barra de navegação inferior precisam dela colada na base. Se uma captura
-nova não tiver borda de cor sólida, o script para e avisa em vez de gerar uma
-emenda visível.
+As capturas do app saíram num viewport curto — `1170x1992`, proporção **0,587**,
+contra os **0,462** de um iPhone real. Dentro de uma moldura de celular isso lê
+como aparelho achatado.
 
-Ao trocar a proporção das telas de celular, atualizar também `width`/`height`
-do componente `Celular` em `src/componentes/ui.tsx` — eles precisam bater com o
-arquivo, senão volta o layout shift.
+O jeito errado de corrigir (já tentado e descartado) é empilhar azul no topo: o
+header incha e fica diferente do app de verdade. O certo é **esticar o miolo** —
+o que faltou na captura foi área de conteúdo, não cabeçalho. O script acha as
+faixas de cor sólida (os vãos entre cards e campos) e distribui a altura que
+falta entre elas, proporcionalmente ao tamanho de cada vão. Header e barra de
+navegação inferior ficam do tamanho real, e a relação entre eles e a tela vira a
+mesma que o motorista vê no aparelho. Nas pontas entra só o indispensável:
+150px de barra de status e 100px de indicador de home.
+
+Duas travas no script: faixas na cor do header são ignoradas (esticar ali
+engordaria o cabeçalho), e se o topo ou a base de uma captura nova não for de
+cor sólida ele para e avisa, em vez de gerar uma emenda visível.
+
+Ao mudar a proporção das telas de celular, atualizar também `width`/`height` do
+componente `Celular` em `src/componentes/ui.tsx` — precisam bater com o arquivo,
+senão volta o layout shift.
 
 `public/og.png` (1200×630) é gerado por script — ver o histórico do commit que
 criou o site.
