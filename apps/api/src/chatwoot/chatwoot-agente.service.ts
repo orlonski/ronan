@@ -1,0 +1,158 @@
+import { Injectable, Logger } from "@nestjs/common";
+import { PrismaService } from "../prisma/prisma.service";
+import { comConta, comoSistema } from "../common/conta/conta-context";
+import { AgenteService } from "../whatsapp/agente/agente.service";
+import { SessaoService } from "../whatsapp/sessao.service";
+import { ChatwootClientService } from "./chatwoot-client.service";
+
+/**
+ * O agente que atende dentro do Chatwoot.
+ *
+ * **Quem escreve decide o que o agente pode fazer.** Telefone que bate com um
+ * motorista aprovado ganha o agente com ferramentas do sistema; qualquer outro
+ * número cai direto na fila humana, sem ferramenta nenhuma. A fronteira é de
+ * segurança, não de organização: um agente único com todas as ferramentas
+ * responderia "sua viagem de ontem foi pra Ponta Grossa" pra quem digitasse um
+ * número por sorte.
+ *
+ * Nada aqui manda mensagem pelo `EnvioWhatsappService`: quem fala com o
+ * WhatsApp é o Chatwoot, dono do canal. Responder pelos dois caminhos entregaria
+ * a mesma frase duas vezes ao motorista, e uma delas fora da conversa.
+ */
+
+/** Resposta pra número que o sistema não conhece. Curta e sem promessa. */
+const TEXTO_DESCONHECIDO =
+  "Oi! Aqui é a Movatruck. Recebi sua mensagem e já chamei alguém da equipe pra te responder.";
+
+type EventoChatwoot = {
+  event?: string;
+  message_type?: string;
+  content?: string;
+  conversation?: { id?: number; status?: string };
+  account?: { id?: number };
+  sender?: { phone_number?: string; identifier?: string; name?: string };
+  inbox?: { id?: number; name?: string };
+};
+
+@Injectable()
+export class ChatwootAgenteService {
+  private readonly log = new Logger("ChatwootAgente");
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly sessao: SessaoService,
+    private readonly agente: AgenteService,
+    private readonly chatwoot: ChatwootClientService,
+  ) {}
+
+  /**
+   * Nunca lança: quem chama já respondeu 200 pro Chatwoot. Erro aqui vira log,
+   * não vira reenvio — o Chatwoot repete o webhook que falha, e repetir
+   * significa o motorista recebendo a mesma resposta de novo.
+   */
+  async processar(evento: EventoChatwoot): Promise<void> {
+    try {
+      await this.tratar(evento);
+    } catch (e) {
+      this.log.error(`falha ao processar evento: ${(e as Error).message}`);
+    }
+  }
+
+  private async tratar(evento: EventoChatwoot): Promise<void> {
+    // Só mensagem que ENTROU. `outgoing` é o que nós mesmos acabamos de
+    // mandar — tratar isso seria o robô conversando consigo mesmo em loop.
+    if (evento.event !== "message_created" || evento.message_type !== "incoming") return;
+
+    const texto = (evento.content ?? "").trim();
+    const conversaId = evento.conversation?.id;
+    const contaChatwoot = evento.account?.id;
+    const telefone = evento.sender?.phone_number ?? evento.sender?.identifier ?? "";
+
+    if (!conversaId || !contaChatwoot) {
+      this.log.warn("evento sem conversa ou conta — ignorado");
+      return;
+    }
+
+    // Áudio e foto ainda não passam por aqui. Fingir que entendeu seria pior
+    // que entregar pra uma pessoa que entende.
+    if (!texto) {
+      await this.chatwoot.passarParaHumano(contaChatwoot, conversaId);
+      return;
+    }
+
+    const identidade = telefone
+      ? await this.sessao.resolverPorTelefone(telefone)
+      : ({ tipo: "DESCONHECIDO", sessaoId: null, contaId: null } as const);
+
+    if (identidade.tipo === "DESCONHECIDO") {
+      this.log.log(`número não reconhecido — conversa ${conversaId} vai pra fila humana`);
+      await this.chatwoot.responder(contaChatwoot, conversaId, TEXTO_DESCONHECIDO);
+      await this.chatwoot.passarParaHumano(contaChatwoot, conversaId);
+      return;
+    }
+
+    // O `resolverPorTelefone` confere `ativo`, não `status`. Aqui é endpoint
+    // sem guard nenhum, então a aprovação se confere na mão — cadastro em
+    // análise não conversa com o agente.
+    if (identidade.tipo === "MOTORISTA" && !(await this.aprovado(identidade.motoristaId))) {
+      this.log.log(`motorista ${identidade.motoristaId} não aprovado — fila humana`);
+      await this.chatwoot.passarParaHumano(contaChatwoot, conversaId);
+      return;
+    }
+
+    // Daqui pra baixo tudo roda dentro da conta do motorista. O `await` mora
+    // DENTRO do `comConta` de propósito: promise do Prisma é preguiçosa, e
+    // resolver fora do contexto faria a query sair sem a trava de conta.
+    await comConta(identidade.contaId, async () => {
+      await this.gravar(identidade.sessaoId, telefone, "ENTRADA", texto);
+
+      const resposta = await this.agente.processar(identidade, texto, {
+        telefoneRemetente: telefone,
+      });
+
+      if (!resposta.trim()) {
+        // Agente sem resposta é agente que não soube. Silêncio no WhatsApp é
+        // pior que demora: a pessoa fica olhando pro nada.
+        this.log.log(`agente não respondeu — conversa ${conversaId} vai pra fila humana`);
+        await this.chatwoot.passarParaHumano(contaChatwoot, conversaId);
+        return;
+      }
+
+      const enviado = await this.chatwoot.responder(contaChatwoot, conversaId, resposta);
+      if (enviado) {
+        await this.gravar(identidade.sessaoId, telefone, "SAIDA", resposta);
+      } else {
+        await this.chatwoot.passarParaHumano(contaChatwoot, conversaId);
+      }
+    });
+
+    await this.sessao.marcarMensagemRecebida(identidade.sessaoId);
+  }
+
+  /**
+   * Grava no mesmo histórico que o agente lê depois. Sem isto o agente
+   * responderia cada mensagem como se fosse a primeira da conversa — o
+   * `AgenteService` monta o contexto a partir de `whatsapp_mensagens`, não do
+   * que o Chatwoot guarda.
+   */
+  private async gravar(
+    sessaoId: string,
+    telefone: string,
+    direcao: "ENTRADA" | "SAIDA",
+    conteudo: string,
+  ): Promise<void> {
+    await this.prisma.whatsappMensagem.create({
+      data: { sessaoId, telefone, direcao, conteudo, tipo: "TEXTO", provedor: "meta" },
+    });
+  }
+
+  private async aprovado(motoristaId: string): Promise<boolean> {
+    const m = await comoSistema(() =>
+      this.prisma.motorista.findUnique({
+        where: { id: motoristaId },
+        select: { status: true },
+      }),
+    );
+    return m?.status === "APROVADO";
+  }
+}

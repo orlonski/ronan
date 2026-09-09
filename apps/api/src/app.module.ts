@@ -20,6 +20,7 @@ import { ErrorsModule } from "./errors/errors.module";
 import { ErrorsExceptionFilter } from "./errors/errors.filter";
 import { EventosModule } from "./eventos/eventos.module";
 import { WhatsappModule } from "./whatsapp/whatsapp.module";
+import { ChatwootModule } from "./chatwoot/chatwoot.module";
 import { NotificacoesModule } from "./notificacoes/notificacoes.module";
 import { ClickupRunnerModule } from "./clickup-runner/clickup-runner.module";
 import { ConferenciaWorkerModule } from "./conferencia-ticket/conferencia-worker.module";
@@ -49,6 +50,7 @@ import { PrismaExceptionFilter } from "./common/prisma-exception.filter";
     ErrorsModule,
     EventosModule,
     WhatsappModule,
+    ChatwootModule,
     NotificacoesModule,
     ClickupRunnerModule,
     ConferenciaWorkerModule,

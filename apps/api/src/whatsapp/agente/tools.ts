@@ -298,6 +298,69 @@ const TOOLS_MOTORISTA: AgentToolDefinition[] = [
   },
 ];
 
+/**
+ * Leitura das viagens do próprio motorista.
+ *
+ * Só lê, e só o que é dele: os três caminhos passam pelo
+ * `ViagensMotoristaService` com o `motoristaId` da identidade, que é onde a
+ * checagem de dono já mora (`detalhe` recusa viagem de outro com 403). Não
+ * existe aqui nenhum parâmetro que aceite "id do motorista" — se existisse,
+ * bastaria o modelo alucinar um id pra vazar viagem alheia.
+ */
+const TOOLS_MOTORISTA_VIAGENS: AgentToolDefinition[] = [
+  {
+    name: "minhas_viagens",
+    description:
+      "Lista as viagens do motorista, da mais recente pra mais antiga. Use quando ele perguntar " +
+      "'quais viagens eu fiz', 'como está a viagem de ontem', 'tem alguma pendência'. " +
+      "Devolve status, data, material, carga, descarga, km e toneladas.",
+    input_schema: {
+      type: "object",
+      properties: {
+        mes: {
+          type: "string",
+          description: "Mês no formato AAAA-MM. Sem isso, traz as mais recentes de qualquer mês.",
+        },
+        grupo_status: {
+          type: "string",
+          enum: ["AGUARDANDO", "CONFERIDA", "DIVERGENTE"],
+          description:
+            "Filtra por situação. DIVERGENTE é o que precisa de ação do motorista.",
+        },
+        limite: {
+          type: "integer",
+          description: "Quantas trazer (default 5, máx 20). Prefira poucas: a resposta vai no WhatsApp.",
+        },
+      },
+    },
+  },
+  {
+    name: "detalhe_viagem",
+    description:
+      "Detalhe completo de UMA viagem, incluindo pendências e divergências. Use depois de " +
+      "`minhas_viagens`, com o id que veio de lá, quando o motorista quiser saber de uma viagem específica.",
+    input_schema: {
+      type: "object",
+      properties: {
+        viagem_id: { type: "string", description: "UUID da viagem, como veio em `minhas_viagens`." },
+      },
+      required: ["viagem_id"],
+    },
+  },
+  {
+    name: "resumo_do_mes",
+    description:
+      "Totais do mês do motorista: quantas viagens, toneladas, km e pedágios. Use pra " +
+      "'quanto eu rodei esse mês', 'quantas viagens eu fiz em agosto'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        mes: { type: "string", description: "Mês AAAA-MM. Sem isso, o mês corrente." },
+      },
+    },
+  },
+];
+
 const TOOLS_ADMIN: AgentToolDefinition[] = [
   {
     name: "dashboard_snapshot",
@@ -327,7 +390,7 @@ const TOOLS_ADMIN: AgentToolDefinition[] = [
 
 export function construirTools(perfil: "MOTORISTA" | "ADMIN"): AgentToolDefinition[] {
   return perfil === "MOTORISTA"
-    ? [...TOOLS_COMUNS, ...TOOLS_MOTORISTA]
+    ? [...TOOLS_COMUNS, ...TOOLS_MOTORISTA, ...TOOLS_MOTORISTA_VIAGENS]
     : [...TOOLS_COMUNS, ...TOOLS_ADMIN];
 }
 
@@ -368,6 +431,37 @@ async function executarToolInterno(
     case "perfil_motorista": {
       if (ctx.identidade.tipo !== "MOTORISTA") throw new Error("tool não disponível pra esse perfil");
       return ctx.motorista.perfilParaAgente(ctx.identidade.motoristaId);
+    }
+
+    case "minhas_viagens": {
+      if (ctx.identidade.tipo !== "MOTORISTA") throw new Error("tool não disponível pra esse perfil");
+      // Teto de 20 porque a resposta vai pro WhatsApp: lista longa vira parede
+      // de texto que o motorista lê dirigindo, ou não lê.
+      const limite = Math.min(Math.max(Number(input.limite ?? 5), 1), 20);
+      const { itens } = await ctx.viagens.list(ctx.identidade.motoristaId, {
+        limit: limite,
+        ...(input.mes ? { mes: String(input.mes) } : {}),
+        ...(input.grupo_status
+          ? { grupoStatus: input.grupo_status as "AGUARDANDO" | "CONFERIDA" | "DIVERGENTE" }
+          : {}),
+      });
+      return { total: itens.length, viagens: itens };
+    }
+
+    case "detalhe_viagem": {
+      if (ctx.identidade.tipo !== "MOTORISTA") throw new Error("tool não disponível pra esse perfil");
+      // `detalhe` recusa viagem de outro motorista — a checagem de dono não se
+      // repete aqui, mora lá, num lugar só.
+      return ctx.viagens.detalhe(ctx.identidade.motoristaId, String(input.viagem_id));
+    }
+
+    case "resumo_do_mes": {
+      if (ctx.identidade.tipo !== "MOTORISTA") throw new Error("tool não disponível pra esse perfil");
+      // Mês default é o de São Paulo, não o do container (que roda em UTC):
+      // no dia 1º de madrugada os dois discordam.
+      const [ano, mesNum] = ymdSaoPaulo(new Date());
+      const mes = input.mes ? String(input.mes) : `${ano}-${String(mesNum).padStart(2, "0")}`;
+      return ctx.viagens.resumoMes(ctx.identidade.motoristaId, mes);
     }
 
     case "buscar_catalogo": {

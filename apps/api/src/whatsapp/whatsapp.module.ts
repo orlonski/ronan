@@ -22,6 +22,6 @@ import { WhatsappService } from "./whatsapp.service";
     AgenteService,
     ChatwootRepasseService,
   ],
-  exports: [WhatsappService, SessaoService, ConviteService, EvolutionModule],
+  exports: [WhatsappService, SessaoService, ConviteService, AgenteService, EvolutionModule],
 })
 export class WhatsappModule {}
