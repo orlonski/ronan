@@ -164,21 +164,17 @@ Pode subir, cair e reiniciar sem afetar nada.
 - Build Method: **Dockerfile**
 - Dockerfile Path: `apps/site/Dockerfile`
 - Build Context: `.` (raiz — o build precisa do `pnpm-lock.yaml`)
-- Build Args (tudo é embutido em build-time, **não** existe env de runtime):
 
-```
-VITE_SITE_URL=https://www.SEU-DOMINIO.com.br
-VITE_APP_URL=https://app.SEU-DOMINIO.com.br
-VITE_PWA_URL=https://motorista.SEU-DOMINIO.com.br
-VITE_WHATSAPP=5541999999999      # DDI+DDD+número, só dígitos — vira o link wa.me
-VITE_EMAIL=contato@SEU-DOMINIO.com.br
-VITE_PLAY_URL=https://play.google.com/store/apps/details?id=br.com.schaba.motorista
-VITE_APPSTORE_URL=              # vazio esconde o botão da App Store
-```
-
-> Trocar qualquer um desses valores exige **rebuild**, não basta reiniciar.
-> Deixar `VITE_APPSTORE_URL` vazio é proposital enquanto a publicação na Apple
-> não sai: o botão some do site em vez de linkar pra lugar nenhum.
+> **Os valores públicos do site não se configuram pelo painel.** Número de
+> WhatsApp, domínios e links das lojas moram em `apps/site/src/lib/config.ts` e
+> entram no bundle em build-time. Esta versão do Easypanel **não tem campo de
+> build arg**, e as "Variáveis de Ambiente" dele são de *runtime* — um container
+> nginx servindo HTML estático simplesmente não as enxerga. Já perdi um deploy
+> trocando o número no painel e achando que tinha funcionado: o build sai do
+> cache, o painel diz "implantado" e o bundle continua com o valor velho.
+>
+> Trocar qualquer um desses valores = editar `config.ts`, commitar e implantar.
+> Nada ali é segredo — tudo aparece na página pra quem abrir o site.
 
 ### Domínio
 
