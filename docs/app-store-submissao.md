@@ -1,5 +1,23 @@
 # Submissão pública na App Store
 
+> **Antes de tudo: o app hoje é UNLISTED, e isso pode não ser reversível.**
+>
+> A doc da Apple diz que, depois de aprovado, o método de distribuição não muda —
+> *"the only exception to this is to change your publicly available app to an
+> unlisted app"*. Ou seja: público → unlisted sim, o contrário não está previsto,
+> e o relato comum é que a saída seria um **app record novo, com outro bundle
+> ID**. O nosso (Apple ID 6778807216) virou unlisted em 03/07/2026.
+>
+> Pedido aberto no Developer Support em **09/09/2026, case 102957914709**,
+> perguntando (a) se dá pra reverter este mesmo app record e (b) se não, que
+> confirmem que o caminho é app record novo. **Enquanto não responderem, nada
+> aqui embaixo pode ser submetido** — mas tudo pode ser preparado.
+>
+> Se a resposta for "app novo": bundle iOS novo (o Android fica onde está, a Play
+> não troca bundle), credenciais/perfil novos, APNs+Firebase iOS novo, o unlisted
+> vira legado e cada motorista de iPhone baixa o app novo à mão. Os dados são do
+> servidor — o risco é lançamento offline preso no aparelho antigo.
+
 O app já foi recusado uma vez, por dois motivos:
 
 - **2.5.4** — localização em segundo plano sem justificativa que se sustentasse.
@@ -50,22 +68,32 @@ fica no aparelho e o que sobe é o km do frete que ele registrou.
 
 ## O que ainda falta antes de submeter
 
-- [ ] **Build nativo novo.** OTA não muda o binário que a Apple revisa. Nada
-      acima chega ao revisor sem um build.
-- [ ] **Conta de demonstração SEM vínculo com empresa.** É obrigatório e é o
-      ponto mais fácil de errar: o código de cadastro sai **só por WhatsApp**
-      (`OTP_CADASTRO`), e um revisor em Cupertino não tem CPF nem WhatsApp
-      brasileiro — ele **não consegue criar conta sozinho**. A conta de demo tem
-      que existir pronta, com CPF e senha nas review notes.
+- [x] **Build nativo novo.** OTA não muda o binário que a Apple revisa: nada do
+      app do autônomo chega ao revisor sem build. `app.config.ts` já está em
+      **1.2.0 / iOS build 15 / Android versionCode 17**; falta rodar o
+      `eas build --profile production`.
+- [x] **Conta de demonstração SEM vínculo com empresa.** É o ponto mais fácil de
+      errar: o código de cadastro sai só por WhatsApp (`OTP_CADASTRO`), e um
+      revisor em Cupertino não tem CPF nem WhatsApp brasileiro — ele não
+      consegue criar conta sozinho. E ela precisa ser de um motorista **sem
+      transportadora**: entregar um vinculado reacende o 3.2 e liga de volta a
+      captura periódica de posição.
 
-      E ela precisa ser de um motorista **sem transportadora**: entregar a conta
-      de um motorista vinculado reacende o 3.2 e liga de volta a captura
-      periódica, que é exatamente o que estamos dizendo que não existe.
+      Criar com `cd apps/api && pnpm demo:apple -- --senha "..."` (em produção,
+      dentro do container: `node dist/scripts/criar-demo-apple.js --senha "..."`).
+      O script recusa CPF que já tenha vínculo, e grava `ultimoLoginEm` pra que
+      uma empresa que cadastre aquele CPF gere convite pendente em vez de adotar
+      a conta do revisor.
+- [ ] **Rodar o script em produção** e colar CPF/senha nas review notes.
 - [ ] **Screenshots** do fluxo do autônomo (a home "Seu trabalho", o frete
       guiado, "Vale a pena?", a carteira de documentos), não do painel nem do
       fluxo de empresa.
-- [ ] **Descrição da loja** escrita pro motorista autônomo. Se o texto falar em
-      "gestão de frota" ou "controle de motoristas", o 3.2 volta sozinho.
+- [x] **Descrição da loja** escrita pro motorista autônomo — junto com
+      subtítulo, keywords, novidades e as review notes em inglês, em
+      `docs/app-store-ficha.md`. Se o texto falar em "gestão de frota" ou
+      "controle de motoristas", o 3.2 volta sozinho.
+- [ ] **Revisar o App Privacy**: a declaração é de 06/2026, de quando todo mundo
+      tinha empresa. No fluxo do autônomo o trajeto não sai do aparelho.
 
 ## O caminho que o revisor faz
 

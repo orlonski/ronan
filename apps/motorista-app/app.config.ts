@@ -15,7 +15,12 @@ const config: ExpoConfig = {
   // binário), e o piso da força-atualização compara com o que o aparelho DIZ.
   // Por isso ela só sobe junto com o build que vai pras lojas — nunca antes,
   // senão a frota inteira se declara 1.1.0 rodando 1.0.5 nativa.
-  version: "1.1.0",
+  //
+  // 1.2.0 é o build do motorista que não tem empresa: cadastro sem código,
+  // home "Seu trabalho", frete guiado, "Vale a pena?", gastos, documentos,
+  // apagar a conta pelo app e o link da política de privacidade. Tudo isso é
+  // JS, mas nada disso chega à Apple por OTA — o que ela revisa é o binário.
+  version: "1.2.0",
   orientation: "portrait",
   platforms: ["ios", "android"],
   icon: "./assets/icon.png",
@@ -31,7 +36,7 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: false,
     bundleIdentifier: "br.com.schaba.motorista",
-    buildNumber: "14",
+    buildNumber: "15",
     // Google Maps SDK for iOS — usa o MESMO motor do Android (que desenha a
     // polilinha perfeitamente), no lugar do Apple Maps (que é furado com linha).
     // Chave via EAS Secret GOOGLE_MAPS_IOS_KEY (precisa "Maps SDK for iOS"
@@ -54,7 +59,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: "br.com.schaba.motorista",
-    versionCode: 16,
+    versionCode: 17,
     // FCM v1 (push notifications): exige google-services.json do projeto Firebase
     // vinculado a este package. EAS Secret GOOGLE_SERVICES_JSON aponta pro arquivo
     // subido via `eas secret:create`; em dev local cai pro arquivo na raiz do app.
