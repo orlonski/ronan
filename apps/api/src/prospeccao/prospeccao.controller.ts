@@ -87,6 +87,16 @@ export class ProspeccaoController {
   }
 
   /**
+   * Dispara a carga do RNTRC. Demora minutos (o arquivo tem ~159 MB), então
+   * responde só quando termina — não é rota pra chamar de tela sem aviso.
+   */
+  @RequerPermissao("prospeccao.importar")
+  @Post("importar-rntrc")
+  async importarRntrc(@Body() body: { ufs?: string[]; urlDireta?: string }) {
+    return this.rntrc.importar({ ufs: body?.ufs, urlDireta: body?.urlDireta });
+  }
+
+  /**
    * Busca telefone e e-mail dos leads sem contato, do melhor pro pior.
    *
    * Vai devagar de propósito (~1 consulta por segundo): a fonte é um serviço
