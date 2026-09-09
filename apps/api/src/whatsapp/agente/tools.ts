@@ -278,7 +278,9 @@ const TOOLS_MOTORISTA: AgentToolDefinition[] = [
   {
     name: "consultar_minhas_viagens",
     description:
-      "Lista as viagens lançadas pelo motorista. Padrão: hoje. Use quando ele perguntar 'o que rodei?', 'minhas viagens'.",
+      "Lista as viagens lançadas pelo motorista, com status e pendências. Padrão: hoje. " +
+      "Use pra 'o que rodei?', 'minhas viagens', 'a viagem de ontem', 'a viagem do dia 03'. " +
+      "Devolve o `id` de cada viagem, que é o que `detalhe_viagem` pede.",
     input_schema: {
       type: "object",
       properties: {
@@ -286,6 +288,12 @@ const TOOLS_MOTORISTA: AgentToolDefinition[] = [
           type: "string",
           enum: ["hoje", "ontem", "semana", "mes"],
           description: "Janela temporal (default: hoje)",
+        },
+        mes: {
+          type: "string",
+          description:
+            "Mês fechado, formato AAAA-MM (ex: 2026-09). Quando vier, manda em `desde`. " +
+            "Use pra data específica de outro mês, ou quando ele disser o mês pelo nome.",
         },
       },
     },
@@ -299,50 +307,25 @@ const TOOLS_MOTORISTA: AgentToolDefinition[] = [
 ];
 
 /**
- * Leitura das viagens do próprio motorista.
+ * O que faltava pra leitura: detalhe de uma viagem e total do mês. A lista em
+ * si é a `consultar_minhas_viagens`, que já existia — duas ferramentas quase
+ * iguais só fazem o modelo escolher errado.
  *
- * Só lê, e só o que é dele: os três caminhos passam pelo
- * `ViagensMotoristaService` com o `motoristaId` da identidade, que é onde a
- * checagem de dono já mora (`detalhe` recusa viagem de outro com 403). Não
- * existe aqui nenhum parâmetro que aceite "id do motorista" — se existisse,
- * bastaria o modelo alucinar um id pra vazar viagem alheia.
+ * Só leem, e só o que é do dono: passam pelo `ViagensMotoristaService` com o
+ * `motoristaId` da identidade, que é onde a checagem já mora (`detalhe` recusa
+ * viagem de outro com 403). Nenhuma aceita "id do motorista" como parâmetro —
+ * se aceitasse, bastaria o modelo alucinar um id pra ler viagem alheia.
  */
 const TOOLS_MOTORISTA_VIAGENS: AgentToolDefinition[] = [
-  {
-    name: "minhas_viagens",
-    description:
-      "Lista as viagens do motorista, da mais recente pra mais antiga. Use quando ele perguntar " +
-      "'quais viagens eu fiz', 'como está a viagem de ontem', 'tem alguma pendência'. " +
-      "Devolve status, data, material, carga, descarga, km e toneladas.",
-    input_schema: {
-      type: "object",
-      properties: {
-        mes: {
-          type: "string",
-          description: "Mês no formato AAAA-MM. Sem isso, traz as mais recentes de qualquer mês.",
-        },
-        grupo_status: {
-          type: "string",
-          enum: ["AGUARDANDO", "CONFERIDA", "DIVERGENTE"],
-          description:
-            "Filtra por situação. DIVERGENTE é o que precisa de ação do motorista.",
-        },
-        limite: {
-          type: "integer",
-          description: "Quantas trazer (default 5, máx 20). Prefira poucas: a resposta vai no WhatsApp.",
-        },
-      },
-    },
-  },
   {
     name: "detalhe_viagem",
     description:
       "Detalhe completo de UMA viagem, incluindo pendências e divergências. Use depois de " +
-      "`minhas_viagens`, com o id que veio de lá, quando o motorista quiser saber de uma viagem específica.",
+      "`consultar_minhas_viagens`, com o `id` que veio de lá, quando ele quiser saber de uma viagem específica.",
     input_schema: {
       type: "object",
       properties: {
-        viagem_id: { type: "string", description: "UUID da viagem, como veio em `minhas_viagens`." },
+        viagem_id: { type: "string", description: "UUID da viagem, como veio em `consultar_minhas_viagens`." },
       },
       required: ["viagem_id"],
     },
@@ -431,21 +414,6 @@ async function executarToolInterno(
     case "perfil_motorista": {
       if (ctx.identidade.tipo !== "MOTORISTA") throw new Error("tool não disponível pra esse perfil");
       return ctx.motorista.perfilParaAgente(ctx.identidade.motoristaId);
-    }
-
-    case "minhas_viagens": {
-      if (ctx.identidade.tipo !== "MOTORISTA") throw new Error("tool não disponível pra esse perfil");
-      // Teto de 20 porque a resposta vai pro WhatsApp: lista longa vira parede
-      // de texto que o motorista lê dirigindo, ou não lê.
-      const limite = Math.min(Math.max(Number(input.limite ?? 5), 1), 20);
-      const { itens } = await ctx.viagens.list(ctx.identidade.motoristaId, {
-        limit: limite,
-        ...(input.mes ? { mes: String(input.mes) } : {}),
-        ...(input.grupo_status
-          ? { grupoStatus: input.grupo_status as "AGUARDANDO" | "CONFERIDA" | "DIVERGENTE" }
-          : {}),
-      });
-      return { total: itens.length, viagens: itens };
     }
 
     case "detalhe_viagem": {
@@ -699,13 +667,21 @@ async function executarToolInterno(
     case "consultar_minhas_viagens": {
       if (ctx.identidade.tipo !== "MOTORISTA") throw new Error("tool não disponível pra esse perfil");
       const desde = (input.desde as string) ?? "hoje";
-      const inicio = inicioJanela(desde);
+      // Mês fechado ganha do `desde`: quem pergunta por "03/09" quer aquele
+      // mês inteiro, não os últimos N dias contados de hoje.
+      const mesPedido = typeof input.mes === "string" && /^\d{4}-\d{2}$/.test(input.mes)
+        ? input.mes
+        : null;
+      const [anoM, mesM] = mesPedido ? mesPedido.split("-").map(Number) : [0, 0];
+      const periodo = mesPedido
+        ? { gte: new Date(Date.UTC(anoM, mesM - 1, 1)), lt: new Date(Date.UTC(anoM, mesM, 1)) }
+        : { gte: inicioJanela(desde) };
       const lista = await ctx.prisma.viagem.findMany({
         where: {
           motoristaId: ctx.identidade.motoristaId,
           // Não reporta viagem incompleta (em andamento ou aguardando peso/ticket).
           status: { notIn: STATUS_FORA_FECHAMENTO },
-          data: { gte: inicio },
+          data: periodo,
         },
         select: {
           id: true,
@@ -724,12 +700,15 @@ async function executarToolInterno(
         take: 20,
       });
       return {
-        janela: desde,
+        janela: mesPedido ?? desde,
         total: lista.length,
         toneladasTotal: lista
           .reduce((s, v) => s + Number(v.toneladas), 0)
           .toFixed(2),
         viagens: lista.map((v) => ({
+          // O id vai junto porque é o que `detalhe_viagem` pede; sem ele o
+          // modelo mandaria o ticket, que não é chave de busca.
+          id: v.id,
           ticket: v.ticket,
           data: v.data,
           toneladas: Number(v.toneladas),
