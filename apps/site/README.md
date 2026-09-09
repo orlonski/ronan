@@ -34,20 +34,26 @@ IntersectionObserver, desligado em `prefers-reduced-motion`. Sem lib de animaç�
 
 ### Screenshots
 
-Vieram de `proposta-alex/imagens/` (seed de vitrine, sem dado de cliente real) e
-foram convertidos pra webp. Pra regerar depois de trocar alguma tela:
+Vieram de `proposta-alex/imagens/` (seed de vitrine, sem dado de cliente real).
+Pra regerar depois de trocar alguma tela, da raiz do repositório:
 
 ```bash
-python3 - <<'PY'
-from PIL import Image
-import os, glob
-for p in sorted(glob.glob("proposta-alex/imagens/*.png")):
-    im = Image.open(p).convert("RGB"); w, h = im.size
-    alvo = 760 if h > w else 1600
-    if w > alvo: im = im.resize((alvo, round(h * alvo / w)), Image.LANCZOS)
-    im.save(f"apps/site/public/telas/{os.path.basename(p)[:-4]}.webp", "WEBP", quality=84, method=6)
-PY
+python3 apps/site/scripts/gerar-telas.py
 ```
+
+O script faz uma coisa que não é óbvia: as capturas do app saíram num viewport
+curto (1170x1992 = **0,587**), muito mais larga que a proporção real de um
+iPhone (**0,462**). Dentro de uma moldura de celular isso vira um "celular
+gordo". Como o topo é azul sólido e a base é branca sólida em todas elas, o
+script estende a imagem com a própria cor da borda — sem inventar conteúdo — e
+devolve a silhueta certa. O acréscimo vai quase todo no topo, porque as telas
+com barra de navegação inferior precisam dela colada na base. Se uma captura
+nova não tiver borda de cor sólida, o script para e avisa em vez de gerar uma
+emenda visível.
+
+Ao trocar a proporção das telas de celular, atualizar também `width`/`height`
+do componente `Celular` em `src/componentes/ui.tsx` — eles precisam bater com o
+arquivo, senão volta o layout shift.
 
 `public/og.png` (1200×630) é gerado por script — ver o histórico do commit que
 criou o site.

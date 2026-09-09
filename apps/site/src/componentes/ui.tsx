@@ -115,7 +115,7 @@ export function Celular({
         src={src}
         alt={alt}
         width={760}
-        height={1294}
+        height={1645}
         loading={prioridade ? "eager" : "lazy"}
         decoding={prioridade ? "sync" : "async"}
         className="block w-full rounded-[1.6rem]"
