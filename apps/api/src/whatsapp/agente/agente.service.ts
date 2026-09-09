@@ -127,7 +127,18 @@ export class AgenteService {
     // Ordem cronológica + anota gaps >= 30min como marcador inline na próxima
     // mensagem do motorista, pra IA reconhecer retomadas e não assumir
     // continuação de uma conversa que ficou no limbo.
-    const ordenado = historicoRaw.reverse().filter((m) => m.conteudo);
+    // Fora do histórico: SAIDA que falhou no envio. A linha é gravada mesmo
+    // quando o envio morre — de propósito, pra auditoria — e o agente lia isso
+    // como "já respondi", parava de consultar e repetia a resposta anterior
+    // palavra por palavra. O motorista nunca viu essa mensagem.
+    const ordenado = historicoRaw
+      .reverse()
+      .filter((m) => m.conteudo)
+      .filter(
+        (m) =>
+          m.direcao !== "SAIDA" ||
+          !(m.metadata && typeof m.metadata === "object" && "erro" in m.metadata),
+      );
     const historico: AgentMessage[] = [];
     let anterior: (typeof ordenado)[number] | null = null;
     for (const m of ordenado) {
@@ -164,9 +175,12 @@ export class AgenteService {
       historico,
       mensagemAtual,
       modelo,
-      executarTool: (nome, input) => {
-        if (nome === "oferecer_opcoes") oferecerChamado = true;
-        return executarTool(nome, input, {
+      executarTool: async (nome, input) => {
+        // A flag é marcada DEPOIS de a tool voltar sem erro. Marcada antes,
+        // uma falha de envio (503 do WhatsApp, por exemplo) fazia o turno
+        // inteiro devolver "" logo abaixo: o motorista não recebia os botões
+        // nem o texto de recuperação que o modelo escreveu. Ficava sem nada.
+        const saida = await executarTool(nome, input, {
           identidade,
           prisma: this.prisma,
           motorista: this.motorista,
@@ -178,6 +192,8 @@ export class AgenteService {
           envio: this.envio,
           metadata,
         });
+        if (nome === "oferecer_opcoes") oferecerChamado = true;
+        return saida;
       },
     });
 

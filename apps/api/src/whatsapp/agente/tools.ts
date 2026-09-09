@@ -584,6 +584,12 @@ async function executarToolInterno(
       if (dryRun) {
         return {
           ok: true,
+          // `criada` é o único campo que separa simulação de criação, e é dito
+          // pelo positivo nos dois casos. Antes a diferença era a PRESENÇA da
+          // chave `dry_run` — o sinal mais forte do payload (`ok: true`) era
+          // idêntico, e anunciar "viagem lançada" sem ter lançado é o pior erro
+          // que este agente pode cometer.
+          criada: false,
           dry_run: true,
           viagem: {
             ...resolucao.nomesCanonicos,
@@ -623,6 +629,9 @@ async function executarToolInterno(
         ctx.motorista.limparPendenciasSessao(ctx.identidade.sessaoId);
         return {
           ok: true,
+          criada: true,
+          dry_run: false,
+          instrucao: "Viagem GRAVADA. Agora sim pode confirmar pro motorista.",
           ticket: v?.ticket,
           viagem: {
             ...resolucao.nomesCanonicos,
@@ -635,7 +644,11 @@ async function executarToolInterno(
         const err = e instanceof Error ? e : new Error(String(e));
         return {
           ok: false,
+          criada: false,
           erro: err.message,
+          instrucao:
+            "A viagem NÃO foi gravada. Diga isso ao motorista em uma frase seca e " +
+            "ofereça tentar de novo. Nunca dê a viagem como lançada.",
         };
       }
     }

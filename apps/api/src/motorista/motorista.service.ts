@@ -318,7 +318,9 @@ export class MotoristaService {
     return {
       motorista: {
         nome: m.nome,
-        cpf: m.cpf,
+        // CPF não entra: este perfil vai inteiro pro prompt do agente, a cada
+        // conversa, e não existe resposta que precise do CPF do motorista.
+        // Dado pessoal que não serve pra nada não deveria sair do banco.
         veiculoDefault: m.veiculoDefault
           ? { placa: m.veiculoDefault.placa, modelo: m.veiculoDefault.modelo }
           : null,
