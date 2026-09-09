@@ -619,6 +619,15 @@ export default function FreteGuiadoScreen() {
   return (
     <View className="flex-1 bg-background">
       <MapaViagem
+        // REMONTA o mapa quando a rota aparece/muda. O Google Maps no iOS não
+        // desenha polilinha adicionada DEPOIS que o mapa montou; remontando, a
+        // linha nasce junto com o mapa e aparece. (Também cobre o recálculo.)
+        //
+        // Aqui isso é obrigatório, não detalhe: o mapa SEMPRE monta antes da
+        // rota existir — ela só é traçada quando o GPS dá a primeira posição.
+        // Sem esta chave, a linha nunca chegava a ser desenhada. É a mesma
+        // armadilha já paga em app/viagem-andamento.tsx.
+        key={rota?.shape ?? "sem-rota"}
         trilha={tracking.data?.pontos ?? []}
         shape={rota?.shape ?? undefined}
         destino={destino ? { lat: destino.lat, lng: destino.lng } : undefined}
