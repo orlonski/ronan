@@ -50,6 +50,10 @@ const MODELS_GLOBAIS = new Set<string>([
   "GeocodingCache", // endereço → coordenada
   "RotaCache", // chaveado por par de Local, que já é da conta
   "ExecucaoAgente", // fila interna da plataforma
+  // Captação: quem pediu contato pelo site ou quem a prospecção achou. Ainda
+  // não é cliente de ninguém — quando vira, vira uma Conta.
+  "Lead",
+  "EventoSite", // contagem anônima de navegação do site institucional
 ]);
 
 /** Erro de trava. Vira 500 de propósito: é bug de código, não do usuário. */

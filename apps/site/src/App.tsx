@@ -12,9 +12,11 @@ import { Faq } from "./componentes/faq";
 import { CtaFinal } from "./componentes/cta-final";
 import { Rodape } from "./componentes/rodape";
 import { useRevelar } from "./lib/revelar";
+import { useAnalytics } from "./lib/usar-analytics";
 
 export default function App() {
   useRevelar();
+  useAnalytics();
 
   return (
     <>

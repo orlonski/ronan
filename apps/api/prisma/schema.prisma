@@ -3588,3 +3588,80 @@ model DenunciaMensagemChat {
   @@index([contaId])
   @@map("denuncias_mensagem_chat")
 }
+
+/// Alguém que pediu contato pelo site, ou que a prospecção encontrou.
+///
+/// É da PLATAFORMA, não de uma empresa: um lead ainda não é cliente de
+/// ninguém, e quando vira, vira uma Conta. Por isso está em MODELS_GLOBAIS e
+/// não tem `contaId` — toda consulta aqui roda em `comoSistema`.
+///
+/// O `origemDado` não é enfeite: a LGPD exige saber de onde veio cada contato
+/// (e o art. 43 do CDC dá ao titular o direito de perguntar). Lead de
+/// formulário guarda "o próprio titular preencheu"; lead de prospecção guarda a
+/// fonte e a data da coleta.
+model Lead {
+  id       String @id @default(uuid())
+  nome     String
+  empresa  String
+  telefone String
+  email    String?
+  cidade   String?
+  frota    String?
+  mensagem String? @db.Text
+
+  origem String @default("SITE_FORMULARIO")
+
+  /// De onde o dado saiu, em texto legível. Obrigatório na prospecção ativa.
+  origemDado    String?
+  /// Quando o dado foi coletado da fonte (≠ criadoEm, que é quando entrou aqui).
+  coletadoEm    DateTime?
+  utmSource     String?
+  utmMedium     String?
+  utmCampaign   String?
+  paginaOrigem  String?
+
+  /// Guardado só pra defesa contra abuso do formulário público, não pra perfil.
+  ipCriacao String?
+
+  status        String    @default("NOVO")
+  /// Fica true quando a pessoa pede pra não ser mais contatada. Vale pra TODOS
+  /// os canais de uma vez — é a supressão global; nunca contatar com isto true.
+  optOut        Boolean   @default(false)
+  optOutEm      DateTime?
+  observacao    String?   @db.Text
+  ultimoContato DateTime?
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([status, criadoEm(sort: Desc)])
+  @@index([optOut])
+  @@index([telefone])
+  @@index([email])
+  @@map("leads")
+}
+
+/// Contagem de navegação do site institucional. ANÔNIMO de propósito: sem IP,
+/// sem cookie, sem user-agent. Se algum dia isso precisar identificar alguém, a
+/// resposta certa é criar outra tabela, não acrescentar coluna aqui.
+model EventoSite {
+  id     String @id @default(uuid())
+  tipo   String
+  caminho String @default("/")
+  rotulo String?
+
+  referenciaHost String?
+  utmSource      String?
+  utmMedium      String?
+  utmCampaign    String?
+
+  /// Some quando a aba fecha. Agrupa eventos de uma visita, não de uma pessoa.
+  sessao String?
+
+  criadoEm DateTime @default(now())
+
+  @@index([criadoEm(sort: Desc)])
+  @@index([tipo, criadoEm(sort: Desc)])
+  @@index([sessao])
+  @@map("eventos_site")
+}
