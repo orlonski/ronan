@@ -45,15 +45,28 @@ export function PerfilPessoal() {
   const [apagandoConta, setApagandoConta] = useState(false);
 
   const recarregar = useCallback(async () => {
-    setCarregando(true);
     try {
       setPerfil(await api.meuPerfil());
     } catch {
       /* sem sinal: fica o que já está na tela */
+    }
+  }, []);
+
+  /**
+   * A rodinha do "puxar pra atualizar" só acende quando ELE puxa.
+   *
+   * Acender numa recarga automática deixa o spinner preso embaixo do cabeçalho
+   * no iOS — o `RefreshControl` é feito pra refletir o gesto, não trabalho de
+   * fundo. A revalidação do perfil roda calada; o que está na tela é o cache.
+   */
+  const puxarPraAtualizar = useCallback(async () => {
+    setCarregando(true);
+    try {
+      await recarregar();
     } finally {
       setCarregando(false);
     }
-  }, []);
+  }, [recarregar]);
 
   useEffect(() => {
     void recarregar();
@@ -182,7 +195,7 @@ export function PerfilPessoal() {
         contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 32 }}
         keyboardShouldPersistTaps="handled"
         refreshControl={
-          <RefreshControl refreshing={carregando} onRefresh={() => void recarregar()} />
+          <RefreshControl refreshing={carregando} onRefresh={() => void puxarPraAtualizar()} />
         }
       >
         <Card className="gap-3 p-4">

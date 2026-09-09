@@ -52,15 +52,22 @@ export default function MeusDocumentosScreen() {
   const [editando, setEditando] = useState<DocumentoPessoal | "novo" | null>(null);
 
   const recarregar = useCallback(async () => {
-    setCarregando(true);
     try {
       setDocs(await carregarDocumentos());
     } catch {
       /* sem sinal: fica o cache, que já está na tela */
+    }
+  }, []);
+
+  /** A rodinha só acende no gesto dele — revalidação de fundo é calada. */
+  const puxarPraAtualizar = useCallback(async () => {
+    setCarregando(true);
+    try {
+      await recarregar();
     } finally {
       setCarregando(false);
     }
-  }, []);
+  }, [recarregar]);
 
   // Cache primeiro, rede depois. A tela era 100% online: offline ela abria
   // VAZIA — e é na estrada, sem sinal, que ele precisa conferir se a CNH
@@ -132,7 +139,7 @@ export default function MeusDocumentosScreen() {
       <ScrollView
         contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }}
         refreshControl={
-          <RefreshControl refreshing={carregando} onRefresh={() => void recarregar()} />
+          <RefreshControl refreshing={carregando} onRefresh={() => void puxarPraAtualizar()} />
         }
       >
         <View>

@@ -48,15 +48,23 @@ export function HomePessoal() {
   const [convites, setConvites] = useState<ConviteEmpresa[]>([]);
   const [docsAlerta, setDocsAlerta] = useState<{ nome: string; vencido: boolean } | null>(null);
   const [perfil, setPerfil] = useState<string | null>(null);
-  const [carregando, setCarregando] = useState(false);
+  /**
+   * SÓ o "puxar pra atualizar" acende a rodinha.
+   *
+   * A recarga que acontece sozinha (ao voltar pra aba) roda calada: é
+   * cache-first, os dados já estão na tela e o que ela faz é revalidar por
+   * baixo. Acender o `RefreshControl` sem o motorista ter puxado nada deixava a
+   * rodinha presa embaixo do cabeçalho — foi o "voltei do cancelar frete e a
+   * home travou no topo".
+   */
+  const [atualizando, setAtualizando] = useState(false);
   const tracking = useViagemAndamento(true);
 
   const recarregar = useCallback(async () => {
-    setCarregando(true);
     // As cinco chamadas em PARALELO e cada uma com o seu resultado. Em série,
-    // com 4G ruim, eram até 40s de spinner na home — e o `catch` único fazia a
-    // primeira falha matar as quatro seguintes (o alerta de CNH vencida sumia
-    // porque o resumo do mês não respondeu).
+    // com 4G ruim, eram até 40s de espera — e o `catch` único fazia a primeira
+    // falha matar as quatro seguintes (o alerta de CNH vencida sumia porque o
+    // resumo do mês não respondeu).
     const [v, r, c, p, docs] = await Promise.all([
       carregarViagens(mes).catch(() => null),
       carregarResumo(mes).catch(() => null),
@@ -79,16 +87,34 @@ export function HomePessoal() {
           : null,
       );
     }
-    setCarregando(false);
   }, [mes]);
+
+  /** O puxão dele. `finally` obrigatório: rodinha que acende TEM que apagar. */
+  const puxarPraAtualizar = useCallback(async () => {
+    setAtualizando(true);
+    try {
+      await drenar();
+    } catch {
+      /* sem sinal: recarrega do jeito que der */
+    } finally {
+      await recarregar().catch(() => {});
+      setAtualizando(false);
+    }
+  }, [recarregar]);
 
   // `useFocusEffect`: a aba Início nunca desmonta, então voltar de um
   // lançamento não recarregava nada — ele lançava R$ 800 de diesel, voltava, e
   // "Seu mês" seguia mostrando o número velho. É assim que se lança duas vezes.
+  //
+  // O `.catch` no `drenar` é o que garante o recarregar: sem ele, uma falha na
+  // fila (sem sinal, por exemplo) engolia a atualização inteira da tela.
   useFocusEffect(
     useCallback(() => {
       void cacheViagens(mes).then(setViagens);
-      void drenar().then(recarregar);
+      void drenar()
+        .catch(() => {})
+        .then(() => recarregar())
+        .catch(() => {});
     }, [mes, recarregar]),
   );
 
@@ -115,7 +141,10 @@ export function HomePessoal() {
       <ScrollView
         contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 32 }}
         refreshControl={
-          <RefreshControl refreshing={carregando} onRefresh={() => void recarregar()} />
+          <RefreshControl
+            refreshing={atualizando}
+            onRefresh={() => void puxarPraAtualizar()}
+          />
         }
       >
 

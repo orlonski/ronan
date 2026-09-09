@@ -59,29 +59,52 @@ export function HistoricoPessoal() {
   const [viagens, setViagens] = useState<ItemViagem[]>([]);
   const [gastos, setGastos] = useState<ItemPessoal[]>([]);
   const [resumo, setResumo] = useState<ResumoMesPessoal | null>(null);
+  /** Só o puxão dele acende a rodinha — a revalidação de fundo é calada. */
+  const [atualizando, setAtualizando] = useState(false);
+  /** Primeira carga do mês: aí sim vale um aviso, porque a lista está vazia. */
   const [carregando, setCarregando] = useState(false);
 
   const recarregar = useCallback(async () => {
-    setCarregando(true);
     try {
       setViagens(await carregarViagens(mes));
       setGastos(await carregarMes(mes));
       setResumo(await carregarResumo(mes));
     } catch {
       /* sem sinal: fica o que já está na tela */
-    } finally {
-      setCarregando(false);
     }
   }, [mes]);
+
+  const puxarPraAtualizar = useCallback(async () => {
+    setAtualizando(true);
+    try {
+      await drenar();
+    } catch {
+      /* sem sinal: recarrega do jeito que der */
+    } finally {
+      await recarregar();
+      setAtualizando(false);
+    }
+  }, [recarregar]);
 
   // `useFocusEffect`, não `useEffect`: a aba nunca desmonta, então voltar de uma
   // correção (ou de um lançamento novo) não recarregava nada — ele via o número
   // velho e lançava de novo achando que não tinha entrado.
+  // O `.catch` no `drenar` é o que garante o recarregar: sem ele, uma falha na
+  // fila (sem sinal) engolia a atualização inteira da tela.
   useFocusEffect(
     useCallback(() => {
-      void cacheViagens(mes).then(setViagens);
-      void cacheDoMes(mes).then(setGastos);
-      void drenar().then(recarregar);
+      let vivo = true;
+      setCarregando(true);
+      void cacheViagens(mes).then((c) => vivo && setViagens(c));
+      void cacheDoMes(mes).then((c) => vivo && setGastos(c));
+      void drenar()
+        .catch(() => {})
+        .then(() => recarregar())
+        .catch(() => {})
+        .finally(() => setCarregando(false));
+      return () => {
+        vivo = false;
+      };
     }, [mes, recarregar]),
   );
 
@@ -152,7 +175,10 @@ export function HistoricoPessoal() {
       <ScrollView
         contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 32 }}
         refreshControl={
-          <RefreshControl refreshing={carregando} onRefresh={() => void recarregar()} />
+          <RefreshControl
+            refreshing={atualizando}
+            onRefresh={() => void puxarPraAtualizar()}
+          />
         }
       >
         {resumo && (
