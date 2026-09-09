@@ -109,6 +109,22 @@ export class AdminRoteamentoWhatsappController {
   }
 
   /**
+   * Quem está inscrito nos webhooks da WABA. Sem isto, "a mensagem não chega"
+   * e "o webhook está configurado" convivem sem contradição aparente: a URL
+   * responde ao teste do console e mesmo assim nenhum evento real sai da Meta.
+   */
+  @Get("apps-inscritos")
+  appsInscritos(@Query("wabaId") wabaId: string) {
+    return this.service.appsInscritos(wabaId);
+  }
+
+  /** Inscreve o app nos webhooks da WABA. Idempotente. */
+  @Post("inscrever-webhook")
+  inscreverWebhook(@Query("wabaId") wabaId: string) {
+    return this.service.inscreverWebhook(wabaId);
+  }
+
+  /**
    * Registra o número na Cloud API. É a chamada que o botão do console
    * embrulha — aqui o erro da Meta volta por escrito em vez de sumir.
    *

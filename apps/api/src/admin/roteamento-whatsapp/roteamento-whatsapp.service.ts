@@ -227,6 +227,14 @@ export class AdminRoteamentoWhatsappService {
     return this.meta.statusNumero();
   }
 
+  appsInscritos(wabaId: string) {
+    return this.meta.appsInscritos(wabaId);
+  }
+
+  inscreverWebhook(wabaId: string) {
+    return this.meta.inscreverApp(wabaId);
+  }
+
   /**
    * Registra o número na Cloud API.
    *

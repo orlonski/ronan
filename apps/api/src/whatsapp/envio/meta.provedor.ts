@@ -205,6 +205,27 @@ export class MetaProvedor implements ProvedorWhatsappClient {
   }
 
   /**
+   * Quais apps estão inscritos nos webhooks desta WABA.
+   *
+   * É o elo que nenhuma tela do console mostra e que o botão "Teste" do painel
+   * NÃO exercita: o teste bate direto na URL configurada, enquanto a mensagem
+   * de verdade só vira webhook se a WABA estiver inscrita no app. Lista vazia
+   * aqui explica, de uma vez, mensagem que não chega e status de entrega que
+   * nunca chegou.
+   */
+  async appsInscritos(wabaId: string): Promise<Record<string, unknown>> {
+    return this.chamar(`/${wabaId}/subscribed_apps`, "GET");
+  }
+
+  /**
+   * Inscreve ESTE app (o dono do token) nos webhooks da WABA. Idempotente: a
+   * Meta responde `success: true` mesmo quando já estava inscrito.
+   */
+  async inscreverApp(wabaId: string): Promise<Record<string, unknown>> {
+    return this.chamar(`/${wabaId}/subscribed_apps`, "POST");
+  }
+
+  /**
    * Os templates que a Meta REALMENTE tem, com nome e idioma exatos.
    *
    * Existe porque a tela da Meta mostrou "Portuguese (BR) · Ativo" enquanto o
