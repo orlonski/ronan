@@ -1,0 +1,128 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-fundo text-tinta font-sans antialiased;
+    font-size: 17px;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4 {
+    @apply font-display text-tinta;
+    letter-spacing: -0.022em;
+    text-wrap: balance;
+  }
+
+  p { text-wrap: pretty; }
+
+  :focus-visible {
+    outline: 3px solid #2A4A9E;
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  /* Âncora não pode parar embaixo do cabeçalho fixo */
+  section[id] { scroll-margin-top: 88px; }
+}
+
+@layer components {
+  .secao {
+    @apply py-20 lg:py-32;
+  }
+
+  .caixa {
+    @apply mx-auto w-full max-w-conteudo px-5 sm:px-6 lg:px-8;
+  }
+
+  /* Etiqueta de seção: as três barras inclinadas do ícone viram marcador */
+  .etiqueta {
+    @apply inline-flex items-center gap-2.5 text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-azul;
+  }
+
+  .barras::before {
+    content: "";
+    width: 20px;
+    height: 12px;
+    flex: none;
+    background:
+      linear-gradient(105deg, transparent 46%, currentColor 46%, currentColor 62%, transparent 62%) 0 0 / 7px 100% no-repeat,
+      linear-gradient(105deg, transparent 46%, currentColor 46%, currentColor 62%, transparent 62%) 7px 2px / 7px 76% no-repeat,
+      linear-gradient(105deg, transparent 46%, currentColor 46%, currentColor 62%, transparent 62%) 14px 4px / 7px 52% no-repeat;
+  }
+
+  .placa {
+    @apply rounded-xl2 border border-borda bg-superficie;
+  }
+
+  .btn {
+    @apply inline-flex min-h-[48px] items-center justify-center gap-2 rounded-lg px-6 text-[0.98rem] font-semibold
+           transition-[transform,background-color,border-color,color] duration-200 ease-patio;
+  }
+
+  .btn-primario {
+    @apply btn bg-laranja text-laranja-tinta hover:bg-[#C9601F] active:translate-y-px;
+  }
+
+  .btn-secundario {
+    @apply btn border border-borda-forte bg-superficie text-tinta hover:border-azul hover:text-azul active:translate-y-px;
+  }
+
+  .btn-azul {
+    @apply btn bg-azul text-white hover:bg-azul-claro active:translate-y-px;
+  }
+
+  .regua {
+    @apply border-t border-borda;
+  }
+}
+
+@layer utilities {
+  .revelar {
+    opacity: 0;
+    transform: translateY(10px);
+    transition:
+      opacity 620ms cubic-bezier(0.16, 1, 0.3, 1),
+      transform 620ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition-delay: var(--atraso, 0ms);
+  }
+
+  .revelado {
+    opacity: 1;
+    transform: none;
+  }
+
+  .listra {
+    background-image: repeating-linear-gradient(
+      105deg,
+      rgba(30, 53, 117, 0.07) 0 1px,
+      transparent 1px 9px
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .revelar { opacity: 1; transform: none; transition: none; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@layer components {
+  .link-rodape {
+    @apply flex w-fit items-center py-2 text-[0.95rem] text-tinta-media transition-colors hover:text-azul;
+  }
+}

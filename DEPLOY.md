@@ -12,7 +12,7 @@ Guia passo-a-passo pra subir o sistema em produção. Pressuposto: VPS Contabo c
 
 ## Estrutura final
 
-5 serviços rodando no Easypanel, todos no mesmo projeto chamado `ronan`:
+6 serviços rodando no Easypanel, todos no mesmo projeto chamado `ronan`:
 
 | Serviço | Tipo | Imagem/Build | Domínio público |
 |---|---|---|---|
@@ -21,6 +21,7 @@ Guia passo-a-passo pra subir o sistema em produção. Pressuposto: VPS Contabo c
 | `api` | App (Dockerfile) | Build do repo, `apps/api/Dockerfile` | `api.SEU-DOMINIO.com.br` |
 | `dashboard` | App (Dockerfile) | Build do repo, `apps/dashboard/Dockerfile` | `painel.SEU-DOMINIO.com.br` |
 | `motorista` | App (Dockerfile) | Build do repo, `apps/motorista/Dockerfile` | `app.SEU-DOMINIO.com.br` |
+| `site` | App (Dockerfile) | Build do repo, `apps/site/Dockerfile` | `www.SEU-DOMINIO.com.br` |
 
 ## 1. Postgres
 
@@ -149,6 +150,45 @@ NEXT_PUBLIC_API_URL=https://api.SEU-DOMINIO.com.br
 ### Domínio
 
 - `app.SEU-DOMINIO.com.br` → porta interna `80`
+
+## 5b. Site institucional (Vite + nginx)
+
+O site público (`apps/site`) é o serviço mais simples do projeto: HTML/CSS/JS
+estático atrás de nginx. Não fala com a API, não tem banco, não tem segredo.
+Pode subir, cair e reiniciar sem afetar nada.
+
+**+ Service → App** com Source: Git Repository
+
+- Repository: `https://github.com/orlonski/ronan`
+- Branch: `main`
+- Build Method: **Dockerfile**
+- Dockerfile Path: `apps/site/Dockerfile`
+- Build Context: `.` (raiz — o build precisa do `pnpm-lock.yaml`)
+- Build Args (tudo é embutido em build-time, **não** existe env de runtime):
+
+```
+VITE_SITE_URL=https://www.SEU-DOMINIO.com.br
+VITE_APP_URL=https://app.SEU-DOMINIO.com.br
+VITE_PWA_URL=https://motorista.SEU-DOMINIO.com.br
+VITE_WHATSAPP=5541999999999      # DDI+DDD+número, só dígitos — vira o link wa.me
+VITE_EMAIL=contato@SEU-DOMINIO.com.br
+VITE_PLAY_URL=https://play.google.com/store/apps/details?id=br.com.schaba.motorista
+VITE_APPSTORE_URL=              # vazio esconde o botão da App Store
+```
+
+> Trocar qualquer um desses valores exige **rebuild**, não basta reiniciar.
+> Deixar `VITE_APPSTORE_URL` vazio é proposital enquanto a publicação na Apple
+> não sai: o botão some do site em vez de linkar pra lugar nenhum.
+
+### Domínio
+
+- `www.SEU-DOMINIO.com.br` → porta interna `80`
+- Vale apontar o apex (`SEU-DOMINIO.com.br`) pro mesmo serviço, com redirect
+  pro `www` no Easypanel.
+
+### Healthcheck
+
+`GET /healthz` responde `ok` em texto puro (configurado no `nginx.conf`).
 
 ## 6. Configurar PWA pra ser instalável
 

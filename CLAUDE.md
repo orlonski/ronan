@@ -20,6 +20,7 @@ apps/api/             Backend Nest.js 10 + Prisma 6 + Postgres (porta 3000, Swag
 apps/dashboard/       Painel admin Next.js 15 App Router (porta 3001, deploy: app.schaba.com.br)
 apps/motorista-app/   App nativo Expo 54/RN — Android + iOS (deploy: EAS Update OTA)
 apps/motorista/       PWA Vite/React — motoristas iPhone (porta 3002, motorista.schaba.com.br)
+apps/site/            Site institucional Vite/React estático (porta 3003, www.movatruck.com.br)
 packages/shared-types Schemas Zod + tipos compartilhados por tudo
 tests/e2e/            Playwright (dashboard + PWA motorista)
 ```
@@ -34,6 +35,7 @@ pnpm lint                    # turbo run lint
 pnpm --filter @ronan/api dev            # só API, :3000
 pnpm --filter @ronan/dashboard dev      # só painel, :3001
 pnpm --filter @ronan/motorista dev      # só PWA, :3002
+pnpm --filter @ronan/site dev           # só site institucional, :3003
 pnpm --filter @ronan/shared-types build # rebuild ao mexer em schemas (OBRIGATÓRIO — os apps consomem dist/)
 
 docker compose up -d postgres           # Postgres em localhost:5435 (o apps/api/.env já aponta)
@@ -206,6 +208,7 @@ Easypanel (Contabo, slug `2azr6q`) — push na `main` dispara build de api + das
 - `ronan-api` — `ronan-api.2azr6q.easypanel.host` (alias `api.schaba.com.br`)
 - `ronan-dashboard` — `app.movatruck.com.br` (+ `app.schaba.com.br`, o domínio antigo, ainda apontando pro mesmo painel)
 - `ronan-motorista` — `motorista.schaba.com.br`
+- `ronan-site` — site institucional público, estático em nginx (`apps/site/Dockerfile`)
 - `ronan_agente` — worker da fila de execuções (`apps/agente/Dockerfile`, sem domínio público)
 
 App nativo: **EAS Update OTA** (canal `production`), fora do Easypanel. OTA não muda a versão nativa.
