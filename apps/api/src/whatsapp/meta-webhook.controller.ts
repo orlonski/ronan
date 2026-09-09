@@ -15,6 +15,7 @@ import { ConfigService } from "@nestjs/config";
 import { ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { Public } from "../auth/decorators/public.decorator";
+import { ChatwootRepasseService } from "./chatwoot-repasse.service";
 import { comoSistema } from "../common/conta/conta-context";
 import { ErrorsService } from "../errors/errors.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -69,6 +70,7 @@ export class MetaWebhookController {
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly errors: ErrorsService,
+    private readonly chatwoot: ChatwootRepasseService,
   ) {}
 
   /**
@@ -136,6 +138,11 @@ export class MetaWebhookController {
       throw new UnauthorizedException();
     }
 
+    // Fan-out antes de processar: o Chatwoot é o atendimento humano do mesmo
+    // número, e o que atrasa aqui atrasa a resposta pra Meta. Não leva `await`
+    // de propósito — ver ChatwootRepasseService.
+    this.chatwoot.repassar(req.rawBody, assinatura);
+
     try {
       await this.processar(body);
     } catch (e) {
@@ -161,13 +168,14 @@ export class MetaWebhookController {
           await this.gravarStatus(s);
         }
 
-        // Mensagem recebida. O agente está DESLIGADO em produção de propósito,
-        // e ligá-lo por aqui seria fazer isso por acidente — então por ora só
-        // registra que chegou. Quando o agente voltar, é aqui que o inbound da
-        // Meta se normaliza pro mesmo formato que o Baileys produz.
+        // Mensagem recebida. Quem atende é o Chatwoot, pelo repasse lá em
+        // cima; aqui não se responde nada. O agente segue DESLIGADO em
+        // produção de propósito, e ligá-lo por este caminho seria fazer isso
+        // por acidente.
         if (value.messages?.length) {
+          const destino = this.chatwoot.configurado() ? "repassada(s) ao Chatwoot" : "sem tratamento";
           this.log.log(
-            `${value.messages.length} mensagem(ns) recebida(s) no número ${value.metadata?.phone_number_id ?? "?"} — sem tratamento (agente desligado)`,
+            `${value.messages.length} mensagem(ns) recebida(s) no número ${value.metadata?.phone_number_id ?? "?"} — ${destino}`,
           );
         }
       }

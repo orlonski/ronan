@@ -6,6 +6,7 @@ import type { Request } from "express";
 import { MetaWebhookController } from "./meta-webhook.controller";
 import type { PrismaService } from "../prisma/prisma.service";
 import type { ErrorsService } from "../errors/errors.service";
+import type { ChatwootRepasseService } from "./chatwoot-repasse.service";
 
 const SEGREDO = "app-secret-de-teste";
 const VERIFY = "verify-token-de-teste";
@@ -13,12 +14,14 @@ const VERIFY = "verify-token-de-teste";
 function controller(env: Record<string, string> = { META_APP_SECRET: SEGREDO, META_WEBHOOK_VERIFY_TOKEN: VERIFY }) {
   const updateMany = vi.fn(async () => ({ count: 1 }));
   const reportar = vi.fn(async (_input: { message: string; extra?: unknown }) => ({}));
+  const repassar = vi.fn((_corpo: Buffer, _assinatura?: string) => {});
   const c = new MetaWebhookController(
     { get: (k: string) => env[k] } as unknown as ConfigService,
     { whatsappMensagem: { updateMany } } as unknown as PrismaService,
     { reportar } as unknown as ErrorsService,
+    { repassar, configurado: () => true } as unknown as ChatwootRepasseService,
   );
-  return { c, updateMany, reportar };
+  return { c, updateMany, reportar, repassar };
 }
 
 /** Monta o POST como a Meta monta: corpo cru + assinatura hex do HMAC dele. */
@@ -151,6 +154,7 @@ describe("status de entrega", () => {
         },
       } as unknown as PrismaService,
       { reportar: vi.fn(async () => ({})) } as unknown as ErrorsService,
+      { repassar: vi.fn(), configurado: () => false } as unknown as ChatwootRepasseService,
     );
     const e = evento(STATUS());
     await expect(
@@ -209,5 +213,38 @@ describe("status de template", () => {
     });
     expect(r).toBe("ok");
     expect(reportar).toHaveBeenCalledOnce();
+  });
+});
+
+describe("repasse pro Chatwoot", () => {
+  const enviar = async (body: unknown) => {
+    const { c, repassar } = controller();
+    const e = evento(body);
+    const r = await c.receber(e.body as never, e.header, {
+      rawBody: e.raw,
+    } as Request & { rawBody?: Buffer });
+    return { r, repassar, e };
+  };
+
+  it("repassa o corpo CRU e a assinatura", async () => {
+    // Reserializar o JSON mudaria espaço e ordem de chave, e a assinatura que
+    // o Chatwoot confere deixaria de bater.
+    const { repassar, e } = await enviar({
+      entry: [{ changes: [{ value: { messages: [{ id: "wamid.X", from: "5542988887777" }] } }] }],
+    });
+    expect(repassar).toHaveBeenCalledOnce();
+    expect(repassar.mock.calls[0]?.[0]).toBe(e.raw);
+    expect(repassar.mock.calls[0]?.[1]).toBe(e.header);
+  });
+
+  it("não repassa evento com assinatura inválida", async () => {
+    // O repasse acontece DEPOIS de autenticar: senão a nossa URL viraria um
+    // encaminhador aberto pra dentro do Chatwoot.
+    const { c, repassar } = controller();
+    const e = evento(STATUS(), { segredo: "outro-segredo" });
+    await expect(
+      c.receber(e.body as never, e.header, { rawBody: e.raw } as Request & { rawBody?: Buffer }),
+    ).rejects.toThrow(UnauthorizedException);
+    expect(repassar).not.toHaveBeenCalled();
   });
 });

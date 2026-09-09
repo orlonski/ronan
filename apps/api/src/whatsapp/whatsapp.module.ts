@@ -4,6 +4,7 @@ import { DashboardModule } from "../admin/dashboard/dashboard.module";
 import { ErrorsModule } from "../errors/errors.module";
 import { UploadsModule } from "../uploads/uploads.module";
 import { AgenteService } from "./agente/agente.service";
+import { ChatwootRepasseService } from "./chatwoot-repasse.service";
 import { ConviteService } from "./convite.service";
 import { EvolutionModule } from "./evolution.module";
 import { SessaoService } from "./sessao.service";
@@ -19,6 +20,7 @@ import { WhatsappService } from "./whatsapp.service";
     SessaoService,
     ConviteService,
     AgenteService,
+    ChatwootRepasseService,
   ],
   exports: [WhatsappService, SessaoService, ConviteService, EvolutionModule],
 })
