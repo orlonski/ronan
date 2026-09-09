@@ -76,6 +76,12 @@ const RESOURCE_DEFS: ResourceDef[] = [
   { recurso: "lancamentos-resgatados", label: "Lançamentos travados", modulo: "Operação", acoes: ["ver", "resolver"] },
   { recurso: "notificacoes", label: "Notificações", modulo: "Operação", acoes: ["ver", "excluir"] },
   { recurso: "demandas", label: "Demandas do agente", modulo: "Operação", acoes: ["ver", "criar"] },
+  // Captação de clientes para a plataforma: leads do site e prospecção ativa.
+  // É trabalho comercial da Movatruck, não da transportadora que usa o sistema
+  // — por isso está em RECURSOS_PLATAFORMA logo abaixo. "importar" dispara a
+  // carga do RNTRC, que é cara e bate em serviço de fora; fica separada de
+  // "editar" de propósito.
+  { recurso: "prospeccao", label: "Captação de clientes", modulo: "Operação", acoes: ["ver", "editar", "importar"] },
   // Chat dos motoristas. "ver" abre a tela (avisos + denúncias), "avisar"
   // publica no canal, "moderar" resolve denúncia e remove mensagem. Conversa
   // de motorista com motorista NÃO é acessível por nenhuma dessas chaves —
@@ -175,6 +181,10 @@ export const RECURSOS_PLATAFORMA: string[] = [
   // A fila de tarefas do agente de desenvolvimento. É ferramenta de quem
   // constrói o sistema — não tem o que uma transportadora faça aqui.
   "demandas",
+  // Captação de clientes da plataforma. Uma transportadora cliente não tem o
+  // que fazer com a lista de outras transportadoras que a gente está
+  // prospectando — nem deve enxergar que ela existe.
+  "prospeccao",
   // A base de praças de pedágio é COMPARTILHADA por todas as empresas (o model
   // não tem dono, é dado do OSM). Uma empresa apagando uma praça mudaria o
   // cálculo de pedágio das outras — parece menu de operação e não é.

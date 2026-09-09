@@ -24,7 +24,9 @@ export class CaptacaoService {
    * Deduplicar é trabalho de quem atende, não do formulário.
    */
   async registrarLead(input: CriarLeadInput, ip: string | null) {
-    const { website, ...dados } = input;
+    // `cidade` no formulário, `municipio` no banco: a tela fala a língua de quem
+    // preenche, a coluna fala a língua do RNTRC, que é de onde vem o resto da base.
+    const { website, cidade, ...dados } = input;
 
     // Isca de robô preenchida: descarta em silêncio. O controller responde 200
     // assim mesmo — dizer "recusado" ensina o robô qual campo evitar.
@@ -37,18 +39,19 @@ export class CaptacaoService {
       this.prisma.lead.create({
         data: {
           ...dados,
+          municipio: cidade,
           // Quem preencheu o formulário é o próprio titular. É a origem mais
           // forte que existe e a que dispensa qualquer discussão de base legal.
           origemDado: "Formulário do site — preenchido pelo próprio titular",
           coletadoEm: new Date(),
           ipCriacao: ip,
         },
-        select: { id: true, nome: true, empresa: true, cidade: true },
+        select: { id: true, nome: true, empresa: true, municipio: true },
       }),
     );
 
     this.log.log(
-      `Lead novo: ${lead.empresa} (${lead.nome}${lead.cidade ? `, ${lead.cidade}` : ""}) id=${lead.id}`,
+      `Lead novo: ${lead.empresa} (${lead.nome}${lead.municipio ? `, ${lead.municipio}` : ""}) id=${lead.id}`,
     );
 
     return { descartado: false as const, id: lead.id };

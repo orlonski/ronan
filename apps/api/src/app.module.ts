@@ -26,6 +26,7 @@ import { ClickupRunnerModule } from "./clickup-runner/clickup-runner.module";
 import { ConferenciaWorkerModule } from "./conferencia-ticket/conferencia-worker.module";
 import { CompartilhamentoModule } from "./compartilhamento/compartilhamento.module";
 import { CaptacaoModule } from "./captacao/captacao.module";
+import { ProspeccaoModule } from "./prospeccao/prospeccao.module";
 import { AppVersionInterceptor } from "./common/app-version.interceptor";
 import { ContaMiddleware } from "./common/conta/conta.middleware";
 import { PrismaExceptionFilter } from "./common/prisma-exception.filter";
@@ -57,6 +58,7 @@ import { PrismaExceptionFilter } from "./common/prisma-exception.filter";
     ConferenciaWorkerModule,
     CompartilhamentoModule,
     CaptacaoModule,
+    ProspeccaoModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: ErrorsExceptionFilter },

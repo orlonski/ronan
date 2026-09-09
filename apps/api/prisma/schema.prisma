@@ -3600,14 +3600,36 @@ model DenunciaMensagemChat {
 /// formulário guarda "o próprio titular preencheu"; lead de prospecção guarda a
 /// fonte e a data da coleta.
 model Lead {
-  id       String @id @default(uuid())
-  nome     String
-  empresa  String
-  telefone String
+  id String @id @default(uuid())
+
+  /// A EMPRESA é a única coisa que sempre existe. Quem chega pelo site diz o
+  /// nome dela; quem a prospecção encontra é ela, antes de qualquer pessoa.
+  empresa String
+  /// Chave de deduplicação da prospecção. Nulo em lead de formulário, porque
+  /// ninguém digita o próprio CNPJ pra pedir demonstração.
+  cnpj      String? @unique
+  rntrc     String?
+  municipio String?
+  uf        String?
+  cep       String?
+
+  /// A PESSOA, quando se sabe quem é. No formulário vem preenchida; na
+  /// prospecção começa vazia e só aparece quando alguém atende.
+  nome     String?
+  telefone String?
   email    String?
-  cidade   String?
+  site     String?
   frota    String?
   mensagem String? @db.Text
+
+  /// Qualificação. Frota vem do dataset de veículos da ANTT; `registradoEm` é a
+  /// data do primeiro RNTRC — quem tirou registro há pouco ainda está montando
+  /// o processo e é o melhor momento de chegar.
+  categoria    String?
+  frotaQtd     Int?
+  registradoEm DateTime?
+  score        Int?
+  scoreMotivo  String?   @db.Text
 
   origem String @default("SITE_FORMULARIO")
 
@@ -3631,6 +3653,8 @@ model Lead {
   observacao    String?   @db.Text
   ultimoContato DateTime?
 
+  interacoes InteracaoLead[]
+
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
@@ -3638,7 +3662,62 @@ model Lead {
   @@index([optOut])
   @@index([telefone])
   @@index([email])
+  @@index([uf, categoria, status])
+  @@index([score(sort: Desc)])
   @@map("leads")
+}
+
+/// Cada toque num lead: e-mail enviado, ligação feita, resposta recebida.
+///
+/// Existe pra responder duas perguntas que sempre voltam: "já falamos com
+/// essa empresa?" e "quando, e o que ela disse?". Sem isso a prospecção
+/// reaborda quem já disse não — que é a forma mais rápida de queimar reputação.
+model InteracaoLead {
+  id     String @id @default(uuid())
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId String
+
+  /// EMAIL, LIGACAO, WHATSAPP, REUNIAO, NOTA
+  canal   String
+  /// ENVIADO, RESPONDEU, SEM_RESPOSTA, RECUSOU, PEDIU_OPT_OUT
+  desfecho String
+  resumo   String? @db.Text
+
+  /// Quem fez. Nulo quando foi automação (ex.: e-mail de sequência).
+  autor String?
+
+  criadoEm DateTime @default(now())
+
+  @@index([leadId, criadoEm(sort: Desc)])
+  @@index([canal, criadoEm(sort: Desc)])
+  @@map("interacoes_lead")
+}
+
+/// Quem pediu pra não ser mais contatado.
+///
+/// Tabela SEPARADA do Lead de propósito. O opt-out tem que sobreviver ao lead
+/// ser apagado, mesclado ou recriado numa importação futura — se morasse só na
+/// coluna `Lead.optOut`, a próxima carga do RNTRC ressuscitaria a empresa
+/// limpa e a gente contataria de novo quem já mandou parar.
+///
+/// A chave é o CONTATO (telefone ou e-mail normalizado), não a empresa: a
+/// pessoa que pediu para sair leva esse direito para qualquer lead onde o
+/// contato dela apareça.
+model SupressaoContato {
+  id String @id @default(uuid())
+
+  /// Só dígitos, ou e-mail em minúsculas. Normalizado na escrita.
+  contato String @unique
+  /// TELEFONE ou EMAIL
+  tipo    String
+  motivo  String?
+  /// De onde veio o pedido (resposta de e-mail, WhatsApp, ligação).
+  fonte   String?
+
+  criadoEm DateTime @default(now())
+
+  @@index([tipo])
+  @@map("supressoes_contato")
 }
 
 /// Contagem de navegação do site institucional. ANÔNIMO de propósito: sem IP,

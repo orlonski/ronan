@@ -53,6 +53,8 @@ const MODELS_GLOBAIS = new Set<string>([
   // Captação: quem pediu contato pelo site ou quem a prospecção achou. Ainda
   // não é cliente de ninguém — quando vira, vira uma Conta.
   "Lead",
+  "InteracaoLead",
+  "SupressaoContato",
   "EventoSite", // contagem anônima de navegação do site institucional
 ]);
 
