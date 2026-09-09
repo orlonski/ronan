@@ -113,6 +113,22 @@ export class ChatwootAgenteService {
     await comConta(identidade.contaId, async () => {
       await this.gravar(identidade.sessaoId, telefone, "ENTRADA", texto);
 
+      // A mesma chave que liga e desliga o agente no painel vale aqui. Sem
+      // isto, desligar o agente na tela não desligaria nada: o Chatwoot
+      // seguiria respondendo por um caminho que a tela não conhece.
+      const cfg = await this.prisma.configuracaoAgente.findUnique({
+        where: { contaId: identidade.contaId },
+        select: { ativo: true, mensagemInativo: true },
+      });
+      if (cfg && !cfg.ativo) {
+        this.log.log(`agente desligado na conta ${identidade.contaId} — fila humana`);
+        if (cfg.mensagemInativo?.trim()) {
+          await this.chatwoot.responder(contaChatwoot, conversaId, cfg.mensagemInativo);
+        }
+        await this.chatwoot.passarParaHumano(contaChatwoot, conversaId);
+        return;
+      }
+
       const resposta = await this.agente.processar(identidade, texto, {
         telefoneRemetente: telefone,
       });

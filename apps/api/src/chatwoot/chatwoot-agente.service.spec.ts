@@ -21,12 +21,17 @@ function montar(
     identidade?: SessaoResolvida;
     status?: string;
     resposta?: string;
+    agenteAtivo?: boolean;
     contaDoCodigo?: string | null;
     consumirErro?: string;
   } = {},
 ) {
   const create = vi.fn(async (_args: { data: { direcao: string } }) => ({}));
   const findUnique = vi.fn(async () => ({ status: opts.status ?? "APROVADO" }));
+  const configFind = vi.fn(async () => ({
+    ativo: opts.agenteAtivo ?? true,
+    mensagemInativo: null,
+  }));
   const processar = vi.fn(async () => opts.resposta ?? "Sua última viagem foi conferida.");
   const responder = vi.fn(async (_conta: number, _conversa: number, _texto: string) => true);
   const passarParaHumano = vi.fn(async () => {});
@@ -38,7 +43,11 @@ function montar(
   });
 
   const s = new ChatwootAgenteService(
-    { whatsappMensagem: { create }, motorista: { findUnique } } as unknown as PrismaService,
+    {
+      whatsappMensagem: { create },
+      motorista: { findUnique },
+      configuracaoAgente: { findUnique: configFind },
+    } as unknown as PrismaService,
     {
       resolverPorTelefone: vi.fn(async () => opts.identidade ?? MOTORISTA),
       marcarMensagemRecebida,
@@ -175,6 +184,17 @@ describe("vínculo por código de convite", () => {
     });
     await s.processar(evento({ content: "oi" }));
     expect(consumir).not.toHaveBeenCalled();
+    expect(passarParaHumano).toHaveBeenCalledWith(1, 7);
+  });
+});
+
+describe("a chave que liga e desliga", () => {
+  it("agente desligado no painel não responde pelo Chatwoot", async () => {
+    // Sem esta checagem, desligar o agente na tela não desligaria nada — o
+    // Chatwoot seguiria respondendo por um caminho que a tela não conhece.
+    const { s, processar, passarParaHumano } = montar({ agenteAtivo: false });
+    await s.processar(evento());
+    expect(processar).not.toHaveBeenCalled();
     expect(passarParaHumano).toHaveBeenCalledWith(1, 7);
   });
 });
