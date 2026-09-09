@@ -418,9 +418,22 @@ async function executarToolInterno(
 
     case "detalhe_viagem": {
       if (ctx.identidade.tipo !== "MOTORISTA") throw new Error("tool não disponível pra esse perfil");
-      // `detalhe` recusa viagem de outro motorista — a checagem de dono não se
-      // repete aqui, mora lá, num lugar só.
-      return ctx.viagens.detalhe(ctx.identidade.motoristaId, String(input.viagem_id));
+      try {
+        // `detalhe` recusa viagem de outro motorista — a checagem de dono não
+        // se repete aqui, mora lá, num lugar só.
+        return await ctx.viagens.detalhe(ctx.identidade.motoristaId, String(input.viagem_id));
+      } catch {
+        // Id que não existe (ou não é dele) quase sempre é id INVENTADO pelo
+        // modelo. Exceção crua vira "tive um problema" na cara do motorista;
+        // devolvida como instrução, o modelo se corrige no mesmo turno.
+        return {
+          ok: false,
+          motivo: "id_invalido",
+          instrucao:
+            "Esse id não é de nenhuma viagem sua. Não invente id: chame " +
+            "consultar_minhas_viagens e use exatamente o campo `id` que vier de lá.",
+        };
+      }
     }
 
     case "resumo_do_mes": {
