@@ -82,30 +82,6 @@ const TOOLS_MOTORISTA: AgentToolDefinition[] = [
     },
   },
   {
-    name: "inferir_cliente_por_trajeto",
-    description:
-      "Quando carga e descarga JÁ estão resolvidos (você tem localCargaId E localDescargaId) " +
-      "e o motorista NÃO citou o cliente, chame esta tool ANTES de perguntar. Olha no histórico " +
-      "de viagens da empresa quais clientes já foram atendidos por esse mesmo par origem→destino. " +
-      "Se `auto_selecionavel: true` E `candidatos[0]` for único, USE direto o cliente no resumo " +
-      "mencionando 'presumi pelo trajeto' (motorista valida no confirma). " +
-      "Se vier 2-3 candidatos com `auto_selecionavel: false`, mostra opções numeradas. " +
-      "Se vier lista vazia, cai no fluxo normal (perguntar o nome).",
-    input_schema: {
-      type: "object",
-      properties: {
-        localCargaId: { type: "string", description: "UUID do local de carga já resolvido" },
-        localDescargaId: { type: "string", description: "UUID do local de descarga já resolvido" },
-        materialId: {
-          type: "string",
-          description:
-            "Opcional. Boost pequeno se cliente historicamente recebeu esse material no mesmo trajeto.",
-        },
-      },
-      required: ["localCargaId", "localDescargaId"],
-    },
-  },
-  {
     name: "locais_recentes_do_motorista",
     description:
       "Lista os locais que ESTE motorista mais usou recentemente (default 30d). " +
@@ -140,67 +116,33 @@ const TOOLS_MOTORISTA: AgentToolDefinition[] = [
   },
   {
     name: "lancar_viagem",
+    // O fluxo de 2 etapas e como tratar cada retorno estão no prompt. Repetir
+    // aqui custa token em toda mensagem — inclusive nas conversas em que o
+    // motorista só quer consultar e nunca vai lançar nada.
     description:
-      "Cria/valida uma viagem usando NOMES HUMANOS (placas, nomes de cliente/material/locais), " +
-      "não UUIDs. Você passa o que o motorista falou, o backend resolve fuzzy. " +
-      "\n\n**USE EM 2 ETAPAS:**" +
-      "\n1. **PRIMEIRO** chame com `dry_run: true` assim que tiver os primeiros dados (mesmo " +
-      "   incompletos). O backend valida fuzzy SEM CRIAR e devolve ambiguidades/faltando. " +
-      "   Use o retorno pra conversar: oferecer opções, pedir o que falta, confirmar nomes. " +
-      "\n2. **SÓ DEPOIS** do motorista confirmar (\"sim/ok/pode\") chame de novo com " +
-      "   `dry_run: false` (ou omitido) pra criar de verdade." +
-      "\n\nVeículo é opcional (usa o default do motorista). Cliente é opcional (se carga e " +
-      "descarga forem comuns, o backend infere). Data aceita 'hoje', 'ontem' ou ISO. " +
-      "\n\nRetorno: " +
-      "\n- `{ok: true, dry_run: true, viagem: {...}}` — tudo resolvido na simulação, monte " +
-      "  resumo com os nomes canônicos da viagem e peça \"Confirma?\". " +
-      "\n- `{ok: true, ticket, viagem: {...}}` — viagem criada de verdade, anuncie ao motorista. " +
-      "\n- `{ok: false, ambiguidades: [...]}` — algum campo tem mais de uma opção, " +
-      "  apresente as opções via `oferecer_opcoes` (botões clicáveis). " +
-      "\n- `{ok: false, faltando: [...]}` — algum dado essencial não veio, pergunte uma vez " +
-      "  só juntando o que falta. " +
-      "\n- `{ok: false, erro: '...'}` — erro real (ticket duplicado, etc), explique " +
-      "  pro motorista em PT-BR claro, sem dramatização. " +
-      "\n\nIdempotente via motorista+ticket+data.",
+      "Valida (`dry_run: true`) ou cria (`dry_run: false`) uma viagem. Passe NOMES como o " +
+      "motorista falou — material, locais, placa —, nunca UUID: o backend resolve. " +
+      "Veículo, cliente e data são opcionais. Idempotente por motorista+ticket+data.",
     input_schema: {
       type: "object",
       properties: {
-        material: {
-          type: "string",
-          description: "Nome do material como o motorista falou (ex: 'CBUQ', 'areia média', 'brita 1').",
-        },
-        carga: {
-          type: "string",
-          description: "Local de carga (nome/rua/bairro como o motorista falou).",
-        },
-        descarga: {
-          type: "string",
-          description: "Local de descarga (nome/cidade/cliente como o motorista falou).",
-        },
+        material: { type: "string", description: "Como ele falou: 'CBUQ', 'areia média'." },
+        carga: { type: "string", description: "Local de origem, como ele falou." },
+        descarga: { type: "string", description: "Local de destino, como ele falou." },
         cliente: {
           type: "string",
-          description:
-            "Nome/código do cliente (opcional — se você omitir e o trajeto for comum, " +
-            "backend infere; se houver dúvida, retorna ambiguidade pra você perguntar).",
+          description: "Opcional. Omita e o backend infere pelo trajeto.",
         },
-        veiculo: {
-          type: "string",
-          description: "Placa (opcional — sem isso usa o veículo padrão do motorista).",
-        },
+        veiculo: { type: "string", description: "Placa. Opcional: default é a dele." },
         toneladas: { type: "number", description: "Peso em toneladas." },
-        ticket: { type: "string", description: "Número/código do ticket." },
-        km: { type: "number", description: "Quilometragem rodada (somente a viagem)." },
-        data: {
-          type: "string",
-          description: "'hoje', 'ontem' ou ISO (ex: 2026-05-08). Default: hoje.",
-        },
-        valorPedagioTotal: { type: "number", description: "R$ pedágio total (opcional)." },
-        observacao: { type: "string", description: "Observação livre (opcional)." },
+        ticket: { type: "string", description: "Número do ticket." },
+        km: { type: "number", description: "Km só desta viagem." },
+        data: { type: "string", description: "'hoje', 'ontem' ou AAAA-MM-DD. Default: hoje." },
+        valorPedagioTotal: { type: "number", description: "R$ de pedágio, opcional." },
+        observacao: { type: "string", description: "Opcional." },
         dry_run: {
           type: "boolean",
-          description:
-            "true = só valida (não cria, não duplica). USE primeiro pra checar nomes/ambiguidades " +
-            "antes do motorista confirmar. false/omitido = cria a viagem de verdade.",
+          description: "true = só confere, não grava. Sempre use true antes de confirmar.",
         },
       },
       required: ["material", "carga", "descarga"],
@@ -502,6 +444,11 @@ async function executarToolInterno(
       return ctx.motorista.locaisRecentes(ctx.identidade.motoristaId, tipoUso, dias);
     }
 
+    // Fora do toolset do motorista: exigia `localCargaId`/`localDescargaId` em
+    // UUID, que o modelo não tem de onde tirar — e `lancar_viagem` já infere o
+    // cliente pelo trajeto sozinho. Oferecê-la era pagar ~250 tokens por
+    // mensagem por uma chamada que só podia dar errado. O case fica pro caso de
+    // alguém chamar por outro caminho.
     case "inferir_cliente_por_trajeto": {
       if (ctx.identidade.tipo !== "MOTORISTA")
         throw new Error("tool não disponível pra esse perfil");
@@ -800,11 +747,15 @@ async function executarToolInterno(
           de: v.localCarga?.nome ?? null,
           para: v.localDescarga?.nome ?? null,
           placa: v.veiculo.placa,
+          quando: quandoFoi(v.data),
           status: v.status,
+          situacao: situacaoDoStatus(v.status),
           // Traduzido aqui, e não no prompt: o que falta numa viagem é regra do
-          // sistema, não estilo de conversa. Deixar isso a cargo do modelo era
-          // pedir pra ele adivinhar o significado de um enum.
-          pendencia: pendenciaDoStatus(v.status),
+          // sistema, não estilo de conversa. O campo se chama `falta` porque o
+          // modelo repete o NOME do campo na resposta — chamado `pendencia`,
+          // ele escrevia "com pendência" pro motorista, que é justamente a
+          // palavra de sistema que o prompt proíbe.
+          falta: pendenciaDoStatus(v.status),
         })),
       };
     }
@@ -937,7 +888,9 @@ function resumirViagem(v: Record<string, any>): Record<string, unknown> {
   return {
     ticket: v.ticket,
     data: v.data,
+    quando: quandoFoi(v.data),
     status: v.status,
+    situacao: situacaoDoStatus(v.status),
     material: v.material?.nome ?? null,
     cliente: v.cliente?.nome ?? null,
     de: v.localCarga?.nome ?? null,
@@ -963,7 +916,8 @@ function resumirViagem(v: Record<string, any>): Record<string, unknown> {
 }
 
 /**
- * O que falta numa viagem, dito como o motorista entende.
+ * O que falta numa viagem, dito como o motorista entende — a frase vai pronta
+ * pro modelo repassar.
  *
  * `null` quando não falta nada dele — inclusive em INCOMPLETA, que é dado que
  * falta do NOSSO lado: cobrar isso dele seria cobrar pelo nosso erro.
@@ -981,4 +935,54 @@ function pendenciaDoStatus(status: string): string | null {
     default:
       return null;
   }
+}
+
+/**
+ * Como está a viagem, em uma frase pronta pra repassar.
+ *
+ * Traduzir enum é regra do sistema, não estilo de conversa — e toda vez que a
+ * tradução ficou a cargo do prompt, alguma resposta saiu com "Status: ..." na
+ * cara do motorista. Sai pronto daqui e o modelo só repete.
+ */
+function situacaoDoStatus(status: string): string {
+  switch (status) {
+    case "OK":
+    case "AJUSTADA":
+      return "conferida, tudo certo";
+    case "ENVIADA":
+    case "EM_CONFERENCIA":
+    case "INCOMPLETA":
+      return "na fila pra conferir";
+    case "DIVERGENTE":
+      return "deu diferença na conferência";
+    case "AGUARDANDO_PESO":
+      return "esperando o peso e o ticket";
+    case "AGUARDANDO_SAIDA":
+      return "esperando a hora da saída";
+    case "EM_ANDAMENTO":
+      return "ainda aberta";
+    default:
+      return "lançada";
+  }
+}
+
+/**
+ * "hoje", "ontem" ou "domingo (06/09)" — pronto pra ler.
+ *
+ * Contar dia da semana a partir de uma data ISO é conta, e modelo erra conta:
+ * o Flash chamou de sexta uma viagem de domingo. Data é dado, não raciocínio.
+ */
+function quandoFoi(data: Date | null): string {
+  if (!data) return "sem data";
+  const [ano, mes, dia] = ymdSaoPaulo();
+  const hoje = Date.UTC(ano, mes - 1, dia);
+  const d = new Date(data);
+  const dDia = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  const diff = Math.round((hoje - dDia) / 86_400_000);
+  const ddmm = `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  if (diff === 0) return `hoje (${ddmm})`;
+  if (diff === 1) return `ontem (${ddmm})`;
+  const nomes = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+  if (diff > 1 && diff < 7) return `${nomes[d.getUTCDay()]} (${ddmm})`;
+  return ddmm;
 }
