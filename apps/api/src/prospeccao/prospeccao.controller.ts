@@ -3,6 +3,7 @@ import { ApiTags } from "@nestjs/swagger";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RequerPermissao } from "../auth/decorators/requer-permissao.decorator";
 import { ProspeccaoService } from "./prospeccao.service";
+import { EnriquecimentoService } from "./enriquecimento.service";
 import { RntrcService } from "./rntrc.service";
 
 /**
@@ -19,6 +20,7 @@ export class ProspeccaoController {
   constructor(
     private readonly prospeccao: ProspeccaoService,
     private readonly rntrc: RntrcService,
+    private readonly enriquecimento: EnriquecimentoService,
   ) {}
 
   @RequerPermissao("prospeccao.ver")
@@ -57,6 +59,22 @@ export class ProspeccaoController {
   @Post("importar-rntrc")
   async importarRntrc(@Body() body: { ufs?: string[]; urlDireta?: string }) {
     return this.rntrc.importar({ ufs: body?.ufs, urlDireta: body?.urlDireta });
+  }
+
+  /**
+   * Busca telefone e e-mail dos leads sem contato, do melhor pro pior.
+   *
+   * Vai devagar de propósito (~1 consulta por segundo): a fonte é um serviço
+   * público gratuito. 500 leads levam uns 8 minutos; chamar de novo continua
+   * de onde parou.
+   */
+  @RequerPermissao("prospeccao.importar")
+  @Post("enriquecer")
+  async enriquecer(@Body() body: { limite?: number; scoreMinimo?: number }) {
+    return this.enriquecimento.enriquecerPendentes({
+      limite: body?.limite,
+      scoreMinimo: body?.scoreMinimo,
+    });
   }
 
   /** Repontua a base sem rebaixar nada do trabalho de campo. Roda em segundos. */

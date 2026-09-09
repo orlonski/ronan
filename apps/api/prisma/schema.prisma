@@ -3631,6 +3631,26 @@ model Lead {
   score        Int?
   scoreMotivo  String?   @db.Text
 
+  /// Enriquecimento (dados públicos da Receita, via BrasilAPI).
+  ///
+  /// O CNAE é o que confirma o ramo DE VERDADE: a heurística por razão social
+  /// erra com "COMERCIO DE ALIMENTOS" que tirou RNTRC pra frota própria.
+  nomeFantasia      String?
+  cnae              String?
+  cnaeDescricao     String?
+  porte             String?
+  capitalSocial     Decimal?  @db.Decimal(15, 2)
+  situacaoCadastral String?
+  /// Nome do sócio administrador — é com quem se fala. Dado pessoal: entra no
+  /// mesmo regime de legítimo interesse do resto, e sai no opt-out.
+  socio             String?
+
+  enriquecidoEm   DateTime?
+  /// Conta as falhas pra não ficar batendo eternamente no mesmo CNPJ que a
+  /// Receita não conhece.
+  enriquecimentoTentativas Int     @default(0)
+  enriquecimentoErro       String?
+
   origem String @default("SITE_FORMULARIO")
 
   /// De onde o dado saiu, em texto legível. Obrigatório na prospecção ativa.
@@ -3664,6 +3684,7 @@ model Lead {
   @@index([email])
   @@index([uf, categoria, status])
   @@index([score(sort: Desc)])
+  @@index([enriquecidoEm])
   @@map("leads")
 }
 
