@@ -4,6 +4,7 @@ import type { PrismaService } from "../prisma/prisma.service";
 import type { SessaoService, SessaoResolvida } from "../whatsapp/sessao.service";
 import type { AgenteService } from "../whatsapp/agente/agente.service";
 import type { ChatwootClientService } from "./chatwoot-client.service";
+import type { ConviteService } from "../whatsapp/convite.service";
 
 const MOTORISTA: SessaoResolvida = {
   tipo: "MOTORISTA",
@@ -15,13 +16,26 @@ const MOTORISTA: SessaoResolvida = {
 
 const DESCONHECIDO: SessaoResolvida = { tipo: "DESCONHECIDO", sessaoId: null, contaId: null };
 
-function montar(opts: { identidade?: SessaoResolvida; status?: string; resposta?: string } = {}) {
+function montar(
+  opts: {
+    identidade?: SessaoResolvida;
+    status?: string;
+    resposta?: string;
+    contaDoCodigo?: string | null;
+    consumirErro?: string;
+  } = {},
+) {
   const create = vi.fn(async (_args: { data: { direcao: string } }) => ({}));
   const findUnique = vi.fn(async () => ({ status: opts.status ?? "APROVADO" }));
   const processar = vi.fn(async () => opts.resposta ?? "Sua última viagem foi conferida.");
-  const responder = vi.fn(async () => true);
+  const responder = vi.fn(async (_conta: number, _conversa: number, _texto: string) => true);
   const passarParaHumano = vi.fn(async () => {});
   const marcarMensagemRecebida = vi.fn(async () => {});
+  const contaDoCodigo = vi.fn(async () => opts.contaDoCodigo ?? null);
+  const consumir = vi.fn(async () => {
+    if (opts.consumirErro) throw new Error(opts.consumirErro);
+    return { motorista: { nome: "Diego Davi" }, user: null };
+  });
 
   const s = new ChatwootAgenteService(
     { whatsappMensagem: { create }, motorista: { findUnique } } as unknown as PrismaService,
@@ -30,9 +44,10 @@ function montar(opts: { identidade?: SessaoResolvida; status?: string; resposta?
       marcarMensagemRecebida,
     } as unknown as SessaoService,
     { processar } as unknown as AgenteService,
+    { contaDoCodigo, consumir } as unknown as ConviteService,
     { responder, passarParaHumano } as unknown as ChatwootClientService,
   );
-  return { s, create, findUnique, processar, responder, passarParaHumano };
+  return { s, create, findUnique, processar, responder, passarParaHumano, consumir };
 }
 
 const evento = (over: Record<string, unknown> = {}) => ({
@@ -124,5 +139,42 @@ describe("histórico", () => {
     expect(create).toHaveBeenCalledTimes(2);
     const direcoes = create.mock.calls.map((c) => c[0].data.direcao);
     expect(direcoes).toEqual(["ENTRADA", "SAIDA"]);
+  });
+});
+
+describe("vínculo por código de convite", () => {
+  it("código válido vincula o telefone e não vira ticket", async () => {
+    // Sem este caminho o código morreria na fila humana e ninguém novo
+    // conseguiria se vincular pelo canal oficial.
+    const { s, consumir, responder, passarParaHumano } = montar({
+      identidade: DESCONHECIDO,
+      contaDoCodigo: "conta-1",
+    });
+    await s.processar(evento({ content: "A1B2C3" }));
+    expect(consumir).toHaveBeenCalledOnce();
+    expect(responder.mock.calls[0]?.[2]).toContain("vinculado");
+    expect(passarParaHumano).not.toHaveBeenCalled();
+  });
+
+  it("código expirado responde o motivo, sem abrir ticket", async () => {
+    // Erro de digitação é de quem digitou; virar ticket a cada typo entope a fila.
+    const { s, responder, passarParaHumano } = montar({
+      identidade: DESCONHECIDO,
+      contaDoCodigo: "conta-1",
+      consumirErro: "Código expirou",
+    });
+    await s.processar(evento({ content: "A1B2C3" }));
+    expect(responder).toHaveBeenCalledWith(1, 7, "Código expirou");
+    expect(passarParaHumano).not.toHaveBeenCalled();
+  });
+
+  it("palavra curta que não é código segue pro caminho normal", async () => {
+    const { s, consumir, passarParaHumano } = montar({
+      identidade: DESCONHECIDO,
+      contaDoCodigo: null,
+    });
+    await s.processar(evento({ content: "oi" }));
+    expect(consumir).not.toHaveBeenCalled();
+    expect(passarParaHumano).toHaveBeenCalledWith(1, 7);
   });
 });

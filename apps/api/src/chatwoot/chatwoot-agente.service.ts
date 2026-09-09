@@ -3,6 +3,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { comConta, comoSistema } from "../common/conta/conta-context";
 import { AgenteService } from "../whatsapp/agente/agente.service";
 import { SessaoService } from "../whatsapp/sessao.service";
+import { ConviteService } from "../whatsapp/convite.service";
 import { ChatwootClientService } from "./chatwoot-client.service";
 
 /**
@@ -42,6 +43,7 @@ export class ChatwootAgenteService {
     private readonly prisma: PrismaService,
     private readonly sessao: SessaoService,
     private readonly agente: AgenteService,
+    private readonly convite: ConviteService,
     private readonly chatwoot: ChatwootClientService,
   ) {}
 
@@ -85,6 +87,11 @@ export class ChatwootAgenteService {
       : ({ tipo: "DESCONHECIDO", sessaoId: null, contaId: null } as const);
 
     if (identidade.tipo === "DESCONHECIDO") {
+      // Antes de entregar pra uma pessoa: pode ser alguém se vinculando. É por
+      // aqui que um motorista entra no canal pela primeira vez — sem isto o
+      // código de convite morreria na fila humana e ninguém novo se vincularia.
+      if (await this.tentarVincular(texto, telefone, contaChatwoot, conversaId)) return;
+
       this.log.log(`número não reconhecido — conversa ${conversaId} vai pra fila humana`);
       await this.chatwoot.responder(contaChatwoot, conversaId, TEXTO_DESCONHECIDO);
       await this.chatwoot.passarParaHumano(contaChatwoot, conversaId);
@@ -127,6 +134,49 @@ export class ChatwootAgenteService {
     });
 
     await this.sessao.marcarMensagemRecebida(identidade.sessaoId);
+  }
+
+  /**
+   * Código de convite: 4 a 8 letras/números, e nada mais na mensagem.
+   *
+   * Devolve `true` quando a mensagem ERA uma tentativa de vínculo — deu certo
+   * ou não. Um código errado é erro de quem digitou, não assunto pra atendente:
+   * responde o motivo e deixa tentar de novo, em vez de abrir ticket a cada
+   * typo.
+   *
+   * O consumo roda dentro da conta DO CÓDIGO, não da conversa: quem manda o
+   * código ainda não tem conta nenhuma resolvida.
+   */
+  private async tentarVincular(
+    texto: string,
+    telefone: string,
+    contaChatwoot: number,
+    conversaId: number,
+  ): Promise<boolean> {
+    if (!/^[A-Za-z0-9]{4,8}$/.test(texto)) return false;
+
+    const contaDoCodigo = await this.convite.contaDoCodigo(texto);
+    if (!contaDoCodigo) return false; // parecia código, mas não era
+
+    try {
+      const sessao = await comConta(contaDoCodigo, () =>
+        this.convite.consumir(texto, telefone),
+      );
+      const nome = sessao.motorista?.nome ?? sessao.user?.nome ?? "";
+      this.log.log(`telefone vinculado pelo Chatwoot — conversa ${conversaId}`);
+      await this.chatwoot.responder(
+        contaChatwoot,
+        conversaId,
+        `Pronto${nome ? `, ${nome.split(" ")[0]}` : ""}! Seu WhatsApp está vinculado. ` +
+          "Pode me perguntar sobre suas viagens.",
+      );
+    } catch (e) {
+      // As exceções do ConviteService já vêm com texto pra pessoa ler
+      // ("Código expirou", "Código já foi usado").
+      const msg = (e as { message?: string }).message ?? "Não consegui usar esse código.";
+      await this.chatwoot.responder(contaChatwoot, conversaId, msg);
+    }
+    return true;
   }
 
   /**
