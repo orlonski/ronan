@@ -183,8 +183,18 @@ VITE_APPSTORE_URL=              # vazio esconde o botão da App Store
 ### Domínio
 
 - `www.SEU-DOMINIO.com.br` → porta interna `80`
-- Vale apontar o apex (`SEU-DOMINIO.com.br`) pro mesmo serviço, com redirect
-  pro `www` no Easypanel.
+- O apex (`SEU-DOMINIO.com.br`) foi apontado pro mesmo serviço: os dois servem o
+  site, e a tag `canonical` do HTML declara o `www` como oficial. O Traefik já
+  redireciona `http` → `https` sozinho (308).
+
+> **Cloudflare: o registro precisa ficar cinza (DNS only).** O `movatruck.com.br`
+> mora na Cloudflare, e com a nuvem laranja o desafio HTTP-01 do Let's Encrypt
+> não chega no Traefik — o domínio fica sem certificado sem dizer por quê.
+> Cuidado com um detalhe que não é óbvio: **desligar o proxy de um CNAME não
+> resolve** se o alvo dele estiver proxiado (o `www` era `CNAME → apex`, e o
+> apex estava laranja; a Cloudflare continuava respondendo). O que funciona é
+> cada nome ser um **registro A próprio apontando pro IP da VPS, DNS only** —
+> igual o `app.` já fazia.
 
 ### Healthcheck
 
