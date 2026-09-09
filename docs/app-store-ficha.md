@@ -94,17 +94,22 @@ Você também pode apagar sua conta pelo próprio app, em Perfil.
 
 ## Review notes (em inglês — é o que o revisor lê)
 
-Trocar `<CPF>` e `<SENHA>` pelos valores gerados por
-`cd apps/api && pnpm demo:apple -- --senha "..."`, rodado contra o banco de
-**produção**. A conta tem que ser de um motorista **sem transportadora** — ver
-`docs/app-store-submissao.md`.
+A conta abaixo foi criada em produção em 09/09/2026 com
+`node dist/scripts/criar-demo-apple.js`, e é de um motorista **sem
+transportadora** — ver `docs/app-store-submissao.md`. Se um dia ela ganhar
+vínculo com alguma empresa, para de servir e tem que ser refeita.
+
+A senha fica **fora do repositório** de propósito — quem for submeter digita no
+App Store Connect. É a senha passada em `--senha` quando o script rodou.
 
 ```
 DEMO ACCOUNT
 The app signs in with a Brazilian tax ID (CPF) and a password.
 
-  CPF:      <CPF>
-  Password: <SENHA>
+  CPF:      73804537006
+  Password: <preencher na hora de colar no App Store Connect>
+
+(The app formats the CPF as 738.045.370-06 while you type; type the digits.)
 
 Please use this account. Self sign-up sends a confirmation code over WhatsApp to
 a Brazilian phone number, so a reviewer cannot complete it. This demo account is
