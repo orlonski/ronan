@@ -128,6 +128,8 @@ export function usePosicaoAoVivo(ativo: boolean): PosAoVivo | null {
     }
     let alive = true;
     let sub: { remove: () => void } | null = null;
+    /** O watch já falou? Então nenhuma semente pode sobrescrever. */
+    let temFixReal = false;
     void (async () => {
       try {
         const Location = await import("expo-location");
@@ -136,6 +138,38 @@ export function usePosicaoAoVivo(ativo: boolean): PosAoVivo | null {
           const req = await Location.requestForegroundPermissionsAsync();
           if (!req.granted) return;
         }
+
+        // PRIMEIRA POSIÇÃO na marra, antes do watch.
+        //
+        // `watchPositionAsync` com `distanceInterval: 5` só chama de volta
+        // depois de 5 metros de deslocamento: quem liga isto PARADO (no pátio,
+        // no posto, esperando carregar) podia ficar sem posição nenhuma por
+        // tempo indeterminado. E sem posição não há origem, logo não há rota —
+        // era por isso que o mapa abria sem a linha e ficava no "procurando o
+        // sinal do GPS".
+        //
+        // Duas fontes, da mais rápida pra mais precisa: a última conhecida sai
+        // na hora (pode estar velha) e o `Balanced` fecha um fix em segundos,
+        // bem antes do `BestForNavigation`. As duas cedem lugar ao watch.
+        const semear = (p: {
+          coords: { latitude: number; longitude: number; heading?: number | null; speed?: number | null };
+        }) => {
+          if (!alive || temFixReal) return;
+          setPos({
+            lat: p.coords.latitude,
+            lng: p.coords.longitude,
+            heading: p.coords.heading ?? null,
+            speed: p.coords.speed ?? null,
+          });
+        };
+        const ultima = await Location.getLastKnownPositionAsync().catch(() => null);
+        if (ultima) semear(ultima);
+        void Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+          .then(semear)
+          .catch(() => {
+            /* sem fix rápido: o watch resolve quando ele andar */
+          });
+
         const s = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.BestForNavigation,
@@ -144,6 +178,7 @@ export function usePosicaoAoVivo(ativo: boolean): PosAoVivo | null {
           },
           (p) => {
             if (!alive) return;
+            temFixReal = true;
             setPos({
               lat: p.coords.latitude,
               lng: p.coords.longitude,
