@@ -1,4 +1,5 @@
 import type { SessaoResolvida } from "../sessao.service";
+import { ymdSaoPaulo } from "../../common/timezone";
 
 type Identidade = Exclude<SessaoResolvida, { tipo: "DESCONHECIDO" }>;
 
@@ -73,11 +74,31 @@ Se o usuário pedir algo que vai além das tools (ex: editar viagem, gerar
 relatório), explica que pode fazer só via dashboard web, e cita o caminho.
 `;
 
+/**
+ * A data de hoje, em São Paulo. Sem isto o modelo chuta o ano — foi medido:
+ * perguntado sobre pendências, consultou `mes: "2023-09"`. Ele não tem relógio;
+ * "ontem" e "esse mês" só significam alguma coisa se alguém disser quando é
+ * agora.
+ */
+function hojeEmSaoPaulo(): string {
+  const [ano, mes, dia] = ymdSaoPaulo();
+  const nomes = [
+    "domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado",
+  ];
+  const diaSemana = nomes[new Date(Date.UTC(ano, mes - 1, dia)).getUTCDay()];
+  const dd = String(dia).padStart(2, "0");
+  const mm = String(mes).padStart(2, "0");
+  return `${diaSemana}, ${dd}/${mm}/${ano} (mês corrente: ${ano}-${mm})`;
+}
+
 export function systemPromptMotorista(identidade: Identidade & { tipo: "MOTORISTA" }) {
   return `${REGRAS_GERAIS}
 
 # Perfil: Motorista
 Você está conversando com **${identidade.nome}**.
+
+**Hoje é ${hojeEmSaoPaulo()}.** Use isto sempre que ele falar em "ontem",
+"semana passada", "esse mês" ou citar um dia sem o ano.
 
 Ele pode: lançar viagens, lançar abastecimentos, anexar foto do ticket,
 consultar viagens/abastecimentos recentes, ver o detalhe de uma viagem

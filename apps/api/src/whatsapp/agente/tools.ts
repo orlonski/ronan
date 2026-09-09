@@ -287,7 +287,10 @@ const TOOLS_MOTORISTA: AgentToolDefinition[] = [
         desde: {
           type: "string",
           enum: ["hoje", "ontem", "semana", "mes"],
-          description: "Janela temporal (default: hoje)",
+          description:
+            "Janela temporal. Default: semana — quem pede 'minhas viagens' ou 'as últimas' " +
+            "quer as recentes, e responder só com as de hoje faz parecer que o resto sumiu. " +
+            "Use 'hoje' só quando ele disser hoje.",
         },
         mes: {
           type: "string",
@@ -320,14 +323,24 @@ const TOOLS_MOTORISTA_VIAGENS: AgentToolDefinition[] = [
   {
     name: "detalhe_viagem",
     description:
-      "Detalhe completo de UMA viagem, incluindo pendências e divergências. Use depois de " +
-      "`consultar_minhas_viagens`, com o `id` que veio de lá, quando ele quiser saber de uma viagem específica.",
+      "Detalhe de UMA viagem: o que falta nela, o que divergiu na conferência, fotos e pedágio. " +
+      "Identifique a viagem pelo TICKET (jeito preferido — é o número que o motorista fala) ou " +
+      "pelo `id` que veio de `consultar_minhas_viagens`. Passe um dos dois.",
     input_schema: {
       type: "object",
       properties: {
-        viagem_id: { type: "string", description: "UUID da viagem, como veio em `consultar_minhas_viagens`." },
+        ticket: {
+          type: "string",
+          description:
+            "Número do ticket/romaneio, como aparece na lista de viagens. Prefira este.",
+        },
+        viagem_id: {
+          type: "string",
+          description:
+            "UUID, apenas se veio literalmente de `consultar_minhas_viagens` nesta conversa. " +
+            "Nunca escreva um UUID de cabeça: se não tem o id na mão, use `ticket`.",
+        },
       },
-      required: ["viagem_id"],
     },
   },
   {
@@ -418,20 +431,49 @@ async function executarToolInterno(
 
     case "detalhe_viagem": {
       if (ctx.identidade.tipo !== "MOTORISTA") throw new Error("tool não disponível pra esse perfil");
+
+      // Ticket ganha do id. O modelo tem o número do ticket na conversa; o UUID
+      // ele só teria se carregasse de um turno anterior — e não carrega, porque
+      // o histórico guarda só o texto. Pedir o que ele não tem é o que fazia
+      // ele inventar.
+      let viagemId = typeof input.viagem_id === "string" ? input.viagem_id.trim() : "";
+      const ticket = typeof input.ticket === "string" ? input.ticket.trim() : "";
+      if (ticket) {
+        const achada = await ctx.prisma.viagem.findFirst({
+          where: { motoristaId: ctx.identidade.motoristaId, ticket },
+          select: { id: true },
+          orderBy: { data: "desc" },
+        });
+        if (!achada) {
+          return {
+            ok: false,
+            motivo: "ticket_nao_encontrado",
+            instrucao: `Não existe viagem sua com o ticket ${ticket}. Confirme o número com ele.`,
+          };
+        }
+        viagemId = achada.id;
+      }
+
+      if (!viagemId) {
+        return {
+          ok: false,
+          motivo: "sem_identificacao",
+          instrucao: "Passe o `ticket` da viagem (ou o `id` vindo de consultar_minhas_viagens).",
+        };
+      }
+
       try {
         // `detalhe` recusa viagem de outro motorista — a checagem de dono não
         // se repete aqui, mora lá, num lugar só.
-        return await ctx.viagens.detalhe(ctx.identidade.motoristaId, String(input.viagem_id));
+        const v = await ctx.viagens.detalhe(ctx.identidade.motoristaId, viagemId);
+        return resumirViagem(v);
       } catch {
-        // Id que não existe (ou não é dele) quase sempre é id INVENTADO pelo
-        // modelo. Exceção crua vira "tive um problema" na cara do motorista;
-        // devolvida como instrução, o modelo se corrige no mesmo turno.
         return {
           ok: false,
-          motivo: "id_invalido",
+          motivo: "nao_encontrada",
           instrucao:
-            "Esse id não é de nenhuma viagem sua. Não invente id: chame " +
-            "consultar_minhas_viagens e use exatamente o campo `id` que vier de lá.",
+            "Esse identificador não é de nenhuma viagem sua. Chame consultar_minhas_viagens " +
+            "e use o `ticket` que vier de lá.",
         };
       }
     }
@@ -679,21 +721,32 @@ async function executarToolInterno(
 
     case "consultar_minhas_viagens": {
       if (ctx.identidade.tipo !== "MOTORISTA") throw new Error("tool não disponível pra esse perfil");
-      const desde = (input.desde as string) ?? "hoje";
+      const desde = (input.desde as string) ?? "semana";
       // Mês fechado ganha do `desde`: quem pergunta por "03/09" quer aquele
       // mês inteiro, não os últimos N dias contados de hoje.
       const mesPedido = typeof input.mes === "string" && /^\d{4}-\d{2}$/.test(input.mes)
         ? input.mes
         : null;
       const [anoM, mesM] = mesPedido ? mesPedido.split("-").map(Number) : [0, 0];
+      // "ontem" é o dia de ontem, não "de ontem pra cá": sem o limite superior,
+      // perguntar pela viagem de ontem trazia junto a de hoje, e o agente
+      // respondia "ontem você fez duas viagens" mostrando uma de cada dia.
+      const [anoH, mesH, diaH] = ymdSaoPaulo();
       const periodo = mesPedido
         ? { gte: new Date(Date.UTC(anoM, mesM - 1, 1)), lt: new Date(Date.UTC(anoM, mesM, 1)) }
-        : { gte: inicioJanela(desde) };
+        : desde === "ontem"
+          ? {
+              gte: new Date(Date.UTC(anoH, mesH - 1, diaH - 1)),
+              lt: new Date(Date.UTC(anoH, mesH - 1, diaH)),
+            }
+          : { gte: inicioJanela(desde) };
       const lista = await ctx.prisma.viagem.findMany({
         where: {
           motoristaId: ctx.identidade.motoristaId,
-          // Não reporta viagem incompleta (em andamento ou aguardando peso/ticket).
-          status: { notIn: STATUS_FORA_FECHAMENTO },
+          // As incompletas ENTRAM. Elas ficam fora de fechamento e KPI — e é
+          // certo que fiquem —, mas escondê-las do próprio motorista fazia o
+          // agente responder "não achei" pra viagem que ele acabou de lançar.
+          // Quem lançou sem peso é justamente quem mais precisa ser lembrado.
           data: periodo,
         },
         select: {
@@ -715,8 +768,11 @@ async function executarToolInterno(
       return {
         janela: mesPedido ?? desde,
         total: lista.length,
+        // Soma só o que está completo: viagem sem peso entraria como 0 e faria
+        // o total mentir pra baixo.
         toneladasTotal: lista
-          .reduce((s, v) => s + Number(v.toneladas), 0)
+          .filter((v) => !STATUS_FORA_FECHAMENTO.includes(v.status))
+          .reduce((s, v) => s + Number(v.toneladas ?? 0), 0)
           .toFixed(2),
         viagens: lista.map((v) => ({
           // O id vai junto porque é o que `detalhe_viagem` pede; sem ele o
@@ -732,6 +788,10 @@ async function executarToolInterno(
           para: v.localDescarga?.nome ?? null,
           placa: v.veiculo.placa,
           status: v.status,
+          // Traduzido aqui, e não no prompt: o que falta numa viagem é regra do
+          // sistema, não estilo de conversa. Deixar isso a cargo do modelo era
+          // pedir pra ele adivinhar o significado de um enum.
+          pendencia: pendenciaDoStatus(v.status),
         })),
       };
     }
@@ -849,4 +909,63 @@ function inicioJanela(desde: string): Date {
   if (desde === "semana") return new Date(Date.UTC(y, m - 1, dia - 7));
   if (desde === "mes") return new Date(Date.UTC(y, m - 1, 1));
   return new Date(Date.UTC(y, m - 1, dia)); // hoje
+}
+
+/**
+ * O que interessa de uma viagem pra uma resposta de WhatsApp.
+ *
+ * O `detalhe` do serviço devolve a linha do banco com tudo: rastro de GPS ponto
+ * a ponto, geometria da rota, chaves estrangeiras, storageKey de cada foto.
+ * Isso é maior que o próprio system prompt, e nada disso cabe numa frase pro
+ * motorista — só empurra o resto do contexto pra fora e dá ao modelo dezenas de
+ * UUIDs pra imitar.
+ */
+function resumirViagem(v: Record<string, any>): Record<string, unknown> {
+  return {
+    ticket: v.ticket,
+    data: v.data,
+    status: v.status,
+    material: v.material?.nome ?? null,
+    cliente: v.cliente?.nome ?? null,
+    de: v.localCarga?.nome ?? null,
+    para: v.localDescarga?.nome ?? null,
+    placa: v.veiculo?.placa ?? null,
+    toneladas: v.toneladas != null ? Number(v.toneladas) : null,
+    km: v.km != null ? Number(v.km) : null,
+    kmMotorista: v.kmMotorista != null ? Number(v.kmMotorista) : null,
+    valorPedagio: v.valorPedagioTotal != null ? Number(v.valorPedagioTotal) : null,
+    observacao: v.observacao ?? null,
+    // O que a conferência apontou é a razão de ele perguntar pelo detalhe.
+    divergencias: Array.isArray(v.divergencias)
+      ? v.divergencias.map((d: Record<string, any>) => ({
+          campo: d.campo,
+          esperado: d.valorEsperado ?? d.esperado ?? null,
+          informado: d.valorInformado ?? d.informado ?? null,
+          resolvida: Boolean(d.resolvidaEm),
+        }))
+      : [],
+    temFoto: Array.isArray(v.fotos) && v.fotos.length > 0,
+    // GPS, geometria de rota e ids ficam de fora de propósito.
+  };
+}
+
+/**
+ * O que falta numa viagem, dito como o motorista entende.
+ *
+ * `null` quando não falta nada dele — inclusive em INCOMPLETA, que é dado que
+ * falta do NOSSO lado: cobrar isso dele seria cobrar pelo nosso erro.
+ */
+function pendenciaDoStatus(status: string): string | null {
+  switch (status) {
+    case "AGUARDANDO_PESO":
+      return "falta o peso e o ticket";
+    case "AGUARDANDO_SAIDA":
+      return "falta marcar a hora da saída";
+    case "EM_ANDAMENTO":
+      return "viagem ainda aberta, não foi finalizada";
+    case "DIVERGENTE":
+      return "deu diferença na conferência e estão esperando sua resposta";
+    default:
+      return null;
+  }
 }

@@ -57,7 +57,14 @@ export class AnthropicProvider implements AgentProvider {
     for (let i = 0; i < MAX_TOOL_LOOPS; i++) {
       const resp = await this.client.messages.create({
         model: modelo,
-        max_tokens: 1500,
+        // 1500 era o mesmo teto que, no Gemini, fazia o modelo terminar sem
+        // escrever nada depois de consultar. Aqui a falha é outra — resposta
+        // cortada no meio, que `stop_reason: max_tokens` denuncia e ninguém
+        // olhava — mas a causa é a mesma: orçamento apertado.
+        max_tokens: 4096,
+        // Ver comentário no provider do Gemini: consistência vale mais que
+        // variedade num agente que responde sobre dado de banco.
+        temperature: 0.2,
         system,
         tools: anthropicTools,
         messages,

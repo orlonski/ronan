@@ -89,7 +89,12 @@ export class GeminiProvider implements AgentProvider {
             // pensamento: aqui ninguém precisa filosofar, precisa contar o que
             // achou no banco.
             maxOutputTokens: 8192,
-            thinkingConfig: { thinkingBudget: 512 },
+            thinkingConfig: { thinkingBudget: 2048 },
+            // Sem isto o default é alto e a MESMA pergunta escolhe ferramenta
+            // diferente a cada execução — medido: "me mostra minhas últimas
+            // viagens" ora consultava hoje, ora a semana. Aqui não se quer
+            // criatividade: quer-se ler o banco e contar o que achou.
+            temperature: 0.2,
           },
         }),
       );

@@ -161,6 +161,7 @@ async function main() {
   for (const pergunta of perguntas) {
     console.log(`\n${"=".repeat(70)}\n>>> ${pergunta}\n${"=".repeat(70)}`);
     const inicio = Date.now();
+    try {
 
     // Tudo dentro do `comConta`, com o await DENTRO: promise do Prisma é
     // preguiçosa, e resolver fora do contexto faria a query sair sem a trava.
@@ -197,6 +198,14 @@ async function main() {
 
     const seg = ((Date.now() - inicio) / 1000).toFixed(1);
     console.log(`\n<<< (${seg}s)\n${resposta || "[VAZIO — o motorista não receberia nada]"}\n`);
+    // pausa curta entre perguntas: o Pro devolve 503 quando se bate nele em
+    // sequência, e uma bateria que morre na primeira pergunta não serve
+    await new Promise((r) => setTimeout(r, 1500));
+    } catch (e) {
+      // Uma pergunta que explode não pode levar a bateria junto: o valor está
+      // em ver os seis casos de uma vez.
+      console.log(`\n<<< [FALHOU] ${(e as Error).message.slice(0, 300)}\n`);
+    }
   }
 
   await app.close();
