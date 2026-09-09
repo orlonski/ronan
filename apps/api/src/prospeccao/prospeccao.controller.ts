@@ -1,7 +1,26 @@
-import { Body, Controller, Get, Post, Query } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  NotFoundException,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+} from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RequerPermissao } from "../auth/decorators/requer-permissao.decorator";
+import { ZodValidationPipe } from "../common/zod-validation.pipe";
+import {
+  atualizarLeadSchema,
+  criarInteracaoSchema,
+  listLeadsSchema,
+  type AtualizarLeadInput,
+  type CriarInteracaoInput,
+  type ListLeadsParams,
+} from "./prospeccao.schema";
 import { ProspeccaoService } from "./prospeccao.service";
 import { EnriquecimentoService } from "./enriquecimento.service";
 import { RntrcService } from "./rntrc.service";
@@ -31,34 +50,40 @@ export class ProspeccaoController {
 
   @RequerPermissao("prospeccao.ver")
   @Get("leads")
-  async leads(
-    @Query("uf") uf?: string,
-    @Query("municipio") municipio?: string,
-    @Query("status") status?: string,
-    @Query("scoreMinimo") scoreMinimo?: string,
-    @Query("comContato") comContato?: string,
-    @Query("pagina") pagina?: string,
-    @Query("porPagina") porPagina?: string,
-  ) {
-    return this.prospeccao.listar({
-      uf,
-      municipio,
-      status,
-      scoreMinimo: scoreMinimo ? Number(scoreMinimo) : undefined,
-      comContato: comContato === "true" ? true : comContato === "false" ? false : undefined,
-      pagina: pagina ? Number(pagina) : 1,
-      porPagina: porPagina ? Number(porPagina) : 50,
-    });
+  async leads(@Query(new ZodValidationPipe(listLeadsSchema)) params: ListLeadsParams) {
+    return this.prospeccao.listar(params);
   }
 
-  /**
-   * Dispara a carga do RNTRC. Demora minutos (o arquivo tem ~159 MB), então
-   * responde assim que termina — não é rota pra chamar de tela sem aviso.
-   */
-  @RequerPermissao("prospeccao.importar")
-  @Post("importar-rntrc")
-  async importarRntrc(@Body() body: { ufs?: string[]; urlDireta?: string }) {
-    return this.rntrc.importar({ ufs: body?.ufs, urlDireta: body?.urlDireta });
+  @RequerPermissao("prospeccao.ver")
+  @Get("leads/:id")
+  async lead(@Param("id") id: string) {
+    const achado = await this.prospeccao.detalhe(id);
+    if (!achado) throw new NotFoundException("Lead não encontrado");
+    return achado;
+  }
+
+  @RequerPermissao("prospeccao.editar")
+  @Patch("leads/:id")
+  async atualizarLead(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(atualizarLeadSchema)) body: AtualizarLeadInput,
+  ) {
+    return this.prospeccao.atualizar(id, body);
+  }
+
+  /** Registra um toque. `PEDIU_OPT_OUT` já dispara a supressão. */
+  @RequerPermissao("prospeccao.editar")
+  @Post("leads/:id/interacoes")
+  async registrarInteracao(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(criarInteracaoSchema)) body: CriarInteracaoInput,
+    @Req() req: { user?: { nome?: string; email?: string } },
+  ) {
+    return this.prospeccao.registrarInteracao(
+      id,
+      body,
+      req.user?.nome ?? req.user?.email ?? undefined,
+    );
   }
 
   /**

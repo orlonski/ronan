@@ -1,5 +1,8 @@
-import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { paginate } from "../common/pagination/paginate.helper";
+import { SEM_ESCOPO } from "../common/escopo/escopo";
+import type { ListLeadsParams } from "./prospeccao.schema";
 import { comoSistema } from "../common/conta/conta-context";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -36,7 +39,7 @@ export class ProspeccaoService {
         // O que falta pra base virar acionável: lead sem contato não dá pra abordar.
         comTelefone,
         comEmail,
-        semContatoNenhum: total - (await this.contarSemContato()),
+        semContatoNenhum: total - (await this.contarComContato()),
         porStatus: porStatus.map((s) => ({ status: s.status, total: s._count })),
         porUf: porUf.map((u) => ({ uf: u.uf ?? "—", total: u._count })),
         suprimidos,
@@ -44,61 +47,57 @@ export class ProspeccaoService {
     });
   }
 
-  private async contarSemContato(): Promise<number> {
+  /** Quantos dá pra trabalhar hoje: tem telefone OU e-mail. */
+  private async contarComContato(): Promise<number> {
     return this.prisma.lead.count({
       where: { OR: [{ telefone: { not: null } }, { email: { not: null } }] },
     });
   }
 
-  async listar(filtros: {
-    uf?: string;
-    municipio?: string;
-    status?: string;
-    scoreMinimo?: number;
-    comContato?: boolean;
-    pagina: number;
-    porPagina: number;
-  }) {
-    const porPagina = Math.min(Math.max(filtros.porPagina, 1), 200);
-    const pagina = Math.max(filtros.pagina, 1);
-
+  /**
+   * Listagem de trabalho. Usa o `paginate` padrão do projeto, então a tela
+   * ganha ordenação, busca e paginação com o mesmo contrato de todas as
+   * outras — nada de formato próprio só pra esta tela.
+   */
+  async listar(params: ListLeadsParams) {
     const where: Prisma.LeadWhereInput = {
-      // Quem pediu pra sair nunca aparece numa lista de trabalho. O filtro é
+      // Quem pediu pra sair nunca aparece numa lista de trabalho. O filtro mora
       // aqui, no ponto único de leitura, e não na tela — tela se esquece.
       optOut: false,
     };
 
-    if (filtros.uf) where.uf = filtros.uf.toUpperCase();
-    if (filtros.municipio) {
-      where.municipio = { contains: filtros.municipio, mode: "insensitive" };
-    }
-    if (filtros.status) where.status = filtros.status;
-    if (typeof filtros.scoreMinimo === "number") {
-      where.score = { gte: filtros.scoreMinimo };
-    }
-    if (filtros.comContato === true) {
+    if (params.uf) where.uf = params.uf.toUpperCase();
+    if (params.municipio) where.municipio = { contains: params.municipio, mode: "insensitive" };
+    if (params.status) where.status = params.status;
+    if (params.origem) where.origem = params.origem;
+    if (typeof params.scoreMinimo === "number") where.score = { gte: params.scoreMinimo };
+
+    if (params.comContato === true) {
       where.OR = [{ telefone: { not: null } }, { email: { not: null } }];
     }
-    if (filtros.comContato === false) {
+    if (params.comContato === false) {
       where.AND = [{ telefone: null }, { email: null }];
     }
 
-    return comoSistema(async () => {
-      const [itens, total] = await Promise.all([
-        this.prisma.lead.findMany({
-          where,
-          orderBy: [{ score: "desc" }, { registradoEm: "desc" }],
-          skip: (pagina - 1) * porPagina,
-          take: porPagina,
-          include: {
-            _count: { select: { interacoes: true } },
-          },
-        }),
-        this.prisma.lead.count({ where }),
-      ]);
-
-      return { itens, total, pagina, porPagina };
-    });
+    return comoSistema(async () =>
+      paginate<Record<string, unknown>, ListLeadsParams>(this.prisma.lead, {
+        params,
+        where: where as Record<string, unknown>,
+        // Lead é da plataforma e não tem coluna de frota: não há recorte por
+        // transportadora a fazer. Quem não pode ver a tela não tem a chave.
+        escopo: SEM_ESCOPO,
+        searchFields: ["empresa", "nomeFantasia", "municipio", "cnpj", "socio"],
+        sortable: {
+          score: "score",
+          empresa: "empresa",
+          municipio: "municipio",
+          registradoEm: "registradoEm",
+          criadoEm: "criadoEm",
+        },
+        defaultSort: { field: "score", order: "desc" },
+        include: { _count: { select: { interacoes: true } } },
+      }),
+    );
   }
 
   /**
@@ -138,6 +137,71 @@ export class ProspeccaoService {
       this.log.log(`Opt-out registrado (${tipo}) — ${count} lead(s) marcado(s)`);
       return { contato, tipo, leadsMarcados: count };
     });
+  }
+
+  /** Ficha completa, com o histórico de toques. */
+  async detalhe(id: string) {
+    return comoSistema(async () =>
+      this.prisma.lead.findUnique({
+        where: { id },
+        include: { interacoes: { orderBy: { criadoEm: "desc" }, take: 50 } },
+      }),
+    );
+  }
+
+  /**
+   * Registra um toque.
+   *
+   * Desfecho `PEDIU_OPT_OUT` dispara a supressão sozinho: quem anota "pediu pra
+   * não ligar mais" está pedindo o opt-out, e depender de a pessoa lembrar de
+   * clicar num segundo botão é como esse tipo de pedido se perde.
+   */
+  async registrarInteracao(
+    leadId: string,
+    dados: { canal: string; desfecho: string; resumo?: string },
+    autor?: string,
+  ) {
+    return comoSistema(async () => {
+      const lead = await this.prisma.lead.findUnique({
+        where: { id: leadId },
+        select: { id: true, telefone: true, email: true },
+      });
+      if (!lead) throw new NotFoundException("Lead não encontrado");
+
+      const interacao = await this.prisma.interacaoLead.create({
+        data: { leadId, canal: dados.canal, desfecho: dados.desfecho, resumo: dados.resumo, autor },
+      });
+
+      await this.prisma.lead.update({
+        where: { id: leadId },
+        data: {
+          ultimoContato: new Date(),
+          ...(dados.desfecho === "RESPONDEU" ? { status: "EM_CONTATO" } : {}),
+        },
+      });
+
+      if (dados.desfecho === "PEDIU_OPT_OUT") {
+        const contato = lead.telefone ?? lead.email;
+        if (contato) {
+          await this.registrarOptOut(contato, dados.resumo ?? "pediu no contato", dados.canal);
+        } else {
+          // Sem contato conhecido não há o que suprimir globalmente, mas o lead
+          // some da lista do mesmo jeito.
+          await this.prisma.lead.update({
+            where: { id: leadId },
+            data: { optOut: true, optOutEm: new Date() },
+          });
+        }
+      }
+
+      return interacao;
+    });
+  }
+
+  async atualizar(id: string, dados: Record<string, unknown>) {
+    return comoSistema(async () =>
+      this.prisma.lead.update({ where: { id }, data: dados }),
+    );
   }
 
   /** Um contato está suprimido? Consulte ANTES de qualquer envio. */
