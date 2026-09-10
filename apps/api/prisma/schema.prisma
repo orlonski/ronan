@@ -674,6 +674,25 @@ model ConfiguracaoPermissoes {
   @@map("configuracao_permissoes")
 }
 
+/// A conversa entre o SDR e um prospect.
+///
+/// Tabela própria, e não `WhatsappMensagem`, porque aquela pertence a uma
+/// empresa (`contaId` obrigatório) e prospect não tem empresa nenhuma — ele
+/// ainda não é cliente. Separar também mantém o canal comercial longe do
+/// operacional: nada aqui dá acesso a dado de transportadora.
+model MensagemLead {
+  id       String   @id @default(uuid())
+  lead     Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId   String
+  /// "ENTRADA" (o prospect falou) | "SAIDA" (o SDR respondeu).
+  direcao  String
+  conteudo String   @db.Text
+  criadoEm DateTime @default(now())
+
+  @@index([leadId, criadoEm])
+  @@map("mensagens_lead")
+}
+
 /// Quanto custa o Movatruck, por tamanho de frota.
 ///
 /// Tabela, e não um número no código, porque preço muda e mudar preço não pode
@@ -722,6 +741,22 @@ model ConfiguracaoPlataforma {
   /// autenticação paga. Os outros dois freios (por IP e por telefone) são
   /// contra insistência, não contra volume.
   maxCodigosPorHora  Int      @default(30)
+
+  /// O SDR atende prospect no WhatsApp?
+  ///
+  /// Mora aqui, e não em `ConfiguracaoAgente`, porque aquela tabela é POR
+  /// EMPRESA e o SDR fala com quem ainda não é empresa nenhuma. Ligar o
+  /// atendimento comercial da Movatruck não pode depender da linha de um
+  /// cliente — nem ligar junto o agente que fala com motorista dele.
+  sdrAtivo           Boolean  @default(false)
+  /// "anthropic" | "gemini" — escolha da plataforma, não herdada de cliente.
+  sdrProvider        String   @default("anthropic")
+  sdrModeloAnthropic String   @default("claude-sonnet-4-6")
+  sdrModeloGemini    String   @default("gemini-2.5-flash")
+  /// Onde o prospect cria a conta sozinho. Configurável porque o domínio do
+  /// painel já mudou uma vez e vai mudar de novo.
+  sdrLinkCadastro    String   @default("https://app.movatruck.com.br/cadastro")
+
   alteradoEm         DateTime @updatedAt
 
   @@map("configuracao_plataforma")
@@ -3888,6 +3923,7 @@ model Lead {
   ultimoContato DateTime?
 
   interacoes InteracaoLead[]
+  mensagens  MensagemLead[]
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt

@@ -5,6 +5,7 @@ import type { SessaoService, SessaoResolvida } from "../whatsapp/sessao.service"
 import type { AgenteService } from "../whatsapp/agente/agente.service";
 import type { ChatwootClientService } from "./chatwoot-client.service";
 import type { ConviteService } from "../whatsapp/convite.service";
+import type { SdrService, RespostaSdr } from "../sdr/sdr.service";
 
 const MOTORISTA: SessaoResolvida = {
   tipo: "MOTORISTA",
@@ -24,6 +25,12 @@ function montar(
     agenteAtivo?: boolean;
     contaDoCodigo?: string | null;
     consumirErro?: string;
+    /** O que o SDR devolve. `null` = não é comigo (desligado, opt-out, sem chave). */
+    respostaSdr?: RespostaSdr | null;
+    /** O telefone bate com um lead da base de prospecção? */
+    ehLead?: boolean;
+    /** O SDR explode (falha de IA, timeout). */
+    sdrErro?: string;
   } = {},
 ) {
   const create = vi.fn(async (_args: { data: { direcao: string } }) => ({}));
@@ -41,12 +48,21 @@ function montar(
     if (opts.consumirErro) throw new Error(opts.consumirErro);
     return { motorista: { nome: "Diego Davi" }, user: null };
   });
+  const atender = vi.fn(async () => {
+    if (opts.sdrErro) throw new Error(opts.sdrErro);
+    return opts.respostaSdr ?? null;
+  });
+  const leadFindFirst = vi.fn(async () =>
+    opts.ehLead ? { id: "lead-1", empresa: "Transportes Teste", status: "NOVO" } : null,
+  );
 
   const s = new ChatwootAgenteService(
     {
       whatsappMensagem: { create },
       motorista: { findUnique },
       configuracaoAgente: { findUnique: configFind },
+      lead: { findFirst: leadFindFirst, update: vi.fn(async () => ({})) },
+      interacaoLead: { create: vi.fn(async () => ({})) },
     } as unknown as PrismaService,
     {
       resolverPorTelefone: vi.fn(async () => opts.identidade ?? MOTORISTA),
@@ -55,8 +71,9 @@ function montar(
     { processar } as unknown as AgenteService,
     { contaDoCodigo, consumir } as unknown as ConviteService,
     { responder, passarParaHumano } as unknown as ChatwootClientService,
+    { atender } as unknown as SdrService,
   );
-  return { s, create, findUnique, processar, responder, passarParaHumano, consumir };
+  return { s, create, findUnique, processar, responder, passarParaHumano, consumir, atender };
 }
 
 const evento = (over: Record<string, unknown> = {}) => ({
@@ -196,5 +213,93 @@ describe("a chave que liga e desliga", () => {
     await s.processar(evento());
     expect(processar).not.toHaveBeenCalled();
     expect(passarParaHumano).toHaveBeenCalledWith(1, 7);
+  });
+});
+
+describe("o SDR atendendo prospect", () => {
+  const RESPOSTA: RespostaSdr = {
+    texto: "Pra 8 caminhões, sai por *R$ 1.890,00* por mês.",
+    passarParaHumano: false,
+    motivoHumano: null,
+    ferramentas: ["consultar_preco"],
+  };
+
+  it("prospect conhecido é atendido pelo SDR, sem virar ticket", async () => {
+    const { s, responder, passarParaHumano, atender } = montar({
+      identidade: DESCONHECIDO,
+      ehLead: true,
+      respostaSdr: RESPOSTA,
+    });
+    await s.processar(evento({ content: "quanto custa?" }));
+    expect(atender).toHaveBeenCalledWith("lead-1", "quanto custa?");
+    expect(responder).toHaveBeenCalledWith(1, 7, RESPOSTA.texto);
+    // O ponto todo: uma conversa que o SDR resolveu não ocupa fila humana.
+    expect(passarParaHumano).not.toHaveBeenCalled();
+  });
+
+  it("número fora da base de leads nunca chega no SDR", async () => {
+    // A fronteira vale nos dois sentidos: o SDR fala de preço e de teste
+    // grátis, e isso não é o que um número aleatório deve receber.
+    const { s, atender, passarParaHumano } = montar({
+      identidade: DESCONHECIDO,
+      ehLead: false,
+      respostaSdr: RESPOSTA,
+    });
+    await s.processar(evento({ content: "quanto custa?" }));
+    expect(atender).not.toHaveBeenCalled();
+    expect(passarParaHumano).toHaveBeenCalledWith(1, 7);
+  });
+
+  it("SDR desligado devolve a conversa pra fila humana", async () => {
+    // `null` do SDR é "não é comigo" — desligado, sem chave de IA ou opt-out.
+    // Em todos esses casos o comportamento tem que ser o de antes dele existir.
+    const { s, responder, passarParaHumano } = montar({
+      identidade: DESCONHECIDO,
+      ehLead: true,
+      respostaSdr: null,
+    });
+    await s.processar(evento({ content: "quanto custa?" }));
+    expect(responder.mock.calls[0]?.[2]).toContain("chamei alguém da equipe");
+    expect(passarParaHumano).toHaveBeenCalledWith(1, 7);
+  });
+
+  it("quando o SDR pede humano, ele responde E encaminha", async () => {
+    // As duas coisas, não uma ou outra: a pessoa precisa ler "alguém vai te
+    // chamar" e a conversa precisa aparecer pra quem vai chamar.
+    const { s, responder, passarParaHumano } = montar({
+      identidade: DESCONHECIDO,
+      ehLead: true,
+      respostaSdr: {
+        texto: "Alguém da Movatruck vai te chamar.",
+        passarParaHumano: true,
+        motivoHumano: "quer negociar preço",
+        ferramentas: ["passar_para_humano"],
+      },
+    });
+    await s.processar(evento({ content: "consegue fazer por 1200?" }));
+    expect(responder).toHaveBeenCalledWith(1, 7, "Alguém da Movatruck vai te chamar.");
+    expect(passarParaHumano).toHaveBeenCalledWith(1, 7);
+  });
+
+  it("SDR que explode cai na fila humana, sem derrubar o webhook", async () => {
+    // Erro aqui não pode virar exceção: o Chatwoot reenvia o webhook que falha,
+    // e reenviar significa a pessoa recebendo a mesma resposta de novo.
+    const { s, responder, passarParaHumano } = montar({
+      identidade: DESCONHECIDO,
+      ehLead: true,
+      sdrErro: "timeout do provider",
+    });
+    await s.processar(evento({ content: "quanto custa?" }));
+    expect(responder.mock.calls[0]?.[2]).toContain("chamei alguém da equipe");
+    expect(passarParaHumano).toHaveBeenCalledWith(1, 7);
+  });
+
+  it("motorista conhecido continua indo pro agente do sistema, não pro SDR", async () => {
+    // A regressão que importa: o SDR entrou no mesmo webhook do agente, e
+    // trocar os dois faria motorista receber conversa de venda.
+    const { s, processar, atender } = montar({ respostaSdr: RESPOSTA });
+    await s.processar(evento({ content: "e minha viagem de ontem?" }));
+    expect(processar).toHaveBeenCalledOnce();
+    expect(atender).not.toHaveBeenCalled();
   });
 });

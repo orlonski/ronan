@@ -5,6 +5,7 @@ import { AgenteService } from "../whatsapp/agente/agente.service";
 import { SessaoService } from "../whatsapp/sessao.service";
 import { ConviteService } from "../whatsapp/convite.service";
 import { ChatwootClientService } from "./chatwoot-client.service";
+import { SdrService } from "../sdr/sdr.service";
 
 /**
  * O agente que atende dentro do Chatwoot.
@@ -45,6 +46,7 @@ export class ChatwootAgenteService {
     private readonly agente: AgenteService,
     private readonly convite: ConviteService,
     private readonly chatwoot: ChatwootClientService,
+    private readonly sdr: SdrService,
   ) {}
 
   /**
@@ -96,7 +98,15 @@ export class ChatwootAgenteService {
       // site. Registrar no funil antes de mandar pra fila humana é o que evita
       // a conversa sumir — até aqui ela virava ticket no atendimento e o lado
       // comercial nunca ficava sabendo que a empresa tinha procurado a gente.
-      await this.registrarNoFunil(telefone, texto);
+      const leadId = await this.registrarNoFunil(telefone, texto);
+
+      // Lead conhecido e SDR ligado: quem responde é o atendimento comercial.
+      // Fora daqui nada muda — quem não está na base de leads continua indo
+      // direto pra fila humana, e é de propósito: o SDR fala de preço e de
+      // teste grátis, e não é isso que um número aleatório deve receber.
+      if (leadId && (await this.atenderComoSdr(leadId, texto, contaChatwoot, conversaId))) {
+        return;
+      }
 
       this.log.log(`número não reconhecido — conversa ${conversaId} vai pra fila humana`);
       await this.chatwoot.responder(contaChatwoot, conversaId, TEXTO_DESCONHECIDO);
@@ -182,11 +192,14 @@ export class ChatwootAgenteService {
    * tem regra de procedência que um telefone avulso não satisfaz.
    *
    * Best-effort: o atendimento nunca pode falhar porque o CRM falhou.
+   *
+   * Devolve o id do lead quando reconheceu alguém — é o que permite o SDR
+   * responder logo em seguida sem resolver o telefone uma segunda vez.
    */
-  private async registrarNoFunil(telefone: string | null, texto: string): Promise<void> {
-    if (!telefone) return;
+  private async registrarNoFunil(telefone: string | null, texto: string): Promise<string | null> {
+    if (!telefone) return null;
     try {
-      await comoSistema(async () => {
+      return await comoSistema(async () => {
         // O lead guarda o telefone como veio da Receita, sem DDI; o WhatsApp
         // manda com 55 na frente. Compara pelos últimos dígitos, que é o que
         // sobrevive às duas formas.
@@ -195,7 +208,7 @@ export class ChatwootAgenteService {
           where: { telefone: { endsWith: semDdi.slice(-8) }, optOut: false },
           select: { id: true, empresa: true, status: true },
         });
-        if (!lead) return;
+        if (!lead) return null;
 
         await this.prisma.interacaoLead.create({
           data: {
@@ -222,9 +235,50 @@ export class ChatwootAgenteService {
           });
         }
         this.log.log(`Interação registrada no lead ${lead.empresa} (${lead.id}).`);
+        return lead.id;
       });
     } catch (e) {
       this.log.warn(`Não consegui registrar a interação no funil: ${String(e)}`);
+      return null;
+    }
+  }
+
+  /**
+   * O SDR responde um prospect conhecido.
+   *
+   * Devolve `true` quando de fato respondeu — só aí a conversa não precisa mais
+   * ir pra fila humana. `false` significa "não é comigo": SDR desligado, sem
+   * chave de IA, lead em opt-out, ou o próprio SDR pedindo uma pessoa.
+   *
+   * Quando ele pede humano, a resposta dele sai ANTES do encaminhamento: a
+   * pessoa lê "alguém vai te chamar" e a conversa aparece na fila do
+   * atendimento — as duas coisas, não uma ou outra.
+   *
+   * Nunca lança. Falha de IA aqui cai na fila humana, que é o comportamento de
+   * antes de o SDR existir; derrubar o webhook faria o Chatwoot reenviar e a
+   * pessoa receber tudo duas vezes.
+   */
+  private async atenderComoSdr(
+    leadId: string,
+    texto: string,
+    contaChatwoot: number,
+    conversaId: number,
+  ): Promise<boolean> {
+    try {
+      const resposta = await this.sdr.atender(leadId, texto);
+      if (!resposta?.texto.trim()) return false;
+
+      const enviado = await this.chatwoot.responder(contaChatwoot, conversaId, resposta.texto);
+      if (!enviado) return false;
+
+      if (resposta.passarParaHumano) {
+        this.log.log(`SDR pediu humano na conversa ${conversaId}: ${resposta.motivoHumano}`);
+        await this.chatwoot.passarParaHumano(contaChatwoot, conversaId);
+      }
+      return true;
+    } catch (e) {
+      this.log.warn(`SDR falhou na conversa ${conversaId}: ${(e as Error).message}`);
+      return false;
     }
   }
 

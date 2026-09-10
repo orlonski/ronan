@@ -15,6 +15,7 @@
     "seed:admin": "ts-node -P tsconfig.json --transpile-only src/scripts/seed-admin.ts",
     "demo:apple": "ts-node -P tsconfig.json --transpile-only src/scripts/criar-demo-apple.ts",
     "testar:agente": "ts-node -P tsconfig.json --transpile-only src/scripts/testar-agente.ts",
+    "testar:sdr": "ts-node -P tsconfig.json --transpile-only src/scripts/testar-sdr.ts",
     "testar:ocr": "ts-node -P tsconfig.json --transpile-only src/scripts/testar-ocr-ticket.ts",
     "comparar:ticket": "ts-node -P tsconfig.json --transpile-only src/scripts/comparar-leitura-ticket.ts",
     "dispensar:retroativo": "ts-node -P tsconfig.json --transpile-only src/scripts/dispensar-conferencia-retroativo.ts",

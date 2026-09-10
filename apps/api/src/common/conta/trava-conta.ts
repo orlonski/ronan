@@ -73,6 +73,8 @@ const MODELS_GLOBAIS = new Set<string>([
   // não é cliente de ninguém — quando vira, vira uma Conta.
   "Lead",
   "InteracaoLead",
+  // A conversa do SDR com o prospect. Global pelo mesmo motivo do Lead.
+  "MensagemLead",
   "SupressaoContato",
   "EventoSite", // contagem anônima de navegação do site institucional
 ]);

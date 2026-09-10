@@ -52,14 +52,26 @@ const ConfiguracaoPlataformaBody = z
     diasTesteGratis: z.number().int().min(1).max(90).optional(),
     // Teto de códigos por hora. Cada um é uma mensagem paga.
     maxCodigosPorHora: z.number().int().min(1).max(1000).optional(),
+
+    // O SDR: o atendimento comercial automático no WhatsApp. Nasce desligado,
+    // e provider/modelo são escolha da casa — o SDR não herda a escolha (nem a
+    // fatura de IA) de nenhum cliente.
+    sdrAtivo: z.boolean().optional(),
+    sdrProvider: z.enum(["anthropic", "gemini"]).optional(),
+    sdrModeloAnthropic: z.string().trim().min(3).max(80).optional(),
+    sdrModeloGemini: z.string().trim().min(3).max(80).optional(),
+    // Link que o SDR manda pra quem quer testar. Tem que ser https: mandar
+    // http num WhatsApp de venda é o que um golpe faria.
+    sdrLinkCadastro: z
+      .string()
+      .trim()
+      .url("Informe uma URL completa.")
+      .startsWith("https://", "O link do teste precisa ser https.")
+      .max(300)
+      .optional(),
   })
-  .refine(
-    (v) =>
-      v.autoCadastroAberto !== undefined ||
-      v.diasTesteGratis !== undefined ||
-      v.maxCodigosPorHora !== undefined,
-    "Diga o que você quer mudar.",
-  );
+  // Corpo vazio passaria batido como "salvei" sem alterar nada.
+  .refine((v) => Object.values(v).some((x) => x !== undefined), "Diga o que você quer mudar.");
 
 /**
  * Os dois são opcionais pra tela poder mexer num sem mandar o outro — e o

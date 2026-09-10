@@ -17,6 +17,21 @@ import { PermissoesService, PAPEL_ADMIN } from "../permissoes/permissoes.service
 import { MATERIAIS_INICIAIS, TIPOS_EVENTO_INICIAIS, TIPOS_SERVICO_INICIAIS } from "./kit-inicial";
 import { gerarCodigoConvite } from "./codigo-convite";
 
+/**
+ * O que a tela de Empresas pode mudar na casa. Todo campo é opcional: ela
+ * manda só o que o super admin mexeu, e o que não vem fica como estava.
+ */
+export type ConfiguracaoPlataformaInput = {
+  autoCadastroAberto?: boolean;
+  diasTesteGratis?: number;
+  maxCodigosPorHora?: number;
+  sdrAtivo?: boolean;
+  sdrProvider?: string;
+  sdrModeloAnthropic?: string;
+  sdrModeloGemini?: string;
+  sdrLinkCadastro?: string;
+};
+
 type DelegateComDelete = {
   deleteMany?: (args: { where: { contaId: string } }) => Promise<unknown>;
 };
@@ -549,7 +564,13 @@ export class ContasService implements OnModuleInit {
     );
   }
 
-  /** Os interruptores da casa: porta de auto-cadastro e dias de teste. */
+  /**
+   * Os interruptores da casa: porta de auto-cadastro, dias de teste e o SDR.
+   *
+   * Os valores abaixo repetem os `@default` do schema só pra tela ter o que
+   * mostrar antes de a linha existir. Quem manda é sempre o banco — assim que
+   * a linha é criada, nenhum número daqui é consultado de novo.
+   */
   async lerConfiguracao() {
     const cfg = await comoSistema(() =>
       this.prisma.configuracaoPlataforma.findUnique({ where: { id: "singleton" } }),
@@ -558,50 +579,41 @@ export class ContasService implements OnModuleInit {
       autoCadastroAberto: cfg?.autoCadastroAberto ?? false,
       diasTesteGratis: cfg?.diasTesteGratis ?? 14,
       maxCodigosPorHora: cfg?.maxCodigosPorHora ?? 30,
+      sdrAtivo: cfg?.sdrAtivo ?? false,
+      sdrProvider: cfg?.sdrProvider ?? "anthropic",
+      sdrModeloAnthropic: cfg?.sdrModeloAnthropic ?? "claude-sonnet-4-6",
+      sdrModeloGemini: cfg?.sdrModeloGemini ?? "gemini-2.5-flash",
+      sdrLinkCadastro: cfg?.sdrLinkCadastro ?? "https://app.movatruck.com.br/cadastro",
     };
   }
 
   /**
-   * Abre ou fecha a porta pública, e define quanto dura o teste.
+   * Abre ou fecha a porta pública, define quanto dura o teste e liga o SDR.
    *
    * Mora aqui, e não em variável de ambiente, porque fechar o cadastro num dia
    * ruim ou esticar o teste de 14 pra 30 dias são decisões comerciais — e
    * decisão comercial que exige deploy é decisão que não se toma.
    */
-  async definirConfiguracao(input: {
-    autoCadastroAberto?: boolean;
-    diasTesteGratis?: number;
-    maxCodigosPorHora?: number;
-  }) {
+  async definirConfiguracao(input: ConfiguracaoPlataformaInput) {
+    // Só o que veio no corpo é escrito: a tela mexe num campo por vez, e
+    // montar o update com os ausentes gravaria o default por cima do que
+    // alguém já tinha configurado.
+    const mudancas = Object.fromEntries(
+      Object.entries(input).filter(([, v]) => v !== undefined),
+    );
+
     const cfg = await comoSistema(() =>
       this.prisma.configuracaoPlataforma.upsert({
         where: { id: "singleton" },
-        create: {
-          id: "singleton",
-          autoCadastroAberto: input.autoCadastroAberto ?? false,
-          diasTesteGratis: input.diasTesteGratis ?? 14,
-        },
-        update: {
-          ...(input.autoCadastroAberto !== undefined
-            ? { autoCadastroAberto: input.autoCadastroAberto }
-            : {}),
-          ...(input.diasTesteGratis !== undefined
-            ? { diasTesteGratis: input.diasTesteGratis }
-            : {}),
-          ...(input.maxCodigosPorHora !== undefined
-            ? { maxCodigosPorHora: input.maxCodigosPorHora }
-            : {}),
-        },
+        create: { id: "singleton", ...mudancas },
+        update: mudancas,
       }),
     );
     this.log.log(
-      `Auto-cadastro ${cfg.autoCadastroAberto ? "ABERTO" : "fechado"}, teste de ${cfg.diasTesteGratis} dias.`,
+      `Auto-cadastro ${cfg.autoCadastroAberto ? "ABERTO" : "fechado"}, ` +
+        `teste de ${cfg.diasTesteGratis} dias, SDR ${cfg.sdrAtivo ? "LIGADO" : "desligado"}.`,
     );
-    return {
-      autoCadastroAberto: cfg.autoCadastroAberto,
-      diasTesteGratis: cfg.diasTesteGratis,
-      maxCodigosPorHora: cfg.maxCodigosPorHora,
-    };
+    return this.lerConfiguracao();
   }
 
   /**
