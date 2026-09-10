@@ -37,6 +37,9 @@ const MODELS_GLOBAIS = new Set<string>([
   // Quem está abrindo uma empresa pelo site. Existe ANTES da conta — é o que
   // impede que um formulário meio preenchido já vire linha em `contas`.
   "ContaCadastroPendente",
+  // Os códigos que já saíram, pra sustentar o teto por hora. Não é de empresa
+  // nenhuma: o envio acontece antes de existir empresa.
+  "EnvioCodigoCadastro",
   // O trabalho por conta própria dele: frete, caderninho e o comprovante que ele
   // manda pra quem vai pagar. É da PESSOA — nenhuma empresa lê. O isolamento é
   // o `identidadeId` em toda consulta (LancamentosPessoaisService).

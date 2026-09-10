@@ -10,7 +10,12 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 
-type Config = { autoCadastroAberto: boolean; diasTesteGratis: number };
+type Config = {
+  autoCadastroAberto: boolean;
+  diasTesteGratis: number;
+  /** Teto de códigos por hora — cada um é uma mensagem de WhatsApp paga. */
+  maxCodigosPorHora: number;
+};
 
 const PATH = "/admin/contas/configuracao";
 
@@ -25,6 +30,7 @@ const PATH = "/admin/contas/configuracao";
 export function PortaCadastro() {
   const token = useAuthToken();
   const [dias, setDias] = useState("14");
+  const [maxHora, setMaxHora] = useState("30");
   const [salvando, setSalvando] = useState(false);
 
   const { data, refetch } = useQuery({
@@ -34,7 +40,9 @@ export function PortaCadastro() {
   });
 
   useEffect(() => {
-    if (data) setDias(String(data.diasTesteGratis));
+    if (!data) return;
+    setDias(String(data.diasTesteGratis));
+    setMaxHora(String(data.maxCodigosPorHora));
   }, [data]);
 
   async function salvar(mudanca: Partial<Config>) {
@@ -46,7 +54,9 @@ export function PortaCadastro() {
         body: JSON.stringify(mudanca),
       });
       toast.success(
-        mudanca.autoCadastroAberto === undefined
+        mudanca.maxCodigosPorHora !== undefined
+          ? `Teto de ${novo.maxCodigosPorHora} códigos por hora.`
+          : mudanca.autoCadastroAberto === undefined
           ? `Teste grátis agora é de ${novo.diasTesteGratis} dias.`
           : novo.autoCadastroAberto
             ? "Cadastro pelo site ABERTO. Qualquer transportadora pode criar conta agora."
@@ -102,6 +112,26 @@ export function PortaCadastro() {
                 return;
               }
               void salvar({ diasTesteGratis: n });
+            }}
+          />
+        </div>
+        <div className="w-32">
+          <Label htmlFor="maxHora" className="text-xs">
+            Códigos por hora
+          </Label>
+          <Input
+            id="maxHora"
+            inputMode="numeric"
+            title="Teto de gasto: cada código é uma mensagem de WhatsApp paga."
+            value={maxHora}
+            onChange={(e) => setMaxHora(e.target.value.replace(/\D/g, ""))}
+            onBlur={() => {
+              const n = Number(maxHora);
+              if (!n || n === data.maxCodigosPorHora) {
+                setMaxHora(String(data.maxCodigosPorHora));
+                return;
+              }
+              void salvar({ maxCodigosPorHora: n });
             }}
           />
         </div>

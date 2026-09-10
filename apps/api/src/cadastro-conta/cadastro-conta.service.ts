@@ -58,29 +58,62 @@ export class CadastroContaService {
    * Vem do banco, editável na tela de Empresas — fechar o cadastro num dia de
    * pico, ou esticar o teste de 14 pra 30 dias, não pode ser deploy.
    */
-  private async configuracao(): Promise<{ aberto: boolean; dias: number }> {
+  private async configuracao(): Promise<{ aberto: boolean; dias: number; maxPorHora: number }> {
     const cfg = await comoSistema(() =>
       this.prisma.configuracaoPlataforma.findUnique({ where: { id: "singleton" } }),
     );
-    return { aberto: cfg?.autoCadastroAberto ?? false, dias: cfg?.diasTesteGratis ?? 14 };
+    return {
+      aberto: cfg?.autoCadastroAberto ?? false,
+      dias: cfg?.diasTesteGratis ?? 14,
+      maxPorHora: cfg?.maxCodigosPorHora ?? 30,
+    };
   }
 
-  private async exigirPortaAberta(): Promise<void> {
-    const { aberto } = await this.configuracao();
-    if (!aberto) {
+  /**
+   * O teto de gasto: quantos códigos podem sair por hora, no mundo todo.
+   *
+   * É a única trava que segura VOLUME. As outras duas seguram insistência: o
+   * limite por IP cai com uma lista de IPs, e o cooldown por telefone cai com
+   * uma lista de números. Quem tem as duas coisas passa pelos dois freios e
+   * gasta uma mensagem paga por tentativa — este teto é onde isso para.
+   *
+   * Conta no banco, e não em memória, justamente porque a conta precisa
+   * sobreviver a um restart e valer igual com mais de uma réplica da API.
+   */
+  private async exigirTetoDeGasto(maxPorHora: number): Promise<void> {
+    const desde = new Date(Date.now() - 3_600_000);
+    const enviados = await comoSistema(() =>
+      this.prisma.envioCodigoCadastro.count({ where: { criadoEm: { gte: desde } } }),
+    );
+    if (enviados >= maxPorHora) {
+      this.log.warn(
+        `Teto de códigos de cadastro atingido (${enviados}/${maxPorHora} na última hora).`,
+      );
+      throw new BadRequestException({
+        code: "MUITOS_CADASTROS",
+        message:
+          "Estamos recebendo muitos cadastros agora. Tente daqui a pouco, ou fale com a gente pelo WhatsApp.",
+      });
+    }
+  }
+
+  private async exigirPortaAberta(): Promise<{ maxPorHora: number }> {
+    const cfg = await this.configuracao();
+    if (!cfg.aberto) {
       throw new BadRequestException({
         code: "CADASTRO_FECHADO",
         message:
           "O cadastro pelo site está fechado no momento. Fale com a gente pelo WhatsApp que a gente abre sua conta.",
       });
     }
+    return { maxPorHora: cfg.maxPorHora };
   }
 
   async iniciar(
     input: IniciarCadastroContaInput,
     ip: string | null,
   ): Promise<IniciarCadastroContaOutput> {
-    await this.exigirPortaAberta();
+    const { maxPorHora } = await this.exigirPortaAberta();
     // Robô preencheu o campo invisível. Responde igual a um cadastro bom, pra
     // não ensinar o que delatou.
     if (input.website) return RESPOSTA_GENERICA(mascarar(input.telefone));
@@ -115,12 +148,14 @@ export class CadastroContaService {
         return RESPOSTA_GENERICA(destino);
       }
 
+      await this.exigirTetoDeGasto(maxPorHora);
+
       const codigo = String(randomInt(0, 1_000_000)).padStart(6, "0");
       const senhaHash = await AuthService.hashPassword(input.adminSenha);
 
       // Manda ANTES de gravar, como o "esqueci a senha": nunca dizer "código
       // enviado" sem ter enviado.
-      await this.enviarCodigo(telefone, codigo);
+      await this.enviarCodigo(telefone, codigo, ip);
 
       await this.prisma.contaCadastroPendente.upsert({
         where: { telefone },
@@ -154,7 +189,7 @@ export class CadastroContaService {
   }
 
   async reenviar(telefoneBruto: string): Promise<IniciarCadastroContaOutput> {
-    await this.exigirPortaAberta();
+    const { maxPorHora } = await this.exigirPortaAberta();
     const telefone = SessaoService.normalizar(telefoneBruto);
     const destino = mascarar(telefoneBruto);
 
@@ -171,7 +206,9 @@ export class CadastroContaService {
         });
       }
 
-      await this.enviarCodigo(telefone, pendente.codigo);
+      // Reenviar custa igual: entra no mesmo teto.
+      await this.exigirTetoDeGasto(maxPorHora);
+      await this.enviarCodigo(telefone, pendente.codigo, null);
       await this.prisma.contaCadastroPendente.update({
         where: { telefone },
         data: { reenvios: { increment: 1 }, ultimoEnvioEm: new Date() },
@@ -242,13 +279,22 @@ export class CadastroContaService {
     );
   }
 
-  private async enviarCodigo(telefone: string, codigo: string): Promise<void> {
+  private async enviarCodigo(
+    telefone: string,
+    codigo: string,
+    ip: string | null,
+  ): Promise<void> {
     await this.envio.enviarOuFalhar({
       destino: { tipo: "TELEFONE", numero: telefone },
       rota: "OTP_CONTA",
       texto: `${NOME_PLATAFORMA}: seu código de cadastro é ${codigo}. Vale por ${TTL_MINUTOS} minutos.`,
       params: [codigo, String(TTL_MINUTOS)],
     });
+    // Só depois de sair de verdade: envio que falhou não consumiu mensagem
+    // paga, e não pode consumir o teto de quem vem depois.
+    await comoSistema(() =>
+      this.prisma.envioCodigoCadastro.create({ data: { telefone, ip } }),
+    );
   }
 
   /**

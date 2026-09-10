@@ -690,6 +690,13 @@ model ConfiguracaoPlataforma {
   autoCadastroAberto Boolean  @default(false)
   /// Quantos dias dura o período de teste de quem se cadastra sozinho.
   diasTesteGratis    Int      @default(14)
+  /// Teto de códigos de cadastro enviados por hora, somando o mundo inteiro.
+  ///
+  /// É a trava que protege o bolso, e a única que funciona quando o ataque vem
+  /// de muitos IPs e muitos telefones: cada código é uma mensagem de
+  /// autenticação paga. Os outros dois freios (por IP e por telefone) são
+  /// contra insistência, não contra volume.
+  maxCodigosPorHora  Int      @default(30)
   alteradoEm         DateTime @updatedAt
 
   @@map("configuracao_plataforma")
@@ -1236,6 +1243,22 @@ model Motorista {
 /// Model GLOBAL (está em `MODELS_GLOBAIS`), pelo mesmo motivo do pendente do
 /// motorista: ele existe ANTES da conta. A empresa só nasce no `confirmar`, e é
 /// o que impede que alguém encha a tabela `contas` só digitando um formulário.
+/// Um código de cadastro que saiu — e custou uma mensagem paga.
+///
+/// Existe só pra sustentar o teto por hora: o pendente não serve pra isso
+/// porque é sobrescrito a cada tentativa e apagado quando o cadastro conclui,
+/// então ele esquece justamente o que precisamos contar. Aqui cada envio deixa
+/// uma linha, e o rastro também mostra o padrão de quem tentou abusar.
+model EnvioCodigoCadastro {
+  id       String   @id @default(uuid())
+  telefone String
+  ip       String?
+  criadoEm DateTime @default(now())
+
+  @@index([criadoEm])
+  @@map("envio_codigo_cadastro")
+}
+
 model ContaCadastroPendente {
   id              String   @id @default(uuid())
   /// Chave do cadastro: um celular abre uma empresa por vez. Tentar de novo

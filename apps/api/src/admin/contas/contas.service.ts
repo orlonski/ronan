@@ -548,6 +548,7 @@ export class ContasService implements OnModuleInit {
     return {
       autoCadastroAberto: cfg?.autoCadastroAberto ?? false,
       diasTesteGratis: cfg?.diasTesteGratis ?? 14,
+      maxCodigosPorHora: cfg?.maxCodigosPorHora ?? 30,
     };
   }
 
@@ -558,7 +559,11 @@ export class ContasService implements OnModuleInit {
    * ruim ou esticar o teste de 14 pra 30 dias são decisões comerciais — e
    * decisão comercial que exige deploy é decisão que não se toma.
    */
-  async definirConfiguracao(input: { autoCadastroAberto?: boolean; diasTesteGratis?: number }) {
+  async definirConfiguracao(input: {
+    autoCadastroAberto?: boolean;
+    diasTesteGratis?: number;
+    maxCodigosPorHora?: number;
+  }) {
     const cfg = await comoSistema(() =>
       this.prisma.configuracaoPlataforma.upsert({
         where: { id: "singleton" },
@@ -574,13 +579,20 @@ export class ContasService implements OnModuleInit {
           ...(input.diasTesteGratis !== undefined
             ? { diasTesteGratis: input.diasTesteGratis }
             : {}),
+          ...(input.maxCodigosPorHora !== undefined
+            ? { maxCodigosPorHora: input.maxCodigosPorHora }
+            : {}),
         },
       }),
     );
     this.log.log(
       `Auto-cadastro ${cfg.autoCadastroAberto ? "ABERTO" : "fechado"}, teste de ${cfg.diasTesteGratis} dias.`,
     );
-    return { autoCadastroAberto: cfg.autoCadastroAberto, diasTesteGratis: cfg.diasTesteGratis };
+    return {
+      autoCadastroAberto: cfg.autoCadastroAberto,
+      diasTesteGratis: cfg.diasTesteGratis,
+      maxCodigosPorHora: cfg.maxCodigosPorHora,
+    };
   }
 
   /**

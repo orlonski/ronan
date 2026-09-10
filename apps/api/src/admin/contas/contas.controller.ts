@@ -50,9 +50,14 @@ const ConfiguracaoPlataformaBody = z
     autoCadastroAberto: z.boolean().optional(),
     // Teto de 90 dias: acima disso não é teste, é uso — e uso se cobra.
     diasTesteGratis: z.number().int().min(1).max(90).optional(),
+    // Teto de códigos por hora. Cada um é uma mensagem paga.
+    maxCodigosPorHora: z.number().int().min(1).max(1000).optional(),
   })
   .refine(
-    (v) => v.autoCadastroAberto !== undefined || v.diasTesteGratis !== undefined,
+    (v) =>
+      v.autoCadastroAberto !== undefined ||
+      v.diasTesteGratis !== undefined ||
+      v.maxCodigosPorHora !== undefined,
     "Diga o que você quer mudar.",
   );
 

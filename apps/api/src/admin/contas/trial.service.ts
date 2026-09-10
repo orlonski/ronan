@@ -39,8 +39,22 @@ export class TrialService {
         }),
       );
       if (count > 0) this.log.log(`${count} empresa(s) passaram para somente leitura.`);
+      await this.podarEnviosAntigos();
     } catch (err) {
       this.log.error(`Falha ao expirar testes: ${(err as Error).message}`);
     }
+  }
+
+  /**
+   * O teto de códigos olha uma hora pra trás; linha mais velha que um dia não
+   * serve nem pra isso nem pra investigar abuso, e só faria a tabela crescer.
+   */
+  private async podarEnviosAntigos(): Promise<void> {
+    const { count } = await comoSistema(() =>
+      this.prisma.envioCodigoCadastro.deleteMany({
+        where: { criadoEm: { lt: new Date(Date.now() - 86_400_000) } },
+      }),
+    );
+    if (count > 0) this.log.log(`${count} registro(s) de envio de código expurgados.`);
   }
 }
