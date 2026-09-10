@@ -24,6 +24,18 @@ export type CriarContaInput = {
   adminNome: string;
   adminEmail: string;
   adminSenha: string;
+  /**
+   * Hash pronto, pra quem já cobrou a senha antes (o auto-cadastro guarda ela
+   * hasheada no pendente e não tem a original de volta). Vence `adminSenha`.
+   */
+  senhaHashPronta?: string;
+  /**
+   * Veio do site, sem ninguém da plataforma no meio. Muda três coisas, todas
+   * de segurança ou de custo — ver os usos abaixo.
+   */
+  origemPublica?: boolean;
+  /** Quando o período de teste acaba. `null`/ausente = não é teste. */
+  trialExpiraEm?: Date | null;
 };
 
 /**
@@ -278,14 +290,20 @@ export class ContasService implements OnModuleInit {
       if (emailEmUso) throw new ConflictException("Esse e-mail já é usado por outro acesso.");
     });
 
-    const senhaHash = await AuthService.hashPassword(input.adminSenha);
+    const senhaHash = input.senhaHashPronta ?? (await AuthService.hashPassword(input.adminSenha));
     const codigoConvite = await this.codigoInedito(input.nome);
 
     const conta = await comoSistema(async () => {
       // A primeira empresa a existir é a casa. Num banco criado do zero a
       // migration passou com a tabela vazia, então é aqui que a plataforma ganha
       // dono — e sem dono ninguém concede as chaves de `CHAVES_PLATAFORMA`.
-      const primeiraDoSistema = (await this.prisma.conta.count()) === 0;
+      // Num caminho PÚBLICO isto é sempre falso, nunca calculado. Decidir a
+      // casa por "o banco está vazio" num endpoint aberto significa que, num
+      // ambiente recém-restaurado, o primeiro estranho que se cadastrar vira
+      // dono da plataforma e ganha o catálogo inteiro de permissões.
+      const primeiraDoSistema = input.origemPublica
+        ? false
+        : (await this.prisma.conta.count()) === 0;
 
       return this.prisma.conta.create({
         data: {
@@ -294,6 +312,11 @@ export class ContasService implements OnModuleInit {
           cnpj: input.cnpj?.replace(/\D/g, "") || null,
           codigoConvite,
           ehPlataforma: primeiraDoSistema,
+          trialExpiraEm: input.trialExpiraEm ?? null,
+          // A leitura de ticket por IA custa por uso e a conta é da plataforma.
+          // No painel ela nasce ligada porque tem alguém decidindo; numa porta
+          // pública, seria toda conta nova gastando sem ninguém ter escolhido.
+          ...(input.origemPublica ? { iaLeituraTicket: false } : {}),
           // Auto-cadastro nasce DESLIGADO: o app publicado não pergunta a empresa,
           // então duas contas ligadas fariam o signup não saber onde cadastrar.
           permiteAutoCadastro: false,
@@ -515,6 +538,49 @@ export class ContasService implements OnModuleInit {
         },
       }),
     );
+  }
+
+  /** Os interruptores da casa: porta de auto-cadastro e dias de teste. */
+  async lerConfiguracao() {
+    const cfg = await comoSistema(() =>
+      this.prisma.configuracaoPlataforma.findUnique({ where: { id: "singleton" } }),
+    );
+    return {
+      autoCadastroAberto: cfg?.autoCadastroAberto ?? false,
+      diasTesteGratis: cfg?.diasTesteGratis ?? 14,
+    };
+  }
+
+  /**
+   * Abre ou fecha a porta pública, e define quanto dura o teste.
+   *
+   * Mora aqui, e não em variável de ambiente, porque fechar o cadastro num dia
+   * ruim ou esticar o teste de 14 pra 30 dias são decisões comerciais — e
+   * decisão comercial que exige deploy é decisão que não se toma.
+   */
+  async definirConfiguracao(input: { autoCadastroAberto?: boolean; diasTesteGratis?: number }) {
+    const cfg = await comoSistema(() =>
+      this.prisma.configuracaoPlataforma.upsert({
+        where: { id: "singleton" },
+        create: {
+          id: "singleton",
+          autoCadastroAberto: input.autoCadastroAberto ?? false,
+          diasTesteGratis: input.diasTesteGratis ?? 14,
+        },
+        update: {
+          ...(input.autoCadastroAberto !== undefined
+            ? { autoCadastroAberto: input.autoCadastroAberto }
+            : {}),
+          ...(input.diasTesteGratis !== undefined
+            ? { diasTesteGratis: input.diasTesteGratis }
+            : {}),
+        },
+      }),
+    );
+    this.log.log(
+      `Auto-cadastro ${cfg.autoCadastroAberto ? "ABERTO" : "fechado"}, teste de ${cfg.diasTesteGratis} dias.`,
+    );
+    return { autoCadastroAberto: cfg.autoCadastroAberto, diasTesteGratis: cfg.diasTesteGratis };
   }
 
   /**

@@ -45,6 +45,17 @@ const CriarContaBody = z.object({
 
 const AtivaBody = z.object({ ativa: z.boolean() });
 
+const ConfiguracaoPlataformaBody = z
+  .object({
+    autoCadastroAberto: z.boolean().optional(),
+    // Teto de 90 dias: acima disso não é teste, é uso — e uso se cobra.
+    diasTesteGratis: z.number().int().min(1).max(90).optional(),
+  })
+  .refine(
+    (v) => v.autoCadastroAberto !== undefined || v.diasTesteGratis !== undefined,
+    "Diga o que você quer mudar.",
+  );
+
 /**
  * Os dois são opcionais pra tela poder mexer num sem mandar o outro — e o
  * `refine` impede o corpo vazio, que passaria batido como "salvei" sem alterar
@@ -82,6 +93,20 @@ export class ContasController {
   @Post()
   criar(@Body(new ZodValidationPipe(CriarContaBody)) body: z.infer<typeof CriarContaBody>) {
     return this.service.criar(body);
+  }
+
+  /** Os interruptores da casa: porta de auto-cadastro e duração do teste. */
+  @Get("configuracao")
+  lerConfiguracao() {
+    return this.service.lerConfiguracao();
+  }
+
+  @Patch("configuracao")
+  definirConfiguracao(
+    @Body(new ZodValidationPipe(ConfiguracaoPlataformaBody))
+    body: z.infer<typeof ConfiguracaoPlataformaBody>,
+  ) {
+    return this.service.definirConfiguracao(body);
   }
 
   @Patch(":id/ativa")

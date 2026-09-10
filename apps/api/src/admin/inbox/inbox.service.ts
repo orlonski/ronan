@@ -14,7 +14,9 @@ export type TipoNotificacaoAdmin =
   | "foto-anexada"
   | "local-em-validacao"
   | "motorista-cadastro"
-  | "motorista-senha-reset";
+  | "motorista-senha-reset"
+  // Uma empresa se cadastrou sozinha pelo site. Vai pro sininho da PLATAFORMA.
+  | "conta-auto-cadastro";
 
 export type DispararNotificacaoInput = {
   tipo: TipoNotificacaoAdmin;

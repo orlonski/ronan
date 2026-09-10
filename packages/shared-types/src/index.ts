@@ -39,3 +39,4 @@ export * from "./posicao-motorista";
 export * from "./versao-app";
 export * from "./whatsapp-mensagens";
 export * from "./captacao";
+export * from "./cadastro-conta";

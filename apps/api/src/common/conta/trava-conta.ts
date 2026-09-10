@@ -34,6 +34,9 @@ const MODELS_GLOBAIS = new Set<string>([
   // O cadastro pendente é dessa mesma pessoa, antes dela existir: quem se
   // cadastra pelo app não diz de qual empresa é.
   "CadastroMotoristaPendente",
+  // Quem está abrindo uma empresa pelo site. Existe ANTES da conta — é o que
+  // impede que um formulário meio preenchido já vire linha em `contas`.
+  "ContaCadastroPendente",
   // O trabalho por conta própria dele: frete, caderninho e o comprovante que ele
   // manda pra quem vai pagar. É da PESSOA — nenhuma empresa lê. O isolamento é
   // o `identidadeId` em toda consulta (LancamentosPessoaisService).
@@ -55,6 +58,8 @@ const MODELS_GLOBAIS = new Set<string>([
   // empresa copiar, e o que ela ganha ao copiar é um `Papel` dela (esse sim
   // escopado). Ninguém é autorizado por um modelo — só por papel de conta.
   "PapelModelo",
+  // Os interruptores da casa: porta de auto-cadastro e dias de teste.
+  "ConfiguracaoPlataforma",
   "PedagioRodovia", // praças de pedágio vindas do OSM (dado público)
   "GeocodingCache", // endereço → coordenada
   "RotaCache", // chaveado por par de Local, que já é da conta

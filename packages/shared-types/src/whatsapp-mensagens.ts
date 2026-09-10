@@ -92,6 +92,16 @@ export const ROTAS_WHATSAPP = [
     escopo: "plataforma",
   },
   {
+    chave: "OTP_CONTA",
+    rotulo: "Código de cadastro da empresa",
+    descricao:
+      "Código que quem está abrindo uma empresa digita pra concluir o cadastro pelo site.",
+    categoria: "authentication",
+    provedores: ["evolution", "meta"],
+    critica: true,
+    escopo: "plataforma",
+  },
+  {
     chave: "OTP_SENHA",
     rotulo: "Código de redefinição de senha",
     descricao: "Código do 'esqueci minha senha'.",
@@ -340,6 +350,20 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
     botao: { tipo: "COPIAR_CODIGO", param: 1 },
     textoAprovacao: "Seu código de verificação é {{1}}.\nPara sua segurança, não o compartilhe.",
     exemplo: ["Movatruck", "482913", "10"],
+  },
+  // Aponta pro MESMO template aprovado do "esqueci a senha", e não pra um
+  // `otp_conta` próprio, porque template de categoria Autenticação tem corpo
+  // FIXO pela Meta — "Seu código de verificação é {{1}}". Um template novo sairia
+  // byte a byte idêntico a este, e só custaria a espera da aprovação sem mudar
+  // uma vírgula do que a pessoa lê. Se um dia o texto puder ser próprio, é só
+  // trocar o `nome` aqui.
+  OTP_CONTA: {
+    nome: "otp_senha",
+    idioma: "pt_BR",
+    corpo: [0],
+    botao: { tipo: "COPIAR_CODIGO", param: 0 },
+    textoAprovacao: "Seu código de verificação é {{1}}.\nPara sua segurança, não o compartilhe.",
+    exemplo: ["482913", "10"],
   },
   OTP_SENHA: {
     nome: "otp_senha",

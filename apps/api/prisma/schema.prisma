@@ -674,6 +674,27 @@ model ConfiguracaoPermissoes {
   @@map("configuracao_permissoes")
 }
 
+/// Os interruptores da plataforma que não são de nenhuma empresa.
+///
+/// Linha única, model global. Existe pra estas decisões NÃO morarem em
+/// constante de código: abrir ou fechar a porta de auto-cadastro e mudar a
+/// duração do teste são decisões comerciais, e virariam deploy se ficassem
+/// no código.
+model ConfiguracaoPlataforma {
+  id                 String   @id @default("singleton")
+  /// A porta pública de auto-cadastro está aberta?
+  ///
+  /// Nasce FECHADA de propósito: quem sobe a migration não está
+  /// necessariamente pronto pra receber cadastro de estranho no mesmo minuto.
+  /// Abrir é um clique na tela de Empresas.
+  autoCadastroAberto Boolean  @default(false)
+  /// Quantos dias dura o período de teste de quem se cadastra sozinho.
+  diasTesteGratis    Int      @default(14)
+  alteradoEm         DateTime @updatedAt
+
+  @@map("configuracao_plataforma")
+}
+
 /// Papel-modelo publicado pela plataforma: "Financeiro", "Conferente".
 ///
 /// É GLOBAL (não tem contaId, está em MODELS_GLOBAIS) porque um modelo não tem
@@ -1210,6 +1231,37 @@ model Motorista {
 /// (não há mais código de empresa), então não há o que carimbar. Está em
 /// `MODELS_GLOBAIS` e a chave passou a ser o CPF, que é único na plataforma —
 /// como a identidade que ele vai virar.
+/// Quem começou a abrir uma empresa pelo site e ainda não confirmou o código.
+///
+/// Model GLOBAL (está em `MODELS_GLOBAIS`), pelo mesmo motivo do pendente do
+/// motorista: ele existe ANTES da conta. A empresa só nasce no `confirmar`, e é
+/// o que impede que alguém encha a tabela `contas` só digitando um formulário.
+model ContaCadastroPendente {
+  id              String   @id @default(uuid())
+  /// Chave do cadastro: um celular abre uma empresa por vez. Tentar de novo
+  /// sobrescreve o pendente em vez de criar outro.
+  telefone        String   @unique
+  empresa         String
+  cnpj            String?
+  adminNome       String
+  adminEmail      String
+  senhaHash       String
+  codigo          String
+  expiraEm        DateTime
+  /// Erros de digitação do código. Estoura o teto, o pendente morre.
+  tentativas      Int      @default(0)
+  /// Quantas vezes ele pediu o código de novo.
+  reenvios        Int      @default(0)
+  /// Base do cooldown — e a defesa contra usar o endpoint como torneira de
+  /// mensagem paga.
+  ultimoEnvioEm   DateTime @default(now())
+  /// De onde veio, pra dar como bloquear em lote se virar abuso.
+  ipCriacao       String?
+  criadoEm        DateTime @default(now())
+
+  @@map("conta_cadastro_pendente")
+}
+
 model CadastroMotoristaPendente {
   id            String   @id @default(uuid())
   cpf           String   @unique // 11 dígitos (sem máscara) — chave do cadastro

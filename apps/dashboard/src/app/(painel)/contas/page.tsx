@@ -19,6 +19,7 @@ import { usePermissoes } from "@/lib/permissoes";
 import { fmtDataHoraSP } from "@/lib/datetime-br";
 import { maskDocumento } from "@ronan/shared-types";
 import { TetoDialog } from "./_components/teto-dialog";
+import { PortaCadastro } from "./_components/porta-cadastro";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
@@ -193,6 +194,8 @@ export default function ContasPage() {
           </Button>
         </div>
       </div>
+
+      <PortaCadastro />
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Carregando…</p>
