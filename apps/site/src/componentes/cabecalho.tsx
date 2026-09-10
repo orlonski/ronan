@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
-import { PAINEL_URL, WHATSAPP_URL } from "../lib/config";
+import { CADASTRO_URL, PAINEL_URL, WHATSAPP_URL } from "../lib/config";
+import { useCadastroAberto } from "../lib/cadastro-aberto";
 
 const LINKS = [
   { href: "#como-funciona", texto: "Como funciona" },
@@ -11,6 +12,8 @@ const LINKS = [
 ];
 
 export function Cabecalho() {
+  // `aberto` aqui é o menu do celular; o do cadastro tem nome próprio.
+  const { aberto: cadastroAberto } = useCadastroAberto();
   const [aberto, setAberto] = useState(false);
   const [rolou, setRolou] = useState(false);
 
@@ -64,9 +67,16 @@ export function Cabecalho() {
           >
             Entrar no painel
           </a>
-          <a href={WHATSAPP_URL} target="_blank" rel="noreferrer" className="btn-primario">
-            Agendar demonstração
-          </a>
+          {/* Com a porta aberta, criar conta é o caminho principal do topo. */}
+          {cadastroAberto ? (
+            <a href={CADASTRO_URL} className="btn-primario">
+              Criar conta grátis
+            </a>
+          ) : (
+            <a href={WHATSAPP_URL} target="_blank" rel="noreferrer" className="btn-primario">
+              Agendar demonstração
+            </a>
+          )}
         </div>
 
         <button

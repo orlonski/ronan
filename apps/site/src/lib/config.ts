@@ -16,6 +16,15 @@ export const PAINEL_URL = env.VITE_APP_URL ?? "https://app.movatruck.com.br";
 export const PWA_URL = env.VITE_PWA_URL ?? "https://motorista.schaba.com.br";
 export const PRIVACIDADE_URL = `${PAINEL_URL}/politica-de-privacidade`;
 
+/**
+ * Onde a pessoa cria a conta dela.
+ *
+ * Mora no painel, e não aqui no site, porque o último passo do cadastro é
+ * entrar logado — e a sessão vive lá. Se o formulário fosse daqui, ela
+ * terminaria de se cadastrar e teria que digitar e-mail e senha de novo.
+ */
+export const CADASTRO_URL = `${PAINEL_URL}/cadastro`;
+
 const zap = (env.VITE_WHATSAPP ?? "5542984223261").replace(/\D/g, "");
 const recado = encodeURIComponent(
   "Oi! Vi o site do Movatruck e quero agendar uma demonstração.",

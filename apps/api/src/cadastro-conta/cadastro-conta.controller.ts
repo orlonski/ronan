@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Post, Req, UseGuards } from "@nestjs/common";
 import { ApiExcludeController } from "@nestjs/swagger";
 import type { Request } from "express";
 import {
@@ -34,6 +34,19 @@ const limiteConfirmar = criarRateLimitIpGuard({
 @Controller("publico/cadastro")
 export class CadastroContaController {
   constructor(private readonly service: CadastroContaService) {}
+
+  /**
+   * A porta está aberta?
+   *
+   * O site é estático e não tem como adivinhar. Sem isto ele ofereceria "criar
+   * conta grátis" com o cadastro fechado, e a pessoa descobriria isso depois de
+   * preencher o formulário inteiro — que é o pior momento possível.
+   */
+  @UseGuards(limiteConfirmar)
+  @Get("aberto")
+  aberto() {
+    return this.service.estaAberto();
+  }
 
   @UseGuards(limiteIniciar)
   @HttpCode(200)

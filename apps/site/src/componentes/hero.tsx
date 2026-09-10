@@ -1,8 +1,12 @@
 import { ArrowRight, WifiOff } from "lucide-react";
 import { Celular, Tela } from "./ui";
-import { PAINEL_URL, WHATSAPP_URL } from "../lib/config";
+import { CADASTRO_URL, PAINEL_URL, WHATSAPP_URL } from "../lib/config";
+import { useCadastroAberto } from "../lib/cadastro-aberto";
+import { registrar } from "../lib/analytics";
 
 export function Hero() {
+  const { aberto, dias } = useCadastroAberto();
+
   return (
     <section id="topo" className="relative overflow-hidden pb-16 pt-28 lg:pb-24 lg:pt-36">
       {/* Fundo: listras inclinadas do ícone, bem lavadas, só no topo */}
@@ -34,19 +38,51 @@ export function Hero() {
           </p>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <a
-              href={WHATSAPP_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="btn-primario w-full sm:w-auto"
-            >
-              Agendar demonstração
-              <ArrowRight size={18} aria-hidden />
-            </a>
-            <a href="#painel" className="btn-secundario w-full sm:w-auto">
-              Ver o painel por dentro
-            </a>
+            {/* Com a porta aberta, criar conta é o caminho principal: quem quer
+                ver o produto não precisa marcar hora com ninguém. Fechada, o
+                botão nem aparece — oferecer o que não existe é pior. */}
+            {aberto ? (
+              <>
+                <a
+                  href={CADASTRO_URL}
+                  onClick={() => registrar("CTA_CADASTRO", "hero")}
+                  className="btn-primario w-full sm:w-auto"
+                >
+                  Criar conta grátis
+                  <ArrowRight size={18} aria-hidden />
+                </a>
+                <a
+                  href={WHATSAPP_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-secundario w-full sm:w-auto"
+                >
+                  Falar com a gente
+                </a>
+              </>
+            ) : (
+              <>
+                <a
+                  href={WHATSAPP_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-primario w-full sm:w-auto"
+                >
+                  Agendar demonstração
+                  <ArrowRight size={18} aria-hidden />
+                </a>
+                <a href="#painel" className="btn-secundario w-full sm:w-auto">
+                  Ver o painel por dentro
+                </a>
+              </>
+            )}
           </div>
+
+          {aberto && (
+            <p className="mt-3 text-sm text-tinta-media">
+              {dias} dias grátis. Sem cartão, sem instalação.
+            </p>
+          )}
 
           <p className="mt-5 flex items-start gap-2 text-[0.92rem] text-tinta-fraca">
             <span

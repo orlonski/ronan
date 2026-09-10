@@ -1,9 +1,12 @@
 import { MessageCircle } from "lucide-react";
-import { WHATSAPP_URL } from "../lib/config";
+import { CADASTRO_URL, WHATSAPP_URL } from "../lib/config";
+import { useCadastroAberto } from "../lib/cadastro-aberto";
 import { registrar } from "../lib/analytics";
 import { FormularioContato } from "./formulario-contato";
 
 export function CtaFinal() {
+  const { aberto: cadastroAberto } = useCadastroAberto();
+
   return (
     <section id="contato" className="secao border-t border-borda bg-superficie">
       <div className="caixa">
@@ -28,6 +31,15 @@ export function CtaFinal() {
               </p>
 
               <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-start">
+                {cadastroAberto && (
+                  <a
+                    href={CADASTRO_URL}
+                    onClick={() => registrar("CTA_CADASTRO", "cta-final")}
+                    className="btn w-full bg-white text-[#0B1B3B] hover:bg-white/90 sm:w-auto"
+                  >
+                    Criar conta grátis
+                  </a>
+                )}
                 <a
                   href={WHATSAPP_URL}
                   target="_blank"

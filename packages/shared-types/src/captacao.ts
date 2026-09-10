@@ -67,6 +67,8 @@ export const TIPOS_EVENTO_SITE = [
   "CTA_FORMULARIO_ABRIU",
   "CTA_FORMULARIO_ENVIOU",
   "CTA_APP",
+  // Clicou em "criar conta grátis" — o caminho que não passa por conversa.
+  "CTA_CADASTRO",
   "SECAO_VISTA",
 ] as const;
 export type TipoEventoSite = (typeof TIPOS_EVENTO_SITE)[number];

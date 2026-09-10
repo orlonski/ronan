@@ -99,6 +99,8 @@ export type TipoEvento =
   | "CTA_FORMULARIO_ABRIU"
   | "CTA_FORMULARIO_ENVIOU"
   | "CTA_APP"
+  // Clicou em "criar conta grátis" — o caminho que não passa por conversa.
+  | "CTA_CADASTRO"
   | "SECAO_VISTA";
 
 /**

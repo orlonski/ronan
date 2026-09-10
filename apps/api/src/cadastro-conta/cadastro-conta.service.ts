@@ -97,6 +97,12 @@ export class CadastroContaService {
     }
   }
 
+  /** Pro site saber se mostra o botão de criar conta. */
+  async estaAberto(): Promise<{ aberto: boolean; diasTesteGratis: number }> {
+    const cfg = await this.configuracao();
+    return { aberto: cfg.aberto, diasTesteGratis: cfg.dias };
+  }
+
   private async exigirPortaAberta(): Promise<{ maxPorHora: number }> {
     const cfg = await this.configuracao();
     if (!cfg.aberto) {
