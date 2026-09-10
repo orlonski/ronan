@@ -43,7 +43,7 @@ export class UsersController {
   @Roles("ADMIN_USER")
   @Get("me")
   me(@CurrentUser() user: AuthAdminUser) {
-    return this.service.me(user.id);
+    return this.service.me(user);
   }
 
   @Roles("ADMIN_USER")

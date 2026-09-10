@@ -115,6 +115,18 @@ export const TrocarEmpresaInput = z.object({
 });
 export type TrocarEmpresaInput = z.infer<typeof TrocarEmpresaInput>;
 
+/**
+ * Painel: o operador da plataforma entra numa empresa pra dar suporte, ou volta
+ * pra casa com `null`. Quem pode fazer isso é o backend que decide.
+ *
+ * Sem `.uuid()` de propósito — id de conta nem sempre é uuid (as primeiras
+ * foram criadas com slug, tipo `cnt_schaba`).
+ */
+export const DefinirContaAtivaInput = z.object({
+  contaId: z.string().min(1).nullable(),
+});
+export type DefinirContaAtivaInput = z.infer<typeof DefinirContaAtivaInput>;
+
 // ---- Recuperação de senha do motorista (esqueci a senha) ----
 
 /**

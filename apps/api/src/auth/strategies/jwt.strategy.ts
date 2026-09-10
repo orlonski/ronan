@@ -5,6 +5,7 @@ import { ConfigService } from "@nestjs/config";
 import { comoSistema, definirConta } from "../../common/conta/conta-context";
 import { vinculoVivo } from "../../common/vinculo";
 import { PrismaService } from "../../prisma/prisma.service";
+import { resolverContaEfetiva } from "../conta-efetiva";
 import type { AuthUser, JwtPayload } from "../types";
 
 @Injectable()
@@ -49,6 +50,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           where: { id: payload.sub },
           include: {
             conta: { select: { id: true, nome: true, ativa: true } },
+            // A empresa que ele está visitando, se estiver. Vem no mesmo
+            // findUnique pra não custar uma query por requisição.
+            contaAtiva: { select: { id: true, nome: true, ativa: true } },
             papel: { select: { permissoes: true } },
             // Escopo entra no mesmo findUnique: sem query extra por request, e a
             // revogação continua imediata (nada disso vive no token).
@@ -59,19 +63,39 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       if (!user || !user.ativo) throw new UnauthorizedException("Usuário inativo");
       if (!user.conta.ativa) throw new UnauthorizedException("Empresa desativada");
 
-      definirConta(user.contaId);
+      // Quem manda nesta requisição: a empresa visitada, se houver uma válida.
+      // A regra mora em `conta-efetiva.ts`, separada e testada — é ela que
+      // decide o isolamento entre empresas.
+      const { conta: efetiva, assumida } = resolverContaEfetiva(user);
+
+      definirConta(efetiva.id);
       return {
         kind: "ADMIN_USER",
         id: user.id,
         nome: user.nome,
         email: user.email,
-        contaId: user.contaId,
-        contaNome: user.conta.nome,
+        // `contaId` é sempre a EFETIVA — a mesma que a trava do Prisma vai usar.
+        // Se aqui dissesse a conta de origem, os pontos que decidem por ele
+        // (MinhaEmpresa, contaAlvo do WhatsApp) agiriam numa empresa e a trava
+        // filtraria por outra.
+        contaId: efetiva.id,
+        contaNome: efetiva.nome,
+        contaOrigemId: user.contaId,
+        contaOrigemNome: user.conta.nome,
+        assumida,
         plataforma: user.plataforma,
+        // O papel é o da conta de ORIGEM, de propósito: visitar uma empresa não
+        // promove ninguém, e quem é restrito em casa continua restrito lá
+        // dentro. As chaves são globais (`Permissao` está em MODELS_GLOBAIS),
+        // então valem em qualquer conta.
         permissoes: user.papel?.permissoes ?? [],
-        escopo: user.acessoGlobal
-          ? null
-          : { transportadoraIds: user.transportadoras.map((t) => t.transportadoraId) },
+        // Visitando, o escopo por transportadora não pode valer: os ids
+        // vinculados são da conta de origem, e `filtroEscopo` com ids de outra
+        // empresa devolve zero linhas — uma tela vazia que parece bug de dados.
+        escopo:
+          assumida || user.acessoGlobal
+            ? null
+            : { transportadoraIds: user.transportadoras.map((t) => t.transportadoraId) },
       };
     }
 

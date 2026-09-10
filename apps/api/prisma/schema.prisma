@@ -220,6 +220,13 @@ enum AcaoAuditoria {
   /// O motorista respondeu ao convite, no app dele.
   MOTORISTA_ACEITOU_VINCULO
   MOTORISTA_RECUSOU_VINCULO
+  /// Um operador da plataforma entrou numa empresa que não é a dele pra dar
+  /// suporte. Fica registrado NA EMPRESA VISITADA: daqui pra frente as ações
+  /// dele saem com o nome de um usuário de fora, e sem esta linha o histórico
+  /// da empresa não explicaria quem é essa pessoa nem desde quando.
+  PLATAFORMA_ASSUMIU_CONTA
+  /// E saiu, voltando pra casa dele. Fecha a janela aberta pela ação acima.
+  PLATAFORMA_SAIU_DA_CONTA
 }
 
 /// Qual comprovante a foto do abastecimento é.
@@ -403,7 +410,9 @@ model Conta {
   criadaEm    DateTime @default(now())
   alteradaEm  DateTime @updatedAt
 
-  users                         User[]
+  users                         User[]                     @relation("UsuarioDaConta")
+  /// Operadores da plataforma que estão dentro desta empresa agora.
+  assumidaPor                   User[]                     @relation("ContaAssumida")
   papeis                        Papel[]
   adminNotificacoes             AdminNotificacao[]
   motoristas                    Motorista[]
@@ -475,7 +484,19 @@ model Conta {
 
 model User {
   contaId             String    @default("__SEM_CONTA__")
-  conta               Conta     @relation(fields: [contaId], references: [id])
+  conta               Conta     @relation("UsuarioDaConta", fields: [contaId], references: [id])
+  /// A empresa que um operador da plataforma está ASSUMINDO agora, pra dar
+  /// suporte sem precisar de um login por empresa. `null` = está na casa dele.
+  ///
+  /// Mora no banco, e não no JWT, porque assim vale pra TODO canal de uma vez:
+  /// o SSE do sininho, as fotos que o `<img>` busca, os downloads de ZIP. Um
+  /// header por requisição cobriria só o que passa pelo fetch do painel, e
+  /// esquecer o header num canal novo é agir na empresa errada em silêncio.
+  ///
+  /// Só vale pra quem tem `plataforma = true`, e o `JwtStrategy` revalida a cada
+  /// requisição: empresa apagada ou desativada faz ele cair de volta na origem.
+  contaAtivaId        String?
+  contaAtiva          Conta?    @relation("ContaAssumida", fields: [contaAtivaId], references: [id], onDelete: SetNull)
   id                  String    @id @default(uuid())
   nome                String
   email               String    @unique

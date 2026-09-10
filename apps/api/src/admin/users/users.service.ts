@@ -6,6 +6,8 @@ import { AuthService } from "../../auth/auth.service";
 import { PAPEL_OPERADOR } from "../permissoes/permissoes.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { SEM_ESCOPO } from "../../common/escopo/escopo";
+import { comoSistema } from "../../common/conta/conta-context";
+import type { AuthAdminUser } from "../../auth/types";
 
 type ListUsersParams = PaginationQuery & {
   ativo?: "true" | "false";
@@ -164,11 +166,26 @@ export class UsersService {
     );
   }
 
-  async me(id: string) {
-    const u = await this.prisma.user.findUniqueOrThrow({
-      where: { id },
-      select: { ...SAFE_SELECT, plataforma: true, conta: { select: { id: true, nome: true, logoUrl: true, codigoConvite: true } } },
-    });
+  async me(user: AuthAdminUser) {
+    // `comoSistema` porque o usuário pertence à conta de ORIGEM e o contexto da
+    // requisição é a empresa que ele está visitando — a trava procuraria ele
+    // dentro dela e não acharia, derrubando o painel inteiro durante a visita.
+    const u = await comoSistema(() =>
+      this.prisma.user.findUniqueOrThrow({
+        where: { id: user.id },
+        select: { ...SAFE_SELECT, plataforma: true },
+      }),
+    );
+    // A empresa que a resposta descreve é a EFETIVA — a mesma que a trava está
+    // usando. Se aqui viesse a de origem, o painel mostraria o nome e a logo de
+    // uma empresa enquanto lê e escreve na outra, que é o jeito mais fácil de
+    // alguém apagar dado de cliente achando que está em casa.
+    const conta = await comoSistema(() =>
+      this.prisma.conta.findUnique({
+        where: { id: user.contaId },
+        select: { id: true, nome: true, logoUrl: true, codigoConvite: true },
+      }),
+    );
     // `permissoes` no topo facilita o frontend (sidebar/guards) checar acesso.
     // Vai ÍNTEGRO, inclusive pra usuário restrito a transportadora: quem decide
     // quais telas ele acessa é a matriz de papéis, não o backend cortando por
@@ -181,8 +198,12 @@ export class UsersService {
     return {
       ...serializar(u),
       permissoes: u.papel?.permissoes ?? [],
-      conta: u.conta,
+      conta,
       plataforma: u.plataforma,
+      /** True = está dentro de uma empresa que não é a dele. A UI avisa. */
+      assumida: user.assumida,
+      /** A empresa dele, pra onde o botão "sair" volta. */
+      contaOrigem: { id: user.contaOrigemId, nome: user.contaOrigemNome },
     };
   }
 

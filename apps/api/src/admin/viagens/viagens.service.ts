@@ -21,6 +21,7 @@ import {
   serializarViagemComMinimos,
 } from "../../common/viagem-minimos";
 import { PrismaService } from "../../prisma/prisma.service";
+import { comoSistema } from "../../common/conta/conta-context";
 import { PushService } from "../../push/push.service";
 import { RoteamentoService } from "../../roteamento/roteamento.service";
 import { UploadsService } from "../../uploads/uploads.service";
@@ -952,10 +953,15 @@ export class ViagensAdminService {
       // O pedido do admin também vira mensagem no chat da viagem (cada "recusar
       // de novo" é uma linha nova, sem sobrescrever a anterior).
       try {
-        const admin = await this.prisma.user.findUnique({
-          where: { id: usuarioId },
-          select: { nome: true },
-        });
+        // `comoSistema`: é o usuário LOGADO. Um operador da plataforma dentro de
+        // outra empresa não pertence à conta do contexto, e a mensagem sairia
+        // sem nome de quem recusou.
+        const admin = await comoSistema(() =>
+          this.prisma.user.findUnique({
+            where: { id: usuarioId },
+            select: { nome: true },
+          }),
+        );
         await this.mensagens.criar({
           viagemId: id,
           autor: "ADMIN",

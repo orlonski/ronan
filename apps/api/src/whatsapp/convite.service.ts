@@ -43,10 +43,14 @@ export class ConviteService {
   }
 
   async gerarParaUser(userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, ativo: true, whatsappSessao: { select: { telefone: true } } },
-    });
+    // `comoSistema`: é o usuário LOGADO, e um operador da plataforma dentro de
+    // outra empresa não pertence à conta do contexto — a trava não o acharia.
+    const user = await comoSistema(() =>
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, ativo: true, whatsappSessao: { select: { telefone: true } } },
+      }),
+    );
     if (!user) throw new NotFoundException("Usuário não encontrado");
     if (!user.ativo) throw new ConflictException("Usuário inativo");
     if (user.whatsappSessao) {

@@ -6,7 +6,7 @@ import type {
   PublicarAvisoInput,
   ResolverDenunciaInput,
 } from "@ronan/shared-types";
-import { contaIdAtual } from "../common/conta/conta-context";
+import { comoSistema, contaIdAtual } from "../common/conta/conta-context";
 import { PrismaService } from "../prisma/prisma.service";
 import { PushService } from "../push/push.service";
 import { UploadsService } from "../uploads/uploads.service";
@@ -137,10 +137,15 @@ export class ChatAdminService {
    */
   async publicarAviso(usuarioId: string, input: PublicarAvisoInput) {
     const canalId = await this.chat.garantirCanalAvisos();
-    const autor = await this.prisma.user.findUnique({
-      where: { id: usuarioId },
-      select: { nome: true },
-    });
+    // `comoSistema`: é o usuário LOGADO. Um operador da plataforma publicando
+    // aviso dentro de outra empresa não pertence à conta do contexto, e sem isto
+    // o aviso sairia sem nome de autor.
+    const autor = await comoSistema(() =>
+      this.prisma.user.findUnique({
+        where: { id: usuarioId },
+        select: { nome: true },
+      }),
+    );
 
     const destinatarios = await this.prisma.motorista.findMany({
       where: { status: "APROVADO", ativo: true, podeChat: true },

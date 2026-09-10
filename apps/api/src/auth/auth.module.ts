@@ -4,6 +4,7 @@ import { PassportModule } from "@nestjs/passport";
 import { APP_GUARD } from "@nestjs/core";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
+import { ContaAtivaService } from "./conta-ativa.service";
 import { IdentidadeService } from "./identidade.service";
 import { EuController } from "./eu.controller";
 import { EuService } from "./eu.service";
@@ -29,6 +30,7 @@ import { UploadsModule } from "../uploads/uploads.module";
   controllers: [AuthController, EuController],
   providers: [
     AuthService,
+    ContaAtivaService,
     IdentidadeService,
     EuService,
     LancamentosPessoaisService,

@@ -17,7 +17,7 @@ import {
   ymdSaoPaulo,
 } from "../../common/timezone";
 import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
-import { contaIdAtual } from "../../common/conta/conta-context";
+import { comoSistema, contaIdAtual } from "../../common/conta/conta-context";
 import { paraCadaConta } from "../../common/conta/para-cada-conta";
 
 const DIA_MS = 86_400_000;
@@ -126,10 +126,15 @@ export class ResumoService {
 
   /** Envio sob demanda (botão "enviar resumo agora" no dashboard). */
   async enviarAgora(userId: string): Promise<{ ok: true }> {
-    const u = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { whatsappResumo: true, resumoAssuntos: true, acessoGlobal: true },
-    });
+    // `comoSistema`: quem pede é o usuário LOGADO, e um operador da plataforma
+    // dentro de outra empresa não pertence à conta do contexto — sem isto a
+    // trava não o encontraria e a tela devolveria "usuário não encontrado".
+    const u = await comoSistema(() =>
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { whatsappResumo: true, resumoAssuntos: true, acessoGlobal: true },
+      }),
+    );
     if (!u) throw new NotFoundException("Usuário não encontrado");
     if (!u.acessoGlobal) {
       // Mesmo motivo do cron: o resumo ainda não sabe se escopar por frota.

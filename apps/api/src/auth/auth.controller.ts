@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import {
   CadastroMotoristaInput,
   ConfirmarCadastroInput,
+  DefinirContaAtivaInput,
   EsqueciSenhaInput,
   LoginInput,
   LoginMotoristaInput,
@@ -14,6 +15,7 @@ import {
   TrocarSenhaInput,
 } from "@ronan/shared-types";
 import { AuthService } from "./auth.service";
+import { ContaAtivaService } from "./conta-ativa.service";
 import { CadastroMotoristaService } from "./cadastro-motorista.service";
 import { RedefinicaoSenhaService } from "./redefinicao-senha.service";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
@@ -21,7 +23,8 @@ import { Public } from "./decorators/public.decorator";
 import { Roles } from "./decorators/roles.decorator";
 import { CurrentUser } from "./decorators/current-user.decorator";
 import { RolesGuard } from "./guards/roles.guard";
-import type { AuthIdentidade, AuthMotorista } from "./types";
+import { PlataformaGuard } from "./guards/plataforma.guard";
+import type { AuthAdminUser, AuthIdentidade, AuthMotorista } from "./types";
 
 @ApiTags("auth")
 @Controller()
@@ -30,6 +33,7 @@ export class AuthController {
     private readonly auth: AuthService,
     private readonly cadastro: CadastroMotoristaService,
     private readonly redefinicaoSenha: RedefinicaoSenhaService,
+    private readonly contaAtiva: ContaAtivaService,
   ) {}
 
   @Public()
@@ -92,6 +96,25 @@ export class AuthController {
   @Post("admin/auth/refresh")
   async refreshAdmin(@Body(new ZodValidationPipe(RefreshInput)) body: RefreshInput) {
     return this.auth.refresh(body.refreshToken);
+  }
+
+  /**
+   * Entra numa empresa pra dar suporte, ou volta pra casa com `contaId: null`.
+   *
+   * Não emite token novo: a conta ativa mora no banco e o `JwtStrategy` a relê a
+   * cada requisição, então o token que o painel já tem passa a valer pra empresa
+   * nova sozinho. O painel precisa limpar o cache dele depois de chamar aqui.
+   */
+  @ApiBearerAuth()
+  @Roles("ADMIN_USER")
+  @UseGuards(RolesGuard, PlataformaGuard)
+  @HttpCode(200)
+  @Post("admin/auth/conta-ativa")
+  async definirContaAtiva(
+    @CurrentUser() user: AuthAdminUser,
+    @Body(new ZodValidationPipe(DefinirContaAtivaInput)) body: DefinirContaAtivaInput,
+  ) {
+    return this.contaAtiva.definir(user, body.contaId);
   }
 
   @Public()
