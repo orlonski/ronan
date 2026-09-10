@@ -164,6 +164,17 @@ export class ContasController {
     return this.service.removerLogo(id);
   }
 
+  /**
+   * Apaga uma empresa de teste, com os dados dela.
+   *
+   * Recusa a casa e qualquer empresa que já tenha lançado viagem — pra isso
+   * existe Suspender, que é reversível.
+   */
+  @Delete(":id")
+  excluir(@Param("id") id: string) {
+    return this.service.excluir(id);
+  }
+
   @Post(":id/codigo-convite")
   trocarCodigo(@Param("id") id: string) {
     return this.service.trocarCodigoConvite(id);

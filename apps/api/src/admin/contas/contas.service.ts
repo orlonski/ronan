@@ -459,11 +459,7 @@ export class ContasService implements OnModuleInit {
   private async desfazer(contaId: string): Promise<void> {
     try {
       await comoSistema(async () => {
-        await this.prisma.tipoEventoViagem.deleteMany({ where: { contaId } });
-        await this.prisma.material.deleteMany({ where: { contaId } });
-        await this.prisma.campoLayout.deleteMany({ where: { contaId } });
-        await this.prisma.user.deleteMany({ where: { contaId } });
-        await this.prisma.papel.deleteMany({ where: { contaId } });
+        await this.limparConteudo(contaId);
         await this.prisma.conta.delete({ where: { id: contaId } });
       });
     } catch (erro) {
@@ -593,6 +589,85 @@ export class ContasService implements OnModuleInit {
       diasTesteGratis: cfg.diasTesteGratis,
       maxCodigosPorHora: cfg.maxCodigosPorHora,
     };
+  }
+
+  /**
+   * Apaga o conteúdo de uma empresa, na ordem que as chaves estrangeiras
+   * aceitam.
+   *
+   * A lista é explícita e não cobre as ~67 tabelas com `contaId` — cobre o que
+   * uma empresa recém-criada tem. É seguro por construção: se sobrar qualquer
+   * linha em outra tabela, o `conta.delete` seguinte falha na chave estrangeira
+   * e nada é apagado pela metade. Melhor recusar do que apagar o que não sei
+   * apagar.
+   */
+  private async limparConteudo(contaId: string): Promise<void> {
+    // Cadastros que apontam pra outros cadastros vêm primeiro.
+    await this.prisma.usuarioTransportadora.deleteMany({ where: { contaId } });
+    await this.prisma.cliente.deleteMany({ where: { contaId } });
+    await this.prisma.veiculo.deleteMany({ where: { contaId } });
+    await this.prisma.motorista.deleteMany({ where: { contaId } });
+    await this.prisma.local.deleteMany({ where: { contaId } });
+    await this.prisma.empresa.deleteMany({ where: { contaId } });
+    await this.prisma.transportadora.deleteMany({ where: { contaId } });
+    // Kit inicial.
+    await this.prisma.tipoEventoViagem.deleteMany({ where: { contaId } });
+    await this.prisma.tipoServico.deleteMany({ where: { contaId } });
+    await this.prisma.material.deleteMany({ where: { contaId } });
+    await this.prisma.campoLayout.deleteMany({ where: { contaId } });
+    // Por último as pessoas e os papéis delas.
+    await this.prisma.user.deleteMany({ where: { contaId } });
+    await this.prisma.papel.deleteMany({ where: { contaId } });
+  }
+
+  /**
+   * Apaga uma empresa de teste — de vez, com os dados dela.
+   *
+   * Existe porque testar o cadastro público sujava a base pra sempre: não havia
+   * como remover empresa nenhuma, e o e-mail, o CNPJ e o identificador usados
+   * ficavam presos.
+   *
+   * Duas travas fazem disto uma ferramenta de limpeza e não um botão de destruir
+   * cliente: a casa nunca é apagada, e empresa que já LANÇOU VIAGEM também não.
+   * Viagem é histórico de operação real — cadastro se refaz, viagem não. Quem
+   * quiser tirar do ar uma empresa que já rodou usa suspender, que é reversível.
+   */
+  async excluir(contaId: string) {
+    const conta = await comoSistema(() =>
+      this.prisma.conta.findUnique({
+        where: { id: contaId },
+        select: { id: true, nome: true, ehPlataforma: true },
+      }),
+    );
+    if (!conta) throw new BadRequestException("Empresa não encontrada.");
+    if (conta.ehPlataforma) {
+      throw new BadRequestException("A empresa da plataforma não pode ser excluída.");
+    }
+
+    const viagens = await comConta(contaId, () => this.prisma.viagem.count());
+    if (viagens > 0) {
+      throw new BadRequestException(
+        `${conta.nome} já tem ${viagens} viagem(ns) lançada(s) e não pode ser excluída. ` +
+          "Use Suspender, que tira o acesso sem apagar o histórico.",
+      );
+    }
+
+    try {
+      await comoSistema(async () => {
+        await this.limparConteudo(contaId);
+        await this.prisma.conta.delete({ where: { id: contaId } });
+      });
+    } catch (erro) {
+      // FK de alguma tabela que a lista não cobre: a empresa tem dado que este
+      // caminho não sabe apagar, e apagar pela metade seria pior.
+      this.log.warn(`Exclusão de ${conta.nome} barrada: ${(erro as Error).message}`);
+      throw new BadRequestException(
+        `${conta.nome} tem dados que não dá pra apagar por aqui. Use Suspender.`,
+      );
+    }
+
+    this.log.warn(`Empresa EXCLUÍDA: ${conta.nome} (${contaId}).`);
+    return { id: contaId, nome: conta.nome };
   }
 
   /**

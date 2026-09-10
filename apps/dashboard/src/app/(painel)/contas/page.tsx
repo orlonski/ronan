@@ -57,6 +57,8 @@ export default function ContasPage() {
   const [abrirNova, setAbrirNova] = useState(false);
   const [contaDoTeto, setContaDoTeto] = useState<Conta | null>(null);
   const [editandoPadrao, setEditandoPadrao] = useState(false);
+  const [excluindo, setExcluindo] = useState<Conta | null>(null);
+  const [confirmacao, setConfirmacao] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [form, setForm] = useState({
     nome: "",
@@ -129,6 +131,27 @@ export default function ContasPage() {
       void refetch();
     } catch (erro) {
       toast.error(erro instanceof Error ? erro.message : "Não consegui enviar a logo.");
+    }
+  }
+
+  /**
+   * Apagar é irreversível, então a confirmação é digitar o nome — não um "tem
+   * certeza?", que a gente clica no automático. O backend recusa empresa com
+   * viagem de qualquer forma; isto é a segunda porta.
+   */
+  async function excluir() {
+    if (!excluindo) return;
+    setSalvando(true);
+    try {
+      await fetchApi(`/admin/contas/${excluindo.id}`, { method: "DELETE", token });
+      toast.success(`${excluindo.nome} foi excluída.`);
+      setExcluindo(null);
+      setConfirmacao("");
+      void refetch();
+    } catch (erro) {
+      toast.error(erro instanceof Error ? erro.message : "Não consegui excluir.");
+    } finally {
+      setSalvando(false);
     }
   }
 
@@ -301,12 +324,71 @@ export default function ContasPage() {
                   >
                     {conta.ativa ? "Suspender" : "Reativar"}
                   </Button>
+                  {/* Só pra empresa que nunca lançou viagem: é ferramenta de
+                      limpar teste, não de descartar cliente. Quem já rodou se
+                      suspende, que é reversível. */}
+                  {!conta.ehPlataforma && conta.viagens === 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive"
+                      onClick={() => {
+                        setExcluindo(conta);
+                        setConfirmacao("");
+                      }}
+                    >
+                      Excluir
+                    </Button>
+                  )}
                 </div>
               </div>
             </Card>
           ))}
         </div>
       )}
+
+      <Dialog
+        open={excluindo !== null}
+        onOpenChange={(v) => {
+          if (!v) {
+            setExcluindo(null);
+            setConfirmacao("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir {excluindo?.nome}?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Isso apaga a empresa e tudo que ela cadastrou — usuários, motoristas, veículos,
+            locais. Não dá pra desfazer. O e-mail e o identificador voltam a ficar livres.
+          </p>
+          <div className="space-y-2">
+            <Label htmlFor="confirmacao">
+              Digite <strong className="font-semibold">{excluindo?.nome}</strong> para confirmar
+            </Label>
+            <Input
+              id="confirmacao"
+              value={confirmacao}
+              autoComplete="off"
+              onChange={(e) => setConfirmacao(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExcluindo(null)} disabled={salvando}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={salvando || confirmacao.trim() !== excluindo?.nome}
+              onClick={() => void excluir()}
+            >
+              Excluir para sempre
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <TetoDialog
         conta={contaDoTeto}

@@ -33,9 +33,24 @@ async function chamar(caminho: string, corpo: unknown) {
   return body;
 }
 
+/**
+ * Só os dígitos, no máximo 11. É isto que o formulário guarda.
+ *
+ * O 55 do começo sai quando ele é DDI: quem copia o número do próprio WhatsApp
+ * cola "+55 42 98877-6655", e cortar isso em 11 dígitos daria "55429887766" —
+ * um número com DDD 55, válido no formato e errado na vida real. O código iria
+ * pro lugar errado sem ninguém perceber. Só corta acima de 11 dígitos, então um
+ * DDD 55 de verdade (Rio Grande do Sul) continua intocado.
+ */
+function digitos(v: string): string {
+  const cru = v.replace(/\D/g, "");
+  const semDdi = cru.length > 11 && cru.startsWith("55") ? cru.slice(2) : cru;
+  return semDdi.slice(0, 11);
+}
+
 /** Máscara de celular conforme digita — o campo mais errado de qualquer form. */
 function mascararTelefone(v: string): string {
-  const d = v.replace(/\D/g, "").slice(0, 11);
+  const d = digitos(v);
   if (d.length <= 2) return d;
   if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
   if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
@@ -147,7 +162,12 @@ export default function CadastroPage() {
                 autoComplete="tel"
                 placeholder="(42) 99988-7766"
                 value={mascararTelefone(form.telefone)}
-                onChange={(e) => setForm({ ...form, telefone: e.target.value })}
+                // Guarda SÓ os dígitos, já cortados em 11. Guardando o texto do
+                // input, a tela mostrava a máscara truncada e o formulário
+                // mandava o resto: quem digitasse um dígito a mais, ou colasse
+                // com o +55, via um número válido e recebia "informe um celular
+                // com DDD".
+                onChange={(e) => setForm({ ...form, telefone: digitos(e.target.value) })}
               />
               <p className="text-xs text-muted-foreground">
                 É pra onde vai o código de confirmação.
