@@ -5,7 +5,8 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { CHAVES_PLATAFORMA, type CriarPapelInput, type AtualizarPapelInput } from "@ronan/shared-types";
-import { comoSistema, contaIdAtual } from "../../common/conta/conta-context";
+import { contaIdAtual } from "../../common/conta/conta-context";
+import { ehContaDaPlataforma } from "../../common/conta/eh-plataforma";
 import { PrismaService } from "../../prisma/prisma.service";
 import { PAPEL_ADMIN } from "../permissoes/permissoes.service";
 
@@ -34,18 +35,14 @@ export class PapeisService {
    * todas as empresas dividem. O painel chama a API direto do navegador, então a
    * regra tem que morar aqui, não na tela.
    *
-   * A conta da plataforma (a primeira, do dono) passa livre.
+   * A conta da plataforma (a casa) passa livre.
    */
   private async recusarChavesDePlataforma(chaves: string[] | undefined): Promise<void> {
     if (!chaves || chaves.length === 0) return;
     const proibidas = chaves.filter((c) => CHAVES_PLATAFORMA.includes(c));
     if (proibidas.length === 0) return;
 
-    const contaId = contaIdAtual();
-    const primeira = await comoSistema(() =>
-      this.prisma.conta.findFirst({ orderBy: { criadaEm: "asc" }, select: { id: true } }),
-    );
-    if (primeira?.id === contaId) return;
+    if (await ehContaDaPlataforma(this.prisma, contaIdAtual())) return;
 
     throw new BadRequestException(
       `Estas permissões são da plataforma e não podem ser concedidas aqui: ${proibidas.join(", ")}.`,

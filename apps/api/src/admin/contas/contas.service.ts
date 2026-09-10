@@ -41,8 +41,41 @@ export class ContasService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
+    await this.garantirContaDaPlataforma();
     await this.garantirOperadorDaPlataforma();
     await this.garantirCodigosDeConvite();
+  }
+
+  /**
+   * Rede de segurança pra `Conta.ehPlataforma`.
+   *
+   * A migration marca a conta mais antiga, mas ela roda com a tabela vazia num
+   * banco criado do zero — e restaurar um dump anterior à coluna deixa todo
+   * mundo `false`. Sem nenhuma conta marcada, ninguém pode conceder as chaves de
+   * `CHAVES_PLATAFORMA` e a casa fica sem as próprias telas.
+   *
+   * Nunca troca de dono: se já houver uma marcada, não faz nada.
+   */
+  private async garantirContaDaPlataforma(): Promise<void> {
+    try {
+      await comoSistema(async () => {
+        if ((await this.prisma.conta.count({ where: { ehPlataforma: true } })) > 0) return;
+
+        const primeira = await this.prisma.conta.findFirst({
+          orderBy: { criadaEm: "asc" },
+          select: { id: true, nome: true },
+        });
+        if (!primeira) return;
+
+        await this.prisma.conta.update({
+          where: { id: primeira.id },
+          data: { ehPlataforma: true },
+        });
+        this.log.log(`Conta da plataforma definida: "${primeira.nome}".`);
+      });
+    } catch (err) {
+      this.log.warn(`Falha ao definir a conta da plataforma: ${(err as Error).message}`);
+    }
   }
 
   /**
@@ -91,17 +124,17 @@ export class ContasService implements OnModuleInit {
         const jaExiste = await this.prisma.user.count({ where: { plataforma: true } });
         if (jaExiste > 0) return;
 
-        const contaMaisAntiga = await this.prisma.conta.findFirst({
-          orderBy: { criadaEm: "asc" },
+        const contaDaCasa = await this.prisma.conta.findFirst({
+          where: { ehPlataforma: true },
           select: { id: true, nome: true },
         });
-        if (!contaMaisAntiga) return;
+        if (!contaDaCasa) return;
 
-        // Administradores da conta 1. Se não houver papel nenhum atribuído, cai
+        // Administradores da casa. Se não houver papel nenhum atribuído, cai
         // pro usuário mais antigo — melhor alguém que ninguém.
         const admins = await this.prisma.user.findMany({
           where: {
-            contaId: contaMaisAntiga.id,
+            contaId: contaDaCasa.id,
             ativo: true,
             papel: { nome: PAPEL_ADMIN },
           },
@@ -111,7 +144,7 @@ export class ContasService implements OnModuleInit {
           admins.length > 0
             ? admins
             : await this.prisma.user.findMany({
-                where: { contaId: contaMaisAntiga.id, ativo: true },
+                where: { contaId: contaDaCasa.id, ativo: true },
                 orderBy: { criadoEm: "asc" },
                 take: 1,
                 select: { id: true, email: true },
@@ -124,7 +157,7 @@ export class ContasService implements OnModuleInit {
         });
         this.log.warn(
           `Nenhum operador de plataforma existia. Promovi ${alvos.map((a) => a.email).join(", ")} ` +
-            `(administradores de ${contaMaisAntiga.nome}). Pra fixar quem manda, use PLATAFORMA_EMAILS.`,
+            `(administradores de ${contaDaCasa.nome}). Pra fixar quem manda, use PLATAFORMA_EMAILS.`,
         );
       });
     } catch (erro) {
@@ -242,19 +275,25 @@ export class ContasService implements OnModuleInit {
     const senhaHash = await AuthService.hashPassword(input.adminSenha);
     const codigoConvite = await this.codigoInedito(input.nome);
 
-    const conta = await comoSistema(() =>
-      this.prisma.conta.create({
+    const conta = await comoSistema(async () => {
+      // A primeira empresa a existir é a casa. Num banco criado do zero a
+      // migration passou com a tabela vazia, então é aqui que a plataforma ganha
+      // dono — e sem dono ninguém concede as chaves de `CHAVES_PLATAFORMA`.
+      const primeiraDoSistema = (await this.prisma.conta.count()) === 0;
+
+      return this.prisma.conta.create({
         data: {
           nome: input.nome.trim(),
           slug,
           cnpj: input.cnpj?.replace(/\D/g, "") || null,
           codigoConvite,
+          ehPlataforma: primeiraDoSistema,
           // Auto-cadastro nasce DESLIGADO: o app publicado não pergunta a empresa,
           // então duas contas ligadas fariam o signup não saber onde cadastrar.
           permiteAutoCadastro: false,
         },
-      }),
-    );
+      });
+    });
 
     try {
       // Daqui pra baixo, tudo roda DENTRO da conta nova — a trava carimba sozinha.

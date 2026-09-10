@@ -7,6 +7,7 @@ import {
   CHAVES_PLATAFORMA,
 } from "@ronan/shared-types";
 import { comoSistema, contaIdAtual } from "../../common/conta/conta-context";
+import { ehContaDaPlataforma } from "../../common/conta/eh-plataforma";
 import { paraCadaConta } from "../../common/conta/para-cada-conta";
 import { PrismaService } from "../../prisma/prisma.service";
 
@@ -83,8 +84,8 @@ export class PermissoesService implements OnModuleInit {
     // O "Administrador" de uma empresa CLIENTE não é o mesmo que o da conta da
     // plataforma. Ele manda na empresa dele — não no WhatsApp compartilhado, nem
     // nas chaves de IA que a plataforma paga, nem na versão do app que ela
-    // publica nas lojas. A conta 1 (a do dono) continua com tudo.
-    const daPlataforma = await this.ehContaDaPlataforma(contaId);
+    // publica nas lojas. A conta marcada `ehPlataforma` continua com tudo.
+    const daPlataforma = await ehContaDaPlataforma(this.prisma, contaId);
     const permissoesAdmin = daPlataforma ? TODAS_AS_CHAVES : PERMISSOES_ADMIN_EMPRESA;
     // O Operador segue a mesma régua: `PERMISSOES_OPERADOR` é montado por módulo
     // (Operação + Cadastros), e "Pedágios (rodovias)" mora em Cadastros — então
@@ -142,18 +143,6 @@ export class PermissoesService implements OnModuleInit {
         `Papel "${papel.nome}": removidas ${papel.permissoes.length - limpas.length} permissão(ões) de plataforma.`,
       );
     }
-  }
-
-  /**
-   * A conta da plataforma é a primeira criada — a do dono. Não há flag no model
-   * porque a ordem já responde: quem estava aqui antes de existir "empresa
-   * cliente" é a casa.
-   */
-  private async ehContaDaPlataforma(contaId: string): Promise<boolean> {
-    const primeira = await comoSistema(() =>
-      this.prisma.conta.findFirst({ orderBy: { criadaEm: "asc" }, select: { id: true } }),
-    );
-    return primeira?.id === contaId;
   }
 
   /** Rede de segurança: usuário sem papel cai no Operador (a migração inicial

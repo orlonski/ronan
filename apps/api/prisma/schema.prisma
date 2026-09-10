@@ -339,6 +339,16 @@ model Conta {
   slug                   String  @unique
   cnpj                   String? @unique
   ativa                  Boolean @default(true)
+  /// True = a casa, a conta da própria Movatruck. Só ela concede as chaves de
+  /// `CHAVES_PLATAFORMA` (WhatsApp compartilhado, IA que ela paga, versão do
+  /// app nas lojas); empresa cliente manda só na operação dela.
+  ///
+  /// Isto já foi "a conta mais antiga por criadaEm". Virou flag porque a ordem
+  /// de criação é dado frágil: um restore, um backfill ou apagar a conta 1
+  /// transferia a autoridade da plataforma pra uma empresa cliente, que no boot
+  /// seguinte recebia o catálogo inteiro de permissões. Espera-se exatamente
+  /// uma conta com true — nenhum endpoint escreve aqui, só migration.
+  ehPlataforma           Boolean @default(false)
   /// Código que o motorista digita no app pra dizer de qual empresa ele é.
   /// Direciona o cadastro, NÃO autoriza: o motorista continua entrando como
   /// PENDENTE_APROVACAO e é a empresa que decide. Por isso código vazado não é

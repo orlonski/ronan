@@ -1344,13 +1344,22 @@ export class MotoristaService {
       hist AS (
         SELECT local_id, COUNT(*) AS n_uso, MAX(data) AS ultima FROM (
           SELECT "localCargaId" AS local_id, data FROM viagens
-            WHERE "motoristaId" = ${motoristaId} AND data >= now() - interval '60 days'
+            WHERE "contaId" = ${contaIdAtual()}
+              AND "motoristaId" = ${motoristaId} AND data >= now() - interval '60 days'
           UNION ALL
           SELECT "localDescargaId" AS local_id, data FROM viagens
-            WHERE "motoristaId" = ${motoristaId} AND data >= now() - interval '60 days'
+            WHERE "contaId" = ${contaIdAtual()}
+              AND "motoristaId" = ${motoristaId} AND data >= now() - interval '60 days'
         ) t GROUP BY local_id
       ),
-      ancora AS ( SELECT lat AS alat, lng AS alng FROM locais WHERE id = ${ancoraId} )
+      -- A âncora vem de query param do app, então o filtro de conta aqui não é
+      -- redundância: sem ele dá pra sondar id de Local de OUTRA empresa e ler a
+      -- coordenada dela pelo "distanciaKm" da resposta. SQL cru não passa pela
+      -- trava do Prisma — o filtro tem que ser escrito à mão.
+      ancora AS (
+        SELECT lat AS alat, lng AS alng FROM locais
+         WHERE id = ${ancoraId} AND "contaId" = ${contaIdAtual()}
+      )
       SELECT
         l.id, l.nome, l.tipo::text AS tipo, l.logradouro, l.cidade, l.uf,
         s.sim_score AS "simScore",
