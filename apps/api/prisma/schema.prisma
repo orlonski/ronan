@@ -635,6 +635,29 @@ model Papel {
   @@map("papeis")
 }
 
+/// O teto PADRÃO das empresas: o que o administrador de uma empresa pode
+/// conceder quando ela não tem teto próprio.
+///
+/// Existe pra essa régua NÃO morar em constante de código. Antes, "o que é da
+/// plataforma" era a lista `RECURSOS_PLATAFORMA` em shared-types, e abrir ou
+/// fechar uma tela pra todos os clientes exigia deploy. Agora a constante é só
+/// o valor de partida: o boot semeia esta linha uma vez, e daí em diante quem
+/// manda é o banco, editável pelo painel.
+///
+/// Linha única (`id = "singleton"`), model global — não pertence a empresa
+/// nenhuma, é a régua da casa.
+model ConfiguracaoPermissoes {
+  id         String   @id @default("singleton")
+  /// Chaves que uma empresa sem teto próprio pode conceder.
+  tetoPadrao String[] @default([])
+  /// Marca que o seed inicial já rodou. Sem isto, "lista vazia" seria
+  /// ambíguo: nunca configurado ou configurado como "nada"?
+  semeado    Boolean  @default(false)
+  alteradoEm DateTime @updatedAt
+
+  @@map("configuracao_permissoes")
+}
+
 /// Papel-modelo publicado pela plataforma: "Financeiro", "Conferente".
 ///
 /// É GLOBAL (não tem contaId, está em MODELS_GLOBAIS) porque um modelo não tem

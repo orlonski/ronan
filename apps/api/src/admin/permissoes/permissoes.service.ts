@@ -1,8 +1,13 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
-import { CATALOGO_PERMISSOES, PERMISSOES_OPERADOR, TODAS_AS_CHAVES } from "@ronan/shared-types";
+import {
+  CATALOGO_PERMISSOES,
+  PERMISSOES_ADMIN_EMPRESA,
+  PERMISSOES_OPERADOR,
+  TODAS_AS_CHAVES,
+} from "@ronan/shared-types";
 import { comoSistema, contaIdAtual } from "../../common/conta/conta-context";
 import { ehContaDaPlataforma } from "../../common/conta/eh-plataforma";
-import { tetoDaConta } from "../../common/conta/teto-da-conta";
+import { tetoDaConta, tetoPadrao } from "../../common/conta/teto-da-conta";
 import { paraCadaConta } from "../../common/conta/para-cada-conta";
 import { PrismaService } from "../../prisma/prisma.service";
 
@@ -19,6 +24,8 @@ export class PermissoesService implements OnModuleInit {
     try {
       // O catálogo de chaves é da plataforma (uma linha por chave, sem dono).
       await comoSistema(() => this.seedCatalogo());
+      // O teto padrão nasce igual à constante e vira dado a partir daí.
+      await comoSistema(() => this.seedTetoPadrao());
       // Papéis e usuários são de cada empresa: toda conta precisa do seu
       // "Administrador" com o catálogo em dia.
       await paraCadaConta(this.prisma, async () => {
@@ -65,6 +72,61 @@ export class PermissoesService implements OnModuleInit {
     this.log.log(
       `Catálogo de permissões sincronizado (${CATALOGO_PERMISSOES.length}; ${removidas.count} removidas).`,
     );
+  }
+
+  /**
+   * O teto padrão das empresas nasce igual a `PERMISSOES_ADMIN_EMPRESA` e, a
+   * partir daí, é dado: quem manda é o painel.
+   *
+   * Semeia UMA vez (a flag `semeado`). Sem ela, "lista vazia" seria ambíguo —
+   * nunca configurado, ou configurado como "nenhuma tela"? — e um deploy
+   * reescreveria por cima da decisão de quem configurou.
+   */
+  async seedTetoPadrao() {
+    const existente = await this.prisma.configuracaoPermissoes.findUnique({
+      where: { id: "singleton" },
+      select: { semeado: true },
+    });
+    if (existente?.semeado) return;
+
+    await this.prisma.configuracaoPermissoes.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", tetoPadrao: [...PERMISSOES_ADMIN_EMPRESA], semeado: true },
+      update: { tetoPadrao: [...PERMISSOES_ADMIN_EMPRESA], semeado: true },
+    });
+    this.log.log(`Teto padrão das empresas semeado com ${PERMISSOES_ADMIN_EMPRESA.length} chaves.`);
+  }
+
+  /** O teto padrão de hoje, pra tela mostrar e editar. */
+  async lerTetoPadrao(): Promise<{ permissoes: string[] }> {
+    return { permissoes: await comoSistema(() => tetoPadrao(this.prisma)) };
+  }
+
+  /**
+   * Troca o teto padrão. Vale pra toda empresa que não tem teto próprio, e a
+   * poda do próximo boot (ou de um salvamento por empresa) aplica o que ficou
+   * de fora.
+   */
+  async definirTetoPadrao(permissoes: string[]): Promise<{ permissoes: string[] }> {
+    const validas = new Set(TODAS_AS_CHAVES);
+    const chaves = [...new Set(permissoes.filter((c) => validas.has(c)))];
+
+    await comoSistema(() =>
+      this.prisma.configuracaoPermissoes.upsert({
+        where: { id: "singleton" },
+        create: { id: "singleton", tetoPadrao: chaves, semeado: true },
+        update: { tetoPadrao: chaves, semeado: true },
+      }),
+    );
+
+    // Aplica na hora em todas as empresas sem teto próprio: quem acabou de
+    // fechar uma tela espera que ela feche agora, não no próximo restart.
+    await paraCadaConta(this.prisma, async () => {
+      await this.seedPapeisSistema();
+    });
+
+    this.log.log(`Teto padrão das empresas: ${chaves.length} chave(s).`);
+    return { permissoes: chaves };
   }
 
   /**

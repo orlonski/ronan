@@ -2,9 +2,23 @@ import { describe, expect, it } from "vitest";
 import { CHAVES_PLATAFORMA, PERMISSOES_ADMIN_EMPRESA, TODAS_AS_CHAVES } from "@ronan/shared-types";
 import { acimaDoTeto, tetoDaConta } from "./teto-da-conta";
 
-/** Prisma de mentira: devolve a conta que o teste quiser. */
-function prismaCom(conta: { ehPlataforma: boolean; permissoesPermitidas: string[] } | null) {
-  return { conta: { findUnique: async () => conta } };
+/**
+ * Prisma de mentira: a conta e o teto padrão que o teste quiser.
+ *
+ * `padrao: null` = a linha de configuração ainda não foi semeada, que é o estado
+ * de um banco antes do primeiro boot com o recurso.
+ */
+function prismaCom(
+  conta: { ehPlataforma: boolean; permissoesPermitidas: string[] } | null,
+  padrao: string[] | null = null,
+) {
+  return {
+    conta: { findUnique: async () => conta },
+    configuracaoPermissoes: {
+      findUnique: async () =>
+        padrao === null ? null : { tetoPadrao: padrao, semeado: true },
+    },
+  };
 }
 
 describe("tetoDaConta", () => {
@@ -56,6 +70,36 @@ describe("tetoDaConta", () => {
     // Fail-closed: some a conta, some o poder — não o contrário.
     const teto = await tetoDaConta(prismaCom(null), "sumiu");
     expect([...teto].sort()).toEqual([...PERMISSOES_ADMIN_EMPRESA].sort());
+  });
+
+  it("o teto padrão vem do BANCO, não da constante — é ele que manda", async () => {
+    // O ponto do recurso: abrir ou fechar uma tela pra todos os clientes é
+    // decisão de tela. Aqui o padrão configurado libera uma chave de plataforma
+    // e restringe o resto; a constante não tem mais voz.
+    const liberada = CHAVES_PLATAFORMA[0]!;
+    const teto = await tetoDaConta(
+      prismaCom({ ehPlataforma: false, permissoesPermitidas: [] }, ["viagens.ver", liberada]),
+      "x",
+    );
+    expect([...teto].sort()).toEqual(["viagens.ver", liberada].sort());
+  });
+
+  it("teto da empresa vence o padrão", async () => {
+    const teto = await tetoDaConta(
+      prismaCom({ ehPlataforma: false, permissoesPermitidas: ["locais.ver"] }, ["viagens.ver"]),
+      "x",
+    );
+    expect([...teto]).toEqual(["locais.ver"]);
+  });
+
+  it("padrão configurado como lista vazia significa vazio de verdade", async () => {
+    // Diferente de "nunca configurado": se a plataforma decidiu que empresa
+    // nenhuma concede nada por padrão, isso tem que valer.
+    const teto = await tetoDaConta(
+      prismaCom({ ehPlataforma: false, permissoesPermitidas: [] }, []),
+      "x",
+    );
+    expect(teto.size).toBe(0);
   });
 });
 

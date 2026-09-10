@@ -46,6 +46,11 @@ const MODELS_GLOBAIS = new Set<string>([
   // `contaId`, então uma consulta dentro de `comConta` derrubaria no Prisma.
   "DocumentoPessoal",
   "Permissao", // catálogo de chaves do RBAC, semeado no boot
+  // A régua de quanto uma empresa pode conceder por padrão. É da casa, não de
+  // empresa nenhuma — e é lida de DENTRO do contexto de cada conta (o seed roda
+  // por empresa), então precisa estar aqui: sem isso a trava tenta filtrar por
+  // uma coluna `contaId` que a tabela não tem.
+  "ConfiguracaoPermissoes",
   // Papel-modelo publicado pela plataforma. Não tem dono: existe pra qualquer
   // empresa copiar, e o que ela ganha ao copiar é um `Papel` dela (esse sim
   // escopado). Ninguém é autorizado por um modelo — só por papel de conta.

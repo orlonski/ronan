@@ -50,9 +50,25 @@ BEGIN
   GET DIAGNOSTICS v_movidos = ROW_COUNT;
   RAISE NOTICE '% operador(es) da plataforma movido(s) para a Movatruck.', v_movidos;
 
-  -- 4. A casa é uma só. Tirar o flag da Schaba é o que a faz voltar a ser
-  --    cliente: no próximo boot, `seedPapeisSistema` recalcula o Administrador
-  --    dela pelo teto de empresa (92 chaves) e `podarAcimaDoTeto` remove das
-  --    mãos dela o que era de plataforma.
+  -- 4. A empresa que ERA a casa guarda, explicitamente, o teto que ela tem
+  --    hoje.
+  --
+  --    Sem isto ela cairia no teto padrão no próximo boot e perderia de uma vez
+  --    dez telas que hoje enxerga — Conferência de ticket inclusive, que pode
+  --    ser rotina de quem trabalha nela. Este deploy não é o lugar de decidir
+  --    isso: preserva o que existe, e a régua fica na tela de Empresas, onde a
+  --    plataforma abre e fecha o que quiser, quando quiser.
+  --
+  --    Só ela recebe teto próprio. As demais continuam no padrão, que é o que
+  --    mantém "abrir uma tela pra todos os clientes" a um clique de distância.
+  UPDATE contas c
+     SET "permissoesPermitidas" = COALESCE(
+           (SELECT p.permissoes FROM papeis p
+             WHERE p."contaId" = c.id AND p.nome = 'Administrador' LIMIT 1),
+           ARRAY[]::TEXT[])
+   WHERE c."ehPlataforma" AND c.id <> v_casa
+     AND cardinality(COALESCE(c."permissoesPermitidas", ARRAY[]::TEXT[])) = 0;
+
+  -- 5. A casa é uma só.
   UPDATE contas SET "ehPlataforma" = (id = v_casa) WHERE "ehPlataforma" <> (id = v_casa);
 END $$;

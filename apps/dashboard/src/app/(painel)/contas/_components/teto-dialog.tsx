@@ -28,6 +28,7 @@ type PermissaoRow = { chave: string; modulo: string; titulo: string };
  */
 export function TetoDialog({
   conta,
+  padrao,
   aberto,
   onFechar,
 }: {
@@ -37,12 +38,14 @@ export function TetoDialog({
     permissoesPermitidas?: string[];
     ehPlataforma?: boolean;
   } | null;
+  /** true = editando o teto PADRÃO (vale pra toda empresa sem teto próprio). */
+  padrao?: boolean;
   aberto: boolean;
   onFechar: (mudou: boolean) => void;
 }) {
   const token = useAuthToken();
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
-  const [padrao, setPadrao] = useState(true);
+  const [usarPadrao, setUsarPadrao] = useState(true);
   const [salvando, setSalvando] = useState(false);
 
   const catalogo = useQuery({
@@ -51,12 +54,27 @@ export function TetoDialog({
     queryFn: () => fetchApi<PermissaoRow[]>("/admin/permissoes", { token }),
   });
 
+  // O teto padrão da plataforma: só carregado quando é ele que está sendo
+  // editado, e é a lista que o dialog mostra marcada.
+  const tetoPadrao = useQuery({
+    queryKey: ["/admin/permissoes/teto-padrao"],
+    enabled: !!token && aberto && !!padrao,
+    queryFn: () => fetchApi<{ permissoes: string[] }>("/admin/permissoes/teto-padrao", { token }),
+  });
+
   useEffect(() => {
-    if (!aberto || !conta) return;
+    if (!aberto) return;
+    if (padrao) {
+      // Editando a régua da casa não existe "usar o padrão" — ela É o padrão.
+      setUsarPadrao(false);
+      setMarcadas(new Set(tetoPadrao.data?.permissoes ?? []));
+      return;
+    }
+    if (!conta) return;
     const atual = conta.permissoesPermitidas ?? [];
-    setPadrao(atual.length === 0);
+    setUsarPadrao(atual.length === 0);
     setMarcadas(new Set(atual));
-  }, [aberto, conta]);
+  }, [aberto, conta, padrao, tetoPadrao.data]);
 
   const grupos = useMemo(() => {
     const map = new Map<string, PermissaoRow[]>();
@@ -69,21 +87,30 @@ export function TetoDialog({
   }, [catalogo.data]);
 
   async function salvar() {
-    if (!conta) return;
+    if (!padrao && !conta) return;
     setSalvando(true);
     try {
-      await fetchApi(`/admin/contas/${conta.id}/permissoes`, {
-        method: "PATCH",
-        token,
-        // Padrão = lista vazia. É o backend que traduz isso pro conjunto
-        // `PERMISSOES_ADMIN_EMPRESA`, pra regra viver num lugar só.
-        body: JSON.stringify({ permissoes: padrao ? [] : [...marcadas] }),
-      });
-      toast.success(
-        padrao
-          ? `${conta.nome} voltou ao conjunto padrão de permissões.`
-          : `Permissões de ${conta.nome} atualizadas.`,
-      );
+      if (padrao) {
+        await fetchApi("/admin/permissoes/teto-padrao", {
+          method: "PUT",
+          token,
+          body: JSON.stringify({ permissoes: [...marcadas] }),
+        });
+        toast.success("Padrão atualizado. Vale para toda empresa sem ajuste próprio.");
+      } else {
+        await fetchApi(`/admin/contas/${conta!.id}/permissoes`, {
+          method: "PATCH",
+          token,
+          // "Usar o padrão" = lista vazia. Quem traduz isso pro conjunto de
+          // verdade é o backend, pra régua viver num lugar só.
+          body: JSON.stringify({ permissoes: usarPadrao ? [] : [...marcadas] }),
+        });
+        toast.success(
+          usarPadrao
+            ? `${conta!.nome} voltou ao conjunto padrão de permissões.`
+            : `Permissões de ${conta!.nome} atualizadas.`,
+        );
+      }
       onFechar(true);
     } catch (e) {
       toast.error("Não foi possível salvar", {
@@ -98,27 +125,31 @@ export function TetoDialog({
     <Dialog open={aberto} onOpenChange={(v) => !v && onFechar(false)}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Permissões liberadas — {conta?.nome}</DialogTitle>
+          <DialogTitle>
+            {padrao ? "Permissões padrão das empresas" : `Permissões liberadas — ${conta?.nome}`}
+          </DialogTitle>
           <DialogDescription>
-            O teto desta empresa: o que o administrador dela pode conceder aos papéis que criar.
-            Apertar o teto também remove o que já tinha sido concedido acima dele.
+            {padrao
+              ? "O que uma empresa pode conceder quando não tem ajuste próprio. Vale para todas de uma vez, e você continua podendo abrir ou fechar caso a caso em cada empresa."
+              : "O teto desta empresa: o que o administrador dela pode conceder aos papéis que criar. Apertar o teto também remove o que já tinha sido concedido acima dele."}
           </DialogDescription>
         </DialogHeader>
 
         {/* A casa não tem teto: `tetoDaConta` devolve o catálogo inteiro pra ela.
             Sem este aviso, mexer aqui e nada acontecer parece bug. */}
-        {conta?.ehPlataforma && (
+        {!padrao && conta?.ehPlataforma && (
           <p className="rounded-md border border-amber-300 bg-amber-100 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
             Esta é a empresa da plataforma. Ela sempre tem o catálogo inteiro, então o que você
             marcar aqui não muda nada.
           </p>
         )}
 
+        {!padrao && (
         <label className="flex items-start gap-2 rounded-md border p-3 text-sm">
           <input
             type="checkbox"
-            checked={padrao}
-            onChange={(e) => setPadrao(e.target.checked)}
+            checked={usarPadrao}
+            onChange={(e) => setUsarPadrao(e.target.checked)}
             className="mt-0.5"
           />
           <span>
@@ -128,8 +159,9 @@ export function TetoDialog({
             </span>
           </span>
         </label>
+        )}
 
-        {!padrao && (
+        {!usarPadrao && (
           <div className="space-y-4">
             {catalogo.isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
             {grupos.map(([modulo, itens]) => (
@@ -174,7 +206,7 @@ export function TetoDialog({
             Cancelar
           </Button>
           <Button onClick={() => void salvar()} disabled={salvando}>
-            Salvar permissões
+            {padrao ? "Salvar padrão" : "Salvar permissões"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -55,6 +55,7 @@ export default function ContasPage() {
   const token = useAuthToken();
   const [abrirNova, setAbrirNova] = useState(false);
   const [contaDoTeto, setContaDoTeto] = useState<Conta | null>(null);
+  const [editandoPadrao, setEditandoPadrao] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [form, setForm] = useState({
     nome: "",
@@ -180,10 +181,17 @@ export default function ContasPage() {
             Cada empresa enxerga só os dados dela. Criar uma aqui já deixa ela pronta pra usar.
           </p>
         </div>
-        <Button onClick={() => setAbrirNova(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Nova empresa
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {/* A régua que vale pra todas. Antes era uma lista fixa no código e
+              mudar exigia deploy; agora é decisão desta tela. */}
+          <Button variant="outline" onClick={() => setEditandoPadrao(true)}>
+            Permissões padrão
+          </Button>
+          <Button onClick={() => setAbrirNova(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Nova empresa
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -299,9 +307,11 @@ export default function ContasPage() {
 
       <TetoDialog
         conta={contaDoTeto}
-        aberto={contaDoTeto !== null}
+        padrao={editandoPadrao}
+        aberto={contaDoTeto !== null || editandoPadrao}
         onFechar={(mudou) => {
           setContaDoTeto(null);
+          setEditandoPadrao(false);
           if (mudou) void refetch();
         }}
       />
