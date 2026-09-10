@@ -6,6 +6,7 @@ import {
   type OnModuleInit,
 } from "@nestjs/common";
 import * as bcrypt from "bcrypt";
+import { Prisma } from "@prisma/client";
 import { TODAS_AS_CHAVES } from "@ronan/shared-types";
 import { comConta, comoSistema } from "../../common/conta/conta-context";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -15,6 +16,18 @@ import { CamposLayoutService } from "../campos-layout/campos-layout.service";
 import { PermissoesService, PAPEL_ADMIN } from "../permissoes/permissoes.service";
 import { MATERIAIS_INICIAIS, TIPOS_EVENTO_INICIAIS, TIPOS_SERVICO_INICIAIS } from "./kit-inicial";
 import { gerarCodigoConvite } from "./codigo-convite";
+
+type DelegateComDelete = {
+  deleteMany?: (args: { where: { contaId: string } }) => Promise<unknown>;
+};
+
+/**
+ * Todo model que pertence a uma empresa, tirado do schema em tempo de boot.
+ * É o que a exclusão varre — sem lista à mão pra ficar desatualizada.
+ */
+const MODELS_COM_CONTA: string[] = Prisma.dmmf.datamodel.models
+  .filter((m) => m.fields.some((f) => f.name === "contaId"))
+  .map((m) => m.name.charAt(0).toLowerCase() + m.name.slice(1));
 
 export type CriarContaInput = {
   nome: string;
@@ -592,32 +605,37 @@ export class ContasService implements OnModuleInit {
   }
 
   /**
-   * Apaga o conteúdo de uma empresa, na ordem que as chaves estrangeiras
-   * aceitam.
+   * Apaga o conteúdo de uma empresa — todas as tabelas que têm dono.
    *
-   * A lista é explícita e não cobre as ~67 tabelas com `contaId` — cobre o que
-   * uma empresa recém-criada tem. É seguro por construção: se sobrar qualquer
-   * linha em outra tabela, o `conta.delete` seguinte falha na chave estrangeira
-   * e nada é apagado pela metade. Melhor recusar do que apagar o que não sei
-   * apagar.
+   * A lista sai do próprio schema, e não escrita à mão, porque à mão ela
+   * envelhece: a primeira versão listava as tabelas "de uma conta nova" e
+   * bastou cadastrar um motorista pra travar, porque a ação gerou uma linha de
+   * auditoria que a lista não previa. Tabela nova no schema entra aqui sozinha.
+   *
+   * A ordem vem por tentativa e erro em vez de topologia: apaga o que dá,
+   * repete com o que sobrou, e para quando uma passada inteira não apaga nada.
+   * Duas ou três passadas resolvem qualquer encadeamento de chave estrangeira,
+   * e o que não resolver o `conta.delete` denuncia logo em seguida.
    */
   private async limparConteudo(contaId: string): Promise<void> {
-    // Cadastros que apontam pra outros cadastros vêm primeiro.
-    await this.prisma.usuarioTransportadora.deleteMany({ where: { contaId } });
-    await this.prisma.cliente.deleteMany({ where: { contaId } });
-    await this.prisma.veiculo.deleteMany({ where: { contaId } });
-    await this.prisma.motorista.deleteMany({ where: { contaId } });
-    await this.prisma.local.deleteMany({ where: { contaId } });
-    await this.prisma.empresa.deleteMany({ where: { contaId } });
-    await this.prisma.transportadora.deleteMany({ where: { contaId } });
-    // Kit inicial.
-    await this.prisma.tipoEventoViagem.deleteMany({ where: { contaId } });
-    await this.prisma.tipoServico.deleteMany({ where: { contaId } });
-    await this.prisma.material.deleteMany({ where: { contaId } });
-    await this.prisma.campoLayout.deleteMany({ where: { contaId } });
-    // Por último as pessoas e os papéis delas.
-    await this.prisma.user.deleteMany({ where: { contaId } });
-    await this.prisma.papel.deleteMany({ where: { contaId } });
+    let restantes = MODELS_COM_CONTA;
+
+    for (let passada = 0; passada < 5 && restantes.length > 0; passada++) {
+      const sobraram: string[] = [];
+      for (const model of restantes) {
+        const delegate = (this.prisma as unknown as Record<string, DelegateComDelete>)[model];
+        if (!delegate?.deleteMany) continue;
+        try {
+          // `contaId` explícito no where: isto roda em `comoSistema`, onde a
+          // trava não injeta filtro nenhum.
+          await delegate.deleteMany({ where: { contaId } });
+        } catch {
+          sobraram.push(model); // depende de outra tabela; tenta na próxima volta
+        }
+      }
+      if (sobraram.length === restantes.length) break;
+      restantes = sobraram;
+    }
   }
 
   /**
@@ -662,7 +680,8 @@ export class ContasService implements OnModuleInit {
       // caminho não sabe apagar, e apagar pela metade seria pior.
       this.log.warn(`Exclusão de ${conta.nome} barrada: ${(erro as Error).message}`);
       throw new BadRequestException(
-        `${conta.nome} tem dados que não dá pra apagar por aqui. Use Suspender.`,
+        `${conta.nome} tem dados que não dá pra apagar por aqui. Use Suspender. ` +
+          "(Se isto se repetir, o log do servidor diz qual tabela travou.)",
       );
     }
 
