@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { RECURSOS_LABEL } from "@ronan/shared-types";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { RequerTela } from "@/components/requer-tela";
+import { PublicarModelo, UsarModelo } from "./_components/modelos";
 import { cn } from "@/lib/utils";
 
 type PermissaoRow = {
@@ -186,6 +187,15 @@ function PermissoesInner() {
           <Button onClick={novo} variant="outline" className="w-full justify-start">
             <Plus className="h-4 w-4" /> Novo papel
           </Button>
+          <UsarModelo
+            onCopiado={(id) => {
+              // Abre a cópia já selecionada: quem copia quase sempre quer
+              // conferir e ajustar antes de atribuir a alguém.
+              void qc
+                .invalidateQueries({ queryKey: [PATH_PAPEIS] })
+                .then(() => setSelId(id));
+            }}
+          />
           {papeis.data?.map((p) => (
             <button
               key={p.id}
@@ -210,6 +220,19 @@ function PermissoesInner() {
               </span>
             </button>
           ))}
+
+          <PublicarModelo
+            papel={
+              selecionado
+                ? {
+                    id: selecionado.id,
+                    nome: selecionado.nome,
+                    descricao: selecionado.descricao,
+                    permissoes: selecionado.permissoes,
+                  }
+                : null
+            }
+          />
         </div>
 
         {/* Editor */}

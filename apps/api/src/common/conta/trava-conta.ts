@@ -46,6 +46,10 @@ const MODELS_GLOBAIS = new Set<string>([
   // `contaId`, então uma consulta dentro de `comConta` derrubaria no Prisma.
   "DocumentoPessoal",
   "Permissao", // catálogo de chaves do RBAC, semeado no boot
+  // Papel-modelo publicado pela plataforma. Não tem dono: existe pra qualquer
+  // empresa copiar, e o que ela ganha ao copiar é um `Papel` dela (esse sim
+  // escopado). Ninguém é autorizado por um modelo — só por papel de conta.
+  "PapelModelo",
   "PedagioRodovia", // praças de pedágio vindas do OSM (dado público)
   "GeocodingCache", // endereço → coordenada
   "RotaCache", // chaveado por par de Local, que já é da conta

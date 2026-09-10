@@ -222,6 +222,37 @@ export const PERMISSOES_OPERADOR: string[] = CATALOGO_PERMISSOES.filter(
   (p) => (p.modulo === "Operação" || p.modulo === "Cadastros") && !ADMIN_ONLY.includes(p.chave),
 ).map((p) => p.chave);
 
+/**
+ * Papel-modelo publicado pela plataforma, pra empresa copiar em vez de montar do
+ * zero. Só quem opera a plataforma escreve isto.
+ */
+export const PapelModeloInput = z.object({
+  nome: z.string().min(2).max(60),
+  descricao: z.string().max(200).optional(),
+  permissoes: z.array(z.string()).default([]),
+  ativo: z.boolean().optional(),
+});
+export type PapelModeloInput = z.infer<typeof PapelModeloInput>;
+
+/**
+ * A empresa copiando um modelo. `nome` só é necessário quando o nome do modelo
+ * já está em uso lá dentro.
+ */
+export const CriarPapelDoModeloInput = z.object({
+  modeloId: z.string().uuid(),
+  nome: z.string().min(2).max(60).optional(),
+});
+export type CriarPapelDoModeloInput = z.infer<typeof CriarPapelDoModeloInput>;
+
+/**
+ * O teto de uma empresa: o que o administrador dela pode conceder. Lista vazia
+ * devolve ao padrão do código (`PERMISSOES_ADMIN_EMPRESA`).
+ */
+export const TetoDaContaInput = z.object({
+  permissoes: z.array(z.string()),
+});
+export type TetoDaContaInput = z.infer<typeof TetoDaContaInput>;
+
 export const CriarPapelInput = z.object({
   nome: z.string().min(2).max(60),
   descricao: z.string().max(200).optional(),

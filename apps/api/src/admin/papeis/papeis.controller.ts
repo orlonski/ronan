@@ -1,6 +1,10 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { AtualizarPapelInput, CriarPapelInput } from "@ronan/shared-types";
+import {
+  AtualizarPapelInput,
+  CriarPapelDoModeloInput,
+  CriarPapelInput,
+} from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
@@ -19,6 +23,25 @@ export class PapeisController {
   @Get()
   list() {
     return this.service.list();
+  }
+
+  /**
+   * Modelos publicados pela plataforma que esta empresa pode copiar.
+   *
+   * Antes de `:id` de propósito: `@Get(":id")` casaria com "modelos" e mandaria
+   * a string pro `findOne`.
+   */
+  @Get("modelos")
+  listarModelos() {
+    return this.service.listarModelos();
+  }
+
+  /** Cria um papel desta empresa a partir de um modelo. */
+  @Post("do-modelo")
+  criarDoModelo(
+    @Body(new ZodValidationPipe(CriarPapelDoModeloInput)) body: CriarPapelDoModeloInput,
+  ) {
+    return this.service.criarDoModelo(body);
   }
 
   @Get(":id")

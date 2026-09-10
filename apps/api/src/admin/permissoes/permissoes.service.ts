@@ -1,13 +1,8 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
-import {
-  CATALOGO_PERMISSOES,
-  PERMISSOES_OPERADOR,
-  TODAS_AS_CHAVES,
-  PERMISSOES_ADMIN_EMPRESA,
-  CHAVES_PLATAFORMA,
-} from "@ronan/shared-types";
+import { CATALOGO_PERMISSOES, PERMISSOES_OPERADOR, TODAS_AS_CHAVES } from "@ronan/shared-types";
 import { comoSistema, contaIdAtual } from "../../common/conta/conta-context";
 import { ehContaDaPlataforma } from "../../common/conta/eh-plataforma";
+import { tetoDaConta } from "../../common/conta/teto-da-conta";
 import { paraCadaConta } from "../../common/conta/para-cada-conta";
 import { PrismaService } from "../../prisma/prisma.service";
 
@@ -86,14 +81,17 @@ export class PermissoesService implements OnModuleInit {
     // nas chaves de IA que a plataforma paga, nem na versão do app que ela
     // publica nas lojas. A conta marcada `ehPlataforma` continua com tudo.
     const daPlataforma = await ehContaDaPlataforma(this.prisma, contaId);
-    const permissoesAdmin = daPlataforma ? TODAS_AS_CHAVES : PERMISSOES_ADMIN_EMPRESA;
+    // O teto da empresa, não a constante: a plataforma pode ter liberado ou
+    // fechado telas pra este cliente específico, e o Administrador dele tem que
+    // refletir isso. Pra quem não foi customizado, `tetoDaConta` devolve
+    // exatamente `PERMISSOES_ADMIN_EMPRESA` — nada muda.
+    const teto = await tetoDaConta(this.prisma, contaId);
+    const permissoesAdmin = TODAS_AS_CHAVES.filter((c) => teto.has(c));
     // O Operador segue a mesma régua: `PERMISSOES_OPERADOR` é montado por módulo
     // (Operação + Cadastros), e "Pedágios (rodovias)" mora em Cadastros — então
     // sem esta poda o operador de uma empresa cliente herdaria a base de praças,
     // que é compartilhada entre todas.
-    const permissoesOperador = daPlataforma
-      ? PERMISSOES_OPERADOR
-      : PERMISSOES_OPERADOR.filter((c) => !CHAVES_PLATAFORMA.includes(c));
+    const permissoesOperador = PERMISSOES_OPERADOR.filter((c) => teto.has(c));
 
     await this.prisma.papel.upsert({
       where: { contaId_nome: { contaId, nome: PAPEL_ADMIN } },
@@ -118,29 +116,29 @@ export class PermissoesService implements OnModuleInit {
       update: { sistema: true },
     });
 
-    if (!daPlataforma) await this.podarChavesDePlataforma();
+    if (!daPlataforma) await this.podarAcimaDoTeto(teto);
   }
 
   /**
-   * Tira das mãos de uma empresa cliente qualquer chave que virou de
-   * plataforma.
+   * Tira das mãos de uma empresa qualquer chave acima do teto dela.
    *
    * Não basta cuidar do papel Administrador na criação: o Operador é montado por
    * MÓDULO (Operação + Cadastros) e "Pedágios (rodovias)" mora em Cadastros;
    * além disso a empresa pode ter criado papéis próprios antes de a chave virar
-   * exclusiva. Roda a cada boot, então promover um recurso a "de plataforma"
-   * limpa o passado sozinho.
+   * exclusiva — ou antes de a plataforma fechar o teto dela. Roda a cada boot,
+   * então promover um recurso a "de plataforma", ou apertar o teto de um
+   * cliente, limpa o passado sozinho.
    */
-  private async podarChavesDePlataforma(): Promise<void> {
+  private async podarAcimaDoTeto(teto: Set<string>): Promise<void> {
     const papeis = await this.prisma.papel.findMany({
       select: { id: true, nome: true, permissoes: true },
     });
     for (const papel of papeis) {
-      const limpas = papel.permissoes.filter((c) => !CHAVES_PLATAFORMA.includes(c));
+      const limpas = papel.permissoes.filter((c) => teto.has(c));
       if (limpas.length === papel.permissoes.length) continue;
       await this.prisma.papel.update({ where: { id: papel.id }, data: { permissoes: limpas } });
       this.log.log(
-        `Papel "${papel.nome}": removidas ${papel.permissoes.length - limpas.length} permissão(ões) de plataforma.`,
+        `Papel "${papel.nome}": removidas ${papel.permissoes.length - limpas.length} permissão(ões) acima do teto da empresa.`,
       );
     }
   }

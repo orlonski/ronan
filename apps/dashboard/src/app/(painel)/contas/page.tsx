@@ -18,6 +18,7 @@ import { useApiQuery, fetchApi, useAuthToken } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
 import { fmtDataHoraSP } from "@/lib/datetime-br";
 import { maskDocumento } from "@ronan/shared-types";
+import { TetoDialog } from "./_components/teto-dialog";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
@@ -27,6 +28,8 @@ type Conta = {
   slug: string;
   cnpj: string | null;
   ativa: boolean;
+  /** A conta da própria plataforma: sempre tem o catálogo inteiro. */
+  ehPlataforma?: boolean;
   permiteAutoCadastro: boolean;
   /** Leitura do ticket por IA na hora da foto, no app do motorista. */
   iaLeituraTicket: boolean;
@@ -34,6 +37,8 @@ type Conta = {
   iaConferenciaTicket: boolean;
   logoUrl: string | null;
   codigoConvite: string | null;
+  /** Teto da empresa. Vazio = conjunto padrão. */
+  permissoesPermitidas?: string[];
   criadaEm: string;
   usuarios: number;
   motoristas: number;
@@ -49,6 +54,7 @@ export default function ContasPage() {
   const { data, isLoading, refetch } = useApiQuery<Conta[]>("/admin/contas");
   const token = useAuthToken();
   const [abrirNova, setAbrirNova] = useState(false);
+  const [contaDoTeto, setContaDoTeto] = useState<Conta | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [form, setForm] = useState({
     nome: "",
@@ -269,6 +275,9 @@ export default function ContasPage() {
                   >
                     {conta.logoUrl ? "Trocar logo" : "Enviar logo"}
                   </Button>
+                  <Button variant="outline" size="sm" onClick={() => setContaDoTeto(conta)}>
+                    Permissões liberadas
+                  </Button>
                   {!conta.permiteAutoCadastro && (
                     <Button variant="outline" size="sm" onClick={() => definirAutoCadastro(conta)}>
                       Receber cadastro pelo app
@@ -287,6 +296,15 @@ export default function ContasPage() {
           ))}
         </div>
       )}
+
+      <TetoDialog
+        conta={contaDoTeto}
+        aberto={contaDoTeto !== null}
+        onFechar={(mudou) => {
+          setContaDoTeto(null);
+          if (mudou) void refetch();
+        }}
+      />
 
       <Dialog open={abrirNova} onOpenChange={setAbrirNova}>
         <DialogContent>

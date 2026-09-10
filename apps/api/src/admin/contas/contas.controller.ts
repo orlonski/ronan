@@ -15,7 +15,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
-import { AtualizarMinhaEmpresaInput } from "@ronan/shared-types";
+import { AtualizarMinhaEmpresaInput, TetoDaContaInput } from "@ronan/shared-types";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { PlataformaGuard } from "../../auth/guards/plataforma.guard";
@@ -95,6 +95,19 @@ export class ContasController {
   @Patch(":id/auto-cadastro")
   definirAutoCadastro(@Param("id") id: string) {
     return this.service.definirAutoCadastro(id);
+  }
+
+  /**
+   * O teto da empresa: o que o administrador dela pode conceder. Lista vazia
+   * volta ao padrão. Fica aqui, e não na matriz de papéis, porque é a plataforma
+   * decidindo o que o cliente contratou — não é permissão que ele mesmo ajusta.
+   */
+  @Patch(":id/permissoes")
+  definirTeto(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(TetoDaContaInput)) body: TetoDaContaInput,
+  ) {
+    return this.service.definirTeto(id, body.permissoes);
   }
 
   /**

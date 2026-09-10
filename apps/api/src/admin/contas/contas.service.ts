@@ -6,6 +6,7 @@ import {
   type OnModuleInit,
 } from "@nestjs/common";
 import * as bcrypt from "bcrypt";
+import { TODAS_AS_CHAVES } from "@ronan/shared-types";
 import { comConta, comoSistema } from "../../common/conta/conta-context";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuthService } from "../../auth/auth.service";
@@ -231,11 +232,16 @@ export class ContasService implements OnModuleInit {
         slug: true,
         cnpj: true,
         ativa: true,
+        // A casa. A tela usa pra avisar que o teto não vale pra ela.
+        ehPlataforma: true,
         permiteAutoCadastro: true,
         iaLeituraTicket: true,
         iaConferenciaTicket: true,
         logoUrl: true,
         codigoConvite: true,
+        // Vazio = conjunto padrão. A tela precisa saber pra abrir o editor de
+        // teto já no estado certo.
+        permissoesPermitidas: true,
         criadaEm: true,
         _count: { select: { users: true, motoristas: true, viagens: true } },
       },
@@ -509,6 +515,38 @@ export class ContasService implements OnModuleInit {
         },
       }),
     );
+  }
+
+  /**
+   * O teto de uma empresa: o que o administrador dela pode conceder aos papéis
+   * que criar.
+   *
+   * Lista vazia devolve ao padrão do código (`PERMISSOES_ADMIN_EMPRESA`) — é o
+   * "voltar ao normal", e não "tirar tudo". Quem interpreta isso é `tetoDaConta`.
+   *
+   * Apertar o teto tem efeito retroativo no boot seguinte: `podarAcimaDoTeto`
+   * varre os papéis da empresa e remove o que passou a ser proibido. Isso é
+   * proposital — teto que só vale pra papel novo não é teto.
+   */
+  async definirTeto(id: string, permissoes: string[]) {
+    const validas = new Set(TODAS_AS_CHAVES);
+    const chaves = [...new Set(permissoes.filter((c) => validas.has(c)))];
+
+    const conta = await comoSistema(() =>
+      this.prisma.conta.update({
+        where: { id },
+        data: { permissoesPermitidas: chaves },
+        select: { id: true, nome: true, permissoesPermitidas: true },
+      }),
+    );
+
+    // Aplica na hora, em vez de esperar o próximo boot: quem acabou de fechar
+    // uma tela pra um cliente espera que ela feche agora.
+    await comConta(id, () => this.permissoes.seedPapeisSistema());
+    this.log.log(
+      `Teto de "${conta.nome}": ${chaves.length > 0 ? `${chaves.length} chave(s)` : "padrão"}.`,
+    );
+    return conta;
   }
 }
 
