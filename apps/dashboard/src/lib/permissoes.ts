@@ -10,10 +10,18 @@ type MePayload = {
   papel: { id: string; nome: string } | null;
   acessoGlobal: boolean;
   transportadoras: { id: string; nome: string }[];
-  /** A empresa (tenant) do usuário. O backend já filtra tudo por ela. */
+  /**
+   * A empresa (tenant) desta sessão — a EFETIVA. O backend já filtra tudo por
+   * ela, e quando a equipe da plataforma está visitando um cliente, é a empresa
+   * visitada que vem aqui.
+   */
   conta: { id: string; nome: string; logoUrl: string | null; codigoConvite: string | null } | null;
   /** true = equipe da plataforma (só ela vê a tela de empresas). */
   plataforma: boolean;
+  /** true = está dentro de uma empresa que não é a dele. */
+  assumida?: boolean;
+  /** A empresa dele, pra onde o botão "sair desta empresa" volta. */
+  contaOrigem?: { id: string; nome: string } | null;
 };
 
 /**
@@ -33,10 +41,18 @@ export function usePermissoes() {
     /** false = usuário restrito a transportadora (o backend filtra o que ele lê). */
     acessoGlobal: data?.acessoGlobal ?? true,
     transportadoras: data?.transportadoras ?? [],
-    /** A empresa do usuário — só pra exibir; o recorte dos dados é do backend. */
+    /** A empresa da sessão — só pra exibir; o recorte dos dados é do backend. */
     conta: data?.conta ?? null,
     /** Equipe da plataforma: enxerga a tela de empresas. */
     plataforma: data?.plataforma ?? false,
+    /**
+     * Está dentro de uma empresa que não é a dele. Quem usa isto tem obrigação
+     * de deixar visível na tela: sem o aviso, uma exclusão feita achando que se
+     * está em casa acontece no dado de um cliente.
+     */
+    assumida: data?.assumida ?? false,
+    /** A empresa dele, pra onde o "sair desta empresa" volta. */
+    contaOrigem: data?.contaOrigem ?? null,
   };
 }
 

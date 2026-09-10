@@ -45,6 +45,7 @@ import {
 import { cn } from "@/lib/utils";
 import { usePermissoes } from "@/lib/permissoes";
 import { Button } from "@/components/ui/button";
+import { ContaSwitcher } from "@/components/conta-switcher";
 import { LogoConta } from "@/components/logo-conta";
 import { limparMarca, useMarcaConta } from "@/lib/marca-conta";
 import { ThemeSwitcher } from "@/components/theme-switcher";
@@ -207,12 +208,18 @@ export function Sidebar({
           )}
         </div>
 
+        {/* Trocar de empresa: só a equipe da plataforma vê (o componente se
+            esconde sozinho). Fica encostado na logo porque é ela que ele troca. */}
+        <ContaSwitcher />
+
         {/* De qual empresa é o que está na tela. Com mais de uma no ar, saber
             onde você está deixa de ser detalhe. Some quando há logo: a logo já
-            identifica a empresa, repetir o nome embaixo é redundante. */}
+            identifica a empresa, repetir o nome embaixo é redundante. E some
+            também pra quem tem o seletor acima, que já diz o nome com todas as
+            letras. */}
         {/* Mesma marca lembrada do logo: sem isso o nome aparecia do nada um
             segundo depois e empurrava o menu pra baixo. */}
-        {!marca?.logoUrl && (
+        {!marca?.logoUrl && !plataforma && (
           <div className="mb-4 h-4 px-2 text-xs font-medium text-muted-foreground">
             {marca?.nome ?? ""}
           </div>
