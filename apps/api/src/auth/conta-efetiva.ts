@@ -1,15 +1,22 @@
+/**
+ * O mínimo que a regra precisa saber de uma empresa. Genérico de propósito:
+ * quem chama passa a conta inteira que já carregou (com estado, logo, o que
+ * for) e recebe ela de volta, sem a função ter que conhecer esses campos.
+ */
+export type ContaBasica = { id: string; nome: string; ativa: boolean };
+
 /** O que o `JwtStrategy` sabe do usuário na hora de decidir a conta. */
-export type UsuarioParaConta = {
+export type UsuarioParaConta<C extends ContaBasica = ContaBasica> = {
   /** A empresa dele, a que não muda. */
   contaId: string;
-  conta: { id: string; nome: string };
+  conta: C;
   plataforma: boolean;
   /** A empresa que ele pediu pra visitar, se pediu. */
-  contaAtiva: { id: string; nome: string; ativa: boolean } | null;
+  contaAtiva: C | null;
 };
 
-export type ContaEfetiva = {
-  conta: { id: string; nome: string };
+export type ContaEfetiva<C extends ContaBasica = ContaBasica> = {
+  conta: C;
   assumida: boolean;
 };
 
@@ -28,11 +35,11 @@ export type ContaEfetiva = {
  *
  * Como nada disso vive no token, a queda vale já na requisição seguinte.
  */
-export function resolverContaEfetiva(u: UsuarioParaConta): ContaEfetiva {
+export function resolverContaEfetiva<C extends ContaBasica>(
+  u: UsuarioParaConta<C>,
+): ContaEfetiva<C> {
   const visitando =
     u.plataforma && u.contaAtiva !== null && u.contaAtiva.ativa && u.contaAtiva.id !== u.contaId;
 
-  return visitando
-    ? { conta: { id: u.contaAtiva!.id, nome: u.contaAtiva!.nome }, assumida: true }
-    : { conta: u.conta, assumida: false };
+  return visitando ? { conta: u.contaAtiva!, assumida: true } : { conta: u.conta, assumida: false };
 }

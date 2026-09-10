@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Menu } from "lucide-react";
+import { AvisoConta } from "@/components/aviso-conta";
 import { AvisoVisita } from "@/components/aviso-visita";
 import { Sidebar } from "@/components/sidebar";
 import { BottomNav } from "@/components/bottom-nav";
@@ -37,6 +38,7 @@ export function PainelShell({ children }: { children: React.ReactNode }) {
             elementos com `top-0` se sobreporiam. */}
         <div className="sticky top-0 z-30 pt-safe">
           <AvisoVisita />
+          <AvisoConta />
 
           {/* Header mobile com hamburger (cara de app) */}
           <header className="flex items-center justify-between border-b bg-background px-4 py-3 md:hidden">

@@ -5,6 +5,7 @@ import * as bcrypt from "bcrypt";
 import type { MotoristaIdentidade, StatusMotorista } from "@prisma/client";
 import type { CadastroEmpresa, SessaoEmpresa } from "@ronan/shared-types";
 import { comConta, comoSistema } from "../common/conta/conta-context";
+import { estadoDaConta } from "../common/conta/estado-da-conta";
 import { VINCULO_VIVO, vinculoVivo } from "../common/vinculo";
 import { IdentidadeService } from "./identidade.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -35,10 +36,33 @@ export class AuthService {
     // O e-mail continua único no sistema inteiro (não por conta) justamente pra
     // que o login não precise perguntar "de qual empresa você é?". Achar o
     // usuário é o que revela a conta, então a busca roda sem filtro.
-    const user = await comoSistema(() => this.prisma.user.findUnique({ where: { email } }));
+    const user = await comoSistema(() =>
+      this.prisma.user.findUnique({
+        where: { email },
+        include: {
+          conta: {
+            select: {
+              ativa: true,
+              somenteLeitura: true,
+              trialExpiraEm: true,
+              motivoBloqueio: true,
+            },
+          },
+        },
+      }),
+    );
     if (!user || !user.ativo) throw new UnauthorizedException("Credenciais inválidas");
     const ok = await bcrypt.compare(senha, user.senhaHash);
     if (!ok) throw new UnauthorizedException("Credenciais inválidas");
+
+    // A senha está certa: daqui pra frente, mentir é pior do que recusar. Sem
+    // isto o login PASSA, a próxima tela dá 401, e o painel mostra "credenciais
+    // inválidas" a quem não errou senha nenhuma — o cliente conclui que perdeu
+    // a senha e nunca descobre que a empresa foi suspensa.
+    const estado = estadoDaConta(user.conta);
+    if (!estado.podeEntrar) {
+      throw new ForbiddenException({ code: estado.codigo, message: estado.motivo });
+    }
     await comConta(user.contaId, () =>
       this.prisma.user.update({
         where: { id: user.id },
@@ -99,12 +123,34 @@ export class AuthService {
     // Cadastro recusado some da lista (PENDENTE_APROVACAO fica — o app mostra o
     // modo "em análise", que é de propósito). Convite não respondido também não
     // vira sessão: ele decide isso na tela de convites, não entrando.
-    const vinculos = await comoSistema(() =>
+    const todosVinculos = await comoSistema(() =>
       this.prisma.motorista.findMany({
         where: { identidadeId: identidade.id, ...VINCULO_VIVO },
         orderBy: { criadoEm: "desc" },
+        include: {
+          conta: {
+            select: {
+              ativa: true,
+              somenteLeitura: true,
+              trialExpiraEm: true,
+              motivoBloqueio: true,
+            },
+          },
+        },
       }),
     );
+
+    // Empresa suspensa sai da lista, e só dela: quem roda pra duas continua
+    // entrando na que está de pé. Emitir sessão pra uma conta bloqueada seria
+    // pior que não emitir — o app entraria e tomaria erro em toda tela.
+    const vinculos = todosVinculos.filter((v) => estadoDaConta(v.conta).podeEntrar);
+
+    if (vinculos.length === 0 && todosVinculos.length > 0) {
+      // Ele TEM vínculo, mas nenhum utilizável. Dizer o motivo é o que evita o
+      // ciclo de "entra, dá erro, tenta de novo".
+      const estado = estadoDaConta(todosVinculos[0]!.conta);
+      throw new ForbiddenException({ code: estado.codigo, message: estado.motivo });
+    }
 
     if (vinculos.length === 0 && !suportaIdentidade) {
       // App antigo não sabe entrar sem empresa. Em vez de devolver uma resposta

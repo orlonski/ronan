@@ -66,6 +66,7 @@ import {
   ApiError,
   getUltimaFalhaRedeAt,
   humanizeApiError,
+  isContaBloqueada,
   SessaoIndisponivelError,
   SessaoTrocadaError,
 } from "./api";
@@ -111,6 +112,11 @@ function isErroPermanente(err: unknown): boolean {
   if (!(err instanceof ApiError)) return false;
   if (err.status >= 500) return false;
   if (err.status === 408 || err.status === 429) return false;
+  // Empresa bloqueada é TRANSITÓRIA: o lançamento está certo, quem está
+  // impedido é a empresa. Tratar como permanente carimbava as pendências como
+  // erro pra sempre — e reativar a conta não as destravava, porque `attempts`
+  // já estava no teto. Era o único dano da suspensão que não se desfazia.
+  if (isContaBloqueada(err)) return false;
   return err.status >= 400 && err.status < 500;
 }
 

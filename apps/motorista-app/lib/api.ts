@@ -174,6 +174,21 @@ export function apiErrorCode(err: unknown): string | null {
 }
 
 /**
+ * A empresa está bloqueada — teste terminado, suspensão, inadimplência.
+ *
+ * NÃO é erro do motorista nem do que ele lançou: o mesmo item passa assim que a
+ * empresa voltar. Por isso o outbox trata como transitório, e a tela mostra a
+ * mensagem do backend (que explica o motivo) em vez de "sessão expirou".
+ */
+const CODIGOS_CONTA_BLOQUEADA = new Set(["CONTA_SUSPENSA", "CONTA_SOMENTE_LEITURA"]);
+
+export function isContaBloqueada(err: unknown): boolean {
+  const codigo = apiErrorCode(err);
+  return codigo !== null && CODIGOS_CONTA_BLOQUEADA.has(codigo);
+}
+
+
+/**
  * Headers que identificam a versão do app rodando, pro backend registrar e o
  * dashboard mostrar quem está atualizado. Memoizado: nada disso muda durante a
  * sessão (só num reload OTA, que reinicia o processo). Em dev/Expo Go vários

@@ -32,7 +32,10 @@ function LoginForm() {
     const res = await signIn("credentials", { email, senha, redirect: false, callbackUrl });
     setLoading(false);
     if (res?.error) {
-      setError("Credenciais inválidas");
+      // O backend manda o motivo real quando existe (empresa suspensa, teste
+      // terminado). "CredentialsSignin" é o genérico do next-auth pra senha
+      // errada — só nesse caso a mensagem é nossa.
+      setError(res.error === "CredentialsSignin" ? "Credenciais inválidas" : res.error);
       return;
     }
     router.push(callbackUrl as never);

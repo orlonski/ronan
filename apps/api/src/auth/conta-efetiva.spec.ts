@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { resolverContaEfetiva, type UsuarioParaConta } from "./conta-efetiva";
 
-const CASA = { id: "conta-casa", nome: "Movatruck" };
+const CASA = { id: "conta-casa", nome: "Movatruck", ativa: true };
 const CLIENTE = { id: "conta-cliente", nome: "Transportes Contab", ativa: true };
 
 function usuario(over: Partial<UsuarioParaConta> = {}): UsuarioParaConta {
@@ -34,7 +34,7 @@ describe("resolverContaEfetiva", () => {
   it("visitar a própria empresa não conta como visita", () => {
     // O painel pode mandar o id que está na tela sem tratar o caso especial —
     // e `assumida: false` mantém a faixa de aviso fora do ar.
-    const r = resolverContaEfetiva(usuario({ contaAtiva: { ...CASA, ativa: true } }));
+    const r = resolverContaEfetiva(usuario({ contaAtiva: CASA }));
     expect(r).toEqual({ conta: CASA, assumida: false });
   });
 

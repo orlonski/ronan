@@ -5,6 +5,7 @@ import { UploadsModule } from "../../uploads/uploads.module";
 import { ContasController, MinhaEmpresaController } from "./contas.controller";
 import { LogoPublicaController } from "./logo-publica.controller";
 import { ContasService } from "./contas.service";
+import { TrialService } from "./trial.service";
 
 /**
  * `CamposLayoutModule` não entra nos imports porque é `@Global`.
@@ -12,7 +13,7 @@ import { ContasService } from "./contas.service";
 @Module({
   imports: [PermissoesModule, AuthModule, UploadsModule],
   controllers: [ContasController, MinhaEmpresaController, LogoPublicaController],
-  providers: [ContasService],
+  providers: [ContasService, TrialService],
   exports: [ContasService],
 })
 export class ContasModule {}

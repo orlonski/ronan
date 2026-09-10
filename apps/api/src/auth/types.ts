@@ -29,6 +29,12 @@ export type AuthAdminUser = {
    */
   assumida: boolean;
   /**
+   * A empresa desta requisição está em modo somente leitura (teste terminado,
+   * ou suspensão branda). Quem barra a escrita é o `SomenteLeituraGuard`; aqui
+   * está pra não custar uma consulta por requisição.
+   */
+  contaSomenteLeitura: boolean;
+  /**
    * Operador da PLATAFORMA (o dono do sistema), não da empresa. É quem enxerga
    * a tela de contas e o único que pode visitar outra. Ver `User.plataforma`.
    */
@@ -58,6 +64,8 @@ export type AuthMotorista = {
   status: StatusMotorista;
   /** A empresa dele. O CPF é único DENTRO dela, não no sistema todo. */
   contaId: string;
+  /** A empresa está em modo somente leitura: ele não lança nada novo. */
+  contaSomenteLeitura: boolean;
 };
 
 /**

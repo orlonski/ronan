@@ -14,6 +14,7 @@ import { RedefinicaoSenhaService } from "./redefinicao-senha.service";
 import { JwtStrategy } from "./strategies/jwt.strategy";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { PermissaoGuard } from "./guards/permissao.guard";
+import { SomenteLeituraGuard } from "./guards/somente-leitura.guard";
 import { EvolutionModule } from "../whatsapp/evolution.module";
 import { AdminInboxModule } from "../admin/inbox/inbox.module";
 import { UploadsModule } from "../uploads/uploads.module";
@@ -40,6 +41,9 @@ import { UploadsModule } from "../uploads/uploads.module";
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     // Roda global; só bloqueia onde houver @RequerPermissao (senão libera).
     { provide: APP_GUARD, useClass: PermissaoGuard },
+    // Empresa em somente leitura não escreve. Global e por método HTTP, pra
+    // não depender de alguém lembrar de anotar cada endpoint novo.
+    { provide: APP_GUARD, useClass: SomenteLeituraGuard },
   ],
   exports: [AuthService, IdentidadeService],
 })

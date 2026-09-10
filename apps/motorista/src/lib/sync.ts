@@ -21,7 +21,7 @@ import {
   type PendingViagem,
   type ZodIssueSaved,
 } from "@/db/dexie";
-import {
+import { isContaBloqueada,
   api,
   ApiError,
   humanizeApiError,
@@ -56,6 +56,10 @@ function isErroPermanente(err: unknown): boolean {
   if (!(err instanceof ApiError)) return false;
   if (err.status >= 500) return false;
   if (err.status === 408 || err.status === 429) return false;
+  // Empresa bloqueada é TRANSITÓRIA: o lançamento está certo, quem está
+  // impedido é a empresa. Tratar como permanente carimbava as pendências como
+  // erro pra sempre — e reativar a conta não as destravava.
+  if (isContaBloqueada(err)) return false;
   return err.status >= 400 && err.status < 500;
 }
 

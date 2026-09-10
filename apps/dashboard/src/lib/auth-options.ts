@@ -75,7 +75,15 @@ export const authOptions: NextAuthOptions = {
             accessToken: tokens.accessToken,
             refreshToken: tokens.refreshToken,
           } as any;
-        } catch {
+        } catch (e) {
+          // Empresa suspensa não é senha errada. Sem repassar o motivo, o painel
+          // dizia "Credenciais inválidas" a quem digitou tudo certo — e o
+          // cliente concluía que tinha perdido a senha, em vez de descobrir que
+          // a conta foi bloqueada. Lançar aqui faz a mensagem chegar na tela.
+          const corpo = e instanceof ApiError ? (e.body as { code?: string; message?: string }) : null;
+          if (corpo?.code?.startsWith("CONTA_") && corpo.message) {
+            throw new Error(corpo.message);
+          }
           return null;
         }
       },

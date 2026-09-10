@@ -22,6 +22,13 @@ type MePayload = {
   assumida?: boolean;
   /** A empresa dele, pra onde o botão "sair desta empresa" volta. */
   contaOrigem?: { id: string; nome: string } | null;
+  /** Em que pé a empresa está: pode escrever? está em teste? faltam quantos dias? */
+  estadoConta?: {
+    podeEscrever: boolean;
+    emTeste: boolean;
+    diasRestantes: number | null;
+    motivo: string | null;
+  } | null;
 };
 
 /**
@@ -53,6 +60,11 @@ export function usePermissoes() {
     assumida: data?.assumida ?? false,
     /** A empresa dele, pra onde o "sair desta empresa" volta. */
     contaOrigem: data?.contaOrigem ?? null,
+    /**
+     * Estado da empresa. Quem usa tem obrigação de deixar visível: sem aviso, a
+     * única pista de que o teste acabou seria o erro ao tentar salvar.
+     */
+    estadoConta: data?.estadoConta ?? null,
   };
 }
 

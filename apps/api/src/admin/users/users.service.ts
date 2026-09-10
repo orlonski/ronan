@@ -13,6 +13,7 @@ import { paginate, type PaginationQuery } from "../../common/pagination";
 import { SEM_ESCOPO } from "../../common/escopo/escopo";
 import { comoSistema } from "../../common/conta/conta-context";
 import { ehContaDaPlataforma } from "../../common/conta/eh-plataforma";
+import { estadoDaConta } from "../../common/conta/estado-da-conta";
 import type { AuthAdminUser } from "../../auth/types";
 
 type ListUsersParams = PaginationQuery & {
@@ -191,7 +192,16 @@ export class UsersService {
     const conta = await comoSistema(() =>
       this.prisma.conta.findUnique({
         where: { id: user.contaId },
-        select: { id: true, nome: true, logoUrl: true, codigoConvite: true },
+        select: {
+          id: true,
+          nome: true,
+          logoUrl: true,
+          codigoConvite: true,
+          ativa: true,
+          somenteLeitura: true,
+          trialExpiraEm: true,
+          motivoBloqueio: true,
+        },
       }),
     );
     // `permissoes` no topo facilita o frontend (sidebar/guards) checar acesso.
@@ -212,6 +222,19 @@ export class UsersService {
       assumida: user.assumida,
       /** A empresa dele, pra onde o botão "sair" volta. */
       contaOrigem: { id: user.contaOrigemId, nome: user.contaOrigemNome },
+      /**
+       * Em que pé a empresa está. O painel usa pra mostrar quantos dias faltam
+       * do teste e pra explicar o modo somente leitura — sem isso a única
+       * pista que o cliente teria seria o erro ao tentar salvar.
+       */
+      estadoConta: conta
+        ? (({ podeEscrever, emTeste, diasRestantes, motivo }) => ({
+            podeEscrever,
+            emTeste,
+            diasRestantes,
+            motivo,
+          }))(estadoDaConta(conta))
+        : null,
     };
   }
 

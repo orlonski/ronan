@@ -345,7 +345,23 @@ model Conta {
   /// landing/subdomínio quando o auto-cadastro entrar.
   slug                   String  @unique
   cnpj                   String? @unique
+  /// False = ninguém entra, nem painel nem app. É o corte total, e o mais
+  /// bruto que existe — para um teste que acaba, prefira `somenteLeitura`.
   ativa                  Boolean @default(true)
+  /// True = a empresa entra, enxerga tudo e exporta, mas não escreve nada.
+  ///
+  /// É o estado de um período de teste que terminou, e existe porque a
+  /// alternativa (desligar `ativa`) é o pior primeiro contato possível com a
+  /// régua comercial: quem estava gostando do produto perde o acesso aos
+  /// próprios dados de uma vez, sem conseguir nem exportar o fechamento do mês.
+  somenteLeitura         Boolean @default(false)
+  /// Quando o período de teste termina. `null` = não é teste, é cliente.
+  /// Quem vira `somenteLeitura` ao passar desta data é o cron diário.
+  trialExpiraEm          DateTime?
+  /// Por que a empresa está bloqueada, na voz de quem vai ler. Vai junto do
+  /// erro para o painel e para o app — sem isto o sistema diz "credenciais
+  /// inválidas" para quem não errou senha nenhuma.
+  motivoBloqueio         String?
   /// True = a casa, a conta da própria Movatruck. Só ela concede as chaves de
   /// `CHAVES_PLATAFORMA` (WhatsApp compartilhado, IA que ela paga, versão do
   /// app nas lojas); empresa cliente manda só na operação dela.

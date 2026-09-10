@@ -6,7 +6,18 @@ import { comoSistema, definirConta } from "../../common/conta/conta-context";
 import { vinculoVivo } from "../../common/vinculo";
 import { PrismaService } from "../../prisma/prisma.service";
 import { resolverContaEfetiva } from "../conta-efetiva";
+import { estadoDaConta } from "../../common/conta/estado-da-conta";
 import type { AuthUser, JwtPayload } from "../types";
+
+/** O que a regra de estado precisa saber da empresa, num lugar só. */
+const SELECT_ESTADO = {
+  id: true,
+  nome: true,
+  ativa: true,
+  somenteLeitura: true,
+  trialExpiraEm: true,
+  motivoBloqueio: true,
+} as const;
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -49,10 +60,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         this.prisma.user.findUnique({
           where: { id: payload.sub },
           include: {
-            conta: { select: { id: true, nome: true, ativa: true } },
+            conta: { select: SELECT_ESTADO },
             // A empresa que ele está visitando, se estiver. Vem no mesmo
             // findUnique pra não custar uma query por requisição.
-            contaAtiva: { select: { id: true, nome: true, ativa: true } },
+            contaAtiva: { select: SELECT_ESTADO },
             papel: { select: { permissoes: true } },
             // Escopo entra no mesmo findUnique: sem query extra por request, e a
             // revogação continua imediata (nada disso vive no token).
@@ -61,12 +72,18 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         }),
       );
       if (!user || !user.ativo) throw new UnauthorizedException("Usuário inativo");
-      if (!user.conta.ativa) throw new UnauthorizedException("Empresa desativada");
 
       // Quem manda nesta requisição: a empresa visitada, se houver uma válida.
       // A regra mora em `conta-efetiva.ts`, separada e testada — é ela que
       // decide o isolamento entre empresas.
       const { conta: efetiva, assumida } = resolverContaEfetiva(user);
+
+      // O estado é o da conta EFETIVA: visitando um cliente suspenso, o operador
+      // da plataforma também não escreve nada lá dentro.
+      const estado = estadoDaConta(efetiva);
+      if (!estado.podeEntrar) {
+        throw new UnauthorizedException({ code: estado.codigo, message: estado.motivo });
+      }
 
       definirConta(efetiva.id);
       return {
@@ -83,6 +100,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         contaOrigemId: user.contaId,
         contaOrigemNome: user.conta.nome,
         assumida,
+        // Somente leitura viaja no usuário pra o guard não precisar de query
+        // própria: o estado já veio no mesmo findUnique da autenticação.
+        contaSomenteLeitura: !estado.podeEscrever,
         plataforma: user.plataforma,
         // O papel é o da conta de ORIGEM, de propósito: visitar uma empresa não
         // promove ninguém, e quem é restrito em casa continua restrito lá
@@ -117,11 +137,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const motorista = await comoSistema(() =>
       this.prisma.motorista.findUnique({
         where: { id: payload.sub },
-        include: { conta: { select: { ativa: true } } },
+        include: { conta: { select: SELECT_ESTADO } },
       }),
     );
     if (!motorista || !motorista.ativo) throw new UnauthorizedException("Motorista inativo");
-    if (!motorista.conta.ativa) throw new UnauthorizedException("Empresa desativada");
+    const estadoMotorista = estadoDaConta(motorista.conta);
+    if (!estadoMotorista.podeEntrar) {
+      throw new UnauthorizedException({ code: estadoMotorista.codigo, message: estadoMotorista.motivo });
+    }
     // Recusar o convite (ou ter o vínculo desfeito) tem que valer NA HORA, e não
     // quando o access token expirar: quem não aceitou não opera pela empresa.
     if (!vinculoVivo(motorista)) {
@@ -136,6 +159,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       cpf: motorista.cpf,
       status: motorista.status,
       contaId: motorista.contaId,
+      contaSomenteLeitura: !estadoMotorista.podeEscrever,
     };
   }
 }

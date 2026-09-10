@@ -116,6 +116,30 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Código de erro estruturado do backend (`body.code`), quando houver — pras
+ * telas reagirem sem depender do texto da mensagem.
+ */
+export function apiErrorCode(err: unknown): string | null {
+  if (!(err instanceof ApiError)) return null;
+  const body = err.body as { code?: unknown } | null;
+  return body && typeof body.code === "string" ? body.code : null;
+}
+
+/**
+ * A empresa está bloqueada — teste terminado, suspensão, inadimplência.
+ *
+ * NÃO é erro do motorista nem do que ele lançou: o mesmo item passa assim que a
+ * empresa voltar. O outbox trata como transitório, e a tela mostra a mensagem
+ * do backend em vez de "sessão expirou".
+ */
+const CODIGOS_CONTA_BLOQUEADA = new Set(["CONTA_SUSPENSA", "CONTA_SOMENTE_LEITURA"]);
+
+export function isContaBloqueada(err: unknown): boolean {
+  const codigo = apiErrorCode(err);
+  return codigo !== null && CODIGOS_CONTA_BLOQUEADA.has(codigo);
+}
+
 export function humanizeApiError(err: unknown): string {
   if (!(err instanceof ApiError)) {
     return (err as Error)?.message ?? "Erro inesperado.";
@@ -126,6 +150,11 @@ export function humanizeApiError(err: unknown): string {
       return humanizeZodIssues(body.issues);
     }
   }
+  // Erro com `code` do backend já vem com mensagem PT-BR pronta (empresa
+  // suspensa, teste terminado, celular divergente…). Ela é sempre melhor que o
+  // texto genérico — inclusive num 401, que diria "sessão expirou" a quem na
+  // verdade está com a empresa bloqueada.
+  if (apiErrorCode(err)) return err.message;
   if (err.status === 401) return "Sessão expirou. Entre de novo.";
   if (err.status === 409) return err.message;
   if (err.status >= 500) return "Servidor com problema. Tente de novo em alguns minutos.";
