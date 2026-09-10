@@ -92,6 +92,12 @@ export class ChatwootAgenteService {
       // código de convite morreria na fila humana e ninguém novo se vincularia.
       if (await this.tentarVincular(texto, telefone, contaChatwoot, conversaId)) return;
 
+      // Pode ser um PROSPECT: alguém que a prospecção já conhece, ou que viu o
+      // site. Registrar no funil antes de mandar pra fila humana é o que evita
+      // a conversa sumir — até aqui ela virava ticket no atendimento e o lado
+      // comercial nunca ficava sabendo que a empresa tinha procurado a gente.
+      await this.registrarNoFunil(telefone, texto);
+
       this.log.log(`número não reconhecido — conversa ${conversaId} vai pra fila humana`);
       await this.chatwoot.responder(contaChatwoot, conversaId, TEXTO_DESCONHECIDO);
       await this.chatwoot.passarParaHumano(contaChatwoot, conversaId);
@@ -167,6 +173,61 @@ export class ChatwootAgenteService {
    * O consumo roda dentro da conta DO CÓDIGO, não da conversa: quem manda o
    * código ainda não tem conta nenhuma resolvida.
    */
+  /**
+   * Um número desconhecido escreveu — se ele estiver na base de leads, isso é
+   * uma interação comercial e precisa ficar registrada.
+   *
+   * Só grava o que já é conhecido: não cria lead a partir de quem escreveu,
+   * porque número solto sem empresa não é lead, é ruído — e a base de captação
+   * tem regra de procedência que um telefone avulso não satisfaz.
+   *
+   * Best-effort: o atendimento nunca pode falhar porque o CRM falhou.
+   */
+  private async registrarNoFunil(telefone: string | null, texto: string): Promise<void> {
+    if (!telefone) return;
+    try {
+      await comoSistema(async () => {
+        // O lead guarda o telefone como veio da Receita, sem DDI; o WhatsApp
+        // manda com 55 na frente. Compara pelos últimos dígitos, que é o que
+        // sobrevive às duas formas.
+        const semDdi = telefone.replace(/\D/g, "").replace(/^55/, "");
+        const lead = await this.prisma.lead.findFirst({
+          where: { telefone: { endsWith: semDdi.slice(-8) }, optOut: false },
+          select: { id: true, empresa: true, status: true },
+        });
+        if (!lead) return;
+
+        await this.prisma.interacaoLead.create({
+          data: {
+            leadId: lead.id,
+            canal: "WHATSAPP",
+            desfecho: "RESPONDEU",
+            resumo: `Mandou mensagem no WhatsApp: "${texto.slice(0, 160)}"`,
+            // `autor` nulo é a convenção da tabela pra "veio da automação".
+            autor: null,
+          },
+        });
+        // Quem escreve por conta própria está em contato, não é mais só um nome
+        // na lista. Só promove quem ainda está no começo do funil — não rebaixa
+        // quem já estava em proposta.
+        if (lead.status === "NOVO") {
+          await this.prisma.lead.update({
+            where: { id: lead.id },
+            data: { status: "EM_CONTATO", ultimoContato: new Date() },
+          });
+        } else {
+          await this.prisma.lead.update({
+            where: { id: lead.id },
+            data: { ultimoContato: new Date() },
+          });
+        }
+        this.log.log(`Interação registrada no lead ${lead.empresa} (${lead.id}).`);
+      });
+    } catch (e) {
+      this.log.warn(`Não consegui registrar a interação no funil: ${String(e)}`);
+    }
+  }
+
   private async tentarVincular(
     texto: string,
     telefone: string,

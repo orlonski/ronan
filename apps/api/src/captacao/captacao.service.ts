@@ -1,7 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { CriarLeadInput, RegistrarEventoSiteInput } from "@ronan/shared-types";
-import { comoSistema } from "../common/conta/conta-context";
+import { comConta, comoSistema } from "../common/conta/conta-context";
 import { PrismaService } from "../prisma/prisma.service";
+import { AdminInboxService } from "../admin/inbox/inbox.service";
 
 /**
  * Captação de lead pelo site institucional.
@@ -14,7 +15,43 @@ import { PrismaService } from "../prisma/prisma.service";
 export class CaptacaoService {
   private readonly log = new Logger("Captacao");
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly inbox: AdminInboxService,
+  ) {}
+
+  /**
+   * Avisa a plataforma no sininho que alguém pediu contato.
+   *
+   * Sem isto o lead ficava esperando alguém abrir a tela de Captação e filtrar
+   * por "novo" — quem preencheu o formulário de manhã podia só ser descoberto
+   * dias depois. Um pedido de contato tem prazo de validade curto.
+   *
+   * Vai pra conta da CASA porque o lead é da plataforma, não de empresa
+   * nenhuma. Best-effort: o site não pode falhar porque o aviso não saiu.
+   */
+  private avisarPlataforma(lead: {
+    id: string;
+    nome: string | null;
+    empresa: string | null;
+    municipio: string | null;
+  }): void {
+    void (async () => {
+      const casa = await comoSistema(() =>
+        this.prisma.conta.findFirst({ where: { ehPlataforma: true }, select: { id: true } }),
+      );
+      if (!casa) return;
+      const onde = lead.municipio ? ` · ${lead.municipio}` : "";
+      await comConta(casa.id, () =>
+        this.inbox.disparar({
+          tipo: "lead-novo",
+          titulo: `Pedido de contato: ${lead.empresa ?? "sem empresa"}`,
+          corpo: `${lead.nome ?? "sem nome"}${onde}`,
+          dados: { leadId: lead.id },
+        }),
+      );
+    })().catch((e: unknown) => this.log.warn(`Aviso de lead novo falhou: ${String(e)}`));
+  }
 
   /**
    * Grava o pedido de contato.
@@ -53,6 +90,7 @@ export class CaptacaoService {
     this.log.log(
       `Lead novo: ${lead.empresa} (${lead.nome}${lead.municipio ? `, ${lead.municipio}` : ""}) id=${lead.id}`,
     );
+    this.avisarPlataforma(lead);
 
     return { descartado: false as const, id: lead.id };
   }

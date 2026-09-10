@@ -63,6 +63,8 @@ const MODELS_GLOBAIS = new Set<string>([
   "PapelModelo",
   // Os interruptores da casa: porta de auto-cadastro e dias de teste.
   "ConfiguracaoPlataforma",
+  // A tabela de preço do produto. É da casa: nenhuma empresa tem a sua.
+  "FaixaPreco",
   "PedagioRodovia", // praças de pedágio vindas do OSM (dado público)
   "GeocodingCache", // endereço → coordenada
   "RotaCache", // chaveado por par de Local, que já é da conta

@@ -674,6 +674,31 @@ model ConfiguracaoPermissoes {
   @@map("configuracao_permissoes")
 }
 
+/// Quanto custa o Movatruck, por tamanho de frota.
+///
+/// Tabela, e não um número no código, porque preço muda e mudar preço não pode
+/// pedir deploy. É o que o SDR consulta quando perguntam "quanto custa?", e o
+/// que a proposta usa.
+///
+/// A faixa é aberta no fim: `ateVeiculos` nulo significa "daqui pra cima".
+model FaixaPreco {
+  id             String   @id @default(uuid())
+  /// A partir de quantos caminhões esta faixa vale.
+  deVeiculos     Int
+  /// Até quantos. `null` = sem teto, é a última faixa.
+  ateVeiculos    Int?
+  /// Mensalidade em centavos — dinheiro nunca em ponto flutuante.
+  valorCentavos  Int
+  /// Como o vendedor (ou o SDR) explica esta faixa. Ex.: "frota pequena".
+  rotulo         String?
+  ativa          Boolean  @default(true)
+  criadoEm       DateTime @default(now())
+  alteradoEm     DateTime @updatedAt
+
+  @@index([deVeiculos])
+  @@map("faixas_preco")
+}
+
 /// Os interruptores da plataforma que não são de nenhuma empresa.
 ///
 /// Linha única, model global. Existe pra estas decisões NÃO morarem em

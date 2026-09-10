@@ -20,6 +20,7 @@ import { fmtDataHoraSP } from "@/lib/datetime-br";
 import { maskDocumento } from "@ronan/shared-types";
 import { TetoDialog } from "./_components/teto-dialog";
 import { PortaCadastro } from "./_components/porta-cadastro";
+import { TabelaPreco } from "./_components/tabela-preco";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
@@ -219,6 +220,7 @@ export default function ContasPage() {
       </div>
 
       <PortaCadastro />
+      <TabelaPreco />
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Carregando…</p>

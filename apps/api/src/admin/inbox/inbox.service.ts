@@ -16,7 +16,9 @@ export type TipoNotificacaoAdmin =
   | "motorista-cadastro"
   | "motorista-senha-reset"
   // Uma empresa se cadastrou sozinha pelo site. Vai pro sininho da PLATAFORMA.
-  | "conta-auto-cadastro";
+  | "conta-auto-cadastro"
+  // Alguém pediu contato pelo formulário do site. Também é da plataforma.
+  | "lead-novo";
 
 export type DispararNotificacaoInput = {
   tipo: TipoNotificacaoAdmin;
