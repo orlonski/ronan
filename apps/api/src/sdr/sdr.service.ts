@@ -87,7 +87,10 @@ export class SdrService {
    */
   async atender(leadId: string, mensagem: string): Promise<RespostaSdr | null> {
     const cfg = await this.configuracao();
-    if (!cfg?.sdrAtivo) return null;
+    if (!cfg?.sdrAtivo) {
+      this.log.log("SDR desligado na tela de Empresas — conversa vai pra fila humana.");
+      return null;
+    }
 
     const lead = await comoSistema(() =>
       this.prisma.lead.findUnique({
@@ -104,7 +107,14 @@ export class SdrService {
         },
       }),
     );
-    if (!lead || lead.optOut) return null;
+    if (!lead) {
+      this.log.warn(`Lead ${leadId} não existe mais — nada a responder.`);
+      return null;
+    }
+    if (lead.optOut) {
+      this.log.log(`Lead ${leadId} pediu pra não ser contatado — SDR não responde.`);
+      return null;
+    }
 
     const contexto: ContextoLead = {
       empresa: lead.empresa ?? "empresa sem nome",
@@ -120,7 +130,10 @@ export class SdrService {
     const modelo = usaGemini ? cfg.sdrModeloGemini : cfg.sdrModeloAnthropic;
 
     if (!provider.habilitado) {
-      this.log.warn(`Provider ${provider.nome} sem chave — SDR não respondeu.`);
+      this.log.warn(
+        `Provider ${provider.nome} sem chave de API — SDR não respondeu. ` +
+          "Troque a IA no card de atendimento, na tela de Empresas, ou configure a chave.",
+      );
       return null;
     }
 

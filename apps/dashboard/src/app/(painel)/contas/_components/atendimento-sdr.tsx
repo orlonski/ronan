@@ -17,6 +17,8 @@ type Config = {
   sdrModeloAnthropic: string;
   sdrModeloGemini: string;
   sdrLinkCadastro: string;
+  /** A IA escolhida tem chave no servidor? Sem ela o SDR fica mudo em silêncio. */
+  sdrProviderTemChave: boolean;
 };
 
 const PATH = "/admin/contas/configuracao";
@@ -74,6 +76,7 @@ export function AtendimentoSdr() {
 
   if (!data) return null;
   const ligado = data.sdrAtivo;
+  const semChave = !data.sdrProviderTemChave;
 
   return (
     <Card className="flex flex-wrap items-end justify-between gap-4 p-4">
@@ -92,6 +95,14 @@ export function AtendimentoSdr() {
               ? "Quem está na lista de captação e manda mensagem é atendido na hora: preço, dúvida e link do teste."
               : "Toda mensagem de quem não é motorista vai direto pra fila humana."}
           </p>
+          {/* O aviso que faltava: sem chave ele não responde e a tela seguia
+              dizendo "ligado", o que manda a pessoa caçar bug no WhatsApp. */}
+          {semChave && (
+            <p className="mt-1 text-sm font-medium text-amber-700 dark:text-amber-500">
+              A {data.sdrProvider === "gemini" ? "Gemini" : "Claude"} não tem chave configurada
+              neste servidor — ligado assim, ele não responde ninguém. Troque a IA ao lado.
+            </p>
+          )}
         </div>
       </div>
 

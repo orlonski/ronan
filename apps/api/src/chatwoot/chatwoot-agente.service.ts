@@ -208,7 +208,15 @@ export class ChatwootAgenteService {
           where: { telefone: { endsWith: semDdi.slice(-8) }, optOut: false },
           select: { id: true, empresa: true, status: true },
         });
-        if (!lead) return null;
+        if (!lead) {
+          // Sem este log, "o SDR não respondeu" tem três causas que produzem a
+          // MESMA mensagem na tela — e a primeira delas some sem deixar rastro.
+          // Os 8 dígitos vão no log porque o defeito quase sempre é de formato:
+          // o lead guardado com máscara, ou com DDI, não casa com o que a Meta
+          // entrega.
+          this.log.log(`Nenhum lead com final ${semDdi.slice(-8)} — sem SDR, fila humana.`);
+          return null;
+        }
 
         await this.prisma.interacaoLead.create({
           data: {

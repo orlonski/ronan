@@ -9,6 +9,7 @@ import * as bcrypt from "bcrypt";
 import { Prisma } from "@prisma/client";
 import { TODAS_AS_CHAVES } from "@ronan/shared-types";
 import { comConta, comoSistema } from "../../common/conta/conta-context";
+import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuthService } from "../../auth/auth.service";
 import { UploadsService } from "../../uploads/uploads.service";
@@ -79,6 +80,7 @@ export class ContasService implements OnModuleInit {
     private readonly permissoes: PermissoesService,
     private readonly camposLayout: CamposLayoutService,
     private readonly uploads: UploadsService,
+    private readonly config: ConfigService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -584,7 +586,19 @@ export class ContasService implements OnModuleInit {
       sdrModeloAnthropic: cfg?.sdrModeloAnthropic ?? "claude-sonnet-4-6",
       sdrModeloGemini: cfg?.sdrModeloGemini ?? "gemini-2.5-flash",
       sdrLinkCadastro: cfg?.sdrLinkCadastro ?? "https://app.movatruck.com.br/cadastro",
+      // A IA escolhida tem chave no ambiente?
+      //
+      // Sem isso, ligar o SDR com o provider errado dá uma falha MUDA: ele não
+      // responde, a conversa cai na fila humana e a tela segue dizendo
+      // "ligado". A tela precisa poder avisar antes de alguém ir caçar bug no
+      // WhatsApp. Só o SIM/NÃO sai daqui — chave nunca atravessa a fronteira.
+      sdrProviderTemChave: this.temChaveDeIa(cfg?.sdrProvider ?? "anthropic"),
     };
+  }
+
+  private temChaveDeIa(provider: string): boolean {
+    const nome = provider === "gemini" ? "GEMINI_API_KEY" : "ANTHROPIC_API_KEY";
+    return Boolean(this.config.get<string>(nome)?.trim());
   }
 
   /**
