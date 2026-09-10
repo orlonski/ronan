@@ -67,15 +67,19 @@ export function ContaSwitcher() {
         <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
         <span className="min-w-0 flex-1">
           <span className="block truncate font-medium">{conta?.nome ?? "—"}</span>
+          {/* Quem opera a plataforma não tem "sua empresa": a casa dele é a
+              Movatruck, e todas as outras são clientes que ele visita. Chamar a
+              casa de "sua empresa" fazia o painel dizer que a transportadora do
+              cliente era dele. */}
           <span className="block truncate text-xs text-muted-foreground">
-            {assumida ? "Você está visitando" : "Sua empresa"}
+            {assumida ? "Você está visitando" : "Plataforma"}
           </span>
         </span>
         <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="start" sideOffset={6} className="max-h-96 w-64 overflow-y-auto">
-        <DropdownMenuLabel>Sua empresa</DropdownMenuLabel>
+        <DropdownMenuLabel>Plataforma</DropdownMenuLabel>
         <DropdownMenuItem
           onSelect={(e) => {
             e.preventDefault();
@@ -96,7 +100,7 @@ export function ContaSwitcher() {
         </DropdownMenuItem>
 
         <DropdownMenuSeparator />
-        <DropdownMenuLabel>Entrar como suporte</DropdownMenuLabel>
+        <DropdownMenuLabel>Empresas clientes</DropdownMenuLabel>
 
         {isLoading && (
           <div className="px-2 py-1.5 text-sm text-muted-foreground">Carregando…</div>
