@@ -32,6 +32,7 @@ import { AdminInboxModule } from "./inbox/inbox.module";
 import { ResumoModule } from "./resumo/resumo.module";
 import { PermissoesModule } from "./permissoes/permissoes.module";
 import { PapeisModule } from "./papeis/papeis.module";
+import { PrimeirosPassosModule } from "./primeiros-passos/primeiros-passos.module";
 import { PapeisModeloModule } from "./papeis-modelo/papeis-modelo.module";
 import { ContasModule } from "./contas/contas.module";
 import { LancamentosResgatadosAdminModule } from "./lancamentos-resgatados/lancamentos-resgatados.module";
@@ -69,6 +70,7 @@ import { LancamentosResgatadosAdminModule } from "./lancamentos-resgatados/lanca
     ResumoModule,
     PermissoesModule,
     PapeisModule,
+    PrimeirosPassosModule,
     PapeisModeloModule,
     ContasModule,
     DemandasModule,

@@ -269,8 +269,43 @@ export class CadastroContaService {
     await this.descartar(telefone);
     this.log.log(`Empresa criada por auto-cadastro: ${pendente.empresa} (${conta.id})`);
     this.avisarPlataforma(pendente.empresa, pendente.adminNome, telefone);
+    this.registrarNoFunil(pendente);
 
     return conta;
+  }
+
+  /** Ver o comentário acima de `segundosDesde`. */
+  private registrarNoFunil(pendente: {
+    empresa: string;
+    cnpj: string | null;
+    adminNome: string;
+    adminEmail: string;
+    telefone: string;
+  }): void {
+    void comoSistema(async () => {
+      // `cnpj` é único no Lead: quem já estava na base de prospecção vira
+      // GANHOU em vez de virar linha duplicada.
+      const existente = pendente.cnpj
+        ? await this.prisma.lead.findUnique({ where: { cnpj: pendente.cnpj } })
+        : null;
+
+      const dados = {
+        empresa: pendente.empresa,
+        nome: pendente.adminNome,
+        telefone: pendente.telefone,
+        email: pendente.adminEmail,
+        status: "GANHOU",
+        origem: "AUTO_CADASTRO" as const,
+        origemDado: "Auto-cadastro pelo site — preenchido pelo próprio titular",
+        coletadoEm: new Date(),
+      };
+
+      if (existente) {
+        await this.prisma.lead.update({ where: { id: existente.id }, data: dados });
+      } else {
+        await this.prisma.lead.create({ data: { ...dados, cnpj: pendente.cnpj } });
+      }
+    }).catch((e: unknown) => this.log.warn(`Não consegui registrar no funil: ${String(e)}`));
   }
 
   private descartar(telefone: string) {
@@ -324,6 +359,18 @@ export class CadastroContaService {
   }
 }
 
+/**
+ * Põe a empresa no funil comercial, como GANHOU.
+ *
+ * Sem isto, quem se cadastra sozinho não aparece em lugar nenhum do lado
+ * comercial: o sininho avisa uma vez e some, e a tela de Captação — que é onde
+ * se acompanha quem virou cliente — nunca fica sabendo. O status já nasce
+ * ganho porque é o que é: a pessoa não é um contato a trabalhar, ela já está
+ * usando o produto.
+ *
+ * Best-effort, como o aviso: a empresa existe, e o CRM não pode derrubar o
+ * cadastro de ninguém.
+ */
 function segundosDesde(quando: Date): number {
   return (Date.now() - quando.getTime()) / 1000;
 }

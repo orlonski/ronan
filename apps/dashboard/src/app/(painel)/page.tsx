@@ -27,6 +27,7 @@ import { LoadingCard } from "@/components/loading";
 import { TendenciaChart } from "@/components/tendencia-chart";
 import { AnalisesChart } from "@/components/analises-chart";
 import { StatCard } from "@/components/stat-card";
+import { PrimeirosPassos } from "@/components/primeiros-passos";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { fmtBRL, fmtNum } from "@/lib/fechamento-helpers";
 
@@ -100,6 +101,10 @@ export default function PainelHome() {
         </h1>
         <p className="text-sm capitalize text-muted-foreground">{dataHoje}</p>
       </header>
+
+      {/* Antes dos números: numa conta nova eles são todos zero, e zero não
+          ensina nada. O que a pessoa precisa é saber por onde começar. */}
+      <PrimeirosPassos />
 
       {isLoading && <LoadingCard label="Carregando dashboard..." />}
 

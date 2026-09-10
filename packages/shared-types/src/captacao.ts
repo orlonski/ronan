@@ -24,6 +24,9 @@ export const ORIGENS_LEAD = [
   "INDICACAO",
   "PROSPECCAO_ATIVA",
   "FEIRA",
+  // Abriu a conta sozinho pelo site. Já é cliente em teste, não é mais um
+  // contato a trabalhar — entra no funil direto como ganho.
+  "AUTO_CADASTRO",
 ] as const;
 export type OrigemLead = (typeof ORIGENS_LEAD)[number];
 
