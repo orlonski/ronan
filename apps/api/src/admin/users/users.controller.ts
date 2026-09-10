@@ -14,9 +14,11 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
 import { AtualizarUserInput, CriarUserInput } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
+import { DefinirPlataformaInput } from "@ronan/shared-types";
 import { paginationQuerySchema } from "../../common/pagination";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
+import { PlataformaGuard } from "../../auth/guards/plataforma.guard";
 import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import { IgnoraEscopo } from "../../common/escopo/escopo.decorator";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
@@ -51,6 +53,25 @@ export class UsersController {
   @Get()
   list(@Query(new ZodValidationPipe(ListUsersQuery)) query: ListUsersQuery) {
     return this.service.list(query);
+  }
+
+  /**
+   * Promove ou rebaixa um operador da plataforma.
+   *
+   * Atrás do `PlataformaGuard`, e fora do catálogo de permissões, pelo mesmo
+   * motivo da gestão de empresas: quem opera a plataforma é outro nível, não um
+   * papel que um administrador de empresa possa ganhar na matriz.
+   */
+  @Roles("ADMIN_USER")
+  @UseGuards(PlataformaGuard)
+  @IgnoraEscopo()
+  @Patch(":id/plataforma")
+  definirPlataforma(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(DefinirPlataformaInput)) body: DefinirPlataformaInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.definirPlataforma(id, body.plataforma, user);
   }
 
   @Roles("ADMIN_USER")

@@ -253,6 +253,15 @@ export const TetoDaContaInput = z.object({
 });
 export type TetoDaContaInput = z.infer<typeof TetoDaContaInput>;
 
+/**
+ * Promover ou rebaixar um operador da plataforma. Só quem já é pode chamar, e o
+ * backend recusa promover quem está fora da empresa da plataforma.
+ */
+export const DefinirPlataformaInput = z.object({
+  plataforma: z.boolean(),
+});
+export type DefinirPlataformaInput = z.infer<typeof DefinirPlataformaInput>;
+
 export const CriarPapelInput = z.object({
   nome: z.string().min(2).max(60),
   descricao: z.string().max(200).optional(),

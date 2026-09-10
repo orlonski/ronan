@@ -3,12 +3,15 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Pencil, Plus, UserCircle } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { StatusToggle } from "@/components/status-toggle";
 import { ConviteWhatsappButton } from "@/components/convite-whatsapp-button";
 import { EnviarResumoButton } from "@/components/enviar-resumo-button";
 import { Permitido } from "@/components/requer-tela";
+import { usePermissoes } from "@/lib/permissoes";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -21,7 +24,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
-import { usePaginatedList, useUpdateResource } from "@/lib/client-api";
+import { fetchApi, usePaginatedList, useAuthToken, useUpdateResource } from "@/lib/client-api";
 
 type User = {
   id: string;
@@ -33,6 +36,8 @@ type User = {
   receberResumoDiario: boolean;
   papel: { id: string; nome: string } | null;
   acessoGlobal: boolean;
+  /** Opera a PLATAFORMA (troca de empresa, tela de Empresas). */
+  plataforma?: boolean;
   transportadoras: { id: string; nome: string }[];
   criadoPor: { id: string; nome: string } | null;
 };
@@ -58,6 +63,36 @@ export default function UsuariosPage() {
   const update = useUpdateResource<{ ativo?: boolean }, User>(PATH, PATH);
   const { viewMode, setViewMode } = useListViewMode("usuarios");
   const { data: session } = useSession();
+  // Quem já é da plataforma pode promover outro. O backend cobra de novo.
+  const { plataforma: souDaPlataforma } = usePermissoes();
+  const token = useAuthToken();
+  const qc = useQueryClient();
+
+  /**
+   * Liga/desliga o super administrador.
+   *
+   * Fica na tela, e não em variável de ambiente com restart, porque quem manda
+   * na plataforma é quem decide quem mais manda nela.
+   */
+  async function alternarPlataforma(u: User) {
+    try {
+      await fetchApi(`${PATH}/${u.id}/plataforma`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({ plataforma: !u.plataforma }),
+      });
+      toast.success(
+        u.plataforma
+          ? `${u.nome} deixou de ser super administrador.`
+          : `${u.nome} agora é super administrador e pode entrar nas empresas.`,
+      );
+      void qc.invalidateQueries({ queryKey: [PATH] });
+    } catch (e) {
+      toast.error("Não foi possível alterar", {
+        description: e instanceof Error ? e.message : undefined,
+      });
+    }
+  }
 
   const currentEmail = session?.user?.email ?? "";
 
@@ -101,6 +136,33 @@ export default function UsuariosPage() {
           );
         },
       },
+      // Só a equipe da plataforma enxerga (e mexe) nisto.
+      ...(souDaPlataforma
+        ? [
+            {
+              id: "plataforma",
+              enableSorting: false,
+              header: () => <span>Plataforma</span>,
+              cell: ({ row }: { row: { original: User } }) => {
+                const u = row.original;
+                return (
+                  <Button
+                    variant={u.plataforma ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => void alternarPlataforma(u)}
+                    title={
+                      u.plataforma
+                        ? "Tirar o acesso de super administrador"
+                        : "Tornar super administrador (troca de empresa e tela de Empresas)"
+                    }
+                  >
+                    {u.plataforma ? "Super admin" : "Tornar super admin"}
+                  </Button>
+                );
+              },
+            } as ColumnDef<User>,
+          ]
+        : []),
       {
         id: "ultimoLoginEm",
         accessorKey: "ultimoLoginEm",
@@ -247,6 +309,18 @@ export default function UsuariosPage() {
                       ? u.transportadoras[0]!.nome
                       : `${u.transportadoras.length} transportadoras`}
                   </Badge>
+                )}
+                {/* Também no card, e não só na tabela: a tela abre em Cards, e
+                    quem procura como criar outro super admin não ia achar. */}
+                {souDaPlataforma && (
+                  <Button
+                    variant={u.plataforma ? "default" : "outline"}
+                    size="sm"
+                    className="mt-1"
+                    onClick={() => void alternarPlataforma(u)}
+                  >
+                    {u.plataforma ? "Super admin" : "Tornar super admin"}
+                  </Button>
                 )}
               </div>
 

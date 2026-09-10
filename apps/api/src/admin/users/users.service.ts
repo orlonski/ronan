@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import { ASSUNTOS_RESUMO_IDS, type CriarUserInput, type AtualizarUserInput } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -7,6 +12,7 @@ import { PAPEL_OPERADOR } from "../permissoes/permissoes.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { SEM_ESCOPO } from "../../common/escopo/escopo";
 import { comoSistema } from "../../common/conta/conta-context";
+import { ehContaDaPlataforma } from "../../common/conta/eh-plataforma";
 import type { AuthAdminUser } from "../../auth/types";
 
 type ListUsersParams = PaginationQuery & {
@@ -25,6 +31,8 @@ const SAFE_SELECT = {
   papelId: true,
   papel: { select: { id: true, nome: true, permissoes: true } },
   acessoGlobal: true,
+  // A tela de Usuários mostra quem é super admin (só pra quem também é).
+  plataforma: true,
   transportadoras: {
     select: { transportadora: { select: { id: true, nome: true } } },
     orderBy: { transportadora: { nome: "asc" } },
@@ -205,6 +213,71 @@ export class UsersService {
       /** A empresa dele, pra onde o botão "sair" volta. */
       contaOrigem: { id: user.contaOrigemId, nome: user.contaOrigemNome },
     };
+  }
+
+  /**
+   * Promove ou rebaixa um operador da plataforma.
+   *
+   * Era a única forma de virar super admin: colocar o e-mail em
+   * `PLATAFORMA_EMAILS` e reiniciar a API. Isso fazia de "quem opera a
+   * plataforma" uma decisão de deploy, quando é decisão de quem manda nela.
+   *
+   * Três travas, todas contra tiro no pé — nenhuma delas é sobre visibilidade
+   * de tela, que é o que se configura na matriz:
+   *
+   * 1. Só quem mora na conta da plataforma pode ser promovido. Super admin
+   *    dentro de uma empresa cliente recria exatamente o problema que a conta
+   *    Movatruck veio consertar: o Administrador daquela empresa passa a
+   *    enxergar o que é da casa.
+   * 2. Ninguém se rebaixa sozinho — é o jeito clássico de se trancar do lado de
+   *    fora, e sempre por engano.
+   * 3. O último não sai. Hoje esta é rede de segurança e não trava alcançável:
+   *    quem chama já é um operador ativo, então sempre sobra pelo menos ele. Fica
+   *    porque a consequência de errar aqui é o sistema ficar sem ninguém que
+   *    consiga promover o próximo — a tela que faria isso exige já ser um.
+   */
+  async definirPlataforma(alvoId: string, plataforma: boolean, solicitante: AuthAdminUser) {
+    const alvo = await comoSistema(() =>
+      this.prisma.user.findUnique({
+        where: { id: alvoId },
+        select: { id: true, nome: true, contaId: true, plataforma: true, ativo: true },
+      }),
+    );
+    if (!alvo) throw new NotFoundException("Usuário não encontrado");
+    if (alvo.plataforma === plataforma) {
+      return { id: alvo.id, nome: alvo.nome, plataforma };
+    }
+
+    if (plataforma) {
+      const daCasa = await ehContaDaPlataforma(this.prisma, alvo.contaId);
+      if (!daCasa) {
+        throw new BadRequestException(
+          "Só quem está na empresa da plataforma pode ser super administrador. " +
+            "Crie o acesso dentro dela e tente de novo.",
+        );
+      }
+      if (!alvo.ativo) throw new BadRequestException("Usuário inativo não pode ser promovido.");
+    } else {
+      if (alvo.id === solicitante.id) {
+        throw new BadRequestException(
+          "Você não pode tirar o seu próprio acesso de super administrador. " +
+            "Peça para outro super administrador fazer isso.",
+        );
+      }
+      const quantos = await comoSistema(() =>
+        this.prisma.user.count({ where: { plataforma: true, ativo: true } }),
+      );
+      if (quantos <= 1) {
+        throw new BadRequestException(
+          "Este é o último super administrador. Promova outro antes de tirar este.",
+        );
+      }
+    }
+
+    await comoSistema(() =>
+      this.prisma.user.update({ where: { id: alvoId }, data: { plataforma } }),
+    );
+    return { id: alvo.id, nome: alvo.nome, plataforma };
   }
 
   private async ensureExists(id: string) {
