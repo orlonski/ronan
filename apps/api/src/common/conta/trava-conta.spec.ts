@@ -122,3 +122,51 @@ describe("trava de conta — carimbo do contaId", () => {
     expect(a.where.AND).toBeUndefined();
   });
 });
+
+/**
+ * O bug que este bloco fecha: o convite por CPF lia o nome da empresa com
+ * `conta.findFirstOrThrow({ select: { nome: true } })`. `Conta` é global, a
+ * trava não filtra — e o motorista recebeu "«outra transportadora» quer te
+ * adicionar". Nome de empresa aparecendo pra quem não é dela é vazamento, e o
+ * jeito de descobrir foi um motorista lendo a notificação.
+ */
+describe("trava de conta — model global exige alvo", () => {
+  it("recusa findFirst sem where dentro de uma requisição", async () => {
+    await expect(
+      argsDe(() => prisma.conta.findFirst({ select: { nome: true } })),
+    ).rejects.toThrow(/sem `where` dentro de uma requisição/);
+  });
+
+  it("recusa findFirstOrThrow com where vazio", async () => {
+    await expect(argsDe(() => prisma.conta.findFirstOrThrow({ where: {} }))).rejects.toThrow(
+      /AlvoGlobalAusenteError|sem `where`/,
+    );
+  });
+
+  it("aceita quando o alvo está citado", async () => {
+    const a = await argsDe(() =>
+      prisma.conta.findFirst({ where: { id: "conta-x" }, select: { nome: true } }),
+    );
+    expect(a.where).toEqual({ id: "conta-x" });
+    // Global: nem filtro de conta injetado, nem carimbo.
+    expect(a.where.contaId).toBeUndefined();
+  });
+
+  it("deixa passar fora de requisição (boot, script, cron)", async () => {
+    const a = (await comoSistema(() =>
+      prisma.conta.findFirst({ orderBy: { criadaEm: "asc" } as never }),
+    )) as Record<string, any>;
+    expect(a.orderBy).toEqual({ criadaEm: "asc" });
+  });
+
+  it("não atrapalha listagem — a tela de Empresas lista de propósito", async () => {
+    const a = await argsDe(() => prisma.conta.findMany({ orderBy: { nome: "asc" } as never }));
+    expect(a.where).toBeUndefined();
+  });
+
+  it("vale pros outros models globais, não só pra Conta", async () => {
+    await expect(argsDe(() => prisma.motoristaIdentidade.findFirst({}))).rejects.toThrow(
+      /sem `where`/,
+    );
+  });
+});

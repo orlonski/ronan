@@ -17,6 +17,12 @@ import { contaAtual } from "./conta-context";
  * LIMITE IMPORTANTE: extensions não interceptam `$queryRaw`/`$executeRaw`.
  * Todo SQL cru precisa filtrar por `"contaId"` na mão — o teste de vazamento é
  * o que cobra isso.
+ *
+ * O OUTRO LIMITE: nos `MODELS_GLOBAIS` não há `contaId` pra injetar, então lá a
+ * trava não protege nada — quem consulta tem que citar o alvo no `where`. O que
+ * dá pra cobrar é o caso silencioso, e `exigirAlvo` cobra: `findFirst` sem
+ * `where` dentro de uma requisição lança em vez de devolver linha de qualquer
+ * empresa.
  */
 
 /**
@@ -78,6 +84,34 @@ const MODELS_GLOBAIS = new Set<string>([
   "SupressaoContato",
   "EventoSite", // contagem anônima de navegação do site institucional
 ]);
+
+/**
+ * "Me dá qualquer linha" num model que não é de ninguém, dentro de uma
+ * requisição de uma empresa.
+ *
+ * Vira 500 pelo mesmo motivo do `ContaAusenteError`: é bug de código. E é um
+ * bug caro — `conta.findFirstOrThrow({ select: { nome: true } })` no convite
+ * por CPF fazia o motorista receber "«a primeira conta da tabela» quer te
+ * adicionar". O nome de uma empresa aparecendo pra quem não é dela é vazamento,
+ * mesmo quando nenhum dado de negócio sai junto.
+ *
+ * Model global não tem `contaId` pra trava injetar, então quem consulta tem que
+ * dizer QUAL linha quer. Sem `where` a resposta é "a primeira que o Postgres
+ * devolver" — nunca é isso que se quis.
+ */
+export class AlvoGlobalAusenteError extends Error {
+  constructor(model: string, operation: string) {
+    super(
+      `${model}.${operation} sem \`where\` dentro de uma requisição. ${model} é ` +
+        `global (não pertence a nenhuma conta), então a trava não filtra nada: ` +
+        `sem \`where\` isso devolve uma linha QUALQUER, de qualquer empresa. ` +
+        `Cite o alvo (\`where: { id: ... }\` — para a conta da requisição, ` +
+        `\`contaIdAtual()\`) ou, se varrer tudo é o objetivo, declare com ` +
+        `comoSistema(...).`,
+    );
+    this.name = "AlvoGlobalAusenteError";
+  }
+}
 
 /** Erro de trava. Vira 500 de propósito: é bug de código, não do usuário. */
 export class ContaAusenteError extends Error {
@@ -221,12 +255,39 @@ function carimbar(
   }
 }
 
+/**
+ * Model global só pode ser lido "de olhos fechados" fora de requisição.
+ *
+ * `findFirst`/`findFirstOrThrow` sem `where` são as duas operações onde pedir
+ * qualquer linha é o comportamento padrão e silencioso — `findMany` sem `where`
+ * é uma listagem, que a plataforma faz de propósito (a tela de Empresas), e
+ * `findUnique` já exige a chave. Então é só nessas duas que a checagem paga:
+ * pega o bug real sem atravessar o caminho de ninguém.
+ *
+ * Boot, cron, script e fila seguem livres — lá varrer contas é o trabalho, e
+ * `comoSistema(...)` é a declaração de que se sabe disso.
+ */
+function exigirAlvo(model: string, operation: string, args: unknown): void {
+  if (operation !== "findFirst" && operation !== "findFirstOrThrow") return;
+
+  const ctx = contaAtual();
+  if (!ctx || ctx.modo === "sistema") return;
+
+  const where = ehObjeto(args) ? args.where : undefined;
+  if (ehObjeto(where) && Object.keys(where).length > 0) return;
+
+  throw new AlvoGlobalAusenteError(model, operation);
+}
+
 export const travaConta = Prisma.defineExtension({
   name: "trava-conta",
   query: {
     $allModels: {
       $allOperations({ model, operation, args, query }) {
-        if (MODELS_GLOBAIS.has(model)) return query(args);
+        if (MODELS_GLOBAIS.has(model)) {
+          exigirAlvo(model, operation, args);
+          return query(args);
+        }
 
         const ctx = contaAtual();
 

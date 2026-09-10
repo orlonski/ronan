@@ -21,6 +21,7 @@ import { UploadsService } from "../../uploads/uploads.service";
 import { PushService } from "../../push/push.service";
 import { EnvioWhatsappService } from "../../whatsapp/envio/envio-whatsapp.service";
 import { SessaoService } from "../../whatsapp/sessao.service";
+import { contaIdAtual } from "../../common/conta/conta-context";
 import { paginate, type Paginated, type PaginationQuery } from "../../common/pagination";
 import { ymdSaoPaulo } from "../../common/timezone";
 import { adotarLancamentosOrfaos } from "../../common/transportadora";
@@ -381,7 +382,7 @@ export class MotoristasService {
         valorDepois: "PENDENTE",
         metadata: { cpf: data.cpf, origem: "novo-motorista" },
       });
-      void this.avisarConvite(identidade.id, identidade.telefone);
+      void this.avisarConvite(identidade.id, identidade.telefone, contaIdAtual());
     }
     return this.flatten(created);
   }
@@ -481,7 +482,7 @@ export class MotoristasService {
       valorDepois: "PENDENTE",
       metadata: { cpf },
     });
-    void this.avisarConvite(identidade.id, identidade.telefone);
+    void this.avisarConvite(identidade.id, identidade.telefone, contaIdAtual());
     return this.flatten(motorista);
   }
 
@@ -491,9 +492,18 @@ export class MotoristasService {
    * Best-effort nos dois: se falharem, o convite continua esperando na tela de
    * convites, que é onde ele vive de verdade. O push vai pra PESSOA (ela ainda
    * não tem vínculo vivo, então não há `motoristaId` pra usar).
+   *
+   * O `contaId` vem por parâmetro, capturado pelo chamador: `Conta` é global
+   * (MODELS_GLOBAIS), então a trava NÃO filtra esta leitura e o id tem que ser
+   * citado. Uma versão anterior usava `findFirstOrThrow` sem `where` e o
+   * motorista recebia "«outra empresa» quer te adicionar" — o nome da primeira
+   * conta da tabela, não da empresa que convidou.
    */
-  private async avisarConvite(identidadeId: string, telefone: string | null) {
-    const conta = await this.prisma.conta.findFirstOrThrow({ select: { nome: true } });
+  private async avisarConvite(identidadeId: string, telefone: string | null, contaId: string) {
+    const conta = await this.prisma.conta.findUniqueOrThrow({
+      where: { id: contaId },
+      select: { nome: true },
+    });
 
     void this.push
       .enviarParaIdentidade({
