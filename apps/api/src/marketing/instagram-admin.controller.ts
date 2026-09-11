@@ -182,11 +182,20 @@ export class InstagramAdminController {
         "Sem INSTAGRAM_ACCESS_TOKEN configurado não adianta ligar: o cron não roda.",
       );
     }
+    // Traduzido campo a campo de propósito: o corpo fala a língua da API
+    // (`ativo`) e a tabela fala a dela (`instagramAtivo`). Espalhar `...body`
+    // direto compila — spread de variável não sofre checagem de propriedade
+    // excedente — e explode em runtime com "Unknown argument `ativo`".
+    const dados = {
+      ...(body.ativo !== undefined ? { instagramAtivo: body.ativo } : {}),
+      ...(body.maxPorDia !== undefined ? { instagramMaxPorDia: body.maxPorDia } : {}),
+    };
+
     return comoSistema(async () => {
       const cfg = await this.prisma.configuracaoPlataforma.upsert({
         where: { id: "singleton" },
-        update: { ...body },
-        create: { id: "singleton", ...body },
+        update: dados,
+        create: { id: "singleton", ...dados },
         select: { instagramAtivo: true, instagramMaxPorDia: true },
       });
       this.logger.warn(
