@@ -20,6 +20,10 @@ import { RateLimitIpGuard } from "./rate-limit-ip.guard";
   imports: [PrismaModule],
   controllers: [ClickupWebhookController],
   providers: [RunnerConfig, RunnerTokenGuard, RateLimitIpGuard, FilaExecucoesService],
+  // A fila sai do módulo porque o marketing também abre demanda: a pauta
+  // semanal do Instagram escreve na MESMA fila que o webhook, pra o agente não
+  // precisar saber de onde o pedido veio.
+  exports: [FilaExecucoesService],
 })
 export class ClickupRunnerModule implements OnModuleInit {
   constructor(private readonly config: RunnerConfig) {}

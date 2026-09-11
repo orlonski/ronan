@@ -8,6 +8,8 @@ import { InstagramAdminController } from "./instagram-admin.controller";
 import { InstagramConfig } from "./instagram.config";
 import { InstagramFilaService } from "./instagram-fila.service";
 import { InstagramPublicadorService } from "./instagram-publicador.service";
+import { PautaService } from "./pauta.service";
+import { ClickupRunnerModule } from "../clickup-runner/clickup-runner.module";
 
 /**
  * Marketing da própria Movatruck — hoje, o Instagram do @movatruck.
@@ -22,9 +24,9 @@ import { InstagramPublicadorService } from "./instagram-publicador.service";
  * `ConfiguracaoPlataforma.instagramAtivo` for false.
  */
 @Module({
-  imports: [PrismaModule, UploadsModule],
+  imports: [PrismaModule, UploadsModule, ClickupRunnerModule],
   controllers: [InstagramAdminController, ArtePublicaController, IngestaoController],
-  providers: [InstagramConfig, InstagramFilaService, InstagramPublicadorService, IngestaoTokenGuard],
+  providers: [InstagramConfig, InstagramFilaService, InstagramPublicadorService, IngestaoTokenGuard, PautaService],
   exports: [InstagramFilaService],
 })
 export class MarketingModule {}

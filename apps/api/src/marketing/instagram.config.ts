@@ -44,6 +44,15 @@ export class InstagramConfig {
    * no seu tempo.
    */
   readonly ingestToken: string;
+  /**
+   * A pauta semanal está ligada?
+   *
+   * Terceiro interruptor, e independente dos outros dois: dá pra ter o
+   * publicador no ar e a produção automática desligada — que é exatamente o
+   * estado de quem quer escolher o que sai antes de deixar o agente escrever.
+   */
+  readonly pautaAutomatica: boolean;
+  readonly postsPorLeva: number;
 
   constructor(private readonly config: ConfigService) {
     this.token = (this.config.get<string>("INSTAGRAM_ACCESS_TOKEN") ?? "").trim();
@@ -55,6 +64,8 @@ export class InstagramConfig {
     this.arteValidadeHoras = this.numero("INSTAGRAM_ARTE_VALIDADE_HORAS", 48, 1, 720);
     this.timeoutPublicacaoMs = this.numero("INSTAGRAM_TIMEOUT_MS", 5 * 60_000, 30_000, 30 * 60_000);
     this.ingestToken = (this.config.get<string>("MARKETING_INGEST_TOKEN") ?? "").trim();
+    this.pautaAutomatica = (this.config.get<string>("MARKETING_PAUTA_AUTOMATICA") ?? "").trim() === "true";
+    this.postsPorLeva = this.numero("MARKETING_POSTS_POR_LEVA", 3, 1, 10);
   }
 
   /** A ingestão nasce fechada: sem segredo, o endpoint recusa tudo. */
@@ -93,6 +104,7 @@ export class InstagramConfig {
         tentativasMax: this.tentativasMax,
         arteValidadeHoras: this.arteValidadeHoras,
         ingestao: this.ingestaoHabilitada ? "aberta ao agente" : "fechada (sem MARKETING_INGEST_TOKEN)",
+        pauta: this.pautaAutomatica ? `automática, ${this.postsPorLeva}/semana` : "manual",
       }),
     );
   }

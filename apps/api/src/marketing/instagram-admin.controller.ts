@@ -28,6 +28,7 @@ import { UploadsService } from "../uploads/uploads.service";
 import { InstagramConfig } from "./instagram.config";
 import { InstagramFilaService } from "./instagram-fila.service";
 import { InstagramPublicadorService } from "./instagram-publicador.service";
+import { PautaService } from "./pauta.service";
 
 /**
  * Limites da Meta, validados aqui e não no worker.
@@ -81,6 +82,7 @@ export class InstagramAdminController {
     private readonly prisma: PrismaService,
     private readonly config: InstagramConfig,
     private readonly publicador: InstagramPublicadorService,
+    private readonly pauta: PautaService,
   ) {}
 
   @RequerPermissao("marketing.ver")
@@ -219,6 +221,18 @@ export class InstagramAdminController {
   @Post("rodar-agora")
   async rodarAgora() {
     return this.publicador.rodar();
+  }
+
+  /**
+   * Pede ao agente a próxima leva agora, sem esperar a segunda de manhã.
+   *
+   * Se já houver post esperando na fila, não pede: cada leva custa uma execução
+   * do agente, e empilhar trabalho que ninguém consumiu é gastar por nada.
+   */
+  @RequerPermissao("marketing.criar")
+  @Post("pedir-leva")
+  async pedirLeva() {
+    return this.pauta.pedirLeva(this.config.postsPorLeva);
   }
 
   /** Tira da fila. Não apaga: post cancelado fica no histórico com o motivo. */
