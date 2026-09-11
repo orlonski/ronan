@@ -36,6 +36,19 @@ const navegador = await chromium.launch(
 );
 const pagina = await navegador.newPage({ deviceScaleFactor: 2 });
 
+// O padrão do feed não é recomendação: é porteiro. Peça com defeito ainda é
+// escrita em saida/ (pra você olhar o estrago), mas o processo sai com código 1
+// e o `enfileirar.mjs` morre junto — ou seja, não chega na fila de publicação.
+const defeitos = [];
+
+// Celular tem que parecer celular. O print do app é 760x1645 (1:2,16) e a
+// moldura `.celular.recorte` trava em 1:2,05. A faixa aceita cobre as duas com
+// folga e ainda assim reprova o que já passou: 320x400 (1:1,25) e 330x360
+// (1:1,09) saíram no feed parecendo tela gorda, e foi preciso apagar post
+// publicado pra consertar.
+const PROPORCAO_MIN = 1.9;
+const PROPORCAO_MAX = 2.4;
+
 for (const arquivo of arquivos) {
   const destino = join(raiz, "saida", arquivo.replace(/\.html$/, ".png"));
   const origem = pathToFileURL(join(raiz, pasta, arquivo)).href;
@@ -63,8 +76,35 @@ for (const arquivo of arquivos) {
 
   // Transbordo é defeito: a peça tem que caber na altura declarada sem rolagem.
   const altura = await pagina.evaluate(() => document.body.scrollHeight);
-  const aviso = altura > a + 1 ? `  ⚠ TRANSBORDOU (${altura}px)` : "";
-  console.log(`✓ ${arquivo.padEnd(34)} -> saida/${arquivo.replace(/\.html$/, ".png")}${aviso}`);
+  if (altura > a + 1) {
+    defeitos.push(`${arquivo}: transbordou a altura (${altura}px em vez de ${a}px).
+    Corte texto — não diminua a fonte.`);
+  }
+
+  const celulares = await pagina.evaluate(() =>
+    [...document.querySelectorAll(".celular")].map((el) => {
+      const { width, height } = el.getBoundingClientRect();
+      return { largura: Math.round(width), altura: Math.round(height) };
+    }));
+  celulares.forEach(({ largura, altura: alt }, i) => {
+    const proporcao = alt / largura;
+    if (proporcao >= PROPORCAO_MIN && proporcao <= PROPORCAO_MAX) return;
+    const qual = celulares.length > 1 ? ` (celular ${i + 1} de ${celulares.length})` : "";
+    defeitos.push(
+      `${arquivo}: a moldura do celular${qual} está ${largura}x${alt} — 1:${proporcao.toFixed(2)}, ` +
+        `fora da faixa 1:${PROPORCAO_MIN}–1:${PROPORCAO_MAX}.
+    Use class="celular recorte" e declare SÓ a largura; a altura sai da proporção.
+    Pra mostrar menos tela, diminua a largura — nunca achate a caixa.`,
+    );
+  });
+
+  console.log(`✓ ${arquivo.padEnd(34)} -> saida/${arquivo.replace(/\.html$/, ".png")}`);
 }
 
 await navegador.close();
+
+if (defeitos.length) {
+  console.error(`\n✗ ${defeitos.length} peça(s) fora do padrão — nada disto vai pra fila:\n`);
+  for (const d of defeitos) console.error(`  • ${d}\n`);
+  process.exit(1);
+}

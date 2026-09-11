@@ -41,8 +41,11 @@ node render.mjs 03           # só a peça 03
 PASTA=perfil node render.mjs # avatar e destaques
 ```
 
-O render avisa se a peça transbordou a altura. Transbordo é defeito: corte texto,
-não diminua a fonte.
+**O render é porteiro, não conselheiro.** Ele mede cada peça e sai com código 1 se
+transbordar a altura ou se a moldura do celular estiver fora de 1:1,9–1:2,4. Como o
+`enfileirar.mjs` chama o render, peça reprovada **não chega na fila** — não existe
+caminho pra publicar uma arte fora do padrão sem alguém desligar a trava de
+propósito. Transbordo: corte texto, não diminua a fonte.
 
 ## O fluxo
 
@@ -86,7 +89,8 @@ O feed alterna os dois públicos: dono de transportadora (quem paga) e motorista
   Venda como recurso que se liga, não como padrão.
 - **Números precisam de origem.** Comentário no código não é medição.
 - **Celular tem que parecer celular.** O print do app é 760×1645 (1:2,16). A moldura
-  `.celular.recorte` trava a proporção sozinha — a peça define **só a largura**. Pra
+  `.celular.recorte` trava a proporção sozinha — a peça define **só a largura**, e o
+  render reprova quem furar. Custou quatro posts publicados apagados e repostados. Pra
   mostrar menos tela, diminua a largura; nunca achate a caixa. Uma moldura 320×400 com
   canto arredondado não lê como telefone, lê como tela gorda.
 - **Os prints antigos** em `apps/site/public/telas/` carregam a badge do Next devtools
