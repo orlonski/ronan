@@ -283,6 +283,14 @@ function Linha({ post }: { post: Post }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/admin/marketing/instagram"] }),
   });
 
+  const adiantar = useMutation({
+    mutationFn: () =>
+      fetchApi(`/admin/marketing/instagram/${post.id}/adiantar`, { method: "POST", token }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/admin/marketing/instagram"] }),
+  });
+
+  const adiantavel = post.status === "AGENDADO" || post.status === "RASCUNHO";
+
   return (
     <div className="flex flex-wrap items-start gap-4 p-4 sm:flex-nowrap">
       {/* A arte primeiro: é ela que vai pro feed, e é por ela que se decide
@@ -341,14 +349,32 @@ function Linha({ post }: { post: Post }) {
           </a>
         ) : null}
 
-        {cancelavel && temPermissao("marketing.publicar") ? (
-          <button
-            onClick={() => cancelar.mutate()}
-            disabled={cancelar.isPending}
-            className="mt-2 block text-sm text-red-700 underline-offset-2 hover:underline disabled:opacity-50"
-          >
-            {cancelar.isPending ? "Cancelando…" : "Cancelar"}
-          </button>
+        {temPermissao("marketing.publicar") ? (
+          <div className="mt-2 flex flex-col items-end gap-1.5">
+            {adiantavel ? (
+              <button
+                onClick={() => adiantar.mutate()}
+                disabled={adiantar.isPending}
+                className="text-sm text-primary underline-offset-2 hover:underline disabled:opacity-50"
+                title="Entra no próximo ciclo do publicador (até 5 minutos)"
+              >
+                {adiantar.isPending ? "Adiantando…" : "Adiantar"}
+              </button>
+            ) : null}
+            {cancelavel ? (
+              <button
+                onClick={() => cancelar.mutate()}
+                disabled={cancelar.isPending}
+                className="text-sm text-red-700 underline-offset-2 hover:underline disabled:opacity-50"
+              >
+                {cancelar.isPending ? "Cancelando…" : "Cancelar"}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {adiantar.isError ? (
+          <p className="mt-1 text-xs text-red-700">{(adiantar.error as Error).message}</p>
         ) : null}
 
         {cancelar.isError ? (

@@ -261,6 +261,46 @@ export class InstagramAdminController {
     return this.pauta.pedirLeva(this.config.postsPorLeva);
   }
 
+  /**
+   * Adianta um post: manda sair no próximo ciclo em vez de esperar a hora.
+   *
+   * Não publica na hora de propósito. O cron roda de 5 em 5 minutos, e esses
+   * minutos são a janela de arrependimento — com o modo sombra desligado, o
+   * post vai pro feed público e de lá não volta.
+   *
+   * Também limpa `proximaTentativaEm`: um post que estava em backoff depois de
+   * uma falha ficaria esperando o backoff mesmo com a hora adiantada.
+   */
+  @RequerPermissao("marketing.publicar")
+  @Post(":id/adiantar")
+  async adiantar(@Param("id") id: string) {
+    return comoSistema(async () => {
+      const post = await this.prisma.postInstagram.findUnique({
+        where: { id },
+        select: { status: true },
+      });
+      if (!post) throw new NotFoundException("Post não encontrado");
+      // Só faz sentido no que ainda pode sair. Adiantar um publicado não
+      // republicaria (o mediaId barra), mas mexer no estado dele confunde quem
+      // lê a fila depois.
+      const adiantavel =
+        post.status === StatusPostInstagram.AGENDADO ||
+        post.status === StatusPostInstagram.RASCUNHO;
+      if (!adiantavel) {
+        throw new BadRequestException(`Post ${post.status.toLowerCase()} não entra na fila de novo`);
+      }
+      return this.prisma.postInstagram.update({
+        where: { id },
+        data: {
+          status: StatusPostInstagram.AGENDADO,
+          publicarEm: new Date(),
+          proximaTentativaEm: null,
+        },
+        select: { id: true, status: true, publicarEm: true },
+      });
+    });
+  }
+
   /** Tira da fila. Não apaga: post cancelado fica no histórico com o motivo. */
   @RequerPermissao("marketing.publicar")
   @Post(":id/cancelar")
