@@ -22,6 +22,10 @@ if (!arquivos.length) {
 }
 
 await mkdir(join(raiz, "saida"), { recursive: true });
+// A API de publicação do Instagram não aceita PNG e reduz qualquer coisa acima
+// de 1440px de largura. O JPEG sai em 1080 de largura (@1x), que é o tamanho em
+// que a arte foi desenhada — nada é reamostrado pela Meta.
+await mkdir(join(raiz, "saida", "jpeg"), { recursive: true });
 
 const navegador = await chromium.launch();
 const pagina = await navegador.newPage({ deviceScaleFactor: 2 });
@@ -41,6 +45,15 @@ for (const arquivo of arquivos) {
   }
   await pagina.evaluate(() => document.fonts.ready);
   await pagina.screenshot({ path: destino, clip: { x: 0, y: 0, width: l, height: a } });
+
+  // Versão pra publicar por API: JPEG, 1x, qualidade alta mas dentro dos 8 MB.
+  await pagina.screenshot({
+    path: join(raiz, "saida", "jpeg", arquivo.replace(/\.html$/, ".jpg")),
+    clip: { x: 0, y: 0, width: l, height: a },
+    type: "jpeg",
+    quality: 92,
+    scale: "css",
+  });
 
   // Transbordo é defeito: a peça tem que caber na altura declarada sem rolagem.
   const altura = await pagina.evaluate(() => document.body.scrollHeight);

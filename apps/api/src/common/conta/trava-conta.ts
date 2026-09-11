@@ -83,6 +83,10 @@ const MODELS_GLOBAIS = new Set<string>([
   "MensagemLead",
   "SupressaoContato",
   "EventoSite", // contagem anônima de navegação do site institucional
+  // A fila do Instagram do @movatruck. É a plataforma divulgando a si mesma:
+  // o post sai no perfil da Movatruck, não no de cliente nenhum. Sem contaId,
+  // então toda leitura precisa citar o alvo no where ou rodar em comoSistema.
+  "PostInstagram",
 ]);
 
 /**

@@ -338,23 +338,23 @@ enum TipoBlocoFechamento {
 /// conta com esse id, então um insert que escape da trava morre na chave
 /// estrangeira em vez de gravar dado sem dono.
 model Conta {
-  id                     String  @id @default(uuid())
+  id                     String    @id @default(uuid())
   /// Nome comercial, aparece no painel e nas mensagens de WhatsApp.
   nome                   String
   /// Identificador curto e estável (lowercase, sem espaço). Vai ser a chave da
   /// landing/subdomínio quando o auto-cadastro entrar.
-  slug                   String  @unique
-  cnpj                   String? @unique
+  slug                   String    @unique
+  cnpj                   String?   @unique
   /// False = ninguém entra, nem painel nem app. É o corte total, e o mais
   /// bruto que existe — para um teste que acaba, prefira `somenteLeitura`.
-  ativa                  Boolean @default(true)
+  ativa                  Boolean   @default(true)
   /// True = a empresa entra, enxerga tudo e exporta, mas não escreve nada.
   ///
   /// É o estado de um período de teste que terminou, e existe porque a
   /// alternativa (desligar `ativa`) é o pior primeiro contato possível com a
   /// régua comercial: quem estava gostando do produto perde o acesso aos
   /// próprios dados de uma vez, sem conseguir nem exportar o fechamento do mês.
-  somenteLeitura         Boolean @default(false)
+  somenteLeitura         Boolean   @default(false)
   /// Quando o período de teste termina. `null` = não é teste, é cliente.
   /// Quem vira `somenteLeitura` ao passar desta data é o cron diário.
   trialExpiraEm          DateTime?
@@ -371,7 +371,7 @@ model Conta {
   /// transferia a autoridade da plataforma pra uma empresa cliente, que no boot
   /// seguinte recebia o catálogo inteiro de permissões. Espera-se exatamente
   /// uma conta com true — nenhum endpoint escreve aqui, só migration.
-  ehPlataforma           Boolean @default(false)
+  ehPlataforma           Boolean   @default(false)
   /// O TETO desta empresa: as chaves que o administrador dela pode conceder aos
   /// papéis que criar. Vazio = o padrão do código (`PERMISSOES_ADMIN_EMPRESA`,
   /// tudo menos o que é da plataforma), que é como toda empresa nasce.
@@ -381,17 +381,17 @@ model Conta {
   /// contratou — sem virar chave de código. Quem lê isto é
   /// `tetoDaConta()`; o teto vale na criação de papel, na cópia de modelo e no
   /// seed do Administrador.
-  permissoesPermitidas   String[] @default([])
+  permissoesPermitidas   String[]  @default([])
   /// Código que o motorista digita no app pra dizer de qual empresa ele é.
   /// Direciona o cadastro, NÃO autoriza: o motorista continua entrando como
   /// PENDENTE_APROVACAO e é a empresa que decide. Por isso código vazado não é
   /// incidente — no máximo um cadastro pra recusar. Trocável pelo painel.
-  codigoConvite          String? @unique
+  codigoConvite          String?   @unique
   /// Se o auto-cadastro de motorista (signup pelo app) cai nesta conta.
   /// O app publicado nas lojas não diz de qual empresa o motorista é, então
   /// alguém precisa ser o destino padrão. Com mais de uma conta marcada, o
   /// signup passa a exigir o `contaSlug` no formulário.
-  permiteAutoCadastro    Boolean @default(false)
+  permiteAutoCadastro    Boolean   @default(false)
   /// Esta transportadora exige a FOTO do comprovante no lançamento.
   ///
   /// É política DELA, não do tomador: "aqui todo lançamento tem foto". Por isso
@@ -405,9 +405,9 @@ model Conta {
   ///
   /// O bloqueio de verdade acontece no APP. O backend NUNCA recusa por falta de
   /// foto: recusar mataria item de outbox offline; ele carimba a falta.
-  exigeFotoViagem        Boolean @default(false)
+  exigeFotoViagem        Boolean   @default(false)
   /// Idem pro cupom do posto no abastecimento.
-  exigeFotoAbastecimento Boolean @default(false)
+  exigeFotoAbastecimento Boolean   @default(false)
 
   /// Leitura do ticket por IA na hora da foto, no app do motorista.
   ///
@@ -436,9 +436,9 @@ model Conta {
   criadaEm    DateTime @default(now())
   alteradaEm  DateTime @updatedAt
 
-  users                         User[]                     @relation("UsuarioDaConta")
+  users                         User[]                           @relation("UsuarioDaConta")
   /// Operadores da plataforma que estão dentro desta empresa agora.
-  assumidaPor                   User[]                     @relation("ContaAssumida")
+  assumidaPor                   User[]                           @relation("ContaAssumida")
   papeis                        Papel[]
   adminNotificacoes             AdminNotificacao[]
   motoristas                    Motorista[]
@@ -604,6 +604,7 @@ model User {
   viagensKmAlterado      Viagem[]              @relation("AlterouKmViagem")
   divergenciasResolvidas ViagemDivergencia[]
   adminNotificacoes      AdminNotificacao[]
+  postsInstagramCriados  PostInstagram[]       @relation("PostsInstagramCriados")
 
   @@index([contaId])
   @@map("users")
@@ -627,13 +628,13 @@ model Permissao {
 /// Papel (RBAC): conjunto nomeado de permissões. `permissoes` guarda as chaves
 /// liberadas. `sistema=true` nos embutidos (Administrador/Operador).
 model Papel {
-  contaId    String   @default("__SEM_CONTA__")
-  conta      Conta    @relation(fields: [contaId], references: [id])
-  id         String   @id @default(uuid())
+  contaId    String       @default("__SEM_CONTA__")
+  conta      Conta        @relation(fields: [contaId], references: [id])
+  id         String       @id @default(uuid())
   nome       String
   descricao  String?
-  permissoes String[] @default([])
-  sistema    Boolean  @default(false)
+  permissoes String[]     @default([])
+  sistema    Boolean      @default(false)
   /// De qual modelo da plataforma este papel foi copiado, se foi.
   ///
   /// É SÓ telemetria — "de onde isto veio", pra saber quais modelos pegam. A
@@ -641,8 +642,8 @@ model Papel {
   /// a vida dele, e mudar o modelo depois não mexe em quem já copiou.
   modeloId   String?
   modelo     PapelModelo? @relation(fields: [modeloId], references: [id], onDelete: SetNull)
-  criadoEm   DateTime @default(now())
-  alteradoEm DateTime @updatedAt
+  criadoEm   DateTime     @default(now())
+  alteradoEm DateTime     @updatedAt
 
   usuarios User[]
 
@@ -701,18 +702,18 @@ model MensagemLead {
 ///
 /// A faixa é aberta no fim: `ateVeiculos` nulo significa "daqui pra cima".
 model FaixaPreco {
-  id             String   @id @default(uuid())
+  id            String   @id @default(uuid())
   /// A partir de quantos caminhões esta faixa vale.
-  deVeiculos     Int
+  deVeiculos    Int
   /// Até quantos. `null` = sem teto, é a última faixa.
-  ateVeiculos    Int?
+  ateVeiculos   Int?
   /// Mensalidade em centavos — dinheiro nunca em ponto flutuante.
-  valorCentavos  Int
+  valorCentavos Int
   /// Como o vendedor (ou o SDR) explica esta faixa. Ex.: "frota pequena".
-  rotulo         String?
-  ativa          Boolean  @default(true)
-  criadoEm       DateTime @default(now())
-  alteradoEm     DateTime @updatedAt
+  rotulo        String?
+  ativa         Boolean  @default(true)
+  criadoEm      DateTime @default(now())
+  alteradoEm    DateTime @updatedAt
 
   @@index([deVeiculos])
   @@map("faixas_preco")
@@ -725,22 +726,22 @@ model FaixaPreco {
 /// duração do teste são decisões comerciais, e virariam deploy se ficassem
 /// no código.
 model ConfiguracaoPlataforma {
-  id                 String   @id @default("singleton")
+  id                 String  @id @default("singleton")
   /// A porta pública de auto-cadastro está aberta?
   ///
   /// Nasce FECHADA de propósito: quem sobe a migration não está
   /// necessariamente pronto pra receber cadastro de estranho no mesmo minuto.
   /// Abrir é um clique na tela de Empresas.
-  autoCadastroAberto Boolean  @default(false)
+  autoCadastroAberto Boolean @default(false)
   /// Quantos dias dura o período de teste de quem se cadastra sozinho.
-  diasTesteGratis    Int      @default(14)
+  diasTesteGratis    Int     @default(14)
   /// Teto de códigos de cadastro enviados por hora, somando o mundo inteiro.
   ///
   /// É a trava que protege o bolso, e a única que funciona quando o ataque vem
   /// de muitos IPs e muitos telefones: cada código é uma mensagem de
   /// autenticação paga. Os outros dois freios (por IP e por telefone) são
   /// contra insistência, não contra volume.
-  maxCodigosPorHora  Int      @default(30)
+  maxCodigosPorHora  Int     @default(30)
 
   /// O SDR atende prospect no WhatsApp?
   ///
@@ -748,16 +749,30 @@ model ConfiguracaoPlataforma {
   /// EMPRESA e o SDR fala com quem ainda não é empresa nenhuma. Ligar o
   /// atendimento comercial da Movatruck não pode depender da linha de um
   /// cliente — nem ligar junto o agente que fala com motorista dele.
-  sdrAtivo           Boolean  @default(false)
+  sdrAtivo           Boolean @default(false)
   /// "anthropic" | "gemini" — escolha da plataforma, não herdada de cliente.
-  sdrProvider        String   @default("anthropic")
-  sdrModeloAnthropic String   @default("claude-sonnet-4-6")
-  sdrModeloGemini    String   @default("gemini-2.5-flash")
+  sdrProvider        String  @default("anthropic")
+  sdrModeloAnthropic String  @default("claude-sonnet-4-6")
+  sdrModeloGemini    String  @default("gemini-2.5-flash")
   /// Onde o prospect cria a conta sozinho. Configurável porque o domínio do
   /// painel já mudou uma vez e vai mudar de novo.
-  sdrLinkCadastro    String   @default("https://app.movatruck.com.br/cadastro")
+  sdrLinkCadastro    String  @default("https://app.movatruck.com.br/cadastro")
 
-  alteradoEm         DateTime @updatedAt
+  /// O publicador do Instagram está ligado?
+  ///
+  /// Nasce DESLIGADO, como o runner do agente: subir o código não pode ligar
+  /// nada sozinho — e o que sai daqui vai pro feed público da marca.
+  /// O token e o id da conta moram em env (INSTAGRAM_ACCESS_TOKEN,
+  /// INSTAGRAM_IG_USER_ID), não aqui: é System User token, não expira, e
+  /// segredo em tabela lida por quem tem permissão de leitura é segredo a mais.
+  instagramAtivo     Boolean @default(false)
+  /// Teto diário próprio, bem abaixo do limite da Meta (que fica entre 25 e 100
+  /// conforme a fonte — a resposta autoritativa é o endpoint
+  /// content_publishing_limit). O freio aqui é editorial, não técnico: dez
+  /// posts no mesmo dia derrubaram a conta numa verificação anti-bot.
+  instagramMaxPorDia Int     @default(3)
+
+  alteradoEm DateTime @updatedAt
 
   @@map("configuracao_plataforma")
 }
@@ -830,11 +845,11 @@ model AdminNotificacao {
 /// consciente. Ou seja, a trava não protege nada aqui — toda consulta filtra por
 /// `id`/`cpf` na mão, e o que sai pra fora se monta campo a campo.
 model MotoristaIdentidade {
-  id        String @id @default(uuid())
+  id        String  @id @default(uuid())
   /// 11 dígitos, sem máscara. É o login e a chave da pessoa na plataforma —
   /// único de verdade, ao contrário de `Motorista.cpf`, que é único só dentro
   /// da conta.
-  cpf       String @unique
+  cpf       String  @unique
   nome      String
   /// Celular do WhatsApp: é pra cá que vai o código de cadastro e o convite.
   ///
@@ -871,14 +886,14 @@ model MotoristaIdentidade {
   expoPushToken         String?
   pushTokenAtualizadoEm DateTime?
 
-  criadoEm  DateTime @default(now())
+  criadoEm   DateTime @default(now())
   alteradoEm DateTime @updatedAt
 
-  vinculos       Motorista[]
-  lancamentos     LancamentoPessoal[]
-  viagensPessoais ViagemPessoal[]
-  comprovantes    ComprovantePessoal[]
-  documentos      DocumentoPessoal[]
+  vinculos         Motorista[]
+  lancamentos      LancamentoPessoal[]
+  viagensPessoais  ViagemPessoal[]
+  comprovantes     ComprovantePessoal[]
+  documentos       DocumentoPessoal[]
   redefinicaoSenha RedefinicaoSenhaPendente?
 
   @@index([ativo])
@@ -911,26 +926,26 @@ enum TipoLancamentoPessoal {
 /// `LancamentoPessoal`, o autônomo fecha o mês sozinho — quanto rodou, quanto
 /// recebeu e quanto gastou. Ver docs/identidade-motorista.md.
 model ViagemPessoal {
-  id           String              @id @default(uuid())
-  identidade   MotoristaIdentidade @relation(fields: [identidadeId], references: [id], onDelete: Cascade)
-  identidadeId String
+  id            String              @id @default(uuid())
+  identidade    MotoristaIdentidade @relation(fields: [identidadeId], references: [id], onDelete: Cascade)
+  identidadeId  String
   /// Id do aparelho — idempotência do outbox, único POR PESSOA.
-  clientId     String
+  clientId      String
   /// Dia civil da viagem (ele pode lançar hoje a viagem de ontem).
-  data         DateTime            @db.Date
+  data          DateTime            @db.Date
   /// De onde e pra onde, como ele escreve. Sem `Local`: local é da empresa.
-  origem       String
-  destino      String
+  origem        String
+  destino       String
   /// O que levou. Sem `Material` pelo mesmo motivo.
-  carga        String?
-  km           Decimal?            @db.Decimal(10, 2)
+  carga         String?
+  km            Decimal?            @db.Decimal(10, 2)
   /// Toneladas, quando teve balança.
-  peso         Decimal?            @db.Decimal(10, 3)
+  peso          Decimal?            @db.Decimal(10, 3)
   /// Quanto ele recebeu pelo frete. Entra no resumo do mês como ganho.
-  valorRecebido Decimal?           @db.Decimal(12, 2)
-  observacao   String?
-  criadoEm     DateTime            @default(now())
-  alteradoEm   DateTime            @updatedAt
+  valorRecebido Decimal?            @db.Decimal(12, 2)
+  observacao    String?
+  criadoEm      DateTime            @default(now())
+  alteradoEm    DateTime            @updatedAt
 
   /// Os gastos que ele amarrou nesta viagem (diesel do trecho, pedágio…).
   gastos LancamentoPessoal[]
@@ -987,16 +1002,16 @@ model DocumentoPessoal {
   /// A foto/PDF no MinIO. Fica PRIVADA: o link que ele manda pra transportadora
   /// mostra que o documento existe e está em dia, não a imagem — mandar CNH
   /// escaneada por link público é exatamente como documento de gente vaza.
-  arquivoKey   String?
-  arquivoMime  String?
-  arquivoNome  String?
+  arquivoKey  String?
+  arquivoMime String?
+  arquivoNome String?
 
   /// Quando o aviso de vencimento foi disparado — trava de envio único por
   /// ciclo, pra não virar push todo dia sobre o mesmo documento.
-  avisadoEm    DateTime?
+  avisadoEm DateTime?
 
-  criadoEm     DateTime             @default(now())
-  alteradoEm   DateTime             @updatedAt
+  criadoEm   DateTime @default(now())
+  alteradoEm DateTime @updatedAt
 
   @@index([identidadeId, tipo])
   @@index([validade])
@@ -1021,17 +1036,17 @@ enum TipoComprovantePessoal {
 }
 
 model ComprovantePessoal {
-  id           String              @id @default(uuid())
-  identidade   MotoristaIdentidade @relation(fields: [identidadeId], references: [id], onDelete: Cascade)
+  id           String                 @id @default(uuid())
+  identidade   MotoristaIdentidade    @relation(fields: [identidadeId], references: [id], onDelete: Cascade)
   identidadeId String
   tipo         TipoComprovantePessoal @default(FRETES)
-  token        String              @unique
+  token        String                 @unique
   /// Período coberto (dias civis).
-  inicio       DateTime            @db.Date
-  fim          DateTime            @db.Date
+  inicio       DateTime               @db.Date
+  fim          DateTime               @db.Date
   /// Pra quem ele disse que é — só rótulo, aparece na página.
   destinatario String?
-  criadoEm     DateTime            @default(now())
+  criadoEm     DateTime               @default(now())
   revogadoEm   DateTime?
 
   @@index([identidadeId, criadoEm])
@@ -1053,9 +1068,9 @@ model ComprovantePessoal {
 /// nada. Todo acesso passa pelo `LancamentosPessoaisService`, que carimba o
 /// `identidadeId` do token em TODA consulta.
 model LancamentoPessoal {
-  id           String                @id @default(uuid())
-  identidade   MotoristaIdentidade   @relation(fields: [identidadeId], references: [id], onDelete: Cascade)
-  identidadeId String
+  id              String                @id @default(uuid())
+  identidade      MotoristaIdentidade   @relation(fields: [identidadeId], references: [id], onDelete: Cascade)
+  identidadeId    String
   /// Id gerado no aparelho. É o que torna o envio do outbox idempotente: rede
   /// ruim reenvia o mesmo lançamento, e ele não vira dois.
   ///
@@ -1063,26 +1078,26 @@ model LancamentoPessoal {
   /// coincidisse com o de outra pessoa (ou fosse mandado de propósito) bateria
   /// na constraint e viraria 500 — quando o certo é nem existir colisão entre
   /// caderninhos diferentes.
-  clientId     String
-  tipo         TipoLancamentoPessoal
+  clientId        String
+  tipo            TipoLancamentoPessoal
   /// Dia civil do lançamento (não o instante do envio — ele pode lançar offline
   /// hoje o abastecimento de ontem).
-  data         DateTime              @db.Date
-  valor        Decimal               @db.Decimal(12, 2)
+  data            DateTime              @db.Date
+  valor           Decimal               @db.Decimal(12, 2)
   /// Só faz sentido em ABASTECIMENTO. Deixa calcular R$/litro e média.
-  litros       Decimal?              @db.Decimal(8, 2)
+  litros          Decimal?              @db.Decimal(8, 2)
   /// Odômetro no momento — o que permite ver consumo entre dois abastecimentos.
-  odometro     Int?
+  odometro        Int?
   /// Texto livre: o posto, a praça, quem pagou o frete. Sem catálogo: catálogo é
   /// coisa de empresa, e aqui não tem empresa.
-  descricao    String?
+  descricao       String?
   /// Amarra o gasto a uma viagem dele, quando fizer sentido (o diesel daquele
   /// trecho, o pedágio daquela estrada). Opcional: a maioria dos gastos do dia
   /// não pertence a viagem nenhuma.
-  viagem       ViagemPessoal?        @relation(fields: [viagemPessoalId], references: [id], onDelete: SetNull)
+  viagem          ViagemPessoal?        @relation(fields: [viagemPessoalId], references: [id], onDelete: SetNull)
   viagemPessoalId String?
-  criadoEm     DateTime              @default(now())
-  alteradoEm   DateTime              @updatedAt
+  criadoEm        DateTime              @default(now())
+  alteradoEm      DateTime              @updatedAt
 
   @@unique([identidadeId, clientId])
   @@index([identidadeId, data])
@@ -1320,36 +1335,36 @@ model EnvioCodigoCadastro {
 }
 
 model ContaCadastroPendente {
-  id              String   @id @default(uuid())
+  id            String   @id @default(uuid())
   /// Chave do cadastro: um celular abre uma empresa por vez. Tentar de novo
   /// sobrescreve o pendente em vez de criar outro.
-  telefone        String   @unique
-  empresa         String
-  cnpj            String?
-  adminNome       String
-  adminEmail      String
-  senhaHash       String
-  codigo          String
-  expiraEm        DateTime
+  telefone      String   @unique
+  empresa       String
+  cnpj          String?
+  adminNome     String
+  adminEmail    String
+  senhaHash     String
+  codigo        String
+  expiraEm      DateTime
   /// Erros de digitação do código. Estoura o teto, o pendente morre.
-  tentativas      Int      @default(0)
+  tentativas    Int      @default(0)
   /// Quantas vezes ele pediu o código de novo.
-  reenvios        Int      @default(0)
+  reenvios      Int      @default(0)
   /// Base do cooldown — e a defesa contra usar o endpoint como torneira de
   /// mensagem paga.
-  ultimoEnvioEm   DateTime @default(now())
+  ultimoEnvioEm DateTime @default(now())
   /// De onde veio, pra dar como bloquear em lote se virar abuso.
-  ipCriacao       String?
-  criadoEm        DateTime @default(now())
+  ipCriacao     String?
+  criadoEm      DateTime @default(now())
 
   @@map("conta_cadastro_pendente")
 }
 
 model CadastroMotoristaPendente {
-  id            String   @id @default(uuid())
-  cpf           String   @unique // 11 dígitos (sem máscara) — chave do cadastro
-  nome          String
-  telefone      String // celular que ELE digitou no formulário
+  id              String   @id @default(uuid())
+  cpf             String   @unique // 11 dígitos (sem máscara) — chave do cadastro
+  nome            String
+  telefone        String // celular que ELE digitou no formulário
   /// Empresa em que o cadastro deve entrar, quando ele veio do app ANTIGO.
   ///
   /// Compatibilidade de transição: a versão anterior manda `codigoEmpresa` no
@@ -1357,7 +1372,7 @@ model CadastroMotoristaPendente {
   /// ignorássemos o código, esse app receberia uma resposta sem token e
   /// quebraria — e ele é o que está no bolso de todo mundo até o OTA chegar.
   /// Some quando a frota estiver atualizada.
-  contaConvite  String?
+  contaConvite    String?
   /// Pra onde o código foi de verdade.
   ///
   /// Difere do `telefone` quando o CPF já tem cadastro criado pelo painel: aí o
@@ -1365,16 +1380,16 @@ model CadastroMotoristaPendente {
   /// que prova que quem está do outro lado é mesmo ele, e não alguém que sabe
   /// um CPF. Null = foi pro mesmo número do formulário.
   telefoneDestino String?
-  email         String?
-  senhaHash     String
+  email           String?
+  senhaHash       String
   /// Lista de placas do formulário: { placa, modelo?, default }
-  placas        Json
-  codigo        String // 6 dígitos numéricos
-  expiraEm      DateTime
-  tentativas    Int      @default(0) // confirmações erradas
-  reenvios      Int      @default(0)
-  ultimoEnvioEm DateTime @default(now())
-  criadoEm      DateTime @default(now())
+  placas          Json
+  codigo          String // 6 dígitos numéricos
+  expiraEm        DateTime
+  tentativas      Int      @default(0) // confirmações erradas
+  reenvios        Int      @default(0)
+  ultimoEnvioEm   DateTime @default(now())
+  criadoEm        DateTime @default(now())
 
   @@map("cadastros_motorista_pendentes")
 }
@@ -1390,23 +1405,23 @@ model CadastroMotoristaPendente {
 /// empresa nenhuma, e a FK recusaria o `__SEM_CONTA__`.
 model RedefinicaoSenhaPendente {
   contaId       String?
-  conta         Conta?     @relation(fields: [contaId], references: [id])
-  id            String    @id @default(uuid())
-  motoristaId   String?    @unique
-  motorista     Motorista? @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  conta         Conta?               @relation(fields: [contaId], references: [id])
+  id            String               @id @default(uuid())
+  motoristaId   String?              @unique
+  motorista     Motorista?           @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
   identidadeId  String?              @unique
   identidade    MotoristaIdentidade? @relation(fields: [identidadeId], references: [id], onDelete: Cascade)
   /// Número de destino do código (já normalizado pra dígitos com DDD).
   telefone      String
   /// Quando true, o telefone acima deve ser GRAVADO no cadastro do motorista
   /// após a confirmação (caso de motorista que não tinha celular cadastrado).
-  vincular      Boolean   @default(false)
+  vincular      Boolean              @default(false)
   codigo        String // 6 dígitos numéricos
   expiraEm      DateTime
-  tentativas    Int       @default(0) // confirmações erradas
-  reenvios      Int       @default(0)
-  ultimoEnvioEm DateTime  @default(now())
-  criadoEm      DateTime  @default(now())
+  tentativas    Int                  @default(0) // confirmações erradas
+  reenvios      Int                  @default(0)
+  ultimoEnvioEm DateTime             @default(now())
+  criadoEm      DateTime             @default(now())
 
   @@index([contaId])
   @@map("redefinicoes_senha_pendentes")
@@ -3853,7 +3868,7 @@ model Lead {
 
   /// A EMPRESA é a única coisa que sempre existe. Quem chega pelo site diz o
   /// nome dela; quem a prospecção encontra é ela, antes de qualquer pessoa.
-  empresa String
+  empresa   String
   /// Chave de deduplicação da prospecção. Nulo em lead de formulário, porque
   /// ninguém digita o próprio CNPJ pra pedir demonstração.
   cnpj      String? @unique
@@ -3888,28 +3903,28 @@ model Lead {
   cnae              String?
   cnaeDescricao     String?
   porte             String?
-  capitalSocial     Decimal?  @db.Decimal(15, 2)
+  capitalSocial     Decimal? @db.Decimal(15, 2)
   situacaoCadastral String?
   /// Nome do sócio administrador — é com quem se fala. Dado pessoal: entra no
   /// mesmo regime de legítimo interesse do resto, e sai no opt-out.
   socio             String?
 
-  enriquecidoEm   DateTime?
+  enriquecidoEm            DateTime?
   /// Conta as falhas pra não ficar batendo eternamente no mesmo CNPJ que a
   /// Receita não conhece.
-  enriquecimentoTentativas Int     @default(0)
+  enriquecimentoTentativas Int       @default(0)
   enriquecimentoErro       String?
 
   origem String @default("SITE_FORMULARIO")
 
   /// De onde o dado saiu, em texto legível. Obrigatório na prospecção ativa.
-  origemDado    String?
+  origemDado   String?
   /// Quando o dado foi coletado da fonte (≠ criadoEm, que é quando entrou aqui).
-  coletadoEm    DateTime?
-  utmSource     String?
-  utmMedium     String?
-  utmCampaign   String?
-  paginaOrigem  String?
+  coletadoEm   DateTime?
+  utmSource    String?
+  utmMedium    String?
+  utmCampaign  String?
+  paginaOrigem String?
 
   /// Guardado só pra defesa contra abuso do formulário público, não pra perfil.
   ipCriacao String?
@@ -3949,7 +3964,7 @@ model InteracaoLead {
   leadId String
 
   /// EMAIL, LIGACAO, WHATSAPP, REUNIAO, NOTA
-  canal   String
+  canal    String
   /// ENVIADO, RESPONDEU, SEM_RESPOSTA, RECUSOU, PEDIU_OPT_OUT
   desfecho String
   resumo   String? @db.Text
@@ -3978,7 +3993,7 @@ model SupressaoContato {
   id String @id @default(uuid())
 
   /// Só dígitos, ou e-mail em minúsculas. Normalizado na escrita.
-  contato String @unique
+  contato String  @unique
   /// TELEFONE ou EMAIL
   tipo    String
   motivo  String?
@@ -3995,10 +4010,10 @@ model SupressaoContato {
 /// sem cookie, sem user-agent. Se algum dia isso precisar identificar alguém, a
 /// resposta certa é criar outra tabela, não acrescentar coluna aqui.
 model EventoSite {
-  id     String @id @default(uuid())
-  tipo   String
-  caminho String @default("/")
-  rotulo String?
+  id      String  @id @default(uuid())
+  tipo    String
+  caminho String  @default("/")
+  rotulo  String?
 
   referenciaHost String?
   utmSource      String?
@@ -4014,4 +4029,101 @@ model EventoSite {
   @@index([tipo, criadoEm(sort: Desc)])
   @@index([sessao])
   @@map("eventos_site")
+}
+
+// ---------------------------------------------------------------------------
+// Instagram do @movatruck
+// ---------------------------------------------------------------------------
+
+enum StatusPostInstagram {
+  /// Arte no storage, ainda sem hora marcada.
+  RASCUNHO
+  /// Tem `publicarEm` — é o que o cron pesca.
+  AGENDADO
+  /// Reivindicado por um worker.
+  PUBLICANDO
+  PUBLICADO
+  FALHOU
+  /// Decisão humana. Nunca volta pra fila sozinho.
+  CANCELADO
+  /// Reivindicado, o processo morreu, e NÃO dá pra saber se a Meta publicou.
+  /// Não retenta: republicar é destrutivo. Resolve por reconciliação contra a
+  /// API, e só volta pra AGENDADO se ficar provado que não saiu.
+  INDETERMINADO
+  /// Terminou sem publicar, e isso não é falha: a arte sumiu do storage ou o
+  /// link expirou antes da hora. Nunca retenta. (Mesma ideia de
+  /// StatusConferenciaTicket.DESCARTADA.)
+  DESCARTADA
+}
+
+/// Fila de posts do Instagram do @movatruck.
+///
+/// Ferramenta da PLATAFORMA divulgando a si mesma — não é recurso de cliente.
+/// Sem `contaId` de propósito, e por isso o model entra em MODELS_GLOBAIS, pelo
+/// mesmo motivo de ExecucaoAgente e Lead: uma transportadora cliente não tem o
+/// que fazer com o calendário editorial da Movatruck. A régua está em
+/// `permissoes.ts` (RECURSOS_PLATAFORMA): mexer nisso afeta a marca de quem
+/// opera a plataforma.
+model PostInstagram {
+  id String @id @default(uuid())
+
+  /// Nome da peça em `marketing/instagram/posts/` (ex.: "03-sem-sinal"), pra
+  /// rastrear a arte publicada de volta ao HTML que a gerou.
+  peca    String
+  legenda String @db.Text
+
+  /// A arte, em JPEG — a API da Meta não aceita PNG, e busca a imagem numa URL
+  /// pública em vez de receber upload. `storageKey` nunca sai daqui; o que a
+  /// URL carrega é o `arteToken`.
+  storageKey   String
+  arteToken    String   @unique
+  /// Depois disto o endpoint público devolve 404. A Meta só precisa da URL
+  /// durante a criação do container (minutos), então o link não fica de pé.
+  arteExpiraEm DateTime
+
+  status     StatusPostInstagram @default(RASCUNHO)
+  /// Quando publicar. Gravado já ancorado em America/Sao_Paulo (o container
+  /// roda em UTC — ver common/timezone.ts).
+  publicarEm DateTime?
+  /// Espelha o id enquanto o job está vivo e volta a null ao terminar. É o
+  /// mutex no banco: a corrida se resolve em P2002, não em memória (mesma
+  /// mecânica de ExecucaoAgente.taskAtiva).
+  postAtivo  String?             @unique
+
+  /// Container criado em POST /<ig-user-id>/media. Gravado ANTES do publish:
+  /// numa retentativa, com isto preenchido, pula a fase 1 em vez de criar
+  /// container novo. É a chave de idempotência entre as duas chamadas.
+  containerId String?
+  /// Id do media publicado. Preenchido = acabou; nunca republicar.
+  mediaId     String?
+  permalink   String?
+
+  tentativas         Int       @default(0)
+  proximaTentativaEm DateTime?
+  workerId           String?
+  reivindicadoEm     DateTime?
+
+  iniciadoEm  DateTime?
+  publicadoEm DateTime?
+  /// Código de erro da Meta (ex.: 9 = teto de posts em 24h). É ele que decide
+  /// se retenta, não o status HTTP: a Graph API devolve 400 pra coisa
+  /// transitória.
+  erroCodigo  Int?
+  erro        String?   @db.Text
+  /// Null com post FALHOU = ninguém foi avisado, que é o pior resultado
+  /// possível — o feed para e ninguém percebe por semanas.
+  avisadoEm   DateTime?
+
+  /// Quem agendou. Null = automação.
+  criadoPorId String?
+  criadoPor   User?   @relation("PostsInstagramCriados", fields: [criadoPorId], references: [id])
+
+  criadoEm   DateTime @default(now())
+  alteradoEm DateTime @updatedAt
+
+  /// A query do reivindicar.
+  @@index([status, publicarEm])
+  @@index([status, proximaTentativaEm])
+  @@index([publicadoEm(sort: Desc)])
+  @@map("posts_instagram")
 }

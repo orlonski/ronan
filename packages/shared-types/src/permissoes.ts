@@ -82,6 +82,10 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // carga do RNTRC, que é cara e bate em serviço de fora; fica separada de
   // "editar" de propósito.
   { recurso: "prospeccao", label: "Captação de clientes", modulo: "Operação", acoes: ["ver", "editar", "importar"] },
+  // `publicar` é separado de `criar` pelo mesmo motivo que `importar` é separado
+  // em prospeccao: criar um post é rascunho, publicar é irreversível e sai na
+  // cara da marca.
+  { recurso: "marketing", label: "Instagram da Movatruck", modulo: "Sistema", acoes: ["ver", "criar", "publicar"] },
   // Chat dos motoristas. "ver" abre a tela (avisos + denúncias), "avisar"
   // publica no canal, "moderar" resolve denúncia e remove mensagem. Conversa
   // de motorista com motorista NÃO é acessível por nenhuma dessas chaves —
@@ -189,6 +193,10 @@ export const RECURSOS_PLATAFORMA: string[] = [
   // não tem dono, é dado do OSM). Uma empresa apagando uma praça mudaria o
   // cálculo de pedágio das outras — parece menu de operação e não é.
   "pedagios",
+  // O Instagram da própria Movatruck. O que sai daqui vai pro feed público da
+  // marca da plataforma — uma transportadora cliente postando ali seria um
+  // estranho falando pela empresa.
+  "marketing",
 ];
 
 /** Chaves de plataforma (`recurso.acao`), derivadas de RECURSOS_PLATAFORMA. */

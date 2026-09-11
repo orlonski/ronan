@@ -216,6 +216,21 @@ export class UploadsService implements OnModuleInit {
     }
   }
 
+  /**
+   * Arte de post do Instagram da própria Movatruck.
+   *
+   * Fora do prefixo de conta de propósito (como `fechamentos/originais/` e
+   * `pessoal/`): não é dado de empresa nenhuma, é material de marca da
+   * plataforma. JPEG porque a API de publicação da Meta não aceita PNG.
+   */
+  async putArteInstagram(buffer: Buffer): Promise<string> {
+    const key = `plataforma/instagram/${new Date().toISOString().slice(0, 10)}/${randomUUID()}.jpg`;
+    await this.client.putObject(this.bucket, key, buffer, buffer.length, {
+      "Content-Type": "image/jpeg",
+    });
+    return key;
+  }
+
   async getObjectBuffer(key: string): Promise<Buffer> {
     try {
       const stream = await this.client.getObject(this.bucket, key);
