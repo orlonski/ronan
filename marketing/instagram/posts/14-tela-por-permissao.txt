@@ -1,0 +1,11 @@
+Seu operacional abre a viagem. Seu financeiro vê o fechamento. Ninguém vê o que não é da função dele.
+
+No Movatruck cada tela e cada botão do painel são liberados por permissão — pessoa por pessoa, nunca tudo ou nada de uma vez.
+
+O gestor de uma frota terceira, por exemplo, acompanha o que os motoristas dele lançaram: ticket, km, toneladas, fotos. O que cada cliente paga, ele não vê — nem filtrando a lista, nem chamando a API direto do navegador.
+
+Você monta o papel de cada pessoa do seu time. O sistema segura a fronteira, sem confiar que ninguém vai clicar onde não devia.
+
+Chama no direct que a gente te mostra a tela de permissões.
+
+#movatruck #transportadora #gestaodefrota #logistica #transporterodoviario #frete #caminhao #gestaologistica #seguranca #permissoes
