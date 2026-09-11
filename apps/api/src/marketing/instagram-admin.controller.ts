@@ -11,8 +11,11 @@ import {
   UseGuards,
   UseInterceptors,
   BadRequestException,
+  NotFoundException,
+  Res,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import type { Response } from "express";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { StatusPostInstagram } from "@prisma/client";
 import { z } from "zod";
@@ -221,6 +224,29 @@ export class InstagramAdminController {
   @Post("rodar-agora")
   async rodarAgora() {
     return this.publicador.rodar();
+  }
+
+  /**
+   * A arte do post, pra quem está olhando a fila.
+   *
+   * Serve a imagem autenticada em vez de devolver o `arteToken` na listagem: o
+   * token abre a arte SEM autenticação nenhuma (é o que a Meta usa), então quem
+   * pode ver a fila não deve recebê-lo de brinde.
+   *
+   * Sem isto, revisar um post era ler a legenda e confiar — e o que vai pro
+   * feed é principalmente a imagem.
+   */
+  @RequerPermissao("marketing.ver")
+  @Get(":id/arte")
+  async arte(@Param("id") id: string, @Res() res: Response) {
+    const post = await comoSistema(() =>
+      this.prisma.postInstagram.findUnique({ where: { id }, select: { storageKey: true } }),
+    );
+    if (!post) throw new NotFoundException("Post não encontrado");
+    const buffer = await this.uploads.getObjectBuffer(post.storageKey);
+    res.set("Content-Type", "image/jpeg");
+    res.set("Cache-Control", "private, max-age=3600");
+    res.send(buffer);
   }
 
   /**

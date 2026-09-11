@@ -15,6 +15,7 @@ import { Card } from "@/components/ui/card";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useApiQuery, useAuthToken, fetchApi, apiBaseUrl } from "@/lib/client-api";
 import { NovoPost } from "./_components/novo-post";
+import { ArtePost } from "./_components/arte-post";
 import { usePermissoes } from "@/lib/permissoes";
 import { Button } from "@/components/ui/button";
 import { RequerTela } from "@/components/requer-tela";
@@ -283,7 +284,11 @@ function Linha({ post }: { post: Post }) {
   });
 
   return (
-    <div className="flex flex-wrap items-start justify-between gap-4 p-4">
+    <div className="flex flex-wrap items-start gap-4 p-4 sm:flex-nowrap">
+      {/* A arte primeiro: é ela que vai pro feed, e é por ela que se decide
+          cancelar. Legenda sem imagem é revisar no escuro. */}
+      <ArtePost postId={post.id} peca={post.peca} />
+
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{post.peca}</span>
@@ -293,7 +298,10 @@ function Linha({ post }: { post: Post }) {
           ) : null}
         </div>
 
-        <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{post.legenda}</p>
+        {/* Inteira, com as quebras de linha do original: é assim que sai no
+            Instagram, e cortar em duas linhas escondia justamente o fim, onde
+            mora o CTA e as hashtags. */}
+        <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">{post.legenda}</p>
 
         {post.erro ? (
           <p className="mt-2 flex items-start gap-1.5 text-sm text-red-700">
