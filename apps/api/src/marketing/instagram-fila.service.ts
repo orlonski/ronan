@@ -210,6 +210,33 @@ export class InstagramFilaService {
     return this.prisma.postInstagram.findUnique({ where: { arteToken: token } });
   }
 
+  /**
+   * Por que o `reivindicar` não devolveu nada.
+   *
+   * Sem isto, "a fila está vazia" e "tem post mas a hora não chegou" e "a hora
+   * chegou mas o backoff segura" são o mesmo silêncio.
+   */
+  async espiarFila(): Promise<string> {
+    const agora = new Date();
+    const [total, agendados, proximo] = await Promise.all([
+      this.prisma.postInstagram.count(),
+      this.prisma.postInstagram.count({ where: { status: StatusPostInstagram.AGENDADO } }),
+      this.prisma.postInstagram.findFirst({
+        where: { status: StatusPostInstagram.AGENDADO },
+        orderBy: { publicarEm: "asc" },
+        select: { peca: true, publicarEm: true, proximaTentativaEm: true },
+      }),
+    ]);
+    if (!proximo) return `fila: ${total} posts, nenhum AGENDADO`;
+    const espera =
+      proximo.publicarEm && proximo.publicarEm > agora
+        ? `hora ainda não chegou (${proximo.publicarEm.toISOString()}, agora ${agora.toISOString()})`
+        : proximo.proximaTentativaEm && proximo.proximaTentativaEm > agora
+          ? `em backoff até ${proximo.proximaTentativaEm.toISOString()}`
+          : "deveria ter sido pescado — investigar o claim";
+    return `fila: ${total} posts, ${agendados} agendados; próximo "${proximo.peca}": ${espera}`;
+  }
+
   async indeterminados(): Promise<PostInstagram[]> {
     return this.prisma.postInstagram.findMany({
       where: { status: StatusPostInstagram.INDETERMINADO },

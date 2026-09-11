@@ -27,6 +27,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
 import { InstagramConfig } from "./instagram.config";
 import { InstagramFilaService } from "./instagram-fila.service";
+import { InstagramPublicadorService } from "./instagram-publicador.service";
 
 /**
  * Limites da Meta, validados aqui e não no worker.
@@ -79,6 +80,7 @@ export class InstagramAdminController {
     private readonly uploads: UploadsService,
     private readonly prisma: PrismaService,
     private readonly config: InstagramConfig,
+    private readonly publicador: InstagramPublicadorService,
   ) {}
 
   @RequerPermissao("marketing.ver")
@@ -204,6 +206,19 @@ export class InstagramAdminController {
       );
       return cfg;
     });
+  }
+
+  /**
+   * Roda o ciclo agora, sem esperar os 5 minutos do cron, e conta o que houve.
+   *
+   * Serve pra testar a integração e pra responder "por que não saiu?" sem
+   * acesso ao log do servidor — que é justamente onde essa pergunta costuma
+   * morrer.
+   */
+  @RequerPermissao("marketing.publicar")
+  @Post("rodar-agora")
+  async rodarAgora() {
+    return this.publicador.rodar();
   }
 
   /** Tira da fila. Não apaga: post cancelado fica no histórico com o motivo. */

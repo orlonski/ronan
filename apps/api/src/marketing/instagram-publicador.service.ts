@@ -45,25 +45,45 @@ export class InstagramPublicadorService implements OnModuleInit {
 
   @Cron("0 */5 * * * *", { name: "publicar-instagram", timeZone: "America/Sao_Paulo" })
   async tick(): Promise<void> {
-    if (!this.config.habilitado) return;
-    if (this.tickRodando) return;
+    await this.rodar();
+  }
+
+  /**
+   * O tick, com relato do que aconteceu.
+   *
+   * O relato existe porque "o post não saiu e não há erro em lugar nenhum" é o
+   * estado mais caro de depurar aqui: sem acesso ao log do servidor, um return
+   * cedo é indistinguível de um cron que não rodou. Cada saída antecipada diz
+   * o próprio nome.
+   */
+  async rodar(): Promise<{ passo: string; detalhe?: string; posts: number }> {
+    if (!this.config.habilitado) return { passo: "sem-credencial", posts: 0 };
+    if (this.tickRodando) return { passo: "tick-anterior-ainda-rodando", posts: 0 };
     this.tickRodando = true;
     try {
       // Model global não tem contaId pra trava injetar: roda como sistema.
-      await comoSistema(async () => {
-        if (!(await this.ligadoNaConfiguracao())) return;
-        await this.fila.marcarOrfaos();
+      return await comoSistema(async () => {
+        if (!(await this.ligadoNaConfiguracao())) {
+          return { passo: "publicacao-desligada", posts: 0 };
+        }
+        const orfaos = await this.fila.marcarOrfaos();
 
         const cabe = await this.quantosCabem();
-        if (cabe <= 0) return;
+        if (cabe <= 0) return { passo: "teto-diario-atingido", posts: 0 };
 
         const posts = await this.fila.reivindicar(this.workerId, Math.min(cabe, this.config.loteMax));
+        if (posts.length === 0) {
+          const espiar = await this.fila.espiarFila();
+          return { passo: "nada-na-hora", detalhe: espiar, posts: 0 };
+        }
         for (const post of posts) {
           await this.publicarUm(post);
         }
+        return { passo: "processou", detalhe: `orfaos=${orfaos}`, posts: posts.length };
       });
     } catch (erro) {
       this.logger.error(`Tick falhou: ${(erro as Error).message}`);
+      return { passo: "erro", detalhe: (erro as Error).message, posts: 0 };
     } finally {
       this.tickRodando = false;
     }
