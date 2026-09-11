@@ -3,7 +3,10 @@
 import { AlertTriangle, CheckCircle2, Clock, Instagram, PauseCircle, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { useApiQuery } from "@/lib/client-api";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useApiQuery, useAuthToken, fetchApi } from "@/lib/client-api";
+import { usePermissoes } from "@/lib/permissoes";
+import { Button } from "@/components/ui/button";
 import { RequerTela } from "@/components/requer-tela";
 import { fmtDataHoraBR } from "@/lib/fechamento-helpers";
 
@@ -96,6 +99,20 @@ function Conteudo() {
  */
 function Estado({ estado }: { estado: Estado }) {
   const parado = !estado.credencialConfigurada || !estado.ativo;
+  const { temPermissao } = usePermissoes();
+  const token = useAuthToken();
+  const qc = useQueryClient();
+
+  const alternar = useMutation({
+    mutationFn: (ativo: boolean) =>
+      fetchApi("/admin/marketing/instagram/config", {
+        method: "PATCH",
+        body: JSON.stringify({ ativo }),
+        token,
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["/admin/marketing/instagram/estado"] }),
+  });
 
   return (
     <Card className="p-5">
@@ -113,7 +130,28 @@ function Estado({ estado }: { estado: Estado }) {
             {estado.publicadosUltimas24h} de {estado.maxPorDia}
           </span>
         </div>
+
+        {temPermissao("marketing.publicar") ? (
+          <Button
+            className="ml-auto"
+            variant={estado.ativo ? "outline" : "default"}
+            disabled={alternar.isPending || (!estado.ativo && !estado.credencialConfigurada)}
+            onClick={() => alternar.mutate(!estado.ativo)}
+          >
+            {alternar.isPending
+              ? "Salvando…"
+              : estado.ativo
+                ? "Desligar publicação"
+                : "Ligar publicação"}
+          </Button>
+        ) : null}
       </div>
+
+      {alternar.isError ? (
+        <p className="mt-3 text-sm text-red-700">
+          {(alternar.error as Error).message}
+        </p>
+      ) : null}
 
       {estado.modoSombra && estado.credencialConfigurada ? (
         <p className="mt-4 flex items-start gap-2 rounded-md bg-amber-50 p-3 text-sm text-amber-900">

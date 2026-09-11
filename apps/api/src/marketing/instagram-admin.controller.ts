@@ -2,7 +2,9 @@ import {
   Body,
   Controller,
   Get,
+  Logger,
   Param,
+  Patch,
   Post,
   Query,
   UploadedFile,
@@ -48,6 +50,17 @@ const AgendarInput = z.object({
 });
 type AgendarInput = z.infer<typeof AgendarInput>;
 
+/**
+ * Ligar a publicação é decisão de gente, e por isso passa por endpoint com
+ * permissão própria (`marketing.publicar`) — não por variável de ambiente nem
+ * por UPDATE no banco. O que sai daqui vai pro feed público da marca.
+ */
+const ConfigInput = z.object({
+  ativo: z.boolean().optional(),
+  maxPorDia: z.number().int().min(1, "No mínimo 1").max(25, "Acima de 25 o Instagram começa a recusar").optional(),
+});
+type ConfigInput = z.infer<typeof ConfigInput>;
+
 const ListarQuery = z.object({
   status: z.nativeEnum(StatusPostInstagram).optional(),
 });
@@ -59,6 +72,8 @@ type ListarQuery = z.infer<typeof ListarQuery>;
 @Roles("ADMIN_USER")
 @Controller("admin/marketing/instagram")
 export class InstagramAdminController {
+  private readonly logger = new Logger(InstagramAdminController.name);
+
   constructor(
     private readonly fila: InstagramFilaService,
     private readonly uploads: UploadsService,
@@ -146,6 +161,39 @@ export class InstagramAdminController {
         criadoPorId: user.id,
         validadeHoras: this.config.arteValidadeHoras,
       });
+    });
+  }
+
+  /**
+   * Liga ou desliga a publicação, e ajusta o teto diário.
+   *
+   * Separado da credencial de propósito: o token diz que dá pra publicar, este
+   * diz que pode. Desligar aqui é o freio de mão — os posts continuam entrando
+   * na fila e nada sai até religar.
+   */
+  @RequerPermissao("marketing.publicar")
+  @Patch("config")
+  async configurar(@Body(new ZodValidationPipe(ConfigInput)) body: ConfigInput) {
+    if (body.ativo === undefined && body.maxPorDia === undefined) {
+      throw new BadRequestException("Diga o que mudar: `ativo` ou `maxPorDia`");
+    }
+    if (body.ativo === true && !this.config.habilitado) {
+      throw new BadRequestException(
+        "Sem INSTAGRAM_ACCESS_TOKEN configurado não adianta ligar: o cron não roda.",
+      );
+    }
+    return comoSistema(async () => {
+      const cfg = await this.prisma.configuracaoPlataforma.upsert({
+        where: { id: "singleton" },
+        update: { ...body },
+        create: { id: "singleton", ...body },
+        select: { instagramAtivo: true, instagramMaxPorDia: true },
+      });
+      this.logger.warn(
+        `Publicação do Instagram agora está ${cfg.instagramAtivo ? "LIGADA" : "DESLIGADA"} ` +
+          `(teto de ${cfg.instagramMaxPorDia}/dia)`,
+      );
+      return cfg;
     });
   }
 
