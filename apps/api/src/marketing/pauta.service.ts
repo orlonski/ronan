@@ -32,14 +32,17 @@ export class PautaService {
   ) {}
 
   /**
-   * Segunda de manhã: pede a leva da semana.
+   * Todo dia de manhã: repõe a fila.
    *
-   * Cedo o bastante pra dar a semana inteira de folga entre produzir e
-   * publicar — se o agente errar, sobra tempo de alguém ver antes do primeiro
-   * post sair.
+   * Às 7h de propósito, antes do horário em que os posts saem (9h): o que o
+   * agente produzir hoje só é publicado amanhã, o que dá um dia inteiro de
+   * folga pra alguém olhar e cancelar.
+   *
+   * Não pede um por dia cegamente — pede o que falta pra fila chegar em
+   * `postsPorLeva`. Dia em que ninguém consumiu a fila, não gasta execução.
    */
-  @Cron("0 0 8 * * 1", { name: "pauta-instagram", timeZone: "America/Sao_Paulo" })
-  async pedirLevaSemanal(): Promise<void> {
+  @Cron("0 0 7 * * *", { name: "pauta-instagram", timeZone: "America/Sao_Paulo" })
+  async pedirLevaDoDia(): Promise<void> {
     if (!this.config.pautaAutomatica) return;
     await this.pedirLeva(this.config.postsPorLeva);
   }
