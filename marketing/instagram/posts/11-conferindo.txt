@@ -4,7 +4,7 @@ No Movatruck, não.
 
 Quando falta conferência do lado do escritório, o app nunca mostra em vermelho.
 Nunca chama de erro. Nunca vira alerta de "resolva isso".
-Aparece como "Conferindo" — mesma cor de "Enviada", sem susto na tela.
+Aparece como "Conferindo", em amarelo de aviso — nunca em vermelho de erro.
 
 Quem tem algo pra preencher é o escritório. Pra você, é rotina normal.
 O motorista não causou a pendência. Não é ele quem resolve.
