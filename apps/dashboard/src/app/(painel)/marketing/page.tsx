@@ -1,6 +1,15 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, Clock, Instagram, PauseCircle, XCircle } from "lucide-react";
+import Link from "next/link";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  Instagram,
+  PauseCircle,
+  Sparkles,
+  XCircle,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -55,6 +64,17 @@ export default function MarketingPage() {
 
 function Conteudo() {
   const { temPermissao } = usePermissoes();
+  const token = useAuthToken();
+  const qc = useQueryClient();
+
+  const pedirLeva = useMutation({
+    mutationFn: () =>
+      fetchApi<{ pedido: boolean; motivo: string }>("/admin/marketing/instagram/pedir-leva", {
+        method: "POST",
+        token,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/admin/marketing/instagram"] }),
+  });
   const { data: estado } = useApiQuery<Estado>("/admin/marketing/instagram/estado", {
     refetchInterval: 30_000,
   });
@@ -76,6 +96,47 @@ function Conteudo() {
       </div>
 
       {estado ? <Estado estado={estado} /> : null}
+
+      {temPermissao("marketing.criar") ? (
+        <Card className="p-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="font-medium">Pedir a próxima leva ao agente</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Abre uma demanda pro agente produzir os posts e entregar nesta fila. Ele só
+                entrega — quem publica é o publicador, e você revisa antes.
+              </p>
+            </div>
+            <Button variant="outline" onClick={() => pedirLeva.mutate()} disabled={pedirLeva.isPending}>
+              <Sparkles className="mr-2 h-4 w-4" />
+              {pedirLeva.isPending ? "Pedindo…" : "Pedir leva"}
+            </Button>
+          </div>
+
+          {pedirLeva.data ? (
+            <p
+              className={`mt-3 text-sm ${pedirLeva.data.pedido ? "text-green-700" : "text-muted-foreground"}`}
+            >
+              {pedirLeva.data.pedido ? "Pedido: " : "Não pedi: "}
+              {pedirLeva.data.motivo}
+              {pedirLeva.data.pedido ? (
+                <>
+                  {" "}
+                  Acompanhe em{" "}
+                  <Link href="/demandas" className="underline underline-offset-2">
+                    Demandas do agente
+                  </Link>
+                  .
+                </>
+              ) : null}
+            </p>
+          ) : null}
+
+          {pedirLeva.isError ? (
+            <p className="mt-3 text-sm text-red-700">{(pedirLeva.error as Error).message}</p>
+          ) : null}
+        </Card>
+      ) : null}
 
       {temPermissao("marketing.criar") ? <NovoPost apiUrl={apiBaseUrl} /> : null}
 
