@@ -141,7 +141,7 @@ export class MetaWebhookController {
     // Fan-out antes de processar: o Chatwoot é o atendimento humano do mesmo
     // número, e o que atrasa aqui atrasa a resposta pra Meta. Não leva `await`
     // de propósito — ver ChatwootRepasseService.
-    this.chatwoot.repassar(req.rawBody, assinatura);
+    this.chatwoot.repassar(req.rawBody, assinatura, numerosDoCorpo(body));
 
     try {
       await this.processar(body);
@@ -281,4 +281,22 @@ function assinaturaConfere(
     return false;
   }
   return recebido.length === esperado.length && timingSafeEqual(recebido, esperado);
+}
+
+/**
+ * Os números que aparecem no evento.
+ *
+ * É o que diz pra qual inbox do Chatwoot cada coisa vai. Vem do corpo já
+ * parseado — o repasse continua mandando o corpo CRU, porque reserializar
+ * quebraria o `X-Hub-Signature-256`.
+ */
+function numerosDoCorpo(body: CorpoWebhook): string[] {
+  const ids = new Set<string>();
+  for (const entry of body.entry ?? []) {
+    for (const change of entry.changes ?? []) {
+      const id = change.value?.metadata?.phone_number_id;
+      if (id) ids.add(id);
+    }
+  }
+  return [...ids];
 }
