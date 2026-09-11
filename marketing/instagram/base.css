@@ -1,0 +1,184 @@
+/* Sistema visual dos posts do Instagram — Movatruck
+   Formato 1080x1350 (4:5). Nunca hardcode cor na peça: use as variáveis daqui. */
+
+@font-face { font-family: "Archivo"; font-weight: 700; font-display: block;
+  src: url("../fontes/archivo-700.woff2") format("woff2"); }
+@font-face { font-family: "Archivo"; font-weight: 800; font-display: block;
+  src: url("../fontes/archivo-800.woff2") format("woff2"); }
+@font-face { font-family: "Public Sans"; font-weight: 400; font-display: block;
+  src: url("../fontes/publicsans-400.woff2") format("woff2"); }
+@font-face { font-family: "Public Sans"; font-weight: 600; font-display: block;
+  src: url("../fontes/publicsans-600.woff2") format("woff2"); }
+@font-face { font-family: "Public Sans"; font-weight: 700; font-display: block;
+  src: url("../fontes/publicsans-700.woff2") format("woff2"); }
+
+:root {
+  --grafite: #0E1526;
+  --grafite-2: #141C30;
+  --grafite-3: #1B2540;
+  --laranja: #DF7234;
+  --laranja-escuro: #B4501A;
+  --laranja-tinta: #1A1005;
+  --branco: #FFFFFF;
+  --cinza: #A6B3D2;
+  --cinza-fraco: #6E7C9E;
+  --azul: #1E3575;
+  --azul-claro: #2A4A9E;
+  --verde: #27A06A;
+  --vermelho: #E05A4E;
+  --margem: 72px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  width: 1080px; height: 1350px; overflow: hidden;
+  background: var(--grafite);
+  font-family: "Public Sans", system-ui, sans-serif;
+  color: var(--branco);
+  -webkit-font-smoothing: antialiased;
+}
+
+.peca {
+  position: relative;
+  width: 1080px; height: 1350px;
+  padding: var(--margem);
+  display: flex; flex-direction: column;
+  background:
+    radial-gradient(1100px 720px at 82% -12%, rgba(223,114,52,.20), transparent 62%),
+    radial-gradient(900px 640px at -10% 108%, rgba(42,74,158,.26), transparent 60%),
+    var(--grafite);
+  overflow: hidden;
+}
+
+/* Textura de fundo: malha discreta, dá profundidade sem competir */
+.peca::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(166,179,210,.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(166,179,210,.055) 1px, transparent 1px);
+  background-size: 90px 90px;
+  mask-image: radial-gradient(760px 560px at 50% 34%, #000 12%, transparent 78%);
+}
+.peca > * { position: relative; z-index: 1; }
+
+/* ---------- Etiqueta (categoria) ---------- */
+.etiqueta {
+  display: inline-flex; align-items: center; gap: 16px;
+  font-size: 22px; font-weight: 700; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--laranja);
+}
+.barras { display: inline-flex; align-items: flex-end; gap: 5px; transform: skewX(-14deg); }
+.barras i { display: block; width: 8px; border-radius: 4px; }
+.barras i:nth-child(1) { height: 26px; background: var(--branco); }
+.barras i:nth-child(2) { height: 19px; background: var(--cinza); }
+.barras i:nth-child(3) { height: 12px; background: var(--laranja); }
+
+/* ---------- Tipografia ---------- */
+.headline {
+  font-family: "Archivo", system-ui, sans-serif;
+  font-weight: 800; letter-spacing: -.032em; line-height: .96;
+  font-size: 96px; text-wrap: balance;
+}
+.headline.g  { font-size: 112px; }
+.headline.p  { font-size: 80px; }
+.headline.pp { font-size: 66px; }
+.destaque { color: var(--laranja); }
+.riscado  { text-decoration: line-through; text-decoration-thickness: 6px;
+            text-decoration-color: var(--vermelho); color: var(--cinza); }
+
+.apoio {
+  font-size: 32px; line-height: 1.42; color: var(--cinza);
+  max-width: 800px; text-wrap: pretty;
+}
+.apoio strong { color: var(--branco); font-weight: 600; }
+
+/* ---------- Rodapé / assinatura ---------- */
+.rodape {
+  margin-top: auto; display: flex; align-items: center;
+  justify-content: space-between; gap: 24px;
+  /* #6E7C9E sobre o grafite dá 4,37:1 e reprova AA — o rodapé usa o cinza cheio. */
+  font-size: 24px; color: var(--cinza); font-weight: 600;
+}
+.marca { display: inline-flex; align-items: center; gap: 14px;
+         color: var(--branco); font-weight: 700; letter-spacing: .01em; }
+.arraste { display: inline-flex; align-items: center; gap: 10px;
+           color: var(--laranja); font-weight: 700; }
+
+/* ---------- Molduras de prova ---------- */
+.celular {
+  width: 372px; flex: none; border-radius: 44px; padding: 11px;
+  background: linear-gradient(160deg, #33405E, #10182B);
+  box-shadow: 0 40px 90px -30px rgba(0,0,0,.85), 0 0 0 1px rgba(166,179,210,.14);
+}
+.celular img { display: block; width: 100%; border-radius: 34px; }
+
+.cartao {
+  border-radius: 22px; overflow: hidden;
+  box-shadow: 0 36px 80px -28px rgba(0,0,0,.85), 0 0 0 1px rgba(166,179,210,.16);
+  background: var(--grafite-2);
+}
+.cartao img { display: block; width: 100%; }
+.cartao .barra-topo {
+  display: flex; align-items: center; gap: 9px;
+  padding: 15px 20px; background: var(--grafite-3);
+}
+.cartao .barra-topo b { width: 13px; height: 13px; border-radius: 50%; background: #3D4A6B; }
+
+/* ---------- Blocos de conteúdo ---------- */
+.placa {
+  background: rgba(166,179,210,.08); border: 1px solid rgba(166,179,210,.18);
+  border-radius: 20px; padding: 30px 34px;
+}
+.placa.laranja { background: rgba(223,114,52,.14); border-color: rgba(223,114,52,.42); }
+.placa.verde   { background: rgba(39,160,106,.14); border-color: rgba(39,160,106,.45); }
+
+.numerao {
+  font-family: "Archivo", system-ui, sans-serif; font-weight: 800;
+  font-size: 150px; line-height: .9; letter-spacing: -.04em; color: var(--laranja);
+}
+
+.lista { display: flex; flex-direction: column; gap: 22px; }
+.item { display: flex; align-items: flex-start; gap: 20px; font-size: 31px; line-height: 1.32; }
+.item .marcador {
+  flex: none; width: 40px; height: 40px; border-radius: 12px; margin-top: 2px;
+  display: grid; place-items: center; font-size: 22px; font-weight: 800;
+  background: rgba(223,114,52,.18); color: var(--laranja);
+}
+.item .marcador.ok  { background: rgba(39,160,106,.18); color: var(--verde); }
+.item .marcador.nao { background: rgba(224,90,78,.16); color: var(--vermelho); }
+
+.selo {
+  display: inline-flex; align-items: center; gap: 12px; align-self: flex-start;
+  padding: 14px 24px; border-radius: 999px; font-size: 24px; font-weight: 700;
+  background: var(--laranja); color: var(--laranja-tinta);
+}
+
+/* ---------- Cabeçalho: etiqueta à esquerda, assinatura à direita ----------
+   Use quando a prova (print) sangra na borda de baixo e não sobra rodapé. */
+.cabecalho {
+  display: flex; align-items: center; justify-content: space-between; gap: 24px;
+}
+.cabecalho .marca { font-size: 26px; }
+
+/* Prova que sangra: estoura a margem lateral/inferior de propósito. */
+.sangra {
+  margin: 0 calc(var(--margem) * -1) calc(var(--margem) * -1);
+  padding: 0 var(--margem);
+  display: flex; gap: 26px; align-items: flex-end;
+}
+
+/* Recorte: print alto demais (ou vazio demais) mostrado só pelo topo.
+   Use --alt pra definir a altura visível. */
+.celular.recorte { height: var(--alt, 560px); }
+.celular.recorte img { height: 100%; object-fit: cover; object-position: top; }
+.cartao.recorte { height: var(--alt, 520px); display: flex; flex-direction: column; }
+.cartao.recorte img { flex: 1; min-height: 0; object-fit: cover; object-position: top; }
+/* Recorte pela parte de baixo do print (ex.: pegar só o mapa de uma tela longa). */
+.recorte.baixo img { object-position: bottom; }
+
+/* Os prints do painel carregam a coluna de menu, e no rodapé dela vinham dois
+   artefatos de desenvolvimento (indicador do Next e o seletor de tema). Cortar o
+   menu tira os dois e ainda dá o dobro de espaço pro que o post quer mostrar. */
+.cartao.sem-menu { overflow: hidden; }
+.cartao.sem-menu img { width: 122%; max-width: none; margin-left: -22%; }

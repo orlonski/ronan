@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="tamanho" content="1080x1080">
+<link rel="stylesheet" href="../base.css">
+<style>
+  body { width:1080px; height:1080px; }
+  .avatar {
+    width:1080px; height:1080px; display:grid; place-items:center;
+    background: radial-gradient(700px 700px at 50% 34%, #2A4A9E, #16224A 62%, #0E1526);
+  }
+  /* O Instagram corta em círculo: nada importante fora do miolo. */
+  .barras-marca { display:flex; align-items:flex-end; gap:34px; transform:skewX(-14deg); }
+  .barras-marca i { display:block; width:96px; border-radius:48px; }
+</style></head>
+<body>
+<div class="avatar">
+  <div class="barras-marca">
+    <i style="height:420px;background:#FFFFFF"></i>
+    <i style="height:300px;background:#A6B3D2"></i>
+    <i style="height:196px;background:#DF7234"></i>
+  </div>
+</div>
+</body></html>
