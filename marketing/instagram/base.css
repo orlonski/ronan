@@ -172,6 +172,18 @@ body {
    Use --alt pra definir a altura visível. */
 .celular.recorte { height: var(--alt, 560px); }
 .celular.recorte img { height: 100%; object-fit: cover; object-position: top; }
+
+/* Celular tem que PARECER celular.
+   O print do app é 760x1645 — alto e estreito, 1:2,16. A imagem nunca distorce
+   (o `cover` preserva a proporção e corta), mas a MOLDURA vira uma caixa quase
+   quadrada se a peça pedir 320 de largura por 400 de altura, e aí a tela parece
+   gorda. Esta trava tira a conta da mão de quem escreve a peça: define-se só a
+   largura, e a altura sai da proporção de um telefone.
+   Quando precisar mostrar menos tela, diminua a largura — não achate a caixa. */
+.celular.recorte {
+  aspect-ratio: 1 / 2.05;
+  height: auto;
+}
 .cartao.recorte { height: var(--alt, 520px); display: flex; flex-direction: column; }
 .cartao.recorte img { flex: 1; min-height: 0; object-fit: cover; object-position: top; }
 /* Recorte pela parte de baixo do print (ex.: pegar só o mapa de uma tela longa). */

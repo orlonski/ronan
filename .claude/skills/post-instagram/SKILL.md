@@ -85,6 +85,10 @@ O feed alterna os dois públicos: dono de transportadora (quem paga) e motorista
   `@default(false)` e ainda roda em modo sombra). A leitura do ticket é que vem ligada.
   Venda como recurso que se liga, não como padrão.
 - **Números precisam de origem.** Comentário no código não é medição.
+- **Celular tem que parecer celular.** O print do app é 760×1645 (1:2,16). A moldura
+  `.celular.recorte` trava a proporção sozinha — a peça define **só a largura**. Pra
+  mostrar menos tela, diminua a largura; nunca achate a caixa. Uma moldura 320×400 com
+  canto arredondado não lê como telefone, lê como tela gorda.
 - **Os prints antigos** em `apps/site/public/telas/` carregam a badge do Next devtools
   no canto do menu. A classe `.cartao.sem-menu` corta essa coluna; a correção de raiz é
   recapturar do build de produção (receita em `marketing/capturas/README.md`).
