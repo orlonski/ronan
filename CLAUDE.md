@@ -233,6 +233,10 @@ No app nativo, `EXPO_PUBLIC_API_URL` **não** é setado no EAS (usa fallback do 
 todas. Cinco agentes em `.claude/agents/ig-*.md` cobrem estratégia, copy, direção de
 arte, design e QA; a receita completa está na skill `post-instagram`.
 
+O publicador automático (API oficial da Meta, sem navegador) vive em
+`apps/api/src/marketing/` e nasce desligado em dois interruptores: credencial em env
+e `ConfiguracaoPlataforma.instagramAtivo`. Como ligar: `docs/instagram-publicador.md`.
+
 **Nada vai pro ar sem existir no código.** O `ig-qa` confere cada promessa contra o
 repositório — na primeira leva ele barrou cinco peças que pareciam verdade e não eram.
 Prints de produto saem do build de produção (`marketing/capturas/`), porque os antigos
