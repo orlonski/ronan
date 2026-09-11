@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -65,6 +67,7 @@ export default function MarketingPage() {
 
 function Conteudo() {
   const { temPermissao } = usePermissoes();
+  const [verEncerrados, setVerEncerrados] = useState(false);
   const token = useAuthToken();
   const qc = useQueryClient();
 
@@ -82,6 +85,10 @@ function Conteudo() {
   const { data: posts, isLoading } = useApiQuery<Post[]>("/admin/marketing/instagram", {
     refetchInterval: 30_000,
   });
+
+  const ENCERRADOS = ["CANCELADO", "DESCARTADA"];
+  const vivos = (posts ?? []).filter((p) => !ENCERRADOS.includes(p.status));
+  const encerrados = (posts ?? []).filter((p) => ENCERRADOS.includes(p.status));
 
   return (
     <div className="space-y-6">
@@ -144,14 +151,36 @@ function Conteudo() {
       <Card className="divide-y">
         {isLoading ? (
           <p className="p-6 text-sm text-muted-foreground">Carregando…</p>
-        ) : !posts || posts.length === 0 ? (
+        ) : vivos.length === 0 ? (
           <p className="p-6 text-sm text-muted-foreground">
-            Nenhum post na fila. Eles entram pela API, junto da arte já em JPEG.
+            Nenhum post na fila. Peça uma leva ao agente ou agende um acima.
           </p>
         ) : (
-          posts.map((p) => <Linha key={p.id} post={p} />)
+          vivos.map((p) => <Linha key={p.id} post={p} />)
         )}
       </Card>
+
+      {/* Cancelado e descartado não voltam: ficam fora da vista por padrão, e
+          o histórico segue acessível pra quem quiser conferir o que houve. */}
+      {encerrados.length > 0 ? (
+        <div>
+          <button
+            onClick={() => setVerEncerrados((v) => !v)}
+            className="text-sm text-muted-foreground underline-offset-2 hover:underline"
+          >
+            {verEncerrados
+              ? "Esconder encerrados"
+              : `Ver ${encerrados.length} encerrado${encerrados.length > 1 ? "s" : ""} (cancelados e descartados)`}
+          </button>
+          {verEncerrados ? (
+            <Card className="mt-3 divide-y opacity-70">
+              {encerrados.map((p) => (
+                <Linha key={p.id} post={p} />
+              ))}
+            </Card>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

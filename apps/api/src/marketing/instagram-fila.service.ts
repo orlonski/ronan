@@ -36,6 +36,53 @@ export class InstagramFilaService {
     private readonly config: InstagramConfig,
   ) {}
 
+  /**
+   * Já existe post vivo com essa peça?
+   *
+   * Duas execuções do agente rodam sem saber uma da outra, e nada impede que
+   * escolham o mesmo ângulo — foi o que aconteceu na primeira leva: a mesma
+   * peça entrou duas vezes, agendada pro mesmo horário. No feed isso seria o
+   * post repetido.
+   */
+  async pecaJaNaFila(peca: string): Promise<boolean> {
+    const n = await this.prisma.postInstagram.count({
+      where: {
+        peca,
+        status: {
+          in: [
+            StatusPostInstagram.RASCUNHO,
+            StatusPostInstagram.AGENDADO,
+            StatusPostInstagram.PUBLICANDO,
+            StatusPostInstagram.PUBLICADO,
+          ],
+        },
+      },
+    });
+    return n > 0;
+  }
+
+  /**
+   * Empurra o horário até achar um livre.
+   *
+   * Dois posts na mesma hora significam os dois saindo no mesmo ciclo — o teto
+   * diário permite, mas o feed fica com duas publicações no mesmo minuto, que é
+   * exatamente o padrão que derrubou a conta numa verificação anti-bot.
+   */
+  async horarioLivre(desejado: Date): Promise<Date> {
+    const candidato = new Date(desejado);
+    for (let tentativa = 0; tentativa < 30; tentativa++) {
+      const ocupado = await this.prisma.postInstagram.count({
+        where: {
+          publicarEm: candidato,
+          status: { in: [StatusPostInstagram.AGENDADO, StatusPostInstagram.PUBLICANDO] },
+        },
+      });
+      if (ocupado === 0) return candidato;
+      candidato.setDate(candidato.getDate() + 1);
+    }
+    return candidato;
+  }
+
   async enfileirar(dados: Enfileirar): Promise<PostInstagram> {
     const expiraEm = new Date(Date.now() + dados.validadeHoras * 3600_000);
     return this.prisma.postInstagram.create({

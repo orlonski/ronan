@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
   Post,
   UploadedFile,
@@ -69,11 +70,23 @@ export class IngestaoController {
     }
 
     return comoSistema(async () => {
+      // Duas execuções do agente não se enxergam: sem isto, escolher o mesmo
+      // ângulo nas duas vira post repetido no feed. Recusa é melhor que
+      // duplicata — o agente vê o motivo e pode tentar outro assunto.
+      if (await this.fila.pecaJaNaFila(body.peca)) {
+        throw new ConflictException(
+          `A peça "${body.peca}" já está na fila ou já foi publicada. Escolha outro assunto.`,
+        );
+      }
+
+      // Dois posts na mesma hora sairiam no mesmo ciclo, um atrás do outro.
+      const quando = body.publicarEm ? await this.fila.horarioLivre(body.publicarEm) : null;
+
       const storageKey = await this.uploads.putArteInstagram(arte.buffer);
       const post = await this.fila.enfileirar({
         peca: body.peca,
         legenda: body.legenda,
-        publicarEm: body.publicarEm ?? null,
+        publicarEm: quando,
         storageKey,
         // Null = veio de automação, não de gente. É o que a tela usa pra
         // mostrar quem agendou.
