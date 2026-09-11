@@ -1,0 +1,11 @@
+Ficou sem sinal na serra e, quando voltou, o app pediu login de novo — como se você tivesse feito algo errado?
+
+No Movatruck isso não acontece.
+
+O app só desloga quando o servidor recusa a sua sessão de verdade. Sinal fraco, timeout ou servidor engasgado não contam como isso — sua sessão fica esperando a rede voltar, do jeito que você deixou.
+
+Rodar sem sinal não devia significar perder o acesso ao seu próprio trabalho.
+
+Chama no direct que a gente te manda o link do app.
+
+#movatruck #caminhoneiro #motoristadecaminhao #appparamotorista #semsinal #logistica #transportadora #estrada #caminhao #frete
