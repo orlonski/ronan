@@ -6,6 +6,7 @@ import type { AgenteService } from "../whatsapp/agente/agente.service";
 import type { ChatwootClientService } from "./chatwoot-client.service";
 import type { ConviteService } from "../whatsapp/convite.service";
 import type { SdrService, RespostaSdr } from "../sdr/sdr.service";
+import type { ConfigService } from "@nestjs/config";
 
 const MOTORISTA: SessaoResolvida = {
   tipo: "MOTORISTA",
@@ -31,6 +32,8 @@ function montar(
     ehLead?: boolean;
     /** O SDR explode (falha de IA, timeout). */
     sdrErro?: string;
+    /** Id do inbox comercial, como vem do env. */
+    inboxComercial?: string;
   } = {},
 ) {
   const create = vi.fn(async (_args: { data: { direcao: string } }) => ({}));
@@ -72,6 +75,10 @@ function montar(
     { contaDoCodigo, consumir } as unknown as ConviteService,
     { responder, passarParaHumano } as unknown as ChatwootClientService,
     { atender } as unknown as SdrService,
+    {
+      get: (k: string) =>
+        k === "CHATWOOT_INBOX_COMERCIAL" ? (opts.inboxComercial ?? undefined) : undefined,
+    } as unknown as ConfigService,
   );
   return { s, create, findUnique, processar, responder, passarParaHumano, consumir, atender };
 }
@@ -301,5 +308,62 @@ describe("o SDR atendendo prospect", () => {
     await s.processar(evento({ content: "e minha viagem de ontem?" }));
     expect(processar).toHaveBeenCalledOnce();
     expect(atender).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * O canal por onde a pessoa escreveu decide quem atende.
+ *
+ * A fronteira é de segurança: o agente do motorista lê viagem, km e ticket de
+ * uma empresa, e o comercial é o canal onde qualquer prospect escreve.
+ */
+describe("canal comercial", () => {
+  const COMERCIAL = { inbox: { id: 2 } };
+
+  it("motorista conhecido que escreve no comercial NÃO fala com o agente dele", async () => {
+    const { s, processar, passarParaHumano } = montar({ inboxComercial: "2" });
+    await s.processar(evento(COMERCIAL));
+    expect(processar).not.toHaveBeenCalled();
+    expect(passarParaHumano).toHaveBeenCalled();
+  });
+
+  it("lead conhecido no comercial é atendido pelo SDR", async () => {
+    const { s, atender, responder } = montar({
+      inboxComercial: "2",
+      identidade: DESCONHECIDO,
+      ehLead: true,
+      respostaSdr: {
+        texto: "Oi! Posso te mostrar como funciona?",
+        passarParaHumano: false,
+        motivoHumano: null,
+        ferramentas: [],
+      },
+    });
+    await s.processar(evento(COMERCIAL));
+    expect(atender).toHaveBeenCalled();
+    expect(responder).toHaveBeenCalledWith(1, 7, "Oi! Posso te mostrar como funciona?");
+  });
+
+  it("desconhecido no comercial não fica em silêncio", async () => {
+    const { s, responder, passarParaHumano } = montar({
+      inboxComercial: "2",
+      identidade: DESCONHECIDO,
+      ehLead: false,
+    });
+    await s.processar(evento(COMERCIAL));
+    expect(responder).toHaveBeenCalled();
+    expect(passarParaHumano).toHaveBeenCalled();
+  });
+
+  it("no inbox de operação o motorista segue falando com o agente", async () => {
+    const { s, processar } = montar({ inboxComercial: "2" });
+    await s.processar(evento({ inbox: { id: 1 } }));
+    expect(processar).toHaveBeenCalled();
+  });
+
+  it("sem inbox comercial configurado, nada muda", async () => {
+    const { s, processar } = montar();
+    await s.processar(evento(COMERCIAL));
+    expect(processar).toHaveBeenCalled();
   });
 });

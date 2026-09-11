@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../prisma/prisma.service";
 import { comConta, comoSistema } from "../common/conta/conta-context";
 import { AgenteService } from "../whatsapp/agente/agente.service";
@@ -40,6 +41,14 @@ type EventoChatwoot = {
 export class ChatwootAgenteService {
   private readonly log = new Logger("ChatwootAgente");
 
+  /**
+   * O inbox do número COMERCIAL (`CHATWOOT_INBOX_COMERCIAL`).
+   *
+   * Vazio = não existe canal de vendas separado, e tudo segue pelo caminho
+   * antigo. É o estado em que o sistema viveu enquanto havia um número só.
+   */
+  private readonly inboxComercial: number | null;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly sessao: SessaoService,
@@ -47,7 +56,14 @@ export class ChatwootAgenteService {
     private readonly convite: ConviteService,
     private readonly chatwoot: ChatwootClientService,
     private readonly sdr: SdrService,
-  ) {}
+    config: ConfigService,
+  ) {
+    const bruto = Number(config.get<string>("CHATWOOT_INBOX_COMERCIAL"));
+    this.inboxComercial = Number.isInteger(bruto) && bruto > 0 ? bruto : null;
+    if (this.inboxComercial) {
+      this.log.log(`inbox ${this.inboxComercial} é o canal comercial (sem agente do motorista)`);
+    }
+  }
 
   /**
    * Nunca lança: quem chama já respondeu 200 pro Chatwoot. Erro aqui vira log,
@@ -74,6 +90,22 @@ export class ChatwootAgenteService {
 
     if (!conversaId || !contaChatwoot) {
       this.log.warn("evento sem conversa ou conta — ignorado");
+      return;
+    }
+
+    // O canal por onde a pessoa escreveu diz mais que o número dela.
+    //
+    // Quem escreve no comercial veio de anúncio, do site ou da prospecção: é
+    // conversa de VENDA. O agente do motorista não entra aqui nem quando o
+    // telefone bate com um motorista cadastrado — ele carrega ferramentas que
+    // leem viagem, km e ticket de uma empresa, e nada disso se responde no
+    // canal onde um prospect qualquer pode escrever.
+    //
+    // O contrário também vale, e é o motivo de a decisão ser por inbox e não
+    // por telefone: um motorista que escreve no número de operação continua
+    // caindo no agente dele, como sempre.
+    if (this.inboxComercial && evento.inbox?.id === this.inboxComercial) {
+      await this.atenderNoComercial(texto, telefone, contaChatwoot, conversaId);
       return;
     }
 
@@ -170,6 +202,29 @@ export class ChatwootAgenteService {
       // que parecia falha de envio.
       await this.sessao.marcarMensagemRecebida(identidade.sessaoId);
     });
+  }
+
+  /**
+   * Atendimento do canal comercial.
+   *
+   * Sem agente do motorista, sem código de convite: só funil e SDR. Quem o SDR
+   * não atende (lead desconhecido, SDR desligado, opt-out) vai pra fila humana
+   * com uma palavra — nunca em silêncio, porque silêncio no WhatsApp é a forma
+   * mais rápida de perder uma venda que já tinha chegado.
+   */
+  private async atenderNoComercial(
+    texto: string,
+    telefone: string,
+    contaChatwoot: number,
+    conversaId: number,
+  ): Promise<void> {
+    const leadId = await this.registrarNoFunil(telefone, texto);
+
+    if (leadId && (await this.atenderComoSdr(leadId, texto, contaChatwoot, conversaId))) return;
+
+    this.log.log(`comercial: conversa ${conversaId} vai pra fila humana`);
+    await this.chatwoot.responder(contaChatwoot, conversaId, TEXTO_DESCONHECIDO);
+    await this.chatwoot.passarParaHumano(contaChatwoot, conversaId);
   }
 
   /**
