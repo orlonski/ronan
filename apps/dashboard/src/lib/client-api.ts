@@ -6,6 +6,9 @@ import type { DataTableParams } from "@/hooks/use-data-table-state";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
+/** A base da API, pra quem precisa montar a chamada na mão (upload com FormData). */
+export const apiBaseUrl = API_URL;
+
 // Colapsa 401s concorrentes numa única renovação de sessão — quando o access
 // (15min) expira, várias queries batem 401 ao mesmo tempo; sem isso cada uma
 // dispararia um getSession/refresh. Espelha o dedup do app nativo.

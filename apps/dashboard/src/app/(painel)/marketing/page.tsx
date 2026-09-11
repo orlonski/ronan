@@ -4,7 +4,8 @@ import { AlertTriangle, CheckCircle2, Clock, Instagram, PauseCircle, XCircle } f
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useApiQuery, useAuthToken, fetchApi } from "@/lib/client-api";
+import { useApiQuery, useAuthToken, fetchApi, apiBaseUrl } from "@/lib/client-api";
+import { NovoPost } from "./_components/novo-post";
 import { usePermissoes } from "@/lib/permissoes";
 import { Button } from "@/components/ui/button";
 import { RequerTela } from "@/components/requer-tela";
@@ -53,6 +54,7 @@ export default function MarketingPage() {
 }
 
 function Conteudo() {
+  const { temPermissao } = usePermissoes();
   const { data: estado } = useApiQuery<Estado>("/admin/marketing/instagram/estado", {
     refetchInterval: 30_000,
   });
@@ -74,6 +76,8 @@ function Conteudo() {
       </div>
 
       {estado ? <Estado estado={estado} /> : null}
+
+      {temPermissao("marketing.criar") ? <NovoPost apiUrl={apiBaseUrl} /> : null}
 
       <Card className="divide-y">
         {isLoading ? (
