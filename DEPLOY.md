@@ -83,7 +83,7 @@ VIACEP_URL=https://viacep.com.br/ws
 ANTHROPIC_API_KEY=sk-ant-api03-...
 MINIMAX_API_KEY=            # opcional — leitura de ticket em avaliação
 CORS_ORIGINS=https://painel.SEU-DOMINIO.com.br,https://app.SEU-DOMINIO.com.br
-PUBLIC_APP_URL=https://app.schaba.com.br
+PUBLIC_APP_URL=https://app.movatruck.com.br
 ```
 
 > `PUBLIC_APP_URL` é a base pública do painel, usada pra montar o link do
@@ -91,6 +91,11 @@ PUBLIC_APP_URL=https://app.schaba.com.br
 > WhatsApp. Mora na API, e não como `NEXT_PUBLIC_*` no dashboard, porque lá seria
 > baked no build da imagem — aqui basta reiniciar. Sem valor, a API loga um
 > `warn` no boot e os links saem apontando pra `localhost:3001`.
+>
+> **Tem que ser o domínio da plataforma.** Ficou em `app.schaba.com.br` por muito
+> tempo, e esse link é o que a transportadora manda pro cliente dela: o comprovante
+> saía com a logo certa e o domínio do primeiro cliente. Trocado pra
+> `app.movatruck.com.br` em 11/09/2026 (os dois apontam pro mesmo painel).
 
 ### Domínio
 
