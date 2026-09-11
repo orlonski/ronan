@@ -510,5 +510,66 @@ export type AtualizarRoteamentoPlataformaInput = z.infer<
  */
 export const RegistrarNumeroMetaInput = z.object({
   pin: z.string().regex(/^\d{6}$/, "O PIN tem exatamente 6 dígitos."),
+  /**
+   * Qual número registrar. Ausente = o número do env, que era o único que
+   * existia quando este endpoint nasceu. Com o número comercial ao lado do
+   * transacional, omitir passou a significar "o transacional", nunca "o que
+   * você está registrando agora".
+   */
+  phoneNumberId: z
+    .string()
+    .regex(/^\d{5,}$/, "Id da Meta é só dígitos (é o ID, não o telefone).")
+    .optional(),
 });
 export type RegistrarNumeroMetaInput = z.infer<typeof RegistrarNumeroMetaInput>;
+
+/**
+ * Ciclo de vida de um número NOVO na Cloud API.
+ *
+ * Existe porque o registro do primeiro número (21/08/2026) só saiu por endpoint
+ * próprio: o botão "Registrar" do console fechou a janela do PIN quatro vezes
+ * sem emitir requisição nenhuma. Repetir aquele dia a cada chip novo não é
+ * aceitável — e com dois números (transacional e comercial) as ferramentas não
+ * podem mais falar de um número implícito que vem do env.
+ *
+ * Por isso todo schema daqui carrega o `phoneNumberId` ou o `wabaId` explícito.
+ */
+
+/** Id de número da Meta: dígitos, e é o ID — nunca o telefone em si. */
+const IdMeta = z.string().regex(/^\d{5,}$/, "Id da Meta é só dígitos (é o ID, não o telefone).");
+
+/**
+ * Adiciona um número à WABA.
+ *
+ * `cc` é o código do país separado do número, do jeito que a Meta exige — "55"
+ * e "42984223261", não "+5542...". O nome de exibição entra em revisão à parte
+ * e a Meta cobra relação com o negócio verificado: até aprovar, quem recebe vê
+ * o número cru.
+ */
+export const AdicionarNumeroMetaInput = z.object({
+  wabaId: IdMeta,
+  cc: z.string().regex(/^\d{1,4}$/, "Código do país: só dígitos, sem o +."),
+  numero: z.string().regex(/^\d{8,15}$/, "Número: só dígitos, sem o código do país."),
+  nomeExibicao: z.string().min(3, "O nome de exibição tem ao menos 3 letras.").max(60),
+});
+export type AdicionarNumeroMetaInput = z.infer<typeof AdicionarNumeroMetaInput>;
+
+/**
+ * Pede o código de verificação do número.
+ *
+ * SMS é o padrão; VOICE é a saída quando o chip não recebe SMS (o chip não
+ * precisa ficar num aparelho pra sempre — precisa receber UMA verificação).
+ */
+export const SolicitarCodigoMetaInput = z.object({
+  phoneNumberId: IdMeta,
+  metodo: z.enum(["SMS", "VOICE"]).default("SMS"),
+  idioma: z.string().min(2).max(5).default("pt_BR"),
+});
+export type SolicitarCodigoMetaInput = z.infer<typeof SolicitarCodigoMetaInput>;
+
+/** Confirma o código que chegou por SMS/ligação. */
+export const VerificarCodigoMetaInput = z.object({
+  phoneNumberId: IdMeta,
+  codigo: z.string().regex(/^\d{3}-?\d{3}$/, "O código tem 6 dígitos (a Meta manda com hífen)."),
+});
+export type VerificarCodigoMetaInput = z.infer<typeof VerificarCodigoMetaInput>;

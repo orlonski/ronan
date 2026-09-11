@@ -223,8 +223,26 @@ export class AdminRoteamentoWhatsappService {
   }
 
   /** O que a Meta diz sobre o número configurado no servidor. */
-  statusNumero() {
-    return this.meta.statusNumero();
+  statusNumero(phoneNumberId?: string) {
+    return this.meta.statusNumero(phoneNumberId);
+  }
+
+  /** Todos os números da WABA e em que etapa cada um está. */
+  numeros(wabaId: string) {
+    return this.meta.listarNumeros(wabaId);
+  }
+
+  adicionarNumero(dados: { wabaId: string; cc: string; numero: string; nomeExibicao: string }) {
+    return this.meta.adicionarNumero(dados.wabaId, dados);
+  }
+
+  solicitarCodigo(phoneNumberId: string, metodo: "SMS" | "VOICE", idioma: string) {
+    return this.meta.solicitarCodigo(phoneNumberId, metodo, idioma);
+  }
+
+  /** O código atravessa este método e não é gravado nem logado. */
+  verificarCodigo(phoneNumberId: string, codigo: string) {
+    return this.meta.verificarCodigo(phoneNumberId, codigo);
   }
 
   appsInscritos(wabaId: string) {
@@ -245,8 +263,8 @@ export class AdminRoteamentoWhatsappService {
    * Sem conta no contexto e sem gravar nada: é operação sobre o número da
    * plataforma, não sobre dados de empresa. O PIN só atravessa este método.
    */
-  registrarNumero(pin: string) {
-    return this.meta.registrarNumero(pin);
+  registrarNumero(pin: string, phoneNumberId?: string) {
+    return this.meta.registrarNumero(pin, phoneNumberId);
   }
 
   /**

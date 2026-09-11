@@ -199,3 +199,77 @@ describe("simulação de payload", () => {
     expect(r.ok === false && r.erro).toContain("grupo");
   });
 });
+
+/**
+ * As ferramentas de número. Existem porque o console da Meta falhou em
+ * registrar o primeiro número quatro vezes sem emitir requisição, e porque com
+ * dois números em produção nenhuma delas pode mais falar de um número
+ * implícito vindo do env.
+ */
+describe("ciclo de vida do número", () => {
+  const OK_JSON = { id: "123456" };
+
+  it("status-numero usa o id passado, não o do env", async () => {
+    fetchMock = respondeCom(200, OK_JSON);
+    vi.stubGlobal("fetch", fetchMock);
+    await provedor().statusNumero("777");
+    expect(fetchMock.mock.calls[0]![0]).toContain("/777?fields=");
+    expect(fetchMock.mock.calls[0]![0]).not.toContain("/999?");
+  });
+
+  it("sem id passado, cai no número do env", async () => {
+    fetchMock = respondeCom(200, OK_JSON);
+    vi.stubGlobal("fetch", fetchMock);
+    await provedor().statusNumero();
+    expect(fetchMock.mock.calls[0]![0]).toContain("/999?fields=");
+  });
+
+  it("registrar aceita um número que não é o do env", async () => {
+    fetchMock = respondeCom(200, { success: true });
+    vi.stubGlobal("fetch", fetchMock);
+    await provedor().registrarNumero("123456", "777");
+    expect(fetchMock.mock.calls[0]![0]).toContain("/777/register");
+    expect(corpoEnviado(fetchMock)).toMatchObject({ messaging_product: "whatsapp", pin: "123456" });
+  });
+
+  it("adicionar número manda cc e telefone separados, como a Meta exige", async () => {
+    fetchMock = respondeCom(200, OK_JSON);
+    vi.stubGlobal("fetch", fetchMock);
+    await provedor().adicionarNumero("888", {
+      cc: "55",
+      numero: "42999998888",
+      nomeExibicao: "Movatruck Comercial",
+    });
+    expect(fetchMock.mock.calls[0]![0]).toContain("/888/phone_numbers");
+    expect(corpoEnviado(fetchMock)).toEqual({
+      cc: "55",
+      phone_number: "42999998888",
+      verified_name: "Movatruck Comercial",
+    });
+  });
+
+  it("o hífen do código da Meta não volta pra ela", async () => {
+    fetchMock = respondeCom(200, { success: true });
+    vi.stubGlobal("fetch", fetchMock);
+    await provedor().verificarCodigo("777", "123-456");
+    expect(corpoEnviado(fetchMock)).toEqual({ code: "123456" });
+  });
+
+  it("operação de WABA não depende do número do env estar configurado", async () => {
+    fetchMock = respondeCom(200, { data: [] });
+    vi.stubGlobal("fetch", fetchMock);
+    const semNumero = provedor({ META_WHATSAPP_TOKEN: "TOKEN" });
+    const r = (await semNumero.listarNumeros("888")) as { ok?: boolean };
+    expect(r.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
+  it("sem token nenhum, responde erro legível em vez de bater na rede", async () => {
+    fetchMock = respondeCom(200, {});
+    vi.stubGlobal("fetch", fetchMock);
+    const r = (await provedor({}).listarNumeros("888")) as { ok?: boolean; erro?: string };
+    expect(r.ok).toBe(false);
+    expect(r.erro).toContain("token");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

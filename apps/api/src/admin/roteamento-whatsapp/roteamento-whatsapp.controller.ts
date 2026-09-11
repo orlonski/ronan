@@ -1,9 +1,12 @@
 import { Body, Controller, Get, Post, Put, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import {
+  AdicionarNumeroMetaInput,
   AtualizarRoteamentoPlataformaInput,
   AtualizarRoteamentoWhatsappInput,
   RegistrarNumeroMetaInput,
+  SolicitarCodigoMetaInput,
+  VerificarCodigoMetaInput,
 } from "@ronan/shared-types";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
@@ -103,9 +106,50 @@ export class AdminRoteamentoWhatsappController {
     return this.service.templatesMeta(wabaId);
   }
 
+  /**
+   * `?phoneNumberId=` escolhe qual número olhar. Sem ele, o do env — que hoje
+   * é o transacional, e não o que alguém está registrando agora.
+   */
   @Get("status-numero")
-  statusNumero() {
-    return this.service.statusNumero();
+  statusNumero(@Query("phoneNumberId") phoneNumberId?: string) {
+    return this.service.statusNumero(phoneNumberId);
+  }
+
+  /**
+   * Os números da WABA, cada um com a etapa em que parou.
+   *
+   * Com dois números (transacional e comercial) esta é a primeira tela a olhar:
+   * diz o id de cada um — que é o que todo o resto do fluxo pede — e separa
+   * "verificado" de "registrado na Cloud API", que o console trata como a
+   * mesma coisa e não são.
+   */
+  @Get("numeros")
+  numeros(@Query("wabaId") wabaId: string) {
+    return this.service.numeros(wabaId);
+  }
+
+  /** Adiciona um número novo à WABA. Devolve o id que o resto do fluxo usa. */
+  @Post("adicionar-numero")
+  adicionarNumero(
+    @Body(new ZodValidationPipe(AdicionarNumeroMetaInput)) body: AdicionarNumeroMetaInput,
+  ) {
+    return this.service.adicionarNumero(body);
+  }
+
+  /** Dispara o SMS (ou a ligação) de verificação pro chip. */
+  @Post("solicitar-codigo")
+  solicitarCodigo(
+    @Body(new ZodValidationPipe(SolicitarCodigoMetaInput)) body: SolicitarCodigoMetaInput,
+  ) {
+    return this.service.solicitarCodigo(body.phoneNumberId, body.metodo, body.idioma);
+  }
+
+  /** Confirma o código recebido. Ele não é logado nem gravado. */
+  @Post("verificar-codigo")
+  verificarCodigo(
+    @Body(new ZodValidationPipe(VerificarCodigoMetaInput)) body: VerificarCodigoMetaInput,
+  ) {
+    return this.service.verificarCodigo(body.phoneNumberId, body.codigo);
   }
 
   /**
@@ -143,7 +187,7 @@ export class AdminRoteamentoWhatsappController {
   registrarNumero(
     @Body(new ZodValidationPipe(RegistrarNumeroMetaInput)) body: RegistrarNumeroMetaInput,
   ) {
-    return this.service.registrarNumero(body.pin);
+    return this.service.registrarNumero(body.pin, body.phoneNumberId);
   }
 
   @Put()

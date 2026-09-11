@@ -175,7 +175,9 @@ export class MetaProvedor implements ProvedorWhatsappClient {
    * indisponível" com ele disponível, no mesmo dia. Perguntar direto pra Graph
    * API é a única resposta que não depende do rótulo de uma tela.
    */
-  async statusNumero(): Promise<Record<string, unknown>> {
+  async statusNumero(phoneNumberId?: string): Promise<Record<string, unknown>> {
+    const alvo = phoneNumberId ?? this.phoneNumberId;
+    if (!alvo) return { ok: false, erro: "Nenhum número informado nem configurado no servidor." };
     const campos = [
       "id",
       "display_phone_number",
@@ -184,8 +186,9 @@ export class MetaProvedor implements ProvedorWhatsappClient {
       "quality_rating",
       "platform_type",
       "throughput",
+      "name_status",
     ].join(",");
-    return this.chamar(`/${this.phoneNumberId}?fields=${campos}`, "GET");
+    return this.chamar(`/${alvo}?fields=${campos}`, "GET");
   }
 
   /**
@@ -197,10 +200,82 @@ export class MetaProvedor implements ProvedorWhatsappClient {
    *
    * O pin nunca é logado, nem em erro. Ele entra no corpo e sai do escopo.
    */
-  async registrarNumero(pin: string): Promise<Record<string, unknown>> {
-    return this.chamar(`/${this.phoneNumberId}/register`, "POST", {
+  async registrarNumero(pin: string, phoneNumberId?: string): Promise<Record<string, unknown>> {
+    const alvo = phoneNumberId ?? this.phoneNumberId;
+    if (!alvo) return { ok: false, erro: "Nenhum número informado nem configurado no servidor." };
+    return this.chamar(`/${alvo}/register`, "POST", {
       messaging_product: "whatsapp",
       pin,
+    });
+  }
+
+  /**
+   * Todos os números da WABA, com o estado que importa em cada um.
+   *
+   * É a pergunta que não tinha resposta enquanto existia um número só: qual é o
+   * id de cada número, qual já está registrado na Cloud API e qual ainda é só
+   * verificado. O console responde as duas coisas com o mesmo rótulo.
+   *
+   * Sinal de número pronto pra enviar: `platform_type: CLOUD_API` +
+   * `throughput` preenchido. `code_verification_status: VERIFIED` sozinho NÃO
+   * quer dizer registrado — foi exatamente essa confusão que custou um dia em
+   * agosto de 2026.
+   */
+  async listarNumeros(wabaId: string): Promise<Record<string, unknown>> {
+    const campos = [
+      "id",
+      "display_phone_number",
+      "verified_name",
+      "name_status",
+      "code_verification_status",
+      "quality_rating",
+      "platform_type",
+      "throughput",
+    ].join(",");
+    return this.chamar(`/${wabaId}/phone_numbers?fields=${campos}&limit=50`, "GET");
+  }
+
+  /**
+   * Adiciona um número à WABA. Devolve o `id` novo — que é o que todo o resto
+   * do fluxo (código, verificação, registro) usa dali pra frente.
+   *
+   * O código do país vai separado do número, do jeito que a Meta exige.
+   */
+  async adicionarNumero(
+    wabaId: string,
+    dados: { cc: string; numero: string; nomeExibicao: string },
+  ): Promise<Record<string, unknown>> {
+    return this.chamar(`/${wabaId}/phone_numbers`, "POST", {
+      cc: dados.cc,
+      phone_number: dados.numero,
+      verified_name: dados.nomeExibicao,
+    });
+  }
+
+  /**
+   * Pede o código de verificação. O chip precisa estar num aparelho só agora:
+   * é UMA mensagem (ou ligação), e depois ele pode voltar pra gaveta.
+   */
+  async solicitarCodigo(
+    phoneNumberId: string,
+    metodo: "SMS" | "VOICE",
+    idioma: string,
+  ): Promise<Record<string, unknown>> {
+    return this.chamar(`/${phoneNumberId}/request_code`, "POST", {
+      code_method: metodo,
+      language: idioma,
+    });
+  }
+
+  /**
+   * Confirma o código. A Meta manda com hífen ("123-456") e recusa o hífen de
+   * volta — tirar aqui evita o erro mais bobo possível no meio do fluxo.
+   *
+   * O código não é logado em lugar nenhum, como o PIN.
+   */
+  async verificarCodigo(phoneNumberId: string, codigo: string): Promise<Record<string, unknown>> {
+    return this.chamar(`/${phoneNumberId}/verify_code`, "POST", {
+      code: codigo.replace(/\D/g, ""),
     });
   }
 
@@ -270,8 +345,11 @@ export class MetaProvedor implements ProvedorWhatsappClient {
     metodo: "GET" | "POST" | "DELETE",
     corpo?: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    if (!this.configurado()) {
-      return { ok: false, erro: "Meta não está configurada no servidor." };
+    // Só o TOKEN, não `configurado()`. Metade das chamadas daqui é sobre a WABA
+    // ou sobre um número que ainda nem existe — exigir o número do env faria o
+    // diagnóstico de um número novo depender do número velho estar configurado.
+    if (!this.token) {
+      return { ok: false, erro: "Meta não está configurada no servidor (falta o token)." };
     }
     const ac = new AbortController();
     const t = setTimeout(() => ac.abort(), TIMEOUT_MS);
