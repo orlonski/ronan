@@ -226,6 +226,18 @@ Sempre commitar `pnpm-lock.yaml` — o build usa `--frozen-lockfile`. Detalhes d
 
 No app nativo, `EXPO_PUBLIC_API_URL` **não** é setado no EAS (usa fallback do código). Já houve OTA publicado com URL de teste vazada pelo cache do Metro — conferir a URL dentro do bundle antes e depois de publicar.
 
+## Marketing — Instagram (@movatruck)
+
+`marketing/instagram/` é a fábrica de posts: a arte é **HTML renderizado em PNG**
+(`node render.mjs`), não arquivo de editor gráfico — mexer no `base.css` refaz as peças
+todas. Cinco agentes em `.claude/agents/ig-*.md` cobrem estratégia, copy, direção de
+arte, design e QA; a receita completa está na skill `post-instagram`.
+
+**Nada vai pro ar sem existir no código.** O `ig-qa` confere cada promessa contra o
+repositório — na primeira leva ele barrou cinco peças que pareciam verdade e não eram.
+Prints de produto saem do build de produção (`marketing/capturas/`), porque os antigos
+em `apps/site/public/telas/` carregam a badge do Next devtools.
+
 ## Fluxo de demandas (ClickUp)
 Quando eu passar um ID de task:
 1. Buscar a task no ClickUp e ler descrição + comentários
