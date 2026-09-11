@@ -36,6 +36,14 @@ export class InstagramConfig {
   readonly arteValidadeHoras: number;
   /** Depois disto, um post PUBLICANDO é considerado órfão e vira INDETERMINADO. */
   readonly timeoutPublicacaoMs: number;
+  /**
+   * Segredo que o `ronan_agente` usa pra entregar post pronto.
+   *
+   * Separado do token da Meta de propósito: um dá acesso ao feed, o outro
+   * deixa enfileirar. Vazar um não entrega o outro, e dá pra rotacionar cada um
+   * no seu tempo.
+   */
+  readonly ingestToken: string;
 
   constructor(private readonly config: ConfigService) {
     this.token = (this.config.get<string>("INSTAGRAM_ACCESS_TOKEN") ?? "").trim();
@@ -46,6 +54,12 @@ export class InstagramConfig {
     this.tentativasMax = this.numero("INSTAGRAM_TENTATIVAS_MAX", 4, 1, 10);
     this.arteValidadeHoras = this.numero("INSTAGRAM_ARTE_VALIDADE_HORAS", 48, 1, 720);
     this.timeoutPublicacaoMs = this.numero("INSTAGRAM_TIMEOUT_MS", 5 * 60_000, 30_000, 30 * 60_000);
+    this.ingestToken = (this.config.get<string>("MARKETING_INGEST_TOKEN") ?? "").trim();
+  }
+
+  /** A ingestão nasce fechada: sem segredo, o endpoint recusa tudo. */
+  get ingestaoHabilitada(): boolean {
+    return this.ingestToken.length >= 24;
   }
 
   /** Publicador ligado? Sem token não há o que fazer — nem tentar. */
@@ -78,6 +92,7 @@ export class InstagramConfig {
         loteMax: this.loteMax,
         tentativasMax: this.tentativasMax,
         arteValidadeHoras: this.arteValidadeHoras,
+        ingestao: this.ingestaoHabilitada ? "aberta ao agente" : "fechada (sem MARKETING_INGEST_TOKEN)",
       }),
     );
   }

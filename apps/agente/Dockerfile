@@ -30,10 +30,22 @@ RUN cd apps/api && pnpm prisma generate && pnpm build
 
 # ---- runtime ----
 FROM node:20-bookworm-slim AS runtime
+# Chromium entra por causa do marketing: a arte dos posts do Instagram é HTML
+# renderizado em imagem (marketing/instagram/render.mjs), e a API da Meta não
+# aceita upload de arquivo — ela busca um JPEG numa URL. Sem browser aqui, o
+# agente escreve a legenda e não tem como produzir a peça.
+#
+# É o pacote da distro, não o que o Playwright baixa: a imagem já é Debian, o
+# binário vem assinado pelo repositório e não engorda o build com um download a
+# cada deploy. O render aponta pra ele por PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH.
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates openssl tini \
+      chromium fonts-liberation fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/* \
     && npm install -g @anthropic-ai/claude-code \
     && useradd -m -u 10001 agente
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
+# O Playwright não precisa baixar browser: já tem um instalado acima.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 ENV NODE_ENV=production
 
 WORKDIR /repo

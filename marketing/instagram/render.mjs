@@ -27,7 +27,13 @@ await mkdir(join(raiz, "saida"), { recursive: true });
 // que a arte foi desenhada — nada é reamostrado pela Meta.
 await mkdir(join(raiz, "saida", "jpeg"), { recursive: true });
 
-const navegador = await chromium.launch();
+// No servidor o Chromium vem do apt (o agente não baixa browser a cada deploy);
+// na máquina de quem desenvolve, o do Playwright. Um `launch()` sem caminho
+// procura só o segundo e falha no container com "Executable doesn't exist".
+const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+const navegador = await chromium.launch(
+  executablePath ? { executablePath, args: ["--no-sandbox"] } : {},
+);
 const pagina = await navegador.newPage({ deviceScaleFactor: 2 });
 
 for (const arquivo of arquivos) {

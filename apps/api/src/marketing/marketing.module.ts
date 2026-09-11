@@ -2,6 +2,8 @@ import { Module } from "@nestjs/common";
 import { PrismaModule } from "../prisma/prisma.module";
 import { UploadsModule } from "../uploads/uploads.module";
 import { ArtePublicaController } from "./arte-publica.controller";
+import { IngestaoController } from "./ingestao.controller";
+import { IngestaoTokenGuard } from "./ingestao-token.guard";
 import { InstagramAdminController } from "./instagram-admin.controller";
 import { InstagramConfig } from "./instagram.config";
 import { InstagramFilaService } from "./instagram-fila.service";
@@ -21,8 +23,8 @@ import { InstagramPublicadorService } from "./instagram-publicador.service";
  */
 @Module({
   imports: [PrismaModule, UploadsModule],
-  controllers: [InstagramAdminController, ArtePublicaController],
-  providers: [InstagramConfig, InstagramFilaService, InstagramPublicadorService],
+  controllers: [InstagramAdminController, ArtePublicaController, IngestaoController],
+  providers: [InstagramConfig, InstagramFilaService, InstagramPublicadorService, IngestaoTokenGuard],
   exports: [InstagramFilaService],
 })
 export class MarketingModule {}
