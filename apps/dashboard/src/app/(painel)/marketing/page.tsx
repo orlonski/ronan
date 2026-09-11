@@ -204,6 +204,22 @@ function Indicador({
 function Linha({ post }: { post: Post }) {
   const ap = APARENCIA[post.status] ?? { rotulo: post.status, classe: "bg-muted" };
   const quando = post.publicadoEm ?? post.publicarEm;
+  const { temPermissao } = usePermissoes();
+  const token = useAuthToken();
+  const qc = useQueryClient();
+
+  // Só faz sentido cancelar o que ainda pode sair. Publicado não volta, e
+  // cancelar um que já falhou não muda nada.
+  const cancelavel =
+    post.status === "AGENDADO" ||
+    post.status === "RASCUNHO" ||
+    post.status === "INDETERMINADO";
+
+  const cancelar = useMutation({
+    mutationFn: () =>
+      fetchApi(`/admin/marketing/instagram/${post.id}/cancelar`, { method: "POST", token }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/admin/marketing/instagram"] }),
+  });
 
   return (
     <div className="flex flex-wrap items-start justify-between gap-4 p-4">
@@ -254,6 +270,20 @@ function Linha({ post }: { post: Post }) {
           >
             ver no Instagram
           </a>
+        ) : null}
+
+        {cancelavel && temPermissao("marketing.publicar") ? (
+          <button
+            onClick={() => cancelar.mutate()}
+            disabled={cancelar.isPending}
+            className="mt-2 block text-sm text-red-700 underline-offset-2 hover:underline disabled:opacity-50"
+          >
+            {cancelar.isPending ? "Cancelando…" : "Cancelar"}
+          </button>
+        ) : null}
+
+        {cancelar.isError ? (
+          <p className="mt-1 text-xs text-red-700">{(cancelar.error as Error).message}</p>
         ) : null}
       </div>
     </div>
