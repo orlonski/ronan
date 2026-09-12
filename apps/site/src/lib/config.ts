@@ -25,7 +25,7 @@ export const PRIVACIDADE_URL = `${PAINEL_URL}/politica-de-privacidade`;
  */
 export const CADASTRO_URL = `${PAINEL_URL}/cadastro`;
 
-const zap = (env.VITE_WHATSAPP ?? "5542984223261").replace(/\D/g, "");
+const zap = (env.VITE_WHATSAPP ?? "5542991563750").replace(/\D/g, "");
 const recado = encodeURIComponent(
   "Oi! Vi o site do Movatruck e quero agendar uma demonstração.",
 );
