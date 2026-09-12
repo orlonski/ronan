@@ -170,16 +170,32 @@ Pode subir, cair e reiniciar sem afetar nada.
 - Dockerfile Path: `apps/site/Dockerfile`
 - Build Context: `.` (raiz — o build precisa do `pnpm-lock.yaml`)
 
-> **Os valores públicos do site não se configuram pelo painel.** Número de
-> WhatsApp, domínios e links das lojas moram em `apps/site/src/lib/config.ts` e
-> entram no bundle em build-time. Esta versão do Easypanel **não tem campo de
-> build arg**, e as "Variáveis de Ambiente" dele são de *runtime* — um container
-> nginx servindo HTML estático simplesmente não as enxerga. Já perdi um deploy
-> trocando o número no painel e achando que tinha funcionado: o build sai do
-> cache, o painel diz "implantado" e o bundle continua com o valor velho.
+> **A aba Ambiente deste serviço tem que ficar VAZIA.** Número de WhatsApp,
+> domínios, e-mail e links das lojas moram em `apps/site/src/lib/config.ts`, que
+> é a única fonte — o código não lê `import.meta.env`.
+>
+> O que estava escrito aqui antes era falso e custou três deploys: as
+> "Variáveis de Ambiente" do Easypanel **chegam sim** no ambiente do build, e o
+> Vite as embute no bundle. Dava pra ver no JS que estava no ar:
+> `{VITE_APP_URL:"...",VITE_EMAIL:"",VITE_WHATSAPP:"5542984223261"}` — valores
+> cadastrados no painel meses antes, vencendo o código em silêncio. O número
+> novo era commitado, o painel dizia "implantado" e a página não mudava. O
+> `VITE_EMAIL` vazio ainda apagou o e-mail de contato do site, porque
+> `"" ?? "contato@..."` devolve `""`.
+>
+> Hoje o site ignora env, então uma variável esquecida no painel não estraga
+> mais a página — mas **apague as `VITE_*` do serviço `ronan-site`** mesmo
+> assim, pra ninguém achar que configurou algo por ali.
 >
 > Trocar qualquer um desses valores = editar `config.ts`, commitar e implantar.
 > Nada ali é segredo — tudo aparece na página pra quem abrir o site.
+>
+> Pra conferir o que foi de fato pro ar, sem confiar no painel:
+>
+> ```bash
+> curl -s https://www.movatruck.com.br/ | grep -o 'assets/index-[^"]*\.js'
+> curl -s https://www.movatruck.com.br/assets/index-XXXX.js | grep -o '5542[0-9]*'
+> ```
 
 ### Domínio
 

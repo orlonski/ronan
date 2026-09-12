@@ -12,21 +12,10 @@ COPY --from=deps /repo/node_modules ./node_modules
 COPY --from=deps /repo/apps/site/node_modules ./apps/site/node_modules
 COPY tsconfig.base.json ./
 COPY apps/site ./apps/site
-# Os valores públicos do site (número, domínios, lojas) moram em
-# src/lib/config.ts, não aqui: o Easypanel não passa build arg, e as variáveis
-# de ambiente dele são de runtime — nginx servindo estático não as enxerga.
-# Estes ARGs existem só pra build local/CI que queira apontar pra outro
-# ambiente; sem eles, valem os padrões do config.ts.
-ARG VITE_SITE_URL
-ARG VITE_APP_URL
-ARG VITE_PWA_URL
-ARG VITE_WHATSAPP
-ARG VITE_EMAIL
-ARG VITE_PLAY_URL
-ARG VITE_APPSTORE_URL
-ENV VITE_SITE_URL=$VITE_SITE_URL VITE_APP_URL=$VITE_APP_URL VITE_PWA_URL=$VITE_PWA_URL \
-    VITE_WHATSAPP=$VITE_WHATSAPP VITE_EMAIL=$VITE_EMAIL \
-    VITE_PLAY_URL=$VITE_PLAY_URL VITE_APPSTORE_URL=$VITE_APPSTORE_URL
+# Sem ARG/ENV de VITE_* aqui: o site não lê variáveis de ambiente. Os valores
+# públicos (número, domínios, lojas) moram em src/lib/config.ts, que é a única
+# fonte. As variáveis do painel do Easypanel CHEGAM no ambiente deste build —
+# era o que vinha sobrescrevendo o número de WhatsApp e esvaziando o e-mail.
 RUN cd apps/site && pnpm build
 
 FROM nginx:1.27-alpine AS runtime

@@ -1,15 +1,5 @@
 /// <reference types="vite/client" />
 
-interface ImportMetaEnv {
-  readonly VITE_SITE_URL?: string;
-  readonly VITE_APP_URL?: string;
-  readonly VITE_PWA_URL?: string;
-  readonly VITE_WHATSAPP?: string;
-  readonly VITE_EMAIL?: string;
-  readonly VITE_PLAY_URL?: string;
-  readonly VITE_APPSTORE_URL?: string;
-}
-
-interface ImportMeta {
-  readonly env: ImportMetaEnv;
-}
+// Sem declarações de `VITE_*` aqui de propósito: o site não lê variáveis de
+// ambiente. Os valores públicos moram em `src/lib/config.ts` — ver o comentário
+// de lá pra entender por que o painel do Easypanel não manda nesta página.

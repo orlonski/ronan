@@ -1,17 +1,14 @@
 /**
  * Endereço da API pública.
  *
- * Mesma armadilha do resto do `config.ts`: num container nginx servindo HTML
- * estático, variável de ambiente do Easypanel não chega. O valor de produção
- * mora aqui, e `import.meta.env` só serve pra build local apontar pra outro
- * lugar.
+ * Chumbado aqui pelo mesmo motivo do `config.ts`: as variáveis do painel do
+ * Easypanel chegam no build e vencem o `??` sem avisar. Uma `VITE_API_URL`
+ * esquecida no painel apontaria o formulário de contato pro lugar errado, e o
+ * sintoma seria só um lead que não chega.
  *
  * A URL tem que ser o host PÚBLICO com https — nunca o nome interno do Docker.
  */
-const env = import.meta.env;
-
-export const API_URL =
-  env.VITE_API_URL ?? "https://ronan-api.2azr6q.easypanel.host";
+export const API_URL = "https://ronan-api.2azr6q.easypanel.host";
 
 /** Erro que o formulário sabe mostrar pro visitante. */
 export class ErroApi extends Error {
