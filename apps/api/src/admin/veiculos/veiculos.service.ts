@@ -62,7 +62,22 @@ export class VeiculosService {
     return this.prisma.veiculo.create({ data: { ...data, criadoPorId: usuarioId } });
   }
 
-  async update(id: string, data: AtualizarVeiculoInput) {
+  /**
+   * Barra a ação sobre veículo de OUTRA frota. A leitura já filtrava; editar e
+   * excluir não. Um gestor de frota terceira podia desativar caminhão que não é
+   * dele trocando o id na URL.
+   */
+  private async ensureNoEscopo(id: string, escopo: EscopoAdmin): Promise<void> {
+    if (!escopo) return;
+    const achou = await this.prisma.veiculo.findFirst({
+      where: { id, ...filtroEscopo(escopo) },
+      select: { id: true },
+    });
+    if (!achou) throw new NotFoundException("Veículo não encontrado");
+  }
+
+  async update(id: string, data: AtualizarVeiculoInput, escopo: EscopoAdmin) {
+    await this.ensureNoEscopo(id, escopo);
     const antes = await this.ensureExists(id);
     const veiculo = await this.prisma.veiculo.update({ where: { id }, data });
     // Classificou uma placa que ainda não tinha frota: adota o histórico dela
@@ -77,7 +92,8 @@ export class VeiculosService {
     return veiculo;
   }
 
-  async remove(id: string) {
+  async remove(id: string, escopo: EscopoAdmin) {
+    await this.ensureNoEscopo(id, escopo);
     await this.ensureExists(id);
     const [viagens, pedagios, abastecimentos, motoristas] = await Promise.all([
       this.prisma.viagem.count({ where: { veiculoId: id } }),

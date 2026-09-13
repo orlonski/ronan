@@ -159,47 +159,54 @@ export class MotoristasController {
   }
 
   @RequerPermissao("motoristas.editar")
+  @EscopoPor("motorista")
   @Patch(":id")
   update(
     @Param("id") id: string,
     @Body(new ZodValidationPipe(AtualizarMotoristaInput)) body: AtualizarMotoristaInput,
+    @CurrentUser() user: AuthAdminUser,
   ) {
-    return this.service.update(id, body);
+    return this.service.update(id, body, user.escopo);
   }
 
   @RequerPermissao("motoristas.editar")
+  @EscopoPor("motorista")
   @Patch(":id/acessos")
   atualizarAcessos(
     @Param("id") id: string,
     @Body(new ZodValidationPipe(AcessosInput)) body: AcessosInput,
+    @CurrentUser() user: AuthAdminUser,
   ) {
-    return this.service.atualizarAcessos(id, body);
+    return this.service.atualizarAcessos(id, body, user.escopo);
   }
 
   @RequerPermissao("motoristas.aprovar")
+  @EscopoPor("motorista")
   @Patch(":id/aprovacao")
   aprovar(
     @Param("id") id: string,
     @Body(new ZodValidationPipe(AprovarMotoristaInput)) body: AprovarMotoristaInput,
     @CurrentUser() user: AuthAdminUser,
   ) {
-    return this.service.definirAprovacao(id, body.status, user.id);
+    return this.service.definirAprovacao(id, body.status, user.id, user.escopo);
   }
 
   @RequerPermissao("motoristas.excluir")
+  @EscopoPor("motorista")
   @Delete(":id")
-  remove(@Param("id") id: string) {
-    return this.service.remove(id);
+  remove(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    return this.service.remove(id, user.escopo);
   }
 
   @RequerPermissao("motoristas.editar")
+  @EscopoPor("motorista")
   @Post(":id/push")
   enviarPush(
     @Param("id") id: string,
     @Body(new ZodValidationPipe(EnviarPushInput)) body: EnviarPushInput,
     @CurrentUser() user: AuthAdminUser,
   ) {
-    return this.service.enviarPush(id, body, user.id);
+    return this.service.enviarPush(id, body, user.id, user.escopo);
   }
 
   /** Envia o resumo diário do motorista AGORA no WhatsApp (pra testar). */

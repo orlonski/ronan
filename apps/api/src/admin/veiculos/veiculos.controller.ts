@@ -54,17 +54,20 @@ export class VeiculosController {
   }
 
   @RequerPermissao("veiculos.editar")
+  @EscopoPor("veiculo")
   @Patch(":id")
   update(
     @Param("id") id: string,
     @Body(new ZodValidationPipe(AtualizarVeiculoInput)) body: AtualizarVeiculoInput,
+    @CurrentUser() user: AuthAdminUser,
   ) {
-    return this.service.update(id, body);
+    return this.service.update(id, body, user.escopo);
   }
 
   @RequerPermissao("veiculos.excluir")
+  @EscopoPor("veiculo")
   @Delete(":id")
-  remove(@Param("id") id: string) {
-    return this.service.remove(id);
+  remove(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    return this.service.remove(id, user.escopo);
   }
 }

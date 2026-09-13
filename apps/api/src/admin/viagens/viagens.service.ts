@@ -84,7 +84,7 @@ export class ViagensAdminService {
    * dentro do raio inicial do GPS real. São candidatas a erro do raio antigo
    * (busca de 500m), pra admin revisar e corrigir 1 a 1. Não altera nada.
    */
-  async descargasSuspeitas(opts?: { limit?: number }) {
+  async descargasSuspeitas(escopo: EscopoAdmin, opts?: { limit?: number }) {
     const cfg = await this.buscaConfig.get();
     const raioInicial = cfg.raioInicialM;
     const raioAmpliado = cfg.raioAmpliadoM;
@@ -101,7 +101,11 @@ export class ViagensAdminService {
     });
 
     const viagens = await this.prisma.viagem.findMany({
-      where: { lat: { not: null }, lng: { not: null } },
+      // O escopo entra aqui, e não só no decorator: marcar `@EscopoPor` sem
+      // filtrar de verdade é pior que não marcar, porque passa a impressão de
+      // que foi tratado. O gestor de frota terceira vê as descargas suspeitas
+      // dos motoristas DELE.
+      where: { lat: { not: null }, lng: { not: null }, ...filtroEscopo(escopo) },
       select: {
         id: true,
         ticket: true,
@@ -208,7 +212,8 @@ export class ViagensAdminService {
    * atribui à viagem. Usado no caso "sem local cadastrado" da auditoria de
    * descargas suspeitas. Reusa `atualizar` pra validar/auditar/notificar.
    */
-  async cadastrarLocalDescarga(id: string, nome: string, usuarioId: string) {
+  async cadastrarLocalDescarga(id: string, nome: string, usuarioId: string, escopo: EscopoAdmin) {
+    await this.ensureNoEscopo(id, escopo);
     const viagem = await this.prisma.viagem.findUnique({
       where: { id },
       select: {
@@ -936,7 +941,9 @@ export class ViagensAdminService {
         | "OUTRO";
     },
     usuarioId: string,
+    escopo: EscopoAdmin,
   ) {
+    await this.ensureNoEscopo(id, escopo);
     const viagem = await this.prisma.viagem.findUnique({
       where: { id },
       select: {
@@ -1297,7 +1304,8 @@ export class ViagensAdminService {
     return { ok: true, km: escolhida.km, atualizouKm: alterarKm };
   }
 
-  async recalcularTrajeto(id: string, usuarioId: string) {
+  async recalcularTrajeto(id: string, usuarioId: string, escopo: EscopoAdmin) {
+    await this.ensureNoEscopo(id, escopo);
     const viagem = await this.prisma.viagem.findUnique({
       where: { id },
       select: {
@@ -1423,7 +1431,8 @@ export class ViagensAdminService {
    * confundir os dois campos fazia o card de Pré-validação exibir "Divergente"
    * sozinho, sem ninguém ter marcado a viagem como divergente.
    */
-  async aceitarKm(id: string, usuarioId: string) {
+  async aceitarKm(id: string, usuarioId: string, escopo: EscopoAdmin) {
+    await this.ensureNoEscopo(id, escopo);
     const antes = await this.prisma.viagem.findUnique({
       where: { id },
       select: { id: true, km: true, kmForaDoPadrao: true },
@@ -1460,7 +1469,8 @@ export class ViagensAdminService {
    * O vínculo com a viagem anterior é PRESERVADO de propósito: o fato de terem
    * o mesmo número continua verdadeiro e auditável, só deixa de pedir atenção.
    */
-  async aceitarDuplicidade(id: string, usuarioId: string) {
+  async aceitarDuplicidade(id: string, usuarioId: string, escopo: EscopoAdmin) {
+    await this.ensureNoEscopo(id, escopo);
     const antes = await this.prisma.viagem.findUnique({
       where: { id },
       select: { id: true, ticket: true, ticketDuplicadoDeId: true },
@@ -1730,7 +1740,8 @@ export class ViagensAdminService {
     return { ok: true };
   }
 
-  async excluirFoto(viagemId: string, fotoId: string) {
+  async excluirFoto(viagemId: string, fotoId: string, escopo: EscopoAdmin) {
+    await this.ensureNoEscopo(viagemId, escopo);
     const foto = await this.prisma.ticketFoto.findFirst({
       where: { id: fotoId, viagemId },
       select: { id: true, storageKey: true },
@@ -1742,7 +1753,8 @@ export class ViagensAdminService {
     return { ok: true };
   }
 
-  async rotacionarFoto(viagemId: string, fotoId: string, rotacao: number) {
+  async rotacionarFoto(viagemId: string, fotoId: string, rotacao: number, escopo: EscopoAdmin) {
+    await this.ensureNoEscopo(viagemId, escopo);
     const foto = await this.prisma.ticketFoto.findFirst({
       where: { id: fotoId, viagemId },
       select: { id: true },
@@ -1776,7 +1788,9 @@ export class ViagensAdminService {
     buffer: Buffer,
     mimetype: string,
     usuarioId: string,
+    escopo: EscopoAdmin,
   ) {
+    await this.ensureNoEscopo(viagemId, escopo);
     const viagem = await this.prisma.viagem.findUnique({
       where: { id: viagemId },
       select: { id: true },

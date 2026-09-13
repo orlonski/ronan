@@ -147,9 +147,10 @@ export class ViagensAdminController {
    * Declarado antes de :id pra não ser capturado pela rota dinâmica.
    */
   @RequerPermissao("descargas-suspeitas.ver")
+  @EscopoPor("viagem")
   @Get("descargas-suspeitas")
-  descargasSuspeitas() {
-    return this.service.descargasSuspeitas();
+  descargasSuspeitas(@CurrentUser() user: AuthAdminUser) {
+    return this.service.descargasSuspeitas(user.escopo);
   }
 
   /**
@@ -157,6 +158,7 @@ export class ViagensAdminController {
    * local no GPS de lançamento da viagem e já atribui. Reusa atualizar.
    */
   @RequerPermissao("descargas-suspeitas.corrigir")
+  @EscopoPor("viagem")
   @Post("descargas-suspeitas/:id/cadastrar-local")
   cadastrarLocalDescarga(
     @Param("id") id: string,
@@ -164,7 +166,7 @@ export class ViagensAdminController {
     body: z.infer<typeof CadastrarLocalDescargaInput>,
     @CurrentUser() user: AuthAdminUser,
   ) {
-    return this.service.cadastrarLocalDescarga(id, body.nome, user.id);
+    return this.service.cadastrarLocalDescarga(id, body.nome, user.id, user.escopo);
   }
 
   @EscopoPor("viagem")
@@ -238,18 +240,20 @@ export class ViagensAdminController {
    * em revisadoEm/status.
    */
   @RequerPermissao("viagens.editar")
+  @EscopoPor("viagem")
   @Post(":id/aceitar-km")
   aceitarKm(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
-    return this.service.aceitarKm(id, user.id);
+    return this.service.aceitarKm(id, user.id, user.escopo);
   }
   /**
    * "Aceitar duplicidade": o conferente confirma que o ticket repetido está
    * certo. Some o selo, sem mexer no status nem na pré-validação.
    */
   @RequerPermissao("viagens.editar")
+  @EscopoPor("viagem")
   @Post(":id/aceitar-duplicidade")
   aceitarDuplicidade(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
-    return this.service.aceitarDuplicidade(id, user.id);
+    return this.service.aceitarDuplicidade(id, user.id, user.escopo);
   }
 
 
@@ -266,12 +270,13 @@ export class ViagensAdminController {
   }
 
   @RequerPermissao("viagens.editar")
+  @EscopoPor("viagem")
   @Post(":id/recalcular-trajeto")
   recalcularTrajeto(
     @Param("id") id: string,
     @CurrentUser() user: AuthAdminUser,
   ) {
-    return this.service.recalcularTrajeto(id, user.id);
+    return this.service.recalcularTrajeto(id, user.id, user.escopo);
   }
 
   /**
@@ -298,13 +303,14 @@ export class ViagensAdminController {
   }
 
   @RequerPermissao("viagens.validar")
+  @EscopoPor("viagem")
   @Post(":id/pre-validar")
   preValidar(
     @Param("id") id: string,
     @Body(new ZodValidationPipe(PreValidarInput)) body: PreValidarInput,
     @CurrentUser() user: AuthAdminUser,
   ) {
-    return this.service.preValidar(id, body, user.id);
+    return this.service.preValidar(id, body, user.id, user.escopo);
   }
 
   /** Chat da viagem: histórico de mensagens (admin <-> motorista). */
@@ -352,13 +358,15 @@ export class ViagensAdminController {
   }
 
   @RequerPermissao("viagens.editar")
+  @EscopoPor("viagem")
   @Patch(":id/fotos/:fotoId")
   rotacionarFoto(
     @Param("id") id: string,
     @Param("fotoId") fotoId: string,
     @Body(new ZodValidationPipe(RotacaoFotoInput)) body: RotacaoFotoInput,
+    @CurrentUser() user: AuthAdminUser,
   ) {
-    return this.service.rotacionarFoto(id, fotoId, body.rotacao);
+    return this.service.rotacionarFoto(id, fotoId, body.rotacao, user.escopo);
   }
 
   /**
@@ -367,13 +375,15 @@ export class ViagensAdminController {
    * a linha no DB.
    */
   @RequerPermissao("viagens.editar")
+  @EscopoPor("viagem")
   @Delete(":id/fotos/:fotoId")
   @HttpCode(204)
   async excluirFoto(
     @Param("id") id: string,
     @Param("fotoId") fotoId: string,
+    @CurrentUser() user: AuthAdminUser,
   ): Promise<void> {
-    await this.service.excluirFoto(id, fotoId);
+    await this.service.excluirFoto(id, fotoId, user.escopo);
   }
 
   /**
@@ -381,6 +391,7 @@ export class ViagensAdminController {
    * já que admin no dashboard sempre tem rede. Registra auditoria.
    */
   @RequerPermissao("viagens.editar")
+  @EscopoPor("viagem")
   @Post(":id/fotos")
   @UseInterceptors(FileInterceptor("foto"))
   async adicionarFoto(
@@ -396,6 +407,6 @@ export class ViagensAdminController {
     if (file.size > 10 * 1024 * 1024) {
       throw new BadRequestException("Foto maior que 10MB");
     }
-    return this.service.adicionarFoto(id, file.buffer, file.mimetype, user.id);
+    return this.service.adicionarFoto(id, file.buffer, file.mimetype, user.id, user.escopo);
   }
 }

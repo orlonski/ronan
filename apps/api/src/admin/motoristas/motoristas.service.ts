@@ -580,7 +580,27 @@ export class MotoristasService {
     };
   }
 
-  async update(id: string, data: AtualizarMotoristaInput) {
+  /**
+   * Barra a ação sobre motorista de OUTRA frota.
+   *
+   * A listagem e o detalhe já filtravam; as ações de ESCRITA não. Um gestor de
+   * frota terceira com `motoristas.editar` podia editar acesso, aprovar cadastro
+   * e até excluir motorista que não é dele — bastava trocar o id na URL, e o id
+   * aparece no payload da listagem.
+   *
+   * 404 e não 403: quem não enxerga a frota não descobre que o motorista existe.
+   */
+  private async ensureNoEscopo(id: string, escopo: EscopoAdmin): Promise<void> {
+    if (!escopo) return; // acesso global
+    const achou = await this.prisma.motorista.findFirst({
+      where: { id, ...filtroEscopo(escopo) },
+      select: { id: true },
+    });
+    if (!achou) throw new NotFoundException("Motorista não encontrado");
+  }
+
+  async update(id: string, data: AtualizarMotoristaInput, escopo: EscopoAdmin) {
+    await this.ensureNoEscopo(id, escopo);
     const atual = await this.prisma.motorista.findUnique({
       where: { id },
       include: { veiculos: { select: { veiculoId: true } } },
@@ -690,7 +710,9 @@ export class MotoristasService {
       podeDiaria?: boolean;
       receberResumoDiario?: boolean;
     },
+    escopo: EscopoAdmin,
   ) {
+    await this.ensureNoEscopo(id, escopo);
     const exists = await this.prisma.motorista.findUnique({ where: { id }, select: { id: true } });
     if (!exists) throw new NotFoundException("Motorista não encontrado");
     return this.prisma.motorista.update({
@@ -720,7 +742,13 @@ export class MotoristasService {
    * (auditoria). Rejeitar limpa o carimbo de aprovação. Login do motorista
    * respeita o status: REJEITADO não loga; APROVADO libera o app.
    */
-  async definirAprovacao(id: string, status: "APROVADO" | "REJEITADO", usuarioId: string) {
+  async definirAprovacao(
+    id: string,
+    status: "APROVADO" | "REJEITADO",
+    usuarioId: string,
+    escopo: EscopoAdmin,
+  ) {
+    await this.ensureNoEscopo(id, escopo);
     const exists = await this.prisma.motorista.findUnique({ where: { id }, select: { id: true } });
     if (!exists) throw new NotFoundException("Motorista não encontrado");
     const aprovando = status === "APROVADO";
@@ -736,7 +764,8 @@ export class MotoristasService {
     return this.flatten(updated);
   }
 
-  async remove(id: string) {
+  async remove(id: string, escopo: EscopoAdmin) {
+    await this.ensureNoEscopo(id, escopo);
     const atual = await this.prisma.motorista.findUnique({
       where: { id },
       include: {
@@ -853,7 +882,9 @@ export class MotoristasService {
     motoristaId: string,
     body: EnviarPushInput,
     usuarioId: string,
+    escopo: EscopoAdmin,
   ): Promise<EnviarPushResultado> {
+    await this.ensureNoEscopo(motoristaId, escopo);
     const m = await this.prisma.motorista.findUnique({
       where: { id: motoristaId },
       select: { id: true, ativo: true, expoPushToken: true },
