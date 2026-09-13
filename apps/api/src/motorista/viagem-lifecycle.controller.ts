@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import {
+  EncerrarOcorrenciaInput,
   FinalizarViagemBase,
   IniciarViagemInput,
   RegistrarEventoInput,
@@ -22,6 +23,7 @@ const RegistrarEventoPayload = RegistrarEventoInput;
 // lançamento por campo faltando — aceita e carimba. Ver o comentário do
 // FinalizarViagemBase e common/divergencias.ts.
 const FinalizarViagemPayload = FinalizarViagemBase;
+const EncerrarOcorrenciaPayload = EncerrarOcorrenciaInput;
 
 /**
  * Lifecycle guiado de viagem (Iniciar → eventos → Finalizar). Controller
@@ -36,10 +38,23 @@ const FinalizarViagemPayload = FinalizarViagemBase;
 export class ViagemLifecycleController {
   constructor(private readonly service: ViagensMotoristaService) {}
 
-  /** Catálogo dinâmico de tipos de evento (app renderiza os botões). */
+  /** Catálogo dinâmico da espinha da viagem (app renderiza os botões). */
   @Get("tipos-evento")
   tiposEvento() {
     return this.service.catalogoTiposEvento();
+  }
+
+  /**
+   * O que deu errado: fila, quebra, carga recusada.
+   *
+   * Rota própria, e não um campo a mais na de cima, porque o app já instalado
+   * consome aquela lista como a espinha — ocorrência entrando ali viraria botão
+   * de "Carreguei" ao lado de "Acidente" em todo celular que ainda não pegou o
+   * OTA.
+   */
+  @Get("tipos-ocorrencia")
+  tiposOcorrencia() {
+    return this.service.catalogoOcorrencias();
   }
 
   /** Viagem em andamento do motorista (0 ou 1) + eventos + catálogo. */
@@ -67,6 +82,21 @@ export class ViagemLifecycleController {
     body: z.infer<typeof RegistrarEventoPayload>,
   ) {
     return this.service.registrarEvento(user.id, clientId, body);
+  }
+
+  /**
+   * Encerra uma ocorrência com duração. Rota com prefixo fixo (`ocorrencias/`)
+   * pra não ser confundida com `:clientId/...`.
+   */
+  @Post("ocorrencias/:id/encerrar")
+  @AcessoMotorista("podeViagemLifecycle")
+  encerrarOcorrencia(
+    @CurrentUser() user: AuthMotorista,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(EncerrarOcorrenciaPayload))
+    body: z.infer<typeof EncerrarOcorrenciaPayload>,
+  ) {
+    return this.service.encerrarEvento(user.id, id, body.terminouEm);
   }
 
   @Post(":clientId/finalizar")

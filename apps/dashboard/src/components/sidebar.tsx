@@ -30,6 +30,7 @@ import {
   MessagesSquare,
   Package,
   Radio,
+  TowerControl,
   CalendarDays,
   ClipboardList,
   HandCoins,
@@ -78,6 +79,7 @@ const GRUPOS: Grupo[] = [
     itens: [
       { href: "/viagens", label: "Viagens", icon: ClipboardCheck, perm: "viagens.ver" },
       { href: "/viagens-andamento", label: "Viagens em andamento", icon: Radio, perm: "viagens.ver" },
+      { href: "/torre", label: "Torre de controle", icon: TowerControl, perm: "programacao.ver" },
       { href: "/programacao", label: "Programação do dia", icon: CalendarDays, perm: "programacao.ver" },
       { href: "/pedidos", label: "Pedidos do cliente", icon: ClipboardList, perm: "pedidos.ver" },
       { href: "/conferencias", label: "Conferência de ticket", icon: ScanEye, perm: "conferencia-ticket.ver" },

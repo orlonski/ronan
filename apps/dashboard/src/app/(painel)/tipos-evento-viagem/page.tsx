@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   Camera,
+  CircleAlert,
   DollarSign,
   FileText,
   Flag,
@@ -12,6 +13,7 @@ import {
   Plus,
   Repeat,
   Ticket,
+  Timer,
   Weight,
 } from "lucide-react";
 import type { TipoEventoViagem } from "@ronan/shared-types";
@@ -45,8 +47,39 @@ const PEDE_ICONES: { key: keyof TipoEventoViagem; label: string; Icon: typeof Ma
   { key: "pedeObservacao", label: "Observação", Icon: MessageSquare },
 ];
 
+const COR_SEVERIDADE: Record<string, string> = {
+  ALTA: "bg-red-100 text-red-700",
+  MEDIA: "bg-amber-100 text-amber-700",
+  BAIXA: "bg-slate-100 text-slate-600",
+};
+
 function FlagsMarco({ t }: { t: TipoEventoViagem }) {
   const badges: React.ReactNode[] = [];
+  // Ocorrência vem primeiro e sozinha: ela não é um marco da espinha, é o
+  // oposto — e misturar os dois conjuntos de selo escondia isso.
+  if (t.ehOcorrencia) {
+    badges.push(
+      <Badge
+        key="oco"
+        className={`border-transparent ${COR_SEVERIDADE[t.severidade ?? ""] ?? "bg-slate-100 text-slate-600"}`}
+      >
+        <CircleAlert className="mr-1 h-3 w-3" /> Ocorrência
+      </Badge>,
+    );
+    if (t.temDuracao)
+      badges.push(
+        <Badge key="dur" className="border-transparent bg-slate-100 text-slate-600">
+          <Timer className="mr-1 h-3 w-3" /> Conta o tempo
+        </Badge>,
+      );
+    if (t.geraCobranca)
+      badges.push(
+        <Badge key="cob" className="border-transparent bg-emerald-100 text-emerald-700">
+          {t.valorHora ? `R$ ${t.valorHora}/h` : "Estadia sem valor"}
+        </Badge>,
+      );
+    return <div className="flex flex-wrap gap-1">{badges}</div>;
+  }
   if (t.obrigatorio)
     badges.push(
       <Badge key="obr" className="border-transparent bg-red-100 text-red-700">

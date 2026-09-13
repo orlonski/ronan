@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { useCreateResource, useUpdateResource } from "@/lib/client-api";
 
 const PATH = "/admin/tipos-evento-viagem";
@@ -57,6 +58,12 @@ type FormState = {
   nome: string;
   ordem: string;
   ativo: boolean;
+  // --- ocorrência ---
+  ehOcorrencia: boolean;
+  severidade: "BAIXA" | "MEDIA" | "ALTA";
+  temDuracao: boolean;
+  geraCobranca: boolean;
+  valorHora: string;
 } & Record<FlagKey, boolean>;
 
 function estadoInicial(initial?: TipoEventoViagem): FormState {
@@ -75,6 +82,11 @@ function estadoInicial(initial?: TipoEventoViagem): FormState {
     pedeValor: initial?.pedeValor ?? false,
     pedeTicket: initial?.pedeTicket ?? false,
     pedeObservacao: initial?.pedeObservacao ?? false,
+    ehOcorrencia: initial?.ehOcorrencia ?? false,
+    severidade: initial?.severidade ?? "MEDIA",
+    temDuracao: initial?.temDuracao ?? false,
+    geraCobranca: initial?.geraCobranca ?? false,
+    valorHora: initial?.valorHora ?? "",
   };
 }
 
@@ -118,6 +130,17 @@ export function TipoEventoDialog({
     const ordem = Number(form.ordem);
     if (!Number.isInteger(ordem) || ordem < 0) return setErro("A ordem deve ser um número inteiro (0 ou maior).");
 
+    // Vazio é resposta legítima: "ainda não combinamos o preço da hora". O
+    // sistema conta as horas de qualquer jeito e não inventa valor.
+    const bruto = form.valorHora.trim().replace(/\./g, "").replace(",", ".");
+    let valorHora: number | null = null;
+    if (form.ehOcorrencia && form.temDuracao && form.geraCobranca && bruto !== "") {
+      valorHora = Number(bruto);
+      if (!Number.isFinite(valorHora) || valorHora < 0) {
+        return setErro("Valor da hora inválido.");
+      }
+    }
+
     const flags = {
       ativo: form.ativo,
       obrigatorio: form.obrigatorio,
@@ -130,6 +153,14 @@ export function TipoEventoDialog({
       pedeValor: form.pedeValor,
       pedeTicket: form.pedeTicket,
       pedeObservacao: form.pedeObservacao,
+      ehOcorrencia: form.ehOcorrencia,
+      // Severidade e duração só fazem sentido em ocorrência; mandar mesmo
+      // desmarcado deixaria "ALTA" grudado num evento da espinha se alguém
+      // desmarcasse depois de marcar.
+      severidade: form.ehOcorrencia ? form.severidade : null,
+      temDuracao: form.ehOcorrencia && form.temDuracao,
+      geraCobranca: form.ehOcorrencia && form.temDuracao && form.geraCobranca,
+      valorHora: valorHora,
     };
 
     try {
@@ -218,6 +249,99 @@ export function TipoEventoDialog({
                 </label>
               ))}
             </div>
+          </div>
+
+          {/* Ocorrência: a espinha acima só sabe contar o dia que correu bem.
+              É aqui que "fiquei 3h na fila" e "quebrei na BR" ganham lugar — e
+              onde o preço da hora parada é combinado. */}
+          <div className="space-y-3">
+            <label className="flex items-start justify-between gap-3">
+              <span className="space-y-0.5">
+                <span className="block text-sm font-medium">É uma ocorrência</span>
+                <span className="block text-xs text-muted-foreground">
+                  Algo que deu errado (fila, quebra, carga recusada). Aparece na torre e
+                  fica fora da sequência guiada do app.
+                </span>
+              </span>
+              <StatusToggle
+                active={form.ehOcorrencia}
+                onChange={(next) => setForm({ ...form, ehOcorrencia: next })}
+                size="sm"
+              />
+            </label>
+
+            {form.ehOcorrencia && (
+              <div className="space-y-3 rounded-md border p-3">
+                <div className="space-y-2">
+                  <Label>Gravidade</Label>
+                  <Select
+                    value={form.severidade}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        severidade: e.target.value as FormState["severidade"],
+                      })
+                    }
+                  >
+                    <option value="ALTA">Alta — vira aviso na hora</option>
+                    <option value="MEDIA">Média</option>
+                    <option value="BAIXA">Baixa</option>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Ordena a fila da torre. Só a alta manda notificação — notificar tudo é
+                    como se ensina alguém a ignorar notificação.
+                  </p>
+                </div>
+
+                <label className="flex items-start justify-between gap-3">
+                  <span className="space-y-0.5">
+                    <span className="block text-sm font-medium">Tem início e fim</span>
+                    <span className="block text-xs text-muted-foreground">
+                      Fila e espera duram; carga recusada acontece e pronto.
+                    </span>
+                  </span>
+                  <StatusToggle
+                    active={form.temDuracao}
+                    onChange={(next) => setForm({ ...form, temDuracao: next })}
+                    size="sm"
+                  />
+                </label>
+
+                {form.temDuracao && (
+                  <label className="flex items-start justify-between gap-3">
+                    <span className="space-y-0.5">
+                      <span className="block text-sm font-medium">
+                        O tempo parado é faturável
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        Estadia: cobrada por hora cheia iniciada.
+                      </span>
+                    </span>
+                    <StatusToggle
+                      active={form.geraCobranca}
+                      onChange={(next) => setForm({ ...form, geraCobranca: next })}
+                      size="sm"
+                    />
+                  </label>
+                )}
+
+                {form.temDuracao && form.geraCobranca && (
+                  <div className="space-y-2">
+                    <Label>Valor da hora parada</Label>
+                    <Input
+                      inputMode="decimal"
+                      value={form.valorHora}
+                      onChange={(e) => setForm({ ...form, valorHora: e.target.value })}
+                      placeholder="ex: 80,00"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Pode ficar em branco: as horas continuam sendo contadas e o sistema
+                      não inventa preço. O que vale é o que está no contrato.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="space-y-3">

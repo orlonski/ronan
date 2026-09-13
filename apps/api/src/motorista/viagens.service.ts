@@ -1876,17 +1876,39 @@ export class ViagensMotoristaService {
   // finalizar, entrando no fluxo de conferência/fechamento normal.
   // =========================================================================
 
-  /** Catálogo de tipos de evento ativos, ordenado (app renderiza os botões). */
+  /**
+   * Catálogo de tipos de evento ativos, ordenado (app renderiza os botões).
+   *
+   * Só a ESPINHA. As ocorrências saem em `catalogoOcorrencias` e vão numa lista
+   * separada no app — misturar "quebrei na BR" com "carreguei" na mesma fileira
+   * de botões esconderia o fluxo feliz atrás do que dá errado. Separar aqui
+   * também é o que mantém o app já instalado intacto: ele lê só este campo e
+   * segue vendo exatamente a mesma lista de antes.
+   */
   async catalogoTiposEvento() {
     return this.prisma.tipoEventoViagem.findMany({
-      where: { ativo: true },
+      where: { ativo: true, ehOcorrencia: false },
       orderBy: [{ ordem: "asc" }, { nome: "asc" }],
     });
   }
 
+  /** O que deu errado. Lista separada, ordenada por gravidade e depois nome. */
+  async catalogoOcorrencias() {
+    const tipos = await this.prisma.tipoEventoViagem.findMany({
+      where: { ativo: true, ehOcorrencia: true },
+      orderBy: [{ ordem: "asc" }, { nome: "asc" }],
+    });
+    const peso: Record<string, number> = { ALTA: 0, MEDIA: 1, BAIXA: 2 };
+    return tipos.sort(
+      (a, b) =>
+        (peso[a.severidade ?? ""] ?? 9) - (peso[b.severidade ?? ""] ?? 9) ||
+        a.ordem - b.ordem,
+    );
+  }
+
   /** Viagem em andamento do motorista (0 ou 1) com seus eventos + catálogo. */
   async viagemAndamento(motoristaId: string) {
-    const [viagem, catalogo] = await Promise.all([
+    const [viagem, catalogo, ocorrencias] = await Promise.all([
       this.prisma.viagem.findFirst({
         where: { motoristaId, status: "EM_ANDAMENTO" },
         include: {
@@ -1895,8 +1917,9 @@ export class ViagensMotoristaService {
         },
       }),
       this.catalogoTiposEvento(),
+      this.catalogoOcorrencias(),
     ]);
-    return { viagem, catalogo };
+    return { viagem, catalogo, ocorrencias };
   }
 
   /**
@@ -2083,6 +2106,11 @@ export class ViagensMotoristaService {
         observacao: input.observacao,
         ocorridoEm: input.ocorridoEm,
         criadoOfflineEm: input.criadoOfflineEm,
+        // Ocorrência com duração (fila, quebra, espera) começa a contar na hora
+        // que ACONTECEU, não na hora que o servidor recebeu — o motorista sem
+        // sinal na pedreira só sincroniza quando sai de lá, e a hora de chegada
+        // do pacote transformaria 3h de fila em zero.
+        ...(tipo.temDuracao ? { iniciouEm: input.ocorridoEm } : {}),
       },
     });
 
@@ -2113,6 +2141,42 @@ export class ViagensMotoristaService {
     }
 
     return evento;
+  }
+
+  /**
+   * Encerra uma ocorrência com duração (saí da fila, consertei, liberaram).
+   *
+   * Idempotente e NÃO sobrescreve: reenvio do outbox com hora nova esticaria a
+   * estadia de quem ficou 3h na fila pra 5h. A primeira hora de fim é a boa.
+   */
+  async encerrarEvento(motoristaId: string, eventoId: string, terminouEm: Date) {
+    const evento = await this.prisma.eventoViagem.findUnique({
+      where: { id: eventoId },
+      include: {
+        viagem: { select: { motoristaId: true } },
+        tipoEvento: { select: { temDuracao: true } },
+      },
+    });
+    // 404 aqui é transiente de verdade: a ocorrência pode ainda estar na fila
+    // de envio do próprio celular. O app segura o item e tenta de novo.
+    if (!evento) throw new NotFoundException("Ocorrência ainda não sincronizada.");
+    if (evento.viagem?.motoristaId !== motoristaId) {
+      throw new ForbiddenException("Esta ocorrência não é sua.");
+    }
+    if (!evento.tipoEvento.temDuracao) {
+      throw new BadRequestException("Esse registro não tem duração pra encerrar.");
+    }
+    if (evento.terminouEm) return evento;
+
+    // Fim antes do início é relógio do celular torto, não viagem no passado:
+    // aceitar produziria estadia negativa. Vale o início.
+    const fim =
+      evento.iniciouEm && terminouEm < evento.iniciouEm ? evento.iniciouEm : terminouEm;
+
+    return this.prisma.eventoViagem.update({
+      where: { id: eventoId },
+      data: { terminouEm: fim },
+    });
   }
 
   /**

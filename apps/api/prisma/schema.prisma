@@ -507,6 +507,7 @@ model Conta {
   documentosVeiculo             DocumentoVeiculo[]
   pneus                         Pneu[]
   multas                        Multa[]
+  alertasOperacionais           AlertaOperacional[]
   locais                        Local[]
   locaisClientes                LocalCliente[]
   locaisEvidencias              LocalEvidencia[]
@@ -652,6 +653,8 @@ model User {
   baixasDadas            BaixaTitulo[]         @relation("DeuBaixa")
   manutencoesCriadas     ManutencaoVeiculo[]   @relation("CriouManutencao")
   multasCriadas          Multa[]               @relation("CriouMulta")
+  alertasResolvidos      AlertaOperacional[]   @relation("ResolveuAlerta")
+  ocorrenciasEncerradas  EventoViagem[]        @relation("EncerrouOcorrencia")
   viagemValoresAlterados ViagemValor[]         @relation("AlterouViagemValor")
   tiposEventoCriados     TipoEventoViagem[]    @relation("CriouTipoEventoViagem")
   locaisCriados          Local[]               @relation("CriouLocal")
@@ -1369,6 +1372,8 @@ model Motorista {
   titulosPagar TituloPagar[]
 
   multas Multa[]
+
+  alertas AlertaOperacional[]
 
   @@unique([contaId, cpf])
   @@index([ativo])
@@ -3047,6 +3052,57 @@ model Multa {
   @@map("multas")
 }
 
+enum TipoAlertaOperacional {
+  /// Viagem aberta há muito mais tempo que o normal daquele trajeto.
+  ATRASO
+  /// Parado no mesmo lugar tempo demais, sem evento registrado.
+  PARADA_LONGA
+  /// Sem posição nova há horas, com viagem aberta.
+  SEM_SINAL
+  /// Programado e não rodou.
+  NAO_INICIOU
+  /// Ocorrência aberta esperando alguém resolver.
+  OCORRENCIA_ABERTA
+}
+
+/**
+ * O que está fora do esperado AGORA.
+ * Antes disto, a viagem em curso não emitia um único sinal: os treze tipos de
+ * aviso do painel eram todos reativos a algo que o motorista já tinha
+ * terminado. O modelo mental era "tem uma tela, alguém que olhe" — e isso não
+ * escala, porque ninguém fica olhando quarenta cards.
+ * O alerta é DESATIVADO, não apagado, quando resolve: saber que o caminhão
+ * ficou 3h parado ontem é o dado que explica o atraso de hoje.
+ */
+model AlertaOperacional {
+  contaId        String                @default("__SEM_CONTA__")
+  conta          Conta                 @relation(fields: [contaId], references: [id])
+  id             String                @id @default(uuid())
+  tipo           TipoAlertaOperacional
+  /// "BAIXA" | "MEDIA" | "ALTA".
+  severidade     String                @default("MEDIA")
+  viagem         Viagem?               @relation(fields: [viagemId], references: [id], onDelete: Cascade)
+  viagemId       String?
+  motorista      Motorista?            @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  motoristaId    String?
+  /// O que dizer ao supervisor, pronto. "Jorge · 47 min parado na Pedreira Norte".
+  titulo         String
+  detalhe        String?
+  /// Números que geraram o alerta, pra tela poder explicar sem recalcular.
+  dados          Json?
+  detectadoEm    DateTime              @default(now())
+  resolvidoEm    DateTime?
+  resolvidoPor   User?                 @relation("ResolveuAlerta", fields: [resolvidoPorId], references: [id], onDelete: SetNull)
+  resolvidoPorId String?
+
+  /// Um alerta vivo por tipo e viagem: o cron roda a cada 5 min e não pode
+  /// empilhar o mesmo aviso doze vezes por hora.
+  @@unique([viagemId, tipo, resolvidoEm])
+  @@index([contaId, resolvidoEm, severidade])
+  @@index([contaId])
+  @@map("alertas_operacionais")
+}
+
 model RegraMinimo {
   contaId         String    @default("__SEM_CONTA__")
   conta           Conta     @relation(fields: [contaId], references: [id])
@@ -3496,6 +3552,8 @@ model Viagem {
 
   faturaLinhas FaturaLinha[]
 
+  alertas AlertaOperacional[]
+
   @@index([transportadoraId, data])
   @@index([motoristaId, data])
   @@index([veiculoId, data])
@@ -3627,6 +3685,24 @@ model TipoEventoViagem {
 
   eventos EventoViagem[]
 
+  // --- ocorrência ---
+  // O catálogo nasceu como a espinha da viagem (cheguei, carreguei, saí). Nada
+  // respondia "a carga foi recusada", "fiquei 3h na fila" ou "quebrei na BR" —
+  // e são essas as conversas que a transportadora tem todo dia com o embarcador.
+  /// True = isto é uma OCORRÊNCIA, não um marco do fluxo feliz. Separa o que
+  /// deu errado do que era pra acontecer.
+  ehOcorrencia Boolean  @default(false)
+  /// "BAIXA" | "MEDIA" | "ALTA". Ordena a fila da torre: o supervisor não pode
+  /// ficar caçando o que é grave no meio de "parei pra almoçar".
+  severidade   String?
+  /// True = tem início e fim (fila na pedreira, espera, quebra). O evento base
+  /// é pontual, e sem isso "3 horas de fila" não tem onde caber.
+  temDuracao   Boolean  @default(false)
+  /// True = o tempo parado vira valor faturável (estadia).
+  geraCobranca Boolean  @default(false)
+  /// Quanto vale a hora parada, quando gera cobrança.
+  valorHora    Decimal? @db.Decimal(10, 2)
+
   @@unique([contaId, slug])
   @@index([ativo, ordem])
   @@index([contaId])
@@ -3659,6 +3735,14 @@ model EventoViagem {
   ocorridoEm      DateTime
   criadoOfflineEm DateTime?
   recebidoEm      DateTime         @default(now())
+
+  /// Início e fim da ocorrência. `ocorridoEm` continua sendo o carimbo do
+  /// registro; estes dois marcam o intervalo do que durou.
+  iniciouEm      DateTime?
+  terminouEm     DateTime?
+  /// Quem encerrou pelo painel, quando foi o escritório que fechou.
+  encerradoPor   User?     @relation("EncerrouOcorrencia", fields: [encerradoPorId], references: [id], onDelete: SetNull)
+  encerradoPorId String?
 
   @@index([viagemId, ocorridoEm])
   @@index([tipoEventoId])

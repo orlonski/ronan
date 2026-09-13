@@ -41,6 +41,14 @@ export const TipoEventoViagem = z.object({
   pedeValor: z.boolean(),
   pedeTicket: z.boolean(),
   pedeObservacao: z.boolean(),
+  // Ocorrência: o que dá errado. Separado da espinha do fluxo feliz.
+  ehOcorrencia: z.boolean(),
+  severidade: z.enum(["BAIXA", "MEDIA", "ALTA"]).nullable(),
+  temDuracao: z.boolean(),
+  geraCobranca: z.boolean(),
+  // Decimal do Prisma chega como string no JSON — tratar como number aqui
+  // perderia centavo em valor grande.
+  valorHora: z.string().nullable(),
 });
 export type TipoEventoViagem = z.infer<typeof TipoEventoViagem>;
 
@@ -60,6 +68,13 @@ export const CriarTipoEventoViagemInput = z.object({
   pedeValor: z.boolean().optional(),
   pedeTicket: z.boolean().optional(),
   pedeObservacao: z.boolean().optional(),
+  ehOcorrencia: z.boolean().optional(),
+  severidade: z.enum(["BAIXA", "MEDIA", "ALTA"]).nullish(),
+  temDuracao: z.boolean().optional(),
+  geraCobranca: z.boolean().optional(),
+  // Preço da hora parada. Nulo é legítimo e significa "ainda não combinado":
+  // o sistema conta as horas e não inventa o valor.
+  valorHora: z.coerce.number().nonnegative().max(99999999).nullish(),
 });
 export type CriarTipoEventoViagemInput = z.infer<typeof CriarTipoEventoViagemInput>;
 
@@ -129,6 +144,14 @@ export const RegistrarEventoInput = z.object({
   criadoOfflineEm: z.coerce.date().optional(),
 });
 export type RegistrarEventoInput = z.infer<typeof RegistrarEventoInput>;
+
+// Encerrar uma ocorrência com duração (saí da fila, consertei, liberaram).
+// Idempotente pelo id do evento: o servidor NÃO sobrescreve um fim já gravado,
+// senão o reenvio do outbox esticaria a estadia de quem ficou 3h na fila.
+export const EncerrarOcorrenciaInput = z.object({
+  terminouEm: z.coerce.date(),
+});
+export type EncerrarOcorrenciaInput = z.infer<typeof EncerrarOcorrenciaInput>;
 
 // Finalizar: preenche os campos que faltavam e fecha (EM_ANDAMENTO → ENVIADA).
 // ticket é opcional aqui; a obrigatoriedade depende de Material.exigeTicket e

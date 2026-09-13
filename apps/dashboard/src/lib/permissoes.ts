@@ -127,6 +127,7 @@ const ROTA_PERM: { prefixo: string; perm: string }[] = [
   { prefixo: "/financeiro", perm: "financeiro.ver" },
   { prefixo: "/frota", perm: "manutencao.ver" },
   { prefixo: "/programacao", perm: "programacao.ver" },
+  { prefixo: "/torre", perm: "programacao.ver" },
   { prefixo: "/pedidos", perm: "pedidos.ver" },
   // Estas duas estavam no menu e fora daqui — `permDaRota` libera o que não está
   // mapeado, então a tela montava por URL direta e quebrava nos 403 da API em
