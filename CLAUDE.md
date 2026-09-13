@@ -46,7 +46,7 @@ pnpm --filter @ronan/api exec prisma migrate deploy   # aplicar migrations sem g
 
 ### Testes
 
-`apps/api` tem **vitest** com ~700 testes de unidade (regras puras e o runner do ClickUp): `cd apps/api && pnpm exec vitest run`. A cobertura de fluxo é **Playwright E2E**, que exige api+dashboard+PWA de pé e banco semeado — ver `tests/e2e/README.md`.
+`apps/api` tem **vitest** com ~780 testes de unidade (regras puras e o runner do ClickUp): `cd apps/api && pnpm exec vitest run`. A cobertura de fluxo é **Playwright E2E**, que exige api+dashboard+PWA de pé e banco semeado — ver `tests/e2e/README.md`.
 
 `pnpm lint` **não roda**: nenhum app tem `eslint.config.js` (ESLint 9 exige o formato novo e a migração nunca foi feita). Falha em todos os pacotes, é anterior a qualquer mudança — não confundir com regressão.
 
@@ -104,6 +104,9 @@ Corpo das rotas usa **Zod dos `shared-types`** via `ZodValidationPipe` (não cla
 - `common/viagem-status.ts` — `STATUS_FORA_FECHAMENTO` (`EM_ANDAMENTO`, `AGUARDANDO_PESO`): viagens incompletas que nunca entram em match/fechamento/KPI/export. Esquecer um ponto de exclusão faz viagem sem peso entrar como 0t.
 - `common/viagem-minimos.ts` — `RegraMinimo` (empresa+material+faixa de km → km/ton mínimo faturado). O real nunca é sobrescrito no banco; o mínimo é aplicado ao **exibir/agregar/faturar**. Todo cálculo de efetivo passa por aqui.
 - `common/viagem-preco.ts` — `TabelaPreco` (empresa+material+modo+faixa de km+vigência → R$). **O mínimo decide quanto se CONTA; o preço decide quanto vale o que foi contado** — nessa ordem, sempre: o preço multiplica a quantidade efetiva, nunca a real. A resolução de "qual linha casa" é idêntica à do mínimo de propósito (mesma faixa, mesmo desempate); divergir faria o mínimo valer pra uma faixa e o preço pra outra. Diária nunca é cobrada por tonelada (`BASE_INCOMPATIVEL`). O valor vai pra `ViagemValor`, **materializado** (dinheiro se soma: faturamento é `SUM` de milhares de linhas) e **congelado** (guarda preço e quantidade do momento, não FK viva). Quem mantém em dia é `admin/tabelas-preco/precificacao.service.ts`: os caminhos principais chamam na hora, e um cron de madrugada varre o que ficou sem valor — ele **nunca** reprecifica o que já tem. Valor alterado à mão exige motivo e não é sobrescrito por recálculo.
+- `common/acerto-motorista.ts` — o que a empresa deve ao motorista no período. A régua de pagamento mora na `ModalidadeMotorista` (percentual/viagem/tonelada/km/diária) e o motorista pode ter a dele, que vence — o override é **tudo-ou-nada**, não campo a campo. **Armadilha do pedágio em dobro:** `Viagem.valorPedagioTotal` (nativo) e `Pedagio.valor` (PWA) são fontes independentes; `pedagioDaViagem` escolhe UMA por viagem. Comboio nunca vira reembolso. Acerto FECHADO não regenera e PAGO não reabre.
+- `common/pedido-saldo.ts` — saldo do pedido (sempre DERIVADO das viagens, nunca contador) e o casamento plano↔viagem real. ⚠️ `ViagemPlanejada` é **entidade separada** da Viagem: um status `PLANEJADA` no `StatusViagem` obrigaria a revisar os 25 pontos de `STATUS_FORA_FECHAMENTO`, e cada um esquecido vira viagem fantasma de 0t na fatura.
+- `common/chave-fiscal.ts` — chave de 44 dígitos com DV módulo 11 e checagem de MODELO. Colar a chave da NF-e no campo do CT-e passa por qualquer regex e só o modelo denuncia.
 - `common/consumo.ts` — km/l tanque-a-tanque. Só mede entre dois abastecimentos com `tanqueCheio` e odômetro; parciais no meio entram nos litros, não na fronteira. Média da frota é ponderada pelo km.
 - `common/km-motorista.ts` — **o km que o motorista informa é lei.** `Viagem.kmMotorista` é cópia intocável do valor dele (só os 3 caminhos do app escrevem); `Viagem.km` é o faturado. Qualquer alteração de km pelo painel passa por `checarAlteracaoKm` → sem motivo escrito é 400, e o que passa vira auditoria `ADMIN_ALTEROU_KM` + carimbo `kmAlterado*` (que também tira a viagem do reprocessamento). Endpoint novo que escreva `km` tem que chamar a regra — nunca reimplementar.
 - `common/timezone.ts` — container roda em UTC; "hoje"/mês devem ancorar em `America/Sao_Paulo`, nunca `setHours(0)`.
@@ -126,7 +129,7 @@ OSRM (`OSRM_URL`, rotas/km) · Valhalla (`VALHALLA_URL`, navegação ao vivo) ·
 
 ### Prisma
 
-~93 models em `apps/api/prisma/schema.prisma`. Gotchas recorrentes:
+~100 models em `apps/api/prisma/schema.prisma`. Gotchas recorrentes:
 - `$queryRaw` usa o nome do `@@map` (`"viagens"`, `"users"`), não o do model; colunas da Viagem são camelCase. Typecheck não pega, quebra em runtime.
 - Função SQL chamada dentro de outra usada em `CREATE INDEX` precisa de `public.` explícito (42883 no inlining). Prod é PG17: `unaccent(text)` single-arg.
 - Depois de criar migration, conferir com `git show --stat` se o `migration.sql` entrou — pasta vazia o git ignora em silêncio.
@@ -203,6 +206,26 @@ Next.js App Router; tudo de painel dentro de `src/app/(painel)/`. Sessão via **
 
 - FK grande (Locais/Veículos/Motoristas/Clientes) usa `AsyncCombobox` server-side (wrappers em `fk-comboboxes.tsx`), nunca `useResourceOptions` — o teto de 200 escondia registros.
 - Telas e botões são gatados por permissão (`temPermissao("recurso.acao")` / `<RequerTela>`), espelhando o catálogo em `shared-types/src/permissoes.ts`. Pra colocar algo novo sob permissão: chave no catálogo → gate na UI → `@RequerPermissao` no endpoint. O seed sincroniza o resto.
+
+### Módulos contratados (o que a empresa comprou)
+
+`ModuloContratado` (tabela, não array — módulo tem data e autor) + catálogo em
+`shared-types/src/modulos.ts`. **O módulo é dono de RECURSOS, não de chaves**:
+`viagens.arquivar` criada amanhã entra no módulo sozinha.
+
+Entra **por cima** do RBAC, como fator do `tetoDaConta()` — a poda de chave acima
+do teto já existia, então módulo cancelado poda papel de graça. Nove testes de
+invariante quebram o build se um recurso ficar órfão ou em dois módulos.
+
+O **boot-check** (`common/modulos/modulos.boot-check.ts`) varre os controllers no
+boot e **derruba a subida** se um endpoint de `admin/*` não declarar
+`@RequerPermissao` (ou `@Public`, ou `PlataformaGuard`). Endpoint novo sem
+decorator não passa no CI. A dívida conhecida vive em
+`endpoints-sem-permissao.ts`, e essa lista **só encolhe**.
+
+Na UI: item não contratado **some** do menu; quem chega por URL vê uma tela
+diferente da de "acesso restrito" — "fale com um administrador" é mentira quando
+o administrador não pode resolver.
 
 ## UI — padrão de botões (semáforo)
 
