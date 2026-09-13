@@ -35,7 +35,7 @@ export type CampoImportavel = {
 };
 
 export type EntidadeImportavel = {
-  chave: "clientes" | "motoristas" | "veiculos" | "locais" | "materiais";
+  chave: "clientes" | "motoristas" | "veiculos" | "locais" | "materiais" | "viagens";
   rotulo: string;
   /** O que o painel diz antes de o usuário subir o arquivo. */
   descricao: string;
@@ -227,4 +227,120 @@ export const ENTIDADES: EntidadeImportavel[] = [
   },
 ];
 
-export const ENTIDADE_POR_CHAVE = new Map(ENTIDADES.map((e) => [e.chave, e]));
+/**
+ * O histórico de viagens.
+ *
+ * Fica fora de `ENTIDADES` acima porque a ordem importa: viagem só entra depois
+ * que motorista, veículo, cliente, material e locais existem — ela é a única
+ * entidade que aponta pra todas as outras. A tela mostra isso na ordem.
+ *
+ * Nada aqui cria cadastro: a viagem que cita uma placa desconhecida vira erro
+ * na linha com o nome do que faltou. Criar um veículo "ABC1D23" em silêncio no
+ * meio de uma importação de viagens é como se monta uma frota fantasma.
+ */
+export const VIAGENS: EntidadeImportavel = {
+  chave: "viagens",
+  rotulo: "Viagens (histórico)",
+  descricao:
+    "O que já rodou. Importe DEPOIS dos cadastros — cada viagem aponta pra um motorista, um veículo e um local que já precisam existir. Entram como enviadas, do mesmo jeito que uma viagem lançada pelo app.",
+  // Data + motorista + veículo + ticket é o que distingue duas viagens do mesmo
+  // dia. Sem ticket, duas viagens iguais no mesmo dia são uma só — e é por isso
+  // que a tela avisa quando a planilha não tem a coluna.
+  chaveNatural: "ticket",
+  permissao: "importacao.executar",
+  campos: [
+    {
+      chave: "data",
+      rotulo: "Data",
+      tipo: "data",
+      obrigatorio: true,
+      sinonimos: ["data", "dia", "data viagem", "data da viagem", "emissao"],
+    },
+    {
+      chave: "motorista",
+      rotulo: "Motorista (CPF ou nome)",
+      tipo: "texto",
+      obrigatorio: true,
+      sinonimos: ["motorista", "nome motorista", "condutor", "cpf motorista", "cpf"],
+      ajuda: "CPF casa com certeza; nome casa pelo nome exato do cadastro.",
+    },
+    {
+      chave: "placa",
+      rotulo: "Placa",
+      tipo: "placa",
+      obrigatorio: true,
+      sinonimos: ["placa", "veiculo", "placa do veiculo", "cavalo", "frota"],
+    },
+    {
+      chave: "cliente",
+      rotulo: "Cliente",
+      tipo: "texto",
+      obrigatorio: false,
+      sinonimos: ["cliente", "tomador", "contratante", "obra cliente"],
+    },
+    {
+      chave: "material",
+      rotulo: "Material",
+      tipo: "texto",
+      obrigatorio: false,
+      sinonimos: ["material", "produto", "carga", "mercadoria"],
+    },
+    {
+      chave: "origem",
+      rotulo: "Local de carga",
+      tipo: "texto",
+      obrigatorio: false,
+      sinonimos: ["origem", "local carga", "carga", "pedreira", "saida", "de"],
+    },
+    {
+      chave: "destino",
+      rotulo: "Local de descarga",
+      tipo: "texto",
+      obrigatorio: false,
+      sinonimos: ["destino", "local descarga", "descarga", "obra", "entrega", "para"],
+    },
+    {
+      chave: "toneladas",
+      rotulo: "Toneladas",
+      tipo: "numero",
+      obrigatorio: false,
+      sinonimos: ["toneladas", "peso", "ton", "t", "quantidade", "peso liquido"],
+    },
+    {
+      chave: "km",
+      rotulo: "Km",
+      tipo: "numero",
+      obrigatorio: false,
+      sinonimos: ["km", "distancia", "quilometragem", "km rodado"],
+    },
+    {
+      chave: "ticket",
+      rotulo: "Ticket / nota",
+      tipo: "texto",
+      obrigatorio: false,
+      sinonimos: ["ticket", "nota", "nf", "romaneio", "documento", "numero"],
+      ajuda: "É o que distingue duas viagens do mesmo motorista no mesmo dia.",
+    },
+    {
+      chave: "valorFrete",
+      rotulo: "Valor do frete",
+      tipo: "numero",
+      obrigatorio: false,
+      sinonimos: ["valor", "valor frete", "frete", "total", "valor total", "receita"],
+    },
+    {
+      chave: "valorPedagio",
+      rotulo: "Pedágio",
+      tipo: "numero",
+      obrigatorio: false,
+      sinonimos: ["pedagio", "vale pedagio", "valor pedagio"],
+    },
+  ],
+};
+
+export const ENTIDADE_POR_CHAVE = new Map(
+  [...ENTIDADES, VIAGENS].map((e) => [e.chave, e]),
+);
+
+/** A ordem em que a implantação acontece. Viagem depende de todo o resto. */
+export const ORDEM_IMPORTACAO = [...ENTIDADES, VIAGENS];

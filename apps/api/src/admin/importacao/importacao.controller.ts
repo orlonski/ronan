@@ -18,7 +18,7 @@ import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import type { AuthAdminUser } from "../../auth/types";
-import { ENTIDADES } from "../../common/importacao/campos";
+import { ORDEM_IMPORTACAO } from "../../common/importacao/campos";
 import { ImportacaoService } from "./importacao.service";
 
 const LinhaSchema = z.object({
@@ -54,11 +54,17 @@ const AplicarInput = z.object({
 export class ImportacaoController {
   constructor(private readonly service: ImportacaoService) {}
 
-  /** O que dá pra importar, e com que colunas. A tela monta o passo a passo daqui. */
+  /**
+   * O que dá pra importar, e com que colunas. A tela monta o passo a passo daqui.
+   *
+   * Na ORDEM da implantação: viagem depende de motorista, veículo, cliente,
+   * material e local já existirem. Listar em ordem alfabética faria o usuário
+   * começar pela última.
+   */
   @RequerPermissao("importacao.ver")
   @Get("entidades")
   entidades() {
-    return ENTIDADES.map((e) => ({
+    return ORDEM_IMPORTACAO.map((e) => ({
       chave: e.chave,
       rotulo: e.rotulo,
       descricao: e.descricao,

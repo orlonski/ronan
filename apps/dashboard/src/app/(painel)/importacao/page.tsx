@@ -157,7 +157,8 @@ function Conteudo() {
         <p className="max-w-prose text-sm text-muted-foreground">
           Traga a base que a empresa já tem. O sistema lê a planilha do jeito que ela está —
           título, logo e linha em branco no topo não atrapalham — e mostra o que entraria
-          antes de gravar qualquer coisa.
+          antes de gravar qualquer coisa. A lista abaixo está na ordem da implantação:
+          as viagens vêm por último porque cada uma aponta pros cadastros.
         </p>
       </header>
 
@@ -335,6 +336,20 @@ function Previsao({
           <Numero rotulo="Com erro" valor={previa.resumo.comErro} />
           <Numero rotulo="Repetidas no arquivo" valor={previa.resumo.duplicadasNoArquivo} />
         </div>
+
+        {/* Sem ticket, o sistema ainda separa duas viagens iguais do mesmo dia
+            (contador por assinatura), mas subir a planilha com as linhas em
+            outra ordem duplicaria o histórico. Dizer isso antes é barato. */}
+        {previa.entidade === "viagens" && previa.mapa.ticket === undefined && (
+          <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <p className="text-sm">
+              Sua planilha não tem a coluna de ticket/nota. Dá pra importar assim, mas se
+              você subir o arquivo de novo com as linhas em outra ordem, o histórico
+              duplica. Se existir uma coluna com o número do romaneio, aponte ela abaixo.
+            </p>
+          </div>
+        )}
 
         {/* O automático é atalho, nunca a única porta: quando o palpite erra,
             trocar a coluna aqui é mais rápido que mexer na planilha. */}

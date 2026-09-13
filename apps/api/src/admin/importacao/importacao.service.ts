@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { TipoLocal } from "@prisma/client";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuthService } from "../../auth/auth.service";
 import { IdentidadeService } from "../../auth/identidade.service";
@@ -124,6 +125,11 @@ export class ImportacaoService {
     empresaId?: string;
   }): Promise<{ criados: number; atualizados: number; ignorados: number; avisos: string[] }> {
     const entidade = this.entidade(args.entidade);
+    // Zera o cache de cadastros a cada importação: entre uma subida e outra o
+    // usuário acabou de cadastrar o que faltava, e reaproveitar o mapa velho
+    // devolveria "motorista não cadastrado" pra quem ele acabou de criar.
+    this.contexto = null;
+    this.ocorrencias = new Map();
     const validas = args.linhas.filter((l) => l.erros.length === 0 && !l.duplicadaNoArquivo);
     const ignorados = args.linhas.length - validas.length;
     const avisos: string[] = [];
@@ -230,7 +236,195 @@ export class ImportacaoService {
 
       case "motoristas":
         return this.gravarMotorista(linha, args.usuarioId, avisos);
+
+      case "viagens":
+        return this.gravarViagem(linha, avisos);
     }
+  }
+
+  /**
+   * Uma viagem do histórico.
+   *
+   * Ela é a única entidade que aponta pra todas as outras, e por isso não cria
+   * NENHUMA delas: placa desconhecida vira erro na linha com o nome do que
+   * faltou. Criar um veículo em silêncio no meio de uma importação de viagens é
+   * como se monta uma frota fantasma que ninguém sabe de onde veio.
+   *
+   * Entra como ENVIADA — o mesmo status de uma viagem lançada pelo app e ainda
+   * não conferida. É o que faz ela contar em fechamento e KPI sem se passar por
+   * conferida por alguém que nunca a viu.
+   */
+  private async gravarViagem(
+    linha: LinhaValidada,
+    avisos: string[],
+  ): Promise<"criado" | "atualizado" | "pulado"> {
+    const v = linha.valores;
+    const ctx = await this.contextoDeViagens();
+
+    const motorista = this.acharMotorista(String(v.motorista), ctx);
+    if (!motorista) {
+      avisos.push(`Linha ${linha.numero}: motorista "${v.motorista}" não está cadastrado.`);
+      return "pulado";
+    }
+    const veiculo = ctx.veiculos.get(String(v.placa));
+    if (!veiculo) {
+      avisos.push(`Linha ${linha.numero}: veículo ${v.placa} não está cadastrado.`);
+      return "pulado";
+    }
+
+    // `clientId` é a chave de idempotência da Viagem — no app ele é gerado pelo
+    // celular. Aqui é derivado do que identifica a viagem na planilha, pra que
+    // subir o arquivo duas vezes não crie o histórico em dobro.
+    const assinatura = [
+      String(v.data),
+      motorista.id,
+      veiculo.id,
+      String(v.ticket ?? ""),
+      String(v.toneladas ?? ""),
+    ].join("|");
+    // Duas viagens REALMENTE iguais no mesmo dia (mesmo motorista, mesmo
+    // caminhão, sem ticket) existem — é o dia inteiro puxando brita da mesma
+    // pedreira. O contador as separa sem inventar dado e sem colapsar em uma.
+    const ocorrencia = (this.ocorrencias.get(assinatura) ?? 0) + 1;
+    this.ocorrencias.set(assinatura, ocorrencia);
+    const clientId = `import:${createHash("sha1")
+      .update(`${assinatura}|${ocorrencia}`)
+      .digest("hex")}`;
+
+    const dados = {
+      motoristaId: motorista.id,
+      veiculoId: veiculo.id,
+      data: new Date(`${String(v.data)}T00:00:00.000Z`),
+      clienteId: v.cliente === undefined ? null : (ctx.clientes.get(normalizar(String(v.cliente))) ?? null),
+      materialId: v.material === undefined ? null : (ctx.materiais.get(normalizar(String(v.material))) ?? null),
+      localCargaId: v.origem === undefined ? null : (ctx.locais.get(normalizar(String(v.origem))) ?? null),
+      localDescargaId:
+        v.destino === undefined ? null : (ctx.locais.get(normalizar(String(v.destino))) ?? null),
+      toneladas: v.toneladas === undefined ? null : new Prisma.Decimal(v.toneladas),
+      km: v.km === undefined ? null : new Prisma.Decimal(v.km),
+      ticket: v.ticket === undefined ? null : String(v.ticket),
+      valorPedagioTotal:
+        v.valorPedagio === undefined ? null : new Prisma.Decimal(v.valorPedagio),
+    };
+
+    // O que a planilha cita e o cadastro não tem vira aviso, não erro: a viagem
+    // com cliente em branco continua valendo pro km e pro peso do histórico, e
+    // perder a linha inteira por causa de um nome escrito diferente seria pior.
+    for (const [campo, valor, resolvido] of [
+      ["cliente", v.cliente, dados.clienteId],
+      ["material", v.material, dados.materialId],
+      ["local de carga", v.origem, dados.localCargaId],
+      ["local de descarga", v.destino, dados.localDescargaId],
+    ] as const) {
+      if (valor !== undefined && resolvido === null) {
+        avisos.push(`Linha ${linha.numero}: ${campo} "${valor}" não está cadastrado — ficou em branco.`);
+      }
+    }
+
+    const existente = await this.prisma.viagem.findUnique({
+      where: { clientId },
+      select: { id: true },
+    });
+    const viagem = existente
+      ? await this.prisma.viagem.update({ where: { id: existente.id }, data: dados })
+      : await this.prisma.viagem.create({
+          // Sem `revisadoPorId`: a Viagem não tem "criado por", e carimbar o
+          // revisor CONGELA a viagem no fechamento. Quem importou fica no log
+          // da importação, não numa viagem que ninguém conferiu.
+          data: { clientId, ...dados, status: "ENVIADA" },
+        });
+
+    await this.gravarValor(viagem.id, v);
+    return existente ? "atualizado" : "criado";
+  }
+
+  /**
+   * O dinheiro da viagem importada.
+   *
+   * `base: VIAGEM` porque o que a planilha traz é o total combinado, não um
+   * preço unitário: inventar "R$/tonelada" dividindo o total pelo peso criaria
+   * um preço que nunca existiu e que apareceria como se fosse tabela.
+   */
+  private async gravarValor(viagemId: string, v: Record<string, string | number>) {
+    if (v.valorFrete === undefined) return;
+    const valorFrete = new Prisma.Decimal(v.valorFrete);
+    const valorPedagio = new Prisma.Decimal(v.valorPedagio ?? 0);
+    await this.prisma.viagemValor.upsert({
+      where: { viagemId },
+      create: {
+        viagemId,
+        base: "VIAGEM",
+        precoUnitario: valorFrete,
+        quantidade: new Prisma.Decimal(1),
+        valorFrete,
+        valorPedagio,
+        valorTotal: valorFrete.add(valorPedagio),
+        alteracaoMotivo: "Importado do histórico da empresa",
+      },
+      update: {
+        base: "VIAGEM",
+        precoUnitario: valorFrete,
+        quantidade: new Prisma.Decimal(1),
+        valorFrete,
+        valorPedagio,
+        valorTotal: valorFrete.add(valorPedagio),
+      },
+    });
+  }
+
+  /**
+   * Os cadastros, em memória, pra casar nome com id.
+   *
+   * Uma consulta por linha faria 400 idas ao banco numa planilha de 400
+   * viagens; os cadastros de uma transportadora cabem todos na memória.
+   */
+  private async contextoDeViagens() {
+    if (this.contexto) return this.contexto;
+    const [motoristas, veiculos, clientes, materiais, locais] = await Promise.all([
+      this.prisma.motorista.findMany({ select: { id: true, cpf: true, nome: true } }),
+      this.prisma.veiculo.findMany({ select: { id: true, placa: true } }),
+      this.prisma.cliente.findMany({ select: { id: true, nome: true } }),
+      this.prisma.material.findMany({ select: { id: true, nome: true } }),
+      this.prisma.local.findMany({ select: { id: true, nome: true } }),
+    ]);
+    this.contexto = {
+      motoristasPorCpf: new Map(motoristas.map((m) => [m.cpf, m])),
+      motoristasPorNome: new Map(motoristas.map((m) => [normalizar(m.nome), m])),
+      veiculos: new Map(veiculos.map((v) => [v.placa, v])),
+      clientes: new Map(clientes.map((c) => [normalizar(c.nome), c.id])),
+      materiais: new Map(materiais.map((m) => [normalizar(m.nome), m.id])),
+      locais: new Map(locais.map((l) => [normalizar(l.nome), l.id])),
+    };
+    return this.contexto;
+  }
+
+  /**
+   * Quantas vezes a mesma assinatura de viagem já apareceu NESTE arquivo.
+   *
+   * Zerado a cada importação. É o que dá um `clientId` estável pra cada linha:
+   * subir a mesma planilha de novo reencontra as mesmas viagens; subir uma
+   * planilha com as linhas em outra ordem, não — e é por isso que a tela pede a
+   * coluna do ticket quando ela existe.
+   */
+  private ocorrencias = new Map<string, number>();
+
+  private contexto: {
+    motoristasPorCpf: Map<string, { id: string; nome: string }>;
+    motoristasPorNome: Map<string, { id: string; nome: string }>;
+    veiculos: Map<string, { id: string }>;
+    clientes: Map<string, string>;
+    materiais: Map<string, string>;
+    locais: Map<string, string>;
+  } | null = null;
+
+  /** CPF primeiro: casa com certeza. Nome é o caminho de quem não tem a coluna. */
+  private acharMotorista(
+    bruto: string,
+    ctx: NonNullable<ImportacaoService["contexto"]>,
+  ): { id: string } | null {
+    const digitos = bruto.replace(/\D/g, "");
+    if (digitos.length === 11) return ctx.motoristasPorCpf.get(digitos) ?? null;
+    return ctx.motoristasPorNome.get(normalizar(bruto)) ?? null;
   }
 
   /**

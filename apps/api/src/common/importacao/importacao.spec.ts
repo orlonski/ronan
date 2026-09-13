@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ENTIDADE_POR_CHAVE } from "./campos";
+import { ENTIDADE_POR_CHAVE, ORDEM_IMPORTACAO } from "./campos";
 import { acharCabecalho, casarColunas, faltandoObrigatorios, normalizar } from "./mapear";
 import { lerData, resumirValidacao, validarLinhas } from "./validar";
 
@@ -185,5 +185,52 @@ describe("lerData", () => {
 
   it("31 de fevereiro não existe", () => {
     expect(lerData("31/02/2026")).toBeNull();
+  });
+});
+
+describe("catálogo de importação", () => {
+  it("viagem vem por último: ela depende de todos os outros cadastros", () => {
+    const ordem = ORDEM_IMPORTACAO.map((e) => e.chave);
+    expect(ordem[ordem.length - 1]).toBe("viagens");
+  });
+
+  it("todo campo obrigatório tem pelo menos um sinônimo", () => {
+    // Campo obrigatório que nenhum cabeçalho reconhece trava a importação sem
+    // dizer o porquê.
+    for (const e of ORDEM_IMPORTACAO) {
+      for (const c of e.campos) {
+        expect(c.sinonimos.length, `${e.chave}.${c.chave}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("a chave natural é sempre um campo da própria entidade", () => {
+    // Chave apontando pra campo inexistente faria toda linha ter chave vazia, e
+    // com isso a importação deixaria de ser repetível em silêncio.
+    for (const e of ORDEM_IMPORTACAO) {
+      expect(
+        e.campos.some((c) => c.chave === e.chaveNatural),
+        `${e.chave} → ${e.chaveNatural}`,
+      ).toBe(true);
+    }
+  });
+
+  it("reconhece o cabeçalho de uma planilha de viagens de verdade", () => {
+    const VIAGENS = ENTIDADE_POR_CHAVE.get("viagens")!;
+    const mapa = casarColunas(
+      ["Data", "Motorista", "Placa", "Cliente", "Material", "Peso", "Km", "Nota", "Valor"],
+      VIAGENS,
+    );
+    expect(mapa).toEqual({
+      data: 0,
+      motorista: 1,
+      placa: 2,
+      cliente: 3,
+      material: 4,
+      toneladas: 5,
+      km: 6,
+      ticket: 7,
+      valorFrete: 8,
+    });
   });
 });
