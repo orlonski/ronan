@@ -4,6 +4,7 @@ import {
   Bell,
   BellOff,
   Building2,
+  HandCoins,
   ChevronRight,
   HelpCircle,
   KeyRound,
@@ -258,6 +259,14 @@ function PerfilDaEmpresa() {
                 icon={<MapPin size={20} color="#13316b" />}
                 title="Compartilhar posição"
                 onPress={() => router.push("/perfil-posicao")}
+              />
+              <View className="h-px bg-border" />
+              {/* O extrato do que a empresa apurou que deve a ele. Fica em Conta
+                  e não numa aba: é consulta de fim de período, não uso diário. */}
+              <ActionRow
+                icon={<HandCoins size={20} color="#13316b" />}
+                title="Meus acertos"
+                onPress={() => router.push("/meus-acertos")}
               />
               <View className="h-px bg-border" />
               {/* Convites só tinham entrada na home de quem NÃO tem empresa

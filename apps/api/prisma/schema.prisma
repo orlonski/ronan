@@ -462,6 +462,8 @@ model Conta {
   regrasMinimo                  RegraMinimo[]
   tabelasPreco                  TabelaPreco[]
   viagemValores                 ViagemValor[]
+  acertosMotorista              AcertoMotorista[]
+  itensAcerto                   ItemAcerto[]
   locais                        Local[]
   locaisClientes                LocalCliente[]
   locaisEvidencias              LocalEvidencia[]
@@ -596,6 +598,9 @@ model User {
   empresasCriadas        Empresa[]             @relation("CriouEmpresa")
   regrasMinimoCriadas    RegraMinimo[]         @relation("CriouRegraMinimo")
   tabelasPrecoCriadas    TabelaPreco[]         @relation("CriouTabelaPreco")
+  acertosFechados        AcertoMotorista[]     @relation("FechouAcerto")
+  acertosPagos           AcertoMotorista[]     @relation("PagouAcerto")
+  itensAcertoCriados     ItemAcerto[]          @relation("CriouItemAcerto")
   viagemValoresAlterados ViagemValor[]         @relation("AlterouViagemValor")
   tiposEventoCriados     TipoEventoViagem[]    @relation("CriouTipoEventoViagem")
   locaisCriados          Local[]               @relation("CriouLocal")
@@ -1250,6 +1255,18 @@ model Motorista {
   /// o que ele deveria ser: uma exceção ("esse aqui não lança diária"), não um
   /// pré-requisito.
   podeDiaria              Boolean              @default(true)
+  // --- remuneração própria deste motorista (vence a da modalidade) ---
+  /// null = usa a regra da modalidade. Preenchido = este motorista negociou
+  /// diferente, que é a norma com agregado.
+  tipoRemuneracao         TipoRemuneracao?
+  percentualFrete         Decimal?             @db.Decimal(5, 2)
+  valorPorViagem          Decimal?             @db.Decimal(10, 2)
+  valorPorTonelada        Decimal?             @db.Decimal(10, 2)
+  valorPorKm              Decimal?             @db.Decimal(10, 2)
+  valorDiaria             Decimal?             @db.Decimal(10, 2)
+  /// Pra onde o pagamento vai. Guardado como o motorista digitou (pode ser CPF,
+  /// telefone, e-mail ou chave aleatória) — normalizar chave PIX é errar.
+  chavePix                String?
   /// Frota dona do motorista. Null = não classificado (invisível pros usuários
   /// restritos). Usado pra carimbar Viagem/Pedagio/Abastecimento na criação —
   /// mudar aqui NÃO reescreve o histórico já carimbado, de propósito.
@@ -1293,6 +1310,8 @@ model Motorista {
   redefinicaoSenha      RedefinicaoSenhaPendente?
   criadoPor             User?                     @relation("CriouMotorista", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId           String?
+
+  acertos AcertoMotorista[]
 
   @@unique([contaId, cpf])
   @@index([ativo])
@@ -1941,29 +1960,183 @@ model TipoServico {
 ///
 /// ⚠️ Conta que não cadastrar modalidade nenhuma se comporta EXATAMENTE como
 /// antes desta feature existir.
+/**
+ * Como o motorista é pago. Mora na `ModalidadeMotorista` porque é o que
+ * "agregado", "terceiro" e "frota própria" de fato querem dizer — até agora
+ * essas palavras só decidiam quais FOTOS o abastecimento exigia.
+ */
+enum TipoRemuneracao {
+  /// Não é pago por viagem pelo sistema (motorista CLT com salário fora daqui).
+  /// É o default de propósito: ligar remuneração sozinho pra frota inteira seria
+  /// gerar acerto de dinheiro que ninguém pediu.
+  SEM_REMUNERACAO
+  /// Percentual do valor do frete. Exige TabelaPreco — sem preço não há de que
+  /// tirar percentual.
+  PERCENTUAL_FRETE
+  VALOR_POR_VIAGEM
+  VALOR_POR_TONELADA
+  VALOR_POR_KM
+}
+
+/// O que cada linha do extrato é. Positivo credita pro motorista, negativo desconta.
+enum TipoItemAcerto {
+  /// O que ele ganhou pela viagem, pela regra da modalidade.
+  FRETE
+  /// Diária (serviço medido por período).
+  DIARIA
+  /// Pedágio que ELE pagou do próprio bolso e a empresa devolve.
+  REEMBOLSO_PEDAGIO
+  /// Idem combustível.
+  REEMBOLSO_ABASTECIMENTO
+  /// Vale/adiantamento que ele já recebeu — desconta do que tem a receber.
+  ADIANTAMENTO
+  DESCONTO_AVARIA
+  DESCONTO_MULTA
+  DESCONTO_COMBUSTIVEL
+  DESCONTO_OUTROS
+  BONUS
+  /// Correção manual, pros casos que a regra não cobre.
+  AJUSTE
+}
+
+enum StatusAcerto {
+  /// Em construção: ainda entra viagem, ainda dá pra mexer.
+  ABERTO
+  /// Conferido e fechado. Vira o extrato que o motorista vê e vale como combinado.
+  FECHADO
+  /// Pago. Data e meio registrados.
+  PAGO
+}
+
+/**
+ * O acerto do período com o motorista — o extrato que ele assina.
+ * Existe porque o sistema sabia faturar o cliente e não sabia pagar quem rodou.
+ * Pior: o motorista adianta pedágio e diesel do próprio bolso DENTRO do app, e
+ * não havia um único lugar registrando que a empresa devia isso a ele.
+ * Fechar um acerto é um ato: daí em diante os itens não mudam mais sozinhos,
+ * mesmo que alguém edite a viagem depois. Um extrato que muda depois de
+ * combinado não é extrato.
+ */
+model AcertoMotorista {
+  contaId       String       @default("__SEM_CONTA__")
+  conta         Conta        @relation(fields: [contaId], references: [id])
+  id            String       @id @default(uuid())
+  motorista     Motorista    @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+  motoristaId   String
+  periodoInicio DateTime     @db.Date
+  periodoFim    DateTime     @db.Date
+  /// Somatórios congelados no fechamento. Enquanto ABERTO são recalculados a
+  /// cada geração; depois de FECHADO, não mudam mais.
+  valorCreditos Decimal      @default(0) @db.Decimal(12, 2)
+  valorDebitos  Decimal      @default(0) @db.Decimal(12, 2)
+  valorLiquido  Decimal      @default(0) @db.Decimal(12, 2)
+  status        StatusAcerto @default(ABERTO)
+  fechadoEm     DateTime?
+  fechadoPor    User?        @relation("FechouAcerto", fields: [fechadoPorId], references: [id], onDelete: SetNull)
+  fechadoPorId  String?
+  pagoEm        DateTime?
+  /// "PIX", "TED", "DINHEIRO" — texto livre porque cada empresa chama de um jeito.
+  pagoMeio      String?
+  pagoPor       User?        @relation("PagouAcerto", fields: [pagoPorId], references: [id], onDelete: SetNull)
+  pagoPorId     String?
+  /// Quando o motorista ABRIU o extrato no app. Acerto que ele não viu é
+  /// imposição, e ele é parceiro autônomo, não empregado. Espelha
+  /// ViagemCompartilhamento.
+  vistoEm       DateTime?
+  observacao    String?
+  criadoEm      DateTime     @default(now())
+  alteradoEm    DateTime     @updatedAt
+
+  itens ItemAcerto[]
+
+  /// Um acerto por motorista por período: gerar duas vezes não cria dois.
+  @@unique([contaId, motoristaId, periodoInicio, periodoFim])
+  @@index([contaId, status])
+  @@index([motoristaId, periodoInicio])
+  @@index([contaId])
+  @@map("acertos_motorista")
+}
+
+/**
+ * Uma linha do extrato.
+ * `viagemId`/`pedagioId`/`abastecimentoId` amarram a linha ao fato operacional
+ * que a gerou — é o que faz o motorista reconhecer ("isso é o pedágio de terça")
+ * em vez de receber um total que ele tem que acreditar. No máximo uma delas vem
+ * preenchida.
+ */
+model ItemAcerto {
+  contaId         String          @default("__SEM_CONTA__")
+  conta           Conta           @relation(fields: [contaId], references: [id])
+  id              String          @id @default(uuid())
+  acerto          AcertoMotorista @relation(fields: [acertoId], references: [id], onDelete: Cascade)
+  acertoId        String
+  tipo            TipoItemAcerto
+  viagem          Viagem?         @relation(fields: [viagemId], references: [id], onDelete: SetNull)
+  viagemId        String?
+  pedagio         Pedagio?        @relation(fields: [pedagioId], references: [id], onDelete: SetNull)
+  pedagioId       String?
+  abastecimento   Abastecimento?  @relation(fields: [abastecimentoId], references: [id], onDelete: SetNull)
+  abastecimentoId String?
+  /// O que o motorista lê na linha. Snapshot: sobrevive à viagem ser editada.
+  descricao       String
+  /// Um sinal só, positivo credita e negativo desconta — assim a soma do extrato
+  /// não depende de lembrar o sinal de cada tipo.
+  valor           Decimal         @db.Decimal(12, 2)
+  /// Obrigatório em desconto lançado à mão. Tirar dinheiro de parceiro autônomo
+  /// sem justificativa escrita é a mesma doutrina do km: não pode.
+  motivo          String?
+  /// True = a regra gerou. False = alguém digitou. O regerar só mexe no automático.
+  automatico      Boolean         @default(true)
+  criadoPor       User?           @relation("CriouItemAcerto", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId     String?
+  criadoEm        DateTime        @default(now())
+
+  @@index([acertoId])
+  @@index([viagemId])
+  @@index([contaId])
+  @@map("itens_acerto")
+}
+
 model ModalidadeMotorista {
-  contaId           String   @default("__SEM_CONTA__")
-  conta             Conta    @relation(fields: [contaId], references: [id])
-  id                String   @id @default(uuid())
+  contaId                String          @default("__SEM_CONTA__")
+  conta                  Conta           @relation(fields: [contaId], references: [id])
+  id                     String          @id @default(uuid())
   /// Chave estável usada no código/seed (ex: "agregado"). Imutável no rename.
-  slug              String
+  slug                   String
   /// Rótulo que o admin lê no painel (editável).
-  nome              String
-  ativo             Boolean  @default(true)
+  nome                   String
+  ativo                  Boolean         @default(true)
   /// Ordena o seletor no cadastro do motorista.
-  ordem             Int      @default(0)
+  ordem                  Int             @default(0)
   // --- o que o abastecimento exige nesta modalidade ---
   /// Cupom do posto. Quando o motorista TEM modalidade, esta flag substitui o
   /// interruptor geral da conta — é o que permite "própria não pede nada".
-  exigeFotoCupom    Boolean  @default(false)
+  exigeFotoCupom         Boolean         @default(false)
   /// Foto do odômetro (comprova o KM no momento do abastecimento).
-  exigeFotoOdometro Boolean  @default(false)
+  exigeFotoOdometro      Boolean         @default(false)
   /// Foto da bomba.
-  exigeFotoBomba    Boolean  @default(false)
-  criadoEm          DateTime @default(now())
-  alteradoEm        DateTime @updatedAt
-  criadoPor         User?    @relation("CriouModalidadeMotorista", fields: [criadoPorId], references: [id], onDelete: SetNull)
-  criadoPorId       String?
+  exigeFotoBomba         Boolean         @default(false)
+  // --- como o motorista desta modalidade é pago ---
+  /// A régua de remuneração da modalidade. O motorista pode ter a dele própria
+  /// (`Motorista.tipoRemuneracao`), que vence esta — agregado negocia caso a caso.
+  tipoRemuneracao        TipoRemuneracao @default(SEM_REMUNERACAO)
+  /// % do valor do frete. Só vale com tipoRemuneracao = PERCENTUAL_FRETE.
+  percentualFrete        Decimal?        @db.Decimal(5, 2)
+  valorPorViagem         Decimal?        @db.Decimal(10, 2)
+  valorPorTonelada       Decimal?        @db.Decimal(10, 2)
+  valorPorKm             Decimal?        @db.Decimal(10, 2)
+  /// Quanto ele ganha por diária (serviço medido por período). Independente do
+  /// tipo acima: um agregado pago por percentual também pode fazer diária.
+  valorDiaria            Decimal?        @db.Decimal(10, 2)
+  /// A empresa devolve o pedágio que ele pagou do bolso? Default true porque é
+  /// o combinado em 99% dos casos — e porque não devolver, em silêncio, é o
+  /// tipo de coisa que faz motorista ir embora.
+  reembolsaPedagio       Boolean         @default(true)
+  reembolsaAbastecimento Boolean         @default(true)
+  criadoEm               DateTime        @default(now())
+  alteradoEm             DateTime        @updatedAt
+  criadoPor              User?           @relation("CriouModalidadeMotorista", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId            String?
 
   motoristas Motorista[]
 
@@ -2502,6 +2675,8 @@ model Viagem {
   /// quando existe TabelaPreco que case, e nunca em STATUS_FORA_FECHAMENTO.
   valor ViagemValor?
 
+  itensAcerto ItemAcerto[]
+
   @@index([transportadoraId, data])
   @@index([motoristaId, data])
   @@index([veiculoId, data])
@@ -2946,6 +3121,8 @@ model Pedagio {
   transportadoraId String?
 
   fechamentoLinhas FechamentoLinha[]
+
+  itensAcerto ItemAcerto[]
 
   @@index([veiculoId, data])
   @@index([viagemId])
@@ -3688,6 +3865,8 @@ model Abastecimento {
 
   fotos            AbastecimentoFoto[]
   fechamentoLinhas FechamentoLinha[]
+
+  itensAcerto ItemAcerto[]
 
   @@index([veiculoId, data])
   @@index([motoristaId, data])

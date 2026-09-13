@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TipoRemuneracaoSchema } from "./acerto-motorista";
 import { cpfDigits, isCpfValid } from "./cpf";
 import { isTelefoneValid, telefoneDigits } from "./telefone";
 
@@ -109,6 +110,17 @@ export const CriarMotoristaInput = z
       .regex(placaRegex)
       .nullable()
       .optional(),
+    // Como ESTE motorista é pago. Null = herda a régua da modalidade dele.
+    // Agregado quase sempre negocia caso a caso, por isso o override existe.
+    tipoRemuneracao: TipoRemuneracaoSchema.nullish(),
+    percentualFrete: z.number().positive().max(100).nullish(),
+    valorPorViagem: z.number().positive().max(99999.99).nullish(),
+    valorPorTonelada: z.number().positive().max(99999.99).nullish(),
+    valorPorKm: z.number().positive().max(99999.99).nullish(),
+    valorDiaria: z.number().positive().max(99999.99).nullish(),
+    // Pra onde o acerto é pago. Sem normalizar: chave PIX pode ser CPF,
+    // telefone, e-mail ou aleatória, e "consertar" a digitação é errar.
+    chavePix: z.string().trim().max(140).nullish(),
   })
   .superRefine((v, ctx) => {
     placasSemDuplicatas(v.placas, ctx);
@@ -141,6 +153,17 @@ export const AtualizarMotoristaInput = z
       .optional(),
     ativo: z.boolean().optional(),
     novaSenha: z.string().min(6).max(80).optional(),
+    // Como ESTE motorista é pago. Null = herda a régua da modalidade dele.
+    // Agregado quase sempre negocia caso a caso, por isso o override existe.
+    tipoRemuneracao: TipoRemuneracaoSchema.nullish(),
+    percentualFrete: z.number().positive().max(100).nullish(),
+    valorPorViagem: z.number().positive().max(99999.99).nullish(),
+    valorPorTonelada: z.number().positive().max(99999.99).nullish(),
+    valorPorKm: z.number().positive().max(99999.99).nullish(),
+    valorDiaria: z.number().positive().max(99999.99).nullish(),
+    // Pra onde o acerto é pago. Sem normalizar: chave PIX pode ser CPF,
+    // telefone, e-mail ou aleatória, e "consertar" a digitação é errar.
+    chavePix: z.string().trim().max(140).nullish(),
   })
   .superRefine((v, ctx) => {
     if (v.placas) placasSemDuplicatas(v.placas, ctx);

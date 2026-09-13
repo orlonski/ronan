@@ -46,6 +46,9 @@ const ACAO_TITULO: Record<string, string> = {
   avisar: "Publicar aviso",
   moderar: "Moderar denúncias",
   gerenciar: "Gerenciar",
+  gerar: "Gerar / lançar item",
+  fechar: "Fechar (vira combinado)",
+  pagar: "Marcar como pago",
   expurgar: "Expurgar histórico",
 };
 
@@ -66,6 +69,11 @@ const RESOURCE_DEFS: ResourceDef[] = [
   { recurso: "abastecimentos", label: "Abastecimentos", modulo: "Operação", acoes: ["ver", "editar", "excluir"] },
   { recurso: "fechamentos", label: "Fechamentos", modulo: "Operação", acoes: ["ver", "criar", "conferir", "exportar", "excluir"] },
   { recurso: "envios", label: "Envios", modulo: "Operação", acoes: ["ver", "criar", "excluir"] },
+  // O que a empresa deve a cada motorista no período. Três ações separadas de
+  // propósito: montar o acerto é trabalho de escritório; dizer que está
+  // combinado (fechar) e que o dinheiro saiu (pagar) é decisão de quem responde
+  // pelo caixa, e raramente é a mesma pessoa.
+  { recurso: "acertos", label: "Acertos com motorista", modulo: "Operação", acoes: ["ver", "gerar", "fechar", "pagar"] },
   // Relatório de produção por período. Agrupar por cliente/empresa (ou filtrar
   // por eles) exige TAMBÉM "viagens.ver-comercial" no endpoint: o agrupamento
   // por cliente É a carteira, e as colunas de km/toneladas faturados são as

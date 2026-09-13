@@ -3,6 +3,7 @@ import * as Updates from "expo-updates";
 import { router } from "expo-router";
 import { Platform } from "react-native";
 import type {
+  AcertoDoMotorista,
   CadastroEmpresa,
   CadastroMotoristaInput,
   ConfirmarCadastroInput,
@@ -619,6 +620,11 @@ export const api = {
     }),
   meusConvites: () =>
     request<ConviteEmpresa[]>("GET", "/m/eu/convites", { comoIdentidade: true }),
+  /** Os acertos FECHADOS/PAGOS da empresa ativa. Rascunho do escritório não vem. */
+  meusAcertos: () => request<AcertoDoMotorista[]>("GET", "/m/acertos"),
+  /** Carimba que ele abriu o extrato. O painel mostra isso. */
+  marcarAcertoVisto: (id: string) =>
+    request<{ ok: boolean }>("POST", `/m/acertos/${id}/visto`, { body: {} }),
   aceitarConvite: (motoristaId: string) =>
     request<SessaoEmpresa>("POST", `/m/eu/convites/${motoristaId}/aceitar`, {
       body: {},

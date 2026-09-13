@@ -12,7 +12,10 @@ import {
   isTelefoneValid,
   maskTelefone,
   telefoneDigits,
+  REMUNERACAO_LABEL,
+  TIPOS_REMUNERACAO,
   type TipoDocumentoMotorista,
+  type TipoRemuneracaoTipo,
 } from "@ronan/shared-types";
 import {
   ModalidadeCombobox,
@@ -24,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { useCreateResource, useUpdateResource, useAuthToken, fetchApi } from "@/lib/client-api";
 import { StatusToggle } from "@/components/status-toggle";
 
@@ -57,6 +61,13 @@ export type Motorista = {
   podeChat: boolean;
   podeDiaria: boolean;
   receberResumoDiario: boolean;
+  tipoRemuneracao: TipoRemuneracaoTipo | null;
+  percentualFrete: string | null;
+  valorPorViagem: string | null;
+  valorPorTonelada: string | null;
+  valorPorKm: string | null;
+  valorDiaria: string | null;
+  chavePix: string | null;
 };
 
 const PATH = "/admin/motoristas";
@@ -66,6 +77,11 @@ type FormShape = {
   nome: string;
   cpf: string;
   senha: string;
+  chavePix: string;
+  /** "" = herda a régua da modalidade. */
+  tipoRemuneracao: TipoRemuneracaoTipo | "";
+  valorRemuneracao: string;
+  valorDiaria: string;
   telefone: string;
   email: string;
   placas: PlacaRow[];
@@ -79,6 +95,10 @@ const empty: FormShape = {
   nome: "",
   cpf: "",
   senha: "",
+  chavePix: "",
+  tipoRemuneracao: "",
+  valorRemuneracao: "",
+  valorDiaria: "",
   telefone: "",
   email: "",
   placas: [],
@@ -88,6 +108,14 @@ const empty: FormShape = {
 };
 
 const placaRegex = /^[A-Z]{3}-?\d[A-Z\d]\d{2}$/i;
+
+/** "12,5" → 12.5. Vazio ou inválido → null. */
+function parseValorBR(v: string): number | null {
+  const t = v.trim();
+  if (!t) return null;
+  const n = Number(t.replace(/\./g, "").replace(",", "."));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
 
 function maskCpf(input: string): string {
   const d = cpfDigits(input).slice(0, 11);
@@ -184,6 +212,15 @@ export function MotoristaForm({ initial }: Props) {
           placas: initial.veiculos.map((v) => ({ placa: v.placa, modelo: v.modelo ?? "" })),
           transportadoraId: initial.transportadoraId ?? undefined,
           modalidadeId: initial.modalidadeId ?? undefined,
+          chavePix: initial.chavePix ?? "",
+          tipoRemuneracao: initial.tipoRemuneracao ?? "",
+          valorRemuneracao:
+            initial.percentualFrete ??
+            initial.valorPorViagem ??
+            initial.valorPorTonelada ??
+            initial.valorPorKm ??
+            "",
+          valorDiaria: initial.valorDiaria ?? "",
           placaDefault: initial.veiculoDefault?.placa ?? null,
         }
       : empty,
@@ -302,8 +339,23 @@ export function MotoristaForm({ initial }: Props) {
       modelo: p.modelo || undefined,
     }));
 
+    // A régua própria do motorista vence a da modalidade, e é tudo-ou-nada: só
+    // o campo do tipo escolhido vai, os outros vão null. Mandar os dois deixaria
+    // valor órfão que reaparece se alguém trocar a régua depois.
+    const valorRem = parseValorBR(form.valorRemuneracao);
+    const remuneracao = {
+      tipoRemuneracao: form.tipoRemuneracao || null,
+      percentualFrete: form.tipoRemuneracao === "PERCENTUAL_FRETE" ? valorRem : null,
+      valorPorViagem: form.tipoRemuneracao === "VALOR_POR_VIAGEM" ? valorRem : null,
+      valorPorTonelada: form.tipoRemuneracao === "VALOR_POR_TONELADA" ? valorRem : null,
+      valorPorKm: form.tipoRemuneracao === "VALOR_POR_KM" ? valorRem : null,
+      valorDiaria: parseValorBR(form.valorDiaria),
+      chavePix: form.chavePix.trim() || null,
+    };
+
     if (initial) {
       const body: Record<string, unknown> = {
+        ...remuneracao,
         nome: form.nome,
         cpf: cpfDigitos,
         telefone: telDigitos || undefined,
@@ -317,6 +369,7 @@ export function MotoristaForm({ initial }: Props) {
       await update.mutateAsync({ id: initial.id, body });
     } else {
       await create.mutateAsync({
+        ...remuneracao,
         nome: form.nome,
         cpf: cpfDigitos,
         // Sem senha quando a pessoa já existe na plataforma — o backend pendura o
@@ -455,7 +508,78 @@ export function MotoristaForm({ initial }: Props) {
             />
             <p className="text-xs text-muted-foreground">
               O vínculo dele (próprio, agregado, terceiro…). É o que decide quais fotos
-              o app pede no abastecimento. Sem modalidade, nada muda pra ele.
+              o app pede no abastecimento e como ele é pago. Sem modalidade, nada muda pra ele.
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-3 rounded-lg border p-3">
+          <div>
+            <Label className="text-base">Pagamento</Label>
+            <p className="text-xs text-muted-foreground">
+              Por padrão vale a regra da modalidade. Preencha aqui só se este motorista
+              negociou diferente — é o caso comum com agregado.
+            </p>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="space-y-2">
+              <Label>Regra deste motorista</Label>
+              <Select
+                value={form.tipoRemuneracao}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    tipoRemuneracao: e.target.value as TipoRemuneracaoTipo | "",
+                  })
+                }
+              >
+                <option value="">Usar a regra da modalidade</option>
+                {TIPOS_REMUNERACAO.map((t) => (
+                  <option key={t} value={t}>
+                    {REMUNERACAO_LABEL[t].nome}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            {form.tipoRemuneracao && REMUNERACAO_LABEL[form.tipoRemuneracao].campo && (
+              <div className="space-y-2">
+                <Label>
+                  {form.tipoRemuneracao === "PERCENTUAL_FRETE"
+                    ? "Porcentagem (%)"
+                    : "Valor (R$)"}
+                </Label>
+                <Input
+                  inputMode="decimal"
+                  placeholder={form.tipoRemuneracao === "PERCENTUAL_FRETE" ? "ex: 12" : "ex: 120,00"}
+                  value={form.valorRemuneracao}
+                  onChange={(e) => setForm({ ...form, valorRemuneracao: e.target.value })}
+                />
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label>Valor da diária (R$)</Label>
+              <Input
+                inputMode="decimal"
+                placeholder="herda da modalidade"
+                value={form.valorDiaria}
+                onChange={(e) => setForm({ ...form, valorDiaria: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="chave-pix">Chave PIX</Label>
+            <Input
+              id="chave-pix"
+              placeholder="CPF, telefone, e-mail ou chave aleatória"
+              value={form.chavePix}
+              onChange={(e) => setForm({ ...form, chavePix: e.target.value })}
+            />
+            <p className="text-xs text-muted-foreground">
+              Aparece no acerto, na hora de pagar. Guardada exatamente como você digitar.
             </p>
           </div>
         </div>

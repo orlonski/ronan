@@ -79,6 +79,13 @@ const SAFE_SELECT = {
   transportadora: { select: { id: true, nome: true } },
   modalidadeId: true,
   modalidade: { select: { id: true, nome: true } },
+  tipoRemuneracao: true,
+  percentualFrete: true,
+  valorPorViagem: true,
+  valorPorTonelada: true,
+  valorPorKm: true,
+  valorDiaria: true,
+  chavePix: true,
   ativo: true,
   status: true,
   aceite: true,
@@ -349,6 +356,19 @@ export class MotoristasService {
           telefone: ehConvite ? identidade.telefone : data.telefone,
           email: ehConvite ? identidade.email : data.email,
           transportadoraId: data.transportadoraId ?? null,
+          // `modalidadeId` era montado campo a campo aqui e ficou de fora: o
+          // admin escolhia "Agregado" no cadastro e o campo sumia em silêncio,
+          // só pegando se ele editasse depois (o update faz `...rest`).
+          modalidadeId: data.modalidadeId ?? null,
+          // Régua de pagamento própria deste motorista (null = herda a da
+          // modalidade) e a chave PIX pra onde o acerto é pago.
+          tipoRemuneracao: data.tipoRemuneracao ?? null,
+          percentualFrete: data.percentualFrete ?? null,
+          valorPorViagem: data.valorPorViagem ?? null,
+          valorPorTonelada: data.valorPorTonelada ?? null,
+          valorPorKm: data.valorPorKm ?? null,
+          valorDiaria: data.valorDiaria ?? null,
+          chavePix: data.chavePix ?? null,
           ...(ehConvite
             ? { aceite: "PENDENTE" as const, convidadoPorId: usuarioId, convidadoEm: new Date() }
             : {}),

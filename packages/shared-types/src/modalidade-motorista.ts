@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TipoRemuneracaoSchema } from "./acerto-motorista";
 
 /**
  * Vínculo do motorista com a transportadora (próprio, agregado, terceiro…).
@@ -19,6 +20,15 @@ export const CriarModalidadeMotoristaInput = z.object({
   exigeFotoOdometro: z.boolean().default(false),
   exigeFotoBomba: z.boolean().default(false),
   ordem: z.number().int().min(0).max(999).default(0),
+  // Como o motorista deste vínculo é pago — o que entra no acerto do mês.
+  tipoRemuneracao: TipoRemuneracaoSchema.optional(),
+  percentualFrete: z.number().positive().max(100).nullish(),
+  valorPorViagem: z.number().positive().max(99999.99).nullish(),
+  valorPorTonelada: z.number().positive().max(99999.99).nullish(),
+  valorPorKm: z.number().positive().max(99999.99).nullish(),
+  valorDiaria: z.number().positive().max(99999.99).nullish(),
+  reembolsaPedagio: z.boolean().optional(),
+  reembolsaAbastecimento: z.boolean().optional(),
 });
 export type CriarModalidadeMotoristaInput = z.infer<typeof CriarModalidadeMotoristaInput>;
 
@@ -29,6 +39,15 @@ export const AtualizarModalidadeMotoristaInput = z.object({
   exigeFotoOdometro: z.boolean().optional(),
   exigeFotoBomba: z.boolean().optional(),
   ordem: z.number().int().min(0).max(999).optional(),
+  // Como o motorista deste vínculo é pago — o que entra no acerto do mês.
+  tipoRemuneracao: TipoRemuneracaoSchema.optional(),
+  percentualFrete: z.number().positive().max(100).nullish(),
+  valorPorViagem: z.number().positive().max(99999.99).nullish(),
+  valorPorTonelada: z.number().positive().max(99999.99).nullish(),
+  valorPorKm: z.number().positive().max(99999.99).nullish(),
+  valorDiaria: z.number().positive().max(99999.99).nullish(),
+  reembolsaPedagio: z.boolean().optional(),
+  reembolsaAbastecimento: z.boolean().optional(),
 });
 export type AtualizarModalidadeMotoristaInput = z.infer<typeof AtualizarModalidadeMotoristaInput>;
 
@@ -42,5 +61,14 @@ export const ModalidadeMotorista = z.object({
   exigeFotoCupom: z.boolean(),
   exigeFotoOdometro: z.boolean(),
   exigeFotoBomba: z.boolean(),
+  // Decimais chegam como string do Prisma.
+  tipoRemuneracao: TipoRemuneracaoSchema.optional(),
+  percentualFrete: z.string().nullable().optional(),
+  valorPorViagem: z.string().nullable().optional(),
+  valorPorTonelada: z.string().nullable().optional(),
+  valorPorKm: z.string().nullable().optional(),
+  valorDiaria: z.string().nullable().optional(),
+  reembolsaPedagio: z.boolean().optional(),
+  reembolsaAbastecimento: z.boolean().optional(),
 });
 export type ModalidadeMotorista = z.infer<typeof ModalidadeMotorista>;
