@@ -46,7 +46,7 @@ pnpm --filter @ronan/api exec prisma migrate deploy   # aplicar migrations sem g
 
 ### Testes
 
-`apps/api` tem **vitest** com ~140 testes de unidade (regras puras e o runner do ClickUp): `cd apps/api && pnpm exec vitest run`. A cobertura de fluxo é **Playwright E2E**, que exige api+dashboard+PWA de pé e banco semeado — ver `tests/e2e/README.md`.
+`apps/api` tem **vitest** com ~700 testes de unidade (regras puras e o runner do ClickUp): `cd apps/api && pnpm exec vitest run`. A cobertura de fluxo é **Playwright E2E**, que exige api+dashboard+PWA de pé e banco semeado — ver `tests/e2e/README.md`.
 
 `pnpm lint` **não roda**: nenhum app tem `eslint.config.js` (ESLint 9 exige o formato novo e a migração nunca foi feita). Falha em todos os pacotes, é anterior a qualquer mudança — não confundir com regressão.
 
@@ -103,6 +103,8 @@ Corpo das rotas usa **Zod dos `shared-types`** via `ZodValidationPipe` (não cla
 
 - `common/viagem-status.ts` — `STATUS_FORA_FECHAMENTO` (`EM_ANDAMENTO`, `AGUARDANDO_PESO`): viagens incompletas que nunca entram em match/fechamento/KPI/export. Esquecer um ponto de exclusão faz viagem sem peso entrar como 0t.
 - `common/viagem-minimos.ts` — `RegraMinimo` (empresa+material+faixa de km → km/ton mínimo faturado). O real nunca é sobrescrito no banco; o mínimo é aplicado ao **exibir/agregar/faturar**. Todo cálculo de efetivo passa por aqui.
+- `common/viagem-preco.ts` — `TabelaPreco` (empresa+material+modo+faixa de km+vigência → R$). **O mínimo decide quanto se CONTA; o preço decide quanto vale o que foi contado** — nessa ordem, sempre: o preço multiplica a quantidade efetiva, nunca a real. A resolução de "qual linha casa" é idêntica à do mínimo de propósito (mesma faixa, mesmo desempate); divergir faria o mínimo valer pra uma faixa e o preço pra outra. Diária nunca é cobrada por tonelada (`BASE_INCOMPATIVEL`). O valor vai pra `ViagemValor`, **materializado** (dinheiro se soma: faturamento é `SUM` de milhares de linhas) e **congelado** (guarda preço e quantidade do momento, não FK viva). Quem mantém em dia é `admin/tabelas-preco/precificacao.service.ts`: os caminhos principais chamam na hora, e um cron de madrugada varre o que ficou sem valor — ele **nunca** reprecifica o que já tem. Valor alterado à mão exige motivo e não é sobrescrito por recálculo.
+- `common/consumo.ts` — km/l tanque-a-tanque. Só mede entre dois abastecimentos com `tanqueCheio` e odômetro; parciais no meio entram nos litros, não na fronteira. Média da frota é ponderada pelo km.
 - `common/km-motorista.ts` — **o km que o motorista informa é lei.** `Viagem.kmMotorista` é cópia intocável do valor dele (só os 3 caminhos do app escrevem); `Viagem.km` é o faturado. Qualquer alteração de km pelo painel passa por `checarAlteracaoKm` → sem motivo escrito é 400, e o que passa vira auditoria `ADMIN_ALTEROU_KM` + carimbo `kmAlterado*` (que também tira a viagem do reprocessamento). Endpoint novo que escreva `km` tem que chamar a regra — nunca reimplementar.
 - `common/timezone.ts` — container roda em UTC; "hoje"/mês devem ancorar em `America/Sao_Paulo`, nunca `setHours(0)`.
 
@@ -124,7 +126,7 @@ OSRM (`OSRM_URL`, rotas/km) · Valhalla (`VALHALLA_URL`, navegação ao vivo) ·
 
 ### Prisma
 
-~55 models em `apps/api/prisma/schema.prisma`. Gotchas recorrentes:
+~93 models em `apps/api/prisma/schema.prisma`. Gotchas recorrentes:
 - `$queryRaw` usa o nome do `@@map` (`"viagens"`, `"users"`), não o do model; colunas da Viagem são camelCase. Typecheck não pega, quebra em runtime.
 - Função SQL chamada dentro de outra usada em `CREATE INDEX` precisa de `public.` explícito (42883 no inlining). Prod é PG17: `unaccent(text)` single-arg.
 - Depois de criar migration, conferir com `git show --stat` se o `migration.sql` entrou — pasta vazia o git ignora em silêncio.
@@ -132,11 +134,17 @@ OSRM (`OSRM_URL`, rotas/km) · Valhalla (`VALHALLA_URL`, navegação ao vivo) ·
 
 ## Duas bases de código pro motorista (importante)
 
-`apps/motorista-app/` (nativo, Android+iOS) e `apps/motorista/` (PWA iOS) são **codebases separadas** com paridade visual e funcional. Compartilham:
+`apps/motorista-app/` (nativo, Android+iOS) e `apps/motorista/` (PWA iOS) são **codebases separadas**. Compartilham:
 - Backend (`/m/*`)
 - `@ronan/shared-types` (schemas Zod, tipos `Viagem`/`Pedagio`/`ExtrairTicketResult`, helpers `cpfDigits`/`formatCpf`/etc)
 
-**Não** compartilham telas, componentes UI nem libs do client. O nativo é o app de ponta (features novas nascem lá); o PWA fica atrás em várias features (stories, lifecycle, navegação) — verificar antes de assumir paridade.
+**Não** compartilham telas, componentes UI nem libs do client.
+
+**O PWA é produto REDUZIDO, não um nativo atrasado.** Isto é declaração, não descrição do acaso: em 3 meses o nativo recebeu 225 commits (204 só dele) contra 22 do PWA, dos quais 1 só dele. Fingir paridade cobra um imposto de decisão em toda feature nova e não entrega paridade nenhuma.
+
+O escopo do PWA é: **lançamento** (viagem, pedágio, abastecimento), **pendentes**, **histórico**, **perfil** e **multi-empresa**. Tudo que depende de background, câmera contínua, mapa nativo, keychain ou OTA é **só-nativo por definição** — stories, chat, ciclo de vida guiado, navegação ao vivo, frete pessoal, documentos, tracking.
+
+O PWA existe porque a distribuição iOS está travada (publicação UNLISTED). Enquanto estiver, ele não morre — e enquanto viver, recebe o que está no escopo acima, não tudo.
 
 ### Regra ao desenvolver features pra motorista
 
@@ -144,7 +152,7 @@ OSRM (`OSRM_URL`, rotas/km) · Valhalla (`VALHALLA_URL`, navegação ao vivo) ·
 |---|---|
 | Novo endpoint, novo campo em entidade | Backend + shared-types → ambos os apps pegam após `pnpm build` no shared-types e rebuild |
 | Lógica de validação Zod | shared-types → ambos pegam |
-| Nova tela / botão / fluxo de UX | **Ambos**: `apps/motorista-app/` E `apps/motorista/` (salvo feature declarada só-nativo) |
+| Nova tela / botão / fluxo de UX | **Nativo sempre.** PWA só se a feature estiver no escopo declarado dele (lançamento, pendentes, histórico, perfil, multi-empresa) |
 | Bug visual / interação no Android/iOS nativo | Só `apps/motorista-app/` |
 | Bug visual / interação no PWA iOS | Só `apps/motorista/` |
 
