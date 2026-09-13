@@ -105,10 +105,25 @@ for (const arquivo of arquivos) {
     scale: "css",
   });
 
-  // Transbordo é defeito: a peça tem que caber na altura declarada sem rolagem.
-  const altura = await pagina.evaluate(() => document.body.scrollHeight);
-  if (altura > a + 1) {
-    defeitos.push(`${arquivo}: transbordou a altura (${altura}px em vez de ${a}px).
+  // Transbordo é defeito: a peça tem que caber na altura declarada.
+  //
+  // Mede o elemento que termina mais embaixo, não o `scrollHeight` do body: com
+  // `overflow: hidden` em qualquer ancestral o scrollHeight para em 1350 e o
+  // rodapé sai cortado na imagem sem ninguém reclamar. Foi assim que a 15 saiu
+  // do agente com "No app do Movatruck" faltando metade da letra.
+  // Só TEXTO conta. Sangrar imagem na borda é decisão de arte — a 06, a 09 e a
+  // moldura da 08 fazem isso de propósito. Letra cortada nunca é de propósito.
+  const vazado = await pagina.evaluate((limite) => {
+    const temTextoProprio = (el) =>
+      [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+    return [...document.querySelectorAll("body *")]
+      .filter(temTextoProprio)
+      .map((el) => ({ fim: Math.round(el.getBoundingClientRect().bottom), texto: el.textContent.trim().slice(0, 40) }))
+      .filter((x) => x.fim > limite + 1)
+      .sort((a, b) => b.fim - a.fim)[0] ?? null;
+  }, a);
+  if (vazado) {
+    defeitos.push(`${arquivo}: texto cortado na borda de baixo — "${vazado.texto}" termina em ${vazado.fim}px, ${vazado.fim - a}px além do limite.
     Corte texto — não diminua a fonte.`);
   }
 
