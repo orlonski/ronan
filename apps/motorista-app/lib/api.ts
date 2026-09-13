@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import { Platform } from "react-native";
 import type {
   AcertoDoMotorista,
+  ViagemProgramada,
   CadastroEmpresa,
   CadastroMotoristaInput,
   ConfirmarCadastroInput,
@@ -622,6 +623,12 @@ export const api = {
     request<ConviteEmpresa[]>("GET", "/m/eu/convites", { comoIdentidade: true }),
   /** Os acertos FECHADOS/PAGOS da empresa ativa. Rascunho do escritório não vem. */
   meusAcertos: () => request<AcertoDoMotorista[]>("GET", "/m/acertos"),
+  /** A programação que o escritório publicou pra ele. */
+  minhaProgramacao: () => request<ViagemProgramada[]>("GET", "/m/programacao"),
+  responderProgramacao: (id: string, aceita: boolean, motivo?: string) =>
+    request<{ ok: boolean }>("POST", `/m/programacao/${id}/responder`, {
+      body: { aceita, motivo },
+    }),
   /** Carimba que ele abriu o extrato. O painel mostra isso. */
   marcarAcertoVisto: (id: string) =>
     request<{ ok: boolean }>("POST", `/m/acertos/${id}/visto`, { body: {} }),

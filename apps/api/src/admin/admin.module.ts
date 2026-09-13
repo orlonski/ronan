@@ -7,6 +7,7 @@ import { ModalidadesModule } from "./modalidades/modalidades.module";
 import { RegrasMinimoModule } from "./regras-minimo/regras-minimo.module";
 import { TabelasPrecoModule } from "./tabelas-preco/tabelas-preco.module";
 import { AcertosModule } from "./acertos/acertos.module";
+import { PedidosModule } from "./pedidos/pedidos.module";
 import { ViagemLifecycleAdminModule } from "./viagem-lifecycle/viagem-lifecycle.module";
 import { VeiculosModule } from "./veiculos/veiculos.module";
 import { EmpresasModule } from "./empresas/empresas.module";
@@ -48,6 +49,7 @@ import { LancamentosResgatadosAdminModule } from "./lancamentos-resgatados/lanca
     RegrasMinimoModule,
     TabelasPrecoModule,
     AcertosModule,
+    PedidosModule,
     ViagemLifecycleAdminModule,
     VeiculosModule,
     EmpresasModule,

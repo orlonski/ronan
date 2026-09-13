@@ -44,6 +44,7 @@ const ACAO_TITULO: Record<string, string> = {
   resolver: "Resolver",
   reprocessar: "Mandar reler (gasta leitura paga)",
   avisar: "Publicar aviso",
+  publicar: "Publicar (avisa o motorista)",
   moderar: "Moderar denúncias",
   gerenciar: "Gerenciar",
   gerar: "Gerar / lançar item",
@@ -74,6 +75,12 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // combinado (fechar) e que o dinheiro saiu (pagar) é decisão de quem responde
   // pelo caixa, e raramente é a mesma pessoa.
   { recurso: "acertos", label: "Acertos com motorista", modulo: "Operação", acoes: ["ver", "gerar", "fechar", "pagar"] },
+  // O que o cliente pediu, e o quadro de quem leva o quê. Recursos separados
+  // porque quem negocia o pedido com o cliente raramente é quem monta a escala
+  // do dia. `publicar` é à parte de `editar` pelo mesmo motivo que em marketing:
+  // montar é rascunho, publicar avisa gente de fora e vira combinado.
+  { recurso: "pedidos", label: "Pedidos do cliente", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },
+  { recurso: "programacao", label: "Programação do dia", modulo: "Operação", acoes: ["ver", "editar", "publicar"] },
   // Relatório de produção por período. Agrupar por cliente/empresa (ou filtrar
   // por eles) exige TAMBÉM "viagens.ver-comercial" no endpoint: o agrupamento
   // por cliente É a carteira, e as colunas de km/toneladas faturados são as

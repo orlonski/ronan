@@ -4,6 +4,7 @@ import {
   Bell,
   BellOff,
   Building2,
+  CalendarDays,
   HandCoins,
   ChevronRight,
   HelpCircle,
@@ -263,6 +264,12 @@ function PerfilDaEmpresa() {
               <View className="h-px bg-border" />
               {/* O extrato do que a empresa apurou que deve a ele. Fica em Conta
                   e não numa aba: é consulta de fim de período, não uso diário. */}
+              <ActionRow
+                icon={<CalendarDays size={20} color="#13316b" />}
+                title="Minha programação"
+                onPress={() => router.push("/programacao")}
+              />
+              <View className="h-px bg-border" />
               <ActionRow
                 icon={<HandCoins size={20} color="#13316b" />}
                 title="Meus acertos"

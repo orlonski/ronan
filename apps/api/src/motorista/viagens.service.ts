@@ -43,6 +43,7 @@ import { AdminInboxService } from "../admin/inbox/inbox.service";
 import { KmReprocessamentoService } from "./km-reprocessamento.service";
 import { ConferenciaFilaService } from "../conferencia-ticket/conferencia-fila.service";
 import { PrecificacaoService } from "../admin/tabelas-preco/precificacao.service";
+import { ProgramacaoService } from "../admin/pedidos/programacao.service";
 import { KmAtipicoService } from "../km-atipico/km-atipico.service";
 import { ViagemMensagensService } from "../viagem-mensagens/viagem-mensagens.service";
 import { AvisoPesoService } from "./aviso-peso.service";
@@ -173,6 +174,7 @@ export class ViagensMotoristaService {
     private readonly kmAtipico: KmAtipicoService,
     private readonly conferencia: ConferenciaFilaService,
     private readonly precificacao: PrecificacaoService,
+    private readonly programacao: ProgramacaoService,
     private readonly mensagens: ViagemMensagensService,
     private readonly resgates: LancamentosResgatadosService,
   ) {}
@@ -1574,6 +1576,10 @@ export class ViagensMotoristaService {
     // o outbox aberto, e não pode perder o lançamento porque a tabela de preço
     // deu problema. Se falhar aqui, o cron de reconciliação pega de noite.
     void this.precificacao.recalcularSeguro(viagem.id);
+    // Casa com a viagem que o painel tinha programado pra ele hoje, se houver.
+    // Silencioso: a maior parte das viagens continua nascendo sem plano nenhum,
+    // e exigir plano pra lançar quebraria o app.
+    void this.programacao.casarComViagem(viagem.id);
 
     void (async () => {
       const m = await this.prisma.motorista.findUnique({
@@ -2301,6 +2307,7 @@ export class ViagensMotoristaService {
     void this.kmAtipico.avaliarViagem(finalizada.id);
     void this.conferencia.enfileirar(finalizada.id, "finalizar");
     void this.precificacao.recalcularSeguro(finalizada.id);
+    void this.programacao.casarComViagem(finalizada.id);
 
     // Notifica os admins (inbox/sininho do dashboard) — mesma "Nova viagem" que
     // o fluxo de lançamento único dispara. Só ao FINALIZAR (a viagem em

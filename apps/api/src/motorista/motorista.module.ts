@@ -34,6 +34,7 @@ import { IaTicketController } from "./ia-ticket.controller";
 import { KmReprocessamentoService } from "./km-reprocessamento.service";
 import { ConferenciaTicketModule } from "../conferencia-ticket/conferencia-ticket.module";
 import { TabelasPrecoModule } from "../admin/tabelas-preco/tabelas-preco.module";
+import { PedidosModule } from "../admin/pedidos/pedidos.module";
 import { KmAtipicoModule } from "../km-atipico/km-atipico.module";
 import { LocaisImagemModule } from "../locais-imagem/locais-imagem.module";
 import { ViagemMensagensModule } from "../viagem-mensagens/viagem-mensagens.module";
@@ -44,6 +45,7 @@ import { StoriesCleanupService } from "./stories-cleanup.service";
 import { VersaoAppMotoristaController } from "./versao-app.controller";
 import { LancamentosResgatadosMotoristaController } from "./lancamentos-resgatados.controller";
 import { AcertosMotoristaController } from "./acertos.controller";
+import { ProgramacaoMotoristaController } from "./programacao.controller";
 
 @Module({
   imports: [
@@ -62,6 +64,7 @@ import { AcertosMotoristaController } from "./acertos.controller";
     KmAtipicoModule,
     ConferenciaTicketModule,
     TabelasPrecoModule,
+    PedidosModule,
     ViagemMensagensModule,
     LocaisImagemModule,
   ],
@@ -83,6 +86,7 @@ import { AcertosMotoristaController } from "./acertos.controller";
     VersaoAppMotoristaController,
     LancamentosResgatadosMotoristaController,
     AcertosMotoristaController,
+    ProgramacaoMotoristaController,
   ],
   providers: [
     MotoristaService,

@@ -464,6 +464,8 @@ model Conta {
   viagemValores                 ViagemValor[]
   acertosMotorista              AcertoMotorista[]
   itensAcerto                   ItemAcerto[]
+  pedidos                       Pedido[]
+  viagensPlanejadas             ViagemPlanejada[]
   locais                        Local[]
   locaisClientes                LocalCliente[]
   locaisEvidencias              LocalEvidencia[]
@@ -601,6 +603,8 @@ model User {
   acertosFechados        AcertoMotorista[]     @relation("FechouAcerto")
   acertosPagos           AcertoMotorista[]     @relation("PagouAcerto")
   itensAcertoCriados     ItemAcerto[]          @relation("CriouItemAcerto")
+  pedidosCriados         Pedido[]              @relation("CriouPedido")
+  planejadasCriadas      ViagemPlanejada[]     @relation("CriouViagemPlanejada")
   viagemValoresAlterados ViagemValor[]         @relation("AlterouViagemValor")
   tiposEventoCriados     TipoEventoViagem[]    @relation("CriouTipoEventoViagem")
   locaisCriados          Local[]               @relation("CriouLocal")
@@ -1313,6 +1317,8 @@ model Motorista {
 
   acertos AcertoMotorista[]
 
+  viagensPlanejadas ViagemPlanejada[]
+
   @@unique([contaId, cpf])
   @@index([ativo])
   @@index([status])
@@ -1682,18 +1688,50 @@ model WhatsappMensagem {
 }
 
 model Veiculo {
-  contaId          String          @default("__SEM_CONTA__")
-  conta            Conta           @relation(fields: [contaId], references: [id])
-  id               String          @id @default(uuid())
-  placa            String
-  modelo           String?
-  ativo            Boolean         @default(true)
+  contaId             String          @default("__SEM_CONTA__")
+  conta               Conta           @relation(fields: [contaId], references: [id])
+  id                  String          @id @default(uuid())
+  placa               String
+  modelo              String?
+  ativo               Boolean         @default(true)
+  // --- ficha técnica ---
+  // Até aqui o veículo eram quatro campos: placa, modelo (texto livre), ativo e
+  // frota. Não dava pra dizer se cabia a carga, e nada disso existia pro MDF-e.
+  // Tudo opcional: frota que já usa o sistema não pode travar por causa de
+  // cadastro incompleto — o que exigir o campo cobra na hora de usar.
+  /// Quanto o caminhão carrega, em toneladas. É o que permite responder
+  /// "preciso de quantos caminhões pra 180 t?" na programação.
+  capacidadeToneladas Decimal?        @db.Decimal(10, 3)
+  /// Peso do veículo vazio. Obrigatório no MDF-e.
+  tara                Decimal?        @db.Decimal(10, 3)
+  renavam             String?
+  chassi              String?
+  anoFabricacao       Int?
+  anoModelo           Int?
+  marca               String?
+  /// Código do MDF-e: 01 Truck, 02 Toco, 03 Cavalo Mecânico, 04 VAN,
+  /// 05 Utilitário, 06 Outros. String e não enum pra acompanhar a tabela da
+  /// SEFAZ sem migration quando ela mudar.
+  tipoRodado          String?
+  /// Código do MDF-e: 00 N/A, 01 aberta, 02 fechada/baú, 03 granelera,
+  /// 04 porta-container, 05 sider. Agregado é 03.
+  tipoCarroceria      String?
+  /// Próprio, arrendado ou de terceiro. Muda o grupo `prop` do MDF-e — e é
+  /// exigido quando o veículo não é do emitente, que é o caso do agregado.
+  tipoProprietario    String?
+  /// CNPJ/CPF do dono quando não é a própria empresa.
+  cpfCnpjProprietario String?
+  rntrcProprietario   String?
+  /// Documento do veículo com validade, pra avisar antes de parar na balança.
+  crlvValidade        DateTime?       @db.Date
+  /// Vencimento do seguro do casco/RCTR-C.
+  seguroValidade      DateTime?       @db.Date
   /// Frota dona do caminhão. Null = não classificado. Serve de fallback quando
   /// o motorista não tem transportadora no momento do lançamento.
-  transportadora   Transportadora? @relation(fields: [transportadoraId], references: [id], onDelete: SetNull)
-  transportadoraId String?
-  criadoEm         DateTime        @default(now())
-  alteradoEm       DateTime        @updatedAt
+  transportadora      Transportadora? @relation(fields: [transportadoraId], references: [id], onDelete: SetNull)
+  transportadoraId    String?
+  criadoEm            DateTime        @default(now())
+  alteradoEm          DateTime        @updatedAt
 
   motoristasComoDefault Motorista[]        @relation("VeiculoDefaultMotorista")
   motoristas            MotoristaVeiculo[]
@@ -1702,6 +1740,8 @@ model Veiculo {
   abastecimentos        Abastecimento[]
   criadoPor             User?              @relation("CriouVeiculo", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId           String?
+
+  viagensPlanejadas ViagemPlanejada[]
 
   @@unique([contaId, placa])
   @@index([ativo])
@@ -1792,6 +1832,8 @@ model Empresa {
   criadoPor      User?               @relation("CriouEmpresa", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId    String?
 
+  pedidos Pedido[]
+
   @@unique([contaId, cnpj])
   @@index([ativa])
   @@index([contaId])
@@ -1847,6 +1889,8 @@ model Cliente {
   criadoPor   User?          @relation("CriouCliente", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId String?
 
+  pedidos Pedido[]
+
   @@index([empresaId])
   @@index([ativa])
   @@index([contaId])
@@ -1893,6 +1937,8 @@ model Material {
   tabelasPreco TabelaPreco[]
   criadoPor    User?         @relation("CriouMaterial", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId  String?
+
+  pedidos Pedido[]
 
   @@unique([contaId, nome])
   @@index([ativo])
@@ -1942,6 +1988,8 @@ model TipoServico {
 
   viagens      Viagem[]
   tabelasPreco TabelaPreco[]
+
+  pedidos Pedido[]
 
   @@unique([contaId, slug])
   @@unique([contaId, nome])
@@ -2267,6 +2315,137 @@ model ViagemValor {
   @@map("viagem_valores")
 }
 
+enum UnidadePedido {
+  VIAGENS
+  TONELADAS
+}
+
+enum StatusPedido {
+  ABERTO
+  /// Já tem viagem abatendo.
+  EM_CURSO
+  CUMPRIDO
+  CANCELADO
+}
+
+/**
+ * O que o cliente pediu: "a pedreira quer 20 viagens de brita nessa obra até
+ * sexta".
+ * Era o buraco que fazia o sistema só conhecer o passado. Tudo começava quando
+ * o motorista tocava "Iniciar viagem"; receber o pedido, programar o dia e
+ * dizer a quem cabe viviam no grupo de WhatsApp — e enquanto a programação
+ * mora no WhatsApp, o WhatsApp é o sistema e isto aqui é o relatório.
+ * O saldo (pedido × entregue) é DERIVADO das viagens reais, nunca um contador
+ * incrementado: contador dessincroniza no primeiro cancelamento e ninguém
+ * descobre até o cliente reclamar.
+ */
+model Pedido {
+  contaId         String        @default("__SEM_CONTA__")
+  conta           Conta         @relation(fields: [contaId], references: [id])
+  id              String        @id @default(uuid())
+  /// Número curto e sequencial POR CONTA, pra falar ao telefone ("o pedido 47").
+  numero          Int
+  empresa         Empresa       @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  empresaId       String
+  /// A obra/frente específica dentro do tomador. Null = qualquer uma dele.
+  cliente         Cliente?      @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  clienteId       String?
+  material        Material?     @relation(fields: [materialId], references: [id], onDelete: SetNull)
+  materialId      String?
+  localCarga      Local?        @relation("PedidoLocalCarga", fields: [localCargaId], references: [id], onDelete: SetNull)
+  localCargaId    String?
+  localDescarga   Local?        @relation("PedidoLocalDescarga", fields: [localDescargaId], references: [id], onDelete: SetNull)
+  localDescargaId String?
+  tipoServico     TipoServico?  @relation(fields: [tipoServicoId], references: [id], onDelete: SetNull)
+  tipoServicoId   String?
+  quantidadeAlvo  Decimal       @db.Decimal(12, 3)
+  unidadeAlvo     UnidadePedido @default(VIAGENS)
+  inicioEm        DateTime      @db.Date
+  /// Quando tem que estar cumprido. Null = sem prazo combinado.
+  prazoEm         DateTime?     @db.Date
+  /// Maior = mais urgente. Ordena o quadro de programação.
+  prioridade      Int           @default(0)
+  status          StatusPedido  @default(ABERTO)
+  observacao      String?
+  criadoPor       User?         @relation("CriouPedido", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId     String?
+  criadoEm        DateTime      @default(now())
+  alteradoEm      DateTime      @updatedAt
+
+  planejadas ViagemPlanejada[]
+
+  @@unique([contaId, numero])
+  @@index([contaId, status])
+  @@index([empresaId, prazoEm])
+  @@index([contaId])
+  @@map("pedidos")
+}
+
+enum StatusViagemPlanejada {
+  /// Montada no quadro, ainda não publicada pro motorista.
+  PLANEJADA
+  /// Publicada: o motorista já vê no app dele.
+  PUBLICADA
+  ACEITA
+  RECUSADA
+  /// A viagem real começou e casou com esta.
+  EM_EXECUCAO
+  CUMPRIDA
+  /// Passou o dia e não virou viagem. É o dado que ninguém tem hoje.
+  FURADA
+  CANCELADA
+}
+
+/**
+ * Uma viagem PROGRAMADA: quem leva o quê, pra onde, quando.
+ * ⚠️ ENTIDADE SEPARADA DA `Viagem`, DE PROPÓSITO. A tentação é criar um status
+ * `PLANEJADA` no `StatusViagem` — e isso seria a pior decisão possível aqui.
+ * `STATUS_FORA_FECHAMENTO` existe justamente porque status incompleto vazando
+ * pra KPI e fechamento é a armadilha recorrente deste projeto: cada ponto de
+ * exclusão esquecido vira viagem fantasma de 0 t na fatura do cliente. São 25
+ * pontos hoje. Uma entidade separada não corre esse risco em nenhum deles.
+ * O encontro com a realidade acontece por `viagemId`, preenchido quando a
+ * viagem real nasce e casa com esta.
+ */
+model ViagemPlanejada {
+  contaId      String                @default("__SEM_CONTA__")
+  conta        Conta                 @relation(fields: [contaId], references: [id])
+  id           String                @id @default(uuid())
+  pedido       Pedido?               @relation(fields: [pedidoId], references: [id], onDelete: SetNull)
+  pedidoId     String?
+  /// Null = vaga aberta no quadro, ainda sem dono.
+  motorista    Motorista?            @relation(fields: [motoristaId], references: [id], onDelete: SetNull)
+  motoristaId  String?
+  veiculo      Veiculo?              @relation(fields: [veiculoId], references: [id], onDelete: SetNull)
+  veiculoId    String?
+  dataPrevista DateTime              @db.Date
+  /// "06:00". String porque é hora de parede combinada com o cliente, não
+  /// instante — guardar como timestamp obrigaria a decidir um fuso pra algo que
+  /// já é local por natureza.
+  janelaInicio String?
+  janelaFim    String?
+  /// Ordem no dia daquele motorista: a 1ª, a 2ª viagem.
+  sequencia    Int                   @default(0)
+  status       StatusViagemPlanejada @default(PLANEJADA)
+  /// A viagem real que cumpriu esta. Preenchido no casamento.
+  viagem       Viagem?               @relation(fields: [viagemId], references: [id], onDelete: SetNull)
+  viagemId     String?               @unique
+  observacao   String?
+  publicadoEm  DateTime?
+  respondidoEm DateTime?
+  recusaMotivo String?
+  criadoPor    User?                 @relation("CriouViagemPlanejada", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId  String?
+  criadoEm     DateTime              @default(now())
+  alteradoEm   DateTime              @updatedAt
+
+  @@index([contaId, dataPrevista])
+  @@index([motoristaId, dataPrevista])
+  @@index([pedidoId])
+  @@index([contaId])
+  @@map("viagens_planejadas")
+}
+
 model RegraMinimo {
   contaId         String    @default("__SEM_CONTA__")
   conta           Conta     @relation(fields: [contaId], references: [id])
@@ -2343,6 +2522,9 @@ model Local {
   /// Quando o admin cadastra/edita pelo dashboard. Pra motorista, ver criadoPorMotorista.
   criadoPor       User?            @relation("CriouLocal", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId     String?
+
+  pedidosComoCarga    Pedido[] @relation("PedidoLocalCarga")
+  pedidosComoDescarga Pedido[] @relation("PedidoLocalDescarga")
 
   @@index([cidade, uf])
   @@index([ativo])
@@ -2676,6 +2858,8 @@ model Viagem {
   valor ViagemValor?
 
   itensAcerto ItemAcerto[]
+
+  planejada ViagemPlanejada?
 
   @@index([transportadoraId, data])
   @@index([motoristaId, data])
