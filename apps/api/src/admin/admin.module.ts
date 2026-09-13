@@ -11,6 +11,7 @@ import { PedidosModule } from "./pedidos/pedidos.module";
 import { FinanceiroModule } from "./financeiro/financeiro.module";
 import { FornecedoresModule } from "./fornecedores/fornecedores.module";
 import { FrotaManutencaoModule } from "./frota-manutencao/frota-manutencao.module";
+import { CteModule } from "./cte/cte.module";
 import { ImportacaoModule } from "./importacao/importacao.module";
 import { TorreModule } from "./torre/torre.module";
 import { ViagemLifecycleAdminModule } from "./viagem-lifecycle/viagem-lifecycle.module";
@@ -58,6 +59,7 @@ import { LancamentosResgatadosAdminModule } from "./lancamentos-resgatados/lanca
     FinanceiroModule,
     FornecedoresModule,
     FrotaManutencaoModule,
+    CteModule,
     ImportacaoModule,
     TorreModule,
     ViagemLifecycleAdminModule,

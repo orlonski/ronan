@@ -157,6 +157,10 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // cadastro: quem pode criar um cliente não deveria, por isso, poder
   // reescrever a base inteira — por isso recurso próprio.
   { recurso: "importacao", label: "Importar dados", modulo: "Sistema", acoes: ["ver", "executar"] },
+  // Emitir documento fiscal é ato com consequência jurídica: quem lança uma
+  // viagem não deveria, por isso, poder emitir em nome da empresa. Cancelar é
+  // ação à parte porque tem prazo legal e é contada pela SEFAZ.
+  { recurso: "cte", label: "CT-e (emissão)", modulo: "Sistema", acoes: ["ver", "emitir", "cancelar"] },
   { recurso: "whatsapp", label: "WhatsApp", modulo: "Sistema", acoes: ["ver", "gerenciar"] },
   { recurso: "erros", label: "Erros", modulo: "Sistema", acoes: ["ver", "resolver"] },
   { recurso: "diagnosticos", label: "Diagnósticos", modulo: "Sistema", acoes: ["ver"] },

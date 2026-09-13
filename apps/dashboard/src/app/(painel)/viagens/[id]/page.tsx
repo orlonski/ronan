@@ -87,6 +87,7 @@ import { FaturamentoCard, type RegraMinimo } from "./_components/faturamento-car
 import { ConversaViagemCard } from "./_components/conversa-viagem-card";
 import { EscolherRotaModal } from "./_components/escolher-rota-modal";
 import { CompartilharViagemModal } from "./_components/compartilhar-modal";
+import { PainelCte } from "./_components/painel-cte";
 
 type ViagemDetalhe = {
   /**
@@ -1306,6 +1307,8 @@ export default function ViagemDetalhePage({
               />
             </Card>
           )}
+
+          <PainelCte viagemId={id} />
 
           {(v.matchesFechamento?.length ?? 0) > 0 && (
             <Card className="p-4 sm:p-5">

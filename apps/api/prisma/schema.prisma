@@ -456,6 +456,29 @@ model Conta {
   /// ETC (empresa), CTC (cooperativa) ou TAC (autônomo).
   tipoTransportador   String?
 
+  // --- emissão de CT-e (modelo 57) ---
+  // Nada aqui tem default "o que costuma ser": CFOP, CST e alíquota são decisão
+  // do contador da transportadora. Chutar produz documento que a SEFAZ autoriza
+  // e que está errado — e errado em imposto só aparece na fiscalização.
+  /// "SIMULADOR" (nível 1, local) · "GATEWAY" (níveis 2 e 3).
+  cteEmissor          String?
+  /// 1 produção · 2 homologação. Nasce em homologação de propósito.
+  cteAmbiente         Int?     @default(2)
+  cteSerie            Int?     @default(1)
+  /// Os TRÊS últimos dígitos do CFOP. O 5 ou o 6 da frente o sistema deriva.
+  cteNaturezaCfop     String?
+  cteNaturezaOperacao String?
+  /// "SN" | "00" | "20" | "45" | "60" | "90".
+  cteIcmsTipo         String?
+  cteIcmsAliquota     Decimal? @db.Decimal(5, 2)
+  cteIcmsReducao      Decimal? @db.Decimal(5, 2)
+  /// Só quando o tipo é "45": 40 isenta · 41 não tributada · 51 diferimento.
+  cteIcmsCst          String?
+  /// Base da API do gateway. Vazio = ainda não contratado.
+  cteGatewayUrl       String?
+  /// Credencial do gateway. NUNCA sai numa resposta de API.
+  cteGatewayToken     String?
+
   /// URL pública servida por /publico/contas/:id/logo (com `v` pra furar cache).
   logoUrl     String?
   /// Chave do objeto no MinIO. Separada da URL pra poder apagar a logo antiga.
@@ -508,6 +531,8 @@ model Conta {
   pneus                         Pneu[]
   multas                        Multa[]
   alertasOperacionais           AlertaOperacional[]
+  documentosFiscais             DocumentoFiscal[]
+  sequenciasFiscais             SequenciaFiscal[]
   locais                        Local[]
   locaisClientes                LocalCliente[]
   locaisEvidencias              LocalEvidencia[]
@@ -654,6 +679,7 @@ model User {
   manutencoesCriadas     ManutencaoVeiculo[]   @relation("CriouManutencao")
   multasCriadas          Multa[]               @relation("CriouMulta")
   alertasResolvidos      AlertaOperacional[]   @relation("ResolveuAlerta")
+  documentosFiscais      DocumentoFiscal[]     @relation("EmitiuDocumentoFiscal")
   ocorrenciasEncerradas  EventoViagem[]        @relation("EncerrouOcorrencia")
   viagemValoresAlterados ViagemValor[]         @relation("AlterouViagemValor")
   tiposEventoCriados     TipoEventoViagem[]    @relation("CriouTipoEventoViagem")
@@ -3117,6 +3143,93 @@ model AlertaOperacional {
   @@map("alertas_operacionais")
 }
 
+enum StatusDocumentoFiscal {
+  /// Montado e validado aqui, ainda não foi pra lugar nenhum.
+  RASCUNHO
+  /// Saiu daqui e ainda não voltou resposta.
+  ENVIADO
+  AUTORIZADO
+  /// A SEFAZ recusou, e o motivo está em `motivo`. Dá pra corrigir e reemitir.
+  REJEITADO
+  CANCELADO
+  /// Falhou antes de chegar à SEFAZ (rede, gateway fora, credencial). Retentável.
+  ERRO
+}
+
+/**
+ * O documento fiscal que ESTE sistema emitiu.
+ * Diferente dos campos `cteChave`/`nfeChave` da Viagem, que guardam o documento
+ * emitido em OUTRO lugar: aqui mora o que saiu daqui, com o que foi mandado, o
+ * que voltou e por quê. Sem guardar os dois lados, uma rejeição vira "deu erro"
+ * e ninguém consegue dizer qual campo estava errado.
+ */
+model DocumentoFiscal {
+  contaId            String                @default("__SEM_CONTA__")
+  conta              Conta                 @relation(fields: [contaId], references: [id])
+  id                 String                @id @default(uuid())
+  viagem             Viagem?               @relation(fields: [viagemId], references: [id], onDelete: SetNull)
+  viagemId           String?
+  /// "57" CT-e · "58" MDF-e. Hoje só 57.
+  modelo             String
+  serie              Int
+  numero             Int
+  /// Os 44 dígitos. Existe desde o rascunho: a chave é calculada, não sorteada
+  /// pela SEFAZ — e é ela que amarra a tentativa ao retorno.
+  chave              String
+  /// 1 produção · 2 homologação.
+  ambiente           Int
+  /// "SIMULADOR" | "GATEWAY". Saber por onde saiu é o que explica um documento
+  /// que existe aqui e não existe na SEFAZ.
+  emissor            String
+  status             StatusDocumentoFiscal @default(RASCUNHO)
+  /// Protocolo de autorização da SEFAZ.
+  protocolo          String?
+  autorizadoEm       DateTime?
+  /// Código e texto do retorno — inclusive quando é rejeição.
+  codigoRetorno      String?
+  motivo             String?
+  /// O que foi mandado, campo a campo. É o que permite responder "por que
+  /// rejeitou" sem remontar o documento e torcer pra dar igual.
+  payload            Json
+  /// O que voltou, cru.
+  retorno            Json?
+  /// XML autorizado, quando o emissor devolve.
+  xml                String?
+  canceladoEm        DateTime?
+  cancelamentoMotivo String?
+  criadoEm           DateTime              @default(now())
+  alteradoEm         DateTime              @updatedAt
+  criadoPor          User?                 @relation("EmitiuDocumentoFiscal", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId        String?
+
+  /// Chave repetida na mesma conta é numeração furada — o pior defeito
+  /// possível aqui, porque só aparece na SEFAZ recusando o segundo.
+  @@unique([contaId, chave])
+  @@index([contaId, status])
+  @@index([viagemId])
+  @@map("documentos_fiscais")
+}
+
+/**
+ * A numeração sequencial por série.
+ * Tabela própria, e não `max(numero) + 1`: dois usuários emitindo ao mesmo
+ * tempo leriam o mesmo máximo e gerariam o mesmo número. O incremento aqui é
+ * atômico no banco, que é a única forma de isso não acontecer.
+ */
+model SequenciaFiscal {
+  contaId String @default("__SEM_CONTA__")
+  conta   Conta  @relation(fields: [contaId], references: [id])
+  id      String @id @default(uuid())
+  modelo  String
+  serie   Int
+  /// O próximo número a usar. Começa em 1.
+  proximo Int    @default(1)
+
+  @@unique([contaId, modelo, serie])
+  @@index([contaId])
+  @@map("sequencias_fiscais")
+}
+
 model RegraMinimo {
   contaId         String    @default("__SEM_CONTA__")
   conta           Conta     @relation(fields: [contaId], references: [id])
@@ -3142,32 +3255,44 @@ model RegraMinimo {
 }
 
 model Local {
-  contaId              String               @default("__SEM_CONTA__")
-  conta                Conta                @relation(fields: [contaId], references: [id])
-  id                   String               @id @default(uuid())
-  nome                 String
-  logradouro           String
-  numero               String?
-  bairro               String?
-  cidade               String
-  uf                   String               @db.Char(2)
-  cep                  String?
-  lat                  Float?
-  lng                  Float?
+  contaId           String    @default("__SEM_CONTA__")
+  conta             Conta     @relation(fields: [contaId], references: [id])
+  id                String    @id @default(uuid())
+  nome              String
+  logradouro        String
+  numero            String?
+  bairro            String?
+  cidade            String
+  uf                String    @db.Char(2)
+  cep               String?
+  lat               Float?
+  lng               Float?
   /// Precisão (accuracy em metros) do GPS quando o motorista cadastrou o local
   /// estando nele ("Estou no local", fluxo rápido). null pra locais cadastrados
   /// pelo admin (endereço digitado) ou antigos pré-feature.
-  latLngPrecisao       Float?
+  latLngPrecisao    Float?
   /// Fonte do sinal de GPS na captura (PRECISA/BALANCED/CACHE). Complementa a
   /// precisão pra auditar: CACHE = caiu no last-known do sistema (pode estar
   /// defasado). null pra locais do admin / antigos / PWA (não distingue fonte).
-  latLngFonte          FonteGps?
-  pontoReferencia      String?
+  latLngFonte       FonteGps?
+  pontoReferencia   String?
   /// Apelidos/sinônimos pra busca fuzzy do agente WhatsApp. Como o motorista
   /// chama no dia a dia (ex: "pedreira nova", "do souza", "balança 2").
-  apelidos             String[]             @default([])
-  tipo                 TipoLocal
-  ativo                Boolean              @default(true)
+  apelidos          String[]  @default([])
+  tipo              TipoLocal
+  ativo             Boolean   @default(true)
+  // --- identidade fiscal ---
+  // No CT-e, o lugar de onde a carga sai e o lugar pra onde ela vai não são
+  // endereços: são PESSOAS JURÍDICAS, com CNPJ e inscrição estadual. O Local
+  // sabia onde fica a pedreira e não sabia de quem ela é.
+  /// CNPJ (14) ou CPF (11), só dígitos.
+  cnpjCpf           String?
+  /// Razão social, quando difere do nome do dia a dia ("Pedreira Norte").
+  razaoSocialFiscal String?
+  inscricaoEstadual String?
+  /// "1" contribuinte · "2" isento · "9" não contribuinte.
+  indicadorIe       String?
+
   /// Confiança no local. Começa RASCUNHO quando motorista cadastra; sobe
   /// sozinho conforme evidências (LocalEvidencia) chegam. RECORRENTE/HUMANO
   /// = limpo, sem destaque no app.
@@ -3566,7 +3691,8 @@ model Viagem {
 
   faturaLinhas FaturaLinha[]
 
-  alertas AlertaOperacional[]
+  alertas           AlertaOperacional[]
+  documentosFiscais DocumentoFiscal[]
 
   @@index([transportadoraId, data])
   @@index([motoristaId, data])

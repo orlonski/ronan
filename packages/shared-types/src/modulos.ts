@@ -84,6 +84,7 @@ export const MODULOS: ModuloDef[] = [
       "minha-empresa",
       "mapa",
       "importacao",
+      "cte",
     ],
   },
   {
