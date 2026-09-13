@@ -184,6 +184,9 @@ export class ExportFechamentoService {
         motorista: { select: { id: true, nome: true } },
         localCarga: { select: { nome: true, cidade: true, uf: true } },
         localDescarga: { select: { nome: true, cidade: true, uf: true } },
+        // O valor calculado pela TabelaPreco. Nulo enquanto a empresa não tiver
+        // preço cadastrado — e aí a coluna sai vazia, não zerada.
+        valor: { select: { valorTotal: true } },
       },
       orderBy: [{ data: "asc" }, { ticket: "asc" }],
     });
@@ -201,10 +204,13 @@ export class ExportFechamentoService {
     const regras = await this.prisma.regraMinimo.findMany({ where: { ativo: true } });
     const linhasParaExport = viagens.map((v) => {
       const viagem = v as ViagemFull;
+      // Até existir TabelaPreco, isto era `null` fixo com um comentário dizendo
+      // "sem fechamento real" — e a coluna `valor_total` do layout resolvia pra
+      // 0, mandando R$ 0,00 em toda linha da planilha que vai pro cliente.
+      const valorDaViagem = (v as { valor?: { valorTotal: unknown } | null }).valor?.valorTotal;
       return {
         viagem,
-        // valor unitário do contrato vezes toneladas (aproximação) — sem fechamento real
-        valorTotal: null as number | null,
+        valorTotal: valorDaViagem != null ? Number(valorDaViagem) : null,
         override: comOverride(regras, viagem),
       };
     });
@@ -500,7 +506,11 @@ function valorParaColuna(
     case "valor_pedagio":
       return viagem.valorPedagioTotal ? Number(viagem.valorPedagioTotal) : 0;
     case "valor_total":
-      return valorTotalLinha ?? 0;
+      // Célula VAZIA quando não há preço cadastrado, nunca zero. R$ 0,00 numa
+      // planilha de cobrança parece um valor conferido e aceito; vazio parece o
+      // que é — falta preencher. O cliente que recebe a planilha lê os dois de
+      // um jeito bem diferente.
+      return valorTotalLinha ?? null;
     case "local_carga":
       return `${viagem.localCarga?.nome ?? ""} (${viagem.localCarga?.cidade ?? ""}/${viagem.localCarga?.uf ?? ""})`;
     case "local_descarga":

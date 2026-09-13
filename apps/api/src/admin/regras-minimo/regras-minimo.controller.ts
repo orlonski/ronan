@@ -28,11 +28,15 @@ type ListRegrasQuery = z.infer<typeof ListRegrasQuery>;
 export class RegrasMinimoController {
   constructor(private readonly service: RegrasMinimoService) {}
 
+  // Os dois GETs abaixo estavam sem permissão: com o PermissaoGuard fail-open,
+  // qualquer ADMIN_USER lia os mínimos negociados com cada tomador.
+  @RequerPermissao("regras-minimo.ver")
   @Get()
   list(@Query(new ZodValidationPipe(ListRegrasQuery)) query: ListRegrasQuery) {
     return this.service.list(query);
   }
 
+  @RequerPermissao("regras-minimo.ver")
   @Get(":id")
   findOne(@Param("id") id: string) {
     return this.service.findOne(id);

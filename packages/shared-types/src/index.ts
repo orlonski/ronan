@@ -24,6 +24,7 @@ export * from "./veiculo";
 export * from "./material";
 export * from "./tipo-servico";
 export * from "./regra-minimo";
+export * from "./tabela-preco";
 export * from "./relatorio";
 export * from "./relatorio-abastecimento";
 export * from "./relatorio-conferencia";

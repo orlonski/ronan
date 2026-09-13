@@ -35,6 +35,7 @@ import { PedagiosRodoviaConsultaService } from "../pedagios-rodovia/pedagios-rod
 import { BuscaLocaisConfigService } from "../busca-locais-config/busca-locais-config.service";
 import { GeocodingService } from "../../geocoding/geocoding.service";
 import { KmAtipicoService } from "../../km-atipico/km-atipico.service";
+import { PrecificacaoService } from "../tabelas-preco/precificacao.service";
 import { ViagemMensagensService } from "../../viagem-mensagens/viagem-mensagens.service";
 
 type ListViagensParams = PaginationQuery & {
@@ -72,6 +73,7 @@ export class ViagensAdminService {
     private readonly buscaConfig: BuscaLocaisConfigService,
     private readonly geocoding: GeocodingService,
     private readonly kmAtipico: KmAtipicoService,
+    private readonly precificacao: PrecificacaoService,
     private readonly mensagens: ViagemMensagensService,
   ) {}
 
@@ -798,6 +800,23 @@ export class ViagensAdminService {
       input.localDescargaId != null
     ) {
       void this.kmAtipico.avaliarViagem(id);
+    }
+
+    // Mexeu em qualquer insumo do preço, o valor tem que acompanhar. Sem isto, o
+    // conferente corrige as toneladas de 20 pra 27 e a fatura continua com o
+    // valor de 20 — que é pior do que não ter valor nenhum, porque parece certo.
+    //
+    // `await` e não `void` como nos outros: o `detalhe` logo abaixo devolve a
+    // viagem pra tela, e ela precisa sair já com o valor novo. É uma consulta
+    // curta, no caminho de uma edição manual, não no do app.
+    if (
+      input.km != null ||
+      input.toneladas != null ||
+      input.clienteId != null ||
+      input.materialId != null ||
+      input.data != null
+    ) {
+      await this.precificacao.recalcularSeguro(id);
     }
 
     return this.detalhe(id, null /* handler sem @EscopoPor: sem recorte por frota (a conta a trava já filtra) */, true /* admin */);

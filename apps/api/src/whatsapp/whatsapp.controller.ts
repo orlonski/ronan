@@ -10,6 +10,7 @@ import {
   Post,
   Put,
   Query,
+  UnauthorizedException,
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
@@ -63,11 +64,18 @@ export class WhatsappController {
    * a autenticação é o segredo compartilhado em `WHATSAPP_WEBHOOK_SECRET`,
    * mandado pelo Evolution num header.
    *
-   * ⚠️ ETAPA 1 DE 2 — hoje a conferência só OBSERVA: quando o segredo não bate,
-   * loga e deixa passar. É de propósito. O Evolution v2 não garante qual header
-   * manda no webhook (depende da config da instância), e ligar a recusa no
-   * escuro derrubaria todo o inbound em produção. Depois de 24h de log limpo
-   * confirmando qual header chega, trocar o `warn` por `UnauthorizedException`.
+   * A recusa é controlada por `WHATSAPP_WEBHOOK_ENFORCE`:
+   *
+   *   - desligada (padrão): quando o segredo não bate, loga e deixa passar.
+   *     É a etapa de observação — o Evolution v2 não garante qual header manda
+   *     (depende da config da instância), e ligar a recusa no escuro derrubaria
+   *     todo o inbound em produção.
+   *   - ligada: recusa com 401.
+   *
+   * Ligar é uma variável no Easypanel, não um deploy — dá pra virar a chave
+   * depois de ver no log qual header chega, e desligar em segundos se o
+   * inbound parar. Enquanto estiver desligada, o endpoint é público de fato:
+   * quem souber a URL injeta `messages.upsert` forjado e o agente responde.
    *
    * Resposta 200 imediata pra não bloquear o Evolution; processamento é
    * fire-and-forget.
@@ -110,10 +118,23 @@ export class WhatsappController {
    * de ligar a recusa.
    */
   private conferirSegredo(headers: Record<string, string | string[]>, event: unknown): void {
+    // "true"/"1" ligam. Qualquer outra coisa (inclusive ausente) deixa no modo
+    // observação — a falha de uma env mal digitada não pode ser derrubar o
+    // inbound inteiro.
+    const bruto = (this.config.get<string>("WHATSAPP_WEBHOOK_ENFORCE") ?? "").trim().toLowerCase();
+    const exigir = bruto === "true" || bruto === "1";
+
     const esperado = this.config.get<string>("WHATSAPP_WEBHOOK_SECRET");
     if (!esperado) {
-      // Sem segredo configurado não há o que conferir. Avisa uma vez por
-      // evento pra não passar despercebido em produção.
+      // Sem segredo configurado não há o que conferir. Com a recusa ligada isso
+      // é erro de configuração e o webhook fecha: o contrário seria a chave
+      // ligada dando a sensação de proteção que não existe.
+      if (exigir) {
+        this.log.error(
+          `WHATSAPP_WEBHOOK_ENFORCE ligado sem WHATSAPP_WEBHOOK_SECRET — recusando (event=${event})`,
+        );
+        throw new UnauthorizedException("Webhook não autenticado");
+      }
       this.log.warn(`WHATSAPP_WEBHOOK_SECRET não configurado — webhook aberto (event=${event})`);
       return;
     }
@@ -128,9 +149,17 @@ export class WhatsappController {
       this.log.debug(`segredo do webhook conferido no header "${bateu}"`);
       return;
     }
+    const ondeProcurou = presentes.length ? presentes.join(", ") : "nenhum";
+    if (exigir) {
+      this.log.warn(
+        `segredo do webhook NÃO bateu (event=${event}) — headers de segredo presentes: ` +
+          `${ondeProcurou}. Recusado.`,
+      );
+      throw new UnauthorizedException("Webhook não autenticado");
+    }
     this.log.warn(
       `segredo do webhook NÃO bateu (event=${event}) — headers de segredo presentes: ` +
-        `${presentes.length ? presentes.join(", ") : "nenhum"}. Passando assim mesmo (etapa 1 de 2).`,
+        `${ondeProcurou}. Passando assim mesmo (WHATSAPP_WEBHOOK_ENFORCE desligado).`,
     );
   }
 

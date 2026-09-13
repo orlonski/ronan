@@ -460,6 +460,8 @@ model Conta {
   tiposServico                  TipoServico[]
   modalidadesMotorista          ModalidadeMotorista[]
   regrasMinimo                  RegraMinimo[]
+  tabelasPreco                  TabelaPreco[]
+  viagemValores                 ViagemValor[]
   locais                        Local[]
   locaisClientes                LocalCliente[]
   locaisEvidencias              LocalEvidencia[]
@@ -593,6 +595,8 @@ model User {
   motoristasConvidados   Motorista[]           @relation("ConvidouMotorista")
   empresasCriadas        Empresa[]             @relation("CriouEmpresa")
   regrasMinimoCriadas    RegraMinimo[]         @relation("CriouRegraMinimo")
+  tabelasPrecoCriadas    TabelaPreco[]         @relation("CriouTabelaPreco")
+  viagemValoresAlterados ViagemValor[]         @relation("AlterouViagemValor")
   tiposEventoCriados     TipoEventoViagem[]    @relation("CriouTipoEventoViagem")
   locaisCriados          Local[]               @relation("CriouLocal")
   usuariosCriados        User[]                @relation("CriouUser")
@@ -1760,6 +1764,7 @@ model Empresa {
 
   clientes       Cliente[]
   regrasMinimo   RegraMinimo[]
+  tabelasPreco   TabelaPreco[]
   fechamentos    Fechamento[]
   layoutsEnvio   LayoutEnvio[]
   layoutsImport  LayoutImportBloco[]
@@ -1866,6 +1871,7 @@ model Material {
 
   viagens      Viagem[]
   regrasMinimo RegraMinimo[]
+  tabelasPreco TabelaPreco[]
   criadoPor    User?         @relation("CriouMaterial", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId  String?
 
@@ -1915,7 +1921,8 @@ model TipoServico {
   criadoPor          User?         @relation("CriouTipoServico", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId        String?
 
-  viagens Viagem[]
+  viagens      Viagem[]
+  tabelasPreco TabelaPreco[]
 
   @@unique([contaId, slug])
   @@unique([contaId, nome])
@@ -1972,6 +1979,121 @@ model ModalidadeMotorista {
 /// e km real dentro da faixa), o mínimo da regra vence o mínimo do cliente.
 /// kmFaixaDe inclusivo, kmFaixaAte exclusivo (null = sem teto). Pelo menos um
 /// dos mínimos (km/toneladas) preenchido.
+/**
+ * Em que unidade o frete é cobrado. Espelha `TipoServico.medicao` no espírito,
+ * mas é outra coisa: medicao diz COMO o serviço é medido, isto diz POR QUAL
+ * unidade ele é pago. Uma viagem medida em PESO pode ser paga por viagem fechada.
+ */
+enum BasePreco {
+  /// R$ por tonelada efetiva (o mais comum em agregados).
+  TONELADA
+  /// R$ por km efetivo.
+  KM
+  /// Valor fechado por viagem, independente de peso e distância.
+  VIAGEM
+  /// R$ por diária/período. Única base válida pra TipoServico.medicao = PERIODO.
+  PERIODO
+}
+
+/**
+ * Quanto vale o serviço — a tabela de preço de frete.
+ * Espelha a `RegraMinimo` de propósito: mesma resolução (empresa + material +
+ * faixa de km), mesma semântica de faixa (`kmFaixaDe` inclusivo, `kmFaixaAte`
+ * exclusivo, null = sem teto), mesmo desempate (material específico vence
+ * "qualquer"; entre iguais, a faixa mais estreita). Duas lógicas de "qual regra
+ * casa" divergindo em silêncio seria o pior jeito de errar dinheiro.
+ * A ordem importa e não é negociável: o preço multiplica a quantidade EFETIVA
+ * (pós `aplicarMinimos`), nunca a real. O mínimo decide quanto se conta; o preço
+ * decide quanto vale o que foi contado.
+ * Preço tem DATA. `vigenciaDe`/`vigenciaAte` existem porque reprocessar um mês
+ * já fechado com a tabela nova é o erro clássico de TMS — a viagem de março tem
+ * que continuar valendo o preço de março depois do reajuste de abril.
+ */
+model TabelaPreco {
+  contaId        String       @default("__SEM_CONTA__")
+  conta          Conta        @relation(fields: [contaId], references: [id])
+  id             String       @id @default(uuid())
+  /// O tomador que paga este preço.
+  empresa        Empresa      @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  empresaId      String
+  /// null = vale pra qualquer material.
+  material       Material?    @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  materialId     String?
+  /// null = vale pra qualquer modo de serviço. Preencher quando a diária (ou
+  /// outro modo) tiver preço próprio — é o que permite `PERIODO` conviver com
+  /// frete por tonelada na mesma empresa.
+  tipoServico    TipoServico? @relation(fields: [tipoServicoId], references: [id], onDelete: Cascade)
+  tipoServicoId  String?
+  kmFaixaDe      Decimal      @db.Decimal(10, 2)
+  kmFaixaAte     Decimal?     @db.Decimal(10, 2)
+  /// Em que unidade `precoUnitario` está. Uma base só por linha — duas seria
+  /// valor ambíguo, e ambiguidade em dinheiro vira discussão no dia 30.
+  base           BasePreco
+  precoUnitario  Decimal      @db.Decimal(10, 2)
+  /// O pedágio que o motorista pagou é reembolsado pelo tomador POR FORA do
+  /// frete? Muda o total da viagem, não o preço unitário.
+  repassaPedagio Boolean      @default(false)
+  vigenciaDe     DateTime     @db.Date
+  /// null = vigente até segunda ordem.
+  vigenciaAte    DateTime?    @db.Date
+  ativo          Boolean      @default(true)
+  criadoPor      User?        @relation("CriouTabelaPreco", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId    String?
+  criadoEm       DateTime     @default(now())
+  alteradoEm     DateTime     @updatedAt
+
+  viagemValores ViagemValor[]
+
+  @@index([empresaId, materialId])
+  @@index([ativo])
+  @@index([contaId])
+  @@map("tabelas_preco")
+}
+
+/**
+ * Quanto ESTA viagem vale, congelado.
+ * Tabela separada e não colunas na `Viagem` por dois motivos: a Viagem já passa
+ * de 90 colunas, e o dinheiro precisa de auditoria própria — quem mexeu, quando
+ * e por quê.
+ * "Congelado" é a palavra importante. Guarda o preço unitário e a quantidade do
+ * momento do cálculo, não uma FK viva pra tabela de preço: se o preço da empresa
+ * mudar amanhã, a viagem de ontem não muda sozinha. `tabelaPrecoId` fica só
+ * como rastro de qual linha originou o valor, e vira null se alguém apagar a
+ * linha — o valor sobrevive à regra que o gerou.
+ * Viagem em STATUS_FORA_FECHAMENTO nunca é precificada: viagem sem peso valendo
+ * dinheiro é o mesmo erro que viagem sem peso entrando como 0t no fechamento.
+ */
+model ViagemValor {
+  contaId         String       @default("__SEM_CONTA__")
+  conta           Conta        @relation(fields: [contaId], references: [id])
+  viagem          Viagem       @relation(fields: [viagemId], references: [id], onDelete: Cascade)
+  viagemId        String       @id
+  /// De qual linha da tabela saiu. SetNull: apagar a regra não apaga o valor.
+  tabelaPreco     TabelaPreco? @relation(fields: [tabelaPrecoId], references: [id], onDelete: SetNull)
+  tabelaPrecoId   String?
+  base            BasePreco
+  precoUnitario   Decimal      @db.Decimal(10, 2)
+  /// A quantidade EFETIVA que foi multiplicada (toneladas ou km pós-mínimo, ou
+  /// 1 nas bases VIAGEM/PERIODO). Guardada pra conta ser reconstituível sem
+  /// recalcular nada.
+  quantidade      Decimal      @db.Decimal(12, 3)
+  valorFrete      Decimal      @db.Decimal(12, 2)
+  /// Pedágio repassado ao tomador. Zero quando a linha não repassa.
+  valorPedagio    Decimal      @default(0) @db.Decimal(12, 2)
+  valorTotal      Decimal      @db.Decimal(12, 2)
+  /// Preenchidos quando alguém do painel sobrescreve o valor calculado. Mesma
+  /// doutrina do km do motorista: o número cede, mas só com motivo escrito.
+  alteradoPor     User?        @relation("AlterouViagemValor", fields: [alteradoPorId], references: [id], onDelete: SetNull)
+  alteradoPorId   String?
+  alteracaoMotivo String?
+  calculadoEm     DateTime     @default(now())
+  alteradoEm      DateTime     @updatedAt
+
+  @@index([contaId])
+  @@index([tabelaPrecoId])
+  @@map("viagem_valores")
+}
+
 model RegraMinimo {
   contaId         String    @default("__SEM_CONTA__")
   conta           Conta     @relation(fields: [contaId], references: [id])
@@ -2375,6 +2497,10 @@ model Viagem {
   compartilhamentos  ViagemCompartilhamento[]
   divergencias       ViagemDivergencia[]
   conferenciasTicket ConferenciaTicket[]
+
+  /// O valor congelado desta viagem. Nasce nulo: viagem só ganha valor
+  /// quando existe TabelaPreco que case, e nunca em STATUS_FORA_FECHAMENTO.
+  valor ViagemValor?
 
   @@index([transportadoraId, data])
   @@index([motoristaId, data])

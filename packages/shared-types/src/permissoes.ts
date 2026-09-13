@@ -27,6 +27,7 @@ export type PermissaoCatalogo = {
 const ACAO_TITULO: Record<string, string> = {
   ver: "Ver / acessar",
   "ver-comercial": "Ver dados comerciais",
+  "alterar-valor": "Alterar valor faturado (com motivo)",
   criar: "Criar",
   editar: "Editar",
   excluir: "Excluir",
@@ -60,7 +61,7 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // "compartilhar" gera link público do comprovante pro cliente. Exige TAMBÉM
   // "ver-comercial" no endpoint: o comprovante mostra km/toneladas faturados,
   // então quem não enxerga isso no painel não pode gerar link que mostre.
-  { recurso: "viagens", label: "Viagens", modulo: "Operação", acoes: ["ver", "ver-comercial", "editar", "excluir", "validar", "compartilhar"] },
+  { recurso: "viagens", label: "Viagens", modulo: "Operação", acoes: ["ver", "ver-comercial", "editar", "excluir", "validar", "compartilhar", "alterar-valor"] },
   { recurso: "descargas-suspeitas", label: "Descargas suspeitas", modulo: "Operação", acoes: ["ver", "corrigir"] },
   { recurso: "abastecimentos", label: "Abastecimentos", modulo: "Operação", acoes: ["ver", "editar", "excluir"] },
   { recurso: "fechamentos", label: "Fechamentos", modulo: "Operação", acoes: ["ver", "criar", "conferir", "exportar", "excluir"] },
@@ -109,6 +110,11 @@ const RESOURCE_DEFS: ResourceDef[] = [
   { recurso: "tipos-servico", label: "Modos de serviço", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "modalidades", label: "Modalidades do motorista", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "regras-minimo", label: "Mínimos por faixa", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
+  // Quanto cada empresa paga por tonelada/km/viagem. Chave própria e separada de
+  // `regras-minimo` porque são decisões diferentes: mínimo é quanto se CONTA
+  // (operacional, quem confere mexe), preço é quanto se COBRA (comercial, nem
+  // todo mundo que confere viagem pode mexer no preço do contrato).
+  { recurso: "tabelas-preco", label: "Tabela de preços", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "tipos-evento-viagem", label: "Eventos da viagem", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   // ---- Sistema ----
   { recurso: "usuarios", label: "Usuários", modulo: "Sistema", acoes: ["ver", "criar", "editar", "excluir"] },

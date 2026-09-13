@@ -58,6 +58,7 @@ export class DashboardService {
       // Mês
       viagensMes,
       toneladasMes,
+      faturamentoMes,
       combustivelMes,
       pedagioMes,
       // Pendências
@@ -97,6 +98,19 @@ export class DashboardService {
       this.prisma.viagem.aggregate({
         where: { data: { gte: inicioMes, lt: inicioMesQueVem }, ...foraFechamento, ...frota },
         _sum: { toneladas: true },
+      }),
+      // Faturamento do mês. Soma os ViagemValor das viagens do período — o
+      // filtro vive na relação porque o valor é 1-1 com a viagem e herda os
+      // mesmos recortes (status incompleto e frota) que todo KPI aqui usa.
+      // Zero legítimo (empresa sem tabela de preço) e zero por falta de viagem
+      // se parecem na tela, por isso a contagem de viagens precificadas vai
+      // junto: é ela que deixa a home dizer "cadastre seu preço".
+      this.prisma.viagemValor.aggregate({
+        where: {
+          viagem: { data: { gte: inicioMes, lt: inicioMesQueVem }, ...foraFechamento, ...frota },
+        },
+        _sum: { valorTotal: true, valorFrete: true },
+        _count: { _all: true },
       }),
       this.prisma.abastecimento.aggregate({
         where: { data: { gte: inicioMesInst, lt: inicioMesQueVemInst }, ...frota },
@@ -258,6 +272,10 @@ export class DashboardService {
       mes: {
         viagens: viagensMes,
         toneladas: (toneladasMes._sum.toneladas ?? 0).toString(),
+        faturamento: (faturamentoMes._sum.valorTotal ?? 0).toString(),
+        faturamentoFrete: (faturamentoMes._sum.valorFrete ?? 0).toString(),
+        /** Quantas das `viagens` do mês já têm preço. Menos que o total = falta tabela. */
+        viagensPrecificadas: faturamentoMes._count._all,
         combustivelValor: (combustivelMes._sum.valorTotal ?? 0).toString(),
         pedagioValor: (pedagioMes._sum.valor ?? 0).toString(),
       },

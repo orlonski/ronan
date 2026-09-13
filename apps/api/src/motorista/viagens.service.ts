@@ -42,6 +42,7 @@ import { ValidacaoLocalService } from "./validacao-local.service";
 import { AdminInboxService } from "../admin/inbox/inbox.service";
 import { KmReprocessamentoService } from "./km-reprocessamento.service";
 import { ConferenciaFilaService } from "../conferencia-ticket/conferencia-fila.service";
+import { PrecificacaoService } from "../admin/tabelas-preco/precificacao.service";
 import { KmAtipicoService } from "../km-atipico/km-atipico.service";
 import { ViagemMensagensService } from "../viagem-mensagens/viagem-mensagens.service";
 import { AvisoPesoService } from "./aviso-peso.service";
@@ -171,6 +172,7 @@ export class ViagensMotoristaService {
     private readonly avisos: AvisoPesoService,
     private readonly kmAtipico: KmAtipicoService,
     private readonly conferencia: ConferenciaFilaService,
+    private readonly precificacao: PrecificacaoService,
     private readonly mensagens: ViagemMensagensService,
     private readonly resgates: LancamentosResgatadosService,
   ) {}
@@ -1568,6 +1570,10 @@ export class ViagensMotoristaService {
     // `.catch` porque `enfileirar` engole o próprio erro — `void` sobre promise
     // rejeitada derruba o processo.
     void this.conferencia.enfileirar(viagem.id, "create");
+    // Preço da viagem. `void` como os vizinhos: o app está esperando o 2xx com
+    // o outbox aberto, e não pode perder o lançamento porque a tabela de preço
+    // deu problema. Se falhar aqui, o cron de reconciliação pega de noite.
+    void this.precificacao.recalcularSeguro(viagem.id);
 
     void (async () => {
       const m = await this.prisma.motorista.findUnique({
@@ -1849,6 +1855,8 @@ export class ViagensMotoristaService {
     // romaneio chegou. É este o momento em que dá pra conferir o número que
     // vira dinheiro.
     void this.conferencia.enfileirar(atualizada.id, "completar-peso");
+    // O peso chegou: agora a viagem sai de AGUARDANDO_PESO e pode valer.
+    void this.precificacao.recalcularSeguro(atualizada.id);
 
     return serializarViagemComMinimos(
       atualizada,
@@ -2292,6 +2300,7 @@ export class ViagensMotoristaService {
     // Carimba se o km está fora do padrão do trajeto (igual ao create).
     void this.kmAtipico.avaliarViagem(finalizada.id);
     void this.conferencia.enfileirar(finalizada.id, "finalizar");
+    void this.precificacao.recalcularSeguro(finalizada.id);
 
     // Notifica os admins (inbox/sininho do dashboard) — mesma "Nova viagem" que
     // o fluxo de lançamento único dispara. Só ao FINALIZAR (a viagem em
