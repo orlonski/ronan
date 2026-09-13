@@ -163,3 +163,21 @@ Produção: [ElevenLabs PT](https://elevenlabs.io/pt/text-to-speech/portuguese) 
 
 Medição: [Insights API](https://www.upgrow.com/blog/instagram-insights-api-features-use-cases) ·
 [follower count](https://www.keyapi.ai/blog/instagram-api-follower-count/)
+
+## Custo real do Veo (medido, não estimado)
+
+Em 13/09/2026 o projeto tinha **teto mensal de R$ 50** e estava em R$ 7,03. Três
+clipes de 8 segundos no `veo-3.1-generate-preview` levaram o total a **R$ 63,38** —
+ou seja, cerca de **R$ 18 a 19 por clipe de 8 segundos**, e o teto estourou no meio
+da segunda leva.
+
+A estimativa que a pesquisa trouxe (US$ 0,15/s, ~R$ 6,50 o clipe) vale pro modo
+**fast**. O modelo completo custa cerca de três vezes isso.
+
+Consequência prática: **um Reel de 20 segundos = 3 clipes ≈ R$ 55**. Antes de
+qualquer esteira automática de vídeo, isso precisa de um teto por mês E da escolha
+consciente entre `veo-3.1-generate-preview`, `-fast` e `-lite`. Como o Instagram
+recomprime tudo, a diferença de qualidade entre completo e fast pode não aparecer
+no feed — testar antes de pagar três vezes mais.
+
+O teto zera no dia 1º de cada mês (PST) e se ajusta em `ai.studio/spend`.
