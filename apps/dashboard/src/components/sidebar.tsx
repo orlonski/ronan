@@ -150,13 +150,16 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const { data: session } = useSession();
-  const { temPermissao, papelNome, plataforma } = usePermissoes();
+  const { temPermissao, temModulo, papelNome, plataforma } = usePermissoes();
   const { marca } = useMarcaConta();
 
   // Itens visíveis por permissão; grupo só aparece se sobrar algum item.
   const gruposVisiveis = GRUPOS.map((g) => ({
     ...g,
-    itens: g.itens.filter((i) => temPermissao(i.perm)),
+    // Menu não é vitrine: item de módulo não contratado SOME, não fica cinza.
+    // O upsell mora na tela de quem chegou por URL direta e no ponto de dor
+    // dentro de um módulo que a empresa já tem.
+    itens: g.itens.filter((i) => temPermissao(i.perm) && temModulo(i.perm)),
   })).filter((g) => g.itens.length > 0);
 
   // Accordion: só um grupo aberto por vez. Operação é o default ao abrir

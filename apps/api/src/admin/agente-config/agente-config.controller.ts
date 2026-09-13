@@ -25,6 +25,7 @@ export class AgenteConfigController {
   constructor(private readonly service: AgenteConfigService) {}
 
   @Roles("ADMIN_USER")
+  @RequerPermissao("config-agente.ver")
   @Get()
   get() {
     return this.service.get();

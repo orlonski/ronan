@@ -1,6 +1,7 @@
 import { Controller, Get, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Roles } from "../../auth/decorators/roles.decorator";
+import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { EscopoPor } from "../../common/escopo/escopo.decorator";
@@ -16,6 +17,7 @@ export class DashboardController {
 
   @EscopoPor("viagem")
   @Roles("ADMIN_USER")
+  @RequerPermissao("viagens.ver")
   @Get()
   snapshot(@CurrentUser() user: AuthAdminUser) {
     return this.service.snapshot(user.escopo);

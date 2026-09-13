@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
+import { MODULOS_POR_CHAVE, moduloDaChave } from "@ronan/shared-types";
 import { permDaRota, usePermissoes } from "@/lib/permissoes";
 
 const AcessoRestrito = () => (
@@ -13,12 +14,42 @@ const AcessoRestrito = () => (
 );
 
 /**
+ * Tela de módulo não contratado.
+ *
+ * Deliberadamente diferente de "acesso restrito": ali o usuário tem que falar
+ * com o administrador da empresa dele, aqui o administrador é que precisa falar
+ * com a gente. Mandar os dois pro mesmo texto ("fale com um administrador") é
+ * uma mentira no segundo caso — o administrador não pode resolver — e mata a
+ * única chance de isso virar conversa comercial.
+ *
+ * Sem cadeado, sem paywall, sem preço: o modelo é recorrência vendida por gente,
+ * não self-service, e o produto não sabe do plano.
+ */
+function ModuloNaoContratado({ chave }: { chave: string }) {
+  const modulo = moduloDaChave(chave);
+  const def = modulo ? MODULOS_POR_CHAVE[modulo] : null;
+  if (!def) return <AcessoRestrito />;
+
+  return (
+    <div className="rounded-md border bg-muted/30 p-6">
+      <p className="text-base font-semibold">{def.nome} não está ativo na sua empresa</p>
+      <p className="mt-1 max-w-prose text-sm text-muted-foreground">{def.pitch}</p>
+      <p className="mt-3 text-sm text-muted-foreground">
+        Fale com a Movatruck pra ativar.
+      </p>
+    </div>
+  );
+}
+
+/**
  * Mostra os filhos só se o papel tiver a permissão. Usado pra esconder botões
  * de ação (Novo, Editar, Excluir, etc.) que o usuário não pode usar.
  */
 export function Permitido({ chave, children }: { chave: string; children: ReactNode }) {
-  const { temPermissao } = usePermissoes();
-  return temPermissao(chave) ? <>{children}</> : null;
+  const { temPermissao, temModulo } = usePermissoes();
+  // Botão de módulo não contratado some igual a botão sem permissão: botão
+  // morto é pior que ausência, e o upsell mora na tela, não no botão.
+  return temPermissao(chave) && temModulo(chave) ? <>{children}</> : null;
 }
 
 /**
@@ -29,11 +60,13 @@ export function Permitido({ chave, children }: { chave: string; children: ReactN
  */
 export function TelaGuard({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { temPermissao, isLoading } = usePermissoes();
+  const { temPermissao, temModulo, isLoading } = usePermissoes();
 
   const perm = permDaRota(pathname);
   if (!perm) return <>{children}</>;
   if (isLoading) return <p className="text-sm text-muted-foreground">Carregando…</p>;
+  // Módulo primeiro: quem não contratou não deve nem saber que falta permissão.
+  if (!temModulo(perm)) return <ModuloNaoContratado chave={perm} />;
   if (!temPermissao(perm)) return <AcessoRestrito />;
   return <>{children}</>;
 }
@@ -44,11 +77,12 @@ export function TelaGuard({ children }: { children: ReactNode }) {
  * (O backend é a fonte de verdade — isto só evita renderizar a tela.)
  */
 export function RequerTela({ chave, children }: { chave: string; children: ReactNode }) {
-  const { temPermissao, isLoading } = usePermissoes();
+  const { temPermissao, temModulo, isLoading } = usePermissoes();
 
   if (isLoading) {
     return <p className="text-sm text-muted-foreground">Carregando…</p>;
   }
+  if (!temModulo(chave)) return <ModuloNaoContratado chave={chave} />;
   if (!temPermissao(chave)) {
     return (
       <div className="rounded-md border bg-muted/30 p-6">

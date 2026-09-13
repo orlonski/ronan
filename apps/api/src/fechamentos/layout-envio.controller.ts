@@ -43,11 +43,13 @@ const AtualizarSchema = CriarSchema.partial();
 export class LayoutEnvioController {
   constructor(private readonly service: LayoutEnvioService) {}
 
+  @RequerPermissao("empresas.layouts")
   @Get()
   list(@Param("empresaId") empresaId: string) {
     return this.service.list(empresaId);
   }
 
+  @RequerPermissao("empresas.layouts")
   @Get(":id")
   detalhe(@Param("id") id: string) {
     return this.service.detalhe(id);

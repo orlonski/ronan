@@ -14,6 +14,7 @@ import { SEM_ESCOPO } from "../../common/escopo/escopo";
 import { comoSistema } from "../../common/conta/conta-context";
 import { ehContaDaPlataforma } from "../../common/conta/eh-plataforma";
 import { estadoDaConta } from "../../common/conta/estado-da-conta";
+import { modulosDaConta } from "../../common/conta/teto-da-conta";
 import type { AuthAdminUser } from "../../auth/types";
 
 type ListUsersParams = PaginationQuery & {
@@ -213,9 +214,21 @@ export class UsersService {
     // `conta` e `plataforma` vêm juntos porque este endpoint é por onde o painel
     // recebe tudo do usuário logado (`usePermissoes`) — assim o nome da empresa
     // e a tela de contas não precisam de chamada nem de sessão nova.
+    // Os módulos que a empresa contratou. Vão junto porque este endpoint já é
+    // por onde o painel recebe tudo do usuário logado — uma chamada nova só pra
+    // isso seria um request a mais em toda navegação.
+    //
+    // A UI usa pra sumir o menu do que não foi contratado e pra distinguir
+    // "você não pode" de "a empresa não contratou", que são conversas
+    // diferentes: uma manda falar com o administrador, a outra com a gente.
+    const modulos = conta
+      ? [...(await comoSistema(() => modulosDaConta(this.prisma, conta.id)))]
+      : [];
+
     return {
       ...serializar(u),
       permissoes: u.papel?.permissoes ?? [],
+      modulos,
       conta,
       plataforma: u.plataforma,
       /** True = está dentro de uma empresa que não é a dele. A UI avisa. */

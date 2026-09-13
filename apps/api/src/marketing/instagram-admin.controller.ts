@@ -239,6 +239,7 @@ export class InstagramAdminController {
    * dia, a variação do dia é o que aquele post rendeu. A API não dá isso por
    * peça — ver metricas.service.ts.
    */
+  @RequerPermissao("marketing.ver")
   @Get("seguidores")
   async seguidores() {
     return this.metricas.serie(30);

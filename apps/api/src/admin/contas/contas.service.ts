@@ -15,6 +15,7 @@ import { AuthService } from "../../auth/auth.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { CamposLayoutService } from "../campos-layout/campos-layout.service";
 import { PermissoesService, PAPEL_ADMIN } from "../permissoes/permissoes.service";
+import { MODULOS_PADRAO } from "@ronan/shared-types";
 import { MATERIAIS_INICIAIS, TIPOS_EVENTO_INICIAIS, TIPOS_SERVICO_INICIAIS } from "./kit-inicial";
 import { gerarCodigoConvite } from "./codigo-convite";
 
@@ -387,6 +388,21 @@ export class ContasService implements OnModuleInit {
 
         await this.prisma.tipoServico.createMany({
           data: TIPOS_SERVICO_INICIAIS.map((t) => ({ ...t, contaId: conta.id })),
+          skipDuplicates: true,
+        });
+
+        // Os módulos que a empresa nova recebe: o núcleo e o que não custa por
+        // uso. Conferência por IA e WhatsApp ficam de fora até alguém da
+        // plataforma ligar — são recursos que gastam dinheiro de quem opera o
+        // produto, não de quem assina.
+        await this.prisma.moduloContratado.createMany({
+          data: MODULOS_PADRAO.map((chave) => ({
+            contaId: conta.id,
+            chave,
+            ativo: true,
+            vigenteDe: new Date(),
+            observacao: "Módulo padrão de conta nova",
+          })),
           skipDuplicates: true,
         });
       });

@@ -29,6 +29,7 @@ export class TrackingConfigController {
   constructor(private readonly service: TrackingConfigService) {}
 
   @Roles("ADMIN_USER")
+  @RequerPermissao("config-tracking.ver")
   @Get()
   get() {
     return this.service.get();

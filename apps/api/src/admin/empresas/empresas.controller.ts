@@ -25,11 +25,13 @@ type ListEmpresasQuery = z.infer<typeof ListEmpresasQuery>;
 export class EmpresasController {
   constructor(private readonly service: EmpresasService) {}
 
+  @RequerPermissao("empresas.ver")
   @Get()
   list(@Query(new ZodValidationPipe(ListEmpresasQuery)) query: ListEmpresasQuery) {
     return this.service.list(query);
   }
 
+  @RequerPermissao("empresas.ver")
   @Get(":id")
   findOne(@Param("id") id: string) {
     return this.service.findOne(id);

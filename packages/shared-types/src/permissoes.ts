@@ -160,6 +160,13 @@ const RESOURCE_DEFS: ResourceDef[] = [
 ];
 
 /** Mapa recurso → rótulo amigável (usado na matriz de papéis). */
+/**
+ * Os recursos declarados, expostos pro catálogo de MÓDULOS poder validar que
+ * nenhum ficou órfão. Só leitura — quem manda na estrutura é o RESOURCE_DEFS.
+ */
+export const RESOURCE_DEFS_PUBLICO: ReadonlyArray<{ recurso: string; label: string; modulo: string }> =
+  RESOURCE_DEFS.map((r) => ({ recurso: r.recurso, label: r.label, modulo: r.modulo }));
+
 export const RECURSOS_LABEL: Record<string, string> = Object.fromEntries(
   RESOURCE_DEFS.map((r) => [r.recurso, r.label]),
 );

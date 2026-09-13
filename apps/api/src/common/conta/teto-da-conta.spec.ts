@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { CHAVES_PLATAFORMA, PERMISSOES_ADMIN_EMPRESA, TODAS_AS_CHAVES } from "@ronan/shared-types";
-import { acimaDoTeto, tetoDaConta } from "./teto-da-conta";
+import {
+  CHAVES_PLATAFORMA,
+  MODULOS,
+  PERMISSOES_ADMIN_EMPRESA,
+  TODAS_AS_CHAVES,
+} from "@ronan/shared-types";
+import { acimaDoTeto, modulosDaConta, tetoDaConta } from "./teto-da-conta";
+
+/** Todos os módulos ligados, sem vigência — o estado depois da migração. */
+const TODOS_MODULOS = MODULOS.map((m) => ({
+  chave: m.chave,
+  vigenteDe: null as Date | null,
+  vigenteAte: null as Date | null,
+}));
 
 /**
  * Prisma de mentira: a conta e o teto padrão que o teste quiser.
@@ -11,6 +23,7 @@ import { acimaDoTeto, tetoDaConta } from "./teto-da-conta";
 function prismaCom(
   conta: { ehPlataforma: boolean; permissoesPermitidas: string[] } | null,
   padrao: string[] | null = null,
+  modulos: { chave: string; vigenteDe: Date | null; vigenteAte: Date | null }[] = TODOS_MODULOS,
 ) {
   return {
     conta: { findUnique: async () => conta },
@@ -18,6 +31,7 @@ function prismaCom(
       findUnique: async () =>
         padrao === null ? null : { tetoPadrao: padrao, semeado: true },
     },
+    moduloContratado: { findMany: async () => modulos },
   };
 }
 
@@ -111,5 +125,68 @@ describe("acimaDoTeto", () => {
 
   it("nada acima do teto devolve lista vazia", () => {
     expect(acimaDoTeto(["a"], new Set(["a", "b"]))).toEqual([]);
+  });
+});
+
+
+describe("módulos contratados", () => {
+  it("o núcleo vale mesmo sem nenhuma linha contratada", async () => {
+    // Conta criada antes do módulo existir, ou seed que falhou: precisa
+    // continuar funcionando, não virar tela em branco.
+    const modulos = await modulosDaConta(prismaCom(null, null, []), "x");
+    expect(modulos.has("operacao")).toBe(true);
+  });
+
+  it("módulo desligado some do teto e poda o papel", async () => {
+    const semFinanceiro = TODOS_MODULOS.filter((m) => m.chave !== "financeiro");
+    const teto = await tetoDaConta(
+      prismaCom(
+        { ehPlataforma: false, permissoesPermitidas: ["viagens.ver", "acertos.ver"] },
+        null,
+        semFinanceiro,
+      ),
+      "x",
+    );
+    expect(teto.has("viagens.ver")).toBe(true);
+    // `acertos` é do módulo Financeiro: sem contrato, a chave não é concedível
+    // nem que esteja explicitamente na lista da conta.
+    expect(teto.has("acertos.ver")).toBe(false);
+  });
+
+  it("vigência que ainda não começou não conta", async () => {
+    const futuro = [
+      { chave: "financeiro", vigenteDe: new Date("2030-01-01"), vigenteAte: null },
+    ];
+    const modulos = await modulosDaConta(prismaCom(null, null, futuro), "x", new Date("2026-06-10"));
+    expect(modulos.has("financeiro")).toBe(false);
+  });
+
+  it("vigência vencida não conta", async () => {
+    const passado = [
+      { chave: "financeiro", vigenteDe: null, vigenteAte: new Date("2026-05-31") },
+    ];
+    const modulos = await modulosDaConta(prismaCom(null, null, passado), "x", new Date("2026-06-10"));
+    expect(modulos.has("financeiro")).toBe(false);
+  });
+
+  it("o último dia da vigência ainda vale", async () => {
+    const ate = [{ chave: "financeiro", vigenteDe: null, vigenteAte: new Date("2026-06-10") }];
+    const modulos = await modulosDaConta(prismaCom(null, null, ate), "x", new Date("2026-06-10"));
+    expect(modulos.has("financeiro")).toBe(true);
+  });
+
+  it("chave de módulo que não existe no catálogo é ignorada", async () => {
+    const lixo = [{ chave: "modulo-inventado", vigenteDe: null, vigenteAte: null }];
+    const modulos = await modulosDaConta(prismaCom(null, null, lixo), "x");
+    expect(modulos.has("modulo-inventado" as never)).toBe(false);
+  });
+
+  it("a casa continua com o catálogo inteiro, módulo não a limita", async () => {
+    // A plataforma opera o produto: limitar ela por contrato não faz sentido.
+    const teto = await tetoDaConta(
+      prismaCom({ ehPlataforma: true, permissoesPermitidas: [] }, null, []),
+      "x",
+    );
+    expect(teto.size).toBe(TODAS_AS_CHAVES.length);
   });
 });

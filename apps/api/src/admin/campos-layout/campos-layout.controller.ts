@@ -39,12 +39,14 @@ export class CamposLayoutController {
   constructor(private readonly service: CamposLayoutService) {}
 
   @Roles("ADMIN_USER")
+  @RequerPermissao("config-campos-layout.ver")
   @Get()
   list() {
     return this.service.list();
   }
 
   @Roles("ADMIN_USER")
+  @RequerPermissao("config-campos-layout.ver")
   @Get(":id")
   findOne(@Param("id") id: string) {
     return this.service.findOne(id);

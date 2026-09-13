@@ -1,4 +1,11 @@
-import { PERMISSOES_ADMIN_EMPRESA, TODAS_AS_CHAVES } from "@ronan/shared-types";
+import {
+  MODULOS,
+  MODULOS_POR_CHAVE,
+  moduloDaChave,
+  PERMISSOES_ADMIN_EMPRESA,
+  TODAS_AS_CHAVES,
+  type ModuloChave,
+} from "@ronan/shared-types";
 
 /** Cliente mínimo, tipado por forma pelo mesmo motivo de `eh-plataforma.ts`. */
 type ClienteConta = {
@@ -14,7 +21,51 @@ type ClienteConta = {
       select: { tetoPadrao: true; semeado: true };
     }) => Promise<{ tetoPadrao: string[]; semeado: boolean } | null>;
   };
+  moduloContratado: {
+    findMany: (args: {
+      where: { contaId: string; ativo: true };
+      select: { chave: true; vigenteDe: true; vigenteAte: true };
+    }) => Promise<{ chave: string; vigenteDe: Date | null; vigenteAte: Date | null }[]>;
+  };
 };
+
+/** Só a data importa na vigência de um contrato, nunca a hora. */
+function vigenteHoje(m: { vigenteDe: Date | null; vigenteAte: Date | null }, hoje: Date): boolean {
+  const dia = (d: Date) => d.toISOString().slice(0, 10);
+  const h = dia(hoje);
+  if (m.vigenteDe && dia(m.vigenteDe) > h) return false;
+  // `vigenteAte` é inclusivo: o último dia do contrato ainda vale.
+  if (m.vigenteAte && dia(m.vigenteAte) < h) return false;
+  return true;
+}
+
+/**
+ * Os módulos que valem HOJE nesta conta.
+ *
+ * O núcleo entra sempre, contratado ou não: desligar Operação seria vender um
+ * sistema de viagens que não registra viagem, e uma conta sem nenhuma linha na
+ * tabela (criada antes do módulo existir, ou por um bug de seed) precisa
+ * continuar funcionando em vez de virar uma tela em branco.
+ */
+export async function modulosDaConta(
+  prisma: ClienteConta,
+  contaId: string,
+  hoje: Date = new Date(),
+): Promise<Set<ModuloChave>> {
+  const linhas = await prisma.moduloContratado.findMany({
+    where: { contaId, ativo: true },
+    select: { chave: true, vigenteDe: true, vigenteAte: true },
+  });
+
+  const ativos = new Set<ModuloChave>(
+    MODULOS.filter((m) => m.nucleo).map((m) => m.chave),
+  );
+  for (const l of linhas) {
+    if (!vigenteHoje(l, hoje)) continue;
+    if (MODULOS_POR_CHAVE[l.chave as ModuloChave]) ativos.add(l.chave as ModuloChave);
+  }
+  return ativos;
+}
 
 /**
  * O teto padrão: o que vale pra empresa que não tem teto próprio.
@@ -65,7 +116,23 @@ export async function tetoDaConta(prisma: ClienteConta, contaId: string): Promis
   // Interseção com o catálogo: chave que saiu do código não volta à vida por
   // estar guardada no banco.
   const validas = new Set(TODAS_AS_CHAVES);
-  return new Set(chaves.filter((c) => validas.has(c)));
+
+  // E interseção com o que a empresa CONTRATOU. Este é o ponto onde módulo e
+  // RBAC se encontram, e é o único lugar que precisou mudar: a poda de chaves
+  // acima do teto já existia e já era testada, então módulo cancelado passa a
+  // podar papel sozinho, sem código novo.
+  const modulos = await modulosDaConta(prisma, contaId);
+
+  return new Set(
+    chaves.filter((c) => {
+      if (!validas.has(c)) return false;
+      const modulo = moduloDaChave(c);
+      // Chave sem módulo não existe (há teste de invariante garantindo), mas se
+      // aparecer, ela passa: derrubar acesso por causa de um catálogo
+      // incompleto seria pior que o vazamento que isso evitaria.
+      return modulo == null || modulos.has(modulo);
+    }),
+  );
 }
 
 /** O que, de `chaves`, está acima do teto. Vazio = tudo permitido. */

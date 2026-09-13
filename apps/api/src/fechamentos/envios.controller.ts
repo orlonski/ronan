@@ -50,6 +50,7 @@ const MarcarEnviadoInput = z.object({
 export class EnviosController {
   constructor(private readonly exporter: ExportFechamentoService) {}
 
+  @RequerPermissao("envios.ver")
   @Get()
   list(@Query(new ZodValidationPipe(ListEnviosQuery)) query: ListEnviosQuery) {
     return this.exporter.listar(query);
@@ -71,6 +72,7 @@ export class EnviosController {
     });
   }
 
+  @RequerPermissao("envios.ver")
   @Get(":envioId/download")
   async download(@Param("envioId") envioId: string, @Res() res: Response) {
     const arquivo = await this.exporter.baixar(envioId);

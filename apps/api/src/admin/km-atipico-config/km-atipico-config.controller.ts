@@ -21,6 +21,7 @@ export class KmAtipicoConfigController {
   ) {}
 
   @Roles("ADMIN_USER")
+  @RequerPermissao("config-km-atipico.ver")
   @Get()
   get() {
     return this.service.get();
@@ -28,6 +29,7 @@ export class KmAtipicoConfigController {
 
   /** Contadores do backfill (quantas viagens ainda faltam avaliar). */
   @Roles("ADMIN_USER")
+  @RequerPermissao("config-km-atipico.ver")
   @Get("status")
   status() {
     return this.kmAtipico.status();

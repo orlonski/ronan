@@ -99,6 +99,7 @@ export class LocaisController {
    * Lista enxuta pra exibir no mapa (sem paginação). Definida ANTES de :id
    * pra Nest não interpretar "mapa" como id.
    */
+  @RequerPermissao("locais.ver")
   @Get("mapa")
   mapa(@Query(new ZodValidationPipe(ListLocaisQuery)) query: ListLocaisQuery) {
     return this.service.mapa(query);
@@ -109,6 +110,7 @@ export class LocaisController {
    * lista pra exibir tarja vermelha. Definido ANTES de :id pra Nest não tratar
    * "duplicatas" como id.
    */
+  @RequerPermissao("locais.homologar")
   @Get("duplicatas")
   duplicatas() {
     return this.service.duplicatas();
@@ -118,6 +120,7 @@ export class LocaisController {
    * Locais de um grupo + pontos de descarga das viagens de cada, pro modal de
    * revisão de duplicata. Antes de :id.
    */
+  @RequerPermissao("locais.homologar")
   @Get("duplicata-mapa")
   duplicataMapa(@Query(new ZodValidationPipe(DuplicataMapaQuery)) query: DuplicataMapaQuery) {
     const ids = query.ids
@@ -134,6 +137,7 @@ export class LocaisController {
    * considera "mesmo lugar" (ajustável no painel, default 200). Definido ANTES
    * de :id pra Nest não tratar "duplicatas-geo" como id.
    */
+  @RequerPermissao("locais.homologar")
   @Get("duplicatas-geo")
   duplicatasGeo(
     @Query(new ZodValidationPipe(DuplicatasGeoQuery)) query: z.infer<typeof DuplicatasGeoQuery>,

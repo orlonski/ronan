@@ -81,12 +81,14 @@ export class MotoristasDocumentosController {
     private readonly uploads: UploadsService,
   ) {}
 
+  @RequerPermissao("motoristas.documentos")
   @Get()
   async list(@Param("motoristaId") motoristaId: string) {
     const docs = await this.service.list(motoristaId);
     return docs.map(publicShape);
   }
 
+  @RequerPermissao("motoristas.documentos")
   @Get("zip")
   async downloadZip(@Param("motoristaId") motoristaId: string, @Res() res: Response) {
     const motorista = await this.prisma.motorista.findUnique({
@@ -128,6 +130,7 @@ export class MotoristasDocumentosController {
     await archive.finalize();
   }
 
+  @RequerPermissao("motoristas.documentos")
   @Get(":tipo/download")
   async download(
     @Param("motoristaId") motoristaId: string,

@@ -40,6 +40,7 @@ export class BuscaLocaisConfigController {
    */
   @IgnoraEscopo()
   @Roles("ADMIN_USER")
+  @RequerPermissao("config-busca-locais.ver")
   @Get()
   get() {
     return this.service.get();

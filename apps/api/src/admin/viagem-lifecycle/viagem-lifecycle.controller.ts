@@ -21,6 +21,7 @@ import { ViagemLifecycleAdminService } from "./viagem-lifecycle.service";
 export class TiposEventoViagemController {
   constructor(private readonly service: ViagemLifecycleAdminService) {}
 
+  @RequerPermissao("tipos-evento-viagem.ver")
   @Get()
   list() {
     return this.service.listarTipos();

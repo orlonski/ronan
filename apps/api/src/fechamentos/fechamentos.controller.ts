@@ -77,16 +77,19 @@ export class FechamentosController {
     private readonly exporter: ExportFechamentoService,
   ) {}
 
+  @RequerPermissao("fechamentos.ver")
   @Get()
   list(@Query(new ZodValidationPipe(ListFechamentosQuery)) query: ListFechamentosQuery) {
     return this.service.list(query);
   }
 
+  @RequerPermissao("fechamentos.ver")
   @Get(":id")
   detalhe(@Param("id") id: string) {
     return this.service.detalhe(id);
   }
 
+  @RequerPermissao("fechamentos.ver")
   @Get(":id/linhas")
   linhas(
     @Param("id") id: string,
@@ -182,6 +185,7 @@ export class FechamentosController {
     });
   }
 
+  @RequerPermissao("fechamentos.exportar")
   @Get(":id/envios/:envioId/download")
   async download(
     @Param("id") id: string,

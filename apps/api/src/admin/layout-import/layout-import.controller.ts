@@ -59,11 +59,13 @@ export class LayoutImportController {
   constructor(private readonly service: LayoutImportService) {}
 
   /** Lista TODOS os blocos cadastrados pra empresa (até 3: VIAGEM/PEDAGIO/COMBUSTIVEL). */
+  @RequerPermissao("empresas.layouts")
   @Get()
   list(@Param("empresaId") empresaId: string) {
     return this.service.listarBlocos(empresaId);
   }
 
+  @RequerPermissao("empresas.layouts")
   @Get("fechamentos-recentes")
   fechamentosRecentes(@Param("empresaId") empresaId: string) {
     return this.service.fechamentosRecentes(empresaId);

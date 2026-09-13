@@ -466,6 +466,7 @@ model Conta {
   itensAcerto                   ItemAcerto[]
   pedidos                       Pedido[]
   viagensPlanejadas             ViagemPlanejada[]
+  modulosContratados            ModuloContratado[]
   locais                        Local[]
   locaisClientes                LocalCliente[]
   locaisEvidencias              LocalEvidencia[]
@@ -605,6 +606,7 @@ model User {
   itensAcertoCriados     ItemAcerto[]          @relation("CriouItemAcerto")
   pedidosCriados         Pedido[]              @relation("CriouPedido")
   planejadasCriadas      ViagemPlanejada[]     @relation("CriouViagemPlanejada")
+  modulosLigados         ModuloContratado[]    @relation("LigouModulo")
   viagemValoresAlterados ViagemValor[]         @relation("AlterouViagemValor")
   tiposEventoCriados     TipoEventoViagem[]    @relation("CriouTipoEventoViagem")
   locaisCriados          Local[]               @relation("CriouLocal")
@@ -2444,6 +2446,38 @@ model ViagemPlanejada {
   @@index([pedidoId])
   @@index([contaId])
   @@map("viagens_planejadas")
+}
+
+/**
+ * O que a empresa contratou.
+ * TABELA e não um `String[]` na Conta (como `permissoesPermitidas`), de
+ * propósito: módulo contratado tem DATA e AUTOR. Array não guarda isso, e migrar
+ * de array pra tabela depois custa mais que nascer certo. Na primeira discussão
+ * de fatura, "desde quando esse cliente tem Financeiro?" precisa ter resposta.
+ * Entra POR CIMA do RBAC, como mais um fator no `tetoDaConta()` — nada mais do
+ * RBAC muda, e a poda de chave acima do teto (que já existe e já é testada)
+ * passa a cuidar de módulo cancelado de graça.
+ */
+model ModuloContratado {
+  id          String    @id @default(uuid())
+  contaId     String
+  conta       Conta     @relation(fields: [contaId], references: [id], onDelete: Cascade)
+  /// Chave do catálogo em `shared-types/src/modulos.ts`.
+  chave       String
+  ativo       Boolean   @default(true)
+  vigenteDe   DateTime? @db.Date
+  /// Fim do teste do módulo, downgrade agendado. Null = sem prazo.
+  vigenteAte  DateTime? @db.Date
+  /// Quem ligou. A auditoria comercial que hoje não existe em lugar nenhum.
+  ligadoPor   User?     @relation("LigouModulo", fields: [ligadoPorId], references: [id], onDelete: SetNull)
+  ligadoPorId String?
+  observacao  String?
+  criadoEm    DateTime  @default(now())
+  alteradoEm  DateTime  @updatedAt
+
+  @@unique([contaId, chave])
+  @@index([contaId, ativo])
+  @@map("modulos_contratados")
 }
 
 model RegraMinimo {

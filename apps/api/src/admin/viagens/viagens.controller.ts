@@ -146,6 +146,7 @@ export class ViagensAdminController {
    * real, pra admin revisar e corrigir 1 a 1 (via PATCH :id). Não altera nada.
    * Declarado antes de :id pra não ser capturado pela rota dinâmica.
    */
+  @RequerPermissao("descargas-suspeitas.ver")
   @Get("descargas-suspeitas")
   descargasSuspeitas() {
     return this.service.descargasSuspeitas();

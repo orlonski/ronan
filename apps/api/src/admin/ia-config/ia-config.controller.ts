@@ -42,12 +42,14 @@ export class IaConfigController {
   constructor(private readonly service: IaConfigService) {}
 
   @Roles("ADMIN_USER")
+  @RequerPermissao("config-ia.ver")
   @Get()
   get() {
     return this.service.get();
   }
 
   @Roles("ADMIN_USER")
+  @RequerPermissao("config-ia.ver")
   @Get("historico-sugestoes")
   historico() {
     return this.service.historicoSugestoes();

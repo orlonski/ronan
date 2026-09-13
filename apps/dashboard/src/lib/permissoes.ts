@@ -1,12 +1,15 @@
 "use client";
 
 import { useMemo } from "react";
+import { moduloDaChave } from "@ronan/shared-types";
 import { useApiQuery } from "@/lib/client-api";
 
 type MePayload = {
   id: string;
   nome: string;
   permissoes: string[];
+  /** Os módulos que a empresa contratou. Vazio em payload antigo (ver o hook). */
+  modulos?: string[];
   papel: { id: string; nome: string } | null;
   acessoGlobal: boolean;
   transportadoras: { id: string; nome: string }[];
@@ -41,10 +44,24 @@ export function usePermissoes() {
     staleTime: 5 * 60_000,
   });
   const set = useMemo(() => new Set(data?.permissoes ?? []), [data]);
+  // `undefined` (API antiga, durante um deploy) vale como "tem tudo": a
+  // alternativa seria o painel esvaziar o menu inteiro na janela entre o
+  // frontend novo subir e o backend novo responder.
+  const modulos = useMemo(
+    () => (data?.modulos ? new Set(data.modulos) : null),
+    [data],
+  );
   return {
     isLoading,
     papelNome: data?.papel?.nome ?? null,
     temPermissao: (chave: string) => set.has(chave),
+    /** A empresa contratou o módulo que esta chave pertence? */
+    temModulo: (chave: string) => {
+      if (!modulos) return true;
+      const m = moduloDaChave(chave);
+      return m == null || modulos.has(m);
+    },
+    modulos: data?.modulos ?? null,
     /** false = usuário restrito a transportadora (o backend filtra o que ele lê). */
     acessoGlobal: data?.acessoGlobal ?? true,
     transportadoras: data?.transportadoras ?? [],
