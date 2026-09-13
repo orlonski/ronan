@@ -54,6 +54,15 @@ export type ModuloDef = {
    * empresa não paga essa conta. Mesma régua do RECURSOS_PLATAFORMA.
    */
   medido?: boolean;
+  /**
+   * Vendido à parte. Não entra no conjunto que a conta nova recebe: quem assina
+   * o adicional é decisão comercial, e ligar sozinho daria de graça o que se
+   * pretende cobrar.
+   *
+   * Diferente de `medido`, que é "gasta dinheiro da plataforma por uso" — um
+   * adicional pode não custar nada por documento e ainda assim ser vendido.
+   */
+  adicional?: boolean;
   /** Recursos do catálogo RBAC que este módulo traz. */
   recursos: string[];
 };
@@ -128,6 +137,7 @@ export const MODULOS: ModuloDef[] = [
   {
     chave: "fiscal",
     nome: "Fiscal",
+    adicional: true,
     pitch:
       "O CT-e sai daqui, com os dados da viagem que já estão no sistema. Acaba a digitação dupla no emissor.",
     recursos: ["cte"],
@@ -174,7 +184,7 @@ export function moduloDaChave(chave: string): ModuloChave | undefined {
 
 /** Os módulos que toda conta nova recebe. Núcleo + o que não custa por uso. */
 export const MODULOS_PADRAO: ModuloChave[] = MODULOS.filter(
-  (m) => m.nucleo || (!m.medido && m.chave !== "plataforma"),
+  (m) => m.nucleo || (!m.medido && !m.adicional && m.chave !== "plataforma"),
 ).map((m) => m.chave);
 
 /**

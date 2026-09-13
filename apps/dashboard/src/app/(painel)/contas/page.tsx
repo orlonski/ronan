@@ -19,6 +19,7 @@ import { usePermissoes } from "@/lib/permissoes";
 import { fmtDataHoraSP } from "@/lib/datetime-br";
 import { maskDocumento } from "@ronan/shared-types";
 import { TetoDialog } from "./_components/teto-dialog";
+import { ModulosDialog } from "./_components/modulos-dialog";
 import { PortaCadastro } from "./_components/porta-cadastro";
 import { AtendimentoSdr } from "./_components/atendimento-sdr";
 import { TabelaPreco } from "./_components/tabela-preco";
@@ -58,6 +59,7 @@ export default function ContasPage() {
   const token = useAuthToken();
   const [abrirNova, setAbrirNova] = useState(false);
   const [contaDoTeto, setContaDoTeto] = useState<Conta | null>(null);
+  const [contaDosModulos, setContaDosModulos] = useState<Conta | null>(null);
   const [editandoPadrao, setEditandoPadrao] = useState(false);
   const [excluindo, setExcluindo] = useState<Conta | null>(null);
   const [confirmacao, setConfirmacao] = useState("");
@@ -316,6 +318,9 @@ export default function ContasPage() {
                   <Button variant="outline" size="sm" onClick={() => setContaDoTeto(conta)}>
                     Permissões liberadas
                   </Button>
+                  <Button variant="outline" size="sm" onClick={() => setContaDosModulos(conta)}>
+                    Módulos
+                  </Button>
                   {!conta.permiteAutoCadastro && (
                     <Button variant="outline" size="sm" onClick={() => definirAutoCadastro(conta)}>
                       Receber cadastro pelo app
@@ -403,6 +408,12 @@ export default function ContasPage() {
           setEditandoPadrao(false);
           if (mudou) void refetch();
         }}
+      />
+
+      <ModulosDialog
+        conta={contaDosModulos}
+        aberto={contaDosModulos !== null}
+        onFechar={() => setContaDosModulos(null)}
       />
 
       <Dialog open={abrirNova} onOpenChange={setAbrirNova}>
