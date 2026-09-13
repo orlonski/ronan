@@ -59,7 +59,12 @@ propósito. Transbordo: corte texto, não diminua a fonte.
    dois bloqueios que as correções tinham deixado passar.
 5. **Publicar** — ver abaixo.
 
-Os cinco agentes estão em `.claude/agents/ig-*.md`.
+Os agentes estão em `.claude/agents/ig-*.md`.
+
+**Se a pauta for Reel e não imagem**, o fluxo muda: quem escreve é o `ig-reels`, a
+receita está em `marketing/reels/PLAYBOOK.md` e a produção em
+`marketing/reels/README.md`. O que não muda é o QA — vídeo promete igual a imagem,
+e mentira em movimento é pior.
 
 ## Voz
 
