@@ -11,7 +11,7 @@ funcionalidade — não tem como virar tour de recurso.
 |---|---|---|
 | 0–6s | POV rasante do asfalto molhado, faixa gasta, acostamento de terra vermelha, neblina de serra. | **Ele rodou 64. Chegou 58.** |
 | 6–13s | Mão calejada no aro do volante, amanhecendo, contraluz forte. | **Alguém corrigiu depois** → **Sem falar nada com ele** |
-| 13–18s | Serra abrindo, vale com neblina embaixo. Plano largo. | **O km do motorista é lei** |
+| 13–18s | Obra no asfalto: caçamba despejando brita, nuvem de pó, cones. | **O km do motorista é lei** |
 | 18–20s | **Captura real**: painel recusando a alteração de km, com a mensagem do backend. | **Mudar exige motivo escrito** |
 
 ## Prompts
@@ -50,21 +50,30 @@ screens, no steering wheel logo or emblem, no phone screen, no readable text, no
 numbers, no visible face, no subtitles, no watermark, no on-screen graphics.
 ```
 
-### Clipe 3C (13–18s)
+### Clipe 3C (13–18s) — OBRA, não paisagem
+
+A versão original era uma vista da serra. Bonita e genérica: podia ser turismo.
+O nosso mundo é pedreira, caçamba, obra no meio do asfalto e pó — é isso que o
+público reconhece como a vida dele.
 ```
-Vertical 9:16 wide landscape shot from a curve high on a Brazilian serra highway at early
-morning. A deep green valley below is filled with a sea of low fog; layered blue ridges
-recede into the distance. The dark asphalt curve and its red dirt shoulder cut across the
-lower third of the frame, empty. Rich tropical forest, Atlantic-forest look, no
-buildings.
-Camera: locked-off wide, 28mm lens, f/5.6, deep focus, shot from the roadside looking out
-and slightly down. Extremely slow, almost still push-in. Natural overcast-to-golden
-light, no color grading tricks, documentary realism.
-Audio: wind through vegetation, birds, one very distant engine far below. No music. No
-voices. No dialogue.
-NEGATIVE: no road signs, no guardrail signage, no kilometer posts, no billboards, no
-vehicles in frame, no license plates, no towns, no US canyon or desert scenery, no pine
-forest, no subtitles, no watermark, no on-screen graphics.
+Vertical 9:16 cinematic shot at a road construction site on a Brazilian highway,
+mid-morning. A dump truck body is tilted up, releasing a heavy cascade of crushed
+stone and gravel onto the raw roadbed. A thick cloud of pale rock dust blooms and
+drifts across the frame, catching hard sunlight. Orange traffic cones stand in a
+line at the edge; red clay earth, patches of fresh black asphalt, tropical scrub
+and hills in the far background. A worker in a high-visibility vest is visible far
+away as a small blurred silhouette, never in focus, face never shown.
+Camera: low wide angle, 28mm lens, f/5.6, shot from ground level near the cones
+looking up at the tipping body against the sky. Slight handheld weight, no zoom.
+Harsh midday sun, deep contrast, dust haze, documentary realism, visible grain.
+Audio: crushed stone thundering down onto the roadbed, hydraulic whine of the
+tipping body, diesel idling, distant compactor, wind. No music. No voices. No
+dialogue.
+NEGATIVE: no license plates, no truck brand badges or grille logos, no company
+lettering on the dump body, no readable signage, no road signs, no safety signs
+with text, no legible numbers, no visible faces, no eye contact, no American
+roadwork layout, no desert, no snow, no subtitles, no watermark, no on-screen
+graphics.
 ```
 
 ## Narração (voz masculina, afirmativa, quase um juramento)
@@ -105,3 +114,16 @@ simulada.
 | Vira auditoria com autor e motivo | `AcaoAuditoria.ADMIN_ALTEROU_KM` em `apps/api/src/admin/viagens/viagens.service.ts` |
 | O número dele nunca é sobrescrito | `Viagem.kmMotorista` é cópia intocável; `Viagem.km` é o faturado |
 | O conferente pode corrigir | a regra permite com motivo, e carimba `kmAlterado*` |
+
+## Como foi montado
+
+`node marketing/reels/montar-reel3.mjs` — os três clipes do Veo mais a captura
+real do painel, com o texto queimado POR CIMA do vídeo (cartela de tela cheia foi
+o que o dono reprovou; com imagem de verdade embaixo ela só rouba quadro).
+
+O trecho do painel é tela clara: ali o texto ganha faixa escura por trás, porque
+branco com sombra some no claro.
+
+E a tela entregou melhor que o roteiro: em vez do 400 seco, o painel **pede o
+motivo** e explica que ele vai pro histórico e chega no celular do motorista. A
+frase "Informado pelo motorista: 64 km — esse valor é lei" já está na interface.
