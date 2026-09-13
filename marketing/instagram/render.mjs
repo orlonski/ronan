@@ -1,10 +1,41 @@
 // Renderiza as peças HTML em PNG 1080x1350 @2x, prontas pro Instagram.
 //   node render.mjs        -> renderiza tudo
 //   node render.mjs 03     -> só a peça que começa com "03"
-import { chromium } from "@playwright/test";
 import { readdir, mkdir } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
+
+// De onde sai o Playwright.
+//
+// Na máquina de quem desenvolve, do `node_modules` do próprio repo — e um
+// `import` normal acharia. No agente não: cada execução roda num `git worktree`
+// criado em /trabalho, e worktree não tem `node_modules` nenhum (não é coisa
+// versionada). Instalar de lá exige aprovação humana, que às 7h da manhã não
+// existe — e foi exatamente assim que duas pautas seguidas terminaram
+// "concluídas" sem entregar post: o agente escreveu a peça, não conseguiu
+// renderizar e não teve como publicar.
+//
+// PLAYWRIGHT_RAIZ aponta pro `node_modules` que a imagem já traz. `createRequire`
+// em vez de `import()` porque resolve o pacote pelo nome (e os symlinks do pnpm)
+// a partir de outra raiz, coisa que import de caminho absoluto não faz.
+const raizPlaywright = process.env.PLAYWRIGHT_RAIZ;
+const resolverDe = raizPlaywright
+  ? pathToFileURL(join(raizPlaywright, "package.json")).href
+  : import.meta.url;
+let chromium;
+try {
+  ({ chromium } = createRequire(resolverDe)("@playwright/test"));
+} catch (erro) {
+  console.error(
+    `Não achei o @playwright/test a partir de ${raizPlaywright ?? "deste arquivo"}.\n` +
+      `  • Na sua máquina: rode 'pnpm install' na raiz do repositório.\n` +
+      `  • No agente: PLAYWRIGHT_RAIZ tem que apontar pra uma pasta com node_modules\n` +
+      `    (a imagem do ronan_agente traz em /repo).\n` +
+      `  Detalhe: ${erro.message}`,
+  );
+  process.exit(1);
+}
 
 const raiz = dirname(fileURLToPath(import.meta.url));
 const filtro = process.argv[2];

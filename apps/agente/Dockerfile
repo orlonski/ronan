@@ -46,6 +46,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
 ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 # O Playwright não precisa baixar browser: já tem um instalado acima.
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+# ...e não precisa estar instalado no worktree, que é onde o agente trabalha.
+# Cada execução roda em /trabalho/wt/<branch>, um `git worktree` sem
+# node_modules — e instalar de lá exige aprovação humana que não há de
+# madrugada. O render resolve o pacote a partir daqui, onde a imagem já copiou
+# o node_modules do build.
+ENV PLAYWRIGHT_RAIZ=/repo
 ENV NODE_ENV=production
 
 WORKDIR /repo
