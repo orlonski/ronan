@@ -39,6 +39,9 @@ export type EventoLocal = {
   nome: string;
   ocorridoEm: string; // ISO
   localNome?: string;
+  /** Ocorrência com duração: enquanto `terminouEm` for nulo, ela está correndo. */
+  temDuracao?: boolean;
+  terminouEm?: string | null;
 };
 
 /** Rascunho da tela de finalizar (persistido pra não perder ao voltar/sair). */
@@ -194,7 +197,13 @@ type ServerAndamento = {
     cliente: { id: string; nome: string } | null;
     iniciadoEm: string | null;
     localCarga: { id: string; nome: string } | null;
-    eventosViagem: { id: string; tipoSlug: string; ocorridoEm: string }[];
+    eventosViagem: {
+      id: string;
+      tipoSlug: string;
+      ocorridoEm: string;
+      iniciouEm?: string | null;
+      terminouEm?: string | null;
+    }[];
   } | null;
 };
 
@@ -265,6 +274,10 @@ export async function hidratarViagemDoServidor(): Promise<LifecycleLocal | null>
         tipoSlug: e.tipoSlug,
         nome: e.tipoSlug,
         ocorridoEm: e.ocorridoEm,
+        // `iniciouEm` preenchido é o que marca ocorrência com duração — é o
+        // servidor que decide isso, a partir do tipo, e não o app.
+        temDuracao: e.iniciouEm != null,
+        terminouEm: e.terminouEm ?? null,
       })),
     };
     await setLifecycleLocal(novo);
@@ -491,7 +504,15 @@ export async function registrarEventoGuiado(input: {
   // Espelho local
   const eventos = [
     ...atual.eventos,
-    { id, tipoSlug: input.tipo.slug, nome: input.tipo.nome, ocorridoEm, localNome: input.local?.nome },
+    {
+      id,
+      tipoSlug: input.tipo.slug,
+      nome: input.tipo.nome,
+      ocorridoEm,
+      localNome: input.local?.nome,
+      temDuracao: input.tipo.temDuracao,
+      terminouEm: null,
+    },
   ];
   const patch: LifecycleLocal = { ...atual, eventos };
   if (input.tipo.ehCarga && input.local) {
@@ -510,6 +531,40 @@ export async function registrarEventoGuiado(input: {
     },
     { viagemClientId: atual.clientId },
   );
+}
+
+/**
+ * Encerra uma ocorrência com duração ("saí da fila", "consertei").
+ *
+ * Vai na MESMA fila do evento que abriu: herda retentativa, recuperação e a
+ * tela de Pendentes — e garante a ordem, já que o servidor não tem o que
+ * encerrar antes de a abertura chegar.
+ */
+export async function encerrarOcorrenciaGuiada(eventoId: string): Promise<void> {
+  const atual = await getLifecycleLocal();
+  if (!atual) throw new Error("Nenhuma viagem em andamento.");
+  const alvo = atual.eventos.find((e) => e.id === eventoId);
+  if (!alvo || alvo.terminouEm) return;
+
+  const terminouEm = nowIso();
+  await enqueueEventoViagem(atual.clientId, {
+    // Id próprio: o do evento aberto é a chave de idempotência DELE e reusá-lo
+    // faria o item de encerrar sobrescrever o de abertura na fila.
+    id: uuid(),
+    encerraId: eventoId,
+    terminouEm,
+    // Só pra tela de Pendentes ter o que mostrar se ficar preso.
+    tipoSlug: alvo.tipoSlug,
+    ocorridoEm: terminouEm,
+  });
+
+  await setLifecycleLocal({
+    ...atual,
+    eventos: atual.eventos.map((e) => (e.id === eventoId ? { ...e, terminouEm } : e)),
+  });
+  void reportarEvento("viagem_guiada_ocorrencia_encerrada", { tipoSlug: alvo.tipoSlug }, {
+    viagemClientId: atual.clientId,
+  });
 }
 
 /** Finaliza: enfileira o POST /finalizar e limpa o espelho local. */

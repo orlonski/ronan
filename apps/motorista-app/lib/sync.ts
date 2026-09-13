@@ -1547,7 +1547,19 @@ async function processEventoViagem(item: PendingEventoViagem): Promise<void> {
         status: "syncing",
       });
     }
-    await api.post(`/m/viagem/${item.viagemClientId}/eventos`, payload, { outbox: true });
+    // Encerramento de ocorrência anda na MESMA fila do evento que ele fecha:
+    // herda a retentativa, a recuperação de item travado e a tela de Pendentes
+    // de graça — e, mais importante, respeita a ordem, porque o servidor não
+    // tem o que encerrar antes do evento de abertura chegar.
+    if (typeof payload.encerraId === "string") {
+      await api.post(
+        `/m/viagem/ocorrencias/${payload.encerraId}/encerrar`,
+        { terminouEm: payload.terminouEm },
+        { outbox: true },
+      );
+    } else {
+      await api.post(`/m/viagem/${item.viagemClientId}/eventos`, payload, { outbox: true });
+    }
     await deletePendingEventoViagem(item.clientId);
   } catch (err) {
     // 404 = viagem-mãe ainda não sincronizou (ordem) → transiente, retry.

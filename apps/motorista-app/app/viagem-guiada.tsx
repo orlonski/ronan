@@ -1,7 +1,8 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { router, Stack, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
+  AlertTriangle,
   ArrowRight,
   Check,
   CheckCircle2,
@@ -38,13 +39,15 @@ import {
   extras,
   getLifecycleLocal,
   proximoPassoObrigatorio,
+  encerrarOcorrenciaGuiada,
   registrarEventoGuiado,
   type LifecycleLocal,
 } from "@/lib/lifecycle";
-import { useCatalogoEventos, useCatalogos } from "@/lib/queries";
+import { useCatalogoEventos, useCatalogoOcorrencias, useCatalogos } from "@/lib/queries";
 
 export default function ViagemGuiada() {
   const catalogo = useCatalogoEventos();
+  const ocorrencias = useCatalogoOcorrencias();
   const catalogos = useCatalogos();
   const [local, setLocal] = useState<LifecycleLocal | null>(null);
   const [carregando, setCarregando] = useState(true);
@@ -81,6 +84,32 @@ export default function ViagemGuiada() {
     [cat, slugsRegistrados],
   );
   const opcionais = useMemo(() => extras(cat), [cat]);
+  const tiposOcorrencia = useMemo(
+    () => (ocorrencias.data ?? []).filter((t) => t.ativo),
+    [ocorrencias.data],
+  );
+  // O que ainda está correndo: fila que não acabou, quebra que não foi
+  // resolvida. Fica no topo porque é o que exige uma ação AGORA — e porque é o
+  // relógio que vira estadia.
+  const abertas = useMemo(
+    () => (local?.eventos ?? []).filter((e) => e.temDuracao && !e.terminouEm),
+    [local?.eventos],
+  );
+
+  // Relógio da ocorrência aberta. Sem isto o tempo só mudaria quando a tela
+  // recebesse foco de novo — e o motorista na fila fica olhando pra ela parada.
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (abertas.length === 0) return;
+    const id = setInterval(() => tick((n) => n + 1), 60_000);
+    return () => clearInterval(id);
+  }, [abertas.length]);
+
+  async function encerrar(eventoId: string) {
+    await encerrarOcorrenciaGuiada(eventoId);
+    setLocal(await getLifecycleLocal());
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }
 
   const placa = useMemo(() => {
     const v = catalogos.data?.veiculos.find((x) => x.id === local?.veiculoId);
@@ -193,6 +222,36 @@ export default function ViagemGuiada() {
             </Text>
           </View>
         </View>
+
+        {/* O que está correndo agora. Fica ANTES da timeline: a timeline conta
+            o que já passou, e isto é o que ainda não acabou. */}
+        {abertas.map((e) => (
+          <View
+            key={e.id}
+            className="gap-3 rounded-2xl border-2 border-warning bg-warning/10 p-4"
+          >
+            <View className="flex-row items-start gap-3">
+              <View className="mt-0.5">
+                <AlertTriangle size={20} color="#b45309" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-base font-extrabold text-foreground">{e.nome}</Text>
+                <Text
+                  className="text-sm text-muted-foreground"
+                  style={{ fontVariant: ["tabular-nums"] }}
+                >
+                  Começou {fmtHora(e.ocorridoEm)} · já faz {tempoDesde(e.ocorridoEm)}
+                </Text>
+              </View>
+            </View>
+            <Button className="bg-success" onPress={() => void encerrar(e.id)}>
+              <CheckCircle2 size={20} color="white" />
+              <Text className="text-lg font-bold text-primary-foreground">
+                Já resolveu
+              </Text>
+            </Button>
+          </View>
+        ))}
 
         {/* Timeline: o marco da carga (do espelho) + os extras registrados */}
         <View className="gap-3 rounded-2xl border-2 border-border bg-card p-4">
@@ -318,6 +377,34 @@ export default function ViagemGuiada() {
                   <Text className="text-base font-semibold text-foreground">
                     + {t.nome}
                   </Text>
+                </Button>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Deu problema. Separado dos "outros registros" de propósito: fila,
+            quebra e carga recusada não são passos da viagem, são o contrário —
+            e é isso que a transportadora precisa saber na hora, não no fim. */}
+        {tiposOcorrencia.length > 0 && (
+          <View className="gap-2">
+            <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              Deu problema?
+            </Text>
+            <Text className="text-sm text-muted-foreground">
+              Avisa aqui que o escritório já fica sabendo. Fila e espera contam o tempo
+              — é assim que a parada vira conversa com o cliente em vez de prejuízo seu.
+            </Text>
+            <View className="flex-row flex-wrap gap-2">
+              {tiposOcorrencia.map((t) => (
+                <Button
+                  key={t.id}
+                  variant="outline"
+                  className="grow border-warning"
+                  onPress={() => setSheetTipo(t)}
+                >
+                  <AlertTriangle size={16} color="#b45309" />
+                  <Text className="text-base font-semibold text-foreground">{t.nome}</Text>
                 </Button>
               ))}
             </View>

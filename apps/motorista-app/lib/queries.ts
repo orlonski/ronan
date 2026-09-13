@@ -596,10 +596,19 @@ export async function prefetchDadosBase(qc: QueryClient): Promise<void> {
     "/m/busca-locais-config",
     { staleTime: 5 * 60_000 },
   );
+  // Ocorrências: o motorista que fica preso na fila costuma ficar preso
+  // TAMBÉM sem sinal. Se a lista não estiver no bolso antes, ele não tem como
+  // registrar justo na hora que importa.
+  const ocorrencias = offlineCacheQuery<TipoEventoViagemApp[]>(
+    "tipos-ocorrencia",
+    "/m/viagem/tipos-ocorrencia",
+    { staleTime: 5 * 60_000 },
+  );
   await Promise.allSettled([
     qc.prefetchQuery(cat),
     qc.prefetchQuery(me),
     qc.prefetchQuery(tipos),
+    qc.prefetchQuery(ocorrencias),
     qc.prefetchQuery(buscaCfg),
     prefetchKmReferencia(qc),
   ]);
@@ -631,6 +640,15 @@ async function prefetchKmReferencia(qc: QueryClient): Promise<void> {
 export function useCatalogoEventos() {
   return useQuery(
     offlineCacheQuery<TipoEventoViagemApp[]>("tipos-evento", "/m/viagem/tipos-evento", {
+      staleTime: 5 * 60_000,
+    }),
+  );
+}
+
+/** O que dá errado (fila, quebra, carga recusada). Cacheado offline. */
+export function useCatalogoOcorrencias() {
+  return useQuery(
+    offlineCacheQuery<TipoEventoViagemApp[]>("tipos-ocorrencia", "/m/viagem/tipos-ocorrencia", {
       staleTime: 5 * 60_000,
     }),
   );
