@@ -10,6 +10,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { RoteamentoService } from "../roteamento/roteamento.service";
 import { PedagiosRodoviaConsultaService } from "../admin/pedagios-rodovia/pedagios-rodovia-consulta.service";
 import { DocumentosPessoaisService } from "./documentos-pessoais.service";
+import { calcularConsumo, type ConsumoVeiculo } from "../common/consumo";
 
 /** Janela do histórico que alimenta consumo e preço do litro. */
 const DIAS_HISTORICO = 90;
@@ -80,35 +81,63 @@ export class FretePessoalService {
   /**
    * O consumo e o preço do litro DELE, dos últimos 90 dias.
    *
-   * Consumo = km rodado nas viagens dele ÷ litros abastecidos. Só sai quando os
-   * dois lados existem; sem isso a estimativa de diesel fica `null` e a tela diz
-   * o que falta lançar, em vez de inventar uma média de mercado.
+   * O consumo sai TANQUE-A-TANQUE, pelo odômetro, e não da divisão do km das
+   * viagens lançadas pelos litros abastecidos. Aquela conta juntava dois
+   * conjuntos que não se falam: quem lança cinco fretes e abastece vinte vezes
+   * recebia um km/l inventado com cara de medido — e é com esse número que ele
+   * decide se aceita o frete.
+   *
+   * Sem dois cheios com odômetro, devolve `null` e diz o que falta. A tela
+   * mostra o que preencher em vez de uma média de mercado disfarçada de "seu
+   * consumo".
    */
   private async numerosDele(identidadeId: string): Promise<{
     consumoKmPorLitro: number | null;
+    /** Por que não deu pra medir — vira o texto que pede o dado que falta. */
+    consumoMotivo: ConsumoVeiculo["motivo"] | null;
     precoLitro: number | null;
   }> {
     const desde = new Date(Date.now() - DIAS_HISTORICO * 24 * 60 * 60 * 1000);
 
-    const [abastecimentos, viagens] = await comoSistema(() =>
-      Promise.all([
-        this.prisma.lancamentoPessoal.aggregate({
-          where: { identidadeId, tipo: "ABASTECIMENTO", data: { gte: desde } },
-          _sum: { litros: true, valor: true },
-        }),
-        this.prisma.viagemPessoal.aggregate({
-          where: { identidadeId, data: { gte: desde } },
-          _sum: { km: true },
-        }),
-      ]),
+    const abastecimentos = await comoSistema(() =>
+      this.prisma.lancamentoPessoal.findMany({
+        where: { identidadeId, tipo: "ABASTECIMENTO", data: { gte: desde } },
+        select: {
+          id: true,
+          data: true,
+          odometro: true,
+          litros: true,
+          valor: true,
+          tanqueCheio: true,
+        },
+        orderBy: { data: "asc" },
+      }),
     );
 
-    const litros = Number(abastecimentos._sum.litros ?? 0);
-    const gasto = Number(abastecimentos._sum.valor ?? 0);
-    const km = Number(viagens._sum.km ?? 0);
+    const consumo = calcularConsumo(
+      abastecimentos.map((a) => ({
+        id: a.id,
+        data: a.data,
+        odometro: a.odometro,
+        litros: Number(a.litros ?? 0),
+        tanqueCheio: a.tanqueCheio,
+      })),
+    );
+
+    // O preço do litro segue vindo do total: aqui a divisão é legítima, os dois
+    // números saem do MESMO abastecimento.
+    let litros = 0;
+    let gasto = 0;
+    for (const a of abastecimentos) {
+      const l = Number(a.litros ?? 0);
+      if (l <= 0) continue;
+      litros += l;
+      gasto += Number(a.valor);
+    }
 
     return {
-      consumoKmPorLitro: litros > 0 && km > 0 ? arredondar(km / litros) : null,
+      consumoKmPorLitro: consumo.kmPorLitro != null ? arredondar(consumo.kmPorLitro) : null,
+      consumoMotivo: consumo.kmPorLitro != null ? null : (consumo.motivo ?? "SEM_DOIS_CHEIOS"),
       precoLitro: litros > 0 && gasto > 0 ? arredondar(gasto / litros) : null,
     };
   }

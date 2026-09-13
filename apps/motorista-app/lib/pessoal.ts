@@ -327,6 +327,7 @@ function paraLocal(input: CriarLancamentoPessoalInput): LancamentoPessoal {
     valor: input.valor,
     litros: input.litros ?? null,
     odometro: input.odometro ?? null,
+    tanqueCheio: input.tanqueCheio ?? true,
     descricao: input.descricao ?? null,
     criadoEm: new Date().toISOString(),
   };

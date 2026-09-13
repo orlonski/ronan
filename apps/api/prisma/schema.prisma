@@ -1151,6 +1151,10 @@ model LancamentoPessoal {
   litros          Decimal?              @db.Decimal(8, 2)
   /// Odômetro no momento — o que permite ver consumo entre dois abastecimentos.
   odometro        Int?
+  /// Encheu o tanque. É o que torna a conta de consumo possível: num tanque
+  /// cheio, o que coube no bocal é exatamente o que foi queimado desde o cheio
+  /// anterior. Abastecimento parcial não diz quanto ainda havia lá dentro.
+  tanqueCheio     Boolean               @default(true)
   /// Texto livre: o posto, a praça, quem pagou o frete. Sem catálogo: catálogo é
   /// coisa de empresa, e aqui não tem empresa.
   descricao       String?

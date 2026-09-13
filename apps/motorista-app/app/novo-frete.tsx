@@ -165,9 +165,17 @@ export default function NovoFreteScreen() {
                     a {dinheiro(estimativa.precoLitro!)} o litro, dos últimos 90 dias.
                   </Text>
                 ) : (
+                  // Dizer O QUE falta, e não só que falta: a diferença entre o
+                  // motorista preencher o odômetro no próximo posto e achar que
+                  // o app não funciona.
                   <Text className="text-sm text-muted-foreground">
-                    Pra estimar o diesel, lance seus abastecimentos (com litros) e os fretes com
-                    km no caderno — a conta sai com os SEUS números, não com média de mercado.
+                    {estimativa.consumoMotivo === "SEM_ODOMETRO"
+                      ? "Anote o odômetro quando encher o tanque. Com dois cheios o app mede seu km/L de verdade — média de mercado aqui seria chute com o seu dinheiro."
+                      : estimativa.consumoMotivo === "ODOMETRO_INCONSISTENTE"
+                        ? "Os odômetros lançados não batem entre si (algum ficou trocado). Corrija em Meus gastos e a conta volta."
+                        : estimativa.precoLitro == null
+                          ? "Lance seus abastecimentos com litros e odômetro. A conta sai com os SEUS números, não com média de mercado."
+                          : "Falta o segundo tanque cheio com odômetro: é entre dois cheios que dá pra medir o consumo."}
                   </Text>
                 )}
               </View>

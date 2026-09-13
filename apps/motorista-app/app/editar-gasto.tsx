@@ -9,7 +9,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Trash2 } from "lucide-react-native";
+import { Check, Trash2 } from "lucide-react-native";
 import {
   ROTULO_LANCAMENTO_PESSOAL,
   TIPOS_LANCAMENTO_PESSOAL,
@@ -38,6 +38,8 @@ export default function EditarGastoScreen() {
   const [data, setData] = useState("");
   const [valor, setValor] = useState("");
   const [litros, setLitros] = useState("");
+  const [odometro, setOdometro] = useState("");
+  const [tanqueCheio, setTanqueCheio] = useState(true);
   const [descricao, setDescricao] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
@@ -51,6 +53,8 @@ export default function EditarGastoScreen() {
       setData(achado.data);
       setValor(String(achado.valor).replace(".", ","));
       setLitros(achado.litros != null ? String(achado.litros).replace(".", ",") : "");
+      setOdometro(achado.odometro != null ? String(achado.odometro) : "");
+      setTanqueCheio(achado.tanqueCheio);
       setDescricao(achado.descricao ?? "");
     })();
   }, [clientId, mes]);
@@ -72,6 +76,11 @@ export default function EditarGastoScreen() {
           tipo === "ABASTECIMENTO" && litros
             ? Number(litros.replace(",", "."))
             : undefined,
+        // Odômetro trocado é o motivo mais comum de o consumo sumir da tela do
+        // frete — poder corrigir aqui é o que traz a conta de volta.
+        odometro:
+          tipo === "ABASTECIMENTO" && odometro ? Number(odometro.replace(/\D/g, "")) : undefined,
+        tanqueCheio: tipo === "ABASTECIMENTO" ? tanqueCheio : undefined,
         descricao: descricao.trim() || undefined,
       });
       router.back();
@@ -160,15 +169,45 @@ export default function EditarGastoScreen() {
             </View>
 
             {tipo === "ABASTECIMENTO" && (
-              <View className="gap-2">
-                <Label>Litros</Label>
-                <Input
-                  value={litros}
-                  onChangeText={(v) => setLitros(v.replace(/[^\d.,]/g, ""))}
-                  keyboardType="decimal-pad"
-                  editable={!salvando}
-                />
-              </View>
+              <>
+                <View className="gap-2">
+                  <Label>Litros</Label>
+                  <Input
+                    value={litros}
+                    onChangeText={(v) => setLitros(v.replace(/[^\d.,]/g, ""))}
+                    keyboardType="decimal-pad"
+                    editable={!salvando}
+                  />
+                </View>
+                <View className="gap-2">
+                  <Label>Odômetro</Label>
+                  <Input
+                    value={odometro}
+                    onChangeText={(v) => setOdometro(v.replace(/[^\d]/g, ""))}
+                    keyboardType="number-pad"
+                    placeholder="km do painel"
+                    editable={!salvando}
+                  />
+                  <Pressable
+                    onPress={() => setTanqueCheio((v) => !v)}
+                    disabled={salvando}
+                    className={`flex-row items-center gap-3 rounded-xl border-2 p-3 ${
+                      tanqueCheio ? "border-primary bg-primary/10" : "border-border bg-card"
+                    }`}
+                  >
+                    <View
+                      className={`h-6 w-6 items-center justify-center rounded-md border-2 ${
+                        tanqueCheio ? "border-primary bg-primary" : "border-border"
+                      }`}
+                    >
+                      {tanqueCheio ? <Check size={16} color="white" strokeWidth={3} /> : null}
+                    </View>
+                    <Text className="flex-1 text-base font-semibold text-foreground">
+                      Enchi o tanque
+                    </Text>
+                  </Pressable>
+                </View>
+              </>
             )}
 
             <View className="gap-2">

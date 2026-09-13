@@ -62,6 +62,9 @@ export class LancamentosPessoaisService {
           valor: new Prisma.Decimal(input.valor),
           litros: input.litros === undefined ? null : new Prisma.Decimal(input.litros),
           odometro: input.odometro ?? null,
+          // Só o abastecimento fala de tanque. Ausente vira `true` porque é o
+          // que o caminhoneiro faz no posto — e é o que o app já marca.
+          tanqueCheio: input.tipo === "ABASTECIMENTO" ? (input.tanqueCheio ?? true) : true,
           descricao: input.descricao ?? null,
         },
       }),
@@ -90,6 +93,9 @@ export class LancamentosPessoaisService {
           valor: new Prisma.Decimal(input.valor),
           litros: input.litros === undefined ? null : new Prisma.Decimal(input.litros),
           odometro: input.odometro ?? null,
+          // Só o abastecimento fala de tanque. Ausente vira `true` porque é o
+          // que o caminhoneiro faz no posto — e é o que o app já marca.
+          tanqueCheio: input.tipo === "ABASTECIMENTO" ? (input.tanqueCheio ?? true) : true,
           descricao: input.descricao ?? null,
         },
       }),
@@ -274,6 +280,7 @@ type LinhaPrisma = {
   valor: Prisma.Decimal;
   litros: Prisma.Decimal | null;
   odometro: number | null;
+  tanqueCheio: boolean;
   descricao: string | null;
   criadoEm: Date;
 };
@@ -294,6 +301,7 @@ function saida(l: LinhaPrisma): LancamentoPessoal {
     valor: Number(l.valor),
     litros: l.litros === null ? null : Number(l.litros),
     odometro: l.odometro,
+    tanqueCheio: l.tanqueCheio,
     descricao: l.descricao,
     criadoEm: l.criadoEm.toISOString(),
   };

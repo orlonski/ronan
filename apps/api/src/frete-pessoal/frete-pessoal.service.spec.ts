@@ -11,10 +11,17 @@ import type { DocumentosPessoaisService } from "./documentos-pessoais.service";
 const EU = "identidade-do-motorista";
 const OUTRO = "identidade-de-outra-pessoa";
 
+type AbastecimentoFake = {
+  id?: string;
+  data?: Date;
+  odometro?: number | null;
+  litros?: number | null;
+  valor?: number;
+  tanqueCheio?: boolean;
+};
+
 function montar(opts: {
-  litros?: number;
-  gastoCombustivel?: number;
-  km?: number;
+  abastecimentos?: AbastecimentoFake[];
   rota?:
     | { km: string; duracaoSegundos: number; geometria: string | null }
     | { km: null; erro: string };
@@ -24,17 +31,18 @@ function montar(opts: {
 }) {
   const prisma = {
     lancamentoPessoal: {
-      aggregate: vi.fn(async () => ({
-        _sum: {
-          litros: opts.litros == null ? null : new Prisma.Decimal(opts.litros),
-          valor: opts.gastoCombustivel == null ? null : new Prisma.Decimal(opts.gastoCombustivel),
-        },
-      })),
+      findMany: vi.fn(async () =>
+        (opts.abastecimentos ?? []).map((a, i) => ({
+          id: a.id ?? `ab-${i}`,
+          data: a.data ?? new Date(2026, 5, 1 + i),
+          odometro: a.odometro ?? null,
+          litros: a.litros == null ? null : new Prisma.Decimal(a.litros),
+          valor: new Prisma.Decimal(a.valor ?? 0),
+          tanqueCheio: a.tanqueCheio ?? true,
+        })),
+      ),
     },
     viagemPessoal: {
-      aggregate: vi.fn(async () => ({
-        _sum: { km: opts.km == null ? null : new Prisma.Decimal(opts.km) },
-      })),
       findMany: vi.fn(async () => opts.viagens ?? []),
     },
     comprovantePessoal: {
@@ -68,8 +76,15 @@ const DESTINO = { lat: -25.43, lng: -49.27 };
 
 describe("vale a pena esse frete?", () => {
   it("estima o diesel com o consumo e o preço DELE", async () => {
-    // 1.180 km rodados com 400 L = 2,95 km/L; R$ 2.600 em 400 L = R$ 6,50/L.
-    const { service } = montar({ km: 1180, litros: 400, gastoCombustivel: 2600 });
+    // Tanque a tanque: 100.000 → 101.180 são 1.180 km, repostos com os 400 L
+    // que couberam no segundo cheio = 2,95 km/L. O preço sai do total: 600 L
+    // por R$ 3.900 = R$ 6,50/L.
+    const { service } = montar({
+      abastecimentos: [
+        { odometro: 100_000, litros: 200, valor: 1300 },
+        { odometro: 101_180, litros: 400, valor: 2600 },
+      ],
+    });
     const r = await service.estimar(EU, ORIGEM, DESTINO);
     expect(r.km).toBe(118.4);
     expect(r.consumoKmPorLitro).toBe(2.95);
@@ -87,12 +102,46 @@ describe("vale a pena esse frete?", () => {
     expect(r.km).toBe(118.4);
   });
 
-  it("abasteceu mas nunca lançou frete com km: sem consumo, sem estimativa", async () => {
-    const { service } = montar({ litros: 400, gastoCombustivel: 2600 });
+  it("abasteceu sem anotar o odômetro: dá o preço do litro, não o consumo", async () => {
+    // A conta antiga dividia o km dos fretes lançados pelos litros de TODOS os
+    // abastecimentos — dois conjuntos que não se falam. Sem odômetro não há
+    // como medir, e dizer isso é melhor que um km/l com cara de medido.
+    const { service } = montar({
+      abastecimentos: [
+        { odometro: null, litros: 200, valor: 1300 },
+        { odometro: null, litros: 400, valor: 2600 },
+      ],
+    });
     const r = await service.estimar(EU, ORIGEM, DESTINO);
     expect(r.precoLitro).toBe(6.5);
     expect(r.consumoKmPorLitro).toBeNull();
+    expect(r.consumoMotivo).toBe("SEM_ODOMETRO");
     expect(r.diesel).toBeNull();
+  });
+
+  it("um cheio só não mede nada — precisa de dois pra ter um trecho", async () => {
+    const { service } = montar({
+      abastecimentos: [{ odometro: 100_000, litros: 300, valor: 1950 }],
+    });
+    const r = await service.estimar(EU, ORIGEM, DESTINO);
+    expect(r.consumoKmPorLitro).toBeNull();
+    expect(r.consumoMotivo).toBe("SEM_DOIS_CHEIOS");
+    expect(r.precoLitro).toBe(6.5);
+  });
+
+  it("o parcial do meio entra em litros, não vira fronteira", async () => {
+    // Ignorar o parcial daria km demais pra litros de menos: um km/l otimista
+    // em cima do qual ele aceitaria frete que não paga o diesel.
+    const { service } = montar({
+      abastecimentos: [
+        { odometro: 100_000, litros: 100, valor: 650 },
+        { odometro: 100_300, litros: 50, valor: 325, tanqueCheio: false },
+        { odometro: 100_600, litros: 150, valor: 975 },
+      ],
+    });
+    const r = await service.estimar(EU, ORIGEM, DESTINO);
+    // 600 km com 200 L (50 do parcial + 150 do cheio final) = 3 km/L.
+    expect(r.consumoKmPorLitro).toBe(3);
   });
 
   it("lista as praças que a rota cruza", async () => {
@@ -114,8 +163,10 @@ describe("vale a pena esse frete?", () => {
   it("rota indisponível não derruba a tela: devolve o erro e os números dele", async () => {
     const { service } = montar({
       rota: { km: null, erro: "Servidor de rotas não configurado." },
-      litros: 400,
-      gastoCombustivel: 2600,
+      abastecimentos: [
+        { odometro: 100_000, litros: 200, valor: 1300 },
+        { odometro: 101_180, litros: 400, valor: 2600 },
+      ],
     });
     const r = await service.estimar(EU, ORIGEM, DESTINO);
     expect(r.km).toBeNull();

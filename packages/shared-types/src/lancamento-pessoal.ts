@@ -115,6 +115,8 @@ const CamposLancamentoPessoal = {
     (v) => (v === "" || v === null ? undefined : v),
     z.coerce.number().int().positive().max(9_999_999).optional(),
   ),
+  /** Encheu o tanque. É o que permite medir o consumo entre dois cheios. */
+  tanqueCheio: z.boolean().optional(),
   descricao: z.string().trim().max(200).optional(),
 };
 
@@ -156,6 +158,7 @@ export type LancamentoPessoal = {
   valor: number;
   litros: number | null;
   odometro: number | null;
+  tanqueCheio: boolean;
   descricao: string | null;
   criadoEm: string;
 };
@@ -234,6 +237,11 @@ export type EstimativaFrete = {
   pedagiosDesconhecidos?: boolean;
   /** Do histórico DELE (90 dias). Null = ainda não dá pra saber. */
   consumoKmPorLitro: number | null;
+  /**
+   * Por que não deu pra medir o consumo. É o que permite a tela pedir o dado
+   * que falta ("anota o odômetro quando encher") em vez de só mostrar um traço.
+   */
+  consumoMotivo?: "SEM_DOIS_CHEIOS" | "SEM_ODOMETRO" | "ODOMETRO_INCONSISTENTE" | null;
   precoLitro: number | null;
   /** Estimativa de diesel do trecho. Null quando falta consumo ou preço. */
   diesel: number | null;

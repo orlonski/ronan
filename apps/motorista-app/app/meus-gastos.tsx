@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { KeyboardAvoidingView, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { CloudOff } from "lucide-react-native";
+import { Check, CloudOff } from "lucide-react-native";
 import {
   ROTULO_LANCAMENTO_PESSOAL,
   TIPOS_LANCAMENTO_PESSOAL,
@@ -38,6 +38,10 @@ export default function LancarGastoScreen() {
   const [tipo, setTipo] = useState<TipoLancamentoPessoal>(tipoInicial);
   const [valor, setValor] = useState("");
   const [litros, setLitros] = useState("");
+  const [odometro, setOdometro] = useState("");
+  // Nasce marcado porque encher é o que se faz no posto — e porque é a marcação
+  // que torna a conta de consumo possível. Quem só completou desmarca.
+  const [tanqueCheio, setTanqueCheio] = useState(true);
   const [descricao, setDescricao] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
@@ -61,6 +65,9 @@ export default function LancarGastoScreen() {
         data: hojeISO(),
         valor: valorNum,
         litros: tipo === "ABASTECIMENTO" && litros ? Number(litros.replace(",", ".")) : undefined,
+        odometro:
+          tipo === "ABASTECIMENTO" && odometro ? Number(odometro.replace(/\D/g, "")) : undefined,
+        tanqueCheio: tipo === "ABASTECIMENTO" ? tanqueCheio : undefined,
         descricao: descricao.trim() || undefined,
       });
       router.back();
@@ -127,8 +134,46 @@ export default function LancarGastoScreen() {
                   editable={!salvando}
                 />
                 <Text className="text-sm text-muted-foreground">
-                  Com os litros o app calcula seu consumo — e é ele que estima o diesel dos
-                  seus fretes.
+                  Com os litros o app sabe quanto você paga no litro.
+                </Text>
+              </View>
+            )}
+
+            {/* Odômetro + tanque cheio: é o par que mede o consumo de verdade.
+                Sem eles a conta só poderia dividir o km dos fretes lançados
+                pelos litros de todos os abastecimentos — dois conjuntos que não
+                se falam, e um km/l com cara de medido. */}
+            {tipo === "ABASTECIMENTO" && (
+              <View className="gap-2">
+                <Label>Odômetro (opcional)</Label>
+                <Input
+                  value={odometro}
+                  onChangeText={(v) => setOdometro(v.replace(/[^\d]/g, ""))}
+                  keyboardType="number-pad"
+                  placeholder="km do painel"
+                  editable={!salvando}
+                />
+                <Pressable
+                  onPress={() => setTanqueCheio((v) => !v)}
+                  disabled={salvando}
+                  className={`flex-row items-center gap-3 rounded-xl border-2 p-3 ${
+                    tanqueCheio ? "border-primary bg-primary/10" : "border-border bg-card"
+                  }`}
+                >
+                  <View
+                    className={`h-6 w-6 items-center justify-center rounded-md border-2 ${
+                      tanqueCheio ? "border-primary bg-primary" : "border-border"
+                    }`}
+                  >
+                    {tanqueCheio ? <Check size={16} color="white" strokeWidth={3} /> : null}
+                  </View>
+                  <Text className="flex-1 text-base font-semibold text-foreground">
+                    Enchi o tanque
+                  </Text>
+                </Pressable>
+                <Text className="text-sm text-muted-foreground">
+                  Anotando o odômetro nos cheios, o app mede seu km/L de verdade — e é ele
+                  que diz se o frete paga o diesel.
                 </Text>
               </View>
             )}
