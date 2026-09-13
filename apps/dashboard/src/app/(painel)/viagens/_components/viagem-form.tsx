@@ -36,6 +36,13 @@ export type ViagemEditavel = {
   /** O km que o MOTORISTA informou — a lei. Alterar exige motivo escrito. */
   kmMotorista?: string | null;
   observacao: string | null;
+  nfeChave: string | null;
+  nfeNumero: string | null;
+  cteChave: string | null;
+  cteNumero: string | null;
+  mdfeChave: string | null;
+  recebedorNome: string | null;
+  recebedorDoc: string | null;
   valorPedagioTotal: string | null;
   status: string;
   // Coordenadas capturadas pelo motorista no momento do lançamento (opcional —
@@ -66,6 +73,13 @@ type FormState = {
   motivoKm: string;
   valorPedagioTotal: string;
   observacao: string;
+  nfeChave: string;
+  nfeNumero: string;
+  cteChave: string;
+  cteNumero: string;
+  mdfeChave: string;
+  recebedorNome: string;
+  recebedorDoc: string;
   veiculoId: string;
   clienteId: string;
   materialId: string;
@@ -114,6 +128,13 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
         ? String(initial.valorPedagioTotal).replace(".", ",")
         : "",
     observacao: initial.observacao ?? "",
+    nfeChave: initial.nfeChave ?? "",
+    nfeNumero: initial.nfeNumero ?? "",
+    cteChave: initial.cteChave ?? "",
+    cteNumero: initial.cteNumero ?? "",
+    mdfeChave: initial.mdfeChave ?? "",
+    recebedorNome: initial.recebedorNome ?? "",
+    recebedorDoc: initial.recebedorDoc ?? "",
     veiculoId: initial.veiculo.id,
     clienteId: initial.cliente?.id ?? "",
     materialId: initial.material?.id ?? "",
@@ -253,6 +274,24 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
     const obsAntigo = initial.observacao;
     if (obsNovo !== obsAntigo) {
       diff.observacao = obsNovo;
+    }
+
+    // Campos fiscais e do recebedor: texto puro, vazio vira null. As chaves vão
+    // só com os números — quem cola do DACTE traz espaço e ponto, e a mesma
+    // chave virando dois valores no banco é o que quebra a conferência depois.
+    const textos = [
+      "nfeChave",
+      "nfeNumero",
+      "cteChave",
+      "cteNumero",
+      "mdfeChave",
+      "recebedorNome",
+      "recebedorDoc",
+    ] as const;
+    for (const campo of textos) {
+      const bruto = form[campo].trim();
+      const novo = bruto === "" ? null : campo.endsWith("Chave") ? bruto.replace(/\D/g, "") : bruto;
+      if (novo !== initial[campo]) diff[campo] = novo;
     }
 
     return diff;
@@ -496,6 +535,95 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
             />
           </div>
         </div>
+
+        <details className="rounded-lg border p-3">
+          <summary className="cursor-pointer text-sm font-medium">
+            Documentos e comprovante de entrega
+          </summary>
+          <div className="mt-3 space-y-4">
+            <p className="text-xs text-muted-foreground">
+              O sistema não emite documento fiscal — guarda o que você já emite em outro lugar,
+              pra não ter que procurar depois nem digitar a viagem duas vezes.
+            </p>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="cte-chave">Chave do CT-e</Label>
+                <Input
+                  id="cte-chave"
+                  inputMode="numeric"
+                  placeholder="44 números"
+                  value={form.cteChave}
+                  onChange={(e) => setForm({ ...form, cteChave: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="cte-numero">Número</Label>
+                <Input
+                  id="cte-numero"
+                  value={form.cteNumero}
+                  onChange={(e) => setForm({ ...form, cteNumero: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="nfe-chave">Chave da NF-e da carga</Label>
+                <Input
+                  id="nfe-chave"
+                  inputMode="numeric"
+                  placeholder="44 números"
+                  value={form.nfeChave}
+                  onChange={(e) => setForm({ ...form, nfeChave: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="nfe-numero">Número</Label>
+                <Input
+                  id="nfe-numero"
+                  value={form.nfeNumero}
+                  onChange={(e) => setForm({ ...form, nfeNumero: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="mdfe-chave">Chave do MDF-e</Label>
+              <Input
+                id="mdfe-chave"
+                inputMode="numeric"
+                placeholder="44 números"
+                value={form.mdfeChave}
+                onChange={(e) => setForm({ ...form, mdfeChave: e.target.value })}
+              />
+            </div>
+
+            <div className="grid gap-4 border-t pt-3 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="recebedor-nome">Quem recebeu a carga</Label>
+                <Input
+                  id="recebedor-nome"
+                  placeholder="nome de quem assinou"
+                  value={form.recebedorNome}
+                  onChange={(e) => setForm({ ...form, recebedorNome: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="recebedor-doc">Documento (CPF/RG)</Label>
+                <Input
+                  id="recebedor-doc"
+                  value={form.recebedorDoc}
+                  onChange={(e) => setForm({ ...form, recebedorDoc: e.target.value })}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Com o GPS e a foto que a viagem já tem, isto fecha os quatro requisitos do
+              comprovante de entrega eletrônico.
+            </p>
+          </div>
+        </details>
 
         <div className="flex justify-end gap-2 pt-2">
           <Link href={`/viagens/${initial.id}`}>

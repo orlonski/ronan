@@ -28,6 +28,7 @@ import { UploadsService } from "../../uploads/uploads.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
 import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
+import { lerChaveFiscal } from "../../common/chave-fiscal";
 import { resolverDivergenciasSupridas } from "../../common/divergencias";
 import { checarAlteracaoKm, fmtKmBr } from "../../common/km-motorista";
 import { filtrarComercial, omitirComercial } from "./comercial";
@@ -722,6 +723,21 @@ export class ViagensAdminService {
         // Admin limpou a saída: a diária volta a ser uma diária aberta.
         dataUpdate.duracaoMinutos = null;
       }
+    }
+
+    // As chaves fiscais só entram se forem chaves de verdade. O Zod já garantiu
+    // 44 números; aqui o dígito verificador e o MODELO são conferidos, porque
+    // colar a chave da NF-e no campo do CT-e passa por qualquer regex e só o
+    // modelo denuncia.
+    for (const [campo, modelo] of [
+      ["nfeChave", "55"],
+      ["cteChave", "57"],
+      ["mdfeChave", "58"],
+    ] as const) {
+      const valor = (input as Record<string, unknown>)[campo];
+      if (typeof valor !== "string" || valor.length === 0) continue;
+      const r = lerChaveFiscal(valor, modelo);
+      if (!r.ok) throw new BadRequestException(r.motivo);
     }
 
     const depois = await this.prisma.viagem.update({

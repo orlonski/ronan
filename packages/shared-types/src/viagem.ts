@@ -253,6 +253,24 @@ export type EncerrarDiariaInput = z.infer<typeof EncerrarDiariaInput>;
 // Edição admin: campos que motorista lança continuam editáveis. Imutáveis aqui:
 // id, clientId (idempotência), motoristaId, status, tracking GPS, fotos, timestamps.
 // `null` em valorPedagioTotal/observacao permite limpar o campo.
+/**
+ * Chave de acesso de documento fiscal, como ela chega do formulário.
+ *
+ * Guarda SÓ OS NÚMEROS: a chave é copiada do DACTE, do e-mail ou do WhatsApp, e
+ * chega com espaço, ponto e quebra de linha. Normalizar aqui evita a mesma
+ * chave virar dois valores diferentes no banco conforme de onde foi colada.
+ *
+ * String vazia vira null — é como o formulário manda "apaguei esse campo".
+ */
+const ChaveFiscalSchema = z
+  .string()
+  .trim()
+  .transform((v) => v.replace(/\D/g, ""))
+  .refine((v) => v.length === 0 || v.length === 44, "A chave precisa ter 44 números.")
+  .transform((v) => (v.length === 0 ? null : v))
+  .nullable()
+  .optional();
+
 export const AtualizarViagemInput = z.object({
   veiculoId: z.string().uuid().optional(),
   clienteId: z.string().uuid().optional(),
@@ -280,6 +298,25 @@ export const AtualizarViagemInput = z.object({
   localDescargaId: z.string().uuid().optional(),
   valorPedagioTotal: z.number().nonnegative().max(MAX_VALOR).nullable().optional(),
   observacao: z.string().max(500).nullable().optional(),
+  // --- documentos fiscais emitidos FORA daqui ---
+  // O sistema não emite; ele amarra. Guardar a chave é o que mata a digitação
+  // dupla entre o emissor fiscal do cliente e este sistema — e digitação dupla
+  // é o que faz sistema de operação ser abandonado em 90 dias.
+  //
+  // A validação real (44 dígitos, DV módulo 11, modelo certo) mora no backend,
+  // em `common/chave-fiscal.ts`: ela precisa dizer POR QUE a chave não serve, e
+  // um regex de 44 dígitos aceitaria a chave de outro documento calada.
+  nfeChave: ChaveFiscalSchema,
+  nfeNumero: z.string().trim().max(20).nullable().optional(),
+  nfeSerie: z.string().trim().max(5).nullable().optional(),
+  cteChave: ChaveFiscalSchema,
+  cteNumero: z.string().trim().max(20).nullable().optional(),
+  cteSerie: z.string().trim().max(5).nullable().optional(),
+  mdfeChave: ChaveFiscalSchema,
+  // Quem recebeu a carga. Com o GPS e a foto que já existem, fecha os quatro
+  // requisitos do Comprovante de Entrega Eletrônico (evento 110180 do CT-e).
+  recebedorNome: z.string().trim().max(120).nullable().optional(),
+  recebedorDoc: z.string().trim().max(20).nullable().optional(),
 });
 export type AtualizarViagemInput = z.infer<typeof AtualizarViagemInput>;
 

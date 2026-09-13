@@ -428,6 +428,34 @@ model Conta {
   /// sozinho pra ninguém. Ligar é decisão da plataforma, empresa por empresa.
   iaConferenciaTicket Boolean @default(false)
 
+  // --- identificação fiscal do emitente ---
+  // Nada disto existia: a Conta tinha nome, slug, cnpj e logo. Sem estes campos
+  // não se emite CT-e nem MDF-e, e o XML emitido fora não tem contra o que ser
+  // conferido. Tudo opcional — quem não emite documento não é obrigado a
+  // preencher, e quem for emitir é cobrado na hora de emitir.
+  /// A razão social. O `nome` acima é fantasia, e é ele que aparece no painel.
+  razaoSocial         String?
+  inscricaoEstadual   String?
+  inscricaoMunicipal  String?
+  /// Regime tributário: 1 Simples, 2 Simples com excesso, 3 Normal.
+  crt                 String?
+  /// Endereço fiscal. Separado do endereço de operação de propósito: o emitente
+  /// pode ter matriz num lugar e pátio em outro.
+  logradouro          String?
+  numero              String?
+  complemento         String?
+  bairro              String?
+  cep                 String?
+  municipio           String?
+  /// Código IBGE de 7 dígitos. Obrigatório no CT-e e no MDF-e.
+  codigoMunicipioIbge String?
+  uf                  String?
+  telefoneFiscal      String?
+  /// Registro na ANTT. Sem ele não há CT-e, MDF-e nem CIOT.
+  rntrc               String?
+  /// ETC (empresa), CTC (cooperativa) ou TAC (autônomo).
+  tipoTransportador   String?
+
   /// URL pública servida por /publico/contas/:id/logo (com `v` pra furar cache).
   logoUrl     String?
   /// Chave do objeto no MinIO. Separada da URL pra poder apagar a logo antiga.
@@ -1804,24 +1832,40 @@ model UsuarioTransportadora {
 }
 
 model Empresa {
-  contaId          String       @default("__SEM_CONTA__")
-  conta            Conta        @relation(fields: [contaId], references: [id])
-  id               String       @id @default(uuid())
-  nome             String
-  cnpj             String?
-  contato          String?
-  papel            PapelEmpresa @default(AMBOS)
-  layoutImport     Json? // mapeamento de colunas do fechamento que ela manda (cached IA inference)
+  contaId             String       @default("__SEM_CONTA__")
+  conta               Conta        @relation(fields: [contaId], references: [id])
+  id                  String       @id @default(uuid())
+  nome                String
+  cnpj                String?
+  contato             String?
+  // --- dados fiscais do tomador ---
+  razaoSocial         String?
+  inscricaoEstadual   String?
+  /// 1 contribuinte, 2 isento, 9 não contribuinte. Sem isto a SEFAZ rejeita o
+  /// CT-e — e é o campo que ninguém lembra de perguntar na hora do cadastro.
+  indicadorIe         String?
+  logradouro          String?
+  numeroEndereco      String?
+  bairro              String?
+  cep                 String?
+  municipio           String?
+  codigoMunicipioIbge String?
+  uf                  String?
+  email               String?
+  /// Em quantos dias a empresa paga depois do fechamento. Base do vencimento.
+  prazoPagamentoDias  Int?
+  papel               PapelEmpresa @default(AMBOS)
+  layoutImport        Json? // mapeamento de colunas do fechamento que ela manda (cached IA inference)
   // Lista de campos que compõem a chave única de match. Default null = ["placa","data","ticket"].
   // Empresa que usa NF como chave seria ["placa","data","nf"] (requer Viagem.nf, V3.1).
-  chaveMatch       Json?
+  chaveMatch          Json?
   // 0–20 — divergência aceita em km antes de virar DIVERGENCIA. 5 = ±5%.
-  toleranciaKmPct  Int          @default(0)
+  toleranciaKmPct     Int          @default(0)
   // 0–10 — idem pra toneladas
-  toleranciaTonPct Int          @default(0)
-  ativa            Boolean      @default(true)
-  criadoEm         DateTime     @default(now())
-  alteradoEm       DateTime     @updatedAt
+  toleranciaTonPct    Int          @default(0)
+  ativa               Boolean      @default(true)
+  criadoEm            DateTime     @default(now())
+  alteradoEm          DateTime     @updatedAt
 
   clientes       Cliente[]
   regrasMinimo   RegraMinimo[]
@@ -1892,6 +1936,23 @@ model Cliente {
   criadoPorId String?
 
   pedidos Pedido[]
+
+  // --- dados fiscais ---
+  // O Cliente era um rótulo comercial dentro de uma Empresa, sem nenhum
+  // documento. Pra CT-e ele é remetente ou destinatário, e sem CNPJ/endereço
+  // não há documento nenhum.
+  cnpjCpf             String?
+  inscricaoEstadual   String?
+  indicadorIe         String?
+  logradouro          String?
+  numeroEndereco      String?
+  bairro              String?
+  cep                 String?
+  municipio           String?
+  codigoMunicipioIbge String?
+  uf                  String?
+  telefone            String?
+  email               String?
 
   @@index([empresaId])
   @@index([ativa])
@@ -2560,6 +2621,13 @@ model Local {
   pedidosComoCarga    Pedido[] @relation("PedidoLocalCarga")
   pedidosComoDescarga Pedido[] @relation("PedidoLocalDescarga")
 
+  /// Código IBGE de 7 dígitos do município.
+  ///
+  /// É o campo mais barato e mais bloqueante da lista fiscal: o CT-e exige
+  /// `cMunIni`/`cMunFim` e o MDF-e exige `cMunCarrega`/`cMunDescarga`, e dá pra
+  /// derivar de cidade+UF com a tabela do IBGE. Sem ele, nenhum documento sai.
+  codigoMunicipioIbge String?
+
   @@index([cidade, uf])
   @@index([ativo])
   @@index([nivelConfianca])
@@ -2894,6 +2962,31 @@ model Viagem {
   itensAcerto ItemAcerto[]
 
   planejada ViagemPlanejada?
+
+  // --- documentos fiscais ---
+  // O sistema não emite (e por ora não vai): emissor próprio é certificado A1
+  // por conta, 27 webservices de UF, contingência e um leiaute em transição
+  // pela reforma até 2033. O que ele passa a fazer é AMARRAR o documento que o
+  // cliente já emite em outro lugar — que é o que mata a digitação dupla, e
+  // digitação dupla é o que mata sistema de operação em 90 dias.
+  /// Chave de 44 dígitos da NF-e da carga. O OCR do ticket já lê o número da
+  /// nota e jogava fora.
+  nfeChave      String?
+  nfeNumero     String?
+  nfeSerie      String?
+  /// Conhecimento de transporte emitido pra esta viagem.
+  cteChave      String?
+  cteNumero     String?
+  cteSerie      String?
+  /// Manifesto do veículo no dia.
+  mdfeChave     String?
+  // --- comprovante de entrega ---
+  // O evento 110180 do CT-e (Comprovante de Entrega Eletrônico) exige data,
+  // hora, geolocalização, identificação de quem recebeu e hash da imagem. Três
+  // dos quatro já existiam (descargaLat/Lng, TicketFoto, timestamp) — faltava
+  // só saber quem recebeu.
+  recebedorNome String?
+  recebedorDoc  String?
 
   @@index([transportadoraId, data])
   @@index([motoristaId, data])
