@@ -5,10 +5,14 @@ import type {
 } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
+import { AuditoriaService } from "../../auditoria/auditoria.service";
 
 @Injectable()
 export class ViagemLifecycleAdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditoria: AuditoriaService,
+  ) {}
 
   // ---- Catálogo de tipos de evento ----
 
@@ -70,11 +74,21 @@ export class ViagemLifecycleAdminService {
         motorista: { select: { id: true, nome: true, telefone: true } },
         veiculo: { select: { id: true, placa: true } },
         localCarga: { select: { id: true, nome: true, cidade: true, uf: true } },
+        // O destino faltava no payload, então a tela mostrava de onde a viagem
+        // saiu e não pra onde ia — justamente o que o supervisor precisa saber
+        // pra estimar chegada. Nulos até o motorista escolher no finalizar.
+        localDescarga: { select: { id: true, nome: true, cidade: true, uf: true } },
+        cliente: { select: { id: true, nome: true } },
+        material: { select: { id: true, nome: true } },
         eventosViagem: {
           orderBy: { ocorridoEm: "asc" },
           select: {
             id: true,
             tipoSlug: true,
+            // O nome legível pro card. O `tipoSlug` continua sendo o snapshot
+            // que manda no histórico; ele só não serve de rótulo — a tela
+            // mostrava "cheguei-carga" pro supervisor.
+            tipoEvento: { select: { nome: true } },
             ocorridoEm: true,
             lat: true,
             lng: true,
@@ -90,16 +104,45 @@ export class ViagemLifecycleAdminService {
   /**
    * Cancela (apaga) uma viagem EM_ANDAMENTO presa, pelo dashboard. Só apaga se
    * de fato estiver EM_ANDAMENTO — nunca uma viagem já finalizada.
+   *
+   * O DELETE é físico de propósito: é o rescue da casca órfã, e o índice único
+   * `uq_viagem_em_andamento_por_motorista` precisa sair da frente pro motorista
+   * conseguir abrir a próxima. Trocar por um status novo obrigaria a revisar os
+   * pontos que filtram STATUS_FORA_FECHAMENTO, um a um — fica pra quando o
+   * modelo de viagem planejada entrar.
+   *
+   * O que NÃO podia continuar é apagar sem rastro: isto aqui é trabalho em
+   * curso de uma pessoa (GPS da carga, fotos, eventos, o km que ela já rodou),
+   * e sumia inteiro sem ninguém conseguir dizer depois o que havia ali nem quem
+   * mandou apagar. Guardamos o retrato antes de apagar.
    */
-  async cancelarEmAndamento(id: string) {
+  async cancelarEmAndamento(id: string, usuarioId: string) {
     const v = await this.prisma.viagem.findUnique({
       where: { id },
-      select: { id: true, status: true },
+      include: {
+        motorista: { select: { id: true, nome: true } },
+        veiculo: { select: { id: true, placa: true } },
+        localCarga: { select: { id: true, nome: true } },
+        eventosViagem: { select: { tipoSlug: true, ocorridoEm: true, observacao: true } },
+      },
     });
     if (!v) throw new NotFoundException("Viagem não encontrada");
     if (v.status !== "EM_ANDAMENTO") {
       throw new ConflictException("Só dá pra cancelar viagem que está em andamento.");
     }
+
+    // Antes do delete: o AuditLog não tem FK pra Viagem, então a linha sobrevive
+    // ao registro que descreve — é o que permite responder "o que foi cancelado
+    // no dia 12?" depois que a viagem não existe mais.
+    await this.auditoria.log({
+      usuarioId,
+      entidade: "Viagem",
+      entidadeId: id,
+      acao: "DELETE",
+      motivo: "Viagem em andamento cancelada pelo painel",
+      valorAntes: v,
+    });
+
     await this.prisma.viagem.delete({ where: { id } });
     return { ok: true };
   }

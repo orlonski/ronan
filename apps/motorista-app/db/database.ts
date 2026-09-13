@@ -394,6 +394,11 @@ const SUFIXOS_OUTBOX = [
   VG_FINALIZAR_KEY,
   VG_CANCELAR_KEY,
   COMPLETAR_PESO_KEY,
+  // Entrou por último e ficou de fora desta lista. Efeito: motorista em mais de
+  // uma empresa via "0 não enviados" na linha da empresa que tinha um encerrar
+  // diária preso — justamente o silêncio que o contador existe pra evitar — e o
+  // item podia não ser adotado numa migração de storage.
+  ENCERRAR_DIARIA_KEY,
 ];
 
 async function readList<T>(key: string): Promise<T[]> {

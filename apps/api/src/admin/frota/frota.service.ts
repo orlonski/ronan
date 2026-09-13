@@ -1,9 +1,10 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { Cron } from "@nestjs/schedule";
 import type { MapaFrotaItem } from "@ronan/shared-types";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import type { EscopoAdmin } from "../../common/escopo/escopo";
-import { contaIdAtual } from "../../common/conta/conta-context";
+import { contaIdAtual, comoSistema } from "../../common/conta/conta-context";
 
 const RETENCAO_DIAS = 90;
 
@@ -82,6 +83,10 @@ export class FrotaAdminService {
    * Expurga posições mais antigas que RETENCAO_DIAS dias. Pode ser chamado
    * via endpoint admin manualmente ou por cron externo (Easypanel).
    * Retorna quantos rows foram apagados.
+   *
+   * Chamado de dentro de uma requisição, a trava de conta recorta o deleteMany
+   * pra conta do usuário — é o certo: o admin de uma empresa não apaga o
+   * histórico da outra. Quem varre tudo é o cron abaixo, em `comoSistema`.
    */
   async expurgarAntigas(): Promise<{ apagadas: number }> {
     const limite = new Date(Date.now() - RETENCAO_DIAS * 24 * 60 * 60_000);
@@ -90,5 +95,28 @@ export class FrotaAdminService {
     });
     this.log.log(`Expurgo de posições antigas: ${result.count} removidas`);
     return { apagadas: result.count };
+  }
+
+  /**
+   * O expurgo automático. Existia só como botão no painel e como promessa de
+   * "cron externo (Easypanel)" que nunca foi criado — na prática as posições
+   * NUNCA eram apagadas, e é a tabela que mais cresce do sistema (um ponto por
+   * motorista a cada ~15 min, o dia inteiro). A retenção de 90 dias está na
+   * política de privacidade; sem este cron ela era só texto.
+   *
+   * Roda de madrugada, uma vez por dia, fora do horário de operação: é um
+   * DELETE grande e não deve competir com o lançamento de viagem.
+   *
+   * `comoSistema` porque o expurgo é por data e vale pra todas as contas —
+   * é a mesma justificativa do limpador de stories.
+   */
+  @Cron("0 20 3 * * *", { name: "expurgar-posicoes", timeZone: "America/Sao_Paulo" })
+  async expurgarAntigasCron(): Promise<void> {
+    try {
+      await comoSistema(() => this.expurgarAntigas());
+    } catch (e) {
+      // Cron não pode derrubar o processo: loga e tenta de novo amanhã.
+      this.log.error(`falha no expurgo de posições: ${(e as Error).message}`);
+    }
   }
 }

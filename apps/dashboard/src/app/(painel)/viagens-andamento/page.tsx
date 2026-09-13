@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  ArrowRight,
   Clock,
   ExternalLink,
   MapPin,
@@ -24,6 +25,8 @@ const POLL_MS = 20_000;
 type EventoAndamento = {
   id: string;
   tipoSlug: string;
+  /** Nome do catálogo. Pode faltar se o tipo foi removido depois do evento. */
+  tipoEvento: { nome: string } | null;
   ocorridoEm: string;
   lat: number | null;
   lng: number | null;
@@ -42,8 +45,20 @@ type ViagemAndamento = {
   motorista: { id: string; nome: string; telefone: string | null };
   veiculo: { id: string; placa: string } | null;
   localCarga: { id: string; nome: string; cidade: string | null; uf: string | null } | null;
+  localDescarga: { id: string; nome: string; cidade: string | null; uf: string | null } | null;
+  cliente: { id: string; nome: string } | null;
+  material: { id: string; nome: string } | null;
   eventosViagem: EventoAndamento[];
 };
+
+/**
+ * Fallback de rótulo quando o tipo de evento não veio (foi removido do
+ * catálogo depois que o evento aconteceu). "cheguei-carga" → "Cheguei carga".
+ */
+function humanizarSlug(slug: string): string {
+  const texto = slug.replace(/[-_]+/g, " ").trim();
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
 
 // "iniciada há X" — tempo relativo curto em PT-BR.
 function tempoRelativo(desde: string, agora: number): string {
@@ -138,6 +153,29 @@ function ViagemCard({ v, agora }: { v: ViagemAndamento; agora: number }) {
             <span>Local de carga não identificado</span>
           )}
         </span>
+        <span className="flex items-center gap-1.5">
+          <ArrowRight className="h-3.5 w-3.5 shrink-0" />
+          {v.localDescarga ? (
+            <>
+              {v.localDescarga.nome}
+              {v.localDescarga.cidade && (
+                <span className="text-xs">
+                  · {v.localDescarga.cidade}
+                  {v.localDescarga.uf ? `/${v.localDescarga.uf}` : ""}
+                </span>
+              )}
+            </>
+          ) : (
+            /* Destino nasce nulo: o motorista só escolhe ao finalizar. Dizer
+               isso é melhor que omitir a linha — some o "cadê o destino?". */
+            <span className="text-xs italic">destino ainda não informado</span>
+          )}
+        </span>
+        {(v.cliente || v.material) && (
+          <span className="text-xs">
+            {[v.cliente?.nome, v.material?.nome].filter(Boolean).join(" · ")}
+          </span>
+        )}
         {v.lat != null && v.lng != null && (
           <a
             href={`https://www.google.com/maps?q=${v.lat},${v.lng}`}
@@ -145,7 +183,11 @@ function ViagemCard({ v, agora }: { v: ViagemAndamento; agora: number }) {
             rel="noreferrer"
             className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
           >
-            ver no mapa <ExternalLink className="h-3 w-3" />
+            {/* Estas coordenadas são de ONDE A VIAGEM COMEÇOU, não de onde o
+                caminhão está agora — o rótulo antigo ("ver no mapa") mandava o
+                supervisor pro ponto de carga de horas atrás achando que era a
+                posição atual. */}
+            início no mapa <ExternalLink className="h-3 w-3" />
           </a>
         )}
       </div>
@@ -165,7 +207,7 @@ function ViagemCard({ v, agora }: { v: ViagemAndamento; agora: number }) {
                   <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-baseline gap-x-2">
-                      <span className="font-medium">{ev.tipoSlug}</span>
+                      <span className="font-medium">{ev.tipoEvento?.nome ?? humanizarSlug(ev.tipoSlug)}</span>
                       <span className="text-xs text-muted-foreground">{fmtHora(ev.ocorridoEm)}</span>
                       {ton && <span className="text-xs text-muted-foreground">· {ton}</span>}
                     </div>

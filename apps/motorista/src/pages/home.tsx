@@ -142,7 +142,10 @@ export default function HomePage() {
             Hoje o servidor aceita o lançamento sempre e a pendência vai
             carimbada pro escritório. Sobra a tarja de "ainda não subiu". */}
 
-        {pending.viagens + pending.pedagios + pending.abastecimentos > 0 && (
+        {/* `outros` são local e foto pendentes: entram no total porque também
+            ficam presos na fila, e ficavam fora da conta — a home dizia "tudo
+            sincronizado" com um local travado. */}
+        {pending.viagens + pending.pedagios + pending.abastecimentos + pending.outros > 0 && (
           <button
             type="button"
             onClick={() => navigate("/pendentes")}
@@ -153,8 +156,8 @@ export default function HomePage() {
             </div>
             <div className="flex-1">
               <p className="text-base font-bold text-foreground">
-                {pending.viagens + pending.pedagios + pending.abastecimentos} aguardando
-                sincronizar
+                {pending.viagens + pending.pedagios + pending.abastecimentos + pending.outros}{" "}
+                aguardando sincronizar
               </p>
               <p className="text-sm text-muted-foreground">
                 Sobem sozinhos quando o sinal voltar

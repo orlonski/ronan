@@ -78,7 +78,7 @@ export class ViagensAndamentoAdminController {
    */
   @RequerPermissao("viagens.editar")
   @Delete(":id")
-  cancelar(@Param("id") id: string) {
-    return this.service.cancelarEmAndamento(id);
+  cancelar(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    return this.service.cancelarEmAndamento(id, user.id);
   }
 }

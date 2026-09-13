@@ -183,6 +183,34 @@ export default function PerfilPosicaoScreen() {
           </Text>
         </Card>
 
+        {/* O geofence de locais em validação roda desde sempre e nunca foi
+            contado a ninguém: não havia uma linha sobre ele em tela nenhuma do
+            app. O uso é legítimo (confirmar o local que o próprio motorista
+            cadastrou), mas descobrir por fora que o celular avisa o escritório
+            quando ele fica parado num lugar é o tipo de coisa que quebra a
+            confiança de uma vez. Melhor ele ler aqui, da nossa boca. */}
+        <Card>
+          <View className="mb-3 flex-row items-center gap-2">
+            <MapPin size={18} color="#0f172a" />
+            <Text className="text-base font-bold text-foreground">
+              Sobre os locais que você cadastra
+            </Text>
+          </View>
+          <Text className="text-sm leading-5 text-muted-foreground">
+            Quando você cadastra um local novo, ele entra em validação. Pra
+            confirmar que o lugar existe mesmo — e você não ter que cadastrar de
+            novo —, o app repara se você passa por lá: se ficar mais de 10
+            minutos dentro de um raio de 200 metros do ponto, ele registra que o
+            local foi visitado e por quanto tempo.
+          </Text>
+          <Text className="mt-2 text-sm leading-5 text-muted-foreground">
+            Isso vale só pros locais que estão esperando validação, no máximo 20
+            de cada vez, e some assim que o local é confirmado. Não guarda o
+            caminho que você fez, nem onde você esteve fora desses pontos. Quem
+            trabalha por conta própria, sem empresa, não tem nada disso ligado.
+          </Text>
+        </Card>
+
         <Card>
           <View className="flex-row items-center justify-between">
             <View className="flex-1 pr-3">

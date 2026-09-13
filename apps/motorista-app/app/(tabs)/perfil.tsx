@@ -3,6 +3,7 @@ import { router, Stack } from "expo-router";
 import {
   Bell,
   BellOff,
+  Building2,
   ChevronRight,
   HelpCircle,
   KeyRound,
@@ -257,6 +258,17 @@ function PerfilDaEmpresa() {
                 icon={<MapPin size={20} color="#13316b" />}
                 title="Compartilhar posição"
                 onPress={() => router.push("/perfil-posicao")}
+              />
+              <View className="h-px bg-border" />
+              {/* Convites só tinham entrada na home de quem NÃO tem empresa
+                  nenhuma. Quem já roda pra uma e é convidado por outra recebia
+                  o push e não achava onde responder — a tela existia, sem porta.
+                  Rodar pra mais de uma empresa é a tese do app; a porta tem que
+                  estar sempre aqui, com ou sem convite na fila. */}
+              <ActionRow
+                icon={<Building2 size={20} color="#13316b" />}
+                title="Convites de empresas"
+                onPress={() => router.push("/convites")}
               />
               {me.data ? (
                 <>

@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
   type PendingAbastecimento,
+  type PendingFoto,
+  type PendingLocal,
   type PendingPedagio,
   type PendingViagem,
 } from "@/db/dexie";
@@ -29,9 +31,12 @@ import { fmtNum } from "@/lib/utils";
 type CommonItem = PendingViagem | PendingPedagio | PendingAbastecimento;
 
 export default function PendentesPage() {
-  const { viagens, pedagios, abastecimentos, loading } = usePendingItens();
+  const { viagens, pedagios, abastecimentos, locais, fotos, loading } = usePendingItens();
   const cat = useCatalogos();
-  const total = viagens.length + pedagios.length + abastecimentos.length;
+  // Locais e fotos contam no total: eles travam igual aos outros, e um item que
+  // não aparece aqui fica preso pra sempre sem o motorista saber.
+  const total =
+    viagens.length + pedagios.length + abastecimentos.length + locais.length + fotos.length;
   const [detalhe, setDetalhe] = useState<CommonItem | null>(null);
 
   const lookups = useMemo(() => {
@@ -96,10 +101,74 @@ export default function PendentesPage() {
         {abastecimentos.map((a) => (
           <AbastecimentoCard key={a.clientId} item={a} onDetalhes={() => setDetalhe(a)} />
         ))}
+
+        {locais.length > 0 && <SecaoTitulo titulo="Locais novos" count={locais.length} />}
+        {locais.map((l) => (
+          <LocalCard key={l.clientId} item={l} />
+        ))}
+
+        {fotos.length > 0 && <SecaoTitulo titulo="Fotos" count={fotos.length} />}
+        {fotos.map((f) => (
+          <FotoCard key={f.clientId} item={f} />
+        ))}
       </div>
 
       {detalhe && <DetalheModal item={detalhe} onClose={() => setDetalhe(null)} />}
     </div>
+  );
+}
+
+/**
+ * Local que o motorista cadastrou offline. Sem botão de editar: o que dá pra
+ * fazer com um local recusado é tentar de novo ou descartar — corrigir exigiria
+ * a tela de cadastro, que ainda não aceita reabrir um pendente.
+ */
+function LocalCard({ item }: { item: PendingLocal }) {
+  const temErro = item.status === "error";
+  return (
+    <Card>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-lg font-bold text-foreground">{item.payload.nome}</p>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            {item.payload.tipo === "AMBOS"
+              ? "Carga e descarga"
+              : item.payload.tipo === "CARGA"
+                ? "Carga"
+                : "Descarga"}
+          </p>
+        </div>
+        <Badge variant={temErro ? "destructive" : "warning"}>
+          {temErro ? "Com erro" : "Pendente"}
+        </Badge>
+      </div>
+      {temErro && item.errorMsg && (
+        <p className="mt-2 text-xs text-muted-foreground">{item.errorMsg}</p>
+      )}
+    </Card>
+  );
+}
+
+/** Foto anexada a uma viagem que ainda não subiu. */
+function FotoCard({ item }: { item: PendingFoto }) {
+  const temErro = item.status === "error";
+  return (
+    <Card>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-lg font-bold text-foreground">Foto da viagem</p>
+          <p className="mt-0.5 text-sm text-muted-foreground tabular">
+            {fmtDataCurta(new Date(item.createdAt).toISOString().slice(0, 10))}
+          </p>
+        </div>
+        <Badge variant={temErro ? "destructive" : "warning"}>
+          {temErro ? "Com erro" : "Pendente"}
+        </Badge>
+      </div>
+      {temErro && item.errorMsg && (
+        <p className="mt-2 text-xs text-muted-foreground">{item.errorMsg}</p>
+      )}
+    </Card>
   );
 }
 

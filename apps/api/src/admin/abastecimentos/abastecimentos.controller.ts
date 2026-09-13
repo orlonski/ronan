@@ -63,16 +63,26 @@ export class AbastecimentosAdminController {
     return this.service.list(query, user.escopo);
   }
 
+  // Os três GETs de item abaixo ficaram sem @RequerPermissao desde que a
+  // controller nasceu. Como o PermissaoGuard é fail-open (handler sem a chave
+  // passa), qualquer ADMIN_USER lia abastecimento — inclusive a foto do cupom
+  // — de QUALQUER frota, bastando o UUID. A trava de conta segurava o
+  // vazamento entre empresas; entre transportadoras da mesma conta, não.
+  @EscopoPor("abastecimento")
+  @RequerPermissao("abastecimentos.ver")
   @Get(":id")
-  detalhe(@Param("id") id: string) {
-    return this.service.detalhe(id);
+  detalhe(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    return this.service.detalhe(id, user.escopo);
   }
 
+  @EscopoPor("abastecimento")
+  @RequerPermissao("abastecimentos.ver")
   @Get(":id/historico")
-  historico(@Param("id") id: string) {
-    return this.service.historico(id);
+  historico(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    return this.service.historico(id, user.escopo);
   }
 
+  @EscopoPor("abastecimento")
   @RequerPermissao("abastecimentos.editar")
   @Patch(":id")
   atualizar(
@@ -81,36 +91,42 @@ export class AbastecimentosAdminController {
     body: z.infer<typeof AtualizarAbastecimentoInput>,
     @CurrentUser() user: AuthAdminUser,
   ) {
-    return this.service.atualizar(id, body, user.id);
+    return this.service.atualizar(id, body, user.id, user.escopo);
   }
 
   @Roles("ADMIN_USER")
+  @EscopoPor("abastecimento")
   @RequerPermissao("abastecimentos.excluir")
   @Delete(":id")
   @HttpCode(204)
-  async excluir(@Param("id") id: string) {
-    await this.service.excluir(id);
+  async excluir(@Param("id") id: string, @CurrentUser() user: AuthAdminUser) {
+    await this.service.excluir(id, user.escopo);
   }
 
+  @EscopoPor("abastecimento")
+  @RequerPermissao("abastecimentos.ver")
   @Get(":id/fotos/:fotoId")
   async foto(
     @Param("id") id: string,
     @Param("fotoId") fotoId: string,
+    @CurrentUser() user: AuthAdminUser,
     @Res() res: Response,
   ) {
-    const { buffer, contentType } = await this.service.fotoBuffer(id, fotoId);
+    const { buffer, contentType } = await this.service.fotoBuffer(id, fotoId, user.escopo);
     res.set("Content-Type", contentType);
     res.set("Cache-Control", "private, max-age=3600");
     res.send(buffer);
   }
 
+  @EscopoPor("abastecimento")
   @RequerPermissao("abastecimentos.editar")
   @Patch(":id/fotos/:fotoId")
   rotacionarFoto(
     @Param("id") id: string,
     @Param("fotoId") fotoId: string,
     @Body(new ZodValidationPipe(RotacaoFotoInput)) body: RotacaoFotoInput,
+    @CurrentUser() user: AuthAdminUser,
   ) {
-    return this.service.rotacionarFoto(id, fotoId, body.rotacao);
+    return this.service.rotacionarFoto(id, fotoId, body.rotacao, user.escopo);
   }
 }

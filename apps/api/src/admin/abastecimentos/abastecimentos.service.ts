@@ -99,7 +99,26 @@ export class AbastecimentosAdminService {
     };
   }
 
-  async detalhe(id: string) {
+  /**
+   * Barra o acesso a item de OUTRA frota. A listagem já filtrava por escopo,
+   * mas os acessos por id não — e como o id é um UUID que aparece no payload
+   * da listagem, o gestor de uma frota terceira podia ler, editar e apagar
+   * item de outra só trocando o id na URL.
+   *
+   * Sobe 404 e não 403 de propósito: quem não enxerga a frota não deve nem
+   * descobrir que o registro existe.
+   */
+  private async garantirNoEscopo(id: string, escopo: EscopoAdmin): Promise<void> {
+    if (!escopo) return; // acesso global
+    const achou = await this.prisma.abastecimento.findFirst({
+      where: { id, ...filtroEscopo(escopo) },
+      select: { id: true },
+    });
+    if (!achou) throw new NotFoundException("Abastecimento não encontrado");
+  }
+
+  async detalhe(id: string, escopo: EscopoAdmin) {
+    await this.garantirNoEscopo(id, escopo);
     const a = await this.prisma.abastecimento.findUnique({
       where: { id },
       include: {
@@ -118,7 +137,8 @@ export class AbastecimentosAdminService {
    * Hard delete do abastecimento. Bloqueado se há linha de fechamento usando
    * abastecimentoMatchId. AbastecimentoFoto sai cascade.
    */
-  async excluir(id: string) {
+  async excluir(id: string, escopo: EscopoAdmin) {
+    await this.garantirNoEscopo(id, escopo);
     const a = await this.prisma.abastecimento.findUnique({
       where: { id },
       select: { id: true, fotos: { select: { storageKey: true } } },
@@ -141,7 +161,8 @@ export class AbastecimentosAdminService {
     return { ok: true };
   }
 
-  async fotoBuffer(abastecimentoId: string, fotoId: string) {
+  async fotoBuffer(abastecimentoId: string, fotoId: string, escopo: EscopoAdmin) {
+    await this.garantirNoEscopo(abastecimentoId, escopo);
     const foto = await this.prisma.abastecimentoFoto.findFirst({
       where: { id: fotoId, abastecimentoId },
       select: { storageKey: true },
@@ -153,7 +174,13 @@ export class AbastecimentosAdminService {
     return { buffer, contentType };
   }
 
-  async rotacionarFoto(abastecimentoId: string, fotoId: string, rotacao: number) {
+  async rotacionarFoto(
+    abastecimentoId: string,
+    fotoId: string,
+    rotacao: number,
+    escopo: EscopoAdmin,
+  ) {
+    await this.garantirNoEscopo(abastecimentoId, escopo);
     const foto = await this.prisma.abastecimentoFoto.findFirst({
       where: { id: fotoId, abastecimentoId },
       select: { id: true },
@@ -170,7 +197,13 @@ export class AbastecimentosAdminService {
    * snapshot antes/depois, enriquece FK com nomes, registra logDiff
    * (1 log por campo alterado), notifica motorista com resumo.
    */
-  async atualizar(id: string, input: AtualizarAbastecimentoInput, usuarioId: string) {
+  async atualizar(
+    id: string,
+    input: AtualizarAbastecimentoInput,
+    usuarioId: string,
+    escopo: EscopoAdmin,
+  ) {
+    await this.garantirNoEscopo(id, escopo);
     const antes = await this.prisma.abastecimento.findUnique({
       where: { id },
       include: { _count: { select: { fechamentoLinhas: true } } },
@@ -224,10 +257,11 @@ export class AbastecimentosAdminService {
       });
     }
 
-    return this.detalhe(id);
+    return this.detalhe(id, escopo);
   }
 
-  async historico(abastecimentoId: string) {
+  async historico(abastecimentoId: string, escopo: EscopoAdmin) {
+    await this.garantirNoEscopo(abastecimentoId, escopo);
     const a = await this.prisma.abastecimento.findUnique({ where: { id: abastecimentoId } });
     if (!a) throw new NotFoundException("Abastecimento não encontrado");
     return this.auditoria.historicoDe("Abastecimento", abastecimentoId);

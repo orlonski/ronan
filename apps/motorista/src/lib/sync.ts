@@ -289,25 +289,41 @@ export async function descartarAbastecimentoPendente(clientId: string): Promise<
   notify();
 }
 
+/**
+ * Contagem pro badge de pendentes. Locais e fotos entram no `comErro` porque
+ * também são drenados e também podem falhar de vez — ficavam de fora, então o
+ * motorista via "0 com erro" com um local travado na fila.
+ *
+ * `viagens`/`pedagios`/`abastecimentos` seguem sendo os lançamentos que ele
+ * reconhece por nome; `outros` junta local e foto, que são acessórios de um
+ * lançamento e não fazem sentido como linha própria no badge.
+ */
 export async function pendingCounts(): Promise<{
   viagens: number;
   pedagios: number;
   abastecimentos: number;
+  outros: number;
   comErro: number;
 }> {
-  const [v, p, a] = await Promise.all([
+  const [v, p, a, l, f] = await Promise.all([
     listPendingViagens(),
     listPendingPedagios(),
     listPendingAbastecimentos(),
+    listPendingLocais(),
+    listPendingFotos(),
   ]);
+  const travado = (i: { attempts: number }) => i.attempts >= MAX_ATTEMPTS;
   const comErro =
-    v.filter((i) => i.attempts >= MAX_ATTEMPTS).length +
-    p.filter((i) => i.attempts >= MAX_ATTEMPTS).length +
-    a.filter((i) => i.attempts >= MAX_ATTEMPTS).length;
+    v.filter(travado).length +
+    p.filter(travado).length +
+    a.filter(travado).length +
+    l.filter(travado).length +
+    f.filter(travado).length;
   return {
     viagens: v.length,
     pedagios: p.length,
     abastecimentos: a.length,
+    outros: l.length + f.length,
     comErro,
   };
 }
