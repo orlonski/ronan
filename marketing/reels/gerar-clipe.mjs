@@ -79,7 +79,9 @@ const inicio = await chamar(`/models/${MODELO}:predictLongRunning`, {
       aspectRatio: "9:16",
       durationSeconds: 8,
       negativePrompt: NEGATIVO,
-      personGeneration: "allow_adult",
+      // `personGeneration` não é aceito neste modelo ("allow_adult ... not
+      // supported"). Os prompts já mantêm rosto fora de quadro por decisão de
+      // direção, então não há o que configurar aqui.
       sampleCount: 1,
     },
   }),
