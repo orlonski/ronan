@@ -443,6 +443,32 @@ export const api = {
     if (res.status) setCadastroStatus(res.status);
     return res;
   },
+  // ---- Esqueci minha senha ----
+  // O backend já tinha os três endpoints, públicos e prontos; o PWA só não
+  // tinha as telas. Quem esquece a senha no iPhone não tinha saída nenhuma —
+  // a troca de senha do perfil exige a senha ATUAL.
+  esqueciSenha: (cpf: string, telefone: string) =>
+    request<{ ok: true; expiraEmSegundos: number }>("POST", "/m/auth/senha/esqueci", {
+      body: { cpf, telefone },
+      auth: false,
+    }),
+  reenviarCodigoSenha: (cpf: string) =>
+    request<{ ok: true; expiraEmSegundos: number }>("POST", "/m/auth/senha/reenviar", {
+      body: { cpf },
+      auth: false,
+    }),
+  redefinirSenha: async (body: { cpf: string; codigo: string; novaSenha: string }) => {
+    const res = await request<AuthResposta>("POST", "/m/auth/senha/redefinir", {
+      body,
+      auth: false,
+    });
+    // Redefinir já loga: o motorista acabou de provar quem é pelo código no
+    // WhatsApp, e mandar ele digitar a senha nova na tela seguinte seria pedir
+    // duas vezes a mesma coisa.
+    guardarIdentidade(res);
+    if (res.status) setCadastroStatus(res.status);
+    return res;
+  },
   iniciarCadastro: (body: CadastroMotoristaInput) =>
     request<CadastroIniciado>("POST", "/m/auth/cadastro/iniciar", { body, auth: false }),
   reenviarCodigoCadastro: (cpf: string) =>

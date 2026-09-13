@@ -6,6 +6,7 @@ import { SessaoService } from "../whatsapp/sessao.service";
 import { achatarParam, NOME_PLATAFORMA } from "@ronan/shared-types";
 import { inicioDoDiaData, ymdSaoPaulo } from "../common/timezone";
 import { paraCadaConta } from "../common/conta/para-cada-conta";
+import { comLockDeCron } from "../common/cron-exclusivo";
 import { comoSistema } from "../common/conta/conta-context";
 
 /**
@@ -57,7 +58,12 @@ export class ResumoMotoristaService {
   @Cron("0 0 20 * * *", { name: "resumo-motorista", timeZone: "America/Sao_Paulo" })
   async enviarDiario(): Promise<void> {
     // Mensagem por motorista com os números dele — roda dentro da conta dele.
-    await paraCadaConta(this.prisma, () => this.enviarDiarioDaVez());
+    // Uma instância só: com duas réplicas, os dois processos disparam este
+    // job no mesmo segundo — e aqui isso é mensagem duplicada no celular de
+    // gente de verdade. Ver common/cron-exclusivo.ts.
+    await comLockDeCron(this.prisma, "resumo-motorista", async () => {
+      await paraCadaConta(this.prisma, () => this.enviarDiarioDaVez());
+    });
   }
 
   private async enviarDiarioDaVez(): Promise<void> {

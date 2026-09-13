@@ -5,6 +5,7 @@ import { RoteamentoService } from "../roteamento/roteamento.service";
 import { PushService } from "../push/push.service";
 import { KmAtipicoService } from "../km-atipico/km-atipico.service";
 import { paraCadaConta } from "../common/conta/para-cada-conta";
+import { comLockDeCron } from "../common/cron-exclusivo";
 
 // Diferença mínima (km) pra considerar que o recálculo "mudou" o valor e valer
 // o aviso ao motorista. Abaixo disso, só marca como reprocessado sem incomodar.
@@ -201,7 +202,12 @@ export class KmReprocessamentoService {
   async sweep(): Promise<void> {
     // Recalcula km e avisa o motorista. Vai por conta porque a configuração de km
     // atípico é por empresa e o aviso sai em nome dela.
-    await paraCadaConta(this.prisma, () => this.sweepDaVez());
+    // Uma instância só: com duas réplicas, os dois processos disparam este
+    // job no mesmo segundo — e aqui isso é mensagem duplicada no celular de
+    // gente de verdade. Ver common/cron-exclusivo.ts.
+    await comLockDeCron(this.prisma, "reprocessar-km", async () => {
+      await paraCadaConta(this.prisma, () => this.sweepDaVez());
+    });
   }
 
   private async sweepDaVez(): Promise<void> {

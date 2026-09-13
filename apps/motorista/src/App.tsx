@@ -7,6 +7,8 @@ import { AlertHost } from "@/components/ui/alert-dialog";
 
 import LoginPage from "@/pages/login";
 import SignupPage from "@/pages/signup";
+import EsqueciSenhaPage from "@/pages/esqueci-senha";
+import EsqueciSenhaCodigoPage from "@/pages/esqueci-senha-codigo";
 import SignupCodigoPage from "@/pages/signup-codigo";
 import HomePage from "@/pages/home";
 import HistoricoPage from "@/pages/historico";
@@ -36,6 +38,8 @@ export default function App() {
         <AuthGate>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/esqueci-senha" element={<EsqueciSenhaPage />} />
+            <Route path="/esqueci-senha/codigo" element={<EsqueciSenhaCodigoPage />} />
             <Route path="/signup" element={<SignupPage />} />
             <Route path="/signup/codigo" element={<SignupCodigoPage />} />
             <Route element={<WithTabs />}>

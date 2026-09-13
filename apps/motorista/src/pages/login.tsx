@@ -168,6 +168,18 @@ export default function LoginPage() {
             {submitting ? "Entrando..." : "Entrar"}
           </Button>
 
+          {/* O link que faltava: quem esquecia a senha no iPhone não tinha saída
+              nenhuma — a troca pelo perfil exige a senha atual, que é
+              justamente a que ele não lembra. */}
+          <button
+            type="button"
+            onClick={() => navigate(`/esqueci-senha${cpf ? `?cpf=${cpf.replace(/\D/g, "")}` : ""}`)}
+            disabled={submitting}
+            className="w-full py-2 text-center text-base text-muted-foreground underline"
+          >
+            Esqueci minha senha
+          </button>
+
           <button
             type="button"
             onClick={() => navigate("/signup")}

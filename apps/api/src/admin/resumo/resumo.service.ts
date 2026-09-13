@@ -19,6 +19,7 @@ import {
 import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
 import { comoSistema, contaIdAtual } from "../../common/conta/conta-context";
 import { paraCadaConta } from "../../common/conta/para-cada-conta";
+import { comLockDeCron } from "../../common/cron-exclusivo";
 
 const DIA_MS = 86_400_000;
 
@@ -81,7 +82,12 @@ export class ResumoService {
   async enviarDiario(): Promise<void> {
     // O resumo é uma mensagem com os números da empresa: uma passada por conta,
     // senão o dono da Schaba receberia as viagens da outra no mesmo texto.
-    await paraCadaConta(this.prisma, () => this.enviarDiarioDaVez());
+    // Uma instância só: com duas réplicas, os dois processos disparam este
+    // job no mesmo segundo — e aqui isso é mensagem duplicada no celular de
+    // gente de verdade. Ver common/cron-exclusivo.ts.
+    await comLockDeCron(this.prisma, "resumo-diario", async () => {
+      await paraCadaConta(this.prisma, () => this.enviarDiarioDaVez());
+    });
   }
 
   private async enviarDiarioDaVez(): Promise<void> {
