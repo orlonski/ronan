@@ -152,6 +152,11 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // gestão de EMPRESAS da plataforma, que não passa por permissão nenhuma —
   // é gateada por `User.plataforma`, fora da matriz de propósito.
   { recurso: "minha-empresa", label: "Minha empresa (marca e regras)", modulo: "Sistema", acoes: ["editar"] },
+  // Trazer a base que a transportadora já tem (planilha de clientes, frota,
+  // motoristas, locais). É ato de IMPLANTAÇÃO, e não a criação avulsa de um
+  // cadastro: quem pode criar um cliente não deveria, por isso, poder
+  // reescrever a base inteira — por isso recurso próprio.
+  { recurso: "importacao", label: "Importar dados", modulo: "Sistema", acoes: ["ver", "executar"] },
   { recurso: "whatsapp", label: "WhatsApp", modulo: "Sistema", acoes: ["ver", "gerenciar"] },
   { recurso: "erros", label: "Erros", modulo: "Sistema", acoes: ["ver", "resolver"] },
   { recurso: "diagnosticos", label: "Diagnósticos", modulo: "Sistema", acoes: ["ver"] },

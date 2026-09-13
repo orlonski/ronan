@@ -83,6 +83,7 @@ export const MODULOS: ModuloDef[] = [
       "permissoes",
       "minha-empresa",
       "mapa",
+      "importacao",
     ],
   },
   {
