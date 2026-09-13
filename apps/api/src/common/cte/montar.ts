@@ -106,6 +106,24 @@ export type ValorPrestacao = {
   extras?: { nome: string; valor: number }[];
 };
 
+/**
+ * O responsável técnico pelo software emissor.
+ *
+ * É onde a empresa que ESCREVEU o sistema entra no documento — e é o único
+ * lugar dela: emitente é quem presta o serviço de transporte, e uma software
+ * house não tem RNTRC, nem inscrição estadual, nem credenciamento de
+ * transportador na SEFAZ.
+ *
+ * O dado é o mesmo pra todas as contas (é sempre a mesma desenvolvedora), então
+ * ele vem de env e não do cadastro de cada empresa.
+ */
+export type ResponsavelTecnico = {
+  cnpj: string;
+  contato: string;
+  email: string;
+  telefone: string;
+};
+
 export type EntradaCte = {
   emitente: Emitente;
   remetente: Participante;
@@ -129,6 +147,8 @@ export type EntradaCte = {
   /** Injetável pra teste — em produção é sorteado. */
   codigoNumerico?: number;
   versaoAplicativo?: string;
+  /** Ausente = o grupo não vai. A prévia avisa. */
+  responsavelTecnico?: ResponsavelTecnico | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -148,6 +168,7 @@ export type CteMontado = {
   vPrest: Record<string, unknown>;
   imp: Record<string, unknown>;
   infCTeNorm: Record<string, unknown>;
+  infRespTec?: Record<string, unknown>;
 };
 
 const dec = (n: number, casas: number) => n.toFixed(casas);
@@ -405,6 +426,16 @@ export function montarCte(e: EntradaCte): CteMontado {
         rodo: { RNTRC: soDigitos(e.emitente.rntrc) },
       },
     },
+    ...(e.responsavelTecnico
+      ? {
+          infRespTec: {
+            CNPJ: soDigitos(e.responsavelTecnico.cnpj),
+            xContato: e.responsavelTecnico.contato,
+            email: e.responsavelTecnico.email,
+            fone: soDigitos(e.responsavelTecnico.telefone),
+          },
+        }
+      : {}),
   };
 }
 

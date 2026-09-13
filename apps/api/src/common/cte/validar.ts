@@ -191,6 +191,18 @@ export function validarCte(e: EntradaCte): Validacao {
     });
   }
 
+  // --- responsável técnico ---
+  // Aviso, não erro: o grupo existe no leiaute 4.00 pro desenvolvedor do
+  // software, e a obrigatoriedade dele varia. Barrar a emissão por causa de uma
+  // env não preenchida seria pior que deixar o gateway dizer se exige.
+  if (!e.responsavelTecnico?.cnpj) {
+    avisos.push({
+      campo: "respTec",
+      mensagem:
+        "Sem o responsável técnico (a empresa que desenvolve o sistema). Configure RESP_TECNICO_* nas variáveis de ambiente — alguns gateways exigem.",
+    });
+  }
+
   // --- emissão ---
   const agora = Date.now();
   if (e.emitidoEm.getTime() > agora + 5 * 60_000) {

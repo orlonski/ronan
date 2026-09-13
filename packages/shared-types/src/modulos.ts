@@ -31,6 +31,7 @@ export const MODULOS_CHAVES = [
   "financeiro",
   "frota",
   "torre",
+  "fiscal",
   "comunicacao",
   "plataforma",
 ] as const;
@@ -84,7 +85,6 @@ export const MODULOS: ModuloDef[] = [
       "minha-empresa",
       "mapa",
       "importacao",
-      "cte",
     ],
   },
   {
@@ -124,6 +124,13 @@ export const MODULOS: ModuloDef[] = [
     nome: "Torre de controle",
     pitch: "Pedido do cliente, programação do dia e a viagem acompanhada ao vivo.",
     recursos: ["pedidos", "programacao"],
+  },
+  {
+    chave: "fiscal",
+    nome: "Fiscal",
+    pitch:
+      "O CT-e sai daqui, com os dados da viagem que já estão no sistema. Acaba a digitação dupla no emissor.",
+    recursos: ["cte"],
   },
   {
     chave: "comunicacao",

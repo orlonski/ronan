@@ -274,6 +274,33 @@ describe("montarCte", () => {
     });
   });
 
+  it("o responsável técnico é a DESENVOLVEDORA, não a transportadora", () => {
+    // É o único lugar da software house no documento: emitente é quem presta o
+    // serviço de transporte, e ela não tem RNTRC nem inscrição estadual.
+    const cte = montarCte(
+      entrada({
+        responsavelTecnico: {
+          cnpj: "45997418000153",
+          contato: "Diego Orlonski",
+          email: "suporte@movatruck.com.br",
+          telefone: "(42) 99999-8888",
+        },
+      }),
+    );
+    expect(cte.infRespTec).toEqual({
+      CNPJ: "45997418000153",
+      xContato: "Diego Orlonski",
+      email: "suporte@movatruck.com.br",
+      fone: "42999998888",
+    });
+    // E não se confunde com o emitente.
+    expect((cte.emit as any).CNPJ).toBe("34238864000168");
+  });
+
+  it("sem responsável técnico o grupo simplesmente não vai", () => {
+    expect(montarCte(entrada()).infRespTec).toBeUndefined();
+  });
+
   it("o RNTRC entra no modal rodoviário", () => {
     const cte = montarCte(entrada());
     expect((cte.infCTeNorm as any).infModal.rodo.RNTRC).toBe("12345678");
@@ -362,6 +389,14 @@ describe("validarCte", () => {
   it("viagem sem peso não vira CT-e", () => {
     const r = validarCte(entrada({ carga: { ...entrada().carga, toneladas: 0 } }));
     expect(r.erros.some((e) => e.campo === "carga")).toBe(true);
+  });
+
+  it("responsável técnico ausente é aviso, não trava a emissão", () => {
+    // A obrigatoriedade do grupo varia; uma env esquecida não pode impedir uma
+    // emissão que o gateway aceitaria.
+    const r = validarCte(entrada());
+    expect(r.ok).toBe(true);
+    expect(r.avisos.some((a) => a.campo === "respTec")).toBe(true);
   });
 
   it("sem NF-e é AVISO, não erro — o documento é emissível", () => {

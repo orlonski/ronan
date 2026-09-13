@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { contaIdAtual } from "../../common/conta/conta-context";
@@ -11,6 +12,7 @@ import {
   type PapelTomador,
   type Participante,
   type RegraIcms,
+  type ResponsavelTecnico,
 } from "../../common/cte/montar";
 import { validarCte, type Validacao } from "../../common/cte/validar";
 import { GatewayCte, SimuladorCte, type EmissorCte } from "./emissor";
@@ -34,7 +36,29 @@ import { MODELO_CTE } from "../../common/cte/chave";
 export class CteService {
   private readonly log = new Logger(CteService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
+
+  /**
+   * Quem desenvolveu o sistema — o `infRespTec` do CT-e.
+   *
+   * Vem de env porque é o MESMO pra todas as contas: é sempre a mesma
+   * desenvolvedora, não um dado de cada transportadora. Ausente devolve null e
+   * a prévia avisa; não trava, porque a obrigatoriedade varia e uma env
+   * esquecida não pode impedir uma emissão que o gateway aceitaria.
+   */
+  private responsavelTecnico(): ResponsavelTecnico | null {
+    const cnpj = soDigitos(this.config.get<string>("RESP_TECNICO_CNPJ") ?? "");
+    if (cnpj.length !== 14) return null;
+    return {
+      cnpj,
+      contato: this.config.get<string>("RESP_TECNICO_CONTATO") ?? "",
+      email: this.config.get<string>("RESP_TECNICO_EMAIL") ?? "",
+      telefone: this.config.get<string>("RESP_TECNICO_FONE") ?? "",
+    };
+  }
 
   // -------------------------------------------------------------------------
   // Numeração
@@ -268,6 +292,7 @@ export class CteService {
       },
       config,
       numero: await this.espiarNumero(MODELO_CTE, config.serie),
+      responsavelTecnico: this.responsavelTecnico(),
       emitidoEm: new Date(),
       ambiente: (conta.cteAmbiente as 1 | 2) ?? 2,
     };
