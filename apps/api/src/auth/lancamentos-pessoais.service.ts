@@ -149,6 +149,9 @@ export class LancamentosPessoaisService {
           peso: input.peso === undefined ? null : new Prisma.Decimal(input.peso),
           valorRecebido:
             input.valorRecebido === undefined ? null : new Prisma.Decimal(input.valorRecebido),
+          contratante: input.contratante ?? null,
+          recebidoEm:
+            input.recebidoEm === undefined ? null : new Date(`${input.recebidoEm}T00:00:00.000Z`),
           observacao: input.observacao ?? null,
         },
       }),
@@ -191,7 +194,57 @@ export class LancamentosPessoaisService {
           peso: input.peso === undefined ? null : new Prisma.Decimal(input.peso),
           valorRecebido:
             input.valorRecebido === undefined ? null : new Prisma.Decimal(input.valorRecebido),
+          contratante: input.contratante ?? null,
+          recebidoEm:
+            input.recebidoEm === undefined ? null : new Date(`${input.recebidoEm}T00:00:00.000Z`),
           observacao: input.observacao ?? null,
+        },
+      }),
+    );
+    if (alteradas.count === 0) throw new NotFoundException("Frete não encontrado.");
+    const atual = await comoSistema(() =>
+      this.prisma.viagemPessoal.findUniqueOrThrow({ where: { id } }),
+    );
+    return saidaViagem(atual);
+  }
+
+  /**
+   * Os fretes em aberto, do mais velho pro mais novo.
+   *
+   * Sem recorte de mês: dívida não tem mês, ela envelhece — e o mais velho
+   * primeiro é a ordem em que ele vai cobrar.
+   */
+  async listarAReceber(identidadeId: string): Promise<ViagemPessoal[]> {
+    const itens = await comoSistema(() =>
+      this.prisma.viagemPessoal.findMany({
+        where: {
+          identidadeId,
+          recebidoEm: null,
+          valorRecebido: { not: null, gt: new Prisma.Decimal(0) },
+        },
+        orderBy: [{ data: "asc" }, { criadoEm: "asc" }],
+      }),
+    );
+    return itens.map(saidaViagem);
+  }
+
+  /**
+   * Marca (ou desmarca) o recebimento de um frete.
+   *
+   * Só isto, e nada mais do frete: a ação do dia 30 é carimbar uma data, e
+   * mandar reenviar origem/destino/valor pra fazê-la sobrescreveria o que ele
+   * tivesse corrigido no meio.
+   */
+  async marcarRecebido(
+    identidadeId: string,
+    id: string,
+    recebidoEm: string | null,
+  ): Promise<ViagemPessoal> {
+    const alteradas = await comoSistema(() =>
+      this.prisma.viagemPessoal.updateMany({
+        where: { id, identidadeId },
+        data: {
+          recebidoEm: recebidoEm === null ? null : new Date(`${recebidoEm}T00:00:00.000Z`),
         },
       }),
     );
@@ -214,6 +267,7 @@ export class LancamentosPessoaisService {
   async resumo(identidadeId: string, mes: string): Promise<ResumoMesPessoal> {
     const itens = await this.listar(identidadeId, mes);
     const viagens = await this.listarViagens(identidadeId, mes);
+    const aReceber = await this.aReceber(identidadeId);
     let ganhos = 0;
     let gastos = 0;
     let litros = 0;
@@ -257,6 +311,49 @@ export class LancamentosPessoaisService {
         total: arredondar(porTipo.get(t)!.total),
         quantidade: porTipo.get(t)!.quantidade,
       })),
+      aReceber,
+    };
+  }
+
+  /**
+   * Quem ainda deve.
+   *
+   * NÃO é do mês, de propósito: a dívida de março não some em abril, e a tela
+   * mensal fazia exatamente isso com ela. Enquanto `recebidoEm` for nulo, o
+   * frete está em aberto — não importa quando foi feito.
+   */
+  private async aReceber(identidadeId: string): Promise<ResumoMesPessoal["aReceber"]> {
+    const abertos = await comoSistema(() =>
+      this.prisma.viagemPessoal.findMany({
+        where: {
+          identidadeId,
+          recebidoEm: null,
+          valorRecebido: { not: null, gt: new Prisma.Decimal(0) },
+        },
+        select: { data: true, valorRecebido: true, contratante: true },
+        orderBy: { data: "asc" },
+      }),
+    );
+
+    const porContratante = new Map<string, { total: number; fretes: number }>();
+    let total = 0;
+    for (const v of abertos) {
+      const valor = Number(v.valorRecebido);
+      total += valor;
+      // Sem contratante anotado o frete continua contando — só não sabe de quem
+      // cobrar. Esconder esses faria a soma da tela não bater com o total.
+      const chave = v.contratante?.trim() || "Sem contratante anotado";
+      const atual = porContratante.get(chave) ?? { total: 0, fretes: 0 };
+      porContratante.set(chave, { total: atual.total + valor, fretes: atual.fretes + 1 });
+    }
+
+    return {
+      total: arredondar(total),
+      fretes: abertos.length,
+      maisAntigo: abertos[0]?.data.toISOString().slice(0, 10) ?? null,
+      porContratante: [...porContratante.entries()]
+        .map(([contratante, v]) => ({ contratante, total: arredondar(v.total), fretes: v.fretes }))
+        .sort((a, b) => b.total - a.total),
     };
   }
 
@@ -337,6 +434,8 @@ type LinhaViagem = {
   km: Prisma.Decimal | null;
   peso: Prisma.Decimal | null;
   valorRecebido: Prisma.Decimal | null;
+  contratante: string | null;
+  recebidoEm: Date | null;
   observacao: string | null;
   criadoEm: Date;
 };
@@ -353,6 +452,8 @@ function saidaViagem(v: LinhaViagem): ViagemPessoal {
     km: v.km === null ? null : Number(v.km),
     peso: v.peso === null ? null : Number(v.peso),
     valorRecebido: v.valorRecebido === null ? null : Number(v.valorRecebido),
+    contratante: v.contratante,
+    recebidoEm: v.recebidoEm === null ? null : v.recebidoEm.toISOString().slice(0, 10),
     observacao: v.observacao,
     criadoEm: v.criadoEm.toISOString(),
   };

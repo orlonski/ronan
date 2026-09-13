@@ -22,15 +22,29 @@ type AbastecimentoFake = {
 
 function montar(opts: {
   abastecimentos?: AbastecimentoFake[];
+  eixos?: number | null;
+  gastosNaoCombustivel?: number;
+  kmRodado?: number;
   rota?:
     | { km: string; duracaoSegundos: number; geometria: string | null }
     | { km: null; erro: string };
-  pedagios?: { nome: string }[];
+  pedagios?: { nome: string; valorBase?: string | null }[];
   comprovante?: Record<string, unknown> | null;
   viagens?: Record<string, unknown>[];
 }) {
   const prisma = {
+    motoristaIdentidade: {
+      findUnique: vi.fn(async () => ({ eixos: opts.eixos ?? null })),
+    },
     lancamentoPessoal: {
+      aggregate: vi.fn(async () => ({
+        _sum: {
+          valor:
+            opts.gastosNaoCombustivel == null
+              ? null
+              : new Prisma.Decimal(opts.gastosNaoCombustivel),
+        },
+      })),
       findMany: vi.fn(async () =>
         (opts.abastecimentos ?? []).map((a, i) => ({
           id: a.id ?? `ab-${i}`,
@@ -43,6 +57,9 @@ function montar(opts: {
       ),
     },
     viagemPessoal: {
+      aggregate: vi.fn(async () => ({
+        _sum: { km: opts.kmRodado == null ? null : new Prisma.Decimal(opts.kmRodado) },
+      })),
       findMany: vi.fn(async () => opts.viagens ?? []),
     },
     comprovantePessoal: {
@@ -142,6 +159,97 @@ describe("vale a pena esse frete?", () => {
     const r = await service.estimar(EU, ORIGEM, DESTINO);
     // 600 km com 200 L (50 do parcial + 150 do cheio final) = 3 km/L.
     expect(r.consumoKmPorLitro).toBe(3);
+  });
+
+  it("pedágio vira R$ quando ele diz quantos eixos roda", async () => {
+    const { service } = montar({
+      eixos: 6,
+      pedagios: [
+        { nome: "Purunã", valorBase: "12.50" },
+        { nome: "Norte", valorBase: "10.00" },
+      ],
+    });
+    const r = await service.estimar(EU, ORIGEM, DESTINO);
+    expect(r.pedagioTotal).toBe(135);
+    expect(r.pedagioParcial).toBe(false);
+  });
+
+  it("praça sem preço cadastrado marca o total como piso", async () => {
+    const { service } = montar({
+      eixos: 6,
+      pedagios: [{ nome: "Purunã", valorBase: "12.50" }, { nome: "Sem preço", valorBase: null }],
+    });
+    const r = await service.estimar(EU, ORIGEM, DESTINO);
+    expect(r.pedagioTotal).toBe(75);
+    expect(r.pedagioParcial).toBe(true);
+  });
+
+  it("sem eixos cadastrados não inventa pedágio", async () => {
+    const { service } = montar({ pedagios: [{ nome: "Purunã", valorBase: "12.50" }] });
+    const r = await service.estimar(EU, ORIGEM, DESTINO);
+    expect(r.pedagioTotal).toBeNull();
+  });
+
+  it("com o valor oferecido, responde o que SOBRA", async () => {
+    // A pergunta do autônomo nunca foi "quanto é o frete".
+    const { service } = montar({
+      eixos: 6,
+      abastecimentos: [
+        { odometro: 100_000, litros: 200, valor: 1300 },
+        { odometro: 101_180, litros: 400, valor: 2600 },
+      ],
+      gastosNaoCombustivel: 4500,
+      kmRodado: 9000,
+      pedagios: [{ nome: "Purunã", valorBase: "12.50" }],
+    });
+    const r = await service.estimar(EU, ORIGEM, DESTINO, { valorFrete: 1200 });
+    // 118,4 km: diesel R$ 260,88 · pedágio R$ 75 · custo 0,50/km = R$ 59,20
+    expect(r.resultado!.custoDoTrecho).toBe(59.2);
+    expect(r.resultado!.sobra).toBe(804.92);
+    expect(r.resultado!.incompleto).toBe(false);
+  });
+
+  it("sem o valor oferecido não há sobra pra mostrar", async () => {
+    const { service } = montar({});
+    const r = await service.estimar(EU, ORIGEM, DESTINO);
+    expect(r.resultado).toBeNull();
+  });
+
+  it("diz por quanto ELE já fez esse mesmo trecho", async () => {
+    const { service } = montar({
+      viagens: [
+        {
+          origem: "Ponta Grossa/PR",
+          destino: "Curitiba",
+          data: new Date("2026-06-10"),
+          km: new Prisma.Decimal(120),
+          valorRecebido: new Prisma.Decimal(1100),
+        },
+        {
+          origem: "ponta grossa",
+          destino: "curitiba - pr",
+          data: new Date("2026-05-01"),
+          km: new Prisma.Decimal(120),
+          valorRecebido: new Prisma.Decimal(900),
+        },
+      ],
+    });
+    const r = await service.estimar(EU, ORIGEM, DESTINO, {
+      origem: "Ponta Grossa",
+      destino: "Curitiba",
+    });
+    expect(r.historico!.vezes).toBe(2);
+    expect(r.historico!.medianaValor).toBe(1000);
+    expect(r.historico!.ultimaVez).toBe("2026-06-10");
+  });
+
+  it("trecho que ele nunca fez não ganha referência inventada", async () => {
+    const { service } = montar({ viagens: [] });
+    const r = await service.estimar(EU, ORIGEM, DESTINO, {
+      origem: "Jaguariaíva",
+      destino: "Santos",
+    });
+    expect(r.historico).toBeNull();
   });
 
   it("lista as praças que a rota cruza", async () => {

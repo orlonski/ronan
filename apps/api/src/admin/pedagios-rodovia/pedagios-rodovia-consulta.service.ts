@@ -14,6 +14,12 @@ export type PedagioNaRota = {
   distanciaMetros: number;
   lat: number;
   lng: number;
+  /**
+   * Tarifa do eixo simples, como está cadastrada. Null = praça conhecida, preço
+   * não cadastrado — que NÃO é a mesma coisa que grátis: quem soma tem que
+   * contar essa à parte, senão o total sai menor que o real.
+   */
+  valorBase: string | null;
 };
 
 /**
@@ -165,6 +171,7 @@ export class PedagiosRodoviaConsultaService {
           distanciaMetros: Math.round(dist),
           lat: p.lat,
           lng: p.lng,
+          valorBase: p.valorBase == null ? null : p.valorBase.toFixed(2),
         });
       }
     }

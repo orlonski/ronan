@@ -427,6 +427,8 @@ function viagemParaLocal(input: CriarViagemPessoalInput): ViagemPessoal {
     origem: input.origem,
     destino: input.destino,
     carga: input.carga ?? null,
+    contratante: input.contratante ?? null,
+    recebidoEm: input.recebidoEm ?? null,
     km: input.km ?? null,
     peso: input.peso ?? null,
     valorRecebido: input.valorRecebido ?? null,

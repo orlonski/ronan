@@ -72,6 +72,15 @@ const CamposViagemPessoal = {
   km: OpcionalPositivo,
   peso: OpcionalPositivo,
   valorRecebido: OpcionalPositivo,
+  /** Quem contratou. Texto livre: aqui não há cadastro de cliente. */
+  contratante: z.string().trim().max(120).optional(),
+  /**
+   * Quando o dinheiro caiu (YYYY-MM-DD). Ausente = ainda devem.
+   *
+   * É o campo que separa "faturei" de "recebi". Sem ele, o resumo do mês somava
+   * como ganho um frete que ele ainda não viu a cor.
+   */
+  recebidoEm: DataSchema.optional(),
   observacao: z.string().trim().max(200).optional(),
 };
 
@@ -90,6 +99,18 @@ export type CriarViagemPessoalInput = z.infer<typeof CriarViagemPessoalInput>;
  * R$ 0" ficava gravado pra sempre.
  */
 export const EditarViagemPessoalInput = z.object(CamposViagemPessoal);
+
+/**
+ * "Esse já caiu."
+ *
+ * A data é obrigatória (o app manda a de hoje) e `null` DESMARCA: pagamento
+ * devolvido, cheque sem fundo, dedo errado. Sem o caminho de volta, um toque
+ * acidental apagaria a dívida pra sempre e o dinheiro sumiria do "a receber".
+ */
+export const MarcarRecebidoInput = z.object({
+  recebidoEm: DataSchema.nullable(),
+});
+export type MarcarRecebidoInput = z.infer<typeof MarcarRecebidoInput>;
 export type EditarViagemPessoalInput = z.infer<typeof EditarViagemPessoalInput>;
 
 export type ViagemPessoal = {
@@ -102,6 +123,8 @@ export type ViagemPessoal = {
   km: number | null;
   peso: number | null;
   valorRecebido: number | null;
+  contratante: string | null;
+  recebidoEm: string | null;
   observacao: string | null;
   criadoEm: string;
 };
@@ -184,6 +207,18 @@ export type ResumoMesPessoal = {
   litros: number;
   precoMedioLitro: number | null;
   porTipo: { tipo: TipoLancamentoPessoal; total: number; quantidade: number }[];
+  /**
+   * O que já foi feito e ainda não foi pago. Não é do mês: é TUDO que está em
+   * aberto, porque a dívida de março não some em abril — e era justamente isso
+   * que a tela de mês fazia com ela.
+   */
+  aReceber: {
+    total: number;
+    fretes: number;
+    /** O mais velho em aberto, pra ele saber de quando vem a cobrança. */
+    maisAntigo: string | null;
+    porContratante: { contratante: string; total: number; fretes: number }[];
+  };
 };
 
 // ---- "Vale a pena esse frete?" ----
@@ -201,6 +236,12 @@ export const EstimarFreteInput = z.object({
   origemLng: z.number().min(-180).max(180),
   destinoLat: z.number().min(-90).max(90),
   destinoLng: z.number().min(-180).max(180),
+  // Os nomes escritos, só pra achar o MESMO trecho no histórico dele —
+  // coordenada de hoje nunca bate com a coordenada digitada mês passado.
+  origemNome: z.string().trim().max(120).optional(),
+  destinoNome: z.string().trim().max(120).optional(),
+  /** Quanto estão oferecendo. Com ele a tela responde "sobra quanto". */
+  valorFrete: z.number().positive().max(9_999_999).optional(),
 });
 export type EstimarFreteInput = z.infer<typeof EstimarFreteInput>;
 
@@ -245,6 +286,34 @@ export type EstimativaFrete = {
   precoLitro: number | null;
   /** Estimativa de diesel do trecho. Null quando falta consumo ou preço. */
   diesel: number | null;
+
+  /** Pedágio da rota em R$ (tarifa do eixo × eixos dele). Null = não dá. */
+  pedagioTotal: number | null;
+  /**
+   * `true` = há praça na rota sem preço cadastrado, então `pedagioTotal` é um
+   * PISO e não o total. Somar zero pela praça desconhecida faria o frete
+   * parecer melhor do que é.
+   */
+  pedagioParcial: boolean;
+  /** O que o caminhão custa por km rodado, fora combustível (90 dias dele). */
+  custoPorKm: number | null;
+  /** O que ELE já recebeu nesse mesmo trecho. Null = nunca fez. */
+  historico: {
+    vezes: number;
+    medianaValor: number | null;
+    medianaPorKm: number | null;
+    ultimaVez: string | null;
+  } | null;
+  /** Só quando ele informa quanto estão oferecendo: o que sobra. */
+  resultado: {
+    sobra: number | null;
+    sobraPorKm: number | null;
+    diesel: number | null;
+    pedagio: number | null;
+    custoDoTrecho: number | null;
+    /** Algum custo ficou de fora — a sobra é otimista e a tela precisa dizer. */
+    incompleto: boolean;
+  } | null;
 };
 
 /** O período que ele manda pra quem vai pagar. */

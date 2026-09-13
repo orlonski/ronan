@@ -15,6 +15,7 @@ import {
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import {
   AtualizarPerfilInput,
+  MarcarRecebidoInput,
   AtualizarPlacasInput,
   CriarLancamentoPessoalInput,
   CriarViagemPessoalInput,
@@ -150,6 +151,18 @@ export class EuController {
     return this.lancamentos.listarViagens(user.id, mesValido(mes));
   }
 
+  /**
+   * Os fretes feitos e ainda não pagos — de todos os meses.
+   *
+   * Rota antes de `viagens/:id` porque "a-receber" casaria com `:id`. E sem
+   * filtro de mês de propósito: a dívida de março não some em abril, e era
+   * exatamente isso que a tela mensal fazia com ela.
+   */
+  @Get("viagens/a-receber")
+  aReceber(@CurrentUser() user: AuthIdentidade) {
+    return this.lancamentos.listarAReceber(user.id);
+  }
+
   @HttpCode(200)
   @Post("viagens")
   criarViagem(
@@ -172,6 +185,24 @@ export class EuController {
     @Body(new ZodValidationPipe(EditarViagemPessoalInput)) body: EditarViagemPessoalInput,
   ) {
     return this.lancamentos.editarViagem(user.id, id, body);
+  }
+
+  /**
+   * "Esse já caiu."
+   *
+   * Rota própria em vez de mandar editar o frete inteiro: marcar recebimento é
+   * a ação mais repetida do dia 30, e fazê-la pela tela de edição obrigaria a
+   * reenviar origem, destino e valor só pra carimbar uma data — com o risco de
+   * sobrescrever o que ele corrigiu no meio.
+   */
+  @HttpCode(200)
+  @Post("viagens/:id/recebi")
+  marcarRecebido(
+    @CurrentUser() user: AuthIdentidade,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(MarcarRecebidoInput)) body: MarcarRecebidoInput,
+  ) {
+    return this.lancamentos.marcarRecebido(user.id, id, body.recebidoEm);
   }
 
   @Delete("viagens/:id")

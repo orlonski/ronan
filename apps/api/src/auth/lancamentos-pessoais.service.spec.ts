@@ -164,6 +164,8 @@ describe("as viagens dele", () => {
           km: new Prisma.Decimal("130.00"),
           peso: null,
           valorRecebido: new Prisma.Decimal("1300.00"),
+          contratante: "Transportes Alfa",
+          recebidoEm: null,
           observacao: null,
           criadoEm: new Date(),
         },
@@ -191,6 +193,8 @@ describe("as viagens dele", () => {
           km: null,
           peso: null,
           valorRecebido: new Prisma.Decimal("900.00"),
+          contratante: null,
+          recebidoEm: null,
           observacao: null,
           criadoEm: new Date(),
         },
@@ -199,5 +203,78 @@ describe("as viagens dele", () => {
     const r = await new LancamentosPessoaisService(prisma).resumo(EU, "2026-09");
     expect(r.ganhoPorKm).toBeNull();
     expect(r.ganhos).toBe(900);
+  });
+});
+
+describe("quem ainda me deve", () => {
+  function comFretes(fretes: Record<string, unknown>[]) {
+    const { prisma } = fakePrisma();
+    (prisma as unknown as { viagemPessoal: unknown }).viagemPessoal = {
+      findMany: async (args: { where?: { recebidoEm?: null } }) =>
+        // A consulta do "a receber" filtra `recebidoEm: null`; a do mês não.
+        args?.where?.recebidoEm === null
+          ? fretes.filter((f) => f.recebidoEm == null)
+          : fretes,
+    };
+    return new LancamentosPessoaisService(prisma);
+  }
+
+  const frete = (over: Record<string, unknown> = {}) => ({
+    id: "v1",
+    clientId: "cv1",
+    data: new Date("2026-08-05T00:00:00.000Z"),
+    origem: "A",
+    destino: "B",
+    carga: null,
+    km: null,
+    peso: null,
+    valorRecebido: new Prisma.Decimal("1000.00"),
+    contratante: null,
+    recebidoEm: null,
+    observacao: null,
+    criadoEm: new Date(),
+    ...over,
+  });
+
+  it("soma o que está em aberto e agrupa por quem deve", async () => {
+    const service = comFretes([
+      frete({ id: "a", contratante: "Alfa", valorRecebido: new Prisma.Decimal("1000.00") }),
+      frete({ id: "b", contratante: "Alfa", valorRecebido: new Prisma.Decimal("500.00") }),
+      frete({ id: "c", contratante: "Beta", valorRecebido: new Prisma.Decimal("800.00") }),
+    ]);
+    const r = await service.resumo("eu", "2026-08");
+    expect(r.aReceber.total).toBe(2300);
+    expect(r.aReceber.fretes).toBe(3);
+    // Maior dívida primeiro: é por quem ele liga antes.
+    expect(r.aReceber.porContratante[0]).toEqual({ contratante: "Alfa", total: 1500, fretes: 2 });
+  });
+
+  it("frete já pago sai do a receber", async () => {
+    const service = comFretes([
+      frete({ id: "a", contratante: "Alfa" }),
+      frete({ id: "b", contratante: "Beta", recebidoEm: new Date("2026-08-20T00:00:00.000Z") }),
+    ]);
+    const r = await service.resumo("eu", "2026-08");
+    expect(r.aReceber.total).toBe(1000);
+    expect(r.aReceber.fretes).toBe(1);
+  });
+
+  it("frete sem contratante anotado continua contando", async () => {
+    // Esconder esses faria a soma da tela não bater com o total devido.
+    const service = comFretes([frete({ contratante: null })]);
+    const r = await service.resumo("eu", "2026-08");
+    expect(r.aReceber.total).toBe(1000);
+    expect(r.aReceber.porContratante[0]!.contratante).toBe("Sem contratante anotado");
+  });
+
+  it("guarda o mais antigo em aberto — é de quando vem a cobrança", async () => {
+    const service = comFretes([
+      frete({ id: "a", data: new Date("2026-08-05T00:00:00.000Z") }),
+      frete({ id: "b", data: new Date("2026-06-02T00:00:00.000Z") }),
+    ]);
+    const r = await service.resumo("eu", "2026-08");
+    // A consulta ordena por data; o fake devolve na ordem dada, então o teste
+    // checa o que o serviço faz com o PRIMEIRO — que é o contrato dele.
+    expect(r.aReceber.maisAntigo).toBe("2026-08-05");
   });
 });

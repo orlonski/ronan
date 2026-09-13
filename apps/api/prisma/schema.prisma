@@ -936,6 +936,9 @@ model MotoristaIdentidade {
   /// quem se cadastra hoje e é convidado semana que vem começaria sem placa
   /// nenhuma e não conseguiria lançar.
   placas    Json?
+  /// Quantos eixos ele roda. É o que transforma "passa por 3 praças" em
+  /// "R$ 186 de pedágio" — a tarifa por eixo de cada praça o sistema já tem.
+  eixos     Int?
 
   ativo           Boolean   @default(true)
   ultimoLoginEm   DateTime?
@@ -1004,8 +1007,14 @@ model ViagemPessoal {
   km            Decimal?            @db.Decimal(10, 2)
   /// Toneladas, quando teve balança.
   peso          Decimal?            @db.Decimal(10, 3)
-  /// Quanto ele recebeu pelo frete. Entra no resumo do mês como ganho.
+  /// Quanto foi COMBINADO pelo frete. Entra no resumo do mês como ganho.
   valorRecebido Decimal?            @db.Decimal(12, 2)
+  /// Quem contratou. Texto livre: não há cadastro de cliente aqui, e quem paga
+  /// o autônomo costuma ser outra transportadora, um agenciador ou a obra.
+  contratante   String?
+  /// Quando o dinheiro caiu. Nulo = ainda devem. É o que separa "faturei" de
+  /// "recebi" — e a segunda é a pergunta que ele faz todo dia 30.
+  recebidoEm    DateTime?           @db.Date
   observacao    String?
   criadoEm      DateTime            @default(now())
   alteradoEm    DateTime            @updatedAt
@@ -1015,6 +1024,7 @@ model ViagemPessoal {
 
   @@unique([identidadeId, clientId])
   @@index([identidadeId, data])
+  @@index([identidadeId, recebidoEm])
   @@map("viagens_pessoais")
 }
 

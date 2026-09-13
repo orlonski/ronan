@@ -39,6 +39,7 @@ export default function NovoFreteScreen() {
   const [carga, setCarga] = useState("");
   const [peso, setPeso] = useState("");
   const [pagam, setPagam] = useState("");
+  const [contratante, setContratante] = useState("");
   const [kmManual, setKmManual] = useState("");
   const [estimativa, setEstimativa] = useState<EstimativaFrete | null>(null);
   const [estimando, setEstimando] = useState(false);
@@ -46,6 +47,16 @@ export default function NovoFreteScreen() {
   const [erro, setErro] = useState<string | null>(null);
 
   const temCoordenadas = origem.lat != null && destino.lat != null;
+  const valor = pagam ? Number(pagam.replace(/\./g, "").replace(",", ".")) : null;
+
+  // O valor entra na estimativa (é ele que responde "sobra quanto"), mas com
+  // atraso: a estimativa chama roteamento, e disparar isso a cada tecla do
+  // campo de dinheiro seria uma consulta por dígito.
+  const [valorParaConta, setValorParaConta] = useState<number | null>(null);
+  useEffect(() => {
+    const t = setTimeout(() => setValorParaConta(valor), 600);
+    return () => clearTimeout(t);
+  }, [valor]);
 
   const estimar = useCallback(async () => {
     if (!temCoordenadas) return;
@@ -58,6 +69,11 @@ export default function NovoFreteScreen() {
           origemLng: origem.lng!,
           destinoLat: destino.lat!,
           destinoLng: destino.lng!,
+          // Os nomes escritos são o que casa com o histórico dele: coordenada
+          // de hoje nunca bate com a coordenada digitada mês passado.
+          origemNome: origem.texto.trim() || undefined,
+          destinoNome: destino.texto.trim() || undefined,
+          valorFrete: valorParaConta && valorParaConta > 0 ? valorParaConta : undefined,
         }),
       );
     } catch {
@@ -67,16 +83,14 @@ export default function NovoFreteScreen() {
     } finally {
       setEstimando(false);
     }
-  }, [origem, destino, temCoordenadas]);
+  }, [origem, destino, temCoordenadas, valorParaConta]);
 
   useEffect(() => {
     void estimar();
   }, [estimar]);
 
   const km = estimativa?.km ?? (kmManual ? Number(kmManual.replace(",", ".")) : null);
-  const valor = pagam ? Number(pagam.replace(/\./g, "").replace(",", ".")) : null;
-  const sobra =
-    valor != null && estimativa?.diesel != null ? valor - estimativa.diesel : null;
+  const resultado = estimativa?.resultado ?? null;
 
   async function registrar() {
     setErro(null);
@@ -93,6 +107,10 @@ export default function NovoFreteScreen() {
         km: km ?? undefined,
         peso: peso ? Number(peso.replace(",", ".")) : undefined,
         valorRecebido: valor ?? undefined,
+        contratante: contratante.trim() || undefined,
+        // Nasce EM ABERTO: o frete acabou de ser aceito, o dinheiro não caiu.
+        // Marcar como recebido aqui era o que fazia o resumo somar como ganho
+        // um dinheiro que ele ainda não tinha visto a cor.
       });
       // Volta pra Início, onde o frete recém-criado aparece no topo dos
       // últimos. Antes ia pra "/meus-gastos", que deixou de ser o caderno e
@@ -141,16 +159,29 @@ export default function NovoFreteScreen() {
 
                 <View className="flex-row items-start justify-between gap-3">
                   <Text className="text-base font-medium text-muted-foreground">Pedágio</Text>
-                  <Text className="flex-1 text-right text-base font-semibold text-foreground">
+                  <Text className="flex-1 text-right text-xl font-bold text-foreground">
                     {estimativa.pedagiosDesconhecidos
                       ? "não deu pra conferir"
                       : estimativa.pedagios.length === 0
-                        ? "nenhuma praça no caminho"
-                        : `${estimativa.pedagios.length} ${
-                            estimativa.pedagios.length === 1 ? "praça" : "praças"
-                          }: ${estimativa.pedagios.map((p) => p.nome).join(", ")}`}
+                        ? "sem praça no caminho"
+                        : estimativa.pedagioTotal != null
+                          ? `${estimativa.pedagioParcial ? "a partir de " : ""}${dinheiro(estimativa.pedagioTotal)}`
+                          : "—"}
                   </Text>
                 </View>
+
+                {estimativa.pedagios.length > 0 && (
+                  <Text className="text-sm text-muted-foreground">
+                    {estimativa.pedagioTotal == null
+                      ? // Sem os eixos o app tem a tarifa de cada praça e não
+                        // pode somar nada: um eixo a mais ou a menos muda o
+                        // pedágio inteiro.
+                        "Diga quantos eixos você roda no seu perfil e o app soma o pedágio em reais."
+                      : estimativa.pedagioParcial
+                        ? `${estimativa.pedagios.length} ${estimativa.pedagios.length === 1 ? "praça" : "praças"} no caminho, e nem todas têm preço cadastrado — o valor real é maior.`
+                        : `${estimativa.pedagios.length} ${estimativa.pedagios.length === 1 ? "praça" : "praças"}: ${estimativa.pedagios.map((p) => p.nome).join(", ")}`}
+                  </Text>
+                )}
 
                 <View className="flex-row items-center justify-between">
                   <Text className="text-base font-medium text-muted-foreground">Diesel</Text>
@@ -176,6 +207,35 @@ export default function NovoFreteScreen() {
                         : estimativa.precoLitro == null
                           ? "Lance seus abastecimentos com litros e odômetro. A conta sai com os SEUS números, não com média de mercado."
                           : "Falta o segundo tanque cheio com odômetro: é entre dois cheios que dá pra medir o consumo."}
+                  </Text>
+                )}
+
+                {/* A única referência de preço honesta que o app tem pra dar:
+                    a dele. Tabela de mercado o sistema não conhece, e inventar
+                    uma seria pôr um número na boca dele numa negociação. */}
+                {estimativa.historico && (
+                  <View className="gap-1 border-t border-border pt-3">
+                    <Text className="text-base font-semibold text-foreground">
+                      Você já fez esse trecho {estimativa.historico.vezes}{" "}
+                      {estimativa.historico.vezes === 1 ? "vez" : "vezes"}
+                    </Text>
+                    <Text className="text-sm text-muted-foreground">
+                      Recebeu {dinheiro(estimativa.historico.medianaValor ?? 0)} em média
+                      {estimativa.historico.medianaPorKm != null
+                        ? ` (${dinheiro(estimativa.historico.medianaPorKm)}/km)`
+                        : ""}
+                      {estimativa.historico.ultimaVez
+                        ? ` · última vez em ${estimativa.historico.ultimaVez.split("-").reverse().join("/")}`
+                        : ""}
+                      .
+                    </Text>
+                  </View>
+                )}
+
+                {estimativa.custoPorKm != null && (
+                  <Text className="text-sm text-muted-foreground">
+                    Fora o diesel, seu caminhão custa {dinheiro(estimativa.custoPorKm)} por km
+                    rodado (manutenção, alimentação e outros, dos últimos 90 dias).
                   </Text>
                 )}
               </View>
@@ -214,33 +274,65 @@ export default function NovoFreteScreen() {
               />
             </View>
 
-            {sobra != null && (
+            <View className="gap-2">
+              <Label>Quem está contratando (opcional)</Label>
+              <Input
+                value={contratante}
+                onChangeText={setContratante}
+                placeholder="Transportadora, agenciador, a obra…"
+              />
+              <Text className="text-sm text-muted-foreground">
+                É o nome que aparece em “quem te deve” quando chegar o dia de cobrar.
+              </Text>
+            </View>
+
+            {resultado?.sobra != null && (
               <View
-                className={`rounded-2xl border-2 p-4 ${
-                  sobra > 0 ? "border-success bg-success/10" : "border-destructive bg-destructive/10"
+                className={`gap-2 rounded-2xl border-2 p-4 ${
+                  resultado.sobra > 0
+                    ? "border-success bg-success/10"
+                    : "border-destructive bg-destructive/10"
                 }`}
               >
                 <Text
                   className={`text-base font-medium ${
-                    sobra > 0 ? "text-foreground" : "text-destructive"
+                    resultado.sobra > 0 ? "text-foreground" : "text-destructive"
                   }`}
                 >
-                  Tirando o diesel, sobram
+                  Sobra pra você
                 </Text>
                 <Text
                   className={`text-3xl font-extrabold ${
-                    sobra > 0 ? "text-success" : "text-destructive"
+                    resultado.sobra > 0 ? "text-success" : "text-destructive"
                   }`}
                 >
-                  {dinheiro(sobra)}
+                  {dinheiro(resultado.sobra)}
                 </Text>
-                <Text
-                  className={`mt-1 text-sm ${sobra > 0 ? "text-muted-foreground" : "text-destructive"}`}
-                >
-                  {estimativa?.pedagios.length
-                    ? "Ainda falta descontar o pedágio das praças acima."
-                    : "Sem contar pedágio, manutenção e o seu tempo."}
-                </Text>
+                {resultado.sobraPorKm != null && (
+                  <Text className="text-sm font-semibold text-muted-foreground">
+                    {dinheiro(resultado.sobraPorKm)} por km rodado
+                  </Text>
+                )}
+
+                {/* Mostrar a conta aberta é o que faz ele confiar no número —
+                    e o que mostra onde falta dado. */}
+                <View className="mt-1 gap-1 border-t border-border/60 pt-2">
+                  <LinhaConta rotulo="Diesel do trecho" valor={resultado.diesel} />
+                  <LinhaConta
+                    rotulo={
+                      estimativa?.pedagioParcial ? "Pedágio (pelo menos)" : "Pedágio"
+                    }
+                    valor={resultado.pedagio}
+                  />
+                  <LinhaConta rotulo="Custo de rodar" valor={resultado.custoDoTrecho} />
+                </View>
+
+                {resultado.incompleto && (
+                  <Text className="text-sm text-muted-foreground">
+                    Falta dado pra alguns custos, então essa sobra está por cima. Os itens
+                    com “—” não entraram na conta.
+                  </Text>
+                )}
               </View>
             )}
 
@@ -367,6 +459,26 @@ function BuscaLocal({
           <Text className="flex-1 text-base text-foreground">{s.textoCompleto || s.nome}</Text>
         </Pressable>
       ))}
+    </View>
+  );
+}
+
+/**
+ * Uma linha da conta aberta.
+ *
+ * O "—" é informação: significa que aquele custo NÃO entrou, e é por isso que a
+ * sobra está por cima. Esconder a linha faria parecer que o custo é zero.
+ */
+function LinhaConta({ rotulo, valor }: { rotulo: string; valor: number | null }) {
+  return (
+    <View className="flex-row items-center justify-between gap-3">
+      <Text className="text-sm text-muted-foreground">{rotulo}</Text>
+      <Text
+        className="text-sm font-semibold text-foreground"
+        style={{ fontVariant: ["tabular-nums"] }}
+      >
+        {valor != null ? `− ${dinheiro(valor)}` : "—"}
+      </Text>
     </View>
   );
 }

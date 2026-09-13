@@ -41,6 +41,7 @@ export function PerfilPessoal() {
   const [novaSenha, setNovaSenha] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [placaNova, setPlacaNova] = useState("");
+  const [salvandoEixos, setSalvandoEixos] = useState(false);
   const [salvandoPlaca, setSalvandoPlaca] = useState(false);
   const [apagandoConta, setApagandoConta] = useState(false);
 
@@ -101,6 +102,23 @@ export function PerfilPessoal() {
       void showAlert({ title: "Não deu pra salvar a placa", message: (e as Error).message });
     } finally {
       setSalvandoPlaca(false);
+    }
+  }
+
+  /**
+   * Quantos eixos ele roda.
+   *
+   * É o único número que falta pra "passa por 3 praças" virar "R$ 186 de
+   * pedágio" — a tarifa por eixo de cada praça o sistema já tem cadastrada.
+   */
+  async function salvarEixos(eixos: number | null) {
+    setSalvandoEixos(true);
+    try {
+      setPerfil(await api.salvarMeusEixos(eixos));
+    } catch (e) {
+      void showAlert({ title: "Não deu pra salvar", message: (e as Error).message });
+    } finally {
+      setSalvandoEixos(false);
     }
   }
 
@@ -254,6 +272,42 @@ export function PerfilPessoal() {
             >
               <Plus size={22} color="#fff" />
             </Button>
+          </View>
+        </Card>
+
+        <Card className="gap-3 p-4">
+          <View className="flex-row items-center gap-2">
+            <Truck size={22} color="#13316b" />
+            <Text className="text-lg font-bold text-foreground">Quantos eixos você roda</Text>
+          </View>
+          <Text className="text-sm text-muted-foreground">
+            Com isso o app soma o pedágio em reais na hora de calcular o frete. Sem, ele só
+            consegue dizer por quantas praças você passa.
+          </Text>
+          <View className="flex-row flex-wrap gap-2">
+            {[2, 3, 4, 5, 6, 7, 8, 9].map((n) => {
+              const marcado = perfil?.eixos === n;
+              return (
+                <Pressable
+                  key={n}
+                  disabled={salvandoEixos}
+                  // Tocar no que já está marcado desmarca: ele pode ter errado,
+                  // e sem volta ficaria com um pedágio errado pra sempre.
+                  onPress={() => void salvarEixos(marcado ? null : n)}
+                  className={`h-14 w-14 items-center justify-center rounded-xl border-2 ${
+                    marcado ? "border-primary bg-primary/10" : "border-border bg-card"
+                  }`}
+                >
+                  <Text
+                    className={`text-xl font-extrabold ${
+                      marcado ? "text-primary" : "text-foreground"
+                    }`}
+                  >
+                    {n}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
         </Card>
 

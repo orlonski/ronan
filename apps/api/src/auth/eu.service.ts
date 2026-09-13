@@ -34,7 +34,15 @@ export class EuService {
     const eu = await comoSistema(() =>
       this.prisma.motoristaIdentidade.findUniqueOrThrow({
         where: { id: identidadeId },
-        select: { id: true, nome: true, cpf: true, telefone: true, email: true, placas: true },
+        select: {
+          id: true,
+          nome: true,
+          cpf: true,
+          telefone: true,
+          email: true,
+          placas: true,
+          eixos: true,
+        },
       }),
     );
     const { placas, placaDefault } = lerPlacasJson(eu.placas);
@@ -44,6 +52,7 @@ export class EuService {
       cpf: eu.cpf,
       telefone: eu.telefone,
       email: eu.email,
+      eixos: eu.eixos,
       placas,
       placaDefault,
       empresas: await this.auth.cadastrosDaIdentidade(identidadeId),
@@ -156,10 +165,16 @@ export class EuService {
 
   async atualizarPerfil(
     identidadeId: string,
-    data: { nome?: string; telefone?: string; email?: string | null },
+    data: { nome?: string; telefone?: string; email?: string | null; eixos?: number | null },
   ) {
+    const { eixos, ...doVinculo } = data;
     await comoSistema(() =>
-      this.prisma.motoristaIdentidade.update({ where: { id: identidadeId }, data }),
+      this.prisma.motoristaIdentidade.update({
+        where: { id: identidadeId },
+        // `eixos` fica só na pessoa: é do caminhão dela, não do vínculo com
+        // empresa nenhuma — e o sincronizador abaixo não tem onde pôr.
+        data: { ...doVinculo, ...(eixos !== undefined ? { eixos } : {}) },
+      }),
     );
     // As cópias no vínculo são o que o painel lê — atualizar só a pessoa faria a
     // empresa continuar vendo o telefone velho.

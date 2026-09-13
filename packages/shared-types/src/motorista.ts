@@ -256,10 +256,23 @@ export const AtualizarPerfilInput = z
     nome: z.string().min(2, "Nome muito curto").max(120).optional(),
     telefone: TelefoneOpcionalSchema,
     email: EmailOpcionalSchema,
+    /**
+     * Quantos eixos ele roda. É o que transforma "passa por 3 praças" em
+     * "R$ 186 de pedágio" — a tarifa por eixo o sistema já tem.
+     *
+     * Teto 9: bitrem de 9 eixos é o maior que roda com AET; acima disso é erro
+     * de digitação, e erro aqui multiplica o pedágio inteiro.
+     */
+    eixos: z.number().int().min(2).max(9).nullish(),
   })
-  .refine((v) => v.nome !== undefined || v.telefone !== undefined || v.email !== undefined, {
-    message: "Nada pra atualizar.",
-  });
+  .refine(
+    (v) =>
+      v.nome !== undefined ||
+      v.telefone !== undefined ||
+      v.email !== undefined ||
+      v.eixos !== undefined,
+    { message: "Nada pra atualizar." },
+  );
 export type AtualizarPerfilInput = z.infer<typeof AtualizarPerfilInput>;
 
 /** As placas que ele diz rodar. Viram veículo quando ele entra numa empresa. */

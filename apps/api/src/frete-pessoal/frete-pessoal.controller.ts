@@ -63,6 +63,11 @@ export class FretePessoalController {
       user.id,
       { lat: body.origemLat, lng: body.origemLng },
       { lat: body.destinoLat, lng: body.destinoLng },
+      {
+        origem: body.origemNome,
+        destino: body.destinoNome,
+        valorFrete: body.valorFrete,
+      },
     );
   }
 

@@ -8,6 +8,7 @@ import {
   ArrowRight,
   Building2,
   Calculator,
+  ChevronRight,
   FileText,
   Fuel,
   Play,
@@ -250,6 +251,36 @@ export function HomePessoal() {
               {resumo.ganhoPorKm != null ? ` · ${dinheiro(resumo.ganhoPorKm)}/km` : ""}
             </Text>
           </View>
+        )}
+
+        {/* Quem ainda deve.
+            Vem logo depois do mês porque é a pergunta seguinte — e fica FORA do
+            card mensal de propósito: a dívida de março não some em abril, e
+            colocá-la ali dentro faria ela desaparecer na virada. */}
+        {resumo && resumo.aReceber.total > 0 && (
+          <Pressable
+            onPress={() => router.push("/a-receber")}
+            className="rounded-2xl border-2 border-warning bg-warning/10 p-4"
+          >
+            <View className="flex-row items-center justify-between gap-3">
+              <View className="flex-1">
+                <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Ainda te devem
+                </Text>
+                <Text className="mt-1 text-3xl font-extrabold text-foreground">
+                  {dinheiro(resumo.aReceber.total)}
+                </Text>
+                <Text className="mt-1 text-sm text-muted-foreground">
+                  {resumo.aReceber.fretes}{" "}
+                  {resumo.aReceber.fretes === 1 ? "frete" : "fretes"} em aberto
+                  {resumo.aReceber.porContratante.length > 0
+                    ? ` · maior: ${resumo.aReceber.porContratante[0]!.contratante}`
+                    : ""}
+                </Text>
+              </View>
+              <ChevronRight size={24} color="#b45309" />
+            </View>
+          </Pressable>
         )}
 
         {/* Ações em grade: cabem na tela sem rolar, e o polegar alcança as

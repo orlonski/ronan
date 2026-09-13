@@ -11,6 +11,12 @@ import { RoteamentoService } from "../roteamento/roteamento.service";
 import { PedagiosRodoviaConsultaService } from "../admin/pedagios-rodovia/pedagios-rodovia-consulta.service";
 import { DocumentosPessoaisService } from "./documentos-pessoais.service";
 import { calcularConsumo, type ConsumoVeiculo } from "../common/consumo";
+import {
+  compararComHistorico,
+  custoPorKmDele,
+  pedagioDaRota,
+  resultadoDoFrete,
+} from "../common/frete-autonomo";
 
 /** Janela do histórico que alimenta consumo e preço do litro. */
 const DIAS_HISTORICO = 90;
@@ -39,6 +45,9 @@ export class FretePessoalService {
     identidadeId: string,
     origem: { lat: number; lng: number },
     destino: { lat: number; lng: number },
+    // Os nomes que ele digitou. Só servem pra achar o mesmo trecho no histórico
+    // dele — coordenada não casa com coordenada digitada de novo.
+    nomes?: { origem?: string; destino?: string; valorFrete?: number },
   ): Promise<EstimativaFrete> {
     const rota = await this.roteamento.calcularEntreCoordenadas(origem, destino);
     // `== null` e não `=== null`: o contrato do roteamento é devolver `km: null`
@@ -53,6 +62,11 @@ export class FretePessoalService {
         // valendo, e a tela usa pra explicar o que teria sido usado.
         ...(await this.numerosDele(identidadeId)),
         diesel: null,
+        pedagioTotal: null,
+        pedagioParcial: false,
+        custoPorKm: null,
+        historico: null,
+        resultado: null,
       };
     }
 
@@ -60,7 +74,21 @@ export class FretePessoalService {
     // `null` (não sei) é diferente de `[]` (checei e não passa por praça): sem
     // geometria a tela não pode afirmar "sem pedágio no caminho".
     const praças = rota.geometria ? await this.pedagios.pedagiosNaGeometria(rota.geometria) : null;
-    const dele = await this.numerosDele(identidadeId);
+    const [dele, eixos, custo, historico] = await Promise.all([
+      this.numerosDele(identidadeId),
+      this.eixosDele(identidadeId),
+      this.custoDele(identidadeId),
+      nomes?.origem && nomes?.destino
+        ? this.historicoDoTrecho(identidadeId, nomes.origem, nomes.destino)
+        : Promise.resolve(null),
+    ]);
+
+    const diesel =
+      dele.consumoKmPorLitro && dele.precoLitro
+        ? arredondar((km / dele.consumoKmPorLitro) * dele.precoLitro)
+        : null;
+
+    const pedagio = pedagioDaRota(praças ?? [], eixos);
 
     return {
       km,
@@ -71,11 +99,104 @@ export class FretePessoalService {
       ...dele,
       // Só estima o diesel com os DOIS números dele. Chutar consumo médio de
       // caminhão daria um número plausível e errado — e é dinheiro do cara.
-      diesel:
-        dele.consumoKmPorLitro && dele.precoLitro
-          ? arredondar((km / dele.consumoKmPorLitro) * dele.precoLitro)
+      diesel,
+      pedagioTotal: pedagio.total,
+      // `true` = tem praça na rota sem preço cadastrado, então o total é um
+      // PISO. Dizer isso é o que impede o frete de parecer melhor do que é.
+      pedagioParcial: pedagio.semTarifa > 0,
+      custoPorKm: custo.valor,
+      historico,
+      // A pergunta não é "quanto é o frete", é "sobra quanto". Só responde
+      // quando ele disse o valor que estão oferecendo.
+      resultado:
+        nomes?.valorFrete != null && nomes.valorFrete > 0
+          ? resultadoDoFrete({
+              valorFrete: nomes.valorFrete,
+              km,
+              diesel,
+              pedagio: pedagio.total,
+              custoPorKm: custo.valor,
+            })
           : null,
     };
+  }
+
+  private async eixosDele(identidadeId: string): Promise<number | null> {
+    const eu = await comoSistema(() =>
+      this.prisma.motoristaIdentidade.findUnique({
+        where: { id: identidadeId },
+        select: { eixos: true },
+      }),
+    );
+    return eu?.eixos ?? null;
+  }
+
+  /**
+   * O que o caminhão custa por km rodado, fora combustível.
+   *
+   * O diesel fica de fora porque é estimado à parte, pelo consumo medido —
+   * somar os dois contaria diesel duas vezes, e um frete bom viraria recusado.
+   */
+  private async custoDele(identidadeId: string) {
+    const desde = new Date(Date.now() - DIAS_HISTORICO * 24 * 60 * 60 * 1000);
+    const [gastos, viagens] = await comoSistema(() =>
+      Promise.all([
+        this.prisma.lancamentoPessoal.aggregate({
+          where: {
+            identidadeId,
+            data: { gte: desde },
+            tipo: { in: ["MANUTENCAO", "ALIMENTACAO", "OUTRO_GASTO"] },
+          },
+          _sum: { valor: true },
+        }),
+        this.prisma.viagemPessoal.aggregate({
+          where: { identidadeId, data: { gte: desde } },
+          _sum: { km: true },
+        }),
+      ]),
+    );
+    return custoPorKmDele({
+      gastosNaoCombustivel: Number(gastos._sum.valor ?? 0),
+      kmRodado: Number(viagens._sum.km ?? 0),
+      dias: DIAS_HISTORICO,
+    });
+  }
+
+  /**
+   * "Esse trecho você já fez, por quanto."
+   *
+   * A única referência de preço honesta que dá pra oferecer: a dele. Tabela de
+   * mercado o sistema não conhece, e inventar uma seria colocar um número na
+   * boca dele no meio de uma negociação.
+   */
+  private async historicoDoTrecho(identidadeId: string, origem: string, destino: string) {
+    const anteriores = await comoSistema(() =>
+      this.prisma.viagemPessoal.findMany({
+        where: { identidadeId, valorRecebido: { not: null } },
+        select: { origem: true, destino: true, data: true, km: true, valorRecebido: true },
+        orderBy: { data: "desc" },
+        take: 300,
+      }),
+    );
+    const r = compararComHistorico(
+      origem,
+      destino,
+      anteriores.map((v) => ({
+        origem: v.origem,
+        destino: v.destino,
+        data: v.data,
+        km: v.km == null ? null : Number(v.km),
+        valorRecebido: v.valorRecebido == null ? null : Number(v.valorRecebido),
+      })),
+    );
+    return r.vezes === 0
+      ? null
+      : {
+          vezes: r.vezes,
+          medianaValor: r.medianaValor,
+          medianaPorKm: r.medianaPorKm,
+          ultimaVez: r.ultimaVez ? r.ultimaVez.toISOString().slice(0, 10) : null,
+        };
   }
 
   /**

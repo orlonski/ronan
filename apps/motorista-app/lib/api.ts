@@ -82,6 +82,8 @@ export type MeuPerfil = {
   email: string | null;
   placas: { placa: string; modelo?: string }[];
   placaDefault: string | null;
+  /** Quantos eixos ele roda. É o que transforma praça em R$ de pedágio. */
+  eixos: number | null;
   empresas: CadastroEmpresa[];
   convites: ConviteEmpresa[];
 };
@@ -613,6 +615,9 @@ export const api = {
       body: { placas, placaDefault },
       comoIdentidade: true,
     }),
+  /** Quantos eixos ele roda: sem isso o app sabe as praças e não soma o pedágio. */
+  salvarMeusEixos: (eixos: number | null) =>
+    request<MeuPerfil>("PATCH", "/m/eu", { body: { eixos }, comoIdentidade: true }),
   /** Troca de senha pela PESSOA — quem não tem empresa não tem a outra porta. */
   trocarSenhaPessoa: (senhaAtual: string, novaSenha: string) =>
     request<{ ok: true }>("POST", "/m/eu/trocar-senha", {
@@ -653,6 +658,20 @@ export const api = {
     request<ViagemPessoal>("PUT", `/m/eu/viagens/${id}`, { body, comoIdentidade: true }),
   apagarViagemPessoal: (id: string) =>
     request<{ ok: true }>("DELETE", `/m/eu/viagens/${id}`, { comoIdentidade: true }),
+  /**
+   * "Esse já caiu" — e o caminho de volta.
+   *
+   * `null` desmarca: pagamento devolvido, cheque sem fundo, dedo errado. Sem
+   * isso, um toque acidental apagaria a dívida pra sempre.
+   */
+  /** Os fretes em aberto de TODOS os meses: dívida não tem mês, ela envelhece. */
+  fretesAReceber: () =>
+    request<ViagemPessoal[]>("GET", "/m/eu/viagens/a-receber", { comoIdentidade: true }),
+  marcarFreteRecebido: (id: string, recebidoEm: string | null) =>
+    request<ViagemPessoal>("POST", `/m/eu/viagens/${id}/recebi`, {
+      body: { recebidoEm },
+      comoIdentidade: true,
+    }),
   /** Navegação guiada até um ponto — o mesmo Valhalla da viagem da empresa. */
   navegarPessoal: (body: NavegarPessoalInput) =>
     request<RotaNav | { erro: string }>("POST", "/m/eu/frete/navegar", {

@@ -1,8 +1,15 @@
 import { useEffect, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
-import { ActivityIndicator, KeyboardAvoidingView, ScrollView, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Trash2 } from "lucide-react-native";
+import { Check, Trash2 } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +19,7 @@ import {
   apagarViagem,
   cacheViagens,
   editarViagemPessoal,
+  hojeISO,
   type ItemViagem,
 } from "@/lib/pessoal";
 
@@ -39,6 +47,8 @@ export default function EditarFreteScreen() {
   const [km, setKm] = useState("");
   const [peso, setPeso] = useState("");
   const [valor, setValor] = useState("");
+  const [contratante, setContratante] = useState("");
+  const [recebidoEm, setRecebidoEm] = useState<string | null>(null);
   const [observacao, setObservacao] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
@@ -57,6 +67,8 @@ export default function EditarFreteScreen() {
       setValor(
         achado.valorRecebido != null ? String(achado.valorRecebido).replace(".", ",") : "",
       );
+      setContratante(achado.contratante ?? "");
+      setRecebidoEm(achado.recebidoEm ?? null);
       setObservacao(achado.observacao ?? "");
     })();
   }, [clientId, mes]);
@@ -81,6 +93,10 @@ export default function EditarFreteScreen() {
         km: numero(km),
         peso: numero(peso),
         valorRecebido: numero(valor),
+        contratante: contratante.trim() || undefined,
+        // Vai junto porque o PUT reescreve o frete inteiro: omitir aqui
+        // apagaria o recebimento que ele marcou na tela "quem te deve".
+        recebidoEm: recebidoEm ?? undefined,
         observacao: observacao.trim() || undefined,
       });
       router.back();
@@ -164,6 +180,45 @@ export default function EditarFreteScreen() {
                 editable={!salvando}
               />
             </View>
+
+            <View className="gap-2">
+              <Label>Quem contratou</Label>
+              <Input
+                value={contratante}
+                onChangeText={setContratante}
+                placeholder="Transportadora, agenciador, a obra…"
+                editable={!salvando}
+              />
+            </View>
+
+            {/* O caminho de volta do "Já caiu": pagamento devolvido, cheque sem
+                fundo, dedo errado. Sem ele um toque acidental apagaria a dívida
+                pra sempre. */}
+            <Pressable
+              onPress={() => setRecebidoEm((v) => (v ? null : hojeISO()))}
+              disabled={salvando}
+              className={`flex-row items-center gap-3 rounded-xl border-2 p-3 ${
+                recebidoEm ? "border-success bg-success/10" : "border-warning bg-warning/10"
+              }`}
+            >
+              <View
+                className={`h-6 w-6 items-center justify-center rounded-md border-2 ${
+                  recebidoEm ? "border-success bg-success" : "border-border"
+                }`}
+              >
+                {recebidoEm ? <Check size={16} color="white" strokeWidth={3} /> : null}
+              </View>
+              <View className="flex-1">
+                <Text className="text-base font-semibold text-foreground">
+                  {recebidoEm ? "Recebido" : "Ainda não recebi"}
+                </Text>
+                <Text className="text-sm text-muted-foreground">
+                  {recebidoEm
+                    ? `Caiu em ${recebidoEm.split("-").reverse().join("/")}. Toque pra desmarcar.`
+                    : "Fica em “quem te deve” até você marcar."}
+                </Text>
+              </View>
+            </Pressable>
 
             <View className="flex-row gap-3">
               <View className="flex-1 gap-2">
