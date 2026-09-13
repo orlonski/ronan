@@ -502,6 +502,11 @@ model Conta {
   baixasTitulo                  BaixaTitulo[]
   fornecedores                  Fornecedor[]
   custosFixosVeiculo            CustoFixoVeiculo[]
+  manutencoesVeiculo            ManutencaoVeiculo[]
+  planosManutencao              PlanoManutencao[]
+  documentosVeiculo             DocumentoVeiculo[]
+  pneus                         Pneu[]
+  multas                        Multa[]
   locais                        Local[]
   locaisClientes                LocalCliente[]
   locaisEvidencias              LocalEvidencia[]
@@ -645,6 +650,8 @@ model User {
   faturasCriadas         Fatura[]              @relation("CriouFatura")
   titulosPagarCriados    TituloPagar[]         @relation("CriouTituloPagar")
   baixasDadas            BaixaTitulo[]         @relation("DeuBaixa")
+  manutencoesCriadas     ManutencaoVeiculo[]   @relation("CriouManutencao")
+  multasCriadas          Multa[]               @relation("CriouMulta")
   viagemValoresAlterados ViagemValor[]         @relation("AlterouViagemValor")
   tiposEventoCriados     TipoEventoViagem[]    @relation("CriouTipoEventoViagem")
   locaisCriados          Local[]               @relation("CriouLocal")
@@ -1361,6 +1368,8 @@ model Motorista {
 
   titulosPagar TituloPagar[]
 
+  multas Multa[]
+
   @@unique([contaId, cpf])
   @@index([ativo])
   @@index([status])
@@ -1787,6 +1796,12 @@ model Veiculo {
 
   titulosPagar TituloPagar[]
   custosFixos  CustoFixoVeiculo[]
+
+  manutencoes      ManutencaoVeiculo[]
+  planosManutencao PlanoManutencao[]
+  documentos       DocumentoVeiculo[]
+  pneus            Pneu[]
+  multas           Multa[]
 
   @@unique([contaId, placa])
   @@index([ativo])
@@ -2720,6 +2735,8 @@ model TituloPagar {
 
   baixas BaixaTitulo[]
 
+  manutencao ManutencaoVeiculo?
+
   @@index([contaId, status, vencimento])
   @@index([contaId])
   @@map("titulos_pagar")
@@ -2778,6 +2795,8 @@ model Fornecedor {
 
   titulos TituloPagar[]
 
+  manutencoes ManutencaoVeiculo[]
+
   @@unique([contaId, nome])
   @@index([contaId, tipo])
   @@index([contaId])
@@ -2809,6 +2828,223 @@ model CustoFixoVeiculo {
   @@index([veiculoId])
   @@index([contaId])
   @@map("custos_fixos_veiculo")
+}
+
+enum TipoManutencao {
+  /// Programada: troca de óleo, revisão de 10 mil km.
+  PREVENTIVA
+  /// Quebrou. É a que dói e a que ninguém planeja.
+  CORRETIVA
+  /// Pneu: rodízio, recapagem, troca.
+  PNEU
+  /// Funilaria, sinistro.
+  SINISTRO
+  OUTRO
+}
+
+enum StatusManutencao {
+  /// Agendada, ainda não entrou na oficina.
+  ABERTA
+  /// Na oficina. O caminhão está PARADO — é o que a tela de disponibilidade lê.
+  EM_ANDAMENTO
+  CONCLUIDA
+  CANCELADA
+}
+
+enum StatusMulta {
+  /// Chegou a notificação, ninguém decidiu nada.
+  RECEBIDA
+  /// Condutor indicado no Detran.
+  INDICADA
+  RECORRIDA
+  PAGA
+  CANCELADA
+}
+
+/**
+ * Ordem de serviço do veículo.
+ * Depois do diesel, manutenção e pneu são o maior custo da operação — e não
+ * existia nada: nem plano preventivo, nem OS, nem histórico, nem custo por
+ * caminhão. Frota acima de ~20 caminhões não assina sem isto, porque é onde o
+ * dinheiro vaza sem aparecer.
+ */
+model ManutencaoVeiculo {
+  contaId       String           @default("__SEM_CONTA__")
+  conta         Conta            @relation(fields: [contaId], references: [id])
+  id            String           @id @default(uuid())
+  veiculo       Veiculo          @relation(fields: [veiculoId], references: [id], onDelete: Cascade)
+  veiculoId     String
+  tipo          TipoManutencao   @default(PREVENTIVA)
+  status        StatusManutencao @default(ABERTA)
+  descricao     String
+  /// Odômetro na entrada. É o que fecha o ciclo do plano por km.
+  odometro      Int?
+  /// Quando entrou e saiu da oficina. A diferença é o tempo PARADO, que é o
+  /// custo que ninguém lança mas todo mundo sente.
+  iniciadaEm    DateTime?
+  concluidaEm   DateTime?
+  /// Data prevista, pra manutenção agendada.
+  previstaEm    DateTime?        @db.Date
+  fornecedor    Fornecedor?      @relation(fields: [fornecedorId], references: [id], onDelete: SetNull)
+  fornecedorId  String?
+  valorPecas    Decimal?         @db.Decimal(12, 2)
+  valorMaoObra  Decimal?         @db.Decimal(12, 2)
+  valorTotal    Decimal?         @db.Decimal(12, 2)
+  /// O título a pagar gerado por esta OS, quando alguém pediu.
+  tituloPagar   TituloPagar?     @relation(fields: [tituloPagarId], references: [id], onDelete: SetNull)
+  tituloPagarId String?          @unique
+  observacao    String?
+  criadoPor     User?            @relation("CriouManutencao", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId   String?
+  criadoEm      DateTime         @default(now())
+  alteradoEm    DateTime         @updatedAt
+
+  @@index([veiculoId, status])
+  @@index([contaId, status])
+  @@index([contaId])
+  @@map("manutencoes_veiculo")
+}
+
+/**
+ * O plano preventivo: "troca de óleo a cada 10 mil km".
+ * O gatilho é por km OU por dias — o que vencer primeiro, que é como oficina
+ * realmente trabalha. `ultimoOdometro`/`ultimaEm` carimbam a última execução, e
+ * é a diferença pro odômetro atual que diz se está na hora.
+ */
+model PlanoManutencao {
+  contaId        String    @default("__SEM_CONTA__")
+  conta          Conta     @relation(fields: [contaId], references: [id])
+  id             String    @id @default(uuid())
+  veiculo        Veiculo   @relation(fields: [veiculoId], references: [id], onDelete: Cascade)
+  veiculoId      String
+  descricao      String
+  /// A cada quantos km. Null = só por tempo.
+  intervaloKm    Int?
+  /// A cada quantos dias. Null = só por km.
+  intervaloDias  Int?
+  ultimoOdometro Int?
+  ultimaEm       DateTime? @db.Date
+  ativo          Boolean   @default(true)
+  criadoEm       DateTime  @default(now())
+  alteradoEm     DateTime  @updatedAt
+
+  @@index([veiculoId, ativo])
+  @@index([contaId])
+  @@map("planos_manutencao")
+}
+
+/**
+ * Documento do VEÍCULO, com vencimento.
+ * Existia `MotoristaDocumento` (da pessoa) e `DocumentoPessoal` (do autônomo),
+ * mas nada do caminhão — CRLV e seguro venciam sem ninguém ser avisado, e o
+ * caminhão parava na balança. O aviso reaproveita o cron que já existe pro
+ * autônomo.
+ */
+model DocumentoVeiculo {
+  contaId     String    @default("__SEM_CONTA__")
+  conta       Conta     @relation(fields: [contaId], references: [id])
+  id          String    @id @default(uuid())
+  veiculo     Veiculo   @relation(fields: [veiculoId], references: [id], onDelete: Cascade)
+  veiculoId   String
+  /// "CRLV", "SEGURO", "TACOGRAFO", "AET", "ANTT"…
+  tipo        String
+  numero      String?
+  validade    DateTime? @db.Date
+  /// Arquivo no MinIO, quando alguém anexou.
+  storageKey  String?
+  nomeArquivo String?
+  observacao  String?
+  criadoEm    DateTime  @default(now())
+  alteradoEm  DateTime  @updatedAt
+
+  @@unique([veiculoId, tipo])
+  @@index([contaId, validade])
+  @@index([contaId])
+  @@map("documentos_veiculo")
+}
+
+/**
+ * Pneu, controlado por POSIÇÃO no veículo.
+ * Pneu é o segundo maior custo depois do diesel e o mais fácil de perder de
+ * vista: ele roda, é rodiziado, vai pra recapagem e volta. Sem número de fogo e
+ * posição, o custo por km do pneu é um chute.
+ */
+model Pneu {
+  contaId            String    @default("__SEM_CONTA__")
+  conta              Conta     @relation(fields: [contaId], references: [id])
+  id                 String    @id @default(uuid())
+  /// O número gravado na carcaça. É a identidade dele.
+  numeroFogo         String
+  marca              String?
+  medida             String?
+  veiculo            Veiculo?  @relation(fields: [veiculoId], references: [id], onDelete: SetNull)
+  veiculoId          String?
+  /// "1DE" (1º eixo direito externo), "2EI"… Null = em estoque.
+  posicao            String?
+  /// Sulco em milímetros na última medição. Abaixo de 1,6mm é ilegal.
+  sulcoMm            Decimal?  @db.Decimal(4, 1)
+  medidoEm           DateTime? @db.Date
+  odometroInstalacao Int?
+  /// Quantas vezes já foi recapado. Carcaça aguenta 2 ou 3.
+  recapagens         Int       @default(0)
+  valorCompra        Decimal?  @db.Decimal(10, 2)
+  /// False = descartado (carcaça condenada).
+  ativo              Boolean   @default(true)
+  observacao         String?
+  criadoEm           DateTime  @default(now())
+  alteradoEm         DateTime  @updatedAt
+
+  @@unique([contaId, numeroFogo])
+  @@index([veiculoId, ativo])
+  @@index([contaId])
+  @@map("pneus")
+}
+
+/**
+ * Multa de trânsito.
+ * O prazo de indicação do condutor é curto (30 dias no geral) e perdê-lo faz a
+ * multa virar do PROPRIETÁRIO, com pontuação na empresa. É por isso que o
+ * `prazoIndicacao` existe e aparece na tela.
+ */
+model Multa {
+  contaId              String      @default("__SEM_CONTA__")
+  conta                Conta       @relation(fields: [contaId], references: [id])
+  id                   String      @id @default(uuid())
+  veiculo              Veiculo?    @relation(fields: [veiculoId], references: [id], onDelete: SetNull)
+  veiculoId            String?
+  /// Quem estava dirigindo. Null = ainda não se sabe.
+  motorista            Motorista?  @relation(fields: [motoristaId], references: [id], onDelete: SetNull)
+  motoristaId          String?
+  /// Auto de infração (AIT).
+  numeroAit            String?
+  infracao             String
+  /// "LEVE", "MEDIA", "GRAVE", "GRAVISSIMA" — decide os pontos na CNH.
+  gravidade            String?
+  pontos               Int?
+  local                String?
+  ocorridaEm           DateTime
+  valor                Decimal     @db.Decimal(10, 2)
+  /// Com desconto de 20% pra pagamento até o vencimento.
+  valorComDesconto     Decimal?    @db.Decimal(10, 2)
+  vencimento           DateTime?   @db.Date
+  /// Até quando dá pra indicar o condutor. Perdeu, vira do proprietário.
+  prazoIndicacao       DateTime?   @db.Date
+  status               StatusMulta @default(RECEBIDA)
+  /// True = descontada do motorista no acerto.
+  descontarDoMotorista Boolean     @default(false)
+  /// O item de acerto que fez o desconto, quando fez.
+  itemAcertoId         String?
+  observacao           String?
+  criadoPor            User?       @relation("CriouMulta", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId          String?
+  criadoEm             DateTime    @default(now())
+  alteradoEm           DateTime    @updatedAt
+
+  @@index([contaId, status])
+  @@index([veiculoId, ocorridaEm])
+  @@index([motoristaId, ocorridaEm])
+  @@index([contaId])
+  @@map("multas")
 }
 
 model RegraMinimo {

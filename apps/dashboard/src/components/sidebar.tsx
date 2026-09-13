@@ -36,6 +36,7 @@ import {
   Ruler,
   Tag,
   Wallet,
+  Wrench,
   ScanEye,
   Send,
   Settings,
@@ -100,6 +101,7 @@ const GRUPOS: Grupo[] = [
     itens: [
       { href: "/motoristas", label: "Motoristas", icon: HardHat, perm: "motoristas.ver" },
       { href: "/veiculos", label: "Veículos", icon: Truck, perm: "veiculos.ver" },
+      { href: "/frota", label: "Frota (manutenção)", icon: Wrench, perm: "manutencao.ver" },
       { href: "/transportadoras", label: "Transportadoras", icon: Truck, perm: "transportadoras.ver" },
       { href: "/mapa", label: "Mapa", icon: MapPin, perm: "mapa.ver" },
       { href: "/empresas", label: "Empresas", icon: Building2, perm: "empresas.ver" },

@@ -115,7 +115,7 @@ export const MODULOS: ModuloDef[] = [
     chave: "frota",
     nome: "Frota",
     pitch: "Consumo por caminhão, documentos com vencimento e rastreamento.",
-    recursos: ["config-tracking", "pedagios"],
+    recursos: ["config-tracking", "pedagios", "manutencao", "pneus", "multas", "documentos-veiculo"],
   },
   {
     chave: "torre",

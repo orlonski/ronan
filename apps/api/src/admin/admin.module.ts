@@ -10,6 +10,7 @@ import { AcertosModule } from "./acertos/acertos.module";
 import { PedidosModule } from "./pedidos/pedidos.module";
 import { FinanceiroModule } from "./financeiro/financeiro.module";
 import { FornecedoresModule } from "./fornecedores/fornecedores.module";
+import { FrotaManutencaoModule } from "./frota-manutencao/frota-manutencao.module";
 import { ViagemLifecycleAdminModule } from "./viagem-lifecycle/viagem-lifecycle.module";
 import { VeiculosModule } from "./veiculos/veiculos.module";
 import { EmpresasModule } from "./empresas/empresas.module";
@@ -54,6 +55,7 @@ import { LancamentosResgatadosAdminModule } from "./lancamentos-resgatados/lanca
     PedidosModule,
     FinanceiroModule,
     FornecedoresModule,
+    FrotaManutencaoModule,
     ViagemLifecycleAdminModule,
     VeiculosModule,
     EmpresasModule,

@@ -88,6 +88,12 @@ const RESOURCE_DEFS: ResourceDef[] = [
   { recurso: "financeiro", label: "Financeiro", modulo: "Operação", acoes: ["ver", "faturar", "baixar"] },
   { recurso: "fornecedores", label: "Fornecedores", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
   { recurso: "custos-veiculo", label: "Custos fixos do veículo", modulo: "Cadastros", acoes: ["ver", "editar"] },
+  // Manutenção, pneu, documento do veículo e multa — o que some do radar e vira
+  // caminhão parado ou multa vencida.
+  { recurso: "manutencao", label: "Manutenção da frota", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },
+  { recurso: "pneus", label: "Pneus", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },
+  { recurso: "multas", label: "Multas", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },
+  { recurso: "documentos-veiculo", label: "Documentos do veículo", modulo: "Cadastros", acoes: ["ver", "editar"] },
   { recurso: "programacao", label: "Programação do dia", modulo: "Operação", acoes: ["ver", "editar", "publicar"] },
   // Relatório de produção por período. Agrupar por cliente/empresa (ou filtrar
   // por eles) exige TAMBÉM "viagens.ver-comercial" no endpoint: o agrupamento
