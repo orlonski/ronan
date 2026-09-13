@@ -4118,6 +4118,22 @@ model PostInstagram {
   criadoPorId String?
   criadoPor   User?   @relation("PostsInstagramCriados", fields: [criadoPorId], references: [id])
 
+  /// O que a peça rendeu, relido periodicamente enquanto é recente.
+  ///
+  /// A API NÃO devolve "seguidores ganhos" por Reel — esse número só existe pra
+  /// post de feed. O que dá pra ler de todo mundo é isto aqui, e é o bastante
+  /// pra comparar formato: `compartilhamentos` é o sinal que mais alcança quem
+  /// ainda não segue (as fontes estimam 3 a 5 vezes o peso de um like), então é
+  /// por ele que se escolhe o que repetir — não por curtida.
+  alcance           Int?
+  visualizacoes     Int?
+  salvos            Int?
+  compartilhamentos Int?
+  curtidas          Int?
+  comentarios       Int?
+  /// Quando as métricas acima foram lidas. Null = nunca lidas.
+  metricasEm        DateTime?
+
   criadoEm   DateTime @default(now())
   alteradoEm DateTime @updatedAt
 
@@ -4126,4 +4142,25 @@ model PostInstagram {
   @@index([status, proximaTentativaEm])
   @@index([publicadoEm(sort: Desc)])
   @@map("posts_instagram")
+}
+
+/// Quantos seguidores o perfil tinha em cada dia.
+///
+/// Existe porque a série diária de `follower_count` da API só libera a partir de
+/// **100 seguidores**, e o perfil tem 11. O campo `followers_count` cru funciona
+/// em qualquer tamanho, então a série a gente monta sozinho: uma leitura por dia,
+/// e a diferença entre dois dias é o que o dia rendeu.
+///
+/// Model global: é o perfil da plataforma, não de conta nenhuma.
+model SeguidoresInstagram {
+  id String @id @default(uuid())
+
+  /// Meia-noite de São Paulo do dia medido. Único: uma leitura por dia, e reler
+  /// o mesmo dia sobrescreve em vez de duplicar.
+  dia   DateTime @unique @db.Date
+  total Int
+
+  criadoEm DateTime @default(now())
+
+  @@map("seguidores_instagram")
 }

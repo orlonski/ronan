@@ -30,6 +30,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
 import { InstagramConfig } from "./instagram.config";
 import { InstagramFilaService } from "./instagram-fila.service";
+import { MetricasInstagramService } from "./metricas.service";
 import { InstagramPublicadorService } from "./instagram-publicador.service";
 import { PautaService } from "./pauta.service";
 
@@ -86,6 +87,7 @@ export class InstagramAdminController {
     private readonly config: InstagramConfig,
     private readonly publicador: InstagramPublicadorService,
     private readonly pauta: PautaService,
+    private readonly metricas: MetricasInstagramService,
   ) {}
 
   @RequerPermissao("marketing.ver")
@@ -111,6 +113,16 @@ export class InstagramAdminController {
           erroCodigo: true,
           criadoEm: true,
           criadoPor: { select: { nome: true } },
+          // O que a peça rendeu. `compartilhamentos` primeiro na leitura da tela:
+          // é o sinal que mais alcança quem não segue, e por isso o que decide
+          // qual formato repetir.
+          alcance: true,
+          visualizacoes: true,
+          salvos: true,
+          compartilhamentos: true,
+          curtidas: true,
+          comentarios: true,
+          metricasEm: true,
         },
       }),
     );
@@ -220,6 +232,25 @@ export class InstagramAdminController {
    * acesso ao log do servidor — que é justamente onde essa pergunta costuma
    * morrer.
    */
+  /**
+   * A série de seguidores por dia, pro painel.
+   *
+   * É o que transforma escolha de formato em decisão por número: com um post por
+   * dia, a variação do dia é o que aquele post rendeu. A API não dá isso por
+   * peça — ver metricas.service.ts.
+   */
+  @Get("seguidores")
+  async seguidores() {
+    return this.metricas.serie(30);
+  }
+
+  /** Relê agora, sem esperar as 6h do cron. */
+  @RequerPermissao("marketing.publicar")
+  @Post("ler-metricas")
+  async lerMetricas() {
+    return this.metricas.rodar();
+  }
+
   @RequerPermissao("marketing.publicar")
   @Post("rodar-agora")
   async rodarAgora() {

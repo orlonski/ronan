@@ -119,6 +119,54 @@ export class MetaClient {
     return corpo.data ?? [];
   }
 
+  /**
+   * Quantos seguidores o perfil tem AGORA.
+   *
+   * De propósito o campo cru `followers_count`, e não a métrica `follower_count`
+   * de Insights: a métrica só existe a partir de 100 seguidores, e o perfil não
+   * chegou lá. O campo funciona em qualquer tamanho, e a série diária a gente
+   * monta guardando uma leitura por dia.
+   */
+  async seguidores(): Promise<number | null> {
+    try {
+      const corpo = await this.get<{ followers_count?: number }>(
+        `/${this.config.igUserId}?fields=followers_count`,
+      );
+      return corpo.followers_count ?? null;
+    } catch (erro) {
+      this.logger.warn(`Não consegui ler os seguidores: ${(erro as Error).message}`);
+      return null;
+    }
+  }
+
+  /**
+   * O que uma publicação rendeu.
+   *
+   * Não existe "seguidores ganhos" por mídia nesta API — só post de feed tem, e
+   * nem sempre. O que dá pra ler de tudo é alcance, views, salvos e
+   * compartilhamentos; é com isso que se compara formato.
+   *
+   * A Meta recusa a chamada inteira quando UMA métrica do pedido não se aplica
+   * ao tipo da mídia, então cada uma vai numa tentativa própria e o que falhar
+   * volta ausente em vez de derrubar o resto.
+   */
+  async metricas(mediaId: string): Promise<Record<string, number>> {
+    const nomes = ["reach", "views", "saved", "shares", "likes", "comments"];
+    const saida: Record<string, number> = {};
+    for (const nome of nomes) {
+      try {
+        const corpo = await this.get<{ data?: { name: string; values?: { value?: number }[] }[] }>(
+          `/${mediaId}/insights?metric=${nome}`,
+        );
+        const valor = corpo.data?.[0]?.values?.[0]?.value;
+        if (typeof valor === "number") saida[nome] = valor;
+      } catch {
+        // Métrica que não se aplica a este tipo de mídia. Seguir em frente.
+      }
+    }
+    return saida;
+  }
+
   private async get<T>(caminho: string): Promise<T> {
     const juncao = caminho.includes("?") ? "&" : "?";
     const url = `${this.config.baseUrl}${caminho}${juncao}access_token=${encodeURIComponent(this.config.token)}`;

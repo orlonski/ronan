@@ -8,6 +8,7 @@ import { InstagramAdminController } from "./instagram-admin.controller";
 import { InstagramConfig } from "./instagram.config";
 import { InstagramFilaService } from "./instagram-fila.service";
 import { InstagramPublicadorService } from "./instagram-publicador.service";
+import { MetricasInstagramService } from "./metricas.service";
 import { PautaService } from "./pauta.service";
 import { ClickupRunnerModule } from "../clickup-runner/clickup-runner.module";
 
@@ -26,7 +27,7 @@ import { ClickupRunnerModule } from "../clickup-runner/clickup-runner.module";
 @Module({
   imports: [PrismaModule, UploadsModule, ClickupRunnerModule],
   controllers: [InstagramAdminController, ArtePublicaController, IngestaoController],
-  providers: [InstagramConfig, InstagramFilaService, InstagramPublicadorService, IngestaoTokenGuard, PautaService],
-  exports: [InstagramFilaService],
+  providers: [InstagramConfig, InstagramFilaService, InstagramPublicadorService, IngestaoTokenGuard, PautaService, MetricasInstagramService],
+  exports: [InstagramFilaService, MetricasInstagramService],
 })
 export class MarketingModule {}

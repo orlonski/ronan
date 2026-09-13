@@ -36,7 +36,16 @@ type Post = {
   erroCodigo: number | null;
   criadoEm: string;
   criadoPor: { nome: string } | null;
+  alcance: number | null;
+  visualizacoes: number | null;
+  salvos: number | null;
+  compartilhamentos: number | null;
+  curtidas: number | null;
+  comentarios: number | null;
+  metricasEm: string | null;
 };
+
+type DiaSeguidores = { dia: string; total: number; variacao: number | null };
 
 type Estado = {
   credencialConfigurada: boolean;
@@ -45,6 +54,58 @@ type Estado = {
   maxPorDia: number;
   publicadosUltimas24h: number;
 };
+
+/**
+ * O que a peça rendeu.
+ *
+ * Compartilhamento vem PRIMEIRO e em destaque de propósito: é o sinal que mais
+ * alcança quem ainda não segue (estimado em 3 a 5 vezes o peso de uma curtida),
+ * e portanto é por ele que se escolhe qual formato repetir. Curtida fica por
+ * último, do tamanho que merece.
+ */
+function Metricas({ post }: { post: Post }) {
+  const itens: [string, number | null][] = [
+    ["compart.", post.compartilhamentos],
+    ["salvos", post.salvos],
+    ["alcance", post.alcance],
+    ["views", post.visualizacoes],
+    ["curtidas", post.curtidas],
+    ["coment.", post.comentarios],
+  ];
+  const temAlgum = itens.some(([, v]) => v !== null);
+  if (!temAlgum) return null;
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+      {itens.map(([rotulo, valor], i) =>
+        valor === null ? null : (
+          <span key={rotulo} className={i === 0 ? "font-semibold text-foreground" : undefined}>
+            {valor.toLocaleString("pt-BR")} <span className="font-normal">{rotulo}</span>
+          </span>
+        ),
+      )}
+    </div>
+  );
+}
+
+/**
+ * Quanto o perfil ganhou (ou perdeu) desde a medição anterior.
+ *
+ * Null no primeiro dia medido: não existe "anterior" pra comparar, e mostrar
+ * zero ali seria dizer que o dia não rendeu nada — que é diferente de não saber.
+ */
+function Variacao({ valor }: { valor: number | null }) {
+  if (valor === null) return null;
+  if (valor === 0) return <span className="ml-1 text-xs text-muted-foreground">sem mudança</span>;
+  const sobe = valor > 0;
+  return (
+    <span
+      className={`ml-1 text-xs font-semibold tabular-nums ${sobe ? "text-green-700" : "text-red-700"}`}
+    >
+      {sobe ? "+" : ""}
+      {valor} hoje
+    </span>
+  );
+}
 
 const APARENCIA: Record<string, { rotulo: string; classe: string }> = {
   RASCUNHO: { rotulo: "Rascunho", classe: "bg-muted text-muted-foreground" },
@@ -194,6 +255,10 @@ function Conteudo() {
  */
 function Estado({ estado }: { estado: Estado }) {
   const parado = !estado.credencialConfigurada || !estado.ativo;
+  // Uma leitura por dia basta: o cron grava às 6h e o número não muda sozinho
+  // no meio da tarde.
+  const seguidores = useApiQuery<DiaSeguidores[]>("/admin/marketing/instagram/seguidores");
+  const ultimoDia = seguidores.data?.at(-1) ?? null;
   const { temPermissao } = usePermissoes();
   const token = useAuthToken();
   const qc = useQueryClient();
@@ -225,6 +290,14 @@ function Estado({ estado }: { estado: Estado }) {
             {estado.publicadosUltimas24h} de {estado.maxPorDia}
           </span>
         </div>
+
+        {ultimoDia ? (
+          <div className="text-sm">
+            <span className="text-muted-foreground">Seguidores: </span>
+            <span className="font-medium tabular-nums">{ultimoDia.total}</span>
+            <Variacao valor={ultimoDia.variacao} />
+          </div>
+        ) : null}
 
         {temPermissao("marketing.publicar") ? (
           <Button
@@ -377,6 +450,8 @@ function Linha({ post }: { post: Post }) {
             ver no Instagram
           </a>
         ) : null}
+
+        {post.metricasEm ? <Metricas post={post} /> : null}
 
         {temPermissao("marketing.publicar") ? (
           <div className="mt-2 flex flex-col items-end gap-1.5">
