@@ -4,15 +4,21 @@
 #
 # Cada push na main dispara build de api + dashboard + PWA, e um push novo
 # CANCELA o que estiver rodando — deixando o serviço amarelo pra sempre, sem
-# tentar de novo sozinho. Em 13/09/2026 foram seis pushes em 28 minutos e o dono
-# do produto teve que clicar em Implantar à mão três vezes.
+# tentar de novo sozinho. Em 13/09/2026 foram seis pushes em 28 minutos.
 #
 # A regra é: commitar quantas vezes quiser, PUSHAR uma vez por bloco. `git push`
 # manda todos os commits pendentes de uma vez — a granularidade do histórico
 # nunca dependeu da frequência do push.
 #
-# Este hook é o mecanismo, não o lembrete: ele bloqueia o segundo push enquanto
-# o build do primeiro não tiver subido um container novo.
+# ⚠️ O QUE FAZ MAL é pushar DENTRO da janela do build anterior. Empilhar commit
+# num deploy que ainda não foi clicado não faz mal nenhum: um build só pega
+# todos. A primeira versão deste hook confundia as duas coisas e bloqueava
+# trabalho legítimo enquanto o dono não tivesse clicado em Implantar.
+#
+# Então libera quando:
+#   • o container reiniciou desde o último push (o build subiu), OU
+#   • já passou a janela de build (o anterior acabou, ou morreu — nos dois
+#     casos um push novo não mata mais nada).
 #
 # Emergência: PUSH_MESMO_ASSIM=1 git push
 set -euo pipefail
@@ -21,7 +27,10 @@ branch=$(git rev-parse --abbrev-ref HEAD)
 [ "$branch" = "main" ] || exit 0
 [ "${PUSH_MESMO_ASSIM:-}" = "1" ] && exit 0
 
-marcador="$(git rev-parse --git-dir)/ultimo-deploy-visto"
+# Folga sobre a duração do build da API no Contabo, que é o mais demorado.
+JANELA_SEG=${JANELA_BUILD_SEG:-600}
+
+marcador="$(git rev-parse --git-dir)/ultimo-push"
 api="${API_URL:-https://api.schaba.com.br}"
 
 atual=$(curl -fsS --max-time 10 "$api/health" 2>/dev/null \
@@ -34,28 +43,31 @@ if [ -z "$atual" ]; then
   exit 0
 fi
 
-if [ -f "$marcador" ] && [ "$(cat "$marcador")" = "$atual" ]; then
-  cat <<MSG
+agora=$(date +%s)
+if [ -f "$marcador" ]; then
+  anterior_container=$(sed -n '1p' "$marcador")
+  anterior_em=$(sed -n '2p' "$marcador")
+  decorrido=$(( agora - ${anterior_em:-0} ))
 
-  ┌─────────────────────────────────────────────────────────────┐
-  │  PUSH BLOQUEADO — o build anterior ainda não subiu           │
-  └─────────────────────────────────────────────────────────────┘
+  if [ "$anterior_container" = "$atual" ] && [ "$decorrido" -lt "$JANELA_SEG" ]; then
+    faltam=$(( (JANELA_SEG - decorrido + 59) / 60 ))
+    cat <<MSG
 
-  O container no ar é o mesmo de antes do seu último push, então o
-  build dele ainda está rodando (ou morreu). Pushar agora CANCELA
-  esse build e deixa o serviço amarelo no Easypanel.
+  ┌──────────────────────────────────────────────────────────────┐
+  │  PUSH BLOQUEADO — o build do push anterior deve estar rodando │
+  └──────────────────────────────────────────────────────────────┘
 
-  Container no ar desde: $atual
+  Você pushou faz $(( decorrido / 60 ))min e o container no ar ainda é o de antes.
+  Pushar agora CANCELA aquele build e deixa o serviço amarelo.
 
-  O que fazer:
-    • esperar o build fechar e pushar de novo (é o caminho normal);
-    • ou juntar este commit ao bloco e mandar tudo num push só.
+  Espere ~${faltam}min e pushe de novo — ou junte este commit ao bloco.
 
-  Se for emergência mesmo:  PUSH_MESMO_ASSIM=1 git push
+  Emergência mesmo:  PUSH_MESMO_ASSIM=1 git push
 
 MSG
-  exit 1
+    exit 1
+  fi
 fi
 
-echo "$atual" > "$marcador"
+printf '%s\n%s\n' "$atual" "$agora" > "$marcador"
 exit 0

@@ -123,6 +123,9 @@ function paraLocal(input: CriarLancamentoPessoalInput): LancamentoPessoal {
     data: input.data,
     valor: input.valor,
     litros: input.litros ?? null,
+    // Campo novo do tipo compartilhado: o `tanqueCheio` nasce marcado, que é o
+    // que o formulário manda e o que o backend assume quando ele vem ausente.
+    tanqueCheio: input.tanqueCheio ?? true,
     odometro: input.odometro ?? null,
     descricao: input.descricao ?? null,
     criadoEm: new Date().toISOString(),

@@ -312,17 +312,24 @@ manda todos os commits pendentes de uma vez — seis commits e um push produzem
 exatamente o mesmo histórico que seis pushes, e um build em vez de seis. A
 granularidade do histórico nunca dependeu da frequência do push.
 
-Isso não depende de ninguém lembrar: `.githooks/pre-push` bloqueia o segundo push
-enquanto o build do primeiro não tiver subido um container novo (compara o
-`iniciadoEm` do `/health` com o do push anterior). Ele se cala quando a API está
-fora de alcance — rede ruim não é build rodando. Emergência:
-`PUSH_MESMO_ASSIM=1 git push`.
+Isso não depende de ninguém lembrar: `.githooks/pre-push` bloqueia o push que cairia
+DENTRO da janela de build do anterior. Ele libera quando o container já reiniciou (o
+build subiu) ou quando a janela passou (o build acabou ou morreu — nos dois casos um
+push novo não mata mais nada), e se cala quando a API está fora de alcance, porque
+rede ruim não é build rodando. Empilhar commit num deploy que ainda não foi clicado
+**não** é bloqueado: um build só pega todos. Emergência: `PUSH_MESMO_ASSIM=1 git push`.
 
 O hook vive no repositório, então vale pra qualquer clone depois de:
 
 ```bash
 git config core.hooksPath .githooks     # uma vez por clone
 ```
+
+**Typecheck que mente:** `apps/motorista` e `apps/site` usam project references, e
+nesses dois `tsc --noEmit` **não confere nada** — passa sempre. O comando verdadeiro
+é `pnpm typecheck` (que é `tsc -b`), e o do repositório inteiro é `pnpm typecheck` na
+raiz. Rodar o errado foi o que deixou o PWA quebrado por horas: um campo novo em
+`@ronan/shared-types` chegou nos dois apps do motorista e só um foi atualizado.
 
 **Diagnóstico:** `node scripts/deploy-status.mjs` diz o que está no ar — migration
 aplicada e há quanto tempo o container subiu. Serve porque os serviços seguem
