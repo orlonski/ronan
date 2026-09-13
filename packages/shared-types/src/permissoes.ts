@@ -48,6 +48,8 @@ const ACAO_TITULO: Record<string, string> = {
   moderar: "Moderar denúncias",
   gerenciar: "Gerenciar",
   gerar: "Gerar / lançar item",
+  faturar: "Faturar / lançar conta",
+  baixar: "Dar baixa (dinheiro entrou/saiu)",
   fechar: "Fechar (vira combinado)",
   pagar: "Marcar como pago",
   expurgar: "Expurgar histórico",
@@ -80,6 +82,12 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // do dia. `publicar` é à parte de `editar` pelo mesmo motivo que em marketing:
   // montar é rascunho, publicar avisa gente de fora e vira combinado.
   { recurso: "pedidos", label: "Pedidos do cliente", modulo: "Operação", acoes: ["ver", "criar", "editar", "excluir"] },
+  // Contas a receber e a pagar. `baixar` é separado de `faturar` porque emitir a
+  // cobrança é trabalho de escritório e dizer que o dinheiro entrou é de quem
+  // responde pelo caixa — e quase nunca é a mesma pessoa.
+  { recurso: "financeiro", label: "Financeiro", modulo: "Operação", acoes: ["ver", "faturar", "baixar"] },
+  { recurso: "fornecedores", label: "Fornecedores", modulo: "Cadastros", acoes: ["ver", "criar", "editar", "excluir"] },
+  { recurso: "custos-veiculo", label: "Custos fixos do veículo", modulo: "Cadastros", acoes: ["ver", "editar"] },
   { recurso: "programacao", label: "Programação do dia", modulo: "Operação", acoes: ["ver", "editar", "publicar"] },
   // Relatório de produção por período. Agrupar por cliente/empresa (ou filtrar
   // por eles) exige TAMBÉM "viagens.ver-comercial" no endpoint: o agrupamento

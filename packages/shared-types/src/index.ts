@@ -28,6 +28,7 @@ export * from "./tabela-preco";
 export * from "./acerto-motorista";
 export * from "./pedido";
 export * from "./modulos";
+export * from "./financeiro";
 export * from "./relatorio";
 export * from "./relatorio-abastecimento";
 export * from "./relatorio-conferencia";

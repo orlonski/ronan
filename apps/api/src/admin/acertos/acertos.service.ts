@@ -394,6 +394,36 @@ export class AcertosService {
         valorLiquido: totais.liquido,
       },
     });
+    // Fechar o acerto cria a CONTA A PAGAR. É o que liga o que foi apurado ao
+    // dinheiro que sai: sem isso o acerto seria mais um número na tela e o
+    // pagamento continuaria sendo lembrado de cabeça.
+    //
+    // Só quando sobra algo a pagar. Líquido zero ou negativo (ele adiantou mais
+    // do que rodou) não vira título — cobrar do motorista é outra conversa, e
+    // não se faz criando um "a receber" no nome dele.
+    const liquido = new Prisma.Decimal(totais.liquido);
+    if (liquido.gt(0)) {
+      const jaTem = await this.prisma.tituloPagar.findFirst({
+        where: { acertoId: id, status: { not: "CANCELADO" } },
+        select: { id: true },
+      });
+      if (!jaTem) {
+        await this.prisma.tituloPagar.create({
+          data: {
+            motoristaId: acerto.motoristaId,
+            acertoId: id,
+            descricao: `Acerto ${acerto.periodoInicio.toISOString().slice(0, 10)} a ${acerto.periodoFim.toISOString().slice(0, 10)}`,
+            emissao: new Date(),
+            // Vence no dia do fechamento: acerto fechado é dívida vencida, não
+            // prazo pra pagar. Quem quiser adiar muda o vencimento na tela.
+            vencimento: new Date(),
+            valor: liquido,
+            criadoPorId: usuarioId,
+          },
+        });
+      }
+    }
+
     await this.auditoria.log({
       usuarioId,
       entidade: "AcertoMotorista",

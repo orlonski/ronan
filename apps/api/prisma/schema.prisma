@@ -495,6 +495,13 @@ model Conta {
   pedidos                       Pedido[]
   viagensPlanejadas             ViagemPlanejada[]
   modulosContratados            ModuloContratado[]
+  faturas                       Fatura[]
+  faturaLinhas                  FaturaLinha[]
+  titulosReceber                TituloReceber[]
+  titulosPagar                  TituloPagar[]
+  baixasTitulo                  BaixaTitulo[]
+  fornecedores                  Fornecedor[]
+  custosFixosVeiculo            CustoFixoVeiculo[]
   locais                        Local[]
   locaisClientes                LocalCliente[]
   locaisEvidencias              LocalEvidencia[]
@@ -635,6 +642,9 @@ model User {
   pedidosCriados         Pedido[]              @relation("CriouPedido")
   planejadasCriadas      ViagemPlanejada[]     @relation("CriouViagemPlanejada")
   modulosLigados         ModuloContratado[]    @relation("LigouModulo")
+  faturasCriadas         Fatura[]              @relation("CriouFatura")
+  titulosPagarCriados    TituloPagar[]         @relation("CriouTituloPagar")
+  baixasDadas            BaixaTitulo[]         @relation("DeuBaixa")
   viagemValoresAlterados ViagemValor[]         @relation("AlterouViagemValor")
   tiposEventoCriados     TipoEventoViagem[]    @relation("CriouTipoEventoViagem")
   locaisCriados          Local[]               @relation("CriouLocal")
@@ -1349,6 +1359,8 @@ model Motorista {
 
   viagensPlanejadas ViagemPlanejada[]
 
+  titulosPagar TituloPagar[]
+
   @@unique([contaId, cpf])
   @@index([ativo])
   @@index([status])
@@ -1773,6 +1785,9 @@ model Veiculo {
 
   viagensPlanejadas ViagemPlanejada[]
 
+  titulosPagar TituloPagar[]
+  custosFixos  CustoFixoVeiculo[]
+
   @@unique([contaId, placa])
   @@index([ativo])
   @@index([transportadoraId])
@@ -1806,6 +1821,8 @@ model Transportadora {
   usuarios       UsuarioTransportadora[]
   criadoPor      User?                   @relation("CriouTransportadora", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId    String?
+
+  titulosPagar TituloPagar[]
 
   @@unique([contaId, cnpj])
   @@index([ativa])
@@ -1879,6 +1896,9 @@ model Empresa {
   criadoPorId    String?
 
   pedidos Pedido[]
+
+  faturas        Fatura[]
+  titulosReceber TituloReceber[]
 
   @@unique([contaId, cnpj])
   @@index([ativa])
@@ -2161,6 +2181,8 @@ model AcertoMotorista {
   itens ItemAcerto[]
 
   /// Um acerto por motorista por período: gerar duas vezes não cria dois.
+  titulosPagar TituloPagar[]
+
   @@unique([contaId, motoristaId, periodoInicio, periodoFim])
   @@index([contaId, status])
   @@index([motoristaId, periodoInicio])
@@ -2539,6 +2561,254 @@ model ModuloContratado {
   @@unique([contaId, chave])
   @@index([contaId, ativo])
   @@map("modulos_contratados")
+}
+
+enum StatusFatura {
+  RASCUNHO
+  EMITIDA
+  ENVIADA
+  CANCELADA
+}
+
+enum StatusTitulo {
+  ABERTO
+  PARCIAL
+  PAGO
+  CANCELADO
+}
+
+enum TipoFornecedor {
+  POSTO
+  OFICINA
+  PNEU
+  SEGURADORA
+  PEDAGIO
+  OUTRO
+}
+
+/**
+ * A cobrança que vai pro tomador.
+ * O sistema conferia a conta do cliente com maestria e não sabia emitir a
+ * própria: o fechamento terminava em "marquei como enviado" e o rastro do
+ * dinheiro acabava ali. A fatura é o que transforma quantidade conferida em
+ * valor a receber.
+ */
+model Fatura {
+  contaId         String       @default("__SEM_CONTA__")
+  conta           Conta        @relation(fields: [contaId], references: [id])
+  id              String       @id @default(uuid())
+  /// Sequencial POR CONTA, pra falar ao telefone ("a fatura 132").
+  numero          Int
+  empresa         Empresa      @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  empresaId       String
+  /// De qual fechamento nasceu, quando nasceu de um. Null = avulsa.
+  fechamento      Fechamento?  @relation(fields: [fechamentoId], references: [id], onDelete: SetNull)
+  fechamentoId    String?
+  periodoInicio   DateTime     @db.Date
+  periodoFim      DateTime     @db.Date
+  valorBruto      Decimal      @default(0) @db.Decimal(12, 2)
+  valorDescontos  Decimal      @default(0) @db.Decimal(12, 2)
+  valorLiquido    Decimal      @default(0) @db.Decimal(12, 2)
+  status          StatusFatura @default(RASCUNHO)
+  emitidaEm       DateTime?
+  /// Só o NÚMERO do CT-e/NFS-e emitido fora. A emissão fiscal continua fora
+  /// daqui — ver os campos fiscais da Viagem.
+  documentoNumero String?
+  documentoChave  String?
+  observacao      String?
+  criadoPor       User?        @relation("CriouFatura", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId     String?
+  criadoEm        DateTime     @default(now())
+  alteradoEm      DateTime     @updatedAt
+
+  linhas  FaturaLinha[]
+  titulos TituloReceber[]
+
+  @@unique([contaId, numero])
+  @@index([empresaId, periodoInicio])
+  @@index([contaId, status])
+  @@index([contaId])
+  @@map("faturas")
+}
+
+/**
+ * Uma viagem dentro da fatura, com o valor CONGELADO na emissão.
+ * Não lê `ViagemValor` em runtime de propósito: fatura emitida não muda porque
+ * alguém corrigiu o km depois. Mês fechado que muda sozinho é como a
+ * contabilidade do cliente perde a fé no sistema — e é o mesmo risco que o
+ * reprocessamento de km já cria, agora com dinheiro em cima.
+ */
+model FaturaLinha {
+  contaId       String  @default("__SEM_CONTA__")
+  conta         Conta   @relation(fields: [contaId], references: [id])
+  id            String  @id @default(uuid())
+  fatura        Fatura  @relation(fields: [faturaId], references: [id], onDelete: Cascade)
+  faturaId      String
+  /// Null = linha avulsa (estadia, taxa, reentrega).
+  viagem        Viagem? @relation(fields: [viagemId], references: [id], onDelete: SetNull)
+  viagemId      String?
+  descricao     String
+  quantidade    Decimal @db.Decimal(12, 3)
+  precoUnitario Decimal @db.Decimal(10, 2)
+  valor         Decimal @db.Decimal(12, 2)
+
+  @@index([faturaId])
+  @@index([contaId])
+  @@map("fatura_linhas")
+}
+
+/**
+ * O que ENTRA. Uma fatura vira N parcelas.
+ */
+model TituloReceber {
+  contaId    String       @default("__SEM_CONTA__")
+  conta      Conta        @relation(fields: [contaId], references: [id])
+  id         String       @id @default(uuid())
+  fatura     Fatura?      @relation(fields: [faturaId], references: [id], onDelete: SetNull)
+  faturaId   String?
+  empresa    Empresa      @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  empresaId  String
+  parcela    Int          @default(1)
+  emissao    DateTime     @db.Date
+  vencimento DateTime     @db.Date
+  valor      Decimal      @db.Decimal(12, 2)
+  valorPago  Decimal      @default(0) @db.Decimal(12, 2)
+  status     StatusTitulo @default(ABERTO)
+  observacao String?
+  criadoEm   DateTime     @default(now())
+  alteradoEm DateTime     @updatedAt
+
+  baixas BaixaTitulo[]
+
+  /// A tela "o que está vencido" vive deste índice.
+  @@index([contaId, status, vencimento])
+  @@index([empresaId, vencimento])
+  @@index([contaId])
+  @@map("titulos_receber")
+}
+
+/**
+ * O que SAI: motorista, agregado, posto, oficina, seguradora.
+ */
+model TituloPagar {
+  contaId          String           @default("__SEM_CONTA__")
+  conta            Conta            @relation(fields: [contaId], references: [id])
+  id               String           @id @default(uuid())
+  /// EXATAMENTE UM dos três. O serviço valida — o Prisma não expressa XOR.
+  motorista        Motorista?       @relation(fields: [motoristaId], references: [id], onDelete: SetNull)
+  motoristaId      String?
+  transportadora   Transportadora?  @relation(fields: [transportadoraId], references: [id], onDelete: SetNull)
+  transportadoraId String?
+  fornecedor       Fornecedor?      @relation(fields: [fornecedorId], references: [id], onDelete: SetNull)
+  fornecedorId     String?
+  /// Quando o título nasce de um acerto fechado.
+  acerto           AcertoMotorista? @relation(fields: [acertoId], references: [id], onDelete: SetNull)
+  acertoId         String?
+  veiculo          Veiculo?         @relation(fields: [veiculoId], references: [id], onDelete: SetNull)
+  veiculoId        String?
+  descricao        String
+  emissao          DateTime         @db.Date
+  vencimento       DateTime         @db.Date
+  valor            Decimal          @db.Decimal(12, 2)
+  valorPago        Decimal          @default(0) @db.Decimal(12, 2)
+  status           StatusTitulo     @default(ABERTO)
+  observacao       String?
+  criadoPor        User?            @relation("CriouTituloPagar", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId      String?
+  criadoEm         DateTime         @default(now())
+  alteradoEm       DateTime         @updatedAt
+
+  baixas BaixaTitulo[]
+
+  @@index([contaId, status, vencimento])
+  @@index([contaId])
+  @@map("titulos_pagar")
+}
+
+/**
+ * A baixa é FATO, não flag: quem, quando, quanto e por qual meio.
+ * Um booleano "pago" não responde "recebemos metade em março e o resto em
+ * abril?", que é a pergunta que o financeiro faz toda semana.
+ */
+model BaixaTitulo {
+  contaId         String         @default("__SEM_CONTA__")
+  conta           Conta          @relation(fields: [contaId], references: [id])
+  id              String         @id @default(uuid())
+  tituloReceber   TituloReceber? @relation(fields: [tituloReceberId], references: [id], onDelete: Cascade)
+  tituloReceberId String?
+  tituloPagar     TituloPagar?   @relation(fields: [tituloPagarId], references: [id], onDelete: Cascade)
+  tituloPagarId   String?
+  data            DateTime       @db.Date
+  valor           Decimal        @db.Decimal(12, 2)
+  /// "PIX", "TED", "DINHEIRO", "BOLETO". Texto livre: cada empresa chama de um
+  /// jeito, e um enum viraria migration a cada cliente novo.
+  meio            String
+  /// Quem deu baixa. User REAL, sempre — nenhum robô baixa título. Mesma
+  /// doutrina do `revisadoEm`: automação não assina decisão de dinheiro.
+  usuario         User           @relation("DeuBaixa", fields: [usuarioId], references: [id])
+  usuarioId       String
+  observacao      String?
+  criadoEm        DateTime       @default(now())
+
+  @@index([contaId, data])
+  @@index([tituloReceberId])
+  @@index([tituloPagarId])
+  @@index([contaId])
+  @@map("baixas_titulo")
+}
+
+/**
+ * Posto, oficina, borracharia, seguradora.
+ * `Abastecimento.postoNome` é texto livre e continua sendo — a adoção é por
+ * nome normalizado, sem apagar nada (migração adotiva, ver a memória do
+ * projeto). Sem cadastro não há negociação por volume nem contas a pagar.
+ */
+model Fornecedor {
+  contaId    String         @default("__SEM_CONTA__")
+  conta      Conta          @relation(fields: [contaId], references: [id])
+  id         String         @id @default(uuid())
+  nome       String
+  cnpjCpf    String?
+  tipo       TipoFornecedor @default(OUTRO)
+  telefone   String?
+  observacao String?
+  ativo      Boolean        @default(true)
+  criadoEm   DateTime       @default(now())
+  alteradoEm DateTime       @updatedAt
+
+  titulos TituloPagar[]
+
+  @@unique([contaId, nome])
+  @@index([contaId, tipo])
+  @@index([contaId])
+  @@map("fornecedores")
+}
+
+/**
+ * Custo fixo recorrente do veículo: IPVA, seguro, financiamento, rastreador,
+ * depreciação.
+ * O rateio é DERIVADO — custo do mês ÷ km rodado no mês — e nunca materializado
+ * por viagem. Materializar faria o recálculo de km reescrever o custo do
+ * passado, que é o oposto do que um número de custo serve.
+ */
+model CustoFixoVeiculo {
+  contaId     String    @default("__SEM_CONTA__")
+  conta       Conta     @relation(fields: [contaId], references: [id])
+  id          String    @id @default(uuid())
+  veiculo     Veiculo   @relation(fields: [veiculoId], references: [id], onDelete: Cascade)
+  veiculoId   String
+  /// "IPVA", "SEGURO", "FINANCIAMENTO", "DEPRECIACAO", "RASTREADOR"…
+  tipo        String
+  valorMensal Decimal   @db.Decimal(12, 2)
+  vigenciaDe  DateTime  @db.Date
+  vigenciaAte DateTime? @db.Date
+  observacao  String?
+  criadoEm    DateTime  @default(now())
+  alteradoEm  DateTime  @updatedAt
+
+  @@index([veiculoId])
+  @@index([contaId])
+  @@map("custos_fixos_veiculo")
 }
 
 model RegraMinimo {
@@ -2987,6 +3257,8 @@ model Viagem {
   // só saber quem recebeu.
   recebedorNome String?
   recebedorDoc  String?
+
+  faturaLinhas FaturaLinha[]
 
   @@index([transportadoraId, data])
   @@index([motoristaId, data])
@@ -3471,6 +3743,8 @@ model Fechamento {
   envios      EnvioFechamento[]
   criadoPor   User?             @relation("CriouFechamento", fields: [criadoPorId], references: [id], onDelete: SetNull)
   criadoPorId String?
+
+  faturas Fatura[]
 
   @@index([empresaId, periodoInicio])
   @@index([status])

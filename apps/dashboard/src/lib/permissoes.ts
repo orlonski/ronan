@@ -124,6 +124,7 @@ const ROTA_PERM: { prefixo: string; perm: string }[] = [
   { prefixo: "/regras-minimo", perm: "regras-minimo.ver" },
   { prefixo: "/tabelas-preco", perm: "tabelas-preco.ver" },
   { prefixo: "/acertos", perm: "acertos.ver" },
+  { prefixo: "/financeiro", perm: "financeiro.ver" },
   { prefixo: "/programacao", perm: "programacao.ver" },
   { prefixo: "/pedidos", perm: "pedidos.ver" },
   // Estas duas estavam no menu e fora daqui — `permDaRota` libera o que não está

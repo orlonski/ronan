@@ -109,7 +109,7 @@ export const MODULOS: ModuloDef[] = [
     chave: "financeiro",
     nome: "Financeiro",
     pitch: "O acerto do motorista e do agregado: o que ele ganhou, adiantou e deve.",
-    recursos: ["acertos"],
+    recursos: ["acertos", "financeiro", "fornecedores", "custos-veiculo"],
   },
   {
     chave: "frota",
