@@ -23,6 +23,10 @@ const CAMPOS_COMERCIAIS = [
   "toneladasEfetiva",
   "toneladasAjustada",
   "matchesFechamento",
+  // Quanto a viagem vale. É o dado comercial mais óbvio de todos: o gestor de
+  // uma frota terceira confere o que os motoristas dele lançaram, e não tem por
+  // que enxergar o preço que a transportadora negociou com o tomador.
+  "valor",
 ] as const;
 
 /**

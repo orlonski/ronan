@@ -516,6 +516,16 @@ export class ViagensAdminService {
         ticketDuplicadoDe: { select: { id: true, ticket: true, data: true } },
         // Quem mexeu no km do motorista — o painel mostra o nome junto do motivo.
         kmAlteradoPor: { select: { id: true, nome: true } },
+        // Quanto a viagem vale. Sai do payload de quem não tem `ver-comercial`
+        // (ver comercial.ts) — é preço de contrato.
+        valor: {
+          include: {
+            tabelaPreco: {
+              select: { id: true, base: true, precoUnitario: true, vigenciaDe: true },
+            },
+            alteradoPor: { select: { id: true, nome: true } },
+          },
+        },
         // No detalhe vêm TODAS (inclusive resolvidas): aqui o histórico ajuda
         // quem está conferindo a entender o que a viagem já passou.
         divergencias: {

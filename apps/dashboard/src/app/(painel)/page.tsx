@@ -9,6 +9,7 @@ import {
   CalendarClock,
   ClipboardList,
   Clock,
+  Banknote,
   Droplet,
   FileSpreadsheet,
   Fuel,
@@ -41,6 +42,9 @@ type Snapshot = {
   mes: {
     viagens: number;
     toneladas: string;
+    faturamento: string;
+    faturamentoFrete: string;
+    viagensPrecificadas: number;
     combustivelValor: string;
     pedagioValor: string;
   };
@@ -298,7 +302,18 @@ function BlocoMes({ d }: { d: Snapshot }) {
       <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
         Este mês
       </h2>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
+        <StatCard
+          icon={Banknote}
+          label="Faturamento"
+          value={fmtBRL(d.mes.faturamento)}
+          info={
+            d.mes.viagensPrecificadas < d.mes.viagens
+              ? `${d.mes.viagens - d.mes.viagensPrecificadas} viagem(ns) deste mês ainda estão sem preço. Cadastre a tabela de preços da empresa pra elas entrarem na conta.`
+              : "Soma do valor de todas as viagens deste mês, já com o mínimo por faixa aplicado."
+          }
+          tone="default"
+        />
         <StatCard
           icon={Truck}
           label="Viagens"

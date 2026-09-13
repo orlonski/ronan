@@ -96,6 +96,21 @@ export class RelatoriosController {
     return this.abastecimentos.resumo(query, user.escopo);
   }
 
+  /**
+   * Consumo (km/l) e custo por km, por veículo. Usa o mesmo filtro de período e
+   * frota do relatório de abastecimentos.
+   */
+  @EscopoPor("abastecimento")
+  @RequerPermissao("relatorios.ver")
+  @Get("consumo")
+  consumo(
+    @Query(new ZodValidationPipe(RelatorioAbastecimentosQuery))
+    query: RelatorioAbastecimentosQuery,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.abastecimentos.consumoPorVeiculo(query, user.escopo);
+  }
+
   @EscopoPor("abastecimento")
   @RequerPermissao("relatorios.exportar")
   @Get("abastecimentos/exportar")

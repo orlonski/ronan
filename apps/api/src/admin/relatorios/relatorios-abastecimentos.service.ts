@@ -10,6 +10,7 @@ import {
   type TotaisRelatorioAbastecimentos,
 } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
+import { calcularConsumo, CONSUMO_MOTIVO_TEXTO } from "../../common/consumo";
 import type { EscopoAdmin } from "../../common/escopo/escopo";
 import { comEscopo } from "../../common/escopo/escopo";
 import { inicioDoDiaBR } from "../../common/timezone";
@@ -114,6 +115,97 @@ export class RelatoriosAbastecimentosService {
     if (f.posto) base.postoNome = { equals: f.posto, mode: "insensitive" };
 
     return comEscopo(base, escopo) as Prisma.AbastecimentoWhereInput;
+  }
+
+  /**
+   * Consumo médio (km/l) por veículo, tanque a tanque.
+   *
+   * O `odometro` e o `tanqueCheio` já eram gravados em todo abastecimento e
+   * nunca eram lidos por nada — dava pra responder "quanto meu caminhão faz por
+   * litro?" desde sempre e o painel não respondia. A conta em si mora em
+   * `common/consumo.ts`, com teste.
+   *
+   * Ignora o filtro de posto e de tipo: consumo é do VEÍCULO no período, e
+   * recortar por posto partiria o intervalo entre dois cheios no meio, que é
+   * justamente o que torna a medição válida.
+   */
+  async consumoPorVeiculo(f: RelatorioAbastecimentosFiltros, escopo: EscopoAdmin) {
+    const where = this.montarWhere({ ...f, posto: undefined, tipo: undefined }, escopo);
+
+    const linhas = await this.prisma.abastecimento.findMany({
+      where,
+      select: {
+        id: true,
+        data: true,
+        odometro: true,
+        litros: true,
+        tanqueCheio: true,
+        emComboio: true,
+        valorTotal: true,
+        veiculo: { select: { id: true, placa: true, modelo: true } },
+      },
+      orderBy: { data: "asc" },
+    });
+
+    const porVeiculo = new Map<string, typeof linhas>();
+    for (const l of linhas) {
+      if (!l.veiculo) continue;
+      const atual = porVeiculo.get(l.veiculo.id) ?? [];
+      atual.push(l);
+      porVeiculo.set(l.veiculo.id, atual);
+    }
+
+    const veiculos = [...porVeiculo.entries()].map(([veiculoId, abs]) => {
+      const consumo = calcularConsumo(
+        abs.map((a) => ({
+          id: a.id,
+          data: a.data,
+          odometro: a.odometro != null ? Number(a.odometro) : null,
+          litros: Number(a.litros),
+          tanqueCheio: a.tanqueCheio,
+          emComboio: a.emComboio,
+        })),
+      );
+      const gasto = abs.reduce((s, a) => s + Number(a.valorTotal ?? 0), 0);
+      return {
+        veiculoId,
+        placa: abs[0]!.veiculo!.placa,
+        modelo: abs[0]!.veiculo!.modelo,
+        abastecimentos: abs.length,
+        kmPorLitro: consumo.kmPorLitro,
+        kmRodados: consumo.kmTotal,
+        litros: consumo.litrosTotal,
+        gasto: gasto.toFixed(2),
+        // Custo por km só existe quando o consumo existe: sem km medido, dividir
+        // o gasto por nada daria um número inventado.
+        custoPorKm: consumo.kmTotal > 0 ? (gasto / consumo.kmTotal).toFixed(2) : null,
+        trechos: consumo.trechos.length,
+        motivo: consumo.motivo ? CONSUMO_MOTIVO_TEXTO[consumo.motivo] : null,
+      };
+    });
+
+    // Pior consumo primeiro: é onde o dinheiro está vazando, e é o que o gestor
+    // abre a tela pra ver. Quem não deu pra medir vai pro fim, não pro topo.
+    veiculos.sort((a, b) => {
+      if (a.kmPorLitro == null) return 1;
+      if (b.kmPorLitro == null) return -1;
+      return a.kmPorLitro - b.kmPorLitro;
+    });
+
+    const medidos = veiculos.filter((v) => v.kmPorLitro != null);
+    const kmFrota = medidos.reduce((s, v) => s + v.kmRodados, 0);
+    const litrosFrota = medidos.reduce((s, v) => s + v.litros, 0);
+
+    return {
+      veiculos,
+      frota: {
+        veiculosMedidos: medidos.length,
+        veiculosSemMedicao: veiculos.length - medidos.length,
+        kmPorLitro: litrosFrota > 0 ? Number((kmFrota / litrosFrota).toFixed(2)) : null,
+        kmRodados: kmFrota,
+        litros: Number(litrosFrota.toFixed(2)),
+      },
+    };
   }
 
   async resumo(

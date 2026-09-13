@@ -42,7 +42,38 @@ type Props = {
   regraMinimo?: RegraMinimo | null;
   /** Null quando o modo de serviço não exige material (diária à disposição). */
   materialNome: string | null;
+  /**
+   * Quanto a viagem vale. Ausente pra quem não tem `viagens.ver-comercial` (o
+   * backend omite do payload), e null quando a empresa ainda não tem preço
+   * cadastrado — os dois casos aparecem diferente na tela.
+   */
+  valor?: {
+    base: "TONELADA" | "KM" | "VIAGEM" | "PERIODO";
+    precoUnitario: string;
+    quantidade: string;
+    valorFrete: string;
+    valorPedagio: string;
+    valorTotal: string;
+    alteracaoMotivo: string | null;
+    alteradoPor?: { nome: string } | null;
+  } | null;
+  /** true = o usuário tem a chave comercial. Separa "sem preço" de "sem acesso". */
+  podeVerValor?: boolean;
 };
+
+const BASE_UNIDADE: Record<string, string> = {
+  TONELADA: "por tonelada",
+  KM: "por km",
+  VIAGEM: "por viagem",
+  PERIODO: "por diária",
+};
+
+function brl(v: string): string {
+  const n = Number(v);
+  return Number.isFinite(n)
+    ? n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+    : v;
+}
 
 /**
  * Conta a história do km/toneladas em tiles claros. O normal é o motorista
@@ -72,6 +103,52 @@ export function FaturamentoCard(p: Props) {
       <h3 className="mb-4 flex items-center gap-2 text-base font-medium">
         <TrendingUp className="h-4 w-4" /> Km e faturamento
       </h3>
+
+      {/* --- VALOR --- O card se chamava "Faturamento" e não mostrava dinheiro
+          nenhum: só km e tonelada. Agora mostra, e vem primeiro, porque é a
+          pergunta que o dono da transportadora faz olhando uma viagem. */}
+      {p.podeVerValor !== false && (
+        <div className="mb-3">
+          {p.valor ? (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <span className="text-xs font-medium uppercase tracking-wide text-emerald-800">
+                  Valor da viagem
+                </span>
+                <span className="text-xl font-bold tabular-nums text-emerald-900">
+                  {brl(p.valor.valorTotal)}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-emerald-900/80">
+                {brl(p.valor.precoUnitario)} {BASE_UNIDADE[p.valor.base] ?? ""}
+                {p.valor.base === "TONELADA" || p.valor.base === "KM"
+                  ? ` × ${fmtNum(p.valor.quantidade, 2)} ${p.valor.base === "TONELADA" ? "t" : "km"} faturados`
+                  : ""}
+                {Number(p.valor.valorPedagio) > 0
+                  ? ` · pedágio ${brl(p.valor.valorPedagio)} por fora`
+                  : ""}
+              </p>
+              {p.valor.alteracaoMotivo && (
+                <p className="mt-2 border-t border-emerald-200 pt-2 text-xs text-emerald-900">
+                  <span className="font-semibold">
+                    Valor alterado no painel
+                    {p.valor.alteradoPor?.nome ? ` por ${p.valor.alteradoPor.nome}` : ""}:
+                  </span>{" "}
+                  {p.valor.alteracaoMotivo}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-muted-foreground/30 p-3 text-xs text-muted-foreground">
+              Sem valor: não há preço cadastrado que sirva pra esta viagem. Cadastre em{" "}
+              <a href="/tabelas-preco" className="underline">
+                Tabela de preços
+              </a>
+              .
+            </div>
+          )}
+        </div>
+      )}
 
       {/* --- KM --- (Faturado só quando o mínimo elevou) */}
       <div className={`grid gap-2 ${p.kmAjustada ? "grid-cols-3" : "grid-cols-2"}`}>

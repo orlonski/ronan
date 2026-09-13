@@ -89,6 +89,20 @@ import { EscolherRotaModal } from "./_components/escolher-rota-modal";
 import { CompartilharViagemModal } from "./_components/compartilhar-modal";
 
 type ViagemDetalhe = {
+  /**
+   * Valor da viagem. `undefined` = o backend omitiu (sem `viagens.ver-comercial`);
+   * `null` = não há preço cadastrado que sirva. A tela trata os dois diferente.
+   */
+  valor?: {
+    base: "TONELADA" | "KM" | "VIAGEM" | "PERIODO";
+    precoUnitario: string;
+    quantidade: string;
+    valorFrete: string;
+    valorPedagio: string;
+    valorTotal: string;
+    alteracaoMotivo: string | null;
+    alteradoPor?: { nome: string } | null;
+  } | null;
   id: string;
   data: string;
   toneladas: string;
@@ -839,6 +853,11 @@ export default function ViagemDetalhePage({
           <div className="grid gap-4 lg:grid-cols-3">
             <div className="flex flex-col gap-4 lg:col-span-2">
               <FaturamentoCard
+                valor={v.valor ?? null}
+                // `kmEfetivo` só vem pra quem tem a chave comercial — usamos ele
+                // como sinal pra não mostrar "sem preço cadastrado" a quem, na
+                // verdade, não pode ver preço nenhum.
+                podeVerValor={v.kmEfetivo !== undefined}
                 kmCalculado={v.kmCalculado}
                 kmInformado={v.kmInformado}
                 kmEfetivo={v.kmEfetivo}
