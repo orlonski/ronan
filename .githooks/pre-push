@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+#
+# Impede o atropelamento de build no Easypanel.
+#
+# Cada push na main dispara build de api + dashboard + PWA, e um push novo
+# CANCELA o que estiver rodando — deixando o serviço amarelo pra sempre, sem
+# tentar de novo sozinho. Em 13/09/2026 foram seis pushes em 28 minutos e o dono
+# do produto teve que clicar em Implantar à mão três vezes.
+#
+# A regra é: commitar quantas vezes quiser, PUSHAR uma vez por bloco. `git push`
+# manda todos os commits pendentes de uma vez — a granularidade do histórico
+# nunca dependeu da frequência do push.
+#
+# Este hook é o mecanismo, não o lembrete: ele bloqueia o segundo push enquanto
+# o build do primeiro não tiver subido um container novo.
+#
+# Emergência: PUSH_MESMO_ASSIM=1 git push
+set -euo pipefail
+
+branch=$(git rev-parse --abbrev-ref HEAD)
+[ "$branch" = "main" ] || exit 0
+[ "${PUSH_MESMO_ASSIM:-}" = "1" ] && exit 0
+
+marcador="$(git rev-parse --git-dir)/ultimo-deploy-visto"
+api="${API_URL:-https://api.schaba.com.br}"
+
+atual=$(curl -fsS --max-time 10 "$api/health" 2>/dev/null \
+  | sed -n 's/.*"iniciadoEm":"\([^"]*\)".*/\1/p' || true)
+
+# Sem resposta não se bloqueia nada: rede ruim não é build rodando, e travar o
+# push por causa de um blip seria pior que o problema que isto resolve.
+if [ -z "$atual" ]; then
+  echo "pre-push: API fora de alcance — seguindo sem conferir o deploy."
+  exit 0
+fi
+
+if [ -f "$marcador" ] && [ "$(cat "$marcador")" = "$atual" ]; then
+  cat <<MSG
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │  PUSH BLOQUEADO — o build anterior ainda não subiu           │
+  └─────────────────────────────────────────────────────────────┘
+
+  O container no ar é o mesmo de antes do seu último push, então o
+  build dele ainda está rodando (ou morreu). Pushar agora CANCELA
+  esse build e deixa o serviço amarelo no Easypanel.
+
+  Container no ar desde: $atual
+
+  O que fazer:
+    • esperar o build fechar e pushar de novo (é o caminho normal);
+    • ou juntar este commit ao bloco e mandar tudo num push só.
+
+  Se for emergência mesmo:  PUSH_MESMO_ASSIM=1 git push
+
+MSG
+  exit 1
+fi
+
+echo "$atual" > "$marcador"
+exit 0

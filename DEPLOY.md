@@ -298,3 +298,36 @@ A API roda `prisma migrate deploy` automaticamente no `CMD` do container (ver `a
 - O MiniMax é fornecedor externo com API compatível com a da Anthropic. A
   segunda opinião (`CONFERENCIA_MODELO_2A_OPINIAO`) segue no Claude
   independentemente do que a empresa escolher.
+
+## Por que o build fica amarelo (e o que impede isso)
+
+Cada `git push` na `main` dispara build de api + dashboard + PWA. **Um push novo
+CANCELA o build que estiver rodando**, e o cancelado fica amarelo pra sempre, sem
+tentar de novo sozinho. O log termina em `CANCELED` / `context canceled` — que é
+fácil confundir com erro de compilação, mas não é: build quebrado de verdade mostra
+o erro do compilador, e demora o tempo de compilar.
+
+**A regra: commitar quantas vezes quiser, PUSHAR uma vez por bloco.** `git push`
+manda todos os commits pendentes de uma vez — seis commits e um push produzem
+exatamente o mesmo histórico que seis pushes, e um build em vez de seis. A
+granularidade do histórico nunca dependeu da frequência do push.
+
+Isso não depende de ninguém lembrar: `.githooks/pre-push` bloqueia o segundo push
+enquanto o build do primeiro não tiver subido um container novo (compara o
+`iniciadoEm` do `/health` com o do push anterior). Ele se cala quando a API está
+fora de alcance — rede ruim não é build rodando. Emergência:
+`PUSH_MESMO_ASSIM=1 git push`.
+
+O hook vive no repositório, então vale pra qualquer clone depois de:
+
+```bash
+git config core.hooksPath .githooks     # uma vez por clone
+```
+
+**Diagnóstico:** `node scripts/deploy-status.mjs` diz o que está no ar — migration
+aplicada e há quanto tempo o container subiu. Serve porque os serviços seguem
+verdes e respondendo 200 mesmo com o build morto: o Easypanel não derruba o
+container antigo, e a cor da tela não responde "minha última mudança subiu?".
+
+**Amarelo preso conserta** clicando em **Implantar** no serviço — sem commit novo,
+ele rebuilda o HEAD atual. Um serviço de cada vez, senão um atropela o outro de novo.
