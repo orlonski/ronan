@@ -5705,6 +5705,27 @@ model CobrancaAssinatura {
   /// que isso não é cobrança, é perturbação — e a decisão de cortar é humana.
   avisosAtraso  Int       @default(0)
 
+  /// Quando o cliente CONTESTOU esta cobrança no cartão (chargeback).
+  ///
+  /// Guardado à parte do status porque contestação e estorno não são a mesma
+  /// coisa, embora o gateway devolva os dois como "estornado":
+  ///
+  /// - **estorno** é você devolvendo o dinheiro (cliente cancelou, houve erro).
+  ///   Não se cobra de novo.
+  /// - **contestação** é o cliente pedindo o dinheiro de volta à bandeira. O
+  ///   valor sai da sua conta e a mensalidade daquele mês continua devida — mas
+  ///   há uma disputa formal em curso.
+  ///
+  /// O sistema NUNCA volta a cobrar sozinho uma cobrança contestada. Cobrar
+  /// automaticamente quem contestou é disparar cobrança contra alguém em
+  /// disputa, e se a contestação for legítima isso é cobrança indevida. Quem
+  /// decide é uma pessoa, com o contexto que o sistema não tem — e a decisão
+  /// fica registrada com autor e motivo.
+  ///
+  /// O que o sistema faz é não deixar passar em branco: a assinatura aparece
+  /// sinalizada na tela até alguém olhar.
+  contestadaEm DateTime?
+
   /// Esta é a mensalidade paga no QR inicial do Pix Automático.
   ///
   /// Existe porque aquele pagamento é invisível pelos caminhos normais: ele

@@ -189,6 +189,12 @@ export class EventosGatewayService {
           // onde pararam — o cliente não tem culpa do estorno.
           avisosAtraso: pago ? 0 : undefined,
           avisoAtrasoEm: pago ? null : undefined,
+          // Contestação é diferente de estorno, ainda que o gateway devolva os
+          // dois como "estornado". Carimbar aqui é o que permite a tela
+          // sinalizar — e é o que impede o caso sumir em silêncio, que era o
+          // que acontecia: o dinheiro saía da conta e a assinatura continuava
+          // "ativa, nada em aberto".
+          contestadaEm: ehContestacao(pagamento.status) ? new Date() : undefined,
         },
       }),
     );
@@ -544,4 +550,21 @@ export function extrairAutorizacao(payload: unknown): { id?: string; status?: st
 /** "R$ 1.890,00" — só pra mensagem de log ficar legível por gente. */
 function formatarValor(reais: number): string {
   return reais.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+/**
+ * Este status é o cliente CONTESTANDO, não você devolvendo?
+ *
+ * A diferença decide o que o sistema faz. Estorno é devolução intencional e
+ * encerra o assunto; contestação é uma disputa em curso em que o dinheiro saiu
+ * da sua conta e a mensalidade continua devida — mas que ninguém deve cobrar
+ * automaticamente, porque cobrar quem contestou é cobrança contra alguém em
+ * disputa formal.
+ */
+export function ehContestacao(status: string): boolean {
+  return (
+    status === "CHARGEBACK_REQUESTED" ||
+    status === "CHARGEBACK_DISPUTE" ||
+    status === "AWAITING_CHARGEBACK_REVERSAL"
+  );
 }

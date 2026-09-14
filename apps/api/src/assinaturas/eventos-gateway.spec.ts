@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { EventosGatewayService, extrairAutorizacao } from "./eventos-gateway.service";
+import { EventosGatewayService, ehContestacao, extrairAutorizacao } from "./eventos-gateway.service";
+import { acaoDaRegua, statusDoGateway } from "../common/assinatura-cobranca";
 
 /**
  * O evento de autorização de Pix Automático, como ele chega.
@@ -367,5 +368,41 @@ describe("o alarme sabe a diferença entre perdido e a caminho", () => {
     const r = await s.receber("ev2", "PAYMENT_RECEIVED", pagamentoRecebido);
     expect(r.status).toBe("falhou");
     expect(String(erros[0])).toMatch(/sem assinatura/i);
+  });
+});
+
+describe("contestação não é estorno, e não pode sumir", () => {
+  it("chargeback é contestação; estorno comum não é", () => {
+    // A diferença decide o que o sistema faz: contestação é disputa com o
+    // dinheiro fora da conta; estorno é devolução intencional e encerra o
+    // assunto. O gateway devolve os dois como "estornado".
+    expect(ehContestacao("CHARGEBACK_REQUESTED")).toBe(true);
+    expect(ehContestacao("CHARGEBACK_DISPUTE")).toBe(true);
+    expect(ehContestacao("AWAITING_CHARGEBACK_REVERSAL")).toBe(true);
+
+    expect(ehContestacao("REFUNDED")).toBe(false);
+    expect(ehContestacao("PARTIALLY_REFUNDED")).toBe(false);
+    expect(ehContestacao("RECEIVED")).toBe(false);
+  });
+
+  it("os dois continuam virando ESTORNADA no status — o que muda é o carimbo", () => {
+    // Se um dia alguém "simplificar" isto tratando contestação como status
+    // próprio, a régua para de ignorá-la e volta a cobrar quem contestou.
+    expect(statusDoGateway("CHARGEBACK_REQUESTED")).toBe("ESTORNADA");
+    expect(statusDoGateway("REFUNDED")).toBe("ESTORNADA");
+  });
+
+  it("a régua NUNCA cobra uma cobrança estornada ou contestada", () => {
+    const r = acaoDaRegua(
+      {
+        status: "ESTORNADA",
+        vencimento: new Date(Date.UTC(2026, 8, 10)),
+        avisoAbertaEm: null,
+        avisoAtrasoEm: null,
+        avisosAtraso: 0,
+      },
+      new Date(Date.UTC(2026, 9, 30, 15)),
+    );
+    expect(r.tipo).toBe("NADA");
   });
 });

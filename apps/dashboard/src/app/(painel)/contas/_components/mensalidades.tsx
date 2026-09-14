@@ -47,6 +47,8 @@ type Assinatura = {
   taxaPorCobrancaCentavos: number;
   conta: { id: string; nome: string; slug: string; ativa: boolean; somenteLeitura: boolean };
   emAberto: { quantidade: number; totalCentavos: number; diasDeAtraso: number | null };
+  /** Cobranças que o cliente contestou no cartão. Disputa, não dívida. */
+  contestadas: { quantidade: number; totalCentavos: number };
 };
 
 type Cobranca = {
@@ -219,6 +221,16 @@ export function Mensalidades({ contas }: { contas: ContaResumo[] }) {
                       {a.emAberto.diasDeAtraso !== null && a.emAberto.diasDeAtraso > 0 && (
                         <> · {a.emAberto.diasDeAtraso} dia(s)</>
                       )}
+                    </span>
+                  )}
+                  {/* Contestação fica em ROXO, não no vermelho de dívida: não é
+                      o cliente devendo, é dinheiro que saiu da conta e está em
+                      disputa. A cor separada existe pra ninguém tratar isso
+                      como cobrança atrasada e sair cobrando. */}
+                  {a.contestadas.quantidade > 0 && (
+                    <span className="flex items-center gap-1 rounded bg-purple-500/10 px-2 py-0.5 text-xs text-purple-700 dark:text-purple-400">
+                      <AlertTriangle className="h-3 w-3" />
+                      {reais(a.contestadas.totalCentavos)} contestado{a.contestadas.quantidade > 1 ? "s" : ""} no cartão
                     </span>
                   )}
                 </div>
@@ -689,6 +701,23 @@ function DialogCobrancas({
             >
               Copiar
             </Button>
+          </div>
+        )}
+
+        {/* Contestação aberta: o que a pessoa precisa saber ANTES de agir. A
+            tentação é cobrar de novo, e é justamente o que não se faz com quem
+            abriu disputa formal. */}
+        {assinatura.contestadas.quantidade > 0 && (
+          <div className="rounded border border-purple-500/40 bg-purple-500/5 p-3">
+            <p className="text-sm font-medium">
+              O cliente contestou {reais(assinatura.contestadas.totalCentavos)} no cartão
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              O valor saiu da conta e há uma disputa em curso na bandeira. O sistema não cobra de
+              novo sozinho — e não deve: cobrar quem contestou é cobrança contra alguém em disputa.
+              Veja o motivo com o cliente antes de decidir. Se o acerto for pagar de outro jeito,
+              use &ldquo;Dar baixa&rdquo; com o motivo escrito.
+            </p>
           </div>
         )}
 

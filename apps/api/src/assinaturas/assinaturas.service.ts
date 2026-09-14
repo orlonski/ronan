@@ -63,7 +63,13 @@ export class AssinaturasService {
         include: {
           conta: { select: { id: true, nome: true, slug: true, ativa: true, somenteLeitura: true } },
           cobrancas: {
-            where: { status: { in: ["PENDENTE", "VENCIDA"] } },
+            // Em aberto OU contestada: as duas coisas precisam ser vistas. Uma
+            // contestação não é dívida do cliente, é dinheiro que saiu da conta
+            // e está em disputa — e some da tela se a gente olhar só o que está
+            // "em aberto".
+            where: {
+              OR: [{ status: { in: ["PENDENTE", "VENCIDA"] } }, { contestadaEm: { not: null } }],
+            },
             orderBy: { vencimento: "asc" },
           },
         },
@@ -73,7 +79,10 @@ export class AssinaturasService {
 
     const hoje = new Date();
     return assinaturas.map((a) => {
-      const emAberto = a.cobrancas;
+      const contestadas = a.cobrancas.filter((c) => c.contestadaEm !== null);
+      const emAberto = a.cobrancas.filter(
+        (c) => c.contestadaEm === null && (c.status === "PENDENTE" || c.status === "VENCIDA"),
+      );
       const maisAntiga = emAberto[0];
       return {
         ...this.paraTela(a),
@@ -83,6 +92,17 @@ export class AssinaturasService {
           totalCentavos: emAberto.reduce((s, c) => s + c.valorCentavos, 0),
           /** Dias de atraso da mais antiga. Negativo = ainda não venceu. */
           diasDeAtraso: maisAntiga ? diasDeAtraso(maisAntiga.vencimento, hoje) : null,
+        },
+        /**
+         * Cobranças que o cliente contestou no cartão.
+         *
+         * Separadas do "em aberto" de propósito: não são dívida a cobrar, são
+         * disputa a resolver. Misturar as duas faria a tela pedir cobrança
+         * automática de quem contestou — que é exatamente o que não se faz.
+         */
+        contestadas: {
+          quantidade: contestadas.length,
+          totalCentavos: contestadas.reduce((s, c) => s + c.valorCentavos, 0),
         },
       };
     });
