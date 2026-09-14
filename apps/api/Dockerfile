@@ -38,6 +38,10 @@ COPY --from=build /repo/node_modules              ./node_modules
 COPY --from=build /repo/packages/shared-types     ./packages/shared-types
 COPY --from=build /repo/apps/api/dist             ./apps/api/dist
 COPY --from=build /repo/apps/api/prisma           ./apps/api/prisma
+# Os XSD oficiais do CT-e. Não são código, então nenhum passo de build os leva
+# junto — e sem eles a validação de leiaute quebra com ENOENT na primeira
+# emissão, em produção, que é o pior lugar pra descobrir.
+COPY --from=build /repo/apps/api/schemas          ./apps/api/schemas
 COPY --from=build /repo/apps/api/package.json     ./apps/api/
 COPY --from=build /repo/apps/api/node_modules     ./apps/api/node_modules
 

@@ -1,0 +1,5 @@
+
+# Os XSD vêm do pacote oficial da SEFAZ com CRLF. Normalizar mudaria os bytes e
+# quebraria a conferência contra o pacote publicado — o valor deles é serem
+# idênticos ao original, não arrumados.
+*.xsd -text

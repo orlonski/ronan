@@ -18,6 +18,8 @@ type Achado = { campo: string; mensagem: string };
 
 type Previa = {
   validacao: { ok: boolean; erros: Achado[]; avisos: Achado[] };
+  /** Erros de LEIAUTE, do XSD oficial da SEFAZ. Diferente das regras acima. */
+  leiaute: { mensagem: string; linha?: number }[];
   numeroPrevisto: number;
   ambiente: number;
   emissor: string;
@@ -244,6 +246,23 @@ export function PainelCte({ viagemId }: { viagemId: string }) {
 
       {/* Aviso não trava: o documento sai, e alguém reclama depois. Dizer isso
           antes é o que permite decidir conscientemente. */}
+      {/* Leiaute é outra conversa: as regras acima são do negócio (falta o
+          CNPJ do destinatário), estas são do documento (o nome passou de 60
+          caracteres). Misturar as duas listas faria o usuário procurar no
+          cadastro errado. */}
+      {!vivo && (previa.data?.leiaute.length ?? 0) > 0 && (
+        <div className="space-y-1 rounded-md border border-destructive/40 bg-destructive/5 p-3">
+          <p className="text-sm font-medium text-destructive">
+            O documento não fecha com o leiaute oficial da SEFAZ:
+          </p>
+          <ul className="ml-5 list-disc space-y-0.5 text-sm text-destructive">
+            {previa.data!.leiaute.map((e, i) => (
+              <li key={i}>{e.mensagem}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {!vivo && previa.data && previa.data.validacao.avisos.length > 0 && (
         <ul className="ml-5 list-disc space-y-0.5 text-sm text-muted-foreground">
           {previa.data.validacao.avisos.map((a, i) => (
@@ -252,7 +271,7 @@ export function PainelCte({ viagemId }: { viagemId: string }) {
         </ul>
       )}
 
-      {!vivo && previa.data?.validacao.ok && (
+      {!vivo && previa.data?.validacao.ok && previa.data.leiaute.length === 0 && (
         <div className="flex flex-wrap items-center gap-3">
           <Permitido chave="cte.emitir">
             <Button

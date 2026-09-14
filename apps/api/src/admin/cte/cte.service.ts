@@ -15,6 +15,8 @@ import {
   type ResponsavelTecnico,
 } from "../../common/cte/montar";
 import { validarCte, type Validacao } from "../../common/cte/validar";
+import { gerarXmlCte } from "../../common/cte/xml";
+import { validarContraXsd, type ErroXsd } from "../../common/cte/xsd";
 import { GatewayCte, SimuladorCte, type EmissorCte } from "./emissor";
 import { MODELO_CTE } from "../../common/cte/chave";
 
@@ -303,6 +305,7 @@ export class CteService {
   /** Monta e valida SEM consumir número nem gravar nada. */
   async previa(viagemId: string): Promise<{
     validacao: Validacao;
+    leiaute: ErroXsd[];
     numeroPrevisto: number;
     ambiente: number;
     emissor: string;
@@ -310,14 +313,24 @@ export class CteService {
   }> {
     const { entrada } = await this.montarEntrada(viagemId);
     const validacao = validarCte(entrada);
+
+    // Só monta se as regras passaram: montar com dado faltando lançaria antes
+    // de a tela conseguir mostrar a lista de pendências, que é o que o usuário
+    // precisa ver.
+    const cte = validacao.ok ? montarCte(entrada) : null;
+
+    // E aí o leiaute, contra o XSD oficial. As regras de cima são as do
+    // negócio; esta é a do documento — tamanho de campo, enumeração, ordem.
+    // Uma passa sem a outra, e as duas precisam passar.
+    const leiaute = cte ? (await validarContraXsd(gerarXmlCte(cte))).erros : [];
+
     return {
       validacao,
+      leiaute,
       numeroPrevisto: entrada.numero,
       ambiente: entrada.ambiente,
       emissor: await this.nomeDoEmissor(),
-      // Só monta se passou: montar com dado faltando lançaria antes de a tela
-      // conseguir mostrar a lista de pendências, que é o que o usuário precisa.
-      cte: validacao.ok ? montarCte(entrada) : null,
+      cte,
     };
   }
 
@@ -373,6 +386,17 @@ export class CteService {
     // deliberado: num timeout não dá pra saber se o documento chegou à SEFAZ, e
     // reaproveitar o número correria o risco de duplicar um CT-e autorizado —
     // muito pior que um buraco na numeração, que se justifica com um relatório.
+    // O leiaute é conferido com o número que SERÁ usado: a chave entra no XML e
+    // no atributo Id, e validar com outro número não provaria o documento real.
+    // Roda antes de consumir, com o número espiado.
+    const leiaute = await validarContraXsd(gerarXmlCte(montarCte(entrada)));
+    if (!leiaute.ok) {
+      throw new BadRequestException({
+        message: "O CT-e não fecha com o leiaute oficial da SEFAZ.",
+        pendencias: leiaute.erros.map((e) => ({ campo: "leiaute", mensagem: e.mensagem })),
+      });
+    }
+
     const numero = await this.consumirNumero(conta.id, MODELO_CTE, entrada.config.serie);
     const cte = montarCte({ ...entrada, numero });
 
@@ -387,6 +411,9 @@ export class CteService {
         emissor: await this.nomeDoEmissor(),
         status: "ENVIADO",
         payload: cte as unknown as Prisma.InputJsonValue,
+        // O XML é guardado desde o rascunho: é ele que foi (ou seria) assinado,
+        // e sem ele uma rejeição vira discussão sobre o que foi mandado.
+        xml: gerarXmlCte(cte),
         criadoPorId: usuarioId,
       },
     });

@@ -173,7 +173,16 @@ export type CteMontado = {
 
 const dec = (n: number, casas: number) => n.toFixed(casas);
 
-function enderecoXml(e: Endereco, prefixoCep = true) {
+/**
+ * O endereço, na ordem do schema.
+ *
+ * São DOIS tipos diferentes e a diferença morde: `TEndereco` (remetente,
+ * destinatário, expedidor, recebedor, tomador) termina em `cPais`/`xPais`;
+ * `TEndeEmi` (só o emitente) não tem país nenhum e termina em `fone`. Mandar
+ * `cPais` no emitente é rejeição de leiaute, e é um erro que passa despercebido
+ * porque os dois blocos são visualmente idênticos.
+ */
+function enderecoXml(e: Endereco, tipo: "emitente" | "outros", fone?: string | null) {
   return {
     xLgr: e.logradouro,
     nro: e.numero,
@@ -181,10 +190,11 @@ function enderecoXml(e: Endereco, prefixoCep = true) {
     xBairro: e.bairro,
     cMun: e.codigoMunicipio,
     xMun: e.municipio,
-    ...(prefixoCep && e.cep ? { CEP: soDigitos(e.cep) } : {}),
+    ...(e.cep ? { CEP: soDigitos(e.cep) } : {}),
     UF: e.uf.toUpperCase(),
-    cPais: "1058",
-    xPais: "BRASIL",
+    ...(tipo === "emitente"
+      ? { ...(fone ? { fone: soDigitos(fone) } : {}) }
+      : { cPais: "1058", xPais: "BRASIL" }),
   };
 }
 
@@ -206,7 +216,7 @@ function participanteXml(p: Participante, chaveEndereco: string) {
     xNome: p.razaoSocial,
     ...(p.nomeFantasia ? { xFant: p.nomeFantasia } : {}),
     ...(p.telefone ? { fone: soDigitos(p.telefone) } : {}),
-    [chaveEndereco]: enderecoXml(p.endereco),
+    [chaveEndereco]: enderecoXml(p.endereco, "outros"),
     ...(p.email ? { email: p.email } : {}),
   };
 }
@@ -380,7 +390,7 @@ export function montarCte(e: EntradaCte): CteMontado {
         : {}),
       xNome: e.emitente.razaoSocial,
       ...(e.emitente.nomeFantasia ? { xFant: e.emitente.nomeFantasia } : {}),
-      enderEmit: enderecoXml(e.emitente.endereco),
+      enderEmit: enderecoXml(e.emitente.endereco, "emitente", e.emitente.telefone),
       CRT: e.emitente.crt,
     },
     rem: participanteXml(e.remetente, "enderReme"),
@@ -421,8 +431,11 @@ export function montarCte(e: EntradaCte): CteMontado {
               },
             ],
           },
+      // `versaoModal` é ATRIBUTO, não elemento: o `infModal` tem um único filho
+      // (`xs:any`), e pôr a versão como tag ocupava essa vaga — daí o `rodo`
+      // virar "elemento não esperado", que é uma mensagem que não ajuda nada.
       infModal: {
-        versaoModal: "4.00",
+        "@versaoModal": "4.00",
         rodo: { RNTRC: soDigitos(e.emitente.rntrc) },
       },
     },
