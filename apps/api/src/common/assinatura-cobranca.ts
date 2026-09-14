@@ -185,11 +185,11 @@ export function mensagemCobrancaAberta(dados: {
   const { nomeResponsavel, competenciaRotulo, valor, vencimento, link } = dados;
   return {
     texto:
-      `Olá, ${nomeResponsavel}! A mensalidade do Movatruck de ${competenciaRotulo} ` +
-      `está disponível.\n\n` +
+      `Olá, ${nomeResponsavel}. A mensalidade do Movatruck de ${competenciaRotulo} ` +
+      `está disponível para pagamento.\n\n` +
       `Valor: ${valor}\nVencimento: ${vencimento}\n\n` +
       `Para pagar: ${link}\n\n` +
-      `Se já pagou, pode ignorar esta mensagem.`,
+      `Se o pagamento já foi feito, desconsidere esta mensagem.`,
     params: [nomeResponsavel, competenciaRotulo, valor, vencimento, link, sufixoDoLink(link)],
   };
 }
@@ -220,13 +220,17 @@ export function mensagemAutorizacao(dados: {
     ? `Copie o código abaixo e pague pelo app do seu banco:\n\n${codigo}`
     : `Informe os dados do cartão neste link:\n\n${codigo}`;
 
+  // Mesmo tom transacional do template aprovado. O texto livre não passa pela
+  // análise da Meta, mas o cliente pode receber por qualquer um dos dois
+  // canais — e receber duas vozes diferentes da mesma empresa é estranho.
   return {
     texto:
-      `Olá, ${nomeResponsavel}! A assinatura do Movatruck da sua empresa está pronta.\n\n` +
-      `Falta autorizar a cobrança automática de ${valor} por mês — é uma vez só. ` +
-      `Depois disso as mensalidades caem sozinhas, sem boleto e sem QR Code todo mês.\n\n` +
+      `Olá, ${nomeResponsavel}. A assinatura do Movatruck da sua empresa foi criada.\n\n` +
+      `Para ativar a cobrança automática de ${valor} por mês, conclua o pagamento abaixo. ` +
+      `Esta autorização é feita uma única vez.\n\n` +
       `${comoPagar}\n\n` +
-      `Vencimento da primeira: ${vencimento}`,
+      `Vencimento da primeira mensalidade: ${vencimento}\n\n` +
+      `Qualquer dúvida, é só responder aqui.`,
     params: [nomeResponsavel, valor, vencimento, "", codigo, sufixoDoLink(codigo)],
   };
 }
@@ -245,9 +249,9 @@ export function mensagemCobrancaAtrasada(dados: {
     // que a mensalidade.
     texto:
       `Olá, ${nomeResponsavel}. A mensalidade do Movatruck de ${competenciaRotulo}, ` +
-      `de ${valor}, venceu em ${vencimento} e consta em aberto por aqui.\n\n` +
+      `no valor de ${valor}, venceu em ${vencimento} e consta em aberto.\n\n` +
       `Para pagar: ${link}\n\n` +
-      `Se o pagamento já saiu, me avise que eu confiro.`,
+      `Se o pagamento já foi feito, desconsidere esta mensagem.`,
     params: [nomeResponsavel, competenciaRotulo, valor, vencimento, link, sufixoDoLink(link)],
   };
 }

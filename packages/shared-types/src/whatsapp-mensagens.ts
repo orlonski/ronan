@@ -532,12 +532,12 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
     corpo: [0, 1, 2, 3],
     botao: { tipo: "URL", param: 5 },
     textoAprovacao: [
-      "Olá, {{1}}! A mensalidade do Movatruck de {{2}} está disponível.",
+      "Olá, {{1}}. A mensalidade do Movatruck de {{2}} está disponível para pagamento.",
       "",
       "Valor: {{3}}",
       "Vencimento: {{4}}",
       "",
-      "Se já pagou, pode ignorar esta mensagem.",
+      "Se o pagamento já foi feito, desconsidere esta mensagem.",
     ].join("\n"),
     exemplo: [
       "Marcos",
@@ -557,12 +557,18 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
     idioma: "pt_BR",
     corpo: [0, 1, 2],
     botao: { tipo: "URL", param: 5 },
+    // Tom TRANSACIONAL, não promocional. A primeira versão dizia "sem boleto e
+    // sem QR Code todo mês" e a Meta classificou como MARKETING, avisando que
+    // seria rejeitada — marketing custa mais, exige opt-in e não serve pra
+    // cobrança. Vender benefício aqui é o que derruba o template.
     textoAprovacao: [
-      "Olá, {{1}}! A assinatura do Movatruck da sua empresa está pronta.",
+      "Olá, {{1}}. A assinatura do Movatruck da sua empresa foi criada.",
       "",
-      "Falta você autorizar a cobrança automática de {{2}} por mês, pagando uma única vez pelo link abaixo. Depois disso as mensalidades caem sozinhas, sem boleto e sem QR Code todo mês.",
+      "Para ativar a cobrança automática de {{2}} por mês, conclua o pagamento pelo link abaixo. Esta autorização é feita uma única vez.",
       "",
-      "Vencimento da primeira: {{3}}",
+      "Vencimento da primeira mensalidade: {{3}}",
+      "",
+      "Qualquer dúvida, é só responder aqui.",
     ].join("\n"),
     exemplo: [
       "Marcos",
@@ -581,9 +587,9 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
     corpo: [0, 1, 2, 3],
     botao: { tipo: "URL", param: 5 },
     textoAprovacao: [
-      "Olá, {{1}}. A mensalidade do Movatruck de {{2}}, de {{3}}, venceu em {{4}} e consta em aberto por aqui.",
+      "Olá, {{1}}. A mensalidade do Movatruck de {{2}}, no valor de {{3}}, venceu em {{4}} e consta em aberto.",
       "",
-      "Se o pagamento já saiu, me avise que eu confiro.",
+      "Se o pagamento já foi feito, desconsidere esta mensagem.",
     ].join("\n"),
     exemplo: [
       "Marcos",
