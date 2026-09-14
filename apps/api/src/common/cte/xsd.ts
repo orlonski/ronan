@@ -51,14 +51,14 @@ export type ResultadoXsd = {
  * de enchimento. Ele NUNCA é transmitido: `gerarXmlCte` não o produz, e o
  * resultado acima diz em voz alta que a assinatura não foi conferida.
  */
-function esqueletoAssinatura(chave: string): string {
+function esqueletoAssinatura(id: string): string {
   const vazio = "AA==";
   return (
     `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">` +
     `<SignedInfo>` +
     `<CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>` +
     `<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>` +
-    `<Reference URI="#CTe${chave}">` +
+    `<Reference URI="#${id}">` +
     `<Transforms>` +
     `<Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>` +
     `<Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>` +
@@ -87,6 +87,9 @@ export const SCHEMA_DA_MENSAGEM = {
   statusServico: "consStatServCTe_v4.00.xsd",
   consultaCte: "consSitCTe_v4.00.xsd",
   evento: "eventoCTe_v4.00.xsd",
+  cancelamento: "evCancCTe_v4.00.xsd",
+  cartaCorrecao: "evCCeCTe_v4.00.xsd",
+  comprovanteEntrega: "evCECTe_v4.00.xsd",
 } as const;
 export type Mensagem = keyof typeof SCHEMA_DA_MENSAGEM;
 
@@ -125,6 +128,37 @@ function limparMensagem(m: unknown): string {
  * principal e declarar "passou no XSD" deixaria de fora justamente o grupo que
  * carrega o RNTRC — e a SEFAZ confere.
  */
+/**
+ * O `detEvento` de um evento, validado à parte.
+ *
+ * Mesma história do modal rodoviário: no envelope ele é `xs:any
+ * processContents="skip"`, então o conteúdo NÃO é conferido. Validar só o
+ * envelope e dizer "passou" deixaria de fora justamente o que o evento carrega.
+ */
+async function validarDetalheEvento(xml: string, pasta: string): Promise<ErroXsd[]> {
+  const tipos = [
+    ["evCancCTe", "evCancCTe_v4.00.xsd"],
+    ["evCCeCTe", "evCCeCTe_v4.00.xsd"],
+    ["evCECTe", "evCECTe_v4.00.xsd"],
+  ] as const;
+  const achado = tipos.find(([tag]) => xml.includes(`<${tag}`));
+  if (!achado) return [];
+  const [tag, schema] = achado;
+
+  const m = xml.match(new RegExp(`<${tag}[\\s\\S]*?<\\/${tag}>`));
+  if (!m) return [];
+  // Só o namespace: o detalhe do evento NÃO tem atributo `versao` (ele vive no
+  // `detEvento`, que é do envelope). Acrescentar aqui inventaria um erro.
+  const solto = m[0].replace(`<${tag}`, `<${tag} xmlns="http://www.portalfiscal.inf.br/cte"`);
+  const { preload } = carregar(pasta);
+  const r = await validateXML({
+    xml: [{ fileName: "det.xml", contents: `<?xml version="1.0" encoding="UTF-8"?>${solto}` }],
+    schema: [readFileSync(join(pasta, schema), "utf8")],
+    preload,
+  });
+  return r.valid ? [] : r.errors.map((e) => ({ mensagem: `${tag}: ${limparMensagem(e.message)}` }));
+}
+
 async function validarModal(xml: string, pasta: string): Promise<ErroXsd[]> {
   const m = xml.match(/<rodo>[\s\S]*?<\/rodo>/);
   if (!m) return [];
@@ -153,12 +187,16 @@ export async function validarContraXsd(
   const { preload } = carregar(pasta);
   const raiz = readFileSync(join(pasta, SCHEMA_DA_MENSAGEM[mensagem]), "utf8");
 
-  // Só o CT-e exige assinatura; as consultas não têm `Signature` nenhuma.
-  const jaAssinado = mensagem !== "cte" || xml.includes("<Signature");
+  // CT-e e EVENTO exigem assinatura; as consultas não têm `Signature` nenhuma.
+  const precisaAssinar = mensagem === "cte" || mensagem === "evento";
+  const jaAssinado = !precisaAssinar || xml.includes("<Signature");
   let paraValidar = xml;
   if (!jaAssinado) {
-    const chave = xml.match(/Id="CTe(\d{44})"/)?.[1] ?? "";
-    paraValidar = xml.replace("</CTe>", `${esqueletoAssinatura(chave)}</CTe>`);
+    // A referência aponta pro Id do próprio documento — `CTe...` no CT-e,
+    // `ID...` no evento.
+    const id = xml.match(/Id="((?:CTe|ID)\d+)"/)?.[1] ?? "";
+    const fecha = mensagem === "cte" ? "</CTe>" : "</eventoCTe>";
+    paraValidar = xml.replace(fecha, `${esqueletoAssinatura(id)}${fecha}`);
   }
 
   const [r, errosModal] = await Promise.all([
@@ -167,7 +205,11 @@ export async function validarContraXsd(
       schema: [raiz],
       preload,
     }),
-    mensagem === "cte" ? validarModal(xml, pasta) : Promise.resolve([]),
+    mensagem === "cte"
+      ? validarModal(xml, pasta)
+      : mensagem === "evento"
+        ? validarDetalheEvento(xml, pasta)
+        : Promise.resolve([]),
   ]);
 
   if (r.valid && errosModal.length === 0) {

@@ -89,17 +89,24 @@ function extrairCnpj(cert: forge.pki.Certificate): string | null {
 export type ResultadoAssinatura = { xml: string; assinadoEm: Date };
 
 /**
- * Assina o CT-e.
+ * Assina um documento fiscal do CT-e — o próprio CT-e ou um de seus eventos.
  *
- * A referência aponta pro `Id` do `infCte` (`#CTe` + 44 dígitos) — não pro
- * documento todo. É esse trecho que a SEFAZ confere, e é por isso que o `Id`
- * precisa estar exatamente igual nos dois lugares.
+ * A referência aponta pro `Id` do bloco assinável, não pro documento todo:
+ * `infCte` no CT-e (`Id="CTe"+44`) e `infEvento` no evento (`Id="ID"+53`). É
+ * esse trecho que a SEFAZ confere, e é por isso que o `Id` precisa estar
+ * exatamente igual nos dois lugares.
  *
- * A `<Signature>` entra como irmã do `infCte`, dentro do `CTe`.
+ * A `<Signature>` entra como irmã do bloco assinado.
+ *
+ * Um assinador só, e não dois: cancelamento, carta de correção e comprovante de
+ * entrega usam a mesma criptografia com os mesmos parâmetros fixos — duplicar
+ * daria duas chances de divergir num detalhe que só falha em produção.
  */
 export function assinarCte(xml: string, cert: Certificado): ResultadoAssinatura {
-  const id = xml.match(/Id="(CTe\d{44})"/)?.[1];
+  const id = xml.match(/Id="((?:CTe|ID)\d+)"/)?.[1];
   if (!id) throw new Error("O XML não tem o atributo Id do infCte — não há o que referenciar.");
+  // O bloco a assinar decorre do prefixo do Id.
+  const bloco = id.startsWith("CTe") ? "infCte" : "infEvento";
 
   const assinador = new SignedXml({
     privateKey: cert.chavePrivadaPem,
@@ -118,7 +125,7 @@ export function assinarCte(xml: string, cert: Certificado): ResultadoAssinatura 
   });
 
   assinador.computeSignature(xml, {
-    location: { reference: "//*[local-name(.)='infCte']", action: "after" },
+    location: { reference: `//*[local-name(.)='${bloco}']`, action: "after" },
   });
 
   return { xml: assinador.getSignedXml(), assinadoEm: new Date() };

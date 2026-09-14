@@ -201,6 +201,16 @@ export class ClienteSefaz {
     return this.chamar(uf, "CTeRecepcaoSincV4", ambiente, xmlAssinado, 60_000);
   }
 
+  /**
+   * Manda um evento (cancelamento, carta de correção, comprovante de entrega).
+   *
+   * Todos vão pelo MESMO endpoint e no mesmo envelope — o que os distingue é o
+   * `tpEvento` lá dentro.
+   */
+  async enviarEvento(uf: string, ambiente: Ambiente, xmlAssinado: string): Promise<RespostaSefaz> {
+    return this.chamar(uf, "CTeRecepcaoEventoV4", ambiente, xmlAssinado, 45_000);
+  }
+
   /** Consulta a situação de um CT-e pela chave. */
   async consultarCte(uf: string, ambiente: Ambiente, chave: string): Promise<RespostaSefaz> {
     const corpo =

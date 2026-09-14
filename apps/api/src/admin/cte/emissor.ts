@@ -3,6 +3,7 @@ import type { CteMontado } from "../../common/cte/montar";
 import { assinarCte, type Certificado } from "../../common/cte/assinatura";
 import { gerarXmlCte } from "../../common/cte/xml";
 import { ClienteSefaz } from "../../common/cte/sefaz";
+import { gerarCancelamento } from "../../common/cte/eventos";
 
 /**
  * Os três níveis de emissão são o MESMO código com um interruptor.
@@ -51,7 +52,17 @@ export type RespostaCancelamento =
 export interface EmissorCte {
   readonly nome: "SIMULADOR" | "GATEWAY" | "SEFAZ";
   emitir(cte: CteMontado, ambiente: 1 | 2): Promise<RespostaEmissao>;
-  cancelar(chave: string, justificativa: string, ambiente: 1 | 2): Promise<RespostaCancelamento>;
+  /**
+   * `protocolo` é o da autorização que está sendo desfeita. Está na interface
+   * porque quem fala direto com a SEFAZ precisa dele — e um gateway que não
+   * precise simplesmente o ignora.
+   */
+  cancelar(
+    chave: string,
+    justificativa: string,
+    ambiente: 1 | 2,
+    protocolo?: string,
+  ): Promise<RespostaCancelamento>;
 }
 
 // ---------------------------------------------------------------------------
@@ -351,16 +362,62 @@ export class SefazDireto implements EmissorCte {
     };
   }
 
-  async cancelar(): Promise<RespostaCancelamento> {
-    // O cancelamento é um EVENTO (110111), com XML e assinatura próprios. Ele
-    // entra em seguida; declarar aqui que ainda não existe é melhor que uma
-    // implementação pela metade que parece funcionar.
-    return {
-      situacao: "ERRO",
-      motivo:
-        "O cancelamento direto na SEFAZ ainda não foi implementado — ele é um evento à parte, com XML próprio.",
-      cru: null,
-    };
+  /**
+   * Cancela — que é um EVENTO (110111), não uma operação sobre o CT-e.
+   *
+   * Um CT-e autorizado não se apaga: o que existe é um documento novo, assinado
+   * à parte, que se pendura na chave. Por isso ele precisa do PROTOCOLO da
+   * autorização que está desfazendo, e não só da chave.
+   */
+  async cancelar(
+    chave: string,
+    justificativa: string,
+    ambiente: 1 | 2,
+    protocolo?: string,
+  ): Promise<RespostaCancelamento> {
+    if (!protocolo) {
+      return {
+        situacao: "ERRO",
+        motivo: "Sem o protocolo da autorização não dá pra cancelar — é ele que a SEFAZ confere.",
+        cru: null,
+      };
+    }
+
+    let assinado: string;
+    try {
+      const { xml } = gerarCancelamento({
+        chave,
+        cnpjEmitente: this.cert.cnpj ?? "",
+        uf: this.uf,
+        ambiente,
+        protocolo,
+        justificativa,
+      });
+      assinado = assinarCte(xml, this.cert).xml;
+    } catch (e) {
+      return { situacao: "ERRO", motivo: (e as Error).message, cru: null };
+    }
+
+    try {
+      const r = await this.cliente().enviarEvento(this.uf, ambiente, assinado);
+      // 135 = evento vinculado e registrado. 134/136 também são aceitos em
+      // alguns fluxos, mas só o 135 confirma o cancelamento do documento.
+      if (r.cStat === "135") {
+        return {
+          situacao: "CANCELADO",
+          protocolo: r.xml.match(/<nProt>(\d+)<\/nProt>/)?.[1] ?? "",
+          canceladoEm: new Date(),
+          cru: { xml: r.xml },
+        };
+      }
+      return {
+        situacao: "ERRO",
+        motivo: `${r.cStat ?? "?"} — ${r.xMotivo ?? "a SEFAZ não confirmou o cancelamento."}`,
+        cru: { xml: r.xml },
+      };
+    } catch (e) {
+      return { situacao: "ERRO", motivo: (e as Error).message, cru: null };
+    }
   }
 
   /** "A SEFAZ está no ar, e o meu certificado serve?" */

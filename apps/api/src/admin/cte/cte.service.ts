@@ -622,7 +622,14 @@ export class CteService {
     }
 
     const emissor = await this.emissorDaConta();
-    const r = await emissor.cancelar(doc.chave, justificativa, doc.ambiente as 1 | 2);
+    const r = await emissor.cancelar(
+      doc.chave,
+      justificativa,
+      doc.ambiente as 1 | 2,
+      // O protocolo da autorização: é ele que a SEFAZ confere no evento de
+      // cancelamento, e sem ele o documento a desfazer é ambíguo.
+      doc.protocolo ?? undefined,
+    );
     if (r.situacao === "ERRO") {
       throw new BadRequestException(`Não deu pra cancelar: ${r.motivo}`);
     }
