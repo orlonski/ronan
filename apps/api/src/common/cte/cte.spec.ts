@@ -257,12 +257,40 @@ describe("montarCte", () => {
   it("tomador 'outro' vira toma4 com os dados dele", () => {
     const cte = montarCte(
       entrada({
+        ambiente: 1,
         papelTomador: "OUTRO",
         tomadorOutro: participante({ razaoSocial: "Agenciadora Fretes ME" }),
       }),
     );
     expect((cte.ide as any).toma4.toma).toBe(4);
     expect((cte.ide as any).toma4.xNome).toBe("Agenciadora Fretes ME");
+  });
+
+  it("em homologação, todo participante vira a razão social exigida pela SEFAZ", () => {
+    // Rejeições 646/647/648 (e a do destinatário): a SEFAZ recusa documento de
+    // teste com nome de empresa de verdade — a ideia é que ele nunca possa ser
+    // confundido com um documento real. Só o emitente mantém o nome, porque é
+    // ele que assina.
+    const cte = montarCte(
+      entrada({
+        expedidor: participante({ razaoSocial: "Expedidora Alfa" }),
+        recebedor: participante({ razaoSocial: "Recebedora Beta" }),
+      }),
+    );
+    const literal = "CT-E EMITIDO EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL";
+    for (const bloco of [cte.rem, cte.dest, cte.exped!, cte.receb!]) {
+      expect((bloco as any).xNome).toBe(literal);
+    }
+    expect((cte.emit as any).xNome).toBe("Transportes Schaba Ltda");
+
+    // E o CNPJ continua o de verdade: o que a regra troca é o NOME.
+    expect((cte.rem as any).CNPJ).toBe("11222333000181");
+  });
+
+  it("em produção o nome de cada participante é o real", () => {
+    const cte = montarCte(entrada({ ambiente: 1 }));
+    expect((cte.rem as any).xNome).toBe("Pedreira Norte Ltda");
+    expect((cte.dest as any).xNome).toBe("Construtora Obra Centro Ltda");
   });
 
   it("a quantidade da carga sai em tonelada", () => {

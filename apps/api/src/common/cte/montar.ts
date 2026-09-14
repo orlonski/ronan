@@ -203,7 +203,20 @@ function documentoXml(p: Participante) {
   return doc.length === 14 ? { CNPJ: doc } : { CPF: doc };
 }
 
-function participanteXml(p: Participante, chaveEndereco: string) {
+/**
+ * A razão social que a SEFAZ EXIGE em homologação.
+ *
+ * Não é enfeite nem convenção: emitir em homologação com o nome real do
+ * remetente, do expedidor, do recebedor ou do destinatário é rejeição na hora
+ * (646, 647, 648 e a do destinatário). A ideia é que um documento de teste
+ * nunca possa ser confundido com um de verdade — nem numa tela, nem num PDF
+ * que vaze pra alguém.
+ *
+ * Só o EMITENTE mantém o nome verdadeiro: é ele que assina.
+ */
+const NOME_HOMOLOGACAO = "CT-E EMITIDO EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL";
+
+function participanteXml(p: Participante, chaveEndereco: string, ambiente: 1 | 2) {
   return {
     ...documentoXml(p),
     // Contribuinte isento vai com a tag literal "ISENTO"; mandar o número de
@@ -213,7 +226,7 @@ function participanteXml(p: Participante, chaveEndereco: string) {
       : p.inscricaoEstadual
         ? { IE: soDigitos(p.inscricaoEstadual) }
         : {}),
-    xNome: p.razaoSocial,
+    xNome: ambiente === 2 ? NOME_HOMOLOGACAO : p.razaoSocial,
     ...(p.nomeFantasia ? { xFant: p.nomeFantasia } : {}),
     ...(p.telefone ? { fone: soDigitos(p.telefone) } : {}),
     [chaveEndereco]: enderecoXml(p.endereco, "outros"),
@@ -375,7 +388,7 @@ export function montarCte(e: EntradaCte): CteMontado {
     retira: 1, // não há retirada pelo destinatário
     indIEToma: tomador.indicadorIe,
     ...(e.papelTomador === "OUTRO"
-      ? { toma4: { toma: 4, ...participanteXml(tomador, "enderToma") } }
+      ? { toma4: { toma: 4, ...participanteXml(tomador, "enderToma", e.ambiente) } }
       : { toma3: { toma: CODIGO_TOMADOR[e.papelTomador] } }),
   };
 
@@ -393,10 +406,10 @@ export function montarCte(e: EntradaCte): CteMontado {
       enderEmit: enderecoXml(e.emitente.endereco, "emitente", e.emitente.telefone),
       CRT: e.emitente.crt,
     },
-    rem: participanteXml(e.remetente, "enderReme"),
-    dest: participanteXml(e.destinatario, "enderDest"),
-    ...(e.expedidor ? { exped: participanteXml(e.expedidor, "enderExped") } : {}),
-    ...(e.recebedor ? { receb: participanteXml(e.recebedor, "enderReceb") } : {}),
+    rem: participanteXml(e.remetente, "enderReme", e.ambiente),
+    dest: participanteXml(e.destinatario, "enderDest", e.ambiente),
+    ...(e.expedidor ? { exped: participanteXml(e.expedidor, "enderExped", e.ambiente) } : {}),
+    ...(e.recebedor ? { receb: participanteXml(e.recebedor, "enderReceb", e.ambiente) } : {}),
     vPrest: {
       vTPrest: dec(total, 2),
       vRec: dec(total, 2),

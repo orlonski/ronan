@@ -174,7 +174,9 @@ describe("o XSD pega o que regra escrita à mão não pega", () => {
     // 60 é o teto do xNome. Nenhuma regra nossa confere tamanho campo a campo —
     // e manter uma seria escrever um segundo schema à mão.
     const r = await validar(
-      entrada({ destinatario: participante({ razaoSocial: "X".repeat(61) }) }),
+      // Em produção: em homologação a razão social é trocada pela literal da
+      // SEFAZ e o campo nunca chegaria grande no XML.
+      entrada({ ambiente: 1, destinatario: participante({ razaoSocial: "X".repeat(61) }) }),
     );
     expect(r.ok).toBe(false);
     expect(r.erros.some((e) => e.mensagem.includes("xNome"))).toBe(true);
