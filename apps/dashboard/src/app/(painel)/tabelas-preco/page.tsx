@@ -1,9 +1,12 @@
 "use client";
 
+import * as React from "react";
 import { useMemo } from "react";
 import Link from "next/link";
-import { Pencil, Plus, Tag } from "lucide-react";
+import { Pencil, Plus, RefreshCw, Tag } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { BASE_PRECO_LABEL, type BasePrecoTipo } from "@ronan/shared-types";
 import { StatusToggle } from "@/components/status-toggle";
 import { Permitido } from "@/components/requer-tela";
@@ -16,7 +19,14 @@ import { Combobox } from "@/components/ui/combobox";
 import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
-import { usePaginatedList, useResourceOptions, useUpdateResource } from "@/lib/client-api";
+import {
+  fetchApi,
+  useAuthToken,
+  usePaginatedList,
+  useResourceOptions,
+  useUpdateResource,
+} from "@/lib/client-api";
+import { useConfirm } from "@/components/confirm-dialog";
 
 type Empresa = { id: string; nome: string };
 type Preco = {
@@ -208,6 +218,10 @@ export default function TabelasPrecoPage() {
         </div>
         <div className="flex items-center gap-2">
           <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          <BotaoRecalcular
+            empresaId={tableState.filters.empresaId}
+            nomeEmpresa={empresaOptions.find((o) => o.value === tableState.filters.empresaId)?.label}
+          />
           <Permitido chave="tabelas-preco.criar">
             <Link href="/tabelas-preco/novo">
               <Button>
@@ -285,5 +299,68 @@ export default function TabelasPrecoPage() {
         )}
       />
     </div>
+  );
+}
+
+/**
+ * Refazer o preço de todas as viagens de uma empresa.
+ *
+ * Existe porque cadastrar uma tabela só recalcula a janela de vigência dela: o
+ * histórico anterior fica sem valor e dependia do cron das 04:40, que varre 500
+ * por noite e só quem está SEM valor nenhum. Quem corrigiu o mínimo por faixa,
+ * ou o km de um monte de viagem, precisava esperar sem saber que estava
+ * esperando.
+ *
+ * Pede confirmação porque reescreve o valor de milhares de viagens — e ignora
+ * de propósito quem teve o valor alterado à mão, que é o que a regra do
+ * recálculo já garante.
+ */
+function BotaoRecalcular({ empresaId, nomeEmpresa }: { empresaId?: string; nomeEmpresa?: string }) {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  const { confirmar, ConfirmDialog } = useConfirm();
+  const [rodando, setRodando] = React.useState(false);
+
+  // Sem empresa escolhida não há o que recalcular: o endpoint é por empresa, e
+  // "todas" seria uma varredura da base inteira disparada por engano.
+  if (!empresaId) return null;
+
+  async function recalcular() {
+    const ok = await confirmar({
+      variant: "warning",
+      title: `Refazer o preço das viagens de ${nomeEmpresa ?? "esta empresa"}?`,
+      description:
+        "Vale pras viagens fechadas que ainda não têm valor ou cujo valor veio da tabela. Valor alterado à mão não é tocado.",
+      confirmLabel: "Refazer os preços",
+      cancelLabel: "Agora não",
+    });
+    if (!ok || !token) return;
+    setRodando(true);
+    try {
+      const r = await fetchApi<{ total: number; precificadas: number }>(
+        `/admin/tabelas-preco/recalcular/${empresaId}`,
+        { token, method: "POST" },
+      );
+      toast.success(
+        r.precificadas === 0
+          ? `Nenhuma das ${r.total} viagens casou com uma tabela.`
+          : `${r.precificadas} de ${r.total} viagens ganharam valor.`,
+      );
+      await qc.invalidateQueries({ queryKey: ["viagens"] });
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setRodando(false);
+    }
+  }
+
+  return (
+    <Permitido chave="tabelas-preco.editar">
+      <ConfirmDialog />
+      <Button variant="outline" disabled={rodando} onClick={() => void recalcular()}>
+        <RefreshCw className={`h-4 w-4 ${rodando ? "animate-spin" : ""}`} />
+        {rodando ? "Refazendo…" : "Refazer preços"}
+      </Button>
+    </Permitido>
   );
 }

@@ -7,7 +7,7 @@ import {
 } from "@nestjs/common";
 import * as bcrypt from "bcrypt";
 import { Prisma } from "@prisma/client";
-import { TODAS_AS_CHAVES } from "@ronan/shared-types";
+import { CODIGO_UF_IBGE, motivoMunicipioNaoBate, TODAS_AS_CHAVES } from "@ronan/shared-types";
 import { comConta, comoSistema } from "../../common/conta/conta-context";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -72,14 +72,6 @@ export type CriarContaInput = {
  * Cadastro das empresas que usam o sistema. É a única parte do backend que
  * atravessa contas de propósito, e por isso mora atrás de `User.plataforma`.
  */
-/** Código IBGE de cada UF — os dois primeiros dígitos do código do município. */
-const CODIGO_UF_IBGE: Record<string, string> = {
-  RO: "11", AC: "12", AM: "13", RR: "14", PA: "15", AP: "16", TO: "17",
-  MA: "21", PI: "22", CE: "23", RN: "24", PB: "25", PE: "26", AL: "27",
-  SE: "28", BA: "29", MG: "31", ES: "32", RJ: "33", SP: "35", PR: "41",
-  SC: "42", RS: "43", MS: "50", MT: "51", GO: "52", DF: "53",
-};
-
 @Injectable()
 export class ContasService implements OnModuleInit {
   private readonly log = new Logger(ContasService.name);
@@ -484,7 +476,7 @@ export class ContasService implements OnModuleInit {
     const ibge = limpo.codigoMunicipioIbge as string | null | undefined;
     if (uf && ibge && CODIGO_UF_IBGE[uf] && !ibge.startsWith(CODIGO_UF_IBGE[uf]!)) {
       throw new BadRequestException(
-        `O código IBGE ${ibge} não é de ${uf} — ele começa com ${CODIGO_UF_IBGE[uf]}.`,
+        motivoMunicipioNaoBate(ibge, uf),
       );
     }
 

@@ -216,3 +216,30 @@ export const SEM_PRECO_TEXTO: Record<SemPrecoMotivo, string> = {
   SEM_TABELA: "Nenhum preço cadastrado que sirva pra esta viagem.",
   BASE_INCOMPATIVEL: "O preço cadastrado é de outra unidade (diária x frete).",
 };
+
+/**
+ * Os campos cuja edição obriga a refazer o preço.
+ *
+ * Existe como regra nomeada, e não como um `if` dentro do service, porque a
+ * lista tem que andar junto com o que o cálculo LÊ: quem acrescentar um insumo
+ * ao preço amanhã e esquecer desta lista cria o pior defeito possível de
+ * faturamento — a viagem fica certa na tela e errada na fatura, e ninguém
+ * percebe, porque parece certo.
+ *
+ * `valorPedagioTotal` está aqui porque em tabela com `repassaPedagio` ele É
+ * componente do valor. E a checagem é por PRESENÇA da chave, não por valor
+ * diferente de nulo: mandar `null` significa LIMPAR o pedágio, que muda o total
+ * tanto quanto trocá-lo.
+ */
+export const INSUMOS_DO_PRECO = [
+  "km",
+  "toneladas",
+  "clienteId",
+  "materialId",
+  "data",
+  "valorPedagioTotal",
+] as const;
+
+export function mudouInsumoDePreco(input: Record<string, unknown>): boolean {
+  return INSUMOS_DO_PRECO.some((campo) => input[campo] !== undefined);
+}

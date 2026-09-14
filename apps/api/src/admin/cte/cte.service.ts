@@ -206,6 +206,11 @@ export class CteService {
       razaoSocial: conta.razaoSocial?.trim() || conta.nome,
       nomeFantasia: conta.nome,
       inscricaoEstadual: conta.inscricaoEstadual,
+      // Quem emite CT-e é transportadora, e transportadora é contribuinte de
+      // ICMS — não é escolha de cadastro, é o que o documento significa. Fica
+      // fixo aqui pra que a falta da IE apareça como o que é (cadastro
+      // incompleto) em vez de virar um CT-e de "não contribuinte" que a SEFAZ
+      // autoriza e o contador descobre depois.
       indicadorIe: "1",
       crt: (conta.crt as "1" | "2" | "3") ?? "3",
       rntrc: conta.rntrc ?? "",
@@ -552,7 +557,11 @@ export class CteService {
       cnpjCpf: soDigitos(conta.cnpj),
       razaoSocial: conta.razaoSocial?.trim() || conta.nome,
       inscricaoEstadual: conta.inscricaoEstadual,
-      indicadorIe: conta.inscricaoEstadual ? "1" : "9",
+      // O MESMO fato da emissão real: contribuinte, sempre. Antes isto era
+      // deduzido da presença da IE, e a emissão de teste passava num cadastro
+      // que a real recusaria — teste que mente sobre o que vai acontecer é
+      // pior do que teste nenhum.
+      indicadorIe: "1",
       endereco: {
         logradouro: conta.logradouro ?? "RUA DE TESTE",
         numero: conta.numero ?? "S/N",

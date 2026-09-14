@@ -1,7 +1,15 @@
 import { z } from "zod";
 import { FonteGps, TipoLocal } from "./enums";
+import { CamposFiscais, conferirCamposFiscais } from "./endereco-fiscal";
 
-export const CriarLocalInput = z.object({
+/**
+ * O objeto sem as conferências cruzadas.
+ *
+ * Existe separado porque `superRefine` devolve um `ZodEffects`, que não tem
+ * `.partial()` — e a edição precisa aceitar campo solto. As duas pontas saem
+ * DAQUI pra não divergirem.
+ */
+const LocalBase = z.object({
   nome: z.string().min(2).max(120),
   logradouro: z.string().min(2).max(160),
   numero: z.string().max(20).optional(),
@@ -15,8 +23,24 @@ export const CriarLocalInput = z.object({
   tipo: z.nativeEnum(TipoLocal),
   clienteIds: z.array(z.string().uuid()).default([]),
   apelidos: z.array(z.string().min(1).max(60)).max(20).default([]),
+  ...CamposFiscais,
 });
+
+export const CriarLocalInput = LocalBase.superRefine((v, ctx) => conferirCamposFiscais(v, ctx));
 export type CriarLocalInput = z.infer<typeof CriarLocalInput>;
+
+/**
+ * A edição.
+ *
+ * Tudo opcional — quem edita o apelido não reenvia o CNPJ —, mas as
+ * conferências cruzadas continuam valendo sobre o que VEIO: mandar
+ * `indicadorIe: "1"` sozinho, sem inscrição estadual no corpo, precisa falhar
+ * do mesmo jeito que na criação.
+ */
+export const AtualizarLocalInput = LocalBase.partial().superRefine((v, ctx) =>
+  conferirCamposFiscais(v, ctx),
+);
+export type AtualizarLocalInput = z.infer<typeof AtualizarLocalInput>;
 
 export const CriarLocalRapidoInput = z.object({
   nome: z.string().min(2).max(120),

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { calcularValorViagem, tabelaPrecoAplicada, type TabelaPrecoRow } from "./viagem-preco";
+import {
+  calcularValorViagem,
+  mudouInsumoDePreco,
+  tabelaPrecoAplicada,
+  type TabelaPrecoRow,
+} from "./viagem-preco";
 
 const EMPRESA = "emp-1";
 const BRITA = "mat-brita";
@@ -220,5 +225,33 @@ describe("calcularValorViagem", () => {
       tabelas: [linha({ base: "PERIODO", precoUnitario: 950 })],
     });
     expect(r.motivo).toBe("BASE_INCOMPATIVEL");
+  });
+});
+
+describe("mudouInsumoDePreco", () => {
+  it("pega o pedágio — o insumo que faltava na lista", () => {
+    // O defeito: corrigir o pedágio no painel deixava a viagem certa e a
+    // fatura errada, numa empresa com `repassaPedagio`. Pior que valor
+    // faltando, porque parece certo.
+    expect(mudouInsumoDePreco({ valorPedagioTotal: 40 })).toBe(true);
+  });
+
+  it("LIMPAR o pedágio também conta", () => {
+    // `null` é "apague o pedágio", e isso muda o total tanto quanto trocá-lo.
+    // Uma checagem `!= null` deixaria este caso passar batido.
+    expect(mudouInsumoDePreco({ valorPedagioTotal: null })).toBe(true);
+  });
+
+  it("os insumos clássicos continuam valendo", () => {
+    for (const campo of ["km", "toneladas", "clienteId", "materialId", "data"]) {
+      expect(mudouInsumoDePreco({ [campo]: 1 })).toBe(true);
+    }
+  });
+
+  it("editar o que não entra no preço não refaz a conta", () => {
+    // Recalcular à toa não corrompe nada, mas é consulta no caminho de toda
+    // edição — e escondia que a lista estava incompleta.
+    expect(mudouInsumoDePreco({ observacao: "x", placa: "ABC1D23" })).toBe(false);
+    expect(mudouInsumoDePreco({})).toBe(false);
   });
 });

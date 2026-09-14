@@ -9,6 +9,7 @@ export * from "./story";
 export * from "./chat";
 export * from "./cpf";
 export * from "./documento";
+export * from "./endereco-fiscal";
 export * from "./telefone";
 export * from "./local";
 export * from "./cliente";

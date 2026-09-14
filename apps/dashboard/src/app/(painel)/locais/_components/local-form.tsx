@@ -24,6 +24,12 @@ import {
   useCreateResource,
   useUpdateResource,
 } from "@/lib/client-api";
+import {
+  CamposFiscais,
+  fiscalDe,
+  fiscalParaEnvio,
+  temDadoFiscal,
+} from "@/components/campos-fiscais";
 import { useSujo } from "@/hooks/use-sujo";
 import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
 
@@ -47,6 +53,13 @@ export type Local = {
   lng: number | null;
   apelidos: string[];
   totalViagens?: number;
+  // --- fiscais: no CT-e, o local de carga vira o remetente e o de descarga
+  // vira o destinatário. Sem estes campos o documento não sai.
+  cnpjCpf: string | null;
+  razaoSocialFiscal: string | null;
+  inscricaoEstadual: string | null;
+  indicadorIe: string | null;
+  codigoMunicipioIbge: string | null;
 };
 
 type ViaCepRes = {
@@ -56,6 +69,8 @@ type ViaCepRes = {
   cidade: string;
   uf: string;
   cep?: string;
+  /** O ViaCEP entrega o código do IBGE junto — é de graça e o CT-e exige. */
+  codigoMunicipioIbge?: string;
 };
 
 const PATH = "/admin/locais";
@@ -83,10 +98,15 @@ export function LocalForm({ initial }: Props) {
     lng: initial?.lng ?? (null as number | null),
     apelidos: initial?.apelidos ?? [],
   });
+  const [fiscal, setFiscal] = useState(fiscalDe(initial));
 
   // Sair de um cadastro longo descartava tudo em silêncio.
-  const sujo = useSujo(form);
+  const sujo = useSujo({ ...form, ...fiscal });
   useAvisarSeSujo(sujo);
+  // Abre a seção já expandida quando tem conteúdo: esconder o que está
+  // preenchido faz o usuário achar que perdeu o dado.
+  const temFiscal = temDadoFiscal(fiscal);
+
   const [cepLoading, setCepLoading] = useState(false);
   const [cepNotFound, setCepNotFound] = useState(false);
 
@@ -121,6 +141,12 @@ export function LocalForm({ initial }: Props) {
           uf: res.uf,
           cep: res.cep ?? cep,
         }));
+        // O código do IBGE vem junto na mesma consulta. É a diferença entre um
+        // campo que ninguém sabe onde achar e um campo que já está certo antes
+        // de alguém reparar que existe.
+        if (res.codigoMunicipioIbge) {
+          setFiscal((x) => ({ ...x, codigoMunicipioIbge: res.codigoMunicipioIbge! }));
+        }
       } else {
         setCepNotFound(true);
       }
@@ -145,6 +171,7 @@ export function LocalForm({ initial }: Props) {
       lat: form.lat ?? undefined,
       lng: form.lng ?? undefined,
       apelidos: form.apelidos,
+      ...fiscalParaEnvio(fiscal),
     };
     if (initial) {
       await update.mutateAsync({ id: initial.id, body });
@@ -271,6 +298,27 @@ export function LocalForm({ initial }: Props) {
             achar o local quando ele escreve diferente do cadastro.
           </p>
         </div>
+
+        {/* Um local é um lugar no mapa pro motorista e uma PESSOA pro documento
+            fiscal. Recolhido porque a maioria dos locais nunca entra num
+            documento — quem cadastra uma balança não deve tropeçar em CNPJ. */}
+        <details className="rounded-md border border-border" open={temFiscal}>
+          <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium">
+            Dados fiscais{" "}
+            <span className="font-normal text-muted-foreground">
+              — preencha se este local vai virar remetente ou destinatário de CT-e
+            </span>
+          </summary>
+          <div className="border-t border-border p-3">
+            <CamposFiscais
+              valor={fiscal}
+              onChange={setFiscal}
+              uf={form.uf}
+              prefixo="localform"
+              papel="remetente (carga) ou destinatário (descarga)"
+            />
+          </div>
+        </details>
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div className="space-y-2">

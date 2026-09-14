@@ -23,6 +23,15 @@ export type SugestaoEndereco = {
   cep?: string;
   lat?: number;
   lng?: number;
+  /**
+   * Código IBGE de 7 dígitos do município.
+   *
+   * Só o ViaCEP entrega: o Google não conhece código do IBGE. Vale ouro porque
+   * é OBRIGATÓRIO em documento fiscal — o CT-e não aceita município por nome —
+   * e a alternativa é carregar a tabela dos 5.570 municípios só pra traduzir
+   * cidade+UF. Ele já vinha em toda consulta de CEP e era descartado aqui.
+   */
+  codigoMunicipioIbge?: string;
 };
 
 type ViaCepResponse = {
@@ -31,6 +40,8 @@ type ViaCepResponse = {
   bairro: string;
   localidade: string;
   uf: string;
+  /** 7 dígitos. Vem sempre que o CEP existe. */
+  ibge?: string;
   erro?: boolean;
 };
 
@@ -94,6 +105,7 @@ export class GeocodingService {
         cidade: data.localidade,
         uf: data.uf,
         cep: data.cep,
+        codigoMunicipioIbge: /^\d{7}$/.test(data.ibge ?? "") ? data.ibge : undefined,
       };
     } catch (err) {
       this.log.warn(`ViaCEP falhou: ${(err as Error).message}`);

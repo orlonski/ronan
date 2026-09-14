@@ -1,4 +1,9 @@
-import { isCnpjValid, isCpfValid } from "@ronan/shared-types";
+import {
+  isCnpjValid,
+  isCpfValid,
+  motivoMunicipioNaoBate,
+  municipioBateComUf,
+} from "@ronan/shared-types";
 import { soDigitos } from "../chave-fiscal";
 import { CODIGO_UF } from "./chave";
 import { quemEhOTomador, type EntradaCte, type Participante } from "./montar";
@@ -18,13 +23,6 @@ import { quemEhOTomador, type EntradaCte, type Participante } from "./montar";
 
 export type Achado = { campo: string; mensagem: string };
 export type Validacao = { ok: boolean; erros: Achado[]; avisos: Achado[] };
-
-/** O código IBGE do município começa com o código da UF. Confere de graça. */
-function municipioBateComUf(codigoMunicipio: string, uf: string): boolean {
-  const cod = soDigitos(codigoMunicipio);
-  const cUF = CODIGO_UF[uf.toUpperCase()];
-  return cod.length === 7 && cUF !== undefined && cod.startsWith(cUF);
-}
 
 function checarParticipante(p: Participante, papel: string, erros: Achado[]): void {
   const doc = soDigitos(p.cnpjCpf);
@@ -54,12 +52,19 @@ function checarParticipante(p: Participante, papel: string, erros: Achado[]): vo
 
   if (!CODIGO_UF[String(e.uf ?? "").toUpperCase()]) {
     erros.push({ campo: papel, mensagem: `UF do ${papel} não existe: "${e.uf}".` });
+  } else if (!soDigitos(e.codigoMunicipio)) {
+    // Faltando é diferente de errado, e a mensagem tem que separar os dois:
+    // "(vazio) não é de PR" mandava conferir o estado, que estava certo.
+    erros.push({
+      campo: papel,
+      mensagem: `Falta o código IBGE do município do ${papel}. Abra o cadastro dele e busque o CEP — ele preenche sozinho.`,
+    });
   } else if (!municipioBateComUf(e.codigoMunicipio, e.uf)) {
     // O erro clássico da importação de planilha: o código IBGE de outro estado.
     // A SEFAZ devolve "código de município inválido" sem dizer qual.
     erros.push({
       campo: papel,
-      mensagem: `O código IBGE do município do ${papel} (${e.codigoMunicipio || "vazio"}) não é de ${e.uf.toUpperCase()}.`,
+      mensagem: motivoMunicipioNaoBate(e.codigoMunicipio, e.uf) + ` (${papel})`,
     });
   }
 
@@ -68,7 +73,10 @@ function checarParticipante(p: Participante, papel: string, erros: Achado[]): vo
   if (p.indicadorIe === "1" && !soDigitos(p.inscricaoEstadual ?? "")) {
     erros.push({
       campo: papel,
-      mensagem: `O ${papel} está marcado como contribuinte de ICMS e não tem inscrição estadual.`,
+      mensagem:
+        papel === "emitente"
+          ? "Falta a inscrição estadual da empresa. Quem emite CT-e é contribuinte de ICMS, e a SEFAZ exige a IE. Está em Configurações → Minha empresa."
+          : `O ${papel} está marcado como contribuinte de ICMS e não tem inscrição estadual — preencha a IE no cadastro dele, ou marque que não é contribuinte.`,
     });
   }
   if (p.indicadorIe === "9" && soDigitos(p.inscricaoEstadual ?? "")) {
@@ -117,10 +125,19 @@ export function validarCte(e: EntradaCte): Validacao {
     ["início", e.inicioPrestacao],
     ["fim", e.fimPrestacao],
   ] as const) {
-    if (!ponto?.codigo || !ponto?.uf) {
+    const onde = nome === "início" ? "carga" : "descarga";
+    if (!ponto?.uf) {
       erros.push({
         campo: `prestacao.${nome}`,
-        mensagem: `O local de ${nome === "início" ? "carga" : "descarga"} está sem município ou UF no cadastro.`,
+        mensagem: `O local de ${onde} está sem UF no cadastro.`,
+      });
+    } else if (!ponto?.codigo) {
+      // Dizer "sem município" aqui mandava o usuário conferir cidade e UF, que
+      // são obrigatórios no formulário e estavam certos. O que falta é o CÓDIGO
+      // do IBGE — outro campo, outra tela, e até agora sem lugar pra preencher.
+      erros.push({
+        campo: `prestacao.${nome}`,
+        mensagem: `Falta o código IBGE do município no cadastro do local de ${onde}. Abra o local e busque o CEP — ele preenche sozinho.`,
       });
     } else if (!municipioBateComUf(ponto.codigo, ponto.uf)) {
       erros.push({

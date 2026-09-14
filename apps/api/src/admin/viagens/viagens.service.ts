@@ -27,6 +27,7 @@ import { RoteamentoService } from "../../roteamento/roteamento.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { paginate, type PaginationQuery } from "../../common/pagination";
 import { filtroEscopo, type EscopoAdmin } from "../../common/escopo/escopo";
+import { mudouInsumoDePreco } from "../../common/viagem-preco";
 import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
 import { lerChaveFiscal } from "../../common/chave-fiscal";
 import { resolverDivergenciasSupridas } from "../../common/divergencias";
@@ -840,13 +841,12 @@ export class ViagensAdminService {
     // `await` e não `void` como nos outros: o `detalhe` logo abaixo devolve a
     // viagem pra tela, e ela precisa sair já com o valor novo. É uma consulta
     // curta, no caminho de uma edição manual, não no do app.
-    if (
-      input.km != null ||
-      input.toneladas != null ||
-      input.clienteId != null ||
-      input.materialId != null ||
-      input.data != null
-    ) {
+    //
+    // A lista de insumos mora em `viagem-preco.ts`, junto do cálculo: aqui ela
+    // era um `if` solto que esquecia o pedágio, e corrigir o pedágio deixava a
+    // viagem certa e a fatura errada — sem o cron da madrugada salvar, porque
+    // ele só varre quem está SEM valor nenhum.
+    if (mudouInsumoDePreco(input as Record<string, unknown>)) {
       await this.precificacao.recalcularSeguro(id);
     }
 

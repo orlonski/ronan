@@ -13,7 +13,7 @@ import {
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { z } from "zod";
-import { CriarLocalInput } from "@ronan/shared-types";
+import { AtualizarLocalInput, CriarLocalInput } from "@ronan/shared-types";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { paginationQuerySchema } from "../../common/pagination";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
@@ -196,7 +196,7 @@ export class LocaisController {
   @Patch(":id")
   update(
     @Param("id") id: string,
-    @Body(new ZodValidationPipe(CriarLocalInput.partial())) body: Partial<CriarLocalInput>,
+    @Body(new ZodValidationPipe(AtualizarLocalInput)) body: AtualizarLocalInput,
   ) {
     return this.service.update(id, body);
   }
