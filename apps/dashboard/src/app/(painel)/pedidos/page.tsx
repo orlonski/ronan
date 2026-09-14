@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DataTable, DataTableToolbar } from "@/components/data-table";
+import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
 import { Combobox } from "@/components/ui/combobox";
 import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { useDataTableState } from "@/hooks/use-data-table-state";
@@ -113,7 +114,10 @@ function Conteudo() {
       {
         id: "numero",
         size: 64,
-        header: "Nº",
+        enableSorting: true,
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Nº" />
+        ),
         cell: ({ row }) => (
           <span className="font-mono text-sm text-muted-foreground">#{row.original.numero}</span>
         ),
@@ -162,7 +166,10 @@ function Conteudo() {
       },
       {
         id: "prazoEm",
-        header: "Prazo",
+        enableSorting: true,
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Prazo" />
+        ),
         cell: ({ row }) => (
           <span className="whitespace-nowrap text-sm tabular-nums">
             {dataBR(row.original.prazoEm)}

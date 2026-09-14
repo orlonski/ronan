@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { DataTable, DataTableToolbar } from "@/components/data-table";
+import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
 import { Combobox } from "@/components/ui/combobox";
 import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { useDataTableState } from "@/hooks/use-data-table-state";
@@ -114,7 +115,10 @@ function Conteudo() {
       },
       {
         id: "periodoInicio",
-        header: "Período",
+        enableSorting: true,
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Período" />
+        ),
         cell: ({ row }) => (
           <span className="whitespace-nowrap tabular-nums text-sm">
             {data(row.original.periodoInicio)} a {data(row.original.periodoFim)}
@@ -142,14 +146,20 @@ function Conteudo() {
       },
       {
         id: "valorLiquido",
-        header: "A receber",
+        enableSorting: true,
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="A receber" />
+        ),
         cell: ({ row }) => (
           <span className="font-semibold tabular-nums">{brl(row.original.valorLiquido)}</span>
         ),
       },
       {
         id: "status",
-        header: "Status",
+        enableSorting: true,
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Status" />
+        ),
         cell: ({ row }) => {
           const s = STATUS_BADGE[row.original.status];
           return (

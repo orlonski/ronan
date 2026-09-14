@@ -11,6 +11,7 @@ import { ExcluirButton } from "@/components/excluir-button";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DataTable, DataTableToolbar } from "@/components/data-table";
+import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
 import { Combobox } from "@/components/ui/combobox";
 import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { useDataTableState } from "@/hooks/use-data-table-state";
@@ -105,7 +106,10 @@ export default function TabelasPrecoPage() {
       },
       {
         id: "precoUnitario",
-        header: "Preço",
+        enableSorting: true,
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Preço" />
+        ),
         cell: ({ row }) => (
           <span className="tabular-nums font-medium">
             {fmtMoeda(row.original.precoUnitario)}
@@ -128,7 +132,10 @@ export default function TabelasPrecoPage() {
       },
       {
         id: "vigenciaDe",
-        header: "Vigência",
+        enableSorting: true,
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Vigência" />
+        ),
         cell: ({ row }) => (
           <span className="whitespace-nowrap text-sm tabular-nums">{vigencia(row.original)}</span>
         ),
@@ -147,7 +154,10 @@ export default function TabelasPrecoPage() {
       {
         id: "ativo",
         size: 128,
-        header: "Status",
+        enableSorting: true,
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Status" />
+        ),
         cell: ({ row }) => (
           <Permitido chave="tabelas-preco.editar">
             <StatusToggle
