@@ -37,33 +37,70 @@ export type Servico =
   | "CTeRecepcaoEventoV4";
 
 /**
- * Onde cada UF autoriza.
+ * Os autorizadores.
  *
- * São OITO autorizadores no país, não 27: a maioria dos estados delega pra
- * SVRS. Começamos pelo Paraná, que tem o próprio — e é onde está o primeiro
- * cliente. Acrescentar estado é acrescentar linha aqui.
+ * São OITO no país, não 27: MT, MS, MG, PR, RS e SP operam o próprio, e todo o
+ * resto delega pra SVRS (18 estados) ou pra SVSP (3). Por isso atender o Brasil
+ * inteiro é uma tabela pequena, e não 27 integrações.
+ *
+ * O caminho é um MOLDE e não uma concatenação: o Paraná serve em
+ * `/cte4/CTeStatusServicoV4` e a SVRS em
+ * `/ws/CTeStatusServicoV4/CTeStatusServicoV4.asmx`. Assumir um formato só
+ * funciona até o segundo estado — que foi exatamente o que aconteceu aqui.
  */
-const AUTORIZADORES: Record<string, { producao: string; homologacao: string }> = {
-  PR: {
-    producao: "https://cte.fazenda.pr.gov.br/cte4",
-    homologacao: "https://homologacao.cte.fazenda.pr.gov.br/cte4",
-  },
+type Autorizador = {
+  nome: string;
+  producao: string;
+  homologacao: string;
+  /** `{s}` é trocado pelo nome do serviço. */
+  caminho: string;
 };
 
-/** Código IBGE da UF — vai no corpo das consultas. */
+const SVRS: Autorizador = {
+  nome: "SVRS",
+  producao: "https://cte.svrs.rs.gov.br",
+  homologacao: "https://cte-homologacao.svrs.rs.gov.br",
+  caminho: "/ws/{s}/{s}.asmx",
+};
+
+const PARANA: Autorizador = {
+  nome: "SEFAZ-PR",
+  producao: "https://cte.fazenda.pr.gov.br",
+  homologacao: "https://homologacao.cte.fazenda.pr.gov.br",
+  caminho: "/cte4/{s}",
+};
+
+/** As UFs que a SVRS atende — a própria RS mais as 18 que delegam a ela. */
+const UFS_SVRS = "RS AC AL AM BA CE DF ES GO MA PA PB PI RJ RN RO SC SE TO".split(" ");
+
+const AUTORIZADORES: Record<string, Autorizador> = {
+  PR: PARANA,
+  ...Object.fromEntries(UFS_SVRS.map((uf) => [uf, SVRS])),
+};
+
+/** Código IBGE da UF — vai no corpo das consultas e nos dois primeiros dígitos da chave. */
 export const CODIGO_IBGE_UF: Record<string, string> = {
-  PR: "41",
+  RO: "11", AC: "12", AM: "13", RR: "14", PA: "15", AP: "16", TO: "17",
+  MA: "21", PI: "22", CE: "23", RN: "24", PB: "25", PE: "26", AL: "27",
+  SE: "28", BA: "29", MG: "31", ES: "32", RJ: "33", SP: "35", PR: "41",
+  SC: "42", RS: "43", MS: "50", MT: "51", GO: "52", DF: "53",
 };
 
 export function enderecoDoServico(uf: string, servico: Servico, ambiente: Ambiente): string {
   const a = AUTORIZADORES[uf.toUpperCase()];
   if (!a) {
     throw new Error(
-      `Ainda não sei falar com a SEFAZ de ${uf.toUpperCase()}. ` +
-        `Hoje o sistema fala com: ${Object.keys(AUTORIZADORES).join(", ")}.`,
+      `Ainda não sei falar com o autorizador de ${uf.toUpperCase()}. ` +
+        `Hoje o sistema fala com: ${Object.keys(AUTORIZADORES).sort().join(", ")}.`,
     );
   }
-  return `${ambiente === 1 ? a.producao : a.homologacao}/${servico}`;
+  const base = ambiente === 1 ? a.producao : a.homologacao;
+  return base + a.caminho.replace(/\{s\}/g, servico);
+}
+
+/** Quem autoriza esta UF, pra tela poder dizer. */
+export function autorizadorDaUf(uf: string): string | null {
+  return AUTORIZADORES[uf.toUpperCase()]?.nome ?? null;
 }
 
 export type RespostaSefaz = {

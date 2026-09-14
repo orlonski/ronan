@@ -15,6 +15,36 @@ import { Select } from "@/components/ui/select";
 import { LoadingCard } from "@/components/loading";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 
+/**
+ * As UFs que o sistema já sabe atender, e por qual autorizador.
+ *
+ * Dizer QUEM autoriza não é detalhe: quando a SEFAZ de um estado cai, quem cai
+ * é o autorizador — e saber que dezoito estados compartilham o mesmo explica
+ * por que a emissão parou em todos de uma vez.
+ */
+const UFS_ATENDIDAS: [string, string, string][] = [
+  ["PR", "Paraná", "SEFAZ-PR"],
+  ["RS", "Rio Grande do Sul", "SVRS"],
+  ["AC", "Acre", "SVRS"],
+  ["AL", "Alagoas", "SVRS"],
+  ["AM", "Amazonas", "SVRS"],
+  ["BA", "Bahia", "SVRS"],
+  ["CE", "Ceará", "SVRS"],
+  ["DF", "Distrito Federal", "SVRS"],
+  ["ES", "Espírito Santo", "SVRS"],
+  ["GO", "Goiás", "SVRS"],
+  ["MA", "Maranhão", "SVRS"],
+  ["PA", "Pará", "SVRS"],
+  ["PB", "Paraíba", "SVRS"],
+  ["PI", "Piauí", "SVRS"],
+  ["RJ", "Rio de Janeiro", "SVRS"],
+  ["RN", "Rio Grande do Norte", "SVRS"],
+  ["RO", "Rondônia", "SVRS"],
+  ["SC", "Santa Catarina", "SVRS"],
+  ["SE", "Sergipe", "SVRS"],
+  ["TO", "Tocantins", "SVRS"],
+];
+
 type Certificado = {
   cnpj: string | null;
   titular: string;
@@ -497,11 +527,16 @@ function Conteudo() {
                 onChange={(e) => set("cteUfAutorizador", e.target.value)}
               >
                 <option value="">Selecione…</option>
-                <option value="PR">Paraná</option>
+                {UFS_ATENDIDAS.map(([sigla, nome, quem]) => (
+                  <option key={sigla} value={sigla}>
+                    {nome} — {quem}
+                  </option>
+                ))}
               </Select>
               <p className="text-xs text-muted-foreground">
-                São oito autorizadores no país — a maioria dos estados delega pra SVRS. Hoje
-                o sistema fala com o do Paraná; acrescentar outro é trabalho pequeno.
+                Normalmente é a UF da empresa. São oito autorizadores no país: seis estados
+                operam o próprio e o resto delega — por isso atender quase o Brasil todo é
+                uma tabela pequena. Faltam SP, MG, MT, MS e os três da SVSP.
               </p>
             </div>
 

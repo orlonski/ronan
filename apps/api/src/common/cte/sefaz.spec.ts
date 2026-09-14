@@ -103,9 +103,29 @@ describe("endereços dos autorizadores", () => {
     );
   });
 
+  it("o RS vai pra SVRS, com OUTRO formato de caminho", () => {
+    // O molde de URL muda por autorizador: o PR serve em /cte4/{servico} e a
+    // SVRS em /ws/{servico}/{servico}.asmx. Assumir um formato só funciona até
+    // o segundo estado.
+    expect(enderecoDoServico("RS", "CTeStatusServicoV4", 2)).toBe(
+      "https://cte-homologacao.svrs.rs.gov.br/ws/CTeStatusServicoV4/CTeStatusServicoV4.asmx",
+    );
+  });
+
+  it("um estado que delega pra SVRS cai no mesmo lugar que o RS", () => {
+    // 18 estados delegam. Atender todos eles é uma linha de tabela, não 18
+    // integrações.
+    expect(enderecoDoServico("SC", "CTeRecepcaoSincV4", 1)).toBe(
+      enderecoDoServico("RS", "CTeRecepcaoSincV4", 1),
+    );
+  });
+
   it("UF que ainda não sei atender diz isso, e diz quais eu sei", () => {
-    // São 8 autorizadores no país; começamos pelo do primeiro cliente.
-    expect(() => enderecoDoServico("SP", "CTeStatusServicoV4", 2)).toThrow(/Hoje o sistema fala com: PR/);
+    // São 8 autorizadores no país. Faltam os que operam o próprio (SP, MG,
+    // MT, MS) e a SVSP.
+    expect(() => enderecoDoServico("SP", "CTeStatusServicoV4", 2)).toThrow(
+      /Hoje o sistema fala com: AC/,
+    );
   });
 });
 
