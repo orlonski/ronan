@@ -67,11 +67,11 @@ export default function LayoutEnvioPage({
     <div className="space-y-6">
     <ConfirmDialog />
       <header className="flex items-center gap-3">
-        <Link href={`/empresas`}>
-          <Button variant="ghost" size="icon">
+        <Button variant="ghost" size="icon" asChild>
+            <Link href={`/empresas`} aria-label="Voltar para Empresas-cliente">
             <ArrowLeft className="h-5 w-5" />
+            </Link>
           </Button>
-        </Link>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">
             Layout de envio — {empresa.data?.nome}
@@ -237,8 +237,8 @@ function Editor({
     <div className="grid gap-4 lg:grid-cols-2">
       <Card className="space-y-4 p-5">
         <div className="space-y-1.5">
-          <Label>Nome do modelo *</Label>
-          <Input
+          <Label htmlFor="page-nome-do-modelo">Nome do modelo *</Label>
+          <Input id="page-nome-do-modelo"
             required
             value={nome}
             onChange={(e) => setNome(e.target.value)}
@@ -291,6 +291,7 @@ function Editor({
                   type="button"
                   variant="ghost"
                   size="icon"
+                  aria-label={`Mover ${c.campo} para cima`}
                   onClick={() => moverPara(idx, -1)}
                   disabled={idx === 0}
                 >
@@ -300,6 +301,7 @@ function Editor({
                   type="button"
                   variant="ghost"
                   size="icon"
+                  aria-label={`Mover ${c.campo} para baixo`}
                   onClick={() => moverPara(idx, 1)}
                   disabled={idx === colunas.length - 1}
                 >
@@ -309,6 +311,7 @@ function Editor({
                   type="button"
                   variant="ghost"
                   size="icon"
+                  aria-label={`Remover a coluna ${c.campo}`}
                   onClick={() => remover(idx)}
                 >
                   <Trash2 className="h-3 w-3" />
@@ -320,8 +323,8 @@ function Editor({
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <Label>Formato de data</Label>
-            <Select
+            <Label htmlFor="page-formato-de-data">Formato de data</Label>
+            <Select id="page-formato-de-data"
               value={config?.formatoData ?? "DD/MM/YYYY"}
               onChange={(e) =>
                 setConfig({ ...(config ?? {}), formatoData: e.target.value as never })
@@ -333,8 +336,8 @@ function Editor({
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>Separador decimal</Label>
-            <Select
+            <Label htmlFor="page-separador-decimal">Separador decimal</Label>
+            <Select id="page-separador-decimal"
               value={config?.separadorDecimal ?? "vírgula"}
               onChange={(e) =>
                 setConfig({ ...(config ?? {}), separadorDecimal: e.target.value as never })

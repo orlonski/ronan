@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { TagInput } from "@/components/ui/tag-input";
 import { StatusToggle } from "@/components/status-toggle";
 import { useCreateResource, useUpdateResource } from "@/lib/client-api";
+import { useSujo } from "@/hooks/use-sujo";
+import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
 
 export type Material = {
   id: string;
@@ -47,6 +49,10 @@ export function MaterialForm({ initial }: Props) {
     temComprovanteFoto: initial?.temComprovanteFoto ?? true,
     dispensaConferencia: initial?.dispensaConferencia ?? false,
   });
+
+  // Sair de um cadastro longo descartava tudo em silêncio.
+  const sujo = useSujo(form);
+  useAvisarSeSujo(sujo);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -89,6 +95,7 @@ export function MaterialForm({ initial }: Props) {
           <div className="flex items-center justify-between gap-3">
             <Label htmlFor="exigeTicket">Exige ticket na viagem</Label>
             <StatusToggle
+              id="exigeTicket"
               active={form.exigeTicket}
               onChange={(next) => setForm({ ...form, exigeTicket: next })}
             />
@@ -103,6 +110,7 @@ export function MaterialForm({ initial }: Props) {
           <div className="flex items-center justify-between gap-3">
             <Label htmlFor="dispensaConferencia">Não precisa de conferência</Label>
             <StatusToggle
+              id="dispensaConferencia"
               active={form.dispensaConferencia}
               onChange={(next) => setForm({ ...form, dispensaConferencia: next })}
             />
@@ -129,6 +137,7 @@ export function MaterialForm({ initial }: Props) {
           <div className="flex items-center justify-between gap-3">
             <Label htmlFor="temComprovanteFoto">Gera comprovante fotografável</Label>
             <StatusToggle
+              id="temComprovanteFoto"
               active={form.temComprovanteFoto}
               onChange={(next) => setForm({ ...form, temComprovanteFoto: next })}
             />
@@ -144,6 +153,7 @@ export function MaterialForm({ initial }: Props) {
           <div className="flex items-center justify-between gap-3">
             <Label htmlFor="permiteBotaFora">Permite voltar pro bota-fora</Label>
             <StatusToggle
+              id="permiteBotaFora"
               active={form.permiteBotaFora}
               onChange={(next) => setForm({ ...form, permiteBotaFora: next })}
             />
@@ -156,11 +166,7 @@ export function MaterialForm({ initial }: Props) {
           </p>
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <Link href="/materiais">
-            <Button type="button" variant="outline">
-              Cancelar
-            </Button>
-          </Link>
+          <BotaoCancelar href="/materiais" sujo={sujo} />
           <Button type="submit" disabled={saving}>
             Salvar
           </Button>

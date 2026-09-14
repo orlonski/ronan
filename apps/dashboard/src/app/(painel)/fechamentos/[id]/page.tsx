@@ -71,11 +71,11 @@ export default function FechamentoDetalhePage({
     <div className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <Link href="/fechamentos">
-            <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" asChild>
+              <Link href="/fechamentos" aria-label="Voltar para Planilhas dos clientes">
               <ArrowLeft className="h-5 w-5" />
+              </Link>
             </Button>
-          </Link>
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-semibold tracking-tight">

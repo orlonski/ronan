@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCreateResource, useUpdateResource } from "@/lib/client-api";
 import { documentoDigits, maskDocumento } from "@ronan/shared-types";
+import { useSujo } from "@/hooks/use-sujo";
+import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
 
 export type Transportadora = {
   id: string;
@@ -32,6 +34,10 @@ export function TransportadoraForm({ initial }: Props) {
     cnpj: maskDocumento(initial?.cnpj ?? ""),
     contato: initial?.contato ?? "",
   });
+
+  // Sair de um cadastro longo descartava tudo em silêncio.
+  const sujo = useSujo(form);
+  useAvisarSeSujo(sujo);
 
   // Vazio é permitido (campo opcional); preenchido tem que fechar 11 ou 14 dígitos.
   const digitos = documentoDigits(form.cnpj);
@@ -60,8 +66,8 @@ export function TransportadoraForm({ initial }: Props) {
     <Card className="p-6">
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label>Nome</Label>
-          <Input
+          <Label htmlFor="transporta-nome">Nome</Label>
+          <Input id="transporta-nome"
             required
             autoFocus
             value={form.nome}
@@ -71,8 +77,8 @@ export function TransportadoraForm({ initial }: Props) {
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div className="space-y-2">
-            <Label>CNPJ ou CPF</Label>
-            <Input
+            <Label htmlFor="transporta-cnpj-ou-cpf">CNPJ ou CPF</Label>
+            <Input id="transporta-cnpj-ou-cpf"
               value={form.cnpj}
               inputMode="numeric"
               maxLength={18}
@@ -87,8 +93,8 @@ export function TransportadoraForm({ initial }: Props) {
             )}
           </div>
           <div className="space-y-2">
-            <Label>Contato</Label>
-            <Input
+            <Label htmlFor="transporta-contato">Contato</Label>
+            <Input id="transporta-contato"
               value={form.contato}
               onChange={(e) => setForm({ ...form, contato: e.target.value })}
               placeholder="Quem responde pela frota"
@@ -96,11 +102,7 @@ export function TransportadoraForm({ initial }: Props) {
           </div>
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <Link href="/transportadoras">
-            <Button type="button" variant="outline">
-              Cancelar
-            </Button>
-          </Link>
+          <BotaoCancelar href="/transportadoras" sujo={sujo} />
           <Button type="submit" disabled={saving}>
             Salvar
           </Button>

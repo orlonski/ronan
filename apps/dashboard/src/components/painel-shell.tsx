@@ -25,6 +25,14 @@ export function PainelShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
+      {/* Quem navega por teclado passava pelos 50+ links do menu antes de
+          chegar no conteúdo, em toda tela. */}
+      <a
+        href="#conteudo"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:shadow-lg focus:ring-2 focus:ring-ring"
+      >
+        Pular para o conteúdo
+      </a>
       <GlobalLoadingBar />
       <Sidebar
         mobileOpen={mobileOpen}
@@ -64,7 +72,11 @@ export function PainelShell({ children }: { children: React.ReactNode }) {
           </header>
         </div>
 
-        <main className="flex-1 overflow-y-auto overflow-x-hidden bg-background p-4 pb-24 md:p-8 md:pb-8">
+        <main
+          id="conteudo"
+          tabIndex={-1}
+          className="flex-1 overflow-y-auto overflow-x-hidden bg-background p-4 pb-24 md:p-8 md:pb-8"
+        >
           <TelaGuard>{children}</TelaGuard>
         </main>
       </div>

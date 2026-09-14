@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { useCreateResource, useUpdateResource } from "@/lib/client-api";
 import { documentoDigits, maskDocumento } from "@ronan/shared-types";
+import { useSujo } from "@/hooks/use-sujo";
+import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
 
 type Papel = "RECEBE_PLANILHA" | "MANDA_FECHAMENTO" | "AMBOS";
 export type Empresa = {
@@ -36,6 +38,10 @@ export function EmpresaForm({ initial }: Props) {
     contato: initial?.contato ?? "",
     papel: (initial?.papel ?? "AMBOS") as Papel,
   });
+
+  // Sair de um cadastro longo descartava tudo em silêncio.
+  const sujo = useSujo(form);
+  useAvisarSeSujo(sujo);
 
   // Vazio é permitido (campo opcional); preenchido tem que fechar 11 ou 14 dígitos.
   const digitos = documentoDigits(form.cnpj);
@@ -65,8 +71,8 @@ export function EmpresaForm({ initial }: Props) {
     <Card className="p-6">
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label>Nome</Label>
-          <Input
+          <Label htmlFor="empresafor-nome">Nome</Label>
+          <Input id="empresafor-nome"
             required
             autoFocus
             value={form.nome}
@@ -75,8 +81,8 @@ export function EmpresaForm({ initial }: Props) {
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div className="space-y-2">
-            <Label>CNPJ ou CPF</Label>
-            <Input
+            <Label htmlFor="empresafor-cnpj-ou-cpf">CNPJ ou CPF</Label>
+            <Input id="empresafor-cnpj-ou-cpf"
               value={form.cnpj}
               inputMode="numeric"
               maxLength={18}
@@ -91,8 +97,8 @@ export function EmpresaForm({ initial }: Props) {
             )}
           </div>
           <div className="space-y-2">
-            <Label>Papel</Label>
-            <Select
+            <Label htmlFor="empresafor-papel">Papel</Label>
+            <Select id="empresafor-papel"
               value={form.papel}
               onChange={(e) => setForm({ ...form, papel: e.target.value as Papel })}
             >
@@ -103,18 +109,14 @@ export function EmpresaForm({ initial }: Props) {
           </div>
         </div>
         <div className="space-y-2">
-          <Label>Contato</Label>
-          <Input
+          <Label htmlFor="empresafor-contato">Contato</Label>
+          <Input id="empresafor-contato"
             value={form.contato}
             onChange={(e) => setForm({ ...form, contato: e.target.value })}
           />
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <Link href="/empresas">
-            <Button type="button" variant="outline">
-              Cancelar
-            </Button>
-          </Link>
+          <BotaoCancelar href="/empresas" sujo={sujo} />
           <Button type="submit" disabled={saving || documentoIncompleto}>
             Salvar
           </Button>

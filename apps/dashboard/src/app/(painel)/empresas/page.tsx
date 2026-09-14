@@ -108,21 +108,21 @@ export default function EmpresasPage() {
             <div className="flex justify-center">
               {(e.papel === "RECEBE_PLANILHA" || e.papel === "AMBOS") && (
                 <Link href={`/empresas/${e.id}/layout-envio`} title="Layout de envio">
-                  <Button variant="ghost" size="icon">
+                  <Button variant="ghost" size="icon" aria-label="Layout de envio">
                     <FileSpreadsheet className="h-4 w-4" />
                   </Button>
                 </Link>
               )}
               {(e.papel === "MANDA_FECHAMENTO" || e.papel === "AMBOS") && (
                 <Link href={`/empresas/${e.id}/layout-import`} title="Layout de importação">
-                  <Button variant="ghost" size="icon">
+                  <Button variant="ghost" size="icon" aria-label="Layout de importação">
                     <FileInput className="h-4 w-4" />
                   </Button>
                 </Link>
               )}
               <Permitido chave="empresas.editar">
                 <Link href={`/empresas/${e.id}`} title="Editar">
-                  <Button variant="ghost" size="icon">
+                  <Button variant="ghost" size="icon" aria-label="Editar">
                     <Pencil className="h-4 w-4" />
                   </Button>
                 </Link>

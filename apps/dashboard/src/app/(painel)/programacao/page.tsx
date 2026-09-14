@@ -165,7 +165,7 @@ function Conteudo() {
 
       <Card className="flex flex-wrap items-center justify-between gap-3 p-3">
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => setDia(somarDias(dia, -1))}>
+          <Button variant="outline" size="icon" aria-label="Dia anterior" onClick={() => setDia(somarDias(dia, -1))}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <Input
@@ -175,7 +175,7 @@ function Conteudo() {
             onChange={(e) => setDia(e.target.value)}
             className="w-40"
           />
-          <Button variant="outline" size="icon" onClick={() => setDia(somarDias(dia, 1))}>
+          <Button variant="outline" size="icon" aria-label="Próximo dia" onClick={() => setDia(somarDias(dia, 1))}>
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>

@@ -1456,8 +1456,8 @@ export default function ViagemDetalhePage({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Motivo (mínimo 2 caracteres)</Label>
-              <Textarea
+              <Label htmlFor="page-motivo-minimo-2-caracteres">Motivo (mínimo 2 caracteres)</Label>
+              <Textarea id="page-motivo-minimo-2-caracteres"
                 rows={4}
                 value={motivoTexto}
                 onChange={(e) => {

@@ -15,6 +15,8 @@ import {
   type TipoRemuneracaoTipo,
 } from "@ronan/shared-types";
 import { useCreateResource, useUpdateResource } from "@/lib/client-api";
+import { useSujo } from "@/hooks/use-sujo";
+import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
 
 export type Modalidade = {
   id: string;
@@ -80,6 +82,10 @@ export function ModalidadeForm({ initial }: { initial?: Modalidade }) {
     reembolsaPedagio: initial?.reembolsaPedagio ?? true,
     reembolsaAbastecimento: initial?.reembolsaAbastecimento ?? true,
   });
+
+  // Sair de um cadastro longo descartava tudo em silêncio.
+  const sujo = useSujo(form);
+  useAvisarSeSujo(sujo);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -168,8 +174,8 @@ export function ModalidadeForm({ initial }: { initial?: Modalidade }) {
 
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-2">
-              <Label>Regra de pagamento</Label>
-              <Select
+              <Label htmlFor="modalidade-regra-de-pagamento">Regra de pagamento</Label>
+              <Select id="modalidade-regra-de-pagamento"
                 value={form.tipoRemuneracao}
                 onChange={(e) =>
                   setForm({ ...form, tipoRemuneracao: e.target.value as TipoRemuneracaoTipo })
@@ -185,8 +191,8 @@ export function ModalidadeForm({ initial }: { initial?: Modalidade }) {
 
             {campoDaRegua === "percentualFrete" && (
               <div className="space-y-2">
-                <Label>Porcentagem do frete (%)</Label>
-                <Input
+                <Label htmlFor="modalidade-porcentagem-do-frete">Porcentagem do frete (%)</Label>
+                <Input id="modalidade-porcentagem-do-frete"
                   inputMode="decimal"
                   placeholder="ex: 12"
                   value={form.percentualFrete}
@@ -200,8 +206,8 @@ export function ModalidadeForm({ initial }: { initial?: Modalidade }) {
             )}
             {campoDaRegua === "valorPorViagem" && (
               <div className="space-y-2">
-                <Label>Valor por viagem (R$)</Label>
-                <Input
+                <Label htmlFor="modalidade-valor-por-viagem-r">Valor por viagem (R$)</Label>
+                <Input id="modalidade-valor-por-viagem-r"
                   inputMode="decimal"
                   placeholder="ex: 120,00"
                   value={form.valorPorViagem}
@@ -211,8 +217,8 @@ export function ModalidadeForm({ initial }: { initial?: Modalidade }) {
             )}
             {campoDaRegua === "valorPorTonelada" && (
               <div className="space-y-2">
-                <Label>Valor por tonelada (R$)</Label>
-                <Input
+                <Label htmlFor="modalidade-valor-por-tonelada-r">Valor por tonelada (R$)</Label>
+                <Input id="modalidade-valor-por-tonelada-r"
                   inputMode="decimal"
                   placeholder="ex: 8,50"
                   value={form.valorPorTonelada}
@@ -222,8 +228,8 @@ export function ModalidadeForm({ initial }: { initial?: Modalidade }) {
             )}
             {campoDaRegua === "valorPorKm" && (
               <div className="space-y-2">
-                <Label>Valor por km (R$)</Label>
-                <Input
+                <Label htmlFor="modalidade-valor-por-km-r">Valor por km (R$)</Label>
+                <Input id="modalidade-valor-por-km-r"
                   inputMode="decimal"
                   placeholder="ex: 3,50"
                   value={form.valorPorKm}
@@ -233,8 +239,8 @@ export function ModalidadeForm({ initial }: { initial?: Modalidade }) {
             )}
 
             <div className="space-y-2">
-              <Label>Valor da diária (R$)</Label>
-              <Input
+              <Label htmlFor="modalidade-valor-da-diaria-r">Valor da diária (R$)</Label>
+              <Input id="modalidade-valor-da-diaria-r"
                 inputMode="decimal"
                 placeholder="deixe vazio se não faz diária"
                 value={form.valorDiaria}
@@ -264,11 +270,7 @@ export function ModalidadeForm({ initial }: { initial?: Modalidade }) {
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <Link href="/modalidades">
-            <Button type="button" variant="outline">
-              Cancelar
-            </Button>
-          </Link>
+          <BotaoCancelar href="/modalidades" sujo={sujo} />
           <Button type="submit" disabled={saving}>
             Salvar
           </Button>

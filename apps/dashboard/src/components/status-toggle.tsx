@@ -12,6 +12,7 @@ export function StatusToggle({
   disabled = false,
   size = "md",
   label,
+  id,
 }: {
   active: boolean;
   onChange: (next: boolean) => void;
@@ -19,6 +20,11 @@ export function StatusToggle({
   size?: "sm" | "md";
   /** Se passado, mostra o texto "ativo"/"inativo" ao lado. */
   label?: boolean;
+  /**
+   * Pra que um `<Label htmlFor>` ao lado realmente aponte pro controle — sem
+   * isso o rótulo fica solto e clicar nele não faz nada.
+   */
+  id?: string;
 }) {
   const dims =
     size === "sm"
@@ -28,6 +34,7 @@ export function StatusToggle({
   return (
     <div className="flex items-center gap-2">
       <button
+        id={id}
         type="button"
         role="switch"
         aria-checked={active}
@@ -35,6 +42,7 @@ export function StatusToggle({
         onClick={() => onChange(!active)}
         className={cn(
           "relative inline-flex shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
           dims.track,
           active ? "bg-green-600" : "bg-gray-300",
           disabled && "opacity-50 cursor-not-allowed",

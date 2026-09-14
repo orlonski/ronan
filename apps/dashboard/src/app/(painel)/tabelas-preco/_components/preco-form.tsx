@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { useCreateResource, useResourceOptions, useUpdateResource } from "@/lib/client-api";
+import { useSujo } from "@/hooks/use-sujo";
+import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
 
 type Empresa = { id: string; nome: string };
 type Material = { id: string; nome: string };
@@ -84,6 +86,10 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
     vigenciaAte: soData(initial?.vigenciaAte),
   });
 
+  // Sair de um cadastro longo descartava tudo em silêncio.
+  const sujo = useSujo(form);
+  useAvisarSeSujo(sujo);
+
   useEffect(() => {
     if (initial || form.empresaId || !empresas.data?.[0]?.id) return;
     setForm((f) => ({ ...f, empresaId: empresas.data![0]!.id }));
@@ -152,8 +158,8 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label>Empresa que paga</Label>
-            <Select
+            <Label htmlFor="precoform-empresa-que-paga">Empresa que paga</Label>
+            <Select id="precoform-empresa-que-paga"
               required
               value={form.empresaId}
               onChange={(e) => setForm({ ...form, empresaId: e.target.value })}
@@ -169,8 +175,8 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Material</Label>
-            <Select
+            <Label htmlFor="precoform-material">Material</Label>
+            <Select id="precoform-material"
               value={form.materialId}
               onChange={(e) => setForm({ ...form, materialId: e.target.value })}
             >
@@ -186,8 +192,8 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label>Modo de serviço</Label>
-            <Select
+            <Label htmlFor="precoform-modo-de-servico">Modo de serviço</Label>
+            <Select id="precoform-modo-de-servico"
               value={form.tipoServicoId}
               onChange={(e) => setForm({ ...form, tipoServicoId: e.target.value })}
             >
@@ -203,8 +209,8 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
             </p>
           </div>
           <div className="space-y-2">
-            <Label>Cobrado por</Label>
-            <Select
+            <Label htmlFor="precoform-cobrado-por">Cobrado por</Label>
+            <Select id="precoform-cobrado-por"
               value={form.base}
               onChange={(e) => setForm({ ...form, base: e.target.value as BasePrecoTipo })}
             >
@@ -279,7 +285,7 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label>Vale a partir de</Label>
+            <Label htmlFor="vigencia-de">Vale a partir de</Label>
             <Input
               type="date"
               id="vigencia-de"
@@ -288,7 +294,7 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
             />
           </div>
           <div className="space-y-2">
-            <Label>Vale até</Label>
+            <Label htmlFor="vigencia-ate">Vale até</Label>
             <Input
               type="date"
               id="vigencia-ate"
@@ -305,11 +311,7 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
         {erro && <p className="text-sm text-destructive">{erro}</p>}
 
         <div className="flex justify-end gap-2 pt-2">
-          <Link href="/tabelas-preco">
-            <Button type="button" variant="outline">
-              Cancelar
-            </Button>
-          </Link>
+          <BotaoCancelar href="/tabelas-preco" sujo={sujo} />
           <Button type="submit" disabled={saving}>
             Salvar
           </Button>

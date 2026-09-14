@@ -278,6 +278,16 @@ export function Sidebar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
+  // Esc fecha a gaveta — é o gesto que todo mundo tenta antes de procurar o X.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    function aoTeclar(e: KeyboardEvent) {
+      if (e.key === "Escape") onMobileClose?.();
+    }
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  }, [mobileOpen, onMobileClose]);
+
   // Fecha gaveta automaticamente quando muda de rota no mobile
   useEffect(() => {
     onMobileClose?.();
@@ -297,9 +307,14 @@ export function Sidebar({
       <aside
         className={cn(
           "z-50 flex w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground px-4 py-6",
-          "fixed inset-y-0 left-0 transform transition-transform",
-          "md:relative md:translate-x-0",
-          mobileOpen ? "translate-x-0 shadow-xl" : "-translate-x-full md:translate-x-0",
+          "fixed inset-y-0 left-0 transform transition-[transform,visibility]",
+          "md:relative md:translate-x-0 md:visible",
+          // Fechada, a gaveta só saía de vista por `transform` — continuava no
+          // fluxo de foco, então no celular o Tab entrava num menu invisível de
+          // 50 links. `invisible` tira do foco; no desktop ela volta a valer.
+          mobileOpen
+            ? "translate-x-0 shadow-xl"
+            : "-translate-x-full invisible md:translate-x-0",
         )}
       >
         <div className="mb-1 flex items-center px-2">

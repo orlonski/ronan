@@ -107,11 +107,11 @@ export default function NovoEnvioPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <header className="flex items-center gap-3">
-        <Link href="/envios">
-          <Button variant="ghost" size="icon">
+        <Button variant="ghost" size="icon" asChild>
+            <Link href="/envios" aria-label="Voltar para Planilhas enviadas">
             <ArrowLeft className="h-5 w-5" />
+            </Link>
           </Button>
-        </Link>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Novo envio</h1>
           <p className="text-sm text-muted-foreground">
@@ -124,8 +124,8 @@ export default function NovoEnvioPage() {
       <form onSubmit={onSubmit}>
         <Card className="space-y-5 p-6">
           <div className="space-y-2">
-            <Label>Empresa *</Label>
-            <Select required value={empresaId} onChange={(e) => setEmpresaId(e.target.value)}>
+            <Label htmlFor="page-empresa">Empresa *</Label>
+            <Select id="page-empresa" required value={empresaId} onChange={(e) => setEmpresaId(e.target.value)}>
               <option value="">— escolha —</option>
               {empresas.data
                 ?.filter(
@@ -201,8 +201,8 @@ export default function NovoEnvioPage() {
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>Período de</Label>
-              <Input
+              <Label htmlFor="page-periodo-de">Período de</Label>
+              <Input id="page-periodo-de"
                 type="date"
                 required
                 value={periodoInicio}
@@ -210,8 +210,8 @@ export default function NovoEnvioPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Período até</Label>
-              <Input
+              <Label htmlFor="page-periodo-ate">Período até</Label>
+              <Input id="page-periodo-ate"
                 type="date"
                 required
                 value={periodoFim}

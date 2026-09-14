@@ -197,8 +197,8 @@ export function TipoEventoDialog({
         <form onSubmit={onSubmit} className="space-y-5">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>Slug</Label>
-              <Input
+              <Label htmlFor="tipoevento-slug">Slug</Label>
+              <Input id="tipoevento-slug"
                 value={form.slug}
                 onChange={(e) => setForm({ ...form, slug: e.target.value })}
                 placeholder="ex: carga"
@@ -212,8 +212,8 @@ export function TipoEventoDialog({
               </p>
             </div>
             <div className="space-y-2">
-              <Label>Ordem</Label>
-              <Input
+              <Label htmlFor="tipoevento-ordem">Ordem</Label>
+              <Input id="tipoevento-ordem"
                 inputMode="numeric"
                 value={form.ordem}
                 onChange={(e) => setForm({ ...form, ordem: e.target.value })}
@@ -224,8 +224,8 @@ export function TipoEventoDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>Nome</Label>
-            <Input
+            <Label htmlFor="tipoevento-nome">Nome</Label>
+            <Input id="tipoevento-nome"
               value={form.nome}
               onChange={(e) => setForm({ ...form, nome: e.target.value })}
               placeholder="ex: Carga"
@@ -273,8 +273,8 @@ export function TipoEventoDialog({
             {form.ehOcorrencia && (
               <div className="space-y-3 rounded-md border p-3">
                 <div className="space-y-2">
-                  <Label>Gravidade</Label>
-                  <Select
+                  <Label htmlFor="tipoevento-gravidade">Gravidade</Label>
+                  <Select id="tipoevento-gravidade"
                     value={form.severidade}
                     onChange={(e) =>
                       setForm({
@@ -327,8 +327,8 @@ export function TipoEventoDialog({
 
                 {form.temDuracao && form.geraCobranca && (
                   <div className="space-y-2">
-                    <Label>Valor da hora parada</Label>
-                    <Input
+                    <Label htmlFor="tipoevento-valor-da-hora-parada">Valor da hora parada</Label>
+                    <Input id="tipoevento-valor-da-hora-parada"
                       inputMode="decimal"
                       value={form.valorHora}
                       onChange={(e) => setForm({ ...form, valorHora: e.target.value })}

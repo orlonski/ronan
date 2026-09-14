@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatusToggle } from "@/components/status-toggle";
 import { useCreateResource, useUpdateResource } from "@/lib/client-api";
+import { useSujo } from "@/hooks/use-sujo";
+import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
 
 export type TipoServico = {
   id: string;
@@ -51,6 +53,10 @@ export function TipoServicoForm({ initial }: Props) {
     exigeKm: initial?.exigeKm ?? true,
     ordem: initial?.ordem ?? 0,
   });
+
+  // Sair de um cadastro longo descartava tudo em silêncio.
+  const sujo = useSujo(form);
+  useAvisarSeSujo(sujo);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -170,11 +176,7 @@ export function TipoServicoForm({ initial }: Props) {
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <Link href="/tipos-servico">
-            <Button type="button" variant="outline">
-              Cancelar
-            </Button>
-          </Link>
+          <BotaoCancelar href="/tipos-servico" sujo={sujo} />
           <Button type="submit" disabled={saving}>
             Salvar
           </Button>

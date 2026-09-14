@@ -224,7 +224,7 @@ export function CompartilharViagemModal({ viagemId }: { viagemId: string }) {
                 <Label htmlFor="url">Link do comprovante</Label>
                 <div className="flex gap-2">
                   <Input id="url" readOnly value={ativo.url} className="font-mono text-xs" />
-                  <Button variant="outline" size="icon" onClick={() => copiar(ativo.url)}>
+                  <Button variant="outline" size="icon" aria-label="Copiar o link do comprovante" onClick={() => copiar(ativo.url)}>
                     {copiado ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                   </Button>
                 </div>

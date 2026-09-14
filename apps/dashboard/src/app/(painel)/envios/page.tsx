@@ -329,8 +329,8 @@ export default function EnviosPage() {
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label>Canal de envio</Label>
-              <Select value={canalEnvio} onChange={(e) => setCanalEnvio(e.target.value)}>
+              <Label htmlFor="page-canal-de-envio">Canal de envio</Label>
+              <Select id="page-canal-de-envio" value={canalEnvio} onChange={(e) => setCanalEnvio(e.target.value)}>
                 <option>WhatsApp</option>
                 <option>E-mail</option>
                 <option>Entregue pessoalmente</option>
@@ -338,8 +338,8 @@ export default function EnviosPage() {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Observação (opcional)</Label>
-              <Input
+              <Label htmlFor="page-observacao-opcional">Observação (opcional)</Label>
+              <Input id="page-observacao-opcional"
                 value={observacao}
                 onChange={(e) => setObservacao(e.target.value)}
                 placeholder='ex: "enviado no grupo da Construtora X"'

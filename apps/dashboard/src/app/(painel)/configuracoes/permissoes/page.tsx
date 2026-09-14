@@ -242,8 +242,8 @@ function PermissoesInner() {
         <Card className="space-y-5 p-6">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="space-y-1">
-              <Label>Nome do papel</Label>
-              <Input
+              <Label htmlFor="page-nome-do-papel">Nome do papel</Label>
+              <Input id="page-nome-do-papel"
                 value={form.nome}
                 disabled={bloqueado}
                 placeholder="ex: Financeiro"
@@ -251,8 +251,8 @@ function PermissoesInner() {
               />
             </div>
             <div className="space-y-1">
-              <Label>Descrição</Label>
-              <Input
+              <Label htmlFor="page-descricao">Descrição</Label>
+              <Input id="page-descricao"
                 value={form.descricao}
                 disabled={bloqueado}
                 placeholder="opcional"

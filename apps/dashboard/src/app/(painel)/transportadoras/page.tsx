@@ -111,7 +111,7 @@ export default function TransportadorasPage() {
             <div className="flex justify-center">
               <Permitido chave="transportadoras.editar">
                 <Link href={`/transportadoras/${t.id}`} title="Editar">
-                  <Button variant="ghost" size="icon">
+                  <Button variant="ghost" size="icon" aria-label="Editar">
                     <Pencil className="h-4 w-4" />
                   </Button>
                 </Link>

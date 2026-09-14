@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { useSujo } from "@/hooks/use-sujo";
+import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
 
 export type Campo = {
   id: string;
@@ -72,6 +74,10 @@ export function CampoLayoutForm({ initial }: Props) {
     descricao: initial?.descricao ?? "",
     ordem: initial?.ordem ?? 100,
   });
+
+  // Sair de um cadastro longo descartava tudo em silêncio.
+  const sujo = useSujo(form);
+  useAvisarSeSujo(sujo);
   const [erro, setErro] = useState<string | null>(null);
 
   async function onSubmit(ev: React.FormEvent) {
@@ -117,8 +123,8 @@ export function CampoLayoutForm({ initial }: Props) {
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div className="space-y-2 md:col-span-2">
-            <Label>Label *</Label>
-            <Input
+            <Label htmlFor="campolayou-label">Label *</Label>
+            <Input id="campolayou-label"
               required
               autoFocus
               value={form.label}
@@ -134,8 +140,8 @@ export function CampoLayoutForm({ initial }: Props) {
             />
           </div>
           <div className="space-y-2">
-            <Label>Slug *</Label>
-            <Input
+            <Label htmlFor="campolayou-slug">Slug *</Label>
+            <Input id="campolayou-slug"
               required
               value={form.slug}
               onChange={(e) => setForm({ ...form, slug: slugify(e.target.value) })}
@@ -147,8 +153,8 @@ export function CampoLayoutForm({ initial }: Props) {
             </p>
           </div>
           <div className="space-y-2">
-            <Label>Tipo</Label>
-            <Select
+            <Label htmlFor="campolayou-tipo">Tipo</Label>
+            <Select id="campolayou-tipo"
               value={form.tipo}
               onChange={(e) =>
                 setForm({ ...form, tipo: e.target.value as FormShape["tipo"] })
@@ -161,16 +167,16 @@ export function CampoLayoutForm({ initial }: Props) {
             </Select>
           </div>
           <div className="space-y-2 md:col-span-2">
-            <Label>Descrição</Label>
-            <Input
+            <Label htmlFor="campolayou-descricao">Descrição</Label>
+            <Input id="campolayou-descricao"
               value={form.descricao}
               onChange={(e) => setForm({ ...form, descricao: e.target.value })}
               placeholder="O que é esse campo? Aparece pro admin na tela de mapeamento."
             />
           </div>
           <div className="space-y-2">
-            <Label>Ordem no dropdown</Label>
-            <Input
+            <Label htmlFor="campolayou-ordem-no-dropdown">Ordem no dropdown</Label>
+            <Input id="campolayou-ordem-no-dropdown"
               type="number"
               value={form.ordem}
               onChange={(e) =>
@@ -183,11 +189,7 @@ export function CampoLayoutForm({ initial }: Props) {
         {erro && <p className="text-sm text-destructive">{erro}</p>}
 
         <div className="flex justify-end gap-2 pt-2">
-          <Link href="/configuracoes/campos-layout">
-            <Button type="button" variant="outline">
-              Cancelar
-            </Button>
-          </Link>
+          <BotaoCancelar href="/configuracoes/campos-layout" sujo={sujo} />
           <Button type="submit" disabled={saving}>
             Salvar
           </Button>

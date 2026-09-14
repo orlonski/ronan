@@ -105,7 +105,7 @@ export default function VeiculosPage() {
             <div className="flex justify-center">
               <Permitido chave="veiculos.editar">
                 <Link href={`/veiculos/${v.id}`} title="Editar">
-                  <Button variant="ghost" size="icon">
+                  <Button variant="ghost" size="icon" aria-label="Editar">
                     <Pencil className="h-4 w-4" />
                   </Button>
                 </Link>

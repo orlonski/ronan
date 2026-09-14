@@ -13,6 +13,8 @@ import {
   useResourceOptions,
   useUpdateResource,
 } from "@/lib/client-api";
+import { useSujo } from "@/hooks/use-sujo";
+import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
 
 type Empresa = { id: string; nome: string };
 type Material = { id: string; nome: string };
@@ -70,6 +72,10 @@ export function RegraForm({ initial }: Props) {
     toneladasMinimo: initial?.toneladasMinimo ?? "",
   });
 
+  // Sair de um cadastro longo descartava tudo em silêncio.
+  const sujo = useSujo(form);
+  useAvisarSeSujo(sujo);
+
   // Cria: seleciona a primeira empresa por padrão.
   useEffect(() => {
     if (initial || form.empresaId || !empresas.data?.[0]?.id) return;
@@ -120,8 +126,8 @@ export function RegraForm({ initial }: Props) {
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label>Empresa</Label>
-            <Select
+            <Label htmlFor="regraform-empresa">Empresa</Label>
+            <Select id="regraform-empresa"
               required
               value={form.empresaId}
               onChange={(e) => setForm({ ...form, empresaId: e.target.value })}
@@ -137,8 +143,8 @@ export function RegraForm({ initial }: Props) {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Material</Label>
-            <Select
+            <Label htmlFor="regraform-material">Material</Label>
+            <Select id="regraform-material"
               value={form.materialId}
               onChange={(e) => setForm({ ...form, materialId: e.target.value })}
             >
@@ -180,8 +186,8 @@ export function RegraForm({ initial }: Props) {
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label>Km mínimo faturado</Label>
-            <Input
+            <Label htmlFor="regraform-km-minimo-faturado">Km mínimo faturado</Label>
+            <Input id="regraform-km-minimo-faturado"
               inputMode="decimal"
               placeholder="ex: 10"
               value={form.kmMinimo}
@@ -189,8 +195,8 @@ export function RegraForm({ initial }: Props) {
             />
           </div>
           <div className="space-y-2">
-            <Label>Toneladas mínimas</Label>
-            <Input
+            <Label htmlFor="regraform-toneladas-minimas">Toneladas mínimas</Label>
+            <Input id="regraform-toneladas-minimas"
               inputMode="decimal"
               placeholder="opcional"
               value={form.toneladasMinimo}
@@ -206,11 +212,7 @@ export function RegraForm({ initial }: Props) {
         {erro && <p className="text-sm text-destructive">{erro}</p>}
 
         <div className="flex justify-end gap-2 pt-2">
-          <Link href="/regras-minimo">
-            <Button type="button" variant="outline">
-              Cancelar
-            </Button>
-          </Link>
+          <BotaoCancelar href="/regras-minimo" sujo={sujo} />
           <Button type="submit" disabled={saving}>
             Salvar
           </Button>

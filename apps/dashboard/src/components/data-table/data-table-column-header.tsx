@@ -25,6 +25,13 @@ export function DataTableColumnHeader<TData, TValue>({
     <button
       type="button"
       onClick={() => column.toggleSorting(sorted === "asc")}
+      aria-label={
+        sorted === "asc"
+          ? `${title}: ordenado crescente. Clique pra inverter.`
+          : sorted === "desc"
+            ? `${title}: ordenado decrescente. Clique pra inverter.`
+            : `Ordenar por ${title}`
+      }
       className={cn(
         "-mx-1 flex items-center gap-1 rounded px-1 py-0.5 hover:bg-muted",
         className,
@@ -32,11 +39,11 @@ export function DataTableColumnHeader<TData, TValue>({
     >
       <span>{title}</span>
       {sorted === "asc" ? (
-        <ArrowUp className="h-3.5 w-3.5" />
+        <ArrowUp className="h-3.5 w-3.5" aria-hidden />
       ) : sorted === "desc" ? (
-        <ArrowDown className="h-3.5 w-3.5" />
+        <ArrowDown className="h-3.5 w-3.5" aria-hidden />
       ) : (
-        <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />
+        <ArrowUpDown className="h-3.5 w-3.5 opacity-40" aria-hidden />
       )}
     </button>
   );

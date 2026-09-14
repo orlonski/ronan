@@ -30,6 +30,8 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { useCreateResource, useUpdateResource, useAuthToken, fetchApi } from "@/lib/client-api";
 import { StatusToggle } from "@/components/status-toggle";
+import { useSujo } from "@/hooks/use-sujo";
+import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
 
 type Veiculo = { id: string; placa: string; modelo: string | null };
 type DocumentoResumo = { tipo: TipoDocumentoMotorista; validade: string | null };
@@ -225,6 +227,10 @@ export function MotoristaForm({ initial }: Props) {
         }
       : empty,
   );
+
+  // Sair de um cadastro longo descartava tudo em silêncio.
+  const sujo = useSujo(form);
+  useAvisarSeSujo(sujo);
 
   /**
    * O CPF já tem cadastro em OUTRA empresa?
@@ -545,8 +551,8 @@ export function MotoristaForm({ initial }: Props) {
 
           <div className="grid gap-3 md:grid-cols-3">
             <div className="space-y-2">
-              <Label>Regra deste motorista</Label>
-              <Select
+              <Label htmlFor="motoristaf-regra-deste-motorista">Regra deste motorista</Label>
+              <Select id="motoristaf-regra-deste-motorista"
                 value={form.tipoRemuneracao}
                 onChange={(e) =>
                   setForm({
@@ -581,8 +587,8 @@ export function MotoristaForm({ initial }: Props) {
             )}
 
             <div className="space-y-2">
-              <Label>Valor da diária (R$)</Label>
-              <Input
+              <Label htmlFor="motoristaf-valor-da-diaria-r">Valor da diária (R$)</Label>
+              <Input id="motoristaf-valor-da-diaria-r"
                 inputMode="decimal"
                 placeholder="herda da modalidade"
                 value={form.valorDiaria}
@@ -780,11 +786,7 @@ export function MotoristaForm({ initial }: Props) {
       </Card>
 
       <div className="flex justify-end gap-2">
-        <Link href="/motoristas">
-          <Button type="button" variant="outline">
-            Cancelar
-          </Button>
-        </Link>
+        <BotaoCancelar href="/motoristas" sujo={sujo} />
         <Button type="submit" disabled={saving}>
           {!initial && usaOApp ? "Enviar convite" : "Salvar"}
         </Button>

@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { useCreateResource, useUpdateResource } from "@/lib/client-api";
+import { useSujo } from "@/hooks/use-sujo";
+import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
 
 const PontoMap = dynamic(
   () => import("@/components/ponto-map").then((m) => m.PontoMap),
@@ -56,6 +58,10 @@ export function PedagioForm({ initial }: Props) {
     lng: initial?.lng != null ? String(initial.lng) : "",
     ativo: initial?.ativo ?? true,
   });
+
+  // Sair de um cadastro longo descartava tudo em silêncio.
+  const sujo = useSujo(form);
+  useAvisarSeSujo(sujo);
   const [erro, setErro] = useState<string | null>(null);
 
   const lat = parseNum(form.lat);
@@ -97,8 +103,8 @@ export function PedagioForm({ initial }: Props) {
       <div className={temCoord ? "grid grid-cols-1 gap-6 lg:grid-cols-2" : ""}>
         <Card className="space-y-4 p-6">
           <div className="space-y-2">
-            <Label>Nome do pedágio *</Label>
-            <Input
+            <Label htmlFor="pedagiofor-nome-do-pedagio">Nome do pedágio *</Label>
+            <Input id="pedagiofor-nome-do-pedagio"
               required
               placeholder='ex: "Praça BR-376 — Ponta Grossa"'
               value={form.nome}
@@ -108,16 +114,16 @@ export function PedagioForm({ initial }: Props) {
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="space-y-2">
-              <Label>Rodovia</Label>
-              <Input
+              <Label htmlFor="pedagiofor-rodovia">Rodovia</Label>
+              <Input id="pedagiofor-rodovia"
                 placeholder="ex: BR-376"
                 value={form.rodovia}
                 onChange={(e) => setForm({ ...form, rodovia: e.target.value })}
               />
             </div>
             <div className="space-y-2">
-              <Label>Concessionária</Label>
-              <Input
+              <Label htmlFor="pedagiofor-concessionaria">Concessionária</Label>
+              <Input id="pedagiofor-concessionaria"
                 placeholder="ex: CCR ViaSul"
                 value={form.concessionaria}
                 onChange={(e) => setForm({ ...form, concessionaria: e.target.value })}
@@ -127,15 +133,15 @@ export function PedagioForm({ initial }: Props) {
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <div className="space-y-2 md:col-span-2">
-              <Label>Cidade</Label>
-              <Input
+              <Label htmlFor="pedagiofor-cidade">Cidade</Label>
+              <Input id="pedagiofor-cidade"
                 value={form.cidade}
                 onChange={(e) => setForm({ ...form, cidade: e.target.value })}
               />
             </div>
             <div className="space-y-2">
-              <Label>UF</Label>
-              <Input
+              <Label htmlFor="pedagiofor-uf">UF</Label>
+              <Input id="pedagiofor-uf"
                 maxLength={2}
                 value={form.uf}
                 onChange={(e) => setForm({ ...form, uf: e.target.value.toUpperCase() })}
@@ -145,8 +151,8 @@ export function PedagioForm({ initial }: Props) {
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <div className="space-y-2">
-              <Label>Valor base (R$/eixo)</Label>
-              <Input
+              <Label htmlFor="pedagiofor-valor-base-r-eixo">Valor base (R$/eixo)</Label>
+              <Input id="pedagiofor-valor-base-r-eixo"
                 inputMode="decimal"
                 placeholder="opcional"
                 value={form.valorBase.toString()}
@@ -154,8 +160,8 @@ export function PedagioForm({ initial }: Props) {
               />
             </div>
             <div className="space-y-2">
-              <Label>Latitude *</Label>
-              <Input
+              <Label htmlFor="pedagiofor-latitude">Latitude *</Label>
+              <Input id="pedagiofor-latitude"
                 required
                 inputMode="decimal"
                 placeholder="-25.0916"
@@ -164,8 +170,8 @@ export function PedagioForm({ initial }: Props) {
               />
             </div>
             <div className="space-y-2">
-              <Label>Longitude *</Label>
-              <Input
+              <Label htmlFor="pedagiofor-longitude">Longitude *</Label>
+              <Input id="pedagiofor-longitude"
                 required
                 inputMode="decimal"
                 placeholder="-50.1668"
@@ -177,8 +183,8 @@ export function PedagioForm({ initial }: Props) {
 
           {initial && (
             <div className="space-y-2">
-              <Label>Situação</Label>
-              <Select
+              <Label htmlFor="pedagiofor-situacao">Situação</Label>
+              <Select id="pedagiofor-situacao"
                 value={form.ativo ? "1" : "0"}
                 onChange={(e) => setForm({ ...form, ativo: e.target.value === "1" })}
               >
@@ -204,11 +210,7 @@ export function PedagioForm({ initial }: Props) {
       </div>
 
       <div className="flex justify-end gap-2">
-        <Link href="/pedagios-rodovia">
-          <Button type="button" variant="outline">
-            Cancelar
-          </Button>
-        </Link>
+        <BotaoCancelar href="/pedagios-rodovia" sujo={sujo} />
         <Button type="submit" disabled={saving}>
           Salvar
         </Button>

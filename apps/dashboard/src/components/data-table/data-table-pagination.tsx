@@ -24,7 +24,7 @@ export function DataTablePagination({
     <div className="flex flex-col gap-3 px-2 py-1 text-sm md:flex-row md:items-center md:justify-between">
       <div className="text-muted-foreground">
         {total === 0 ? (
-          "Nenhum registro"
+          "Nada encontrado"
         ) : (
           <>
             Mostrando <span className="font-medium text-foreground">{start}–{end}</span> de{" "}
@@ -59,6 +59,7 @@ export function DataTablePagination({
             onClick={() => state.setPage(1)}
             disabled={page <= 1}
             title="Primeira página"
+            aria-label="Primeira página"
           >
             <ChevronsLeft className="h-4 w-4" />
           </Button>
@@ -70,6 +71,7 @@ export function DataTablePagination({
             onClick={() => state.setPage(page - 1)}
             disabled={page <= 1}
             title="Anterior"
+            aria-label="Anterior"
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -85,6 +87,7 @@ export function DataTablePagination({
             onClick={() => state.setPage(page + 1)}
             disabled={page >= totalPages}
             title="Próxima"
+            aria-label="Próxima"
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -96,6 +99,7 @@ export function DataTablePagination({
             onClick={() => state.setPage(totalPages)}
             disabled={page >= totalPages}
             title="Última página"
+            aria-label="Última página"
           >
             <ChevronsRight className="h-4 w-4" />
           </Button>

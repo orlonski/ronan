@@ -15,11 +15,11 @@ type Props = {
 export function FormPageHeader({ title, description, backHref, right }: Props) {
   return (
     <header className="flex items-center gap-3">
-      <Link href={backHref}>
-        <Button variant="ghost" size="icon" title="Voltar" aria-label="Voltar">
+      <Button variant="ghost" size="icon" title="Voltar" aria-label="Voltar" asChild>
+          <Link href={backHref}>
           <ArrowLeft className="h-5 w-5" />
+          </Link>
         </Button>
-      </Link>
       <div className="flex-1">
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         {description && (

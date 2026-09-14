@@ -15,6 +15,8 @@ import { Select } from "@/components/ui/select";
 import { ASSUNTOS_RESUMO, RECURSOS_LABEL } from "@ronan/shared-types";
 import { useApiQuery, useCreateResource, useUpdateResource } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
+import { useSujo } from "@/hooks/use-sujo";
+import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
 
 type Papel = { id: string; nome: string; permissoes: string[] };
 type PermissaoRow = { chave: string; titulo: string; escopavel?: boolean };
@@ -83,6 +85,10 @@ export function UsuarioForm({ initial }: Props) {
     acessoGlobal: initial?.acessoGlobal ?? true,
     transportadoraIds: (initial?.transportadoras ?? []).map((t) => t.id),
   });
+
+  // Sair de um cadastro longo descartava tudo em silêncio.
+  const sujo = useSujo(form);
+  useAvisarSeSujo(sujo);
 
   function toggleAssunto(id: string) {
     setForm((f) => {
@@ -156,8 +162,8 @@ export function UsuarioForm({ initial }: Props) {
     <Card className="p-6">
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label>Nome</Label>
-          <Input
+          <Label htmlFor="usuariofor-nome">Nome</Label>
+          <Input id="usuariofor-nome"
             required
             autoFocus
             value={form.nome}
@@ -165,8 +171,8 @@ export function UsuarioForm({ initial }: Props) {
           />
         </div>
         <div className="space-y-2">
-          <Label>Email</Label>
-          <Input
+          <Label htmlFor="usuariofor-email">Email</Label>
+          <Input id="usuariofor-email"
             type="email"
             required
             disabled={!!initial}
@@ -305,8 +311,8 @@ export function UsuarioForm({ initial }: Props) {
         )}
 
         <div className="space-y-3 rounded-md border p-4">
-          <Label>Resumo diário no WhatsApp</Label>
-          <Input
+          <Label htmlFor="usuariofor-resumo-diario-no-whatsapp">Resumo diário no WhatsApp</Label>
+          <Input id="usuariofor-resumo-diario-no-whatsapp"
             type="tel"
             placeholder="ex: (41) 99999-9999"
             value={form.whatsappResumo}
@@ -355,11 +361,7 @@ export function UsuarioForm({ initial }: Props) {
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <Link href="/usuarios">
-            <Button type="button" variant="outline">
-              Cancelar
-            </Button>
-          </Link>
+          <BotaoCancelar href="/usuarios" sujo={sujo} />
           <Button type="submit" disabled={saving || escopoIncompleto}>
             Salvar
           </Button>

@@ -14,6 +14,8 @@ import {
   useResourceOptions,
   useUpdateResource,
 } from "@/lib/client-api";
+import { useSujo } from "@/hooks/use-sujo";
+import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
 
 type Empresa = { id: string; nome: string };
 export type Cliente = {
@@ -48,6 +50,10 @@ export function ClienteForm({ initial }: Props) {
     apelidos: initial?.apelidos ?? [],
   });
 
+  // Sair de um cadastro longo descartava tudo em silêncio.
+  const sujo = useSujo(form);
+  useAvisarSeSujo(sujo);
+
   useEffect(() => {
     if (initial || form.empresaId || !empresas.data?.[0]?.id) return;
     setForm((f) => ({ ...f, empresaId: empresas.data![0]!.id }));
@@ -74,8 +80,8 @@ export function ClienteForm({ initial }: Props) {
     <Card className="p-6">
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label>Nome</Label>
-          <Input
+          <Label htmlFor="clientefor-nome">Nome</Label>
+          <Input id="clientefor-nome"
             required
             autoFocus
             value={form.nome}
@@ -83,8 +89,8 @@ export function ClienteForm({ initial }: Props) {
           />
         </div>
         <div className="space-y-2">
-          <Label>Empresa</Label>
-          <Select
+          <Label htmlFor="clientefor-empresa">Empresa</Label>
+          <Select id="clientefor-empresa"
             required
             value={form.empresaId}
             onChange={(e) => setForm({ ...form, empresaId: e.target.value })}
@@ -109,11 +115,7 @@ export function ClienteForm({ initial }: Props) {
           </p>
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <Link href="/clientes">
-            <Button type="button" variant="outline">
-              Cancelar
-            </Button>
-          </Link>
+          <BotaoCancelar href="/clientes" sujo={sujo} />
           <Button type="submit" disabled={saving}>
             Salvar
           </Button>

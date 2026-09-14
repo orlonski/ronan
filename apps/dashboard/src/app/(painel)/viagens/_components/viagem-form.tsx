@@ -21,6 +21,8 @@ import { isoDeInputDataHoraSP, paraInputDataHoraSP } from "@/lib/datetime-br";
 import { formatarDuracao } from "@ronan/shared-types";
 import { numeroInvalido, numeroOuNull } from "@/lib/numero";
 import { AvisoNumero } from "@/components/aviso-numero";
+import { useSujo } from "@/hooks/use-sujo";
+import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
 
 type Material = { id: string; nome: string };
 type Motorista = { id: string; nome: string };
@@ -149,6 +151,10 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
     entradaEm: paraInputDataHoraSP(initial.entradaEm),
     saidaEm: paraInputDataHoraSP(initial.saidaEm),
   });
+
+  // Sair de um cadastro longo descartava tudo em silêncio.
+  const sujo = useSujo(form);
+  useAvisarSeSujo(sujo);
 
   const ehPeriodo = initial.tipoServico?.medicao === "PERIODO";
 
@@ -363,8 +369,8 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
         )}
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">
-            <Label>Data</Label>
-            <Input
+            <Label htmlFor="viagemform-data">Data</Label>
+            <Input id="viagemform-data"
               type="date"
               required
               value={form.data}
@@ -372,8 +378,8 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
             />
           </div>
           <div className="space-y-2">
-            <Label>Ticket</Label>
-            <Input
+            <Label htmlFor="viagemform-ticket">Ticket</Label>
+            <Input id="viagemform-ticket"
               value={form.ticket}
               onChange={(e) => setForm({ ...form, ticket: e.target.value })}
               maxLength={50}
@@ -412,8 +418,8 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
               lugar às horas, que é o que se cobra. */}
           {ehPeriodo ? (
             <div className="space-y-2">
-              <Label>Entrada</Label>
-              <Input
+              <Label htmlFor="viagemform-entrada">Entrada</Label>
+              <Input id="viagemform-entrada"
                 type="datetime-local"
                 required
                 value={form.entradaEm}
@@ -439,8 +445,8 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
         {ehPeriodo && (
           <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
-              <Label>Saída</Label>
-              <Input
+              <Label htmlFor="viagemform-saida">Saída</Label>
+              <Input id="viagemform-saida"
                 type="datetime-local"
                 value={form.saidaEm}
                 onChange={(e) => setForm({ ...form, saidaEm: e.target.value })}
@@ -554,8 +560,8 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
             <AvisoNumero valor={form.valorPedagioTotal} dinheiro />
           </div>
           <div className="space-y-2">
-            <Label>Observação</Label>
-            <Input
+            <Label htmlFor="viagemform-observacao">Observação</Label>
+            <Input id="viagemform-observacao"
               maxLength={500}
               value={form.observacao}
               onChange={(e) => setForm({ ...form, observacao: e.target.value })}
@@ -653,11 +659,7 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
         </details>
 
         <div className="flex justify-end gap-2 pt-2">
-          <Link href={`/viagens/${initial.id}`}>
-            <Button type="button" variant="outline">
-              Cancelar
-            </Button>
-          </Link>
+          <BotaoCancelar href={`/viagens/${initial.id}`} sujo={sujo} />
           <Button type="submit" disabled={saving}>
             {saving ? "Salvando…" : "Salvar"}
           </Button>

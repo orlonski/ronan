@@ -12,6 +12,8 @@ import { VeiculoCombobox } from "@/components/fk-comboboxes";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fetchApi, useAuthToken, useResourceOptions } from "@/lib/client-api";
+import { useSujo } from "@/hooks/use-sujo";
+import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
 
 type Empresa = { id: string; nome: string };
 
@@ -86,6 +88,10 @@ export function AbastecimentoForm({ initial }: { initial: AbastecimentoEditavel 
     veiculoId: initial.veiculo.id,
     empresaId: initial.empresa?.id ?? "",
   });
+
+  // Sair de um cadastro longo descartava tudo em silêncio.
+  const sujo = useSujo(form);
+  useAvisarSeSujo(sujo);
 
   const veiculoInicial = {
     value: initial.veiculo.id,
@@ -176,8 +182,8 @@ export function AbastecimentoForm({ initial }: { initial: AbastecimentoEditavel 
       <form onSubmit={onSubmit} className="space-y-5">
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">
-            <Label>Data/hora</Label>
-            <Input
+            <Label htmlFor="abastecime-data-hora">Data/hora</Label>
+            <Input id="abastecime-data-hora"
               type="datetime-local"
               required
               value={form.data}
@@ -205,8 +211,8 @@ export function AbastecimentoForm({ initial }: { initial: AbastecimentoEditavel 
 
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">
-            <Label>Litros</Label>
-            <Input
+            <Label htmlFor="abastecime-litros">Litros</Label>
+            <Input id="abastecime-litros"
               required
               inputMode="decimal"
               value={form.litros}
@@ -214,8 +220,8 @@ export function AbastecimentoForm({ initial }: { initial: AbastecimentoEditavel 
             />
           </div>
           <div className="space-y-2">
-            <Label>Valor total (R$)</Label>
-            <Input
+            <Label htmlFor="abastecime-valor-total-r">Valor total (R$)</Label>
+            <Input id="abastecime-valor-total-r"
               inputMode="decimal"
               placeholder={form.emComboio ? "Em comboio — opcional" : "0,00"}
               value={form.valorTotal}
@@ -223,8 +229,8 @@ export function AbastecimentoForm({ initial }: { initial: AbastecimentoEditavel 
             />
           </div>
           <div className="space-y-2">
-            <Label>Odômetro</Label>
-            <Input
+            <Label htmlFor="abastecime-odometro">Odômetro</Label>
+            <Input id="abastecime-odometro"
               required
               inputMode="numeric"
               value={form.odometro}
@@ -235,8 +241,8 @@ export function AbastecimentoForm({ initial }: { initial: AbastecimentoEditavel 
 
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">
-            <Label>Posto</Label>
-            <Input
+            <Label htmlFor="abastecime-posto">Posto</Label>
+            <Input id="abastecime-posto"
               maxLength={120}
               value={form.postoNome}
               onChange={(e) => setForm({ ...form, postoNome: e.target.value })}
@@ -272,8 +278,8 @@ export function AbastecimentoForm({ initial }: { initial: AbastecimentoEditavel 
         </div>
 
         <div className="space-y-2">
-          <Label>Observação</Label>
-          <Input
+          <Label htmlFor="abastecime-observacao">Observação</Label>
+          <Input id="abastecime-observacao"
             maxLength={500}
             value={form.observacao}
             onChange={(e) => setForm({ ...form, observacao: e.target.value })}
@@ -281,11 +287,7 @@ export function AbastecimentoForm({ initial }: { initial: AbastecimentoEditavel 
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <Link href={`/abastecimentos/${initial.id}`}>
-            <Button type="button" variant="outline">
-              Cancelar
-            </Button>
-          </Link>
+          <BotaoCancelar href={`/abastecimentos/${initial.id}`} sujo={sujo} />
           <Button type="submit" disabled={saving}>
             {saving ? "Salvando…" : "Salvar"}
           </Button>

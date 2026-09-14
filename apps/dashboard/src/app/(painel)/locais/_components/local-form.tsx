@@ -24,6 +24,8 @@ import {
   useCreateResource,
   useUpdateResource,
 } from "@/lib/client-api";
+import { useSujo } from "@/hooks/use-sujo";
+import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
 
 type Tipo = "CARGA" | "DESCARGA" | "AMBOS";
 type Cliente = { id: string; nome: string };
@@ -81,6 +83,10 @@ export function LocalForm({ initial }: Props) {
     lng: initial?.lng ?? (null as number | null),
     apelidos: initial?.apelidos ?? [],
   });
+
+  // Sair de um cadastro longo descartava tudo em silêncio.
+  const sujo = useSujo(form);
+  useAvisarSeSujo(sujo);
   const [cepLoading, setCepLoading] = useState(false);
   const [cepNotFound, setCepNotFound] = useState(false);
 
@@ -170,8 +176,8 @@ export function LocalForm({ initial }: Props) {
           </div>
 
           <div className="space-y-2">
-            <Label>Nome do local *</Label>
-            <Input
+            <Label htmlFor="localform-nome-do-local">Nome do local *</Label>
+            <Input id="localform-nome-do-local"
               required
               placeholder='ex: "Pedreira Souza Naves — balança 2"'
               value={form.nome}
@@ -184,8 +190,8 @@ export function LocalForm({ initial }: Props) {
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <div className="space-y-2">
-            <Label>CEP</Label>
-            <Input
+            <Label htmlFor="localform-cep">CEP</Label>
+            <Input id="localform-cep"
               value={form.cep}
               maxLength={9}
               placeholder="00000-000"
@@ -198,8 +204,8 @@ export function LocalForm({ initial }: Props) {
             )}
           </div>
           <div className="space-y-2 md:col-span-2">
-            <Label>Logradouro *</Label>
-            <Input
+            <Label htmlFor="localform-logradouro">Logradouro *</Label>
+            <Input id="localform-logradouro"
               required
               value={form.logradouro}
               onChange={(e) => setForm({ ...form, logradouro: e.target.value })}
@@ -209,15 +215,15 @@ export function LocalForm({ initial }: Props) {
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <div className="space-y-2">
-            <Label>Número</Label>
-            <Input
+            <Label htmlFor="localform-numero">Número</Label>
+            <Input id="localform-numero"
               value={form.numero}
               onChange={(e) => setForm({ ...form, numero: e.target.value })}
             />
           </div>
           <div className="space-y-2 md:col-span-2">
-            <Label>Bairro</Label>
-            <Input
+            <Label htmlFor="localform-bairro">Bairro</Label>
+            <Input id="localform-bairro"
               value={form.bairro}
               onChange={(e) => setForm({ ...form, bairro: e.target.value })}
             />
@@ -226,16 +232,16 @@ export function LocalForm({ initial }: Props) {
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <div className="space-y-2 md:col-span-2">
-            <Label>Cidade *</Label>
-            <Input
+            <Label htmlFor="localform-cidade">Cidade *</Label>
+            <Input id="localform-cidade"
               required
               value={form.cidade}
               onChange={(e) => setForm({ ...form, cidade: e.target.value })}
             />
           </div>
           <div className="space-y-2">
-            <Label>UF *</Label>
-            <Input
+            <Label htmlFor="localform-uf">UF *</Label>
+            <Input id="localform-uf"
               required
               maxLength={2}
               value={form.uf}
@@ -245,8 +251,8 @@ export function LocalForm({ initial }: Props) {
         </div>
 
         <div className="space-y-2">
-          <Label>Ponto de referência</Label>
-          <Input
+          <Label htmlFor="localform-ponto-de-referencia">Ponto de referência</Label>
+          <Input id="localform-ponto-de-referencia"
             value={form.pontoReferencia}
             onChange={(e) => setForm({ ...form, pontoReferencia: e.target.value })}
             placeholder='ex: "portaria fundos", "balança 2"'
@@ -268,8 +274,8 @@ export function LocalForm({ initial }: Props) {
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div className="space-y-2">
-            <Label>Tipo</Label>
-            <Select
+            <Label htmlFor="localform-tipo">Tipo</Label>
+            <Select id="localform-tipo"
               value={form.tipo}
               onChange={(e) => setForm({ ...form, tipo: e.target.value as Tipo })}
             >
@@ -313,11 +319,7 @@ export function LocalForm({ initial }: Props) {
       </div>
 
       <div className="flex justify-end gap-2">
-        <Link href="/locais">
-          <Button type="button" variant="outline">
-            Cancelar
-          </Button>
-        </Link>
+        <BotaoCancelar href="/locais" sujo={sujo} />
         <Button type="submit" disabled={saving}>
           Salvar
         </Button>

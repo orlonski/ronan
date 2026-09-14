@@ -9,6 +9,8 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCreateResource, useUpdateResource } from "@/lib/client-api";
+import { useSujo } from "@/hooks/use-sujo";
+import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
 
 export type Veiculo = {
   id: string;
@@ -34,6 +36,10 @@ export function VeiculoForm({ initial }: Props) {
     transportadoraId: initial?.transportadoraId ?? undefined,
   });
 
+  // Sair de um cadastro longo descartava tudo em silêncio.
+  const sujo = useSujo(form);
+  useAvisarSeSujo(sujo);
+
   async function onSubmit(ev: React.FormEvent) {
     ev.preventDefault();
     const body: Record<string, unknown> = {
@@ -58,8 +64,8 @@ export function VeiculoForm({ initial }: Props) {
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div className="space-y-2">
-            <Label>Placa</Label>
-            <Input
+            <Label htmlFor="veiculofor-placa">Placa</Label>
+            <Input id="veiculofor-placa"
               required
               autoFocus={!placaTravada}
               disabled={placaTravada}
@@ -77,8 +83,8 @@ export function VeiculoForm({ initial }: Props) {
             )}
           </div>
           <div className="space-y-2">
-            <Label>Modelo</Label>
-            <Input
+            <Label htmlFor="veiculofor-modelo">Modelo</Label>
+            <Input id="veiculofor-modelo"
               autoFocus={placaTravada}
               value={form.modelo}
               onChange={(e) => setForm({ ...form, modelo: e.target.value })}
@@ -102,11 +108,7 @@ export function VeiculoForm({ initial }: Props) {
           </p>
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <Link href="/veiculos">
-            <Button type="button" variant="outline">
-              Cancelar
-            </Button>
-          </Link>
+          <BotaoCancelar href="/veiculos" sujo={sujo} />
           <Button type="submit" disabled={saving}>
             Salvar
           </Button>

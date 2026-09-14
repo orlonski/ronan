@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { useCreateResource, useResourceOptions, useUpdateResource } from "@/lib/client-api";
+import { useSujo } from "@/hooks/use-sujo";
+import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
 
 type Nomeado = { id: string; nome: string };
 
@@ -90,6 +92,10 @@ export function PedidoForm({ initial }: { initial?: Pedido }) {
     observacao: initial?.observacao ?? "",
   });
 
+  // Sair de um cadastro longo descartava tudo em silêncio.
+  const sujo = useSujo(form);
+  useAvisarSeSujo(sujo);
+
   useEffect(() => {
     if (initial || form.empresaId || !empresas.data?.[0]?.id) return;
     setForm((f) => ({ ...f, empresaId: empresas.data![0]!.id }));
@@ -137,8 +143,8 @@ export function PedidoForm({ initial }: { initial?: Pedido }) {
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label>Empresa que pediu</Label>
-            <Select
+            <Label htmlFor="pedidoform-empresa-que-pediu">Empresa que pediu</Label>
+            <Select id="pedidoform-empresa-que-pediu"
               required
               value={form.empresaId}
               onChange={(e) => setForm({ ...form, empresaId: e.target.value, clienteId: undefined })}
@@ -169,8 +175,8 @@ export function PedidoForm({ initial }: { initial?: Pedido }) {
 
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">
-            <Label>Quanto</Label>
-            <Input
+            <Label htmlFor="pedidoform-quanto">Quanto</Label>
+            <Input id="pedidoform-quanto"
               inputMode="decimal"
               placeholder="ex: 20"
               value={form.quantidadeAlvo}
@@ -178,8 +184,8 @@ export function PedidoForm({ initial }: { initial?: Pedido }) {
             />
           </div>
           <div className="space-y-2">
-            <Label>Medido em</Label>
-            <Select
+            <Label htmlFor="pedidoform-medido-em">Medido em</Label>
+            <Select id="pedidoform-medido-em"
               value={form.unidadeAlvo}
               onChange={(e) =>
                 setForm({ ...form, unidadeAlvo: e.target.value as UnidadePedidoTipo })
@@ -193,8 +199,8 @@ export function PedidoForm({ initial }: { initial?: Pedido }) {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Material</Label>
-            <Select
+            <Label htmlFor="pedidoform-material">Material</Label>
+            <Select id="pedidoform-material"
               value={form.materialId}
               onChange={(e) => setForm({ ...form, materialId: e.target.value })}
             >
@@ -255,8 +261,8 @@ export function PedidoForm({ initial }: { initial?: Pedido }) {
             </p>
           </div>
           <div className="space-y-2">
-            <Label>Prioridade</Label>
-            <Select
+            <Label htmlFor="pedidoform-prioridade">Prioridade</Label>
+            <Select id="pedidoform-prioridade"
               value={String(form.prioridade)}
               onChange={(e) => setForm({ ...form, prioridade: Number(e.target.value) })}
             >
@@ -280,11 +286,7 @@ export function PedidoForm({ initial }: { initial?: Pedido }) {
         {erro && <p className="text-sm text-destructive">{erro}</p>}
 
         <div className="flex justify-end gap-2 pt-2">
-          <Link href="/pedidos">
-            <Button type="button" variant="outline">
-              Cancelar
-            </Button>
-          </Link>
+          <BotaoCancelar href="/pedidos" sujo={sujo} />
           <Button type="submit" disabled={saving}>
             Salvar
           </Button>

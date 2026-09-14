@@ -101,8 +101,8 @@ export function EnviosTab({ fechamento }: { fechamento: FechamentoDetalhe }) {
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label>Canal de envio</Label>
-              <Select value={canalEnvio} onChange={(e) => setCanalEnvio(e.target.value)}>
+              <Label htmlFor="enviostab-canal-de-envio">Canal de envio</Label>
+              <Select id="enviostab-canal-de-envio" value={canalEnvio} onChange={(e) => setCanalEnvio(e.target.value)}>
                 <option>WhatsApp</option>
                 <option>E-mail</option>
                 <option>Entregue pessoalmente</option>
@@ -110,8 +110,8 @@ export function EnviosTab({ fechamento }: { fechamento: FechamentoDetalhe }) {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Observação (opcional)</Label>
-              <Input
+              <Label htmlFor="enviostab-observacao-opcional">Observação (opcional)</Label>
+              <Input id="enviostab-observacao-opcional"
                 value={observacao}
                 onChange={(e) => setObservacao(e.target.value)}
                 placeholder='ex: "enviado no grupo da Construtora X"'

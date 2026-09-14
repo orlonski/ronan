@@ -415,11 +415,11 @@ export default function LayoutImportPage({
             <ArrowLeft className="h-5 w-5" />
           </Button>
         ) : (
-          <Link href="/empresas">
-            <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" asChild>
+              <Link href="/empresas" aria-label="Voltar para Empresas-cliente">
               <ArrowLeft className="h-5 w-5" />
+              </Link>
             </Button>
-          </Link>
         )}
         <div className="flex-1">
           <h1 className="text-2xl font-semibold tracking-tight">
@@ -581,8 +581,8 @@ export default function LayoutImportPage({
             </div>
             {estrutura.abas.length > 1 && (
               <div className="space-y-2 pt-2">
-                <Label>Aba escolhida</Label>
-                <Select
+                <Label htmlFor="page-aba-escolhida">Aba escolhida</Label>
+                <Select id="page-aba-escolhida"
                   value={layout.abaPreferida ?? estrutura.abas[0]?.nome ?? ""}
                   onChange={(e) => {
                     const novaAba = e.target.value;
@@ -611,8 +611,8 @@ export default function LayoutImportPage({
             )}
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
-                <Label>Linha do cabeçalho</Label>
-                <Input
+                <Label htmlFor="page-linha-do-cabecalho">Linha do cabeçalho</Label>
+                <Input id="page-linha-do-cabecalho"
                   type="number"
                   min={1}
                   value={layout.linhaCabecalho ?? 1}
@@ -631,8 +631,8 @@ export default function LayoutImportPage({
                 />
               </div>
               <div className="space-y-1">
-                <Label>Linha de início dos dados</Label>
-                <Input
+                <Label htmlFor="page-linha-de-inicio-dos-dados">Linha de início dos dados</Label>
+                <Input id="page-linha-de-inicio-dos-dados"
                   type="number"
                   min={1}
                   value={layout.linhaInicioDados ?? 2}

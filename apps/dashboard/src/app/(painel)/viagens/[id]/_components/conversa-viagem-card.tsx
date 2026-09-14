@@ -138,6 +138,7 @@ export function ConversaViagemCard({ viagemId }: { viagemId: string }) {
         />
         <Button
           onClick={submit}
+          aria-label="Enviar mensagem ao motorista"
           disabled={texto.trim().length === 0 || enviar.isPending}
           size="icon"
           className="h-11 w-11 shrink-0"

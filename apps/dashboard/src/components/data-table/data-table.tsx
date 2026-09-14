@@ -167,6 +167,15 @@ export function DataTable<T>({
                 {hg.headers.map((header) => (
                   <TableHead
                     key={header.id}
+                    aria-sort={
+                      header.column.getCanSort()
+                        ? header.column.getIsSorted() === "asc"
+                          ? "ascending"
+                          : header.column.getIsSorted() === "desc"
+                            ? "descending"
+                            : "none"
+                        : undefined
+                    }
                     style={
                       header.column.columnDef.size
                         ? { width: `${header.column.columnDef.size}px` }
