@@ -260,10 +260,11 @@ describe("proteções de dinheiro", () => {
   it("dinheiro recebido sem dono vira alarme, não silêncio", async () => {
     // O handler responde 200 (a fila do gateway não pode parar), mas a linha do
     // evento fica com `erro` preenchido pra alguém ver.
+    const aguardando = 0;
     const vistos = new Set<string>();
     const erros: unknown[] = [];
     const prisma = {
-      assinatura: { findFirst: async () => null },
+      assinatura: { findFirst: async () => null, count: async () => aguardando },
       cobrancaAssinatura: { findUnique: async () => null, upsert: async () => null },
       eventoGatewayPagamento: {
         findUnique: async ({ where }: { where: { eventoId: string } }) =>
@@ -290,10 +291,11 @@ describe("proteções de dinheiro", () => {
   it("pagamento órfão que NÃO é dinheiro recebido segue sendo ignorado em silêncio", async () => {
     // Um PAYMENT_CREATED de outra coisa na mesma conta do gateway não é
     // problema nosso — alarme pra isso viraria ruído e ninguém olharia mais.
+    const aguardando = 0;
     const vistos = new Set<string>();
     const erros: unknown[] = [];
     const prisma = {
-      assinatura: { findFirst: async () => null },
+      assinatura: { findFirst: async () => null, count: async () => aguardando },
       cobrancaAssinatura: { findUnique: async () => null, upsert: async () => null },
       eventoGatewayPagamento: {
         findUnique: async ({ where }: { where: { eventoId: string } }) =>
@@ -315,5 +317,55 @@ describe("proteções de dinheiro", () => {
     const r = await s.receber("e5", "PAYMENT_CREATED", eventoPagamento("e5", "PAYMENT_CREATED", "PENDING"));
     expect(r.status).toBe("ignorado");
     expect(erros).toHaveLength(0);
+  });
+});
+
+describe("o alarme sabe a diferença entre perdido e a caminho", () => {
+  function servicoOrfao(aguardando: number) {
+    const erros: unknown[] = [];
+    const vistos = new Set<string>();
+    const prisma = {
+      assinatura: { findFirst: async () => null, count: async () => aguardando },
+      cobrancaAssinatura: { findUnique: async () => null, upsert: async () => null },
+      eventoGatewayPagamento: {
+        findUnique: async ({ where }: { where: { eventoId: string } }) =>
+          vistos.has(where.eventoId) ? { id: "l" } : null,
+        create: async ({ data }: { data: { eventoId: string } }) => {
+          vistos.add(data.eventoId);
+          return { id: "l" };
+        },
+        update: async ({ data }: { data: { erro?: string } }) => {
+          if (data.erro) erros.push(data.erro);
+          return {};
+        },
+      },
+    };
+    const s = new EventosGatewayService(prisma as never, {
+      reavaliarInadimplencia: async () => {},
+    } as never);
+    return { s, erros };
+  }
+
+  const pagamentoRecebido = {
+    id: "ev",
+    event: "PAYMENT_RECEIVED",
+    payment: { id: "pay_x", status: "RECEIVED", billingType: "PIX", value: 5, dueDate: "2026-09-14" },
+  };
+
+  it("com Pix Automático aguardando autorização, o órfão NÃO vira alarme", async () => {
+    // É o pagamento do QR de ativação: sempre chega sem dono, e a ativação —
+    // que vem segundos depois — é quem o registra. Alarmar aqui tocaria em
+    // toda assinatura nova.
+    const { s, erros } = servicoOrfao(1);
+    const r = await s.receber("ev1", "PAYMENT_RECEIVED", pagamentoRecebido);
+    expect(r.status).toBe("ignorado");
+    expect(erros).toHaveLength(0);
+  });
+
+  it("sem nada aguardando, o órfão volta a ser alarme", async () => {
+    const { s, erros } = servicoOrfao(0);
+    const r = await s.receber("ev2", "PAYMENT_RECEIVED", pagamentoRecebido);
+    expect(r.status).toBe("falhou");
+    expect(String(erros[0])).toMatch(/sem assinatura/i);
   });
 });

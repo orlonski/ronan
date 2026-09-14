@@ -129,6 +129,18 @@ export class EventosGatewayService {
       // a consulta de diagnóstico procura (ver docs/assinaturas-asaas.md).
       const detalhe = "pagamento sem assinatura conhecida";
       if (novoStatus === "CONFIRMADA" || novoStatus === "RECEBIDA") {
+        // Órfão ESPERADO: o pagamento do QR que ativa um Pix Automático sempre
+        // chega assim, e é a ATIVAÇÃO (segundos depois) que o registra. Alarmar
+        // aqui tocaria em toda assinatura nova — e alarme que toca à toa é
+        // alarme que ninguém olha, que foi o motivo de existir este filtro.
+        if (await this.temPixAutomaticoEsperandoAutorizacao()) {
+          this.log.log(
+            `Pagamento ${pagamento.id} chegou sem dono, mas há Pix Automático aguardando ` +
+              `autorização — a ativação é que vai registrá-lo.`,
+          );
+          return { status: "ignorado", detalhe: "provável pagamento de ativação" };
+        }
+
         this.log.error(
           `DINHEIRO SEM DONO: ${pagamento.id} (${formatarValor(pagamento.value)}) foi ` +
             `${novoStatus} e não casou com assinatura nenhuma. Confira no gateway.`,
@@ -186,6 +198,28 @@ export class EventosGatewayService {
 
     this.log.log(`${tipo}: cobrança ${cobranca.id} → ${novoStatus}`);
     return { status: "processado" };
+  }
+
+  /**
+   * Existe alguma autorização de Pix Automático esperando o primeiro pagamento?
+   *
+   * É a pergunta que separa "dinheiro perdido" de "dinheiro a caminho do lugar
+   * certo". O pagamento do QR de ativação sempre chega órfão; se há uma
+   * assinatura esperando autorização, ele quase certamente é esse — e a
+   * ativação, que vem logo atrás, o registra.
+   *
+   * A janela de 48h evita que uma assinatura esquecida em AGUARDANDO (o cliente
+   * nunca pagou) sirva de desculpa para sempre: passado esse tempo, pagamento
+   * órfão volta a ser alarme.
+   */
+  private async temPixAutomaticoEsperandoAutorizacao(): Promise<boolean> {
+    const desde = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    const quantas = await comoSistema(() =>
+      this.prisma.assinatura.count({
+        where: { status: "AGUARDANDO", forma: "PIX_AUTOMATICO", criadoEm: { gte: desde } },
+      }),
+    );
+    return quantas > 0;
   }
 
   /**
