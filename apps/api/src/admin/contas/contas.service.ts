@@ -72,6 +72,14 @@ export type CriarContaInput = {
  * Cadastro das empresas que usam o sistema. É a única parte do backend que
  * atravessa contas de propósito, e por isso mora atrás de `User.plataforma`.
  */
+/** Código IBGE de cada UF — os dois primeiros dígitos do código do município. */
+const CODIGO_UF_IBGE: Record<string, string> = {
+  RO: "11", AC: "12", AM: "13", RR: "14", PA: "15", AP: "16", TO: "17",
+  MA: "21", PI: "22", CE: "23", RN: "24", PB: "25", PE: "26", AL: "27",
+  SE: "28", BA: "29", MG: "31", ES: "32", RJ: "33", SP: "35", PR: "41",
+  SC: "42", RS: "43", MS: "50", MT: "51", GO: "52", DF: "53",
+};
+
 @Injectable()
 export class ContasService implements OnModuleInit {
   private readonly log = new Logger(ContasService.name);
@@ -427,7 +435,30 @@ export class ContasService implements OnModuleInit {
   async minhaEmpresa(contaId: string) {
     return this.prisma.conta.findUniqueOrThrow({
       where: { id: contaId },
-      select: { id: true, nome: true, exigeFotoViagem: true, exigeFotoAbastecimento: true },
+      select: {
+        id: true,
+        nome: true,
+        exigeFotoViagem: true,
+        exigeFotoAbastecimento: true,
+        // A identidade fiscal. Sai daqui porque é da EMPRESA — o CT-e é o
+        // primeiro a usar, mas o MDF-e e o que vier depois usam a mesma coisa.
+        cnpj: true,
+        razaoSocial: true,
+        inscricaoEstadual: true,
+        inscricaoMunicipal: true,
+        crt: true,
+        logradouro: true,
+        numero: true,
+        complemento: true,
+        bairro: true,
+        cep: true,
+        municipio: true,
+        codigoMunicipioIbge: true,
+        uf: true,
+        telefoneFiscal: true,
+        rntrc: true,
+        tipoTransportador: true,
+      },
     });
   }
 
@@ -438,13 +469,36 @@ export class ContasService implements OnModuleInit {
    */
   async atualizarMinhaEmpresa(
     contaId: string,
-    data: { exigeFotoViagem?: boolean; exigeFotoAbastecimento?: boolean },
+    data: Record<string, unknown>,
   ) {
-    return this.prisma.conta.update({
-      where: { id: contaId },
-      data,
-      select: { id: true, nome: true, exigeFotoViagem: true, exigeFotoAbastecimento: true },
-    });
+    // Campo vazio na tela significa "não tenho", e vazio no banco é null — não
+    // string vazia, que passaria por preenchida em toda checagem de pendência.
+    const limpo: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(data)) {
+      limpo[k] = typeof v === "string" && v.trim() === "" ? null : v;
+    }
+
+    // O código IBGE começa com o código da UF. Conferir na hora de salvar é de
+    // graça, e evita descobrir isso numa rejeição da SEFAZ semanas depois.
+    const uf = limpo.uf as string | null | undefined;
+    const ibge = limpo.codigoMunicipioIbge as string | null | undefined;
+    if (uf && ibge && CODIGO_UF_IBGE[uf] && !ibge.startsWith(CODIGO_UF_IBGE[uf]!)) {
+      throw new BadRequestException(
+        `O código IBGE ${ibge} não é de ${uf} — ele começa com ${CODIGO_UF_IBGE[uf]}.`,
+      );
+    }
+
+    try {
+      await this.prisma.conta.update({ where: { id: contaId }, data: limpo });
+      return await this.minhaEmpresa(contaId);
+    } catch (e) {
+      // CNPJ é único entre contas: dizer isso é melhor que devolver o erro cru
+      // do Postgres, que ninguém entende.
+      if ((e as { code?: string }).code === "P2002") {
+        throw new BadRequestException("Esse CNPJ já está cadastrado em outra empresa.");
+      }
+      throw e;
+    }
   }
 
   async definirLogo(contaId: string, buffer: Buffer, mimetype: string) {

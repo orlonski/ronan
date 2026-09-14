@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Building2, RefreshCw, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,9 @@ import { usePermissoes } from "@/lib/permissoes";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { StatusToggle } from "@/components/status-toggle";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { useConfirm } from "@/components/confirm-dialog";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
@@ -179,6 +182,7 @@ function Conteudo() {
       </Card>
 
       <ComprovantesCard />
+      <IdentidadeFiscalCard />
     </div>
   );
 }
@@ -253,6 +257,158 @@ function ComprovantesCard() {
           disabled={config.isLoading || salvar.isPending}
         />
       </div>
+    </Card>
+  );
+}
+
+type Fiscal = {
+  cnpj: string | null;
+  razaoSocial: string | null;
+  inscricaoEstadual: string | null;
+  inscricaoMunicipal: string | null;
+  crt: string | null;
+  logradouro: string | null;
+  numero: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  cep: string | null;
+  municipio: string | null;
+  codigoMunicipioIbge: string | null;
+  uf: string | null;
+  telefoneFiscal: string | null;
+  rntrc: string | null;
+  tipoTransportador: string | null;
+};
+
+const CAMPOS: { chave: keyof Fiscal; rotulo: string; dica?: string; largura?: string }[] = [
+  { chave: "cnpj", rotulo: "CNPJ", largura: "sm:col-span-2" },
+  { chave: "razaoSocial", rotulo: "Razão social", largura: "sm:col-span-4" },
+  { chave: "inscricaoEstadual", rotulo: "Inscrição estadual", largura: "sm:col-span-2" },
+  { chave: "inscricaoMunicipal", rotulo: "Inscrição municipal", largura: "sm:col-span-2" },
+  { chave: "rntrc", rotulo: "RNTRC", dica: "Registro na ANTT", largura: "sm:col-span-2" },
+  { chave: "logradouro", rotulo: "Logradouro", largura: "sm:col-span-4" },
+  { chave: "numero", rotulo: "Número", largura: "sm:col-span-1" },
+  { chave: "complemento", rotulo: "Complemento", largura: "sm:col-span-1" },
+  { chave: "bairro", rotulo: "Bairro", largura: "sm:col-span-2" },
+  { chave: "cep", rotulo: "CEP", largura: "sm:col-span-2" },
+  { chave: "municipio", rotulo: "Município", largura: "sm:col-span-2" },
+  {
+    chave: "codigoMunicipioIbge",
+    rotulo: "Código IBGE do município",
+    dica: "7 números. O CT-e não aceita município por nome.",
+    largura: "sm:col-span-2",
+  },
+  { chave: "telefoneFiscal", rotulo: "Telefone", largura: "sm:col-span-2" },
+];
+
+/**
+ * A identidade fiscal da empresa.
+ *
+ * Estes campos existiam no banco desde a fase 0 e nunca tiveram tela: dava pra
+ * guardá-los e não dava pra preenchê-los. A tela de emissão de CT-e mandava o
+ * usuário procurar aqui o que não estava aqui.
+ *
+ * Moram nesta tela, e não na do CT-e, porque são da EMPRESA — o CT-e é só o
+ * primeiro a precisar deles; o MDF-e e o que vier depois usam os mesmos.
+ */
+function IdentidadeFiscalCard() {
+  const token = useAuthToken();
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState<Partial<Fiscal>>({});
+
+  const dados = useQuery({
+    queryKey: [PATH_MINHA_EMPRESA],
+    enabled: !!token,
+    queryFn: () => fetchApi<Fiscal>(PATH_MINHA_EMPRESA, { token }),
+  });
+
+  useEffect(() => {
+    if (dados.data) setForm(dados.data);
+  }, [dados.data]);
+
+  const salvar = useMutation({
+    mutationFn: (body: Partial<Fiscal>) =>
+      fetchApi(PATH_MINHA_EMPRESA, { method: "PATCH", token, body: JSON.stringify(body) }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: [PATH_MINHA_EMPRESA] });
+      toast.success("Dados fiscais salvos.");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Não consegui salvar."),
+  });
+
+  const v = { ...dados.data, ...form } as Fiscal;
+  const set = (k: keyof Fiscal, valor: string) => setForm((f) => ({ ...f, [k]: valor }));
+
+  return (
+    <Card className="space-y-4 p-5">
+      <div>
+        <p className="text-sm font-medium">Identidade fiscal</p>
+        <p className="max-w-prose text-xs text-muted-foreground">
+          Quem a empresa é para o fisco. É daqui que saem os dados do emitente no CT-e —
+          e, mais pra frente, no MDF-e. Só precisa preencher quem vai emitir documento
+          fiscal pelo sistema.
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-4">
+        {CAMPOS.map((c) => (
+          <div key={c.chave} className={`space-y-1.5 ${c.largura ?? "sm:col-span-2"}`}>
+            <Label htmlFor={c.chave}>{c.rotulo}</Label>
+            <Input
+              id={c.chave}
+              // Sem isto o Chrome enfia e-mail e endereço salvos em campo de
+              // texto livre — já aconteceu na tela do CT-e.
+              autoComplete="off"
+              value={v[c.chave] ?? ""}
+              onChange={(e) => set(c.chave, e.target.value)}
+            />
+            {c.dica && <p className="text-xs text-muted-foreground">{c.dica}</p>}
+          </div>
+        ))}
+
+        <div className="space-y-1.5 sm:col-span-1">
+          <Label htmlFor="uf">UF</Label>
+          <Input
+            id="uf"
+            autoComplete="off"
+            maxLength={2}
+            value={v.uf ?? ""}
+            onChange={(e) => set("uf", e.target.value.toUpperCase())}
+          />
+        </div>
+
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label htmlFor="crt">Regime tributário</Label>
+          <Select id="crt" value={v.crt ?? ""} onChange={(e) => set("crt", e.target.value)}>
+            <option value="">Selecione…</option>
+            <option value="1">1 — Simples Nacional</option>
+            <option value="2">2 — Simples, com excesso de sublimite</option>
+            <option value="3">3 — Regime Normal</option>
+          </Select>
+        </div>
+
+        <div className="space-y-1.5 sm:col-span-1">
+          <Label htmlFor="tipoTransp">Tipo</Label>
+          <Select
+            id="tipoTransp"
+            value={v.tipoTransportador ?? ""}
+            onChange={(e) => set("tipoTransportador", e.target.value)}
+          >
+            <option value="">Selecione…</option>
+            <option value="ETC">ETC — empresa</option>
+            <option value="CTC">CTC — cooperativa</option>
+            <option value="TAC">TAC — autônomo</option>
+          </Select>
+        </div>
+      </div>
+
+      <Button
+        onClick={() => salvar.mutate(form)}
+        disabled={salvar.isPending || dados.isLoading}
+        variant="success"
+      >
+        {salvar.isPending ? "Salvando…" : "Salvar dados fiscais"}
+      </Button>
     </Card>
   );
 }
