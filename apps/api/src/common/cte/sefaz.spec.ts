@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { createServer, type Server } from "node:https";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { gunzipSync } from "node:zlib";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { lerCertificado, type Certificado } from "./assinatura";
@@ -158,6 +159,20 @@ describe("conversa com o serviço", () => {
     expect(ultimoCorpo).toContain("http://www.w3.org/2003/05/soap-envelope");
     expect(ultimoCorpo).toContain("wsdl/CTeStatusServicoV4");
     expect(ultimoCorpo).toContain("<cteDadosMsg");
+  });
+
+  it("a recepção síncrona vai comprimida — e só ela", async () => {
+    // A exceção do MOC §3.4.1. Errar isso devolve HTTP 400 com corpo VAZIO, o
+    // que não parece erro de formato nenhum: o teste existe porque o sintoma
+    // não ensina a causa.
+    await cliente().enviarCte("PR", 2, `<?xml version="1.0"?><CTe><x>1</x></CTe>`);
+    const dados = ultimoCorpo.match(/<cteDadosMsg[^>]*>([\s\S]*)<\/cteDadosMsg>/)?.[1] ?? "";
+    expect(dados).not.toContain("<CTe>");
+    expect(gunzipSync(Buffer.from(dados, "base64")).toString("utf8")).toBe("<CTe><x>1</x></CTe>");
+
+    // O status, no mesmo cliente e no mesmo envelope, continua em XML cru.
+    await cliente().statusDoServico("PR", 2);
+    expect(ultimoCorpo).toContain("<xServ>STATUS</xServ>");
   });
 
   it("sem apresentar certificado, o servidor recusa — como a SEFAZ faz", async () => {

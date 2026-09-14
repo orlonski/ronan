@@ -1,13 +1,14 @@
 import { request, type RequestOptions } from "node:https";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { gzipSync } from "node:zlib";
 import { XMLParser } from "fast-xml-parser";
 import type { Certificado } from "./assinatura";
 
 /**
  * Falar direto com a SEFAZ.
  *
- * Duas coisas que só se descobrem tentando, e que derrubam quem não sabe:
+ * Três coisas que só se descobrem tentando, e que derrubam quem não sabe:
  *
  * 1. **A cadeia é ICP-Brasil.** O certificado do servidor da SEFAZ é emitido
  *    sob a "Autoridade Certificadora Raiz Brasileira", que NÃO está em nenhum
@@ -20,6 +21,12 @@ import type { Certificado } from "./assinatura";
  *    próprio handshake: a SEFAZ exige certificado de cliente e anuncia a lista
  *    de ACs que aceita. Sem apresentar o A1, o servidor derruba a conexão antes
  *    de responder qualquer coisa — nem o WSDL dá pra ler.
+ *
+ * 3. **A recepção síncrona recebe o CT-e comprimido.** Só ela: GZip + Base64
+ *    dentro do `cteDadosMsg` (MOC 4.00, §3.4.1). Mandar XML cru devolve HTTP
+ *    400 com corpo VAZIO, enquanto status, consulta e evento respondem bem no
+ *    mesmo endereço — um erro que não se parece nem com erro de transporte nem
+ *    com rejeição de documento.
  *
  * O CT-e 4.00 é SOAP 1.2. O corpo vai dentro de `cteDadosMsg`, no namespace do
  * serviço chamado.
@@ -191,6 +198,13 @@ export class ClienteSefaz {
    *
    * `cteDadosMsg` é o invólucro que todo serviço do CT-e 4.00 espera; o que
    * muda entre eles é só o namespace, que é o do próprio serviço.
+   *
+   * `comprimir` existe por causa de UMA exceção: a recepção síncrona recebe o
+   * CT-e em GZip + Base64, não em XML cru (MOC 4.00, §3.4.1). O sintoma de
+   * errar isso é cruel — HTTP 400 com corpo VAZIO, enquanto todos os outros
+   * serviços respondem normalmente no mesmo endereço, com o mesmo certificado
+   * e o mesmo envelope. Não é erro de transporte nem de documento: o corpo
+   * chega, mas não é do tipo que o serviço sabe ler.
    */
   private async chamar(
     uf: string,
@@ -198,16 +212,21 @@ export class ClienteSefaz {
     ambiente: Ambiente,
     corpoXml: string,
     timeoutMs = 30_000,
+    comprimir = false,
   ): Promise<RespostaSefaz> {
     const url = this.baseDeTeste
       ? `${this.baseDeTeste}/${servico}`
       : enderecoDoServico(uf, servico, ambiente);
     const ns = `http://www.portalfiscal.inf.br/cte/wsdl/${servico}`;
+    const semDeclaracao = corpoXml.replace(/^<\?xml[^>]*\?>/, "");
+    const dados = comprimir
+      ? gzipSync(Buffer.from(semDeclaracao, "utf8"), { level: 9 }).toString("base64")
+      : semDeclaracao;
     const envelope =
       `<?xml version="1.0" encoding="UTF-8"?>` +
       `<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">` +
       `<soap12:Body><cteDadosMsg xmlns="${ns}">` +
-      corpoXml.replace(/^<\?xml[^>]*\?>/, "") +
+      dados +
       `</cteDadosMsg></soap12:Body></soap12:Envelope>`;
 
     const res = await this.postar(url, envelope, timeoutMs);
@@ -247,9 +266,13 @@ export class ClienteSefaz {
     return this.chamar(uf, "CTeStatusServicoV4", ambiente, corpo);
   }
 
-  /** Manda o CT-e assinado. Síncrono no 4.00: a autorização vem na resposta. */
+  /**
+   * Manda o CT-e assinado. Síncrono no 4.00: a autorização vem na resposta.
+   *
+   * É a ÚNICA chamada que vai comprimida — ver `chamar`.
+   */
   async enviarCte(uf: string, ambiente: Ambiente, xmlAssinado: string): Promise<RespostaSefaz> {
-    return this.chamar(uf, "CTeRecepcaoSincV4", ambiente, xmlAssinado, 60_000);
+    return this.chamar(uf, "CTeRecepcaoSincV4", ambiente, xmlAssinado, 60_000, true);
   }
 
   /**
