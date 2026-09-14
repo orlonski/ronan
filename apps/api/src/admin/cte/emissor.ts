@@ -299,6 +299,29 @@ export class GatewayCte implements EmissorCte {
 export class SefazDireto implements EmissorCte {
   readonly nome = "SEFAZ" as const;
 
+  /**
+   * O que guardar quando a SEFAZ responde — qualquer que seja a resposta.
+   *
+   * Inclui o envelope ENVIADO e o corpo CRU, e não só o miolo interpretado:
+   * quando a resposta não é SOAP (um 400 do IIS, por exemplo), o miolo vem
+   * vazio e o diagnóstico some exatamente onde ele fazia falta.
+   */
+  private diagnostico(r: {
+    url: string;
+    httpStatus: number;
+    enviado: string;
+    bruto: string;
+    xml: string;
+  }) {
+    const corte = (t: string) => (t.length > 20_000 ? `${t.slice(0, 20_000)}…` : t);
+    return {
+      url: r.url,
+      httpStatus: r.httpStatus,
+      enviado: corte(r.enviado),
+      resposta: corte(r.bruto),
+    };
+  }
+
   constructor(
     private readonly cert: Certificado,
     private readonly pfx: Buffer,
@@ -342,7 +365,7 @@ export class SefazDireto implements EmissorCte {
         // Guardamos o XML ASSINADO: é ele que tem valor, e é o que precisa ser
         // arquivado pelos cinco anos que a legislação pede.
         xml: xmlAssinado,
-        cru: { xml: r.xml, httpStatus: r.httpStatus },
+        cru: this.diagnostico(r),
       };
     }
 
@@ -351,14 +374,14 @@ export class SefazDireto implements EmissorCte {
         situacao: "REJEITADO",
         codigo: r.cStat,
         motivo: r.xMotivo ?? "Rejeitado sem motivo informado",
-        cru: { xml: r.xml, httpStatus: r.httpStatus },
+        cru: this.diagnostico(r),
       };
     }
 
     return {
       situacao: "ERRO",
       motivo: `A SEFAZ respondeu algo que não reconheço (HTTP ${r.httpStatus}).`,
-      cru: { xml: r.xml.slice(0, 2000) },
+      cru: this.diagnostico(r),
     };
   }
 
@@ -407,13 +430,13 @@ export class SefazDireto implements EmissorCte {
           situacao: "CANCELADO",
           protocolo: r.xml.match(/<nProt>(\d+)<\/nProt>/)?.[1] ?? "",
           canceladoEm: new Date(),
-          cru: { xml: r.xml },
+          cru: this.diagnostico(r),
         };
       }
       return {
         situacao: "ERRO",
         motivo: `${r.cStat ?? "?"} — ${r.xMotivo ?? "a SEFAZ não confirmou o cancelamento."}`,
-        cru: { xml: r.xml },
+        cru: this.diagnostico(r),
       };
     } catch (e) {
       return { situacao: "ERRO", motivo: (e as Error).message, cru: null };

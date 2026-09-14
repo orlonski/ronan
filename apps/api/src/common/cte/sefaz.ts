@@ -105,6 +105,12 @@ export function autorizadorDaUf(uf: string): string | null {
 
 export type RespostaSefaz = {
   httpStatus: number;
+  /** Pra onde foi. Muda por UF e ambiente, e erra-se com facilidade. */
+  url: string;
+  /** O envelope inteiro que saiu daqui. */
+  enviado: string;
+  /** A resposta CRUA, antes de qualquer interpretação. */
+  bruto: string;
   /** O XML de dentro do envelope SOAP — sem a casca. */
   xml: string;
   /** Campos comuns a toda resposta da SEFAZ. */
@@ -210,6 +216,14 @@ export class ClienteSefaz {
     const raiz = Object.values(obj)[0] ?? {};
     return {
       httpStatus: res.status,
+      url,
+      // O que foi MANDADO e o que veio CRU. Guardar só o miolo desembrulhado
+      // funciona quando a resposta é SOAP — e some justamente quando não é, que
+      // é quando se precisa dela: um 400 do IIS não tem `Body` nenhum, e o
+      // desembrulhador devolvia string vazia. Diagnóstico que some no erro não
+      // é diagnóstico.
+      enviado: envelope,
+      bruto: res.texto,
       xml: interno,
       cStat: raiz?.cStat ?? null,
       xMotivo: raiz?.xMotivo ?? null,

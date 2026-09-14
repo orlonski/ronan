@@ -71,6 +71,20 @@ function Conteudo({ id }: { id: string }) {
   if (isLoading || !data) return <LoadingCard />;
   const vis = VISUAL[data.status];
 
+  // O `retorno` guarda o diagnóstico completo quando a conversa foi com a
+  // SEFAZ. Nas emissões antigas (e no simulador) ele tem outro formato — daí
+  // a leitura defensiva em vez de um cast.
+  const r = data.retorno as Record<string, unknown> | null;
+  const diag =
+    r && typeof r.enviado === "string"
+      ? {
+          enviado: r.enviado as string,
+          resposta: (r.resposta as string) ?? "",
+          httpStatus: r.httpStatus as number,
+          url: r.url as string | undefined,
+        }
+      : null;
+
   return (
     <div className="space-y-5">
       <div>
@@ -134,13 +148,28 @@ function Conteudo({ id }: { id: string }) {
         nome={`cte-${data.chave}.xml`}
       />
 
+      {/* O envelope SOAP inteiro, com a casca. Diferente do "XML enviado", que
+          é só o documento: quando o erro está no TRANSPORTE — namespace errado,
+          cabeçalho faltando, endereço de outro estado — ele está aqui, e não no
+          CT-e. */}
+      <Bloco
+        titulo="Envelope enviado"
+        subtitulo="A requisição inteira, como saiu daqui. Onde mora erro de transporte."
+        conteudo={diag?.enviado ?? null}
+        nome={`envelope-${data.chave}.xml`}
+      />
+
       <Bloco
         titulo="Resposta da SEFAZ"
-        subtitulo="O que voltou, cru. É aqui que mora o motivo real de uma rejeição."
-        conteudo={
-          data.retorno ? JSON.stringify(data.retorno, null, 2) : null
+        subtitulo={
+          diag
+            ? `HTTP ${diag.httpStatus} · ${diag.url ?? ""}`
+            : "O que voltou, cru. É aqui que mora o motivo real de uma rejeição."
         }
-        nome={`retorno-${data.chave}.json`}
+        conteudo={
+          diag?.resposta ?? (data.retorno ? JSON.stringify(data.retorno, null, 2) : null)
+        }
+        nome={`retorno-${data.chave}.xml`}
       />
 
       <Bloco
