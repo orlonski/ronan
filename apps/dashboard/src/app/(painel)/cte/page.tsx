@@ -151,14 +151,19 @@ function Conteudo() {
                   )}
                 </div>
 
-                {d.viagemId && (
-                  <Link
-                    href={`/viagens/${d.viagemId}`}
-                    className="text-sm text-muted-foreground underline"
-                  >
-                    Ver viagem
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <Link href={`/cte/${d.id}`} className="text-sm underline">
+                    Ver a conversa com a SEFAZ
                   </Link>
-                )}
+                  {d.viagemId && (
+                    <Link
+                      href={`/viagens/${d.viagemId}`}
+                      className="text-sm text-muted-foreground underline"
+                    >
+                      Ver viagem
+                    </Link>
+                  )}
+                </div>
               </div>
             </Card>
           );

@@ -145,6 +145,24 @@ export class CteController {
     return this.service.testarConexao();
   }
 
+  /**
+   * Emite um CT-e sintético contra a SEFAZ de homologação.
+   *
+   * Responde em um clique o que nenhum teste de unidade responde: "o que a
+   * SEFAZ diz do MEU documento, com o MEU certificado?". A rejeição é resultado
+   * válido — ela vem com código e motivo da própria SEFAZ, mais útil que
+   * qualquer suposição nossa sobre o que falta.
+   *
+   * Série 999, reservada: passa pelo mesmo caminho da emissão real sem gastar
+   * número da numeração fiscal de verdade.
+   */
+  @RequerPermissao("cte.emitir")
+  @HttpCode(200)
+  @Post("emitir-teste")
+  emitirTeste(@CurrentUser() user: AuthAdminUser) {
+    return this.service.emitirTeste(user.id);
+  }
+
   @RequerPermissao("cte.ver")
   @Get(":id")
   detalhe(@Param("id") id: string) {

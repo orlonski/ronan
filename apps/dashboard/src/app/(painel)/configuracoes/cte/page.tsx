@@ -66,6 +66,35 @@ function Conteudo() {
   const [subindo, setSubindo] = React.useState(false);
   const [testando, setTestando] = React.useState(false);
   const [conexao, setConexao] = React.useState<{ ok: boolean; motivo: string | null } | null>(null);
+  const [emitindoTeste, setEmitindoTeste] = React.useState(false);
+  const [teste, setTeste] = React.useState<{
+    documentoId: string;
+    situacao: string;
+    codigo: string | null;
+    motivo: string | null;
+    chave: string;
+  } | null>(null);
+
+  /**
+   * Emite um CT-e sintético em homologação, pela série 999.
+   *
+   * A rejeição é resultado válido: ela vem com código e motivo da própria
+   * SEFAZ, que diz o que falta melhor do que qualquer suposição nossa.
+   */
+  async function emitirTeste() {
+    if (!token) return;
+    setEmitindoTeste(true);
+    setTeste(null);
+    try {
+      setTeste(
+        await fetchApi("/admin/cte/emitir-teste", { token, method: "POST" }),
+      );
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setEmitindoTeste(false);
+    }
+  }
   const arquivoRef = React.useRef<HTMLInputElement>(null);
 
   async function subirCertificado(file: File) {
@@ -493,6 +522,45 @@ function Conteudo() {
               É a única chamada que não emite nada. Prova certificado, cadeia, credenciamento
               e rede de uma vez — antes de arriscar um CT-e e queimar um número da série.
             </p>
+
+            <div className="space-y-2 border-t border-border pt-3">
+              <Button variant="outline" onClick={() => void emitirTeste()} disabled={emitindoTeste}>
+                <FlaskConical className="h-4 w-4" />
+                {emitindoTeste ? "Emitindo…" : "Emitir um CT-e de teste"}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Um documento sintético, em homologação, pela <b>série 999</b> — separada de
+                propósito, pra não gastar número da numeração fiscal de verdade. Responde o que
+                nenhum teste daqui responde: o que a SEFAZ diz do <i>seu</i> documento, com o{" "}
+                <i>seu</i> certificado. <b>Rejeição é resultado bom</b>: ela vem com o motivo em
+                português, direto da fonte.
+              </p>
+
+              {teste && (
+                <div
+                  className={`space-y-1 rounded-md border p-3 ${
+                    teste.situacao === "AUTORIZADO"
+                      ? "border-emerald-300 bg-emerald-50/60"
+                      : "border-amber-300 bg-amber-50"
+                  }`}
+                >
+                  <p className="text-sm font-medium">
+                    {teste.situacao === "AUTORIZADO"
+                      ? "A SEFAZ autorizou."
+                      : teste.situacao === "REJEITADO"
+                        ? "A SEFAZ recebeu, avaliou e recusou — o caminho até lá funciona."
+                        : "Não chegou a ser avaliado."}
+                  </p>
+                  <p className="text-sm">
+                    {teste.codigo ? `${teste.codigo} — ` : ""}
+                    {teste.motivo}
+                  </p>
+                  <Link href={`/cte/${teste.documentoId}`} className="text-sm underline">
+                    Ver o XML enviado e a resposta crua
+                  </Link>
+                </div>
+              )}
+            </div>
           </div>
         </Card>
       )}

@@ -500,6 +500,164 @@ export class CteService {
   }
 
   // -------------------------------------------------------------------------
+  // Emissão de teste
+  // -------------------------------------------------------------------------
+
+  /**
+   * Série reservada pro teste.
+   *
+   * 999 e uma sequência própria: a emissão de teste passa pelo MESMO caminho da
+   * de verdade — é esse o ponto —, e sem série separada ela gastaria número da
+   * numeração fiscal real. Buraco na numeração é coisa que a SEFAZ pergunta, e
+   * "foi um teste" não é resposta que se dê ao fisco.
+   */
+  private static readonly SERIE_TESTE = 999;
+
+  /**
+   * Emite um CT-e sintético contra a SEFAZ de homologação.
+   *
+   * Serve pra responder, em um clique, a pergunta que nenhum teste de unidade
+   * responde: "o que a SEFAZ diz do MEU documento, com o MEU certificado?".
+   *
+   * A rejeição é resultado válido — na maioria das vezes é a resposta esperada,
+   * e ela vem com código e motivo em português da própria SEFAZ, que é
+   * infinitamente mais útil que qualquer suposição nossa sobre o que falta.
+   *
+   * Os participantes são a própria empresa, dos dois lados. Inventar um CNPJ de
+   * terceiro seria pôr no ar um documento citando alguém que não sabe disso.
+   */
+  async emitirTeste(usuarioId: string) {
+    const contaId = contaIdAtual();
+    const conta = await this.prisma.conta.findUniqueOrThrow({ where: { id: contaId } });
+
+    if (conta.cteEmissor !== "SEFAZ") {
+      throw new BadRequestException(
+        "A emissão de teste vale pro emissor SEFAZ — é ela que prova o caminho até lá.",
+      );
+    }
+    if (!conta.cnpj) throw new BadRequestException("Falta o CNPJ da empresa.");
+    if (!conta.codigoMunicipioIbge || !conta.uf) {
+      throw new BadRequestException(
+        "Falta o endereço fiscal com código IBGE do município em Minha empresa.",
+      );
+    }
+
+    const municipio = {
+      codigo: conta.codigoMunicipioIbge,
+      nome: conta.municipio ?? "",
+      uf: conta.uf,
+    };
+    const eu: Participante = {
+      cnpjCpf: soDigitos(conta.cnpj),
+      razaoSocial: conta.razaoSocial?.trim() || conta.nome,
+      inscricaoEstadual: conta.inscricaoEstadual,
+      indicadorIe: conta.inscricaoEstadual ? "1" : "9",
+      endereco: {
+        logradouro: conta.logradouro ?? "RUA DE TESTE",
+        numero: conta.numero ?? "S/N",
+        bairro: conta.bairro ?? "CENTRO",
+        codigoMunicipio: conta.codigoMunicipioIbge,
+        municipio: conta.municipio ?? "",
+        cep: conta.cep,
+        uf: conta.uf,
+      },
+    };
+
+    const serie = CteService.SERIE_TESTE;
+    const numero = await this.consumirNumero(contaId, MODELO_CTE, serie);
+
+    const entrada: EntradaCte = {
+      emitente: {
+        ...eu,
+        crt: (conta.crt as "1" | "2" | "3") ?? "3",
+        rntrc: conta.rntrc ?? "00000000",
+      },
+      remetente: eu,
+      destinatario: eu,
+      papelTomador: "DESTINATARIO",
+      inicioPrestacao: municipio,
+      fimPrestacao: municipio,
+      carga: {
+        produtoPredominante: "TESTE DE HOMOLOGACAO",
+        toneladas: 1,
+        valorCarga: 1,
+        documentoAvulso: "TESTE",
+      },
+      valores: { valorFrete: 1 },
+      config: {
+        naturezaCfop: conta.cteNaturezaCfop ?? "353",
+        naturezaOperacao: conta.cteNaturezaOperacao ?? "TESTE DE HOMOLOGACAO",
+        serie,
+        icms: this.regraIcms(conta),
+      },
+      numero,
+      emitidoEm: new Date(),
+      // SEMPRE homologação, mesmo que a conta esteja apontada pra produção: uma
+      // emissão de teste que vira documento fiscal de verdade é o pior acidente
+      // possível aqui, e ele não pode depender de ninguém lembrar.
+      ambiente: 2,
+      responsavelTecnico: this.responsavelTecnico(),
+    };
+
+    const cte = montarCte(entrada);
+    const xml = gerarXmlCte(cte);
+    const leiaute = await validarContraXsd(xml);
+
+    const doc = await this.prisma.documentoFiscal.create({
+      data: {
+        modelo: MODELO_CTE,
+        serie,
+        numero,
+        chave: cte.chave,
+        ambiente: 2,
+        emissor: "SEFAZ",
+        status: "ENVIADO",
+        payload: cte as unknown as Prisma.InputJsonValue,
+        xml,
+        motivo: "Emissão de teste — série reservada, sem valor fiscal",
+        criadoPorId: usuarioId,
+      },
+    });
+
+    const emissor = await this.emissorDaConta();
+    const r = await emissor.emitir(cte, 2);
+
+    const atualizado = await this.prisma.documentoFiscal.update({
+      where: { id: doc.id },
+      data:
+        r.situacao === "AUTORIZADO"
+          ? {
+              status: "AUTORIZADO",
+              protocolo: r.protocolo,
+              autorizadoEm: r.autorizadoEm,
+              codigoRetorno: r.codigo,
+              motivo: r.motivo,
+              xml: r.xml ?? xml,
+              retorno: r.cru as Prisma.InputJsonValue,
+            }
+          : r.situacao === "REJEITADO"
+            ? {
+                status: "REJEITADO",
+                codigoRetorno: r.codigo,
+                motivo: r.motivo,
+                retorno: r.cru as Prisma.InputJsonValue,
+              }
+            : { status: "ERRO", motivo: r.motivo, retorno: (r.cru ?? {}) as Prisma.InputJsonValue },
+    });
+
+    this.log.log(`emissão de teste ${numero}/${serie}: ${atualizado.status} — ${atualizado.motivo}`);
+    return {
+      documentoId: atualizado.id,
+      situacao: r.situacao,
+      codigo: atualizado.codigoRetorno,
+      motivo: atualizado.motivo,
+      chave: cte.chave,
+      leiauteOk: leiaute.ok,
+      erroDeLeiaute: leiaute.erros.map((e) => e.mensagem),
+    };
+  }
+
+  // -------------------------------------------------------------------------
   // Emissão
   // -------------------------------------------------------------------------
 
