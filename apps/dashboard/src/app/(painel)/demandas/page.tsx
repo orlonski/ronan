@@ -9,6 +9,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { DataTableToolbar } from "@/components/data-table";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import { usePaginatedList, useApiQuery } from "@/lib/client-api";
+import { ErroCard } from "@/components/erro-estado";
 import { usePermissoes } from "@/lib/permissoes";
 import { fmtDataHoraBR } from "@/lib/fechamento-helpers";
 import { NovaDemanda } from "./_components/nova-demanda";
@@ -176,6 +177,8 @@ export default function DemandasPage() {
 
         {lista.isLoading ? (
           <Card className="p-8 text-center text-sm text-muted-foreground">Carregando…</Card>
+        ) : lista.isError ? (
+          <ErroCard erro={lista.error} onRetry={() => void lista.refetch()} />
         ) : demandas.length === 0 ? (
           <Card className="p-8 text-center">
             <Bot className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />

@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
 import { InfoHint } from "@/components/ui/info-hint";
 import { LoadingCard } from "@/components/loading";
+import { ErroCard } from "@/components/erro-estado";
 import { RequerTela } from "@/components/requer-tela";
 import { StatCard } from "@/components/stat-card";
 import { DataTableToolbar, ToolbarFilterDateRange } from "@/components/data-table";
@@ -104,7 +105,7 @@ function Conteudo() {
     return p.toString();
   }, [de, ate, agruparPor, f]);
 
-  const { data, isLoading, isFetching, error } = useApiQuery<RelatorioAbastecimentosResposta>(
+  const { data, isLoading, isFetching, error, refetch } = useApiQuery<RelatorioAbastecimentosResposta>(
     query ? `/admin/relatorios/abastecimentos?${query}` : undefined,
     { staleTime: 30_000 },
   );
@@ -230,6 +231,11 @@ function Conteudo() {
       )}
 
       {isLoading && <LoadingCard />}
+
+      {/* Relatório que não carregou não é relatório vazio: sem isto, uma
+          falha da API virava "nenhuma viagem no período" e o operador ia
+          mexer nos filtros atrás de um dado que nunca chegou. */}
+      {!isLoading && error && <ErroCard erro={error} onRetry={() => void refetch()} />}
 
       {data && t && (
         <>

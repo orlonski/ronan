@@ -1,9 +1,10 @@
 "use client";
 import { SessionProvider } from "next-auth/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MutationCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
 import { useState } from "react";
-import { Toaster } from "sonner";
+import { Toaster, toast } from "sonner";
+import { ApiError } from "@/lib/client-api";
 
 export const THEMES = [
   "light",
@@ -23,6 +24,31 @@ export function Providers({ children }: { children: React.ReactNode }) {
     () =>
       new QueryClient({
         defaultOptions: { queries: { staleTime: 30_000, refetchOnWindowFocus: false } },
+        /**
+         * Rede de segurança: escrita que falha SEMPRE avisa.
+         *
+         * Antes daqui, ~17 formulários chamavam `mutateAsync` sem try/catch e
+         * sem `onError` — CPF duplicado, placa repetida ou senha curta faziam o
+         * botão reabilitar e mais nada acontecer na tela. O operador clicava de
+         * novo achando que não tinha clicado.
+         *
+         * Quem trata o próprio erro (tem `onError` ou marca
+         * `meta.erroTratado`) não recebe este toast, pra não duplicar aviso.
+         */
+        mutationCache: new MutationCache({
+          onError: (erro, _vars, _ctx, mutation) => {
+            if (mutation.options.onError) return;
+            if (mutation.meta?.erroTratado) return;
+            // 401 já é resolvido dentro do fetchApi (renova a sessão ou
+            // desloga). Avisar aqui só assustaria sem o usuário poder agir.
+            if (erro instanceof ApiError && erro.status === 401) return;
+            const descricao =
+              erro instanceof Error && erro.message
+                ? erro.message
+                : "Tente de novo em alguns instantes.";
+            toast.error("Não foi possível concluir", { description: descricao });
+          },
+        }),
       }),
   );
   return (

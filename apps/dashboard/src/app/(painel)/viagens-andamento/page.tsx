@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { fmtDataHoraSP } from "@/lib/datetime-br";
+import { ErroCard } from "@/components/erro-estado";
 
 const PATH = "/admin/viagens-andamento";
 const POLL_MS = 20_000;
@@ -263,7 +264,11 @@ export default function ViagensAndamentoPage() {
           <p className="text-sm text-muted-foreground">Carregando…</p>
         )}
 
-        {!list.isLoading && viagens.length === 0 && (
+        {!list.isLoading && list.isError && (
+          <ErroCard erro={list.error} onRetry={() => void list.refetch()} />
+        )}
+
+        {!list.isLoading && !list.isError && viagens.length === 0 && (
           <Card className="flex flex-col items-center gap-2 p-10 text-center">
             <Truck className="h-8 w-8 text-muted-foreground/60" />
             <p className="font-medium">Nenhuma viagem em andamento agora</p>

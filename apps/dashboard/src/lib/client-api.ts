@@ -3,6 +3,7 @@
 import { getSession, signOut, useSession } from "next-auth/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { DataTableParams } from "@/hooks/use-data-table-state";
+import { type ApiIssue, extrairIssues, mensagemDeErro } from "./erro-api";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
@@ -23,18 +24,30 @@ function renovarSessao() {
 }
 
 export class ApiError extends Error {
+  /**
+   * Os erros campo a campo do Zod, quando o backend mandou.
+   * Form que quer marcar o campo culpado lê daqui (ver `aplicarIssues`);
+   * quem só quer avisar usa `message`, que já vem humanizado.
+   */
+  readonly issues: ApiIssue[];
+
   constructor(public status: number, public body: unknown) {
-    // Tenta extrair mensagem útil do body do Nest
-    // (formato { message, error, statusCode } ou { message: string[] })
-    let msg = `API ${status}`;
-    if (body && typeof body === "object" && "message" in body) {
-      const m = (body as { message: unknown }).message;
-      if (typeof m === "string" && m.length > 0) msg = m;
-      else if (Array.isArray(m) && m.length > 0)
-        msg = m.map((x) => String(x)).join("; ");
-    }
-    super(msg);
+    super(mensagemDeErro(status, body));
+    this.issues = extrairIssues(body);
   }
+}
+
+/**
+ * Mapa `campo -> mensagem` pra alimentar o estado de erro de um formulário.
+ * Devolve `{}` quando o erro não é de validação — aí a tela cai no toast.
+ */
+export function issuesPorCampo(err: unknown): Record<string, string> {
+  if (!(err instanceof ApiError)) return {};
+  const mapa: Record<string, string> = {};
+  for (const i of err.issues) {
+    if (i.path && !mapa[i.path]) mapa[i.path] = i.message;
+  }
+  return mapa;
 }
 
 export async function fetchApi<T>(

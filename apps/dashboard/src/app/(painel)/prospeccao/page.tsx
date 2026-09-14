@@ -15,6 +15,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { DataTableToolbar } from "@/components/data-table";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import { usePaginatedList, useApiQuery } from "@/lib/client-api";
+import { ErroCard } from "@/components/erro-estado";
 import { usePermissoes } from "@/lib/permissoes";
 import { FichaLead } from "./_components/ficha-lead";
 import { AcoesBase } from "./_components/acoes-base";
@@ -189,6 +190,8 @@ export default function ProspeccaoPage() {
             <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
             Carregando…
           </Card>
+        ) : lista.isError ? (
+          <ErroCard erro={lista.error} onRetry={() => void lista.refetch()} />
         ) : leads.length === 0 ? (
           <Card className="p-8 text-center">
             <Building2 className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />

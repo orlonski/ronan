@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
 import { LoadingInline } from "@/components/loading";
+import { ErroCard, ErroEstado } from "@/components/erro-estado";
 import type { DataTableState } from "@/hooks/use-data-table-state";
 import type { Pagination } from "@/lib/client-api";
 import { DataTablePagination } from "./data-table-pagination";
@@ -39,7 +40,19 @@ export type DataTableProps<T> = {
    * em <md, tabela em md+.
    */
   viewMode?: "cards" | "table";
-  emptyMessage?: string;
+  /**
+   * ReactNode, não string: estado vazio bom termina num botão ("Cadastrar
+   * motorista"), e enquanto isso era `string` nenhuma tela conseguia pôr um.
+   */
+  emptyMessage?: React.ReactNode;
+  /**
+   * A lista falhou. Sem isso, 403 e 500 caíam no estado vazio e a tela dizia
+   * "Nenhum registro encontrado." — ou seja, mentia que não havia dados.
+   * Passe `list.isError` / `list.error` / `list.refetch`.
+   */
+  isError?: boolean;
+  error?: unknown;
+  onRetry?: () => void;
 };
 
 export function DataTable<T>({
@@ -52,7 +65,10 @@ export function DataTable<T>({
   toolbar,
   renderMobileCard,
   viewMode,
-  emptyMessage = "Nenhum registro encontrado.",
+  emptyMessage = "Nada pra mostrar aqui ainda.",
+  isError,
+  error,
+  onRetry,
 }: DataTableProps<T>) {
   const sorting: SortingState = React.useMemo(
     () => (state.sort ? [{ id: state.sort, desc: state.order === "desc" }] : []),
@@ -80,7 +96,9 @@ export function DataTable<T>({
   });
 
   const colCount = columns.length;
-  const showEmpty = !isLoading && data.length === 0;
+  // Erro vence vazio: lista que não carregou não é lista sem registros.
+  const showErro = !isLoading && !!isError && data.length === 0;
+  const showEmpty = !isLoading && !showErro && data.length === 0;
 
   return (
     <div className="space-y-3">
@@ -99,6 +117,7 @@ export function DataTable<T>({
           }
         >
           {isLoading && <Card className="p-6"><LoadingInline /></Card>}
+          {showErro && <ErroCard erro={error} onRetry={onRetry} />}
           {showEmpty && (
             <Card className="p-6 text-center text-sm text-muted-foreground">
               {emptyMessage}
@@ -167,6 +186,13 @@ export function DataTable<T>({
                   ))}
                 </TableRow>
               ))}
+            {showErro && (
+              <TableRow>
+                <TableCell colSpan={colCount}>
+                  <ErroEstado erro={error} onRetry={onRetry} />
+                </TableCell>
+              </TableRow>
+            )}
             {showEmpty && (
               <TableRow>
                 <TableCell colSpan={colCount} className="text-center text-muted-foreground">

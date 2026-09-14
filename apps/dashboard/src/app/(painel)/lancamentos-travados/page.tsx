@@ -12,6 +12,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { LoadingCard } from "@/components/loading";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { ErroCard } from "@/components/erro-estado";
 
 type Status = "abertos" | "resolvidos" | "todos";
 
@@ -97,7 +98,11 @@ export default function LancamentosTravadosPage() {
 
       {lista.isLoading && <LoadingCard />}
 
-      {lista.data?.length === 0 && (
+      {!lista.isLoading && lista.isError && (
+        <ErroCard erro={lista.error} onRetry={() => void lista.refetch()} />
+      )}
+
+      {!lista.isError && lista.data?.length === 0 && (
         <Card>
           <p className="py-6 text-center text-sm text-muted-foreground">
             {status === "abertos"

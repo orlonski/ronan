@@ -127,6 +127,9 @@ export function ViagensDoLocal({
         state={tableState}
         isLoading={viagens.isLoading}
         isFetching={viagens.isFetching}
+        isError={viagens.isError}
+        error={viagens.error}
+        onRetry={() => void viagens.refetch()}
         emptyMessage="Nenhuma viagem usou este local ainda."
       />
     </Card>

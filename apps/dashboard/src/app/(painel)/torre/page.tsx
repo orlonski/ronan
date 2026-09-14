@@ -9,6 +9,7 @@ import {
   MessageCircle,
   Phone,
   Plus,
+  RefreshCw,
   ShieldCheck,
   Timer,
 } from "lucide-react";
@@ -27,6 +28,9 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { LoadingCard } from "@/components/loading";
+import { ErroCard } from "@/components/erro-estado";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 
 type Alerta = {
@@ -114,7 +118,7 @@ function Conteudo() {
   const token = useAuthToken();
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch, isFetching, dataUpdatedAt } = useQuery({
     queryKey: ["torre"],
     enabled: Boolean(token),
     queryFn: () =>
@@ -124,16 +128,33 @@ function Conteudo() {
     refetchInterval: 60_000,
   });
 
+  // Estas três não passam pelo MutationCache (são fetchApi cru), então tratam o
+  // erro aqui: sem isso, "Resolver" que falha só não faz nada e o operador
+  // clica de novo achando que não acertou o botão.
   async function resolver(id: string) {
     if (!token) return;
-    await fetchApi(`/admin/torre/alertas/${id}/resolver`, { token, method: "POST" });
-    await queryClient.invalidateQueries({ queryKey: ["torre"] });
+    try {
+      await fetchApi(`/admin/torre/alertas/${id}/resolver`, { token, method: "POST" });
+      await queryClient.invalidateQueries({ queryKey: ["torre"] });
+      toast.success("Alerta resolvido.");
+    } catch (e) {
+      toast.error("Não consegui resolver o alerta", {
+        description: e instanceof Error ? e.message : undefined,
+      });
+    }
   }
 
   async function encerrar(id: string) {
     if (!token) return;
-    await fetchApi(`/admin/torre/ocorrencias/${id}/encerrar`, { token, method: "POST" });
-    await queryClient.invalidateQueries({ queryKey: ["torre"] });
+    try {
+      await fetchApi(`/admin/torre/ocorrencias/${id}/encerrar`, { token, method: "POST" });
+      await queryClient.invalidateQueries({ queryKey: ["torre"] });
+      toast.success("Ocorrência encerrada.");
+    } catch (e) {
+      toast.error("Não consegui encerrar a ocorrência", {
+        description: e instanceof Error ? e.message : undefined,
+      });
+    }
   }
 
   const [abrindo, setAbrindo] = React.useState(false);
@@ -157,6 +178,11 @@ function Conteudo() {
       setTipoEventoId("");
       setObservacao("");
       await queryClient.invalidateQueries({ queryKey: ["torre"] });
+      toast.success("Ocorrência registrada.");
+    } catch (e) {
+      toast.error("Não consegui registrar a ocorrência", {
+        description: e instanceof Error ? e.message : undefined,
+      });
     } finally {
       setSalvando(false);
     }
@@ -166,7 +192,10 @@ function Conteudo() {
   const ocorrencias = data?.ocorrencias ?? [];
   const tipos = data?.tiposOcorrencia ?? [];
   const emCurso = data?.viagensEmCurso ?? [];
-  const limpo = alertas.length === 0 && ocorrencias.length === 0;
+  // "Tudo no esperado" é uma AFIRMAÇÃO sobre a operação. Só pode sair quando a
+  // torre realmente falou com a API: se a busca falhou, o que a tela sabe é
+  // nada — e dizer "nenhuma viagem atrasada" aí é mentir pro supervisor.
+  const limpo = !isError && alertas.length === 0 && ocorrencias.length === 0;
 
   return (
     <div className="space-y-5">
@@ -178,15 +207,51 @@ function Conteudo() {
             cada trajeto sai das viagens que a frota já fez nele.
           </p>
         </div>
-        {/* Quem atende "quebrei na BR-376" precisa registrar sem sair daqui. */}
-        <Permitido chave="programacao.editar">
-          <Button onClick={() => setAbrindo(true)} disabled={emCurso.length === 0}>
-            <Plus className="h-4 w-4" /> Registrar ocorrência
-          </Button>
-        </Permitido>
+        <div className="flex items-center gap-3">
+          {/* Tela que se atualiza sozinha precisa dizer DE QUANDO é o que está
+              na tela — senão não dá pra distinguir "está tudo calmo" de
+              "parou de atualizar". */}
+          {dataUpdatedAt > 0 && (
+            <span
+              className="flex items-center gap-1.5 text-xs text-muted-foreground"
+              aria-live="polite"
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} aria-hidden />
+              Atualizado às{" "}
+              {new Date(dataUpdatedAt).toLocaleTimeString("pt-BR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
+          )}
+          {/* Quem atende "quebrei na BR-376" precisa registrar sem sair daqui. */}
+          <Permitido chave="programacao.editar">
+            <Button onClick={() => setAbrindo(true)} disabled={emCurso.length === 0}>
+              <Plus className="h-4 w-4" /> Registrar ocorrência
+            </Button>
+          </Permitido>
+        </div>
       </header>
 
       {isLoading && <LoadingCard />}
+
+      {/* A torre é lida de relance, de longe, num monitor. Se os dados ficaram
+          velhos porque a busca falhou, isso precisa aparecer ANTES do conteúdo —
+          senão o supervisor confia numa foto de dez minutos atrás. */}
+      {isError && !isLoading && (
+        <ErroCard
+          erro={error}
+          onRetry={() => void refetch()}
+          className={data ? "border-destructive/40" : undefined}
+        />
+      )}
+      {isError && data && (
+        <p className="text-sm text-destructive">
+          O que está abaixo é a última leitura que deu certo
+          {dataUpdatedAt ? `, de ${new Date(dataUpdatedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : ""}.
+          Pode não refletir a operação agora.
+        </p>
+      )}
 
       {/* Sem exceção nenhuma, dizer isso é a informação — e não uma tela vazia,
           que o supervisor lê como "não carregou". */}

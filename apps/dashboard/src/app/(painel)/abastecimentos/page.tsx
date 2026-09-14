@@ -257,6 +257,9 @@ export default function AbastecimentosPage() {
         state={tableState}
         isLoading={list.isLoading}
         isFetching={list.isFetching}
+        isError={list.isError}
+        error={list.error}
+        onRetry={() => void list.refetch()}
         toolbar={
           <DataTableToolbar
             state={tableState}

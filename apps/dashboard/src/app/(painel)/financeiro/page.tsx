@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { LoadingCard } from "@/components/loading";
 import { StatCard } from "@/components/stat-card";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { ErroCard } from "@/components/erro-estado";
 
 type Aging = {
   faixas: Record<FaixaAgingTipo, string>;
@@ -119,6 +120,9 @@ function Conteudo() {
       {aba === "resumo" && (
         <>
           {resumo.isLoading && <LoadingCard />}
+          {!resumo.isLoading && resumo.isError && (
+            <ErroCard erro={resumo.error} onRetry={() => void resumo.refetch()} />
+          )}
           {resumo.data && <BlocoResumo r={resumo.data} />}
         </>
       )}
@@ -279,7 +283,11 @@ function ListaTitulos({ tipo }: { tipo: "receber" | "pagar" }) {
       {erro && <Card className="border-l-4 border-l-red-500 p-3 text-sm">{erro}</Card>}
       {lista.isLoading && <LoadingCard />}
 
-      {!lista.isLoading && titulos.length === 0 && (
+      {!lista.isLoading && lista.isError && (
+        <ErroCard erro={lista.error} onRetry={() => void lista.refetch()} />
+      )}
+
+      {!lista.isLoading && !lista.isError && titulos.length === 0 && (
         <Card className="p-8 text-center text-sm text-muted-foreground">
           {soVencidos ? "Nada vencido." : "Nenhum título em aberto."}
         </Card>

@@ -737,6 +737,9 @@ export default function LocaisPage() {
         state={tableState}
         isLoading={list.isLoading}
         isFetching={list.isFetching}
+        isError={list.isError}
+        error={list.error}
+        onRetry={() => void list.refetch()}
         toolbar={toolbar}
         emptyMessage="Nenhum local cadastrado."
         viewMode={viewMode}

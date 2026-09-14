@@ -1,11 +1,18 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "./auth-options";
+import { type ApiIssue, extrairIssues, mensagemDeErro } from "./erro-api";
 
 const API_URL = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
 export class ApiError extends Error {
+  readonly issues: ApiIssue[];
+
   constructor(public status: number, public body: unknown) {
-    super(typeof body === "object" && body && "message" in body ? String((body as any).message) : `API ${status}`);
+    // O `String(body.message)` de antes virava "[object Object]" quando o Nest
+    // mandava objeto, e "API 500" no resto dos casos. Agora usa a mesma
+    // tradução do cliente (lib/erro-api.ts).
+    super(mensagemDeErro(status, body));
+    this.issues = extrairIssues(body);
   }
 }
 

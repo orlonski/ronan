@@ -11,6 +11,7 @@ import { fetchApi, useApiQuery, useAuthToken } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
 import { fmtDataHoraBR } from "@/lib/fechamento-helpers";
 import { humanizarErroConferencia } from "@/lib/conferencia-erro";
+import { ErroCard } from "@/components/erro-estado";
 
 type Divergencia = {
   campo: string;
@@ -365,6 +366,8 @@ export default function ConferenciasPage() {
 
       {lista.isLoading ? (
         <Card className="p-8 text-center text-sm text-muted-foreground">Carregando…</Card>
+      ) : lista.isError ? (
+        <ErroCard erro={lista.error} onRetry={() => void lista.refetch()} />
       ) : (lista.data ?? []).length === 0 ? (
         <Card className="p-8 text-center">
           <ScanEye className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
