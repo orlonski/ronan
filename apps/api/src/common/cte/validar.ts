@@ -207,6 +207,28 @@ export function validarCte(e: EntradaCte): Validacao {
       mensagem: "A empresa está no Regime Normal mas a regra de ICMS é a do Simples.",
     });
   }
+  // CST 20 É "redução da base de cálculo", e o leiaute cobra coerência: o
+  // `pRedBC` é obrigatório e o tipo dele RECUSA zero. Redução de 0% com CST 20
+  // é uma contradição que o XSD barra com "o valor '0.00' não é aceito pelo
+  // padrão" — mensagem que não diz a ninguém o que preencher.
+  if (e.config.icms.tipo === "20" && !(e.config.icms.reducaoBase > 0)) {
+    erros.push({
+      campo: "icms",
+      mensagem:
+        "O ICMS está como CST 20 (redução da base de cálculo), mas o percentual de redução está zerado. Informe a redução, ou troque o CST com o contador.",
+    });
+  }
+  // Alíquota zerada onde ela é destacada: o documento sai com imposto zero e a
+  // SEFAZ autoriza — o erro só aparece na apuração.
+  if (
+    (e.config.icms.tipo === "00" || e.config.icms.tipo === "20") &&
+    !(e.config.icms.aliquota > 0)
+  ) {
+    erros.push({
+      campo: "icms",
+      mensagem: "A alíquota de ICMS está zerada, mas o CST escolhido destaca imposto.",
+    });
+  }
 
   // --- responsável técnico ---
   // Aviso, não erro: o grupo existe no leiaute 4.00 pro desenvolvedor do

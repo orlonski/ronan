@@ -266,6 +266,27 @@ describe("montarCte", () => {
     expect((cte.ide as any).toma4.xNome).toBe("Agenciadora Fretes ME");
   });
 
+  it("CST 20 com redução zerada é barrado com o motivo, não com o padrão do XSD", () => {
+    // O leiaute obriga `pRedBC` no CST 20 e o tipo dele RECUSA zero. Sem esta
+    // regra o usuário via "o valor '0.00' não é aceito pelo padrão
+    // '0\\.[0-9]{1}[1-9]{1}|...'", que não diz a ninguém o que preencher.
+    const r = validarCte(
+      entrada({ config: { ...entrada().config, icms: { tipo: "20", aliquota: 12, reducaoBase: 0 } } }),
+    );
+    expect(r.ok).toBe(false);
+    expect(r.erros.some((e) => e.mensagem.includes("percentual de redução está zerado"))).toBe(true);
+  });
+
+  it("alíquota zerada onde o CST destaca imposto também é barrada", () => {
+    // Aqui a SEFAZ AUTORIZA: o documento sai com imposto zero e o erro só
+    // aparece na apuração. Pior que rejeição.
+    const r = validarCte(
+      entrada({ config: { ...entrada().config, icms: { tipo: "00", aliquota: 0 } } }),
+    );
+    expect(r.ok).toBe(false);
+    expect(r.erros.some((e) => e.mensagem.includes("alíquota de ICMS está zerada"))).toBe(true);
+  });
+
   it("em homologação, todo participante vira a razão social exigida pela SEFAZ", () => {
     // Rejeições 646/647/648 (e a do destinatário): a SEFAZ recusa documento de
     // teste com nome de empresa de verdade — a ideia é que ele nunca possa ser

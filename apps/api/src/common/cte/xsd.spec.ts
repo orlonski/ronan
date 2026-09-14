@@ -170,6 +170,32 @@ describe("o XML passa no XSD oficial do CT-e 4.00", () => {
 });
 
 describe("o XSD pega o que regra escrita à mão não pega", () => {
+  it("carga sem NF-e e sem valor não manda vDocFisc zerado", async () => {
+    // `vDocFisc` é `TDec_1302Opc`, e o padrão desse tipo NÃO casa com "0.00".
+    // A SEFAZ separa "este documento vale nada" de "não sei o valor", e só o
+    // segundo é aceitável — então a tag some em vez de ir zerada. O irmão
+    // `vCarga` é `TDec_1302` (sem o Opc) e aceita zero: o cuidado é campo a
+    // campo, não uma regra geral de "não mandar zero".
+    const r = await validar(entrada({ carga: { produtoPredominante: "BRITA 1", toneladas: 28.5 } }));
+    expect(r.erros.map((x) => x.mensagem)).toEqual([]);
+
+    const xml = gerarXmlCte(montarCte(entrada({
+      carga: { produtoPredominante: "BRITA 1", toneladas: 28.5 },
+    })));
+    expect(xml).not.toContain("vDocFisc");
+    // E sem número de ticket, nada de "SEM NUMERO" inventado no documento.
+    expect(xml).not.toContain("SEM NUMERO");
+  });
+
+  it("com valor de carga, o vDocFisc volta", async () => {
+    const xml = gerarXmlCte(montarCte(entrada({
+      carga: { produtoPredominante: "BRITA 1", toneladas: 28.5, valorCarga: 2100, documentoAvulso: "TK-8891" },
+    })));
+    expect(xml).toContain("<vDocFisc>2100.00</vDocFisc>");
+    expect(xml).toContain("<nDoc>TK-8891</nDoc>");
+  });
+
+
   it("razão social acima do tamanho máximo é barrada", async () => {
     // 60 é o teto do xNome. Nenhuma regra nossa confere tamanho campo a campo —
     // e manter uma seria escrever um segundo schema à mão.

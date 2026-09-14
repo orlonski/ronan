@@ -174,6 +174,22 @@ export type CteMontado = {
 const dec = (n: number, casas: number) => n.toFixed(casas);
 
 /**
+ * Valor de tag OPCIONAL: ou tem valor de verdade, ou a tag não vai.
+ *
+ * Os tipos `*Opc` do schema recusam zero de propósito — `vDocFisc` é
+ * `TDec_1302Opc`, cujo padrão não casa com "0.00". A leitura da SEFAZ é que
+ * declarar que um documento vale nada é diferente de não declarar valor, e só o
+ * segundo é aceitável. Mandar zero é rejeição de leiaute, que nem chega a ser
+ * analisada como documento.
+ *
+ * Nota: isto NÃO vale pros campos obrigatórios (`TDec_1302` sem o `Opc`), que
+ * aceitam zero normalmente — por isso o cuidado é campo a campo, e não uma
+ * regra geral de "não mandar zero".
+ */
+const tagOpcional = (nome: string, n: number | null | undefined, casas: number) =>
+  n != null && n > 0 ? { [nome]: n.toFixed(casas) } : {};
+
+/**
  * O endereço, na ordem do schema.
  *
  * São DOIS tipos diferentes e a diferença morde: `TEndereco` (remetente,
@@ -443,9 +459,12 @@ export function montarCte(e: EntradaCte): CteMontado {
               {
                 tpDoc: "99",
                 descOutros: "TICKET DE PESAGEM",
-                nDoc: e.carga.documentoAvulso ?? "SEM NUMERO",
+                // Sem número do ticket, a tag não vai. "SEM NUMERO" é texto
+                // inventado que ia parar no documento fiscal e no DACTE, como
+                // se fosse o número — e `nDoc` é opcional justamente pra isso.
+                ...(e.carga.documentoAvulso ? { nDoc: e.carga.documentoAvulso } : {}),
                 dEmi: emData(e.emitidoEm),
-                vDocFisc: dec(e.carga.valorCarga ?? 0, 2),
+                ...tagOpcional("vDocFisc", e.carga.valorCarga, 2),
               },
             ],
           },
