@@ -315,6 +315,14 @@ export type PagamentoAsaas = {
   externalReference?: string | null;
   subscription?: string | null;
   customer?: string | null;
+  /**
+   * De qual autorização de Pix Automático este pagamento veio.
+   *
+   * É o mesmo campo que se envia ao criar cobrança no modo MANUAL, e o único
+   * vínculo que o primeiro pagamento carrega — ele chega sem `subscription` e
+   * sem `externalReference`, registrado como Pix avulso.
+   */
+  pixAutomaticAuthorizationId?: string | null;
 };
 
 /**

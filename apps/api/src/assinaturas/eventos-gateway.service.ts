@@ -85,6 +85,17 @@ export class EventosGatewayService {
     tipo: string,
     payload: unknown,
   ): Promise<{ status: "processado" | "ignorado"; detalhe?: string }> {
+    // O Pix Automático tem um ciclo de vida PRÓPRIO, que não passa pelos
+    // eventos de cobrança: a autorização é criada, o cliente paga o primeiro
+    // QR, e só então ela é ATIVADA. Sem tratar isto, uma assinatura de Pix
+    // Automático fica "aguardando autorização" para sempre — mesmo com o
+    // dinheiro já na conta. Foi exatamente o que aconteceu no primeiro teste
+    // real (14/09/2026): o pagamento entrou, o `PAYMENT_RECEIVED` chegou solto
+    // (sem assinatura nem referência) e a ativação nunca foi contada.
+    if (tipo.startsWith("PIX_AUTOMATIC_RECURRING_AUTHORIZATION")) {
+      return this.aplicarAutorizacaoPix(tipo, payload);
+    }
+
     const pagamento = (payload as { payment?: PagamentoAsaas })?.payment;
     if (!pagamento?.id) {
       return { status: "ignorado", detalhe: "evento sem pagamento" };
@@ -133,6 +144,75 @@ export class EventosGatewayService {
 
     this.log.log(`${tipo}: cobrança ${cobranca.id} → ${novoStatus}`);
     return { status: "processado" };
+  }
+
+  /**
+   * O ciclo de vida da autorização de Pix Automático.
+   *
+   * A autorização é o consentimento que o cliente deu no app do banco dele. É
+   * ela, e não a cobrança, que decide se a recorrência existe: sem autorização
+   * ativa, nenhuma parcela futura é debitada.
+   *
+   * ⚠️ Estes eventos NÃO vêm na categoria "Cobranças" do webhook — precisam ser
+   * marcados à parte no painel do gateway. Um webhook que só assina cobranças
+   * recebe o dinheiro do primeiro Pix e nunca fica sabendo da ativação.
+   */
+  private async aplicarAutorizacaoPix(
+    tipo: string,
+    payload: unknown,
+  ): Promise<{ status: "processado" | "ignorado"; detalhe?: string }> {
+    const autorizacao = extrairAutorizacao(payload);
+    if (!autorizacao?.id) {
+      return { status: "ignorado", detalhe: "evento de autorização sem id" };
+    }
+
+    const assinatura = await comoSistema(() =>
+      this.prisma.assinatura.findFirst({
+        where: { gatewayAutorizacaoId: autorizacao.id },
+        select: { id: true, status: true, inicioEm: true },
+      }),
+    );
+    if (!assinatura) {
+      return { status: "ignorado", detalhe: "autorização de assinatura desconhecida" };
+    }
+    if (assinatura.status === "CANCELADA") {
+      return { status: "ignorado", detalhe: "assinatura já cancelada" };
+    }
+
+    if (tipo.endsWith("_ACTIVATED")) {
+      await comoSistema(() =>
+        this.prisma.assinatura.update({
+          where: { id: assinatura.id },
+          data: { status: "ATIVA", inicioEm: assinatura.inicioEm ?? new Date() },
+        }),
+      );
+      this.log.log(`Autorização ${autorizacao.id} ativada: assinatura ${assinatura.id} está valendo.`);
+      return { status: "processado" };
+    }
+
+    // Recusada, cancelada no app do banco ou vencida sem o primeiro pagamento:
+    // não há mais como cobrar por este caminho. A assinatura para — e SÓ ela:
+    // o acesso da empresa continua, como em todo cancelamento.
+    if (tipo.endsWith("_REFUSED") || tipo.endsWith("_CANCELLED") || tipo.endsWith("_EXPIRED")) {
+      const motivo = tipo.endsWith("_REFUSED")
+        ? "O cliente recusou a autorização do Pix Automático no banco dele."
+        : tipo.endsWith("_CANCELLED")
+          ? "A autorização do Pix Automático foi cancelada no banco do cliente."
+          : "A autorização do Pix Automático venceu sem o primeiro pagamento.";
+
+      await comoSistema(() =>
+        this.prisma.assinatura.update({
+          where: { id: assinatura.id },
+          data: { status: "CANCELADA", canceladaEm: new Date(), motivoCancelamento: motivo },
+        }),
+      );
+      this.log.warn(`Autorização ${autorizacao.id} encerrada (${tipo}): ${motivo}`);
+      return { status: "processado" };
+    }
+
+    // CREATED e o que o gateway inventar depois: guardado, sem efeito. A
+    // criação já foi registrada quando NÓS a criamos.
+    return { status: "ignorado", detalhe: `evento de autorização sem efeito: ${tipo}` };
   }
 
   /**
@@ -197,6 +277,18 @@ export class EventosGatewayService {
     pagamento: PagamentoAsaas,
   ): Promise<{ id: string; contaId: string } | null> {
     const selecao = { id: true, contaId: true };
+
+    // A autorização primeiro, quando o pagamento diz de qual ela veio: no Pix
+    // Automático é o vínculo mais forte que existe, e o único que sobrevive ao
+    // primeiro pagamento — que chega SEM `subscription` e SEM
+    // `externalReference`, porque o gateway o registra como um Pix avulso.
+    if (pagamento.pixAutomaticAuthorizationId) {
+      const porAutorizacao = await this.prisma.assinatura.findFirst({
+        where: { gatewayAutorizacaoId: pagamento.pixAutomaticAuthorizationId },
+        select: selecao,
+      });
+      if (porAutorizacao) return porAutorizacao;
+    }
 
     if (pagamento.subscription) {
       const porAssinatura = await this.prisma.assinatura.findFirst({
@@ -264,4 +356,38 @@ export class EventosGatewayService {
 function dataDoPagamento(p: PagamentoAsaas): Date {
   const ymd = p.paymentDate ?? p.clientPaymentDate;
   return ymd ? new Date(`${ymd.slice(0, 10)}T12:00:00.000Z`) : new Date();
+}
+
+/**
+ * O objeto da autorização dentro do evento.
+ *
+ * Lê mais de uma chave de propósito: a documentação do gateway descreve os
+ * campos da autorização mas não fixa, de forma inequívoca, sob qual chave ela
+ * viaja no webhook. Já pagamos uma vez por assumir um formato sem confirmar —
+ * o copia-e-cola do QR, que era `payload` na raiz e não dentro de
+ * `immediateQrCode`. Aqui o custo de tentar três chaves é zero, e o custo de
+ * errar é uma assinatura que nunca ativa.
+ */
+export function extrairAutorizacao(payload: unknown): { id?: string; status?: string } | null {
+  const p = payload as Record<string, unknown> | undefined;
+  if (!p) return null;
+  for (const chave of [
+    "authorization",
+    "pixAutomaticRecurringAuthorization",
+    "pixAutomaticAuthorization",
+    "recurringAuthorization",
+  ]) {
+    const v = p[chave];
+    if (v && typeof v === "object" && typeof (v as { id?: unknown }).id === "string") {
+      return v as { id?: string; status?: string };
+    }
+  }
+  // Último caso: o id solto na raiz, que é como alguns eventos simples chegam.
+  if (typeof p.id === "string" && typeof p.event === "string" && p.payment === undefined) {
+    const id = p.id;
+    // O `id` da RAIZ costuma ser o do evento ("evt_..."), não o da autorização.
+    // Só serve se não parecer um id de evento.
+    if (!id.startsWith("evt_")) return { id };
+  }
+  return null;
 }
