@@ -82,7 +82,7 @@ function Conteudo() {
   return (
     <div className="space-y-4">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Consumo da frota</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Consumo dos caminhões</h1>
         <p className="text-sm text-muted-foreground">
           Quilômetros por litro de cada caminhão, medido entre dois abastecimentos de tanque
           cheio.

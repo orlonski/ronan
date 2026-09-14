@@ -510,7 +510,7 @@ export function MotoristaForm({ initial }: Props) {
               }
             />
             <p className="text-xs text-muted-foreground">
-              Frota dona do motorista — é ela que carimba cada viagem, pedágio e
+              Transportadora dona do motorista — é ela que carimba cada viagem, pedágio e
               abastecimento que ele lança.{" "}
               {initial && !initial.transportadoraId
                 ? "Ao definir agora, o histórico dele que ainda está sem dono é adotado."

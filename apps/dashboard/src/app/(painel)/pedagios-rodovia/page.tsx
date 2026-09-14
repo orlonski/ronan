@@ -140,7 +140,7 @@ export default function PedagiosRodoviaPage() {
     <div className="space-y-6">
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Pedágios (rodovias)</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Praças de pedágio</h1>
           <p className="text-sm text-muted-foreground">
             Cadastro de pedágios pra alertar motorista quando salvar viagem sem valor de
             pedágio numa rota que passa por um deles. Importa do OpenStreetMap.

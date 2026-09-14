@@ -134,7 +134,7 @@ export default function TiposServicoPage() {
     <div className="space-y-6">
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Modos de serviço</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Como a viagem é cobrada</h1>
           <p className="text-sm text-muted-foreground">
             Como a viagem é medida — por peso (frete) ou por período (diária) — e o que o
             app pede ao motorista em cada caso.

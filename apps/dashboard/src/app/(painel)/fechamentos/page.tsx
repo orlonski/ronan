@@ -136,7 +136,7 @@ export default function FechamentosPage() {
     <div className="space-y-6">
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Fechamentos</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Planilhas dos clientes</h1>
           <p className="text-sm text-muted-foreground">
             Conferências de planilhas que as empresas enviam — extração + match automático com IA.
           </p>

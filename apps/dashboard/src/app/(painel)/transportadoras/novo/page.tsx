@@ -10,7 +10,7 @@ export default function NovaTransportadoraPage() {
       <div className="space-y-6">
         <FormPageHeader
           title="Nova transportadora"
-          description="Frota dona de caminhões e motoristas."
+          description="Quem é dona dos caminhões e dos motoristas — a sua e as que rodam pra você."
           backHref="/transportadoras"
         />
         <TransportadoraForm />

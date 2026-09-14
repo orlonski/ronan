@@ -182,7 +182,7 @@ export default function EnviosPage() {
     <div className="space-y-6">
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Envios</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Planilhas enviadas</h1>
           <p className="text-sm text-muted-foreground">
             Planilhas geradas pra mandar pras empresas que recebem o fechamento.
           </p>

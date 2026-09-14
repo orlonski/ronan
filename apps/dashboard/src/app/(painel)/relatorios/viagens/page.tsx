@@ -132,7 +132,7 @@ function Conteudo() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Relatórios</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Produção de viagens</h1>
           <p className="text-sm text-muted-foreground">
             Produção do período, agrupada como você precisar.
           </p>

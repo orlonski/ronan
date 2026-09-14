@@ -12,6 +12,8 @@ import {
   Bell,
   Bot,
   Boxes,
+  Briefcase,
+  Building,
   Building2,
   ChevronDown,
   ChevronRight,
@@ -21,21 +23,29 @@ import {
   HardHat,
   IdCard,
   Instagram,
+  Landmark,
+  Lightbulb,
   LayoutDashboard,
   LifeBuoy,
   ListChecks,
   LogOut,
+  Map,
   MapPin,
   MessageCircle,
   MessagesSquare,
   Package,
   Radio,
+  Satellite,
+  Search,
+  ShieldAlert,
   TowerControl,
   Upload,
   FileCheck2,
   CalendarDays,
   ClipboardList,
+  Columns3,
   HandCoins,
+  Gauge,
   Ruler,
   Tag,
   Wallet,
@@ -47,6 +57,7 @@ import {
   Sparkles,
   Target,
   Timer,
+  TrafficCone,
   Truck,
   UserCircle,
   Users2,
@@ -71,74 +82,146 @@ type Item = {
 type Grupo = {
   titulo: string;
   itens: Item[];
+  /**
+   * Grupo das ferramentas internas da Movatruck. Some inteiro pra quem não é da
+   * plataforma — igual ao tratamento que o item "Empresas" já tinha. Antes
+   * estavam espalhadas entre "Operação" (no meio da rotina do cliente) e
+   * "Sistema".
+   */
+  soPlataforma?: boolean;
 };
 
 const DASHBOARD_ITEM = { href: "/", label: "Dashboard", icon: LayoutDashboard };
+/**
+ * Relatórios fica FORA dos grupos: é transversal e de uso diário, e o accordion
+ * de um grupo por vez transformaria cada consulta em dois cliques. O href é o
+ * hub (/relatorios), não uma das abas — apontar pra folha deixava o menu sem
+ * nada aceso em 3 das 4 telas de relatório.
+ */
+const RELATORIOS_ITEM = {
+  href: "/relatorios",
+  label: "Relatórios",
+  icon: BarChart3,
+  perm: "relatorios.ver",
+};
 
+/**
+ * O menu, agrupado por JORNADA — o que a pessoa está fazendo agora — e não pela
+ * natureza técnica do registro.
+ *
+ * O desenho anterior tinha três grupos (Operação/Cadastros/Sistema) e "Operação"
+ * havia virado o depósito do que não era cadastro nem configuração: 19 itens,
+ * misturando a rotina do despachante com ferramentas internas da Movatruck.
+ * Dezenove itens não se varrem com o olho; viram leitura linha a linha.
+ *
+ * Os grupos também acompanham os módulos vendidos (shared-types/modulos.ts)
+ * sempre que o módulo é coeso. Isso importa comercialmente: contratar Fiscal
+ * fazia surgir dois itens no meio de "Sistema", entre Importar dados e
+ * WhatsApp — o cliente pagava o adicional e não via nada mudar num lugar que
+ * reconhecesse.
+ *
+ * Um ícone, um conceito: `MapPin` marcava cinco itens diferentes, e ícone
+ * repetido deixa de servir como pista de varredura.
+ */
 const GRUPOS: Grupo[] = [
   {
-    titulo: "Operação",
+    titulo: "Dia a dia",
     itens: [
-      { href: "/viagens", label: "Viagens", icon: ClipboardCheck, perm: "viagens.ver" },
-      { href: "/viagens-andamento", label: "Viagens em andamento", icon: Radio, perm: "viagens.ver" },
       { href: "/torre", label: "Torre de controle", icon: TowerControl, perm: "programacao.ver" },
       { href: "/programacao", label: "Programação do dia", icon: CalendarDays, perm: "programacao.ver" },
+      { href: "/viagens-andamento", label: "Ao vivo", icon: Radio, perm: "viagens.ver" },
+      { href: "/mapa", label: "Mapa", icon: Map, perm: "mapa.ver" },
       { href: "/pedidos", label: "Pedidos do cliente", icon: ClipboardList, perm: "pedidos.ver" },
-      { href: "/conferencias", label: "Conferência de ticket", icon: ScanEye, perm: "conferencia-ticket.ver" },
-      { href: "/relatorios", label: "Relatórios", icon: BarChart3, perm: "relatorios.ver" },
-      { href: "/descargas-suspeitas", label: "Descargas suspeitas", icon: MapPin, perm: "descargas-suspeitas.ver" },
+    ],
+  },
+  {
+    titulo: "Lançamentos",
+    itens: [
+      { href: "/viagens", label: "Viagens", icon: ClipboardCheck, perm: "viagens.ver" },
       { href: "/abastecimentos", label: "Abastecimentos", icon: Fuel, perm: "abastecimentos.ver" },
-      { href: "/fechamentos", label: "Fechamentos", icon: FileSpreadsheet, perm: "fechamentos.ver" },
+      { href: "/conferencias", label: "Conferência de ticket", icon: ScanEye, perm: "conferencia-ticket.ver" },
+      { href: "/descargas-suspeitas", label: "Descargas fora do local", icon: ShieldAlert, perm: "descargas-suspeitas.ver" },
+      { href: "/lancamentos-travados", label: "Lançamentos que não subiram", icon: LifeBuoy, perm: "lancamentos-resgatados.ver" },
+    ],
+  },
+  {
+    titulo: "Faturamento",
+    itens: [
+      { href: "/fechamentos", label: "Planilhas dos clientes", icon: FileSpreadsheet, perm: "fechamentos.ver" },
+      { href: "/envios", label: "Planilhas enviadas", icon: Send, perm: "envios.ver" },
+      { href: "/tabelas-preco", label: "Tabela de preços", icon: Tag, perm: "tabelas-preco.ver" },
+      { href: "/regras-minimo", label: "Mínimo faturado por km", icon: Ruler, perm: "regras-minimo.ver" },
+      { href: "/cte", label: "CT-e emitidos", icon: FileCheck2, perm: "cte.ver" },
+    ],
+  },
+  {
+    titulo: "Financeiro",
+    itens: [
+      { href: "/financeiro", label: "Contas a pagar e receber", icon: Wallet, perm: "financeiro.ver" },
       { href: "/acertos", label: "Acertos com motorista", icon: HandCoins, perm: "acertos.ver" },
-      { href: "/financeiro", label: "Financeiro", icon: Wallet, perm: "financeiro.ver" },
-      { href: "/envios", label: "Envios", icon: Send, perm: "envios.ver" },
-      { href: "/lancamentos-travados", label: "Lançamentos travados", icon: LifeBuoy, perm: "lancamentos-resgatados.ver" },
-      { href: "/notificacoes", label: "Notificações", icon: Bell, perm: "notificacoes.ver" },
-      { href: "/demandas", label: "Demandas do agente", icon: Bot, perm: "demandas.ver" },
-      { href: "/prospeccao", label: "Captação de clientes", icon: Target, perm: "prospeccao.ver" },
-      { href: "/marketing", label: "Instagram da Movatruck", icon: Instagram, perm: "marketing.ver" },
-      { href: "/chat", label: "Chat dos motoristas", icon: MessagesSquare, perm: "chat.ver" },
+    ],
+  },
+  {
+    titulo: "Frota e pessoas",
+    itens: [
+      { href: "/motoristas", label: "Motoristas", icon: HardHat, perm: "motoristas.ver" },
+      { href: "/veiculos", label: "Veículos", icon: Truck, perm: "veiculos.ver" },
+      { href: "/frota", label: "Manutenção e documentos", icon: Wrench, perm: "manutencao.ver" },
+      { href: "/transportadoras", label: "Transportadoras", icon: Building, perm: "transportadoras.ver" },
+      { href: "/pedagios-rodovia", label: "Praças de pedágio", icon: TrafficCone, perm: "pedagios.ver" },
     ],
   },
   {
     titulo: "Cadastros",
     itens: [
-      { href: "/motoristas", label: "Motoristas", icon: HardHat, perm: "motoristas.ver" },
-      { href: "/veiculos", label: "Veículos", icon: Truck, perm: "veiculos.ver" },
-      { href: "/frota", label: "Frota (manutenção)", icon: Wrench, perm: "manutencao.ver" },
-      { href: "/transportadoras", label: "Transportadoras", icon: Truck, perm: "transportadoras.ver" },
-      { href: "/mapa", label: "Mapa", icon: MapPin, perm: "mapa.ver" },
-      { href: "/empresas", label: "Empresas", icon: Building2, perm: "empresas.ver" },
+      // "Empresas" nomeava DUAS entidades diferentes em dois itens de menu
+      // adjacentes. Este é o tomador do serviço — e é o nome que a própria tela
+      // sempre usou no h1.
+      { href: "/empresas", label: "Empresas-cliente", icon: Building2, perm: "empresas.ver" },
       { href: "/clientes", label: "Clientes", icon: Boxes, perm: "clientes.ver" },
       { href: "/locais", label: "Locais", icon: MapPin, perm: "locais.ver" },
-      { href: "/pedagios-rodovia", label: "Pedágios (rodovias)", icon: MapPin, perm: "pedagios.ver" },
       { href: "/materiais", label: "Materiais", icon: Package, perm: "materiais.ver" },
-      { href: "/tipos-servico", label: "Modos de serviço", icon: Timer, perm: "tipos-servico.ver" },
-      { href: "/modalidades", label: "Modalidades do motorista", icon: IdCard, perm: "modalidades.ver" },
-      { href: "/regras-minimo", label: "Mínimos por faixa", icon: Ruler, perm: "regras-minimo.ver" },
-      { href: "/tabelas-preco", label: "Tabela de preços", icon: Tag, perm: "tabelas-preco.ver" },
-      { href: "/tipos-evento-viagem", label: "Eventos da viagem", icon: ListChecks, perm: "tipos-evento-viagem.ver" },
+      { href: "/tipos-servico", label: "Como a viagem é cobrada", icon: Timer, perm: "tipos-servico.ver" },
+      { href: "/modalidades", label: "Vínculos do motorista", icon: IdCard, perm: "modalidades.ver" },
+      { href: "/tipos-evento-viagem", label: "Paradas e ocorrências", icon: ListChecks, perm: "tipos-evento-viagem.ver" },
     ],
   },
   {
-    titulo: "Sistema",
+    titulo: "Comunicação",
     itens: [
+      { href: "/chat", label: "Chat dos motoristas", icon: MessagesSquare, perm: "chat.ver" },
+      // O sininho do topo também se chama "Notificações" e é outra coisa: são os
+      // avisos PRA VOCÊ. Este é o histórico do que foi disparado pros motoristas.
+      { href: "/notificacoes", label: "Avisos enviados ao app", icon: Bell, perm: "notificacoes.ver" },
+      { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle, perm: "whatsapp.ver" },
+    ],
+  },
+  {
+    titulo: "Configurações",
+    itens: [
+      { href: "/configuracoes/empresa", label: "Minha empresa", icon: Landmark, perm: "minha-empresa.editar" },
       { href: "/usuarios", label: "Usuários", icon: Users2, perm: "usuarios.ver" },
       { href: "/configuracoes/permissoes", label: "Papéis e permissões", icon: ShieldCheck, perm: "permissoes.gerenciar" },
-      { href: "/configuracoes/empresa", label: "Minha empresa", icon: Building2, perm: "minha-empresa.editar" },
-      { href: "/cte", label: "CT-e emitidos", icon: FileCheck2, perm: "cte.ver" },
-      { href: "/configuracoes/cte", label: "Emissão de CT-e", icon: Settings, perm: "cte.ver" },
       { href: "/importacao", label: "Importar dados", icon: Upload, perm: "importacao.ver" },
-      { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle, perm: "whatsapp.ver" },
-      { href: "/erros", label: "Erros", icon: AlertCircle, perm: "erros.ver" },
-      { href: "/diagnosticos", label: "Diagnósticos", icon: Activity, perm: "diagnosticos.ver" },
-      { href: "/configuracoes/tracking", label: "Tracking GPS", icon: Settings, perm: "config-tracking.ver" },
-      { href: "/configuracoes/busca-locais", label: "Busca de locais", icon: MapPin, perm: "config-busca-locais.ver" },
+      { href: "/configuracoes/campos-layout", label: "Colunas da planilha do cliente", icon: Columns3, perm: "config-campos-layout.ver" },
+      { href: "/configuracoes/cte", label: "Configurar emissor de CT-e", icon: Settings, perm: "cte.ver" },
+      { href: "/configuracoes/tracking", label: "Tracking GPS", icon: Satellite, perm: "config-tracking.ver" },
+      { href: "/configuracoes/busca-locais", label: "Busca de locais", icon: Search, perm: "config-busca-locais.ver" },
       { href: "/configuracoes/ia", label: "Inteligência Artificial", icon: Sparkles, perm: "config-ia.ver" },
-      { href: "/configuracoes/agente-whatsapp", label: "Agente WhatsApp", icon: MessageCircle, perm: "config-agente.ver" },
-      { href: "/configuracoes/campos-layout", label: "Campos do layout", icon: Sparkles, perm: "config-campos-layout.ver" },
+      { href: "/configuracoes/agente-whatsapp", label: "Agente WhatsApp", icon: Bot, perm: "config-agente.ver" },
+      { href: "/configuracoes/km-atipico", label: "Alerta de km fora do padrão", icon: Gauge, perm: "config-km-atipico.ver" },
+    ],
+  },
+  {
+    titulo: "Movatruck",
+    soPlataforma: true,
+    itens: [
+      { href: "/demandas", label: "Pedidos de melhoria", icon: Lightbulb, perm: "demandas.ver" },
+      { href: "/prospeccao", label: "Captação de clientes", icon: Target, perm: "prospeccao.ver" },
+      { href: "/marketing", label: "Instagram da Movatruck", icon: Instagram, perm: "marketing.ver" },
+      { href: "/erros", label: "Erros", icon: AlertCircle, perm: "erros.ver" },
+      { href: "/diagnosticos", label: "Diagnóstico do app", icon: Activity, perm: "diagnosticos.ver" },
       { href: "/configuracoes/forca-atualizacao", label: "Força-atualização do app", icon: ArrowUpCircle, perm: "config-forca-atualizacao.ver" },
-      { href: "/configuracoes/km-atipico", label: "Km atípico", icon: Ruler, perm: "config-km-atipico.ver" },
     ],
   },
 ];
@@ -165,18 +248,20 @@ export function Sidebar({
   const { marca } = useMarcaConta();
 
   // Itens visíveis por permissão; grupo só aparece se sobrar algum item.
-  const gruposVisiveis = GRUPOS.map((g) => ({
-    ...g,
-    // Menu não é vitrine: item de módulo não contratado SOME, não fica cinza.
-    // O upsell mora na tela de quem chegou por URL direta e no ponto de dor
-    // dentro de um módulo que a empresa já tem.
-    itens: g.itens.filter((i) => temPermissao(i.perm) && temModulo(i.perm)),
-  })).filter((g) => g.itens.length > 0);
+  const gruposVisiveis = GRUPOS.filter((g) => !g.soPlataforma || plataforma)
+    .map((g) => ({
+      ...g,
+      // Menu não é vitrine: item de módulo não contratado SOME, não fica cinza.
+      // O upsell mora na tela de quem chegou por URL direta e no ponto de dor
+      // dentro de um módulo que a empresa já tem.
+      itens: g.itens.filter((i) => temPermissao(i.perm) && temModulo(i.perm)),
+    }))
+    .filter((g) => g.itens.length > 0);
 
-  // Accordion: só um grupo aberto por vez. Operação é o default ao abrir
-  // a plataforma. Ao mudar de rota, abre o grupo correspondente.
-
-  const [grupoAberto, setGrupoAberto] = useState<string>("Operação");
+  // Accordion: só um grupo aberto por vez. "Dia a dia" é o default ao abrir o
+  // painel — é o que a operação usa primeiro. Ao mudar de rota, abre o grupo
+  // correspondente.
+  const [grupoAberto, setGrupoAberto] = useState<string>("Dia a dia");
 
   function toggleGrupo(titulo: string) {
     setGrupoAberto((prev) => (prev === titulo ? "" : titulo));
@@ -270,21 +355,43 @@ export function Sidebar({
             );
           })()}
 
-          {/* Empresas: só a equipe da plataforma. Não passa pela matriz de
+          {/* Relatórios fora dos grupos: transversal, e de uso diário demais pra
+              custar dois cliques num accordion de um grupo por vez. */}
+          {temPermissao(RELATORIOS_ITEM.perm) && temModulo(RELATORIOS_ITEM.perm) && (
+            <Link
+              href={RELATORIOS_ITEM.href as any}
+              aria-current={isRotaAtiva(pathname, RELATORIOS_ITEM.href) ? "page" : undefined}
+              className={cn(
+                "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+                isRotaAtiva(pathname, RELATORIOS_ITEM.href)
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm"
+                  : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              )}
+            >
+              <RELATORIOS_ITEM.icon className="h-4 w-4" />
+              {RELATORIOS_ITEM.label}
+            </Link>
+          )}
+
+          {/* Assinantes: só a equipe da plataforma. Não passa pela matriz de
               papéis de propósito — não é permissão que um administrador de
-              empresa possa ganhar por engano. */}
+              empresa possa ganhar por engano. O rótulo era "Empresas
+              (plataforma)", vizinho de um "Empresas" que abria outra coisa. */}
           {plataforma && (
             <Link
               href={"/contas" as any}
+              aria-current={isRotaAtiva(pathname, "/contas") ? "page" : undefined}
               className={cn(
                 "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
                 isRotaAtiva(pathname, "/contas")
                   ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm"
                   : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
               )}
             >
-              <Building2 className="h-4 w-4" />
-              Empresas (plataforma)
+              <Briefcase className="h-4 w-4" />
+              Assinantes
             </Link>
           )}
 
@@ -311,8 +418,10 @@ export function Sidebar({
                       <Link
                         key={href}
                         href={href as any}
+                        aria-current={active ? "page" : undefined}
                         className={cn(
                           "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
                           active
                             ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm"
                             : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",

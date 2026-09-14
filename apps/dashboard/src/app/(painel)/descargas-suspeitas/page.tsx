@@ -143,7 +143,7 @@ export default function DescargasSuspeitasPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Revisar descargas suspeitas</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Descargas fora do local</h1>
         <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
           Viagens onde o GPS do motorista no lançamento ficou longe do local de
           descarga escolhido — provável engano do raio de busca antigo (maior). A

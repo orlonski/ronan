@@ -129,7 +129,7 @@ export default function VeiculosPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Veículos</h1>
           <p className="text-sm text-muted-foreground">
-            Os caminhões cadastrados e a frota dona de cada um.
+            Os caminhões cadastrados e a transportadora dona de cada um.
           </p>
         </div>
         <div className="flex items-center gap-2">

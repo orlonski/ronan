@@ -97,7 +97,7 @@ export function VeiculoForm({ initial }: Props) {
             }
           />
           <p className="text-xs text-muted-foreground">
-            Frota dona do caminhão. Vale como reserva: quem manda no dono do lançamento é a
+            Transportadora dona do caminhão. Vale como reserva: quem manda no dono do lançamento é a
             transportadora do motorista; esta entra quando ele não tiver uma.
           </p>
         </div>

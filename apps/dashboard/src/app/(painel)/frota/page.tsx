@@ -126,7 +126,7 @@ function Conteudo() {
   return (
     <div className="space-y-5">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Frota</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Manutenção e documentos</h1>
         <p className="text-sm text-muted-foreground">
           Manutenção, pneu, documento e multa — o que some do radar e vira caminhão parado.
         </p>

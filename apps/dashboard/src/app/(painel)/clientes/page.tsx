@@ -116,7 +116,10 @@ export default function ClientesPage() {
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Clientes</h1>
-          <p className="text-sm text-muted-foreground">Clientes por empresa.</p>
+          <p className="text-sm text-muted-foreground">
+            Quem recebe a carga na ponta — a obra, a loja, o canteiro. Cada empresa-cliente
+            pode ter vários.
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <ViewModeToggle value={viewMode} onChange={setViewMode} />

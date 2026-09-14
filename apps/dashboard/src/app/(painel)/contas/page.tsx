@@ -203,10 +203,10 @@ export default function ContasPage() {
         <div>
           <h1 className="flex items-center gap-2 text-xl font-semibold">
             <Building2 className="h-5 w-5" />
-            Empresas
+            Assinantes
           </h1>
           <p className="text-sm text-muted-foreground">
-            Cada empresa enxerga só os dados dela. Criar uma aqui já deixa ela pronta pra usar.
+            As transportadoras que usam a Movatruck. Cada assinante enxerga só os dados dele, e criar um aqui já deixa a conta pronta pra usar.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

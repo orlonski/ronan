@@ -70,7 +70,7 @@ function Conteudo() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold">Relatórios</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Tempo de conferência</h1>
         <p className="text-sm text-muted-foreground">
           Quanto tempo uma viagem espera até ser conferida — e como isso mudou.
         </p>

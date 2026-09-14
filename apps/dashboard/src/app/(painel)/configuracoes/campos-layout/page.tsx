@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Lock, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
+import { Columns3, Lock, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Permitido } from "@/components/requer-tela";
 import { Card } from "@/components/ui/card";
@@ -63,13 +63,13 @@ export default function CamposLayoutPage() {
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-            <Sparkles className="h-6 w-6 text-amber-600" />
-            Campos do layout de importação
+            <Columns3 className="h-6 w-6 text-amber-600" />
+            Colunas da planilha do cliente
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Quais campos a IA reconhece quando lê uma planilha de fechamento.
-            Adicione campos novos aqui pra que apareçam no dropdown da tela de
-            layout de importação. Campos com 🔒 são embarcados (não podem ser
+            Quais colunas a leitura automática reconhece quando abre uma planilha
+            de fechamento. Adicione aqui pra que apareçam na tela de importação da
+            empresa. Colunas com 🔒 vêm de fábrica (não podem ser
             deletados nem ter slug alterado) — são os usados em match e
             comparação.
           </p>

@@ -142,7 +142,10 @@ export default function EmpresasPage() {
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Empresas-cliente</h1>
-          <p className="text-sm text-muted-foreground">Empresas pra quem prestamos serviço.</p>
+          <p className="text-sm text-muted-foreground">
+            Quem contrata o frete e recebe a planilha de fechamento. Não confundir com
+            Transportadoras, que são as donas dos caminhões.
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <ViewModeToggle value={viewMode} onChange={setViewMode} />

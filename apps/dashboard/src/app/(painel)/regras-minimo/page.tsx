@@ -138,7 +138,7 @@ export default function RegrasMinimoPage() {
     <div className="space-y-6">
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Mínimos por faixa</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Mínimo faturado por km</h1>
           <p className="text-sm text-muted-foreground">
             Km/toneladas mínimos faturados por empresa, material e faixa de km rodado.
           </p>

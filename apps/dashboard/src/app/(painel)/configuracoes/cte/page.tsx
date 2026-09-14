@@ -108,7 +108,7 @@ function Conteudo() {
   return (
     <div className="space-y-5">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Emissão de CT-e</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Configurar emissor de CT-e</h1>
         <p className="max-w-prose text-sm text-muted-foreground">
           O CT-e modelo 57, rodoviário. O sistema monta, valida e numera; quem assina e
           manda pra SEFAZ é o emissor escolhido abaixo.

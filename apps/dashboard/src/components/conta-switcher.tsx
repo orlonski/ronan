@@ -100,14 +100,14 @@ export function ContaSwitcher() {
         </DropdownMenuItem>
 
         <DropdownMenuSeparator />
-        <DropdownMenuLabel>Empresas clientes</DropdownMenuLabel>
+        <DropdownMenuLabel>Assinantes</DropdownMenuLabel>
 
         {isLoading && (
           <div className="px-2 py-1.5 text-sm text-muted-foreground">Carregando…</div>
         )}
         {!isLoading && outras.length === 0 && (
           <div className="px-2 py-1.5 text-sm text-muted-foreground">
-            Nenhuma outra empresa cadastrada.
+            Nenhum outro assinante cadastrado.
           </div>
         )}
 

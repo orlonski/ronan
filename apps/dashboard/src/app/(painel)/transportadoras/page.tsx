@@ -62,7 +62,7 @@ export default function TransportadorasPage() {
       {
         id: "frota",
         enableSorting: false,
-        header: "Frota",
+        header: "Caminhões e motoristas",
         cell: ({ row }) => {
           const c = row.original._count;
           return (
