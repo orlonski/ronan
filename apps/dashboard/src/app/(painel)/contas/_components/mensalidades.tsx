@@ -57,6 +57,8 @@ type Cobranca = {
   valorCentavos: number;
   pagoEm: string | null;
   linkPagamento: string | null;
+  /** Foi o Pix que o cliente pagou pra autorizar a recorrência. */
+  pagamentoDeAtivacao: boolean;
 };
 
 type Sugestao = {
@@ -571,6 +573,14 @@ function DialogCobrancas({
                   >
                     {ROTULO_STATUS_COBRANCA[c.status]}
                   </span>
+                  {/* Diz de onde veio o dinheiro. Sem isto, a primeira
+                      mensalidade aparece paga sem link e sem explicação — e a
+                      pergunta "de onde saiu isso?" não tem resposta na tela. */}
+                  {c.pagamentoDeAtivacao && (
+                    <span className="ml-1 text-xs text-muted-foreground">
+                      · pago na autorização do Pix
+                    </span>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   {c.linkPagamento && (

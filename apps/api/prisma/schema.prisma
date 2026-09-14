@@ -5705,6 +5705,19 @@ model CobrancaAssinatura {
   /// que isso não é cobrança, é perturbação — e a decisão de cortar é humana.
   avisosAtraso  Int       @default(0)
 
+  /// Esta é a mensalidade paga no QR inicial do Pix Automático.
+  ///
+  /// Existe porque aquele pagamento é invisível pelos caminhos normais: ele
+  /// chega como Pix avulso, sem `subscription`, sem `externalReference`, e com
+  /// um `customer` que é o PAGADOR (se ele paga da conta pessoa física, é outro
+  /// documento e outro cliente no gateway). Nenhum vínculo casa.
+  ///
+  /// Sem registrar por aqui, o cliente paga a primeira mensalidade e ela não
+  /// aparece em lugar nenhum — some da receita e da conversa com ele. Quem
+  /// conta que esse pagamento aconteceu é o evento de ATIVAÇÃO da autorização,
+  /// e é dele que esta linha nasce.
+  pagamentoDeAtivacao Boolean @default(false)
+
   /// Baixa manual: o dinheiro entrou por fora do gateway (Pix na conta, TED).
   /// Exige motivo escrito e guarda quem deu, porque é a única forma de uma
   /// cobrança virar paga sem o gateway confirmar.

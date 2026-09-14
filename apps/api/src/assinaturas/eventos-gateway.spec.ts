@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extrairAutorizacao } from "./eventos-gateway.service";
+import { EventosGatewayService, extrairAutorizacao } from "./eventos-gateway.service";
 
 /**
  * O evento de autorização de Pix Automático, como ele chega.
@@ -52,5 +52,138 @@ describe("extrair a autorização do evento", () => {
     expect(extrairAutorizacao(null)).toBeNull();
     expect(extrairAutorizacao({ authorization: "não é objeto" })).toBeNull();
     expect(extrairAutorizacao({ authorization: { semId: true } })).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// O pagamento de ativação.
+//
+// Testes com dublê de Prisma, porque o que importa aqui é a DECISÃO: registrar
+// a mensalidade quando a autorização ativa, e — o mais importante — NÃO mexer
+// no que já existe. Uma competência sobrescrita é uma cobrança paga virando
+// outra coisa, e isso é dinheiro.
+// ---------------------------------------------------------------------------
+
+type CobrancaFalsa = {
+  assinaturaId: string;
+  competencia: Date;
+  status: string;
+  valorCentavos: number;
+  valorPagoCentavos?: number | null;
+  pagamentoDeAtivacao?: boolean;
+  formaPaga?: string | null;
+};
+
+function servico(opcoes: {
+  assinatura?: { id: string; contaId: string; valorCentavos: number; status: string; inicioEm: Date | null } | null;
+  cobrancaExistente?: CobrancaFalsa | null;
+}) {
+  const criadas: CobrancaFalsa[] = [];
+  const vistos = new Set<string>();
+  const atualizadasAssinatura: Record<string, unknown>[] = [];
+  const assinatura = opcoes.assinatura === undefined
+    ? { id: "a1", contaId: "c1", valorCentavos: 189000, status: "AGUARDANDO", inicioEm: null }
+    : opcoes.assinatura;
+
+  const prisma = {
+    assinatura: {
+      findFirst: async () => assinatura,
+      update: async ({ data }: { data: Record<string, unknown> }) => {
+        atualizadasAssinatura.push(data);
+        return assinatura;
+      },
+    },
+    cobrancaAssinatura: {
+      findUnique: async () => opcoes.cobrancaExistente ?? null,
+      create: async ({ data }: { data: CobrancaFalsa }) => {
+        criadas.push(data);
+        return data;
+      },
+    },
+    // Guarda os eventos vistos pra reproduzir a trava de idempotência que no
+    // banco é o unique de `eventoId`. Sem isto o dublê aceitaria reenvio, e o
+    // teste passaria a medir o dublê em vez do serviço.
+    eventoGatewayPagamento: {
+      findUnique: async ({ where }: { where: { eventoId: string } }) =>
+        vistos.has(where.eventoId) ? { id: "evt-linha", processadoEm: new Date() } : null,
+      create: async ({ data }: { data: { eventoId: string } }) => {
+        vistos.add(data.eventoId);
+        return { id: "evt-linha" };
+      },
+      update: async () => ({}),
+    },
+  };
+  const assinaturas = { reavaliarInadimplencia: async () => {} };
+  const s = new EventosGatewayService(prisma as never, assinaturas as never);
+  return { s, criadas, atualizadasAssinatura };
+}
+
+const EVENTO_ATIVADO = {
+  id: "evt_ativou_1",
+  event: "PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED",
+  authorization: { id: "pixaut_1", status: "ACTIVE" },
+};
+
+describe("o pagamento que ativa a recorrência vira mensalidade paga", () => {
+  it("registra a competência atual como RECEBIDA, no valor da assinatura", async () => {
+    // Sem isto, o cliente paga a primeira mensalidade e ela não existe em lugar
+    // nenhum: some da receita e ele fica sem resposta ao perguntar.
+    const { s, criadas } = servico({});
+    const r = await s.receber("evt_ativou_1", EVENTO_ATIVADO.event, EVENTO_ATIVADO);
+
+    expect(r.status).toBe("processado");
+    expect(criadas).toHaveLength(1);
+    expect(criadas[0]!.status).toBe("RECEBIDA");
+    expect(criadas[0]!.valorCentavos).toBe(189000);
+    expect(criadas[0]!.valorPagoCentavos).toBe(189000);
+    expect(criadas[0]!.pagamentoDeAtivacao).toBe(true);
+    expect(criadas[0]!.formaPaga).toBe("PIX");
+  });
+
+  it("a assinatura vira ATIVA junto", async () => {
+    const { s, atualizadasAssinatura } = servico({});
+    await s.receber("evt_ativou_1", EVENTO_ATIVADO.event, EVENTO_ATIVADO);
+    expect(atualizadasAssinatura[0]!.status).toBe("ATIVA");
+  });
+
+  it("NÃO toca numa cobrança que já existe naquele mês", async () => {
+    // O que veio do gateway, com id e valor de verdade, vale mais que o que a
+    // gente deduz. Sobrescrever seria transformar um pagamento real em palpite.
+    const { s, criadas } = servico({
+      cobrancaExistente: {
+        assinaturaId: "a1",
+        competencia: new Date(),
+        status: "RECEBIDA",
+        valorCentavos: 189000,
+      },
+    });
+    await s.receber("evt_ativou_1", EVENTO_ATIVADO.event, EVENTO_ATIVADO);
+    expect(criadas).toHaveLength(0);
+  });
+
+  it("reenvio do mesmo evento não cria uma segunda mensalidade", async () => {
+    const { s, criadas } = servico({});
+    await s.receber("evt_ativou_1", EVENTO_ATIVADO.event, EVENTO_ATIVADO);
+    // O segundo passa pela trava de idempotência (mesmo eventoId) antes de
+    // chegar perto de criar qualquer coisa.
+    const r2 = await s.receber("evt_ativou_1", EVENTO_ATIVADO.event, EVENTO_ATIVADO);
+    expect(r2.status).toBe("duplicado");
+    expect(criadas).toHaveLength(1);
+  });
+
+  it("assinatura já cancelada não recebe cobrança nenhuma", async () => {
+    const { s, criadas } = servico({
+      assinatura: { id: "a1", contaId: "c1", valorCentavos: 189000, status: "CANCELADA", inicioEm: null },
+    });
+    const r = await s.receber("evt_ativou_1", EVENTO_ATIVADO.event, EVENTO_ATIVADO);
+    expect(r.status).toBe("ignorado");
+    expect(criadas).toHaveLength(0);
+  });
+
+  it("autorização de assinatura que não é nossa não cria nada", async () => {
+    const { s, criadas } = servico({ assinatura: null });
+    const r = await s.receber("evt_ativou_1", EVENTO_ATIVADO.event, EVENTO_ATIVADO);
+    expect(r.status).toBe("ignorado");
+    expect(criadas).toHaveLength(0);
   });
 });

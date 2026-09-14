@@ -1,6 +1,11 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
-import { competenciaDe, formaDoGateway, statusDoGateway } from "../common/assinatura-cobranca";
+import {
+  competenciaDe,
+  formaDoGateway,
+  hojeData,
+  statusDoGateway,
+} from "../common/assinatura-cobranca";
 import { comoSistema } from "../common/conta/conta-context";
 import { PrismaService } from "../prisma/prisma.service";
 import { AssinaturasService } from "./assinaturas.service";
@@ -186,6 +191,7 @@ export class EventosGatewayService {
           data: { status: "ATIVA", inicioEm: assinatura.inicioEm ?? new Date() },
         }),
       );
+      await this.registrarPagamentoDeAtivacao(assinatura.id);
       this.log.log(`Autorização ${autorizacao.id} ativada: assinatura ${assinatura.id} está valendo.`);
       return { status: "processado" };
     }
@@ -213,6 +219,78 @@ export class EventosGatewayService {
     // CREATED e o que o gateway inventar depois: guardado, sem efeito. A
     // criação já foi registrada quando NÓS a criamos.
     return { status: "ignorado", detalhe: `evento de autorização sem efeito: ${tipo}` };
+  }
+
+  /**
+   * A mensalidade que o cliente pagou no QR inicial, registrada como recebida.
+   *
+   * **Por que isto existe, e por que é obrigatório.** No Pix Automático o
+   * cliente paga um QR pra autorizar a recorrência — e esse pagamento É a
+   * primeira mensalidade, no valor dela. Só que ele chega invisível: sem
+   * `subscription`, sem `externalReference`, e com um `customer` que é o
+   * PAGADOR (se ele paga da conta pessoa física, é outro documento e outro
+   * cliente no gateway). Nenhum dos caminhos de casamento serve, e o
+   * `PAYMENT_RECEIVED` é descartado como órfão — corretamente, porque casar no
+   * chute seria pior.
+   *
+   * O efeito, sem isto: o cliente paga a primeira mensalidade, o dinheiro entra
+   * na conta, e o sistema não sabe. A receita some do fechamento e, quando ele
+   * perguntar "paguei, por que consta em aberto?", não há resposta. Dinheiro
+   * que entra e não é registrado é o pior tipo de erro: silencioso e contra
+   * quem pagou.
+   *
+   * Quem conta que o pagamento aconteceu é o evento de ATIVAÇÃO — a autorização
+   * só vira ativa DEPOIS que o primeiro Pix liquida. Então a ativação é prova
+   * suficiente de recebimento, e é dela que esta linha nasce.
+   *
+   * Idempotente por construção: a chave (assinatura, competência) impede que um
+   * reenvio do evento crie uma segunda mensalidade do mesmo mês. E se a
+   * competência já existir — porque o pagamento casou por outro caminho —, esta
+   * função NÃO mexe nela: o que veio do gateway, com id e valor de verdade,
+   * vale mais que o que a gente deduz.
+   */
+  private async registrarPagamentoDeAtivacao(assinaturaId: string): Promise<void> {
+    await comoSistema(async () => {
+      const assinatura = await this.prisma.assinatura.findFirst({
+        where: { id: assinaturaId },
+        select: { id: true, contaId: true, valorCentavos: true },
+      });
+      if (!assinatura) return;
+
+      const agora = new Date();
+      const competencia = competenciaDe(agora);
+
+      const jaExiste = await this.prisma.cobrancaAssinatura.findUnique({
+        where: { assinaturaId_competencia: { assinaturaId, competencia } },
+        select: { id: true, status: true },
+      });
+      if (jaExiste) {
+        this.log.log(
+          `Ativação de ${assinaturaId}: a competência já tinha cobrança (${jaExiste.status}) — não mexi.`,
+        );
+        return;
+      }
+
+      await this.prisma.cobrancaAssinatura.create({
+        data: {
+          assinaturaId,
+          contaId: assinatura.contaId,
+          competencia,
+          // Venceu e foi paga no mesmo dia: é o pagamento que ativou tudo.
+          vencimento: hojeData(agora),
+          status: "RECEBIDA",
+          valorCentavos: assinatura.valorCentavos,
+          valorPagoCentavos: assinatura.valorCentavos,
+          pagoEm: agora,
+          formaPaga: "PIX",
+          pagamentoDeAtivacao: true,
+        },
+      });
+
+      this.log.log(
+        `Ativação de ${assinaturaId}: mensalidade de ${competencia.toISOString().slice(0, 7)} registrada como paga.`,
+      );
+    });
   }
 
   /**
