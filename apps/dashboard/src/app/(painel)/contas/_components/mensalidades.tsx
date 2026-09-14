@@ -579,13 +579,32 @@ function DialogCobrancas({
           </DialogDescription>
         </DialogHeader>
 
+        {/* Cartão aguardando: o cliente precisa informar o cartão na página do
+            gateway, e é o link da cobrança que leva até lá. Não existe
+            copia-e-cola aqui — dizer que "falta o QR" seria assustar à toa. */}
+        {assinatura.status === "AGUARDANDO" && assinatura.forma === "CARTAO" && (
+          <div className="rounded border border-amber-500/40 bg-amber-500/5 p-3">
+            <p className="text-sm font-medium">Esperando o cliente informar o cartão</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Mande o link da cobrança abaixo. Assim que o cartão passar, a assinatura fica ativa e
+              as próximas são cobradas sozinhas — só a mensalidade por vez, sem travar o limite.
+            </p>
+          </div>
+        )}
+
         {/* Aguardando autorização e SEM o copia-e-cola: estado que não pode
             passar em silêncio. Ele significa que a assinatura existe no
             gateway mas ninguém consegue pagar o primeiro Pix — e sem o
             primeiro, nunca há recorrência. Aconteceu de verdade em 14/09/2026
             (o payload vinha de um campo que o código não lia), e a tela não
-            dizia nada: parecia só "esperando o cliente". */}
-        {assinatura.status === "AGUARDANDO" && !assinatura.qrCodePayload && (
+            dizia nada: parecia só "esperando o cliente".
+
+            Só vale pro Pix Automático: cartão não tem copia-e-cola nenhum, e
+            este mesmo aviso já apareceu numa assinatura de cartão dizendo que
+            faltava um QR que nunca deveria existir. */}
+        {assinatura.status === "AGUARDANDO" &&
+          assinatura.forma === "PIX_AUTOMATICO" &&
+          !assinatura.qrCodePayload && (
           <div className="rounded border border-destructive/40 bg-destructive/5 p-3">
             <p className="text-sm font-medium">Esta assinatura não tem código de pagamento</p>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -596,7 +615,9 @@ function DialogCobrancas({
           </div>
         )}
 
-        {assinatura.status === "AGUARDANDO" && assinatura.qrCodePayload && (
+        {assinatura.status === "AGUARDANDO" &&
+          assinatura.forma === "PIX_AUTOMATICO" &&
+          assinatura.qrCodePayload && (
           <div className="rounded border border-amber-500/40 bg-amber-500/5 p-3">
             <p className="text-sm font-medium">Esperando a autorização do cliente</p>
             <p className="mt-1 text-xs text-muted-foreground">
