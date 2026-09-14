@@ -37,9 +37,14 @@ export type CriarLocalInput = z.infer<typeof CriarLocalInput>;
  * `indicadorIe: "1"` sozinho, sem inscrição estadual no corpo, precisa falhar
  * do mesmo jeito que na criação.
  */
-export const AtualizarLocalInput = LocalBase.partial().superRefine((v, ctx) =>
-  conferirCamposFiscais(v, ctx),
-);
+export const AtualizarLocalInput = LocalBase.partial()
+  // `ativo` só existe na edição: local nasce ativo. E precisa estar DECLARADO —
+  // o Zod descarta chave desconhecida em silêncio, então sem esta linha o
+  // botão de ativar/desativar da lista mandava o campo e o servidor jogava
+  // fora sem erro nenhum. Clique no vazio: a tela voltava ao estado anterior e
+  // parecia só um refresh.
+  .extend({ ativo: z.boolean().optional() })
+  .superRefine((v, ctx) => conferirCamposFiscais(v, ctx));
 export type AtualizarLocalInput = z.infer<typeof AtualizarLocalInput>;
 
 export const CriarLocalRapidoInput = z.object({
