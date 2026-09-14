@@ -180,6 +180,21 @@ export class AssinaturasService {
       throw new BadRequestException("O primeiro vencimento não pode ser no passado.");
     }
 
+    // Data de início escolhida manda no dia do mês.
+    //
+    // Sem isto a tela mentia: "vence dia 10" numa assinatura que começa em 18.
+    // E não é só o texto — a recorrência do gateway anda a partir da data de
+    // início, então quem vence 18/09 vence 18/10, e o `diaVencimento` guardado
+    // é o que a régua usa pra falar com o cliente. Dois números discordando
+    // sobre quando a conta vence é o tipo de coisa que vira discussão.
+    //
+    // O dia 29, 30 ou 31 não vira `diaVencimento` (a coluna para em 28, porque
+    // fevereiro não tem dia 30): nesses casos o combinado do mês segue o que
+    // foi digitado no campo de dia.
+    const diaDoInicio = primeiroVencimento.getUTCDate();
+    const diaVencimento =
+      dados.primeiroVencimento && diaDoInicio <= 28 ? diaDoInicio : dados.diaVencimento;
+
     const assinatura = await comoSistema(() =>
       this.prisma.assinatura.create({
         data: {
@@ -188,7 +203,7 @@ export class AssinaturasService {
           forma: dados.forma,
           ciclo: dados.ciclo,
           valorCentavos: dados.valorCentavos,
-          diaVencimento: dados.diaVencimento,
+          diaVencimento,
           nomeResponsavel: dados.nomeResponsavel,
           emailCobranca: dados.emailCobranca,
           telefoneCobranca: dados.telefoneCobranca,
