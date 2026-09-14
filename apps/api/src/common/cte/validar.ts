@@ -150,6 +150,17 @@ export function validarCte(e: EntradaCte): Validacao {
   // --- valores ---
   const extras = (e.valores.extras ?? []).reduce((s, x) => s + x.valor, 0);
   const total = e.valores.valorFrete + (e.valores.valorPedagio ?? 0) + extras;
+  // A SEFAZ exige o valor da MERCADORIA no modal rodoviário (rejeição 581), e
+  // ele não é o valor do frete. Barrar aqui com o caminho do cadastro é melhor
+  // que gastar um número da série pra receber "Campo Valor da Carga deve ser
+  // informado para o modal", que não diz onde preencher.
+  if (!(Number(e.carga.valorCarga ?? 0) > 0)) {
+    erros.push({
+      campo: "carga",
+      mensagem:
+        "Falta o valor da carga — é quanto vale a MERCADORIA, não o frete. Cadastre o valor de referência por tonelada em Cadastros → Materiais, ou informe o valor desta viagem.",
+    });
+  }
   if (!(e.valores.valorFrete > 0)) {
     erros.push({
       campo: "valor",

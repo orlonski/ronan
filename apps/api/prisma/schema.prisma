@@ -2090,6 +2090,12 @@ model Material {
   /// adiciona a perna descarga→carga ao km faturável. Controlado pelo admin; o
   /// motorista só marca o fato. Ver Viagem.teveBotaFora.
   permiteBotaFora     Boolean  @default(false)
+  /// R$ por tonelada da MERCADORIA (não do frete — frete é TabelaPreco).
+  /// O CT-e exige `vCarga` no modal rodoviário (rejeição 581), e o sistema não
+  /// tem de onde saber quanto vale uma carga de brita. Aqui o contador informa
+  /// uma referência por material e o valor sai de `referência × toneladas`.
+  /// Quando o valor REAL é conhecido (veio da NF-e), a viagem manda nele.
+  valorReferenciaTonelada Decimal? @db.Decimal(12, 2)
   criadoEm            DateTime @default(now())
   alteradoEm          DateTime @updatedAt
 
@@ -3715,6 +3721,10 @@ model Viagem {
   /// Chave de 44 dígitos da NF-e da carga. O OCR do ticket já lê o número da
   /// nota e jogava fora.
   nfeChave      String?
+  /// Valor da mercadoria transportada, quando conhecido — normalmente o total
+  /// da NF-e que acompanha a carga. Vence a referência do material no CT-e:
+  /// aproximação não deve passar por cima de um número que se sabe.
+  valorCarga    Decimal?           @db.Decimal(12, 2)
   nfeNumero     String?
   nfeSerie      String?
   /// Conhecimento de transporte emitido pra esta viagem.

@@ -13,6 +13,7 @@ import {
   type Participante,
   type RegraIcms,
   type ResponsavelTecnico,
+  valorDaCarga,
 } from "../../common/cte/montar";
 import { validarCte, type Validacao } from "../../common/cte/validar";
 import { gerarXmlCte } from "../../common/cte/xml";
@@ -289,7 +290,12 @@ export class CteService {
       carga: {
         produtoPredominante: viagem.material?.nome ?? "CARGA GERAL",
         toneladas: viagem.toneladas == null ? 0 : Number(viagem.toneladas),
-        valorCarga: null,
+        // O valor da MERCADORIA, que o CT-e exige no modal rodoviário
+        // (rejeição 581) e que não é o valor do frete. Duas fontes, nesta
+        // ordem: o valor real da viagem, quando alguém o conhece (veio da
+        // NF-e), e a referência por tonelada do material como aproximação.
+        // Aproximação nunca passa por cima de número sabido.
+        valorCarga: valorDaCarga(viagem),
         chaveNfe: viagem.nfeChave,
         documentoAvulso: viagem.ticket,
       },

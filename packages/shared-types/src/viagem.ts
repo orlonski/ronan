@@ -297,6 +297,14 @@ export const AtualizarViagemInput = z.object({
   localCargaId: z.string().uuid().optional(),
   localDescargaId: z.string().uuid().optional(),
   valorPedagioTotal: z.number().nonnegative().max(MAX_VALOR).nullable().optional(),
+  /**
+   * Valor da MERCADORIA transportada — o `vCarga` do CT-e, não o frete.
+   *
+   * Opcional porque quase sempre a referência por tonelada do material dá
+   * conta. Existe pra quando o valor real é sabido (veio da NF-e): aproximação
+   * não deve passar por cima de número conhecido.
+   */
+  valorCarga: z.number().nonnegative().max(MAX_VALOR).nullable().optional(),
   observacao: z.string().max(500).nullable().optional(),
   // --- documentos fiscais emitidos FORA daqui ---
   // O sistema não emite; ele amarra. Guardar a chave é o que mata a digitação

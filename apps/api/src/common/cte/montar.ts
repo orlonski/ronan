@@ -502,3 +502,40 @@ function emIso(d: Date): string {
 function emData(d: Date): string {
   return emIso(d).slice(0, 10);
 }
+
+/**
+ * O valor da MERCADORIA transportada — o `vCarga` do CT-e.
+ *
+ * Não confundir com o valor do frete: um é quanto vale a brita, o outro é
+ * quanto se cobra pra levar. A SEFAZ exige o primeiro no modal rodoviário
+ * (rejeição 581 — "Campo Valor da Carga deve ser informado para o modal") e o
+ * sistema não tinha de onde saber: a TabelaPreco precifica o serviço, nunca a
+ * carga.
+ *
+ * Duas fontes, nesta ordem:
+ *
+ *   1. o valor REAL da viagem, quando alguém o conhece — normalmente o total da
+ *      NF-e que acompanha a carga;
+ *   2. a referência por tonelada cadastrada no material, multiplicada pelo peso.
+ *
+ * A ordem é o ponto: aproximação não passa por cima de número sabido. E nada é
+ * inventado — sem nenhuma das duas, a validação barra e diz onde cadastrar, em
+ * vez de mandar um valor de fantasia num documento fiscal.
+ */
+export function valorDaCarga(v: {
+  valorCarga?: unknown;
+  toneladas?: unknown;
+  material?: { valorReferenciaTonelada?: unknown } | null;
+}): number | null {
+  const real = v.valorCarga == null ? null : Number(v.valorCarga);
+  if (real != null && real > 0) return real;
+
+  const ref =
+    v.material?.valorReferenciaTonelada == null
+      ? null
+      : Number(v.material.valorReferenciaTonelada);
+  const ton = v.toneladas == null ? 0 : Number(v.toneladas);
+  if (ref != null && ref > 0 && ton > 0) return Number((ref * ton).toFixed(2));
+
+  return null;
+}

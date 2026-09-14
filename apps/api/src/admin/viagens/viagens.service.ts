@@ -1858,6 +1858,7 @@ const LABEL_CAMPO: Record<string, string> = {
   data: "Data",
   observacao: "Observação",
   valorPedagioTotal: "Valor pedágio",
+  valorCarga: "Valor da carga",
   cliente: "Cliente",
   material: "Material",
   veiculo: "Veículo",

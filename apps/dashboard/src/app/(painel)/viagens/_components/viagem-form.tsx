@@ -48,6 +48,7 @@ export type ViagemEditavel = {
   recebedorNome: string | null;
   recebedorDoc: string | null;
   valorPedagioTotal: string | null;
+  valorCarga: string | null;
   status: string;
   // Coordenadas capturadas pelo motorista no momento do lançamento (opcional —
   // null se ele negou GPS). Usado pra sugerir local de descarga próximo.
@@ -76,6 +77,7 @@ type FormState = {
   /** Por que o km do motorista está sendo alterado. Só viaja quando o km muda. */
   motivoKm: string;
   valorPedagioTotal: string;
+  valorCarga: string;
   observacao: string;
   nfeChave: string;
   nfeNumero: string;
@@ -103,6 +105,7 @@ const CAMPOS_NUMERICOS = [
   { chave: "toneladas", id: "viagem-toneladas", rotulo: "Toneladas" },
   { chave: "km", id: "viagem-km", rotulo: "Km" },
   { chave: "valorPedagioTotal", id: "viagem-pedagio", rotulo: "Valor do pedágio" },
+  { chave: "valorCarga", id: "viagem-valor-carga", rotulo: "Valor da carga" },
 ] as const;
 
 // Converte ISO/Date pra "YYYY-MM-DD" pra input type="date"
@@ -131,6 +134,8 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
     // exibiria a string "null".
     km: initial.km != null ? String(initial.km).replace(".", ",") : "",
     motivoKm: "",
+    valorCarga:
+      initial.valorCarga != null ? String(initial.valorCarga).replace(".", ",") : "",
     valorPedagioTotal:
       initial.valorPedagioTotal != null
         ? String(initial.valorPedagioTotal).replace(".", ",")
@@ -280,6 +285,12 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
       initial.valorPedagioTotal != null ? Number(initial.valorPedagioTotal) : null;
     if (pedagioNovo !== pedagioAntigo) {
       diff.valorPedagioTotal = pedagioNovo;
+    }
+
+    const cargaNova = numeroOuNull(form.valorCarga);
+    const cargaAntiga = initial.valorCarga != null ? Number(initial.valorCarga) : null;
+    if (cargaNova !== cargaAntiga) {
+      diff.valorCarga = cargaNova;
     }
 
     const obsNovo = form.observacao.trim() === "" ? null : form.observacao;
@@ -558,6 +569,25 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
               }
             />
             <AvisoNumero valor={form.valorPedagioTotal} dinheiro />
+          </div>
+          {/* O valor da MERCADORIA, que o CT-e exige e que não é o frete.
+              Quase sempre vem da referência por tonelada do material — este
+              campo é pra quando alguém SABE o número, tipicamente da NF-e. */}
+          <div className="space-y-2">
+            <Label htmlFor="viagem-valor-carga">Valor da carga (R$)</Label>
+            <Input
+              id="viagem-valor-carga"
+              inputMode="decimal"
+              placeholder="Vazio = calcula pelo material"
+              aria-invalid={numeroInvalido(form.valorCarga) || undefined}
+              value={form.valorCarga}
+              onChange={(e) => setForm({ ...form, valorCarga: e.target.value })}
+            />
+            <AvisoNumero valor={form.valorCarga} dinheiro />
+            <p className="text-xs text-muted-foreground">
+              Quanto vale a mercadoria, não o frete — o CT-e exige. Em branco, sai
+              do valor por tonelada cadastrado no material.
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="viagemform-observacao">Observação</Label>

@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { lerChaveFiscal } from "../chave-fiscal";
 import { gerarChaveCte, sortearCodigoNumerico } from "./chave";
-import { montarCfop, montarCte, quemEhOTomador, type EntradaCte, type Participante } from "./montar";
+import {
+  montarCfop,
+  montarCte,
+  quemEhOTomador,
+  valorDaCarga,
+  type EntradaCte,
+  type Participante,
+} from "./montar";
 import { validarCte } from "./validar";
 
 const EMITIDO = new Date("2026-09-13T18:30:00.000Z"); // 15:30 em Brasília
@@ -66,6 +73,37 @@ function entrada(over: Partial<EntradaCte> = {}): EntradaCte {
     ...over,
   };
 }
+
+describe("valorDaCarga", () => {
+  // `vCarga` é o valor da MERCADORIA, não do frete — a SEFAZ exige no modal
+  // rodoviário (rejeição 581) e o sistema não tem de onde deduzir sozinho.
+
+  it("o valor real da viagem vence a referência do material", () => {
+    // Aproximação não passa por cima de número sabido: se veio da NF-e, é ele.
+    expect(
+      valorDaCarga({ valorCarga: 2100, toneladas: 28.5, material: { valorReferenciaTonelada: 75 } }),
+    ).toBe(2100);
+  });
+
+  it("sem o real, multiplica a referência pelas toneladas", () => {
+    expect(
+      valorDaCarga({ valorCarga: null, toneladas: 28.5, material: { valorReferenciaTonelada: 75 } }),
+    ).toBe(2137.5);
+  });
+
+  it("sem nenhuma das duas, devolve null em vez de inventar", () => {
+    // Zero seria a afirmação de que a carga não vale nada, num documento
+    // fiscal. Null deixa a validação barrar e dizer onde cadastrar.
+    expect(valorDaCarga({ valorCarga: null, toneladas: 28.5, material: null })).toBeNull();
+    expect(valorDaCarga({ valorCarga: 0, toneladas: 28.5, material: { valorReferenciaTonelada: 0 } })).toBeNull();
+  });
+
+  it("referência sem peso não vira valor", () => {
+    // Viagem sem tonelada lançada daria R$ 0,00 — que é justamente o que a
+    // SEFAZ recusa.
+    expect(valorDaCarga({ valorCarga: null, toneladas: 0, material: { valorReferenciaTonelada: 75 } })).toBeNull();
+  });
+});
 
 describe("gerarChaveCte", () => {
   it("monta os 44 dígitos e o DV fecha na leitura", () => {
@@ -264,6 +302,14 @@ describe("montarCte", () => {
     );
     expect((cte.ide as any).toma4.toma).toBe(4);
     expect((cte.ide as any).toma4.xNome).toBe("Agenciadora Fretes ME");
+  });
+
+  it("sem valor da carga, a validação barra antes de gastar número da série", () => {
+    // Rejeição 581 — "Campo Valor da Carga deve ser informado para o modal".
+    // Descobrir isso pela SEFAZ custa um número da numeração fiscal.
+    const r = validarCte(entrada({ carga: { produtoPredominante: "BRITA 1", toneladas: 28.5 } }));
+    expect(r.ok).toBe(false);
+    expect(r.erros.some((e) => e.mensagem.includes("valor da carga"))).toBe(true);
   });
 
   it("CST 20 com redução zerada é barrado com o motivo, não com o padrão do XSD", () => {

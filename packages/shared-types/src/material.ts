@@ -15,6 +15,16 @@ export const CriarMaterialInput = z.object({
   // conferência. Independente de `temComprovanteFoto`: aquela decide a FOTO,
   // esta decide a CONFERÊNCIA. Nasce desligada.
   dispensaConferencia: z.boolean().default(false),
+  /**
+   * R$ por tonelada da MERCADORIA — não do frete.
+   *
+   * O CT-e exige o valor da carga no modal rodoviário (rejeição 581) e o
+   * sistema não tem de onde deduzi-lo: a tabela de preços precifica o SERVIÇO.
+   * Aqui o contador informa uma referência de mercado por material, e o valor
+   * da carga sai de `referência × toneladas`. Quando a viagem traz o valor real
+   * (da NF-e), ele vence esta referência.
+   */
+  valorReferenciaTonelada: z.coerce.number().nonnegative().max(9_999_999).nullish(),
 });
 export type CriarMaterialInput = z.infer<typeof CriarMaterialInput>;
 
@@ -26,5 +36,15 @@ export const AtualizarMaterialInput = z.object({
   permiteBotaFora: z.boolean().optional(),
   temComprovanteFoto: z.boolean().optional(),
   dispensaConferencia: z.boolean().optional(),
+  /**
+   * R$ por tonelada da MERCADORIA — não do frete.
+   *
+   * O CT-e exige o valor da carga no modal rodoviário (rejeição 581) e o
+   * sistema não tem de onde deduzi-lo: a tabela de preços precifica o SERVIÇO.
+   * Aqui o contador informa uma referência de mercado por material, e o valor
+   * da carga sai de `referência × toneladas`. Quando a viagem traz o valor real
+   * (da NF-e), ele vence esta referência.
+   */
+  valorReferenciaTonelada: z.coerce.number().nonnegative().max(9_999_999).nullish(),
 });
 export type AtualizarMaterialInput = z.infer<typeof AtualizarMaterialInput>;

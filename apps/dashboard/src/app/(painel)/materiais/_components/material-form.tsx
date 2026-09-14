@@ -22,32 +22,42 @@ export type Material = {
   permiteBotaFora: boolean;
   temComprovanteFoto: boolean;
   dispensaConferencia: boolean;
+  valorReferenciaTonelada: number | string | null;
 };
 
 const PATH = "/admin/materiais";
 
 type Props = { initial?: Material };
 
-type MaterialBody = {
+/** O estado do formulário: o valor é TEXTO enquanto a pessoa digita. */
+type MaterialForm = {
   nome: string;
   apelidos: string[];
   exigeTicket: boolean;
   permiteBotaFora: boolean;
   temComprovanteFoto: boolean;
   dispensaConferencia: boolean;
+  valorReferenciaTonelada: string;
+};
+
+/** O que vai pra API: número de verdade, ou null quando em branco. */
+type MaterialBody = Omit<MaterialForm, "valorReferenciaTonelada"> & {
+  valorReferenciaTonelada: number | null;
 };
 
 export function MaterialForm({ initial }: Props) {
   const router = useRouter();
   const create = useCreateResource<MaterialBody, Material>(PATH, PATH);
   const update = useUpdateResource<Partial<MaterialBody>, Material>(PATH, PATH);
-  const [form, setForm] = useState<MaterialBody>({
+  const [form, setForm] = useState<MaterialForm>({
     nome: initial?.nome ?? "",
     apelidos: initial?.apelidos ?? [],
     exigeTicket: initial?.exigeTicket ?? true,
     permiteBotaFora: initial?.permiteBotaFora ?? false,
     temComprovanteFoto: initial?.temComprovanteFoto ?? true,
     dispensaConferencia: initial?.dispensaConferencia ?? false,
+    valorReferenciaTonelada:
+      initial?.valorReferenciaTonelada == null ? "" : String(initial.valorReferenciaTonelada),
   });
 
   // Sair de um cadastro longo descartava tudo em silêncio.
@@ -56,10 +66,19 @@ export function MaterialForm({ initial }: Props) {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const body = {
+      ...form,
+      // Vazio é "não informado", e precisa chegar como null. Mandar "" faria o
+      // `z.coerce.number()` do schema virar 0 — e zero num campo de valor não
+      // é ausência, é a afirmação de que a carga não vale nada.
+      valorReferenciaTonelada: form.valorReferenciaTonelada.trim()
+        ? Number(form.valorReferenciaTonelada)
+        : null,
+    };
     if (initial) {
-      await update.mutateAsync({ id: initial.id, body: form });
+      await update.mutateAsync({ id: initial.id, body });
     } else {
-      await create.mutateAsync(form);
+      await create.mutateAsync(body);
     }
     router.push("/materiais");
   }
@@ -104,6 +123,29 @@ export function MaterialForm({ initial }: Props) {
             Ligado (padrão): o motorista precisa informar o número do ticket. Desligue
             pra materiais que não geram ticket (ex: concreto) — aí o campo some pro
             motorista e a viagem pode ser lançada sem ticket.
+          </p>
+        </div>
+        {/* O valor da MERCADORIA. Mora no material porque é o único lugar onde
+            ele é estável: brita tem preço de mercado por tonelada, e a viagem
+            não sabe disso. Sem ele, o CT-e é rejeitado (581). */}
+        <div className="space-y-2 rounded-lg border p-3">
+          <Label htmlFor="valorReferenciaTonelada">Valor da mercadoria (R$ por tonelada)</Label>
+          <Input
+            id="valorReferenciaTonelada"
+            inputMode="decimal"
+            value={form.valorReferenciaTonelada}
+            onChange={(e) =>
+              setForm({ ...form, valorReferenciaTonelada: e.target.value.replace(",", ".") })
+            }
+            placeholder="ex: 75.00"
+            autoComplete="off"
+          />
+          <p className="text-xs text-muted-foreground">
+            Quanto vale a <strong className="font-medium text-foreground">carga</strong>,
+            não o frete. O CT-e exige esse valor e o sistema não tem como deduzir —
+            a tabela de preços precifica o serviço de transporte, não a mercadoria.
+            O valor da carga sai de <em>referência × toneladas</em>; quando a viagem
+            trouxer o valor real da NF-e, ele vence esta referência.
           </p>
         </div>
         <div className="space-y-2 rounded-lg border p-3">
