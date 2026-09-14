@@ -94,8 +94,22 @@ export interface GatewayPagamento {
   /**
    * Cancela no gateway. Idempotente: cancelar o que já está cancelado (ou o que
    * nem existe mais lá) não é erro — o que importa é que não vai cobrar de novo.
+   *
+   * ⚠️ No Pix Automático isto mata a AUTORIZAÇÃO, e só ela. A assinatura que o
+   * gateway criou por baixo (`paymentCreationMode: SUBSCRIPTION`) sobrevive,
+   * com a cobrança do mês seguinte já aberta. Por isso quem cancela de verdade
+   * é o `encerrarNoGateway` do service, que chama isto E apaga o resto.
    */
   cancelarAssinatura(id: string, forma: FormaCobranca): Promise<void>;
+
+  /**
+   * Apaga uma cobrança ainda em aberto no gateway. Idempotente.
+   *
+   * É a rede de segurança do cancelamento: matar a assinatura lá nem sempre
+   * leva junto a cobrança que ela já tinha gerado, e uma cobrança viva de uma
+   * assinatura morta chega no cliente como um Pix pra pagar o que ele cancelou.
+   */
+  cancelarCobranca(id: string): Promise<void>;
 
   /** O estado atual de uma cobrança. Usado pra conferir sem depender do webhook. */
   buscarCobranca(id: string): Promise<CobrancaGateway | null>;

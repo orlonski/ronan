@@ -373,12 +373,14 @@ export class AssinaturasService {
    */
   async cancelar(id: string, motivo: string, usuarioId: string) {
     const assinatura = await this.buscarOuFalhar(id);
-    if (assinatura.status === "CANCELADA") return this.paraTela(assinatura);
 
-    const idNoGateway = assinatura.gatewayAutorizacaoId ?? assinatura.gatewayAssinaturaId;
-    if (idNoGateway && this.gateway.configurado()) {
-      await this.gateway.cancelarAssinatura(idNoGateway, assinatura.forma);
-    }
+    // Antes do retorno curto de propósito: "já cancelada aqui" não é prova de que o
+    // gateway também parou. Quando o cliente cancela a autorização no app do
+    // banco, o webhook marca CANCELADA do nosso lado e a assinatura do gateway
+    // segue viva, com a cobrança do mês seguinte já aberta no nome dele.
+    await this.encerrarNoGateway(assinatura);
+
+    if (assinatura.status === "CANCELADA") return this.paraTela(assinatura);
 
     const cancelada = await comoSistema(async () => {
       // As cobranças ainda em aberto morrem junto: deixá-las vivas faria a
@@ -412,6 +414,55 @@ export class AssinaturasService {
 
     this.log.log(`Assinatura ${id} cancelada: ${motivo}`);
     return this.paraTela(cancelada);
+  }
+
+  /**
+   * Apaga do gateway TUDO que ainda cobraria esta assinatura.
+   *
+   * Três coisas, porque matar uma não mata as outras — e foi assim que duas
+   * assinaturas canceladas em 14/09/2026 amanheceram com cobrança aberta pra
+   * 10/10 no nome do cliente:
+   *
+   * 1. **A autorização do Pix Automático**, que é o consentimento no banco.
+   * 2. **A assinatura do gateway.** No Pix Automático ela existe mesmo sem a
+   *    gente ter pedido: `paymentCreationMode: SUBSCRIPTION` faz o Asaas criar
+   *    uma por baixo, e ela sobrevive à morte da autorização, continuando a
+   *    marcar "próxima cobrança" todo mês.
+   * 3. **As cobranças que já nasceram.** Apagar a assinatura nem sempre leva
+   *    junto o que ela já gerou. Esta é a rede que pega o caso em que a gente
+   *    nunca ficou sabendo o id da assinatura lá.
+   *
+   * Idempotente de ponta a ponta: cada passo trata "não existe mais" como
+   * sucesso, porque o objetivo — não cobrar de novo — já está cumprido.
+   */
+  async encerrarNoGateway(assinatura: Assinatura) {
+    if (!this.gateway.configurado()) return;
+
+    if (assinatura.gatewayAutorizacaoId) {
+      await this.gateway.cancelarAssinatura(assinatura.gatewayAutorizacaoId, assinatura.forma);
+    }
+    if (assinatura.gatewayAssinaturaId) {
+      // Sempre pelo caminho de assinatura comum: o que se apaga aqui é o objeto
+      // `subscription`, mesmo quando a forma é Pix Automático.
+      await this.gateway.cancelarAssinatura(assinatura.gatewayAssinaturaId, "PIX");
+    }
+
+    // Nunca uma cobrança já paga: apagar o que entrou apagaria a receita, e o
+    // extrato do gateway deixaria de bater com o nosso.
+    const abertas = await comoSistema(() =>
+      this.prisma.cobrancaAssinatura.findMany({
+        where: {
+          assinaturaId: assinatura.id,
+          gatewayCobrancaId: { not: null },
+          status: { notIn: ["CONFIRMADA", "RECEBIDA"] },
+        },
+        select: { id: true, gatewayCobrancaId: true },
+      }),
+    );
+
+    for (const cobranca of abertas) {
+      await this.gateway.cancelarCobranca(cobranca.gatewayCobrancaId!);
+    }
   }
 
   /**

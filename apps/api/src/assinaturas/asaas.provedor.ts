@@ -185,6 +185,22 @@ export class AsaasProvedor implements GatewayPagamento {
     }
   }
 
+  async cancelarCobranca(id: string): Promise<void> {
+    try {
+      await this.requisitar("DELETE", `/payments/${id}`);
+    } catch (erro) {
+      if (erro instanceof ErroGateway && erro.status === 404) return;
+      // Cobrança já paga o Asaas recusa apagar, e com razão: apagar o que já
+      // entrou apagaria a receita. Não é falha do cancelamento — a assinatura
+      // parou de gerar cobrança nova, que é o que o cancelamento promete.
+      if (erro instanceof ErroGateway && erro.status === 400) {
+        this.log.warn(`Cobrança ${id} não pôde ser apagada no gateway: ${erro.message}`);
+        return;
+      }
+      throw erro;
+    }
+  }
+
   async buscarCobranca(id: string): Promise<CobrancaGateway | null> {
     try {
       const bruta = await this.get<PagamentoAsaas>(`/payments/${id}`);

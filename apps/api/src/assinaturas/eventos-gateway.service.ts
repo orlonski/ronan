@@ -283,12 +283,27 @@ export class EventosGatewayService {
           ? "A autorização do Pix Automático foi cancelada no banco do cliente."
           : "A autorização do Pix Automático venceu sem o primeiro pagamento.";
 
-      await comoSistema(() =>
+      const encerrada = await comoSistema(() =>
         this.prisma.assinatura.update({
           where: { id: assinatura.id },
           data: { status: "CANCELADA", canceladaEm: new Date(), motivoCancelamento: motivo },
         }),
       );
+
+      // A autorização morreu, mas a assinatura que o gateway criou por baixo
+      // dela NÃO: ela continua marcando a cobrança do mês seguinte. Sem esta
+      // limpeza, o cliente que cancela no app do banco recebe, no vencimento,
+      // um Pix pra pagar justamente o que acabou de cancelar.
+      try {
+        await this.assinaturas.encerrarNoGateway(encerrada);
+      } catch (erro) {
+        // Webhook não lança, nunca. O que ficou vivo lá aparece na tela como
+        // cobrança em aberto de assinatura cancelada — visível, não silencioso.
+        this.log.error(
+          `Autorização ${autorizacao.id} encerrada, mas a limpeza no gateway falhou: ${(erro as Error).message}`,
+        );
+      }
+
       this.log.warn(`Autorização ${autorizacao.id} encerrada (${tipo}): ${motivo}`);
       return { status: "processado" };
     }
@@ -390,6 +405,17 @@ export class EventosGatewayService {
 
       const assinatura = await this.acharAssinatura(pagamento);
       if (!assinatura) return null;
+
+      // O momento em que o Pix Automático conta qual assinatura o gateway criou
+      // por baixo da autorização. É o ÚNICO momento: a criação devolve só o id
+      // da autorização, e sem este id guardado o cancelamento não tem como
+      // apagar a assinatura que continuaria gerando cobrança todo mês.
+      if (pagamento.subscription) {
+        await this.prisma.assinatura.updateMany({
+          where: { id: assinatura.id, gatewayAssinaturaId: null },
+          data: { gatewayAssinaturaId: pagamento.subscription },
+        });
+      }
 
       // A competência sai do VENCIMENTO, não da data de hoje: uma cobrança de
       // setembro criada em agosto (o gateway gera com antecedência) é de
