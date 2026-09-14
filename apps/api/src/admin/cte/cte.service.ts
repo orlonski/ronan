@@ -20,6 +20,7 @@ import { validarContraXsd, type ErroXsd } from "../../common/cte/xsd";
 import { GatewayCte, SefazDireto, SimuladorCte, type EmissorCte } from "./emissor";
 import { cifrar, decifrar, lerCertificado } from "../../common/cte/assinatura";
 import { MODELO_CTE } from "../../common/cte/chave";
+import { gerarDacte } from "../../common/cte/dacte";
 
 /**
  * Emitir o CT-e de uma viagem.
@@ -970,5 +971,43 @@ export class CteService {
     const doc = await this.prisma.documentoFiscal.findUnique({ where: { id } });
     if (!doc) throw new NotFoundException("Documento não encontrado.");
     return doc;
+  }
+
+  /**
+   * O DACTE — o papel que acompanha a carga.
+   *
+   * Sai do que foi GRAVADO, nunca de uma remontagem: remontar abriria a chance
+   * de o papel divergir do que a SEFAZ autorizou, que é o defeito mais caro
+   * possível aqui, porque só aparece na fiscalização.
+   *
+   * Rascunho não imprime. Um documento que a SEFAZ nunca viu não tem
+   * representação impressa, e um PDF com cara de DACTE circulando sem
+   * autorização é pior do que não ter PDF nenhum.
+   */
+  async dacte(id: string): Promise<{ pdf: Buffer; nome: string }> {
+    const doc = await this.detalhe(id);
+    if (doc.status === "RASCUNHO") {
+      throw new BadRequestException("Este CT-e ainda não foi enviado à SEFAZ — não há DACTE.");
+    }
+
+    const situacao =
+      doc.status === "AUTORIZADO"
+        ? null
+        : doc.status === "CANCELADO"
+          ? `CANCELADO — ${doc.cancelamentoMotivo ?? ""}`
+          : doc.codigoRetorno
+            ? `SEM AUTORIZAÇÃO DE USO — ${doc.codigoRetorno} ${doc.motivo ?? ""}`
+            : "SEM AUTORIZAÇÃO DE USO";
+
+    const pdf = await gerarDacte({
+      payload: doc.payload as never,
+      chave: doc.chave,
+      ambiente: doc.ambiente,
+      protocolo: doc.status === "AUTORIZADO" ? doc.protocolo : null,
+      autorizadoEm: doc.autorizadoEm,
+      cancelado: doc.status === "CANCELADO",
+      situacao,
+    });
+    return { pdf, nome: `dacte-${doc.chave}` };
   }
 }

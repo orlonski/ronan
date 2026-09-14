@@ -8,11 +8,13 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import type { Response } from "express";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
@@ -167,6 +169,25 @@ export class CteController {
   @Get(":id")
   detalhe(@Param("id") id: string) {
     return this.service.detalhe(id);
+  }
+
+  /**
+   * O DACTE em PDF.
+   *
+   * `inline` e não `attachment`: quem clica nisso quase sempre quer CONFERIR na
+   * tela antes de mandar imprimir, e forçar download põe um arquivo na pasta de
+   * downloads a cada olhada.
+   */
+  @RequerPermissao("cte.ver")
+  @Get(":id/dacte")
+  async dacte(@Param("id") id: string, @Res() res: Response) {
+    const { pdf, nome } = await this.service.dacte(id);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${nome}.pdf"`);
+    // Documento fiscal de UMA empresa: cache intermediário serviria o DACTE de
+    // uma conta pra outra.
+    res.setHeader("Cache-Control", "no-store");
+    res.send(pdf);
   }
 
   @RequerPermissao("cte.emitir")

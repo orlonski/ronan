@@ -213,8 +213,13 @@ function documentoXml(p: Participante) {
  * que vaze pra alguém.
  *
  * Só o EMITENTE mantém o nome verdadeiro: é ele que assina.
+ *
+ * O texto é **CTE**, sem hífen. Toda a documentação de terceiros escreve
+ * "CT-E EMITIDO", e com hífen a SEFAZ rejeita — conferido contra a SVRS, que
+ * cita a literal esperada dentro da própria mensagem da rejeição 646. Quem
+ * decide o texto é ela, não a documentação.
  */
-const NOME_HOMOLOGACAO = "CT-E EMITIDO EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL";
+const NOME_HOMOLOGACAO = "CTE EMITIDO EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL";
 
 function participanteXml(p: Participante, chaveEndereco: string, ambiente: 1 | 2) {
   return {

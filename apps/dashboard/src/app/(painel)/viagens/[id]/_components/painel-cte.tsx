@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Ban, CheckCircle2, CircleAlert, FileCheck2, FlaskConical } from "lucide-react";
 import { Permitido } from "@/components/requer-tela";
 import { Button } from "@/components/ui/button";
+import { BotaoDacte } from "@/components/botao-dacte";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -169,6 +170,10 @@ export function PainelCte({ viagemId }: { viagemId: string }) {
           {vivo.protocolo && (
             <p className="text-sm text-muted-foreground">Protocolo {vivo.protocolo}</p>
           )}
+
+          {/* O papel que vai com o caminhão. Fica aqui, na viagem, porque é
+              daqui que alguém imprime — não da tela de auditoria de CT-e. */}
+          <BotaoDacte id={vivo.id} rotulo="Imprimir DACTE" />
 
           <Permitido chave="cte.cancelar">
             {!abrirCancelar ? (

@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Ban, CheckCircle2, CircleAlert, Clock, Copy, FileText, FlaskConical } from "lucide-react";
 import { toast } from "sonner";
 import { RequerTela } from "@/components/requer-tela";
+import { BotaoDacte } from "@/components/botao-dacte";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -137,6 +138,10 @@ function Conteudo({ id }: { id: string }) {
             Ver a viagem
           </Link>
         )}
+
+        {/* Rascunho não tem DACTE: um PDF com cara de documento fiscal
+            circulando sem a SEFAZ ter visto é pior do que não ter PDF. */}
+        {data.status !== "RASCUNHO" && <BotaoDacte id={data.id} />}
       </Card>
 
       {/* O XML assinado é o documento. Ele precisa ser guardado por cinco anos,

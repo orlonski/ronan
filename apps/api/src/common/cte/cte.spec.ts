@@ -277,7 +277,9 @@ describe("montarCte", () => {
         recebedor: participante({ razaoSocial: "Recebedora Beta" }),
       }),
     );
-    const literal = "CT-E EMITIDO EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL";
+    // CTE sem hífen: é o texto que a SVRS exige de verdade, e não o que a
+    // documentação de terceiros repete. Com hífen volta rejeição 646.
+    const literal = "CTE EMITIDO EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL";
     for (const bloco of [cte.rem, cte.dest, cte.exped!, cte.receb!]) {
       expect((bloco as any).xNome).toBe(literal);
     }
