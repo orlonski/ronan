@@ -112,6 +112,7 @@ export function Mensalidades({ contas }: { contas: ContaResumo[] }) {
   const [aberto, setAberto] = useState(false);
   const [criando, setCriando] = useState(false);
   const [detalhe, setDetalhe] = useState<Assinatura | null>(null);
+  const [rodandoRegua, setRodandoRegua] = useState(false);
 
   const { data, refetch } = useQuery({
     queryKey: [PATH],
@@ -131,6 +132,39 @@ export function Mensalidades({ contas }: { contas: ContaResumo[] }) {
     (s, a) => s + (a.ciclo === "ANUAL" ? Math.round(a.valorCentavos / 12) : a.valorCentavos),
     0,
   );
+
+  async function rodarRegua() {
+    setRodandoRegua(true);
+    try {
+      const r = await fetchApi<{
+        vencidas: number;
+        enviados: string[];
+        naoEnviados: string[];
+        semAcao: number;
+        erro?: string;
+      }>(`${PATH}/regua/rodar`, { method: "POST", token });
+
+      if (r.erro) {
+        toast.error("A régua falhou", { description: r.erro });
+      } else if (r.enviados.length === 0 && r.naoEnviados.length === 0) {
+        // Silêncio é resultado, não falha: ninguém estava na janela de aviso.
+        toast.success("Nada a avisar hoje", {
+          description: `${r.semAcao} cobrança(s) em aberto conferida(s)${r.vencidas > 0 ? ` · ${r.vencidas} passou(ram) a vencida(s)` : ""}.`,
+        });
+      } else {
+        toast.success(`${r.enviados.length} aviso(s) enviado(s)`, {
+          description: [...r.enviados, ...r.naoEnviados.map((n) => `não saiu — ${n}`)].join(" · "),
+        });
+      }
+      void refetch();
+    } catch (e) {
+      toast.error("Não consegui rodar a régua", {
+        description: e instanceof Error ? e.message : undefined,
+      });
+    } finally {
+      setRodandoRegua(false);
+    }
+  }
 
   // Empresas que ainda não têm assinatura: é o que a tela precisa oferecer,
   // e listar as que já têm só daria erro de "já tem uma em andamento".
@@ -200,10 +234,30 @@ export function Mensalidades({ contas }: { contas: ContaResumo[] }) {
             </div>
           ))}
 
-          <Button variant="outline" onClick={() => setCriando(true)} disabled={semAssinatura.length === 0}>
-            <Plus className="mr-2 h-4 w-4" />
-            Nova assinatura
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setCriando(true)}
+              disabled={semAssinatura.length === 0}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Nova assinatura
+            </Button>
+
+            {/* A régua roda sozinha às 9h. O botão existe pro dia em que o
+                WhatsApp estava fora do ar: aviso que falha não grava data, e
+                sem isto só seria tentado de novo amanhã. Apertar duas vezes não
+                manda duas mensagens — quem já foi avisado hoje fica de fora. */}
+            {assinaturas.length > 0 && (
+              <Button
+                variant="outline"
+                disabled={rodandoRegua}
+                onClick={() => void rodarRegua()}
+              >
+                {rodandoRegua ? "Rodando…" : "Rodar avisos agora"}
+              </Button>
+            )}
+          </div>
           {semAssinatura.length === 0 && contas.length > 0 && (
             <p className="text-xs text-muted-foreground">
               Todas as empresas já têm assinatura.
@@ -256,6 +310,7 @@ function DialogNovaAssinatura({
   const [ciclo, setCiclo] = useState<CicloAssinatura>("MENSAL");
   const [valor, setValor] = useState("");
   const [diaVencimento, setDiaVencimento] = useState("10");
+  const [primeiroVencimento, setPrimeiroVencimento] = useState("");
   const [nomeResponsavel, setNome] = useState("");
   const [emailCobranca, setEmail] = useState("");
   const [telefoneCobranca, setTelefone] = useState("");
@@ -297,6 +352,7 @@ function DialogNovaAssinatura({
           ciclo,
           valorCentavos: paraCentavos(valor),
           diaVencimento: Number(diaVencimento) || 10,
+          primeiroVencimento: primeiroVencimento || undefined,
           nomeResponsavel,
           emailCobranca,
           telefoneCobranca,
@@ -398,6 +454,23 @@ function DialogNovaAssinatura({
           <p className="text-xs text-muted-foreground">
             O vencimento vai do dia 1 ao 28 — fevereiro não tem dia 30.
           </p>
+
+          <div>
+            <Label>Primeiro vencimento (opcional)</Label>
+            <Input
+              type="date"
+              value={primeiroVencimento}
+              onChange={(e) => setPrimeiroVencimento(e.target.value)}
+            />
+            {/* Sem isto, a primeira cobrança caía sempre no mês seguinte, sem
+                escolha. Quem fecha dia 20 e quer começar já, ou combinou
+                começar em janeiro, não tinha como — e a conversa acabava
+                virando uma cobrança manual por fora do sistema. */}
+            <p className="mt-1 text-xs text-muted-foreground">
+              Vazio = dia {diaVencimento || "10"} do mês que vem. Preencha pra combinar outra data
+              de início.
+            </p>
+          </div>
 
           <div className="border-t pt-3">
             <p className="text-sm font-medium">Quem recebe a cobrança</p>

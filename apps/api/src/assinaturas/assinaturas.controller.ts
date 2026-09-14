@@ -14,6 +14,7 @@ import type { AuthAdminUser } from "../auth/types";
 import { IgnoraEscopo } from "../common/escopo/escopo.decorator";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { AssinaturasService } from "./assinaturas.service";
+import { ReguaCobrancaService } from "./regua-cobranca.service";
 
 /**
  * A gestão das mensalidades, atrás do `PlataformaGuard`.
@@ -34,7 +35,26 @@ import { AssinaturasService } from "./assinaturas.service";
 @IgnoraEscopo()
 @Controller("admin/assinaturas")
 export class AssinaturasController {
-  constructor(private readonly service: AssinaturasService) {}
+  constructor(
+    private readonly service: AssinaturasService,
+    private readonly regua: ReguaCobrancaService,
+  ) {}
+
+  /**
+   * Roda a régua de cobrança agora, sem esperar as 9h.
+   *
+   * Não é só conveniência de teste: quando o WhatsApp cai, os avisos do dia não
+   * saem — e como um aviso que falha NÃO grava data, a régua os tentaria de
+   * novo só no dia seguinte. Este botão recupera o dia.
+   *
+   * É idempotente pela mesma razão que o cron é: quem já foi avisado hoje não é
+   * avisado de novo, porque a decisão olha a data gravada. Apertar duas vezes
+   * não manda duas mensagens.
+   */
+  @Post("regua/rodar")
+  rodarRegua() {
+    return this.regua.passar();
+  }
 
   @Get()
   listar() {

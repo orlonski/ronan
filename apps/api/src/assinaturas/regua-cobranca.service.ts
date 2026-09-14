@@ -43,15 +43,18 @@ export class ReguaCobrancaService {
   ) {}
 
   @Cron("0 0 9 * * *", { name: "regua-cobranca", timeZone: "America/Sao_Paulo" })
-  async passar(): Promise<void> {
+  async passar(): Promise<ResumoRegua> {
     try {
       const vencidas = await this.marcarVencidas();
       if (vencidas > 0) this.log.log(`${vencidas} cobrança(s) passaram a vencidas.`);
-      await this.avisar();
+      const avisos = await this.avisar();
+      return { vencidas, ...avisos };
     } catch (erro) {
       // Cron não derruba: a régua roda de novo amanhã, e uma falha aqui não
       // pode parar o processo que também serve o app do motorista.
-      this.log.error(`Falha na régua de cobrança: ${(erro as Error).message}`);
+      const msg = (erro as Error).message;
+      this.log.error(`Falha na régua de cobrança: ${msg}`);
+      return { vencidas: 0, enviados: [], naoEnviados: [], semAcao: 0, erro: msg };
     }
   }
 
@@ -88,7 +91,10 @@ export class ReguaCobrancaService {
   }
 
   /** Manda o aviso do dia pra cada cobrança que a régua mandar avisar. */
-  private async avisar(): Promise<void> {
+  private async avisar(): Promise<Omit<ResumoRegua, "vencidas">> {
+    const enviados: string[] = [];
+    const naoEnviados: string[] = [];
+    let semAcao = 0;
     const abertas = await comoSistema(() =>
       this.prisma.cobrancaAssinatura.findMany({
         where: {
@@ -121,7 +127,10 @@ export class ReguaCobrancaService {
         },
         agora,
       );
-      if (acao.tipo === "NADA") continue;
+      if (acao.tipo === "NADA") {
+        semAcao++;
+        continue;
+      }
 
       // Sem link não há o que mandar: uma cobrança sem página de pagamento
       // deixaria o cliente sabendo que deve e sem como pagar, que é pior que
@@ -130,6 +139,7 @@ export class ReguaCobrancaService {
         this.log.warn(
           `Cobrança ${cobranca.id} (${cobranca.assinatura.conta.nome}) está aberta e sem link de pagamento — aviso não enviado.`,
         );
+        naoEnviados.push(`${cobranca.assinatura.conta.nome}: sem link de pagamento`);
         continue;
       }
 
@@ -164,6 +174,9 @@ export class ReguaCobrancaService {
         this.log.warn(
           `Aviso de cobrança ${cobranca.id} não saiu (${r.erro?.codigo}): ${r.erro?.detalhe}`,
         );
+        naoEnviados.push(
+          `${cobranca.assinatura.conta.nome}: ${r.erro?.detalhe ?? r.erro?.codigo ?? "falhou"}`,
+        );
         continue;
       }
 
@@ -179,6 +192,29 @@ export class ReguaCobrancaService {
       this.log.log(
         `Aviso ${atrasada ? "de atraso" : "de abertura"} enviado: ${cobranca.assinatura.conta.nome}, ${dados.competenciaRotulo}.`,
       );
+      enviados.push(
+        `${cobranca.assinatura.conta.nome} (${dados.competenciaRotulo}): ${atrasada ? "atraso" : "a vencer"}`,
+      );
     }
+
+    return { enviados, naoEnviados, semAcao };
   }
 }
+
+/**
+ * O que a passada da régua fez.
+ *
+ * Existe porque a régua passou a ter um gatilho manual, e quem aperta o botão
+ * precisa ver o resultado — "rodou" sem dizer o que saiu é o mesmo que não
+ * rodar. `naoEnviados` é a parte que importa: aviso que falhou não grava data e
+ * será tentado de novo, mas quem está na tela tem que saber disso agora.
+ */
+export type ResumoRegua = {
+  /** Quantas cobranças passaram a constar vencidas nesta passada. */
+  vencidas: number;
+  enviados: string[];
+  naoEnviados: string[];
+  /** Cobranças em aberto que a régua olhou e decidiu não avisar hoje. */
+  semAcao: number;
+  erro?: string;
+};
