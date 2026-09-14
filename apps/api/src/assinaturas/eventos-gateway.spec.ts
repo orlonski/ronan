@@ -187,3 +187,133 @@ describe("o pagamento que ativa a recorrência vira mensalidade paga", () => {
     expect(criadas).toHaveLength(0);
   });
 });
+
+describe("proteções de dinheiro", () => {
+  function servicoComCobranca(cobranca: { id: string; assinaturaId: string; status: string }) {
+    const atualizacoes: Record<string, unknown>[] = [];
+    const vistos = new Set<string>();
+    const prisma = {
+      assinatura: { findFirst: async () => ({ id: "a1", contaId: "c1", valorCentavos: 189000 }) },
+      cobrancaAssinatura: {
+        findUnique: async () => cobranca,
+        update: async ({ data }: { data: Record<string, unknown> }) => {
+          atualizacoes.push(data);
+          return data;
+        },
+        upsert: async () => cobranca,
+      },
+      eventoGatewayPagamento: {
+        findUnique: async ({ where }: { where: { eventoId: string } }) =>
+          vistos.has(where.eventoId) ? { id: "l", processadoEm: new Date() } : null,
+        create: async ({ data }: { data: { eventoId: string } }) => {
+          vistos.add(data.eventoId);
+          return { id: "l" };
+        },
+        update: async () => ({}),
+      },
+    };
+    const s = new EventosGatewayService(prisma as never, {
+      reavaliarInadimplencia: async () => {},
+    } as never);
+    return { s, atualizacoes };
+  }
+
+  function eventoPagamento(id: string, event: string, status: string) {
+    return {
+      id,
+      event,
+      payment: {
+        id: "pay_1",
+        status,
+        billingType: "PIX",
+        value: 1890,
+        dueDate: "2026-10-10",
+        subscription: "sub_1",
+      },
+    };
+  }
+
+  it("cobrança PAGA não volta a pendente quando chega um PAYMENT_CREATED do mesmo mês", async () => {
+    // O caso real: a mensalidade de ativação é registrada como recebida e
+    // depois o gateway gera a cobrança da mesma competência. Sem a trava, a
+    // régua voltaria a cobrar quem já pagou.
+    const { s, atualizacoes } = servicoComCobranca({ id: "c1", assinaturaId: "a1", status: "RECEBIDA" });
+    const r = await s.receber("e1", "PAYMENT_CREATED", eventoPagamento("e1", "PAYMENT_CREATED", "PENDING"));
+    expect(r.status).toBe("ignorado");
+    expect(atualizacoes).toHaveLength(0);
+  });
+
+  it("nem a vencida: dívida quitada não ressuscita", async () => {
+    const { s, atualizacoes } = servicoComCobranca({ id: "c1", assinaturaId: "a1", status: "CONFIRMADA" });
+    const r = await s.receber("e2", "PAYMENT_OVERDUE", eventoPagamento("e2", "PAYMENT_OVERDUE", "OVERDUE"));
+    expect(r.status).toBe("ignorado");
+    expect(atualizacoes).toHaveLength(0);
+  });
+
+  it("MAS estorno passa: o dinheiro voltou, e isso tem que valer", async () => {
+    const { s, atualizacoes } = servicoComCobranca({ id: "c1", assinaturaId: "a1", status: "RECEBIDA" });
+    const r = await s.receber("e3", "PAYMENT_REFUNDED", eventoPagamento("e3", "PAYMENT_REFUNDED", "REFUNDED"));
+    expect(r.status).toBe("processado");
+    expect(atualizacoes[0]!.status).toBe("ESTORNADA");
+  });
+
+  it("dinheiro recebido sem dono vira alarme, não silêncio", async () => {
+    // O handler responde 200 (a fila do gateway não pode parar), mas a linha do
+    // evento fica com `erro` preenchido pra alguém ver.
+    const vistos = new Set<string>();
+    const erros: unknown[] = [];
+    const prisma = {
+      assinatura: { findFirst: async () => null },
+      cobrancaAssinatura: { findUnique: async () => null, upsert: async () => null },
+      eventoGatewayPagamento: {
+        findUnique: async ({ where }: { where: { eventoId: string } }) =>
+          vistos.has(where.eventoId) ? { id: "l" } : null,
+        create: async ({ data }: { data: { eventoId: string } }) => {
+          vistos.add(data.eventoId);
+          return { id: "l" };
+        },
+        update: async ({ data }: { data: { erro?: string } }) => {
+          if (data.erro) erros.push(data.erro);
+          return {};
+        },
+      },
+    };
+    const s = new EventosGatewayService(prisma as never, {
+      reavaliarInadimplencia: async () => {},
+    } as never);
+
+    const r = await s.receber("e4", "PAYMENT_RECEIVED", eventoPagamento("e4", "PAYMENT_RECEIVED", "RECEIVED"));
+    expect(r.status).toBe("falhou");
+    expect(String(erros[0])).toMatch(/sem assinatura/i);
+  });
+
+  it("pagamento órfão que NÃO é dinheiro recebido segue sendo ignorado em silêncio", async () => {
+    // Um PAYMENT_CREATED de outra coisa na mesma conta do gateway não é
+    // problema nosso — alarme pra isso viraria ruído e ninguém olharia mais.
+    const vistos = new Set<string>();
+    const erros: unknown[] = [];
+    const prisma = {
+      assinatura: { findFirst: async () => null },
+      cobrancaAssinatura: { findUnique: async () => null, upsert: async () => null },
+      eventoGatewayPagamento: {
+        findUnique: async ({ where }: { where: { eventoId: string } }) =>
+          vistos.has(where.eventoId) ? { id: "l" } : null,
+        create: async ({ data }: { data: { eventoId: string } }) => {
+          vistos.add(data.eventoId);
+          return { id: "l" };
+        },
+        update: async ({ data }: { data: { erro?: string } }) => {
+          if (data.erro) erros.push(data.erro);
+          return {};
+        },
+      },
+    };
+    const s = new EventosGatewayService(prisma as never, {
+      reavaliarInadimplencia: async () => {},
+    } as never);
+
+    const r = await s.receber("e5", "PAYMENT_CREATED", eventoPagamento("e5", "PAYMENT_CREATED", "PENDING"));
+    expect(r.status).toBe("ignorado");
+    expect(erros).toHaveLength(0);
+  });
+});

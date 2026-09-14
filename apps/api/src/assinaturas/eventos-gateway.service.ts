@@ -116,11 +116,48 @@ export class EventosGatewayService {
     const cobranca = await this.acharOuCriarCobranca(pagamento);
     if (!cobranca) {
       // Pagamento de alguém que não é assinatura nossa. Acontece se a mesma
-      // conta do gateway for usada pra outra coisa — ignorar é o certo.
-      return { status: "ignorado", detalhe: "pagamento sem assinatura conhecida" };
+      // conta do gateway for usada pra outra coisa — ignorar é o certo, porque
+      // casar no chute seria pior.
+      //
+      // MAS: dinheiro RECEBIDO que não acha dono não pode passar em silêncio.
+      // Sem isto, um pagamento órfão fica indistinguível de um evento
+      // irrelevante — o cliente pagou e não consta, e ninguém descobre.
+      //
+      // O `throw` aqui NÃO chega ao gateway: `receber` o captura, carimba o
+      // `erro` na linha do evento e o controller responde 200 assim mesmo. Ou
+      // seja, a fila continua andando e fica um alarme no banco — que é o que
+      // a consulta de diagnóstico procura (ver docs/assinaturas-asaas.md).
+      const detalhe = "pagamento sem assinatura conhecida";
+      if (novoStatus === "CONFIRMADA" || novoStatus === "RECEBIDA") {
+        this.log.error(
+          `DINHEIRO SEM DONO: ${pagamento.id} (${formatarValor(pagamento.value)}) foi ` +
+            `${novoStatus} e não casou com assinatura nenhuma. Confira no gateway.`,
+        );
+        throw new Error(`Pagamento ${pagamento.id} recebido sem assinatura correspondente`);
+      }
+      return { status: "ignorado", detalhe };
     }
 
     const pago = novoStatus === "CONFIRMADA" || novoStatus === "RECEBIDA";
+
+    // Nunca REBAIXAR uma cobrança já paga.
+    //
+    // O caso real: a mensalidade de ativação é registrada como recebida, e
+    // depois o gateway gera uma cobrança na mesma competência. O
+    // `PAYMENT_CREATED` dela chega como PENDENTE e, sem esta trava,
+    // sobrescreveria o pagamento — a régua voltaria a cobrar quem já pagou e o
+    // cliente receberia aviso de uma dívida que não existe.
+    //
+    // Estorno e chargeback CONTINUAM passando: eles são a notícia de que o
+    // dinheiro voltou, e essa precisa valer. O que não passa é "pendente"
+    // depois de "pago".
+    const jaPaga = cobranca.status === "CONFIRMADA" || cobranca.status === "RECEBIDA";
+    if (jaPaga && (novoStatus === "PENDENTE" || novoStatus === "VENCIDA")) {
+      this.log.warn(
+        `${tipo}: cobrança ${cobranca.id} já está paga — ignorei o rebaixamento para ${novoStatus}.`,
+      );
+      return { status: "ignorado", detalhe: "cobrança já paga; rebaixamento recusado" };
+    }
 
     await comoSistema(() =>
       this.prisma.cobrancaAssinatura.update({
@@ -303,11 +340,11 @@ export class EventosGatewayService {
    */
   private async acharOuCriarCobranca(
     pagamento: PagamentoAsaas,
-  ): Promise<{ id: string; assinaturaId: string } | null> {
+  ): Promise<{ id: string; assinaturaId: string; status: string } | null> {
     return comoSistema(async () => {
       const existente = await this.prisma.cobrancaAssinatura.findUnique({
         where: { gatewayCobrancaId: pagamento.id },
-        select: { id: true, assinaturaId: true },
+        select: { id: true, assinaturaId: true, status: true },
       });
       if (existente) return existente;
 
@@ -337,7 +374,7 @@ export class EventosGatewayService {
           linkPagamento: pagamento.invoiceUrl ?? null,
         },
         update: { gatewayCobrancaId: pagamento.id },
-        select: { id: true, assinaturaId: true },
+        select: { id: true, assinaturaId: true, status: true },
       });
       return criada;
     });
@@ -468,4 +505,9 @@ export function extrairAutorizacao(payload: unknown): { id?: string; status?: st
     if (!id.startsWith("evt_")) return { id };
   }
   return null;
+}
+
+/** "R$ 1.890,00" — só pra mensagem de log ficar legível por gente. */
+function formatarValor(reais: number): string {
+  return reais.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
