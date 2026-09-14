@@ -61,10 +61,16 @@ propósito. Transbordo: corte texto, não diminua a fonte.
 
 Os agentes estão em `.claude/agents/ig-*.md`.
 
-**Se a pauta for Reel e não imagem**, o fluxo muda: quem escreve é o `ig-reels`, a
-receita está em `marketing/reels/PLAYBOOK.md` e a produção em
-`marketing/reels/README.md`. O que não muda é o QA — vídeo promete igual a imagem,
-e mentira em movimento é pior.
+**Se a pauta for Reel e não imagem**, o roteiro é do `ig-reels`, a receita está em
+`marketing/reels/PLAYBOOK.md` e a produção em `marketing/reels/README.md`. O que não
+muda é o QA — vídeo promete igual a imagem, e mentira em movimento é pior.
+
+> **Agente automático NÃO gera vídeo.** Cada clipe custa dinheiro de verdade (de
+> R$ 1,50 a R$ 18, conforme o modelo — números medidos, no PLAYBOOK). Os geradores
+> exigem `PERMITIR_GASTO_VIDEO=sim` e recusam sem isso, justamente pra que nenhum
+> cron, nenhuma pauta e nenhum agente consiga gastar sozinho. Roteiro o agente
+> escreve; **gerar é decisão de gente, na mão.** A pauta automática pede "UM post",
+> e post é imagem — o caminho de imagem não custa nada além dos tokens da execução.
 
 ## Voz
 

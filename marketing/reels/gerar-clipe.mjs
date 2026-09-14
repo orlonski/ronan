@@ -23,6 +23,23 @@ const raiz = dirname(fileURLToPath(import.meta.url));
 const MODELO = "veo-3.1-generate-preview";
 const BASE = "https://generativelanguage.googleapis.com/v1beta";
 
+// ---- TRAVA DE GASTO ----
+//
+// Este script gasta dinheiro de verdade a cada execução. Nada automático pode
+// chamá-lo: nem o cron da pauta, nem o agente, nem um script de esteira.
+//
+// A proteção não pode ser acidental ("o container não tem .env"), porque
+// acidente muda sem avisar. É explícita: sem PERMITIR_GASTO_VIDEO=sim na
+// chamada, o script recusa e diz por quê.
+if (process.env.PERMITIR_GASTO_VIDEO !== "sim") {
+  console.error(
+    "Recusado: gerar vídeo custa dinheiro por clipe (~R$ 18 por clipe de 8s).\n" +
+      "Se é você, na mão, e sabe quanto vai gastar:\n" +
+      "  PERMITIR_GASTO_VIDEO=sim node " + process.argv[1].split("/").pop() + " <prompt> [saida.mp4]",
+  );
+  process.exit(1);
+}
+
 const [arquivoPrompt, saidaArg] = process.argv.slice(2);
 if (!arquivoPrompt) {
   console.error("uso: node gerar-clipe.mjs <arquivo-de-prompt> [saida.mp4]");
