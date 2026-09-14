@@ -75,7 +75,22 @@ function esqueletoAssinatura(chave: string): string {
 
 type Arquivo = { fileName: string; contents: string };
 
-let cache: { pasta: string; preload: Arquivo[]; raiz: string } | null = null;
+/**
+ * A mensagem que está sendo validada.
+ *
+ * O pacote tem um schema por mensagem — o do CT-e não valida um pedido de
+ * status, e vice-versa. Assumir sempre o CT-e faria a conferência das outras
+ * chamadas passar por acidente ou falhar por motivo errado.
+ */
+export const SCHEMA_DA_MENSAGEM = {
+  cte: "cte_v4.00.xsd",
+  statusServico: "consStatServCTe_v4.00.xsd",
+  consultaCte: "consSitCTe_v4.00.xsd",
+  evento: "eventoCTe_v4.00.xsd",
+} as const;
+export type Mensagem = keyof typeof SCHEMA_DA_MENSAGEM;
+
+let cache: { pasta: string; preload: Arquivo[] } | null = null;
 
 /**
  * Carrega os 44 schemas uma vez.
@@ -89,8 +104,7 @@ function carregar(pasta = PASTA_PADRAO) {
   const preload = readdirSync(pasta)
     .filter((f) => f.endsWith(".xsd"))
     .map((f) => ({ fileName: f, contents: readFileSync(join(pasta, f), "utf8") }));
-  const raiz = readFileSync(join(pasta, "cte_v4.00.xsd"), "utf8");
-  cache = { pasta, preload, raiz };
+  cache = { pasta, preload };
   return cache;
 }
 
@@ -132,11 +146,15 @@ async function validarModal(xml: string, pasta: string): Promise<ErroXsd[]> {
 
 export async function validarContraXsd(
   xml: string,
-  pasta = PASTA_PADRAO,
+  opcoes: { mensagem?: Mensagem; pasta?: string } = {},
 ): Promise<ResultadoXsd> {
-  const { preload, raiz } = carregar(pasta);
+  const mensagem = opcoes.mensagem ?? "cte";
+  const pasta = opcoes.pasta ?? PASTA_PADRAO;
+  const { preload } = carregar(pasta);
+  const raiz = readFileSync(join(pasta, SCHEMA_DA_MENSAGEM[mensagem]), "utf8");
 
-  const jaAssinado = xml.includes("<Signature");
+  // Só o CT-e exige assinatura; as consultas não têm `Signature` nenhuma.
+  const jaAssinado = mensagem !== "cte" || xml.includes("<Signature");
   let paraValidar = xml;
   if (!jaAssinado) {
     const chave = xml.match(/Id="CTe(\d{44})"/)?.[1] ?? "";
@@ -149,7 +167,7 @@ export async function validarContraXsd(
       schema: [raiz],
       preload,
     }),
-    validarModal(xml, pasta),
+    mensagem === "cte" ? validarModal(xml, pasta) : Promise.resolve([]),
   ]);
 
   if (r.valid && errosModal.length === 0) {

@@ -15,6 +15,15 @@ import { Select } from "@/components/ui/select";
 import { LoadingCard } from "@/components/loading";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 
+type Certificado = {
+  cnpj: string | null;
+  titular: string;
+  validoDe: string;
+  validoAte: string;
+  diasParaVencer: number;
+  vencido: boolean;
+} | null;
+
 type Config = {
   cnpj: string | null;
   razaoSocial: string | null;
@@ -33,6 +42,7 @@ type Config = {
   cteIcmsAliquota: number | null;
   cteIcmsReducao: number | null;
   cteIcmsCst: string | null;
+  cteUfAutorizador: string | null;
   cteGatewayUrl: string | null;
   gatewayTemToken: boolean;
   proximoNumero: number;
@@ -52,6 +62,57 @@ function Conteudo() {
   const qc = useQueryClient();
   const [form, setForm] = React.useState<Partial<Config> & { cteGatewayToken?: string }>({});
   const [salvando, setSalvando] = React.useState(false);
+  const [senhaCert, setSenhaCert] = React.useState("");
+  const [subindo, setSubindo] = React.useState(false);
+  const [testando, setTestando] = React.useState(false);
+  const [conexao, setConexao] = React.useState<{ ok: boolean; motivo: string | null } | null>(null);
+  const arquivoRef = React.useRef<HTMLInputElement>(null);
+
+  async function subirCertificado(file: File) {
+    if (!token) return;
+    if (!senhaCert) {
+      toast.error("Informe a senha do certificado antes de escolher o arquivo.");
+      return;
+    }
+    setSubindo(true);
+    try {
+      const fd = new FormData();
+      fd.append("arquivo", file);
+      fd.append("senha", senhaCert);
+      await fetchApi("/admin/cte/certificado", { token, method: "POST", body: fd });
+      await qc.invalidateQueries({ queryKey: ["cte", "certificado"] });
+      setSenhaCert("");
+      toast.success("Certificado guardado.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSubindo(false);
+    }
+  }
+
+  async function testar() {
+    if (!token) return;
+    setTestando(true);
+    setConexao(null);
+    try {
+      setConexao(
+        await fetchApi<{ ok: boolean; motivo: string | null }>("/admin/cte/testar-conexao", {
+          token,
+          method: "POST",
+        }),
+      );
+    } catch (e) {
+      setConexao({ ok: false, motivo: (e as Error).message });
+    } finally {
+      setTestando(false);
+    }
+  }
+
+  const cert = useQuery({
+    queryKey: ["cte", "certificado"],
+    enabled: Boolean(token),
+    queryFn: () => fetchApi<Certificado>("/admin/cte/certificado", { token: token! }),
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ["cte", "config"],
@@ -83,6 +144,7 @@ function Conteudo() {
           cteIcmsAliquota: v.cteIcmsAliquota ?? null,
           cteIcmsReducao: v.cteIcmsReducao ?? null,
           cteIcmsCst: v.cteIcmsCst || null,
+          cteUfAutorizador: v.cteUfAutorizador || null,
           cteGatewayUrl: v.cteGatewayUrl || null,
           // Em branco = não mexi. O servidor nunca devolve o token, então
           // mandar vazio apagaria a credencial de quem só trocou a série.
@@ -103,6 +165,7 @@ function Conteudo() {
 
   const producao = Number(v.cteAmbiente) === 1;
   const gateway = v.cteEmissor === "GATEWAY";
+  const direto = v.cteEmissor === "SEFAZ";
   const destacaIcms = ["00", "20", "90"].includes(String(v.cteIcmsTipo));
 
   return (
@@ -147,12 +210,15 @@ function Conteudo() {
             onChange={(e) => set("cteEmissor", e.target.value)}
           >
             <option value="SIMULADOR">Simulador — local, sem certificado</option>
-            <option value="GATEWAY">Gateway — sandbox ou SEFAZ de verdade</option>
+            <option value="SEFAZ">Direto na SEFAZ — nós assinamos</option>
+            <option value="GATEWAY">Gateway — um provedor assina por nós</option>
           </Select>
           <p className="text-sm text-muted-foreground">
-            {gateway
-              ? "O documento sai daqui pro provedor, que assina com o certificado e manda pra SEFAZ."
-              : "Nada sai desta máquina. O simulador refaz as conferências que dependem só do documento — o dígito da chave e a soma dos componentes — e responde no mesmo formato da SEFAZ. Serve pra provar que tudo depois da emissão funciona."}
+            {direto
+              ? "O sistema assina o XML com o certificado da empresa e fala com o autorizador do estado. Sem mensalidade de intermediário — em troca, somos nós que acompanhamos as notas técnicas da SEFAZ."
+              : gateway
+                ? "O documento sai daqui pro provedor, que assina com o certificado e manda pra SEFAZ."
+                : "Nada sai desta máquina. O simulador refaz as conferências que dependem só do documento — o dígito da chave e a soma dos componentes — e responde no mesmo formato da SEFAZ. Serve pra provar que tudo depois da emissão funciona."}
           </p>
         </div>
 
@@ -315,6 +381,118 @@ function Conteudo() {
           </div>
         )}
       </Card>
+
+      {direto && (
+        <Card className="space-y-4 p-4">
+          <div>
+            <h2 className="font-semibold">Certificado digital (A1)</h2>
+            <p className="max-w-prose text-sm text-muted-foreground">
+              É ele que assina o documento — e é ele também que a SEFAZ exige na própria
+              conexão. Fica guardado cifrado, com a chave fora do banco: um backup do banco
+              sozinho não serve pra assinar nada.
+            </p>
+          </div>
+
+          {cert.data ? (
+            <div
+              className={`rounded-md border p-3 ${
+                cert.data.vencido
+                  ? "border-destructive/40 bg-destructive/5"
+                  : cert.data.diasParaVencer < 30
+                    ? "border-amber-300 bg-amber-50"
+                    : "border-emerald-300 bg-emerald-50/50"
+              }`}
+            >
+              <p className="font-medium">{cert.data.titular}</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                {cert.data.cnpj ? `CNPJ ${cert.data.cnpj} · ` : ""}
+                válido até {new Date(cert.data.validoAte).toLocaleDateString("pt-BR")}
+                {cert.data.vencido
+                  ? " — VENCIDO"
+                  : ` (${cert.data.diasParaVencer} dias)`}
+              </p>
+              {/* Avisar antes é o que evita a emissão parar num dia qualquer:
+                  certificado vence sem avisar ninguém. */}
+              {!cert.data.vencido && cert.data.diasParaVencer < 30 && (
+                <p className="mt-1 text-sm font-medium text-amber-800">
+                  Renove agora. No dia em que vencer, a emissão para.
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Nenhum certificado cadastrado.</p>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="senha-cert">Senha do certificado</Label>
+              <Input
+                id="senha-cert"
+                type="password"
+                autoComplete="off"
+                value={senhaCert}
+                onChange={(e) => setSenhaCert(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="arq-cert">Arquivo .pfx</Label>
+              <input
+                id="arq-cert"
+                ref={arquivoRef}
+                type="file"
+                accept=".pfx,.p12"
+                disabled={subindo}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void subirCertificado(f);
+                  e.target.value = "";
+                }}
+                className="block w-full text-sm file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary-foreground"
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            O CNPJ, o titular e a validade são lidos do próprio arquivo — nada disso é
+            digitado. Se o CNPJ não bater com o da empresa, o sistema recusa.
+          </p>
+
+          <div className="space-y-2">
+            <div className="space-y-2">
+              <Label htmlFor="uf-aut">UF do autorizador</Label>
+              <Select
+                id="uf-aut"
+                value={v.cteUfAutorizador ?? v.uf ?? ""}
+                onChange={(e) => set("cteUfAutorizador", e.target.value)}
+              >
+                <option value="">Selecione…</option>
+                <option value="PR">Paraná</option>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                São oito autorizadores no país — a maioria dos estados delega pra SVRS. Hoje
+                o sistema fala com o do Paraná; acrescentar outro é trabalho pequeno.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <Button variant="outline" onClick={() => void testar()} disabled={testando}>
+                <Radio className="h-4 w-4" />
+                {testando ? "Testando…" : "Testar conexão com a SEFAZ"}
+              </Button>
+              {conexao && (
+                <span
+                  className={`text-sm ${conexao.ok ? "text-emerald-700" : "text-destructive"}`}
+                >
+                  {conexao.ok ? "Serviço em operação." : conexao.motivo}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              É a única chamada que não emite nada. Prova certificado, cadeia, credenciamento
+              e rede de uma vez — antes de arriscar um CT-e e queimar um número da série.
+            </p>
+          </div>
+        </Card>
+      )}
 
       {gateway && (
         <Card className="space-y-4 p-4">

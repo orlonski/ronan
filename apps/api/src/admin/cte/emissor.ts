@@ -1,13 +1,18 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { CteMontado } from "../../common/cte/montar";
+import { assinarCte, type Certificado } from "../../common/cte/assinatura";
+import { gerarXmlCte } from "../../common/cte/xml";
+import { ClienteSefaz } from "../../common/cte/sefaz";
 
 /**
  * Os três níveis de emissão são o MESMO código com um interruptor.
  *
  *   SIMULADOR  nível 1 — local, sem certificado, sem custo. Prova que o
  *              documento fecha e que tudo DEPOIS da emissão funciona.
- *   GATEWAY    níveis 2 e 3 — a mesma chamada; o que muda é a credencial e o
- *              `tpAmb`. Sandbox do provedor (2) e SEFAZ homologação/produção (3).
+ *   GATEWAY    nível 2 — um provedor assina e fala com a SEFAZ por nós.
+ *   SEFAZ      nível 3 sem intermediário — nós assinamos e falamos direto.
+ *              Sem mensalidade de ninguém, em troca de sermos nós a acompanhar
+ *              as notas técnicas.
  *
  * A interface existe pra que a troca não toque em nada do resto do sistema. Se
  * emitir por gateway exigisse um caminho diferente no serviço, todo o fluxo
@@ -44,7 +49,7 @@ export type RespostaCancelamento =
   | { situacao: "ERRO"; motivo: string; cru: unknown };
 
 export interface EmissorCte {
-  readonly nome: "SIMULADOR" | "GATEWAY";
+  readonly nome: "SIMULADOR" | "GATEWAY" | "SEFAZ";
   emitir(cte: CteMontado, ambiente: 1 | 2): Promise<RespostaEmissao>;
   cancelar(chave: string, justificativa: string, ambiente: 1 | 2): Promise<RespostaCancelamento>;
 }
@@ -262,5 +267,104 @@ export class GatewayCte implements EmissorCte {
     } catch (e) {
       return { situacao: "ERRO", motivo: (e as Error).message, cru: null };
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Nível 3 sem intermediário — direto na SEFAZ
+// ---------------------------------------------------------------------------
+
+/**
+ * Nós assinamos e nós falamos com a SEFAZ.
+ *
+ * Duas coisas que só se descobrem tentando, e que estão resolvidas no
+ * `sefaz.ts`: a cadeia do servidor é ICP-Brasil (raiz que nenhum sistema
+ * operacional traz) e o A1 é exigido no próprio handshake — sem ele a conexão
+ * cai antes de qualquer resposta.
+ *
+ * O CT-e 4.00 é síncrono: a autorização vem na resposta da mesma chamada, o que
+ * simplifica bastante em relação ao fluxo antigo de recibo e consulta.
+ */
+export class SefazDireto implements EmissorCte {
+  readonly nome = "SEFAZ" as const;
+
+  constructor(
+    private readonly cert: Certificado,
+    private readonly pfx: Buffer,
+    private readonly senha: string,
+    private readonly uf: string,
+  ) {}
+
+  private cliente() {
+    return new ClienteSefaz(this.cert, this.pfx, this.senha);
+  }
+
+  async emitir(cte: CteMontado, ambiente: 1 | 2): Promise<RespostaEmissao> {
+    let xmlAssinado: string;
+    try {
+      xmlAssinado = assinarCte(gerarXmlCte(cte), this.cert).xml;
+    } catch (e) {
+      // Falha de assinatura é problema NOSSO, não rejeição da SEFAZ: o
+      // documento nem saiu daqui.
+      return { situacao: "ERRO", motivo: `Não deu pra assinar: ${(e as Error).message}`, cru: null };
+    }
+
+    let r: Awaited<ReturnType<ClienteSefaz["enviarCte"]>>;
+    try {
+      r = await this.cliente().enviarCte(this.uf, ambiente, xmlAssinado);
+    } catch (e) {
+      // Rede, TLS, timeout: não é rejeição. Marcar como rejeitado faria alguém
+      // "corrigir" um documento que estava certo.
+      return { situacao: "ERRO", motivo: (e as Error).message, cru: null };
+    }
+
+    // 100 = autorizado. Qualquer outro código com motivo é rejeição avaliada.
+    if (r.cStat === "100") {
+      const prot = r.xml.match(/<nProt>(\d+)<\/nProt>/)?.[1] ?? "";
+      const dh = r.xml.match(/<dhRecbto>([^<]+)<\/dhRecbto>/)?.[1];
+      return {
+        situacao: "AUTORIZADO",
+        protocolo: prot,
+        autorizadoEm: dh ? new Date(dh) : new Date(),
+        codigo: r.cStat,
+        motivo: r.xMotivo ?? "Autorizado o uso do CT-e",
+        // Guardamos o XML ASSINADO: é ele que tem valor, e é o que precisa ser
+        // arquivado pelos cinco anos que a legislação pede.
+        xml: xmlAssinado,
+        cru: { xml: r.xml, httpStatus: r.httpStatus },
+      };
+    }
+
+    if (r.cStat) {
+      return {
+        situacao: "REJEITADO",
+        codigo: r.cStat,
+        motivo: r.xMotivo ?? "Rejeitado sem motivo informado",
+        cru: { xml: r.xml, httpStatus: r.httpStatus },
+      };
+    }
+
+    return {
+      situacao: "ERRO",
+      motivo: `A SEFAZ respondeu algo que não reconheço (HTTP ${r.httpStatus}).`,
+      cru: { xml: r.xml.slice(0, 2000) },
+    };
+  }
+
+  async cancelar(): Promise<RespostaCancelamento> {
+    // O cancelamento é um EVENTO (110111), com XML e assinatura próprios. Ele
+    // entra em seguida; declarar aqui que ainda não existe é melhor que uma
+    // implementação pela metade que parece funcionar.
+    return {
+      situacao: "ERRO",
+      motivo:
+        "O cancelamento direto na SEFAZ ainda não foi implementado — ele é um evento à parte, com XML próprio.",
+      cru: null,
+    };
+  }
+
+  /** "A SEFAZ está no ar, e o meu certificado serve?" */
+  async status(ambiente: 1 | 2) {
+    return this.cliente().statusDoServico(this.uf, ambiente);
   }
 }

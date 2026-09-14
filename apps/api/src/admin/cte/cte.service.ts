@@ -17,7 +17,8 @@ import {
 import { validarCte, type Validacao } from "../../common/cte/validar";
 import { gerarXmlCte } from "../../common/cte/xml";
 import { validarContraXsd, type ErroXsd } from "../../common/cte/xsd";
-import { GatewayCte, SimuladorCte, type EmissorCte } from "./emissor";
+import { GatewayCte, SefazDireto, SimuladorCte, type EmissorCte } from "./emissor";
+import { cifrar, decifrar, lerCertificado } from "../../common/cte/assinatura";
 import { MODELO_CTE } from "../../common/cte/chave";
 
 /**
@@ -342,11 +343,60 @@ export class CteService {
     return c.cteEmissor ?? "SIMULADOR";
   }
 
+  /**
+   * O certificado A1 da conta, aberto.
+   *
+   * A chave de decifra vem de env e nunca do banco: é o que faz um dump do
+   * Postgres não carregar o poder de assinar em nome de cada cliente.
+   */
+  private async certificadoDaConta() {
+    const chave = this.config.get<string>("CERTIFICADO_CHAVE");
+    if (!chave) {
+      throw new BadRequestException(
+        "Falta a variável CERTIFICADO_CHAVE no servidor. Sem ela o certificado não pode ser lido.",
+      );
+    }
+    const linha = await this.prisma.certificadoDigital.findUnique({
+      where: { contaId: contaIdAtual() },
+    });
+    if (!linha) {
+      throw new BadRequestException(
+        "Nenhum certificado digital cadastrado. Suba o A1 em Configurações → Emissão de CT-e.",
+      );
+    }
+    if (linha.validoAte.getTime() < Date.now()) {
+      // Certificado vencido não assina, e o erro da SEFAZ não diz isso com
+      // clareza. Barrar aqui economiza a viagem e o número da série.
+      throw new BadRequestException(
+        `O certificado venceu em ${linha.validoAte.toLocaleDateString("pt-BR")}. Suba o novo antes de emitir.`,
+      );
+    }
+    const pfx = decifrar(Buffer.from(linha.arquivo), chave);
+    const senha = decifrar(Buffer.from(linha.senha), chave).toString("utf8");
+    return { cert: lerCertificado(pfx, senha), pfx, senha, linha };
+  }
+
   private async emissorDaConta(): Promise<EmissorCte> {
     const c = await this.prisma.conta.findUniqueOrThrow({
       where: { id: contaIdAtual() },
-      select: { cteEmissor: true, cteGatewayUrl: true, cteGatewayToken: true },
+      select: {
+        cteEmissor: true,
+        cteGatewayUrl: true,
+        cteGatewayToken: true,
+        cteUfAutorizador: true,
+        uf: true,
+      },
     });
+
+    if (c.cteEmissor === "SEFAZ") {
+      const { cert, pfx, senha } = await this.certificadoDaConta();
+      const uf = c.cteUfAutorizador ?? c.uf;
+      if (!uf) {
+        throw new BadRequestException("Falta dizer por qual UF a empresa emite.");
+      }
+      return new SefazDireto(cert, pfx, senha, uf);
+    }
+
     if (c.cteEmissor === "GATEWAY") {
       if (!c.cteGatewayUrl || !c.cteGatewayToken) {
         throw new BadRequestException(
@@ -356,6 +406,97 @@ export class CteService {
       return new GatewayCte({ url: c.cteGatewayUrl, token: c.cteGatewayToken });
     }
     return new SimuladorCte();
+  }
+
+  /**
+   * Guarda o A1.
+   *
+   * Os metadados saem do PRÓPRIO arquivo — CNPJ, titular e validade. Digitar
+   * qualquer um deles seria a brecha pra cadastrar o certificado de uma empresa
+   * dizendo que é de outra.
+   */
+  async salvarCertificado(pfx: Buffer, senha: string, usuarioId: string) {
+    const chave = this.config.get<string>("CERTIFICADO_CHAVE");
+    if (!chave) {
+      throw new BadRequestException("Falta a variável CERTIFICADO_CHAVE no servidor.");
+    }
+    // Abre antes de guardar: arquivo que não abre não entra no banco.
+    const cert = lerCertificado(pfx, senha);
+    if (cert.validoAte.getTime() < Date.now()) {
+      throw new BadRequestException(
+        `Esse certificado venceu em ${cert.validoAte.toLocaleDateString("pt-BR")}.`,
+      );
+    }
+
+    const contaId = contaIdAtual();
+    const conta = await this.prisma.conta.findUniqueOrThrow({
+      where: { id: contaId },
+      select: { cnpj: true },
+    });
+    // O CNPJ do certificado tem que ser o da empresa. Sem esta conferência o
+    // sistema assinaria documento de uma transportadora com o A1 de outra.
+    if (conta.cnpj && cert.cnpj && soDigitos(conta.cnpj) !== cert.cnpj) {
+      throw new BadRequestException(
+        `Esse certificado é do CNPJ ${cert.cnpj}, e a empresa é ${soDigitos(conta.cnpj)}.`,
+      );
+    }
+
+    const dados = {
+      // `Uint8Array` e não `Buffer`: o tipo do Prisma para `Bytes` é o genérico,
+      // e um `Buffer` cru não casa com ele no TypeScript.
+      arquivo: new Uint8Array(cifrar(pfx, chave)),
+      senha: new Uint8Array(cifrar(Buffer.from(senha, "utf8"), chave)),
+      cnpj: cert.cnpj,
+      titular: cert.titular,
+      validoDe: cert.validoDe,
+      validoAte: cert.validoAte,
+      criadoPorId: usuarioId,
+    };
+    await this.prisma.certificadoDigital.upsert({
+      where: { contaId },
+      create: { contaId, ...dados },
+      update: dados,
+    });
+
+    this.log.log(`certificado de ${cert.titular} guardado (vence ${cert.validoAte.toISOString()})`);
+    return this.certificadoResumo();
+  }
+
+  /** O que a tela mostra. NUNCA o arquivo nem a senha. */
+  async certificadoResumo() {
+    const c = await this.prisma.certificadoDigital.findUnique({
+      where: { contaId: contaIdAtual() },
+      select: { cnpj: true, titular: true, validoDe: true, validoAte: true, criadoEm: true },
+    });
+    if (!c) return null;
+    const diasParaVencer = Math.floor((c.validoAte.getTime() - Date.now()) / 86_400_000);
+    return { ...c, diasParaVencer, vencido: diasParaVencer < 0 };
+  }
+
+  /**
+   * "A SEFAZ está no ar e o meu certificado serve?"
+   *
+   * A única chamada que não precisa de documento nenhum — e por isso a primeira
+   * que se faz: prova certificado, cadeia, credenciamento e rede de uma vez,
+   * sem arriscar um CT-e nem queimar um número da série.
+   */
+  async testarConexao() {
+    const emissor = await this.emissorDaConta();
+    if (!(emissor instanceof SefazDireto)) {
+      throw new BadRequestException(
+        "O teste de conexão vale pro emissor SEFAZ. Hoje a empresa está configurada de outro jeito.",
+      );
+    }
+    const c = await this.prisma.conta.findUniqueOrThrow({
+      where: { id: contaIdAtual() },
+      select: { cteAmbiente: true },
+    });
+    try {
+      const r = await emissor.status((c.cteAmbiente as 1 | 2) ?? 2);
+      return { ok: r.cStat === "107", codigo: r.cStat, motivo: r.xMotivo };
+    } catch (e) {
+      return { ok: false, codigo: null, motivo: (e as Error).message };
+    }
   }
 
   // -------------------------------------------------------------------------

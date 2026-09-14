@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -7,8 +8,11 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
@@ -20,7 +24,9 @@ import type { AuthAdminUser } from "../../auth/types";
 import { CteService } from "./cte.service";
 
 const ConfigInput = z.object({
-  cteEmissor: z.enum(["SIMULADOR", "GATEWAY"]).optional(),
+  cteEmissor: z.enum(["SIMULADOR", "GATEWAY", "SEFAZ"]).optional(),
+  /** UF do autorizador. Separada da UF do endereço. */
+  cteUfAutorizador: z.string().trim().length(2).toUpperCase().nullish(),
   cteAmbiente: z.union([z.literal(1), z.literal(2)]).optional(),
   cteSerie: z.number().int().min(0).max(999).optional(),
   cteNaturezaCfop: z.string().trim().regex(/^\d{3}$/, "Use os 3 últimos dígitos, ex.: 353").nullish(),
@@ -33,6 +39,10 @@ const ConfigInput = z.object({
   /** Vazio = não mexi. O servidor nunca devolve o token, então em branco não
    *  pode significar "apague" — significaria perder a credencial a cada save. */
   cteGatewayToken: z.string().trim().max(500).nullish(),
+});
+
+const CertificadoInput = z.object({
+  senha: z.string().min(1, "Informe a senha do certificado").max(200),
 });
 
 const CancelarInput = z.object({
@@ -90,6 +100,49 @@ export class CteController {
     @CurrentUser() user: AuthAdminUser,
   ) {
     return this.service.salvarConfiguracao(user.contaId, body as never);
+  }
+
+  /** O certificado que está guardado. Nunca o arquivo, nunca a senha. */
+  @RequerPermissao("cte.ver")
+  @Get("certificado")
+  certificado() {
+    return this.service.certificadoResumo();
+  }
+
+  /**
+   * Sobe o A1.
+   *
+   * Os metadados saem do PRÓPRIO arquivo — CNPJ, titular e validade. Digitar
+   * qualquer um seria a brecha pra cadastrar o certificado de uma empresa
+   * dizendo que é de outra.
+   */
+  @RequerPermissao("cte.emitir")
+  @HttpCode(200)
+  @Post("certificado")
+  // 512 KB: um A1 tem uns poucos KB, e o teto evita que um arquivo trocado por
+  // engano atravesse a rede inteira antes de ser recusado.
+  @UseInterceptors(FileInterceptor("arquivo", { limits: { fileSize: 512 * 1024 } }))
+  subirCertificado(
+    @UploadedFile() arquivo: Express.Multer.File | undefined,
+    @Body(new ZodValidationPipe(CertificadoInput)) body: z.infer<typeof CertificadoInput>,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    if (!arquivo) throw new BadRequestException("Envie o arquivo .pfx do certificado.");
+    return this.service.salvarCertificado(arquivo.buffer, body.senha, user.id);
+  }
+
+  /**
+   * "A SEFAZ está no ar e o meu certificado serve?"
+   *
+   * A única chamada que não precisa de documento nenhum, e por isso a primeira
+   * que se faz: prova certificado, cadeia, credenciamento e rede de uma vez,
+   * sem arriscar um CT-e nem queimar um número da série.
+   */
+  @RequerPermissao("cte.ver")
+  @HttpCode(200)
+  @Post("testar-conexao")
+  testarConexao() {
+    return this.service.testarConexao();
   }
 
   @RequerPermissao("cte.ver")

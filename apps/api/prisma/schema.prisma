@@ -482,6 +482,9 @@ model Conta {
   cteIcmsReducao      Decimal? @db.Decimal(5, 2)
   /// Só quando o tipo é "45": 40 isenta · 41 não tributada · 51 diferimento.
   cteIcmsCst          String?
+  /// UF do autorizador da SEFAZ. Separada da UF do endereço: transportadora
+  /// com filial pode emitir por outro estado. Hoje só o PR está implementado.
+  cteUfAutorizador    String?
   /// Base da API do gateway. Vazio = ainda não contratado.
   cteGatewayUrl       String?
   /// Credencial do gateway. NUNCA sai numa resposta de API.
@@ -541,6 +544,7 @@ model Conta {
   alertasOperacionais           AlertaOperacional[]
   documentosFiscais             DocumentoFiscal[]
   sequenciasFiscais             SequenciaFiscal[]
+  certificadoDigital            CertificadoDigital?
   locais                        Local[]
   locaisClientes                LocalCliente[]
   locaisEvidencias              LocalEvidencia[]
@@ -690,6 +694,7 @@ model User {
   multasCriadas          Multa[]               @relation("CriouMulta")
   alertasResolvidos      AlertaOperacional[]   @relation("ResolveuAlerta")
   documentosFiscais      DocumentoFiscal[]     @relation("EmitiuDocumentoFiscal")
+  certificadosSubidos    CertificadoDigital[]  @relation("SubiuCertificado")
   ocorrenciasEncerradas  EventoViagem[]        @relation("EncerrouOcorrencia")
   viagemValoresAlterados ViagemValor[]         @relation("AlterouViagemValor")
   tiposEventoCriados     TipoEventoViagem[]    @relation("CriouTipoEventoViagem")
@@ -3229,6 +3234,30 @@ model DocumentoFiscal {
  * tempo leriam o mesmo máximo e gerariam o mesmo número. O incremento aqui é
  * atômico no banco, que é a única forma de isso não acontecer.
  */
+/**
+ * O certificado A1 da transportadora.
+ * Cifrado, com a chave em env. Os metadados saem do PRÓPRIO arquivo — o CNPJ
+ * digitado seria a brecha pra assinar em nome de outra empresa.
+ */
+model CertificadoDigital {
+  contaId     String   @unique
+  conta       Conta    @relation(fields: [contaId], references: [id], onDelete: Cascade)
+  id          String   @id @default(uuid())
+  /// O .pfx cifrado: iv | tag | corpo.
+  arquivo     Bytes
+  /// A senha do .pfx, cifrada com a mesma chave.
+  senha       Bytes
+  cnpj        String?
+  titular     String
+  validoDe    DateTime
+  validoAte   DateTime
+  criadoEm    DateTime @default(now())
+  criadoPor   User?    @relation("SubiuCertificado", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId String?
+
+  @@map("certificados_digitais")
+}
+
 model SequenciaFiscal {
   contaId String @default("__SEM_CONTA__")
   conta   Conta  @relation(fields: [contaId], references: [id])
