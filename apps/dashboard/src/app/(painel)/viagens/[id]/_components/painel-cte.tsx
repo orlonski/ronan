@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { useConfirm } from "@/components/confirm-dialog";
 
 type Achado = { campo: string; mensagem: string };
 
@@ -47,6 +48,7 @@ export function PainelCte({ viagemId }: { viagemId: string }) {
   const token = useAuthToken();
   const qc = useQueryClient();
   const [emitindo, setEmitindo] = React.useState(false);
+  const { confirmar, ConfirmDialog } = useConfirm();
   const [cancelando, setCancelando] = React.useState(false);
   const [justificativa, setJustificativa] = React.useState("");
   const [abrirCancelar, setAbrirCancelar] = React.useState(false);
@@ -74,6 +76,22 @@ export function PainelCte({ viagemId }: { viagemId: string }) {
 
   async function emitir() {
     if (!token) return;
+    // Em produção o CT-e é documento fiscal válido e o número não volta — o
+    // próprio painel já diz isso num <span> ao lado do botão, mas texto ao lado
+    // de um botão verde não é barreira nenhuma. Em homologação e no simulador
+    // segue direto: ali errar não custa.
+    const producao = previa.data?.emissor !== "SIMULADOR" && previa.data?.ambiente === 1;
+    if (producao) {
+      const ok = await confirmar({
+        variant: "warning",
+        title: `Emitir o CT-e nº ${previa.data?.numeroPrevisto} na SEFAZ?`,
+        description:
+          "É documento fiscal de verdade. Se estiver errado, só dá pra cancelar dentro do prazo legal — e esse número não volta.",
+        confirmLabel: "Emitir na SEFAZ",
+        cancelLabel: "Revisar antes",
+      });
+      if (!ok) return;
+    }
     setEmitindo(true);
     try {
       const r = await fetchApi<{ documento: Documento; avisos: Achado[] }>(
@@ -116,6 +134,7 @@ export function PainelCte({ viagemId }: { viagemId: string }) {
 
   return (
     <Card className="space-y-4 p-4 sm:p-5">
+      <ConfirmDialog />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="flex items-center gap-2 text-base font-medium">
           <FileCheck2 className="h-4 w-4" />
@@ -236,7 +255,15 @@ export function PainelCte({ viagemId }: { viagemId: string }) {
       {!vivo && previa.data?.validacao.ok && (
         <div className="flex flex-wrap items-center gap-3">
           <Permitido chave="cte.emitir">
-            <Button variant="success" disabled={emitindo} onClick={() => void emitir()}>
+            <Button
+              variant={
+                previa.data.emissor !== "SIMULADOR" && previa.data.ambiente === 1
+                  ? "warning"
+                  : "success"
+              }
+              disabled={emitindo}
+              onClick={() => void emitir()}
+            >
               <FileCheck2 className="h-4 w-4" />
               {emitindo ? "Emitindo…" : `Emitir CT-e nº ${previa.data.numeroPrevisto}`}
             </Button>

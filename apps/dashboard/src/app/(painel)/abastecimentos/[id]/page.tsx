@@ -160,7 +160,6 @@ export default function AbastecimentoDetalhePage({
             id={x.id}
             nomeRecurso={`o abastecimento de ${fmtNum(x.litros, 3)}L`}
             size="sm"
-            variant="outline"
             label="Excluir"
             invalidateKeys={[["abastecimento-admin", x.id], "/admin/abastecimentos"]}
             onSuccess={() => router.push("/abastecimentos")}

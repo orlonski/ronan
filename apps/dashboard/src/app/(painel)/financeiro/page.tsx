@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowDownCircle, ArrowUpCircle, Plus, Wallet } from "lucide-react";
+import { AlertTriangle, ArrowDownCircle, ArrowUpCircle, Plus, Undo2, Wallet } from "lucide-react";
 import {
   AGING_LABEL_UI,
   FAIXAS_AGING,
@@ -21,8 +21,10 @@ import { LoadingCard } from "@/components/loading";
 import { StatCard } from "@/components/stat-card";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { ErroCard } from "@/components/erro-estado";
-import { lerNumero } from "@/lib/numero";
 import { AvisoNumero } from "@/components/aviso-numero";
+import { formatarBRL, lerNumero } from "@/lib/numero";
+import { useConfirm } from "@/components/confirm-dialog";
+import { toast } from "sonner";
 
 type Aging = {
   faixas: Record<FaixaAgingTipo, string>;
@@ -49,6 +51,7 @@ type Titulo = {
   motorista?: { nome: string } | null;
   fornecedor?: { nome: string } | null;
   veiculo?: { placa: string } | null;
+  baixas?: { id: string; valor: string; data: string; meio: string }[];
 };
 
 function brl(v: string | number): string {
@@ -228,6 +231,7 @@ function ListaTitulos({ tipo }: { tipo: "receber" | "pagar" }) {
   const [baixando, setBaixando] = React.useState<string | null>(null);
   const [valorBaixa, setValorBaixa] = React.useState("");
   const [erro, setErro] = React.useState<string | null>(null);
+  const { confirmar, ConfirmDialog } = useConfirm();
 
   const lista = useQuery({
     queryKey: ["titulos", tipo, soVencidos],
@@ -239,6 +243,28 @@ function ListaTitulos({ tipo }: { tipo: "receber" | "pagar" }) {
       ),
   });
 
+  async function estornar(baixaId: string, valor: string) {
+    if (!token) return;
+    const ok = await confirmar({
+      variant: "destructive",
+      title: "Estornar esta baixa?",
+      description: `Tira ${brl(valor)} do caixa e o título volta a ficar em aberto pelo valor que faltava.`,
+      confirmLabel: "Estornar baixa",
+      cancelLabel: "Voltar",
+    });
+    if (!ok) return;
+    try {
+      await fetchApi(`/admin/financeiro/baixas/${baixaId}`, { token, method: "DELETE" });
+      await queryClient.invalidateQueries({ queryKey: ["titulos"] });
+      await queryClient.invalidateQueries({ queryKey: ["financeiro-resumo"] });
+      toast.success("Baixa estornada.");
+    } catch (e) {
+      toast.error("Não consegui estornar", {
+        description: e instanceof Error ? e.message : undefined,
+      });
+    }
+  }
+
   async function darBaixa(id: string) {
     if (!token) return;
     const lido = lerNumero(valorBaixa);
@@ -246,6 +272,16 @@ function ListaTitulos({ tipo }: { tipo: "receber" | "pagar" }) {
     const valor = lido.valor ?? 0;
     if (!(valor > 0)) return setErro("Informe o valor recebido.");
     setErro(null);
+    // Dinheiro entrando no caixa merece uma pergunta: o valor vai no texto
+    // porque é justamente ele que saía errado quando digitado com ponto.
+    const ok = await confirmar({
+      variant: "warning",
+      title: tipo === "receber" ? `Confirmar recebimento de ${formatarBRL(valor)}?` : `Confirmar pagamento de ${formatarBRL(valor)}?`,
+      description: "Entra no caixa de hoje. Dá pra estornar depois, pelo botão na própria linha.",
+      confirmLabel: tipo === "receber" ? "Confirmar recebimento" : "Confirmar pagamento",
+      cancelLabel: "Voltar",
+    });
+    if (!ok) return;
     try {
       await fetchApi(`/admin/financeiro/${tipo}/${id}/baixa`, {
         token,
@@ -265,6 +301,7 @@ function ListaTitulos({ tipo }: { tipo: "receber" | "pagar" }) {
 
   return (
     <div className="space-y-3">
+      <ConfirmDialog />
       <div className="flex items-center gap-2">
         <Button
           variant={soVencidos ? "default" : "outline"}
@@ -353,7 +390,7 @@ function ListaTitulos({ tipo }: { tipo: "receber" | "pagar" }) {
                       />
                       <AvisoNumero valor={valorBaixa} dinheiro />
                     </div>
-                    <Button size="sm" variant="success" onClick={() => void darBaixa(t.id)}>
+                    <Button size="sm" variant="warning" onClick={() => void darBaixa(t.id)}>
                       {tipo === "receber" ? "Recebi" : "Paguei"}
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => setBaixando(null)}>
@@ -375,6 +412,19 @@ function ListaTitulos({ tipo }: { tipo: "receber" | "pagar" }) {
                       <Wallet className="h-3.5 w-3.5" />
                       {tipo === "receber" ? "Dar baixa no recebimento" : "Dar baixa no pagamento"}
                     </Button>
+                    {(t.baixas ?? []).map((b) => (
+                      <Button
+                        key={b.id}
+                        size="sm"
+                        variant="ghost"
+                        className="ml-2 text-muted-foreground"
+                        onClick={() => void estornar(b.id, b.valor)}
+                        title={`Baixa de ${brl(b.valor)} em ${dataBR(b.data)} por ${b.meio}`}
+                      >
+                        <Undo2 className="h-3.5 w-3.5" />
+                        Estornar {brl(b.valor)}
+                      </Button>
+                    ))}
                   </div>
                 )}
               </Permitido>

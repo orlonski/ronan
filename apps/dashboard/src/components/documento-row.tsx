@@ -24,6 +24,8 @@ import {
   statusDocumento,
   type DocumentoStatus,
 } from "@/lib/documento-status";
+import { toast } from "sonner";
+import { useConfirm } from "@/components/confirm-dialog";
 
 type Props = {
   motoristaId: string;
@@ -32,6 +34,7 @@ type Props = {
 };
 
 export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
+  const { confirmar, ConfirmDialog } = useConfirm();
   // Anexar/remover documento do motorista (CNH, CRLV) segue
   // `motoristas.documentos` — é PII, não é leitura.
   const { temPermissao } = usePermissoes();
@@ -63,7 +66,9 @@ export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
     try {
       await upload.mutateAsync({ tipo, arquivo: file, validade: doc?.validade ?? null });
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Falha no upload");
+      toast.error("Não consegui enviar o arquivo", {
+        description: err instanceof Error ? err.message : "Confira o arquivo e tente de novo.",
+      });
     } finally {
       setBusy(false);
     }
@@ -76,7 +81,9 @@ export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
     try {
       await atualizarValidade.mutateAsync({ tipo, validade: validadeLocal || null });
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Falha ao atualizar validade");
+      toast.error("Não consegui salvar a validade", {
+        description: err instanceof Error ? err.message : "Tente de novo em alguns instantes.",
+      });
     }
   }
 
@@ -85,22 +92,34 @@ export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
     try {
       await baixarDocumento(motoristaId, tipo, token, doc.nomeArquivo);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Falha ao baixar");
+      toast.error("Não consegui baixar o arquivo", {
+        description: err instanceof Error ? err.message : "Tente de novo em alguns instantes.",
+      });
     }
   }
 
   async function onRemover() {
     if (!doc) return;
-    if (!confirm(`Remover ${ROTULO_DOCUMENTO_MOTORISTA[tipo]}?`)) return;
+    const ok = await confirmar({
+      variant: "destructive",
+      title: `Remover ${ROTULO_DOCUMENTO_MOTORISTA[tipo]}?`,
+      description: "O arquivo sai do cadastro do motorista. Dá pra enviar de novo depois.",
+      confirmLabel: "Remover documento",
+      cancelLabel: "Voltar",
+    });
+    if (!ok) return;
     try {
       await remover.mutateAsync(tipo);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Falha ao remover");
+      toast.error("Não consegui remover o documento", {
+        description: err instanceof Error ? err.message : "Tente de novo em alguns instantes.",
+      });
     }
   }
 
   return (
     <div className="rounded-md border bg-background p-3">
+      <ConfirmDialog />
       <div className="flex items-start gap-3">
         <StatusIcon status={status} />
         <div className="min-w-0 flex-1">

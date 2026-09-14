@@ -11,6 +11,7 @@ import { usePermissoes } from "@/lib/permissoes";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { StatusToggle } from "@/components/status-toggle";
+import { useConfirm } from "@/components/confirm-dialog";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 const PATH_MINHA_EMPRESA = "/admin/minha-empresa";
@@ -28,6 +29,7 @@ export default function MinhaEmpresaPage() {
 }
 
 function Conteudo() {
+  const { confirmar, ConfirmDialog } = useConfirm();
   const { conta } = usePermissoes();
   const token = useAuthToken();
   const queryClient = useQueryClient();
@@ -60,7 +62,14 @@ function Conteudo() {
   }
 
   async function trocarCodigo() {
-    if (!confirm("Gerar um código novo? O atual para de funcionar imediatamente.")) return;
+    const ok = await confirmar({
+      variant: "destructive",
+      title: "Gerar um código de convite novo?",
+      description: "O código atual para de funcionar na hora. Quem ainda não entrou com ele vai precisar do novo.",
+      confirmLabel: "Gerar código novo",
+      cancelLabel: "Manter o atual",
+    });
+    if (!ok) return;
     setEnviando(true);
     try {
       await fetchApi("/admin/minha-empresa/codigo-convite", { method: "POST", token });
@@ -88,6 +97,7 @@ function Conteudo() {
 
   return (
     <div className="space-y-4 p-4 md:p-6">
+      <ConfirmDialog />
       <div>
         <h1 className="flex items-center gap-2 text-xl font-semibold">
           <Building2 className="h-5 w-5" />

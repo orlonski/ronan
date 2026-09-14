@@ -243,6 +243,7 @@ export function MotoristaForm({ initial }: Props) {
    * mesma ação, e o formulário de sempre já a resolve.
    */
   const [usaOApp, setUsaOApp] = useState(false);
+  const [erroValidacao, setErroValidacao] = useState<string | null>(null);
   const cpfDigitado = cpfDigits(form.cpf);
   useEffect(() => {
     if (initial || cpfDigitado.length !== 11 || !token) {
@@ -298,36 +299,43 @@ export function MotoristaForm({ initial }: Props) {
     setForm((f) => ({ ...f, placaDefault: placa.toUpperCase() }));
   }
 
+  /**
+   * Erro de validação era `alert()` do navegador: bloqueia a thread, não fica no
+   * campo, não move o foco e some ao fechar — o usuário voltava pro formulário
+   * sem saber qual dos vinte campos estava errado.
+   */
+  function reprovar(mensagem: string, idCampo?: string) {
+    setErroValidacao(mensagem);
+    if (idCampo) document.getElementById(idCampo)?.focus();
+    else document.getElementById("mot-erro")?.scrollIntoView({ block: "center" });
+  }
+
   async function onSubmit(ev: React.FormEvent) {
     ev.preventDefault();
+    setErroValidacao(null);
     const cpfDigitos = cpfDigits(form.cpf);
     if (!isCpfValid(cpfDigitos)) {
-      alert("CPF inválido. Confira os dígitos.");
-      return;
+      return reprovar("CPF inválido. Confira os dígitos.", "mot-cpf");
     }
     const telDigitos = telefoneDigits(form.telefone);
     if (telDigitos && !isTelefoneValid(telDigitos)) {
-      alert("Telefone deve ter 10 ou 11 dígitos (com DDD).");
-      return;
+      return reprovar("Telefone precisa ter DDD + número (10 ou 11 dígitos).", "mot-telefone");
     }
     const emailTrim = form.email.trim();
     if (emailTrim && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
-      alert("Email inválido.");
-      return;
+      return reprovar("E-mail inválido. Confira se tem @ e o domínio.", "mot-email");
     }
     const placasLimpas = form.placas
       .map((p) => ({ placa: p.placa.trim().toUpperCase(), modelo: p.modelo.trim() }))
       .filter((p) => p.placa !== "");
     for (const p of placasLimpas) {
       if (!placaRegex.test(p.placa)) {
-        alert(`Placa "${p.placa}" inválida. Use ABC1D23 (Mercosul) ou ABC1234 (antigo).`);
-        return;
+        return reprovar(`Placa "${p.placa}" inválida. Use ABC1D23 (Mercosul) ou ABC1234 (antigo).`);
       }
     }
     const placasSet = new Set(placasLimpas.map((p) => p.placa));
     if (placasSet.size !== placasLimpas.length) {
-      alert("Há placas repetidas. Remova duplicadas.");
-      return;
+      return reprovar("Tem placa repetida na lista. Remova a duplicada.");
     }
     let placaDefault = form.placaDefault;
     if (placaDefault && !placasSet.has(placaDefault)) placaDefault = null;
@@ -400,11 +408,21 @@ export function MotoristaForm({ initial }: Props) {
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
+      {erroValidacao && (
+        <p
+          id="mot-erro"
+          role="alert"
+          className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+        >
+          {erroValidacao}
+        </p>
+      )}
       <Card className="space-y-4 p-6">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div className="space-y-2 md:col-span-2">
-            <Label>Nome</Label>
+            <Label htmlFor="mot-nome">Nome</Label>
             <Input
+              id="mot-nome"
               required
               autoFocus
               value={form.nome}
@@ -412,8 +430,9 @@ export function MotoristaForm({ initial }: Props) {
             />
           </div>
           <div className="space-y-2">
-            <Label>CPF (login)</Label>
+            <Label htmlFor="mot-cpf">CPF (login)</Label>
             <Input
+              id="mot-cpf"
               required
               inputMode="numeric"
               placeholder="000.000.000-00"
@@ -459,8 +478,9 @@ export function MotoristaForm({ initial }: Props) {
             </div>
           )}
           <div className="space-y-2">
-            <Label>Telefone</Label>
+            <Label htmlFor="mot-telefone">Telefone</Label>
             <Input
+              id="mot-telefone"
               inputMode="tel"
               placeholder="(00) 00000-0000"
               value={form.telefone}
@@ -468,8 +488,9 @@ export function MotoristaForm({ initial }: Props) {
             />
           </div>
           <div className="space-y-2">
-            <Label>Email</Label>
+            <Label htmlFor="mot-email">Email</Label>
             <Input
+              id="mot-email"
               type="email"
               placeholder="motorista@email.com"
               value={form.email}

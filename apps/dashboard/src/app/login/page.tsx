@@ -16,6 +16,33 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MovatruckLogo } from "@/components/movatruck-logo";
 
+/**
+ * O next-auth devolve um código quando o login falha. `res.error` era impresso
+ * CRU na tela — "Configuration", "AccessDenied", "fetch failed" — na primeira
+ * tela que um cliente vê. Códigos conhecidos viram frase; o resto vira uma
+ * mensagem honesta em vez de vocabulário de biblioteca.
+ *
+ * Motivo vindo do nosso backend (empresa suspensa, teste terminado) passa
+ * inteiro: esse texto já foi escrito pra ser lido.
+ */
+const ERROS_NEXTAUTH = new Set([
+  "CredentialsSignin",
+  "Configuration",
+  "AccessDenied",
+  "Verification",
+  "Default",
+]);
+
+function mensagemDeLogin(erro: string): string {
+  if (erro === "CredentialsSignin") {
+    return "E-mail ou senha não conferem. Confira e tente de novo.";
+  }
+  if (ERROS_NEXTAUTH.has(erro) || /^[A-Z][A-Za-z]*$/.test(erro) || erro.includes("fetch")) {
+    return "Não consegui entrar agora. Tente de novo em alguns minutos.";
+  }
+  return erro;
+}
+
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
@@ -23,6 +50,7 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [mostrarAjudaSenha, setMostrarAjudaSenha] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
@@ -35,7 +63,7 @@ function LoginForm() {
       // O backend manda o motivo real quando existe (empresa suspensa, teste
       // terminado). "CredentialsSignin" é o genérico do next-auth pra senha
       // errada — só nesse caso a mensagem é nossa.
-      setError(res.error === "CredentialsSignin" ? "Credenciais inválidas" : res.error);
+      setError(mensagemDeLogin(res.error));
       return;
     }
     router.push(callbackUrl as never);
@@ -62,13 +90,19 @@ function LoginForm() {
           <button
             type="button"
             className="text-xs text-muted-foreground hover:text-foreground hover:underline"
-            onClick={() =>
-              alert("Entre em contato com o administrador pra recuperar sua senha.")
-            }
+            aria-expanded={mostrarAjudaSenha}
+            onClick={() => setMostrarAjudaSenha((v) => !v)}
           >
             Esqueci minha senha
           </button>
         </div>
+        {mostrarAjudaSenha && (
+          <p className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            Quem administra o painel da sua empresa gera uma senha nova pra você em{" "}
+            <strong className="text-foreground">Usuários</strong>. Se você é quem administra,
+            fale com a Movatruck.
+          </p>
+        )}
         <Input
           id="senha"
           type="password"
@@ -80,7 +114,10 @@ function LoginForm() {
         />
       </div>
       {error && (
-        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p
+          role="alert"
+          className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        >
           {error}
         </p>
       )}

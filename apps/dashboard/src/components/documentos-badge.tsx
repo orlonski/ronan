@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useAuthToken } from "@/lib/client-api";
 import { baixarZipDocumentos } from "@/lib/motorista-documentos-api";
 import { formatValidadeBR, statusDocumento, type DocumentoStatus } from "@/lib/documento-status";
+import { toast } from "sonner";
 
 export type DocumentoResumo = {
   tipo: TipoDocumentoMotorista;
@@ -55,7 +56,9 @@ export function DocumentosBadge({ motoristaId, motoristaNome, documentos }: Prop
     try {
       await baixarZipDocumentos(motoristaId, token, `documentos-${motoristaNome}.zip`);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Falha ao baixar zip");
+      toast.error("Não consegui baixar os documentos", {
+        description: err instanceof Error ? err.message : "Tente de novo em alguns instantes.",
+      });
     } finally {
       setBaixando(false);
     }

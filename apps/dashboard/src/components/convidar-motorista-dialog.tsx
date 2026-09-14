@@ -194,7 +194,7 @@ export function ConvidarMotoristaDialog() {
               Cancelar
             </Button>
             <Button
-              className="bg-green-600 text-white hover:bg-green-700"
+              variant="success"
               disabled={
                 !resultado?.encontrado ||
                 convidar.isPending ||

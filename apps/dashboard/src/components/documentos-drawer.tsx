@@ -22,6 +22,7 @@ import {
   baixarZipDocumentos,
   useDocumentosMotorista,
 } from "@/lib/motorista-documentos-api";
+import { toast } from "sonner";
 
 type Props = {
   open: boolean;
@@ -52,7 +53,9 @@ export function DocumentosDrawer({ open, onClose, motoristaId, motoristaNome }: 
     try {
       await baixarZipDocumentos(motoristaId, token, `documentos-${motoristaNome}.zip`);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Falha ao baixar zip");
+      toast.error("Não consegui baixar os documentos", {
+        description: err instanceof Error ? err.message : "Tente de novo em alguns instantes.",
+      });
     } finally {
       setBaixandoZip(false);
     }

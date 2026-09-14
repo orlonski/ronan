@@ -253,6 +253,13 @@ export class FinanceiroService {
       include: {
         empresa: { select: { id: true, nome: true } },
         fatura: { select: { id: true, numero: true } },
+        // Sem isto a tela não tinha o id da baixa, e o estorno — que existe na
+        // API desde sempre — não tinha como virar botão. Baixa errada parecia
+        // permanente pra quem opera.
+        baixas: {
+          select: { id: true, valor: true, data: true, meio: true },
+          orderBy: { data: "desc" },
+        },
       },
     });
   }
@@ -276,6 +283,10 @@ export class FinanceiroService {
         transportadora: { select: { id: true, nome: true } },
         fornecedor: { select: { id: true, nome: true, tipo: true } },
         veiculo: { select: { id: true, placa: true } },
+        baixas: {
+          select: { id: true, valor: true, data: true, meio: true },
+          orderBy: { data: "desc" },
+        },
       },
     });
   }

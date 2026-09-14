@@ -13,6 +13,7 @@ import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { LoadingCard } from "@/components/loading";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { useConfirm } from "@/components/confirm-dialog";
 
 type Planejada = {
   id: string;
@@ -365,16 +366,27 @@ function LinhaMotorista({
 
 function CardPlanejada({ p, onMudou }: { p: Planejada; onMudou: () => void }) {
   const token = useAuthToken();
+  const { confirmar, ConfirmDialog } = useConfirm();
 
   async function remover() {
     if (!token) return;
-    if (!confirm(p.publicadoEm ? "Cancelar essa viagem programada?" : "Tirar do quadro?")) return;
+    const ok = await confirmar({
+      variant: "destructive",
+      title: p.publicadoEm ? "Cancelar essa viagem programada?" : "Tirar essa viagem do quadro?",
+      description: p.publicadoEm
+        ? "Ela já foi publicada, então o motorista já viu no app. Ele deixa de vê-la."
+        : "Ainda não foi publicada, então ninguém foi avisado.",
+      confirmLabel: p.publicadoEm ? "Cancelar viagem" : "Tirar do quadro",
+      cancelLabel: "Voltar",
+    });
+    if (!ok) return;
     await fetchApi(`/admin/programacao/${p.id}`, { token, method: "DELETE" });
     onMudou();
   }
 
   return (
     <div className="flex items-start justify-between gap-3 rounded-md border px-3 py-2">
+      <ConfirmDialog />
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium">

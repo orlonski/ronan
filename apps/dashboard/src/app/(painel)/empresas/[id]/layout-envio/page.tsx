@@ -24,6 +24,7 @@ import {
   useSalvarLayout,
 } from "@/lib/fechamentos-api";
 import { useQuery } from "@tanstack/react-query";
+import { useConfirm } from "@/components/confirm-dialog";
 
 const CAMPOS_DISPONIVEIS: Array<{ campo: string; defaultHeader: string; formato?: string }> = [
   { campo: "data", defaultHeader: "Data" },
@@ -48,6 +49,7 @@ export default function LayoutEnvioPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const { confirmar, ConfirmDialog } = useConfirm();
   const { id: empresaId } = use(params);
   const token = useAuthToken();
   const empresa = useQuery({
@@ -63,6 +65,7 @@ export default function LayoutEnvioPage({
 
   return (
     <div className="space-y-6">
+    <ConfirmDialog />
       <header className="flex items-center gap-3">
         <Link href={`/empresas`}>
           <Button variant="ghost" size="icon">
@@ -118,10 +121,18 @@ export default function LayoutEnvioPage({
                     Editar
                   </Button>
                   <Button
-                    variant="ghost"
+                    variant="destructive"
                     size="sm"
-                    onClick={() => {
-                      if (confirm(`Remover layout "${l.nome}"?`)) remover.mutate(l.id);
+                    aria-label={`Remover o layout ${l.nome}`}
+                    onClick={async () => {
+                      const ok = await confirmar({
+                        variant: "destructive",
+                        title: `Remover o layout "${l.nome}"?`,
+                        description: "Os envios já gerados com ele continuam como estão.",
+                        confirmLabel: "Remover layout",
+                        cancelLabel: "Voltar",
+                      });
+                      if (ok) remover.mutate(l.id);
                     }}
                   >
                     <Trash2 className="h-4 w-4" />

@@ -54,6 +54,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { useConfirm } from "@/components/confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -658,7 +659,6 @@ export default function ViagemDetalhePage({
             id={v.id}
             nomeRecurso={v.ticket ? `a viagem do ticket ${v.ticket}` : "esta viagem"}
             size="sm"
-            variant="outline"
             label="Excluir"
             invalidateKeys={[["viagem-admin", v.id], "/admin/viagens"]}
             onSuccess={() => router.push("/viagens")}
@@ -1775,6 +1775,7 @@ function FotosViagem({
   viagemId: string;
   fotos: { id: string; storageKey: string; rotacao: number }[];
 }) {
+  const { confirmar, ConfirmDialog } = useConfirm();
   const token = useAuthToken();
   const qc = useQueryClient();
   const [zoom, setZoom] = useState<{ url: string; rotacao: number } | null>(null);
@@ -1840,6 +1841,7 @@ function FotosViagem({
 
   return (
     <>
+    <ConfirmDialog />
       {/* 1 coluna em telas md+ (a Card já fica numa coluna do grid externo,
           então 1-col aqui maximiza tamanho da foto pra conferência). */}
       <div className="grid grid-cols-1 gap-3">
@@ -1858,10 +1860,15 @@ function FotosViagem({
               })
             }
             onRecortar={(url) => setRecortarFoto({ url })}
-            onRemover={() => {
-              if (confirm("Remover esta foto? Não pode ser desfeito.")) {
-                excluirFoto.mutate(f.id);
-              }
+            onRemover={async () => {
+              const ok = await confirmar({
+                variant: "destructive",
+                title: "Remover esta foto?",
+                description: "A foto sai da viagem e não dá pra recuperar.",
+                confirmLabel: "Remover foto",
+                cancelLabel: "Voltar",
+              });
+              if (ok) excluirFoto.mutate(f.id);
             }}
           />
         ))}

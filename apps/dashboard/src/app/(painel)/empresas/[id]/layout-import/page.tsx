@@ -32,6 +32,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { useConfirm } from "@/components/confirm-dialog";
 
 // Slug é dinâmico — vem da tabela CampoLayout via API. Aceita qualquer string.
 type CampoLayout = string;
@@ -160,6 +161,7 @@ export default function LayoutImportPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const { confirmar, ConfirmDialog } = useConfirm();
   const { id: empresaId } = use(params);
   const token = useAuthToken();
   const qc = useQueryClient();
@@ -386,6 +388,7 @@ export default function LayoutImportPage({
   if (empresa.data?.papel === "RECEBE_PLANILHA") {
     return (
       <div className="space-y-4">
+      <ConfirmDialog />
         <Link href="/empresas" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline">
           <ArrowLeft className="h-4 w-4" /> Empresas
         </Link>
@@ -530,10 +533,16 @@ export default function LayoutImportPage({
               <Button
                 variant="destructive"
                 size="sm"
-                onClick={() => {
-                  if (confirm("Apagar layout atual? Próxima planilha vai re-inferir do zero.")) {
-                    limpar.mutate();
-                  }
+                onClick={async () => {
+                  const ok = await confirmar({
+                    variant: "destructive",
+                    title: "Apagar essa configuração de colunas?",
+                    description:
+                      "Na próxima planilha o sistema tenta adivinhar as colunas de novo, do zero.",
+                    confirmLabel: "Apagar e recomeçar",
+                    cancelLabel: "Manter",
+                  });
+                  if (ok) limpar.mutate();
                 }}
               >
                 <Trash2 className="h-4 w-4" /> Apagar e recomeçar

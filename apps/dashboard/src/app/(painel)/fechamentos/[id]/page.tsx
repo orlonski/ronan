@@ -116,7 +116,7 @@ export default function FechamentoDetalhePage({
               disabled={reprocessar.isPending}
               title="Reprocessa só linhas de viagem"
             >
-              🚛 Viagens
+              <RefreshCw className="h-4 w-4" /> Reprocessar viagens
             </Button>
           </Permitido>
           <Permitido chave="fechamentos.conferir">
@@ -127,7 +127,7 @@ export default function FechamentoDetalhePage({
               disabled={reprocessar.isPending}
               title="Reprocessa só linhas de pedágio"
             >
-              🛣️ Pedágios
+              <RefreshCw className="h-4 w-4" /> Reprocessar pedágios
             </Button>
           </Permitido>
           <Permitido chave="fechamentos.conferir">
@@ -138,25 +138,37 @@ export default function FechamentoDetalhePage({
               disabled={reprocessar.isPending}
               title="Reprocessa só linhas de combustível"
             >
-              ⛽ Combustível
+              <RefreshCw className="h-4 w-4" /> Reprocessar combustível
             </Button>
           </Permitido>
           <Permitido chave="fechamentos.exportar">
-            <Button
-              size="sm"
-              onClick={() => exportar.mutate({})}
-              disabled={exportar.isPending || pendentes > 0}
-            >
-              <Download className="h-4 w-4" />
-              {exportar.isPending ? "Gerando..." : "Exportar planilha"}
-            </Button>
+            <div className="flex flex-col gap-1">
+              <Button
+                size="sm"
+                onClick={() => exportar.mutate({})}
+                disabled={exportar.isPending || pendentes > 0}
+                title={
+                  pendentes > 0
+                    ? `Falta conferir ${pendentes} ${pendentes === 1 ? "divergência" : "divergências"}`
+                    : "Gera a planilha e marca o fechamento como exportado"
+                }
+              >
+                <Download className="h-4 w-4" />
+                {exportar.isPending ? "Gerando..." : "Exportar planilha"}
+              </Button>
+              {/* Botão cinza sem explicação faz o operador achar que quebrou. */}
+              {pendentes > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  Falta conferir {pendentes} {pendentes === 1 ? "divergência" : "divergências"}
+                </span>
+              )}
+            </div>
           </Permitido>
           <ExcluirButton perm="fechamentos.excluir"
             path="/admin/fechamentos"
             id={f.id}
             nomeRecurso={`o fechamento de ${f.empresa.nome} (${fmtBR(f.periodoInicio)} → ${fmtBR(f.periodoFim)})`}
             size="sm"
-            variant="outline"
             label="Excluir"
             invalidateKeys={[["fechamento", f.id], "/admin/fechamentos"]}
             onSuccess={() => router.push("/fechamentos")}
@@ -180,14 +192,13 @@ export default function FechamentoDetalhePage({
               </p>
               <div className="flex flex-wrap gap-2 pt-1">
                 <Link href={`/empresas/${f.empresa.id}/layout-import`}>
-                  <Button size="sm" variant="outline" className="border-amber-400">
+                  <Button size="sm" variant="warning">
                     Atualizar layout de importação
                   </Button>
                 </Link>
                 <Button
                   size="sm"
-                  variant="outline"
-                  className="border-amber-400"
+                  variant="warning"
                   onClick={() => reprocessar.mutate(undefined)}
                   disabled={reprocessar.isPending}
                 >

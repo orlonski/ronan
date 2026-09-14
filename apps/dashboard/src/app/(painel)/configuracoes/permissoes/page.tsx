@@ -13,6 +13,7 @@ import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { RequerTela } from "@/components/requer-tela";
 import { PublicarModelo, UsarModelo } from "./_components/modelos";
 import { cn } from "@/lib/utils";
+import { useConfirm } from "@/components/confirm-dialog";
 
 type PermissaoRow = {
   chave: string;
@@ -60,6 +61,7 @@ export default function PermissoesPage() {
 }
 
 function PermissoesInner() {
+  const { confirmar, ConfirmDialog } = useConfirm();
   const token = useAuthToken();
   const qc = useQueryClient();
 
@@ -172,6 +174,7 @@ function PermissoesInner() {
 
   return (
     <div className="space-y-6">
+    <ConfirmDialog />
       <div>
         <h1 className="text-2xl font-bold">Papéis e permissões</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -336,11 +339,18 @@ function PermissoesInner() {
             <div>
               {!ehNovo && selecionado && !selecionado.sistema && (
                 <Button
-                  variant="outline"
-                  className="text-destructive"
+                  variant="destructive"
                   disabled={excluir.isPending}
-                  onClick={() => {
-                    if (confirm(`Excluir o papel "${selecionado.nome}"?`)) excluir.mutate();
+                  onClick={async () => {
+                    const ok = await confirmar({
+                      variant: "destructive",
+                      title: `Excluir o papel "${selecionado.nome}"?`,
+                      description:
+                        "Quem estiver com esse papel fica sem nenhuma permissão até você dar outro.",
+                      confirmLabel: "Excluir papel",
+                      cancelLabel: "Voltar",
+                    });
+                    if (ok) excluir.mutate();
                   }}
                 >
                   <Trash2 className="h-4 w-4" /> Excluir

@@ -13,7 +13,15 @@ import {
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/loading";
 
-type Variant = "destructive" | "default";
+/**
+ * Semáforo do `docs/padrao-botoes.md`:
+ * - `destructive` (vermelho): apaga algo.
+ * - `warning` (âmbar): não apaga nada, mas não tem volta — marcar acerto como
+ *   pago, dar baixa, emitir documento fiscal. Era isso que faltava, e por falta
+ *   dele essas ações saíam em verde, como se fossem rotina reversível.
+ * - `default` (azul): rotina.
+ */
+type Variant = "destructive" | "warning" | "default";
 
 type ConfirmOptions = {
   title: string;
@@ -68,14 +76,27 @@ export function useConfirm() {
   const ConfirmDialog = useCallback(() => {
     if (!estado) return null;
     const variant = estado.variant ?? "default";
+    const temAviso = variant === "destructive" || variant === "warning";
     return (
       <Dialog open onOpenChange={(open) => !open && fechar(false)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <div className="flex items-start gap-3">
-              {variant === "destructive" && (
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-destructive/10">
-                  <AlertTriangle className="h-5 w-5 text-destructive" />
+              {temAviso && (
+                <div
+                  className={
+                    variant === "destructive"
+                      ? "flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-destructive/10"
+                      : "flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500/15"
+                  }
+                >
+                  <AlertTriangle
+                    className={
+                      variant === "destructive"
+                        ? "h-5 w-5 text-destructive"
+                        : "h-5 w-5 text-amber-600"
+                    }
+                  />
                 </div>
               )}
               <div className="flex-1">
@@ -99,7 +120,7 @@ export function useConfirm() {
             </Button>
             <Button
               type="button"
-              variant={variant === "destructive" ? "destructive" : "default"}
+              variant={variant}
               disabled={estado.pending}
               onClick={() => {
                 setEstado((s) => (s ? { ...s, pending: true } : s));

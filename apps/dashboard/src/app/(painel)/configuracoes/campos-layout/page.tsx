@@ -16,6 +16,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { toast } from "sonner";
+import { useConfirm } from "@/components/confirm-dialog";
 
 type Campo = {
   id: string;
@@ -31,6 +33,7 @@ type Campo = {
 const PATH = "/admin/campos-layout";
 
 export default function CamposLayoutPage() {
+  const { confirmar, ConfirmDialog } = useConfirm();
   const token = useAuthToken();
   const qc = useQueryClient();
 
@@ -56,6 +59,7 @@ export default function CamposLayoutPage() {
   });
   return (
     <div className="space-y-6">
+    <ConfirmDialog />
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
@@ -130,14 +134,25 @@ export default function CamposLayoutPage() {
                   </Permitido>
                   {!c.sistema && (
                     <Button
-                      variant="ghost"
+                      variant="destructive"
                       size="icon"
+                      aria-label={`Excluir o campo ${c.label}`}
                       onClick={async () => {
-                        if (!confirm(`Deletar campo "${c.label}"?`)) return;
+                        const ok = await confirmar({
+                          variant: "destructive",
+                          title: `Excluir o campo "${c.label}"?`,
+                          description:
+                            "As planilhas que usavam essa coluna param de reconhecê-la na próxima leitura.",
+                          confirmLabel: "Excluir campo",
+                          cancelLabel: "Voltar",
+                        });
+                        if (!ok) return;
                         try {
                           await remove.mutateAsync(c.id);
                         } catch (err) {
-                          alert((err as Error).message);
+                          toast.error("Não consegui excluir o campo", {
+                            description: (err as Error).message || "Tente de novo em alguns instantes.",
+                          });
                         }
                       }}
                     >

@@ -14,6 +14,7 @@ import {
   baixarDocumento,
   carregarPreviewDocumento,
 } from "@/lib/motorista-documentos-api";
+import { toast } from "sonner";
 
 type Props = {
   open: boolean;
@@ -64,7 +65,9 @@ export function PreviewDocumentoModal({ open, onClose, motoristaId, tipo, doc }:
     try {
       await baixarDocumento(motoristaId, tipo, token, doc.nomeArquivo);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Falha ao baixar");
+      toast.error("Não consegui baixar o arquivo", {
+        description: err instanceof Error ? err.message : "Tente de novo em alguns instantes.",
+      });
     }
   }
 

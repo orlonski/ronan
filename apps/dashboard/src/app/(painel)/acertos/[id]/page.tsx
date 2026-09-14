@@ -16,6 +16,7 @@ import { LoadingCard } from "@/components/loading";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { lerNumero } from "@/lib/numero";
 import { AvisoNumero } from "@/components/aviso-numero";
+import { useConfirm } from "@/components/confirm-dialog";
 
 type Item = {
   id: string;
@@ -71,6 +72,7 @@ function Conteudo({ id }: { id: string }) {
   const queryClient = useQueryClient();
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  const { confirmar, ConfirmDialog } = useConfirm();
 
   const { data: a, isLoading } = useQuery({
     queryKey: ["acerto", id],
@@ -96,6 +98,36 @@ function Conteudo({ id }: { id: string }) {
     }
   }
 
+  /**
+   * As duas transições mais irreversíveis do produto saíam em UM clique, em
+   * verde, sem diálogo: o backend é explícito ("Acerto já pago não reabre.
+   * Lance um ajuste no próximo acerto."), e o painel não dizia nada disso.
+   * Verde é "confirmar/certo"; isto aqui é cuidado — daí o âmbar.
+   */
+  async function fecharAcerto() {
+    if (!a) return;
+    const ok = await confirmar({
+      variant: "warning",
+      title: `Fechar o acerto de ${a.motorista.nome}?`,
+      description: `Trava o acerto em ${brl(a.liquido)} e já cria a conta a pagar com vencimento hoje. Depois de fechado, mudança só reabrindo.`,
+      confirmLabel: "Fechar acerto",
+      cancelLabel: "Voltar",
+    });
+    if (ok) await acao("fechar");
+  }
+
+  async function marcarPago() {
+    if (!a) return;
+    const ok = await confirmar({
+      variant: "warning",
+      title: `Marcar como pago o acerto de ${a.motorista.nome}?`,
+      description: `Encerra o acerto em ${brl(a.liquido)}. Acerto pago NÃO reabre — se precisar corrigir, só lançando um ajuste no próximo acerto.`,
+      confirmLabel: "Confirmar pagamento",
+      cancelLabel: "Voltar",
+    });
+    if (ok) await acao("pagar", { meio: "PIX" });
+  }
+
   if (isLoading) return <LoadingCard />;
   if (!a) return <Card className="p-6 text-sm">Acerto não encontrado.</Card>;
 
@@ -105,6 +137,7 @@ function Conteudo({ id }: { id: string }) {
 
   return (
     <div className="space-y-6">
+      <ConfirmDialog />
       <FormPageHeader
         title={`Acerto de ${a.motorista.nome}`}
         description={`${dataBR(a.periodoInicio)} a ${dataBR(a.periodoFim)}`}
@@ -127,7 +160,7 @@ function Conteudo({ id }: { id: string }) {
           <div className="flex flex-wrap items-center gap-2">
             {a.status === "ABERTO" && (
               <Permitido chave="acertos.fechar">
-                <Button onClick={() => acao("fechar")} disabled={ocupado} variant="success">
+                <Button onClick={() => void fecharAcerto()} disabled={ocupado} variant="warning">
                   <Lock className="h-4 w-4" /> Fechar acerto
                 </Button>
               </Permitido>
@@ -140,7 +173,7 @@ function Conteudo({ id }: { id: string }) {
                   </Button>
                 </Permitido>
                 <Permitido chave="acertos.pagar">
-                  <Button onClick={() => acao("pagar", { meio: "PIX" })} disabled={ocupado} variant="success">
+                  <Button onClick={() => void marcarPago()} disabled={ocupado} variant="warning">
                     <Wallet className="h-4 w-4" /> Marcar como pago
                   </Button>
                 </Permitido>
@@ -220,16 +253,25 @@ function ListaItens({
   onMudou: () => void;
 }) {
   const token = useAuthToken();
+  const { confirmar, ConfirmDialog } = useConfirm();
 
   async function remover(itemId: string) {
     if (!token) return;
-    if (!confirm("Tirar este lançamento do acerto?")) return;
+    const ok = await confirmar({
+      variant: "destructive",
+      title: "Tirar este lançamento do acerto?",
+      description: "O valor sai da conta deste período. Dá pra lançar de novo depois.",
+      confirmLabel: "Remover lançamento",
+      cancelLabel: "Voltar",
+    });
+    if (!ok) return;
     await fetchApi(`/admin/acertos/${acertoId}/itens/${itemId}`, { token, method: "DELETE" });
     onMudou();
   }
 
   return (
     <Card className="p-0">
+      <ConfirmDialog />
       <p className="border-b px-4 py-3 text-sm font-semibold">{titulo}</p>
       {itens.length === 0 ? (
         <p className="px-4 py-6 text-center text-sm text-muted-foreground">{vazio}</p>

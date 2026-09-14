@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/loading";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { useConfirm } from "@/components/confirm-dialog";
 
 const PATH = "/admin/motoristas";
 
@@ -15,6 +16,7 @@ const PATH = "/admin/motoristas";
  * pra a linha sair de "Pendente" na hora.
  */
 export function AprovacaoMotoristaButtons({ id, nome }: { id: string; nome: string }) {
+  const { confirmar, ConfirmDialog } = useConfirm();
   const token = useAuthToken();
   const qc = useQueryClient();
 
@@ -36,19 +38,27 @@ export function AprovacaoMotoristaButtons({ id, nome }: { id: string; nome: stri
     },
   });
 
-  function rejeitar() {
-    if (!confirm(`Rejeitar o cadastro de "${nome}"? Ele não vai conseguir entrar no app.`)) return;
+  async function rejeitar() {
+    const ok = await confirmar({
+      variant: "destructive",
+      title: `Rejeitar o cadastro de ${nome}?`,
+      description: "Ele não consegue entrar no app enquanto estiver rejeitado. Dá pra aprovar depois, se for engano.",
+      confirmLabel: "Rejeitar cadastro",
+      cancelLabel: "Voltar",
+    });
+    if (!ok) return;
     mutacao.mutate("REJEITADO");
   }
 
   return (
     <div className="flex items-center gap-1">
+      <ConfirmDialog />
       <Button
         size="sm"
         title="Aprovar cadastro"
         disabled={mutacao.isPending}
         onClick={() => mutacao.mutate("APROVADO")}
-        className="bg-emerald-600 hover:bg-emerald-700"
+        variant="success"
       >
         {mutacao.isPending ? <Spinner /> : <Check className="h-4 w-4" />}
         Aprovar
