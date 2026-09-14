@@ -67,8 +67,14 @@ Em Configurações → Integrações → Webhooks:
 
 - **URL**: `https://ronan-api.2azr6q.easypanel.host/pagamentos/webhook/asaas`
 - **Token de autenticação**: o mesmo valor de `ASAAS_WEBHOOK_TOKEN`
-- **Eventos**: todos os de cobrança (`PAYMENT_*`)
+- **Eventos**: todos os de **Cobranças** E todos os de **Pix Automático**
+- **Tipo de envio**: Sequencial
 - **Versão**: v3
+
+⚠️ **Marcar as DUAS seções.** O Pix Automático tem um ciclo de vida próprio que
+não passa pelos eventos de cobrança, e a seção dele fica bem abaixo na lista —
+fácil de não ver. Sem ela, a assinatura recebe o dinheiro do primeiro Pix e
+fica "aguardando autorização" para sempre. Custou um teste real pra descobrir.
 
 Confira que a fila está ativa depois do primeiro evento. **15 falhas seguidas
 interrompem a fila inteira** — de todos os clientes — e o Asaas dá 14 dias antes
@@ -121,6 +127,28 @@ não paga            ──►   PAYMENT_OVERDUE        ──►  VENCIDA + Ass
 **O gateway gera as cobranças**, não a gente: é para isso que a assinatura
 existe lá. Nosso cron só marca o que venceu (rede de segurança, caso um webhook
 se perca) e manda os avisos.
+
+### O ciclo do Pix Automático, que é diferente
+
+```
+PIX_AUTOMATIC_RECURRING_AUTHORIZATION_CREATED    a autorização nasce + QR inicial
+PAYMENT_CREATED                                  a cobrança do primeiro Pix
+PAYMENT_RECEIVED                                 o cliente pagou
+PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED  ← a recorrência passa a valer
+```
+
+**É o último que importa**, e ele demora: no teste real (14/09/2026) levou
+**~2 minutos** depois do pagamento — é a propagação pelo Banco Central. Antes
+dele, a tela mostra "Aguardando autorização" e está certa.
+
+O primeiro pagamento chega **sem `subscription` e sem `externalReference`**: o
+gateway o registra como Pix avulso ("Cobrança gerada automaticamente a partir de
+Pix recebido"). Quem casa é o `pixAutomaticAuthorizationId`, e é por isso que
+ele é o primeiro caminho de `acharAssinatura`.
+
+No app do banco do cliente, o pagamento aparece como **Pix Automático, status
+ativo, mensal** — se aparecer como Pix comum, o banco dele não suporta a
+modalidade e a autorização nunca será ativada.
 
 ### A régua
 
