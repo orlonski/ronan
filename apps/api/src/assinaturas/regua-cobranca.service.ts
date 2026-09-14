@@ -6,6 +6,7 @@ import {
   formatarData,
   formatarReais,
   hojeData,
+  mensagemAutorizacao,
   mensagemCobrancaAberta,
   mensagemCobrancaAtrasada,
   rotuloCompetencia,
@@ -15,6 +16,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { EnvioWhatsappService } from "../whatsapp/envio/envio-whatsapp.service";
 import { SessaoService } from "../whatsapp/sessao.service";
 import { AssinaturasService } from "./assinaturas.service";
+import { AvisoCobrancaService } from "./aviso-cobranca.service";
 
 /**
  * A régua de cobrança — que AVISA e nunca corta.
@@ -40,6 +42,7 @@ export class ReguaCobrancaService {
     private readonly prisma: PrismaService,
     private readonly envio: EnvioWhatsappService,
     private readonly assinaturas: AssinaturasService,
+    private readonly aviso: AvisoCobrancaService,
   ) {}
 
   @Cron("0 0 9 * * *", { name: "regua-cobranca", timeZone: "America/Sao_Paulo" })

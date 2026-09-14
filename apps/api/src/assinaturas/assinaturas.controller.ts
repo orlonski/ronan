@@ -14,6 +14,7 @@ import type { AuthAdminUser } from "../auth/types";
 import { IgnoraEscopo } from "../common/escopo/escopo.decorator";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { AssinaturasService } from "./assinaturas.service";
+import { AvisoCobrancaService } from "./aviso-cobranca.service";
 import { ReguaCobrancaService } from "./regua-cobranca.service";
 
 /**
@@ -38,6 +39,7 @@ export class AssinaturasController {
   constructor(
     private readonly service: AssinaturasService,
     private readonly regua: ReguaCobrancaService,
+    private readonly aviso: AvisoCobrancaService,
   ) {}
 
   /**
@@ -87,6 +89,17 @@ export class AssinaturasController {
    * CNPJ recusado, chave Pix faltando) e recomeçar o cadastro inteiro por causa
    * disso seria digitar tudo de novo pra tentar a mesma coisa.
    */
+  /**
+   * Manda pro financeiro do cliente o que ele precisa pra pagar agora.
+   *
+   * Pro dia em que ele diz que não recebeu, apagou, ou repassou pro contador
+   * errado. Não consome o aviso automático do dia — são coisas diferentes.
+   */
+  @Post(":id/avisar")
+  avisar(@Param("id") id: string) {
+    return this.aviso.avisarAgora(id);
+  }
+
   @Post(":id/espelhar")
   espelhar(@Param("id") id: string) {
     return this.service.espelharNoGateway(id);

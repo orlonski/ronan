@@ -6,6 +6,7 @@ import { AsaasConfig } from "./asaas.config";
 import { AsaasProvedor } from "./asaas.provedor";
 import { AssinaturasController } from "./assinaturas.controller";
 import { AssinaturasService } from "./assinaturas.service";
+import { AvisoCobrancaService } from "./aviso-cobranca.service";
 import { EventosGatewayService } from "./eventos-gateway.service";
 import { ReguaCobrancaService } from "./regua-cobranca.service";
 import { PagamentosWebhookController } from "./webhook.controller";
@@ -24,6 +25,7 @@ import { PagamentosWebhookController } from "./webhook.controller";
     AsaasConfig,
     AsaasProvedor,
     AssinaturasService,
+    AvisoCobrancaService,
     EventosGatewayService,
     ReguaCobrancaService,
   ],

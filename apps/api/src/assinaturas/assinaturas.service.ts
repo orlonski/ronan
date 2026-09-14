@@ -25,6 +25,7 @@ import {
 } from "../common/assinatura-cobranca";
 import { PrismaService } from "../prisma/prisma.service";
 import { AsaasProvedor } from "./asaas.provedor";
+import { AvisoCobrancaService } from "./aviso-cobranca.service";
 import { ErroGateway } from "./gateway.types";
 
 /** Status em que a assinatura ainda ocupa a vaga da conta. */
@@ -48,6 +49,7 @@ export class AssinaturasService {
     private readonly gateway: AsaasProvedor,
     private readonly precos: PrecosService,
     private readonly auditoria: AuditoriaService,
+    private readonly aviso: AvisoCobrancaService,
   ) {}
 
   /**
@@ -215,7 +217,7 @@ export class AssinaturasService {
       }),
     );
 
-    return this.espelharNoGateway(assinatura.id);
+    return this.espelharNoGateway(assinatura.id, dados.avisarCliente !== false);
   }
 
   /**
@@ -225,7 +227,7 @@ export class AssinaturasService {
    * recusado, chave Pix faltando. Com o rascunho já gravado, tentar de novo é
    * um clique — e não recomeçar o cadastro inteiro.
    */
-  async espelharNoGateway(id: string) {
+  async espelharNoGateway(id: string, avisarCliente = true) {
     const assinatura = await comoSistema(() =>
       this.prisma.assinatura.findFirst({
         where: { id },
@@ -284,6 +286,26 @@ export class AssinaturasService {
       this.log.log(
         `Assinatura ${assinatura.id} (${assinatura.conta.nome}) criada no gateway como ${criada.id}.`,
       );
+
+      // O cliente é avisado AGORA, não 3 dias antes do vencimento.
+      //
+      // Sem isto, entre "fechei o contrato" e o primeiro aviso da régua havia
+      // um silêncio em que ele não sabia como pagar nem que precisava fazer
+      // algo — e é nesse silêncio que uma assinatura fica parada para sempre
+      // esperando uma autorização que ninguém pediu.
+      //
+      // O envio nunca lança: WhatsApp fora do ar não pode desfazer uma
+      // assinatura que já existe no gateway. Se falhar, sobra o botão "Mandar
+      // no WhatsApp" na tela, e o log diz o motivo.
+      if (avisarCliente) {
+        const aviso = await this.aviso.avisarAgora(assinatura.id);
+        if (!aviso.enviado) {
+          this.log.warn(
+            `Assinatura ${assinatura.id} criada, mas o aviso não saiu: ${aviso.motivo}`,
+          );
+        }
+      }
+
       return this.paraTela(atualizada);
     } catch (erro) {
       if (erro instanceof ErroGateway) {

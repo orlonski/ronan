@@ -311,6 +311,7 @@ function DialogNovaAssinatura({
   const [valor, setValor] = useState("");
   const [diaVencimento, setDiaVencimento] = useState("10");
   const [primeiroVencimento, setPrimeiroVencimento] = useState("");
+  const [avisarCliente, setAvisarCliente] = useState(true);
   const [nomeResponsavel, setNome] = useState("");
   const [emailCobranca, setEmail] = useState("");
   const [telefoneCobranca, setTelefone] = useState("");
@@ -353,6 +354,7 @@ function DialogNovaAssinatura({
           valorCentavos: paraCentavos(valor),
           diaVencimento: Number(diaVencimento) || 10,
           primeiroVencimento: primeiroVencimento || undefined,
+          avisarCliente,
           nomeResponsavel,
           emailCobranca,
           telefoneCobranca,
@@ -499,6 +501,27 @@ function DialogNovaAssinatura({
                   onChange={(e) => setTelefone(e.target.value)}
                 />
               </div>
+              {/* Ligado por padrão: o normal é o cliente precisar do código pra
+                  autorizar, e esperar alguém lembrar de mandar é como uma
+                  assinatura fica parada. Dá pra desligar porque existe o caso
+                  de ligar pro cliente antes — e sistema que não deixa escolher
+                  isso vira sistema contornado por fora. */}
+              <label className="flex items-start gap-2 rounded border p-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={avisarCliente}
+                  onChange={(e) => setAvisarCliente(e.target.checked)}
+                />
+                <span>
+                  Avisar o cliente no WhatsApp agora
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    Manda pro financeiro o que ele precisa pra autorizar a cobrança. Sem isso, ele
+                    só é avisado 3 dias antes do vencimento.
+                  </span>
+                </span>
+              </label>
+
               <div>
                 <Label>CPF ou CNPJ de quem paga</Label>
                 <Input
@@ -541,6 +564,32 @@ function DialogCobrancas({
   const [baixando, setBaixando] = useState<Cobranca | null>(null);
   const [cancelando, setCancelando] = useState(false);
   const [motivo, setMotivo] = useState("");
+  const [avisando, setAvisando] = useState(false);
+
+  async function avisar() {
+    setAvisando(true);
+    try {
+      const r = await fetchApi<{ enviado: boolean; motivo?: string }>(
+        `${PATH}/${assinatura.id}/avisar`,
+        { method: "POST", token },
+      );
+      if (r.enviado) {
+        toast.success("Mandado no WhatsApp.", {
+          description: `${assinatura.nomeResponsavel} recebeu o que precisa pra pagar.`,
+        });
+      } else {
+        // Não some com o erro: quem apertou precisa saber que o cliente NÃO
+        // recebeu, senão vai esperar um pagamento que nunca foi pedido.
+        toast.error("Não saiu", { description: r.motivo });
+      }
+    } catch (e) {
+      toast.error("Não consegui mandar", {
+        description: e instanceof Error ? e.message : undefined,
+      });
+    } finally {
+      setAvisando(false);
+    }
+  }
 
   const { data, refetch } = useQuery({
     queryKey: [PATH, assinatura.id],
@@ -643,6 +692,18 @@ function DialogCobrancas({
           </div>
         )}
 
+        {/* O caminho pro cliente receber o que precisa. Antes disto, mandar a
+            cobrança significava achar um link em texto miúdo, copiar na mão e
+            colar no WhatsApp — o que não é fluxo, é contorno. */}
+        <div className="flex flex-wrap items-center gap-2 rounded border bg-muted/30 p-2">
+          <Button variant="outline" size="sm" disabled={avisando} onClick={() => void avisar()}>
+            {avisando ? "Mandando…" : "Mandar no WhatsApp"}
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            vai pra {assinatura.nomeResponsavel} ({assinatura.telefoneCobranca})
+          </span>
+        </div>
+
         <div className="space-y-2">
           {(data?.cobrancas ?? []).length === 0 && (
             <p className="text-sm text-muted-foreground">
@@ -676,7 +737,21 @@ function DialogCobrancas({
                     </span>
                   )}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex items-center gap-2">
+                  {c.linkPagamento && !paga && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(c.linkPagamento!);
+                        toast.success("Link copiado.", {
+                          description: "É esse endereço que o cliente abre pra pagar.",
+                        });
+                      }}
+                    >
+                      Copiar link
+                    </Button>
+                  )}
                   {c.linkPagamento && (
                     <a
                       className="text-xs text-primary underline"
@@ -684,7 +759,7 @@ function DialogCobrancas({
                       target="_blank"
                       rel="noreferrer"
                     >
-                      abrir cobrança
+                      abrir
                     </a>
                   )}
                   {!paga && c.status !== "CANCELADA" && (

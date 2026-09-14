@@ -194,6 +194,43 @@ export function mensagemCobrancaAberta(dados: {
   };
 }
 
+/**
+ * O convite pra autorizar a cobrança automática.
+ *
+ * Sai quando a assinatura é criada, não quando a fatura vence: entre "fechei o
+ * contrato" e "3 dias antes do vencimento" havia um silêncio em que o cliente
+ * não sabia como pagar nem que precisava fazer algo. É nesse silêncio que uma
+ * assinatura fica parada para sempre esperando uma autorização que ninguém
+ * pediu.
+ *
+ * `codigo` é o copia-e-cola do Pix (no Pix Automático) ou o link da cobrança
+ * (no cartão e no boleto). No texto livre do Evolution ele vai inteiro; no
+ * template da Meta, o link vai no botão e o código longo do Pix não cabe — por
+ * isso o corpo explica o que fazer sem depender dele.
+ */
+export function mensagemAutorizacao(dados: {
+  nomeResponsavel: string;
+  valor: string;
+  vencimento: string;
+  codigo: string;
+  ehPix: boolean;
+}): { texto: string; params: string[] } {
+  const { nomeResponsavel, valor, vencimento, codigo, ehPix } = dados;
+  const comoPagar = ehPix
+    ? `Copie o código abaixo e pague pelo app do seu banco:\n\n${codigo}`
+    : `Informe os dados do cartão neste link:\n\n${codigo}`;
+
+  return {
+    texto:
+      `Olá, ${nomeResponsavel}! A assinatura do Movatruck da sua empresa está pronta.\n\n` +
+      `Falta autorizar a cobrança automática de ${valor} por mês — é uma vez só. ` +
+      `Depois disso as mensalidades caem sozinhas, sem boleto e sem QR Code todo mês.\n\n` +
+      `${comoPagar}\n\n` +
+      `Vencimento da primeira: ${vencimento}`,
+    params: [nomeResponsavel, valor, vencimento, "", codigo, sufixoDoLink(codigo)],
+  };
+}
+
 export function mensagemCobrancaAtrasada(dados: {
   nomeResponsavel: string;
   competenciaRotulo: string;

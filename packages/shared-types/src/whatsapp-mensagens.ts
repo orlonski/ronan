@@ -205,6 +205,20 @@ export const ROTAS_WHATSAPP = [
     escopo: "plataforma",
   },
   {
+    chave: "COBRANCA_AUTORIZACAO",
+    rotulo: "Autorizar a mensalidade",
+    descricao:
+      "Manda o Pix (ou o link) que o cliente precisa pagar UMA vez pra autorizar a cobrança automática da mensalidade.",
+    categoria: "utility",
+    provedores: ["evolution", "meta"],
+    // Se não sai, a assinatura fica parada esperando uma autorização que o
+    // cliente não sabe que precisa dar. Não trava ninguém no app, mas trava a
+    // cobrança inteira — e o silêncio entre "assinei" e "como eu pago?" é o
+    // pior momento pra deixar o cliente sozinho.
+    critica: false,
+    escopo: "plataforma",
+  },
+  {
     chave: "COBRANCA_ATRASADA",
     rotulo: "Mensalidade em atraso",
     descricao: "Avisa que a mensalidade venceu e ainda não foi paga. Não corta acesso nenhum.",
@@ -530,6 +544,31 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
       "setembro/2026",
       "R$ 1.890,00",
       "10/09/2026",
+      "https://www.asaas.com/i/abc123",
+      "abc123",
+    ],
+  },
+  // O convite pra autorizar. O código do Pix é longo demais pra caber num
+  // parâmetro da Meta com naturalidade, então no template ele vai no BOTÃO como
+  // sufixo (igual ao comprovante) e o corpo explica o que fazer. No Evolution,
+  // que é texto livre, o copia-e-cola vai inteiro no corpo.
+  COBRANCA_AUTORIZACAO: {
+    nome: "cobranca_autorizacao",
+    idioma: "pt_BR",
+    corpo: [0, 1, 2],
+    botao: { tipo: "URL", param: 5 },
+    textoAprovacao: [
+      "Olá, {{1}}! A assinatura do Movatruck da sua empresa está pronta.",
+      "",
+      "Falta você autorizar a cobrança automática de {{2}} por mês, pagando uma única vez pelo link abaixo. Depois disso as mensalidades caem sozinhas, sem boleto e sem QR Code todo mês.",
+      "",
+      "Vencimento da primeira: {{3}}",
+    ].join("\n"),
+    exemplo: [
+      "Marcos",
+      "R$ 1.890,00",
+      "10/09/2026",
+      "",
       "https://www.asaas.com/i/abc123",
       "abc123",
     ],

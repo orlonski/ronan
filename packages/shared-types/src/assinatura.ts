@@ -177,6 +177,15 @@ export const CriarAssinaturaInput = z.object({
     .refine((v) => v.length >= 10 && v.length <= 13, "Telefone com DDD."),
   documento: Documento,
   observacao: z.string().trim().max(500).optional(),
+  /**
+   * Avisar o cliente por WhatsApp assim que a assinatura for criada.
+   *
+   * Ligado por padrão: o normal é que ele precise do código pra autorizar, e
+   * esperar alguém lembrar de mandar é como uma assinatura fica parada. Existe
+   * a opção de desligar porque há o caso real de ligar pro cliente antes — e um
+   * sistema que não deixa escolher isso vira um sistema contornado por fora.
+   */
+  avisarCliente: z.boolean().default(true),
 });
 export type CriarAssinaturaInput = z.infer<typeof CriarAssinaturaInput>;
 
