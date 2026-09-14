@@ -20,6 +20,8 @@ import { useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePaginatedList, useUpdateResource } from "@/lib/client-api";
 import { fmtDataHoraSP } from "@/lib/datetime-br";
+import { EstadoVazio } from "@/components/estado-vazio";
+import { usePermissoes } from "@/lib/permissoes";
 
 type Material = {
   id: string;
@@ -35,6 +37,7 @@ type Material = {
 const PATH = "/admin/materiais";
 
 export default function MateriaisPage() {
+  const { temPermissao } = usePermissoes();
   const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
   const list = usePaginatedList<Material>(PATH, tableState);
   const update = useUpdateResource<{ ativo?: boolean }, Material>(PATH, PATH);
@@ -201,7 +204,17 @@ export default function MateriaisPage() {
             }
           />
         }
-        emptyMessage="Nenhum material cadastrado."
+        emptyMessage={
+          <EstadoVazio
+            icone={Package}
+            titulo="Nenhum material cadastrado"
+            descricao="Sem material o motorista não consegue lançar a viagem — é o que ele escolhe na hora da carga."
+            acaoHref="/materiais/novo"
+            acaoLabel="Cadastrar material"
+            perm="materiais.criar"
+            temPermissao={temPermissao}
+          />
+        }
         viewMode={viewMode}
         renderMobileCard={(m) => (
           <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Pencil, Plus, UserCircle } from "lucide-react";
+import { Pencil, Plus, UserCircle, Users2 } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { StatusToggle } from "@/components/status-toggle";
 import { ConviteWhatsappButton } from "@/components/convite-whatsapp-button";
@@ -25,6 +25,7 @@ import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { fetchApi, usePaginatedList, useAuthToken, useUpdateResource } from "@/lib/client-api";
+import { EstadoVazio } from "@/components/estado-vazio";
 
 type User = {
   id: string;
@@ -58,6 +59,7 @@ function fmtUltimoLogin(iso: string | null): string {
 }
 
 export default function UsuariosPage() {
+  const { temPermissao } = usePermissoes();
   const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
   const list = usePaginatedList<User>(PATH, tableState);
   const update = useUpdateResource<{ ativo?: boolean }, User>(PATH, PATH);
@@ -283,7 +285,17 @@ export default function UsuariosPage() {
             }
           />
         }
-        emptyMessage="Nenhum usuário cadastrado."
+        emptyMessage={
+          <EstadoVazio
+            icone={Users2}
+            titulo="Nenhum usuário além de você"
+            descricao="Quem mais vai usar o painel. Cada um entra com um papel, que decide o que ele enxerga."
+            acaoHref="/usuarios/novo"
+            acaoLabel="Convidar usuário"
+            perm="usuarios.criar"
+            temPermissao={temPermissao}
+          />
+        }
         viewMode={viewMode}
         renderMobileCard={(u) => (
           <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">

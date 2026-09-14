@@ -15,6 +15,8 @@ import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePaginatedList, useResourceOptions, useUpdateResource } from "@/lib/client-api";
+import { EstadoVazio } from "@/components/estado-vazio";
+import { usePermissoes } from "@/lib/permissoes";
 
 type Empresa = { id: string; nome: string };
 type Regra = {
@@ -37,6 +39,7 @@ function fmtNum(v: string | null): string {
 }
 
 export default function RegrasMinimoPage() {
+  const { temPermissao } = usePermissoes();
   const tableState = useDataTableState({ defaultSort: { field: "criadoEm", order: "desc" } });
   const list = usePaginatedList<Regra>(PATH, tableState);
   const empresas = useResourceOptions<Empresa>("/admin/empresas");
@@ -179,7 +182,17 @@ export default function RegrasMinimoPage() {
             }
           />
         }
-        emptyMessage="Nenhuma regra cadastrada."
+        emptyMessage={
+          <EstadoVazio
+            icone={Ruler}
+            titulo="Nenhum mínimo cadastrado"
+            descricao="Serve pra cobrar 10 km quando a viagem teve 4. Sem regra, vale o mínimo do cliente — o km do motorista nunca muda."
+            acaoHref="/regras-minimo/novo"
+            acaoLabel="Criar regra de mínimo"
+            perm="regras-minimo.criar"
+            temPermissao={temPermissao}
+          />
+        }
         viewMode={viewMode}
         renderMobileCard={(r) => (
           <Card className="space-y-2 p-4">

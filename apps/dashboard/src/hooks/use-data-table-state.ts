@@ -28,7 +28,27 @@ export type DataTableState = DataTableParams & {
   setFilter: (key: string, value: string | undefined) => void;
   setFilters: (filters: FilterValues) => void;
   reset: () => void;
+  /**
+   * Os filtros que a tela aplica sozinha ao abrir (ex.: /viagens já vem com o
+   * mês corrente). Sem isso o botão "Limpar" aparecia SEMPRE — o estado nascia
+   * com filtro — e clicar nele reaplicava os mesmos padrões, ou seja: não
+   * mudava nada na tela e o usuário concluía que estava quebrado.
+   */
+  filtrosPadrao: FilterValues;
 };
+
+/** Há filtro escolhido POR ALGUÉM (não o padrão da tela)? */
+export function temFiltroDoUsuario(state: DataTableState): boolean {
+  if (state.q) return true;
+  const padrao = state.filtrosPadrao ?? {};
+  const chaves = new Set([...Object.keys(state.filters), ...Object.keys(padrao)]);
+  for (const k of chaves) {
+    const atual = state.filters[k] ?? "";
+    const base = padrao[k] ?? "";
+    if (atual !== base) return true;
+  }
+  return false;
+}
 
 export type UseDataTableStateOptions = {
   /** Ordenação padrão quando nada está aplicado. */
@@ -257,5 +277,6 @@ export function useDataTableState(
     setFilter,
     setFilters,
     reset,
+    filtrosPadrao: defaultFilters ?? {},
   };
 }

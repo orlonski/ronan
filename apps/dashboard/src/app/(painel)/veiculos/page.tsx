@@ -22,6 +22,7 @@ import { useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePaginatedList, useUpdateResource } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
+import { EstadoVazio } from "@/components/estado-vazio";
 
 type Veiculo = {
   id: string;
@@ -190,7 +191,17 @@ export default function VeiculosPage() {
             }
           />
         }
-        emptyMessage="Nenhum veículo cadastrado."
+        emptyMessage={
+          <EstadoVazio
+            icone={Truck}
+            titulo="Nenhum caminhão cadastrado"
+            descricao="Se você informou a placa ao cadastrar o motorista, ele já entrou aqui sozinho. Nenhuma viagem sai sem caminhão."
+            acaoHref="/veiculos/novo"
+            acaoLabel="Cadastrar caminhão"
+            perm="veiculos.criar"
+            temPermissao={temPermissao}
+          />
+        }
         viewMode={viewMode}
         renderMobileCard={(v) => (
           <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">

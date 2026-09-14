@@ -51,6 +51,7 @@ import { usePermissoes } from "@/lib/permissoes";
 import type { LocalMapa } from "@/components/mapa-locais";
 import type { LocalDupMapa } from "@/components/mapa-duplicata";
 import { CORES as DUP_CORES } from "@/components/mapa-duplicata";
+import { EstadoVazio } from "@/components/estado-vazio";
 
 // Leaflet quebra em SSR (acessa window). Import dinâmico igual PontoMap.
 const MapaLocais = dynamic(
@@ -741,7 +742,17 @@ export default function LocaisPage() {
         error={list.error}
         onRetry={() => void list.refetch()}
         toolbar={toolbar}
-        emptyMessage="Nenhum local cadastrado."
+        emptyMessage={
+          <EstadoVazio
+            icone={MapPin}
+            titulo="Nenhum local cadastrado"
+            descricao="Cadastre pelo menos dois: onde você carrega e onde descarrega. O app baixa a lista pro motorista escolher sem digitar."
+            acaoHref="/locais/novo"
+            acaoLabel="Cadastrar local"
+            perm="locais.criar"
+            temPermissao={temPermissao}
+          />
+        }
         viewMode={viewMode}
         renderMobileCard={(l) => (
           <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">

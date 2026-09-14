@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { Pencil, Plus, Star } from "lucide-react";
+import { Pencil, Plus, Star, Timer } from "lucide-react";
 import { BadgeMedicao } from "./_components/badge-medicao";
 import type { ColumnDef } from "@tanstack/react-table";
 import { StatusToggle } from "@/components/status-toggle";
@@ -16,6 +16,8 @@ import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePaginatedList, useUpdateResource } from "@/lib/client-api";
+import { EstadoVazio } from "@/components/estado-vazio";
+import { usePermissoes } from "@/lib/permissoes";
 
 type TipoServico = {
   id: string;
@@ -34,6 +36,7 @@ type TipoServico = {
 const PATH = "/admin/tipos-servico";
 
 export default function TiposServicoPage() {
+  const { temPermissao } = usePermissoes();
   const tableState = useDataTableState({ defaultSort: { field: "ordem", order: "asc" } });
   const list = usePaginatedList<TipoServico>(PATH, tableState);
   const update = useUpdateResource<{ ativo?: boolean }, TipoServico>(PATH, PATH);
@@ -180,7 +183,17 @@ export default function TiposServicoPage() {
             }
           />
         }
-        emptyMessage="Nenhum modo de serviço cadastrado."
+        emptyMessage={
+          <EstadoVazio
+            icone={Timer}
+            titulo="Nenhum modo de cobrança cadastrado"
+            descricao="Define se a viagem é medida por peso (frete) ou por período (diária). Com um só, o app nem mostra o seletor."
+            acaoHref="/tipos-servico/novo"
+            acaoLabel="Criar modo de cobrança"
+            perm="tipos-servico.criar"
+            temPermissao={temPermissao}
+          />
+        }
         viewMode={viewMode}
         renderMobileCard={(t) => (
           <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">

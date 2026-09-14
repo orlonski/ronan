@@ -17,9 +17,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { LoadingInline } from "@/components/loading";
 import { ErroCard, ErroEstado } from "@/components/erro-estado";
-import type { DataTableState } from "@/hooks/use-data-table-state";
+import { temFiltroDoUsuario, type DataTableState } from "@/hooks/use-data-table-state";
 import type { Pagination } from "@/lib/client-api";
 import { DataTablePagination } from "./data-table-pagination";
 
@@ -99,6 +100,27 @@ export function DataTable<T>({
   // Erro vence vazio: lista que não carregou não é lista sem registros.
   const showErro = !isLoading && !!isError && data.length === 0;
   const showEmpty = !isLoading && !showErro && data.length === 0;
+  /**
+   * "Não existe nenhum" e "o filtro não achou" são coisas diferentes, e a mesma
+   * frase servia pras duas. Em /tabelas-preco, uma busca sem resultado exibia
+   * "Sem preço, a viagem não tem valor e a planilha sai sem a coluna de
+   * dinheiro" — assustador, e falso.
+   */
+  const filtrando = temFiltroDoUsuario(state);
+  const vazio =
+    filtrando && showEmpty ? (
+      <div className="flex flex-col items-center gap-2 py-6 text-center">
+        <p className="text-sm font-medium text-foreground">Nada com esse filtro</p>
+        <p className="text-sm text-muted-foreground">
+          Nenhum registro bate com o que você pediu. Os dados continuam aqui.
+        </p>
+        <Button variant="outline" size="sm" onClick={state.reset} className="mt-1">
+          Limpar filtros
+        </Button>
+      </div>
+    ) : (
+      emptyMessage
+    );
 
   return (
     <div className="space-y-3">
@@ -119,9 +141,7 @@ export function DataTable<T>({
           {isLoading && <Card className="p-6"><LoadingInline /></Card>}
           {showErro && <ErroCard erro={error} onRetry={onRetry} />}
           {showEmpty && (
-            <Card className="p-6 text-center text-sm text-muted-foreground">
-              {emptyMessage}
-            </Card>
+            <Card className="p-6 text-center text-sm text-muted-foreground">{vazio}</Card>
           )}
           {data.map((row, idx) => (
             <React.Fragment key={getRowKey(row, idx)}>{renderMobileCard(row)}</React.Fragment>
@@ -196,7 +216,7 @@ export function DataTable<T>({
             {showEmpty && (
               <TableRow>
                 <TableCell colSpan={colCount} className="text-center text-muted-foreground">
-                  {emptyMessage}
+                  {vazio}
                 </TableCell>
               </TableRow>
             )}

@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { Pencil, Plus } from "lucide-react";
+import { IdCard, Pencil, Plus } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { StatusToggle } from "@/components/status-toggle";
 import { Permitido } from "@/components/requer-tela";
@@ -15,6 +15,8 @@ import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePaginatedList, useUpdateResource } from "@/lib/client-api";
+import { EstadoVazio } from "@/components/estado-vazio";
+import { usePermissoes } from "@/lib/permissoes";
 
 type Modalidade = {
   id: string;
@@ -41,6 +43,7 @@ function resumoFotos(m: Modalidade): string {
 }
 
 export default function ModalidadesPage() {
+  const { temPermissao } = usePermissoes();
   const tableState = useDataTableState({ defaultSort: { field: "ordem", order: "asc" } });
   const list = usePaginatedList<Modalidade>(PATH, tableState);
   const update = useUpdateResource<{ ativo?: boolean }, Modalidade>(PATH, PATH);
@@ -167,7 +170,17 @@ export default function ModalidadesPage() {
             }
           />
         }
-        emptyMessage="Nenhuma modalidade cadastrada — os motoristas seguem sem classificação."
+        emptyMessage={
+          <EstadoVazio
+            icone={IdCard}
+            titulo="Nenhum vínculo cadastrado"
+            descricao="O vínculo carrega a régua de pagamento (percentual, por viagem, por tonelada, km ou diária). Sem ele o acerto não sabe quanto pagar."
+            acaoHref="/modalidades/novo"
+            acaoLabel="Criar vínculo"
+            perm="modalidades.criar"
+            temPermissao={temPermissao}
+          />
+        }
         viewMode={viewMode}
         renderMobileCard={(m) => (
           <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">

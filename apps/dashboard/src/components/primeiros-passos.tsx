@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Check, Circle } from "lucide-react";
+import { ArrowRight, Check, Circle, Copy, Smartphone } from "lucide-react";
+import { toast } from "sonner";
+import { storeUrls } from "@ronan/shared-types";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 
@@ -96,10 +99,50 @@ export function PrimeirosPassos() {
                 </span>
                 {ehProximo && <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-primary" />}
               </Link>
+              {/* Este é o único passo que o dono NÃO cumpre sozinho: a viagem
+                  nasce no celular do motorista. O painel inteiro não tinha um
+                  link pra loja — o teste corria enquanto ele esperava alguém
+                  instalar um app que ninguém disse onde achar. */}
+              {ehProximo && p.chave === "app" && <LinksDaLoja />}
             </li>
           );
         })}
       </ul>
     </Card>
+  );
+}
+
+function LinksDaLoja() {
+  const android = storeUrls("android").web;
+  const ios = storeUrls("ios").web;
+
+  async function copiar() {
+    const texto = `Baixe o app da Movatruck pra lançar as viagens:\nAndroid: ${android}\niPhone: ${ios}`;
+    try {
+      await navigator.clipboard.writeText(texto);
+      toast.success("Link copiado. Cole no WhatsApp do motorista.");
+    } catch {
+      toast.error("Não consegui copiar", { description: "Copie o endereço da barra da loja." });
+    }
+  }
+
+  return (
+    <div className="ml-10 mt-1 flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 p-3">
+      <Smartphone className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+      <Button variant="outline" size="sm" asChild>
+        <a href={android} target="_blank" rel="noreferrer">
+          Google Play
+        </a>
+      </Button>
+      <Button variant="outline" size="sm" asChild>
+        <a href={ios} target="_blank" rel="noreferrer">
+          App Store
+        </a>
+      </Button>
+      <Button variant="default" size="sm" onClick={() => void copiar()} className="gap-1.5">
+        <Copy className="h-3.5 w-3.5" aria-hidden />
+        Copiar link pro motorista
+      </Button>
+    </div>
   );
 }

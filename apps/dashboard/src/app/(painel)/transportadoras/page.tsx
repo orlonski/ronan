@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Pencil, Plus, Truck, Users } from "lucide-react";
+import { Building, Pencil, Plus, Truck, Users } from "lucide-react";
 import Link from "next/link";
 import type { ColumnDef } from "@tanstack/react-table";
 import { StatusToggle } from "@/components/status-toggle";
@@ -21,6 +21,8 @@ import { useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { useApiQuery, usePaginatedList, useUpdateResource } from "@/lib/client-api";
 import { formatDocumento } from "@ronan/shared-types";
+import { EstadoVazio } from "@/components/estado-vazio";
+import { usePermissoes } from "@/lib/permissoes";
 
 type Transportadora = {
   id: string;
@@ -35,6 +37,7 @@ type Transportadora = {
 const PATH = "/admin/transportadoras";
 
 export default function TransportadorasPage() {
+  const { temPermissao } = usePermissoes();
   const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
   const list = usePaginatedList<Transportadora>(PATH, tableState);
   const update = useUpdateResource<Partial<Transportadora>, Transportadora>(PATH, PATH);
@@ -205,7 +208,17 @@ export default function TransportadorasPage() {
             }
           />
         }
-        emptyMessage="Nenhuma transportadora cadastrada."
+        emptyMessage={
+          <EstadoVazio
+            icone={Building}
+            titulo="Nenhuma transportadora cadastrada"
+            descricao="Só é preciso se você subcontrata frota de terceiro. Pode pular por enquanto."
+            acaoHref="/transportadoras/novo"
+            acaoLabel="Cadastrar transportadora"
+            perm="transportadoras.criar"
+            temPermissao={temPermissao}
+          />
+        }
         viewMode={viewMode}
         renderMobileCard={(t) => (
           <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">

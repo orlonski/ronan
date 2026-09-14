@@ -27,6 +27,8 @@ import { useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePaginatedList, useUpdateResource } from "@/lib/client-api";
 import { formatDocumento } from "@ronan/shared-types";
+import { EstadoVazio } from "@/components/estado-vazio";
+import { usePermissoes } from "@/lib/permissoes";
 
 type Papel = "RECEBE_PLANILHA" | "MANDA_FECHAMENTO" | "AMBOS";
 type Empresa = {
@@ -43,6 +45,7 @@ const PAPEL_LABEL: Record<Papel, string> = {
 };
 
 export default function EmpresasPage() {
+  const { temPermissao } = usePermissoes();
   const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
   const list = usePaginatedList<Empresa>(PATH, tableState);
   const update = useUpdateResource<Partial<Empresa>, Empresa>(PATH, PATH);
@@ -200,7 +203,17 @@ export default function EmpresasPage() {
             }
           />
         }
-        emptyMessage="Nenhuma empresa cadastrada."
+        emptyMessage={
+          <EstadoVazio
+            icone={Building2}
+            titulo="Nenhuma empresa-cliente cadastrada"
+            descricao="É quem te contrata e recebe o fechamento. Os clientes ficam dentro dela, então ela vem antes."
+            acaoHref="/empresas/novo"
+            acaoLabel="Cadastrar empresa-cliente"
+            perm="empresas.criar"
+            temPermissao={temPermissao}
+          />
+        }
         viewMode={viewMode}
         renderMobileCard={(e) => (
           <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">

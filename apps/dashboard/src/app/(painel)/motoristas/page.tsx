@@ -38,6 +38,7 @@ import { useDataTableState } from "@/hooks/use-data-table-state";
 import { useListViewMode } from "@/hooks/use-list-view-mode";
 import { usePaginatedList, useUpdateResource, useApiQuery } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
+import { EstadoVazio } from "@/components/estado-vazio";
 
 type Veiculo = { id: string; placa: string; modelo: string | null };
 type DocumentoResumo = { tipo: TipoDocumentoMotorista; validade: string | null };
@@ -447,7 +448,17 @@ export default function MotoristasPage() {
             }
           />
         }
-        emptyMessage="Nenhum motorista encontrado."
+        emptyMessage={
+          <EstadoVazio
+            icone={HardHat}
+            titulo="Nenhum motorista cadastrado"
+            descricao="É o motorista quem lança as viagens, pelo celular. Sem ele, o painel fica vazio por mais cadastro que você faça."
+            acaoHref="/motoristas/novo"
+            acaoLabel="Cadastrar motorista"
+            perm="motoristas.criar"
+            temPermissao={temPermissao}
+          />
+        }
         viewMode={viewMode}
         renderMobileCard={(m) => (
           <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">

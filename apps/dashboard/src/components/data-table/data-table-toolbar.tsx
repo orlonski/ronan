@@ -4,7 +4,7 @@ import * as React from "react";
 import { ArrowDown, ArrowUp, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { DataTableState } from "@/hooks/use-data-table-state";
+import { temFiltroDoUsuario, type DataTableState } from "@/hooks/use-data-table-state";
 
 export function DataTableToolbar({
   state,
@@ -18,11 +18,8 @@ export function DataTableToolbar({
   filters?: React.ReactNode;
   hideSearch?: boolean;
 }) {
-  const hasFilters = Object.values(state.filters).some(
-    (v) => v != null && v !== "",
-  );
-  const hasSearch = !!state.q;
-  const showReset = hasFilters || hasSearch;
+  // Só conta filtro que ALGUÉM escolheu — o padrão da tela não é filtro.
+  const showReset = temFiltroDoUsuario(state);
 
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -34,6 +31,7 @@ export function DataTableToolbar({
               value={state.qInput}
               onChange={(e) => state.setQ(e.target.value)}
               placeholder={searchPlaceholder}
+              aria-label={searchPlaceholder}
               className="h-9 pl-8"
             />
           </div>
@@ -46,8 +44,9 @@ export function DataTableToolbar({
             size="sm"
             onClick={state.reset}
             className="h-9 text-muted-foreground"
+            aria-label="Limpar os filtros aplicados"
           >
-            Limpar
+            Limpar filtros
             <X className="ml-1 h-3.5 w-3.5" />
           </Button>
         )}

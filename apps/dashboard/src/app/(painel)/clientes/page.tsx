@@ -23,6 +23,8 @@ import {
   useResourceOptions,
   useUpdateResource,
 } from "@/lib/client-api";
+import { EstadoVazio } from "@/components/estado-vazio";
+import { usePermissoes } from "@/lib/permissoes";
 
 type Empresa = { id: string; nome: string };
 type Cliente = {
@@ -34,6 +36,7 @@ const PATH = "/admin/clientes";
 const EMPRESAS_PATH = "/admin/empresas";
 
 export default function ClientesPage() {
+  const { temPermissao } = usePermissoes();
   const tableState = useDataTableState({ defaultSort: { field: "nome", order: "asc" } });
   const list = usePaginatedList<Cliente>(PATH, tableState);
   const empresas = useResourceOptions<Empresa>(EMPRESAS_PATH);
@@ -175,7 +178,17 @@ export default function ClientesPage() {
             }
           />
         }
-        emptyMessage="Nenhum cliente cadastrado."
+        emptyMessage={
+          <EstadoVazio
+            icone={Boxes}
+            titulo="Nenhum cliente cadastrado"
+            descricao="Quem recebe a carga na ponta — a obra, a loja, o canteiro. Cada cliente fica dentro de uma empresa-cliente."
+            acaoHref="/clientes/novo"
+            acaoLabel="Cadastrar cliente"
+            perm="clientes.criar"
+            temPermissao={temPermissao}
+          />
+        }
         viewMode={viewMode}
         renderMobileCard={(c) => (
           <Card className="overflow-hidden border-border/60 p-0 transition-all hover:border-border hover:shadow-md">
