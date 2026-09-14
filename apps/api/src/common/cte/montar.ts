@@ -274,16 +274,42 @@ export function quemEhOTomador(e: EntradaCte): Participante {
   }
 }
 
+/** O CFOP de prestação iniciada fora da UF onde o prestador é inscrito. */
+export const NATUREZA_INICIO_FORA = "932";
+
 /**
  * O CFOP.
  *
- * A UF de INÍCIO e a de FIM da prestação decidem o primeiro dígito — e não a UF
- * do emitente, que é o erro clássico: transportadora do Paraná levando de São
+ * Duas decisões, e as duas são mecânicas — nenhuma é escolha de tributo:
+ *
+ * **O primeiro dígito** sai da UF de INÍCIO e da de FIM da prestação, e não da
+ * UF do emitente. É o erro clássico: transportadora do Paraná levando de São
  * Paulo pra São Paulo faz uma prestação INTERNA, ainda que ela seja de fora.
+ *
+ * **Os três últimos** vêm do cadastro — EXCETO quando a prestação começa numa
+ * UF onde o emitente não é inscrito. Aí a SEFAZ não aceita outro: é 5932 ou
+ * 6932, e ela diz isso na cara na rejeição 524 ("CFOP inválido, informar 5932
+ * ou 6932"). Sobrescrever o cadastro aqui não contradiz a regra de que o
+ * sistema nunca escolhe tributo: CST e alíquota são juízo do contador, este
+ * não é juízo nenhum — é a própria SEFAZ ditando o número, a partir de um fato
+ * que está nos dados.
+ *
+ * Limite conhecido: "onde é inscrito" é lido como a UF da empresa, porque o
+ * cadastro guarda uma inscrição estadual só. Transportadora com IE em mais de
+ * um estado poderia legitimamente usar o CFOP normal ao iniciar no segundo
+ * estado — quando isso aparecer, o cadastro é que precisa crescer.
  */
-export function montarCfop(natureza: string, ufInicio: string, ufFim: string): string {
-  const tres = soDigitos(natureza).padStart(3, "0").slice(-3);
+export function montarCfop(
+  natureza: string,
+  ufInicio: string,
+  ufFim: string,
+  ufEmitente: string,
+): string {
   const interna = ufInicio.toUpperCase() === ufFim.toUpperCase();
+  const comecaForaDaInscricao = ufEmitente.toUpperCase() !== ufInicio.toUpperCase();
+  const tres = comecaForaDaInscricao
+    ? NATUREZA_INICIO_FORA
+    : soDigitos(natureza).padStart(3, "0").slice(-3);
   return (interna ? "5" : "6") + tres;
 }
 
@@ -382,7 +408,12 @@ export function montarCte(e: EntradaCte): CteMontado {
   const ide = {
     cUF: CODIGO_UF[e.emitente.endereco.uf.toUpperCase()],
     cCT: codigoNumerico,
-    CFOP: montarCfop(e.config.naturezaCfop, e.inicioPrestacao.uf, e.fimPrestacao.uf),
+    CFOP: montarCfop(
+      e.config.naturezaCfop,
+      e.inicioPrestacao.uf,
+      e.fimPrestacao.uf,
+      e.emitente.endereco.uf,
+    ),
     natOp: e.config.naturezaOperacao,
     mod: MODELO_CTE,
     serie: String(e.config.serie),

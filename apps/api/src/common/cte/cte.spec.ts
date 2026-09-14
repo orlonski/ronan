@@ -182,17 +182,33 @@ describe("sortearCodigoNumerico", () => {
 
 describe("montarCfop", () => {
   it("mesma UF nas duas pontas é 5", () => {
-    expect(montarCfop("353", "PR", "PR")).toBe("5353");
+    expect(montarCfop("353", "PR", "PR", "PR")).toBe("5353");
   });
 
   it("UFs diferentes é 6", () => {
-    expect(montarCfop("353", "PR", "SP")).toBe("6353");
+    expect(montarCfop("353", "PR", "SP", "PR")).toBe("6353");
   });
 
-  it("quem manda é a prestação, não a sede do emitente", () => {
-    // Transportadora do PR levando de SP pra SP faz prestação INTERNA. Olhar a
-    // UF do emitente daria 6353 e a SEFAZ rejeitaria.
-    expect(montarCfop("353", "SP", "SP")).toBe("5353");
+  it("quem manda no primeiro dígito é a prestação, não a sede do emitente", () => {
+    // Transportadora do PR levando de SP pra SP faz prestação INTERNA — o
+    // primeiro dígito é 5. Olhar a UF do emitente daria 6 e seria rejeitado.
+    expect(montarCfop("353", "SP", "SP", "PR")[0]).toBe("5");
+  });
+
+  it("prestação que COMEÇA fora da UF de inscrição vira 932", () => {
+    // Rejeição 524 — "CFOP inválido, informar 5932 ou 6932". Aqui a SEFAZ não
+    // deixa escolha: o cadastro diz 353 e ela quer 932. Interna ao estado onde
+    // começou continua sendo 5.
+    expect(montarCfop("353", "SP", "SP", "PR")).toBe("5932");
+    // E interestadual iniciada fora é 6932.
+    expect(montarCfop("353", "SP", "MG", "PR")).toBe("6932");
+  });
+
+  it("começando na UF de inscrição, o cadastro continua mandando", () => {
+    // A exceção é estreita de propósito: fora dela, CFOP é decisão do contador
+    // e o sistema não opina.
+    expect(montarCfop("353", "PR", "SC", "PR")).toBe("6353");
+    expect(montarCfop("360", "PR", "PR", "pr")).toBe("5360");
   });
 });
 
@@ -302,6 +318,20 @@ describe("montarCte", () => {
     );
     expect((cte.ide as any).toma4.toma).toBe(4);
     expect((cte.ide as any).toma4.xNome).toBe("Agenciadora Fretes ME");
+  });
+
+  it("o CFOP trocado por 932 sai como AVISO, não em silêncio", () => {
+    // O documento sai certo, mas o CFOP impresso diverge do cadastro. Quem
+    // confere merece saber por quê antes de achar que é bug nosso.
+    const r = validarCte(
+      entrada({
+        inicioPrestacao: { codigo: "3550308", nome: "São Paulo", uf: "SP" },
+        fimPrestacao: { codigo: "3550308", nome: "São Paulo", uf: "SP" },
+      }),
+    );
+    const aviso = r.avisos.find((a) => a.campo === "cfop");
+    expect(aviso?.mensagem).toContain("5932");
+    expect(aviso?.mensagem).toContain("começa em SP");
   });
 
   it("sem valor da carga, a validação barra antes de gastar número da série", () => {

@@ -6,7 +6,7 @@ import {
 } from "@ronan/shared-types";
 import { soDigitos } from "../chave-fiscal";
 import { CODIGO_UF } from "./chave";
-import { quemEhOTomador, type EntradaCte, type Participante } from "./montar";
+import { montarCfop, quemEhOTomador, type EntradaCte, type Participante } from "./montar";
 
 /**
  * As rejeições da SEFAZ que dá pra pegar aqui, de graça, antes de mandar.
@@ -202,6 +202,17 @@ export function validarCte(e: EntradaCte): Validacao {
   }
   if (!e.config.naturezaOperacao?.trim()) {
     erros.push({ campo: "cfop", mensagem: "Falta o texto da natureza da operação." });
+  }
+  // Aviso, não erro: o documento sai certo. Mas o CFOP impresso vai divergir do
+  // que está no cadastro, e quem confere merece saber por quê antes de achar
+  // que é bug.
+  const ufEmitente = String(e.emitente.endereco.uf ?? "").toUpperCase();
+  const ufInicio = String(e.inicioPrestacao?.uf ?? "").toUpperCase();
+  if (ufEmitente && ufInicio && ufEmitente !== ufInicio) {
+    avisos.push({
+      campo: "cfop",
+      mensagem: `A prestação começa em ${ufInicio} e a empresa é inscrita em ${ufEmitente}, então o CFOP sai como ${montarCfop(e.config.naturezaCfop, ufInicio, String(e.fimPrestacao?.uf ?? ""), ufEmitente)} — a SEFAZ exige 932 nesse caso, no lugar da natureza do cadastro.`,
+    });
   }
   if (e.emitente.crt === "1" && e.config.icms.tipo !== "SN") {
     // Empresa do Simples destacando ICMS no CT-e é erro de cadastro, e sai caro:
