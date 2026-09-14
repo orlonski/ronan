@@ -429,7 +429,10 @@ function Conteudo() {
               <Input
                 id="senha-cert"
                 type="password"
-                autoComplete="off"
+                // "off" NÃO basta em campo de senha — o Chrome ignora e oferece
+                // a senha salva do site. "new-password" é o que ele respeita, e
+                // aqui o estrago seria subir o certificado com a senha errada.
+                autoComplete="new-password"
                 value={senhaCert}
                 onChange={(e) => setSenhaCert(e.target.value)}
               />

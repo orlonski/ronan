@@ -674,6 +674,9 @@ export class CteService {
         cteEmissor: true,
         cteAmbiente: true,
         cteSerie: true,
+        // Estava faltando: o campo GRAVAVA e nunca voltava, então a tela
+        // reabria em branco e o usuário achava que não tinha salvado.
+        cteUfAutorizador: true,
         cteNaturezaCfop: true,
         cteNaturezaOperacao: true,
         cteIcmsTipo: true,
