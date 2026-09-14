@@ -14,6 +14,8 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { LoadingCard } from "@/components/loading";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { lerNumero } from "@/lib/numero";
+import { AvisoNumero } from "@/components/aviso-numero";
 
 type Item = {
   id: string;
@@ -292,8 +294,11 @@ function NovoItem({ acertoId, onCriou }: { acertoId: string; onCriou: () => void
     e.preventDefault();
     if (!token) return;
     setErro(null);
-    const valor = Number(form.valor.replace(/\./g, "").replace(",", "."));
-    if (!Number.isFinite(valor) || valor <= 0) return setErro("Informe um valor.");
+    // Lido pelo parser único: "2400.50" já foi lançado como R$ 240.050,00 aqui.
+    const lido = lerNumero(form.valor);
+    if (!lido.ok) return setErro("Não entendi esse valor. Use vírgula só uma vez — ex.: 2.400,50");
+    const valor = lido.valor ?? 0;
+    if (!(valor > 0)) return setErro("Informe um valor.");
     if (ehDebito && form.motivo.trim().length < 10) {
       return setErro("Desconto exige motivo escrito (pelo menos 10 letras).");
     }
@@ -349,6 +354,7 @@ function NovoItem({ acertoId, onCriou }: { acertoId: string; onCriou: () => void
               value={form.valor}
               onChange={(e) => setForm({ ...form, valor: e.target.value })}
             />
+            <AvisoNumero valor={form.valor} dinheiro />
             <p className="text-xs text-muted-foreground">
               {ehDebito ? "Entra descontando." : "Entra somando."} Digite sempre positivo.
             </p>

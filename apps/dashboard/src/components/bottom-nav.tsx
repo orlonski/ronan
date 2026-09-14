@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { ClipboardCheck, HardHat, Home, Menu, Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePermissoes } from "@/lib/permissoes";
+import { isRotaAtiva } from "@/components/sidebar";
 
 type NavItem = {
   href: string;
@@ -30,12 +31,18 @@ const ITENS: NavItem[] = [
  */
 export function BottomNav({ onOpenMenu }: { onOpenMenu: () => void }) {
   const pathname = usePathname();
-  const { temPermissao } = usePermissoes();
+  const { temPermissao, temModulo } = usePermissoes();
 
-  const visiveis = ITENS.filter((i) => !i.perm || temPermissao(i.perm));
+  // Mesmo filtro da sidebar: só permissão deixava passar item de módulo não
+  // contratado. Hoje os 4 itens são do núcleo, mas o primeiro item de fora dele
+  // vazaria no celular.
+  const visiveis = ITENS.filter((i) => !i.perm || (temPermissao(i.perm) && temModulo(i.perm)));
 
   function ativo(item: NavItem) {
-    return item.exact ? pathname === item.href : pathname.startsWith(item.href);
+    // `startsWith` cru acendia "Viagens" junto de "Ao vivo" em
+    // /viagens-andamento. A sidebar já tinha resolvido isso; aqui só faltava
+    // usar a mesma regra em vez de manter uma segunda, errada.
+    return item.exact ? pathname === item.href : isRotaAtiva(pathname, item.href);
   }
 
   return (

@@ -10,12 +10,16 @@ import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/confirm-dialog";
 
 /**
- * Botão de exclusão definitiva (hard delete) com:
- * - Confirmação via window.confirm
- * - Tratamento de erro 409 (ConflictException) mostrando a mensagem do backend
- * - Invalidação do queryKey de listagem após sucesso
+ * Botão de exclusão definitiva (hard delete) com confirmação, tratamento de
+ * erro do backend e invalidação da listagem.
  *
- * Visível apenas pra perfil ADMIN.
+ * Nasce VERMELHO. O default era `ghost` — cinza — em 23 telas, contrariando o
+ * `docs/padrao-botoes.md`, que diz que um "excluir" nunca pode ter cor neutra.
+ * Quem quiser o botão discreto pede `variant="ghost"` de propósito.
+ *
+ * `descricaoConfirmacao` existe porque "Essa ação não pode ser desfeita" nem
+ * sempre é verdade: pedido com programação, por exemplo, é CANCELADO pelo
+ * backend, não apagado.
  */
 export function ExcluirButton({
   path,
@@ -24,10 +28,13 @@ export function ExcluirButton({
   invalidateKeys,
   onSuccess,
   size = "icon",
-  variant = "ghost",
+  variant = "destructive",
   disabled = false,
   label,
   perm,
+  descricaoConfirmacao,
+  rotuloConfirmar = "Excluir",
+  tituloConfirmacao,
 }: {
   /** Path base do endpoint admin (ex: "/admin/motoristas") */
   path: string;
@@ -44,6 +51,12 @@ export function ExcluirButton({
   label?: string;
   /** Permissão exigida (ex: "motoristas.excluir"). Sem ela, não renderiza. */
   perm?: string;
+  /** O que acontece de verdade. Default: "Essa ação não pode ser desfeita." */
+  descricaoConfirmacao?: string;
+  /** Verbo do botão que confirma. Default: "Excluir". */
+  rotuloConfirmar?: string;
+  /** Sobrescreve "Excluir <nomeRecurso>?" quando a ação não é exclusão. */
+  tituloConfirmacao?: string;
 }) {
   const { temPermissao } = usePermissoes();
   const token = useAuthToken();
@@ -70,19 +83,19 @@ export function ExcluirButton({
   async function onClick() {
     if (working) return;
     const ok = await confirmar({
-      title: `Excluir ${nomeRecurso}?`,
-      description: "Essa ação não pode ser desfeita.",
-      confirmLabel: "Excluir",
+      title: tituloConfirmacao ?? `Excluir ${nomeRecurso}?`,
+      description: descricaoConfirmacao ?? "Essa ação não pode ser desfeita.",
+      confirmLabel: rotuloConfirmar,
       variant: "destructive",
     });
     if (!ok) return;
     setWorking(true);
     try {
       await mutation.mutateAsync();
-      toast.success(`${capitalize(nomeRecurso)} excluído com sucesso.`);
+      toast.success(`${capitalize(nomeRecurso)} saiu da lista.`);
     } catch (err) {
       toast.error("Não foi possível excluir", {
-        description: (err as Error).message ?? "Erro ao excluir",
+        description: (err as Error).message || "Tente de novo em alguns instantes.",
       });
     } finally {
       setWorking(false);
@@ -92,11 +105,12 @@ export function ExcluirButton({
   return (
     <>
       <Button
-        variant={variant === "ghost" ? "ghost" : variant}
+        variant={variant}
         size={size}
         onClick={onClick}
         disabled={disabled || working}
-        title="Excluir definitivamente"
+        title={tituloConfirmacao ?? "Excluir definitivamente"}
+        aria-label={label ? undefined : (tituloConfirmacao ?? `Excluir ${nomeRecurso}`)}
         className={
           variant === "ghost"
             ? "text-muted-foreground hover:bg-destructive/10 hover:text-destructive"

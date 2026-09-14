@@ -21,6 +21,8 @@ import { LoadingCard } from "@/components/loading";
 import { StatCard } from "@/components/stat-card";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { ErroCard } from "@/components/erro-estado";
+import { lerNumero } from "@/lib/numero";
+import { AvisoNumero } from "@/components/aviso-numero";
 
 type Aging = {
   faixas: Record<FaixaAgingTipo, string>;
@@ -239,8 +241,10 @@ function ListaTitulos({ tipo }: { tipo: "receber" | "pagar" }) {
 
   async function darBaixa(id: string) {
     if (!token) return;
-    const valor = Number(valorBaixa.replace(/\./g, "").replace(",", "."));
-    if (!Number.isFinite(valor) || valor <= 0) return setErro("Informe o valor recebido.");
+    const lido = lerNumero(valorBaixa);
+    if (!lido.ok) return setErro("Não entendi esse valor. Use vírgula só uma vez — ex.: 2.400,50");
+    const valor = lido.valor ?? 0;
+    if (!(valor > 0)) return setErro("Informe o valor recebido.");
     setErro(null);
     try {
       await fetchApi(`/admin/financeiro/${tipo}/${id}/baixa`, {
@@ -347,6 +351,7 @@ function ListaTitulos({ tipo }: { tipo: "receber" | "pagar" }) {
                         value={valorBaixa}
                         onChange={(e) => setValorBaixa(e.target.value)}
                       />
+                      <AvisoNumero valor={valorBaixa} dinheiro />
                     </div>
                     <Button size="sm" variant="success" onClick={() => void darBaixa(t.id)}>
                       {tipo === "receber" ? "Recebi" : "Paguei"}

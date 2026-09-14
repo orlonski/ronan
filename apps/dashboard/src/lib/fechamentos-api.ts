@@ -200,7 +200,12 @@ export function useResolverLinha(fechamentoId: string) {
   return useMutation({
     mutationFn: (input: {
       linhaId: string;
-      acao: "aceitar_sugestao" | "escolher_viagem" | "erro_cliente" | "criar_retroativa";
+      acao:
+        | "aceitar_sugestao"
+        | "escolher_viagem"
+        | "erro_cliente"
+        | "aceitar_cobranca"
+        | "criar_retroativa";
       viagemId?: string;
       motivo?: string;
     }) =>

@@ -86,7 +86,7 @@ const VEREDITO = {
  * sobre a viagem continua sendo na tela de Viagens.
  */
 export default function ConferenciasPage() {
-  const { temPermissao } = usePermissoes();
+  const { temPermissao, plataforma } = usePermissoes();
   const token = useAuthToken();
   const [enviando, setEnviando] = useState(false);
   const [recomparando, setRecomparando] = useState(false);
@@ -237,15 +237,21 @@ export default function ConferenciasPage() {
           icone={(r?.executando ?? 0) > 0 ? <Loader2 className="h-4 w-4 animate-spin" /> : undefined}
         />
         <Metrica titulo="Últimas 24h" valor={r?.ultimas24h ?? 0} />
-        <Metrica
-          titulo="Custo 24h"
-          valor={`R$ ${((r?.custoUsd24h ?? 0) * 5.45).toFixed(2)}`}
-          rodape={
-            r?.ultimas24h
-              ? `≈ R$ ${(((r.custoUsd24h ?? 0) * 5.45) / r.ultimas24h).toFixed(3)} por ticket`
-              : undefined
-          }
-        />
+        {/* O custo da IA é da plataforma, não da transportadora: quanto a
+            Movatruck gasta por ticket não é assunto do cliente — e mostrar isso
+            convida a uma conversa sobre o preço do insumo, não do serviço.
+            Quem precisa do número é a equipe da plataforma, em /contas. */}
+        {plataforma && (
+          <Metrica
+            titulo="Custo 24h (plataforma)"
+            valor={`R$ ${((r?.custoUsd24h ?? 0) * 5.45).toFixed(2)}`}
+            rodape={
+              r?.ultimas24h
+                ? `≈ R$ ${(((r.custoUsd24h ?? 0) * 5.45) / r.ultimas24h).toFixed(3)} por ticket`
+                : undefined
+            }
+          />
+        )}
       </div>
 
       {r && Object.keys(r.porVeredito).length > 0 && (

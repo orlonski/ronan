@@ -31,8 +31,8 @@ export const viewport: Viewport = {
   themeColor: "#3b82f6",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // Sem trava de zoom: o painel tem tabela de 10 colunas e texto auxiliar em
+  // cinza, e quem opera 8h por dia às vezes precisa aproximar.
   viewportFit: "cover",
 };
 

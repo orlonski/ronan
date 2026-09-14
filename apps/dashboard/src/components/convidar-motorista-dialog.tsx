@@ -71,15 +71,29 @@ export function ConvidarMotoristaDialog() {
 
   const convidar = useMutation({
     mutationFn: () =>
-      fetchApi<{ nome: string }>("/admin/motoristas/convidar", {
-        method: "POST",
-        token,
-        body: JSON.stringify({ cpf: digitos }),
-      }),
+      fetchApi<{ nome: string; avisoWhatsapp?: "ENVIADO" | "SEM_TELEFONE" | "NAO_SAIU" }>(
+        "/admin/motoristas/convidar",
+        { method: "POST", token, body: JSON.stringify({ cpf: digitos }) },
+      ),
     onSuccess: (m) => {
-      toast.success(`Convite enviado pra ${m.nome}`, {
-        description: "Ele entra na sua lista assim que aceitar no app.",
-      });
+      // "Convite enviado" só quando ele foi, de fato, enviado. O backend agora
+      // diz o que aconteceu com o WhatsApp — antes a tela afirmava o envio e o
+      // aviso podia nem ter saído.
+      if (m.avisoWhatsapp === "ENVIADO") {
+        toast.success(`Convite enviado pra ${m.nome}`, {
+          description: "Ele entra na sua lista assim que aceitar no app.",
+        });
+      } else if (m.avisoWhatsapp === "SEM_TELEFONE") {
+        toast.success(`${m.nome} foi convidado`, {
+          description:
+            "Ele não tem celular no cadastro, então o aviso saiu só pelo app. Avise você também, se puder.",
+        });
+      } else {
+        toast.warning(`${m.nome} foi convidado, mas o WhatsApp não saiu`, {
+          description:
+            "O convite está esperando no app dele. Fale com ele por fora pra ele abrir o app e aceitar.",
+        });
+      }
       void queryClient.invalidateQueries({ queryKey: ["/admin/motoristas"] });
       fechar();
     },

@@ -126,7 +126,7 @@ export function PedidoForm({ initial }: { initial?: Pedido }) {
       else await create.mutateAsync(body);
       router.push("/pedidos");
     } catch (e) {
-      setErro((e as Error).message ?? "Erro ao salvar.");
+      setErro((e as Error).message || "Não salvei. Confira os campos e tente de novo.");
     }
   }
 

@@ -85,7 +85,7 @@ const GRUPOS: Grupo[] = [
       { href: "/programacao", label: "Programação do dia", icon: CalendarDays, perm: "programacao.ver" },
       { href: "/pedidos", label: "Pedidos do cliente", icon: ClipboardList, perm: "pedidos.ver" },
       { href: "/conferencias", label: "Conferência de ticket", icon: ScanEye, perm: "conferencia-ticket.ver" },
-      { href: "/relatorios/viagens", label: "Relatórios", icon: BarChart3, perm: "relatorios.ver" },
+      { href: "/relatorios", label: "Relatórios", icon: BarChart3, perm: "relatorios.ver" },
       { href: "/descargas-suspeitas", label: "Descargas suspeitas", icon: MapPin, perm: "descargas-suspeitas.ver" },
       { href: "/abastecimentos", label: "Abastecimentos", icon: Fuel, perm: "abastecimentos.ver" },
       { href: "/fechamentos", label: "Fechamentos", icon: FileSpreadsheet, perm: "fechamentos.ver" },

@@ -98,6 +98,7 @@ export function ConferenciaTab({ fechamentoId }: { fechamentoId: string }) {
             | "aceitar_sugestao"
             | "escolher_viagem"
             | "erro_cliente"
+            | "aceitar_cobranca"
             | "criar_retroativa",
           viagemId?: string,
         ) =>
@@ -148,7 +149,12 @@ export function ConferenciaTab({ fechamentoId }: { fechamentoId: string }) {
 }
 
 type ResolverFn = (
-  acao: "aceitar_sugestao" | "escolher_viagem" | "erro_cliente" | "criar_retroativa",
+  acao:
+    | "aceitar_sugestao"
+    | "escolher_viagem"
+    | "erro_cliente"
+    | "aceitar_cobranca"
+    | "criar_retroativa",
   viagemId?: string,
 ) => void;
 
@@ -328,8 +334,8 @@ function LinhaPedagioCard({
           size="sm"
           variant="outline"
           disabled={pending || !podeConferir}
-          onClick={() => onResolver("erro_cliente")}
-          title="Marca como resolvido — motorista esqueceu de lançar mas a cobrança procede"
+          onClick={() => onResolver("aceitar_cobranca")}
+          title="A cobrança procede — o motorista não lançou a viagem"
         >
           <Check className="h-3.5 w-3.5" /> Aceitar cobrança (motorista esqueceu)
         </Button>
@@ -407,8 +413,8 @@ function LinhaCombustivelCard({
           size="sm"
           variant="outline"
           disabled={pending || !podeConferir}
-          onClick={() => onResolver("erro_cliente")}
-          title="Aceita o lançamento mesmo sem o motorista ter registrado"
+          onClick={() => onResolver("aceitar_cobranca")}
+          title="A cobrança procede — o motorista não registrou o abastecimento"
         >
           <Check className="h-3.5 w-3.5" /> Aceitar (motorista esqueceu)
         </Button>

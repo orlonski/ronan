@@ -28,16 +28,22 @@ export class PrimeirosPassosService {
   constructor(private readonly prisma: PrismaService) {}
 
   async listar(): Promise<{ concluido: boolean; passos: PrimeiroPasso[] }> {
-    const [veiculos, motoristas, locais, empresas, clientes, viagens] = await Promise.all([
-      this.prisma.veiculo.count(),
-      this.prisma.motorista.count(),
-      this.prisma.local.count(),
-      this.prisma.empresa.count(),
-      this.prisma.cliente.count(),
-      // Viagem em andamento não conta como "já rodou": o ciclo pode ter sido
-      // aberto e abandonado, e o passo é sobre ter chegado ao fim uma vez.
-      this.prisma.viagem.count({ where: { status: { notIn: STATUS_FORA_FECHAMENTO } } }),
-    ]);
+    const [veiculos, motoristas, locais, empresas, clientes, viagens, motoristasNoApp, precos] =
+      await Promise.all([
+        this.prisma.veiculo.count(),
+        this.prisma.motorista.count(),
+        this.prisma.local.count(),
+        this.prisma.empresa.count(),
+        this.prisma.cliente.count(),
+        // Viagem em andamento não conta como "já rodou": o ciclo pode ter sido
+        // aberto e abandonado, e o passo é sobre ter chegado ao fim uma vez.
+        this.prisma.viagem.count({ where: { status: { notIn: STATUS_FORA_FECHAMENTO } } }),
+        // O passo da viagem é o único que o dono NÃO cumpre sozinho: quem lança
+        // é o motorista, pelo celular. Sem este passo no meio, a lista pedia um
+        // resultado sem nunca pedir a ação que o produz.
+        this.prisma.motorista.count({ where: { ultimoLoginEm: { not: null } } }),
+        this.prisma.tabelaPreco.count(),
+      ]);
 
     const passos: PrimeiroPasso[] = [
       // O motorista vem PRIMEIRO porque o cadastro dele aceita a placa, e a
@@ -60,13 +66,17 @@ export class PrimeirosPassosService {
         rota: "/veiculos/novo",
         cumprido: veiculos > 0,
       },
+      // Dois locais, não um: a viagem exige `localCargaId` E `localDescargaId`
+      // (shared-types/viagem.ts). Com `locais > 0` a pessoa cumpria os seis
+      // passos, ia dormir tranquila, e o motorista continuava travado no app
+      // sem ter onde descarregar.
       {
         chave: "local",
-        titulo: "Cadastre onde você carrega",
+        titulo: "Cadastre onde você carrega e onde descarrega",
         descricao:
-          "A pedreira, o areal, a obra. O app baixa esses lugares pro motorista escolher sem digitar.",
+          "A pedreira e a obra — os dois. O motorista escolhe de onde saiu e onde descarregou, então uma viagem precisa dos dois cadastrados.",
         rota: "/locais/novo",
-        cumprido: locais > 0,
+        cumprido: locais > 1,
       },
       // Cliente exige `empresaId` — sem a empresa, a tela de cliente não tem o
       // que escolher. A dependência aparece na lista pra pessoa não descobrir
@@ -86,6 +96,14 @@ export class PrimeirosPassosService {
         rota: "/clientes/novo",
         cumprido: clientes > 0,
       },
+      {
+        chave: "app",
+        titulo: "Mande o app pro motorista",
+        descricao:
+          "Ele baixa, entra com o CPF e a senha que você cadastrou, e a primeira viagem chega aqui sozinha. Sem isso, o painel fica vazio por mais cadastro que você faça.",
+        rota: "/motoristas",
+        cumprido: motoristasNoApp > 0,
+      },
       // Não existe criar viagem pelo painel: o controller só tem PATCH, e não
       // há tela de nova viagem. A viagem nasce no celular do motorista, e é
       // isso que o texto tem que dizer.
@@ -97,6 +115,22 @@ export class PrimeirosPassosService {
         rota: "/viagens",
         cumprido: viagens > 0,
       },
+      // Só entra na lista depois que existe viagem: antes disso é abstrato
+      // demais, e a lista some assim que o último passo fecha — levando junto a
+      // única bússola que a pessoa tinha. Com viagem na mão, "vale R$ 0" é uma
+      // pergunta que ela já está se fazendo.
+      ...(viagens > 0
+        ? [
+            {
+              chave: "preco",
+              titulo: "Diga quanto vale a viagem",
+              descricao:
+                "Sem tabela de preço a viagem entra valendo zero e a planilha de fechamento sai sem a coluna de dinheiro.",
+              rota: "/tabelas-preco/novo",
+              cumprido: precos > 0,
+            },
+          ]
+        : []),
     ];
 
     return { concluido: passos.every((p) => p.cumprido), passos };

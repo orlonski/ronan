@@ -109,7 +109,7 @@ export function RegraForm({ initial }: Props) {
       }
       router.push("/regras-minimo");
     } catch (e) {
-      setErro((e as Error).message ?? "Erro ao salvar.");
+      setErro((e as Error).message || "Não salvei. Confira os campos e tente de novo.");
     }
   }
 

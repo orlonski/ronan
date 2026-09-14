@@ -255,7 +255,12 @@ export class FechamentosService {
     usuarioId: string;
     fechamentoId: string;
     linhaId: string;
-    acao: "aceitar_sugestao" | "escolher_viagem" | "erro_cliente" | "criar_retroativa";
+    acao:
+      | "aceitar_sugestao"
+      | "escolher_viagem"
+      | "erro_cliente"
+      | "aceitar_cobranca"
+      | "criar_retroativa";
     viagemId?: string;
     motivo?: string;
   }) {
@@ -295,6 +300,18 @@ export class FechamentosService {
         auditEntries.push({
           acao: AcaoAuditoria.RESOLVER,
           motivo: input.motivo ?? "Marcado como erro do cliente",
+        });
+        break;
+      // A linha some do match igual ao erro do cliente, mas o SIGNIFICADO é o
+      // oposto: a cobrança procede, quem não lançou foi o motorista. As duas
+      // gravavam "erro do cliente" — e é essa trilha que a operadora usa pra
+      // contestar a fatura depois.
+      case "aceitar_cobranca":
+        viagemFinalId = null;
+        auditEntries.push({
+          acao: AcaoAuditoria.RESOLVER,
+          motivo:
+            input.motivo ?? "Cobrança aceita — a viagem aconteceu e não foi lançada pelo motorista",
         });
         break;
       case "criar_retroativa":

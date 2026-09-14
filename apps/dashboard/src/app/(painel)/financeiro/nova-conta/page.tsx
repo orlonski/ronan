@@ -13,6 +13,8 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { MotoristaCombobox, VeiculoCombobox } from "@/components/fk-comboboxes";
 import { fetchApi, useAuthToken, useResourceOptions } from "@/lib/client-api";
+import { lerNumero } from "@/lib/numero";
+import { AvisoNumero } from "@/components/aviso-numero";
 
 type Fornecedor = { id: string; nome: string; tipo: keyof typeof TIPO_FORNECEDOR_LABEL };
 
@@ -51,9 +53,11 @@ function Conteudo() {
   async function salvar(e: React.FormEvent) {
     e.preventDefault();
     if (!token) return;
-    const valor = Number(form.valor.replace(/\./g, "").replace(",", "."));
+    const lido = lerNumero(form.valor);
     if (form.descricao.trim().length < 3) return setErro("Diga o que é essa conta.");
-    if (!Number.isFinite(valor) || valor <= 0) return setErro("Informe o valor.");
+    if (!lido.ok) return setErro("Não entendi esse valor. Use vírgula só uma vez — ex.: 2.400,50");
+    const valor = lido.valor ?? 0;
+    if (!(valor > 0)) return setErro("Informe o valor.");
 
     setErro(null);
     setSalvando(true);
@@ -107,6 +111,7 @@ function Conteudo() {
                 value={form.valor}
                 onChange={(e) => setForm({ ...form, valor: e.target.value })}
               />
+              <AvisoNumero valor={form.valor} dinheiro />
             </div>
           </div>
 

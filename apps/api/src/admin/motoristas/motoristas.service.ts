@@ -502,8 +502,16 @@ export class MotoristasService {
       valorDepois: "PENDENTE",
       metadata: { cpf },
     });
-    void this.avisarConvite(identidade.id, identidade.telefone, contaIdAtual());
-    return this.flatten(motorista);
+    // Esperar o aviso custa alguns instantes, mas é o que permite a tela dizer a
+    // verdade: o módulo de comunicação NÃO vem ligado em conta nova, então o
+    // caso comum do dia 1 era o painel dizer "convite enviado" sem nada ter
+    // saído — e o dono ficar esperando um motorista que nunca foi avisado.
+    const aviso = await this.avisarConvite(
+      identidade.id,
+      identidade.telefone,
+      contaIdAtual(),
+    ).catch(() => ({ whatsapp: "NAO_SAIU" as const }));
+    return { ...this.flatten(motorista), avisoWhatsapp: aviso.whatsapp };
   }
 
   /**
@@ -519,7 +527,11 @@ export class MotoristasService {
    * motorista recebia "«outra empresa» quer te adicionar" — o nome da primeira
    * conta da tabela, não da empresa que convidou.
    */
-  private async avisarConvite(identidadeId: string, telefone: string | null, contaId: string) {
+  private async avisarConvite(
+    identidadeId: string,
+    telefone: string | null,
+    contaId: string,
+  ): Promise<{ whatsapp: "ENVIADO" | "SEM_TELEFONE" | "NAO_SAIU" }> {
     const conta = await this.prisma.conta.findUniqueOrThrow({
       where: { id: contaId },
       select: { nome: true },
@@ -534,13 +546,14 @@ export class MotoristasService {
       })
       .catch(() => {});
 
-    if (!telefone) return;
-    await this.envio.tentarEnviar({
+    if (!telefone) return { whatsapp: "SEM_TELEFONE" };
+    const r = await this.envio.tentarEnviar({
       destino: { tipo: "TELEFONE", numero: SessaoService.normalizar(telefone) },
       rota: "CONVITE_EMPRESA",
       texto: `A ${conta.nome} quer te adicionar como motorista no ${NOME_PLATAFORMA}. Abra o app pra aceitar ou recusar.`,
       params: [conta.nome, NOME_PLATAFORMA],
     });
+    return { whatsapp: r.enviado ? "ENVIADO" : "NAO_SAIU" };
   }
 
   /**

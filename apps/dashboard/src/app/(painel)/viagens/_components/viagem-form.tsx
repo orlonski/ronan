@@ -19,6 +19,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { fetchApi, useAuthToken, useResourceOptions } from "@/lib/client-api";
 import { isoDeInputDataHoraSP, paraInputDataHoraSP } from "@/lib/datetime-br";
 import { formatarDuracao } from "@ronan/shared-types";
+import { numeroInvalido, numeroOuNull } from "@/lib/numero";
+import { AvisoNumero } from "@/components/aviso-numero";
 
 type Material = { id: string; nome: string };
 type Motorista = { id: string; nome: string };
@@ -90,12 +92,16 @@ type FormState = {
   saidaEm: string;
 };
 
-function parseDecimal(v: string): number | null {
-  const t = v.trim();
-  if (!t) return null;
-  const n = Number(t.replace(",", "."));
-  return Number.isFinite(n) ? n : null;
-}
+/**
+ * Campos numéricos desta tela. O `id` existe pra poder focar o campo culpado
+ * quando o número não dá pra ler — validação que não leva o olho até o campo
+ * não serve pra formulário deste tamanho.
+ */
+const CAMPOS_NUMERICOS = [
+  { chave: "toneladas", id: "viagem-toneladas", rotulo: "Toneladas" },
+  { chave: "km", id: "viagem-km", rotulo: "Km" },
+  { chave: "valorPedagioTotal", id: "viagem-pedagio", rotulo: "Valor do pedágio" },
+] as const;
 
 // Converte ISO/Date pra "YYYY-MM-DD" pra input type="date"
 function toDateInput(iso: string): string {
@@ -251,11 +257,11 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
       if (saidaNova !== (initial.saidaEm ?? null)) diff.saidaEm = saidaNova;
     }
 
-    const tonNum = parseDecimal(form.toneladas);
+    const tonNum = numeroOuNull(form.toneladas);
     if (tonNum != null && tonNum !== Number(initial.toneladas)) {
       diff.toneladas = tonNum;
     }
-    const kmNum = parseDecimal(form.km);
+    const kmNum = numeroOuNull(form.km);
     if (kmNum != null && kmNum !== Number(initial.km)) {
       diff.km = kmNum;
       // O km do motorista é lei: quando cede, vai junto o porquê (o backend
@@ -263,7 +269,7 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
       if (form.motivoKm.trim()) diff.motivoKm = form.motivoKm.trim();
     }
 
-    const pedagioNovo = parseDecimal(form.valorPedagioTotal);
+    const pedagioNovo = numeroOuNull(form.valorPedagioTotal);
     const pedagioAntigo =
       initial.valorPedagioTotal != null ? Number(initial.valorPedagioTotal) : null;
     if (pedagioNovo !== pedagioAntigo) {
@@ -300,13 +306,25 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
   // O km que o motorista informou é lei: mexer nele exige motivo escrito. A
   // mesma regra vale no backend (400 sem motivo) — aqui é só pra não deixar o
   // conferente descobrir isso depois de digitar tudo.
-  const kmNovo = parseDecimal(form.km);
+  const campoNumericoRuim = CAMPOS_NUMERICOS.find((c) => numeroInvalido(form[c.chave]));
+
+  const kmNovo = numeroOuNull(form.km);
   const kmMudou = kmNovo != null && kmNovo !== Number(initial.km);
   const exigeMotivoKm = kmMudou && initial.kmMotorista != null;
   const motivoKmCurto = form.motivoKm.trim().length < 10;
 
   async function onSubmit(ev: React.FormEvent) {
     ev.preventDefault();
+    // Número que não dá pra ler ("12,5,0") era descartado como se o campo
+    // estivesse vazio: a tela dizia "Viagem atualizada", o km ficava o antigo e,
+    // porque o km "não mudou", a trava do motivo nem disparava. Agora é erro.
+    if (campoNumericoRuim) {
+      toast.error(`${campoNumericoRuim.rotulo}: não entendi esse número`, {
+        description: "Use vírgula só uma vez, sem letra. Ex.: 12,5",
+      });
+      document.getElementById(campoNumericoRuim.id)?.focus();
+      return;
+    }
     if (exigeMotivoKm && motivoKmCurto) {
       toast.error("Explique por que está alterando o km", {
         description:
@@ -404,13 +422,16 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
             </div>
           ) : (
             <div className="space-y-2">
-              <Label>Toneladas</Label>
+              <Label htmlFor="viagem-toneladas">Toneladas</Label>
               <Input
+                id="viagem-toneladas"
                 required
                 inputMode="decimal"
+                aria-invalid={numeroInvalido(form.toneladas) || undefined}
                 value={form.toneladas}
                 onChange={(e) => setForm({ ...form, toneladas: e.target.value })}
               />
+              <AvisoNumero valor={form.toneladas} />
             </div>
           )}
         </div>
@@ -470,13 +491,16 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
             />
           </div>
           <div className="space-y-2">
-            <Label>Km</Label>
+            <Label htmlFor="viagem-km">Km</Label>
             <Input
+              id="viagem-km"
               required
               inputMode="decimal"
+              aria-invalid={numeroInvalido(form.km) || undefined}
               value={form.km}
               onChange={(e) => setForm({ ...form, km: e.target.value })}
             />
+            <AvisoNumero valor={form.km} />
             {initial.kmMotorista != null && (
               <p className="text-xs text-muted-foreground">
                 Informado pelo motorista:{" "}
@@ -516,15 +540,18 @@ export function ViagemForm({ initial }: { initial: ViagemEditavel }) {
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label>Valor pedágio (R$)</Label>
+            <Label htmlFor="viagem-pedagio">Valor pedágio (R$)</Label>
             <Input
+              id="viagem-pedagio"
               inputMode="decimal"
               placeholder="Vazio = sem pedágio"
+              aria-invalid={numeroInvalido(form.valorPedagioTotal) || undefined}
               value={form.valorPedagioTotal}
               onChange={(e) =>
                 setForm({ ...form, valorPedagioTotal: e.target.value })
               }
             />
+            <AvisoNumero valor={form.valorPedagioTotal} dinheiro />
           </div>
           <div className="space-y-2">
             <Label>Observação</Label>

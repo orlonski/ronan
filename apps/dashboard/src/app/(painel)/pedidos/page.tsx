@@ -197,11 +197,16 @@ function Conteudo() {
                 </Button>
               </Link>
             </Permitido>
+            {/* Pedido com programação NÃO é apagado: o backend só marca
+                CANCELADO (pedidos.service.ts). O diálogo dizia "não pode ser
+                desfeita" pros dois casos — e o toast saía "Este pedido
+                excluído com sucesso" pra um pedido que continuava lá. */}
             <ExcluirButton
               perm="pedidos.excluir"
               path={PATH}
               id={row.original.id}
               nomeRecurso="este pedido"
+              descricaoConfirmacao="Se o pedido já tem viagens programadas, ele é cancelado e as viagens continuam no quadro do dia. Se não tem nenhuma, some de vez."
             />
           </div>
         ),

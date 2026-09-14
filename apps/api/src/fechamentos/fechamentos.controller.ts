@@ -44,7 +44,7 @@ const ListFechamentosQuery = paginationQuerySchema.extend({
 type ListFechamentosQuery = z.infer<typeof ListFechamentosQuery>;
 
 const ResolverLinhaInput = z.object({
-  acao: z.enum(["aceitar_sugestao", "escolher_viagem", "erro_cliente", "criar_retroativa"]),
+  acao: z.enum(["aceitar_sugestao", "escolher_viagem", "erro_cliente", "aceitar_cobranca", "criar_retroativa"]),
   viagemId: z.string().uuid().optional(),
   motivo: z.string().max(500).optional(),
 });

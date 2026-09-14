@@ -656,7 +656,7 @@ export default function ViagemDetalhePage({
           <ExcluirButton perm="viagens.excluir"
             path="/admin/viagens"
             id={v.id}
-            nomeRecurso={`a viagem ${v.ticket}`}
+            nomeRecurso={v.ticket ? `a viagem do ticket ${v.ticket}` : "esta viagem"}
             size="sm"
             variant="outline"
             label="Excluir"
@@ -1035,6 +1035,10 @@ export default function ViagemDetalhePage({
                   <p className="text-sm text-muted-foreground">
                     Revise a correção e aprove ou recuse de novo.
                   </p>
+                  {/* Sem o gate, quem não tem `viagens.validar` clicava,
+                      preenchia o motivo e só então levava 403 — os vizinhos
+                      ("Editar", "Aceitar km") já eram gateados. */}
+                  <Permitido chave="viagens.validar">
                   <div className="flex flex-wrap gap-2">
                     <Button
                       variant="success"
@@ -1056,6 +1060,7 @@ export default function ViagemDetalhePage({
                       <ThumbsDown className="h-4 w-4" /> Recusar de novo
                     </Button>
                   </div>
+                  </Permitido>
                 </div>
               ) : v.revisadoEm ? (
                 <div className="space-y-2">
@@ -1119,6 +1124,7 @@ export default function ViagemDetalhePage({
                   <p className="text-sm text-muted-foreground">
                     Marque como validada ou divergente antes do fechamento.
                   </p>
+                  <Permitido chave="viagens.validar">
                   <div className="flex flex-wrap gap-2">
                     <Button
                       variant="success"
@@ -1153,6 +1159,7 @@ export default function ViagemDetalhePage({
                       <ThumbsDown className="h-4 w-4" /> Marcar como divergente
                     </Button>
                   </div>
+                  </Permitido>
                 </div>
               )}
             </Card>
