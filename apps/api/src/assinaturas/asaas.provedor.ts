@@ -120,8 +120,16 @@ export class AsaasProvedor implements GatewayPagamento {
       );
     }
 
+    // ATENÇÃO ao formato da RESPOSTA, que não espelha o da requisição: o
+    // copia-e-cola vem em `payload`, na RAIZ, e o objeto `immediateQrCode`
+    // carrega só a conciliação e o vencimento. Mandar o QR dentro de
+    // `immediateQrCode` e recebê-lo fora dele é assimétrico o bastante pra
+    // enganar — e enganou: a primeira autorização de produção nasceu sem
+    // copia-e-cola nenhum porque este código lia `immediateQrCode.payload`.
     const criada = await this.post<{
       id: string;
+      payload?: string;
+      encodedImage?: string;
       immediateQrCode?: { payload?: string; expirationDate?: string };
     }>("/pix/automatic/authorizations", {
       customerId: dados.clienteId,
@@ -150,7 +158,9 @@ export class AsaasProvedor implements GatewayPagamento {
     const expira = criada.immediateQrCode?.expirationDate;
     return {
       id: criada.id,
-      qrCodePayload: criada.immediateQrCode?.payload,
+      // A raiz primeiro, que é onde o gateway de fato responde; o aninhado
+      // fica como rede caso eles alinhem os dois formatos um dia.
+      qrCodePayload: criada.payload ?? criada.immediateQrCode?.payload,
       qrCodeExpiraEm: expira ? new Date(expira) : undefined,
       // Só vira ativa quando o primeiro Pix for pago.
       ativaImediatamente: false,

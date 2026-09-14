@@ -504,6 +504,23 @@ function DialogCobrancas({
           </DialogDescription>
         </DialogHeader>
 
+        {/* Aguardando autorização e SEM o copia-e-cola: estado que não pode
+            passar em silêncio. Ele significa que a assinatura existe no
+            gateway mas ninguém consegue pagar o primeiro Pix — e sem o
+            primeiro, nunca há recorrência. Aconteceu de verdade em 14/09/2026
+            (o payload vinha de um campo que o código não lia), e a tela não
+            dizia nada: parecia só "esperando o cliente". */}
+        {assinatura.status === "AGUARDANDO" && !assinatura.qrCodePayload && (
+          <div className="rounded border border-destructive/40 bg-destructive/5 p-3">
+            <p className="text-sm font-medium">Esta assinatura não tem código de pagamento</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Ela está esperando autorização, mas o gateway não devolveu o copia-e-cola do
+              primeiro Pix — então o cliente não tem como pagar e a recorrência nunca começa.
+              Cancele e crie de novo; se repetir, é problema na integração.
+            </p>
+          </div>
+        )}
+
         {assinatura.status === "AGUARDANDO" && assinatura.qrCodePayload && (
           <div className="rounded border border-amber-500/40 bg-amber-500/5 p-3">
             <p className="text-sm font-medium">Esperando a autorização do cliente</p>
