@@ -1,6 +1,9 @@
 import { Injectable } from "@nestjs/common";
+import { moduloDoRecurso } from "@ronan/shared-types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
+import { contaIdAtual } from "../../common/conta/conta-context";
+import { modulosDaConta } from "../../common/conta/teto-da-conta";
 
 export type PrimeiroPasso = {
   chave: string;
@@ -10,6 +13,30 @@ export type PrimeiroPasso = {
   rota: string;
   cumprido: boolean;
 };
+
+/**
+ * A permissão que o passo exige pra ser CUMPRIDO — não a de ver a tela.
+ *
+ * Um passo pendente que abre "Você não tem acesso a esta tela" é pior que passo
+ * nenhum: a lista promete um caminho e entrega uma porta fechada, e "fale com um
+ * administrador" não ajuda quem já é o administrador da própria empresa.
+ *
+ * A chave também diz de qual MÓDULO o passo é (moduloDoRecurso): conta que não
+ * contratou Comercial não tem "diga quanto vale a viagem" no caminho dela —
+ * esse passo não está pendente, ele não existe.
+ */
+type Exigencia = { passo: string; perm: string };
+
+const EXIGENCIAS: Exigencia[] = [
+  { passo: "motorista", perm: "motoristas.criar" },
+  { passo: "veiculo", perm: "veiculos.criar" },
+  { passo: "local", perm: "locais.criar" },
+  { passo: "empresa", perm: "empresas.criar" },
+  { passo: "cliente", perm: "clientes.criar" },
+  { passo: "app", perm: "motoristas.ver" },
+  { passo: "viagem", perm: "viagens.ver" },
+  { passo: "preco", perm: "tabelas-preco.criar" },
+];
 
 /**
  * O caminho da conta vazia até a primeira viagem.
@@ -27,7 +54,9 @@ export type PrimeiroPasso = {
 export class PrimeirosPassosService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async listar(): Promise<{ concluido: boolean; passos: PrimeiroPasso[] }> {
+  async listar(
+    usuario: { permissoes: string[]; plataforma: boolean },
+  ): Promise<{ concluido: boolean; passos: PrimeiroPasso[] }> {
     const [veiculos, motoristas, locais, empresas, clientes, viagens, motoristasNoApp, precos] =
       await Promise.all([
         this.prisma.veiculo.count(),
@@ -133,6 +162,26 @@ export class PrimeirosPassosService {
         : []),
     ];
 
-    return { concluido: passos.every((p) => p.cumprido), passos };
+    // Só sobra o que ESTA pessoa consegue fazer nesta conta. Filtrar aqui, e não
+    // na tela, é o que garante que `concluido` (que apaga o card) signifique
+    // "acabou o seu caminho", e não "acabou o caminho de outra pessoa".
+    const modulos = await modulosDaConta(this.prisma, contaIdAtual());
+    const permissoes = new Set(usuario.permissoes);
+
+    const visiveis = passos.filter((p) => {
+      const exigencia = EXIGENCIAS.find((e) => e.passo === p.chave);
+      if (!exigencia) return true;
+      const recurso = exigencia.perm.split(".")[0]!;
+      const modulo = moduloDoRecurso(recurso);
+      if (modulo && !modulos.has(modulo)) return false;
+      // Operador da plataforma enxerga tudo — é ele quem configura a conta nova.
+      if (usuario.plataforma) return true;
+      // Duas permissões, porque são duas portas: o `TelaGuard` abre a tela por
+      // `<recurso>.ver` e a ação exige a dela. Checar só uma deixaria o mesmo
+      // beco sem saída de pé, com outro texto.
+      return permissoes.has(`${recurso}.ver`) && permissoes.has(exigencia.perm);
+    });
+
+    return { concluido: visiveis.every((p) => p.cumprido), passos: visiveis };
   }
 }
