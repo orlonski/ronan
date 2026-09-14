@@ -89,6 +89,13 @@ const MODELS_GLOBAIS = new Set<string>([
   "PostInstagram",
   // A série diária de seguidores do mesmo perfil, pelo mesmo motivo.
   "SeguidoresInstagram",
+  // O evento cru do gateway de pagamento, guardado antes de ser processado.
+  // Chega numa rota pública, sem token e sem conta: de qual empresa ele é só se
+  // descobre depois de casar com a cobrança. As duas tabelas do dinheiro em si
+  // (`Assinatura`, `CobrancaAssinatura`) NÃO estão aqui de propósito — são
+  // escopadas, pra tela do cliente sair filtrada pela trava sem depender de
+  // ninguém lembrar.
+  "EventoGatewayPagamento",
 ]);
 
 /**

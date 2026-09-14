@@ -23,6 +23,7 @@ import { ModulosDialog } from "./_components/modulos-dialog";
 import { PortaCadastro } from "./_components/porta-cadastro";
 import { AtendimentoSdr } from "./_components/atendimento-sdr";
 import { TabelaPreco } from "./_components/tabela-preco";
+import { Mensalidades } from "./_components/mensalidades";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
@@ -225,6 +226,7 @@ export default function ContasPage() {
       <PortaCadastro />
       <AtendimentoSdr />
       <TabelaPreco />
+      <Mensalidades contas={(data ?? []).map((c) => ({ id: c.id, nome: c.nome }))} />
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Carregando…</p>

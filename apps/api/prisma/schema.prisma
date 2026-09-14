@@ -210,6 +210,14 @@ enum AcaoAuditoria {
   /// corrigir o registro do caminho; mexer no km é mexer no que o motorista
   /// recebe. Uma escolha de rota pode gerar as duas ações, ou só esta.
   ADMIN_ESCOLHEU_ROTA
+  /// A assinatura de uma empresa foi cancelada. Nome próprio, e não UPDATE,
+  /// pelo mesmo motivo do ADMIN_ALTEROU_KM: mexe em dinheiro, exige motivo
+  /// escrito e é o tipo de decisão que alguém vai querer reconstituir depois.
+  CANCELAR_ASSINATURA
+  /// Uma mensalidade foi dada como paga sem o gateway confirmar (Pix na conta,
+  /// TED). É a única forma de cobrança virar paga sem prova externa — então
+  /// fica registrado quem deu a baixa e por quê.
+  BAIXA_MANUAL_COBRANCA
   COMPARTILHAR_VIAGEM
   REVOGAR_COMPARTILHAMENTO
   ENVIAR_COMPARTILHAMENTO
@@ -576,6 +584,8 @@ model Conta {
   denunciasMensagemChat         DenunciaMensagemChat[]
   usosIa                        UsoIa[]
   conferenciasTicket            ConferenciaTicket[]
+  assinaturas                   Assinatura[]
+  cobrancasAssinatura           CobrancaAssinatura[]
 
   @@index([ativa])
   @@map("contas")
@@ -694,6 +704,9 @@ model User {
   divergenciasResolvidas ViagemDivergencia[]
   adminNotificacoes      AdminNotificacao[]
   postsInstagramCriados  PostInstagram[]       @relation("PostsInstagramCriados")
+  assinaturasCriadas     Assinatura[]          @relation("CriouAssinatura")
+  assinaturasCanceladas  Assinatura[]          @relation("CancelouAssinatura")
+  cobrancasBaixadas      CobrancaAssinatura[]  @relation("BaixouCobranca")
 
   @@index([contaId])
   @@map("users")
@@ -5513,4 +5526,234 @@ model SeguidoresInstagram {
   criadoEm DateTime @default(now())
 
   @@map("seguidores_instagram")
+}
+
+// ---------------------------------------------------------------------------
+// ASSINATURA: o que a empresa cliente paga pra usar a Movatruck.
+//
+// É o outro lado do balcão de tudo que existe neste schema. `TabelaPreco` é
+// quanto a transportadora cobra do tomador dela; `Fatura` e `Titulo` são o
+// financeiro DELA. Aqui é a mensalidade que a Movatruck cobra dela — que até
+// 14/09/2026 era Pix na mão, sem cobrança gerada, sem nota e sem histórico.
+//
+// Os dois models são ESCOPADOS por conta (têm `contaId`), e não globais como
+// `FaixaPreco`, de propósito: quem vai ler isto na tela do cliente é a própria
+// empresa, e escopado significa que a trava filtra sozinha. Quem atravessa
+// contas é a plataforma, e essa passa por `comoSistema` declarando a intenção.
+// ---------------------------------------------------------------------------
+
+/// Por onde o dinheiro entra. Ver `shared-types/src/assinatura.ts` — lá está o
+/// custo de cada forma, que é o que explica a ordem.
+enum FormaCobranca {
+  PIX_AUTOMATICO
+  CARTAO
+  PIX
+  BOLETO
+}
+
+enum StatusAssinatura {
+  RASCUNHO
+  AGUARDANDO
+  ATIVA
+  INADIMPLENTE
+  CANCELADA
+}
+
+enum StatusCobrancaAssinatura {
+  PENDENTE
+  CONFIRMADA
+  RECEBIDA
+  VENCIDA
+  ESTORNADA
+  CANCELADA
+}
+
+/// O contrato de uma empresa com a Movatruck.
+///
+/// Uma conta pode ter várias linhas ao longo do tempo (cancelou e voltou), mas
+/// só uma viva: quem garante isso é o service, porque "viva" é um conjunto de
+/// status e o Postgres não faz unique parcial pelo Prisma.
+model Assinatura {
+  id      String @id @default(uuid())
+  contaId String
+  conta   Conta  @relation(fields: [contaId], references: [id], onDelete: Cascade)
+
+  status StatusAssinatura @default(RASCUNHO)
+  forma  FormaCobranca
+  /// "MENSAL" | "ANUAL". Anual cobra uma vez e vale o ano — a régua de
+  /// vencimento é a mesma, muda só o intervalo.
+  ciclo  String           @default("MENSAL")
+
+  /// O valor COMBINADO, copiado da `FaixaPreco` na criação e nunca lido ao
+  /// vivo depois. Reajuste de tabela não pode mudar sozinho o que um cliente
+  /// combinou pagar — quem reajusta é uma edição explícita, com data.
+  valorCentavos Int
+  /// Dia do mês em que vence. Limitado a 28 no schema Zod: 29/30/31 não
+  /// existem em todo mês e viram regra de arredondamento que ninguém combinou.
+  diaVencimento Int @default(10)
+
+  // --- quem recebe a cobrança ---
+  // Separado do administrador da conta de propósito: quem opera o sistema é o
+  // dono ou o gerente, quem paga boleto é o financeiro. Mandar cobrança pro
+  // dono todo mês é o jeito certo de a cobrança ser ignorada.
+  nomeResponsavel  String
+  emailCobranca    String
+  telefoneCobranca String
+  /// CPF ou CNPJ de quem paga, só dígitos. Sem ele não sai nota fiscal.
+  documento        String
+
+  // --- o espelho no gateway ---
+  // Guardamos os ids, nunca dados de cartão. O número do cartão não passa nem
+  // pela nossa API: a tela tokeniza direto no gateway e o que chega aqui é um
+  // token — é o que nos mantém fora de quase todo o PCI-DSS.
+  /// Qual gateway processou. Existe pra poder trocar sem apagar o histórico.
+  gateway              String  @default("asaas")
+  /// `customer` do gateway. Um por empresa, reaproveitado entre assinaturas.
+  gatewayClienteId     String?
+  /// `subscription` do gateway (cartão, Pix avulso, boleto).
+  gatewayAssinaturaId  String?
+  /// Autorização do Pix Automático. É o consentimento que o cliente deu no app
+  /// do banco dele, e é ele que faz a parcela seguinte cair sozinha.
+  gatewayAutorizacaoId String?
+
+  /// Copia-e-cola do QR do PRIMEIRO pagamento do Pix Automático — é ele que
+  /// ativa a autorização. Não é segredo (qualquer um que pagar, paga a nossa
+  /// conta), e guardar evita ter que recriar a autorização só pra reenviar.
+  qrCodePayload  String?
+  qrCodeExpiraEm DateTime?
+
+  /// Só os 4 últimos e a bandeira. O suficiente pra tela dizer "Visa •••• 4242"
+  /// e pra reconhecer o cartão que recusou, e nada além disso.
+  cartaoBandeira String?
+  cartaoUltimos4 String?
+
+  /// Quando a assinatura passou a valer. Null enquanto não foi autorizada.
+  inicioEm           DateTime?
+  /// A competência do próximo vencimento, pra listar sem recalcular.
+  proximoVencimento  DateTime? @db.Date
+  canceladaEm        DateTime?
+  /// Cancelar exige motivo escrito, como toda alteração que mexe em dinheiro.
+  motivoCancelamento String?
+
+  observacao String?
+
+  criadoPor      User?   @relation("CriouAssinatura", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId    String?
+  canceladaPor   User?   @relation("CancelouAssinatura", fields: [canceladaPorId], references: [id], onDelete: SetNull)
+  canceladaPorId String?
+
+  cobrancas CobrancaAssinatura[]
+
+  criadoEm   DateTime @default(now())
+  alteradoEm DateTime @updatedAt
+
+  @@index([contaId, status])
+  @@index([status, proximoVencimento])
+  @@index([gatewayAssinaturaId])
+  @@index([gatewayAutorizacaoId])
+  @@map("assinaturas")
+}
+
+/// Uma mensalidade: o mês, o quanto, o vencimento e se entrou.
+model CobrancaAssinatura {
+  id           String     @id @default(uuid())
+  assinaturaId String
+  assinatura   Assinatura @relation(fields: [assinaturaId], references: [id], onDelete: Cascade)
+  /// Repetido da assinatura pra trava filtrar sozinha e pra consulta por
+  /// empresa não precisar de join.
+  contaId      String
+  conta        Conta      @relation(fields: [contaId], references: [id], onDelete: Cascade)
+
+  /// Primeiro dia do mês de referência. É a chave humana da cobrança: "a de
+  /// setembro". Único por assinatura — é o que impede cobrar o mesmo mês duas
+  /// vezes quando o webhook repete ou o cron roda de novo.
+  competencia DateTime @db.Date
+  vencimento  DateTime @db.Date
+
+  status            StatusCobrancaAssinatura @default(PENDENTE)
+  valorCentavos     Int
+  /// O que de fato entrou. Pode divergir do cobrado: juros, multa, ou o
+  /// cliente que pagou um valor combinado à parte.
+  valorPagoCentavos Int?
+  pagoEm            DateTime?
+
+  /// Como ela foi paga de verdade, que nem sempre é a forma da assinatura —
+  /// cartão recusado e pago no Pix acontece, e é assim que se descobre.
+  formaPaga FormaCobranca?
+
+  // --- o espelho no gateway ---
+  /// `payment` do gateway. Único: é por ele que o webhook acha a linha, e é o
+  /// que torna o reprocessamento inofensivo.
+  gatewayCobrancaId String? @unique
+  /// A página de pagamento do gateway, pra mandar pro cliente.
+  linkPagamento     String?
+  /// Copia-e-cola do Pix. Não é segredo: quem tem o código só consegue PAGAR.
+  pixCopiaCola      String?
+  linhaDigitavel    String?
+
+  /// Nota fiscal de serviço emitida pelo gateway na confirmação do pagamento.
+  nfseId  String?
+  nfseUrl String?
+
+  // --- a régua ---
+  // Datas em vez de booleanos: "avisado" não responde "quando", e sem o quando
+  // não dá pra saber se o aviso de hoje já saiu. Guardar a data faz o cron ser
+  // idempotente de graça.
+  avisoAbertaEm DateTime?
+  avisoAtrasoEm DateTime?
+  /// Quantos avisos de atraso já saíram. A régua para depois do terceiro: mais
+  /// que isso não é cobrança, é perturbação — e a decisão de cortar é humana.
+  avisosAtraso  Int       @default(0)
+
+  /// Baixa manual: o dinheiro entrou por fora do gateway (Pix na conta, TED).
+  /// Exige motivo escrito e guarda quem deu, porque é a única forma de uma
+  /// cobrança virar paga sem o gateway confirmar.
+  baixadaPor   User?   @relation("BaixouCobranca", fields: [baixadaPorId], references: [id], onDelete: SetNull)
+  baixadaPorId String?
+  motivoBaixa  String?
+
+  criadoEm   DateTime @default(now())
+  alteradoEm DateTime @updatedAt
+
+  @@unique([assinaturaId, competencia])
+  @@index([contaId, competencia(sort: Desc)])
+  @@index([status, vencimento])
+  @@map("cobrancas_assinatura")
+}
+
+/// Todo evento que o gateway mandou, guardado ANTES de ser processado.
+///
+/// Model global: o evento chega numa rota pública, sem token e sem conta — de
+/// qual empresa ele é só se descobre depois de achar a cobrança.
+///
+/// Existe por três motivos, e o terceiro é o que paga o custo da tabela:
+/// 1. Idempotência. O gateway reenvia o mesmo evento em qualquer resposta fora
+///    da faixa 2xx, e o `eventoId` único transforma reenvio em no-op.
+/// 2. Ordem. Confirmação e estorno do mesmo pagamento podem chegar trocados;
+///    com o payload guardado dá pra reconstruir o que aconteceu.
+/// 3. Quando der ruim. Um webhook que falha 15 vezes seguidas faz o Asaas
+///    INTERROMPER a fila inteira e dar 14 dias antes de apagar. Guardar o cru
+///    primeiro e processar depois é o que garante que uma falha nossa não
+///    perca o evento — e o `erro` diz o que reprocessar.
+model EventoGatewayPagamento {
+  id      String @id @default(uuid())
+  gateway String @default("asaas")
+
+  /// O id do evento no gateway ("evt_..."). Mesmo valor no reenvio, e é isso
+  /// que faz dele a chave de idempotência.
+  eventoId String @unique
+  /// "PAYMENT_CONFIRMED", "PAYMENT_OVERDUE"… Guardado como string, não enum:
+  /// o gateway cria evento novo sem avisar, e um enum faria a API quebrar ao
+  /// receber um que ela não conhece.
+  tipo     String
+  payload  Json
+
+  recebidoEm   DateTime  @default(now())
+  processadoEm DateTime?
+  /// O que deu errado ao processar. Preenchido = precisa de olho humano.
+  erro         String?
+
+  @@index([processadoEm])
+  @@index([tipo, recebidoEm(sort: Desc)])
+  @@map("eventos_gateway_pagamento")
 }

@@ -191,6 +191,28 @@ export const ROTAS_WHATSAPP = [
     critica: false,
     escopo: "empresa",
   },
+  {
+    chave: "COBRANCA_ABERTA",
+    rotulo: "Mensalidade a vencer",
+    descricao:
+      "Avisa o financeiro da empresa cliente que a mensalidade da Movatruck está aberta, com o link de pagamento.",
+    categoria: "utility",
+    provedores: ["evolution", "meta"],
+    critica: false,
+    // A cobrança é da MOVATRUCK contra a empresa, não da empresa contra
+    // ninguém. Deixar cada cliente escolher por onde recebe a própria cobrança
+    // seria deixar o inadimplente desligar o aviso de inadimplência.
+    escopo: "plataforma",
+  },
+  {
+    chave: "COBRANCA_ATRASADA",
+    rotulo: "Mensalidade em atraso",
+    descricao: "Avisa que a mensalidade venceu e ainda não foi paga. Não corta acesso nenhum.",
+    categoria: "utility",
+    provedores: ["evolution", "meta"],
+    critica: false,
+    escopo: "plataforma",
+  },
 ] as const satisfies readonly RotaWhatsappDef[];
 
 export type RotaWhatsapp = (typeof ROTAS_WHATSAPP)[number]["chave"];
@@ -478,6 +500,59 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
       "Qualquer dúvida, é só chamar.",
       "21/09/2026 18:30",
       "aBc123XyZ",
+    ],
+  },
+  // As duas mensagens de mensalidade. Quem recebe é o financeiro da empresa
+  // CLIENTE, e quem cobra é a Movatruck — por isso o texto fala em nome dela,
+  // sem parâmetro de empresa.
+  //
+  // O link vai no BOTÃO, como no comprovante, e pelo mesmo motivo: a Meta trata
+  // URL em parâmetro de corpo como conteúdo suspeito com frequência. O botão é
+  // URL dinâmica com prefixo fixo `https://www.asaas.com/i/` cadastrado no
+  // template — o envio manda só o sufixo (params[5]). Trocar de gateway exige
+  // template novo, e isso é uma característica do formato da Meta, não deste
+  // código.
+  COBRANCA_ABERTA: {
+    nome: "cobranca_aberta",
+    idioma: "pt_BR",
+    corpo: [0, 1, 2, 3],
+    botao: { tipo: "URL", param: 5 },
+    textoAprovacao: [
+      "Olá, {{1}}! A mensalidade do Movatruck de {{2}} está disponível.",
+      "",
+      "Valor: {{3}}",
+      "Vencimento: {{4}}",
+      "",
+      "Se já pagou, pode ignorar esta mensagem.",
+    ].join("\n"),
+    exemplo: [
+      "Marcos",
+      "setembro/2026",
+      "R$ 1.890,00",
+      "10/09/2026",
+      "https://www.asaas.com/i/abc123",
+      "abc123",
+    ],
+  },
+  // Sem ameaça e sem prazo de corte, porque o corte não é automático: anunciar
+  // um seria blefe, e blefe que o cliente descobre custa mais que a mensalidade.
+  COBRANCA_ATRASADA: {
+    nome: "cobranca_atrasada",
+    idioma: "pt_BR",
+    corpo: [0, 1, 2, 3],
+    botao: { tipo: "URL", param: 5 },
+    textoAprovacao: [
+      "Olá, {{1}}. A mensalidade do Movatruck de {{2}}, de {{3}}, venceu em {{4}} e consta em aberto por aqui.",
+      "",
+      "Se o pagamento já saiu, me avise que eu confiro.",
+    ].join("\n"),
+    exemplo: [
+      "Marcos",
+      "setembro/2026",
+      "R$ 1.890,00",
+      "10/09/2026",
+      "https://www.asaas.com/i/abc123",
+      "abc123",
     ],
   },
 };

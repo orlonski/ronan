@@ -46,3 +46,4 @@ export * from "./versao-app";
 export * from "./whatsapp-mensagens";
 export * from "./captacao";
 export * from "./cadastro-conta";
+export * from "./assinatura";
