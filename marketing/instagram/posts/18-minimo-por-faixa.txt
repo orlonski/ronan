@@ -1,0 +1,13 @@
+Fechou com o cliente um mínimo por viagem — km, tonelada — e alguém no escritório tem que lembrar disso na hora de faturar, viagem por viagem?
+
+No Movatruck não precisa.
+
+Cada empresa e material tem sua própria faixa de km, com o km e a tonelada mínimos combinados. O motorista rodou abaixo do mínimo? O sistema aplica sozinho na hora de faturar.
+
+O real que ele lançou nunca é sobrescrito — continua ali, intacto, pra conferência. Só o valor faturado sobe pro mínimo combinado.
+
+Ninguém precisa decorar contrato de cliente. O sistema decora por você.
+
+Chama no direct que a gente te mostra a tela de mínimos.
+
+#movatruck #transportadora #gestaodefrota #logistica #faturamento #transporterodoviario #frete #caminhao #gestaologistica #contratodetransporte
