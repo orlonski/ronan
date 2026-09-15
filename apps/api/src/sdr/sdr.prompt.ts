@@ -8,7 +8,12 @@ import { ymdSaoPaulo } from "../common/timezone";
  * que funcionar sabendo só o nome — e nunca fingir que sabe o resto.
  */
 export type ContextoLead = {
-  empresa: string;
+  /**
+   * `null` quando ninguém disse ainda qual é — o caso de quem chegou sozinho
+   * pelo WhatsApp. Aí descobrir o nome da empresa é a primeira coisa a fazer,
+   * e inventar um é a pior.
+   */
+  empresa: string | null;
   nome: string | null;
   municipio: string | null;
   uf: string | null;
@@ -85,9 +90,18 @@ const NUNCA = `
  * O que ele está tentando descobrir. Um SDR bom não despeja o produto — ele
  * entende a operação primeiro, porque o preço depende disso.
  */
-const O_QUE_DESCOBRIR = `
+const oQueDescobrir = (sabeEmpresa: boolean) => `
 # O que você quer saber, nesta ordem
-
+${
+  sabeEmpresa
+    ? ""
+    : `
+0. **De que empresa ele é.** Você não sabe — ele chegou por conta própria, e
+   só tem o telefone dele. Não precisa ser a primeira pergunta da conversa:
+   responda o que ele trouxe e encaixe essa quando couber. Assim que souber,
+   registre.
+`
+}
 1. **Quantos caminhões** ele tem rodando. É o que define o preço, então é a
    pergunta que mais importa. Se ele já disser de cara, registre e siga.
 2. **Como ele controla hoje** — caderno, planilha, WhatsApp solto, outro
@@ -129,7 +143,7 @@ pelo site, sem falar com ninguém. Use a tool pra pegar o link.
 export function promptSdr(lead: ContextoLead, dataHoje = ymdSaoPaulo()): string {
   const [ano, mes, dia] = dataHoje;
   const conhecido = [
-    `Empresa: ${lead.empresa}`,
+    lead.empresa ? `Empresa: ${lead.empresa}` : null,
     lead.nome ? `Falando com: ${lead.nome}` : null,
     lead.municipio ? `Cidade: ${lead.municipio}${lead.uf ? `/${lead.uf}` : ""}` : null,
     lead.frotaQtd ? `Frota conhecida: ${lead.frotaQtd} caminhões` : null,
@@ -149,10 +163,18 @@ Hoje é ${String(dia).padStart(2, "0")}/${String(mes).padStart(2, "0")}/${ano}.
 
 # Quem é ele
 
-${conhecido}
+${conhecido || "Você só tem o número dele. Mais nada."}
 
 O que não está escrito acima, você não sabe. Não deduza frota pelo tamanho da
-cidade nem chame ele pelo nome se o nome não estiver aí.
-${COMO_ESCREVER}${O_QUE_DESCOBRIR}${O_PRODUTO}${NUNCA}
+cidade nem chame ele pelo nome se o nome não estiver aí.${
+    lead.empresa
+      ? ""
+      : `
+
+Ele escreveu primeiro, por conta própria — não foi a gente que procurou ele.
+Nunca pergunte "como conseguimos seu contato" nem diga que ele está numa lista:
+não está. Comece respondendo o que ele mandou.`
+  }
+${COMO_ESCREVER}${oQueDescobrir(Boolean(lead.empresa))}${O_PRODUTO}${NUNCA}
 `.trim();
 }

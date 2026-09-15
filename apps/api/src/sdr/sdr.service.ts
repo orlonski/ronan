@@ -8,6 +8,7 @@ import { AnthropicProvider } from "../whatsapp/agente/providers/anthropic.provid
 import { GeminiProvider } from "../whatsapp/agente/providers/gemini.provider";
 import type { AgentMessage, AgentProvider } from "../whatsapp/agente/providers/agent.provider";
 import { promptSdr, type ContextoLead } from "./sdr.prompt";
+import { empresaConhecida } from "./lead-inbound";
 import { TOOLS_SDR } from "./sdr.tools";
 
 /** Quanto da conversa entra no contexto. Mesma régua do agente do motorista. */
@@ -117,7 +118,10 @@ export class SdrService {
     }
 
     const contexto: ContextoLead = {
-      empresa: lead.empresa ?? "empresa sem nome",
+      // `null` quando o lead nasceu de uma mensagem e ninguém disse ainda qual
+      // é a empresa. O prompt trata os dois casos — passar o carimbo adiante
+      // seria pior que não passar nada: o modelo o leria como o nome dela.
+      empresa: empresaConhecida(lead.empresa),
       nome: lead.nome,
       municipio: lead.municipio,
       uf: lead.uf,
@@ -150,7 +154,7 @@ export class SdrService {
       modelo,
       executarTool: async (nome, input) => {
         ferramentas.push(nome);
-        const saida = await this.executarTool(nome, input, lead.id);
+        const saida = await this.executarTool(nome, input, lead);
         if (nome === "passar_para_humano") {
           pediuHumano = String((input as { motivo?: unknown }).motivo ?? "sem motivo");
         }
@@ -175,8 +179,9 @@ export class SdrService {
   private async executarTool(
     nome: string,
     input: Record<string, unknown>,
-    leadId: string,
+    lead: { id: string; empresa: string },
   ): Promise<unknown> {
+    const leadId = lead.id;
     switch (nome) {
       case "consultar_preco": {
         const veiculos = Number(input.veiculos) || 0;
@@ -197,7 +202,15 @@ export class SdrService {
 
       case "registrar_qualificacao": {
         const veiculos = Number(input.veiculos);
+        // O nome da empresa só entra em lead que ainda não tem um. Quem veio
+        // da Receita já tem a razão social conferida, e "a firma do meu pai"
+        // dito no WhatsApp não pode passar por cima dela.
+        const empresa =
+          empresaConhecida(lead.empresa) === null
+            ? empresaConhecida(String(input.empresa ?? ""))
+            : null;
         const partes = [
+          empresa ? `empresa: ${empresa}` : null,
           Number.isFinite(veiculos) && veiculos > 0 ? `${veiculos} caminhões` : null,
           input.comoControlaHoje ? `hoje usa: ${String(input.comoControlaHoje)}` : null,
           input.dorPrincipal ? `dor: ${String(input.dorPrincipal)}` : null,
@@ -207,6 +220,7 @@ export class SdrService {
           await this.prisma.lead.update({
             where: { id: leadId },
             data: {
+              ...(empresa ? { empresa } : {}),
               ...(Number.isFinite(veiculos) && veiculos > 0 ? { frotaQtd: veiculos } : {}),
               ultimoContato: new Date(),
             },
@@ -252,10 +266,10 @@ export class SdrService {
       case "registrar_opt_out": {
         // Reusa o caminho da prospecção: a supressão vale pra todos os canais e
         // sobrevive ao lead ser reimportado do RNTRC.
-        const lead = await comoSistema(() =>
+        const dono = await comoSistema(() =>
           this.prisma.lead.findUnique({ where: { id: leadId }, select: { telefone: true } }),
         );
-        if (lead?.telefone) await this.prospeccao.registrarOptOut(lead.telefone);
+        if (dono?.telefone) await this.prospeccao.registrarOptOut(dono.telefone);
         return { ok: true };
       }
 

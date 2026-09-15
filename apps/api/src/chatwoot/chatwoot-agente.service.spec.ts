@@ -30,6 +30,12 @@ function montar(
     respostaSdr?: RespostaSdr | null;
     /** O telefone bate com um lead da base de prospecção? */
     ehLead?: boolean;
+    /** O lead encontrado pediu pra não ser mais contatado. */
+    leadOptOut?: boolean;
+    /** O número está na supressão global, mesmo sem lead. */
+    suprimido?: boolean;
+    /** A criação do lead falha — `P2002` é a corrida de dois webhooks. */
+    createErro?: string;
     /** O SDR explode (falha de IA, timeout). */
     sdrErro?: string;
     /** Id do inbox comercial, como vem do env. */
@@ -55,17 +61,39 @@ function montar(
     if (opts.sdrErro) throw new Error(opts.sdrErro);
     return opts.respostaSdr ?? null;
   });
-  const leadFindFirst = vi.fn(async () =>
-    opts.ehLead ? { id: "lead-1", empresa: "Transportes Teste", status: "NOVO" } : null,
-  );
+  let jaCriou = false;
+  const leadFindFirst = vi.fn(async (args: { where?: { origem?: string } }) => {
+    // A segunda busca, a do tratamento de corrida, procura por origem.
+    if (args?.where?.origem === "WHATSAPP_INBOUND") {
+      return jaCriou ? { id: "lead-corrida" } : null;
+    }
+    return opts.ehLead
+      ? {
+          id: "lead-1",
+          empresa: "Transportes Teste",
+          status: "NOVO",
+          optOut: opts.leadOptOut ?? false,
+        }
+      : null;
+  });
+  const leadCreate = vi.fn(async (_args: { data: Record<string, unknown> }) => {
+    if (opts.createErro) {
+      jaCriou = true;
+      throw Object.assign(new Error("unique"), { code: opts.createErro });
+    }
+    return { id: "lead-novo" };
+  });
+  const interacaoCreate = vi.fn(async () => ({}));
+  const supressaoFindFirst = vi.fn(async () => (opts.suprimido ? { contato: "4299998888" } : null));
 
   const s = new ChatwootAgenteService(
     {
       whatsappMensagem: { create },
       motorista: { findUnique },
       configuracaoAgente: { findUnique: configFind },
-      lead: { findFirst: leadFindFirst, update: vi.fn(async () => ({})) },
-      interacaoLead: { create: vi.fn(async () => ({})) },
+      lead: { findFirst: leadFindFirst, update: vi.fn(async () => ({})), create: leadCreate },
+      interacaoLead: { create: interacaoCreate },
+      supressaoContato: { findFirst: supressaoFindFirst },
     } as unknown as PrismaService,
     {
       resolverPorTelefone: vi.fn(async () => opts.identidade ?? MOTORISTA),
@@ -80,7 +108,18 @@ function montar(
         k === "CHATWOOT_INBOX_COMERCIAL" ? (opts.inboxComercial ?? undefined) : undefined,
     } as unknown as ConfigService,
   );
-  return { s, create, findUnique, processar, responder, passarParaHumano, consumir, atender };
+  return {
+    s,
+    create,
+    findUnique,
+    processar,
+    responder,
+    passarParaHumano,
+    consumir,
+    atender,
+    leadCreate,
+    interacaoCreate,
+  };
 }
 
 const evento = (over: Record<string, unknown> = {}) => ({
@@ -244,17 +283,94 @@ describe("o SDR atendendo prospect", () => {
     expect(passarParaHumano).not.toHaveBeenCalled();
   });
 
-  it("número fora da base de leads nunca chega no SDR", async () => {
-    // A fronteira vale nos dois sentidos: o SDR fala de preço e de teste
-    // grátis, e isso não é o que um número aleatório deve receber.
-    const { s, atender, passarParaHumano } = montar({
+  it("quem escreveu sem estar na base vira lead e é atendido na hora", async () => {
+    // Era o contrário, e estava invertido: quem veio do Instagram, do site ou
+    // de indicação caía na fila humana, enquanto o lead frio do RNTRC — que
+    // nunca pediu nada — tinha atendimento. A procedência obrigatória é régua
+    // de prospecção ATIVA; quem escreve primeiro deu o número no ato.
+    const { s, atender, leadCreate, responder, passarParaHumano } = montar({
       identidade: DESCONHECIDO,
       ehLead: false,
       respostaSdr: RESPOSTA,
     });
     await s.processar(evento({ content: "quanto custa?" }));
+    expect(leadCreate).toHaveBeenCalledOnce();
+    expect(atender).toHaveBeenCalledWith("lead-novo", "quanto custa?");
+    expect(responder).toHaveBeenCalledWith(1, 7, RESPOSTA.texto);
+    expect(passarParaHumano).not.toHaveBeenCalled();
+  });
+
+  it("o lead nasce com o telefone no formato da casa, sem o DDI", async () => {
+    // `registrarOptOut` compara telefone por igualdade exata. Gravar "55" na
+    // frente faria o opt-out marcar zero leads — e a pessoa seguiria
+    // recebendo mensagem depois de pedir pra parar.
+    const { s, leadCreate } = montar({ identidade: DESCONHECIDO, respostaSdr: RESPOSTA });
+    await s.processar(evento({ content: "oi, vi o instagram de vocês" }));
+    const dados = leadCreate.mock.calls[0]?.[0].data as Record<string, unknown>;
+    expect(dados.telefone).toBe("4299998888");
+    expect(dados.origem).toBe("WHATSAPP_INBOUND");
+    // NOVO é a fila de quem ainda não foi tocado, de onde saem as campanhas:
+    // quem já está conversando não pode receber um "oi" frio por cima.
+    expect(dados.status).toBe("EM_CONTATO");
+  });
+
+  it("o nome do perfil vira a pessoa, mas o número disfarçado de nome não", async () => {
+    const comNome = montar({ identidade: DESCONHECIDO, respostaSdr: RESPOSTA });
+    await comNome.s.processar(evento({ sender: { phone_number: "+554299998888", name: "Sérgio" } }));
+    expect((comNome.leadCreate.mock.calls[0]?.[0].data as { nome: unknown }).nome).toBe("Sérgio");
+
+    // O Chatwoot preenche `name` com o próprio número quando o contato não tem
+    // nome no perfil — gravar isso faria o SDR chamar alguém de "+5542...".
+    const semNome = montar({ identidade: DESCONHECIDO, respostaSdr: RESPOSTA });
+    await semNome.s.processar(
+      evento({ sender: { phone_number: "+554299998888", name: "+55 42 99998888" } }),
+    );
+    expect((semNome.leadCreate.mock.calls[0]?.[0].data as { nome: unknown }).nome).toBeNull();
+  });
+
+  it("quem está em opt-out não é atendido nem vira lead novo", async () => {
+    // A busca não filtra `optOut` justamente por isto: filtrando, o lead ficava
+    // invisível e a criação abriria um cadastro novo pra quem pediu pra sumir.
+    const { s, atender, leadCreate, passarParaHumano, interacaoCreate } = montar({
+      identidade: DESCONHECIDO,
+      ehLead: true,
+      leadOptOut: true,
+      respostaSdr: RESPOSTA,
+    });
+    await s.processar(evento({ content: "quanto custa?" }));
+    expect(leadCreate).not.toHaveBeenCalled();
+    expect(atender).not.toHaveBeenCalled();
+    // A interação fica registrada: ele escreveu, e isso é fato do funil.
+    expect(interacaoCreate).toHaveBeenCalledOnce();
+    expect(passarParaHumano).toHaveBeenCalledWith(1, 7);
+  });
+
+  it("número na supressão global não vira lead, mesmo sem cadastro", async () => {
+    const { s, atender, leadCreate, passarParaHumano } = montar({
+      identidade: DESCONHECIDO,
+      ehLead: false,
+      suprimido: true,
+      respostaSdr: RESPOSTA,
+    });
+    await s.processar(evento({ content: "quanto custa?" }));
+    expect(leadCreate).not.toHaveBeenCalled();
     expect(atender).not.toHaveBeenCalled();
     expect(passarParaHumano).toHaveBeenCalledWith(1, 7);
+  });
+
+  it("duas mensagens ao mesmo tempo não viram dois leads", async () => {
+    // Webhooks paralelos disputam a criação; o índice único parcial derruba a
+    // segunda. Achar o lead que a primeira criou é a resposta certa — dois
+    // cadastros partiriam a conversa em duas e o SDR repetiria as perguntas.
+    const { s, atender, responder } = montar({
+      identidade: DESCONHECIDO,
+      ehLead: false,
+      createErro: "P2002",
+      respostaSdr: RESPOSTA,
+    });
+    await s.processar(evento({ content: "boa tarde" }));
+    expect(atender).toHaveBeenCalledWith("lead-corrida", "boa tarde");
+    expect(responder).toHaveBeenCalledWith(1, 7, RESPOSTA.texto);
   });
 
   it("SDR desligado devolve a conversa pra fila humana", async () => {

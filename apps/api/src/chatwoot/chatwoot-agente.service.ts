@@ -7,16 +7,22 @@ import { SessaoService } from "../whatsapp/sessao.service";
 import { ConviteService } from "../whatsapp/convite.service";
 import { ChatwootClientService } from "./chatwoot-client.service";
 import { SdrService } from "../sdr/sdr.service";
+import {
+  EMPRESA_A_DESCOBRIR,
+  ORIGEM_INBOUND,
+  nomeDePessoa,
+  telefoneDaCasa,
+} from "../sdr/lead-inbound";
 
 /**
  * O agente que atende dentro do Chatwoot.
  *
  * **Quem escreve decide o que o agente pode fazer.** Telefone que bate com um
  * motorista aprovado ganha o agente com ferramentas do sistema; qualquer outro
- * número cai direto na fila humana, sem ferramenta nenhuma. A fronteira é de
- * segurança, não de organização: um agente único com todas as ferramentas
- * responderia "sua viagem de ontem foi pra Ponta Grossa" pra quem digitasse um
- * número por sorte.
+ * número é tratado como prospect e vai pro SDR, que não tem ferramenta nenhuma
+ * de dado de empresa. A fronteira é de segurança, não de organização: um agente
+ * único com todas as ferramentas responderia "sua viagem de ontem foi pra Ponta
+ * Grossa" pra quem digitasse um número por sorte.
  *
  * Nada aqui manda mensagem pelo `EnvioWhatsappService`: quem fala com o
  * WhatsApp é o Chatwoot, dono do canal. Responder pelos dois caminhos entregaria
@@ -87,6 +93,9 @@ export class ChatwootAgenteService {
     const conversaId = evento.conversation?.id;
     const contaChatwoot = evento.account?.id;
     const telefone = evento.sender?.phone_number ?? evento.sender?.identifier ?? "";
+    // O nome do perfil do WhatsApp. Só serve pra dar cara a um lead que
+    // nasce agora — o Chatwoot devolve o próprio número quando não há nome.
+    const nomeContato = evento.sender?.name ?? null;
 
     if (!conversaId || !contaChatwoot) {
       this.log.warn("evento sem conversa ou conta — ignorado");
@@ -105,7 +114,7 @@ export class ChatwootAgenteService {
     // por telefone: um motorista que escreve no número de operação continua
     // caindo no agente dele, como sempre.
     if (this.inboxComercial && evento.inbox?.id === this.inboxComercial) {
-      await this.atenderNoComercial(texto, telefone, contaChatwoot, conversaId);
+      await this.atenderNoComercial(texto, telefone, nomeContato, contaChatwoot, conversaId);
       return;
     }
 
@@ -126,16 +135,16 @@ export class ChatwootAgenteService {
       // código de convite morreria na fila humana e ninguém novo se vincularia.
       if (await this.tentarVincular(texto, telefone, contaChatwoot, conversaId)) return;
 
-      // Pode ser um PROSPECT: alguém que a prospecção já conhece, ou que viu o
-      // site. Registrar no funil antes de mandar pra fila humana é o que evita
-      // a conversa sumir — até aqui ela virava ticket no atendimento e o lado
-      // comercial nunca ficava sabendo que a empresa tinha procurado a gente.
-      const leadId = await this.registrarNoFunil(telefone, texto);
+      // É um PROSPECT: alguém que a prospecção já conhece, ou que viu o site,
+      // o Instagram, ou que um cliente indicou. Resolver o lead antes de
+      // mandar pra fila humana é o que evita a conversa sumir — até aqui ela
+      // virava ticket no atendimento e o lado comercial nunca ficava sabendo
+      // que a empresa tinha procurado a gente.
+      const leadId = await this.resolverLead(telefone, nomeContato, texto);
 
-      // Lead conhecido e SDR ligado: quem responde é o atendimento comercial.
-      // Fora daqui nada muda — quem não está na base de leads continua indo
-      // direto pra fila humana, e é de propósito: o SDR fala de preço e de
-      // teste grátis, e não é isso que um número aleatório deve receber.
+      // SDR ligado: quem responde é o atendimento comercial. `null` aqui não é
+      // mais "não está na base" — é opt-out ou falha; nos dois casos a
+      // conversa segue pro caminho de sempre, a fila humana.
       if (leadId && (await this.atenderComoSdr(leadId, texto, contaChatwoot, conversaId))) {
         return;
       }
@@ -207,18 +216,21 @@ export class ChatwootAgenteService {
   /**
    * Atendimento do canal comercial.
    *
-   * Sem agente do motorista, sem código de convite: só funil e SDR. Quem o SDR
-   * não atende (lead desconhecido, SDR desligado, opt-out) vai pra fila humana
-   * com uma palavra — nunca em silêncio, porque silêncio no WhatsApp é a forma
-   * mais rápida de perder uma venda que já tinha chegado.
+   * Sem agente do motorista, sem código de convite: só funil e SDR. Aqui todo
+   * número desconhecido é prospect por definição — é o número que sai no
+   * Instagram e no site. Quem o SDR não atende (desligado, sem chave de IA,
+   * opt-out) vai pra fila humana com uma palavra — nunca em silêncio, porque
+   * silêncio no WhatsApp é a forma mais rápida de perder uma venda que já
+   * tinha chegado.
    */
   private async atenderNoComercial(
     texto: string,
     telefone: string,
+    nomeContato: string | null,
     contaChatwoot: number,
     conversaId: number,
   ): Promise<void> {
-    const leadId = await this.registrarNoFunil(telefone, texto);
+    const leadId = await this.resolverLead(telefone, nomeContato, texto);
 
     if (leadId && (await this.atenderComoSdr(leadId, texto, contaChatwoot, conversaId))) return;
 
@@ -239,71 +251,150 @@ export class ChatwootAgenteService {
    * código ainda não tem conta nenhuma resolvida.
    */
   /**
-   * Um número desconhecido escreveu — se ele estiver na base de leads, isso é
-   * uma interação comercial e precisa ficar registrada.
+   * Quem é esse número — e a conversa pode seguir pro SDR?
    *
-   * Só grava o que já é conhecido: não cria lead a partir de quem escreveu,
-   * porque número solto sem empresa não é lead, é ruído — e a base de captação
-   * tem regra de procedência que um telefone avulso não satisfaz.
+   * Devolve o id do lead quando pode, `null` quando não. Antes isto só
+   * reconhecia quem a prospecção já tinha encontrado; quem escrevia por conta
+   * própria caía na fila humana, que na prática é ninguém respondendo na hora.
+   * Era a régua errada: a procedência obrigatória (`origemDado`, fonte, data)
+   * existe pra prospecção ATIVA, quando somos nós que chegamos primeiro. Quem
+   * manda mensagem pro WhatsApp da Movatruck deu o número no ato de escrever.
    *
-   * Best-effort: o atendimento nunca pode falhar porque o CRM falhou.
-   *
-   * Devolve o id do lead quando reconheceu alguém — é o que permite o SDR
-   * responder logo em seguida sem resolver o telefone uma segunda vez.
+   * Best-effort: o atendimento nunca pode falhar porque o CRM falhou — erro
+   * aqui devolve `null`, e `null` é o comportamento de antes do SDR existir.
    */
-  private async registrarNoFunil(telefone: string | null, texto: string): Promise<string | null> {
+  private async resolverLead(
+    telefone: string | null,
+    nomeContato: string | null,
+    texto: string,
+  ): Promise<string | null> {
     if (!telefone) return null;
     try {
       return await comoSistema(async () => {
         // O lead guarda o telefone como veio da Receita, sem DDI; o WhatsApp
         // manda com 55 na frente. Compara pelos últimos dígitos, que é o que
         // sobrevive às duas formas.
-        const semDdi = telefone.replace(/\D/g, "").replace(/^55/, "");
+        const numero = telefoneDaCasa(telefone);
+        // A busca NÃO filtra `optOut`, e isso é o ponto: filtrando, o lead de
+        // quem pediu pra não ser contatado ficava invisível — e agora que
+        // número desconhecido vira cadastro, invisível significaria criar um
+        // lead novo exatamente pra quem pediu pra sumir da base.
         const lead = await this.prisma.lead.findFirst({
-          where: { telefone: { endsWith: semDdi.slice(-8) }, optOut: false },
-          select: { id: true, empresa: true, status: true },
+          where: { telefone: { endsWith: numero.slice(-8) } },
+          select: { id: true, empresa: true, status: true, optOut: true },
+          orderBy: { criadoEm: "asc" },
         });
-        if (!lead) {
-          // Sem este log, "o SDR não respondeu" tem três causas que produzem a
-          // MESMA mensagem na tela — e a primeira delas some sem deixar rastro.
-          // Os 8 dígitos vão no log porque o defeito quase sempre é de formato:
-          // o lead guardado com máscara, ou com DDI, não casa com o que a Meta
-          // entrega.
-          this.log.log(`Nenhum lead com final ${semDdi.slice(-8)} — sem SDR, fila humana.`);
+
+        if (!lead) return await this.criarLeadInbound(numero, nomeContato, texto);
+
+        await this.registrarInteracao(lead.id, texto);
+
+        if (lead.optOut) {
+          // A interação fica registrada — ele escreveu, e isso é fato do
+          // funil. Mas o SDR não responde: enquanto opt-out significar "não
+          // fale comigo", responder por robô é desobedecer no detalhe.
+          this.log.log(`Lead ${lead.id} está em opt-out — sem SDR, fila humana.`);
           return null;
         }
 
-        await this.prisma.interacaoLead.create({
-          data: {
-            leadId: lead.id,
-            canal: "WHATSAPP",
-            desfecho: "RESPONDEU",
-            resumo: `Mandou mensagem no WhatsApp: "${texto.slice(0, 160)}"`,
-            // `autor` nulo é a convenção da tabela pra "veio da automação".
-            autor: null,
-          },
-        });
         // Quem escreve por conta própria está em contato, não é mais só um nome
         // na lista. Só promove quem ainda está no começo do funil — não rebaixa
         // quem já estava em proposta.
-        if (lead.status === "NOVO") {
-          await this.prisma.lead.update({
-            where: { id: lead.id },
-            data: { status: "EM_CONTATO", ultimoContato: new Date() },
-          });
-        } else {
-          await this.prisma.lead.update({
-            where: { id: lead.id },
-            data: { ultimoContato: new Date() },
-          });
-        }
+        await this.prisma.lead.update({
+          where: { id: lead.id },
+          data: {
+            ...(lead.status === "NOVO" ? { status: "EM_CONTATO" } : {}),
+            ultimoContato: new Date(),
+          },
+        });
         this.log.log(`Interação registrada no lead ${lead.empresa} (${lead.id}).`);
         return lead.id;
       });
     } catch (e) {
-      this.log.warn(`Não consegui registrar a interação no funil: ${String(e)}`);
+      this.log.warn(`Não consegui resolver o lead da conversa: ${String(e)}`);
       return null;
     }
+  }
+
+  /**
+   * Ninguém conhece esse número: ele vira lead agora.
+   *
+   * É o melhor lead que existe — veio do Instagram, do site ou de indicação, e
+   * escreveu primeiro. O que falta dele (empresa, frota, dor) o próprio SDR
+   * descobre conversando e grava por `registrar_qualificacao`.
+   *
+   * Roda dentro do `comoSistema` de quem chamou.
+   */
+  private async criarLeadInbound(
+    numero: string,
+    nomeContato: string | null,
+    texto: string,
+  ): Promise<string | null> {
+    // A supressão global vale antes de existir lead: quem pediu pra não ser
+    // contatado e teve o cadastro descartado depois não volta pra base só
+    // porque escreveu de novo.
+    const suprimido = await this.prisma.supressaoContato.findFirst({
+      where: { contato: { in: [numero, `55${numero}`] } },
+      select: { contato: true },
+    });
+    if (suprimido) {
+      this.log.log(`Número ${numero} está na supressão — sem SDR, fila humana.`);
+      return null;
+    }
+
+    try {
+      const lead = await this.prisma.lead.create({
+        data: {
+          empresa: EMPRESA_A_DESCOBRIR,
+          nome: nomeDePessoa(nomeContato, numero),
+          telefone: numero,
+          origem: ORIGEM_INBOUND,
+          // A pergunta "como vocês conseguiram meu número?" também tem
+          // resposta aqui, e é a mais forte de todas: ele mesmo escreveu.
+          origemDado: "escreveu no WhatsApp da Movatruck",
+          coletadoEm: new Date(),
+          // Nasce EM_CONTATO, nunca NOVO: `NOVO` é a fila de quem ainda não foi
+          // tocado, de onde saem as campanhas. Quem já está conversando não
+          // pode cair nessa fila e receber um "oi" frio por cima da conversa.
+          status: "EM_CONTATO",
+          ultimoContato: new Date(),
+        },
+        select: { id: true },
+      });
+      await this.registrarInteracao(lead.id, texto);
+      this.log.log(`Número ${numero} virou lead ${lead.id} — chegou pelo WhatsApp.`);
+      return lead.id;
+    } catch (e) {
+      // Duas mensagens em sequência ("oi" e "boa tarde") chegam em webhooks
+      // paralelos e disputam a criação. O índice único parcial derruba a
+      // segunda; achar o lead que a primeira criou é a resposta certa, não o
+      // erro.
+      if ((e as { code?: string }).code === "P2002") {
+        const existente = await this.prisma.lead.findFirst({
+          where: { telefone: numero, origem: ORIGEM_INBOUND },
+          select: { id: true },
+        });
+        if (existente) {
+          await this.registrarInteracao(existente.id, texto);
+          return existente.id;
+        }
+      }
+      throw e;
+    }
+  }
+
+  /** O toque no funil. Mesma linha pro lead que já existia e pro que nasceu agora. */
+  private registrarInteracao(leadId: string, texto: string) {
+    return this.prisma.interacaoLead.create({
+      data: {
+        leadId,
+        canal: "WHATSAPP",
+        desfecho: "RESPONDEU",
+        resumo: `Mandou mensagem no WhatsApp: "${texto.slice(0, 160)}"`,
+        // `autor` nulo é a convenção da tabela pra "veio da automação".
+        autor: null,
+      },
+    });
   }
 
   /**

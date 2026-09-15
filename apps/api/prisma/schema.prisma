@@ -5317,6 +5317,13 @@ model Lead {
   enriquecimentoTentativas Int       @default(0)
   enriquecimentoErro       String?
 
+  /// "SITE_FORMULARIO" | "PROSPECCAO_ATIVA" | "WHATSAPP_INBOUND".
+  ///
+  /// O inbound é quem escreveu no WhatsApp da Movatruck sem a gente ter
+  /// procurado — vindo do Instagram, do site ou de indicação. Tem um índice
+  /// ÚNICO PARCIAL em (telefone) só pra essa origem, criado à mão na migration
+  /// `20260914200000_lead_inbound_whatsapp`: índice parcial não se declara
+  /// aqui, e sem esta nota ele parece drift na próxima migration.
   origem String @default("SITE_FORMULARIO")
 
   /// De onde o dado saiu, em texto legível. Obrigatório na prospecção ativa.

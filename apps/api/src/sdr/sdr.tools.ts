@@ -39,6 +39,12 @@ export const TOOLS_SDR: AgentToolDefinition[] = [
     input_schema: {
       type: "object",
       properties: {
+        empresa: {
+          type: "string",
+          description:
+            "O nome da transportadora dele, como ele falou. Só quando ele disser — " +
+            "nunca deduza pelo nome da pessoa nem pela cidade.",
+        },
         veiculos: { type: "integer", description: "Quantos caminhões ele tem." },
         comoControlaHoje: {
           type: "string",

@@ -5,6 +5,8 @@
  *   pnpm testar:sdr --limpar "oi, vi o site de voces"
  *   pnpm testar:sdr --bateria     # o caminho feliz
  *   pnpm testar:sdr --dificil     # desconto, prazo, concorrente, opt-out
+ *   pnpm testar:sdr --inbound --bateria   # quem chegou sozinho, sem empresa
+ *   pnpm testar:sdr --inbound --prompt    # só imprime o prompt, sem chamar IA
  *
  * O histórico é REAL e persiste entre execuções, igual ao harness do agente do
  * motorista — vários defeitos de conversa só aparecem no segundo turno, quando
@@ -21,8 +23,10 @@ import { PrismaModule } from "../prisma/prisma.module";
 import { PrismaService } from "../prisma/prisma.service";
 import { PrecosModule } from "../admin/precos/precos.module";
 import { ProspeccaoModule } from "../prospeccao/prospeccao.module";
+import { promptSdr } from "../sdr/sdr.prompt";
 import { SdrModule } from "../sdr/sdr.module";
 import { SdrService } from "../sdr/sdr.service";
+import { EMPRESA_A_DESCOBRIR, ORIGEM_INBOUND } from "../sdr/lead-inbound";
 
 @Module({
   imports: [
@@ -35,8 +39,9 @@ import { SdrService } from "../sdr/sdr.service";
 })
 class HarnessSdrModule {}
 
-/** Telefone impossível: o lead de teste nunca colide com um real. */
+/** Telefones impossíveis: o lead de teste nunca colide com um real. */
 const TELEFONE_TESTE = "5500000000001";
+const TELEFONE_INBOUND = "5500000000002";
 const EMPRESA_TESTE = "Transportes Harness (teste)";
 
 /** O que um transportador pergunta de verdade quando chega no WhatsApp. */
@@ -72,17 +77,42 @@ async function main() {
   const limpar = args.includes("--limpar");
   const bateria = args.includes("--bateria");
   const dificil = args.includes("--dificil");
+  // Quem chegou sozinho pelo WhatsApp: o SDR não sabe a empresa, nem a cidade,
+  // nem o nome. É o caso em que ele mais erra — ou pergunta tudo de uma vez, ou
+  // finge conhecer quem nunca viu.
+  const inbound = args.includes("--inbound");
   const perguntas = dificil
     ? BATERIA_DIFICIL
     : bateria
       ? BATERIA
       : [args.filter((a) => !a.startsWith("--")).join(" ")];
 
-  if (!bateria && !dificil && !perguntas[0]) {
+  if (!bateria && !dificil && !args.includes("--prompt") && !perguntas[0]) {
     console.error(
-      'Uso: pnpm testar:sdr "sua pergunta"  |  --bateria  |  --dificil  |  --limpar',
+      'Uso: pnpm testar:sdr "sua pergunta"  |  --bateria  |  --dificil  |  --inbound  |  --limpar',
     );
     process.exit(1);
+  }
+
+  // O prompt não depende de chave de API nem de banco: imprimir antes de
+  // gastar chamada é o jeito barato de conferir o que o modelo vai ler — e o
+  // único disponível quando a chave do provider está fora do ar.
+  if (args.includes("--prompt")) {
+    console.log(
+      promptSdr(
+        inbound
+          ? { empresa: null, nome: null, municipio: null, uf: null, frotaQtd: null, origem: "WHATSAPP_INBOUND" }
+          : {
+              empresa: EMPRESA_TESTE,
+              nome: "Sérgio",
+              municipio: "Ponta Grossa",
+              uf: "PR",
+              frotaQtd: 12,
+              origem: "SITE_FORMULARIO",
+            },
+      ),
+    );
+    return;
   }
 
   const app = await NestFactory.createApplicationContext(HarnessSdrModule, {
@@ -91,20 +121,31 @@ async function main() {
   const prisma = app.get(PrismaService);
   const sdr = app.get(SdrService);
 
+  const telefone = inbound ? TELEFONE_INBOUND : TELEFONE_TESTE;
   const lead = await comoSistema(async () => {
-    const existente = await prisma.lead.findFirst({ where: { telefone: TELEFONE_TESTE } });
+    const existente = await prisma.lead.findFirst({ where: { telefone } });
     if (existente) return existente;
     return prisma.lead.create({
-      data: {
-        empresa: EMPRESA_TESTE,
-        nome: "Sérgio",
-        telefone: TELEFONE_TESTE,
-        municipio: "Ponta Grossa",
-        uf: "PR",
-        origem: "SITE_FORMULARIO",
-        origemDado: "Harness de teste do SDR",
-        coletadoEm: new Date(),
-      },
+      data: inbound
+        ? {
+            // Igualzinho ao que nasce de uma mensagem no WhatsApp: só o número.
+            empresa: EMPRESA_A_DESCOBRIR,
+            telefone,
+            origem: ORIGEM_INBOUND,
+            origemDado: "escreveu no WhatsApp da Movatruck",
+            coletadoEm: new Date(),
+            status: "EM_CONTATO",
+          }
+        : {
+            empresa: EMPRESA_TESTE,
+            nome: "Sérgio",
+            telefone,
+            municipio: "Ponta Grossa",
+            uf: "PR",
+            origem: "SITE_FORMULARIO",
+            origemDado: "Harness de teste do SDR",
+            coletadoEm: new Date(),
+          },
     });
   });
 
@@ -114,7 +155,15 @@ async function main() {
     await comoSistema(async () => {
       await prisma.mensagemLead.deleteMany({ where: { leadId: lead.id } });
       await prisma.lead.update({ where: { id: lead.id }, data: { optOut: false } });
-      await prisma.supressaoContato.deleteMany({ where: { contato: TELEFONE_TESTE } });
+      await prisma.supressaoContato.deleteMany({ where: { contato: telefone } });
+      // O `--inbound` descobre a empresa conversando: sem devolver o carimbo,
+      // a segunda rodada já começa sabendo o que devia perguntar.
+      if (inbound) {
+        await prisma.lead.update({
+          where: { id: lead.id },
+          data: { empresa: EMPRESA_A_DESCOBRIR, nome: null, frotaQtd: null },
+        });
+      }
     });
     console.log("(histórico limpo)\n");
   }
@@ -141,7 +190,8 @@ async function main() {
   // descobrir que testou o modelo errado é o defeito mais caro de um harness.
   const modelo =
     antes.sdrProvider === "gemini" ? antes.sdrModeloGemini : antes.sdrModeloAnthropic;
-  console.log(`\x1b[90m(${antes.sdrProvider} · ${modelo} · lead ${EMPRESA_TESTE})\x1b[0m\n`);
+  const quem = inbound ? "lead inbound, empresa a descobrir" : `lead ${EMPRESA_TESTE}`;
+  console.log(`\x1b[90m(${antes.sdrProvider} · ${modelo} · ${quem})\x1b[0m\n`);
 
   try {
     for (const pergunta of perguntas) {
