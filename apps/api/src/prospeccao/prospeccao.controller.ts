@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   NotFoundException,
   Param,
@@ -72,6 +73,18 @@ export class ProspeccaoController {
     @Body(new ZodValidationPipe(atualizarLeadSchema)) body: AtualizarLeadInput,
   ) {
     return this.prospeccao.atualizar(id, body);
+  }
+
+  /**
+   * Apaga o lead e a conversa dele. Sem desfazer.
+   *
+   * `prospeccao.excluir` é chave própria, não `editar`: quem arruma um telefone
+   * errado não é necessariamente quem pode apagar um lead da base.
+   */
+  @RequerPermissao("prospeccao.excluir")
+  @Delete("leads/:id")
+  async excluirLead(@Param("id") id: string) {
+    return this.prospeccao.excluir(id);
   }
 
   /** Registra um toque. `PEDIU_OPT_OUT` já dispara a supressão. */

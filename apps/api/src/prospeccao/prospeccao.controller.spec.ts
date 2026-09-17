@@ -53,6 +53,9 @@ describe("ProspeccaoController — as rotas que a tela chama", () => {
     "GET leads",
     "GET leads/:id",
     "PATCH leads/:id",
+    // Apagar o lead e a conversa junto. Destrutivo, e por isso tem chave
+    // própria (`prospeccao.excluir`) em vez de andar no `editar`.
+    "DELETE leads/:id",
     "POST leads/:id/interacoes",
     "POST importar-rntrc",
     "POST enriquecer",

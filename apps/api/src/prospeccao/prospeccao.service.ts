@@ -151,6 +151,36 @@ export class ProspeccaoService {
   }
 
   /**
+   * Apaga um lead de vez — com a conversa inteira junto.
+   *
+   * Existe pro lixo que toda base acumula: o lead criado pra testar o fluxo, o
+   * número digitado errado. Marcar esse tipo de coisa como `PERDEU` seria
+   * mentir na métrica — "perdemos" conta decisão comercial, e teste não é
+   * decisão nenhuma. Some da contagem de leads, do funil e da conta do
+   * follow-up, porque nunca deveria ter entrado.
+   *
+   * `InteracaoLead` e `MensagemLead` têm `onDelete: Cascade` no schema, então
+   * a transcrição vai junto. Isso é destrutivo e não tem desfazer: quem chama
+   * é uma tela que pergunta antes, com o nome da empresa na frente.
+   *
+   * A supressão NÃO é tocada: quem pediu pra não ser contatado continua
+   * suprimido mesmo que o lead suma, senão a próxima carga do RNTRC o traria
+   * de volta e voltaríamos a escrever pra quem pediu silêncio.
+   */
+  async excluir(id: string) {
+    return comoSistema(async () => {
+      const lead = await this.prisma.lead.findUnique({
+        where: { id },
+        select: { id: true, empresa: true },
+      });
+      if (!lead) throw new NotFoundException("Lead não encontrado");
+      await this.prisma.lead.delete({ where: { id } });
+      this.log.log(`Lead ${lead.empresa} (${id}) excluído junto com a conversa.`);
+      return { ok: true, empresa: lead.empresa };
+    });
+  }
+
+  /**
    * Normaliza telefone pra dígitos e e-mail pra minúsculas — sem isso o mesmo
    * contato entra duas vezes e a supressão falha justamente quando importa.
    */

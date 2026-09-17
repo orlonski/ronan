@@ -123,6 +123,7 @@ export default function ProspeccaoPage() {
 
   const leads = lista.data?.data ?? [];
   const podeEditar = temPermissao("prospeccao.editar");
+  const podeExcluir = temPermissao("prospeccao.excluir");
 
   function recarregar() {
     void lista.refetch();
@@ -253,6 +254,7 @@ export default function ProspeccaoPage() {
         <FichaLead
           leadId={aberto}
           podeEditar={podeEditar}
+          podeExcluir={podeExcluir}
           onFechar={() => setAberto(null)}
           onMudou={recarregar}
         />

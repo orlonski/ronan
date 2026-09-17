@@ -111,7 +111,9 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // — por isso está em RECURSOS_PLATAFORMA logo abaixo. "importar" dispara a
   // carga do RNTRC, que é cara e bate em serviço de fora; fica separada de
   // "editar" de propósito.
-  { recurso: "prospeccao", label: "Captação de clientes", modulo: "Operação", acoes: ["ver", "editar", "importar"] },
+  // `excluir` é chave à parte de `editar`: arrumar um telefone errado e apagar
+  // um lead da base com a conversa junto não são o mesmo poder.
+  { recurso: "prospeccao", label: "Captação de clientes", modulo: "Operação", acoes: ["ver", "editar", "importar", "excluir"] },
   // `publicar` é separado de `criar` pelo mesmo motivo que `importar` é separado
   // em prospeccao: criar um post é rascunho, publicar é irreversível e sai na
   // cara da marca.

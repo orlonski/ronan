@@ -102,11 +102,14 @@ function cnpjBonito(c: string | null): string | null {
 export function FichaLead({
   leadId,
   podeEditar,
+  podeExcluir,
   onFechar,
   onMudou,
 }: {
   leadId: string;
   podeEditar: boolean;
+  /** `prospeccao.excluir` — chave própria: apagar não é o mesmo que editar. */
+  podeExcluir: boolean;
   onFechar: () => void;
   onMudou: () => void;
 }) {
@@ -165,6 +168,24 @@ export function FichaLead({
     onError: (e: Error) => toast.error("Não deu pra abrir a conversa", { description: e.message }),
   });
 
+  /**
+   * Apaga o lead e a conversa inteira. Sem desfazer.
+   *
+   * Pede confirmação com o nome da empresa na frente porque é isso que separa
+   * "apaguei o teste" de "apaguei a transportadora errada" — e aqui não há
+   * lixeira pra onde voltar.
+   */
+  const excluir = useMutation({
+    mutationFn: () => fetchApi(caminho, { method: "DELETE", token }),
+    onSuccess: () => {
+      toast.success(`${lead?.empresa ?? "Lead"} foi excluído.`);
+      onMudou();
+      onFechar();
+    },
+    onError: (e: Error) =>
+      toast.error("Não deu pra excluir", { description: e.message }),
+  });
+
   const mudarSituacao = useMutation({
     mutationFn: (status: string) =>
       fetchApi(caminho, { method: "PATCH", body: JSON.stringify({ status }), token }),
@@ -174,6 +195,7 @@ export function FichaLead({
     },
   });
 
+  const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
   const tel = telefoneBonito(lead?.telefone ?? null);
   const optOut = desfecho === "PEDIU_OPT_OUT";
 
@@ -412,6 +434,48 @@ export function FichaLead({
                 ))
               )}
             </div>
+          </div>
+        )}
+
+        {/* Zona destrutiva, no fim e separada do resto.
+            Vermelho é o semáforo de destrutivo; contorno é o recuo. A
+            confirmação é inline, com o nome da empresa, em vez de um "tem
+            certeza?" que todo mundo clica no automático. */}
+        {lead && podeExcluir && (
+          <div className="border-t px-4 py-4">
+            {confirmandoExclusao ? (
+              <div className="space-y-2">
+                <p className="text-sm">
+                  Excluir <span className="font-medium">{lead.empresa}</span> e toda a conversa
+                  dele? Não tem como desfazer.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={excluir.isPending}
+                    onClick={() => excluir.mutate()}
+                    className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {excluir.isPending ? "Excluindo…" : "Excluir de vez"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmandoExclusao(false)}
+                    className="rounded-md border px-3 py-2 text-sm hover:bg-accent/40"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmandoExclusao(true)}
+                className="text-sm text-red-600 hover:underline dark:text-red-400"
+              >
+                Excluir este lead
+              </button>
+            )}
           </div>
         )}
       </div>

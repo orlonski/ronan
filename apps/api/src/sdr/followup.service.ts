@@ -3,12 +3,8 @@ import { Cron } from "@nestjs/schedule";
 import { comoSistema } from "../common/conta/conta-context";
 import { comLockDeCron } from "../common/cron-exclusivo";
 import { PrismaService } from "../prisma/prisma.service";
-import {
-  acaoDoFollowup,
-  type AcaoFollowup,
-  type EstadoConversa,
-  type PrazosFollowup,
-} from "./followup.regua";
+import { acaoDoFollowup, type AcaoFollowup, type PrazosFollowup } from "./followup.regua";
+import { estadosDeConversa } from "../prospeccao/conversa-lead";
 
 /**
  * O varredor das conversas que pararam.
@@ -54,8 +50,6 @@ type LinhaLead = {
   conversaEncerradaEm: Date | null;
   sdrPausadoEm: Date | null;
 };
-
-type LinhaMensagem = { leadId: string; direcao: string; criadoEm: Date };
 
 @Injectable()
 export class FollowupService {
@@ -111,7 +105,14 @@ export class FollowupService {
           sdrPausadoEm: null,
           // Só quem tem conversa: a base tem 24 mil leads e a esmagadora
           // maioria nunca trocou uma mensagem.
-          mensagens: { some: {} },
+          //
+          // As DUAS fontes, e não só `mensagens`: quem escreveu e caiu na fila
+          // humana não deixa linha em `MensagemLead` — some justamente por não
+          // ter sido atendido, que é o contrário do que deveria acontecer.
+          OR: [
+            { mensagens: { some: {} } },
+            { interacoes: { some: { canal: "WHATSAPP" } } },
+          ],
         },
         select: {
           id: true,
@@ -138,21 +139,13 @@ export class FollowupService {
     };
     if (leads.length === 0) return p;
 
-    const { ultimas, entradas } = await this.mensagensDe(leads.map((l) => l.id));
+    // A MESMA montagem que a tela usa. Duas cópias divergiriam no primeiro
+    // ajuste, e aí o painel diria uma coisa e o robô faria outra.
+    const estados = await estadosDeConversa(this.prisma, leads as LinhaLead[]);
 
     for (const lead of leads as LinhaLead[]) {
-      const ultima = ultimas.get(lead.id);
-      const c: EstadoConversa = {
-        ultimaDirecao: (ultima?.direcao as "ENTRADA" | "SAIDA" | undefined) ?? null,
-        ultimaMensagemEm: ultima?.criadoEm ?? null,
-        ultimaEntradaEm: entradas.get(lead.id) ?? null,
-        followupsEnviados: lead.followupsEnviados,
-        ultimoFollowupEm: lead.ultimoFollowupEm,
-        conversaEncerradaEm: lead.conversaEncerradaEm,
-        sdrPausadoEm: lead.sdrPausadoEm,
-        optOut: lead.optOut,
-        status: lead.status,
-      };
+      const c = estados.get(lead.id);
+      if (!c) continue;
 
       const acao: AcaoFollowup = acaoDoFollowup(c, prazos, agora);
       const horas = c.ultimaMensagemEm
@@ -174,26 +167,6 @@ export class FollowupService {
       }
     }
     return p;
-  }
-
-  /** A última mensagem e a última ENTRADA de cada lead, em duas consultas. */
-  private async mensagensDe(ids: string[]) {
-    const ultimas = await this.prisma.$queryRaw<LinhaMensagem[]>`
-      SELECT DISTINCT ON ("leadId") "leadId", "direcao", "criadoEm"
-      FROM "mensagens_lead"
-      WHERE "leadId" = ANY(${ids})
-      ORDER BY "leadId", "criadoEm" DESC
-    `;
-    const entradas = await this.prisma.$queryRaw<{ leadId: string; criadoEm: Date }[]>`
-      SELECT DISTINCT ON ("leadId") "leadId", "criadoEm"
-      FROM "mensagens_lead"
-      WHERE "leadId" = ANY(${ids}) AND "direcao" = 'ENTRADA'
-      ORDER BY "leadId", "criadoEm" DESC
-    `;
-    return {
-      ultimas: new Map(ultimas.map((r) => [r.leadId, r])),
-      entradas: new Map(entradas.map((r) => [r.leadId, r.criadoEm])),
-    };
   }
 
   private async prazos(): Promise<PrazosFollowup> {
