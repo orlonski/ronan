@@ -18,6 +18,7 @@ import { PermissoesService, PAPEL_ADMIN } from "../permissoes/permissoes.service
 import { MODULOS_PADRAO } from "@ronan/shared-types";
 import { MATERIAIS_INICIAIS, TIPOS_EVENTO_INICIAIS, TIPOS_SERVICO_INICIAIS } from "./kit-inicial";
 import { gerarCodigoConvite } from "./codigo-convite";
+import { identificarChave } from "../../common/identificar-chave";
 
 /**
  * O que a tela de Empresas pode mudar na casa. Todo campo é opcional: ela
@@ -655,12 +656,26 @@ export class ContasService implements OnModuleInit {
       // "ligado". A tela precisa poder avisar antes de alguém ir caçar bug no
       // WhatsApp. Só o SIM/NÃO sai daqui — chave nunca atravessa a fronteira.
       sdrProviderTemChave: this.temChaveDeIa(cfg?.sdrProvider ?? "anthropic"),
+      // QUAL chave está rodando — não a chave.
+      //
+      // "Tem chave: sim" não responde o que quem paga a conta pergunta: de qual
+      // conta é a chave que está gastando ali, se é a mesma que eu troquei
+      // semana passada. Prefixo e quatro dígitos finais dão pra conferir contra
+      // o painel do provedor e não dão pra assinar uma chamada. O valor segue
+      // só no ambiente.
+      sdrChaveApelido: identificarChave(this.chaveDeIa(cfg?.sdrProvider ?? "anthropic")),
+      // O nome da variável, pra quem for configurar saber onde mexer sem
+      // precisar abrir o código.
+      sdrChaveVariavel: nomeDaChave(cfg?.sdrProvider ?? "anthropic"),
     };
   }
 
+  private chaveDeIa(provider: string): string | undefined {
+    return this.config.get<string>(nomeDaChave(provider));
+  }
+
   private temChaveDeIa(provider: string): boolean {
-    const nome = provider === "gemini" ? "GEMINI_API_KEY" : "ANTHROPIC_API_KEY";
-    return Boolean(this.config.get<string>(nome)?.trim());
+    return Boolean(this.chaveDeIa(provider)?.trim());
   }
 
   /**
@@ -819,4 +834,9 @@ function normalizarSlug(bruto: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 40);
+}
+
+/** Onde a chave de cada provider mora no ambiente. */
+function nomeDaChave(provider: string): string {
+  return provider === "gemini" ? "GEMINI_API_KEY" : "ANTHROPIC_API_KEY";
 }

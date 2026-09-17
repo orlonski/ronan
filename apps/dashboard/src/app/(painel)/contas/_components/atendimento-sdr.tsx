@@ -19,6 +19,10 @@ type Config = {
   sdrLinkCadastro: string;
   /** A IA escolhida tem chave no servidor? Sem ela o SDR fica mudo em silêncio. */
   sdrProviderTemChave: boolean;
+  /** Prefixo e fim da chave em uso (`sk-ant…K9fA`). Nunca a chave. */
+  sdrChaveApelido: string | null;
+  /** Onde ela mora no ambiente, pra quem for trocar saber onde mexer. */
+  sdrChaveVariavel: string;
 };
 
 const PATH = "/admin/contas/configuracao";
@@ -97,10 +101,23 @@ export function AtendimentoSdr() {
           </p>
           {/* O aviso que faltava: sem chave ele não responde e a tela seguia
               dizendo "ligado", o que manda a pessoa caçar bug no WhatsApp. */}
-          {semChave && (
+          {semChave ? (
             <p className="mt-1 text-sm font-medium text-amber-700 dark:text-amber-500">
               A {data.sdrProvider === "gemini" ? "Gemini" : "Claude"} não tem chave configurada
               neste servidor — ligado assim, ele não responde ninguém. Troque a IA ao lado.
+            </p>
+          ) : (
+            /* Qual IA responde, com qual modelo e por qual chave. Sem isto a
+               tela dizia só "tem chave: sim", e não dava pra saber de qual
+               conta saía a fatura sem abrir o servidor. */
+            <p className="mt-1 text-sm text-muted-foreground">
+              Responde pela{" "}
+              <span className="font-medium text-foreground">
+                {data.sdrProvider === "gemini" ? "Gemini" : "Claude"}
+              </span>{" "}
+              · modelo <span className="font-medium text-foreground">{modeloSalvo}</span> · chave{" "}
+              <span className="font-mono text-foreground">{data.sdrChaveApelido}</span>{" "}
+              <span className="text-xs">({data.sdrChaveVariavel}, no servidor)</span>
             </p>
           )}
         </div>
