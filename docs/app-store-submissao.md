@@ -1,22 +1,24 @@
 # Submissão pública na App Store
 
-> **Antes de tudo: o app hoje é UNLISTED, e isso pode não ser reversível.**
+> **Resolvido em 17/09/2026: o caminho é app record novo, e ele já existe.**
 >
-> A doc da Apple diz que, depois de aprovado, o método de distribuição não muda —
-> *"the only exception to this is to change your publicly available app to an
-> unlisted app"*. Ou seja: público → unlisted sim, o contrário não está previsto,
-> e o relato comum é que a saída seria um **app record novo, com outro bundle
-> ID**. O nosso (Apple ID 6778807216) virou unlisted em 03/07/2026.
+> O app antigo (Apple ID 6778807216) virou unlisted em 03/07/2026, e a Apple não
+> desfaz isso: a doc dela só prevê público → unlisted. O case 102957914709
+> (aberto 09/09/2026) confirmou o que já se suspeitava — para voltar a ser
+> público, **app record novo, com bundle novo**.
 >
-> Pedido aberto no Developer Support em **09/09/2026, case 102957914709**,
-> perguntando (a) se dá pra reverter este mesmo app record e (b) se não, que
-> confirmem que o caminho é app record novo. **Enquanto não responderem, nada
-> aqui embaixo pode ser submetido** — mas tudo pode ser preparado.
+> O que já está feito do lado da Apple:
 >
-> Se a resposta for "app novo": bundle iOS novo (o Android fica onde está, a Play
-> não troca bundle), credenciais/perfil novos, APNs+Firebase iOS novo, o unlisted
-> vira legado e cada motorista de iPhone baixa o app novo à mão. Os dados são do
-> servidor — o risco é lançamento offline preso no aparelho antigo.
+> - **App ID `br.com.movatruck.app`** registrado, com Push Notifications.
+> - **App novo "Movatruck"**, Apple ID **6813093675**, PT-BR, SKU
+>   `MOVATRUCK-IOS`, distribuição **Pública**.
+> - O app antigo foi **renomeado para "Schaba"**. A Apple só deixa renomear
+>   criando versão nova, então existe uma **1.1.1 em rascunho** — não enviada
+>   para revisão, e o app segue publicado normalmente.
+>
+> O Android não se mexe: a Play não troca bundle de app publicado, então ele
+> fica em `br.com.schaba.motorista` para sempre. **Isso é o estado final**, não
+> dívida — cada loja tem a sua regra, e cada uma ficou com o nome que deu.
 
 O app já foi recusado uma vez, por dois motivos:
 
@@ -119,10 +121,44 @@ o banner de convite — que só aparece se existir um.
 
 Não bloqueiam, mas alguém vai reparar:
 
-- Bundle ID `br.com.schaba.motorista` e host `api.schaba.com.br`. Não dá pra
-  trocar (a Play não permite trocar bundle ID, e os domínios/Firebase estão
-  amarrados). A UI não mostra "Schaba" em lugar nenhum — a plataforma é a
-  Movatruck e a Schaba virou o primeiro cliente.
+- Host `api.schaba.com.br` e, **no Android**, o bundle `br.com.schaba.motorista`.
+  Não dá pra trocar: a Play não troca bundle de app publicado e os domínios e o
+  projeto Firebase estão amarrados nele. No iOS o bundle passou a ser
+  `br.com.movatruck.app`. A UI não mostra "Schaba" em lugar nenhum — a
+  plataforma é a Movatruck e a Schaba virou o primeiro cliente.
 - `ios/…/Info.plist` é gitignored e regerado pelo prebuild a partir do
   `app.config.ts`. Conferir num build de produção que as strings de permissão que
   saem são as do `app.config.ts`, em PT-BR, e não as antigas em inglês.
+
+## A virada, no dia em que a Apple aprovar
+
+Três coisas ficam **de propósito** apontando pro app velho até a aprovação sair.
+Antes disso, mexer nelas manda motorista pra uma página que não existe.
+
+1. `packages/shared-types/src/versao-app.ts` → `APP_STORE_IOS_ID` de
+   `"6778807216"` para `"6813093675"`. É o que o `GET /m/versao-app` devolve
+   como `storeUrl`, ou seja, **o link que a força-atualização abre no iPhone**.
+   Mora no servidor: um deploy da API vira a chave pra todo mundo de uma vez,
+   sem OTA e sem build.
+2. `apps/site/src/lib/config.ts` → `APPSTORE_URL` (hoje `""`) recebe
+   `https://apps.apple.com/br/app/id6813093675`. O site esconde o botão da App
+   Store enquanto a string estiver vazia.
+3. No app "Schaba": publicar o aviso de migração e só então **Remover da venda**.
+   A 1.1.1 em rascunho pode ser apagada.
+
+### O que ninguém deve descobrir no dia
+
+**No iPhone, "atualizar" não é atualizar — é instalar outro app.** Bundle novo é
+app novo para o sistema: ícone novo ao lado do antigo, login de novo (o
+`SecureStore` é por bundle) e, o que dói, **o outbox do app velho não viaja**.
+Lançamento feito offline que ainda não subiu fica preso lá dentro.
+
+Duas consequências práticas:
+
+- A tela `components/atualizacao-obrigatoria.tsx` diz "Atualizar agora" e "a
+  atualização acontece na hora". No Android é verdade (fluxo IMMEDIATE do
+  Google). No iPhone do app legado é mentira — o texto precisa de uma variante
+  por plataforma antes de a força-atualização apontar pro app novo.
+- O aviso de migração tem que pedir, com todas as letras, que ele **abra o app
+  antigo conectado até a tela de pendentes zerar** antes de apagar qualquer
+  coisa.

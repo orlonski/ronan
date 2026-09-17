@@ -35,7 +35,23 @@ const config: ExpoConfig = {
   assetBundlePatterns: ["**/*"],
   ios: {
     supportsTablet: false,
-    bundleIdentifier: "br.com.schaba.motorista",
+    // iOS e Android divergem de bundle DE PROPÓSITO desde 17/09/2026.
+    //
+    // O app record antigo (Apple ID 6778807216) virou UNLISTED em 03/07/2026 e
+    // a Apple não desfaz isso — unlisted → público não existe no fluxo dela. A
+    // saída é app record NOVO, e app record novo exige bundle novo: daí
+    // `br.com.movatruck.app` (Apple ID 6813093675, distribuição Pública).
+    //
+    // O Android FICA em `br.com.schaba.motorista`: a Play não troca o bundle de
+    // um app já publicado. Não é inconsistência pra resolver depois, é o estado
+    // final — cada loja tem a sua regra, e cada uma ficou com o nome que deu.
+    //
+    // O que NÃO muda junto: projectId do EAS, canal de OTA e runtimeVersion. O
+    // update é resolvido por projeto+canal+runtime+plataforma, nunca por bundle,
+    // então um `eas update` alcança os DOIS apps de iPhone — o legado unlisted e
+    // o novo. É o desejado: a frota de iPhone migra à mão, e até o último migrar
+    // quem ficou pra trás continua recebendo correção.
+    bundleIdentifier: "br.com.movatruck.app",
     buildNumber: "15",
     // Google Maps SDK for iOS — usa o MESMO motor do Android (que desenha a
     // polilinha perfeitamente), no lugar do Apple Maps (que é furado com linha).
