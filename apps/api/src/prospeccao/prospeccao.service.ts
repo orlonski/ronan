@@ -10,6 +10,9 @@ import { LeadChatwootService } from "./lead-chatwoot.service";
 import { conversasDosLeads, type LeadParaConversa } from "./conversa-lead";
 import type { PrazosFollowup } from "../sdr/followup.regua";
 
+/** Teto da varredura em memória do filtro de conversa. */
+const MAX_CANDIDATOS = 2000;
+
 /**
  * Leitura e manutenção da base de captação.
  *
@@ -87,6 +90,18 @@ export class ProspeccaoService {
     }
 
     return comoSistema(async () => {
+      // O estado da conversa não é coluna: é função da última mensagem, dos
+      // prazos e do relógio. Filtrar por ele no SQL exigiria reescrever a régua
+      // em query — duas verdades sobre a mesma coisa.
+      //
+      // Em vez disso, o universo é reduzido antes: só quem TEM conversa pode
+      // ter estado, e esses são poucos (a base tem 24 mil leads e um punhado
+      // de conversas). Calcula-se o estado desses e filtra-se por id.
+      if (params.conversa) {
+        const ids = await this.idsPorEstadoDeConversa(params.conversa);
+        where.id = { in: ids };
+      }
+
       const pagina = await paginate<Record<string, unknown>, ListLeadsParams>(this.prisma.lead, {
         params,
         where: where as Record<string, unknown>,
@@ -119,6 +134,39 @@ export class ProspeccaoService {
       }
       return pagina;
     });
+  }
+
+  /**
+   * Quem está naquele estado de conversa, hoje.
+   *
+   * Teto de `MAX_CANDIDATOS`: é uma varredura em memória, e o dia em que
+   * houver mais conversa que isso o filtro vira query de verdade. Até lá,
+   * simples e certo vale mais que geral e errado.
+   */
+  private async idsPorEstadoDeConversa(estado: string): Promise<string[]> {
+    const candidatos = await this.prisma.lead.findMany({
+      where: {
+        OR: [{ mensagens: { some: {} } }, { interacoes: { some: { canal: "WHATSAPP" } } }],
+      },
+      select: {
+        id: true,
+        optOut: true,
+        status: true,
+        followupsEnviados: true,
+        ultimoFollowupEm: true,
+        conversaEncerradaEm: true,
+        sdrPausadoEm: true,
+      },
+      take: MAX_CANDIDATOS,
+    });
+    if (candidatos.length === 0) return [];
+
+    const conversas = await conversasDosLeads(
+      this.prisma,
+      candidatos,
+      await this.prazosDoFollowup(),
+    );
+    return candidatos.filter((c) => conversas.get(c.id)?.estado === estado).map((c) => c.id);
   }
 
   /**

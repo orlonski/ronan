@@ -104,6 +104,7 @@ export default function ProspeccaoPage() {
   const [status, setStatus] = useState<string | undefined>();
   const [contato, setContato] = useState<string | undefined>("true");
   const [scoreMinimo, setScoreMinimo] = useState<string | undefined>();
+  const [conversa, setConversa] = useState<string | undefined>();
   const [aberto, setAberto] = useState<string | null>(null);
 
   const tableState = useDataTableState({ defaultSort: { field: "score", order: "desc" } });
@@ -118,6 +119,7 @@ export default function ProspeccaoPage() {
       ...(status ? { status } : {}),
       ...(contato ? { comContato: contato } : {}),
       ...(scoreMinimo ? { scoreMinimo } : {}),
+      ...(conversa ? { conversa } : {}),
     },
   });
 
@@ -182,6 +184,22 @@ export default function ProspeccaoPage() {
                 options={[
                   { value: "true", label: "Só com telefone" },
                   { value: "false", label: "Só sem contato" },
+                ]}
+              />
+              {/* O filtro que faz o estado da conversa virar ação.
+                  "Esperando resposta" em primeiro lugar porque é o único que
+                  custa uma venda AGORA — os outros são acompanhamento. */}
+              <Combobox
+                value={conversa}
+                onChange={setConversa}
+                placeholder="Conversa"
+                showSearch={false}
+                options={[
+                  { value: "aguardando-nos", label: "Esperando resposta" },
+                  { value: "parada", label: "Parada" },
+                  { value: "ativa", label: "Conversando" },
+                  { value: "com-humano", label: "Com atendente" },
+                  { value: "encerrada", label: "Encerrada" },
                 ]}
               />
               <Combobox

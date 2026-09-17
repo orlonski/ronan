@@ -16,6 +16,17 @@ export const listLeadsSchema = paginationQuerySchema.extend({
     .union([z.boolean(), z.enum(["true", "false"])])
     .transform((v) => (typeof v === "boolean" ? v : v === "true"))
     .optional(),
+  /**
+   * O estado da conversa no WhatsApp.
+   *
+   * `aguardando-nos` é o que justifica este filtro existir: sem ele, achar
+   * quem escreveu e ficou sem resposta significa folhear 24 mil leads
+   * ordenados por nota. Saber que "1 está esperando" sem conseguir chegar até
+   * ela não serve pra nada.
+   */
+  conversa: z
+    .enum(["ativa", "aguardando-nos", "parada", "encerrada", "com-humano"])
+    .optional(),
 });
 export type ListLeadsParams = z.infer<typeof listLeadsSchema>;
 
