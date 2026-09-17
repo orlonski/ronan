@@ -173,10 +173,15 @@ export default function NovoFreteScreen() {
                 {estimativa.pedagios.length > 0 && (
                   <Text className="text-sm text-muted-foreground">
                     {estimativa.pedagioTotal == null
-                      ? // Sem os eixos o app tem a tarifa de cada praça e não
-                        // pode somar nada: um eixo a mais ou a menos muda o
-                        // pedágio inteiro.
-                        "Diga quantos eixos você roda no seu perfil e o app soma o pedágio em reais."
+                      ? // DUAS razões diferentes zeram o total, e só uma tem
+                        // conserto do lado dele. Dizer sempre "informe os eixos"
+                        // manda quem já informou preencher de novo o que já
+                        // preencheu — e a conclusão dele é que o app não
+                        // funciona. O motivo vem do servidor (`pedagioMotivo`),
+                        // igual ao `consumoMotivo` do diesel logo abaixo.
+                        estimativa.pedagioMotivo === "SEM_TARIFA"
+                        ? `${estimativa.pedagios.length} ${estimativa.pedagios.length === 1 ? "praça" : "praças"} no caminho, mas ainda sem preço cadastrado aqui — não dá pra somar em reais. O km e o diesel seguem valendo.`
+                        : "Diga quantos eixos você roda no seu perfil e o app soma o pedágio em reais."
                       : estimativa.pedagioParcial
                         ? `${estimativa.pedagios.length} ${estimativa.pedagios.length === 1 ? "praça" : "praças"} no caminho, e nem todas têm preço cadastrado — o valor real é maior.`
                         : `${estimativa.pedagios.length} ${estimativa.pedagios.length === 1 ? "praça" : "praças"}: ${estimativa.pedagios.map((p) => p.nome).join(", ")}`}

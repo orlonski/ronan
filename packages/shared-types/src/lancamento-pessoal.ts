@@ -295,6 +295,16 @@ export type EstimativaFrete = {
    * parecer melhor do que é.
    */
   pedagioParcial: boolean;
+  /**
+   * Por que `pedagioTotal` é null — o espelho do `consumoMotivo` do diesel.
+   *
+   * Sem isso a tela só sabe que o total não veio, e o palpite mais provável
+   * ("falta dizer os eixos") está errado metade das vezes: praça sem preço
+   * cadastrado zera o total do mesmo jeito. Mandar o motorista preencher o que
+   * ele já preencheu é pior que não dizer nada — ele conclui que o app não
+   * funciona e nunca mais abre a tela.
+   */
+  pedagioMotivo?: "SEM_EIXOS" | "SEM_TARIFA" | null;
   /** O que o caminhão custa por km rodado, fora combustível (90 dias dele). */
   custoPorKm: number | null;
   /** O que ELE já recebeu nesse mesmo trecho. Null = nunca fez. */

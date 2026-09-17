@@ -104,6 +104,8 @@ export class FretePessoalService {
       // `true` = tem praça na rota sem preço cadastrado, então o total é um
       // PISO. Dizer isso é o que impede o frete de parecer melhor do que é.
       pedagioParcial: pedagio.semTarifa > 0,
+      // A regra já sabe POR QUE não somou; jogar fora obrigava a tela a chutar.
+      pedagioMotivo: pedagio.motivo ?? null,
       custoPorKm: custo.valor,
       historico,
       // A pergunta não é "quanto é o frete", é "sobra quanto". Só responde
