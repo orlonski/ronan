@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, Loader2, MessageSquare, Phone, X } from "lucide-react";
 import { toast } from "sonner";
+import { telefoneDiscavel } from "@ronan/shared-types";
 import { Card } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
 import { fetchApi, useApiQuery, useAuthToken } from "@/lib/client-api";
@@ -70,12 +71,25 @@ const SITUACOES = [
   { value: "PERDEU", label: "Perdeu" },
 ];
 
+/** Mostra o número em que dá pra falar — com o nono dígito, quando falta. */
 function telefoneBonito(t: string | null): string | null {
   if (!t) return null;
-  const d = t.replace(/\D/g, "");
+  const d = telefoneDiscavel(t) ?? t.replace(/\D/g, "");
   if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
   if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
   return t;
+}
+
+/**
+ * O telefone como se cola em outro lugar: DDD e número, sem parêntese, traço
+ * nem DDI. É o formato que o WhatsApp, o discador e a busca de qualquer
+ * sistema aceitam — o bonito é pra ler na tela, não pra colar.
+ *
+ * Passa pelo `telefoneDiscavel` porque a base da ANTT guarda celular sem o
+ * nono dígito: copiar "4399360877" entrega um número que não acha ninguém.
+ */
+function soDigitos(t: string | null): string {
+  return telefoneDiscavel(t ?? "") ?? (t ?? "").replace(/\D/g, "");
 }
 
 function cnpjBonito(c: string | null): string | null {
@@ -121,6 +135,34 @@ export function FichaLead({
       void qc.invalidateQueries({ queryKey: ["/admin/prospeccao/leads"] });
       onMudou();
     },
+  });
+
+  /**
+   * Prepara a conversa no Chatwoot e leva pra lá.
+   *
+   * A aba é aberta ANTES da chamada, em branco: aberta depois, o navegador
+   * entende como pop-up e engole — o clique já teria acontecido faz dois
+   * segundos. A janela em branco vira a conversa quando a resposta chega.
+   */
+  const abrirConversa = useMutation({
+    mutationFn: async () => {
+      const aba = window.open("", "_blank");
+      try {
+        const r = await fetchApi<{ url: string }>(`${caminho}/chatwoot/conversa`, {
+          method: "POST",
+          body: JSON.stringify({}),
+          token,
+        });
+        if (aba) aba.location.href = r.url;
+        else window.open(r.url, "_blank", "noopener");
+        return r;
+      } catch (e) {
+        aba?.close();
+        throw e;
+      }
+    },
+    onSuccess: () => void refetch(),
+    onError: (e: Error) => toast.error("Não deu pra abrir a conversa", { description: e.message }),
   });
 
   const mudarSituacao = useMutation({
@@ -193,18 +235,18 @@ export function FichaLead({
                 {/* Secundário à esquerda, principal à direita — padrão de botões. */}
                 <button
                   type="button"
-                  onClick={() => void copiar(tel, "Número")}
+                  onClick={() => void copiar(soDigitos(lead.telefone), "Número")}
                   className="flex items-center justify-center gap-2 rounded-md border px-3 py-3 text-sm font-medium hover:bg-accent/40"
                 >
-                  {copiado === tel ? (
+                  {copiado === soDigitos(lead.telefone) ? (
                     <Check className="h-4 w-4 text-emerald-600" />
                   ) : (
                     <Copy className="h-4 w-4" />
                   )}
-                  {copiado === tel ? "Copiado" : "Copiar número"}
+                  {copiado === soDigitos(lead.telefone) ? "Copiado" : "Copiar número"}
                 </button>
                 <a
-                  href={`tel:+55${lead.telefone}`}
+                  href={`tel:+55${soDigitos(lead.telefone)}`}
                   className="flex flex-1 items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700"
                 >
                   <Phone className="h-4 w-4" />
@@ -214,7 +256,7 @@ export function FichaLead({
               </div>
             )}
 
-            {lead.chatwootUrl && (
+            {lead.chatwootUrl ? (
               <a
                 href={lead.chatwootUrl}
                 target="_blank"
@@ -224,6 +266,23 @@ export function FichaLead({
                 <MessageSquare className="h-4 w-4" />
                 Abrir a conversa no WhatsApp
               </a>
+            ) : (
+              lead.telefone &&
+              podeEditar && (
+                <button
+                  type="button"
+                  disabled={abrirConversa.isPending}
+                  onClick={() => abrirConversa.mutate()}
+                  className="flex w-full items-center justify-center gap-2 rounded-md border px-4 py-3 text-sm font-medium hover:bg-accent/40 disabled:opacity-50"
+                >
+                  {abrirConversa.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <MessageSquare className="h-4 w-4" />
+                  )}
+                  {abrirConversa.isPending ? "Preparando…" : "Falar no WhatsApp"}
+                </button>
+              )
             )}
 
             <Card className="divide-y text-sm">

@@ -11,9 +11,11 @@ import { LeadChatwootService } from "../prospeccao/lead-chatwoot.service";
 import {
   EMPRESA_A_DESCOBRIR,
   ORIGEM_INBOUND,
+  ehPedidoDeParar,
   nomeDePessoa,
   telefoneDaCasa,
 } from "../sdr/lead-inbound";
+import { ProspeccaoService } from "../prospeccao/prospeccao.service";
 
 /**
  * O agente que atende dentro do Chatwoot.
@@ -77,6 +79,7 @@ export class ChatwootAgenteService {
     private readonly chatwoot: ChatwootClientService,
     private readonly sdr: SdrService,
     private readonly leadChatwoot: LeadChatwootService,
+    private readonly prospeccao: ProspeccaoService,
     config: ConfigService,
   ) {
     const bruto = Number(config.get<string>("CHATWOOT_INBOX_COMERCIAL"));
@@ -164,6 +167,11 @@ export class ChatwootAgenteService {
       // virava ticket no atendimento e o lado comercial nunca ficava sabendo
       // que a empresa tinha procurado a gente.
       const leadId = await this.resolverLead(telefone, nomeContato, texto, ondeConversa);
+
+      // "SAIR" tem que funcionar de verdade. É o que a gente promete no fim de
+      // toda mensagem de prospecção, e promessa de opt-out que depende de
+      // alguém ler o ticket é promessa quebrada.
+      if (await this.pararDeContatar(texto, telefone, contaChatwoot, conversaId)) return;
 
       // SDR ligado: quem responde é o atendimento comercial. `null` aqui não é
       // mais "não está na base" — é opt-out ou falha; nos dois casos a
@@ -254,6 +262,8 @@ export class ChatwootAgenteService {
   ): Promise<void> {
     const { contaId: contaChatwoot, conversaId } = onde;
     const leadId = await this.resolverLead(telefone, nomeContato, texto, onde);
+
+    if (await this.pararDeContatar(texto, telefone, contaChatwoot, conversaId)) return;
 
     if (leadId && (await this.atenderComoSdr(leadId, texto, contaChatwoot, conversaId))) return;
 
@@ -432,6 +442,44 @@ export class ChatwootAgenteService {
         autor: null,
       },
     });
+  }
+
+  /**
+   * "SAIR", "parar", "não quero" — e acabou.
+   *
+   * Devolve `true` quando era um pedido de parar, e aí a conversa não segue
+   * pra lugar nenhum: nem SDR, nem fila humana. Responder com um robô depois
+   * de alguém pedir pra parar é desobedecer no detalhe; mandar pra fila humana
+   * é fazer uma pessoa ler pra confirmar o óbvio.
+   *
+   * A supressão é GLOBAL e sobrevive à próxima carga do RNTRC — quem sai, sai
+   * de todas as listas, não só desta conversa.
+   */
+  private async pararDeContatar(
+    texto: string,
+    telefone: string,
+    contaChatwoot: number,
+    conversaId: number,
+  ): Promise<boolean> {
+    if (!telefone || !ehPedidoDeParar(texto)) return false;
+    try {
+      await this.prospeccao.registrarOptOut(
+        telefoneDaCasa(telefone),
+        `pediu no WhatsApp: "${texto.slice(0, 60)}"`,
+        "WHATSAPP",
+      );
+      this.log.log(`Opt-out por mensagem na conversa ${conversaId}.`);
+    } catch (e) {
+      // Falhar em gravar não pode virar silêncio: a pessoa precisa da
+      // confirmação, e o log é o que nos conta que ficou faltando.
+      this.log.error(`não consegui registrar o opt-out: ${(e as Error).message}`);
+    }
+    await this.chatwoot.responder(
+      contaChatwoot,
+      conversaId,
+      "Pronto, tirei seu número da nossa lista. Não vamos mais te procurar. Se um dia precisar, é só chamar aqui.",
+    );
+    return true;
   }
 
   /**

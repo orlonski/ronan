@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -23,6 +24,7 @@ import {
 } from "./prospeccao.schema";
 import { ProspeccaoService } from "./prospeccao.service";
 import { EnriquecimentoService } from "./enriquecimento.service";
+import { LeadChatwootService } from "./lead-chatwoot.service";
 import { RntrcService } from "./rntrc.service";
 
 /**
@@ -40,6 +42,7 @@ export class ProspeccaoController {
     private readonly prospeccao: ProspeccaoService,
     private readonly rntrc: RntrcService,
     private readonly enriquecimento: EnriquecimentoService,
+    private readonly chatwoot: LeadChatwootService,
   ) {}
 
   @RequerPermissao("prospeccao.ver")
@@ -117,6 +120,37 @@ export class ProspeccaoController {
   @Post("recalcular-scores")
   async recalcularScores() {
     return this.rntrc.recalcularScores();
+  }
+
+  /**
+   * Sobe pro Chatwoot os leads que têm telefone, como contatos.
+   *
+   * Sem isto o contato só nascia quando a pessoa escrevia — quem a gente ainda
+   * não abordou não existia no atendimento. Chamar de novo continua de onde
+   * parou; quem já foi não vai duas vezes.
+   */
+  @RequerPermissao("prospeccao.importar")
+  @Post("chatwoot/contatos")
+  async sincronizarContatosChatwoot(@Body() body: { limite?: number }) {
+    return this.chatwoot.sincronizarContatos(body?.limite);
+  }
+
+  /**
+   * Prepara a conversa com esse lead no Chatwoot e devolve o endereço.
+   *
+   * Não manda mensagem: fora da janela de 24h a Meta só aceita template
+   * aprovado, e quem escolhe a primeira palavra pra um lead frio é uma pessoa.
+   */
+  @RequerPermissao("prospeccao.editar")
+  @Post("leads/:id/chatwoot/conversa")
+  async abrirConversaChatwoot(@Param("id") id: string) {
+    try {
+      return await this.chatwoot.abrirConversa(id);
+    } catch (e) {
+      // A mensagem de erro daqui vai direto pra tela de quem clicou: "essa
+      // empresa pediu pra não ser contatada" é resposta, não log.
+      throw new BadRequestException((e as Error).message);
+    }
   }
 
   /**

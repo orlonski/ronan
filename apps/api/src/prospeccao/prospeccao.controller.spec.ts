@@ -58,6 +58,8 @@ describe("ProspeccaoController — as rotas que a tela chama", () => {
     "POST enriquecer",
     "POST recalcular-scores",
     "POST opt-out",
+    "POST chatwoot/contatos",
+    "POST leads/:id/chatwoot/conversa",
   ];
 
   for (const rota of esperadas) {

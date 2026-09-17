@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Sparkles,
 } from "lucide-react";
+import { telefoneDiscavel } from "@ronan/shared-types";
 import { Card } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
 import { DataTableToolbar } from "@/components/data-table";
@@ -257,10 +258,14 @@ function percentualDaBase(parte: number, total: number): string {
   return `${Math.round(pct)}% da base`;
 }
 
-/** (42) 3535-3078 — a maioria é fixo, que a Receita entrega com 10 dígitos. */
+/**
+ * (42) 3535-3078 — e (43) 99936-0877 pro celular que a Receita entregou com 10
+ * dígitos, de antes de 2016. Sem devolver o nono, o botão de ligar disca um
+ * número que não existe mais.
+ */
 function telefoneBonito(t: string | null): string | null {
   if (!t) return null;
-  const d = t.replace(/\D/g, "");
+  const d = telefoneDiscavel(t) ?? t.replace(/\D/g, "");
   if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
   if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
   return t;
@@ -346,7 +351,7 @@ function LinhaLead({ lead, onAbrir }: { lead: Lead; onAbrir: () => void }) {
 
       {tel ? (
         <a
-          href={`tel:+55${lead.telefone}`}
+          href={`tel:+55${telefoneDiscavel(lead.telefone ?? "") ?? lead.telefone}`}
           onClick={(e) => e.stopPropagation()}
           className="flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm tabular-nums hover:bg-accent/50"
         >

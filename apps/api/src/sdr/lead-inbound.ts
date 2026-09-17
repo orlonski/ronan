@@ -68,3 +68,55 @@ export function nomeDePessoa(bruto: string | null | undefined, numero: string): 
   if (digitos && digitos.endsWith(numero.slice(-8))) return null;
   return limpo;
 }
+
+/**
+ * Os últimos 8 dígitos — o pedaço do telefone que sobrevive a tudo.
+ *
+ * O mesmo número aparece de três formas na casa: "4399912345" (Receita, celular
+ * velho sem o nono dígito), "43999912345" (com o nono) e "554399912345" (como
+ * o WhatsApp manda). Comparar por igualdade faz o MESMO telefone parecer três
+ * pessoas — e o caso em que isso dói é o opt-out: a pessoa pede pra parar, o
+ * `updateMany` não casa nenhum lead, e ela continua na lista.
+ *
+ * Oito dígitos porque é o que existe em todas as formas. Colisão entre DDDs
+ * diferentes é teoricamente possível; na prática o custo de errar pra MENOS
+ * (não marcar quem pediu pra sair) é muito maior que o de errar pra mais.
+ */
+export function sufixoTelefone(bruto: string): string {
+  return telefoneDaCasa(bruto).slice(-8);
+}
+
+/**
+ * A pessoa está pedindo pra não receber mais nada?
+ *
+ * Régua curta de propósito. "não quero" no meio de uma frase ("não quero
+ * pagar caro") é conversa, não opt-out — tirar da lista quem estava
+ * negociando é tão ruim quanto continuar mandando pra quem pediu pra sair.
+ * Só conta a mensagem que é ISSO e nada mais.
+ */
+const PEDIDOS_DE_PARAR = new Set([
+  "sair",
+  "parar",
+  "pare",
+  "stop",
+  "remover",
+  "descadastrar",
+  "cancelar",
+  "nao quero",
+  "nao quero mais",
+  "nao tenho interesse",
+  "parar de receber",
+  "nao me mande mais mensagens",
+  "nao envie mais mensagens",
+]);
+
+export function ehPedidoDeParar(texto: string): boolean {
+  const limpo = texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[.!,;:]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return PEDIDOS_DE_PARAR.has(limpo);
+}

@@ -5,6 +5,7 @@ import type { SessaoService, SessaoResolvida } from "../whatsapp/sessao.service"
 import type { AgenteService } from "../whatsapp/agente/agente.service";
 import type { ChatwootClientService } from "./chatwoot-client.service";
 import type { LeadChatwootService } from "../prospeccao/lead-chatwoot.service";
+import type { ProspeccaoService } from "../prospeccao/prospeccao.service";
 import type { ConviteService } from "../whatsapp/convite.service";
 import type { SdrService, RespostaSdr } from "../sdr/sdr.service";
 import type { ConfigService } from "@nestjs/config";
@@ -87,6 +88,7 @@ function montar(
   const interacaoCreate = vi.fn(async () => ({}));
   const supressaoFindFirst = vi.fn(async () => (opts.suprimido ? { contato: "4299998888" } : null));
   const vincular = vi.fn(async () => {});
+  const registrarOptOut = vi.fn(async () => ({ contato: "4299998888", tipo: "TELEFONE", leadsMarcados: 1 }));
 
   const s = new ChatwootAgenteService(
     {
@@ -106,6 +108,7 @@ function montar(
     { responder, passarParaHumano } as unknown as ChatwootClientService,
     { atender } as unknown as SdrService,
     { vincular } as unknown as LeadChatwootService,
+    { registrarOptOut } as unknown as ProspeccaoService,
     {
       get: (k: string) =>
         k === "CHATWOOT_INBOX_COMERCIAL" ? (opts.inboxComercial ?? undefined) : undefined,
@@ -114,6 +117,7 @@ function montar(
   return {
     s,
     vincular,
+    registrarOptOut,
     create,
     findUnique,
     processar,
@@ -533,5 +537,48 @@ describe("o lead e a conversa ficam ligados", () => {
     await s.processar(evento({ sender: { id: 55, phone_number: "+554299998888" } }));
     expect(leadCreate).not.toHaveBeenCalled();
     expect(vincular).not.toHaveBeenCalled();
+  });
+});
+
+describe("quando a pessoa pede pra parar", () => {
+  it("SAIR tira da lista, confirma e não chama o SDR", async () => {
+    // É o que a mensagem de prospecção promete no fim. Promessa de opt-out
+    // que depende de alguém ler o ticket é promessa quebrada.
+    const { s, registrarOptOut, atender, responder, passarParaHumano } = montar({
+      identidade: DESCONHECIDO,
+      ehLead: true,
+    });
+    await s.processar(evento({ content: "SAIR" }));
+    expect(registrarOptOut).toHaveBeenCalledWith(
+      "4299998888",
+      expect.stringContaining("pediu no WhatsApp"),
+      "WHATSAPP",
+    );
+    expect(atender).not.toHaveBeenCalled();
+    expect(passarParaHumano).not.toHaveBeenCalled();
+    expect(responder).toHaveBeenCalledWith(1, 7, expect.stringContaining("tirei seu número"));
+  });
+
+  it("vale também no canal comercial", async () => {
+    const { s, registrarOptOut } = montar({
+      inboxComercial: "2",
+      identidade: DESCONHECIDO,
+      ehLead: true,
+    });
+    await s.processar(evento({ inbox: { id: 2 }, content: "não quero mais" }));
+    expect(registrarOptOut).toHaveBeenCalled();
+  });
+
+  it("não confunde negociação com desistência", async () => {
+    // "não quero pagar caro" é conversa. Tirar da lista quem estava
+    // negociando é tão ruim quanto insistir com quem pediu pra sair.
+    const { s, registrarOptOut, atender } = montar({
+      identidade: DESCONHECIDO,
+      ehLead: true,
+      respostaSdr: { texto: "Posso te explicar o preço", passarParaHumano: false, motivoHumano: null, ferramentas: [] },
+    });
+    await s.processar(evento({ content: "não quero pagar caro nisso" }));
+    expect(registrarOptOut).not.toHaveBeenCalled();
+    expect(atender).toHaveBeenCalled();
   });
 });

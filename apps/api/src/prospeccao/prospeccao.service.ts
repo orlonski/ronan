@@ -5,6 +5,7 @@ import { SEM_ESCOPO } from "../common/escopo/escopo";
 import type { ListLeadsParams } from "./prospeccao.schema";
 import { comoSistema } from "../common/conta/conta-context";
 import { PrismaService } from "../prisma/prisma.service";
+import { sufixoTelefone } from "../sdr/lead-inbound";
 import { LeadChatwootService } from "./lead-chatwoot.service";
 
 /**
@@ -133,8 +134,15 @@ export class ProspeccaoService {
         update: { motivo, fonte },
       });
 
+      // Telefone casa pelos últimos 8 dígitos, não por igualdade: o MESMO
+      // número está na base como "4399912345" (Receita, sem o nono dígito) e
+      // chega do WhatsApp como "554399912345". Com `equals`, quem pedia pra
+      // sair marcava ZERO leads e seguia na lista — o pior jeito de falhar.
       const { count } = await this.prisma.lead.updateMany({
-        where: tipo === "EMAIL" ? { email: contato } : { telefone: contato },
+        where:
+          tipo === "EMAIL"
+            ? { email: contato }
+            : { telefone: { endsWith: sufixoTelefone(contato) } },
         data: { optOut: true, optOutEm: new Date() },
       });
 
@@ -225,12 +233,22 @@ export class ProspeccaoService {
     return lead;
   }
 
-  /** Um contato está suprimido? Consulte ANTES de qualquer envio. */
+  /**
+   * Um contato está suprimido? Consulte ANTES de qualquer envio.
+   *
+   * Mesma régua do opt-out: telefone pelos últimos 8 dígitos. Procurar por
+   * igualdade faria a supressão gravada com o nono dígito não valer pro mesmo
+   * número guardado sem ele.
+   */
   async estaSuprimido(bruto: string): Promise<boolean> {
-    const { contato } = ProspeccaoService.normalizarContato(bruto);
+    const { contato, tipo } = ProspeccaoService.normalizarContato(bruto);
     if (!contato) return false;
     const achado = await comoSistema(async () =>
-      this.prisma.supressaoContato.findUnique({ where: { contato } }),
+      tipo === "EMAIL"
+        ? this.prisma.supressaoContato.findUnique({ where: { contato } })
+        : this.prisma.supressaoContato.findFirst({
+            where: { contato: { endsWith: sufixoTelefone(contato) } },
+          }),
     );
     return achado !== null;
   }
