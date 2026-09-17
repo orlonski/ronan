@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { PrecosModule } from "../admin/precos/precos.module";
 import { ProspeccaoModule } from "../prospeccao/prospeccao.module";
 import { SdrService } from "./sdr.service";
+import { FollowupService } from "./followup.service";
 
 /**
  * O SDR reusa a abstração de provider do agente (Anthropic/Gemini) e nada
@@ -10,7 +11,7 @@ import { SdrService } from "./sdr.service";
  */
 @Module({
   imports: [PrecosModule, ProspeccaoModule],
-  providers: [SdrService],
-  exports: [SdrService],
+  providers: [SdrService, FollowupService],
+  exports: [SdrService, FollowupService],
 })
 export class SdrModule {}

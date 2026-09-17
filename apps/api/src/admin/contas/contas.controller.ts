@@ -24,6 +24,7 @@ import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import type { AuthAdminUser } from "../../auth/types";
 import { IgnoraEscopo } from "../../common/escopo/escopo.decorator";
 import { ContasService } from "./contas.service";
+import { FollowupService } from "../../sdr/followup.service";
 
 const CriarContaBody = z.object({
   nome: z.string().trim().min(2, "Diga o nome da empresa."),
@@ -111,7 +112,10 @@ const RecursosIaBody = z
 @IgnoraEscopo()
 @Controller("admin/contas")
 export class ContasController {
-  constructor(private readonly service: ContasService) {}
+  constructor(
+    private readonly service: ContasService,
+    private readonly followup: FollowupService,
+  ) {}
 
   @Get()
   listar() {
@@ -121,6 +125,19 @@ export class ContasController {
   @Post()
   criar(@Body(new ZodValidationPipe(CriarContaBody)) body: z.infer<typeof CriarContaBody>) {
     return this.service.criar(body);
+  }
+
+  /**
+   * O que o follow-up faria AGORA, se estivesse ligado.
+   *
+   * Existe porque o varredor roda em modo seco e o log do servidor não é
+   * legível na prática — o painel guarda poucas linhas e o boot do Nest as
+   * consome. A cadência real tem que caber numa tela antes de virar mensagem
+   * no WhatsApp de alguém.
+   */
+  @Get("sdr-followup/previsao")
+  previsaoFollowup() {
+    return this.followup.prever();
   }
 
   /** Os interruptores da casa: porta de auto-cadastro e duração do teste. */

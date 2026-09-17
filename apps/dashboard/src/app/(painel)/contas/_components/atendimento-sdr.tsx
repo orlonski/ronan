@@ -62,6 +62,23 @@ const CAMPO_CHAVE: Record<Provider, keyof ConfigEscrita> = {
 };
 
 const PATH = "/admin/contas/configuracao";
+const PATH_PREVISAO = "/admin/contas/sdr-followup/previsao";
+
+/**
+ * O que o follow-up faria agora, se estivesse ligado.
+ *
+ * O varredor já roda, mas em modo seco: decide e não envia. Esta é a única
+ * forma de ver a cadência real antes de a primeira mensagem existir — o log do
+ * servidor não é legível na prática.
+ */
+type Previsao = {
+  analisadas: number;
+  cobrariam: number;
+  encerrariam: number;
+  foraDaJanela: number;
+  esperandoResposta: number;
+  exemplos: { empresa: string; horasParadas: number; passo: number }[];
+};
 
 /**
  * O atendimento comercial automático no WhatsApp.
@@ -88,6 +105,14 @@ export function AtendimentoSdr() {
     queryKey: [PATH, "sdr"],
     enabled: !!token,
     queryFn: () => fetchApi<Config>(PATH, { token }),
+  });
+
+  const { data: previsao } = useQuery({
+    queryKey: [PATH_PREVISAO],
+    enabled: !!token,
+    queryFn: () => fetchApi<Previsao>(PATH_PREVISAO, { token }),
+    // A conta muda com o relógio, não com o que se faz na tela.
+    staleTime: 60_000,
   });
 
   const modeloSalvo =
@@ -310,6 +335,47 @@ export function AtendimentoSdr() {
           {ligado ? "Desligar atendimento" : "Ligar atendimento"}
         </Button>
       </div>
+      {/* A conversa que o prospect abandonou.
+          O varredor já roda e NÃO manda nada — mostra o que faria. É a leitura
+          que transforma "ligo ou não ligo o follow-up" numa decisão com número
+          em vez de um salto. */}
+      {previsao && previsao.analisadas > 0 && (
+        <div className="w-full border-t pt-3 text-sm">
+          <p className="font-medium">Conversas que pararam</p>
+          <p className="mt-0.5 text-muted-foreground">
+            {previsao.esperandoResposta > 0 && (
+              <>
+                <span className="font-medium text-rose-700 dark:text-rose-400">
+                  {previsao.esperandoResposta} esperando resposta de uma pessoa
+                </span>
+                {" · "}
+              </>
+            )}
+            {previsao.analisadas} conversa{previsao.analisadas > 1 ? "s" : ""} viva
+            {previsao.analisadas > 1 ? "s" : ""}. Se o follow-up automático estivesse ligado agora:{" "}
+            <span className="font-medium text-foreground">{previsao.cobrariam}</span> receberia
+            {previsao.cobrariam === 1 ? "" : "m"} uma cobrança e{" "}
+            <span className="font-medium text-foreground">{previsao.encerrariam}</span> seria
+            {previsao.encerrariam === 1 ? "" : "m"} encerrada{previsao.encerrariam === 1 ? "" : "s"}
+            {previsao.foraDaJanela > 0 && (
+              <> ({previsao.foraDaJanela} por já estar fora da janela de 24h da Meta)</>
+            )}
+            .
+          </p>
+          {previsao.exemplos.length > 0 && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Exemplos:{" "}
+              {previsao.exemplos
+                .slice(0, 3)
+                .map((e) => `${e.empresa} (parada há ${Math.floor(e.horasParadas)}h)`)
+                .join(" · ")}
+            </p>
+          )}
+          <p className="mt-1 text-xs text-muted-foreground">
+            Nada disso é enviado hoje — o follow-up automático ainda não está ligado.
+          </p>
+        </div>
+      )}
     </Card>
   );
 }
