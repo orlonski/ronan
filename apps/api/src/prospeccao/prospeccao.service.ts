@@ -5,6 +5,7 @@ import { SEM_ESCOPO } from "../common/escopo/escopo";
 import type { ListLeadsParams } from "./prospeccao.schema";
 import { comoSistema } from "../common/conta/conta-context";
 import { PrismaService } from "../prisma/prisma.service";
+import { LeadChatwootService } from "./lead-chatwoot.service";
 
 /**
  * Leitura e manutenção da base de captação.
@@ -16,7 +17,10 @@ import { PrismaService } from "../prisma/prisma.service";
 export class ProspeccaoService {
   private readonly log = new Logger("Prospeccao");
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly chatwoot: LeadChatwootService,
+  ) {}
 
   async resumo() {
     return comoSistema(async () => {
@@ -139,14 +143,22 @@ export class ProspeccaoService {
     });
   }
 
-  /** Ficha completa, com o histórico de toques. */
+  /**
+   * Ficha completa, com o histórico de toques.
+   *
+   * O `chatwootUrl` sai montado daqui e não dos ids crus: a URL do Chatwoot é
+   * env da API, e mandar os três números pro painel remontar criaria um
+   * segundo lugar pra desatualizar.
+   */
   async detalhe(id: string) {
-    return comoSistema(async () =>
+    const lead = await comoSistema(async () =>
       this.prisma.lead.findUnique({
         where: { id },
         include: { interacoes: { orderBy: { criadoEm: "desc" }, take: 50 } },
       }),
     );
+    if (!lead) return null;
+    return { ...lead, chatwootUrl: this.chatwoot.linkDaConversa(lead) };
   }
 
   /**
@@ -194,14 +206,23 @@ export class ProspeccaoService {
         }
       }
 
+      // O atendimento precisa saber, e precisa saber ANTES de responder: um
+      // "pediu pra não contatar" registrado aqui tem que aparecer na tela de
+      // quem tem o dedo no gatilho de mandar mensagem.
+      void this.chatwoot.sincronizar(leadId);
+
       return interacao;
     });
   }
 
   async atualizar(id: string, dados: Record<string, unknown>) {
-    return comoSistema(async () =>
+    const lead = await comoSistema(async () =>
       this.prisma.lead.update({ where: { id }, data: dados }),
     );
+    // Sem `await`: a ficha do Chatwoot é enfeite pro atendente, e o painel não
+    // pode ficar esperando um HTTP de fora pra confirmar que salvou.
+    void this.chatwoot.sincronizar(id);
+    return lead;
   }
 
   /** Um contato está suprimido? Consulte ANTES de qualquer envio. */

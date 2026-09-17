@@ -5341,6 +5341,22 @@ model Lead {
   /// Guardado só pra defesa contra abuso do formulário público, não pra perfil.
   ipCriacao String?
 
+  /// Onde essa pessoa conversa com a gente no Chatwoot.
+  ///
+  /// Preenchido pelo webhook quando ela escreve no WhatsApp. Serve pras duas
+  /// pontas: o painel monta o link que abre a conversa, e o atendimento recebe
+  /// a ficha do lead nos atributos do contato — sem isto o atendente vê um
+  /// número e o vendedor vê um CNPJ, cada um na sua tela.
+  ///
+  /// A CONTA do Chatwoot vai junto de propósito: ela entra na URL e é própria
+  /// de cada instalação; deduzir do env quebraria o link de toda conversa
+  /// antiga no dia que a gente trocasse de conta.
+  chatwootContaId    Int?
+  chatwootContatoId  Int?
+  /// A ÚLTIMA conversa. O Chatwoot abre uma nova a cada ciclo resolvido, e o
+  /// link que interessa é sempre o de agora.
+  chatwootConversaId Int?
+
   status        String    @default("NOVO")
   /// Fica true quando a pessoa pede pra não ser mais contatada. Vale pra TODOS
   /// os canais de uma vez — é a supressão global; nunca contatar com isto true.

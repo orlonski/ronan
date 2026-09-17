@@ -7,6 +7,7 @@ import { SessaoService } from "../whatsapp/sessao.service";
 import { ConviteService } from "../whatsapp/convite.service";
 import { ChatwootClientService } from "./chatwoot-client.service";
 import { SdrService } from "../sdr/sdr.service";
+import { LeadChatwootService } from "../prospeccao/lead-chatwoot.service";
 import {
   EMPRESA_A_DESCOBRIR,
   ORIGEM_INBOUND,
@@ -39,8 +40,21 @@ type EventoChatwoot = {
   content?: string;
   conversation?: { id?: number; status?: string };
   account?: { id?: number };
-  sender?: { phone_number?: string; identifier?: string; name?: string };
+  // `id` é o CONTATO no Chatwoot (não o remetente da mensagem): é por ele
+  // que a ficha do lead volta pra barra lateral do atendimento.
+  sender?: { id?: number; phone_number?: string; identifier?: string; name?: string };
   inbox?: { id?: number; name?: string };
+};
+
+/**
+ * Onde a conversa mora no Chatwoot. Anda junto pelo fluxo porque é o que liga
+ * o lead do CRM à conversa do atendimento — os dois lados da mesma pessoa.
+ */
+type OndeConversa = {
+  contaId: number;
+  /** O contato. `null` quando o payload não trouxe — dá pra viver sem. */
+  contatoId: number | null;
+  conversaId: number;
 };
 
 @Injectable()
@@ -62,6 +76,7 @@ export class ChatwootAgenteService {
     private readonly convite: ConviteService,
     private readonly chatwoot: ChatwootClientService,
     private readonly sdr: SdrService,
+    private readonly leadChatwoot: LeadChatwootService,
     config: ConfigService,
   ) {
     const bruto = Number(config.get<string>("CHATWOOT_INBOX_COMERCIAL"));
@@ -102,6 +117,14 @@ export class ChatwootAgenteService {
       return;
     }
 
+    // Onde essa conversa mora no Chatwoot. Vai junto do lead: é o que deixa a
+    // ficha do painel abrir a conversa e o atendimento saber quem é o número.
+    const ondeConversa: OndeConversa = {
+      contaId: contaChatwoot,
+      contatoId: evento.sender?.id ?? null,
+      conversaId,
+    };
+
     // O canal por onde a pessoa escreveu diz mais que o número dela.
     //
     // Quem escreve no comercial veio de anúncio, do site ou da prospecção: é
@@ -114,7 +137,7 @@ export class ChatwootAgenteService {
     // por telefone: um motorista que escreve no número de operação continua
     // caindo no agente dele, como sempre.
     if (this.inboxComercial && evento.inbox?.id === this.inboxComercial) {
-      await this.atenderNoComercial(texto, telefone, nomeContato, contaChatwoot, conversaId);
+      await this.atenderNoComercial(texto, telefone, nomeContato, ondeConversa);
       return;
     }
 
@@ -140,7 +163,7 @@ export class ChatwootAgenteService {
       // mandar pra fila humana é o que evita a conversa sumir — até aqui ela
       // virava ticket no atendimento e o lado comercial nunca ficava sabendo
       // que a empresa tinha procurado a gente.
-      const leadId = await this.resolverLead(telefone, nomeContato, texto);
+      const leadId = await this.resolverLead(telefone, nomeContato, texto, ondeConversa);
 
       // SDR ligado: quem responde é o atendimento comercial. `null` aqui não é
       // mais "não está na base" — é opt-out ou falha; nos dois casos a
@@ -227,10 +250,10 @@ export class ChatwootAgenteService {
     texto: string,
     telefone: string,
     nomeContato: string | null,
-    contaChatwoot: number,
-    conversaId: number,
+    onde: OndeConversa,
   ): Promise<void> {
-    const leadId = await this.resolverLead(telefone, nomeContato, texto);
+    const { contaId: contaChatwoot, conversaId } = onde;
+    const leadId = await this.resolverLead(telefone, nomeContato, texto, onde);
 
     if (leadId && (await this.atenderComoSdr(leadId, texto, contaChatwoot, conversaId))) return;
 
@@ -267,10 +290,11 @@ export class ChatwootAgenteService {
     telefone: string | null,
     nomeContato: string | null,
     texto: string,
+    onde: OndeConversa,
   ): Promise<string | null> {
     if (!telefone) return null;
     try {
-      return await comoSistema(async () => {
+      const achado = await comoSistema(async () => {
         // O lead guarda o telefone como veio da Receita, sem DDI; o WhatsApp
         // manda com 55 na frente. Compara pelos últimos dígitos, que é o que
         // sobrevive às duas formas.
@@ -285,7 +309,10 @@ export class ChatwootAgenteService {
           orderBy: { criadoEm: "asc" },
         });
 
-        if (!lead) return await this.criarLeadInbound(numero, nomeContato, texto);
+        if (!lead) {
+          const novo = await this.criarLeadInbound(numero, nomeContato, texto);
+          return { id: novo, sdr: novo !== null };
+        }
 
         await this.registrarInteracao(lead.id, texto);
 
@@ -294,7 +321,10 @@ export class ChatwootAgenteService {
           // funil. Mas o SDR não responde: enquanto opt-out significar "não
           // fale comigo", responder por robô é desobedecer no detalhe.
           this.log.log(`Lead ${lead.id} está em opt-out — sem SDR, fila humana.`);
-          return null;
+          // Devolve o id mesmo assim: o vínculo com a conversa tem que
+          // acontecer JUSTAMENTE aqui, pra "não contatar" chegar na tela de
+          // quem está prestes a responder.
+          return { id: lead.id, sdr: false };
         }
 
         // Quem escreve por conta própria está em contato, não é mais só um nome
@@ -308,8 +338,15 @@ export class ChatwootAgenteService {
           },
         });
         this.log.log(`Interação registrada no lead ${lead.empresa} (${lead.id}).`);
-        return lead.id;
+        return { id: lead.id, sdr: true };
       });
+
+      // Fora do `comoSistema` de propósito: quem escreve aqui já faz a própria
+      // troca de contexto, e a chamada HTTP pro Chatwoot não pertence a
+      // transação nenhuma.
+      if (achado.id) await this.leadChatwoot.vincular(achado.id, onde);
+
+      return achado.sdr ? achado.id : null;
     } catch (e) {
       this.log.warn(`Não consegui resolver o lead da conversa: ${String(e)}`);
       return null;

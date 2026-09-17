@@ -1,8 +1,9 @@
 import { Module } from "@nestjs/common";
 import { WhatsappModule } from "../whatsapp/whatsapp.module";
+import { ProspeccaoModule } from "../prospeccao/prospeccao.module";
+import { ChatwootClientModule } from "./chatwoot-client.module";
 import { SdrModule } from "../sdr/sdr.module";
 import { ChatwootAgenteService } from "./chatwoot-agente.service";
-import { ChatwootClientService } from "./chatwoot-client.service";
 import { ChatwootWebhookController } from "./chatwoot-webhook.controller";
 
 /**
@@ -16,9 +17,9 @@ import { ChatwootWebhookController } from "./chatwoot-webhook.controller";
  * qualquer de alcançar dado de transportadora.
  */
 @Module({
-  imports: [WhatsappModule, SdrModule],
+  imports: [WhatsappModule, SdrModule, ProspeccaoModule, ChatwootClientModule],
   controllers: [ChatwootWebhookController],
-  providers: [ChatwootAgenteService, ChatwootClientService],
-  exports: [ChatwootClientService],
+  providers: [ChatwootAgenteService],
+  exports: [ChatwootClientModule],
 })
 export class ChatwootModule {}

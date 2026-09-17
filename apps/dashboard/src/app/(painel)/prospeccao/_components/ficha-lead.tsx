@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, Loader2, Phone, X } from "lucide-react";
+import { Check, Copy, Loader2, MessageSquare, Phone, X } from "lucide-react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
@@ -40,6 +40,8 @@ type LeadDetalhe = {
   origemDado: string | null;
   registradoEm: string | null;
   observacao: string | null;
+  /** A conversa no Chatwoot, montada pela API. Nulo pra quem nunca escreveu. */
+  chatwootUrl: string | null;
   interacoes: Interacao[];
 };
 
@@ -103,7 +105,7 @@ export function FichaLead({
   const [canal, setCanal] = useState<string | undefined>("LIGACAO");
   const [desfecho, setDesfecho] = useState<string | undefined>();
   const [resumo, setResumo] = useState("");
-  const [copiado, setCopiado] = useState(false);
+  const [copiado, setCopiado] = useState<string | null>(null);
 
   const registrar = useMutation({
     mutationFn: (body: { canal: string; desfecho: string; resumo?: string }) =>
@@ -133,21 +135,21 @@ export function FichaLead({
   const tel = telefoneBonito(lead?.telefone ?? null);
   const optOut = desfecho === "PEDIU_OPT_OUT";
 
-  async function copiarTelefone(numero: string) {
+  async function copiar(valor: string, oQue: string) {
     try {
-      await navigator.clipboard.writeText(numero);
+      await navigator.clipboard.writeText(valor);
     } catch {
       // Contexto não-seguro (http sem TLS) não tem clipboard API.
       const el = document.createElement("textarea");
-      el.value = numero;
+      el.value = valor;
       document.body.appendChild(el);
       el.select();
       document.execCommand("copy");
       el.remove();
     }
-    setCopiado(true);
-    toast.success(`Número copiado: ${numero}`);
-    setTimeout(() => setCopiado(false), 2000);
+    setCopiado(valor);
+    toast.success(`${oQue} copiado: ${valor}`);
+    setTimeout(() => setCopiado((atual) => (atual === valor ? null : atual)), 2000);
   }
 
   return (
@@ -191,15 +193,15 @@ export function FichaLead({
                 {/* Secundário à esquerda, principal à direita — padrão de botões. */}
                 <button
                   type="button"
-                  onClick={() => void copiarTelefone(tel)}
+                  onClick={() => void copiar(tel, "Número")}
                   className="flex items-center justify-center gap-2 rounded-md border px-3 py-3 text-sm font-medium hover:bg-accent/40"
                 >
-                  {copiado ? (
+                  {copiado === tel ? (
                     <Check className="h-4 w-4 text-emerald-600" />
                   ) : (
                     <Copy className="h-4 w-4" />
                   )}
-                  {copiado ? "Copiado" : "Copiar número"}
+                  {copiado === tel ? "Copiado" : "Copiar número"}
                 </button>
                 <a
                   href={`tel:+55${lead.telefone}`}
@@ -212,9 +214,21 @@ export function FichaLead({
               </div>
             )}
 
+            {lead.chatwootUrl && (
+              <a
+                href={lead.chatwootUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 rounded-md border px-4 py-3 text-sm font-medium hover:bg-accent/40"
+              >
+                <MessageSquare className="h-4 w-4" />
+                Abrir a conversa no WhatsApp
+              </a>
+            )}
+
             <Card className="divide-y text-sm">
-              <Linha rotulo="CNPJ" valor={cnpjBonito(lead.cnpj)} mono />
-              <Linha rotulo="RNTRC" valor={lead.rntrc} mono />
+              <Linha rotulo="CNPJ" valor={cnpjBonito(lead.cnpj)} mono copiar={copiar} copiado={copiado} />
+              <Linha rotulo="RNTRC" valor={lead.rntrc} mono copiar={copiar} copiado={copiado} />
               <Linha
                 rotulo="Cidade"
                 valor={lead.municipio ? `${lead.municipio}${lead.uf ? `/${lead.uf}` : ""}` : null}
@@ -227,7 +241,7 @@ export function FichaLead({
                 rotulo="RNTRC desde"
                 valor={lead.registradoEm ? fmtDataHoraBR(lead.registradoEm).slice(0, 10) : null}
               />
-              <Linha rotulo="E-mail" valor={lead.email} />
+              <Linha rotulo="E-mail" valor={lead.email} copiar={copiar} copiado={copiado} />
             </Card>
 
             <Card className="p-4">
@@ -346,20 +360,44 @@ export function FichaLead({
   );
 }
 
+/**
+ * Uma linha da ficha. Com `copiar`, ganha o botão — CNPJ, RNTRC e e-mail são
+ * o que se cola em outro lugar (Receita, Google, e-mail), e digitar 14 dígitos
+ * na mão é onde nasce o erro que faz a consulta não achar a empresa.
+ */
 function Linha({
   rotulo,
   valor,
   mono = false,
+  copiar,
+  copiado,
 }: {
   rotulo: string;
   valor: string | null;
   mono?: boolean;
+  copiar?: (valor: string, oQue: string) => void;
+  copiado?: string | null;
 }) {
   if (!valor) return null;
   return (
-    <div className="flex gap-3 px-4 py-2.5">
+    <div className="group flex items-center gap-3 px-4 py-2.5">
       <span className="w-40 shrink-0 text-muted-foreground">{rotulo}</span>
       <span className={mono ? "tabular-nums" : ""}>{valor}</span>
+      {copiar && (
+        <button
+          type="button"
+          onClick={() => copiar(valor, rotulo)}
+          aria-label={`Copiar ${rotulo}`}
+          title={`Copiar ${rotulo}`}
+          className="ml-auto shrink-0 rounded-md p-1 text-muted-foreground transition-opacity hover:bg-accent/40 hover:text-foreground focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+        >
+          {copiado === valor ? (
+            <Check className="h-3.5 w-3.5 text-emerald-600" />
+          ) : (
+            <Copy className="h-3.5 w-3.5" />
+          )}
+        </button>
+      )}
     </div>
   );
 }

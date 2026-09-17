@@ -4,6 +4,7 @@ import type { PrismaService } from "../prisma/prisma.service";
 import type { SessaoService, SessaoResolvida } from "../whatsapp/sessao.service";
 import type { AgenteService } from "../whatsapp/agente/agente.service";
 import type { ChatwootClientService } from "./chatwoot-client.service";
+import type { LeadChatwootService } from "../prospeccao/lead-chatwoot.service";
 import type { ConviteService } from "../whatsapp/convite.service";
 import type { SdrService, RespostaSdr } from "../sdr/sdr.service";
 import type { ConfigService } from "@nestjs/config";
@@ -85,6 +86,7 @@ function montar(
   });
   const interacaoCreate = vi.fn(async () => ({}));
   const supressaoFindFirst = vi.fn(async () => (opts.suprimido ? { contato: "4299998888" } : null));
+  const vincular = vi.fn(async () => {});
 
   const s = new ChatwootAgenteService(
     {
@@ -103,6 +105,7 @@ function montar(
     { contaDoCodigo, consumir } as unknown as ConviteService,
     { responder, passarParaHumano } as unknown as ChatwootClientService,
     { atender } as unknown as SdrService,
+    { vincular } as unknown as LeadChatwootService,
     {
       get: (k: string) =>
         k === "CHATWOOT_INBOX_COMERCIAL" ? (opts.inboxComercial ?? undefined) : undefined,
@@ -110,6 +113,7 @@ function montar(
   );
   return {
     s,
+    vincular,
     create,
     findUnique,
     processar,
@@ -481,5 +485,53 @@ describe("canal comercial", () => {
     const { s, processar } = montar();
     await s.processar(evento(COMERCIAL));
     expect(processar).toHaveBeenCalled();
+  });
+});
+
+describe("o lead e a conversa ficam ligados", () => {
+  it("guarda conta, contato e conversa do Chatwoot no lead", async () => {
+    // É o que faz a ficha do painel abrir a conversa e o atendimento saber
+    // que aquele número é uma transportadora com CNPJ e nota.
+    const { s, vincular } = montar({ identidade: DESCONHECIDO, ehLead: true });
+    await s.processar(evento({ sender: { id: 55, phone_number: "+554299998888" } }));
+    expect(vincular).toHaveBeenCalledWith("lead-1", {
+      contaId: 1,
+      contatoId: 55,
+      conversaId: 7,
+    });
+  });
+
+  it("vincula também quem pediu pra não ser contatado", async () => {
+    // Justamente aí é que importa: o "não contatar" precisa chegar na tela de
+    // quem está com o dedo no gatilho de responder.
+    const { s, vincular, atender } = montar({
+      identidade: DESCONHECIDO,
+      ehLead: true,
+      leadOptOut: true,
+    });
+    await s.processar(evento({ sender: { id: 55, phone_number: "+554299998888" } }));
+    expect(atender).not.toHaveBeenCalled();
+    expect(vincular).toHaveBeenCalledWith("lead-1", expect.objectContaining({ contatoId: 55 }));
+  });
+
+  it("payload sem contato não impede o vínculo da conversa", async () => {
+    const { s, vincular } = montar({ identidade: DESCONHECIDO, ehLead: true });
+    await s.processar(evento());
+    expect(vincular).toHaveBeenCalledWith("lead-1", {
+      contaId: 1,
+      contatoId: null,
+      conversaId: 7,
+    });
+  });
+
+  it("número na supressão não vira lead nem vínculo", async () => {
+    const { s, vincular, leadCreate } = montar({
+      identidade: DESCONHECIDO,
+      ehLead: false,
+      suprimido: true,
+    });
+    await s.processar(evento({ sender: { id: 55, phone_number: "+554299998888" } }));
+    expect(leadCreate).not.toHaveBeenCalled();
+    expect(vincular).not.toHaveBeenCalled();
   });
 });

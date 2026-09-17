@@ -34,6 +34,39 @@ export class ChatwootClientService {
     return this.base.length > 0 && this.token.length > 0;
   }
 
+  /**
+   * O endereço que abre a conversa na tela do Chatwoot.
+   *
+   * Quem monta é a API, não o painel: a URL do Chatwoot já é env DAQUI, e
+   * repetir `CHATWOOT_URL` no dashboard criaria um segundo lugar pra
+   * desatualizar no dia que o domínio mudar.
+   */
+  linkDaConversa(contaId: number | null, conversaId: number | null): string | null {
+    if (!this.base || !contaId || !conversaId) return null;
+    return `${this.base}/app/accounts/${contaId}/conversations/${conversaId}`;
+  }
+
+  /**
+   * Escreve a ficha do lead no contato do Chatwoot.
+   *
+   * `additional_attributes` são campos que o Chatwoot já desenha sozinho na
+   * barra lateral (empresa, cidade, descrição) — funcionam sem configurar
+   * nada. `custom_attributes` são os nossos (CNPJ, nota, situação no funil) e
+   * só APARECEM depois de criados em Configurações → Atributos
+   * personalizados, com a mesma chave; a gravação funciona de qualquer jeito,
+   * mas sem isso o atendente não vê. Está em `docs/chatwoot-leads.md`.
+   */
+  async atualizarContato(
+    contaId: number,
+    contatoId: number,
+    dados: {
+      additional_attributes?: Record<string, unknown>;
+      custom_attributes?: Record<string, unknown>;
+    },
+  ): Promise<boolean> {
+    return this.chamar(`/api/v1/accounts/${contaId}/contacts/${contatoId}`, dados, "PUT");
+  }
+
   /** Responde na conversa como agente. */
   async responder(contaId: number, conversaId: number, texto: string): Promise<boolean> {
     return this.chamar(`/api/v1/accounts/${contaId}/conversations/${conversaId}/messages`, {
@@ -63,7 +96,11 @@ export class ChatwootClientService {
    * 200 — o Chatwoot reenvia o que falha, e reenviar mensagem de agente
    * duplicaria resposta na cara do motorista.
    */
-  private async chamar(caminho: string, corpo: Record<string, unknown>): Promise<boolean> {
+  private async chamar(
+    caminho: string,
+    corpo: Record<string, unknown>,
+    metodo: "POST" | "PUT" = "POST",
+  ): Promise<boolean> {
     if (!this.configurado()) {
       this.log.error("CHATWOOT_URL ou CHATWOOT_API_TOKEN ausentes — nada foi enviado");
       return false;
@@ -72,7 +109,7 @@ export class ChatwootClientService {
     const t = setTimeout(() => ac.abort(), TIMEOUT_MS);
     try {
       const res = await fetch(`${this.base}${caminho}`, {
-        method: "POST",
+        method: metodo,
         headers: {
           "Content-Type": "application/json",
           api_access_token: this.token,

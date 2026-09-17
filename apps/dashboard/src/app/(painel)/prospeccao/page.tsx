@@ -327,6 +327,14 @@ function LinhaLead({ lead, onAbrir }: { lead: Lead; onAbrir: () => void }) {
               </span>
             </>
           )}
+          {lead.origem === "WHATSAPP_INBOUND" && (
+            <>
+              <span>·</span>
+              {/* Quem escreveu primeiro é o melhor lead da lista — merece
+                  aparecer sem ter que abrir a ficha. */}
+              <span className="text-emerald-700 dark:text-emerald-400">escreveu pelo WhatsApp</span>
+            </>
+          )}
           {!lead.enriquecidoEm && (
             <>
               <span>·</span>
