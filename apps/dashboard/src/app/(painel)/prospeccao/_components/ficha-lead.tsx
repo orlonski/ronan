@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Phone, X } from "lucide-react";
+import { Check, Copy, Loader2, Phone, X } from "lucide-react";
+import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
 import { fetchApi, useApiQuery, useAuthToken } from "@/lib/client-api";
@@ -102,6 +103,7 @@ export function FichaLead({
   const [canal, setCanal] = useState<string | undefined>("LIGACAO");
   const [desfecho, setDesfecho] = useState<string | undefined>();
   const [resumo, setResumo] = useState("");
+  const [copiado, setCopiado] = useState(false);
 
   const registrar = useMutation({
     mutationFn: (body: { canal: string; desfecho: string; resumo?: string }) =>
@@ -130,6 +132,23 @@ export function FichaLead({
 
   const tel = telefoneBonito(lead?.telefone ?? null);
   const optOut = desfecho === "PEDIU_OPT_OUT";
+
+  async function copiarTelefone(numero: string) {
+    try {
+      await navigator.clipboard.writeText(numero);
+    } catch {
+      // Contexto não-seguro (http sem TLS) não tem clipboard API.
+      const el = document.createElement("textarea");
+      el.value = numero;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      el.remove();
+    }
+    setCopiado(true);
+    toast.success(`Número copiado: ${numero}`);
+    setTimeout(() => setCopiado(false), 2000);
+  }
 
   return (
     <div
@@ -168,14 +187,29 @@ export function FichaLead({
         ) : (
           <div className="space-y-5">
             {tel && (
-              <a
-                href={`tel:+55${lead.telefone}`}
-                className="flex items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700"
-              >
-                <Phone className="h-4 w-4" />
-                Ligar para {tel}
-                {lead.socio ? ` — ${lead.socio.split(" ")[0]}` : ""}
-              </a>
+              <div className="flex flex-wrap gap-2">
+                {/* Secundário à esquerda, principal à direita — padrão de botões. */}
+                <button
+                  type="button"
+                  onClick={() => void copiarTelefone(tel)}
+                  className="flex items-center justify-center gap-2 rounded-md border px-3 py-3 text-sm font-medium hover:bg-accent/40"
+                >
+                  {copiado ? (
+                    <Check className="h-4 w-4 text-emerald-600" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                  {copiado ? "Copiado" : "Copiar número"}
+                </button>
+                <a
+                  href={`tel:+55${lead.telefone}`}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700"
+                >
+                  <Phone className="h-4 w-4" />
+                  Ligar para {tel}
+                  {lead.socio ? ` — ${lead.socio.split(" ")[0]}` : ""}
+                </a>
+              </div>
             )}
 
             <Card className="divide-y text-sm">
