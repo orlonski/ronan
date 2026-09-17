@@ -1,0 +1,11 @@
+Cada cliente quer a planilha de um jeito, e alguém no escritório refaz isso todo mês?
+
+No Movatruck não precisa.
+
+Você monta o layout de envio uma vez por empresa: nome de cada coluna, ordem, formato de data, separador decimal. Dá pra ter mais de um modelo pra cada uma — um pra viagens, outro pra pedágio, outro consolidado.
+
+Na hora de fechar o mês, a planilha sai pronta no formato combinado. Ninguém reformata coluna, ninguém redigita cabeçalho.
+
+Chama no direct que a gente te mostra o layout dos seus clientes.
+
+#movatruck #transportadora #gestaodefrota #logistica #faturamento #planilha #fechamento #transporterodoviario #frete #gestaologistica
