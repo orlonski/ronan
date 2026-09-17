@@ -60,7 +60,10 @@ function montar(opts: {
       aggregate: vi.fn(async () => ({
         _sum: { km: opts.kmRodado == null ? null : new Prisma.Decimal(opts.kmRodado) },
       })),
-      findMany: vi.fn(async () => opts.viagens ?? []),
+      // `gastos` entra por padrão porque as DUAS leituras de viagem passam por
+      // aqui — o histórico de valor não pede gastos, o de pedágio pede. Sem o
+      // default, o teste do histórico derrubava o cálculo do pedágio.
+      findMany: vi.fn(async () => (opts.viagens ?? []).map((v) => ({ gastos: [], ...v }))),
     },
     comprovantePessoal: {
       findUnique: vi.fn(async () => opts.comprovante ?? null),
@@ -241,6 +244,77 @@ describe("vale a pena esse frete?", () => {
     expect(r.historico!.vezes).toBe(2);
     expect(r.historico!.medianaValor).toBe(1000);
     expect(r.historico!.ultimaVez).toBe("2026-06-10");
+  });
+
+  it("sem tarifa cadastrada, o pedágio vem do que ELE pagou no trecho", async () => {
+    // O cenário real: as praças estão cadastradas sem preço (o CRUD aceita), e
+    // ele roda 6 eixos. A tabela não responde; o bolso dele responde.
+    const { service } = montar({
+      eixos: 6,
+      pedagios: [{ nome: "Purunã", valorBase: null }],
+      viagens: [
+        {
+          origem: "Ponta Grossa",
+          destino: "Curitiba",
+          data: new Date("2026-06-10"),
+          km: new Prisma.Decimal(120),
+          valorRecebido: new Prisma.Decimal(1100),
+          gastos: [{ valor: new Prisma.Decimal(120) }],
+        },
+        {
+          origem: "ponta grossa - pr",
+          destino: "curitiba",
+          data: new Date("2026-05-01"),
+          km: new Prisma.Decimal(120),
+          valorRecebido: new Prisma.Decimal(900),
+          gastos: [{ valor: new Prisma.Decimal(140) }],
+        },
+      ],
+    });
+    const r = await service.estimar(EU, ORIGEM, DESTINO, {
+      origem: "Ponta Grossa",
+      destino: "Curitiba",
+      valorFrete: 2000,
+    });
+
+    // A tabela segue sem responder, e o motivo tem que dizer QUAL falta é essa:
+    // mandar informar os eixos aqui seria mandar refazer o que já foi feito.
+    expect(r.pedagioTotal).toBeNull();
+    expect(r.pedagioMotivo).toBe("SEM_TARIFA");
+
+    expect(r.pedagioDele!.vezes).toBe(2);
+    expect(r.pedagioDele!.mediana).toBe(130);
+    expect(r.pedagioDele!.ultimaVez).toBe("2026-06-10");
+
+    // E a sobra desconta esse pedágio: deixá-lo fora faria o frete parecer
+    // R$ 130 melhor do que é, que é exatamente o erro que a tela evita.
+    expect(r.resultado!.pedagio).toBe(130);
+  });
+
+  it("com tarifa cadastrada, a tabela ganha do histórico — ela é do trecho de hoje", async () => {
+    const { service } = montar({
+      eixos: 2,
+      pedagios: [{ nome: "Purunã", valorBase: "10.00" }],
+      viagens: [
+        {
+          origem: "Ponta Grossa",
+          destino: "Curitiba",
+          data: new Date("2026-06-10"),
+          km: new Prisma.Decimal(120),
+          valorRecebido: new Prisma.Decimal(1100),
+          gastos: [{ valor: new Prisma.Decimal(500) }],
+        },
+      ],
+    });
+    const r = await service.estimar(EU, ORIGEM, DESTINO, {
+      origem: "Ponta Grossa",
+      destino: "Curitiba",
+      valorFrete: 2000,
+    });
+    expect(r.pedagioTotal).toBe(20);
+    expect(r.resultado!.pedagio).toBe(20);
+    // O histórico continua viajando: a tela mostra os dois quando discordam.
+    expect(r.pedagioDele!.mediana).toBe(500);
   });
 
   it("trecho que ele nunca fez não ganha referência inventada", async () => {

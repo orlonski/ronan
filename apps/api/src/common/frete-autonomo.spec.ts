@@ -4,6 +4,7 @@ import {
   compararComHistorico,
   custoPorKmDele,
   pedagioDaRota,
+  pedagioDoHistorico,
   resultadoDoFrete,
 } from "./frete-autonomo";
 
@@ -58,6 +59,47 @@ describe("pedagioDaRota", () => {
     expect(r.total).toBeNull();
     expect(r.semTarifa).toBe(0);
     expect(r.comTarifa).toBe(0);
+  });
+});
+
+describe("pedagioDoHistorico", () => {
+  const d = (iso: string) => new Date(`${iso}T12:00:00Z`);
+  const anteriores = [
+    { origem: "Ponta Grossa", destino: "Curitiba - PR", data: d("2026-09-01"), pedagio: 120 },
+    { origem: "ponta grossa - PR", destino: "Curitiba", data: d("2026-09-10"), pedagio: 140 },
+    { origem: "Curitiba", destino: "Joinville - SC", data: d("2026-09-05"), pedagio: 300 },
+  ];
+
+  it("casa o trecho ignorando acento, caixa e a sigla da UF", () => {
+    const r = pedagioDoHistorico("PONTA GROSSA - PR", "curitiba", anteriores);
+    expect(r.vezes).toBe(2);
+    expect(r.mediana).toBe(130);
+  });
+
+  it("não mistura o pedágio de outro trecho", () => {
+    const r = pedagioDoHistorico("Ponta Grossa", "Curitiba", anteriores);
+    expect(r.mediana).not.toBe(300);
+  });
+
+  it("guarda a última vez, que é o que data o número na tela", () => {
+    const r = pedagioDoHistorico("Ponta Grossa", "Curitiba", anteriores);
+    expect(r.ultimaVez).toEqual(d("2026-09-10"));
+  });
+
+  it("viagem sem pedágio anotado não entra — zero puxaria a mediana pra baixo", () => {
+    const r = pedagioDoHistorico("Ponta Grossa", "Curitiba", [
+      ...anteriores,
+      { origem: "Ponta Grossa", destino: "Curitiba", data: d("2026-09-12"), pedagio: 0 },
+    ]);
+    expect(r.vezes).toBe(2);
+    expect(r.mediana).toBe(130);
+  });
+
+  it("trecho nunca rodado não inventa número", () => {
+    const r = pedagioDoHistorico("Maringá", "Londrina", anteriores);
+    expect(r.vezes).toBe(0);
+    expect(r.mediana).toBeNull();
+    expect(r.ultimaVez).toBeNull();
   });
 });
 

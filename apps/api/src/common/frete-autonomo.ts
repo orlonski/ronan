@@ -227,6 +227,55 @@ export function compararComHistorico(
   };
 }
 
+/** Uma viagem dele que já teve pedágio anotado. */
+export type PedagioAnterior = {
+  origem: string;
+  destino: string;
+  data: Date;
+  /** Soma dos lançamentos de PEDAGIO amarrados àquela viagem. */
+  pedagio: number;
+};
+
+export type PedagioDoHistorico = {
+  vezes: number;
+  /** Mediana do que ele pagou. Mediana, não média: um trecho com desvio por
+   *  obra vira outlier e a média inteira mente. */
+  mediana: number | null;
+  ultimaVez: Date | null;
+};
+
+/**
+ * Quanto ELE pagou de pedágio nesse mesmo trecho.
+ *
+ * É o plano B do `pedagioDaRota`, e existe porque a tarifa das praças não é
+ * um dado que se compre uma vez: são dezenas de concessões, cada uma
+ * publicando a sua tabela, reajustada todo ano na data do contrato. Um
+ * raspador disso envelhece em silêncio, e tarifa velha num app que responde
+ * "sobra quanto" é pior que tarifa nenhuma.
+ *
+ * O número dele não tem esse problema: já inclui o desconto do Sem Parar, o
+ * eixo suspenso que ele levanta vazio e o caminho que ele de fato faz. É a
+ * mesma escolha que o diesel já fazia ao medir o consumo DELE em vez de usar
+ * média de mercado.
+ */
+export function pedagioDoHistorico(
+  origem: string,
+  destino: string,
+  anteriores: PedagioAnterior[],
+): PedagioDoHistorico {
+  const alvo = chaveTrecho(origem, destino);
+  const iguais = anteriores.filter(
+    (v) => chaveTrecho(v.origem, v.destino) === alvo && v.pedagio > 0,
+  );
+  if (iguais.length === 0) return { vezes: 0, mediana: null, ultimaVez: null };
+
+  return {
+    vezes: iguais.length,
+    mediana: mediana(iguais.map((v) => v.pedagio).sort((a, b) => a - b)),
+    ultimaVez: iguais.reduce<Date | null>((m, v) => (m == null || v.data > m ? v.data : m), null),
+  };
+}
+
 function mediana(ord: number[]): number | null {
   if (ord.length === 0) return null;
   const meio = Math.floor(ord.length / 2);

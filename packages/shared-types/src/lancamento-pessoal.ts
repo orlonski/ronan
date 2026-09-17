@@ -305,6 +305,20 @@ export type EstimativaFrete = {
    * funciona e nunca mais abre a tela.
    */
   pedagioMotivo?: "SEM_EIXOS" | "SEM_TARIFA" | null;
+  /**
+   * O que ELE já pagou de pedágio nesse mesmo trecho.
+   *
+   * O plano B da tarifa, e o plano A em termos de verdade: já vem com o
+   * desconto da tag, o eixo que ele levanta vazio e o caminho que ele faz de
+   * fato. Vem sempre que existir, mesmo com tarifa cadastrada — ver os dois
+   * lado a lado é o que deixa ele desconfiar da tabela quando o bolso discorda.
+   */
+  pedagioDele?: {
+    vezes: number;
+    mediana: number | null;
+    /** "YYYY-MM-DD" da última vez que ele rodou esse trecho pagando pedágio. */
+    ultimaVez: string | null;
+  } | null;
   /** O que o caminhão custa por km rodado, fora combustível (90 dias dele). */
   custoPorKm: number | null;
   /** O que ELE já recebeu nesse mesmo trecho. Null = nunca fez. */

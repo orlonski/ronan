@@ -15,6 +15,7 @@ import {
   compararComHistorico,
   custoPorKmDele,
   pedagioDaRota,
+  pedagioDoHistorico,
   resultadoDoFrete,
 } from "../common/frete-autonomo";
 
@@ -64,6 +65,8 @@ export class FretePessoalService {
         diesel: null,
         pedagioTotal: null,
         pedagioParcial: false,
+        pedagioMotivo: null,
+        pedagioDele: null,
         custoPorKm: null,
         historico: null,
         resultado: null,
@@ -74,12 +77,15 @@ export class FretePessoalService {
     // `null` (não sei) é diferente de `[]` (checei e não passa por praça): sem
     // geometria a tela não pode afirmar "sem pedágio no caminho".
     const praças = rota.geometria ? await this.pedagios.pedagiosNaGeometria(rota.geometria) : null;
-    const [dele, eixos, custo, historico] = await Promise.all([
+    const [dele, eixos, custo, historico, pedagioDele] = await Promise.all([
       this.numerosDele(identidadeId),
       this.eixosDele(identidadeId),
       this.custoDele(identidadeId),
       nomes?.origem && nomes?.destino
         ? this.historicoDoTrecho(identidadeId, nomes.origem, nomes.destino)
+        : Promise.resolve(null),
+      nomes?.origem && nomes?.destino
+        ? this.pedagioDeleNoTrecho(identidadeId, nomes.origem, nomes.destino)
         : Promise.resolve(null),
     ]);
 
@@ -106,6 +112,19 @@ export class FretePessoalService {
       pedagioParcial: pedagio.semTarifa > 0,
       // A regra já sabe POR QUE não somou; jogar fora obrigava a tela a chutar.
       pedagioMotivo: pedagio.motivo ?? null,
+      // O plano B: o que ELE já pagou nesse trecho. Vai sempre, mesmo quando a
+      // tarifa existe — a tela decide o que mostrar, e ver os dois é o que
+      // permite ele desconfiar da tabela quando o próprio bolso discorda.
+      pedagioDele:
+        pedagioDele && pedagioDele.vezes > 0
+          ? {
+              vezes: pedagioDele.vezes,
+              mediana: pedagioDele.mediana,
+              ultimaVez: pedagioDele.ultimaVez
+                ? pedagioDele.ultimaVez.toISOString().slice(0, 10)
+                : null,
+            }
+          : null,
       custoPorKm: custo.valor,
       historico,
       // A pergunta não é "quanto é o frete", é "sobra quanto". Só responde
@@ -116,7 +135,10 @@ export class FretePessoalService {
               valorFrete: nomes.valorFrete,
               km,
               diesel,
-              pedagio: pedagio.total,
+              // Sem tabela, entra o que ELE pagou. É melhor que zero: zero faz
+              // o frete parecer melhor do que é, que é o erro que essa tela
+              // existe pra não cometer.
+              pedagio: pedagio.total ?? pedagioDele?.mediana ?? null,
               custoPorKm: custo.valor,
             })
           : null,
@@ -199,6 +221,43 @@ export class FretePessoalService {
           medianaPorKm: r.medianaPorKm,
           ultimaVez: r.ultimaVez ? r.ultimaVez.toISOString().slice(0, 10) : null,
         };
+  }
+
+  /**
+   * O que ele já pagou de pedágio nesse mesmo trecho.
+   *
+   * Só entram viagens com gasto de PEDAGIO amarrado (`viagemPessoalId`): o
+   * pedágio lançado solto, sem viagem, não diz a que caminho pertence, e
+   * atribuí-lo ao trecho de hoje inventaria um custo que pode ser de outro.
+   *
+   * O teto de 300 é o mesmo do histórico de valor — quem roda o mesmo trecho
+   * repete cedo, e ler a vida inteira do motorista pra achar a mediana de um
+   * trecho é varredura que cresce sem limite.
+   */
+  private async pedagioDeleNoTrecho(identidadeId: string, origem: string, destino: string) {
+    const anteriores = await comoSistema(() =>
+      this.prisma.viagemPessoal.findMany({
+        where: { identidadeId, gastos: { some: { tipo: "PEDAGIO" } } },
+        select: {
+          origem: true,
+          destino: true,
+          data: true,
+          gastos: { where: { tipo: "PEDAGIO" }, select: { valor: true } },
+        },
+        orderBy: { data: "desc" },
+        take: 300,
+      }),
+    );
+    return pedagioDoHistorico(
+      origem,
+      destino,
+      anteriores.map((v) => ({
+        origem: v.origem,
+        destino: v.destino,
+        data: v.data,
+        pedagio: v.gastos.reduce((soma, g) => soma + Number(g.valor), 0),
+      })),
+    );
   }
 
   /**

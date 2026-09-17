@@ -20,6 +20,78 @@ import { hojeISO, lancarViagem } from "@/lib/pessoal";
 
 const dinheiro = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+const plural = (n: number) => (n === 1 ? "praça" : "praças");
+
+/**
+ * A linha do pedágio: o número e a frase embaixo.
+ *
+ * Saiu das ternárias aninhadas do JSX porque viraram cinco casos, e o caso
+ * errado aqui não quebra a tela — ele mente com cara de conta pronta.
+ *
+ * A ordem das perguntas importa: primeiro o que ELE pagou, depois a tabela.
+ * Parece contraintuitivo preferir memória a tarifa oficial, mas o número dele
+ * já vem com o desconto da tag, o eixo que ele levanta vazio e o caminho que
+ * ele realmente faz — e, principalmente, existe. A tabela é a exceção neste
+ * país: são dezenas de concessões publicando cada uma a sua, reajustada todo
+ * ano, e o que está cadastrado aqui é praça sem preço.
+ */
+export function linhaPedagio(e: {
+  pedagiosDesconhecidos?: boolean;
+  pedagios: { nome: string }[];
+  pedagioTotal: number | null;
+  pedagioParcial: boolean;
+  pedagioMotivo?: "SEM_EIXOS" | "SEM_TARIFA" | null;
+  pedagioDele?: { vezes: number; mediana: number | null; ultimaVez: string | null } | null;
+}): { valor: string; nota: string | null } {
+  const n = e.pedagios.length;
+  const nomes = e.pedagios.map((p) => p.nome).join(", ");
+  const dele = e.pedagioDele?.mediana != null ? e.pedagioDele : null;
+
+  if (e.pedagiosDesconhecidos) return { valor: "não deu pra conferir", nota: null };
+
+  // Tabela cadastrada: é o número mais preciso do trecho de hoje.
+  if (e.pedagioTotal != null) {
+    return {
+      valor: `${e.pedagioParcial ? "a partir de " : ""}${dinheiro(e.pedagioTotal)}`,
+      nota: e.pedagioParcial
+        ? `${n} ${plural(n)} no caminho, e nem todas têm preço cadastrado — o valor real é maior.`
+        : n > 0
+          ? `${n} ${plural(n)}: ${nomes}`
+          : null,
+    };
+  }
+
+  // Sem tabela, o bolso dele responde.
+  if (dele) {
+    return {
+      valor: dinheiro(dele.mediana!),
+      nota:
+        `É o que VOCÊ pagou nesse trecho${dele.vezes > 1 ? ` (mediana de ${dele.vezes} vezes)` : ""}` +
+        (n > 0 ? `, que passa por ${n} ${plural(n)}.` : "."),
+    };
+  }
+
+  // Falta o único dado que ele pode dar agora.
+  if (e.pedagioMotivo === "SEM_EIXOS") {
+    return {
+      valor: "—",
+      nota: "Diga quantos eixos você roda no seu perfil e o app soma o pedágio em reais.",
+    };
+  }
+
+  // Nem tabela nem histórico: contar praça ainda é informação — ele sabe que
+  // vai parar 3 vezes. E diz como fazer o app aprender, porque aqui existe
+  // caminho: é o gasto que ele já lança.
+  if (n > 0) {
+    return {
+      valor: `${n} ${plural(n)}`,
+      nota: `${nomes}. Ainda não sei o preço delas — anote o pedágio nos seus gastos e da próxima vez eu uso o SEU número.`,
+    };
+  }
+
+  return { valor: "sem praça no caminho", nota: null };
+}
+
 type Ponto = { texto: string; lat?: number; lng?: number };
 
 /**
@@ -125,6 +197,10 @@ export default function NovoFreteScreen() {
     }
   }
 
+  // Uma vez só: a linha é derivada, e recalcular a cada uso dentro do JSX
+  // espalharia a mesma conta por três lugares que precisam concordar.
+  const ped = estimativa && estimativa.km != null ? linhaPedagio(estimativa) : null;
+
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <KeyboardAvoidingView behavior="padding" className="flex-1">
@@ -160,32 +236,12 @@ export default function NovoFreteScreen() {
                 <View className="flex-row items-start justify-between gap-3">
                   <Text className="text-base font-medium text-muted-foreground">Pedágio</Text>
                   <Text className="flex-1 text-right text-xl font-bold text-foreground">
-                    {estimativa.pedagiosDesconhecidos
-                      ? "não deu pra conferir"
-                      : estimativa.pedagios.length === 0
-                        ? "sem praça no caminho"
-                        : estimativa.pedagioTotal != null
-                          ? `${estimativa.pedagioParcial ? "a partir de " : ""}${dinheiro(estimativa.pedagioTotal)}`
-                          : "—"}
+                    {ped?.valor}
                   </Text>
                 </View>
 
-                {estimativa.pedagios.length > 0 && (
-                  <Text className="text-sm text-muted-foreground">
-                    {estimativa.pedagioTotal == null
-                      ? // DUAS razões diferentes zeram o total, e só uma tem
-                        // conserto do lado dele. Dizer sempre "informe os eixos"
-                        // manda quem já informou preencher de novo o que já
-                        // preencheu — e a conclusão dele é que o app não
-                        // funciona. O motivo vem do servidor (`pedagioMotivo`),
-                        // igual ao `consumoMotivo` do diesel logo abaixo.
-                        estimativa.pedagioMotivo === "SEM_TARIFA"
-                        ? `${estimativa.pedagios.length} ${estimativa.pedagios.length === 1 ? "praça" : "praças"} no caminho, mas ainda sem preço cadastrado aqui — não dá pra somar em reais. O km e o diesel seguem valendo.`
-                        : "Diga quantos eixos você roda no seu perfil e o app soma o pedágio em reais."
-                      : estimativa.pedagioParcial
-                        ? `${estimativa.pedagios.length} ${estimativa.pedagios.length === 1 ? "praça" : "praças"} no caminho, e nem todas têm preço cadastrado — o valor real é maior.`
-                        : `${estimativa.pedagios.length} ${estimativa.pedagios.length === 1 ? "praça" : "praças"}: ${estimativa.pedagios.map((p) => p.nome).join(", ")}`}
-                  </Text>
+                {ped?.nota != null && (
+                  <Text className="text-sm text-muted-foreground">{ped.nota}</Text>
                 )}
 
                 <View className="flex-row items-center justify-between">
