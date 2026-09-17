@@ -88,7 +88,12 @@ Você também pode apagar sua conta pelo próprio app, em Perfil.
 |---|---|
 | Suporte | https://app.movatruck.com.br |
 | Marketing | https://www.movatruck.com.br |
-| Política de privacidade | https://app.schaba.com.br/politica-de-privacidade |
+| Política de privacidade | https://app.movatruck.com.br/politica-de-privacidade |
+
+> O domínio é o `movatruck`, não o `schaba`: é a mesma página (o painel responde
+> nos dois), mas quem lê a ficha é o revisor de um app chamado Movatruck. É
+> também exatamente a URL que o app abre em Perfil › Política de privacidade
+> (`components/perfil-pessoal.tsx`), e divergir das duas é achado fácil.
 
 ---
 
