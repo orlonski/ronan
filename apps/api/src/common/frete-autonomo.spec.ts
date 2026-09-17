@@ -5,6 +5,7 @@ import {
   custoPorKmDele,
   pedagioDaRota,
   pedagioDoHistorico,
+  pedagioPorViagem,
   resultadoDoFrete,
 } from "./frete-autonomo";
 
@@ -59,6 +60,47 @@ describe("pedagioDaRota", () => {
     expect(r.total).toBeNull();
     expect(r.semTarifa).toBe(0);
     expect(r.comTarifa).toBe(0);
+  });
+});
+
+describe("pedagioPorViagem", () => {
+  const d = (iso: string) => new Date(`${iso}T00:00:00Z`);
+  const v1 = { id: "v1", origem: "Ponta Grossa", destino: "Curitiba", data: d("2026-09-01") };
+  const v2 = { id: "v2", origem: "Curitiba", destino: "Joinville", data: d("2026-09-01") };
+  const v3 = { id: "v3", origem: "Ponta Grossa", destino: "Curitiba", data: d("2026-09-05") };
+
+  it("o vínculo explícito vence, mesmo com outra viagem no mesmo dia", () => {
+    const r = pedagioPorViagem(
+      [v1, v2],
+      [{ viagemPessoalId: "v2", data: d("2026-09-01"), valor: 300 }],
+    );
+    expect(r).toEqual([{ origem: "Curitiba", destino: "Joinville", data: d("2026-09-01"), pedagio: 300 }]);
+  });
+
+  it("sem vínculo, atribui quando há UMA viagem no dia", () => {
+    const r = pedagioPorViagem([v3], [{ viagemPessoalId: null, data: d("2026-09-05"), valor: 130 }]);
+    expect(r).toHaveLength(1);
+    expect(r[0]!.pedagio).toBe(130);
+  });
+
+  it("duas viagens no mesmo dia: não chuta de qual foi", () => {
+    // Chutar contaminaria a mediana de um trecho com o custo de outro, e o
+    // motorista recusaria frete bom por causa de número que ele não digitou.
+    const r = pedagioPorViagem([v1, v2], [{ viagemPessoalId: null, data: d("2026-09-01"), valor: 300 }]);
+    expect(r).toEqual([]);
+  });
+
+  it("pedágio em dia sem viagem nenhuma é descartado", () => {
+    const r = pedagioPorViagem([v3], [{ viagemPessoalId: null, data: d("2026-09-09"), valor: 90 }]);
+    expect(r).toEqual([]);
+  });
+
+  it("soma vários pedágios da mesma viagem", () => {
+    const r = pedagioPorViagem([v3], [
+      { viagemPessoalId: null, data: d("2026-09-05"), valor: 70 },
+      { viagemPessoalId: null, data: d("2026-09-05"), valor: 60 },
+    ]);
+    expect(r[0]!.pedagio).toBe(130);
   });
 });
 

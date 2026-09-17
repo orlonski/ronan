@@ -16,6 +16,7 @@ import {
   custoPorKmDele,
   pedagioDaRota,
   pedagioDoHistorico,
+  pedagioPorViagem,
   resultadoDoFrete,
 } from "../common/frete-autonomo";
 
@@ -226,37 +227,45 @@ export class FretePessoalService {
   /**
    * O que ele já pagou de pedágio nesse mesmo trecho.
    *
-   * Só entram viagens com gasto de PEDAGIO amarrado (`viagemPessoalId`): o
-   * pedágio lançado solto, sem viagem, não diz a que caminho pertence, e
-   * atribuí-lo ao trecho de hoje inventaria um custo que pode ser de outro.
+   * Lê as duas pontas separadamente — viagens e gastos de PEDAGIO — porque o
+   * vínculo entre elas ainda não é preenchido por ninguém (ver
+   * `pedagioPorViagem`, que resolve de quem é cada gasto).
    *
-   * O teto de 300 é o mesmo do histórico de valor — quem roda o mesmo trecho
-   * repete cedo, e ler a vida inteira do motorista pra achar a mediana de um
-   * trecho é varredura que cresce sem limite.
+   * O teto de 300 é o mesmo do histórico de valor: quem roda o mesmo trecho
+   * repete cedo, e varrer a vida inteira do motorista pra achar a mediana de um
+   * trecho cresce sem limite.
    */
   private async pedagioDeleNoTrecho(identidadeId: string, origem: string, destino: string) {
-    const anteriores = await comoSistema(() =>
-      this.prisma.viagemPessoal.findMany({
-        where: { identidadeId, gastos: { some: { tipo: "PEDAGIO" } } },
-        select: {
-          origem: true,
-          destino: true,
-          data: true,
-          gastos: { where: { tipo: "PEDAGIO" }, select: { valor: true } },
-        },
-        orderBy: { data: "desc" },
-        take: 300,
-      }),
-    );
+    const [viagens, gastos] = await Promise.all([
+      comoSistema(() =>
+        this.prisma.viagemPessoal.findMany({
+          where: { identidadeId },
+          select: { id: true, origem: true, destino: true, data: true },
+          orderBy: { data: "desc" },
+          take: 300,
+        }),
+      ),
+      comoSistema(() =>
+        this.prisma.lancamentoPessoal.findMany({
+          where: { identidadeId, tipo: "PEDAGIO" },
+          select: { viagemPessoalId: true, data: true, valor: true },
+          orderBy: { data: "desc" },
+          take: 600,
+        }),
+      ),
+    ]);
+
     return pedagioDoHistorico(
       origem,
       destino,
-      anteriores.map((v) => ({
-        origem: v.origem,
-        destino: v.destino,
-        data: v.data,
-        pedagio: v.gastos.reduce((soma, g) => soma + Number(g.valor), 0),
-      })),
+      pedagioPorViagem(
+        viagens,
+        gastos.map((g) => ({
+          viagemPessoalId: g.viagemPessoalId,
+          data: g.data,
+          valor: Number(g.valor),
+        })),
+      ),
     );
   }
 

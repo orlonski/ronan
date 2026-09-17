@@ -31,6 +31,8 @@ function montar(opts: {
   pedagios?: { nome: string; valorBase?: string | null }[];
   comprovante?: Record<string, unknown> | null;
   viagens?: Record<string, unknown>[];
+  /** Lançamentos de PEDAGIO dele, como o app grava: soltos, sem viagem. */
+  pedagiosLancados?: { data: Date; valor: number; viagemPessoalId?: string | null }[];
 }) {
   const prisma = {
     motoristaIdentidade: {
@@ -45,16 +47,27 @@ function montar(opts: {
               : new Prisma.Decimal(opts.gastosNaoCombustivel),
         },
       })),
-      findMany: vi.fn(async () =>
-        (opts.abastecimentos ?? []).map((a, i) => ({
+      // A MESMA tabela serve abastecimento e pedágio; o serviço distingue pelo
+      // `where.tipo` e o mock precisa distinguir também, senão o cálculo de
+      // pedágio recebe a lista de abastecimentos.
+      findMany: vi.fn(async (args: { where?: { tipo?: string } } = {}) => {
+        if (args.where?.tipo === "PEDAGIO") {
+          return (opts.pedagiosLancados ?? []).map((g) => ({
+            viagemPessoalId: g.viagemPessoalId ?? null,
+            data: g.data,
+            valor: new Prisma.Decimal(g.valor),
+          }));
+        }
+        return (opts.abastecimentos ?? []).map((a, i) => ({
           id: a.id ?? `ab-${i}`,
           data: a.data ?? new Date(2026, 5, 1 + i),
           odometro: a.odometro ?? null,
           litros: a.litros == null ? null : new Prisma.Decimal(a.litros),
           valor: new Prisma.Decimal(a.valor ?? 0),
           tanqueCheio: a.tanqueCheio ?? true,
-        })),
-      ),
+          criadoEm: a.data ?? new Date(2026, 5, 1 + i),
+        }));
+      }),
     },
     viagemPessoal: {
       aggregate: vi.fn(async () => ({
@@ -63,7 +76,7 @@ function montar(opts: {
       // `gastos` entra por padrão porque as DUAS leituras de viagem passam por
       // aqui — o histórico de valor não pede gastos, o de pedágio pede. Sem o
       // default, o teste do histórico derrubava o cálculo do pedágio.
-      findMany: vi.fn(async () => (opts.viagens ?? []).map((v) => ({ gastos: [], ...v }))),
+      findMany: vi.fn(async () => (opts.viagens ?? []).map((v, i) => ({ id: `v${i}`, ...v }))),
     },
     comprovantePessoal: {
       findUnique: vi.fn(async () => opts.comprovante ?? null),
@@ -247,8 +260,9 @@ describe("vale a pena esse frete?", () => {
   });
 
   it("sem tarifa cadastrada, o pedágio vem do que ELE pagou no trecho", async () => {
-    // O cenário real: as praças estão cadastradas sem preço (o CRUD aceita), e
-    // ele roda 6 eixos. A tabela não responde; o bolso dele responde.
+    // O cenário real: as praças estão cadastradas sem preço (o CRUD aceita), ele
+    // roda 6 eixos, e lança o pedágio SOLTO — que é o único jeito que o app
+    // oferece hoje. A atribuição é por dia, com uma viagem só no dia.
     const { service } = montar({
       eixos: 6,
       pedagios: [{ nome: "Purunã", valorBase: null }],
@@ -259,7 +273,6 @@ describe("vale a pena esse frete?", () => {
           data: new Date("2026-06-10"),
           km: new Prisma.Decimal(120),
           valorRecebido: new Prisma.Decimal(1100),
-          gastos: [{ valor: new Prisma.Decimal(120) }],
         },
         {
           origem: "ponta grossa - pr",
@@ -267,8 +280,11 @@ describe("vale a pena esse frete?", () => {
           data: new Date("2026-05-01"),
           km: new Prisma.Decimal(120),
           valorRecebido: new Prisma.Decimal(900),
-          gastos: [{ valor: new Prisma.Decimal(140) }],
         },
+      ],
+      pedagiosLancados: [
+        { data: new Date("2026-06-10"), valor: 120 },
+        { data: new Date("2026-05-01"), valor: 140 },
       ],
     });
     const r = await service.estimar(EU, ORIGEM, DESTINO, {
@@ -302,9 +318,9 @@ describe("vale a pena esse frete?", () => {
           data: new Date("2026-06-10"),
           km: new Prisma.Decimal(120),
           valorRecebido: new Prisma.Decimal(1100),
-          gastos: [{ valor: new Prisma.Decimal(500) }],
         },
       ],
+      pedagiosLancados: [{ data: new Date("2026-06-10"), valor: 500 }],
     });
     const r = await service.estimar(EU, ORIGEM, DESTINO, {
       origem: "Ponta Grossa",

@@ -258,6 +258,54 @@ export type PedagioDoHistorico = {
  * mesma escolha que o diesel já fazia ao medir o consumo DELE em vez de usar
  * média de mercado.
  */
+export type ViagemParaPedagio = { id: string; origem: string; destino: string; data: Date };
+export type GastoDePedagio = { viagemPessoalId: string | null; data: Date; valor: number };
+
+/** Dia civil como chave. `data` é `@db.Date`, gravado à meia-noite UTC. */
+const diaDe = (d: Date) => d.toISOString().slice(0, 10);
+
+/**
+ * De quem é cada pedágio lançado.
+ *
+ * O vínculo explícito (`viagemPessoalId`) é o certo e sempre vence — mas hoje
+ * NADA o preenche: a coluna existe no Prisma e não aparece no app nem no schema
+ * Zod. Exigir só ele seria escrever um plano B que nunca dispara.
+ *
+ * Então cai pra inferência, com uma trava: o gasto só é atribuído quando existe
+ * EXATAMENTE UMA viagem naquele dia. Com duas, não há como saber de qual delas
+ * foi o pedágio, e chutar contaminaria a mediana de um trecho com o custo de
+ * outro — o tipo de erro que ninguém percebe e que faz o motorista recusar
+ * frete bom por causa de número errado.
+ */
+export function pedagioPorViagem(
+  viagens: ViagemParaPedagio[],
+  gastos: GastoDePedagio[],
+): PedagioAnterior[] {
+  const porId = new Map(viagens.map((v) => [v.id, v]));
+
+  const porDia = new Map<string, ViagemParaPedagio[]>();
+  for (const v of viagens) {
+    const dia = diaDe(v.data);
+    porDia.set(dia, [...(porDia.get(dia) ?? []), v]);
+  }
+
+  const soma = new Map<string, number>();
+  for (const g of gastos) {
+    let alvo = g.viagemPessoalId ? porId.get(g.viagemPessoalId) : undefined;
+    if (!alvo) {
+      const doDia = porDia.get(diaDe(g.data)) ?? [];
+      if (doDia.length !== 1) continue; // ambíguo (ou nenhuma): não inventa
+      alvo = doDia[0]!;
+    }
+    soma.set(alvo.id, (soma.get(alvo.id) ?? 0) + g.valor);
+  }
+
+  return [...soma.entries()].map(([id, pedagio]) => {
+    const v = porId.get(id)!;
+    return { origem: v.origem, destino: v.destino, data: v.data, pedagio };
+  });
+}
+
 export function pedagioDoHistorico(
   origem: string,
   destino: string,
