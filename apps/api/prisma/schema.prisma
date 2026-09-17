@@ -874,6 +874,25 @@ model ConfiguracaoPlataforma {
   /// **Escrita pela tela, leitura nunca**: nenhum endpoint devolve estes
   /// valores — o que sai é o apelido (`sk-ant…K9fA`), o bastante pra conferir
   /// contra o painel do provedor e insuficiente pra assinar uma chamada.
+  /// A conversa que o prospect abandonou tem fim?
+  ///
+  /// Nasce DESLIGADO, como tudo que fala com gente sozinho. Ligado, um
+  /// varredor cobra uma vez quem sumiu e encerra o assunto — sempre DENTRO da
+  /// janela de 24h da Meta, porque fora dela só sai template aprovado e um
+  /// follow-up de venda é classificado como marketing.
+  sdrFollowupAtivo          Boolean @default(false)
+  /// Silêncio, em horas, até o primeiro toque. Conta do último contato.
+  sdrFollowupHoras          Int     @default(4)
+  /// Teto de toques por conversa. Dois, e o segundo já se despede.
+  sdrFollowupMax            Int     @default(2)
+  /// Espera entre um toque e o seguinte.
+  sdrFollowupIntervaloHoras Int     @default(18)
+  /// Silêncio total até dar o assunto por encerrado.
+  sdrEncerrarAposHoras      Int     @default(48)
+  /// Janela de envio, hora cheia em São Paulo. Ninguém cobra às 3 da manhã.
+  sdrFollowupHoraInicio     Int     @default(9)
+  sdrFollowupHoraFim        Int     @default(19)
+
   sdrChaveAnthropic  String?
   sdrChaveGemini     String?
   sdrChaveMinimax    String?
@@ -5381,6 +5400,18 @@ model Lead {
   observacao    String?   @db.Text
   ultimoContato DateTime?
 
+  /// Quantos follow-ups automáticos já saíram NESTE ciclo de conversa.
+  ///
+  /// Não dá pra derivar do histórico: uma linha de SAIDA de follow-up é igual
+  /// a uma resposta normal. E sem contador o varredor não é idempotente —
+  /// rodar duas vezes mandaria duas vezes.
+  followupsEnviados   Int       @default(0)
+  ultimoFollowupEm    DateTime?
+  /// Quando a conversa foi dada por encerrada. Nulo = ainda viva.
+  conversaEncerradaEm DateTime?
+  /// Um humano assumiu: o robô sai de cena e não escreve mais por cima dele.
+  sdrPausadoEm        DateTime?
+
   interacoes InteracaoLead[]
   mensagens  MensagemLead[]
 
@@ -5394,6 +5425,8 @@ model Lead {
   @@index([uf, categoria, status])
   @@index([score(sort: Desc)])
   @@index([enriquecidoEm])
+  /// A varredura do follow-up: conversa viva, ordenada pelo silêncio.
+  @@index([conversaEncerradaEm, ultimoContato])
   @@map("leads")
 }
 

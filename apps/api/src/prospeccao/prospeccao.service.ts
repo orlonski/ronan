@@ -7,6 +7,8 @@ import { comoSistema } from "../common/conta/conta-context";
 import { PrismaService } from "../prisma/prisma.service";
 import { sufixoTelefone } from "../sdr/lead-inbound";
 import { LeadChatwootService } from "./lead-chatwoot.service";
+import { conversasDosLeads, type LeadParaConversa } from "./conversa-lead";
+import type { PrazosFollowup } from "../sdr/followup.regua";
 
 /**
  * Leitura e manutenção da base de captação.
@@ -84,8 +86,8 @@ export class ProspeccaoService {
       where.AND = [{ telefone: null }, { email: null }];
     }
 
-    return comoSistema(async () =>
-      paginate<Record<string, unknown>, ListLeadsParams>(this.prisma.lead, {
+    return comoSistema(async () => {
+      const pagina = await paginate<Record<string, unknown>, ListLeadsParams>(this.prisma.lead, {
         params,
         where: where as Record<string, unknown>,
         // Lead é da plataforma e não tem coluna de frota: não há recorte por
@@ -101,8 +103,51 @@ export class ProspeccaoService {
         },
         defaultSort: { field: "score", order: "desc" },
         include: { _count: { select: { interacoes: true } } },
-      }),
-    );
+      });
+
+      // O estado da conversa entra DEPOIS da paginação, e de uma vez só pra
+      // página inteira: é o que permite a tela mostrar quem está parado sem
+      // uma consulta por linha.
+      const linhas = (pagina as { data?: unknown[] }).data ?? [];
+      const conversas = await conversasDosLeads(
+        this.prisma,
+        linhas as LeadParaConversa[],
+        await this.prazosDoFollowup(),
+      );
+      for (const linha of linhas as { id: string; conversa?: unknown }[]) {
+        linha.conversa = conversas.get(linha.id) ?? null;
+      }
+      return pagina;
+    });
+  }
+
+  /**
+   * Os prazos que classificam uma conversa como parada.
+   *
+   * Lidos da mesma linha que o varredor vai usar — se a tela tivesse os
+   * próprios números, ela chamaria de "parada" algo que o robô ainda considera
+   * cedo, e ninguém entenderia por que o follow-up não saiu.
+   */
+  private async prazosDoFollowup(): Promise<PrazosFollowup> {
+    const cfg = await this.prisma.configuracaoPlataforma.findUnique({
+      where: { id: "singleton" },
+      select: {
+        sdrFollowupHoras: true,
+        sdrFollowupMax: true,
+        sdrFollowupIntervaloHoras: true,
+        sdrEncerrarAposHoras: true,
+        sdrFollowupHoraInicio: true,
+        sdrFollowupHoraFim: true,
+      },
+    });
+    return {
+      followupHoras: cfg?.sdrFollowupHoras ?? 4,
+      followupMax: cfg?.sdrFollowupMax ?? 2,
+      followupIntervaloHoras: cfg?.sdrFollowupIntervaloHoras ?? 18,
+      encerrarAposHoras: cfg?.sdrEncerrarAposHoras ?? 48,
+      horaInicio: cfg?.sdrFollowupHoraInicio ?? 9,
+      horaFim: cfg?.sdrFollowupHoraFim ?? 19,
+    };
   }
 
   /**

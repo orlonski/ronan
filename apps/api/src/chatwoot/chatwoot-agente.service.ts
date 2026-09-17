@@ -184,6 +184,7 @@ export class ChatwootAgenteService {
         contaChatwoot,
         conversaId,
         `número não reconhecido — conversa ${conversaId}`,
+        leadId,
       );
       return;
     }
@@ -280,7 +281,12 @@ export class ChatwootAgenteService {
 
     if (leadId && (await this.atenderComoSdr(leadId, texto, contaChatwoot, conversaId))) return;
 
-    await this.avisarFilaHumana(contaChatwoot, conversaId, `comercial: conversa ${conversaId}`);
+    await this.avisarFilaHumana(
+      contaChatwoot,
+      conversaId,
+      `comercial: conversa ${conversaId}`,
+      leadId,
+    );
   }
 
   /**
@@ -356,6 +362,16 @@ export class ChatwootAgenteService {
           data: {
             ...(lead.status === "NOVO" ? { status: "EM_CONTATO" } : {}),
             ultimoContato: new Date(),
+            // Ele voltou a falar: a conversa revive e o contador de toques
+            // zera. É o que faz o varredor desistir no meio de uma corrida com
+            // este webhook — a comparação do contador não bate mais.
+            //
+            // `sdrPausadoEm` NÃO é limpo aqui de propósito: se um humano
+            // assumiu, ele continua dono da conversa mesmo depois de o prospect
+            // responder. Quem devolve pro robô é uma pessoa, na tela.
+            followupsEnviados: 0,
+            ultimoFollowupEm: null,
+            conversaEncerradaEm: null,
           },
         });
         this.log.log(`Interação registrada no lead ${lead.empresa} (${lead.id}).`);
@@ -441,6 +457,26 @@ export class ChatwootAgenteService {
     }
   }
 
+  /**
+   * Um humano assumiu esta conversa — o robô não escreve mais nela.
+   *
+   * Best-effort de propósito: falhar em carimbar não pode impedir o repasse,
+   * que é o que a pessoa do outro lado está esperando. O pior caso é um
+   * follow-up a mais, não uma conversa sem atendente.
+   */
+  private async marcarHumanoAssumiu(leadId: string): Promise<void> {
+    try {
+      await comoSistema(() =>
+        this.prisma.lead.update({
+          where: { id: leadId },
+          data: { sdrPausadoEm: new Date() },
+        }),
+      );
+    } catch (e) {
+      this.log.warn(`não consegui marcar o lead ${leadId} como assumido: ${String(e)}`);
+    }
+  }
+
   /** O toque no funil. Mesma linha pro lead que já existia e pro que nasceu agora. */
   private registrarInteracao(leadId: string, texto: string) {
     return this.prisma.interacaoLead.create({
@@ -523,6 +559,7 @@ export class ChatwootAgenteService {
 
       if (resposta.passarParaHumano) {
         this.log.log(`SDR pediu humano na conversa ${conversaId}: ${resposta.motivoHumano}`);
+        await this.marcarHumanoAssumiu(leadId);
         await this.chatwoot.passarParaHumano(contaChatwoot, conversaId);
       }
       return true;
@@ -553,7 +590,12 @@ export class ChatwootAgenteService {
     contaChatwoot: number,
     conversaId: number,
     motivo: string,
+    leadId?: string | null,
   ): Promise<void> {
+    // Daqui pra frente quem cuida é gente. O robô sai de cena: sem isto, o
+    // varredor de follow-up escreveria por cima de um vendedor no meio da
+    // conversa, que é o jeito mais rápido de estragar uma venda com um robô.
+    if (leadId) await this.marcarHumanoAssumiu(leadId);
     const jaAvisado = await this.chatwoot.temEtiqueta(
       contaChatwoot,
       conversaId,

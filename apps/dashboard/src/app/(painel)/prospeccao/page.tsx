@@ -41,6 +41,18 @@ export type Lead = {
   ultimoContato: string | null;
   enriquecidoEm: string | null;
   _count?: { interacoes: number };
+  /** O estado da conversa no WhatsApp. `null` = nunca houve conversa. */
+  conversa?: ConversaDoLead | null;
+};
+
+/** Como a conversa está agora — a mesma classificação que o robô usa. */
+export type ConversaDoLead = {
+  estado: "ativa" | "aguardando-nos" | "parada" | "encerrada" | "com-humano";
+  ultimaDirecao: "ENTRADA" | "SAIDA" | null;
+  ultimaMensagemEm: string | null;
+  horasParada: number | null;
+  followupsEnviados: number;
+  encerradaEm: string | null;
 };
 
 export type Resumo = {
@@ -51,6 +63,31 @@ export type Resumo = {
   porUf: { uf: string; total: number }[];
   suprimidos: number;
 };
+
+/**
+ * O estado da conversa, dito pra quem vende.
+ *
+ * `aguardando-nos` vem primeiro na atenção de propósito: é gente que escreveu
+ * e não foi respondida, o único estado desta lista que custa uma venda AGORA.
+ */
+const CONVERSA_LABEL: Record<ConversaDoLead["estado"], { texto: string; classe: string }> = {
+  "aguardando-nos": {
+    texto: "esperando resposta",
+    classe: "text-rose-700 dark:text-rose-400 font-medium",
+  },
+  parada: { texto: "parada", classe: "text-amber-700 dark:text-amber-500" },
+  encerrada: { texto: "encerrada", classe: "text-muted-foreground" },
+  "com-humano": { texto: "com atendente", classe: "text-sky-700 dark:text-sky-400" },
+  ativa: { texto: "conversando", classe: "text-emerald-700 dark:text-emerald-400" },
+};
+
+/** "3h" · "2d" — quanto tempo a conversa está nesse estado. */
+function haQuantoTempo(horas: number | null): string {
+  if (horas == null) return "";
+  if (horas < 1) return "agora";
+  if (horas < 24) return `há ${Math.floor(horas)}h`;
+  return `há ${Math.floor(horas / 24)}d`;
+}
 
 const STATUS_LABEL: Record<string, string> = {
   NOVO: "Novo",
@@ -329,6 +366,20 @@ function LinhaLead({ lead, onAbrir }: { lead: Lead; onAbrir: () => void }) {
               <span>·</span>
               <span>
                 {toques} contato{toques > 1 ? "s" : ""}
+              </span>
+            </>
+          )}
+          {/* O estado da conversa. Antes isto não existia em lugar nenhum da
+              tela: `ultimoContato` era gravado em quatro pontos do código e
+              nunca lido, então ninguém via quem tinha escrito e ficado sem
+              resposta. */}
+          {lead.conversa && lead.conversa.ultimaDirecao && (
+            <>
+              <span>·</span>
+              <span className={CONVERSA_LABEL[lead.conversa.estado].classe}>
+                {CONVERSA_LABEL[lead.conversa.estado].texto} {haQuantoTempo(lead.conversa.horasParada)}
+                {lead.conversa.followupsEnviados > 0 &&
+                  ` · ${lead.conversa.followupsEnviados} toque${lead.conversa.followupsEnviados > 1 ? "s" : ""}`}
               </span>
             </>
           )}
