@@ -19,6 +19,7 @@ type ResultadoChatwoot = {
   jaTinham: number;
   falhas: number;
   fixos: number;
+  invalidos: number;
 };
 
 /**
@@ -73,12 +74,19 @@ export function AcoesBase({ onPronto }: { onPronto: () => void }) {
         token,
       }),
     onSuccess: (r) => {
+      // "0 contato(s) criado(s)" sozinho parece defeito. O que explica o zero é
+      // o que foi DESCARTADO — sem isso a gente foi caçar bug onde não tinha.
+      const partes = [
+        `${r.criados} contato(s) criado(s) no Chatwoot`,
+        r.fixos > 0 ? `${r.fixos} em telefone fixo (pode não ter WhatsApp)` : null,
+        r.invalidos > 0 ? `${r.invalidos} sem telefone que possa existir` : null,
+        r.falhas > 0 ? `${r.falhas} que o Chatwoot recusou` : null,
+        r.jaTinham > 0 ? `${r.jaTinham} já estavam lá` : null,
+      ].filter(Boolean);
       setRecado(
         r.candidatos === 0
           ? `Nada novo pra mandar — os ${r.jaTinham} leads com telefone já estão no Chatwoot.`
-          : `${r.criados} contato(s) criado(s) no Chatwoot` +
-            `${r.fixos > 0 ? `, ${r.fixos} deles em telefone fixo (pode não ter WhatsApp)` : ""}` +
-            `${r.falhas > 0 ? `. ${r.falhas} não deram.` : "."}`,
+          : `${partes.join(" · ")}.`,
       );
       onPronto();
     },
