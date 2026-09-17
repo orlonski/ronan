@@ -291,8 +291,11 @@ export class FretePessoalService {
           litros: true,
           valor: true,
           tanqueCheio: true,
+          criadoEm: true,
         },
-        orderBy: { data: "asc" },
+        // O desempate vale aqui também: ordem indefinida no banco é o que
+        // tornava o resultado dependente do humor do planner.
+        orderBy: [{ data: "asc" }, { criadoEm: "asc" }],
       }),
     );
 
@@ -303,6 +306,7 @@ export class FretePessoalService {
         odometro: a.odometro,
         litros: Number(a.litros ?? 0),
         tanqueCheio: a.tanqueCheio,
+        criadoEm: a.criadoEm,
       })),
     );
 

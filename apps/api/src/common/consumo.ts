@@ -28,6 +28,16 @@ export type AbastecimentoParaConsumo = {
   tanqueCheio: boolean;
   /** Comboio = abastecido por caminhão-tanque, sem bomba nem cupom. */
   emComboio?: boolean;
+  /**
+   * Quando a linha foi gravada. Serve de desempate, e só isso.
+   *
+   * Opcional porque só um dos dois lados precisa. No abastecimento da FROTA,
+   * `data` é timestamp completo e a hora já desempata. No lançamento pessoal
+   * ela é `@db.Date` — dia civil, sem hora — e dois cheios no mesmo dia, que
+   * acontece em viagem longa ou quando ele completa em dois postos, empatavam:
+   * a ordem vinha do banco, que não promete nenhuma.
+   */
+  criadoEm?: Date;
 };
 
 export type TrechoConsumo = {
@@ -66,7 +76,24 @@ export function calcularConsumo(abastecimentos: AbastecimentoParaConsumo[]): Con
 
   // Ordem cronológica é premissa do método: o intervalo é entre um cheio e o
   // próximo. Ordenamos aqui pra não depender de quem chamou ter feito certo.
-  const ordenados = [...abastecimentos].sort((a, b) => a.data.getTime() - b.data.getTime());
+  //
+  // O desempate não é preciosismo. `data` é dia civil, sem hora, então dois
+  // cheios no mesmo dia empatavam e a ordem saía do banco — que não promete
+  // nenhuma. Invertido, o km dava negativo e o motorista era informado de que
+  // o odômetro DELE estava trocado, por um erro que era nosso.
+  //
+  // `criadoEm` primeiro porque é a ordem real de entrada. O odômetro só decide
+  // quando não há `criadoEm` nos dois: ele é monotônico por física, mas usá-lo
+  // antes esconderia um erro de digitação em vez de denunciá-lo.
+  const ordenados = [...abastecimentos].sort(
+    (a, b) =>
+      a.data.getTime() - b.data.getTime() ||
+      (a.criadoEm && b.criadoEm ? a.criadoEm.getTime() - b.criadoEm.getTime() : 0) ||
+      (a.odometro ?? 0) - (b.odometro ?? 0) ||
+      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+  );
+  // Posição na lista ordenada: é ela que define "entre um cheio e o outro".
+  const posicao = new Map(ordenados.map((a, i) => [a.id, i]));
 
   const cheios = ordenados.filter((a) => a.tanqueCheio && a.odometro != null);
   if (cheios.length < 2) {
@@ -88,8 +115,13 @@ export function calcularConsumo(abastecimentos: AbastecimentoParaConsumo[]): Con
 
     // Tudo que foi abastecido DEPOIS do cheio de abertura até o de fechamento,
     // inclusive — parciais no meio entram.
+    //
+    // Por POSIÇÃO, não por data: com `a.data > inicio.data` dois cheios do
+    // mesmo dia somavam zero litro (nenhuma data é maior que ela mesma), o
+    // trecho caía como inconsistente e o km/l nunca saía — mesmo com a ordem
+    // certa e o odômetro perfeito.
     const litros = ordenados
-      .filter((a) => a.data > inicio.data && a.data <= fim.data)
+      .slice(posicao.get(inicio.id)! + 1, posicao.get(fim.id)! + 1)
       .reduce((s, a) => s + a.litros, 0);
     if (litros <= 0) {
       descartados++;

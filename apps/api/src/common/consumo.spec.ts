@@ -17,7 +17,51 @@ function ab(
   };
 }
 
+/** Dois cheios no MESMO dia civil, como chega do lançamento pessoal. */
+function abMesmoDia(
+  odometro: number,
+  litros: number,
+  minutoDeEntrada: number,
+): AbastecimentoParaConsumo {
+  return {
+    id: `m${++seq}`,
+    // Dia civil, sem hora — é o que `@db.Date` devolve pro fluxo pessoal.
+    data: new Date(Date.UTC(2026, 5, 10)),
+    odometro,
+    litros,
+    tanqueCheio: true,
+    criadoEm: new Date(Date.UTC(2026, 5, 10, 8, minutoDeEntrada)),
+  };
+}
+
 describe("calcularConsumo", () => {
+  describe("dois cheios no mesmo dia (fluxo pessoal, data sem hora)", () => {
+    it("mede normalmente — antes somava zero litro e acusava o motorista", () => {
+      const r = calcularConsumo([abMesmoDia(480_000, 200, 10), abMesmoDia(480_950, 190, 40)]);
+      expect(r.kmTotal).toBe(950);
+      expect(r.litrosTotal).toBe(190);
+      expect(r.kmPorLitro).toBe(5);
+      expect(r.motivo).toBeUndefined();
+    });
+
+    it("independe da ordem em que o banco devolveu as linhas", () => {
+      const primeiro = abMesmoDia(480_000, 200, 10);
+      const segundo = abMesmoDia(480_950, 190, 40);
+      // O Postgres não promete ordem em empate de `data`: o mesmo par tem que
+      // dar o mesmo km/l chegando de trás pra frente.
+      expect(calcularConsumo([segundo, primeiro]).kmPorLitro).toBe(5);
+    });
+
+    it("odômetro que anda pra trás no mesmo dia CONTINUA sendo denunciado", () => {
+      // O desempate é por `criadoEm`, não pelo odômetro: ordenar pelo odômetro
+      // faria qualquer digitação errada virar um trecho plausível.
+      const r = calcularConsumo([abMesmoDia(480_950, 200, 10), abMesmoDia(480_000, 190, 40)]);
+      expect(r.kmPorLitro).toBeNull();
+      expect(r.motivo).toBe("ODOMETRO_INCONSISTENTE");
+    });
+  });
+
+
   it("mede entre dois tanques cheios", () => {
     // 1200 km com 400 litros = 3 km/l.
     const r = calcularConsumo([ab(1, 100_000, 300), ab(5, 101_200, 400)]);
