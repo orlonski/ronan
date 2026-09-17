@@ -245,8 +245,9 @@ export class CteService {
         papelTomador = "OUTRO";
         tomadorOutro = {
           cnpjCpf: doc,
-          // `Cliente` não tem razão social própria: o nome comercial é o que há.
-          razaoSocial: cli.nome,
+          // Mesma regra do local: a razão social do cadastro fiscal manda, e o
+          // nome comercial só entra quando ela está em branco.
+          razaoSocial: cli.razaoSocialFiscal?.trim() || cli.nome,
           inscricaoEstadual: cli.inscricaoEstadual,
           indicadorIe: (cli.indicadorIe as "1" | "2" | "9") ?? "9",
           endereco: {

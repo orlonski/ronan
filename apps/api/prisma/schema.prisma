@@ -2040,6 +2040,9 @@ model Cliente {
   // documento. Pra CT-e ele é remetente ou destinatário, e sem CNPJ/endereço
   // não há documento nenhum.
   cnpjCpf             String?
+  /// A razão social do tomador. O `nome` é como a transportadora chama o
+  /// cliente no dia a dia ("Obra do Beto"); o CT-e quer o nome do cartão CNPJ.
+  razaoSocialFiscal   String?
   inscricaoEstadual   String?
   indicadorIe         String?
   logradouro          String?
