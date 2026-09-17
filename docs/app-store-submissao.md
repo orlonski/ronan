@@ -52,7 +52,7 @@ O que estava errado antes, e não era só texto:
   contradita pelo código é o pior tipo de achado numa review. Hoje esse bloco só
   roda pra quem tem vínculo com transportadora.
 - O pre-prompt da permissão dizia *"seus dados vão SOMENTE pro servidor da
-  empresa"* — no fluxo de quem não tem empresa, onde **nenhum ponto sai do
+  empresa"* — no fluxo de quem não tem empresa, onde **o trajeto não sai do
   aparelho**. Hoje o texto depende do fluxo e diz a verdade nos dois.
 - O GPS ligava no `mount` da tela de frete: o popup do sistema aparecia sobre uma
   tela que só dizia "Pra onde você vai". Hoje só quando ele toca em começar.

@@ -27,7 +27,16 @@ export async function isTrackingAtivo(): Promise<boolean> {
  * popup nativo logo em seguida), false se cancelou.
  *
  * O destino do dado MUDA entre os dois fluxos, e dizer errado é grave: no frete
- * por conta própria nenhum ponto sai do aparelho (só o km vai junto do frete),
+ * por conta própria o TRAJETO não sai do aparelho (só o km vai junto do frete).
+ *
+ * Cuidado com a versão forte dessa frase, que já esteve escrita aqui: "nenhum
+ * ponto sai do aparelho" é falso. A posição instantânea vai pro servidor toda
+ * vez que o guia recalcula a rota (`frete-guiado.tsx` → `/m/rotas/navegar`).
+ * Ela não é gravada, não é ligada ao motorista (o handler nem lê
+ * `@CurrentUser`) e só atravessa pro Valhalla traçar o caminho — por isso não
+ * é "collect" pela régua da Apple. Mas é ponto saindo do aparelho, e a diferença
+ * entre "não sai" e "sai e não fica" é a diferença entre uma declaração de
+ * privacidade correta e uma recusa.
  * e o texto antigo — "seus dados vão SOMENTE pro servidor da empresa" — era
  * falso pra quem não tem empresa nenhuma, além de ser exatamente a frase que a
  * Apple cita numa recusa por localização em segundo plano.

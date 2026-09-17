@@ -166,9 +166,36 @@ Thank you for the review.
 
 A declaração atual (de 06/2026) foi escrita quando todo mundo tinha empresa.
 Antes de submeter, conferir tipo por tipo se ainda bate com o app do motorista
-sem transportadora — em especial **Localização precisa**, que no fluxo do
-autônomo não sai do aparelho: o que sobe é o km do frete que ele salvou.
-Declaração que não bate com o comportamento é achado de review, não detalhe.
+sem transportadora. Declaração que não bate com o comportamento é achado de
+review, não detalhe.
+
+### Localização — a resposta exata, porque a intuição erra aqui
+
+No fluxo do autônomo há **três** destinos diferentes pro dado de GPS, e só um
+deles é "collect" pela definição da Apple (*transmitir pra fora do aparelho de
+um jeito que permita acesso por mais tempo do que o necessário pra atender a
+requisição em tempo real*):
+
+| O quê | Para onde | Conta como collect? |
+|---|---|---|
+| Trajeto contínuo do frete (1 ponto/s) | Fica no aparelho. Só o **km** sobe. | **Não** — não sai |
+| Posição instantânea a cada recálculo de rota | Servidor → Valhalla, traça e devolve. Não é gravada e o handler nem lê `@CurrentUser` (`frete-pessoal.controller.ts:84`) | **Não** — exceção de tempo real |
+| Captura periódica + geofence | Servidor, gravado em `/m/posicoes` | **Sim** — mas **só** pra quem tem vínculo com transportadora |
+
+Ou seja: *para um motorista sem empresa, Localização precisa não é coletada.*
+Isso é bom demais pra declarar no automático — **confira antes se continua
+verdade**, porque basta alguém ligar a captura periódica pro fluxo pessoal pra
+transformar a declaração em mentira.
+
+Duas coisas a verificar antes de marcar:
+
+- **O Valhalla é nosso?** Se `VALHALLA_URL` aponta pra instância própria, é
+  infraestrutura e a conversa acaba aqui. Se aponta pra serviço de terceiro, a
+  coordenada está sendo compartilhada com terceiro e isso muda a resposta.
+- **A foto do ticket** vai pro servidor e de lá pra um provedor de IA
+  (Anthropic/Gemini/OpenAI, `apps/api/src/ia/`) pra ler o número. Isso é
+  *User Content → Photos* coletado **e** compartilhado com terceiro. Não é o
+  fluxo do autônomo, mas está no mesmo binário e precisa estar declarado.
 
 ## Screenshots
 
