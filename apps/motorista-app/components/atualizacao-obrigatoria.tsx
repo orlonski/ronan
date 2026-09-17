@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Linking, ScrollView, Text, View } from "react-native";
+import { Linking, Platform, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ArrowUpCircle } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,13 @@ import { MovatruckLogo } from "./movatruck-logo";
  * no próprio app, 1 toque); se não rolar (iOS, build sem o módulo, sideload),
  * abre a loja. Some sozinha quando o app volta atualizado (a checagem vira
  * "nenhuma"). Offline nunca chega aqui — a checagem é fail-open.
+ *
+ * O texto é por plataforma porque a PROMESSA é diferente. "A atualização
+ * acontece na hora" é verdade no Android, onde o Google baixa e instala sem o
+ * motorista sair do app. No iPhone não existe esse fluxo: o melhor que dá é
+ * abrir a App Store e ele tocar em Atualizar. Prometer o que a plataforma não
+ * faz é o tipo de frase que queima confiança em tela de bloqueio, que é onde
+ * ela é mais cara.
  */
 export function AtualizacaoObrigatoria() {
   const [tentando, setTentando] = useState(false);
@@ -67,7 +74,9 @@ export function AtualizacaoObrigatoria() {
               lançando suas viagens sem problema, é preciso atualizar agora.
             </Text>
             <Text className="text-base leading-6 text-muted-foreground">
-              É rápido: toque no botão abaixo e a atualização acontece na hora.
+              {Platform.OS === "ios"
+                ? "Toque no botão abaixo pra abrir a App Store e baixar a versão nova."
+                : "É rápido: toque no botão abaixo e a atualização acontece na hora."}
             </Text>
           </View>
 
@@ -79,7 +88,13 @@ export function AtualizacaoObrigatoria() {
           >
             <ArrowUpCircle size={22} color="#fff" />
             <Text className="text-lg font-bold text-success-foreground">
-              {tentando ? "Atualizando..." : "Atualizar agora"}
+              {Platform.OS === "ios"
+                ? tentando
+                  ? "Abrindo..."
+                  : "Abrir a App Store"
+                : tentando
+                  ? "Atualizando..."
+                  : "Atualizar agora"}
             </Text>
           </Button>
         </View>
