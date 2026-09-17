@@ -40,9 +40,19 @@ pra desatualizar.
 
 Os três primeiros o Chatwoot já desenha sozinho na barra lateral. O resto são
 atributos personalizados: **a gravação funciona de qualquer jeito, mas sem
-criar o atributo ninguém vê**. Em Configurações → Atributos personalizados →
-Contato, criar um pra cada linha marcada acima, com a **chave exatamente igual**
-à da tabela (o rótulo pode ser o que quiser).
+criar o atributo ninguém vê**.
+
+**Já criados** em 17/09/2026 na conta Movatruck (`atendimento.movatruck.com.br`,
+conta 1), todos do tipo Texto no modelo Contato. Numa instalação nova, refazer
+em Configurações → Atributos personalizados → Contato, um pra cada linha
+marcada acima, com a **chave exatamente igual** à da tabela — o rótulo pode ser
+o que quiser. O Chatwoot sugere a chave a partir do nome e **come os acentos
+errado** ("Situação no funil" vira `situao_no_funil`): corrigir o campo Chave na
+mão, sempre.
+
+`nota_lead` é Texto de propósito, mesmo guardando número: quando o lead não tem
+nota o sistema manda string vazia pra limpar o campo, e atributo numérico
+recusaria.
 
 `nao_contatar` é o mais importante da lista: quem atende é justamente quem tem
 o dedo no gatilho de mandar mensagem, e quem pediu opt-out não pode receber.
