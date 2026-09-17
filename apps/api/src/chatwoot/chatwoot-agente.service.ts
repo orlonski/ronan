@@ -5,7 +5,7 @@ import { comConta, comoSistema } from "../common/conta/conta-context";
 import { AgenteService } from "../whatsapp/agente/agente.service";
 import { SessaoService } from "../whatsapp/sessao.service";
 import { ConviteService } from "../whatsapp/convite.service";
-import { ChatwootClientService } from "./chatwoot-client.service";
+import { ChatwootClientService, LABEL_PRECISA_HUMANO } from "./chatwoot-client.service";
 import { SdrService } from "../sdr/sdr.service";
 import { LeadChatwootService } from "../prospeccao/lead-chatwoot.service";
 import {
@@ -180,9 +180,11 @@ export class ChatwootAgenteService {
         return;
       }
 
-      this.log.log(`número não reconhecido — conversa ${conversaId} vai pra fila humana`);
-      await this.chatwoot.responder(contaChatwoot, conversaId, TEXTO_DESCONHECIDO);
-      await this.chatwoot.passarParaHumano(contaChatwoot, conversaId);
+      await this.avisarFilaHumana(
+        contaChatwoot,
+        conversaId,
+        `número não reconhecido — conversa ${conversaId}`,
+      );
       return;
     }
 
@@ -261,15 +263,24 @@ export class ChatwootAgenteService {
     onde: OndeConversa,
   ): Promise<void> {
     const { contaId: contaChatwoot, conversaId } = onde;
+
+    // Áudio, foto e figurinha chegam com `content` vazio. O guard geral de
+    // mensagem sem texto mora depois do desvio pra cá, então sem isto um áudio
+    // seguia adiante: criava lead com resumo em branco, gravava uma linha vazia
+    // no histórico e mandava mensagem vazia pro modelo, que a recusa. O
+    // prospect ficava esperando uma resposta que nunca vinha.
+    if (!texto) {
+      await this.avisarFilaHumana(contaChatwoot, conversaId, `comercial: mídia sem texto`);
+      return;
+    }
+
     const leadId = await this.resolverLead(telefone, nomeContato, texto, onde);
 
     if (await this.pararDeContatar(texto, telefone, contaChatwoot, conversaId)) return;
 
     if (leadId && (await this.atenderComoSdr(leadId, texto, contaChatwoot, conversaId))) return;
 
-    this.log.log(`comercial: conversa ${conversaId} vai pra fila humana`);
-    await this.chatwoot.responder(contaChatwoot, conversaId, TEXTO_DESCONHECIDO);
-    await this.chatwoot.passarParaHumano(contaChatwoot, conversaId);
+    await this.avisarFilaHumana(contaChatwoot, conversaId, `comercial: conversa ${conversaId}`);
   }
 
   /**
@@ -519,6 +530,42 @@ export class ChatwootAgenteService {
       this.log.warn(`SDR falhou na conversa ${conversaId}: ${(e as Error).message}`);
       return false;
     }
+  }
+
+  /**
+   * Entrega a conversa pra uma pessoa, avisando quem escreveu — **uma vez só**.
+   *
+   * A frase repetida era um bug de verdade: quem mandava "oi", "bom dia" e
+   * "tem alguém aí?" recebia a mesma resposta três vezes em dois minutos,
+   * porque cada mensagem é um webhook novo e nada lembrava do anterior. Três
+   * respostas idênticas não parecem atendimento, parecem robô quebrado — e
+   * essa é a primeira impressão que a Movatruck dá pra um prospect.
+   *
+   * A memória é a própria etiqueta `precisa-humano`, que já era aplicada: ela
+   * vive no Chatwoot, sobrevive entre um webhook e outro e some junto com a
+   * conversa quando um atendente resolve (o inbox abre uma nova a cada ciclo,
+   * e a nova conversa merece o aviso de novo).
+   *
+   * O repasse continua acontecendo sempre — é barato, é idempotente, e garante
+   * que a conversa volte pra fila mesmo que alguém a tenha fechado no meio.
+   */
+  private async avisarFilaHumana(
+    contaChatwoot: number,
+    conversaId: number,
+    motivo: string,
+  ): Promise<void> {
+    const jaAvisado = await this.chatwoot.temEtiqueta(
+      contaChatwoot,
+      conversaId,
+      LABEL_PRECISA_HUMANO,
+    );
+    if (jaAvisado) {
+      this.log.log(`${motivo} — já estava na fila humana, sem repetir o aviso`);
+    } else {
+      this.log.log(`${motivo} — vai pra fila humana`);
+      await this.chatwoot.responder(contaChatwoot, conversaId, TEXTO_DESCONHECIDO);
+    }
+    await this.chatwoot.passarParaHumano(contaChatwoot, conversaId);
   }
 
   private async tentarVincular(

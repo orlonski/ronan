@@ -7,6 +7,7 @@ import { ProspeccaoService } from "../prospeccao/prospeccao.service";
 import { AnthropicProvider } from "../whatsapp/agente/providers/anthropic.provider";
 import { GeminiProvider } from "../whatsapp/agente/providers/gemini.provider";
 import type { AgentMessage, AgentProvider } from "../whatsapp/agente/providers/agent.provider";
+import { comMarcadorDeGap, minutosEntre } from "../common/gap-conversa";
 import { promptSdr, type ContextoLead } from "./sdr.prompt";
 import { empresaConhecida } from "./lead-inbound";
 import { TOOLS_SDR } from "./sdr.tools";
@@ -146,11 +147,17 @@ export class SdrService {
     let pediuHumano: string | null = null;
     const ferramentas: string[] = [];
 
+    // A ENTRADA já foi gravada acima, então ela é a última linha do histórico.
+    // `atual` vem de lá carimbada com o mesmo marcador de gap: os providers
+    // deduplicam comparando o texto da última mensagem com `mensagemAtual`, e
+    // carimbar só um dos dois faria a pergunta do prospect chegar duas vezes.
+    const { mensagens, atual } = await this.historico(leadId, mensagem);
+
     const texto = await provider.processar({
       systemText: promptSdr(contexto),
       tools: TOOLS_SDR,
-      historico: await this.historico(leadId),
-      mensagemAtual: mensagem,
+      historico: mensagens,
+      mensagemAtual: atual,
       modelo,
       executarTool: async (nome, input) => {
         ferramentas.push(nome);
@@ -289,22 +296,46 @@ export class SdrService {
    *
    * Só as últimas 24h: conversa de semana passada é outro assunto, e arrastar
    * ela pra dentro faz o modelo responder a pergunta errada.
+   *
+   * Intervalo grande entre duas mensagens vira marcador inline — o mesmo que o
+   * agente do motorista já usava e o SDR não tinha. Sem ele, quem sumia no meio
+   * da conversa e voltava três horas depois era respondido como se não tivesse
+   * havido intervalo nenhum: o modelo emendava a frase anterior, e do outro
+   * lado isso soa como robô que não percebeu o tempo passar.
    */
-  private async historico(leadId: string): Promise<AgentMessage[]> {
+  private async historico(
+    leadId: string,
+    mensagemAtual: string,
+  ): Promise<{ mensagens: AgentMessage[]; atual: string }> {
     const desde = new Date(Date.now() - JANELA_HORAS * 3_600_000);
     const linhas = await comoSistema(() =>
       this.prisma.mensagemLead.findMany({
         where: { leadId, criadoEm: { gte: desde } },
         orderBy: { criadoEm: "desc" },
         take: MAX_HISTORICO,
-        select: { direcao: true, conteudo: true },
+        select: { direcao: true, conteudo: true, criadoEm: true },
       }),
     );
-    return linhas
-      .reverse()
-      .map((m) => ({
+
+    const ordenado = linhas.reverse();
+    const mensagens: AgentMessage[] = [];
+    let anterior: (typeof ordenado)[number] | null = null;
+    for (const m of ordenado) {
+      mensagens.push({
         role: m.direcao === "ENTRADA" ? ("user" as const) : ("assistant" as const),
-        content: m.conteudo,
-      }));
+        content: anterior
+          ? comMarcadorDeGap(m.conteudo, minutosEntre(anterior.criadoEm, m.criadoEm))
+          : m.conteudo,
+      });
+      anterior = m;
+    }
+
+    const ultima = ordenado[ordenado.length - 1];
+    const atual =
+      ultima?.direcao === "ENTRADA" && ultima.conteudo === mensagemAtual
+        ? (mensagens[mensagens.length - 1]?.content ?? mensagemAtual)
+        : mensagemAtual;
+
+    return { mensagens, atual };
   }
 }

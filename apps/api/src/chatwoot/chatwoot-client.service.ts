@@ -264,6 +264,26 @@ export class ChatwootClientService {
   }
 
   /**
+   * A conversa já está etiquetada assim?
+   *
+   * É o que permite não repetir um aviso que já foi dado. A etiqueta é o
+   * estado que sobrevive ao processo: dois webhooks seguidos caem em execuções
+   * diferentes, e nenhuma memória nossa dura entre elas.
+   *
+   * Erro de rede devolve `false` — na dúvida a pessoa recebe a resposta duas
+   * vezes, que é melhor que ficar sem nenhuma.
+   */
+  async temEtiqueta(contaId: number, conversaId: number, etiqueta: string): Promise<boolean> {
+    const r = await this.requisitar(
+      `/api/v1/accounts/${contaId}/conversations/${conversaId}/labels`,
+      { metodo: "GET" },
+    );
+    if (!r.ok) return false;
+    const payload = (r.corpo as { payload?: unknown } | null)?.payload;
+    return Array.isArray(payload) && payload.includes(etiqueta);
+  }
+
+  /**
    * Nunca lança. Quem chama está no meio de um webhook que precisa responder
    * 200 — o Chatwoot reenvia o que falha, e reenviar mensagem de agente
    * duplicaria resposta na cara do motorista.

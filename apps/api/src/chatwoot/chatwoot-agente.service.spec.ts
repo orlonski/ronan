@@ -42,6 +42,8 @@ function montar(
     sdrErro?: string;
     /** Id do inbox comercial, como vem do env. */
     inboxComercial?: string;
+    /** A conversa JÁ foi etiquetada como precisa-humano numa mensagem anterior. */
+    jaEtiquetada?: boolean;
   } = {},
 ) {
   const create = vi.fn(async (_args: { data: { direcao: string } }) => ({}));
@@ -53,6 +55,9 @@ function montar(
   const processar = vi.fn(async () => opts.resposta ?? "Sua última viagem foi conferida.");
   const responder = vi.fn(async (_conta: number, _conversa: number, _texto: string) => true);
   const passarParaHumano = vi.fn(async () => {});
+  // A conversa ainda não foi etiquetada: é o caso normal, a primeira mensagem.
+  // O teste de não-repetição liga isto pra `true`.
+  const temEtiqueta = vi.fn(async () => opts.jaEtiquetada ?? false);
   const marcarMensagemRecebida = vi.fn(async () => {});
   const contaDoCodigo = vi.fn(async () => opts.contaDoCodigo ?? null);
   const consumir = vi.fn(async () => {
@@ -105,7 +110,7 @@ function montar(
     } as unknown as SessaoService,
     { processar } as unknown as AgenteService,
     { contaDoCodigo, consumir } as unknown as ConviteService,
-    { responder, passarParaHumano } as unknown as ChatwootClientService,
+    { responder, passarParaHumano, temEtiqueta } as unknown as ChatwootClientService,
     { atender } as unknown as SdrService,
     { vincular } as unknown as LeadChatwootService,
     { registrarOptOut } as unknown as ProspeccaoService,
@@ -123,6 +128,7 @@ function montar(
     processar,
     responder,
     passarParaHumano,
+    temEtiqueta,
     consumir,
     atender,
     leadCreate,
@@ -477,6 +483,39 @@ describe("canal comercial", () => {
     await s.processar(evento(COMERCIAL));
     expect(responder).toHaveBeenCalled();
     expect(passarParaHumano).toHaveBeenCalled();
+  });
+
+  it("não repete o aviso de fila humana na segunda mensagem seguida", async () => {
+    // O bug que o dono encontrou testando: três "oi" em dez minutos viraram
+    // três respostas idênticas. Cada mensagem é um webhook novo, e nada lembrava
+    // do anterior — a etiqueta já aplicada é essa memória.
+    const { s, responder, passarParaHumano } = montar({
+      inboxComercial: "2",
+      identidade: DESCONHECIDO,
+      ehLead: false,
+      jaEtiquetada: true,
+    });
+    await s.processar(evento(COMERCIAL));
+    expect(responder).not.toHaveBeenCalled();
+    // O repasse continua: garante a conversa aberta na fila mesmo que alguém
+    // a tenha fechado no meio.
+    expect(passarParaHumano).toHaveBeenCalledWith(1, 7);
+  });
+
+  it("áudio no comercial vai pra uma pessoa, sem virar lead nem acordar o SDR", async () => {
+    // Mídia chega com `content` vazio. O guard geral de mensagem sem texto mora
+    // depois do desvio pro comercial, então sem tratamento aqui o áudio seguia:
+    // criava lead com resumo em branco e mandava mensagem vazia pro modelo.
+    const { s, atender, responder, passarParaHumano, leadCreate } = montar({
+      inboxComercial: "2",
+      identidade: DESCONHECIDO,
+      ehLead: true,
+    });
+    await s.processar(evento({ ...COMERCIAL, content: "" }));
+    expect(atender).not.toHaveBeenCalled();
+    expect(leadCreate).not.toHaveBeenCalled();
+    expect(responder).toHaveBeenCalled();
+    expect(passarParaHumano).toHaveBeenCalledWith(1, 7);
   });
 
   it("no inbox de operação o motorista segue falando com o agente", async () => {

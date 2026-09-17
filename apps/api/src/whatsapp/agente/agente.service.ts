@@ -15,21 +15,11 @@ import type { AgentMessage, AgentProvider } from "./providers/agent.provider";
 import { AnthropicProvider } from "./providers/anthropic.provider";
 import { GeminiProvider } from "./providers/gemini.provider";
 import { contaIdAtual } from "../../common/conta/conta-context";
+import { comMarcadorDeGap, minutosEntre } from "../../common/gap-conversa";
 
 const MAX_HISTORICO_MENSAGENS = 30;
 const HISTORICO_JANELA_HORAS = 24;
-const GAP_NOVA_CONVERSA_MIN = 30;
 const CONFIG_ID = "default";
-
-function formatarGap(minutos: number): string {
-  if (minutos < 60) return `${Math.floor(minutos)}min`;
-  const horas = Math.floor(minutos / 60);
-  const mins = Math.floor(minutos % 60);
-  if (horas < 24) return mins > 0 ? `${horas}h${mins}min` : `${horas}h`;
-  const dias = Math.floor(horas / 24);
-  const horasRest = horas % 24;
-  return horasRest > 0 ? `${dias}d${horasRest}h` : `${dias}d`;
-}
 
 type Identidade = Exclude<SessaoResolvida, { tipo: "DESCONHECIDO" }>;
 
@@ -142,14 +132,9 @@ export class AgenteService {
     const historico: AgentMessage[] = [];
     let anterior: (typeof ordenado)[number] | null = null;
     for (const m of ordenado) {
-      let content = m.conteudo;
-      if (anterior) {
-        const gapMin =
-          (m.criadoEm.getTime() - anterior.criadoEm.getTime()) / 60000;
-        if (gapMin >= GAP_NOVA_CONVERSA_MIN) {
-          content = `[depois de ${formatarGap(gapMin)} sem mensagem]\n${content}`;
-        }
-      }
+      const content = anterior
+        ? comMarcadorDeGap(m.conteudo, minutosEntre(anterior.criadoEm, m.criadoEm))
+        : m.conteudo;
       historico.push({
         role: m.direcao === "ENTRADA" ? ("user" as const) : ("assistant" as const),
         content,
@@ -159,10 +144,10 @@ export class AgenteService {
 
     let mensagemAtual = mensagemUsuario || (metadata?.tipoMidia ? `[${metadata.tipoMidia}]` : "");
     if (anterior) {
-      const gapAtual = (Date.now() - anterior.criadoEm.getTime()) / 60000;
-      if (gapAtual >= GAP_NOVA_CONVERSA_MIN) {
-        mensagemAtual = `[depois de ${formatarGap(gapAtual)} sem mensagem]\n${mensagemAtual}`;
-      }
+      mensagemAtual = comMarcadorDeGap(
+        mensagemAtual,
+        minutosEntre(anterior.criadoEm, Date.now()),
+      );
     }
 
     // Tool tracker: se `oferecer_opcoes` foi chamada, descarta texto subsequente
