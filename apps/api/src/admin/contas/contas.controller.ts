@@ -57,9 +57,20 @@ const ConfiguracaoPlataformaBody = z
     // e provider/modelo são escolha da casa — o SDR não herda a escolha (nem a
     // fatura de IA) de nenhum cliente.
     sdrAtivo: z.boolean().optional(),
-    sdrProvider: z.enum(["anthropic", "gemini"]).optional(),
+    sdrProvider: z.enum(["anthropic", "gemini", "minimax"]).optional(),
     sdrModeloAnthropic: z.string().trim().min(3).max(80).optional(),
     sdrModeloGemini: z.string().trim().min(3).max(80).optional(),
+    sdrModeloMinimax: z.string().trim().min(3).max(80).optional(),
+
+    // As chaves de IA, digitadas na tela. Entram por aqui e não voltam por
+    // endpoint nenhum — a leitura devolve apelido, nunca o valor.
+    //
+    // String vazia é o jeito de APAGAR: some do banco e o servidor volta a
+    // usar a variável de ambiente. Sem isso, chave errada digitada na tela
+    // ficaria presa sem forma de remover pela própria tela.
+    sdrChaveAnthropic: z.string().trim().max(400).optional(),
+    sdrChaveGemini: z.string().trim().max(400).optional(),
+    sdrChaveMinimax: z.string().trim().max(400).optional(),
     // Link que o SDR manda pra quem quer testar. Tem que ser https: mandar
     // http num WhatsApp de venda é o que um golpe faria.
     sdrLinkCadastro: z

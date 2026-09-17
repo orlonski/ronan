@@ -110,6 +110,31 @@ const PEDIDOS_DE_PARAR = new Set([
   "nao envie mais mensagens",
 ]);
 
+/**
+ * Pedidos de parar escritos por extenso.
+ *
+ * A lista acima é de frase INTEIRA, e por isso só pega quem responde exatamente
+ * "SAIR". Quem escreve "não quero mais receber mensagem de vocês" escapava dela
+ * e sobrava pro modelo chamar `registrar_opt_out` — que é justamente o que o
+ * `MiniMax-M3` não fez na bateria: respondeu "entendido, não escrevo mais" e
+ * não registrou nada. A pessoa se despede achando que saiu, e continua na base.
+ *
+ * Promessa de opt-out não pode depender de um modelo lembrar de chamar uma
+ * ferramenta. Estes padrões exigem verbo de parar MAIS o objeto certo
+ * (mensagem, contato, lista) — "não quero pagar mais que R$ 1.200" e "quero
+ * parar de usar planilha" continuam sendo conversa de venda, não opt-out.
+ */
+const PADROES_DE_PARAR: RegExp[] = [
+  /\bn(?:ao)?\s+(?:quero|queria|desejo)\s+(?:mais\s+)?(?:receber|ser\s+contatad|ser\s+incomodad|mensage|contato|nada)/,
+  /\b(?:para|pare|parem|parar|pra?r)\s+de\s+(?:me\s+)?(?:mandar|enviar|escrever|ligar|encher|perturbar)/,
+  /\bme\s+(?:tira|tire|tirem|remova|remove|removam|exclua|exclui|apaga|apague|deleta|delete)\s+(?:da|dessa|desta|de\s+sua|do)\s+(?:lista|base|cadastro)/,
+  /\bdescadastr/,
+  /\bnao\s+me\s+(?:mande|manda|mandem|envie|envia|escreva|escreve|procure|procura|perturbe|perturba|liga|ligue)/,
+  /\bsair?\s+d(?:a|essa|esta)\s+lista/,
+  /\bnao\s+tenho\s+interesse/,
+  /\bpara\s+com\s+(?:isso|essas?\s+mensagens?)/,
+];
+
 export function ehPedidoDeParar(texto: string): boolean {
   const limpo = texto
     .normalize("NFD")
@@ -118,5 +143,5 @@ export function ehPedidoDeParar(texto: string): boolean {
     .replace(/[.!,;:]/g, "")
     .replace(/\s+/g, " ")
     .trim();
-  return PEDIDOS_DE_PARAR.has(limpo);
+  return PEDIDOS_DE_PARAR.has(limpo) || PADROES_DE_PARAR.some((p) => p.test(limpo));
 }

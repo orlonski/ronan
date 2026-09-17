@@ -857,10 +857,26 @@ model ConfiguracaoPlataforma {
   /// atendimento comercial da Movatruck não pode depender da linha de um
   /// cliente — nem ligar junto o agente que fala com motorista dele.
   sdrAtivo           Boolean @default(false)
-  /// "anthropic" | "gemini" — escolha da plataforma, não herdada de cliente.
+  /// "anthropic" | "gemini" | "minimax" — escolha da plataforma, não herdada
+  /// de cliente. O MiniMax fala o protocolo da Anthropic (ver
+  /// `common/ia/provedor-ia.ts`), então entra sem provider novo.
   sdrProvider        String  @default("anthropic")
   sdrModeloAnthropic String  @default("claude-sonnet-4-6")
   sdrModeloGemini    String  @default("gemini-2.5-flash")
+  sdrModeloMinimax   String  @default("MiniMax-M3")
+
+  /// As chaves de IA, quando configuradas PELA TELA.
+  ///
+  /// Vazio = usa a variável de ambiente do servidor, que é como o sistema
+  /// subiu e segue funcionando sem ninguém mexer aqui. Preenchido, vence a
+  /// env: trocar de chave passa a ser um campo no painel, não um deploy.
+  ///
+  /// **Escrita pela tela, leitura nunca**: nenhum endpoint devolve estes
+  /// valores — o que sai é o apelido (`sk-ant…K9fA`), o bastante pra conferir
+  /// contra o painel do provedor e insuficiente pra assinar uma chamada.
+  sdrChaveAnthropic  String?
+  sdrChaveGemini     String?
+  sdrChaveMinimax    String?
   /// Onde o prospect cria a conta sozinho. Configurável porque o domínio do
   /// painel já mudou uma vez e vai mudar de novo.
   sdrLinkCadastro    String  @default("https://app.movatruck.com.br/cadastro")

@@ -189,7 +189,11 @@ async function main() {
   // Dizer com o que está falando antes de falar: gastar 6 chamadas pra depois
   // descobrir que testou o modelo errado é o defeito mais caro de um harness.
   const modelo =
-    antes.sdrProvider === "gemini" ? antes.sdrModeloGemini : antes.sdrModeloAnthropic;
+    antes.sdrProvider === "gemini"
+      ? antes.sdrModeloGemini
+      : antes.sdrProvider === "minimax"
+        ? antes.sdrModeloMinimax
+        : antes.sdrModeloAnthropic;
   const quem = inbound ? "lead inbound, empresa a descobrir" : `lead ${EMPRESA_TESTE}`;
   console.log(`\x1b[90m(${antes.sdrProvider} · ${modelo} · ${quem})\x1b[0m\n`);
 

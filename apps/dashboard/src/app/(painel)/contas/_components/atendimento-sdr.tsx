@@ -11,18 +11,54 @@ import { Card } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 
+type Provider = "anthropic" | "gemini" | "minimax";
+
+/** Situação de uma IA: tem chave? veio de onde? */
+type SituacaoChave = {
+  /** `sk-ant…K9fA`, ou null quando não há chave nenhuma. */
+  apelido: string | null;
+  /** "tela" = digitada aqui · "servidor" = variável de ambiente · null = não tem. */
+  origem: "tela" | "servidor" | null;
+  variavel: string;
+};
+
 type Config = {
   sdrAtivo: boolean;
-  sdrProvider: "anthropic" | "gemini";
+  sdrProvider: Provider;
   sdrModeloAnthropic: string;
   sdrModeloGemini: string;
+  sdrModeloMinimax: string;
   sdrLinkCadastro: string;
-  /** A IA escolhida tem chave no servidor? Sem ela o SDR fica mudo em silêncio. */
+  /** A IA escolhida tem chave? Sem ela o SDR fica mudo em silêncio. */
   sdrProviderTemChave: boolean;
   /** Prefixo e fim da chave em uso (`sk-ant…K9fA`). Nunca a chave. */
   sdrChaveApelido: string | null;
-  /** Onde ela mora no ambiente, pra quem for trocar saber onde mexer. */
   sdrChaveVariavel: string;
+  /** A situação de CADA IA, pra dar pra escolher sabendo o que está pronto. */
+  sdrChaves: Record<Provider, SituacaoChave>;
+};
+
+const NOME_IA: Record<Provider, string> = {
+  anthropic: "Claude",
+  gemini: "Gemini",
+  minimax: "MiniMax",
+};
+
+/**
+ * O que dá pra ESCREVER, que não é o mesmo que dá pra ler: as chaves entram
+ * por aqui e nunca voltam no `Config`.
+ */
+type ConfigEscrita = Partial<Config> & {
+  sdrChaveAnthropic?: string;
+  sdrChaveGemini?: string;
+  sdrChaveMinimax?: string;
+};
+
+/** Em que campo a chave daquela IA é gravada. String vazia apaga. */
+const CAMPO_CHAVE: Record<Provider, keyof ConfigEscrita> = {
+  anthropic: "sdrChaveAnthropic",
+  gemini: "sdrChaveGemini",
+  minimax: "sdrChaveMinimax",
 };
 
 const PATH = "/admin/contas/configuracao";
@@ -43,6 +79,10 @@ export function AtendimentoSdr() {
   const [modelo, setModelo] = useState("");
   const [link, setLink] = useState("");
   const [salvando, setSalvando] = useState(false);
+  // O campo de chave nasce SEMPRE vazio: a chave gravada não volta do servidor
+  // (só o apelido), então não há o que pré-preencher. Vazio aqui significa
+  // "não mexi", nunca "apague".
+  const [chave, setChave] = useState("");
 
   const { data, refetch } = useQuery({
     queryKey: [PATH, "sdr"],
@@ -51,7 +91,12 @@ export function AtendimentoSdr() {
   });
 
   const modeloSalvo =
-    data && (data.sdrProvider === "gemini" ? data.sdrModeloGemini : data.sdrModeloAnthropic);
+    data &&
+    (data.sdrProvider === "gemini"
+      ? data.sdrModeloGemini
+      : data.sdrProvider === "minimax"
+        ? data.sdrModeloMinimax
+        : data.sdrModeloAnthropic);
 
   useEffect(() => {
     if (!data) return;
@@ -59,7 +104,7 @@ export function AtendimentoSdr() {
     setLink(data.sdrLinkCadastro);
   }, [data, modeloSalvo]);
 
-  async function salvar(mudanca: Partial<Config>, aviso: string) {
+  async function salvar(mudanca: ConfigEscrita, aviso: string) {
     setSalvando(true);
     try {
       await fetchApi<Config>(PATH, {
@@ -103,8 +148,8 @@ export function AtendimentoSdr() {
               dizendo "ligado", o que manda a pessoa caçar bug no WhatsApp. */}
           {semChave ? (
             <p className="mt-1 text-sm font-medium text-amber-700 dark:text-amber-500">
-              A {data.sdrProvider === "gemini" ? "Gemini" : "Claude"} não tem chave configurada
-              neste servidor — ligado assim, ele não responde ninguém. Troque a IA ao lado.
+              A {NOME_IA[data.sdrProvider]} não tem chave configurada — ligado assim, ele não
+              responde ninguém. Cole a chave ao lado ou troque a IA.
             </p>
           ) : (
             /* Qual IA responde, com qual modelo e por qual chave. Sem isto a
@@ -112,12 +157,16 @@ export function AtendimentoSdr() {
                conta saía a fatura sem abrir o servidor. */
             <p className="mt-1 text-sm text-muted-foreground">
               Responde pela{" "}
-              <span className="font-medium text-foreground">
-                {data.sdrProvider === "gemini" ? "Gemini" : "Claude"}
-              </span>{" "}
-              · modelo <span className="font-medium text-foreground">{modeloSalvo}</span> · chave{" "}
+              <span className="font-medium text-foreground">{NOME_IA[data.sdrProvider]}</span> ·
+              modelo <span className="font-medium text-foreground">{modeloSalvo}</span> · chave{" "}
               <span className="font-mono text-foreground">{data.sdrChaveApelido}</span>{" "}
-              <span className="text-xs">({data.sdrChaveVariavel}, no servidor)</span>
+              <span className="text-xs">
+                (
+                {data.sdrChaves?.[data.sdrProvider]?.origem === "tela"
+                  ? "guardada na tela, cifrada"
+                  : `${data.sdrChaveVariavel}, no servidor`}
+                )
+              </span>
             </p>
           )}
         </div>
@@ -130,14 +179,16 @@ export function AtendimentoSdr() {
             value={data.sdrProvider}
             onChange={(e) => {
               const v = e.target.value as Config["sdrProvider"];
-              void salvar(
-                { sdrProvider: v },
-                v === "gemini" ? "Agora usando Gemini." : "Agora usando Claude.",
-              );
+              setChave("");
+              void salvar({ sdrProvider: v }, `Agora usando ${NOME_IA[v]}.`);
             }}
           >
-            <option value="anthropic">Claude</option>
-            <option value="gemini">Gemini</option>
+            {(["anthropic", "gemini", "minimax"] as const).map((p) => (
+              <option key={p} value={p}>
+                {NOME_IA[p]}
+                {data.sdrChaves?.[p]?.origem ? "" : " (sem chave)"}
+              </option>
+            ))}
           </Select>
         </div>
 
@@ -160,11 +211,67 @@ export function AtendimentoSdr() {
               void salvar(
                 data.sdrProvider === "gemini"
                   ? { sdrModeloGemini: v }
-                  : { sdrModeloAnthropic: v },
+                  : data.sdrProvider === "minimax"
+                    ? { sdrModeloMinimax: v }
+                    : { sdrModeloAnthropic: v },
                 `Modelo do atendimento: ${v}.`,
               );
             }}
           />
+        </div>
+
+        {/* A chave da IA escolhida.
+            Entra por aqui e não volta: o servidor devolve só o apelido, então
+            o campo nasce vazio e vazio significa "não mexi". Pra remover, existe
+            o botão — um campo que apaga ao ficar em branco apagaria a chave de
+            produção com um backspace distraído. */}
+        <div className="w-64">
+          <Label htmlFor="chaveSdr" className="text-xs">
+            Chave da {NOME_IA[data.sdrProvider]}
+          </Label>
+          <Input
+            id="chaveSdr"
+            type="password"
+            autoComplete="off"
+            placeholder={
+              data.sdrChaves?.[data.sdrProvider]?.apelido
+                ? `${data.sdrChaves[data.sdrProvider].apelido} — cole outra pra trocar`
+                : "cole a chave aqui"
+            }
+            value={chave}
+            onChange={(e) => setChave(e.target.value)}
+            onBlur={() => {
+              const v = chave.trim();
+              if (!v) return;
+              void salvar(
+                { [CAMPO_CHAVE[data.sdrProvider]]: v },
+                `Chave da ${NOME_IA[data.sdrProvider]} guardada.`,
+              ).then(() => setChave(""));
+            }}
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            {data.sdrChaves?.[data.sdrProvider]?.origem === "tela" ? (
+              <>
+                Guardada aqui, cifrada.{" "}
+                <button
+                  type="button"
+                  className="underline hover:text-foreground"
+                  onClick={() =>
+                    void salvar(
+                      { [CAMPO_CHAVE[data.sdrProvider]]: "" },
+                      `Chave removida — voltou a valer a do servidor.`,
+                    )
+                  }
+                >
+                  Remover
+                </button>
+              </>
+            ) : data.sdrChaves?.[data.sdrProvider]?.origem === "servidor" ? (
+              `Vindo de ${data.sdrChaves[data.sdrProvider].variavel}, no servidor.`
+            ) : (
+              "Nenhuma chave — esta IA não responde."
+            )}
+          </p>
         </div>
 
         <div className="w-72">

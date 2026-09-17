@@ -8,16 +8,40 @@ import type {
 
 const MAX_TOOL_LOOPS = 6;
 
+/**
+ * Fala com a API da Anthropic — e com qualquer uma que copie o formato dela.
+ *
+ * O MiniMax publica um endpoint compatível: mesmo `messages`, mesmas `tools`,
+ * mesmo `tool_use` na resposta, mesmo `usage`. Medido antes de escrever isto —
+ * `MiniMax-M2` e `MiniMax-M3` devolveram `stop_reason: "tool_use"` chamando uma
+ * ferramenta do SDR com o argumento certo. Por isso aqui não nasceu um provider
+ * novo com a mesma lógica escrita duas vezes: o que muda entre os dois é
+ * `baseURL`, a chave e o id do modelo, e mais nada.
+ *
+ * O mesmo atalho que `common/ia/provedor-ia.ts` já usava pro OCR de ticket.
+ */
 export class AnthropicProvider implements AgentProvider {
-  readonly nome = "anthropic";
-  private readonly log = new Logger("AnthropicProvider");
+  readonly nome: string;
+  private readonly log: Logger;
   private readonly client?: Anthropic;
 
-  constructor(apiKey: string | undefined) {
+  /**
+   * `apiKey` sozinho continua valendo — é como o agente do motorista chama
+   * desde sempre. `opcoes` só entra quando o destino não é a Anthropic.
+   */
+  constructor(
+    apiKey: string | undefined,
+    opcoes: { nome?: string; baseURL?: string; chaveEnv?: string } = {},
+  ) {
+    this.nome = opcoes.nome ?? "anthropic";
+    this.log = new Logger(`${this.nome}Provider`);
     if (apiKey) {
-      this.client = new Anthropic({ apiKey });
+      this.client = new Anthropic({
+        apiKey,
+        ...(opcoes.baseURL ? { baseURL: opcoes.baseURL } : {}),
+      });
     } else {
-      this.log.warn("ANTHROPIC_API_KEY ausente — provider desabilitado");
+      this.log.warn(`${opcoes.chaveEnv ?? "ANTHROPIC_API_KEY"} ausente — provider desabilitado`);
     }
   }
 
@@ -34,7 +58,7 @@ export class AnthropicProvider implements AgentProvider {
     executarTool,
   }: AgentProcessarArgs): Promise<string> {
     if (!this.client) {
-      throw new Error("AnthropicProvider sem API key configurada");
+      throw new Error(`${this.nome} sem API key configurada`);
     }
 
     const system: Anthropic.TextBlockParam[] = [

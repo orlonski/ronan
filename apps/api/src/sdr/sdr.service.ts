@@ -8,9 +8,40 @@ import { AnthropicProvider } from "../whatsapp/agente/providers/anthropic.provid
 import { GeminiProvider } from "../whatsapp/agente/providers/gemini.provider";
 import type { AgentMessage, AgentProvider } from "../whatsapp/agente/providers/agent.provider";
 import { comMarcadorDeGap, minutosEntre } from "../common/gap-conversa";
+import { BASE_URL_MINIMAX } from "../common/ia/provedor-ia";
+import { decifrar } from "../common/cripto";
+import { trechoForaDoPortugues } from "../common/idioma-resposta";
+import { segredoDeCripto } from "../common/segredo-cripto";
 import { promptSdr, type ContextoLead } from "./sdr.prompt";
 import { empresaConhecida } from "./lead-inbound";
 import { TOOLS_SDR } from "./sdr.tools";
+
+/**
+ * Quem pode atender. O MiniMax entra sem provider novo: ele fala o protocolo
+ * da Anthropic, e o que muda é `baseURL`, chave e id do modelo.
+ */
+export const PROVIDERS_SDR = ["anthropic", "gemini", "minimax"] as const;
+export type ProviderSdr = (typeof PROVIDERS_SDR)[number];
+
+/** De onde vem a chave de cada um quando a tela não define nenhuma. */
+const ENV_DA_CHAVE: Record<ProviderSdr, string> = {
+  anthropic: "ANTHROPIC_API_KEY",
+  gemini: "GEMINI_API_KEY",
+  minimax: "MINIMAX_API_KEY",
+};
+
+/**
+ * O que está gravado é um texto livre — veio de migration antiga, de um
+ * `PATCH` ou de alguém editando o banco. Nome que não reconheço vira
+ * `anthropic`, que é o default histórico: melhor atender pelo caminho de
+ * sempre do que não atender.
+ */
+export function providerValido(nome: string | null | undefined): ProviderSdr {
+  const limpo = (nome ?? "").trim().toLowerCase();
+  return (PROVIDERS_SDR as readonly string[]).includes(limpo)
+    ? (limpo as ProviderSdr)
+    : "anthropic";
+}
 
 /** Quanto da conversa entra no contexto. Mesma régua do agente do motorista. */
 const MAX_HISTORICO = 30;
@@ -50,15 +81,57 @@ export class SdrService {
     private readonly precos: PrecosService,
     private readonly prospeccao: ProspeccaoService,
     private readonly config: ConfigService,
-  ) {
-    // Instanciados aqui, como no agente do motorista: os providers não são
-    // injetáveis, são adaptadores finos em volta de uma chave de API.
-    this.anthropic = new AnthropicProvider(this.config.get<string>("ANTHROPIC_API_KEY"));
-    this.gemini = new GeminiProvider(this.config.get<string>("GEMINI_API_KEY"));
+  ) {}
+
+  /**
+   * Os providers vivem num cache com a chave que os criou.
+   *
+   * Antes eram montados no constructor, o que casava com chave em env — valor
+   * que não muda enquanto o processo vive. Agora a chave pode vir da tela e
+   * mudar sem deploy: montar no boot deixaria o painel dizendo uma coisa e o
+   * processo usando outra até alguém reiniciar. Recriar a cada mensagem também
+   * não serve (o cliente mantém conexão), então o cache é invalidado pelo
+   * próprio valor da chave.
+   */
+  private readonly cache = new Map<string, { chave: string; provider: AgentProvider }>();
+
+  private providerPara(nome: ProviderSdr, chave: string): AgentProvider {
+    const guardado = this.cache.get(nome);
+    if (guardado && guardado.chave === chave) return guardado.provider;
+
+    const provider: AgentProvider =
+      nome === "gemini"
+        ? new GeminiProvider(chave)
+        : nome === "minimax"
+          ? new AnthropicProvider(chave, {
+              nome: "minimax",
+              baseURL: BASE_URL_MINIMAX,
+              chaveEnv: "MINIMAX_API_KEY",
+            })
+          : new AnthropicProvider(chave);
+
+    this.cache.set(nome, { chave, provider });
+    return provider;
   }
 
-  private readonly anthropic: AnthropicProvider;
-  private readonly gemini: GeminiProvider;
+  /**
+   * A chave daquele provider: a da TELA quando existe, senão a do ambiente.
+   *
+   * Essa ordem é o que faz a tela mandar de verdade sem quebrar quem já estava
+   * rodando por env — quem não preencher nada continua exatamente como está.
+   */
+  private chaveDe(nome: ProviderSdr, cfg: { sdrChaveAnthropic: string | null; sdrChaveGemini: string | null; sdrChaveMinimax: string | null }): string {
+    const guardada =
+      nome === "gemini"
+        ? cfg.sdrChaveGemini
+        : nome === "minimax"
+          ? cfg.sdrChaveMinimax
+          : cfg.sdrChaveAnthropic;
+    // Gravada cifrada pela tela. Decifra que falha cai na env em vez de deixar
+    // o SDR mudo com uma chave ilegível.
+    const daTela = decifrar(guardada, segredoDeCripto(this.config)) ?? "";
+    return daTela.trim() || (this.config.get<string>(ENV_DA_CHAVE[nome]) ?? "").trim();
+  }
 
   /**
    * A configuração do SDR, sempre da MESMA linha.
@@ -130,14 +203,19 @@ export class SdrService {
       origem: lead.origem,
     };
 
-    const usaGemini = cfg.sdrProvider === "gemini";
-    const provider: AgentProvider = usaGemini ? this.gemini : this.anthropic;
-    const modelo = usaGemini ? cfg.sdrModeloGemini : cfg.sdrModeloAnthropic;
+    const nomeProvider = providerValido(cfg.sdrProvider);
+    const modelo =
+      nomeProvider === "gemini"
+        ? cfg.sdrModeloGemini
+        : nomeProvider === "minimax"
+          ? cfg.sdrModeloMinimax
+          : cfg.sdrModeloAnthropic;
+    const provider = this.providerPara(nomeProvider, this.chaveDe(nomeProvider, cfg));
 
     if (!provider.habilitado) {
       this.log.warn(
         `Provider ${provider.nome} sem chave de API — SDR não respondeu. ` +
-          "Troque a IA no card de atendimento, na tela de Empresas, ou configure a chave.",
+          "Configure a chave no card de atendimento, na tela de Empresas.",
       );
       return null;
     }
@@ -168,6 +246,24 @@ export class SdrService {
         return saida;
       },
     });
+
+    // Última conferência antes de virar mensagem de WhatsApp: saiu em
+    // português? Modelo multilíngue troca uma palavra de vez em quando — com
+    // MiniMax-M2 a despedida do opt-out voltou com uma palavra em russo. Quem
+    // recebe não vê "modelo multilíngue", vê empresa desleixada.
+    //
+    // Devolve `null` (o mesmo que "não é comigo"), e quem chamou já sabe mandar
+    // pra fila humana. A linha fica gravada como SAIDA pra auditoria: o defeito
+    // precisa aparecer em algum lugar, e some se a gente só descartar.
+    const foraDoPortugues = texto ? trechoForaDoPortugues(texto) : null;
+    if (foraDoPortugues) {
+      this.log.warn(
+        `Resposta do ${provider.nome} (${modelo}) saiu fora do português e não foi enviada: ` +
+          `"${foraDoPortugues}"`,
+      );
+      await this.gravar(leadId, "SAIDA", `[descartada — fora do português] ${texto}`);
+      return null;
+    }
 
     if (texto) await this.gravar(leadId, "SAIDA", texto);
 

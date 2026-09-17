@@ -19,6 +19,8 @@ import { MODULOS_PADRAO } from "@ronan/shared-types";
 import { MATERIAIS_INICIAIS, TIPOS_EVENTO_INICIAIS, TIPOS_SERVICO_INICIAIS } from "./kit-inicial";
 import { gerarCodigoConvite } from "./codigo-convite";
 import { identificarChave } from "../../common/identificar-chave";
+import { cifrar, decifrar } from "../../common/cripto";
+import { segredoDeCripto } from "../../common/segredo-cripto";
 
 /**
  * O que a tela de Empresas pode mudar na casa. Todo campo é opcional: ela
@@ -32,7 +34,12 @@ export type ConfiguracaoPlataformaInput = {
   sdrProvider?: string;
   sdrModeloAnthropic?: string;
   sdrModeloGemini?: string;
+  sdrModeloMinimax?: string;
   sdrLinkCadastro?: string;
+  /** Chave digitada na tela. String vazia apaga e devolve a vez pra env. */
+  sdrChaveAnthropic?: string;
+  sdrChaveGemini?: string;
+  sdrChaveMinimax?: string;
 };
 
 type DelegateComDelete = {
@@ -648,6 +655,7 @@ export class ContasService implements OnModuleInit {
       sdrProvider: cfg?.sdrProvider ?? "anthropic",
       sdrModeloAnthropic: cfg?.sdrModeloAnthropic ?? "claude-sonnet-4-6",
       sdrModeloGemini: cfg?.sdrModeloGemini ?? "gemini-2.5-flash",
+      sdrModeloMinimax: cfg?.sdrModeloMinimax ?? "MiniMax-M3",
       sdrLinkCadastro: cfg?.sdrLinkCadastro ?? "https://app.movatruck.com.br/cadastro",
       // A IA escolhida tem chave no ambiente?
       //
@@ -655,7 +663,7 @@ export class ContasService implements OnModuleInit {
       // responde, a conversa cai na fila humana e a tela segue dizendo
       // "ligado". A tela precisa poder avisar antes de alguém ir caçar bug no
       // WhatsApp. Só o SIM/NÃO sai daqui — chave nunca atravessa a fronteira.
-      sdrProviderTemChave: this.temChaveDeIa(cfg?.sdrProvider ?? "anthropic"),
+      sdrProviderTemChave: this.temChaveDeIa(cfg?.sdrProvider ?? "anthropic", cfg),
       // QUAL chave está rodando — não a chave.
       //
       // "Tem chave: sim" não responde o que quem paga a conta pergunta: de qual
@@ -663,19 +671,44 @@ export class ContasService implements OnModuleInit {
       // semana passada. Prefixo e quatro dígitos finais dão pra conferir contra
       // o painel do provedor e não dão pra assinar uma chamada. O valor segue
       // só no ambiente.
-      sdrChaveApelido: identificarChave(this.chaveDeIa(cfg?.sdrProvider ?? "anthropic")),
+      sdrChaveApelido: identificarChave(this.chaveDeIa(cfg?.sdrProvider ?? "anthropic", cfg)),
       // O nome da variável, pra quem for configurar saber onde mexer sem
       // precisar abrir o código.
       sdrChaveVariavel: nomeDaChave(cfg?.sdrProvider ?? "anthropic"),
+      /**
+       * A situação de CADA IA, pra tela poder dizer o que está pronto antes de
+       * alguém trocar e descobrir no WhatsApp que não estava.
+       *
+       * O que sai daqui é apelido e procedência — o valor da chave não
+       * atravessa este endpoint em nenhuma hipótese.
+       */
+      sdrChaves: Object.fromEntries(
+        (["anthropic", "gemini", "minimax"] as const).map((nome) => {
+          const daTela = chaveDaTela(nome, cfg, segredoDeCripto(this.config));
+          const chave = daTela || this.config.get<string>(nomeDaChave(nome))?.trim() || "";
+          return [
+            nome,
+            {
+              apelido: identificarChave(chave),
+              origem: chave ? (daTela ? "tela" : "servidor") : null,
+              variavel: nomeDaChave(nome),
+            },
+          ];
+        }),
+      ),
     };
   }
 
-  private chaveDeIa(provider: string): string | undefined {
-    return this.config.get<string>(nomeDaChave(provider));
+  /** A chave em uso: a da tela quando existe, senão a do ambiente. */
+  private chaveDeIa(provider: string, cfg: ChavesGravadas): string | undefined {
+    return (
+      chaveDaTela(provider, cfg, segredoDeCripto(this.config)) ||
+      this.config.get<string>(nomeDaChave(provider))
+    );
   }
 
-  private temChaveDeIa(provider: string): boolean {
-    return Boolean(this.chaveDeIa(provider)?.trim());
+  private temChaveDeIa(provider: string, cfg: ChavesGravadas): boolean {
+    return Boolean(this.chaveDeIa(provider, cfg)?.trim());
   }
 
   /**
@@ -689,9 +722,23 @@ export class ContasService implements OnModuleInit {
     // Só o que veio no corpo é escrito: a tela mexe num campo por vez, e
     // montar o update com os ausentes gravaria o default por cima do que
     // alguém já tinha configurado.
-    const mudancas = Object.fromEntries(
+    // `null` entra no tipo porque apagar uma chave é gravar null — o
+    // `Object.fromEntries` sozinho inferiria só os tipos que vieram do corpo.
+    const mudancas: Record<string, string | number | boolean | null> = Object.fromEntries(
       Object.entries(input).filter(([, v]) => v !== undefined),
     );
+
+    // As chaves de IA nunca entram no banco como vieram.
+    //
+    // String vazia é o pedido de APAGAR — vira `null` e o servidor volta a usar
+    // a variável de ambiente. Qualquer outro valor é cifrado aqui, no único
+    // ponto por onde ele entra.
+    const segredo = segredoDeCripto(this.config);
+    for (const campo of ["sdrChaveAnthropic", "sdrChaveGemini", "sdrChaveMinimax"] as const) {
+      if (!(campo in mudancas)) continue;
+      const valor = String(mudancas[campo] ?? "").trim();
+      mudancas[campo] = valor ? cifrar(valor, segredo) : null;
+    }
 
     const cfg = await comoSistema(() =>
       this.prisma.configuracaoPlataforma.upsert({
@@ -838,5 +885,31 @@ function normalizarSlug(bruto: string): string {
 
 /** Onde a chave de cada provider mora no ambiente. */
 function nomeDaChave(provider: string): string {
-  return provider === "gemini" ? "GEMINI_API_KEY" : "ANTHROPIC_API_KEY";
+  if (provider === "gemini") return "GEMINI_API_KEY";
+  if (provider === "minimax") return "MINIMAX_API_KEY";
+  return "ANTHROPIC_API_KEY";
+}
+
+/** Só as colunas de chave — o que estas funções precisam enxergar da linha. */
+type ChavesGravadas = {
+  sdrChaveAnthropic?: string | null;
+  sdrChaveGemini?: string | null;
+  sdrChaveMinimax?: string | null;
+} | null | undefined;
+
+/**
+ * A chave digitada na tela, já decifrada — ou "" quando ninguém digitou.
+ *
+ * Decifra que falha vira "": o efeito é o servidor voltar a usar a env, que é
+ * degradar pro estado anterior em vez de deixar o SDR mudo com uma chave
+ * ilegível.
+ */
+function chaveDaTela(provider: string, cfg: ChavesGravadas, segredo: string): string {
+  const bruto =
+    provider === "gemini"
+      ? cfg?.sdrChaveGemini
+      : provider === "minimax"
+        ? cfg?.sdrChaveMinimax
+        : cfg?.sdrChaveAnthropic;
+  return decifrar(bruto, segredo) ?? "";
 }
