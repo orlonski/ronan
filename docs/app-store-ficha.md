@@ -169,6 +169,47 @@ Antes de submeter, conferir tipo por tipo se ainda bate com o app do motorista
 sem transportadora. Declaração que não bate com o comportamento é achado de
 review, não detalhe.
 
+### A declaração de 06/2026 está INCOMPLETA
+
+Ela tem 6 tipos: Localização precisa, Nome, Telefone, Fotos, ID de usuário e
+Dados de falhas. O fluxo do autônomo trouxe pelo menos dois que não estão lá —
+**Informações financeiras** (o que ele ganhou e gastou) e **Dados de uso** (a
+telemetria). Submeter sem incluir é declarar a menos, que é o lado errado de
+errar.
+
+### A planilha, campo a campo
+
+Em TODOS os tipos: **vinculado à identidade = Sim**, **tracking = Não**.
+O "Não" do tracking é verificável: não há um único SDK de anúncio, analytics ou
+crash de terceiro no `package.json` do app — nem Sentry, nem Firebase Analytics,
+nem nada. Nenhum dado vai pra data broker e não existe rastreio entre apps.
+
+| Tipo (nome no formulário) | Coleta? | De onde vem | Finalidade |
+|---|---|---|---|
+| Contact Info › Name | Sim | `MotoristaIdentidade.nome` | App Functionality |
+| Contact Info › Phone Number | Sim | `.telefone` — é por onde chega o código de cadastro | App Functionality |
+| Contact Info › Email Address | Sim, opcional | `.email` | App Functionality |
+| Identifiers › User ID | Sim | o CPF é o login e a chave única da pessoa | App Functionality |
+| Identifiers › Device ID | Sim | `expoPushToken` (notificação) | App Functionality |
+| User Content › Photos or Videos | Sim | ticket de carga, documentos (CNH/CRLV), stories | App Functionality |
+| User Content › Other User Content | Sim | observações escritas por ele | App Functionality |
+| Financial Info › Other Financial Info | **Sim — falta na atual** | `ViagemPessoal.valorRecebido`, `LancamentoPessoal` (gastos), acerto | App Functionality |
+| Location › Precise Location | **Só com vínculo** | `/m/posicoes`. Ver a seção abaixo — não é o que parece | App Functionality |
+| Diagnostics › Crash Data | Sim | `POST /errors/motorista`, backend próprio | App Functionality |
+| Usage Data › Product Interaction | **Sim — falta na atual** | trilha `nv_*`, **opt-in por motorista** (`podeTelemetria`) | Analytics |
+| Other Data | Sim | número de documento (`DocumentoPessoal.numero`), placas, eixos | App Functionality |
+
+Sobre **Sensitive Info**: a foto da CNH não entra ali. A categoria da Apple é
+origem racial, orientação sexual, religião, biometria e afins — documento de
+identidade não está na lista. A foto é *User Content › Photos*, e o número é
+*Other Data*.
+
+**Terceiros que recebem dado** (não é campo do formulário, mas tem que estar na
+política de privacidade): o provedor de IA que lê o ticket
+(Anthropic/Gemini/OpenAI, `apps/api/src/ia/`) recebe a **foto**; o serviço de
+push do Expo recebe token e conteúdo da notificação. MinIO e Postgres são
+infraestrutura nossa.
+
 ### Localização — a resposta exata, porque a intuição erra aqui
 
 No fluxo do autônomo há **três** destinos diferentes pro dado de GPS, e só um
