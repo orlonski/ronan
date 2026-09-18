@@ -42,6 +42,8 @@ apps/motorista-app/expo-env.d.ts
 # na fonte e sem nenhum código do repo que a leia.
 #
 # Os arquivos continuam na máquina; só param de sujar o `git status`.
+proposta-comercial.*
+proposta-imagens/
 proposta-recorrencia.*
 anexo-entregas.*
 proposta-alex/
