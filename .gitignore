@@ -33,3 +33,17 @@ apps/motorista-app/expo-env.d.ts
 # Artefatos incrementais do tsc: são build, não código. Estavam rastreados e
 # sujavam todo commit de quem rodasse typecheck (inclusive o agente).
 *.tsbuildinfo
+
+# Material COMERCIAL: proposta, anexo e lista de lead.
+#
+# Documento entregue a cliente não é artefato vivo — a proposta do Alex já foi
+# enviada, e versionar isso só faz o repositório carregar megabyte de PDF que
+# nunca muda. Lista de lead é DADO (4 mil transportadoras da ANTT), regenerável
+# na fonte e sem nenhum código do repo que a leia.
+#
+# Os arquivos continuam na máquina; só param de sujar o `git status`.
+proposta-recorrencia.*
+anexo-entregas.*
+proposta-alex/
+Proposta-Turbomind-*.pdf
+leads-*.csv
