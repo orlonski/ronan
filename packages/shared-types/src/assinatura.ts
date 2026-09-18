@@ -152,7 +152,16 @@ const Documento = z
   .refine((v) => v.length === 11 || v.length === 14, "Informe um CPF (11) ou CNPJ (14 dígitos).");
 
 export const CriarAssinaturaInput = z.object({
-  contaId: z.string().uuid("Diga de qual empresa é a assinatura."),
+  /**
+   * Sem `.uuid()` de propósito — id de conta nem sempre é uuid.
+   *
+   * As primeiras contas foram criadas com slug na migration multi-conta
+   * (`cnt_schaba`), e exigir uuid aqui recusava justamente o cliente mais
+   * antigo: a empresa aparecia escolhida na tela e o servidor respondia "diga
+   * de qual empresa é a assinatura", como se ninguém tivesse escolhido nada.
+   * Mesma pegadinha já anotada em `DefinirContaAtivaInput`.
+   */
+  contaId: z.string().min(1, "Diga de qual empresa é a assinatura."),
   forma: FormaCobrancaSchema,
   ciclo: CicloAssinaturaSchema.default("MENSAL"),
   /**

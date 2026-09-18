@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CriarAssinaturaInput } from "@ronan/shared-types";
 import { AssinaturasService } from "./assinaturas.service";
 
 /**
@@ -133,5 +134,46 @@ describe("criar convive com rascunho parado", () => {
     expect(escritas[0].tipo).toBe("create");
     expect(escritas[0].data.contaId).toBe("c1");
     expect(escritas[0].data.criadoPorId).toBe("u1");
+  });
+});
+
+/**
+ * O id da conta nem sempre é uuid.
+ *
+ * Nasceu de um caso real: a Schaba aparecia escolhida no formulário e o
+ * servidor respondia "Empresa: diga de qual empresa é a assinatura" — porque o
+ * id dela é `cnt_schaba`, o slug com que a migration multi-conta semeou as
+ * primeiras contas, e o schema exigia uuid. O cliente mais antigo era o único
+ * que não conseguia ter mensalidade.
+ *
+ * Se isto quebrar, a empresa fica escolhida na tela e o erro culpa quem
+ * escolheu.
+ */
+describe("contaId aceita id que não é uuid", () => {
+  const base = {
+    forma: "PIX_AUTOMATICO" as const,
+    valorCentavos: 189000,
+    nomeResponsavel: "Financeiro",
+    emailCobranca: "financeiro@schaba.com.br",
+    telefoneCobranca: "42998424945",
+    documento: "12345678000199",
+  };
+
+  it("aceita o slug das contas antigas", () => {
+    const r = CriarAssinaturaInput.safeParse({ ...base, contaId: "cnt_schaba" });
+    expect(r.success).toBe(true);
+  });
+
+  it("aceita o uuid das contas novas", () => {
+    const r = CriarAssinaturaInput.safeParse({
+      ...base,
+      contaId: "cb7b876e-74d7-4d03-afb8-ef2a43c5265b",
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("continua recusando quando ninguém escolheu empresa", () => {
+    const r = CriarAssinaturaInput.safeParse({ ...base, contaId: "" });
+    expect(r.success).toBe(false);
   });
 });
