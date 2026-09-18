@@ -219,6 +219,16 @@ export class AdminRoteamentoWhatsappService {
         rota,
         esperado: `${def!.nome} / ${def!.idioma}`,
         naMeta: achado ? `${achado.name} / ${achado.language} (${achado.status})` : "NÃO EXISTE",
+        /**
+         * O status cru da Meta, separado do texto.
+         *
+         * A tela precisa distinguir "não existe" de "existe e está em análise":
+         * nos dois casos a mensagem não sai, mas só no primeiro há o que fazer.
+         * Enquanto isso vinha grudado numa frase, a tela oferecia "Cadastrar na
+         * Meta" pra template que já tinha sido cadastrado e estava só esperando
+         * — e um segundo cadastro é recusado por nome duplicado.
+         */
+        status: achado?.status ?? null,
         bate: !!achado && achado.language === def!.idioma && achado.status === "APPROVED",
       };
     });

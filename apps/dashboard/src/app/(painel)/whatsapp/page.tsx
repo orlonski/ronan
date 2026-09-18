@@ -1265,6 +1265,8 @@ type TemplateEsperado = {
   rota: string;
   esperado: string;
   naMeta: string;
+  /** Status cru da Meta: APPROVED, PENDING, REJECTED… `null` = não existe lá. */
+  status: string | null;
   bate: boolean;
 };
 
@@ -1431,7 +1433,14 @@ function TemplatesMetaCard() {
                   )}
                 </TableCell>
                 <TableCell className="text-right">
-                  {!t.bate && (
+                  {/* Em análise não ganha botão: já foi cadastrado, e um
+                      segundo cadastro com o mesmo nome a Meta recusa. Aqui a
+                      ação certa é esperar, e a tela tem que dizer isso em vez
+                      de oferecer um clique que só produz erro. */}
+                  {!t.bate && t.status === "PENDING" && (
+                    <span className="text-xs text-muted-foreground">Em análise na Meta</span>
+                  )}
+                  {!t.bate && t.status !== "PENDING" && (
                     <div className="flex flex-wrap items-center justify-end gap-2">
                       {pedindoUrl[t.rota] !== undefined && (
                         <Input
