@@ -6008,6 +6008,20 @@ model AceiteTermo {
   ip        String?
   userAgent String?
 
+  /// A CONDIÇÃO COMERCIAL vigente no momento do aceite, congelada.
+  ///
+  /// O contrato diz que o valor é "o combinado por escrito", e não traz preço
+  /// nenhum — um texto só serve pra todo cliente, e desconto não pode exigir
+  /// versão nova do contrato. Mas sem isto aqui, o único registro do que foi
+  /// combinado seria uma linha de `Assinatura` que o cliente nunca viu, e que
+  /// nós podemos editar depois.
+  ///
+  /// Com isto, a prova deixa de ser "aceitou o contrato" e vira "aceitou o
+  /// contrato sabendo que paga R$ X por mês". Nulo = conta sem assinatura na
+  /// hora do aceite (teste grátis, ou cliente que não paga).
+  valorCentavosNoAceite Int?
+  cicloNoAceite         String?
+
   /// De onde veio o clique: "CADASTRO" (trial) ou "PAINEL" (modal de reaceite).
   /// Guardado porque os dois têm peso diferente: o do painel é o que vale
   /// quando a relação já é paga.

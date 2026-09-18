@@ -16,12 +16,28 @@ export const OrigemAceiteSchema = z.enum(["CADASTRO", "PAINEL"]);
 export type OrigemAceite = z.infer<typeof OrigemAceiteSchema>;
 
 /**
+ * O que o cliente paga, do jeito que ele precisa ver ANTES de aceitar.
+ *
+ * O contrato não traz preço — ele diz "o valor é o combinado por escrito".
+ * Isto é esse "por escrito" aparecendo na tela, no momento em que importa.
+ * Nulo quando a conta não tem assinatura (teste grátis, ou quem não paga).
+ */
+export const CondicaoComercialSchema = z.object({
+  valorCentavos: z.number().int(),
+  ciclo: z.string(),
+  diaVencimento: z.number().int(),
+});
+export type CondicaoComercial = z.infer<typeof CondicaoComercialSchema>;
+
+/**
  * O que a tela precisa saber pra decidir se mostra o modal.
  *
  * `pendentes` vazio = está tudo aceito, não incomoda o usuário. Qualquer item
  * ali = tem documento novo esperando.
  */
 export const StatusAceiteSchema = z.object({
+  /** O que esta conta paga hoje. Aparece acima do contrato, no modal. */
+  condicaoComercial: CondicaoComercialSchema.nullable(),
   pendentes: z.array(
     z.object({
       termoVersaoId: z.string().uuid(),
@@ -80,6 +96,8 @@ export const ReciboAceiteSchema = z.object({
   versao: z.string(),
   sha256: z.string(),
   aceitoEm: z.string(),
+  /** Quanto se pagava quando este aceite foi dado. Nulo = não havia cobrança. */
+  valorCentavosNoAceite: z.number().int().nullable(),
   nomeQuemAceitou: z.string(),
   emailQuemAceitou: z.string(),
   documento: z.string().nullable(),

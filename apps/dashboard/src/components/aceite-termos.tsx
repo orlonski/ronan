@@ -32,6 +32,7 @@ import { fetchApi } from "@/lib/client-api";
  */
 export function AceiteTermos() {
   const [pendencia, setPendencia] = useState<StatusAceite["pendentes"][number] | null>(null);
+  const [condicao, setCondicao] = useState<StatusAceite["condicaoComercial"]>(null);
   const [documento, setDocumento] = useState<TermoPublico | null>(null);
   const [leuAteOFim, setLeuAteOFim] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -51,6 +52,7 @@ export function AceiteTermos() {
         if (!vivo || !doc) return;
         setPendencia(p);
         setDocumento(doc);
+        setCondicao(s.condicaoComercial);
       } catch {
         // Falha ao consultar não pode trancar ninguém fora do painel. Se a API
         // está fora, o problema do usuário não é o contrato.
@@ -122,6 +124,26 @@ export function AceiteTermos() {
               : ". Leia o que mudou e aceite para continuar."}
           </p>
 
+          {/* A CONDIÇÃO COMERCIAL, acima do contrato.
+              O texto diz que o valor é "o combinado por escrito" e não traz
+              preço — um documento só serve pra todo cliente, e desconto não
+              pode exigir versão nova. Este bloco é esse "por escrito"
+              aparecendo na hora em que importa: sem ele, a pessoa aceitaria um
+              contrato que remete a uma combinação que ela nunca viu. */}
+          {condicao ? (
+            <div className="mt-3 rounded-md border border-border bg-muted/50 px-3 py-2 text-sm">
+              <p className="font-medium text-foreground">Sua condição comercial</p>
+              <p className="mt-0.5 text-muted-foreground">
+                {(condicao.valorCentavos / 100).toLocaleString("pt-BR", {
+                  style: "currency",
+                  currency: "BRL",
+                })}{" "}
+                por {condicao.ciclo === "ANUAL" ? "ano" : "mês"} · vencimento todo dia{" "}
+                {condicao.diaVencimento}
+              </p>
+            </div>
+          ) : null}
+
           {/* Pedir que alguém releia 2.500 palavras sem dizer o que mudou é
               pedir que ele clique sem ler. */}
           {!pendencia.primeiroAceite && pendencia.oQueMudou ? (
@@ -147,7 +169,9 @@ export function AceiteTermos() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-muted-foreground">
               {leuAteOFim
-                ? "Ao aceitar, registramos seu nome, a data, a hora e a versão."
+                ? condicao
+                  ? "Ao aceitar, registramos seu nome, a data, a hora, a versão e o valor acima."
+                  : "Ao aceitar, registramos seu nome, a data, a hora e a versão."
                 : "Role o texto até o fim para habilitar o aceite."}
             </p>
             <Button

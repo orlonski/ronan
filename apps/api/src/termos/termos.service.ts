@@ -68,6 +68,29 @@ export class TermosService {
     }));
   }
 
+  /**
+   * O que esta conta paga hoje.
+   *
+   * Vive aqui, e não numa consulta do painel, porque o cliente NÃO tem acesso a
+   * `admin/assinaturas` — ela está atrás do `PlataformaGuard`, e com razão:
+   * quanto a Movatruck cobra não é configuração de empresa nenhuma.
+   *
+   * Mas isso abria um buraco: o contrato diz que o valor é "o combinado por
+   * escrito", e o cliente não tinha onde ler qual era. O único registro seria
+   * uma linha que ele nunca viu e que nós podemos editar. Aqui ele lê — só a
+   * dele, só leitura.
+   */
+  async condicaoComercial(contaId: string) {
+    const a = await comoSistema(() =>
+      this.prisma.assinatura.findFirst({
+        where: { contaId, status: { in: ["ATIVA", "AGUARDANDO", "INADIMPLENTE"] } },
+        orderBy: { criadoEm: "desc" },
+        select: { valorCentavos: true, ciclo: true, diaVencimento: true },
+      }),
+    );
+    return a ?? null;
+  }
+
   // ─────────────────────────────────────────────────────── status
 
   /**
@@ -80,6 +103,7 @@ export class TermosService {
    */
   async status(contaId: string): Promise<StatusAceite> {
     const pendentes: StatusAceite["pendentes"] = [];
+    const condicaoComercial = await this.condicaoComercial(contaId);
 
     for (const tipo of EXIGIDOS) {
       const vigente = await this.vigente(tipo);
@@ -111,7 +135,7 @@ export class TermosService {
       });
     }
 
-    return { pendentes };
+    return { condicaoComercial, pendentes };
   }
 
   // ─────────────────────────────────────────────────────── gravar a prova
@@ -164,10 +188,16 @@ export class TermosService {
     );
     if (existente) return existente;
 
+    // Congela o que estava combinado AGORA. Se amanhã o valor mudar, esta
+    // linha continua dizendo o que a pessoa sabia quando aceitou.
+    const condicao = await this.condicaoComercial(dados.contaId);
+
     return comoSistema(() =>
       this.prisma.aceiteTermo.create({
         data: {
           contaId: dados.contaId,
+          valorCentavosNoAceite: condicao?.valorCentavos ?? null,
+          cicloNoAceite: condicao?.ciclo ?? null,
           termoVersaoId: versao.id,
           userId: dados.userId ?? null,
           nomeQuemAceitou: dados.nome,
@@ -195,6 +225,7 @@ export class TermosService {
       versao: a.termoVersao.versao,
       sha256: a.termoVersao.sha256,
       aceitoEm: a.aceitoEm.toISOString(),
+      valorCentavosNoAceite: a.valorCentavosNoAceite,
       nomeQuemAceitou: a.nomeQuemAceitou,
       emailQuemAceitou: a.emailQuemAceitou,
       documento: a.documento,

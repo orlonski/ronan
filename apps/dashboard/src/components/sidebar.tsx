@@ -18,6 +18,7 @@ import {
   ChevronDown,
   ChevronRight,
   ClipboardCheck,
+  FileText,
   FileSpreadsheet,
   Fuel,
   HardHat,
@@ -76,7 +77,11 @@ type Item = {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   // Chave de permissão (catálogo RBAC). Item só aparece se o papel tiver.
-  perm: string;
+  //
+  // OPCIONAL: item sem `perm` aparece pra todo usuário do painel. É exceção, e
+  // hoje só o "Contrato" usa — o aceite dos Termos bloqueia todo mundo, então
+  // esconder de alguém o que ela foi obrigada a aceitar seria incoerente.
+  perm?: string;
 };
 
 type Grupo = {
@@ -200,6 +205,12 @@ const GRUPOS: Grupo[] = [
     titulo: "Configurações",
     itens: [
       { href: "/configuracoes/empresa", label: "Minha empresa", icon: Landmark, perm: "minha-empresa.editar" },
+      // SEM permissão, de propósito. O modal de aceite bloqueia TODO usuário
+      // do painel — ele não pode ser gateado, senão quem não tem a chave
+      // ficaria preso nele pra sempre. Se a pessoa é obrigada a aceitar, ela
+      // tem que conseguir reler o que aceitou; esconder isso seria obrigar a
+      // assinar e negar a cópia.
+      { href: "/configuracoes/contrato", label: "Contrato", icon: FileText },
       { href: "/usuarios", label: "Usuários", icon: Users2, perm: "usuarios.ver" },
       { href: "/configuracoes/permissoes", label: "Papéis e permissões", icon: ShieldCheck, perm: "permissoes.gerenciar" },
       { href: "/importacao", label: "Importar dados", icon: Upload, perm: "importacao.ver" },
@@ -254,7 +265,7 @@ export function Sidebar({
       // Menu não é vitrine: item de módulo não contratado SOME, não fica cinza.
       // O upsell mora na tela de quem chegou por URL direta e no ponto de dor
       // dentro de um módulo que a empresa já tem.
-      itens: g.itens.filter((i) => temPermissao(i.perm) && temModulo(i.perm)),
+      itens: g.itens.filter((i) => !i.perm || (temPermissao(i.perm) && temModulo(i.perm))),
     }))
     .filter((g) => g.itens.length > 0);
 

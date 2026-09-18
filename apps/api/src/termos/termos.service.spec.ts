@@ -14,6 +14,10 @@ function fakePrisma() {
   return {
     termoVersao: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn() },
     aceiteTermo: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn() },
+    // A condição comercial entra na prova: o aceite congela quanto se pagava.
+    // Sem assinatura (teste grátis) o findFirst devolve null, que é o caso
+    // padrão aqui — os testes de valor congelado ficam no bloco próprio.
+    assinatura: { findFirst: vi.fn().mockResolvedValue(null) },
   };
 }
 
@@ -109,6 +113,51 @@ describe("aceite de termos", () => {
       await servico(p).aceitar({ ...ACEITE_BASE, userAgent: "A".repeat(5000) });
 
       expect(p.aceiteTermo.create.mock.calls[0][0].data.userAgent).toHaveLength(500);
+    });
+  });
+
+  describe("o valor combinado entra na prova", () => {
+    it("congela quanto se pagava no momento do aceite", async () => {
+      p.termoVersao.findUnique.mockResolvedValue(VERSAO_PUBLICADA);
+      p.aceiteTermo.findFirst.mockResolvedValue(null);
+      p.aceiteTermo.create.mockResolvedValue({ id: "a1" });
+      p.assinatura.findFirst.mockResolvedValue({
+        valorCentavos: 177000,
+        ciclo: "MENSAL",
+        diaVencimento: 10,
+      });
+
+      await servico(p).aceitar(ACEITE_BASE);
+
+      // É isto que transforma "aceitou o contrato" em "aceitou sabendo que
+      // paga R$ 1.770" — sem isso, o único registro do combinado seria uma
+      // linha de Assinatura que o cliente nunca viu e que nós podemos editar.
+      expect(p.aceiteTermo.create.mock.calls[0][0].data).toMatchObject({
+        valorCentavosNoAceite: 177000,
+        cicloNoAceite: "MENSAL",
+      });
+    });
+
+    it("grava nulo quando a conta não paga nada", async () => {
+      p.termoVersao.findUnique.mockResolvedValue(VERSAO_PUBLICADA);
+      p.aceiteTermo.findFirst.mockResolvedValue(null);
+      p.aceiteTermo.create.mockResolvedValue({ id: "a1" });
+      p.assinatura.findFirst.mockResolvedValue(null);
+
+      await servico(p).aceitar(ACEITE_BASE);
+
+      expect(p.aceiteTermo.create.mock.calls[0][0].data).toMatchObject({
+        valorCentavosNoAceite: null,
+        cicloNoAceite: null,
+      });
+    });
+
+    it("só considera assinatura viva, não cancelada", async () => {
+      p.termoVersao.findFirst.mockResolvedValue(null);
+      await servico(p).status("c1");
+
+      const where = p.assinatura.findFirst.mock.calls[0][0].where;
+      expect(where.status.in).toEqual(["ATIVA", "AGUARDANDO", "INADIMPLENTE"]);
     });
   });
 
