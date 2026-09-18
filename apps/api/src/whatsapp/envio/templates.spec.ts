@@ -57,6 +57,23 @@ describe("catálogo de templates", () => {
     }
   });
 
+  /**
+   * O convite do Pix Automático não pode ter botão de URL.
+   *
+   * Em 18/09/2026 ele tinha: o sufixo saía do copia-e-cola e o cliente caía num
+   * "a cobrança não existe" do Asaas. Não é sufixo errado — é que na hora de
+   * criar a autorização NÃO EXISTE cobrança no gateway, logo não existe URL.
+   * O código tem que ir no corpo.
+   */
+  it("o convite por Pix leva o código no corpo e não tem botão", () => {
+    const def = TEMPLATES_WHATSAPP["COBRANCA_AUTORIZACAO_PIX"]!;
+    expect(def).toBeDefined();
+    expect(def.botao).toBeUndefined();
+    // O índice 4 dos params é o copia-e-cola (o mesmo que o Evolution põe no
+    // texto). Se sumir do corpo, a mensagem vai sem o código e não serve.
+    expect(def.corpo).toContain(4);
+  });
+
   it("toda rota da Meta sem template é texto livre de propósito", () => {
     // Rota `utility`/`authentication` sem template NÃO sai fora da janela de
     // 24h. Se uma aparecer aqui, ou ganhou template ou virou serviço — e

@@ -68,6 +68,7 @@ export class AvisoCobrancaService {
 
     const emAberto = assinatura.cobrancas[0];
     const esperandoAutorizacao = assinatura.status === "AGUARDANDO";
+    const ehPix = assinatura.forma === "PIX_AUTOMATICO";
 
     // O que mandar depende do momento: quem ainda não autorizou recebe o
     // convite; quem já autorizou recebe a fatura em aberto.
@@ -93,7 +94,7 @@ export class AvisoCobrancaService {
           valor,
           vencimento,
           codigo,
-          ehPix: assinatura.forma === "PIX_AUTOMATICO",
+          ehPix,
         })
       : mensagemCobrancaAberta({
           nomeResponsavel: achatarParam(assinatura.nomeResponsavel),
@@ -105,7 +106,17 @@ export class AvisoCobrancaService {
 
     const r = await this.envio.tentarEnviar({
       destino: { tipo: "TELEFONE", numero: SessaoService.normalizar(assinatura.telefoneCobranca) },
-      rota: esperandoAutorizacao ? "COBRANCA_AUTORIZACAO" : "COBRANCA_ABERTA",
+      // Pix Automático tem rota própria porque tem TEMPLATE próprio: o da
+      // autorização comum manda um botão de URL, que só faz sentido no cartão
+      // (ali o código É um link do gateway). No Pix o código é um copia-e-cola
+      // e não existe URL pra apontar — a cobrança só nasce no Asaas depois que
+      // o cliente paga. Mandar os dois pelo mesmo template fazia o cliente
+      // cair num "a cobrança não existe" do próprio gateway.
+      rota: esperandoAutorizacao
+        ? ehPix
+          ? "COBRANCA_AUTORIZACAO_PIX"
+          : "COBRANCA_AUTORIZACAO"
+        : "COBRANCA_ABERTA",
       texto,
       params: params.map(achatarParam),
     });

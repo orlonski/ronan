@@ -219,6 +219,21 @@ export const ROTAS_WHATSAPP = [
     escopo: "plataforma",
   },
   {
+    chave: "COBRANCA_AUTORIZACAO_PIX",
+    rotulo: "Autorizar a mensalidade (Pix)",
+    descricao:
+      "Mesma coisa que a de cima, mas pro Pix Automático: manda o copia-e-cola dentro da mensagem, sem botão.",
+    categoria: "utility",
+    provedores: ["evolution", "meta"],
+    // Rota separada porque o TEMPLATE é outro, e na Meta um template é por
+    // rota. O de cima tem botão de URL, que só serve pro cartão: ali o código
+    // é um link do gateway. No Pix Automático o que o cliente precisa é o
+    // copia-e-cola, e não existe URL nenhuma pra apontar na hora de criar a
+    // autorização — a cobrança só nasce no Asaas DEPOIS que ele paga.
+    critica: false,
+    escopo: "plataforma",
+  },
+  {
     chave: "COBRANCA_ATRASADA",
     rotulo: "Mensalidade em atraso",
     descricao: "Avisa que a mensalidade venceu e ainda não foi paga. Não corta acesso nenhum.",
@@ -577,6 +592,45 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
       "",
       "https://www.asaas.com/i/abc123",
       "abc123",
+    ],
+  },
+  /**
+   * O convite pra autorizar por Pix Automático: o código vai NO CORPO.
+   *
+   * O template irmão manda um botão de URL, e isso derrubou o aviso em
+   * produção (18/09/2026): o sufixo do botão saía de `sufixoDoLink` aplicado ao
+   * copia-e-cola, virava `...qr/cob/<id>52040000...DIEGO DAVI...`, e o cliente
+   * caía num "a cobrança não existe" do próprio Asaas. Não era um sufixo
+   * errado — é que **não existe URL** pra apontar: no Pix Automático a cobrança
+   * só nasce no gateway depois que o cliente paga.
+   *
+   * O BR Code cabe num parâmetro de corpo (200 e poucos caracteres contra o
+   * limite de 1024) e não tem quebra de linha, então passa no `achatarParam`.
+   */
+  COBRANCA_AUTORIZACAO_PIX: {
+    nome: "cobranca_autorizacao_pix",
+    idioma: "pt_BR",
+    // nome, valor, código, vencimento — nessa ordem, que é a ordem em que
+    // aparecem no corpo aprovado.
+    corpo: [0, 1, 4, 2],
+    textoAprovacao: [
+      "Olá, {{1}}. A assinatura do Movatruck da sua empresa foi criada.",
+      "",
+      "Para ativar a cobrança automática de {{2}} por mês, copie o código Pix abaixo e pague pelo app do seu banco. Esta autorização é feita uma única vez.",
+      "",
+      "{{3}}",
+      "",
+      "Vencimento da primeira mensalidade: {{4}}",
+      "",
+      "Qualquer dúvida, é só responder aqui.",
+    ].join("\n"),
+    exemplo: [
+      "Marcos",
+      "R$ 1.890,00",
+      "10/09/2026",
+      "",
+      "00020101021226790014br.gov.bcb.pix2557pix.asaas.com/qr/cob/0cd97f06-6965-4c31-80be-2ab8fb31b8de5204000053039865802BR5925MOVATRUCK DESENVOLVIMENTO6009Ponta Grossa62070503***6304ABCD",
+      "",
     ],
   },
   // Sem ameaça e sem prazo de corte, porque o corte não é automático: anunciar
