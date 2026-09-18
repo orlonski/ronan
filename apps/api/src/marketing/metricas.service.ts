@@ -9,9 +9,14 @@ import { MetaClient } from "./meta-client";
 /**
  * O que cada publicação rendeu, e quantos seguidores o perfil ganhou por dia.
  *
- * Existe pra escolher formato por número em vez de por opinião. A pesquisa em
- * `marketing/reels/PLAYBOOK.md` diz que o sinal que mais alcança quem não segue
- * é o compartilhamento — então é ele que decide o que repetir, não a curtida.
+ * Existe pra escolher formato por número em vez de por opinião. O sinal que mais
+ * alcança quem ainda não segue é o COMPARTILHAMENTO (estimado em 3 a 5 vezes o
+ * peso de uma curtida) — então é ele que decide o que repetir, não a curtida.
+ * Depois vêm tempo assistido e saves; curtida é o mais fraco dos três.
+ *
+ * (Isso vinha de uma pesquisa em `marketing/reels/PLAYBOOK.md`, removida junto
+ * com a esteira de vídeo em 18/09/2026. A conclusão ficou aqui porque é ela que
+ * justifica a ordem das métricas abaixo.)
  *
  * Duas limitações da API que moldaram este serviço:
  *

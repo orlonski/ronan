@@ -1,4 +1,0 @@
-file '/Users/orlonski/dev/ronan/marketing/reels/.montagem3/s0.mp4'
-file '/Users/orlonski/dev/ronan/marketing/reels/.montagem3/s1.mp4'
-file '/Users/orlonski/dev/ronan/marketing/reels/.montagem3/s2.mp4'
-file '/Users/orlonski/dev/ronan/marketing/reels/.montagem3/s3.mp4'

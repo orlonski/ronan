@@ -61,16 +61,14 @@ propósito. Transbordo: corte texto, não diminua a fonte.
 
 Os agentes estão em `.claude/agents/ig-*.md`.
 
-**Se a pauta for Reel e não imagem**, o roteiro é do `ig-reels`, a receita está em
-`marketing/reels/PLAYBOOK.md` e a produção em `marketing/reels/README.md`. O que não
-muda é o QA — vídeo promete igual a imagem, e mentira em movimento é pior.
+**Esta skill é de POST EM IMAGEM, e só.** Vídeo e Reel saíram do repositório em
+18/09/2026: a esteira de geração por IA foi removida inteira (geradores, roteiros,
+montagem e o agente `ig-reels`), por decisão de quem toca a conta. Reel agora é
+feito em aplicativo próprio, fora daqui.
 
-> **Agente automático NÃO gera vídeo.** Cada clipe custa dinheiro de verdade (de
-> R$ 1,50 a R$ 18, conforme o modelo — números medidos, no PLAYBOOK). Os geradores
-> exigem `PERMITIR_GASTO_VIDEO=sim` e recusam sem isso, justamente pra que nenhum
-> cron, nenhuma pauta e nenhum agente consiga gastar sozinho. Roteiro o agente
-> escreve; **gerar é decisão de gente, na mão.** A pauta automática pede "UM post",
-> e post é imagem — o caminho de imagem não custa nada além dos tokens da execução.
+Consequência prática: se a pauta pedir Reel, **não existe caminho no repositório** —
+não procure `marketing/reels/`, não tente reconstruir a esteira, e não gere vídeo
+por API. Escreva o post em imagem ou diga que a pauta não se aplica.
 
 ## Voz
 
