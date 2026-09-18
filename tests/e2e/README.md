@@ -1,15 +1,17 @@
 # Testes E2E (Playwright)
 
-Suítes que validam os 2 fluxos críticos do sistema:
-1. **`*.motorista.spec.ts`** — PWA do motorista (login, criar viagem, offline)
-2. **`*.dashboard.spec.ts`** — Dashboard admin (conciliação, layouts)
+Suítes que validam os fluxos críticos do **painel**:
+- **`*.dashboard.spec.ts`** — Dashboard admin (conciliação, layouts, isolamento de contas)
+
+> Não há E2E do app do motorista. A suíte `*.motorista.spec.ts` dirigia o PWA, que foi
+> removido em 18/09/2026; o app hoje é só nativo (React Native) e o Playwright não
+> dirige RN. Cobertura de motorista é vitest na API (as regras) + teste no aparelho.
 
 ## Pré-requisitos
 
 - API rodando em `http://localhost:3000` (`pnpm --filter @ronan/api dev`)
 - Dashboard rodando em `http://localhost:3001`
-- PWA Motorista rodando em `http://localhost:3002`
-- Banco com seed: 1 admin (`admin@ronan.local`) + 1 motorista (`joao.silva`)
+- Banco com seed: 1 admin (`admin@ronan.local`)
 
 ## Como rodar
 
@@ -23,9 +25,6 @@ pnpm exec playwright test
 # Só os testes do dashboard
 pnpm exec playwright test --project=dashboard
 
-# Só do motorista
-pnpm exec playwright test --project=motorista-pwa
-
 # Modo UI interativo
 pnpm exec playwright test --ui
 
@@ -38,8 +37,6 @@ pnpm exec playwright show-report
 ```
 E2E_ADMIN_EMAIL=admin@ronan.local
 E2E_ADMIN_PASS=ronan_admin_2026
-E2E_MOTORISTA_USR=joao.silva
-E2E_MOTORISTA_PASS=motorista123
 ```
 
 Default: usa as credenciais acima.
@@ -47,7 +44,7 @@ Default: usa as credenciais acima.
 ## CI
 
 Pra rodar em CI (GitHub Actions, etc.), o ideal é:
-1. Subir docker-compose com api + dashboard + motorista
+1. Subir docker-compose com api + dashboard
 2. Aguardar healthchecks
 3. Rodar `playwright test`
 

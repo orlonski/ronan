@@ -102,18 +102,6 @@ services:
     expose:
       - "3001"
 
-  motorista:
-    build:
-      context: .
-      dockerfile: apps/motorista/Dockerfile
-      args:
-        VITE_API_URL: ${PUBLIC_API_URL}
-    container_name: ronan-motorista-prod
-    restart: unless-stopped
-    networks: [ronan-net]
-    expose:
-      - "80"
-
 volumes:
   postgres_data:
   minio_data:

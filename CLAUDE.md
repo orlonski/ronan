@@ -19,10 +19,9 @@ nome da conta. Ficam com o nome antigo, e não dá pra trocar: o bundle ID
 apps/api/             Backend Nest.js 10 + Prisma 6 + Postgres (porta 3000, Swagger em /docs)
 apps/dashboard/       Painel admin Next.js 15 App Router (porta 3001, deploy: app.schaba.com.br)
 apps/motorista-app/   App nativo Expo 54/RN — Android + iOS (deploy: EAS Update OTA)
-apps/motorista/       PWA Vite/React — motoristas iPhone (porta 3002, motorista.schaba.com.br)
 apps/site/            Site institucional Vite/React estático (porta 3003, www.movatruck.com.br)
 packages/shared-types Schemas Zod + tipos compartilhados por tudo
-tests/e2e/            Playwright (dashboard + PWA motorista)
+tests/e2e/            Playwright (dashboard)
 ```
 
 ## Comandos
@@ -34,7 +33,6 @@ pnpm typecheck               # turbo run typecheck
 pnpm lint                    # turbo run lint
 pnpm --filter @ronan/api dev            # só API, :3000
 pnpm --filter @ronan/dashboard dev      # só painel, :3001
-pnpm --filter @ronan/motorista dev      # só PWA, :3002
 pnpm --filter @ronan/site dev           # só site institucional, :3003
 pnpm --filter @ronan/shared-types build # rebuild ao mexer em schemas (OBRIGATÓRIO — os apps consomem dist/)
 
@@ -46,7 +44,7 @@ pnpm --filter @ronan/api exec prisma migrate deploy   # aplicar migrations sem g
 
 ### Testes
 
-`apps/api` tem **vitest** com ~780 testes de unidade (regras puras e o runner do ClickUp): `cd apps/api && pnpm exec vitest run`. A cobertura de fluxo é **Playwright E2E**, que exige api+dashboard+PWA de pé e banco semeado — ver `tests/e2e/README.md`.
+`apps/api` tem **vitest** com ~780 testes de unidade (regras puras e o runner do ClickUp): `cd apps/api && pnpm exec vitest run`. A cobertura de fluxo é **Playwright E2E**, que exige api+dashboard de pé e banco semeado — ver `tests/e2e/README.md`.
 
 `pnpm lint` **não roda**: nenhum app tem `eslint.config.js` (ESLint 9 exige o formato novo e a migração nunca foi feita). Falha em todos os pacotes, é anterior a qualquer mudança — não confundir com regressão.
 
@@ -54,7 +52,6 @@ pnpm --filter @ronan/api exec prisma migrate deploy   # aplicar migrations sem g
 pnpm exec playwright install chromium          # 1ª vez
 pnpm exec playwright test                      # tudo
 pnpm exec playwright test --project=dashboard  # só painel
-pnpm exec playwright test --project=motorista-pwa
 pnpm exec playwright test tests/e2e/admin-conciliacao.dashboard.spec.ts   # um arquivo
 pnpm exec playwright test -g "nome do teste"                              # um teste
 ```
@@ -104,7 +101,7 @@ Corpo das rotas usa **Zod dos `shared-types`** via `ZodValidationPipe` (não cla
 - `common/viagem-status.ts` — `STATUS_FORA_FECHAMENTO` (`EM_ANDAMENTO`, `AGUARDANDO_PESO`): viagens incompletas que nunca entram em match/fechamento/KPI/export. Esquecer um ponto de exclusão faz viagem sem peso entrar como 0t.
 - `common/viagem-minimos.ts` — `RegraMinimo` (empresa+material+faixa de km → km/ton mínimo faturado). O real nunca é sobrescrito no banco; o mínimo é aplicado ao **exibir/agregar/faturar**. Todo cálculo de efetivo passa por aqui.
 - `common/viagem-preco.ts` — `TabelaPreco` (empresa+material+modo+faixa de km+vigência → R$). **O mínimo decide quanto se CONTA; o preço decide quanto vale o que foi contado** — nessa ordem, sempre: o preço multiplica a quantidade efetiva, nunca a real. A resolução de "qual linha casa" é idêntica à do mínimo de propósito (mesma faixa, mesmo desempate); divergir faria o mínimo valer pra uma faixa e o preço pra outra. Diária nunca é cobrada por tonelada (`BASE_INCOMPATIVEL`). O valor vai pra `ViagemValor`, **materializado** (dinheiro se soma: faturamento é `SUM` de milhares de linhas) e **congelado** (guarda preço e quantidade do momento, não FK viva). Quem mantém em dia é `admin/tabelas-preco/precificacao.service.ts`: os caminhos principais chamam na hora, e um cron de madrugada varre o que ficou sem valor — ele **nunca** reprecifica o que já tem. Valor alterado à mão exige motivo e não é sobrescrito por recálculo.
-- `common/acerto-motorista.ts` — o que a empresa deve ao motorista no período. A régua de pagamento mora na `ModalidadeMotorista` (percentual/viagem/tonelada/km/diária) e o motorista pode ter a dele, que vence — o override é **tudo-ou-nada**, não campo a campo. **Armadilha do pedágio em dobro:** `Viagem.valorPedagioTotal` (nativo) e `Pedagio.valor` (PWA) são fontes independentes; `pedagioDaViagem` escolhe UMA por viagem. Comboio nunca vira reembolso. Acerto FECHADO não regenera e PAGO não reabre.
+- `common/acerto-motorista.ts` — o que a empresa deve ao motorista no período. A régua de pagamento mora na `ModalidadeMotorista` (percentual/viagem/tonelada/km/diária) e o motorista pode ter a dele, que vence — o override é **tudo-ou-nada**, não campo a campo. **Armadilha do pedágio em dobro:** `Viagem.valorPedagioTotal` (nativo) e `Pedagio.valor` (linhas antigas do PWA, que segue no banco) são fontes independentes; `pedagioDaViagem` escolhe UMA por viagem. Comboio nunca vira reembolso. Acerto FECHADO não regenera e PAGO não reabre.
 - `common/pedido-saldo.ts` — saldo do pedido (sempre DERIVADO das viagens, nunca contador) e o casamento plano↔viagem real. ⚠️ `ViagemPlanejada` é **entidade separada** da Viagem: um status `PLANEJADA` no `StatusViagem` obrigaria a revisar os 25 pontos de `STATUS_FORA_FECHAMENTO`, e cada um esquecido vira viagem fantasma de 0t na fatura.
 - `common/chave-fiscal.ts` — chave de 44 dígitos com DV módulo 11 e checagem de MODELO. Colar a chave da NF-e no campo do CT-e passa por qualquer regex e só o modelo denuncia.
 - `common/consumo.ts` — km/l tanque-a-tanque. Só mede entre dois abastecimentos com `tanqueCheio` e odômetro; parciais no meio entram nos litros, não na fronteira. Média da frota é ponderada pelo km.
@@ -135,58 +132,39 @@ OSRM (`OSRM_URL`, rotas/km) · Valhalla (`VALHALLA_URL`, navegação ao vivo) ·
 - Depois de criar migration, conferir com `git show --stat` se o `migration.sql` entrou — pasta vazia o git ignora em silêncio.
 - FK inválida em endpoint do motorista deve virar **4xx**, nunca 500: 500 trava o outbox em loop, 4xx manda o item pra tela de Pendentes.
 
-## Duas bases de código pro motorista (importante)
+## Uma base de código pro motorista
 
-`apps/motorista-app/` (nativo, Android+iOS) e `apps/motorista/` (PWA iOS) são **codebases separadas**. Compartilham:
-- Backend (`/m/*`)
-- `@ronan/shared-types` (schemas Zod, tipos `Viagem`/`Pedagio`/`ExtrairTicketResult`, helpers `cpfDigits`/`formatCpf`/etc)
+**`apps/motorista-app/` (nativo, Android+iOS) é o ÚNICO app do motorista.**
 
-**Não** compartilham telas, componentes UI nem libs do client.
+O PWA (`apps/motorista/`, Vite/React, `motorista.schaba.com.br`) foi **removido do
+repositório em 18/09/2026** e o serviço dele foi desligado. Não existe mais, não vai
+voltar, e não há decisão de "mexer nos dois" a tomar: feature de motorista vai pro
+nativo, ponto.
 
-**O PWA é produto REDUZIDO, não um nativo atrasado.** Isto é declaração, não descrição do acaso: em 3 meses o nativo recebeu 225 commits (204 só dele) contra 22 do PWA, dos quais 1 só dele. Fingir paridade cobra um imposto de decisão em toda feature nova e não entrega paridade nenhuma.
+Isso importa porque o repositório carregou por meses uma regra de "onde tocar" que
+cobrava imposto de decisão em toda feature. Ela morreu junto.
 
-O escopo do PWA é: **lançamento** (viagem, pedágio, abastecimento), **pendentes**, **histórico**, **perfil** e **multi-empresa**. Tudo que depende de background, câmera contínua, mapa nativo, keychain ou OTA é **só-nativo por definição** — stories, chat, ciclo de vida guiado, navegação ao vivo, frete pessoal, documentos, tracking.
+O que sobrou do PWA no sistema, de propósito:
 
-O PWA existe porque a distribuição iOS está travada (publicação UNLISTED). Enquanto estiver, ele não morre — e enquanto viver, recebe o que está no escopo acima, não tudo.
+- **`OrigemEvento` em `shared-types` ainda aceita `"motorista-pwa"`.** A telemetria
+  que ele gravou está no banco com esse valor; tirar do enum faria o Zod recusar a
+  leitura do histórico. É rótulo de dado antigo, não plataforma viva.
+- **`Pedagio.valor` continua sendo fonte de pedágio** (ver `common/acerto-motorista.ts`).
+  Linhas criadas pelo PWA seguem no banco e ainda entram em acerto — a armadilha do
+  pedágio em dobro continua valendo.
 
-### Regra ao desenvolver features pra motorista
+Feature de motorista toca: backend (`/m/*`) + `@ronan/shared-types` + `apps/motorista-app/`.
 
-| Mudança | Onde tocar |
-|---|---|
-| Novo endpoint, novo campo em entidade | Backend + shared-types → ambos os apps pegam após `pnpm build` no shared-types e rebuild |
-| Lógica de validação Zod | shared-types → ambos pegam |
-| Nova tela / botão / fluxo de UX | **Nativo sempre.** PWA só se a feature estiver no escopo declarado dele (lançamento, pendentes, histórico, perfil, multi-empresa) |
-| Bug visual / interação no Android/iOS nativo | Só `apps/motorista-app/` |
-| Bug visual / interação no PWA iOS | Só `apps/motorista/` |
-
-### Offline-first é o coração dos apps do motorista
+### Offline-first é o coração do app do motorista
 
 Motorista dirige com 4G ruim; **nada pode depender de estar online**.
 
 - **Cache-first**, não network-first: devolve cache na hora e revalida em background (`lib/queries.ts`; timeouts em `lib/api.ts` — 8s request, 30s outbox, 45s upload). Catálogos vêm de `/m/catalogos` e são pré-baixados no login (`prefetchDadosBase`).
-- **Outbox**: toda escrita (viagem, pedágio, abastecimento, foto, evento de lifecycle, local, story) é enfileirada com `clientId` e drenada por `lib/sync.ts`. Nativo persiste em AsyncStorage (`db/database.ts`), PWA em Dexie (`src/db/dexie.ts`).
+- **Outbox**: toda escrita (viagem, pedágio, abastecimento, foto, evento de lifecycle, local, story) é enfileirada com `clientId` e drenada por `lib/sync.ts`. Persiste em AsyncStorage (`db/database.ts`).
 - Falha **transitória** (rede, timeout, 5xx, keychain travado) não consome `attempts` nem vira `FALHOU` — o item segue "Pendente". Só 4xx real exige o motorista editar.
 - Item `syncing` precisa de stale-recovery (~5 min), senão processo morto no meio do envio trava o item pra sempre.
 - A tela de Pendentes precisa listar **todos** os tipos; tipo faltando some da tela mas continua contando em "X com erro" e fica preso.
 - Renomear campo em app offline-first exige **compat layer on-read** do cache, não só na escrita.
-
-### Padrão de port nativo → PWA
-
-- `View` → `div`; `Text` → `<p>`/`<span>`/`<h*>`; `Pressable` → `<button>`/`<Link>`
-- `FlatList` → `.map()` ou `IntersectionObserver` pra infinite scroll
-- `SafeAreaView` → CSS `env(safe-area-inset-*)` (utilities `pt-safe`, `pb-safe`)
-- `expo-router` → `react-router-dom` (`useNavigate`, `<Navigate>`)
-- `expo-camera` → `<input type="file" capture="environment">` + `lib/photo.ts` (Canvas compress)
-- `expo-location` → `navigator.geolocation` em `lib/geo.ts`
-- `expo-haptics` → `navigator.vibrate()` (opcional)
-- `lucide-react-native` → `lucide-react`
-- `react-native-maps` → Leaflet lazy em `components/map-trajeto.tsx`
-- `expo-notifications` → Web Push API em `lib/notifications.ts`
-- `SecureStore` → `localStorage`; `AsyncStorage` → Dexie/IndexedDB
-- `NetInfo` → `navigator.onLine` + eventos `online`/`offline`
-- `AppState` → `visibilitychange` + `pageshow`
-
-Lógica de outbox, sync, queries, validation, datetime são quase 100% portáveis trocando só as APIs nativas.
 
 ### Gotchas de React Native já pagos caro
 
@@ -235,10 +213,9 @@ Tom dos textos: motoristas são **parceiros autônomos**, não funcionários —
 
 ## Deploy
 
-Easypanel (Contabo, slug `2azr6q`) — push na `main` dispara build de api + dashboard + PWA:
+Easypanel (Contabo, slug `2azr6q`) — push na `main` dispara build de api + dashboard:
 - `ronan-api` — `ronan-api.2azr6q.easypanel.host` (alias `api.schaba.com.br`)
 - `ronan-dashboard` — `app.movatruck.com.br` (+ `app.schaba.com.br`, o domínio antigo, ainda apontando pro mesmo painel)
-- `ronan-motorista` — `motorista.schaba.com.br`
 - `ronan-site` — site institucional público, estático em nginx (`apps/site/Dockerfile`)
 - `ronan_agente` — worker da fila de execuções (`apps/agente/Dockerfile`, sem domínio público)
 
@@ -251,8 +228,6 @@ Sempre commitar `pnpm-lock.yaml` — o build usa `--frozen-lockfile`. Detalhes d
 | App | Var | Valor prod |
 |---|---|---|
 | dashboard | `NEXT_PUBLIC_API_URL` / `API_URL` | `https://ronan-api.2azr6q.easypanel.host` |
-| motorista (PWA) | `VITE_API_URL` | mesma URL, com **https** e **host público** (nunca `ronan-api:3000` interno do Docker) |
-| motorista (PWA) | `VITE_VAPID_PUBLIC_KEY` | (a configurar quando ligar Web Push) |
 | api | `CORS_ORIGINS` | CSV de origins — atualmente `*` |
 
 No app nativo, `EXPO_PUBLIC_API_URL` **não** é setado no EAS (usa fallback do código). Já houve OTA publicado com URL de teste vazada pelo cache do Metro — conferir a URL dentro do bundle antes e depois de publicar.

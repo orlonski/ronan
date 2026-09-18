@@ -20,7 +20,6 @@ Guia passo-a-passo pra subir o sistema em produção. Pressuposto: VPS Contabo c
 | `minio` | App (Compose ou Docker Image) | minio/minio:latest | — (interno) |
 | `api` | App (Dockerfile) | Build do repo, `apps/api/Dockerfile` | `api.SEU-DOMINIO.com.br` |
 | `dashboard` | App (Dockerfile) | Build do repo, `apps/dashboard/Dockerfile` | `painel.SEU-DOMINIO.com.br` |
-| `motorista` | App (Dockerfile) | Build do repo, `apps/motorista/Dockerfile` | `app.SEU-DOMINIO.com.br` |
 | `site` | App (Dockerfile) | Build do repo, `apps/site/Dockerfile` | `www.SEU-DOMINIO.com.br` |
 
 ## 1. Postgres
@@ -136,26 +135,6 @@ NEXT_PUBLIC_API_URL=https://api.SEU-DOMINIO.com.br
 
 - `painel.SEU-DOMINIO.com.br` → porta interna `3001`
 
-## 5. Motorista (PWA / Vite + nginx)
-
-**+ Service → App** com Source: Git Repository
-
-- Repository: `https://github.com/orlonski/ronan`
-- Branch: `main`
-- Build Method: **Dockerfile**
-- Dockerfile Path: `apps/motorista/Dockerfile`
-- Build Context: `.`
-- Build Args:
-  - `VITE_API_URL=https://api.SEU-DOMINIO.com.br`
-
-### Environment
-
-(Nenhuma — tudo é embutido em build-time via VITE_API_URL)
-
-### Domínio
-
-- `app.SEU-DOMINIO.com.br` → porta interna `80`
-
 ## 5b. Site institucional (Vite + nginx)
 
 O site público (`apps/site`) é o serviço mais simples do projeto: HTML/CSS/JS
@@ -216,16 +195,6 @@ Pode subir, cair e reiniciar sem afetar nada.
 ### Healthcheck
 
 `GET /healthz` responde `ok` em texto puro (configurado no `nginx.conf`).
-
-## 6. Configurar PWA pra ser instalável
-
-Pra o app aparecer como "Instalar app" no Chrome do celular do motorista, precisa:
-
-1. HTTPS (já vem com Easypanel)
-2. `manifest.webmanifest` (já incluso no build)
-3. Service Worker (já incluso via vite-plugin-pwa)
-
-Não precisa fazer nada — funciona sozinho após o deploy.
 
 ## 7. Após tudo no ar
 
@@ -301,7 +270,7 @@ A API roda `prisma migrate deploy` automaticamente no `CMD` do container (ver `a
 
 ## Por que o build fica amarelo (e o que impede isso)
 
-Cada `git push` na `main` dispara build de api + dashboard + PWA. **Um push novo
+Cada `git push` na `main` dispara build de api + dashboard + site. **Um push novo
 CANCELA o build que estiver rodando**, e o cancelado fica amarelo pra sempre, sem
 tentar de novo sozinho. O log termina em `CANCELED` / `context canceled` — que é
 fácil confundir com erro de compilação, mas não é: build quebrado de verdade mostra
@@ -325,11 +294,11 @@ O hook vive no repositório, então vale pra qualquer clone depois de:
 git config core.hooksPath .githooks     # uma vez por clone
 ```
 
-**Typecheck que mente:** `apps/motorista` e `apps/site` usam project references, e
-nesses dois `tsc --noEmit` **não confere nada** — passa sempre. O comando verdadeiro
-é `pnpm typecheck` (que é `tsc -b`), e o do repositório inteiro é `pnpm typecheck` na
-raiz. Rodar o errado foi o que deixou o PWA quebrado por horas: um campo novo em
-`@ronan/shared-types` chegou nos dois apps do motorista e só um foi atualizado.
+**Typecheck que mente:** `apps/site` usa project references, e ali `tsc --noEmit`
+**não confere nada** — passa sempre. O comando verdadeiro é `pnpm typecheck` (que é
+`tsc -b`), e o do repositório inteiro é `pnpm typecheck` na raiz. Rodar o errado já
+deixou app quebrado por horas: um campo novo em `@ronan/shared-types` chega em quem
+consome e o typecheck falso não acusa.
 
 **Diagnóstico:** `node scripts/deploy-status.mjs` diz o que está no ar — migration
 aplicada e há quanto tempo o container subiu. Serve porque os serviços seguem

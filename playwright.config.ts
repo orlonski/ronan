@@ -22,13 +22,5 @@ export default defineConfig({
         baseURL: "http://localhost:3001",
       },
     },
-    {
-      name: "motorista-pwa",
-      testMatch: /.*\.motorista\.spec\.ts$/,
-      use: {
-        ...devices["Pixel 7"],
-        baseURL: "http://localhost:3002",
-      },
-    },
   ],
 });

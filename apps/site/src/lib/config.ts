@@ -21,7 +21,6 @@
 
 export const SITE_URL = "https://www.movatruck.com.br";
 export const PAINEL_URL = "https://app.movatruck.com.br";
-export const PWA_URL = "https://motorista.schaba.com.br";
 export const PRIVACIDADE_URL = `${PAINEL_URL}/politica-de-privacidade`;
 
 /**

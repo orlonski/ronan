@@ -4,7 +4,6 @@ import {
   PAINEL_URL,
   PLAY_URL,
   PRIVACIDADE_URL,
-  PWA_URL,
   WHATSAPP_URL,
 } from "../lib/config";
 
@@ -23,7 +22,6 @@ export function Rodape() {
     APPSTORE_URL
       ? { href: APPSTORE_URL, texto: "Baixar na App Store", externo: true }
       : null,
-    { href: PWA_URL, texto: "Abrir a versão web (iPhone)", externo: true },
   ].filter(Boolean) as { href: string; texto: string; externo: boolean }[];
 
   return (

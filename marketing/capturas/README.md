@@ -41,25 +41,25 @@ Faltando: a tela de "Aguardando internet" do app do motorista **com itens na fil
 
 ## Telas do app do motorista
 
-O painel dá pra capturar do build de produção; o app não — ele precisa de sessão,
-de dados e de um servidor respondendo. A saída é o PWA (`apps/motorista`, que tem
-paridade visual com o nativo) com **todo o `/m/*` interceptado pelo Playwright**:
-nenhuma chamada sai da máquina, e os dados da tela são escolhidos aqui.
+**Não há caminho automatizado hoje.** O painel captura do build de produção; o app
+não — ele precisa de sessão, de dados e de um servidor respondendo.
 
-```bash
-pnpm --filter @ronan/motorista dev        # :3002
-node marketing/capturas/capturar-tela-app.mjs
-```
+Até 18/09/2026 a saída era dirigir o PWA (`apps/motorista`) com o Playwright
+interceptando todo o `/m/*`. **O PWA foi removido do repositório** e o script
+`capturar-tela-app.mjs` foi junto: ele apontava pra `localhost:3002`, que não existe
+mais.
 
-O script de referência é o da tela de abastecimento (`assets/app-abastecimento-postos.png`),
-e serve de molde pras outras: troque a rota, o mock e o enquadramento.
+O app do motorista hoje é só nativo (React Native), e Playwright não dirige RN. Pra
+print novo de tela do motorista, as opções são o Simulador iOS ou um aparelho de
+verdade — em ambos os casos, à mão.
 
-Três detalhes que custaram tempo:
+Consequência pro Instagram: **peça que precise de tela do motorista exige print
+manual.** As 13 capturas que existem são todas do painel, então nenhum post atual
+depende disso. O `ig-qa` continua valendo — print tem que mostrar o que o produto
+faz de verdade, tirado à mão ou não.
 
-- **Viewport 390×844.** O descritor `devices["iPhone 13"]` do Playwright usa 390×664,
-  que dá 1:1,70 — e a moldura `.celular.recorte` das peças é 1:2,05, então ela cortaria
-  a imagem nas laterais. Sobrescrever o viewport devolve o 1:2,16 do aparelho real.
-- **A sessão mora em `ronan.motorista.tokens`** (`lib/sessoes.ts`), não em `token`.
-  Chave errada = tela de login.
-- **`object-position: top`**: a peça mostra o TOPO do print. Role a página até o que
-  você quer mostrar ficar no terço de cima, senão ele fica fora do recorte.
+Um detalhe que sobrevive à mudança, porque é da ARTE e não da captura:
+
+- **`object-position: top`**: a peça mostra o TOPO do print. Enquadre o que você quer
+  mostrar no terço de cima, senão fica fora do recorte da moldura `.celular.recorte`,
+  que é 1:2,05.

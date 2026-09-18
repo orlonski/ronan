@@ -106,8 +106,8 @@ de segurança e é dropada depois.
 ### 1. Cadastro no app, sem empresa nenhuma
 
 Formulário: nome, CPF, celular, senha. **O campo "Código da empresa" sai** — nas
-duas bases (`apps/motorista-app/app/signup.tsx` e
-`apps/motorista/src/pages/signup.tsx`). Placa deixa de ser obrigatória no
+duas bases da época (`apps/motorista-app/app/signup.tsx` e o PWA
+`apps/motorista/src/pages/signup.tsx`, removido em 18/09/2026). Placa deixa de ser obrigatória no
 cadastro e vira coisa de perfil: placa é do trabalho, e nesse momento ainda não
 há trabalho.
 
@@ -328,7 +328,7 @@ sem esse filtro.
 9. ✅ Painel: filtro "Vínculo" (convites enviados/recusados), diálogo "Convidar
    por CPF" e auditoria (`ADMIN_CONVIDOU_MOTORISTA`, `MOTORISTA_ACEITOU_VINCULO`,
    `MOTORISTA_RECUSOU_VINCULO`).
-10. ✅ Apps (nativo e PWA): campo de código fora dos dois signups, placa
+10. ✅ Apps (nativo e, à época, o PWA): campo de código fora dos signups, placa
    opcional, aviso de reivindicação na tela do código, tela "sem empresa" com os
    convites (aceitar/recusar) e a sessão da pessoa em `lib/identidade.ts`.
 
@@ -361,8 +361,3 @@ MinIO por conta) e edição de um lançamento já enviado (hoje: apagar e relan�
   ele ganha fallback pra identidade, sem mudar o resto.
 - **Diretório de empresas pro motorista se candidatar** — descartado por ora: a
   entrada é sempre por convite da empresa.
-- **Armadilha ao testar o PWA local**: `lib/api-url.ts` recusa `localhost` de
-  propósito (pra não vazar URL de teste no bundle) e cai no fallback, que é a
-  **API de produção**. Pra apontar pro backend local, use o IP da máquina na
-  rede (`VITE_API_URL=http://192.168.x.x:3000`) — `localhost` faz o app falar
-  com produção sem avisar.
