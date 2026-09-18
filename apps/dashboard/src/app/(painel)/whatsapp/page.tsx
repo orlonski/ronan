@@ -186,6 +186,7 @@ export default function WhatsappPage() {
       {/* Por qual serviço sai cada mensagem — só a plataforma. O backend também
           gateia com PlataformaGuard; esconder aqui é conveniência, não defesa. */}
       {plataforma && <NumeroMetaCard />}
+      {plataforma && <TemplatesMetaCard />}
       {plataforma && <RoteamentoCard />}
 
       {/* Sessões vinculadas */}
@@ -1256,5 +1257,216 @@ function Info({ rotulo, valor }: { rotulo: string; valor: string }) {
       <span className="text-muted-foreground">{rotulo}: </span>
       <span className="font-medium">{valor}</span>
     </div>
+  );
+}
+
+
+type TemplateEsperado = {
+  rota: string;
+  esperado: string;
+  naMeta: string;
+  bate: boolean;
+};
+
+type TemplatesMeta = { esperados: TemplateEsperado[] };
+
+/**
+ * Os templates que o código declara, confrontados com os que a Meta tem — e um
+ * botão pra cadastrar o que faltar.
+ *
+ * O confronto é o ponto: nome igual com idioma diferente é exatamente o que
+ * produz 132001, e é invisível olhando as duas listas em telas separadas. Já
+ * custou uma tarde: o console da Meta dizia "Portuguese (BR) · Ativo" enquanto
+ * todo envio morria dizendo que o template não existia em pt_BR.
+ *
+ * Cadastrar por aqui, e não no console dela, porque o caminho manual é uma
+ * transcrição — e transcrição erra calada: a Meta aprova o texto ligeiramente
+ * diferente e a conta chega no primeiro envio real. Aqui a fonte é o catálogo
+ * do código, o mesmo que o envio usa.
+ */
+function TemplatesMetaCard() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  const [wabaId, setWabaId] = useState("");
+  const [pedindoUrl, setPedindoUrl] = useState<Record<string, string>>({});
+
+  // O id da WABA fica no navegador de quem opera: não é segredo, não é
+  // configuração da empresa, e digitar de novo a cada visita é o tipo de
+  // atrito que faz a tela não ser usada. Em try/catch porque aba anônima e
+  // site data bloqueado fazem o acesso lançar.
+  useEffect(() => {
+    try {
+      const salvo = localStorage.getItem("meta-waba-id");
+      if (salvo) setWabaId(salvo);
+    } catch {
+      /* navegador sem storage: só não lembra */
+    }
+  }, []);
+
+  function guardarWaba(v: string) {
+    setWabaId(v);
+    try {
+      localStorage.setItem("meta-waba-id", v);
+    } catch {
+      /* idem */
+    }
+  }
+
+  const lista = useQuery({
+    queryKey: ["meta-templates", wabaId],
+    enabled: !!token && wabaId.trim().length > 0,
+    queryFn: () =>
+      fetchApi<TemplatesMeta>(
+        `/admin/roteamento-whatsapp/templates-meta?wabaId=${encodeURIComponent(wabaId.trim())}`,
+        { token },
+      ),
+  });
+
+  const criar = useMutation({
+    mutationFn: ({ rota, urlBase }: { rota: string; urlBase?: string }) =>
+      fetchApi<{ ok?: boolean; status?: number; resposta?: Record<string, unknown> }>(
+        `/admin/roteamento-whatsapp/criar-template?wabaId=${encodeURIComponent(wabaId.trim())}`,
+        { token, method: "POST", body: JSON.stringify({ rota, urlBase: urlBase || undefined }) },
+      ),
+    onSuccess: (r, { rota }) => {
+      if (r.ok) {
+        toast.success("Template enviado pra análise da Meta", {
+          description: "Utility costuma sair em minutos. Use Conferir pra ver quando aprovar.",
+        });
+        setPedindoUrl((p) => {
+          const { [rota]: _, ...resto } = p;
+          return resto;
+        });
+        void qc.invalidateQueries({ queryKey: ["meta-templates"] });
+      } else {
+        const erro = r.resposta?.error as { message?: string } | undefined;
+        toast.error("A Meta recusou o template", {
+          description: erro?.message ?? `HTTP ${r.status}`,
+        });
+      }
+    },
+    onError: (e: Error, { rota }) => {
+      // O servidor recusa template de botão sem o prefixo, e a mensagem dele é
+      // a instrução. Em vez de repeti-la aqui, a tela abre o campo que ela
+      // pede — o texto continua morando num lugar só.
+      if (/urlBase/i.test(e.message)) {
+        setPedindoUrl((p) => ({ ...p, [rota]: p[rota] ?? "" }));
+        toast.info("Esse template tem botão", { description: e.message });
+        return;
+      }
+      toast.error("Não consegui cadastrar", { description: e.message });
+    },
+  });
+
+  const faltando = (lista.data?.esperados ?? []).filter((t) => !t.bate).length;
+
+  return (
+    <Card className="space-y-4 p-4">
+      <div className="flex items-center gap-2">
+        <MessageCircle className="h-5 w-5 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <p className="font-medium">Templates na Meta</p>
+          <p className="text-sm text-muted-foreground">
+            O que o código declara contra o que a Meta tem aprovado. Fora da janela de 24h, só
+            template sai.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="w-72">
+          <label className="mb-1 block text-xs font-medium text-muted-foreground">
+            ID da conta do WhatsApp (WABA)
+          </label>
+          <Input
+            value={wabaId}
+            onChange={(e) => guardarWaba(e.target.value)}
+            placeholder="Ex.: 102938475610293"
+            inputMode="numeric"
+          />
+        </div>
+        <Button
+          variant="outline"
+          disabled={!wabaId.trim() || lista.isFetching}
+          onClick={() => void lista.refetch()}
+        >
+          {lista.isFetching ? <Spinner /> : <RefreshCw className="h-4 w-4" />}
+          Conferir
+        </Button>
+        {lista.data && (
+          <span className="text-xs text-muted-foreground">
+            {faltando === 0
+              ? "Todos batem."
+              : `${faltando} template(s) faltando ou divergente(s).`}
+          </span>
+        )}
+      </div>
+
+      {lista.isError && (
+        <p className="text-sm text-destructive">
+          {(lista.error as Error).message}
+        </p>
+      )}
+
+      {lista.data && (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Mensagem</TableHead>
+              <TableHead>O código espera</TableHead>
+              <TableHead>Na Meta</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {lista.data.esperados.map((t) => (
+              <TableRow key={t.rota}>
+                <TableCell className="font-medium">{t.rota}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{t.esperado}</TableCell>
+                <TableCell className="text-xs">
+                  {t.bate ? (
+                    <span className="text-emerald-700 dark:text-emerald-400">{t.naMeta}</span>
+                  ) : (
+                    <span className="text-amber-700 dark:text-amber-400">{t.naMeta}</span>
+                  )}
+                </TableCell>
+                <TableCell className="text-right">
+                  {!t.bate && (
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      {pedindoUrl[t.rota] !== undefined && (
+                        <Input
+                          value={pedindoUrl[t.rota]}
+                          onChange={(e) =>
+                            setPedindoUrl((p) => ({ ...p, [t.rota]: e.target.value }))
+                          }
+                          placeholder="https://www.asaas.com/i/"
+                          className="w-56"
+                        />
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={criar.isPending}
+                        onClick={() =>
+                          criar.mutate({ rota: t.rota, urlBase: pedindoUrl[t.rota] })
+                        }
+                      >
+                        {criar.isPending && criar.variables?.rota === t.rota ? <Spinner /> : null}
+                        Cadastrar na Meta
+                      </Button>
+                    </div>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+
+      <p className="text-xs text-muted-foreground">
+        Template de código (os OTP) não se cria por aqui: a Meta tem uma forma própria pra eles, e
+        o nome errado não se reaproveita. Esses continuam no console dela.
+      </p>
+    </Card>
   );
 }
