@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Menu } from "lucide-react";
+import { AceiteTermos } from "@/components/aceite-termos";
 import { AvisoConta } from "@/components/aviso-conta";
 import { AvisoVisita } from "@/components/aviso-visita";
 import { Sidebar } from "@/components/sidebar";
@@ -25,6 +26,9 @@ export function PainelShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
+      {/* Bloqueia o painel quando há termo pendente. Renderiza null quando
+          não há — ver o componente. */}
+      <AceiteTermos />
       {/* Quem navega por teclado passava pelos 50+ links do menu antes de
           chegar no conteúdo, em toda tela. */}
       <a

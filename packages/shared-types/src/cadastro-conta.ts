@@ -34,6 +34,21 @@ export const IniciarCadastroContaInput = z.object({
   /** Mais longa que a do painel: esta porta é pública. */
   adminSenha: z.string().min(8, "A senha precisa de pelo menos 8 caracteres.").max(72),
   /**
+   * O aceite dos Termos de Uso, marcado no formulário.
+   *
+   * OPCIONAL no schema, obrigatório na prática. A razão é de implantação: API,
+   * painel e site sobem em builds separados, e um formulário antigo em cache
+   * mandando cadastro sem estes campos não pode virar erro 400 na cara de quem
+   * está tentando virar cliente. Quando vierem vazios, a API registra no log e
+   * o aceite é cobrado no primeiro login, pelo modal do painel.
+   *
+   * `termoSha256` é o hash do texto que a TELA mostrou. A API compara com o
+   * publicado e recusa se divergir — é o que impede registrar concordância com
+   * um texto que a pessoa nunca viu.
+   */
+  termoVersaoId: z.string().uuid().optional(),
+  termoSha256: z.string().length(64).optional(),
+  /**
    * Campo-armadilha: invisível na tela, então só robô preenche. Vem do mesmo
    * padrão do formulário de contato do site.
    */

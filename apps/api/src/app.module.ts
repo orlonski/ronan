@@ -30,6 +30,7 @@ import { CaptacaoModule } from "./captacao/captacao.module";
 import { CadastroContaModule } from "./cadastro-conta/cadastro-conta.module";
 import { ProspeccaoModule } from "./prospeccao/prospeccao.module";
 import { MarketingModule } from "./marketing/marketing.module";
+import { TermosModule } from "./termos/termos.module";
 import { AssinaturasModule } from "./assinaturas/assinaturas.module";
 import { AppVersionInterceptor } from "./common/app-version.interceptor";
 import { ContaMiddleware } from "./common/conta/conta.middleware";
@@ -67,6 +68,7 @@ import { PrismaExceptionFilter } from "./common/prisma-exception.filter";
     ProspeccaoModule,
     MarketingModule,
     AssinaturasModule,
+    TermosModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: ErrorsExceptionFilter },

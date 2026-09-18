@@ -48,3 +48,4 @@ export * from "./whatsapp-mensagens";
 export * from "./captacao";
 export * from "./cadastro-conta";
 export * from "./assinatura";
+export * from "./termo";

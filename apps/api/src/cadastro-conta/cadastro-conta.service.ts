@@ -8,6 +8,7 @@ import type {
 import { NOME_PLATAFORMA } from "@ronan/shared-types";
 import { comConta, comoSistema } from "../common/conta/conta-context";
 import { PrismaService } from "../prisma/prisma.service";
+import { TermosService } from "../termos/termos.service";
 import { AuthService } from "../auth/auth.service";
 import { ContasService } from "../admin/contas/contas.service";
 import { EnvioWhatsappService } from "../whatsapp/envio/envio-whatsapp.service";
@@ -46,6 +47,7 @@ export class CadastroContaService {
   private readonly log = new Logger(CadastroContaService.name);
 
   constructor(
+    private readonly termos: TermosService,
     private readonly prisma: PrismaService,
     private readonly contas: ContasService,
     private readonly envio: EnvioWhatsappService,
@@ -175,6 +177,8 @@ export class CadastroContaService {
           codigo,
           expiraEm: new Date(Date.now() + TTL_MINUTOS * 60_000),
           ipCriacao: ip,
+          termoVersaoId: input.termoVersaoId ?? null,
+          termoSha256: input.termoSha256 ?? null,
         },
         update: {
           empresa: input.empresa.trim(),
@@ -182,6 +186,8 @@ export class CadastroContaService {
           adminNome: input.adminNome.trim(),
           adminEmail: input.adminEmail.trim().toLowerCase(),
           senhaHash,
+          termoVersaoId: input.termoVersaoId ?? null,
+          termoSha256: input.termoSha256 ?? null,
           codigo,
           expiraEm: new Date(Date.now() + TTL_MINUTOS * 60_000),
           tentativas: 0,
@@ -272,12 +278,63 @@ export class CadastroContaService {
       origemPublica: true,
     });
 
+    await this.registrarAceite(conta.id, pendente);
+
     await this.descartar(telefone);
     this.log.log(`Empresa criada por auto-cadastro: ${pendente.empresa} (${conta.id})`);
     this.avisarPlataforma(pendente.empresa, pendente.adminNome, telefone);
     this.registrarNoFunil(pendente);
 
     return conta;
+  }
+
+  /**
+   * Transforma em prova o aceite que a pessoa marcou no formulário.
+   *
+   * Roda DEPOIS da conta existir, porque `AceiteTermo` aponta pra uma conta.
+   * Mas usa a versão e o IP capturados lá atrás, no `iniciar` — que é onde a
+   * pessoa de fato leu e clicou. Se alguém publicar versão nova entre o
+   * formulário e o código do WhatsApp, a prova aponta pro texto que ela viu.
+   *
+   * NUNCA derruba o cadastro. Falhar aqui deixa a conta sem aceite registrado,
+   * e o modal do painel cobra no primeiro login — é degradação, não perda.
+   * Recusar a criação da empresa por causa disso seria perder um cliente pra
+   * resolver um problema que se resolve sozinho na tela seguinte.
+   */
+  private async registrarAceite(
+    contaId: string,
+    pendente: {
+      termoVersaoId: string | null;
+      termoSha256: string | null;
+      adminNome: string;
+      adminEmail: string;
+      cnpj: string | null;
+      ipCriacao: string | null;
+    },
+  ): Promise<void> {
+    if (!pendente.termoVersaoId || !pendente.termoSha256) {
+      this.log.warn(
+        `Conta ${contaId} criada SEM aceite no cadastro (formulário antigo). ` +
+          `O modal do painel vai cobrar no primeiro login.`,
+      );
+      return;
+    }
+    try {
+      await this.termos.aceitar({
+        contaId,
+        termoVersaoId: pendente.termoVersaoId,
+        sha256: pendente.termoSha256,
+        nome: pendente.adminNome,
+        email: pendente.adminEmail,
+        documento: pendente.cnpj,
+        ip: pendente.ipCriacao,
+        origem: "CADASTRO",
+      });
+    } catch (e) {
+      this.log.error(
+        `Conta ${contaId}: não consegui registrar o aceite do cadastro — ${(e as Error).message}`,
+      );
+    }
   }
 
   /** Ver o comentário acima de `segundosDesde`. */

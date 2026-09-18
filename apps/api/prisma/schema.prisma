@@ -590,6 +590,7 @@ model Conta {
   conferenciasTicket            ConferenciaTicket[]
   assinaturas                   Assinatura[]
   cobrancasAssinatura           CobrancaAssinatura[]
+  aceitesTermo                  AceiteTermo[]
 
   @@index([ativa])
   @@map("contas")
@@ -712,6 +713,7 @@ model User {
   assinaturasCriadas     Assinatura[]          @relation("CriouAssinatura")
   assinaturasCanceladas  Assinatura[]          @relation("CancelouAssinatura")
   cobrancasBaixadas      CobrancaAssinatura[]  @relation("BaixouCobranca")
+  aceitesTermo           AceiteTermo[]
 
   @@index([contaId])
   @@map("users")
@@ -1534,6 +1536,17 @@ model ContaCadastroPendente {
   /// De onde veio, pra dar como bloquear em lote se virar abuso.
   ipCriacao     String?
   criadoEm      DateTime @default(now())
+
+  /// Qual versão dos Termos a pessoa marcou no formulário, e o hash do texto
+  /// que a tela mostrou.
+  ///
+  /// Fica AQUI, e não vira `AceiteTermo` na hora, porque neste momento a conta
+  /// ainda não existe — ela nasce só no `confirmar`, depois do código do
+  /// WhatsApp. Guardar a intenção aqui é o que permite gravar a prova com a
+  /// versão CERTA depois: se alguém publicar uma versão nova entre o formulário
+  /// e o código, a prova tem que apontar pra que a pessoa leu, não pra vigente.
+  termoVersaoId String?
+  termoSha256   String?
 
   @@map("conta_cadastro_pendente")
 }
@@ -5904,4 +5917,103 @@ model EventoGatewayPagamento {
   @@index([processadoEm])
   @@index([tipo, recebidoEm(sort: Desc)])
   @@map("eventos_gateway_pagamento")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ACEITE DE TERMOS
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum TipoTermo {
+  /// Os Termos de Uso — o contrato com a empresa que paga.
+  USO
+  /// A Política de Privacidade — fala com o motorista, sobre os dados dele.
+  PRIVACIDADE
+}
+
+/// Uma versão publicada de um documento. É da CASA, não de empresa nenhuma —
+/// por isso entra em `MODELS_GLOBAIS` e toda consulta precisa citar o alvo no
+/// `where`.
+///
+/// POR QUE GUARDAR O CORPO INTEIRO, e não uma URL:
+///
+/// Prova de aceite que aponta pra um link não prova nada — o link muda e o que
+/// a pessoa leu se perde. O texto fica aqui, imutável depois de publicado, e o
+/// `sha256` é o que amarra a assinatura ao conteúdo exato.
+model TermoVersao {
+  id   String    @id @default(uuid())
+  tipo TipoTermo
+
+  /// "1.0", "1.1", "2.0". Semântico e legível: vai aparecer na tela e no
+  /// recibo, então "v3" é melhor que um uuid.
+  versao String
+
+  /// O documento em Markdown, como foi publicado. NUNCA sofre UPDATE depois de
+  /// `publicadoEm` — corrigir vírgula exige versão nova, porque alguém já
+  /// aceitou o texto anterior e a prova dele não pode mudar embaixo.
+  corpo String
+
+  /// SHA-256 do `corpo`. É o que liga a pessoa ao texto exato: numa disputa,
+  /// "aceitou a versão 1.0" vale pouco; "aceitou o texto cujo hash é X" vale.
+  sha256 String
+
+  /// A partir de quando esta versão passa a ser a exigida. Futuro = agendada.
+  vigenteDesde DateTime
+  /// Quando foi publicada de fato. `null` = rascunho, não exigida de ninguém.
+  publicadoEm  DateTime?
+
+  /// Resumo do que mudou em relação à versão anterior, na voz de quem vai ler.
+  /// Aparece no modal de reaceite: pedir que alguém releia 2.500 palavras sem
+  /// dizer o que mudou é pedir que ele clique sem ler.
+  oQueMudou String?
+
+  criadoEm DateTime @default(now())
+  aceites  AceiteTermo[]
+
+  /// Só uma versão publicada por número, por tipo.
+  @@unique([tipo, versao])
+  @@index([tipo, vigenteDesde(sort: Desc)])
+  @@map("termo_versoes")
+}
+
+/// O registro de que alguém aceitou uma versão. É a PROVA, e o desenho todo
+/// existe pra ela se sustentar:
+///
+/// - **Nunca sofre UPDATE.** Versão nova = linha nova. O histórico é o valor.
+/// - **Guarda quem era a pessoa naquele momento** (nome e documento copiados,
+///   não FK viva): se o usuário for renomeado ou removido depois, a prova
+///   continua dizendo quem clicou.
+/// - **Guarda IP e user agent**, que é o que transforma "alguém marcou um
+///   checkbox" em evidência com origem.
+model AceiteTermo {
+  id      String @id @default(uuid())
+  contaId String
+  conta   Conta  @relation(fields: [contaId], references: [id], onDelete: Cascade)
+
+  termoVersaoId String
+  termoVersao   TermoVersao @relation(fields: [termoVersaoId], references: [id])
+
+  /// Quem clicou. Pode ficar nulo quando o aceite acontece no cadastro, ANTES
+  /// de o usuário existir — nesse momento só há um `ContaCadastroPendente`.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  /// Cópias congeladas de quem aceitou. Ver o comentário do model.
+  nomeQuemAceitou  String
+  emailQuemAceitou String
+  /// CPF ou CNPJ de quem aceitou, só dígitos. Vazio quando não foi informado
+  /// no cadastro — o CNPJ é opcional no trial de propósito.
+  documento        String?
+
+  aceitoEm  DateTime @default(now())
+  ip        String?
+  userAgent String?
+
+  /// De onde veio o clique: "CADASTRO" (trial) ou "PAINEL" (modal de reaceite).
+  /// Guardado porque os dois têm peso diferente: o do painel é o que vale
+  /// quando a relação já é paga.
+  origem String
+
+  @@index([contaId, aceitoEm(sort: Desc)])
+  @@index([termoVersaoId])
+  @@map("aceites_termo")
 }

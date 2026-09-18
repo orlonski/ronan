@@ -68,6 +68,12 @@ const MODELS_GLOBAIS = new Set<string>([
   // escopado). Ninguém é autorizado por um modelo — só por papel de conta.
   "PapelModelo",
   // Os interruptores da casa: porta de auto-cadastro e dias de teste.
+  // O texto dos Termos de Uso e da Política. É da casa: uma versão publicada
+  // vale pra todo cliente, e o `AceiteTermo` (esse sim escopado) é que diz quem
+  // aceitou qual. Sem estar aqui, a trava tentaria filtrar por uma coluna
+  // `contaId` que a tabela não tem — e hoje só não quebra porque todo acesso
+  // passa por `comoSistema`, o que é sorte, não desenho.
+  "TermoVersao",
   "ConfiguracaoPlataforma",
   // A tabela de preço do produto. É da casa: nenhuma empresa tem a sua.
   "FaixaPreco",

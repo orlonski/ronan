@@ -3,12 +3,14 @@
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowRight, Loader2, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { TermoPublico } from "@ronan/shared-types";
+import { apiBaseUrl } from "@/lib/client-api";
 import { MovatruckLogo } from "@/components/movatruck-logo";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
@@ -81,12 +83,37 @@ export default function CadastroPage() {
   });
   const [codigo, setCodigo] = useState("");
 
+  /**
+   * O contrato vigente, buscado sozinho.
+   *
+   * Vem da API pública em vez de estar chumbado na tela porque o texto muda com
+   * o tempo e o aceite precisa apontar pra versão CERTA. Se a busca falhar, o
+   * cadastro continua funcionando sem checkbox — e o modal do painel cobra no
+   * primeiro login. Contrato é importante; impedir alguém de virar cliente
+   * porque uma requisição secundária falhou, não.
+   */
+  const [termo, setTermo] = useState<TermoPublico | null>(null);
+  const [aceitou, setAceitou] = useState(false);
+
+  useEffect(() => {
+    fetch(`${apiBaseUrl}/termos?tipo=USO`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((lista: TermoPublico[] | null) => setTermo(lista?.[0] ?? null))
+      .catch(() => setTermo(null));
+  }, []);
+
   async function enviarDados(e: React.FormEvent) {
     e.preventDefault();
     setCarregando(true);
     setErro(null);
     try {
-      const r = (await chamar("iniciar", form)) as { destinoMascarado?: string };
+      const r = (await chamar("iniciar", {
+        ...form,
+        // O hash é o do texto que ESTA tela mostrou. A API recusa se divergir
+        // do publicado — é o que impede registrar concordância com um texto
+        // que a pessoa não viu.
+        ...(termo && aceitou ? { termoVersaoId: termo.id, termoSha256: termo.sha256 } : {}),
+      })) as { destinoMascarado?: string };
       setDestino(r?.destinoMascarado ?? "");
       setPasso("codigo");
     } catch (e) {
@@ -211,9 +238,48 @@ export default function CadastroPage() {
               onChange={(e) => setForm({ ...form, website: e.target.value })}
             />
 
+            {termo ? (
+              <label className="flex cursor-pointer items-start gap-x-2 text-sm text-muted-foreground">
+                {/* NÃO nasce marcado. Checkbox pré-marcado não é aceite — é
+                    armadilha, e é a primeira coisa que se usa pra derrubar a
+                    validade de um aceite. */}
+                <input
+                  type="checkbox"
+                  checked={aceitou}
+                  onChange={(e) => setAceitou(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-border"
+                />
+                <span>
+                  Li e aceito os{" "}
+                  <a
+                    href="/termos"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium text-primary underline underline-offset-2"
+                  >
+                    Termos de Uso
+                  </a>{" "}
+                  e a{" "}
+                  <a
+                    href="/politica-de-privacidade"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium text-primary underline underline-offset-2"
+                  >
+                    Política de Privacidade
+                  </a>
+                  .
+                </span>
+              </label>
+            ) : null}
+
             {erro && <p className="text-sm text-destructive">{erro}</p>}
 
-            <Button type="submit" className="w-full" disabled={carregando}>
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={carregando || (termo !== null && !aceitou)}
+            >
               {carregando ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Criar minha conta
               {!carregando && <ArrowRight className="h-4 w-4" />}
