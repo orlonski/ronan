@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AsaasProvedor, centavosParaReais, reaisParaCentavos } from "./asaas.provedor";
+import { AsaasProvedor, centavosParaReais, reaisParaCentavos, textoPix } from "./asaas.provedor";
 import type { AsaasConfig } from "./asaas.config";
 
 /**
@@ -118,6 +118,27 @@ describe("autorização de Pix Automático", () => {
     expect(corpo.contractId.length).toBeLessThanOrEqual(35);
   });
 
+  /**
+   * O travessão derrubou a criação inteira em produção (18/09/2026).
+   *
+   * `Movatruck — <empresa>` é a frase que o serviço monta, e o gateway
+   * respondeu "A descrição da autorização contém caracteres não permitidos" —
+   * recusando a autorização, não o texto. Nenhum cliente conseguia começar a
+   * pagar por Pix Automático, que é a forma padrão.
+   */
+  it("tira travessão e acento da descrição, que o Banco Central recusa", async () => {
+    const { p, chamadas } = provedor(RESPOSTA_REAL);
+    await p.criarAssinatura({ ...pedido, descricao: "Movatruck — Transportes São João" });
+    const corpo = chamadas[0]!.body as {
+      description: string;
+      immediateQrCode: { description: string };
+    };
+
+    expect(corpo.description).toBe("Movatruck Transportes Sao Joao");
+    // O QR carrega a MESMA descrição: é a que o cliente lê no app do banco.
+    expect(corpo.immediateQrCode.description).toBe("Movatruck Transportes Sao Joao");
+  });
+
   it("sem chave Pix configurada, recusa antes de chamar o gateway", async () => {
     const { fake, chamadas } = fetchFalso(RESPOSTA_REAL);
     const p = new AsaasProvedor(configFalsa({ chavePix: "" }));
@@ -195,5 +216,29 @@ describe("centavos e reais", () => {
     // 189.9 * 100 dá 18989.999999999996 em ponto flutuante.
     expect(reaisParaCentavos(189.9)).toBe(18990);
     expect(centavosParaReais(189000)).toBe(1890);
+  });
+});
+
+/**
+ * A regra do Banco Central pra descrição do Pix Automático, isolada.
+ *
+ * Só letra, número e espaço: qualquer outra coisa faz o gateway recusar a
+ * autorização inteira. E o corte em 35 nunca pode deixar espaço sobrando na
+ * ponta — espaço no fim é caractere como qualquer outro pra quem valida.
+ */
+describe("textoPix", () => {
+  it("troca o que não é letra, número ou espaço", () => {
+    expect(textoPix("Movatruck — Schaba")).toBe("Movatruck Schaba");
+    expect(textoPix("Transp. & Cia (Ltda)")).toBe("Transp Cia Ltda");
+  });
+
+  it("tira acento sem comer a letra", () => {
+    expect(textoPix("Transportes São João Ltda")).toBe("Transportes Sao Joao Ltda");
+  });
+
+  it("corta em 35 sem deixar espaço na ponta", () => {
+    const r = textoPix("Movatruck Transportes Reunidas do Parana");
+    expect(r.length).toBeLessThanOrEqual(35);
+    expect(r).toBe(r.trim());
   });
 });

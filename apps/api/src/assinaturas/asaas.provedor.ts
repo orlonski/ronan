@@ -13,7 +13,7 @@ import {
 /**
  * O Asaas falando a nossa língua.
  *
- * Duas traduções moram aqui e em nenhum outro lugar:
+ * Três traduções moram aqui e em nenhum outro lugar:
  *
  * 1. **Centavos ↔ reais.** O sistema inteiro guarda centavos (inteiro, soma sem
  *    erro de ponto flutuante); o Asaas fala `189.9`. A conversão acontece na
@@ -21,6 +21,8 @@ import {
  * 2. **Forma de cobrança ↔ o caminho da API.** `PIX_AUTOMATICO` não é um
  *    `billingType`: é outro endpoint, outro objeto e outro ciclo de vida. Quem
  *    chama não precisa saber disso.
+ * 3. **Nossa frase ↔ o que o Pix aceita.** A descrição da autorização obedece
+ *    ao Banco Central, não a nós: só letra, número e espaço. Ver `textoPix`.
  */
 @Injectable()
 export class AsaasProvedor implements GatewayPagamento {
@@ -136,7 +138,7 @@ export class AsaasProvedor implements GatewayPagamento {
       // O gateway limita a 35 caracteres nos dois campos, e corta em silêncio
       // o que passar — cortar aqui é o que evita descobrir isso no extrato.
       contractId: dados.referenciaExterna.slice(0, 35),
-      description: dados.descricao.slice(0, 35),
+      description: textoPix(dados.descricao),
       frequency: dados.ciclo === "ANUAL" ? "ANNUALLY" : "MONTHLY",
       startDate: dados.primeiroVencimento,
       value: centavosParaReais(dados.valorCentavos),
@@ -151,7 +153,7 @@ export class AsaasProvedor implements GatewayPagamento {
         expirationSeconds: 3 * 24 * 60 * 60,
         originalValue: centavosParaReais(dados.valorCentavos),
         pixKey: this.config.chavePix,
-        description: dados.descricao.slice(0, 35),
+        description: textoPix(dados.descricao),
       },
     });
 
@@ -358,4 +360,31 @@ export function centavosParaReais(centavos: number): number {
  */
 export function reaisParaCentavos(reais: number): number {
   return Math.round(reais * 100);
+}
+
+/**
+ * O texto como o Pix Automático aceita: sem acento, sem símbolo, até 35 letras.
+ *
+ * Não é capricho de formatação — é a terceira tradução que mora nesta borda. A
+ * descrição da autorização vai parar no app do banco do cliente e obedece à
+ * regra do Banco Central, não à nossa: qualquer caractere fora de letra, número
+ * e espaço faz o gateway recusar a autorização INTEIRA, com "A descrição da
+ * autorização contém caracteres não permitidos". Foi o travessão de
+ * `Movatruck — <empresa>` que derrubou toda criação de Pix Automático, e
+ * bastaria o cliente seguinte se chamar "Transportes São João" pra derrubar de
+ * novo por outro motivo.
+ *
+ * O `/subscriptions` (cartão, boleto, Pix mês a mês) não tem essa regra e
+ * continua recebendo a descrição inteira — por isso a limpeza é aqui dentro, e
+ * não na frase que o serviço monta.
+ */
+export function textoPix(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^A-Za-z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 35)
+    .trim();
 }
