@@ -335,6 +335,22 @@ export class MetaProvedor implements ProvedorWhatsappClient {
   }
 
   /**
+   * Submete um template pra análise da Meta.
+   *
+   * Quem monta o corpo é o serviço, que é quem conhece o catálogo — aqui é só
+   * o HTTP, igual ao resto deste arquivo. A resposta volta CRUA de propósito:
+   * quando a Meta recusa, o motivo dela ("o exemplo é genérico demais", "esse
+   * nome já existe") é a única coisa que resolve, e traduzir isso pra um erro
+   * nosso jogaria fora justamente o que se quer ler.
+   */
+  async criarTemplate(
+    wabaId: string,
+    corpo: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    return this.chamar(`/${wabaId}/message_templates`, "POST", corpo);
+  }
+
+  /**
    * Uma chamada à Graph API que devolve o corpo CRU, dando certo ou não.
    *
    * Diferente de `postar`, que traduz pro contrato de envio: aqui quem chama

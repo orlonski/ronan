@@ -656,6 +656,27 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
   },
 };
 
+/**
+ * Pedir pra Meta cadastrar o template que o código já declara.
+ *
+ * Só a chave da rota: o corpo, o idioma e os exemplos saem do catálogo acima,
+ * porque transcrever isso à mão pro console da Meta é como o template aprovado
+ * passa a divergir do que o envio manda — e a divergência só aparece no
+ * primeiro envio real.
+ */
+export const CriarTemplateMetaInput = z.object({
+  rota: z.string().min(1, "Diga qual rota."),
+  /**
+   * O prefixo do botão de URL, pros templates que têm um.
+   *
+   * Fica fora do catálogo porque quem manda nele é o template APROVADO: a
+   * Meta congela o prefixo e o envio só completa o sufixo. Ter a mesma URL em
+   * dois lugares faria o código jurar uma coisa e a Meta entregar outra.
+   */
+  urlBase: z.string().url("Use uma URL completa, terminando em barra.").optional(),
+});
+export type CriarTemplateMetaInput = z.infer<typeof CriarTemplateMetaInput>;
+
 /** O template daquela rota, ou `undefined` se ela não tem um. */
 export function templateWhatsapp(rota: string): TemplateWhatsappDef | undefined {
   return TEMPLATES_WHATSAPP[rota as RotaWhatsapp];

@@ -4,6 +4,7 @@ import {
   AdicionarNumeroMetaInput,
   AtualizarRoteamentoPlataformaInput,
   AtualizarRoteamentoWhatsappInput,
+  CriarTemplateMetaInput,
   RegistrarNumeroMetaInput,
   SolicitarCodigoMetaInput,
   VerificarCodigoMetaInput,
@@ -104,6 +105,25 @@ export class AdminRoteamentoWhatsappController {
   @Get("templates-meta")
   templatesMeta(@Query("wabaId") wabaId: string) {
     return this.service.templatesMeta(wabaId);
+  }
+
+  /**
+   * Cadastra na Meta o template que o código já declara, pela chave da rota.
+   *
+   * Substitui a transcrição manual no console dela: corpo, idioma e um exemplo
+   * por variável saem todos do `TEMPLATES_WHATSAPP`, que é a mesma fonte que o
+   * envio usa. Template com botão de URL precisa do `urlBase`, porque o
+   * prefixo fica congelado no template aprovado e nunca esteve no código.
+   *
+   * A resposta é a da Meta, crua: quando ela recusa, o motivo dela é o que
+   * resolve.
+   */
+  @Post("criar-template")
+  criarTemplate(
+    @Query("wabaId") wabaId: string,
+    @Body(new ZodValidationPipe(CriarTemplateMetaInput)) body: CriarTemplateMetaInput,
+  ) {
+    return this.service.criarTemplateNaMeta(wabaId, body.rota, body.urlBase);
   }
 
   /**

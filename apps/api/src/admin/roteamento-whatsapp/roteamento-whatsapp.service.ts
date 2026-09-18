@@ -1,10 +1,13 @@
 import { Injectable } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import {
+  achatarParam,
   CHAVES_ROTA_WHATSAPP,
   provedorAtendeRota,
   ROTAS_DA_PLATAFORMA,
   ROTAS_WHATSAPP,
   TEMPLATES_WHATSAPP,
+  rotaWhatsapp,
   templateWhatsapp,
   type AtualizarRoteamentoWhatsappInput,
   type ProvedorWhatsapp,
@@ -220,6 +223,79 @@ export class AdminRoteamentoWhatsappService {
       };
     });
     return { bruto: r, esperados };
+  }
+
+  /**
+   * Cadastra na Meta o template que o código já declara.
+   *
+   * Existe porque o caminho manual é uma transcrição: alguém abre o console da
+   * Meta e copia o corpo, o idioma e um exemplo por variável de dentro do
+   * `TEMPLATES_WHATSAPP`. Transcrição erra — e erra calada, porque a Meta
+   * aprova um template com o texto ligeiramente diferente e a falha só aparece
+   * no primeiro envio real, como 132001 ou como contagem de parâmetro que não
+   * bate. Aqui a fonte é o catálogo, que é o mesmo que o envio usa.
+   *
+   * NÃO substitui a análise da Meta: isto submete, ela aprova quando quiser.
+   */
+  async criarTemplateNaMeta(wabaId: string, rota: string, urlBase?: string) {
+    const def = templateWhatsapp(rota);
+    const rotaDef = rotaWhatsapp(rota);
+    if (!def || !rotaDef) {
+      throw new NotFoundException(`A rota "${rota}" não existe ou não tem template no código.`);
+    }
+
+    // O template de código é outro bicho na Meta: corpo FIXO por ela, botão de
+    // OTP e campos de validade que não existem no nosso catálogo. Submeter um
+    // palpite aqui criaria um template com nome certo e forma errada — e o
+    // nome é o que não dá pra reaproveitar depois.
+    if (rotaDef.categoria === "authentication") {
+      throw new BadRequestException(
+        "Template de código (authentication) tem forma própria na Meta e precisa ser criado no console dela.",
+      );
+    }
+
+    if (def.botao && def.botao.tipo === "URL" && !urlBase) {
+      throw new BadRequestException(
+        `O template "${def.nome}" tem botão de URL, e o prefixo dele não mora no código. Informe "urlBase" (ex.: https://www.asaas.com/i/).`,
+      );
+    }
+
+    const componentes: Record<string, unknown>[] = [
+      {
+        type: "BODY",
+        text: def.textoAprovacao,
+        // Um exemplo por {{n}}, na MESMA ordem do corpo. A Meta recusa
+        // template sem exemplo e recusa exemplo genérico; o do catálogo é o
+        // mesmo que a simulação de payload usa, então o que ela analisa é o
+        // que ela vai receber de verdade.
+        example: { body_text: [def.corpo.map((i) => achatarParam(def.exemplo[i] ?? ""))] },
+      },
+    ];
+
+    if (def.botao && def.botao.tipo === "URL") {
+      componentes.push({
+        type: "BUTTONS",
+        buttons: [
+          {
+            type: "URL",
+            text: "Abrir",
+            // `{{1}}` no fim é o que torna a URL dinâmica: o envio manda só o
+            // sufixo. O prefixo fica congelado no template aprovado — é por
+            // isso que ele não pode sair do código depois, e por isso que ele
+            // entra aqui por parâmetro.
+            url: `${urlBase}{{1}}`,
+            example: [`${urlBase}${achatarParam(def.exemplo[def.botao.param] ?? "")}`],
+          },
+        ],
+      });
+    }
+
+    return this.meta.criarTemplate(wabaId, {
+      name: def.nome,
+      language: def.idioma,
+      category: "UTILITY",
+      components: componentes,
+    });
   }
 
   /** O que a Meta diz sobre o número configurado no servidor. */
