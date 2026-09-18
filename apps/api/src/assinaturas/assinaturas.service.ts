@@ -8,6 +8,7 @@ import {
 import { AcaoAuditoria, type Assinatura, type Prisma } from "@prisma/client";
 import {
   custoDeReceber,
+  ROTULO_STATUS_ASSINATURA,
   type AtualizarAssinaturaInput,
   type BaixaManualInput,
   type CriarAssinaturaInput,
@@ -30,6 +31,18 @@ import { ErroGateway } from "./gateway.types";
 
 /** Status em que a assinatura ainda ocupa a vaga da conta. */
 const STATUS_VIVOS = ["RASCUNHO", "AGUARDANDO", "ATIVA", "INADIMPLENTE"] as const;
+
+/**
+ * O rascunho ocupa a vaga, mas não é uma assinatura em andamento.
+ *
+ * Ele é o que sobra de uma tentativa que não chegou ao gateway: gravamos a
+ * linha antes de chamar lá de propósito, e quando o gateway recusa (CNPJ
+ * inválido, chave faltando, fora do ar) a linha fica. Se isso virasse "já tem
+ * uma assinatura em andamento", a empresa ficaria presa pra sempre — o cliente
+ * não é cobrado por nada, e mesmo assim ninguém consegue criar a assinatura
+ * dele. Por isso o rascunho é RETOMADO na tentativa seguinte, não um bloqueio.
+ */
+const STATUS_COBRANDO = ["AGUARDANDO", "ATIVA", "INADIMPLENTE"] as const;
 
 /**
  * A gestão das assinaturas, do lado da plataforma.
@@ -186,11 +199,12 @@ export class AssinaturasService {
     const viva = await comoSistema(() =>
       this.prisma.assinatura.findFirst({
         where: { contaId: dados.contaId, status: { in: [...STATUS_VIVOS] } },
+        orderBy: { criadoEm: "desc" },
       }),
     );
-    if (viva) {
+    if (viva && STATUS_COBRANDO.includes(viva.status as (typeof STATUS_COBRANDO)[number])) {
       throw new ConflictException(
-        `${conta.nome} já tem uma assinatura em andamento. Cancele a atual antes de criar outra.`,
+        `${conta.nome} já tem uma assinatura ${ROTULO_STATUS_ASSINATURA[viva.status].toLowerCase()}. Cancele a atual antes de criar outra.`,
       );
     }
 
@@ -217,24 +231,30 @@ export class AssinaturasService {
     const diaVencimento =
       dados.primeiroVencimento && diaDoInicio <= 28 ? diaDoInicio : dados.diaVencimento;
 
+    const dadosDaLinha = {
+      status: "RASCUNHO" as const,
+      forma: dados.forma,
+      ciclo: dados.ciclo,
+      valorCentavos: dados.valorCentavos,
+      diaVencimento,
+      nomeResponsavel: dados.nomeResponsavel,
+      emailCobranca: dados.emailCobranca,
+      telefoneCobranca: dados.telefoneCobranca,
+      documento: dados.documento,
+      proximoVencimento: primeiroVencimento,
+      observacao: dados.observacao ?? null,
+    };
+
+    // Rascunho parado é reescrito com o que está sendo combinado AGORA, não
+    // reaproveitado como estava: quem tenta de novo quase sempre está tentando
+    // por causa do que o gateway recusou da primeira vez, e mandar os dados
+    // velhos faria a mesma recusa voltar.
     const assinatura = await comoSistema(() =>
-      this.prisma.assinatura.create({
-        data: {
-          contaId: dados.contaId,
-          status: "RASCUNHO",
-          forma: dados.forma,
-          ciclo: dados.ciclo,
-          valorCentavos: dados.valorCentavos,
-          diaVencimento,
-          nomeResponsavel: dados.nomeResponsavel,
-          emailCobranca: dados.emailCobranca,
-          telefoneCobranca: dados.telefoneCobranca,
-          documento: dados.documento,
-          proximoVencimento: primeiroVencimento,
-          observacao: dados.observacao ?? null,
-          criadoPorId: usuarioId,
-        },
-      }),
+      viva
+        ? this.prisma.assinatura.update({ where: { id: viva.id }, data: dadosDaLinha })
+        : this.prisma.assinatura.create({
+            data: { ...dadosDaLinha, contaId: dados.contaId, criadoPorId: usuarioId },
+          }),
     );
 
     return this.espelharNoGateway(assinatura.id, dados.avisarCliente !== false);

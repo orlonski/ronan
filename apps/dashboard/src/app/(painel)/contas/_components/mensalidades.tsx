@@ -170,7 +170,14 @@ export function Mensalidades({ contas }: { contas: ContaResumo[] }) {
 
   // Empresas que ainda não têm assinatura: é o que a tela precisa oferecer,
   // e listar as que já têm só daria erro de "já tem uma em andamento".
-  const semAssinatura = contas.filter((c) => !assinaturas.some((a) => a.contaId === c.id));
+  //
+  // Rascunho NÃO tira a empresa da lista. Ele é tentativa que o gateway
+  // recusou, e ninguém está sendo cobrado por ela — esconder a empresa aqui
+  // deixava o rascunho como um cadeado: impossível criar a assinatura e nada
+  // na tela dizendo por quê. Criar de novo retoma o rascunho no servidor.
+  const semAssinatura = contas.filter(
+    (c) => !assinaturas.some((a) => a.contaId === c.id && a.status !== "RASCUNHO"),
+  );
 
   return (
     <Card className="p-4">
@@ -239,6 +246,16 @@ export function Mensalidades({ contas }: { contas: ContaResumo[] }) {
                   {ROTULO_FORMA_COBRANCA[a.forma]} · vence dia {a.diaVencimento} · taxa{" "}
                   {reais(a.taxaPorCobrancaCentavos)}
                 </p>
+                {/* O rascunho precisa se explicar. Ele aparece igual às
+                    outras, mas não cobra nada de ninguém: é uma tentativa que
+                    o gateway recusou, e quem olha a lista tem que saber que
+                    ainda falta fazer algo. */}
+                {a.status === "RASCUNHO" && (
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Não chegou no gateway — ninguém está sendo cobrado. Use “Nova assinatura”
+                    de novo pra tentar, ou cancele.
+                  </p>
+                )}
               </div>
               <Button variant="outline" size="sm" onClick={() => setDetalhe(a)}>
                 Cobranças
@@ -286,6 +303,7 @@ export function Mensalidades({ contas }: { contas: ContaResumo[] }) {
             setCriando(false);
             void refetch();
           }}
+          onFalhou={() => void refetch()}
         />
       )}
 
@@ -311,10 +329,12 @@ function DialogNovaAssinatura({
   contas,
   onFechar,
   onCriada,
+  onFalhou,
 }: {
   contas: ContaResumo[];
   onFechar: () => void;
   onCriada: () => void;
+  onFalhou: () => void;
 }) {
   const token = useAuthToken();
   const [contaId, setContaId] = useState("");
@@ -384,6 +404,10 @@ function DialogNovaAssinatura({
       toast.error("Não consegui criar", {
         description: e instanceof Error ? e.message : undefined,
       });
+      // A lista recarrega mesmo no erro: a assinatura é gravada como rascunho
+      // ANTES de ir pro gateway, então o que falhou aqui já existe lá atrás. Sem
+      // este refetch a tela seguia jurando que a empresa não tem nada.
+      onFalhou();
     } finally {
       setSalvando(false);
     }

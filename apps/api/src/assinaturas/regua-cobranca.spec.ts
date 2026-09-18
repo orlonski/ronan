@@ -13,7 +13,11 @@ import { ReguaCobrancaService } from "./regua-cobranca.service";
  * quem entra na lista, o que é gravado, e o que acontece quando algo falha.
  */
 describe("régua de cobrança", () => {
-  const HOJE = new Date("2026-09-14T12:00:00.000Z");
+  // Hoje de verdade, não uma data escrita à mão: a régua compara com o relógio
+  // do servidor, e uma data fixa aqui vira um teste que passa na semana em que
+  // foi escrito e amanhece vermelho depois — o pior jeito de perder confiança
+  // na suíte.
+  const HOJE = new Date();
 
   /** Uma cobrança vencida há 3 dias, ainda sem nenhum aviso de atraso. */
   function cobrancaAtrasada(over: Record<string, unknown> = {}) {
