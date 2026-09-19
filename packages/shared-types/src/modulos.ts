@@ -34,6 +34,7 @@ export const MODULOS_CHAVES = [
   "fiscal",
   "comunicacao",
   "mensal",
+  "admissao",
   "plataforma",
 ] as const;
 export const ModuloChaveSchema = z.enum(MODULOS_CHAVES);
@@ -160,6 +161,16 @@ export const MODULOS: ModuloDef[] = [
     pitch:
       "O caminhão fica na obra e você cobra por dia. O motorista marca a presença num toque e você chega no dia 20 com o espelho pronto.",
     recursos: ["alocacoes", "presenca", "espelhos"],
+  },
+  {
+    // Juntar os papéis que a obra exige antes do caminhão entrar. Módulo à
+    // parte do mensal porque quem roda frete comum também precisa disso, e
+    // quem só opera obra pode não querer pagar pelos dois.
+    chave: "admissao",
+    nome: "Admissão de motorista",
+    pitch:
+      "Um link que o motorista ou o dono do caminhão abre pra mandar os documentos, e o painel dizendo quem falta.",
+    recursos: ["documentos-exigidos", "coletas"],
   },
   {
     chave: "plataforma",

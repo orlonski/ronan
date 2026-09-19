@@ -1,0 +1,136 @@
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Query,
+  Req,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { ApiBearerAuth, ApiExcludeController, ApiTags } from "@nestjs/swagger";
+import type { Request } from "express";
+import { CriarDocumentoExigidoInput } from "@ronan/shared-types";
+import { CurrentUser } from "../auth/decorators/current-user.decorator";
+import { Public } from "../auth/decorators/public.decorator";
+import { RequerPermissao } from "../auth/decorators/requer-permissao.decorator";
+import { Roles } from "../auth/decorators/roles.decorator";
+import { RolesGuard } from "../auth/guards/roles.guard";
+import type { AuthAdminUser } from "../auth/types";
+import { ipDaRequisicao } from "../common/rate-limit/ip";
+import { criarRateLimitIpGuard } from "../common/rate-limit/rate-limit-ip.guard";
+import { ZodValidationPipe } from "../common/zod-validation.pipe";
+import { AdmissaoService } from "./admissao.service";
+
+/** O escritório: o que se exige e pra quem se manda o link. */
+@ApiTags("admin/admissao")
+@ApiBearerAuth()
+@UseGuards(RolesGuard)
+@Roles("ADMIN_USER")
+@Controller("admin/admissao")
+export class AdmissaoAdminController {
+  constructor(private readonly service: AdmissaoService) {}
+
+  @RequerPermissao("documentos-exigidos.ver")
+  @Get("documentos-exigidos")
+  listarExigidos(@Query("empresaId") empresaId?: string) {
+    return this.service.listarExigidos(empresaId);
+  }
+
+  @RequerPermissao("documentos-exigidos.editar")
+  @Post("documentos-exigidos")
+  criarExigido(
+    @Body(new ZodValidationPipe(CriarDocumentoExigidoInput)) body: CriarDocumentoExigidoInput,
+  ) {
+    return this.service.criarExigido(body);
+  }
+
+  @RequerPermissao("documentos-exigidos.editar")
+  @Delete("documentos-exigidos/:id")
+  removerExigido(@Param("id") id: string) {
+    return this.service.removerExigido(id);
+  }
+
+  @RequerPermissao("coletas.ver")
+  @Get("coletas")
+  listarConvites(@Query("motoristaId") motoristaId: string) {
+    return this.service.listarConvites(motoristaId);
+  }
+
+  /** Gera o link. Serve ao dono do caminhão e ao próprio motorista. */
+  @RequerPermissao("coletas.criar")
+  @Post("coletas")
+  criarConvite(
+    @Body("motoristaId") motoristaId: string,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    if (!motoristaId) throw new BadRequestException("Diga de qual motorista é a coleta.");
+    return this.service.criarConvite(motoristaId, user.id);
+  }
+
+  @RequerPermissao("coletas.criar")
+  @Post("coletas/:id/revogar")
+  revogar(@Param("id") id: string) {
+    return this.service.revogarConvite(id);
+  }
+}
+
+// Limites separados: abrir a página é barato, subir arquivo não. Cota
+// compartilhada faria quem manda 6 documentos ser bloqueado no meio.
+const limiteAbrir = criarRateLimitIpGuard({ limitePorMinuto: 60, nome: "coleta" });
+const limiteEnviar = criarRateLimitIpGuard({ limitePorMinuto: 20, nome: "coleta-envio" });
+
+/**
+ * A porta pública da coleta. Abre sem login, e só serve pra ENVIAR.
+ *
+ * Prefixo próprio (`p/`), longe de `m/*` e de `admin/*`: não é área do
+ * motorista logado nem do painel, e misturar faria um guard futuro de `m/*`
+ * passar a valer aqui sem ninguém perceber.
+ *
+ * ⚠️ O `PermissaoGuard` global NÃO olha `@Public()` — um `@RequerPermissao`
+ * nesta classe daria 403 em quem abre o link. A autorização aqui é o token,
+ * e mais nada.
+ *
+ * Fora do Swagger de propósito: documentar publicamente uma porta que aceita
+ * documento pessoal não ajuda ninguém além de quem procura.
+ *
+ * Rate limit por IP porque é escrita pública. O teto por link mora no service.
+ */
+@ApiExcludeController()
+@Public()
+@Controller("p/coleta")
+export class ColetaPublicaController {
+  constructor(private readonly service: AdmissaoService) {}
+
+  @UseGuards(limiteAbrir)
+  @Get(":token")
+  async abrir(@Param("token") token: string, @Req() req: Request) {
+    const r = await this.service.paginaPublica(token, ipDaRequisicao(req));
+    // Sem indexação: um link com nome de pessoa não pode acabar no Google.
+    req.res?.setHeader("X-Robots-Tag", "noindex, nofollow");
+    return r;
+  }
+
+  @UseGuards(limiteEnviar)
+  @Post(":token")
+  @UseInterceptors(FileInterceptor("arquivo"))
+  async enviar(
+    @Param("token") token: string,
+    @Body("tipo") tipo: string,
+    @UploadedFile() arquivo: Express.Multer.File | undefined,
+  ) {
+    if (!arquivo) throw new BadRequestException("Escolha um arquivo.");
+    if (!tipo) throw new BadRequestException("Diga qual documento é.");
+    return this.service.receberArquivo(token, tipo, {
+      buffer: arquivo.buffer,
+      mimetype: arquivo.mimetype,
+      size: arquivo.size,
+      originalname: arquivo.originalname,
+    });
+  }
+}

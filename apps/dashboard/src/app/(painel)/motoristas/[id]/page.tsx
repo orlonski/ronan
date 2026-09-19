@@ -9,6 +9,7 @@ import {
 } from "@/components/app-versao-badge";
 import { MotoristaForm, type Motorista } from "../_components/motorista-form";
 import { HistoricoNotificacoes } from "./historico-notificacoes";
+import { PedirDocumentos } from "./pedir-documentos";
 
 type ResumoVersoes = {
   latestUpdateId: string | null;
@@ -46,6 +47,7 @@ export default function EditarMotoristaPage({
               degradado: resumo.data?.fonte === "motoristas",
             }}
           />
+          <PedirDocumentos motoristaId={id} />
           <MotoristaForm initial={item.data} />
           <HistoricoNotificacoes motoristaId={id} />
         </>

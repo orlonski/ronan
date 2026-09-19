@@ -163,3 +163,23 @@ export const ConfigMensalInput = z.object({
     .max(7),
 });
 export type ConfigMensalInput = z.infer<typeof ConfigMensalInput>;
+
+/**
+ * Uma exigência do contratante.
+ *
+ * `titulo` é texto livre de propósito: o sistema NÃO nomeia o documento. Quem
+ * escreve é a operação, copiando o que o contratante pede. Chumbar nomes como
+ * "NR" ou "ordem de serviço" faria a plataforma parecer emissora de documento
+ * de segurança do trabalho — obrigação de empregador, e estes motoristas são
+ * parceiros autônomos.
+ */
+export const CriarDocumentoExigidoInput = z.object({
+  titulo: z.string().trim().min(2, "Diga como o contratante chama esse papel."),
+  /** Em que gaveta o arquivo cai (um `TipoDocumentoMotorista`). */
+  tipo: z.string().trim().min(1, "Escolha a gaveta do arquivo."),
+  /** Vazio = exigência da transportadora inteira, valendo pra qualquer obra. */
+  empresaId: z.string().uuid().optional(),
+  obrigatorio: z.boolean().default(true),
+  ordem: z.number().int().min(0).default(0),
+});
+export type CriarDocumentoExigidoInput = z.infer<typeof CriarDocumentoExigidoInput>;

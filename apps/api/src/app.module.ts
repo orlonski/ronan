@@ -33,6 +33,7 @@ import { MarketingModule } from "./marketing/marketing.module";
 import { TermosModule } from "./termos/termos.module";
 import { AssinaturasModule } from "./assinaturas/assinaturas.module";
 import { MensalModule } from "./mensal/mensal.module";
+import { AdmissaoModule } from "./admissao/admissao.module";
 import { AppVersionInterceptor } from "./common/app-version.interceptor";
 import { ContaMiddleware } from "./common/conta/conta.middleware";
 import { PrismaExceptionFilter } from "./common/prisma-exception.filter";
@@ -71,6 +72,7 @@ import { PrismaExceptionFilter } from "./common/prisma-exception.filter";
     AssinaturasModule,
     TermosModule,
     MensalModule,
+    AdmissaoModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: ErrorsExceptionFilter },

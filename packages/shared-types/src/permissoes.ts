@@ -94,6 +94,12 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // `ver` porque mexer no dia de corte e no calendário da obra muda quantas
   // diárias o mês inteiro tem — é decisão de contrato, não de conferência.
   { recurso: "espelhos", label: "Espelho de diárias", modulo: "Operação", acoes: ["ver", "configurar"] },
+  // A admissão: o que o contratante exige antes do caminhão entrar na obra, e
+  // o link por onde esses papéis chegam. `coletas.criar` é separado de `ver`
+  // porque gerar link é expor documento de alguém a quem tiver a URL — é ação
+  // com consequência, não consulta.
+  { recurso: "documentos-exigidos", label: "Documentos exigidos pela obra", modulo: "Cadastros", acoes: ["ver", "editar"] },
+  { recurso: "coletas", label: "Link de coleta de documentos", modulo: "Operação", acoes: ["ver", "criar"] },
   // Contas a receber e a pagar. `baixar` é separado de `faturar` porque emitir a
   // cobrança é trabalho de escritório e dizer que o dinheiro entrou é de quem
   // responde pelo caixa — e quase nunca é a mesma pessoa.

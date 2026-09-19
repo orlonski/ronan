@@ -592,9 +592,11 @@ model Conta {
   cobrancasAssinatura           CobrancaAssinatura[]
   aceitesTermo                  AceiteTermo[]
 
-  alocacoesObra     AlocacaoObra[]
-  registrosPresenca RegistroPresenca[]
-  configsMensal     ConfigMensalContratante[]
+  alocacoesObra      AlocacaoObra[]
+  registrosPresenca  RegistroPresenca[]
+  configsMensal      ConfigMensalContratante[]
+  documentosExigidos DocumentoExigido[]
+  convitesColeta     ConviteColeta[]
 
   @@index([ativa])
   @@map("contas")
@@ -721,6 +723,7 @@ model User {
 
   alocacoesObraCriadas AlocacaoObra[]
   presencasLancadas    RegistroPresenca[]
+  coletasCriadas       ConviteColeta[]    @relation("CriouColeta")
 
   @@index([contaId])
   @@map("users")
@@ -1485,7 +1488,8 @@ model Motorista {
   /// Motivo de não ser sempre ligada: a tela de registrar presença tem um
   /// único assunto — "cheguei" —, e pendurar dinheiro nela transforma o gesto
   /// numa conferência de valor, que é conversa do acerto e não da obra.
-  podeVerValorDiaria Boolean @default(false)
+  podeVerValorDiaria Boolean         @default(false)
+  convitesColeta     ConviteColeta[]
 
   @@unique([contaId, cpf])
   @@index([ativo])
@@ -2042,9 +2046,10 @@ model Empresa {
 
   pedidos Pedido[]
 
-  faturas        Fatura[]
-  titulosReceber TituloReceber[]
-  configMensal   ConfigMensalContratante?
+  faturas            Fatura[]
+  titulosReceber     TituloReceber[]
+  configMensal       ConfigMensalContratante?
+  documentosExigidos DocumentoExigido[]
 
   @@unique([contaId, cnpj])
   @@index([ativa])
@@ -6255,4 +6260,100 @@ model ConfigMensalContratante {
 
   @@index([contaId])
   @@map("config_mensal_contratante")
+}
+
+// ------------------------------------------------------------- admissão ---
+//
+// O que o contratante exige antes do caminhão entrar na obra, e o link por
+// onde esses papéis chegam sem ninguém caçar foto no WhatsApp.
+
+/// Um papel que UM contratante exige. Catálogo, não constante.
+///
+/// O enum `TipoDocumentoMotorista` continua sendo a GAVETA onde o arquivo é
+/// guardado; isto aqui é a EXIGÊNCIA, que muda de contratante pra contratante.
+/// Ter a lista chumbada faria cada cliente novo com uma exigência diferente
+/// virar deploy.
+///
+/// ⚠️ O sistema NÃO nomeia o documento por conta própria. O `titulo` é texto
+/// livre que a operação escreve, copiando o que o contratante pede. Chumbar
+/// "NR" ou "ordem de serviço" em código faria a plataforma parecer emissora de
+/// documento de segurança do trabalho — que é obrigação de empregador, e estes
+/// motoristas são parceiros autônomos. Nós transportamos o arquivo; o nome e o
+/// conteúdo são requisito de quem exige.
+model DocumentoExigido {
+  contaId String @default("__SEM_CONTA__")
+  conta   Conta  @relation(fields: [contaId], references: [id])
+  id      String @id @default(uuid())
+
+  /// Null = exigência da transportadora inteira, valendo pra qualquer obra.
+  empresaId String?
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+
+  /// Como a operação chama o papel. Texto livre, de propósito.
+  titulo String
+
+  /// Em que gaveta o arquivo cai (`TipoDocumentoMotorista`). String e não enum
+  /// porque a gaveta é detalhe de armazenamento, e exigência nova não pode
+  /// esperar migration de enum.
+  tipo String
+
+  obrigatorio Boolean @default(true)
+  ordem       Int     @default(0)
+  ativo       Boolean @default(true)
+
+  criadoEm   DateTime @default(now())
+  alteradoEm DateTime @updatedAt
+
+  @@index([contaId, ativo])
+  @@index([empresaId])
+  @@map("documentos_exigidos")
+}
+
+/// O convite de coleta: um link que abre sem login e só serve pra ENVIAR.
+///
+/// Serve ao dono do caminhão E ao próprio motorista (decisão do dono,
+/// 19/09/2026): um ajuda o outro, e exigir que o motorista instale o app pra
+/// mandar a CNH seria travar a admissão na parte mais frágil.
+///
+/// Copia o desenho de `ViagemCompartilhamento`, que é o link público maduro
+/// desta casa — token de 192 bits em claro, expiração, soft-revoke e
+/// telemetria mínima. Duas diferenças, e as duas são porque aqui se ESCREVE:
+///
+/// 1. O GET NUNCA devolve o que já foi enviado, só quantos faltam. Link que
+///    lista documento de gente é como documento de gente vaza — e quem abre
+///    pode não ser o titular.
+/// 2. O token carrega a conta: rota pública não tem tenant no contexto, e a
+///    escrita precisa rodar dentro da conta certa.
+model ConviteColeta {
+  contaId String @default("__SEM_CONTA__")
+  conta   Conta  @relation(fields: [contaId], references: [id])
+  id      String @id @default(uuid())
+
+  motoristaId String
+  motorista   Motorista @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+
+  /// 32 chars base64url (192 bits). Em claro porque o painel reenvia o link;
+  /// nunca vai pra log nem pra auditoria.
+  token String @unique
+
+  criadoPorId String?
+  criadoPor   User?   @relation("CriouColeta", fields: [criadoPorId], references: [id], onDelete: SetNull)
+
+  expiraEm   DateTime
+  revogadoEm DateTime?
+
+  visualizacoes    Int       @default(0)
+  primeiroAcessoEm DateTime?
+  ultimoAcessoEm   DateTime?
+  ultimoAcessoIp   String?
+
+  /// Quantos arquivos entraram por este link. Teto de abuso mora no service.
+  enviosFeitos Int @default(0)
+
+  criadoEm DateTime @default(now())
+
+  @@index([motoristaId, criadoEm])
+  @@index([expiraEm])
+  @@index([contaId])
+  @@map("convites_coleta")
 }
