@@ -137,6 +137,7 @@ const GRUPOS: Grupo[] = [
       { href: "/viagens-andamento", label: "Ao vivo", icon: Radio, perm: "viagens.ver" },
       { href: "/mapa", label: "Mapa", icon: Map, perm: "mapa.ver" },
       { href: "/pedidos", label: "Pedidos do cliente", icon: ClipboardList, perm: "pedidos.ver" },
+      { href: "/obras", label: "Obras e diárias", icon: HardHat, perm: "alocacoes.ver" },
     ],
   },
   {
