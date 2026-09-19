@@ -19,7 +19,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EstadoVazio } from "@/components/estado-vazio";
-import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { Combobox } from "@/components/ui/combobox";
+import { fetchApi, useAuthToken, useResourceOptions } from "@/lib/client-api";
 import { usePermissoes } from "@/lib/permissoes";
 
 type Alocacao = {
@@ -338,6 +339,8 @@ function Conteudo() {
         </Card>
       )}
 
+      {temPermissao("espelhos.ver") && <ConfigContratante />}
+
       {criando && (
         <DialogNovaAlocacao
           onFechar={() => setCriando(false)}
@@ -529,5 +532,150 @@ function DialogNovaAlocacao({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+
+const DIAS_SEMANA = [
+  { n: 0, label: "Dom" },
+  { n: 1, label: "Seg" },
+  { n: 2, label: "Ter" },
+  { n: 3, label: "Qua" },
+  { n: 4, label: "Qui" },
+  { n: 5, label: "Sex" },
+  { n: 6, label: "Sáb" },
+];
+
+type ConfigMensal = { diaCorte: number; diasEsperadosSemana: number[] };
+
+/**
+ * O combinado com cada contratante: quando a medição chega e quais dias o
+ * contrato espera o caminhão na obra.
+ *
+ * Existe porque nada disso pode ser constante no código — são vários
+ * contratantes, cada um com o seu combinado, e o próximo cliente não pode
+ * precisar de deploy pra começar a operar. É também o que transforma "o mês
+ * tem 30 dias" em "eram 26 diárias": sem o calendário não existe divergência,
+ * só uma lista de dias soltos.
+ */
+function ConfigContratante() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  const { temPermissao } = usePermissoes();
+  const [empresaId, setEmpresaId] = useState<string>();
+  const empresas = useResourceOptions<{ id: string; nome: string }>("/admin/empresas");
+
+  const [corte, setCorte] = useState<string>("");
+  const [dias, setDias] = useState<number[] | null>(null);
+
+  const config = useQuery({
+    queryKey: [PATH, "config", empresaId],
+    enabled: !!token && !!empresaId,
+    queryFn: async () => {
+      const c = await fetchApi<ConfigMensal>(`${PATH}/config/${empresaId}`, { token });
+      // Só semeia os campos na primeira carga: sobrescrever a cada revalidação
+      // apagaria o que a pessoa está digitando.
+      setCorte(String(c.diaCorte));
+      setDias(c.diasEsperadosSemana);
+      return c;
+    },
+  });
+
+  const salvar = useMutation({
+    mutationFn: () =>
+      fetchApi(`${PATH}/config/${empresaId}`, {
+        token,
+        method: "PUT",
+        body: JSON.stringify({ diaCorte: Number(corte), diasEsperadosSemana: dias ?? [] }),
+      }),
+    onSuccess: () => {
+      toast.success("Combinado salvo.", {
+        description: "O espelho passa a usar esse período no próximo cálculo.",
+      });
+      void qc.invalidateQueries({ queryKey: [PATH, "espelho"] });
+    },
+    onError: (e: Error) => toast.error("Não consegui salvar", { description: e.message }),
+  });
+
+  const podeSalvar =
+    !!empresaId && Number(corte) >= 1 && Number(corte) <= 31 && (dias?.length ?? 0) > 0;
+
+  return (
+    <Card className="space-y-3 p-4">
+      <div>
+        <p className="font-medium">Combinado com o contratante</p>
+        <p className="text-sm text-muted-foreground">
+          Quando a medição chega e quais dias o contrato espera o caminhão na obra. É daqui que
+          sai o período do espelho.
+        </p>
+      </div>
+
+      <div className="w-72">
+        <Label>Contratante</Label>
+        <Combobox
+          value={empresaId}
+          onChange={setEmpresaId}
+          placeholder="Escolha o contratante…"
+          options={(empresas.data ?? []).map((e) => ({ value: e.id, label: e.nome }))}
+        />
+      </div>
+
+      {empresaId && !config.isLoading && (
+        <>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="w-40">
+              <Label>Medição chega dia</Label>
+              <Input
+                inputMode="numeric"
+                value={corte}
+                onChange={(e) => setCorte(e.target.value.replace(/\D/g, "").slice(0, 2))}
+              />
+            </div>
+            <p className="pb-2 text-xs text-muted-foreground">
+              Corte 20 apura de 21 do mês passado a 20 deste.
+            </p>
+          </div>
+
+          <div>
+            <Label>Dias que o contrato espera</Label>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {DIAS_SEMANA.map((d) => {
+                const ligado = dias?.includes(d.n) ?? false;
+                return (
+                  <button
+                    key={d.n}
+                    type="button"
+                    onClick={() =>
+                      setDias((atual) =>
+                        (atual ?? []).includes(d.n)
+                          ? (atual ?? []).filter((x) => x !== d.n)
+                          : [...(atual ?? []), d.n],
+                      )
+                    }
+                    className={`rounded-md border px-3 py-2 text-sm ${
+                      ligado ? "border-primary bg-primary/10 font-medium" : "text-muted-foreground"
+                    }`}
+                  >
+                    {d.label}
+                  </button>
+                );
+              })}
+            </div>
+            {/* Domingo fora não é julgamento sobre ninguém: é o combinado do
+                contrato. Dia trabalhado fora do calendário não some — aparece
+                separado no espelho. */}
+            <p className="mt-1 text-xs text-muted-foreground">
+              Dia registrado fora desses aparece separado no espelho, nunca sumido.
+            </p>
+          </div>
+
+          {temPermissao("espelhos.configurar") && (
+            <Button disabled={!podeSalvar || salvar.isPending} onClick={() => salvar.mutate()}>
+              {salvar.isPending ? "Salvando…" : "Salvar combinado"}
+            </Button>
+          )}
+        </>
+      )}
+    </Card>
   );
 }
