@@ -162,3 +162,78 @@ Duas consequências práticas:
 - O aviso de migração tem que pedir, com todas as letras, que ele **abra o app
   antigo conectado até a tela de pendentes zerar** antes de apagar qualquer
   coisa.
+
+## Rejeição 4.3(a) Spam (19/09/2026) — e por que ela inverte a ordem do plano
+
+A 1.2.0 / build 15 foi **rejeitada por 4.3(a) Design: Spam**: *"this app is
+available in the same locations as another identical app you submitted"*. Não é
+achado sobre o código, sobre o 2.5.4 nem sobre o 3.2 — os dois registros
+(6778807216 "Schaba" e 6813093675 "Movatruck") são **o mesmo app disponível no
+mesmo território**, e a Apple trata isso como duplicata.
+
+A própria mensagem dá a correção: *"restrict the available storefronts for these
+apps and ensure none of the selected storefronts overlap"*.
+
+**O que muda:** o passo 3 da seção anterior ("publicar o aviso de migração e só
+então Remover da venda") **tem que acontecer agora, antes da aprovação**, não
+depois. O app novo só é aprovado quando o velho sair do Brasil.
+
+### O que fazer, na ordem
+
+1. App **Schaba** (6778807216) → Preços e Disponibilidade → Disponibilidade por
+   país ou região → **Nenhum** (remover da venda em todas as lojas). O novo está
+   só no Brasil, então basta o velho não estar em lugar nenhum.
+2. Responder no Resolution Center com o texto abaixo.
+3. **Reenviar a mesma 1.2.0 / build 15.** Nada no binário mudou — não precisa de
+   `eas build` nem de OTA (e OTA segue proibido enquanto estiver em revisão).
+
+### O que remover da venda faz, e o que não faz
+
+- **Não desinstala nada.** Quem já tem o Schaba no iPhone continua com ele
+  funcionando, e continua recebendo `eas update` — OTA é resolvido por
+  projeto+canal+runtime, não passa pela loja.
+- **Mata o link unlisted** `apps.apple.com/br/app/schaba/id6778807216` para
+  instalação nova. Quem já baixou ainda consegue rebaixar pelo histórico de
+  compras da conta Apple; motorista novo de iPhone, não.
+- **Deixa o iOS sem canal de instalação nova durante a revisão.** Se precisar de
+  saída nesse intervalo, o **TestFlight do app legado não depende de
+  disponibilidade na loja** — conferir se o build de lá ainda está dentro dos 90
+  dias antes de contar com isso.
+- **Deixa o link da força-atualização apontando pra página morta**:
+  `APP_STORE_IOS_ID` em `packages/shared-types/src/versao-app.ts` ainda é
+  `"6778807216"`. Enquanto o app novo não for aprovado, o modo da
+  força-atualização no painel **não pode estar em `bloquear` pra iOS** — seria
+  mandar o motorista pra uma página que não existe mais, sem saída.
+
+### Resposta pro Resolution Center (em inglês — é o que o revisor lê)
+
+> Hello,
+>
+> Movatruck is not a duplicate app. It is the replacement record for an app we
+> already have on the App Store, and this new record exists because Apple
+> Developer Support instructed us to create it.
+>
+> Background:
+>
+> - Apple ID 6778807216 ("Schaba") is our existing app. On July 3, 2026 it was
+>   converted to Unlisted App Distribution (Developer Support case
+>   102925600923), because at the time the app served a single company.
+> - The product has since changed: any independent truck driver can now sign up
+>   and use the app on their own, with no company code, so the app is no longer
+>   tied to one organization and belongs on the public App Store.
+> - We asked Developer Support how to convert 6778807216 back to public
+>   distribution (case 102957914709). We were told that unlisted to public is
+>   not possible, and that the correct path is a new app record with a new
+>   bundle ID.
+> - Apple ID 6813093675 ("Movatruck", bundle br.com.movatruck.app) is that new
+>   record. It replaces 6778807216 — we are not distributing two products.
+>
+> Following your instructions, we have removed the legacy app (6778807216) from
+> sale in every storefront. There is now no overlap: Movatruck is available in
+> Brazil only, and the legacy app is available nowhere. Existing users of the
+> legacy app are being migrated to Movatruck.
+>
+> No binary change was needed, so we are resubmitting the same version 1.2.0
+> (build 15) for review.
+>
+> Thank you.
