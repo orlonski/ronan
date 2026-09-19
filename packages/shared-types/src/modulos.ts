@@ -33,6 +33,7 @@ export const MODULOS_CHAVES = [
   "torre",
   "fiscal",
   "comunicacao",
+  "mensal",
   "plataforma",
 ] as const;
 export const ModuloChaveSchema = z.enum(MODULOS_CHAVES);
@@ -148,6 +149,17 @@ export const MODULOS: ModuloDef[] = [
     pitch: "Chat dos motoristas, avisos e o WhatsApp da operação.",
     medido: true,
     recursos: ["chat", "whatsapp", "config-agente", "config-busca-locais"],
+  },
+  {
+    // O contrato em que o caminhão fica à disposição de uma obra e se paga por
+    // DIÁRIA, não por viagem. É módulo à parte porque é outro negócio: a
+    // transportadora que só roda frete não compra isto, e quem vive de obra
+    // não usa metade da Operação.
+    chave: "mensal",
+    nome: "Obra e diária",
+    pitch:
+      "O caminhão fica na obra e você cobra por dia. O motorista marca a presença num toque e você chega no dia 20 com o espelho pronto.",
+    recursos: ["alocacoes", "presenca"],
   },
   {
     chave: "plataforma",

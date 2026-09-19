@@ -592,6 +592,9 @@ model Conta {
   cobrancasAssinatura           CobrancaAssinatura[]
   aceitesTermo                  AceiteTermo[]
 
+  alocacoesObra     AlocacaoObra[]
+  registrosPresenca RegistroPresenca[]
+
   @@index([ativa])
   @@map("contas")
 }
@@ -714,6 +717,9 @@ model User {
   assinaturasCanceladas  Assinatura[]          @relation("CancelouAssinatura")
   cobrancasBaixadas      CobrancaAssinatura[]  @relation("BaixouCobranca")
   aceitesTermo           AceiteTermo[]
+
+  alocacoesObraCriadas AlocacaoObra[]
+  presencasLancadas    RegistroPresenca[]
 
   @@index([contaId])
   @@map("users")
@@ -895,12 +901,12 @@ model ConfiguracaoPlataforma {
   sdrFollowupHoraInicio     Int     @default(9)
   sdrFollowupHoraFim        Int     @default(19)
 
-  sdrChaveAnthropic  String?
-  sdrChaveGemini     String?
-  sdrChaveMinimax    String?
+  sdrChaveAnthropic String?
+  sdrChaveGemini    String?
+  sdrChaveMinimax   String?
   /// Onde o prospect cria a conta sozinho. Configurável porque o domínio do
   /// painel já mudou uma vez e vai mudar de novo.
-  sdrLinkCadastro    String  @default("https://app.movatruck.com.br/cadastro")
+  sdrLinkCadastro   String  @default("https://app.movatruck.com.br/cadastro")
 
   /// O publicador do Instagram está ligado?
   ///
@@ -1470,6 +1476,16 @@ model Motorista {
 
   alertas AlertaOperacional[]
 
+  alocacoesObra AlocacaoObra[]
+
+  /// Mostrar no app quanto ele já tem a receber nas diárias do período.
+  ///
+  /// Nasce DESLIGADA e o painel liga por motorista, como as outras flags.
+  /// Motivo de não ser sempre ligada: a tela de registrar presença tem um
+  /// único assunto — "cheguei" —, e pendurar dinheiro nela transforma o gesto
+  /// numa conferência de valor, que é conversa do acerto e não da obra.
+  podeVerValorDiaria Boolean @default(false)
+
   @@unique([contaId, cpf])
   @@index([ativo])
   @@index([status])
@@ -1914,6 +1930,8 @@ model Veiculo {
   pneus            Pneu[]
   multas           Multa[]
 
+  alocacoesObra AlocacaoObra[]
+
   @@unique([contaId, placa])
   @@index([ativo])
   @@index([transportadoraId])
@@ -2103,6 +2121,8 @@ model Cliente {
   telefone            String?
   email               String?
 
+  alocacoesObra AlocacaoObra[]
+
   @@index([empresaId])
   @@index([ativa])
   @@index([contaId])
@@ -2110,20 +2130,20 @@ model Cliente {
 }
 
 model Material {
-  contaId             String   @default("__SEM_CONTA__")
-  conta               Conta    @relation(fields: [contaId], references: [id])
-  id                  String   @id @default(uuid())
-  nome                String
+  contaId                 String   @default("__SEM_CONTA__")
+  conta                   Conta    @relation(fields: [contaId], references: [id])
+  id                      String   @id @default(uuid())
+  nome                    String
   /// Apelidos/sinônimos pra busca fuzzy do agente WhatsApp.
-  apelidos            String[] @default([])
-  ativo               Boolean  @default(true)
+  apelidos                String[] @default([])
+  ativo                   Boolean  @default(true)
   /// Se false, viagens desse material não exigem número de ticket (ex: concreto,
   /// que não gera ticket de pesagem). Controlado pelo admin, nunca pelo motorista.
-  exigeTicket         Boolean  @default(true)
+  exigeTicket             Boolean  @default(true)
   /// Esse material gera algum papel que dá pra fotografar (ticket de pesagem,
   /// canhoto, nota). false = não gera nada (concreto): suprime a exigência de
   /// foto da empresa, porque não dá pra cobrar foto de comprovante inexistente.
-  temComprovanteFoto  Boolean  @default(true)
+  temComprovanteFoto      Boolean  @default(true)
   /// Material que não gera documento nenhum pra conferir: a viagem já entra
   /// APROVADA, sem passar pela fila de conferência.
   ///
@@ -2135,20 +2155,20 @@ model Material {
   /// Nasce DESLIGADA. Ligar num material que na verdade gera papel faria viagens
   /// entrarem no faturamento sem ninguém olhar — e ninguém revisa o que já está
   /// aprovado. Ver common/conferencia-dispensada.ts para as travas.
-  dispensaConferencia Boolean  @default(false)
+  dispensaConferencia     Boolean  @default(false)
   /// Se true, o motorista pode marcar que precisou voltar pro bota-fora (limpeza):
   /// na última carga ele retorna ao local de carga pra descarregar a sobra. Isso
   /// adiciona a perna descarga→carga ao km faturável. Controlado pelo admin; o
   /// motorista só marca o fato. Ver Viagem.teveBotaFora.
-  permiteBotaFora     Boolean  @default(false)
+  permiteBotaFora         Boolean  @default(false)
   /// R$ por tonelada da MERCADORIA (não do frete — frete é TabelaPreco).
   /// O CT-e exige `vCarga` no modal rodoviário (rejeição 581), e o sistema não
   /// tem de onde saber quanto vale uma carga de brita. Aqui o contador informa
   /// uma referência por material e o valor sai de `referência × toneladas`.
   /// Quando o valor REAL é conhecido (veio da NF-e), a viagem manda nele.
   valorReferenciaTonelada Decimal? @db.Decimal(12, 2)
-  criadoEm            DateTime @default(now())
-  alteradoEm          DateTime @updatedAt
+  criadoEm                DateTime @default(now())
+  alteradoEm              DateTime @updatedAt
 
   viagens      Viagem[]
   regrasMinimo RegraMinimo[]
@@ -3775,7 +3795,7 @@ model Viagem {
   /// Valor da mercadoria transportada, quando conhecido — normalmente o total
   /// da NF-e que acompanha a carga. Vence a referência do material no CT-e:
   /// aproximação não deve passar por cima de um número que se sabe.
-  valorCarga    Decimal?           @db.Decimal(12, 2)
+  valorCarga    Decimal? @db.Decimal(12, 2)
   nfeNumero     String?
   nfeSerie      String?
   /// Conhecimento de transporte emitido pra esta viagem.
@@ -5966,7 +5986,7 @@ model TermoVersao {
   /// dizer o que mudou é pedir que ele clique sem ler.
   oQueMudou String?
 
-  criadoEm DateTime @default(now())
+  criadoEm DateTime      @default(now())
   aceites  AceiteTermo[]
 
   /// Só uma versão publicada por número, por tipo.
@@ -6030,4 +6050,170 @@ model AceiteTermo {
   @@index([contaId, aceitoEm(sort: Desc)])
   @@index([termoVersaoId])
   @@map("aceites_termo")
+}
+
+// ---------------------------------------------------------------- mensal ---
+//
+// O contrato em que o caminhão fica À DISPOSIÇÃO DE UMA OBRA e o pagamento é
+// por DIÁRIA — não por viagem, não por tonelada.
+//
+// LEIA ISTO ANTES DE MEXER: aqui NÃO existe ponto, jornada, falta nem atraso,
+// e essas palavras não podem entrar em nome de coluna, de enum nem em texto de
+// tela. O motorista é PARCEIRO AUTÔNOMO. O que se registra é a PRESENÇA DO
+// CAMINHÃO NA OBRA num dia — um fato do contrato de transporte, não o
+// cumprimento de horário por um empregado. Somar "ponto" a pagamento por
+// diária, habitualidade e documento de NR é desenhar os elementos do vínculo
+// empregatício dentro do produto, e a conta cai na transportadora.
+//
+// Pela mesma razão NÃO existe horário esperado: sem horário-alvo não há
+// atraso, sem atraso não há descumprimento, sem descumprimento não há
+// subordinação.
+
+/// Quem marcou a presença daquele dia.
+///
+/// Guardado porque o escritório precisa saber o que é registro do motorista e
+/// o que foi lançado no painel por ele — a prova que vale contra a medição do
+/// contratante é a primeira. Nunca vira julgamento sobre o motorista.
+enum OrigemPresenca {
+  /// O motorista tocou no app. É a prova forte.
+  APP
+  /// Alguém do escritório lançou pelo painel (exige motivo).
+  PAINEL
+}
+
+/// "Este caminhão, com este motorista, está à disposição desta obra, por esta
+/// diária, neste período."
+///
+/// É a peça que faltava, e ela existe por um motivo de INTERFACE antes de ser
+/// de dados: é a alocação que permite o app não perguntar NADA. Obra, veículo,
+/// contratante e valor já estão decididos aqui, então a tela do motorista tem
+/// um botão e nada mais. Sem ela, o app volta a ter lista — e lista é o que
+/// este público não consegue usar.
+///
+/// A obra é o `Cliente` (que já tem contratante, locais e preço); não existe
+/// entidade "Obra". E isto é tabela AO LADO da Viagem, nunca status novo em
+/// `StatusViagem`: a lição do `ViagemPlanejada` custou caro.
+model AlocacaoObra {
+  contaId String @default("__SEM_CONTA__")
+  conta   Conta  @relation(fields: [contaId], references: [id])
+  id      String @id @default(uuid())
+
+  /// A OBRA. É um Cliente — ele já carrega o contratante, os locais e a tabela
+  /// de preço.
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id])
+
+  motoristaId String
+  motorista   Motorista @relation(fields: [motoristaId], references: [id])
+
+  veiculoId String
+  veiculo   Veiculo @relation(fields: [veiculoId], references: [id])
+
+  /// Vigência. `fim` nulo = vigente sem data marcada.
+  inicio DateTime  @db.Date
+  fim    DateTime? @db.Date
+
+  /// A régua de pagamento DESTA alocação, quando ela difere da modalidade.
+  ///
+  /// Terceiro degrau da escada que já existe (`ModalidadeMotorista.valorDiaria`
+  /// → `Motorista.valorDiaria` → aqui), e pelo mesmo motivo dos outros dois: o
+  /// mesmo motorista em duas obras no mesmo período tem duas diárias
+  /// diferentes, e sem isto o acerto nasce errado. Override é tudo-ou-nada.
+  valorDiaria Decimal? @db.Decimal(10, 2)
+
+  /// False = acabou. Não se apaga alocação: os dias registrados apontam pra
+  /// ela e o espelho de um mês fechado precisa continuar legível.
+  ativa           Boolean   @default(true)
+  encerradaEm     DateTime?
+  encerradaMotivo String?
+
+  criadoEm    DateTime @default(now())
+  alteradoEm  DateTime @updatedAt
+  criadoPorId String?
+  criadoPor   User?    @relation(fields: [criadoPorId], references: [id])
+
+  presencas RegistroPresenca[]
+
+  /// Chave que só existe enquanto a alocação está viva.
+  ///
+  /// Vale `motoristaId` enquanto `ativa`, e NULL quando encerrada. É o que faz
+  /// o banco garantir UMA obra por vez sem proibir histórico: no Postgres dois
+  /// NULLs não colidem, então o motorista acumula quantas alocações encerradas
+  /// tiver e no máximo uma viva. Índice parcial de verdade (`WHERE ativa`) o
+  /// Prisma não declara, e índice que só existe na migration vira drift.
+  ///
+  /// Quem mantém em dia é o service, nunca a mão: encerrar põe NULL aqui no
+  /// mesmo update que põe `ativa=false`.
+  vigenteDe String?
+
+  /// UMA obra por vez, por decisão do dono (19/09/2026).
+  ///
+  /// Não é limitação técnica, é o que sustenta o botão único: com duas
+  /// alocações vivas o app teria que perguntar "qual obra?", e a pergunta é
+  /// justamente o que não pode existir. A sobreposição de período entre uma
+  /// alocação nova e as encerradas é conferida no service.
+  @@unique([contaId, vigenteDe], map: "uma_alocacao_ativa_por_motorista")
+  @@index([contaId, clienteId, ativa])
+  @@index([motoristaId, ativa])
+  @@map("alocacoes_obra")
+}
+
+/// O caminhão esteve na obra neste DIA.
+///
+/// Por DIA, não por período: decisão do dono (19/09/2026). Um toque, uma
+/// linha, sem hora de saída — porque exigir a saída obriga um segundo toque e
+/// cria a figura do "esqueceu de fechar", que este público não resolve sozinho.
+/// A hora do toque fica gravada como informação, nunca como cobrança.
+///
+/// O dia é o dia em SÃO PAULO, resolvido no aparelho no instante do toque e
+/// não no servidor na hora do envio: o outbox pode drenar horas depois, e um
+/// toque às 23h50 que sobe 00h10 tem que continuar sendo o dia de ontem.
+model RegistroPresenca {
+  contaId String @default("__SEM_CONTA__")
+  conta   Conta  @relation(fields: [contaId], references: [id])
+  id      String @id @default(uuid())
+
+  alocacaoId String
+  alocacao   AlocacaoObra @relation(fields: [alocacaoId], references: [id])
+
+  /// O dia. Coluna Date de propósito: o assunto é o dia, não o instante.
+  data DateTime @db.Date
+
+  /// Quando o dedo tocou. Serve pra explicar, nunca pra julgar — não existe
+  /// horário esperado com que comparar.
+  registradoEm DateTime @default(now())
+
+  origem OrigemPresenca @default(APP)
+
+  /// Onde ele estava no instante do toque, quando o aparelho soube dizer.
+  ///
+  /// É EVIDÊNCIA, nunca porteiro: coordenada fora da obra não recusa o
+  /// registro e não acusa ninguém — no máximo marca pra conferência humana. O
+  /// registro funciona sem GPS nenhum, porque 4G e sinal em obra são ruins e
+  /// recusar por isso puniria o motorista por um problema que não é dele.
+  /// Aqui, e não em `MotoristaPosicao`, porque aquela tem expurgo de 90 dias e
+  /// a discussão da medição passa disso.
+  latitude  Float?
+  longitude Float?
+  precisao  Float?
+
+  /// Lançamento pelo painel exige motivo escrito, no mesmo espírito da
+  /// alteração de km: o escritório pode corrigir, mas fica registrado quem
+  /// corrigiu e por quê.
+  motivoPainel String?
+  criadoPorId  String?
+  criadoPor    User?   @relation(fields: [criadoPorId], references: [id])
+
+  /// Idempotência do outbox. O app manda `alocacao+data+CHEGADA`, sempre igual:
+  /// tocar cinco vezes com 4G ruim continua sendo um dia.
+  clientId String?
+
+  criadoEm DateTime @default(now())
+
+  /// Um dia, um registro. É esta linha que faz o segundo toque devolver a
+  /// mesma tela verde em vez de criar duplicata.
+  @@unique([alocacaoId, data])
+  @@unique([contaId, clientId])
+  @@index([contaId, data])
+  @@map("registros_presenca")
 }

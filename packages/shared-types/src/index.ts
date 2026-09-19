@@ -23,6 +23,7 @@ export * from "./motorista-documento";
 export * from "./modalidade-motorista";
 export * from "./veiculo";
 export * from "./material";
+export * from "./mensal";
 export * from "./tipo-servico";
 export * from "./regra-minimo";
 export * from "./tabela-preco";
