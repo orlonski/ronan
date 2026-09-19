@@ -159,7 +159,7 @@ export const MODULOS: ModuloDef[] = [
     nome: "Obra e diária",
     pitch:
       "O caminhão fica na obra e você cobra por dia. O motorista marca a presença num toque e você chega no dia 20 com o espelho pronto.",
-    recursos: ["alocacoes", "presenca"],
+    recursos: ["alocacoes", "presenca", "espelhos"],
   },
   {
     chave: "plataforma",

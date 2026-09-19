@@ -90,6 +90,10 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // grade não deveria poder escrever nela sem querer.
   { recurso: "alocacoes", label: "Alocações em obra", modulo: "Operação", acoes: ["ver", "criar", "editar", "encerrar"] },
   { recurso: "presenca", label: "Presença na obra", modulo: "Operação", acoes: ["ver", "lancar", "corrigir"] },
+  // O documento que vai pra conversa do dia 20. `configurar` é à parte de
+  // `ver` porque mexer no dia de corte e no calendário da obra muda quantas
+  // diárias o mês inteiro tem — é decisão de contrato, não de conferência.
+  { recurso: "espelhos", label: "Espelho de diárias", modulo: "Operação", acoes: ["ver", "configurar"] },
   // Contas a receber e a pagar. `baixar` é separado de `faturar` porque emitir a
   // cobrança é trabalho de escritório e dizer que o dinheiro entrou é de quem
   // responde pelo caixa — e quase nunca é a mesma pessoa.

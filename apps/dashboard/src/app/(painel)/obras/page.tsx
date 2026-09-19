@@ -39,6 +39,24 @@ type LinhaGrade = {
   total: number;
 };
 
+type LinhaEspelho = {
+  alocacaoId: string;
+  obra: string;
+  motorista: string;
+  placa: string;
+  diaCorte: number;
+  de: string;
+  ate: string;
+  espelho: {
+    esperados: string[];
+    registrados: string[];
+    emBranco: string[];
+    foraDoCalendario: string[];
+    diasNoContrato: number;
+    diasMarcadosPeloMotorista: number;
+  };
+};
+
 const PATH = "/admin/mensal";
 
 /** "2026-09-19" → "19/09". O ano some: a grade já é de um mês só. */
@@ -98,6 +116,16 @@ function Conteudo() {
     queryKey: [PATH, "presenca", de, ate],
     enabled: !!token && temPermissao("presenca.ver"),
     queryFn: () => fetchApi<LinhaGrade[]>(`${PATH}/presenca?de=${de}&ate=${ate}`, { token }),
+  });
+
+  const espelho = useQuery({
+    queryKey: [PATH, "espelho", mes],
+    enabled: !!token && temPermissao("espelhos.ver"),
+    queryFn: () =>
+      fetchApi<{ competencia: string | null; linhas: LinhaEspelho[] }>(
+        `${PATH}/espelho?competencia=${mes}`,
+        { token },
+      ),
   });
 
   const diasDoMes = useMemo(() => {
@@ -221,6 +249,92 @@ function Conteudo() {
               </table>
             </div>
           )}
+        </Card>
+      )}
+
+      {temPermissao("espelhos.ver") && (espelho.data?.linhas.length ?? 0) > 0 && (
+        <Card className="space-y-3 p-4">
+          <div>
+            <p className="font-medium">Espelho da competência</p>
+            <p className="text-sm text-muted-foreground">
+              O que o contrato esperava contra o que aconteceu. É o que você leva pra conferir a
+              medição — o período vem do dia de corte de cada contratante.
+            </p>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left">
+                  <th className="p-2">Motorista / obra</th>
+                  <th className="p-2">Período</th>
+                  <th className="p-2 text-right">Esperados</th>
+                  <th className="p-2 text-right">No contrato</th>
+                  <th className="p-2 text-right">Em branco</th>
+                  <th className="p-2 text-right">Fora do calendário</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(espelho.data?.linhas ?? []).map((l) => (
+                  <tr key={l.alocacaoId} className="border-b align-top">
+                    <td className="p-2">
+                      <span className="font-medium">{l.motorista}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {l.obra} · {l.placa}
+                      </span>
+                    </td>
+                    <td className="p-2 text-xs text-muted-foreground">
+                      {diaMes(l.de)} a {diaMes(l.ate)}
+                      <span className="block">corte dia {l.diaCorte}</span>
+                    </td>
+                    <td className="p-2 text-right">{l.espelho.esperados.length}</td>
+                    <td className="p-2 text-right font-semibold">
+                      {l.espelho.diasNoContrato}
+                      <span className="block text-xs font-normal text-muted-foreground">
+                        {l.espelho.diasMarcadosPeloMotorista} pelo motorista
+                      </span>
+                    </td>
+                    {/* Em branco NÃO é falta: é dia que ninguém marcou. Pode
+                        ser que o caminhão não foi, pode ser que ele esqueceu
+                        de tocar — o sistema não sabe e não finge que sabe. */}
+                    <td className="p-2 text-right">
+                      {l.espelho.emBranco.length > 0 ? (
+                        <span
+                          className="text-amber-700 dark:text-amber-400"
+                          title={l.espelho.emBranco.map(diaMes).join(", ")}
+                        >
+                          {l.espelho.emBranco.length}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    {/* Separado do total de propósito: somado, a transportadora
+                        cobraria um dia que o contrato não previa e descobriria
+                        na recusa da medição; escondido, o motorista teria
+                        trabalhado de graça. */}
+                    <td className="p-2 text-right">
+                      {l.espelho.foraDoCalendario.length > 0 ? (
+                        <span
+                          className="text-sky-700 dark:text-sky-400"
+                          title={l.espelho.foraDoCalendario.map(diaMes).join(", ")}
+                        >
+                          {l.espelho.foraDoCalendario.length}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            &ldquo;Em branco&rdquo; é dia que ninguém marcou — pode ser que o caminhão não foi, pode
+            ser que o motorista esqueceu. Confira antes de contestar.
+          </p>
         </Card>
       )}
 

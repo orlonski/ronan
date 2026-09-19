@@ -7,12 +7,14 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
 import {
+  ConfigMensalInput,
   CriarAlocacaoInput,
   EditarAlocacaoInput,
   EncerrarAlocacaoInput,
@@ -86,6 +88,38 @@ export class MensalAdminController {
     @Body(new ZodValidationPipe(EncerrarAlocacaoInput)) body: EncerrarAlocacaoInput,
   ) {
     return this.service.encerrarAlocacao(id, body.motivo);
+  }
+
+  /**
+   * O espelho da competência. É o documento que vai pra conversa do dia 20.
+   *
+   * `competencia` é "AAAA-MM" — o mês em que a medição chega. O período que
+   * ela cobre sai do dia de corte DO CONTRATANTE, não daqui.
+   */
+  @RequerPermissao("espelhos.ver")
+  @Get("espelho")
+  espelho(
+    @Query("competencia") competencia: string,
+    @Query("clienteId") clienteId?: string,
+    @Query("empresaId") empresaId?: string,
+  ) {
+    return this.service.espelho(competencia, { clienteId, empresaId });
+  }
+
+  /** O combinado com um contratante: dia de corte e calendário da obra. */
+  @RequerPermissao("espelhos.ver")
+  @Get("config/:empresaId")
+  config(@Param("empresaId") empresaId: string) {
+    return this.service.configDoContratante(empresaId);
+  }
+
+  @RequerPermissao("espelhos.configurar")
+  @Put("config/:empresaId")
+  salvarConfig(
+    @Param("empresaId") empresaId: string,
+    @Body(new ZodValidationPipe(ConfigMensalInput)) body: ConfigMensalInput,
+  ) {
+    return this.service.salvarConfigDoContratante(empresaId, body);
   }
 
   /** A grade do período: quem esteve em que dia, e quem marcou. */

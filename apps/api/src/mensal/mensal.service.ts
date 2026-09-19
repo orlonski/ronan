@@ -14,6 +14,7 @@ import type {
 } from "@ronan/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
 import { inicioDoDiaBR, ymdSaoPaulo } from "../common/timezone";
+import { competenciaDe, montarEspelho, type Espelho } from "../common/espelho-mensal";
 
 /** "2026-09-19" → Date de meia-noite UTC, que é como coluna Date se compara. */
 function dia(ymd: string): Date {
@@ -278,6 +279,113 @@ export class MensalService {
     }
 
     return [...porAlocacao.values()].map((x) => ({ ...x, total: x.dias.length }));
+  }
+
+  // ------------------------------------------------------------ espelho ---
+
+  /**
+   * O espelho da competência: o que o contrato esperava contra o que
+   * aconteceu, alocação por alocação.
+   *
+   * É o documento que a transportadora leva pra conversa do dia 20. Hoje ela
+   * chega sem nada e pergunta no grupo de WhatsApp.
+   *
+   * O calendário e o dia de corte vêm da configuração DO CONTRATANTE, nunca do
+   * código: são vários, cada um com o seu combinado.
+   */
+  async espelho(competenciaRotulo: string, filtros: { clienteId?: string; empresaId?: string }) {
+    const alocacoes = await this.prisma.alocacaoObra.findMany({
+      where: {
+        ...(filtros.clienteId ? { clienteId: filtros.clienteId } : {}),
+        ...(filtros.empresaId ? { cliente: { empresaId: filtros.empresaId } } : {}),
+      },
+      include: {
+        cliente: { select: { id: true, nome: true, empresaId: true } },
+        motorista: { select: { id: true, nome: true, cpf: true } },
+        veiculo: { select: { placa: true } },
+      },
+      orderBy: [{ ativa: "desc" }],
+    });
+    if (alocacoes.length === 0) return { competencia: null, linhas: [] };
+
+    // Uma consulta de config por contratante, não por alocação: 45 obras do
+    // mesmo contratante não podem virar 45 idas ao banco.
+    const empresaIds = [...new Set(alocacoes.map((a) => a.cliente.empresaId))];
+    const configs = await this.prisma.configMensalContratante.findMany({
+      where: { empresaId: { in: empresaIds } },
+    });
+    const configPorEmpresa = new Map(configs.map((c) => [c.empresaId, c]));
+
+    const linhas: {
+      alocacaoId: string;
+      obra: string;
+      motorista: string;
+      placa: string;
+      diaCorte: number;
+      de: string;
+      ate: string;
+      espelho: Espelho;
+    }[] = [];
+
+    for (const a of alocacoes) {
+      const cfg = configPorEmpresa.get(a.cliente.empresaId);
+      // Contratante sem configuração ainda usa a semente. É o que faz a tela
+      // abrir no primeiro dia, antes de alguém configurar nada.
+      const diaCorte = cfg?.diaCorte ?? 20;
+      const diasEsperadosSemana = cfg?.diasEsperadosSemana ?? [1, 2, 3, 4, 5, 6];
+      const competencia = competenciaDe(competenciaRotulo, diaCorte);
+
+      const registros = await this.prisma.registroPresenca.findMany({
+        where: {
+          alocacaoId: a.id,
+          data: { gte: dia(competencia.de), lte: dia(competencia.ate) },
+        },
+        select: { data: true, origem: true },
+      });
+
+      const espelho = montarEspelho({
+        competencia,
+        diasEsperadosSemana,
+        inicio: paraYmd(a.inicio),
+        fim: a.fim ? paraYmd(a.fim) : null,
+        registrados: registros.map((r) => ({ data: paraYmd(r.data), origem: r.origem })),
+      });
+
+      // Alocação que não tem nada a ver com o período não polui o documento.
+      if (espelho.esperados.length === 0 && espelho.registrados.length === 0) continue;
+
+      linhas.push({
+        alocacaoId: a.id,
+        obra: a.cliente.nome,
+        motorista: a.motorista.nome,
+        placa: a.veiculo.placa,
+        diaCorte,
+        de: competencia.de,
+        ate: competencia.ate,
+        espelho,
+      });
+    }
+
+    return { competencia: competenciaRotulo, linhas };
+  }
+
+  /** O combinado com um contratante: dia de corte e calendário da obra. */
+  async configDoContratante(empresaId: string) {
+    const cfg = await this.prisma.configMensalContratante.findFirst({ where: { empresaId } });
+    return cfg ?? { empresaId, diaCorte: 20, diasEsperadosSemana: [1, 2, 3, 4, 5, 6] };
+  }
+
+  async salvarConfigDoContratante(
+    empresaId: string,
+    dados: { diaCorte: number; diasEsperadosSemana: number[] },
+  ) {
+    const empresa = await this.prisma.empresa.findFirst({ where: { id: empresaId } });
+    if (!empresa) throw new NotFoundException("Contratante não encontrado.");
+    return this.prisma.configMensalContratante.upsert({
+      where: { empresaId },
+      create: { empresaId, ...dados },
+      update: dados,
+    });
   }
 
   /**

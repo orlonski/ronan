@@ -594,6 +594,7 @@ model Conta {
 
   alocacoesObra     AlocacaoObra[]
   registrosPresenca RegistroPresenca[]
+  configsMensal     ConfigMensalContratante[]
 
   @@index([ativa])
   @@map("contas")
@@ -2043,6 +2044,7 @@ model Empresa {
 
   faturas        Fatura[]
   titulosReceber TituloReceber[]
+  configMensal   ConfigMensalContratante?
 
   @@unique([contaId, cnpj])
   @@index([ativa])
@@ -6216,4 +6218,41 @@ model RegistroPresenca {
   @@unique([contaId, clientId])
   @@index([contaId, data])
   @@map("registros_presenca")
+}
+
+/// O que muda de um contratante pro outro no mensal.
+///
+/// Existe por causa da regra da casa: nada chumbado em código. São vários
+/// contratantes, cada um com o seu combinado — o dia em que a medição chega, e
+/// quais dias da semana o contrato espera o caminhão na obra. Chumbar o "dia
+/// 20" faria o próximo cliente exigir deploy pra começar a operar.
+///
+/// Os defaults aqui são SEMENTE, não regra: existem pra a tela abrir preenchida
+/// com o caso mais comum, e qualquer um deles se muda no painel.
+model ConfigMensalContratante {
+  contaId String @default("__SEM_CONTA__")
+  conta   Conta  @relation(fields: [contaId], references: [id])
+  id      String @id @default(uuid())
+
+  /// O contratante. 1:1 porque é o combinado com ele, não com cada obra.
+  empresaId String  @unique
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+
+  /// O dia em que a medição chega e a competência fecha. 20 = de 21 do mês
+  /// passado a 20 deste.
+  diaCorte Int @default(20)
+
+  /// Quais dias da semana o contrato espera o caminhão na obra (0 = domingo).
+  ///
+  /// É isto que transforma "o mês tem 30 dias" em "eram 26 diárias" — sem essa
+  /// régua não existe divergência, só uma lista de dias soltos. Obra que roda
+  /// de segunda a sábado é o caso comum; por isso o default. Domingo de fora
+  /// não é julgamento sobre ninguém: é o combinado do contrato.
+  diasEsperadosSemana Int[] @default([1, 2, 3, 4, 5, 6])
+
+  criadoEm   DateTime @default(now())
+  alteradoEm DateTime @updatedAt
+
+  @@index([contaId])
+  @@map("config_mensal_contratante")
 }

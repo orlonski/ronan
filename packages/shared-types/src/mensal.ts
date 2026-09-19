@@ -137,3 +137,29 @@ export const RemoverPresencaInput = z.object({
   motivo: z.string().trim().min(3, "Diga por que está removendo o dia."),
 });
 export type RemoverPresencaInput = z.infer<typeof RemoverPresencaInput>;
+
+/**
+ * O combinado com UM contratante. Vários contratantes, vários combinados —
+ * por isso é configuração e não constante.
+ */
+export const ConfigMensalInput = z.object({
+  /** O dia em que a medição chega e a competência fecha. */
+  diaCorte: z
+    .number()
+    .int()
+    .min(1, "O corte cai entre os dias 1 e 31.")
+    .max(31, "O corte cai entre os dias 1 e 31."),
+  /**
+   * Quais dias da semana o contrato espera o caminhão na obra (0 = domingo).
+   *
+   * É isto que transforma "o mês tem 30 dias" em "eram 26 diárias". Lista
+   * vazia seria um contrato que não espera o caminhão em dia nenhum — o que
+   * zeraria a divergência e faria o espelho sempre concordar com qualquer
+   * medição.
+   */
+  diasEsperadosSemana: z
+    .array(z.number().int().min(0).max(6))
+    .min(1, "Escolha pelo menos um dia da semana.")
+    .max(7),
+});
+export type ConfigMensalInput = z.infer<typeof ConfigMensalInput>;
