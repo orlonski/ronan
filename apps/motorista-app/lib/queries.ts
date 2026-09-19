@@ -673,6 +673,37 @@ export type ResumoMes = {
 };
 
 /** Home: top 10 mais recentes, sem filtro. */
+/** A obra em que o caminhão está hoje, e os dias que ficaram em branco. */
+export type ObraDeHoje = {
+  alocacao: { id: string; obra: string; placa: string } | null;
+  hoje: { data: string; registrado: boolean } | null;
+  /** Dias do período que ninguém marcou. NÃO são faltas — são dias em branco. */
+  pendentes: string[];
+};
+
+/**
+ * Cache-first como todo o resto, e aqui isso é o recurso inteiro: o motorista
+ * abre o app no pátio, com 4G ruim, e o botão tem que estar na tela na hora.
+ * Esperar a rede pra saber se ele tem obra hoje seria esperar pra mostrar um
+ * botão cuja resposta já estava no aparelho ontem.
+ */
+export function useObraDeHoje(enabled = true) {
+  const cacheKey = "q:obra-hoje";
+  const buscarRede = async (): Promise<ObraDeHoje> => {
+    const fresh = await api.get<ObraDeHoje>("/m/obra/hoje");
+    void cachePut(cacheKey, fresh).catch(() => {});
+    return fresh;
+  };
+  return useQuery({
+    queryKey: ["obra-hoje"],
+    // Motorista sem empresa não tem obra: chamar /m/obra/hoje ali seria gastar
+    // uma requisição em 4G ruim pra receber 403.
+    enabled,
+    staleTime: 60_000,
+    queryFn: () => cacheFirst<ObraDeHoje>(["obra-hoje"], cacheKey, buscarRede),
+  });
+}
+
 export function useViagens() {
   const cacheKey = "q:viagens";
   const buscarRede = async (): Promise<Viagem[]> => {

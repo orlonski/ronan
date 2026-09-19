@@ -243,6 +243,38 @@ export type PendingEncerrarDiaria = {
   errorPermanenteLocal?: boolean;
 };
 
+/**
+ * O toque: o caminhão esteve na obra neste dia.
+ *
+ * `clientId` é DETERMINÍSTICO (`alocacao|data|CHEGADA`), nunca uuid novo: é o
+ * que faz cinco toques com 4G ruim continuarem sendo um dia só. O servidor
+ * também deduplica por (alocação, dia) e devolve 200 com o registro existente,
+ * então reenvio nunca vira erro na cara do motorista.
+ *
+ * `data` é resolvida NO APARELHO no instante do toque, não no envio: o outbox
+ * pode drenar horas depois, e um toque às 23h50 que sobe 00h10 tem que
+ * continuar sendo o dia de ontem.
+ */
+export type PendingPresencaObra = {
+  clientId: string;
+  payload: {
+    /** "AAAA-MM-DD", no fuso de São Paulo, carimbado no toque. */
+    data: string;
+    clientId: string;
+    latitude?: number;
+    longitude?: number;
+    precisao?: number;
+  };
+  status: "pending" | "syncing" | "error";
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
+  errorPermanenteLocal?: boolean;
+};
+
 /** Local de descarga criado offline. clientId vira id real no servidor
  * (POST /m/locais/rapido aceita id pra idempotência). */
 export type PendingLocal = {
@@ -379,6 +411,7 @@ const VG_FINALIZAR_KEY = "outbox.viagem-finalizar";
 const VG_CANCELAR_KEY = "outbox.viagem-cancelar";
 const COMPLETAR_PESO_KEY = "outbox.viagem-completar-peso";
 const ENCERRAR_DIARIA_KEY = "outbox.viagem-encerrar-diaria";
+const PRESENCA_OBRA_KEY = "outbox.presenca-obra";
 
 /** Todos os sufixos do outbox — usado pela adoção/limpeza do storage legado. */
 const SUFIXOS_OUTBOX = [
@@ -399,6 +432,7 @@ const SUFIXOS_OUTBOX = [
   // diária preso — justamente o silêncio que o contador existe pra evitar — e o
   // item podia não ser adotado numa migração de storage.
   ENCERRAR_DIARIA_KEY,
+  PRESENCA_OBRA_KEY,
 ];
 
 async function readList<T>(key: string): Promise<T[]> {
@@ -601,6 +635,26 @@ export async function deletePendingCompletarPeso(viagemId: string): Promise<void
   await writeList(
     COMPLETAR_PESO_KEY,
     list.filter((x) => x.viagemId !== viagemId),
+  );
+}
+
+export async function listPendingPresencaObra(): Promise<PendingPresencaObra[]> {
+  return readList<PendingPresencaObra>(PRESENCA_OBRA_KEY);
+}
+
+export async function upsertPendingPresencaObra(item: PendingPresencaObra): Promise<void> {
+  const list = await listPendingPresencaObra();
+  const i = list.findIndex((x) => x.clientId === item.clientId);
+  if (i >= 0) list[i] = item;
+  else list.push(item);
+  await writeList(PRESENCA_OBRA_KEY, list);
+}
+
+export async function deletePendingPresencaObra(clientId: string): Promise<void> {
+  const list = await listPendingPresencaObra();
+  await writeList(
+    PRESENCA_OBRA_KEY,
+    list.filter((x) => x.clientId !== clientId),
   );
 }
 

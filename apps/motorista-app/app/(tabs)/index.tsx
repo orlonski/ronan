@@ -25,6 +25,7 @@ import {
 } from "lucide-react-native";
 import { fmtHoraBR } from "@/lib/datetime";
 import { HomePessoal } from "@/components/home-pessoal";
+import { HomeObra } from "@/components/home-obra";
 import { useSemEmpresa } from "@/lib/visao";
 import {
   ActivityIndicator,
@@ -60,6 +61,7 @@ import {
   useTrackingConfig,
   useViagens,
   useDiariasAbertas,
+  useObraDeHoje,
   useViagensAguardandoPeso,
   type Viagem,
 } from "@/lib/queries";
@@ -94,10 +96,23 @@ const statusLabel: Record<string, string> = {
 };
 
 export default function Home() {
+  const semEmpresa = useSemEmpresa();
+  // Os dois hooks rodam SEMPRE, antes de qualquer return: trocar a ordem faria
+  // a contagem de hooks mudar entre renders quando o vínculo aparece.
+  const { data: obra } = useObraDeHoje(!semEmpresa);
+
   // Sem empresa, a home é a DELE: frete guiado, "vale a pena?", gastos e
   // documentos. A da empresa não faz sentido pra quem não tem uma — ela fica
   // vazia, porque tudo ali depende do `/m/me` que ele não alcança.
-  if (useSemEmpresa()) return <HomePessoal />;
+  if (semEmpresa) return <HomePessoal />;
+
+  // Alocado numa obra hoje, a home é o BOTÃO — não a home normal com mais um
+  // banner. A home da empresa empilha catorze blocos, e o público do mensal
+  // tem pouquíssima familiaridade com tecnologia: um botão a mais naquela
+  // pilha é um botão que ninguém acha. Ele volta pra home normal no dia em
+  // que a alocação for encerrada.
+  if (obra?.alocacao) return <HomeObra />;
+
   return <HomeDaEmpresa />;
 }
 

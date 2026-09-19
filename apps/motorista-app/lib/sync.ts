@@ -9,6 +9,7 @@ import {
   deletePendingAbastecimento,
   deletePendingCompletarPeso,
   deletePendingEncerrarDiaria,
+  deletePendingPresencaObra,
   deletePendingEventoViagem,
   deletePendingFoto,
   deletePendingLocal,
@@ -22,6 +23,7 @@ import {
   listPendingAbastecimentos,
   listPendingCompletarPeso,
   listPendingEncerrarDiaria,
+  listPendingPresencaObra,
   listPendingEventosViagem,
   listPendingFotos,
   listPendingLocais,
@@ -35,6 +37,7 @@ import {
   upsertPendingAbastecimento,
   upsertPendingCompletarPeso,
   upsertPendingEncerrarDiaria,
+  upsertPendingPresencaObra,
   upsertPendingEventoViagem,
   upsertPendingFoto,
   upsertPendingLocal,
@@ -49,6 +52,7 @@ import {
   type FotoPendente,
   type PendingCompletarPeso,
   type PendingEncerrarDiaria,
+  type PendingPresencaObra,
   type PendingEventoViagem,
   type PendingFoto,
   type PendingLocal,
@@ -649,6 +653,66 @@ export async function enqueueEncerrarDiaria(item: {
   void drain();
 }
 
+/**
+ * Enfileira o toque de presença na obra.
+ *
+ * `clientId` determinístico de propósito: tocar cinco vezes no mesmo dia
+ * sobrescreve o MESMO item em vez de empilhar cinco. É isso que faz 4G ruim
+ * não virar cinco diárias.
+ */
+export async function enqueuePresencaObra(item: {
+  alocacaoId: string;
+  data: string;
+  latitude?: number;
+  longitude?: number;
+  precisao?: number;
+}): Promise<void> {
+  const clientId = `${item.alocacaoId}|${item.data}|CHEGADA`;
+  await upsertPendingPresencaObra({
+    clientId,
+    payload: {
+      data: item.data,
+      clientId,
+      latitude: item.latitude,
+      longitude: item.longitude,
+      precisao: item.precisao,
+    },
+    status: "pending",
+    attempts: 0,
+    createdAt: Date.now(),
+    lastTriedAt: undefined,
+    errorMsg: undefined,
+    errorStatus: undefined,
+    errorIssues: undefined,
+    errorPermanenteLocal: undefined,
+  });
+  notify();
+  void drain();
+}
+
+/** Reseta o erro e tenta a presença de novo (após 4xx permanente). */
+export async function tentarNovamentePresencaObra(clientId: string): Promise<void> {
+  const list = await listPendingPresencaObra();
+  const item = list.find((x) => x.clientId === clientId);
+  if (!item) return;
+  await upsertPendingPresencaObra({
+    ...item,
+    status: "pending",
+    attempts: 0,
+    errorMsg: undefined,
+    errorStatus: undefined,
+    errorIssues: undefined,
+    errorPermanenteLocal: undefined,
+  });
+  notify();
+  void drain();
+}
+
+export async function descartarPresencaObra(clientId: string): Promise<void> {
+  await deletePendingPresencaObra(clientId);
+  notify();
+}
+
 /** Reseta o erro e tenta encerrar a diária de novo (após 4xx permanente). */
 export async function tentarNovamenteEncerrarDiaria(viagemId: string): Promise<void> {
   const list = await listPendingEncerrarDiaria();
@@ -805,7 +869,7 @@ export async function pendingCounts(): Promise<{
   /** Itens com erro permanente (4xx) que precisam de ação do motorista. */
   comErro: number;
 }> {
-  const [v, p, a, li, ev, fi, cp, ed, fo, lo, st] = await Promise.all([
+  const [v, p, a, li, ev, fi, cp, ed, fo, lo, st, po] = await Promise.all([
     listPendingViagens(),
     listPendingPedagios(),
     listPendingAbastecimentos(),
@@ -817,10 +881,11 @@ export async function pendingCounts(): Promise<{
     listPendingFotos(),
     listPendingLocais(),
     listPendingStories(),
+    listPendingPresencaObra(),
   ]);
   // foto/local/story ficavam de fora da contagem: item travado desses não
   // aparecia em lugar nenhum, nem no badge da home nem na tela de Pendentes.
-  const comErro = [v, p, a, li, ev, fi, cp, ed, fo, lo, st].reduce(
+  const comErro = [v, p, a, li, ev, fi, cp, ed, fo, lo, st, po].reduce(
     (acc, lista) => acc + lista.filter((i) => i.attempts >= MAX_ATTEMPTS).length,
     0,
   );
@@ -1057,6 +1122,7 @@ async function snapshotPendentes(): Promise<{ total: number; motivo?: string }> 
     listPendingEventosViagem(),
     listPendingViagemFinalizar(),
     listPendingViagemCancelar(),
+    listPendingPresencaObra(),
   ]);
   const todos = listas.flat();
   const motivo = todos.map((i) => i.errorMsg).find(Boolean) ?? undefined;
@@ -1127,6 +1193,10 @@ export async function drain(opts?: { force?: boolean }): Promise<DrainResumo> {
     await drainCompletarPeso();
     // Encerrar diária: mesma natureza (viagem já sincronizada, AGUARDANDO_SAIDA).
     await drainEncerrarDiaria();
+    // Presença na obra: independe de viagem, mas vai cedo porque é o dado que
+    // paga o mês do motorista mensal — atrasar isso atrás de foto seria
+    // priorizar o que ninguém cobra.
+    await drainPresencaObra();
     await drainPedagios();
     await drainAbastecimentos();
     await drainStories();
@@ -1192,6 +1262,11 @@ async function rescueStaleItems(): Promise<void> {
   for (const ed of await listPendingEncerrarDiaria()) {
     if (ed.status === "syncing" && isStale(ed.lastTriedAt)) {
       await upsertPendingEncerrarDiaria({ ...ed, status: "pending" });
+    }
+  }
+  for (const po of await listPendingPresencaObra()) {
+    if (po.status === "syncing" && isStale(po.lastTriedAt)) {
+      await upsertPendingPresencaObra({ ...po, status: "pending" });
     }
   }
   for (const i of await listPendingViagemIniciar()) {
@@ -1385,6 +1460,32 @@ async function processEncerrarDiaria(item: PendingEncerrarDiaria): Promise<void>
   } catch (err) {
     await upsertPendingEncerrarDiaria(
       proximoEstadoFalha(item, err, isErroPermanente(err), "encerrar-diaria"),
+    );
+  }
+  notify();
+}
+
+async function drainPresencaObra(): Promise<void> {
+  const list = await listPendingPresencaObra();
+  for (const item of list) {
+    if (item.status === "syncing") continue;
+    if (item.attempts >= MAX_ATTEMPTS) continue;
+    if (!(await podeTentar("presenca-obra"))) return;
+    await processPresencaObra(item);
+  }
+}
+
+async function processPresencaObra(item: PendingPresencaObra): Promise<void> {
+  await upsertPendingPresencaObra({ ...item, status: "syncing", lastTriedAt: Date.now() });
+  notify();
+  try {
+    // Idempotente no backend: dia já registrado devolve o registro existente,
+    // nunca 409 — reenvio de outbox não pode virar erro pro motorista.
+    await api.post("/m/obra/cheguei", item.payload, { outbox: true });
+    await deletePendingPresencaObra(item.clientId);
+  } catch (err) {
+    await upsertPendingPresencaObra(
+      proximoEstadoFalha(item, err, isErroPermanente(err), "presenca-obra"),
     );
   }
   notify();
