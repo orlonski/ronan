@@ -237,3 +237,26 @@ depois. O app novo só é aprovado quando o velho sair do Brasil.
 > (build 15) for review.
 >
 > Thank you.
+
+### Feito em 19/09/2026
+
+- **Modo da força-atualização conferido antes de tudo**: está em **Observar**,
+  com os dois pisos vazios. Ninguém é bloqueado, então o link morto da loja não
+  prende motorista nenhum. Nada a mudar lá — mas se alguém subir o modo pra
+  `bloquear` antes de o app novo aprovar, prende.
+- **Schaba (6778807216): disponibilidade em 0 países.** Pela tela
+  Preços e disponibilidade › Disponibilidade do app › Gerenciar disponibilidade
+  › **Nenhum**. A Apple confirmou "seu app será removido da App Store no
+  seguinte país ou região: Brasil" e avisa que **leva até 24 horas** pra valer
+  de fato.
+- **Movatruck (6813093675) conferido**: 1 país, Brasil, "Disponível no
+  lançamento do app". Sem sobreposição.
+- **Resposta enviada** no Resolution Center e **1.2.0 / build 15 reenviada** —
+  status voltou pra "Aguardando revisão".
+
+**Gotcha do reenvio:** na página do envio, o botão **"Reenviar para Revisão do
+app" nasce desabilitado**, mesmo depois de responder a mensagem. Ele só acende
+depois de abrir a versão (link "Editar" na linha do item) e clicar em
+**"Atualizar revisão"** — aí o item sai de "Rejeitado" e vira "Pronto para
+revisão". Sem esse passo dá pra ficar rodando em círculo achando que a Apple
+travou o reenvio.
