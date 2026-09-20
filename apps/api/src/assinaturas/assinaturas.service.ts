@@ -27,6 +27,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { AsaasProvedor } from "./asaas.provedor";
 import { AvisoCobrancaService } from "./aviso-cobranca.service";
+import { PagamentoLinkService } from "./pagamento-link.service";
 import { ErroGateway } from "./gateway.types";
 
 /** Status em que a assinatura ainda ocupa a vaga da conta. */
@@ -63,6 +64,7 @@ export class AssinaturasService {
     private readonly precos: PrecosService,
     private readonly auditoria: AuditoriaService,
     private readonly aviso: AvisoCobrancaService,
+    private readonly link: PagamentoLinkService,
   ) {}
 
   /**
@@ -326,6 +328,13 @@ export class AssinaturasService {
       this.log.log(
         `Assinatura ${assinatura.id} (${assinatura.conta.nome}) criada no gateway como ${criada.id}.`,
       );
+
+      // O link de pagamento nasce junto, e não só quando o WhatsApp sai: é ele
+      // que a tela mostra pra quem precisa mandar a cobrança por outro canal
+      // (e-mail, conversa já aberta) no dia em que o envio automático falhar.
+      if (assinatura.forma === "PIX_AUTOMATICO") {
+        await this.link.garantirLink(assinatura.id);
+      }
 
       // O cliente é avisado AGORA, não 3 dias antes do vencimento.
       //
@@ -596,6 +605,10 @@ export class AssinaturasService {
       cartaoUltimos4: a.cartaoUltimos4,
       qrCodePayload: a.qrCodePayload,
       qrCodeExpiraEm: a.qrCodeExpiraEm,
+      // A URL, nunca o token cru: quem lê a tela quer mandar o link, e token
+      // solto na resposta é convite pra alguém montar a URL na mão e errar o
+      // domínio.
+      linkPagamento: a.tokenPagamento ? this.link.urlDoToken(a.tokenPagamento) : null,
       inicioEm: a.inicioEm,
       proximoVencimento: a.proximoVencimento,
       canceladaEm: a.canceladaEm,

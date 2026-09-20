@@ -222,14 +222,16 @@ export const ROTAS_WHATSAPP = [
     chave: "COBRANCA_AUTORIZACAO_PIX",
     rotulo: "Autorizar a mensalidade (Pix)",
     descricao:
-      "Mesma coisa que a de cima, mas pro Pix Automático: manda o copia-e-cola dentro da mensagem, sem botão.",
+      "Mesma coisa que a de cima, mas pro Pix Automático: manda o link da página de pagamento, com o QR e o botão de copiar o código.",
     categoria: "utility",
     provedores: ["evolution", "meta"],
     // Rota separada porque o TEMPLATE é outro, e na Meta um template é por
-    // rota. O de cima tem botão de URL, que só serve pro cartão: ali o código
-    // é um link do gateway. No Pix Automático o que o cliente precisa é o
-    // copia-e-cola, e não existe URL nenhuma pra apontar na hora de criar a
-    // autorização — a cobrança só nasce no Asaas DEPOIS que ele paga.
+    // rota. Os dois têm botão de URL, mas apontando pra lugares diferentes — e
+    // o prefixo da URL fica CONGELADO no template aprovado, então um template
+    // não serve pro outro. O de cima vai pro Asaas (no cartão, o código É um
+    // link deles); este vai pra `/pagar/<token>`, nossa, porque no Pix
+    // Automático não existe página do gateway: a cobrança só nasce lá DEPOIS
+    // que o cliente paga.
     critica: false,
     escopo: "plataforma",
   },
@@ -344,8 +346,16 @@ export type AtualizarRoteamentoWhatsappInput = z.infer<typeof AtualizarRoteament
 export type BotaoTemplate =
   /** Botão "Copiar código" do template de autenticação. O param é o código. */
   | { tipo: "COPIAR_CODIGO"; param: number }
-  /** Botão de URL dinâmica: o param é só o SUFIXO que completa a URL base. */
-  | { tipo: "URL"; param: number };
+  /**
+   * Botão de URL dinâmica: o param é só o SUFIXO que completa a URL base.
+   *
+   * `texto` é o rótulo que aparece no botão. Tem default porque quase todo
+   * link é "veja isto", mas o de cobrança não é: "Abrir" ao lado de um valor
+   * em reais não diz o que acontece ao tocar, e o rótulo de botão é sempre o
+   * verbo do que vai acontecer. A Meta congela o rótulo no template aprovado,
+   * então ele mora aqui junto do resto da forma.
+   */
+  | { tipo: "URL"; param: number; texto?: string };
 
 export type TemplateWhatsappDef = {
   /** Nome exato aprovado na Meta. Minúsculas e underscore — a Meta exige. */
@@ -595,32 +605,42 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
     ],
   },
   /**
-   * O convite pra autorizar por Pix Automático: o código vai NO CORPO.
+   * O convite pra autorizar por Pix Automático: o link da NOSSA página.
    *
-   * O template irmão manda um botão de URL, e isso derrubou o aviso em
-   * produção (18/09/2026): o sufixo do botão saía de `sufixoDoLink` aplicado ao
-   * copia-e-cola, virava `...qr/cob/<id>52040000...DIEGO DAVI...`, e o cliente
-   * caía num "a cobrança não existe" do próprio Asaas. Não era um sufixo
-   * errado — é que **não existe URL** pra apontar: no Pix Automático a cobrança
-   * só nasce no gateway depois que o cliente paga.
+   * Duas correções em cima da primeira versão, nessa ordem:
    *
-   * O BR Code cabe num parâmetro de corpo (200 e poucos caracteres contra o
-   * limite de 1024) e não tem quebra de linha, então passa no `achatarParam`.
+   * 1. O template irmão manda um botão de URL do Asaas, e isso derrubou o aviso
+   *    em produção (18/09/2026): o sufixo saía de `sufixoDoLink` aplicado ao
+   *    copia-e-cola e o cliente caía num "a cobrança não existe" do próprio
+   *    gateway. Não existe URL DELES pra apontar — no Pix Automático a cobrança
+   *    só nasce no Asaas depois que o cliente paga. A resposta foi mandar o BR
+   *    Code dentro do corpo.
+   * 2. Só que BR Code dentro do corpo é ruim de usar, e isso é pior que feio:
+   *    no WhatsApp o toque longo copia a mensagem INTEIRA, com o "Olá, Fulano"
+   *    junto. Não existe botão de copiar que salve — o `COPY_CODE` da Meta para
+   *    em 15 caracteres e é template de marketing, e o código tem ~230. Quem
+   *    recebia tinha que selecionar 230 caracteres na mão, no celular, sem
+   *    errar um byte, senão o banco recusa.
+   *
+   * Então a URL passa a ser NOSSA: `/pagar/<token>`, uma página com botão de
+   * copiar de verdade e o QR pra quem paga de outro aparelho. O param do botão
+   * é o token, não o código.
+   *
+   * O nome do template mudou junto (`_link`) porque o corpo mudou: template
+   * aprovado é imutável na Meta, e reaproveitar o nome faria o código jurar um
+   * texto e ela entregar outro.
    */
   COBRANCA_AUTORIZACAO_PIX: {
-    nome: "cobranca_autorizacao_pix",
+    nome: "cobranca_autorizacao_pix_link",
     idioma: "pt_BR",
-    // nome, valor, código, vencimento — nessa ordem, que é a ordem em que
-    // aparecem no corpo aprovado.
-    corpo: [0, 1, 4, 2],
+    corpo: [0, 1, 2],
+    botao: { tipo: "URL", param: 5, texto: "Pagar" },
     textoAprovacao: [
       "Olá, {{1}}. A assinatura do Movatruck da sua empresa foi criada.",
       "",
-      "Para ativar a cobrança automática de {{2}} por mês, copie o código Pix abaixo e pague pelo app do seu banco. Esta autorização é feita uma única vez.",
+      "Para ativar a cobrança automática de {{2}} por mês, pague o Pix pelo botão abaixo. Esta autorização é feita uma única vez.",
       "",
-      "{{3}}",
-      "",
-      "Vencimento da primeira mensalidade: {{4}}",
+      "Vencimento da primeira mensalidade: {{3}}",
       "",
       "Qualquer dúvida, é só responder aqui.",
     ].join("\n"),
@@ -630,7 +650,7 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
       "10/09/2026",
       "",
       "00020101021226790014br.gov.bcb.pix2557pix.asaas.com/qr/cob/0cd97f06-6965-4c31-80be-2ab8fb31b8de5204000053039865802BR5925MOVATRUCK DESENVOLVIMENTO6009Ponta Grossa62070503***6304ABCD",
-      "",
+      "k7Qw2mT9xZ0aB3cD5eF6gH8j",
     ],
   },
   // Sem ameaça e sem prazo de corte, porque o corte não é automático: anunciar

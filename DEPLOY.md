@@ -85,9 +85,14 @@ CORS_ORIGINS=https://painel.SEU-DOMINIO.com.br,https://app.SEU-DOMINIO.com.br
 PUBLIC_APP_URL=https://app.movatruck.com.br
 ```
 
-> `PUBLIC_APP_URL` é a base pública do painel, usada pra montar o link do
-> comprovante compartilhado (`PUBLIC_APP_URL/v/<token>`) que vai pro cliente no
-> WhatsApp. Mora na API, e não como `NEXT_PUBLIC_*` no dashboard, porque lá seria
+> `PUBLIC_APP_URL` é a base pública do painel, usada pra montar dois links que
+> vão pro WhatsApp de quem está fora do sistema: o comprovante compartilhado
+> (`PUBLIC_APP_URL/v/<token>`), que a transportadora manda pro cliente dela, e a
+> página de pagamento da mensalidade (`PUBLIC_APP_URL/pagar/<token>`), que a
+> Movatruck manda pro financeiro da transportadora. **O prefixo do segundo está
+> congelado no template aprovado da Meta** (`cobranca_autorizacao_pix_link`) —
+> mudar esta env sem refazer o template deixa o botão "Pagar" apontando pro
+> domínio velho. Mora na API, e não como `NEXT_PUBLIC_*` no dashboard, porque lá seria
 > baked no build da imagem — aqui basta reiniciar. Sem valor, a API loga um
 > `warn` no boot e os links saem apontando pra `localhost:3001`.
 >

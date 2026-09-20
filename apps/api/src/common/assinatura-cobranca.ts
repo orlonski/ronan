@@ -203,22 +203,28 @@ export function mensagemCobrancaAberta(dados: {
  * assinatura fica parada para sempre esperando uma autorização que ninguém
  * pediu.
  *
- * `codigo` é o copia-e-cola do Pix (no Pix Automático) ou o link da cobrança
- * (no cartão e no boleto). No texto livre do Evolution ele vai inteiro; no
- * template da Meta, o link vai no botão e o código longo do Pix não cabe — por
- * isso o corpo explica o que fazer sem depender dele.
+ * `link` é para onde o cliente vai pagar: a página do gateway (cartão) ou a
+ * NOSSA `/pagar/<token>` (Pix Automático). Nos dois casos o botão do template
+ * é a mesma coisa e o sufixo é a última parte da URL.
+ *
+ * O Pix não manda mais o copia-e-cola dentro da mensagem, e isso não é
+ * preferência de estilo: no WhatsApp o toque longo copia o balão INTEIRO, com
+ * a saudação junto, e o banco recusa o que vem colado. Botão de copiar nativo
+ * não resolve — o `COPY_CODE` da Meta para em 15 caracteres, e o BR Code tem
+ * ~230. Copiar de verdade só acontece numa página, então é pra uma página que
+ * o link leva.
  */
 export function mensagemAutorizacao(dados: {
   nomeResponsavel: string;
   valor: string;
   vencimento: string;
-  codigo: string;
+  link: string;
   ehPix: boolean;
 }): { texto: string; params: string[] } {
-  const { nomeResponsavel, valor, vencimento, codigo, ehPix } = dados;
+  const { nomeResponsavel, valor, vencimento, link, ehPix } = dados;
   const comoPagar = ehPix
-    ? `Copie o código abaixo e pague pelo app do seu banco:\n\n${codigo}`
-    : `Informe os dados do cartão neste link:\n\n${codigo}`;
+    ? `Pague o Pix por aqui:\n\n${link}`
+    : `Informe os dados do cartão neste link:\n\n${link}`;
 
   // Mesmo tom transacional do template aprovado. O texto livre não passa pela
   // análise da Meta, mas o cliente pode receber por qualquer um dos dois
@@ -231,7 +237,7 @@ export function mensagemAutorizacao(dados: {
       `${comoPagar}\n\n` +
       `Vencimento da primeira mensalidade: ${vencimento}\n\n` +
       `Qualquer dúvida, é só responder aqui.`,
-    params: [nomeResponsavel, valor, vencimento, "", codigo, sufixoDoLink(codigo)],
+    params: [nomeResponsavel, valor, vencimento, "", link, sufixoDoLink(link)],
   };
 }
 

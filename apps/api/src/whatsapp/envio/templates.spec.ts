@@ -58,20 +58,31 @@ describe("catálogo de templates", () => {
   });
 
   /**
-   * O convite do Pix Automático não pode ter botão de URL.
+   * O convite do Pix Automático leva LINK, e o copia-e-cola não entra nele.
    *
-   * Em 18/09/2026 ele tinha: o sufixo saía do copia-e-cola e o cliente caía num
-   * "a cobrança não existe" do Asaas. Não é sufixo errado — é que na hora de
-   * criar a autorização NÃO EXISTE cobrança no gateway, logo não existe URL.
-   * O código tem que ir no corpo.
+   * São dois erros travados de uma vez, os dois já cometidos:
+   *
+   * 1. Em 18/09/2026 o botão apontava pro Asaas com o sufixo tirado do
+   *    copia-e-cola, e o cliente caía num "a cobrança não existe" do próprio
+   *    gateway. Na hora de criar a autorização NÃO existe cobrança lá, logo
+   *    não existe URL DELES — o botão só pode apontar pra nossa `/pagar/`.
+   * 2. A resposta seguinte foi pôr o BR Code no corpo, e aí ninguém conseguia
+   *    copiar: no WhatsApp o toque longo copia o balão inteiro, com a saudação
+   *    junto, e o banco recusa. O código NÃO pode voltar pro corpo.
+   *
+   * O índice 4 dos params é o copia-e-cola; o 5 é o sufixo do link. Confundir
+   * os dois é literalmente o bug 1.
    */
-  it("o convite por Pix leva o código no corpo e não tem botão", () => {
+  it("o convite por Pix leva link no botão, e nunca o copia-e-cola", () => {
     const def = TEMPLATES_WHATSAPP["COBRANCA_AUTORIZACAO_PIX"]!;
     expect(def).toBeDefined();
-    expect(def.botao).toBeUndefined();
-    // O índice 4 dos params é o copia-e-cola (o mesmo que o Evolution põe no
-    // texto). Se sumir do corpo, a mensagem vai sem o código e não serve.
-    expect(def.corpo).toContain(4);
+    expect(def.botao?.tipo).toBe("URL");
+    expect(def.botao?.param).toBe(5);
+    expect(def.corpo).not.toContain(4);
+    expect(def.textoAprovacao).not.toContain("br.gov.bcb.pix");
+    // Rótulo próprio: "Abrir" ao lado de um valor em reais não diz o que
+    // acontece ao tocar.
+    expect(def.botao?.tipo === "URL" && def.botao.texto).toBe("Pagar");
   });
 
   it("toda rota da Meta sem template é texto livre de propósito", () => {

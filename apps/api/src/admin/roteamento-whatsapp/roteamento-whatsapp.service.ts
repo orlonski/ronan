@@ -12,6 +12,7 @@ import {
   type AtualizarRoteamentoWhatsappInput,
   type ProvedorWhatsapp,
 } from "@ronan/shared-types";
+import { ConfigService } from "@nestjs/config";
 import { comoSistema, contaIdAtual } from "../../common/conta/conta-context";
 import { inicioDoDiaData } from "../../common/timezone";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -27,6 +28,7 @@ export class AdminRoteamentoWhatsappService {
     private readonly prisma: PrismaService,
     private readonly roteador: Roteador,
     private readonly meta: MetaProvedor,
+    private readonly config: ConfigService,
   ) {}
 
   /**
@@ -230,9 +232,31 @@ export class AdminRoteamentoWhatsappService {
          */
         status: achado?.status ?? null,
         bate: !!achado && achado.language === def!.idioma && achado.status === "APPROVED",
+        /**
+         * O prefixo a sugerir no campo de URL, pros templates que apontam pra
+         * NÓS.
+         *
+         * Não é o prefixo virando código: quem manda nele segue sendo o
+         * template aprovado, e o campo continua editável. É que o do Pix é uma
+         * URL nossa, e um palpite genérico ali (o placeholder mostrava o do
+         * Asaas) vira um botão apontando pro gateway errado — congelado, porque
+         * a Meta não deixa editar template aprovado.
+         */
+        urlBaseSugerida: def!.botao?.tipo === "URL" ? this.urlBaseDe(rota) : null,
       };
     });
     return { bruto: r, esperados };
+  }
+
+  /**
+   * Nossa própria base pública, pros templates cujo botão volta pro sistema.
+   * Sai da env, e não de constante, pelo mesmo motivo do link do comprovante:
+   * o domínio do painel já mudou uma vez.
+   */
+  private urlBaseDe(rota: string): string | null {
+    if (rota !== "COBRANCA_AUTORIZACAO_PIX") return null;
+    const base = (this.config.get<string>("PUBLIC_APP_URL") ?? "").replace(/\/+$/, "");
+    return base ? `${base}/pagar/` : null;
   }
 
   /**
@@ -288,7 +312,9 @@ export class AdminRoteamentoWhatsappService {
         buttons: [
           {
             type: "URL",
-            text: "Abrir",
+            // O rótulo vem do catálogo quando a rota tem opinião: "Abrir" ao
+            // lado de um valor em reais não diz o que acontece ao tocar.
+            text: def.botao.texto ?? "Abrir",
             // `{{1}}` no fim é o que torna a URL dinâmica: o envio manda só o
             // sufixo. O prefixo fica congelado no template aprovado — é por
             // isso que ele não pode sair do código depois, e por isso que ele

@@ -74,6 +74,7 @@ describe("cancelar apaga tudo no gateway", () => {
       { precoPara: async () => null } as never,
       { log: async () => {} } as never,
       { avisarAgora: async () => ({ enviado: true }) } as never,
+      { garantirLink: async () => "https://app.movatruck.com.br/pagar/tok", urlDoToken: (t: string) => `https://app.movatruck.com.br/pagar/${t}` } as never,
     );
     return { s, assinaturas, cobrancasApagadas, filtro: () => filtroDasCobrancas };
   }

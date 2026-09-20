@@ -23,13 +23,14 @@ describe("criar template na Meta", () => {
       {} as never,
       {} as never,
       meta as never,
+      { get: () => "https://app.movatruck.com.br" } as never,
     );
     return { s, chamadas };
   }
 
   it("monta o corpo do template sem botão a partir do catálogo", async () => {
     const { s, chamadas } = servico();
-    await s.criarTemplateNaMeta("waba1", "COBRANCA_AUTORIZACAO_PIX");
+    await s.criarTemplateNaMeta("waba1", "COBRANCA_ABERTA", "https://www.asaas.com/i/");
 
     const corpo = chamadas[0]!.corpo as {
       name: string;
@@ -37,19 +38,48 @@ describe("criar template na Meta", () => {
       category: string;
       components: { type: string; text?: string; example?: { body_text: string[][] } }[];
     };
-    expect(corpo.name).toBe("cobranca_autorizacao_pix");
+    expect(corpo.name).toBe("cobranca_aberta");
     expect(corpo.language).toBe("pt_BR");
     expect(corpo.category).toBe("UTILITY");
 
-    // Um componente só: BODY. Botão nenhum — é o que este template não pode ter.
-    expect(corpo.components).toHaveLength(1);
-    expect(corpo.components[0]!.type).toBe("BODY");
-    expect(corpo.components[0]!.text).toContain("{{3}}");
+    const body = corpo.components.find((c) => c.type === "BODY")!;
+    expect(body.text).toContain("{{4}}");
 
-    // Um exemplo por {{n}}, e o do código Pix tem que ser o código, não vazio.
-    const exemplos = corpo.components[0]!.example!.body_text[0]!;
+    // Um exemplo por {{n}}, na mesma ordem do corpo — a Meta recusa template
+    // com contagem diferente, e recusa exemplo genérico.
+    const exemplos = body.example!.body_text[0]!;
     expect(exemplos).toHaveLength(4);
-    expect(exemplos[2]).toContain("br.gov.bcb.pix");
+  });
+
+  /**
+   * O convite por Pix aponta pra NOSSA página, e o rótulo do botão vem do
+   * catálogo.
+   *
+   * O prefixo continua sendo parâmetro, e não constante de código, porque quem
+   * manda nele é o template APROVADO: a Meta o congela e o envio só completa o
+   * sufixo. Ter a URL em dois lugares é como o código jura uma coisa e ela
+   * entrega outra.
+   */
+  it("o convite por Pix vira botão Pagar apontando pra nossa página", async () => {
+    const { s, chamadas } = servico();
+    await s.criarTemplateNaMeta(
+      "waba1",
+      "COBRANCA_AUTORIZACAO_PIX",
+      "https://app.movatruck.com.br/pagar/",
+    );
+
+    const corpo = chamadas[0]!.corpo as {
+      name: string;
+      components: { type: string; text?: string; buttons?: { type: string; text: string; url: string; example: string[] }[] }[];
+    };
+    expect(corpo.name).toBe("cobranca_autorizacao_pix_link");
+
+    const botao = corpo.components.find((c) => c.type === "BUTTONS")!.buttons![0]!;
+    expect(botao.text).toBe("Pagar");
+    expect(botao.url).toBe("https://app.movatruck.com.br/pagar/{{1}}");
+    // O exemplo do botão é um TOKEN, nunca o copia-e-cola: foi exatamente essa
+    // troca que mandou o cliente pra um "a cobrança não existe" em 18/09/2026.
+    expect(botao.example[0]).not.toContain("br.gov.bcb.pix");
   });
 
   it("template com botão de URL exige o prefixo, que não mora no código", async () => {

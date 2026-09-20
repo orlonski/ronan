@@ -12,6 +12,7 @@ import { comoSistema } from "../common/conta/conta-context";
 import { PrismaService } from "../prisma/prisma.service";
 import { EnvioWhatsappService } from "../whatsapp/envio/envio-whatsapp.service";
 import { SessaoService } from "../whatsapp/sessao.service";
+import { PagamentoLinkService } from "./pagamento-link.service";
 
 /**
  * O aviso avulso: manda pro cliente, agora, o que ele precisa pra pagar.
@@ -29,6 +30,7 @@ export class AvisoCobrancaService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly envio: EnvioWhatsappService,
+    private readonly link: PagamentoLinkService,
   ) {}
 
   /**
@@ -72,11 +74,20 @@ export class AvisoCobrancaService {
 
     // O que mandar depende do momento: quem ainda não autorizou recebe o
     // convite; quem já autorizou recebe a fatura em aberto.
-    const codigo = esperandoAutorizacao
-      ? (assinatura.qrCodePayload ?? emAberto?.linkPagamento ?? null)
-      : (emAberto?.linkPagamento ?? null);
+    //
+    // No convite por Pix o destino é a NOSSA página: o copia-e-cola tem ~230
+    // caracteres e, dentro da mensagem, o cliente só consegue copiar o balão
+    // inteiro — com o "Olá, Fulano" junto, que o banco recusa. A página tem
+    // botão de copiar de verdade e o QR pra quem paga de outro aparelho.
+    //
+    // A checagem segue sendo do CÓDIGO, não do link: o link a gente sempre
+    // consegue montar, e mandar um link pra uma página que vai dizer "não tem
+    // código" é pior que não mandar nada e explicar na tela.
+    const temComoPagar = esperandoAutorizacao
+      ? (ehPix ? assinatura.qrCodePayload : emAberto?.linkPagamento)
+      : emAberto?.linkPagamento;
 
-    if (!codigo) {
+    if (!temComoPagar) {
       return {
         enviado: false,
         motivo: esperandoAutorizacao
@@ -84,6 +95,11 @@ export class AvisoCobrancaService {
           : "Não há cobrança em aberto pra mandar.",
       };
     }
+
+    const destinoDoPagamento =
+      esperandoAutorizacao && ehPix
+        ? await this.link.garantirLink(assinatura.id)
+        : temComoPagar;
 
     const valor = formatarReais(assinatura.valorCentavos);
     const vencimento = formatarData(emAberto?.vencimento ?? assinatura.proximoVencimento ?? hojeData());
@@ -93,7 +109,7 @@ export class AvisoCobrancaService {
           nomeResponsavel: achatarParam(assinatura.nomeResponsavel),
           valor,
           vencimento,
-          codigo,
+          link: destinoDoPagamento,
           ehPix,
         })
       : mensagemCobrancaAberta({
@@ -101,17 +117,17 @@ export class AvisoCobrancaService {
           competenciaRotulo: rotuloCompetencia(emAberto!.competencia),
           valor: formatarReais(emAberto!.valorCentavos),
           vencimento,
-          link: codigo,
+          link: destinoDoPagamento,
         });
 
     const r = await this.envio.tentarEnviar({
       destino: { tipo: "TELEFONE", numero: SessaoService.normalizar(assinatura.telefoneCobranca) },
-      // Pix Automático tem rota própria porque tem TEMPLATE próprio: o da
-      // autorização comum manda um botão de URL, que só faz sentido no cartão
-      // (ali o código É um link do gateway). No Pix o código é um copia-e-cola
-      // e não existe URL pra apontar — a cobrança só nasce no Asaas depois que
-      // o cliente paga. Mandar os dois pelo mesmo template fazia o cliente
-      // cair num "a cobrança não existe" do próprio gateway.
+      // Pix Automático tem rota própria porque tem TEMPLATE próprio: os dois
+      // mandam botão de URL, mas o prefixo fica congelado no template aprovado
+      // e eles apontam pra lugares diferentes — o do cartão vai pro gateway
+      // (ali o código É um link deles), o do Pix vem pra nossa `/pagar/`.
+      // Mandar os dois pelo mesmo template fazia o cliente cair num "a
+      // cobrança não existe" do próprio Asaas.
       rota: esperandoAutorizacao
         ? ehPix
           ? "COBRANCA_AUTORIZACAO_PIX"

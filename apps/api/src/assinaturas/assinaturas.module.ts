@@ -8,6 +8,8 @@ import { AssinaturasController } from "./assinaturas.controller";
 import { AssinaturasService } from "./assinaturas.service";
 import { AvisoCobrancaService } from "./aviso-cobranca.service";
 import { EventosGatewayService } from "./eventos-gateway.service";
+import { PagamentoLinkService } from "./pagamento-link.service";
+import { PagamentoPublicoController } from "./pagamento-publico.controller";
 import { ReguaCobrancaService } from "./regua-cobranca.service";
 import { PagamentosWebhookController } from "./webhook.controller";
 
@@ -20,13 +22,14 @@ import { PagamentosWebhookController } from "./webhook.controller";
  */
 @Module({
   imports: [PrecosModule, AuditoriaModule, WhatsappModule],
-  controllers: [AssinaturasController, PagamentosWebhookController],
+  controllers: [AssinaturasController, PagamentosWebhookController, PagamentoPublicoController],
   providers: [
     AsaasConfig,
     AsaasProvedor,
     AssinaturasService,
     AvisoCobrancaService,
     EventosGatewayService,
+    PagamentoLinkService,
     ReguaCobrancaService,
   ],
   exports: [AssinaturasService],

@@ -5800,6 +5800,18 @@ model Assinatura {
   qrCodePayload  String?
   qrCodeExpiraEm DateTime?
 
+  /// Token da página pública de pagamento (`/pagar/<token>`).
+  ///
+  /// Existe porque o copia-e-cola do Pix tem 230 caracteres e não cabe em
+  /// botão nenhum do WhatsApp (o `COPY_CODE` da Meta para em 15): dentro da
+  /// mensagem, o cliente só consegue copiar o balão INTEIRO, com o texto
+  /// junto, e o banco recusa. O link leva pra uma tela com um botão de copiar
+  /// de verdade e o QR pra quem paga de outro aparelho.
+  ///
+  /// Não expira junto com o QR: link morto não explica nada, e a página
+  /// precisa poder dizer "este código venceu, peça outro" em vez de 404.
+  tokenPagamento String? @unique
+
   /// Só os 4 últimos e a bandeira. O suficiente pra tela dizer "Visa •••• 4242"
   /// e pra reconhecer o cartão que recusou, e nada além disso.
   cartaoBandeira String?

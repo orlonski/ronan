@@ -1268,6 +1268,12 @@ type TemplateEsperado = {
   /** Status cru da Meta: APPROVED, PENDING, REJECTED… `null` = não existe lá. */
   status: string | null;
   bate: boolean;
+  /**
+   * O prefixo que o servidor sugere pro botão, quando o link volta pra nós.
+   * Vem de lá porque é a `PUBLIC_APP_URL` dele — o painel não sabe o domínio
+   * que a API usa pra montar link público.
+   */
+  urlBaseSugerida?: string | null;
 };
 
 type TemplatesMeta = { esperados: TemplateEsperado[] };
@@ -1352,7 +1358,9 @@ function TemplatesMetaCard() {
       // a instrução. Em vez de repeti-la aqui, a tela abre o campo que ela
       // pede — o texto continua morando num lugar só.
       if (/urlBase/i.test(e.message)) {
-        setPedindoUrl((p) => ({ ...p, [rota]: p[rota] ?? "" }));
+        const sugerida =
+          lista.data?.esperados.find((t) => t.rota === rota)?.urlBaseSugerida ?? "";
+        setPedindoUrl((p) => ({ ...p, [rota]: p[rota] ?? sugerida }));
         toast.info("Esse template tem botão", { description: e.message });
         return;
       }
@@ -1448,8 +1456,12 @@ function TemplatesMetaCard() {
                           onChange={(e) =>
                             setPedindoUrl((p) => ({ ...p, [t.rota]: e.target.value }))
                           }
-                          placeholder="https://www.asaas.com/i/"
-                          className="w-56"
+                          // O prefixo fica CONGELADO no template aprovado: um
+                          // palpite errado aqui é um botão apontando pro lugar
+                          // errado pra sempre. Quando o link volta pro sistema,
+                          // o servidor diz qual é.
+                          placeholder={t.urlBaseSugerida ?? "https://www.asaas.com/i/"}
+                          className="w-64"
                         />
                       )}
                       <Button

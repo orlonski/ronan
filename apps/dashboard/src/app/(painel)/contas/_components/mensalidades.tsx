@@ -45,6 +45,8 @@ type Assinatura = {
   telefoneCobranca: string;
   proximoVencimento: string | null;
   qrCodePayload: string | null;
+  /** A página pública de pagamento. Null enquanto o token não nasceu. */
+  linkPagamento: string | null;
   taxaPorCobrancaCentavos: number;
   conta: { id: string; nome: string; slug: string; ativa: boolean; somenteLeitura: boolean };
   emAberto: { quantidade: number; totalCentavos: number; diasDeAtraso: number | null };
@@ -706,26 +708,62 @@ function DialogCobrancas({
           assinatura.qrCodePayload && (
           <div className="rounded border border-amber-500/40 bg-amber-500/5 p-3">
             <p className="text-sm font-medium">Esperando a autorização do cliente</p>
+            {/* O LINK primeiro, o copia-e-cola depois — e nessa ordem de
+                propósito. Mandar o código cru foi o que a gente fazia até
+                18/09/2026, e era ruim de usar do outro lado: no WhatsApp o
+                toque longo copia o balão inteiro, com o texto junto, e o banco
+                recusa. A página tem botão de copiar de verdade e o QR. */}
             <p className="mt-1 text-xs text-muted-foreground">
-              Mande este copia-e-cola pro financeiro. Pagar este Pix é o que autoriza as próximas
+              Mande o link abaixo pro financeiro. Pagar este Pix é o que autoriza as próximas
               parcelas a caírem sozinhas.
             </p>
-            <textarea
-              readOnly
-              className="mt-2 h-20 w-full rounded border bg-background p-2 font-mono text-[11px]"
-              value={assinatura.qrCodePayload}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-2"
-              onClick={() => {
-                void navigator.clipboard.writeText(assinatura.qrCodePayload ?? "");
-                toast.success("Copiado.");
-              }}
-            >
-              Copiar
-            </Button>
+            {assinatura.linkPagamento ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <a
+                  href={assinatura.linkPagamento}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="truncate text-xs text-primary underline"
+                >
+                  {assinatura.linkPagamento}
+                </a>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(assinatura.linkPagamento ?? "");
+                    toast.success("Link copiado.");
+                  }}
+                >
+                  Copiar link
+                </Button>
+              </div>
+            ) : (
+              <p className="mt-2 text-xs text-muted-foreground">
+                O link é criado no primeiro envio — use &ldquo;Mandar no WhatsApp&rdquo; abaixo.
+              </p>
+            )}
+            <details className="mt-3">
+              <summary className="cursor-pointer text-xs text-muted-foreground">
+                Ver o copia-e-cola
+              </summary>
+              <textarea
+                readOnly
+                className="mt-2 h-20 w-full rounded border bg-background p-2 font-mono text-[11px]"
+                value={assinatura.qrCodePayload}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2"
+                onClick={() => {
+                  void navigator.clipboard.writeText(assinatura.qrCodePayload ?? "");
+                  toast.success("Copiado.");
+                }}
+              >
+                Copiar código
+              </Button>
+            </details>
           </div>
         )}
 
