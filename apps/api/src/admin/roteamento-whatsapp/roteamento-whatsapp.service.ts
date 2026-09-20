@@ -306,22 +306,6 @@ export class AdminRoteamentoWhatsappService {
       },
     ];
 
-    // O botão de copiar de template comum: o `example` é o texto que ele vai
-    // copiar. A Meta documenta 15–20 caracteres alfanuméricos aqui, e é isso
-    // que esta submissão põe à prova com um BR Code inteiro — se ela recusar, o
-    // erro dela é a resposta, e vem antes de qualquer cliente receber nada.
-    if (def.botao && def.botao.tipo === "COPIAR_TEXTO") {
-      componentes.push({
-        type: "BUTTONS",
-        buttons: [
-          {
-            type: "COPY_CODE",
-            example: achatarParam(def.exemplo[def.botao.param] ?? ""),
-          },
-        ],
-      });
-    }
-
     if (def.botao && def.botao.tipo === "URL") {
       componentes.push({
         type: "BUTTONS",

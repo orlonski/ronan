@@ -347,21 +347,6 @@ export type BotaoTemplate =
   /** Botão "Copiar código" do template de autenticação. O param é o código. */
   | { tipo: "COPIAR_CODIGO"; param: number }
   /**
-   * Botão de copiar de template COMUM (o "coupon code" da Meta).
-   *
-   * Parece o de cima e não é: o de autenticação viaja como `sub_type: "url"`
-   * com parâmetro de texto, e este viaja como `sub_type: "copy_code"` com
-   * parâmetro `coupon_code`. Mandar um no formato do outro a Meta recusa.
-   *
-   * A documentação dela fala em 15–20 caracteres e cupom alfanumérico, mas
-   * mensagem de cobrança real no Brasil chega com BR Code inteiro dentro de um
-   * botão desses — ~180 caracteres, com ponto, barra e asterisco. Ou o limite
-   * documentado não é o que o envio aplica, ou aquilo é outro mecanismo. É
-   * exatamente o que este botão existe pra descobrir, e a resposta vem da
-   * submissão à Meta, não de mais documentação.
-   */
-  | { tipo: "COPIAR_TEXTO"; param: number }
-  /**
    * Botão de URL dinâmica: o param é só o SUFIXO que completa a URL base.
    *
    * `texto` é o rótulo que aparece no botão. Tem default porque quase todo
@@ -637,30 +622,23 @@ export const TEMPLATES_WHATSAPP: Partial<Record<RotaWhatsapp, TemplateWhatsappDe
    *    recebia tinha que selecionar 230 caracteres na mão, no celular, sem
    *    errar um byte, senão o banco recusa.
    *
-   * A resposta a (2) foi a página `/pagar/<token>`, que segue de pé e traz o
-   * QR pra quem paga de outro aparelho. Mas antes de mandar o link, vale
-   * descobrir se o botão de copiar da própria Meta aguenta o BR Code: uma
-   * cobrança de provedor de internet chegou assim em 20/09/2026, com 180
-   * caracteres e pontuação, e isso contraria a documentação dela. Se aguentar,
-   * o cliente copia sem sair do WhatsApp — um toque a menos que o link.
+   * Então a URL passa a ser NOSSA: `/pagar/<token>`, uma página com botão de
+   * copiar de verdade e o QR pra quem paga de outro aparelho. O param do botão
+   * é o token, não o código.
    *
-   * O nome do template muda a cada versão dessas porque template aprovado é
-   * imutável na Meta: reaproveitar o nome faria o código jurar um texto e ela
-   * entregar outro.
+   * O nome do template mudou junto (`_link`) porque o corpo mudou: template
+   * aprovado é imutável na Meta, e reaproveitar o nome faria o código jurar um
+   * texto e ela entregar outro.
    */
   COBRANCA_AUTORIZACAO_PIX: {
-    nome: "cobranca_autorizacao_pix_copia",
+    nome: "cobranca_autorizacao_pix_link",
     idioma: "pt_BR",
     corpo: [0, 1, 2],
-    // O BR Code inteiro dentro do botão de copiar. A doc da Meta diz que não
-    // cabe (15–20 caracteres, alfanumérico); uma cobrança de provedor de
-    // internet recebida em 20/09/2026 diz que cabe, com 180 caracteres e
-    // pontuação. Quem decide é a submissão.
-    botao: { tipo: "COPIAR_TEXTO", param: 4 },
+    botao: { tipo: "URL", param: 5, texto: "Pagar" },
     textoAprovacao: [
       "Olá, {{1}}. A assinatura do Movatruck da sua empresa foi criada.",
       "",
-      "Para ativar a cobrança automática de {{2}} por mês, copie o código pelo botão abaixo e pague no app do seu banco. Esta autorização é feita uma única vez.",
+      "Para ativar a cobrança automática de {{2}} por mês, pague o Pix pelo botão abaixo. Esta autorização é feita uma única vez.",
       "",
       "Vencimento da primeira mensalidade: {{3}}",
       "",

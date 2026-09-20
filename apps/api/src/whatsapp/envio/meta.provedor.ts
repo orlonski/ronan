@@ -151,30 +151,17 @@ export class MetaProvedor implements ProvedorWhatsappClient {
       },
     ];
 
+    // Os dois tipos de botão têm o MESMO formato na linha: `sub_type: "url"`,
+    // índice 0, um parâmetro de texto. No template de autenticação esse texto é
+    // o código que o botão copia; no de URL dinâmica é o sufixo que completa a
+    // URL base cadastrada na Meta. A distinção no catálogo é pra quem lê.
     if (template.botao) {
-      const valor = pegar(template.botao.param, "botão");
-
-      // O botão de copiar de template COMUM é o único que sai do formato: vai
-      // como `copy_code` com parâmetro `coupon_code`, não como texto. Os
-      // outros dois viajam iguais — `sub_type: "url"`, índice 0, um texto —
-      // ainda que signifiquem coisas diferentes (no de autenticação o texto é
-      // o código que o botão copia; no de URL é o sufixo que completa a base
-      // cadastrada na Meta).
-      componentes.push(
-        template.botao.tipo === "COPIAR_TEXTO"
-          ? {
-              type: "button",
-              sub_type: "copy_code",
-              index: "0",
-              parameters: [{ type: "coupon_code", coupon_code: valor }],
-            }
-          : {
-              type: "button",
-              sub_type: "url",
-              index: "0",
-              parameters: [{ type: "text", text: valor }],
-            },
-      );
+      componentes.push({
+        type: "button",
+        sub_type: "url",
+        index: "0",
+        parameters: [{ type: "text", text: pegar(template.botao.param, "botão") }],
+      });
     }
 
     return componentes;

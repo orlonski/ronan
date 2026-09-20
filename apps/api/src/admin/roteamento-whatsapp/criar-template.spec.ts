@@ -52,29 +52,34 @@ describe("criar template na Meta", () => {
   });
 
   /**
-   * O convite por Pix sobe com o BR Code inteiro dentro do botão de copiar.
+   * O convite por Pix aponta pra NOSSA página, e o rótulo do botão vem do
+   * catálogo.
    *
-   * A Meta documenta 15–20 caracteres alfanuméricos pra esse botão, e uma
-   * cobrança real de provedor de internet chegou com 180 e pontuação. Esta
-   * submissão é o que decide qual das duas coisas vale — e o `example` tem que
-   * ser o código de verdade, senão a gente testa outra coisa.
+   * O prefixo continua sendo parâmetro, e não constante de código, porque quem
+   * manda nele é o template APROVADO: a Meta o congela e o envio só completa o
+   * sufixo. Ter a URL em dois lugares é como o código jura uma coisa e ela
+   * entrega outra.
    */
-  it("o convite por Pix sobe com o copia-e-cola dentro do botão de copiar", async () => {
+  it("o convite por Pix vira botão Pagar apontando pra nossa página", async () => {
     const { s, chamadas } = servico();
-    await s.criarTemplateNaMeta("waba1", "COBRANCA_AUTORIZACAO_PIX");
+    await s.criarTemplateNaMeta(
+      "waba1",
+      "COBRANCA_AUTORIZACAO_PIX",
+      "https://app.movatruck.com.br/pagar/",
+    );
 
     const corpo = chamadas[0]!.corpo as {
       name: string;
-      components: { type: string; text?: string; buttons?: { type: string; example: string }[] }[];
+      components: { type: string; text?: string; buttons?: { type: string; text: string; url: string; example: string[] }[] }[];
     };
-    expect(corpo.name).toBe("cobranca_autorizacao_pix_copia");
+    expect(corpo.name).toBe("cobranca_autorizacao_pix_link");
 
     const botao = corpo.components.find((c) => c.type === "BUTTONS")!.buttons![0]!;
-    expect(botao.type).toBe("COPY_CODE");
-    expect(botao.example).toContain("br.gov.bcb.pix");
-    // Botão de copiar não tem prefixo de URL pra pedir: a submissão passou sem
-    // `urlBase`, e é isso que a chamada acima prova.
-    expect(botao.example.length).toBeGreaterThan(100);
+    expect(botao.text).toBe("Pagar");
+    expect(botao.url).toBe("https://app.movatruck.com.br/pagar/{{1}}");
+    // O exemplo do botão é um TOKEN, nunca o copia-e-cola: foi exatamente essa
+    // troca que mandou o cliente pra um "a cobrança não existe" em 18/09/2026.
+    expect(botao.example[0]).not.toContain("br.gov.bcb.pix");
   });
 
   it("template com botão de URL exige o prefixo, que não mora no código", async () => {
