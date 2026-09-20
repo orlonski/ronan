@@ -190,6 +190,7 @@ const GRUPOS: Grupo[] = [
       { href: "/tipos-servico", label: "Como a viagem é cobrada", icon: Timer, perm: "tipos-servico.ver" },
       { href: "/modalidades", label: "Vínculos do motorista", icon: IdCard, perm: "modalidades.ver" },
       { href: "/tipos-evento-viagem", label: "Paradas e ocorrências", icon: ListChecks, perm: "tipos-evento-viagem.ver" },
+      { href: "/documentos-exigidos", label: "Documentos exigidos pela obra", icon: FileCheck2, perm: "documentos-exigidos.ver" },
     ],
   },
   {
