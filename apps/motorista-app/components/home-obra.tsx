@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Location from "expo-location";
-import { Check, MapPin } from "lucide-react-native";
+import { CalendarDays, Check, MapPin } from "lucide-react-native";
 import { SeletorEmpresa } from "@/components/seletor-empresa";
 import { useMe, useObraDeHoje } from "@/lib/queries";
 import { desfazerPresencaObra, enqueuePresencaObra } from "@/lib/sync";
@@ -40,6 +41,7 @@ const ALTURA_BOTAO = 220;
 const MINUTOS_PRA_DESFAZER = 10;
 
 export function HomeObra() {
+  const router = useRouter();
   const { data } = useObraDeHoje();
   const me = useMe();
   const [tocadoEm, setTocadoEm] = useState<number | null>(null);
@@ -187,6 +189,18 @@ export function HomeObra() {
             </Pressable>
           </>
         )}
+
+        {/* O caminho pro mês. Pra quem é pago por diária, "quantos dias eu já
+            fiz" é a pergunta que mais importa — e sem esta porta ele só
+            conseguia responder de cabeça. Alvo grande, uma linha, sem menu. */}
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push("/meus-dias-obra")}
+          className="flex-row items-center justify-center gap-3 rounded-2xl border-2 border-border py-5"
+        >
+          <CalendarDays size={28} />
+          <Text className="text-xl font-semibold text-foreground">Ver meus dias do mês</Text>
+        </Pressable>
 
         {/* Os dias em branco. Não se chamam falta e não acusam ninguém: são
             dias que ninguém marcou, e só ele pode dizer se esteve lá. */}

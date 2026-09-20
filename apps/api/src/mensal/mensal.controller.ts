@@ -188,6 +188,13 @@ export class ObraMotoristaController {
     return this.service.obraDeHoje(user.id);
   }
 
+  /** Os dias que ele já marcou no mês. Sem valor em dinheiro, de propósito. */
+  @Get("meus-dias")
+  async meusDias(@CurrentUser() user: AuthMotorista, @Query("mes") mes: string) {
+    await this.exigirAprovado(user.id);
+    return this.service.meusDias(user.id, mes);
+  }
+
   /**
    * Desfazer o próprio toque. É o que torna honesto não perguntar "tem
    * certeza?" antes de marcar.

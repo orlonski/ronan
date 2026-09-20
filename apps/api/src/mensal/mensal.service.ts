@@ -281,6 +281,72 @@ export class MensalService {
     return { desmarcado: true };
   }
 
+  /**
+   * Os dias do mês, do ponto de vista do motorista.
+   *
+   * Pra quem é pago por diária, "quantos dias eu já fiz" é a pergunta do mês
+   * inteiro — e até agora ele só conseguia responder de cabeça. O escritório
+   * tem a grade; ele não tinha nada.
+   *
+   * Vale pra QUALQUER alocação dele no mês, não só a ativa: obra que terminou
+   * dia 10 e outra que começou dia 11 são dois contratos e um mês só, e somar
+   * errado aqui é discutir pagamento com número errado.
+   *
+   * O que este método NÃO devolve: valor em dinheiro. Isso é conversa do
+   * acerto, e misturar transformaria uma tela de conferência numa tela de
+   * cobrança. Existe a flag `podeVerValorDiaria` pra quando for a hora.
+   */
+  async meusDias(motoristaId: string, mesRotulo: string) {
+    const [ano, mes] = mesRotulo.split("-").map(Number);
+    if (!ano || !mes) throw new BadRequestException("Mês inválido.");
+    const primeiro = new Date(Date.UTC(ano, mes - 1, 1));
+    const ultimo = new Date(Date.UTC(ano, mes, 0));
+
+    const alocacoes = await this.prisma.alocacaoObra.findMany({
+      where: {
+        motoristaId,
+        inicio: { lte: ultimo },
+        OR: [{ fim: null }, { fim: { gte: primeiro } }],
+      },
+      include: { cliente: { select: { nome: true } } },
+    });
+    if (alocacoes.length === 0) return { mes: mesRotulo, total: 0, dias: [], obras: [] };
+
+    const registros = await this.prisma.registroPresenca.findMany({
+      where: {
+        alocacaoId: { in: alocacoes.map((a) => a.id) },
+        data: { gte: primeiro, lte: ultimo },
+      },
+      select: { data: true, origem: true },
+      orderBy: { data: "asc" },
+    });
+    const marcados = new Map(registros.map((r) => [paraYmd(r.data), r.origem]));
+
+    // Um dia "vazio" só existe se ele estava alocado naquele dia E o dia já
+    // passou. Cobrar dia futuro seria inventar dívida; cobrar dia fora da
+    // vigência seria cobrar de quem nem estava lá.
+    const [ay, am, ad] = ymdSaoPaulo();
+    const hoje = `${ay}-${String(am).padStart(2, "0")}-${String(ad).padStart(2, "0")}`;
+    const alocadoEm = (d: string) =>
+      alocacoes.some((a) => d >= paraYmd(a.inicio) && (!a.fim || d <= paraYmd(a.fim)));
+
+    const dias = this.diasEntre(primeiro, ultimo)
+      .filter((d) => alocadoEm(d))
+      .map((d) => ({
+        data: d,
+        marcado: marcados.has(d),
+        origem: marcados.get(d) ?? null,
+        futuro: d > hoje,
+      }));
+
+    return {
+      mes: mesRotulo,
+      total: registros.length,
+      dias,
+      obras: [...new Set(alocacoes.map((a) => a.cliente.nome))],
+    };
+  }
+
   /** A grade do período, por alocação. É a base do espelho da Fase 2. */
   async grade(clienteId: string | undefined, de: string, ate: string) {
     const registros = await this.prisma.registroPresenca.findMany({

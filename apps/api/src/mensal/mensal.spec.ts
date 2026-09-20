@@ -228,6 +228,73 @@ describe("o motorista desfaz o próprio toque", () => {
   });
 });
 
+describe("os dias do mês do motorista", () => {
+  function comAlocacoes(
+    alocacoes: { id: string; inicio: string; fim: string | null; obra: string }[],
+    registros: { data: string; origem: string }[],
+  ) {
+    const prisma = {
+      alocacaoObra: {
+        findMany: async () =>
+          alocacoes.map((a) => ({
+            id: a.id,
+            inicio: new Date(`${a.inicio}T00:00:00.000Z`),
+            fim: a.fim ? new Date(`${a.fim}T00:00:00.000Z`) : null,
+            cliente: { nome: a.obra },
+          })),
+      },
+      registroPresenca: {
+        findMany: async () =>
+          registros.map((r) => ({ data: new Date(`${r.data}T00:00:00.000Z`), origem: r.origem })),
+      },
+    };
+    return new MensalService(prisma as never);
+  }
+
+  it("conta os dias de TODAS as alocações do mês, não só a ativa", async () => {
+    // Obra que terminou dia 10 e outra que começou dia 11 são dois contratos e
+    // um mês só. Somar errado aqui é discutir pagamento com número errado.
+    const s = comAlocacoes(
+      [
+        { id: "a1", inicio: "2026-09-01", fim: "2026-09-10", obra: "Obra Norte" },
+        { id: "a2", inicio: "2026-09-11", fim: null, obra: "Obra Sul" },
+      ],
+      [
+        { data: "2026-09-08", origem: "APP" },
+        { data: "2026-09-12", origem: "APP" },
+      ],
+    );
+    const r = await s.meusDias("mot1", "2026-09");
+    expect(r.total).toBe(2);
+    expect(r.obras).toEqual(["Obra Norte", "Obra Sul"]);
+  });
+
+  it("não lista dia em que ele nem estava alocado", async () => {
+    // Cobrar dia fora da vigência seria cobrar de quem não estava lá.
+    const s = comAlocacoes([{ id: "a1", inicio: "2026-09-10", fim: null, obra: "Obra" }], []);
+    const r = await s.meusDias("mot1", "2026-09");
+    expect(r.dias.some((d) => d.data === "2026-09-09")).toBe(false);
+    expect(r.dias[0]!.data).toBe("2026-09-10");
+  });
+
+  it("marca o que ainda não aconteceu como futuro, pra não parecer dívida", async () => {
+    const s = comAlocacoes([{ id: "a1", inicio: "2026-09-01", fim: null, obra: "Obra" }], []);
+    const r = await s.meusDias("mot1", "2026-12");
+    expect(r.dias.every((d) => d.futuro)).toBe(true);
+  });
+
+  it("não devolve valor em dinheiro nenhum", async () => {
+    // Dinheiro é conversa do acerto. Misturar transformaria uma tela de
+    // conferência numa tela de cobrança.
+    const s = comAlocacoes(
+      [{ id: "a1", inicio: "2026-09-01", fim: null, obra: "Obra" }],
+      [{ data: "2026-09-02", origem: "APP" }],
+    );
+    const r = await s.meusDias("mot1", "2026-09");
+    expect(JSON.stringify(r)).not.toMatch(/valor|diaria|reais|centavos/i);
+  });
+});
+
 /**
  * O léxico é regra, não estilo.
  *

@@ -704,6 +704,32 @@ export function useObraDeHoje(enabled = true) {
   });
 }
 
+export type MeusDiasObra = {
+  mes: string;
+  total: number;
+  dias: { data: string; marcado: boolean; origem: string | null; futuro: boolean }[];
+  obras: string[];
+};
+
+/**
+ * Os dias que ele já marcou no mês. Cache-first como tudo: pra quem é pago por
+ * diária, "quantos dias eu fiz" não pode depender de sinal.
+ */
+export function useMeusDiasObra(mes: string, enabled = true) {
+  const cacheKey = `q:meus-dias-obra:${mes}`;
+  const buscarRede = async (): Promise<MeusDiasObra> => {
+    const fresh = await api.get<MeusDiasObra>(`/m/obra/meus-dias?mes=${mes}`);
+    void cachePut(cacheKey, fresh).catch(() => {});
+    return fresh;
+  };
+  return useQuery({
+    queryKey: ["meus-dias-obra", mes],
+    enabled,
+    staleTime: 60_000,
+    queryFn: () => cacheFirst<MeusDiasObra>(["meus-dias-obra", mes], cacheKey, buscarRede),
+  });
+}
+
 export function useViagens() {
   const cacheKey = "q:viagens";
   const buscarRede = async (): Promise<Viagem[]> => {
