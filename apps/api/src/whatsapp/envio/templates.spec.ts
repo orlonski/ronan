@@ -73,16 +73,28 @@ describe("catálogo de templates", () => {
    * O índice 4 dos params é o copia-e-cola; o 5 é o sufixo do link. Confundir
    * os dois é literalmente o bug 1.
    */
-  it("o convite por Pix leva link no botão, e nunca o copia-e-cola", () => {
+  it("o convite por Pix leva o código no botão de copiar, nunca no corpo", () => {
     const def = TEMPLATES_WHATSAPP["COBRANCA_AUTORIZACAO_PIX"]!;
     expect(def).toBeDefined();
-    expect(def.botao?.tipo).toBe("URL");
-    expect(def.botao?.param).toBe(5);
+    // `COPIAR_TEXTO`, não `COPIAR_CODIGO`: o segundo é o do OTP e viaja como
+    // `sub_type: "url"`. Trocar um pelo outro a Meta recusa no envio.
+    expect(def.botao?.tipo).toBe("COPIAR_TEXTO");
+    expect(def.botao?.param).toBe(4);
+    // O código FORA do corpo é o ponto: dentro dele, o toque longo copia o
+    // balão inteiro com a saudação junto e o banco recusa.
     expect(def.corpo).not.toContain(4);
     expect(def.textoAprovacao).not.toContain("br.gov.bcb.pix");
-    // Rótulo próprio: "Abrir" ao lado de um valor em reais não diz o que
-    // acontece ao tocar.
-    expect(def.botao?.tipo === "URL" && def.botao.texto).toBe("Pagar");
+  });
+
+  /**
+   * Os params são compartilhados entre os dois convites, e as posições não
+   * podem escorregar: no Pix o botão carrega o CÓDIGO (4), no cartão carrega o
+   * SUFIXO DO LINK (5). Em 18/09/2026 um pegou a posição do outro, o sufixo
+   * saiu do copia-e-cola e o cliente caiu num "a cobrança não existe" do Asaas.
+   */
+  it("cada convite puxa a ponta certa dos params", () => {
+    expect(TEMPLATES_WHATSAPP["COBRANCA_AUTORIZACAO_PIX"]!.botao?.param).toBe(4);
+    expect(TEMPLATES_WHATSAPP["COBRANCA_AUTORIZACAO"]!.botao?.param).toBe(5);
   });
 
   it("toda rota da Meta sem template é texto livre de propósito", () => {

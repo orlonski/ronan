@@ -204,24 +204,28 @@ export function mensagemCobrancaAberta(dados: {
  * pediu.
  *
  * `link` é para onde o cliente vai pagar: a página do gateway (cartão) ou a
- * NOSSA `/pagar/<token>` (Pix Automático). Nos dois casos o botão do template
- * é a mesma coisa e o sufixo é a última parte da URL.
+ * NOSSA `/pagar/<token>` (Pix Automático). `codigo` é o copia-e-cola, e só
+ * existe no Pix.
  *
- * O Pix não manda mais o copia-e-cola dentro da mensagem, e isso não é
- * preferência de estilo: no WhatsApp o toque longo copia o balão INTEIRO, com
- * a saudação junto, e o banco recusa o que vem colado. Botão de copiar nativo
- * não resolve — o `COPY_CODE` da Meta para em 15 caracteres, e o BR Code tem
- * ~230. Copiar de verdade só acontece numa página, então é pra uma página que
- * o link leva.
+ * Os dois viajam porque os dois templates usam pontas diferentes: o do cartão
+ * põe o sufixo do link no botão de URL; o do Pix põe o CÓDIGO no botão de
+ * copiar. A indexação é fixa e compartilhada — mudar a ordem aqui reaponta o
+ * botão de um template sem que nada reclame, que foi o bug de 18/09/2026.
+ *
+ * O texto livre (Evolution) manda o link nos dois casos, e não o código: lá
+ * não existe botão, e no WhatsApp o toque longo copia o balão INTEIRO, com a
+ * saudação junto — o banco recusa o que vem colado. A página resolve com um
+ * toque.
  */
 export function mensagemAutorizacao(dados: {
   nomeResponsavel: string;
   valor: string;
   vencimento: string;
   link: string;
+  codigo?: string;
   ehPix: boolean;
 }): { texto: string; params: string[] } {
-  const { nomeResponsavel, valor, vencimento, link, ehPix } = dados;
+  const { nomeResponsavel, valor, vencimento, link, codigo, ehPix } = dados;
   const comoPagar = ehPix
     ? `Pague o Pix por aqui:\n\n${link}`
     : `Informe os dados do cartão neste link:\n\n${link}`;
@@ -237,7 +241,10 @@ export function mensagemAutorizacao(dados: {
       `${comoPagar}\n\n` +
       `Vencimento da primeira mensalidade: ${vencimento}\n\n` +
       `Qualquer dúvida, é só responder aqui.`,
-    params: [nomeResponsavel, valor, vencimento, "", link, sufixoDoLink(link)],
+    // [4] é o copia-e-cola (botão de copiar do template de Pix) e [5] o sufixo
+    // do link (botão de URL do template de cartão). No cartão o código não
+    // existe, e o link ocupa a posição dele desde sempre.
+    params: [nomeResponsavel, valor, vencimento, "", codigo ?? link, sufixoDoLink(link)],
   };
 }
 

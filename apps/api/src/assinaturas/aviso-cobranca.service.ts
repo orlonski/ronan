@@ -110,6 +110,8 @@ export class AvisoCobrancaService {
           valor,
           vencimento,
           link: destinoDoPagamento,
+          // O código só vai no Pix, e é ele que o botão de copiar carrega.
+          codigo: ehPix ? (assinatura.qrCodePayload ?? undefined) : undefined,
           ehPix,
         })
       : mensagemCobrancaAberta({

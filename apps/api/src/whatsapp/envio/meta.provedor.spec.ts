@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { ConfigService } from "@nestjs/config";
-import { ROTAS_WHATSAPP, templateWhatsapp } from "@ronan/shared-types";
+import { ROTAS_WHATSAPP, TEMPLATES_WHATSAPP, templateWhatsapp } from "@ronan/shared-types";
 import { MetaProvedor } from "./meta.provedor";
 import type { EnvioWhatsapp } from "./envio.types";
 
@@ -78,6 +78,43 @@ describe("template de autenticação", () => {
     await provedor().enviar(envio({ rota: "OTP_SENHA", params: ["654321", "10"] }));
     const c = corpoEnviado(fetchMock);
     expect(c.template.components[0].parameters).toEqual([{ type: "text", text: "654321" }]);
+  });
+});
+
+describe("botão de copiar de template comum", () => {
+  /**
+   * Parece o botão do OTP e NÃO é. O de autenticação viaja como
+   * `sub_type: "url"` com um parâmetro de texto; o de template comum viaja
+   * como `copy_code` com `coupon_code`. Mandar um no formato do outro a Meta
+   * recusa — e o erro dela não diz qual dos dois estava errado.
+   */
+  it("viaja como copy_code com coupon_code, não como texto em url", async () => {
+    const def = TEMPLATES_WHATSAPP["COBRANCA_AUTORIZACAO_PIX"]!;
+    await provedor().enviar(
+      envio({ rota: "COBRANCA_AUTORIZACAO_PIX", params: [...def.exemplo] }),
+    );
+    const c = corpoEnviado(fetchMock);
+    expect(c.template.name).toBe("cobranca_autorizacao_pix_copia");
+
+    const botao = c.template.components.find((x: { type: string }) => x.type === "button");
+    expect(botao.sub_type).toBe("copy_code");
+    expect(botao.parameters[0].type).toBe("coupon_code");
+    // O BR Code inteiro, não um pedaço: é o que o cliente cola no banco.
+    expect(botao.parameters[0].coupon_code).toBe(def.exemplo[4]);
+    expect(botao.parameters[0].coupon_code).toContain("br.gov.bcb.pix");
+  });
+
+  /** O código vai no botão e em lugar nenhum do corpo. */
+  it("não repete o código no corpo", async () => {
+    const def = TEMPLATES_WHATSAPP["COBRANCA_AUTORIZACAO_PIX"]!;
+    await provedor().enviar(
+      envio({ rota: "COBRANCA_AUTORIZACAO_PIX", params: [...def.exemplo] }),
+    );
+    const c = corpoEnviado(fetchMock);
+    const corpo = c.template.components.find((x: { type: string }) => x.type === "body");
+    for (const p of corpo.parameters) {
+      expect(p.text).not.toContain("br.gov.bcb.pix");
+    }
   });
 });
 
