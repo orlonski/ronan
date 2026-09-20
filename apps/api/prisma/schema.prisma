@@ -592,11 +592,12 @@ model Conta {
   cobrancasAssinatura           CobrancaAssinatura[]
   aceitesTermo                  AceiteTermo[]
 
-  alocacoesObra      AlocacaoObra[]
-  registrosPresenca  RegistroPresenca[]
-  configsMensal      ConfigMensalContratante[]
-  documentosExigidos DocumentoExigido[]
-  convitesColeta     ConviteColeta[]
+  alocacoesObra       AlocacaoObra[]
+  registrosPresenca   RegistroPresenca[]
+  configsMensal       ConfigMensalContratante[]
+  documentosExigidos  DocumentoExigido[]
+  convitesColeta      ConviteColeta[]
+  medicoesContratante MedicaoContratante[]
 
   @@index([ativa])
   @@map("contas")
@@ -723,7 +724,8 @@ model User {
 
   alocacoesObraCriadas AlocacaoObra[]
   presencasLancadas    RegistroPresenca[]
-  coletasCriadas       ConviteColeta[]    @relation("CriouColeta")
+  coletasCriadas       ConviteColeta[]      @relation("CriouColeta")
+  medicoesLancadas     MedicaoContratante[] @relation("LancouMedicao")
 
   @@index([contaId])
   @@map("users")
@@ -2050,6 +2052,7 @@ model Empresa {
   titulosReceber     TituloReceber[]
   configMensal       ConfigMensalContratante?
   documentosExigidos DocumentoExigido[]
+  medicoes           MedicaoContratante[]
 
   @@unique([contaId, cnpj])
   @@index([ativa])
@@ -6356,4 +6359,47 @@ model ConviteColeta {
   @@index([expiraEm])
   @@index([contaId])
   @@map("convites_coleta")
+}
+
+/// O que o contratante mediu numa competência, do jeito que ele mandou.
+///
+/// Guardado ANTES de comparar e sem nenhuma correção nossa: é o documento
+/// dele, e a discussão do dia 20 é justamente sobre o que ele disse. Ajustar
+/// na entrada apagaria a prova de que havia o que ajustar.
+///
+/// As linhas ficam em Json de propósito. O formato do que o contratante manda
+/// varia — hoje é o que alguém digita olhando a planilha dele, amanhã pode ser
+/// a planilha lida direto — e cada variação viraria uma migration se isso
+/// fosse coluna. O que é ESTÁVEL e por isso é regra em código está em
+/// `common/medicao-mensal.ts`: a comparação.
+model MedicaoContratante {
+  contaId String @default("__SEM_CONTA__")
+  conta   Conta  @relation(fields: [contaId], references: [id])
+  id      String @id @default(uuid())
+
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+
+  /// "2026-09" — o mês em que a medição chegou.
+  competencia String
+
+  /// `[{ alocacaoId, dias?: string[], totalDias?: number }]`.
+  ///
+  /// `dias` quando a medição vem dia a dia (dá pra apontar QUAL caiu);
+  /// `totalDias` quando ela só traz o número (aí só dá pra dizer que não bate).
+  linhas Json
+
+  /// De onde veio: digitado olhando a planilha, ou lido dela.
+  origem String @default("MANUAL")
+
+  criadoPorId String?
+  criadoPor   User?    @relation("LancouMedicao", fields: [criadoPorId], references: [id])
+  criadoEm    DateTime @default(now())
+  alteradoEm  DateTime @updatedAt
+
+  /// Uma medição por contratante por competência. Lançar de novo corrige a
+  /// mesma linha em vez de criar uma segunda verdade sobre o mesmo mês.
+  @@unique([empresaId, competencia])
+  @@index([contaId, competencia])
+  @@map("medicoes_contratante")
 }

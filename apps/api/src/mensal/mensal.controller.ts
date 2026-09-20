@@ -15,6 +15,7 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
 import {
   ConfigMensalInput,
+  LancarMedicaoInput,
   CriarAlocacaoInput,
   EditarAlocacaoInput,
   EncerrarAlocacaoInput,
@@ -104,6 +105,23 @@ export class MensalAdminController {
     @Query("empresaId") empresaId?: string,
   ) {
     return this.service.espelho(competencia, { clienteId, empresaId });
+  }
+
+  /** O nosso espelho contra a medição do contratante. */
+  @RequerPermissao("espelhos.ver")
+  @Get("medicao")
+  conferir(@Query("empresaId") empresaId: string, @Query("competencia") competencia: string) {
+    return this.service.conferirMedicao(empresaId, competencia);
+  }
+
+  /** Lança o que a medição diz. Guardado como veio, sem correção nossa. */
+  @RequerPermissao("espelhos.configurar")
+  @Put("medicao")
+  lancarMedicao(
+    @Body(new ZodValidationPipe(LancarMedicaoInput)) body: LancarMedicaoInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.lancarMedicao(body, user.id);
   }
 
   /** O combinado com um contratante: dia de corte e calendário da obra. */

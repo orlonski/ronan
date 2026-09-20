@@ -15,6 +15,11 @@ import type {
 import { PrismaService } from "../prisma/prisma.service";
 import { inicioDoDiaBR, ymdSaoPaulo } from "../common/timezone";
 import { competenciaDe, montarEspelho, type Espelho } from "../common/espelho-mensal";
+import {
+  compararMedicao,
+  resumirDivergencias,
+  type LadoDeles,
+} from "../common/medicao-mensal";
 
 /** "2026-09-19" → Date de meia-noite UTC, que é como coluna Date se compara. */
 function dia(ymd: string): Date {
@@ -470,6 +475,85 @@ export class MensalService {
     }
 
     return { competencia: competenciaRotulo, linhas };
+  }
+
+  // ------------------------------------------------------------ medição ---
+
+  /**
+   * Guarda o que o contratante mediu, SEM corrigir nada.
+   *
+   * É o documento dele, e a conversa do dia 20 é exatamente sobre o que ele
+   * disse — ajustar na entrada apagaria a prova de que havia o que ajustar.
+   */
+  async lancarMedicao(
+    dados: { empresaId: string; competencia: string; linhas: unknown[] },
+    usuarioId: string,
+  ) {
+    const empresa = await this.prisma.empresa.findFirst({ where: { id: dados.empresaId } });
+    if (!empresa) throw new NotFoundException("Contratante não encontrado.");
+
+    return this.prisma.medicaoContratante.upsert({
+      where: {
+        empresaId_competencia: {
+          empresaId: dados.empresaId,
+          competencia: dados.competencia,
+        },
+      },
+      create: {
+        empresaId: dados.empresaId,
+        competencia: dados.competencia,
+        linhas: dados.linhas as never,
+        origem: "MANUAL",
+        criadoPorId: usuarioId,
+      },
+      update: { linhas: dados.linhas as never, criadoPorId: usuarioId },
+    });
+  }
+
+  /**
+   * A conferência do dia 20: o nosso espelho contra a medição dele.
+   *
+   * Sem medição lançada devolve só o espelho — a tela precisa abrir e mostrar
+   * o nosso lado antes de existir o lado deles, senão ela só serve depois que
+   * alguém digitou, que é tarde demais pra ajudar.
+   */
+  async conferirMedicao(empresaId: string, competencia: string) {
+    const espelho = await this.espelho(competencia, { empresaId });
+
+    const medicao = await this.prisma.medicaoContratante.findFirst({
+      where: { empresaId, competencia },
+    });
+    const linhasDeles = (medicao?.linhas ?? []) as {
+      alocacaoId: string;
+      dias?: string[];
+      totalDias?: number;
+    }[];
+
+    const nossos = espelho.linhas.map((l) => ({
+      chave: l.alocacaoId,
+      dias: l.espelho.registrados,
+    }));
+    const deles: LadoDeles[] = linhasDeles.map((l) => ({
+      chave: l.alocacaoId,
+      dias: l.dias,
+      totalDias: l.totalDias,
+    }));
+
+    const divergencias = compararMedicao(nossos, deles);
+    // O nome de cada linha vem do espelho: a comparação é regra pura e não
+    // conhece motorista nem obra, e ninguém confere uma tabela de uuid.
+    const rotulos = new Map(
+      espelho.linhas.map((l) => [l.alocacaoId, { motorista: l.motorista, obra: l.obra, placa: l.placa }]),
+    );
+
+    return {
+      competencia,
+      lancada: !!medicao,
+      lancadaEm: medicao?.alteradoEm ?? null,
+      espelho: espelho.linhas,
+      divergencias: divergencias.map((d) => ({ ...d, ...rotulos.get(d.chave) })),
+      resumo: resumirDivergencias(divergencias),
+    };
   }
 
   /** O combinado com um contratante: dia de corte e calendário da obra. */

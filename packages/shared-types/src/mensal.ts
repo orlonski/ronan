@@ -183,3 +183,29 @@ export const CriarDocumentoExigidoInput = z.object({
   ordem: z.number().int().min(0).default(0),
 });
 export type CriarDocumentoExigidoInput = z.infer<typeof CriarDocumentoExigidoInput>;
+
+/**
+ * O que o contratante mediu, como ele mandou.
+ *
+ * Duas formas porque existem duas planilhas no mundo, e a diferença decide o
+ * que se pode contestar: com os DIAS dá pra apontar qual caiu; com o TOTAL só
+ * dá pra dizer que o número não bate.
+ */
+export const LinhaMedicaoInput = z
+  .object({
+    alocacaoId: z.string().uuid(),
+    dias: z.array(Dia).optional(),
+    totalDias: z.number().int().min(0).max(31).optional(),
+  })
+  .refine((l) => l.dias !== undefined || l.totalDias !== undefined, {
+    message: "Diga os dias ou o total de dias dessa linha.",
+  });
+export type LinhaMedicaoInput = z.infer<typeof LinhaMedicaoInput>;
+
+export const LancarMedicaoInput = z.object({
+  empresaId: z.string().uuid("Diga de qual contratante é a medição."),
+  /** "AAAA-MM" — o mês em que a medição chegou. */
+  competencia: z.string().regex(/^\d{4}-\d{2}$/, "Use o mês no formato AAAA-MM."),
+  linhas: z.array(LinhaMedicaoInput),
+});
+export type LancarMedicaoInput = z.infer<typeof LancarMedicaoInput>;
