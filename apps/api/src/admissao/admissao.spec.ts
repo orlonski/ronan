@@ -14,8 +14,17 @@ const MES_PASSADO = new Date(Date.now() - 30 * 86_400_000);
 
 function servico(over: {
   convite?: Record<string, unknown> | null;
-  exigidos?: { tipo: string; titulo: string; obrigatorio: boolean }[];
-  enviados?: { tipo: string }[];
+  exigidos?: {
+    tipo: string;
+    titulo: string;
+    obrigatorio: boolean;
+    empresaId?: string | null;
+    exigeAssinatura?: boolean;
+    exigeIcpBrasil?: boolean;
+  }[];
+  enviados?: { tipo: string; storageKey?: string }[];
+  assinaturas?: { tipoDocumento: string; modo: string; assinadoEm: Date }[];
+  arquivoGuardado?: Buffer;
 } = {}) {
   const escritas: { tabela: string; data: Record<string, unknown> }[] = [];
   const convite =
@@ -56,14 +65,30 @@ function servico(over: {
     },
     motoristaDocumento: {
       findMany: async () => over.enviados ?? [],
+      findFirst: async () => over.enviados?.[0] ?? null,
       upsert: async ({ create }: { create: Record<string, unknown> }) => {
         escritas.push({ tabela: "documento", data: create });
         return create;
       },
     },
-    motorista: { findFirst: async () => ({ id: "mot1", nome: "João" }) },
+    motorista: { findFirst: async () => ({ id: "mot1", nome: "João", cpf: "11122233344" }) },
+    assinaturaDocumento: {
+      findMany: async () => over.assinaturas ?? [],
+      deleteMany: async () => ({ count: 0 }),
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        escritas.push({ tabela: "assinatura", data });
+        return data;
+      },
+      upsert: async ({ create }: { create: Record<string, unknown> }) => {
+        escritas.push({ tabela: "assinatura", data: create });
+        return { ...create, assinadoEm: new Date("2026-09-20T12:00:00Z") };
+      },
+    },
   };
-  const uploads = { putMotoristaDocumento: async () => "chave/no/minio" };
+  const uploads = {
+    putMotoristaDocumento: async () => "chave/no/minio",
+    getObjectBuffer: async () => over.arquivoGuardado ?? Buffer.from("conteudo do papel"),
+  };
   return { s: new AdmissaoService(prisma as never, uploads as never), escritas };
 }
 
@@ -162,7 +187,7 @@ describe("o que entra pela porta pública", () => {
     const { s } = servico();
     await expect(
       s.receberArquivo("tok", "CNH", { ...ARQUIVO, mimetype: "application/x-msdownload" }),
-    ).rejects.toThrow(/foto ou um PDF/i);
+    ).rejects.toThrow(/foto, um PDF ou o arquivo assinado/i);
   });
 
   it("recusa arquivo grande demais", async () => {
@@ -192,7 +217,7 @@ describe("o que entra pela porta pública", () => {
   it("aceita o documento pedido e grava na gaveta certa", async () => {
     const { s, escritas } = servico();
     const r = await s.receberArquivo("tok", "CNH", ARQUIVO);
-    expect(r).toEqual({ recebido: true, tipo: "CNH" });
+    expect(r).toEqual({ recebido: true, tipo: "CNH", assinaturaEmbutida: false });
     const doc = escritas.find((e) => e.tabela === "documento");
     expect(doc?.data.tipo).toBe("CNH");
     expect(doc?.data.motoristaId).toBe("mot1");
@@ -213,5 +238,111 @@ describe("o link", () => {
     await s.criarConvite("mot1", "u1");
     const expira = escritas.find((e) => e.tabela === "convite")?.data.expiraEm as Date;
     expect(expira.getTime()).toBeGreaterThan(Date.now());
+  });
+});
+
+/**
+ * A assinatura. O que dá valor a ela não é o clique — é a trilha, e é o hash
+ * amarrando a assinatura AO papel que foi assinado.
+ */
+describe("assinatura de documento", () => {
+  const EXIGE_SIMPLES = [
+    { tipo: "CNH", titulo: "Contrato", obrigatorio: true, empresaId: null, exigeAssinatura: true },
+  ];
+  const EXIGE_ICP = [
+    {
+      tipo: "CNH",
+      titulo: "Contrato",
+      obrigatorio: true,
+      empresaId: null,
+      exigeAssinatura: true,
+      exigeIcpBrasil: true,
+    },
+  ];
+  const P7S = Buffer.concat([
+    Buffer.from([0x30, 0x82, 0x01, 0x00, 0x06, 0x09]),
+    Buffer.from([0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x07, 0x02]),
+  ]);
+
+  it("grava nome, CPF, IP e o HASH do arquivo guardado", async () => {
+    const { s, escritas } = servico({
+      exigidos: EXIGE_SIMPLES,
+      enviados: [{ tipo: "CNH", storageKey: "chave/no/minio" }],
+    });
+    await s.assinarDocumento(
+      "tok",
+      { tipo: "CNH", nome: "João da Silva", cpf: "111.222.333-44" },
+      "203.0.113.9",
+      "Mozilla/5.0",
+    );
+    const a = escritas.find((e) => e.tabela === "assinatura")!;
+    expect(a.data.modo).toBe("SIMPLES");
+    expect(a.data.nomeDeclarado).toBe("João da Silva");
+    expect(a.data.cpfDeclarado).toBe("11122233344");
+    expect(a.data.ip).toBe("203.0.113.9");
+    expect(String(a.data.hashArquivo)).toHaveLength(64);
+  });
+
+  it("recusa quem não é o motorista — senão o dono assina no lugar dele", async () => {
+    const { s } = servico({
+      exigidos: EXIGE_SIMPLES,
+      enviados: [{ tipo: "CNH", storageKey: "k" }],
+    });
+    await expect(
+      s.assinarDocumento("tok", { tipo: "CNH", nome: "Outra Pessoa", cpf: "99988877766" }),
+    ).rejects.toThrow(/CPF não confere/i);
+  });
+
+  it("não deixa assinar antes de mandar o arquivo — não há o que assinar", async () => {
+    const { s } = servico({ exigidos: EXIGE_SIMPLES, enviados: [] });
+    await expect(
+      s.assinarDocumento("tok", { tipo: "CNH", nome: "João da Silva", cpf: "11122233344" }),
+    ).rejects.toThrow(/Mande o arquivo antes/i);
+  });
+
+  it("documento com ICP não aceita aceite eletrônico — a assinatura é o arquivo", async () => {
+    const { s } = servico({ exigidos: EXIGE_ICP, enviados: [{ tipo: "CNH", storageKey: "k" }] });
+    await expect(
+      s.assinarDocumento("tok", { tipo: "CNH", nome: "João da Silva", cpf: "11122233344" }),
+    ).rejects.toThrow(/certificado digital/i);
+  });
+
+  it("documento com ICP recusa PDF escaneado, que é o erro que a pessoa comete", async () => {
+    const { s } = servico({ exigidos: EXIGE_ICP });
+    await expect(
+      s.receberArquivo("tok", "CNH", {
+        buffer: Buffer.from("%PDF-1.4 nada assinado aqui"),
+        mimetype: "application/pdf",
+        size: 100,
+        originalname: "contrato.pdf",
+      }),
+    ).rejects.toThrow(/certificado digital/i);
+  });
+
+  it("documento com ICP aceita .p7s e já registra a assinatura", async () => {
+    const { s, escritas } = servico({ exigidos: EXIGE_ICP });
+    const r = await s.receberArquivo("tok", "CNH", {
+      buffer: P7S,
+      mimetype: "application/pkcs7-signature",
+      size: P7S.length,
+      originalname: "contrato.pdf.p7s",
+    });
+    expect(r.assinaturaEmbutida).toBe(true);
+    const a = escritas.find((e) => e.tabela === "assinatura")!;
+    expect(a.data.modo).toBe("ICP_BRASIL");
+    // Ninguém digitou nada: a identidade está dentro do certificado.
+    expect(a.data.nomeDeclarado).toBeUndefined();
+  });
+
+  it("recusa .p7s que não tem PKCS#7 dentro", async () => {
+    const { s } = servico({ exigidos: EXIGE_ICP });
+    await expect(
+      s.receberArquivo("tok", "CNH", {
+        buffer: Buffer.from([0xff, 0xd8, 0xff]),
+        mimetype: "application/octet-stream",
+        size: 3,
+        originalname: "cnh.jpg.p7s",
+      }),
+    ).rejects.toThrow(/não tem assinatura digital dentro/i);
   });
 });

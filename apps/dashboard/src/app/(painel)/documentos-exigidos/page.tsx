@@ -26,6 +26,8 @@ type Exigido = {
   tipo: TipoDocumentoMotorista;
   empresaId: string | null;
   obrigatorio: boolean;
+  exigeAssinatura: boolean;
+  exigeIcpBrasil: boolean;
   ordem: number;
   ativo: boolean;
 };
@@ -193,6 +195,11 @@ function Grupo({
                 <p className="text-sm text-muted-foreground">
                   guardado em {ROTULO_DOCUMENTO_MOTORISTA[e.tipo] ?? e.tipo}
                   {e.empresaId ? ` · ${nomeEmpresa(e.empresaId)}` : ""}
+                  {e.exigeAssinatura
+                    ? e.exigeIcpBrasil
+                      ? " · exige certificado digital"
+                      : " · exige assinatura"
+                    : ""}
                 </p>
               </div>
               {temPermissao("documentos-exigidos.editar") && (
@@ -220,6 +227,8 @@ function DialogNovo({ onFechar, onCriado }: { onFechar: () => void; onCriado: ()
   const [tipo, setTipo] = useState<string>("CNH");
   const [empresaId, setEmpresaId] = useState<string>();
   const [obrigatorio, setObrigatorio] = useState(true);
+  const [exigeAssinatura, setExigeAssinatura] = useState(false);
+  const [exigeIcpBrasil, setExigeIcpBrasil] = useState(false);
   const empresas = useResourceOptions<{ id: string; nome: string }>("/admin/empresas");
 
   const criar = useMutation({
@@ -227,7 +236,15 @@ function DialogNovo({ onFechar, onCriado }: { onFechar: () => void; onCriado: ()
       fetchApi(PATH, {
         token,
         method: "POST",
-        body: JSON.stringify({ titulo: titulo.trim(), tipo, empresaId, obrigatorio, ordem: 0 }),
+        body: JSON.stringify({
+          titulo: titulo.trim(),
+          tipo,
+          empresaId,
+          obrigatorio,
+          exigeAssinatura,
+          exigeIcpBrasil: exigeAssinatura && exigeIcpBrasil,
+          ordem: 0,
+        }),
       }),
     onSuccess: () => {
       toast.success("Passou a ser exigido.", {
@@ -294,6 +311,39 @@ function DialogNovo({ onFechar, onCriado }: { onFechar: () => void; onCriado: ()
           />
           Obrigatório
         </label>
+
+        {/* Assinatura é decisão do contratante, não do sistema: cópia de CNH
+            ninguém assina, contrato todo mundo assina, ordem de serviço
+            depende da obra. Por isso é interruptor por documento. */}
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={exigeAssinatura}
+            onChange={(e) => {
+              setExigeAssinatura(e.target.checked);
+              if (!e.target.checked) setExigeIcpBrasil(false);
+            }}
+          />
+          Precisa ser assinado
+        </label>
+
+        {exigeAssinatura && (
+          <div className="ml-6 space-y-1">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={exigeIcpBrasil}
+                onChange={(e) => setExigeIcpBrasil(e.target.checked)}
+              />
+              Exige certificado digital (ICP-Brasil)
+            </label>
+            <p className="text-xs text-muted-foreground">
+              {exigeIcpBrasil
+                ? "O arquivo tem que chegar já assinado (gov.br ou certificado A1/A3). Foto e PDF escaneado são recusados na hora do envio."
+                : "Aceite eletrônico na própria página: a pessoa digita nome e CPF, e fica gravado quem, quando, de onde e o hash do arquivo."}
+            </p>
+          </div>
+        )}
 
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="outline" onClick={onFechar}>

@@ -15,7 +15,7 @@ import {
 import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiBearerAuth, ApiExcludeController, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
-import { CriarDocumentoExigidoInput } from "@ronan/shared-types";
+import { AssinarDocumentoInput, CriarDocumentoExigidoInput } from "@ronan/shared-types";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { Public } from "../auth/decorators/public.decorator";
 import { RequerPermissao } from "../auth/decorators/requer-permissao.decorator";
@@ -132,5 +132,25 @@ export class ColetaPublicaController {
       size: arquivo.size,
       originalname: arquivo.originalname,
     });
+  }
+
+  /**
+   * O aceite eletrônico. Rate-limitado como o envio: é escrita pública.
+   *
+   * IP e user-agent vão pra trilha — é o que transforma um clique em prova.
+   */
+  @UseGuards(limiteEnviar)
+  @Post(":token/assinar")
+  async assinar(
+    @Param("token") token: string,
+    @Body(new ZodValidationPipe(AssinarDocumentoInput)) body: AssinarDocumentoInput,
+    @Req() req: Request,
+  ) {
+    return this.service.assinarDocumento(
+      token,
+      { tipo: body.tipo, nome: body.nome, cpf: body.cpf },
+      ipDaRequisicao(req),
+      req.headers["user-agent"],
+    );
   }
 }

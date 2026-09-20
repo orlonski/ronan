@@ -8,6 +8,10 @@ type DocumentoPedido = {
   titulo: string;
   obrigatorio: boolean;
   recebido: boolean;
+  exigeAssinatura: boolean;
+  exigeIcpBrasil: boolean;
+  assinado: boolean;
+  assinadoEm: string | null;
 };
 
 type Pagina = {
@@ -81,7 +85,11 @@ export default function ColetaPage({ params }: { params: Promise<{ token: string
     );
   }
 
-  const faltam = pagina.documentos.filter((d) => !d.recebido).length;
+  // Falta enquanto não chegou OU não foi assinado. Contar só o arquivo diria
+  // "recebemos todos" com um contrato por assinar.
+  const faltam = pagina.documentos.filter(
+    (d) => !d.recebido || (d.exigeAssinatura && !d.assinado),
+  ).length;
 
   return (
     <Moldura alinhar="start">
@@ -143,6 +151,34 @@ function ItemDocumento({
   const input = useRef<HTMLInputElement>(null);
   const [estado, setEstado] = useState<"parado" | "enviando" | "erro">("parado");
   const [msg, setMsg] = useState<string | null>(null);
+  const [assinando, setAssinando] = useState(false);
+  const [nome, setNome] = useState("");
+  const [cpf, setCpf] = useState("");
+  const [aceito, setAceito] = useState(false);
+
+  const precisaAssinar = item.recebido && item.exigeAssinatura && !item.assinado;
+  const pronto = item.recebido && (!item.exigeAssinatura || item.assinado);
+
+  async function assinar() {
+    setAssinando(true);
+    setMsg(null);
+    try {
+      const r = await fetch(`${API}/p/coleta/${token}/assinar`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ tipo: item.tipo, nome: nome.trim(), cpf, aceito: true }),
+      });
+      if (!r.ok) {
+        const corpo = (await r.json().catch(() => null)) as { message?: string } | null;
+        throw new Error(corpo?.message ?? "Não consegui registrar a assinatura.");
+      }
+      onEnviado();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Não consegui assinar.");
+    } finally {
+      setAssinando(false);
+    }
+  }
 
   async function enviar(file: File) {
     setEstado("enviando");
@@ -166,23 +202,37 @@ function ItemDocumento({
   return (
     <div
       className={`w-full rounded-2xl border-2 p-4 ${
-        item.recebido ? "border-emerald-600/50 bg-emerald-500/5" : ""
+        pronto ? "border-emerald-600/50 bg-emerald-500/5" : precisaAssinar ? "border-amber-500/60" : ""
       }`}
     >
       <div className="flex items-start gap-2">
-        {item.recebido && <Check className="mt-1 h-6 w-6 shrink-0 text-emerald-600" strokeWidth={3} />}
+        {pronto && <Check className="mt-1 h-6 w-6 shrink-0 text-emerald-600" strokeWidth={3} />}
         <div className="min-w-0 flex-1">
           <p className="text-lg font-semibold">{item.titulo}</p>
           {item.recebido ? (
-            <p className="text-sm text-emerald-700">Recebido</p>
+            <p className="text-sm text-emerald-700">
+              Recebido
+              {item.assinado ? " e assinado" : item.exigeAssinatura ? " — falta assinar" : ""}
+            </p>
           ) : (
-            !item.obrigatorio && <p className="text-sm text-muted-foreground">Opcional</p>
+            <>
+              {!item.obrigatorio && <p className="text-sm text-muted-foreground">Opcional</p>}
+              {item.exigeIcpBrasil && (
+                <p className="text-sm text-amber-700">
+                  Este precisa vir assinado com certificado digital. Assine em
+                  gov.br/assinatura-eletronica e mande o arquivo assinado.
+                </p>
+              )}
+            </>
           )}
         </div>
       </div>
 
       {/* Recebido vira botão de contorno, não some: é o "refazer a foto". Some
-          faria a pessoa sem saída quando a primeira sai tremida. */}
+          faria a pessoa sem saída quando a primeira sai tremida.
+
+          Trocar DERRUBA a assinatura, e a página avisa antes: a assinatura
+          apontava, pelo hash, pro arquivo anterior. */}
       <button
         type="button"
         disabled={estado === "enviando"}
@@ -197,6 +247,58 @@ function ItemDocumento({
         {estado === "enviando" ? "Enviando…" : item.recebido ? "Trocar" : "Enviar"}
       </button>
 
+      {/* O aceite eletrônico. Aparece só depois do arquivo chegar, porque é o
+          arquivo que se assina — e o hash dele é o que dá valor à assinatura.
+
+          Nome e CPF são DIGITADOS, não puxados do cadastro: o valor probatório
+          está em a pessoa declarar quem é, e o CPF ter que bater com o do
+          motorista é o que impede o dono do caminhão assinar no lugar dele. */}
+      {precisaAssinar && (
+        <div className="mt-4 space-y-3 border-t pt-4">
+          <p className="text-base font-semibold">Agora assine este documento</p>
+          <input
+            className="h-14 w-full rounded-xl border-2 border-border px-4 text-lg"
+            placeholder="Seu nome completo"
+            autoComplete="name"
+            value={nome}
+            onChange={(e) => setNome(e.target.value)}
+          />
+          <input
+            className="h-14 w-full rounded-xl border-2 border-border px-4 text-lg"
+            placeholder="Seu CPF"
+            inputMode="numeric"
+            value={cpf}
+            onChange={(e) => setCpf(e.target.value.replace(/\D/g, "").slice(0, 11))}
+          />
+          <label className="flex items-start gap-3 text-base">
+            <input
+              type="checkbox"
+              className="mt-1 h-6 w-6 shrink-0"
+              checked={aceito}
+              onChange={(e) => setAceito(e.target.checked)}
+            />
+            <span>
+              Eu li este documento e concordo com ele. Sei que ficam gravados meu nome, meu CPF, a
+              data e de onde eu assinei.
+            </span>
+          </label>
+          <button
+            type="button"
+            disabled={assinando || !aceito || nome.trim().length < 5 || cpf.length !== 11}
+            onClick={() => void assinar()}
+            className="flex h-16 w-full items-center justify-center rounded-xl bg-emerald-600 text-xl font-bold text-white disabled:opacity-50"
+          >
+            {assinando ? "Assinando…" : "Assinar"}
+          </button>
+        </div>
+      )}
+
+      {item.assinado && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Assinado. Se trocar o arquivo, vai precisar assinar de novo.
+        </p>
+      )}
+
       {msg && <p className="mt-2 text-sm text-destructive">{msg}</p>}
 
       {/* SEM `capture`: com ele o celular abre só a câmera e esconde galeria e
@@ -206,7 +308,7 @@ function ItemDocumento({
       <input
         ref={input}
         type="file"
-        accept="image/*,application/pdf"
+        accept={item.exigeIcpBrasil ? "application/pdf,.p7s,.p7m" : "image/*,application/pdf"}
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];

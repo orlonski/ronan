@@ -191,8 +191,36 @@ export const CriarDocumentoExigidoInput = z.object({
   empresaId: z.string().uuid().optional(),
   obrigatorio: z.boolean().default(true),
   ordem: z.number().int().min(0).default(0),
+  /** Este papel precisa ser assinado, não só enviado? */
+  exigeAssinatura: z.boolean().default(false),
+  /**
+   * E a assinatura precisa ser ICP-Brasil?
+   *
+   * Configurável porque os contratantes divergem: alguns aceitam aceite
+   * eletrônico com trilha de auditoria, outros só certificado digital. Chumbar
+   * um dos dois no código deixaria metade dos clientes fora.
+   */
+  exigeIcpBrasil: z.boolean().default(false),
 });
 export type CriarDocumentoExigidoInput = z.infer<typeof CriarDocumentoExigidoInput>;
+
+/**
+ * O aceite eletrônico de um documento, na página pública de coleta.
+ *
+ * Nome e CPF são DIGITADOS por quem assina, não puxados do cadastro: o valor
+ * probatório está em a pessoa declarar quem é, e o CPF conferir com o do
+ * motorista é o que impede o dono do caminhão assinar no lugar dele.
+ */
+export const AssinarDocumentoInput = z.object({
+  tipo: z.string().trim().min(1),
+  nome: z.string().trim().min(5, "Escreva seu nome completo."),
+  cpf: z.string().trim().min(11, "Informe o CPF de quem está assinando."),
+  /** O aceite tem que ser um ato: caixa desmarcada não assina nada. */
+  aceito: z.literal(true, {
+    errorMap: () => ({ message: "Marque que você leu e concorda para assinar." }),
+  }),
+});
+export type AssinarDocumentoInput = z.infer<typeof AssinarDocumentoInput>;
 
 /**
  * O que o contratante mediu, como ele mandou.

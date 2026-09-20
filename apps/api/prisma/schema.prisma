@@ -592,12 +592,13 @@ model Conta {
   cobrancasAssinatura           CobrancaAssinatura[]
   aceitesTermo                  AceiteTermo[]
 
-  alocacoesObra       AlocacaoObra[]
-  registrosPresenca   RegistroPresenca[]
-  configsMensal       ConfigMensalContratante[]
-  documentosExigidos  DocumentoExigido[]
-  convitesColeta      ConviteColeta[]
-  medicoesContratante MedicaoContratante[]
+  alocacoesObra        AlocacaoObra[]
+  registrosPresenca    RegistroPresenca[]
+  configsMensal        ConfigMensalContratante[]
+  documentosExigidos   DocumentoExigido[]
+  convitesColeta       ConviteColeta[]
+  medicoesContratante  MedicaoContratante[]
+  assinaturaDocumentos AssinaturaDocumento[]
 
   @@index([ativa])
   @@map("contas")
@@ -1492,6 +1493,8 @@ model Motorista {
   /// numa conferência de valor, que é conversa do acerto e não da obra.
   podeVerValorDiaria Boolean         @default(false)
   convitesColeta     ConviteColeta[]
+
+  assinaturasDocumento AssinaturaDocumento[]
 
   @@unique([contaId, cpf])
   @@index([ativo])
@@ -6325,12 +6328,91 @@ model DocumentoExigido {
   ordem       Int     @default(0)
   ativo       Boolean @default(true)
 
+  /// Este papel precisa ser ASSINADO, não só enviado?
+  ///
+  /// Configurável porque os contratantes divergem e o sistema não pode
+  /// decidir por eles: cópia de CNH ninguém assina, contrato de prestação
+  /// todo mundo assina, e ordem de serviço depende da obra.
+  exigeAssinatura Boolean @default(false)
+
+  /// E a assinatura precisa ser ICP-Brasil (certificado digital)?
+  ///
+  /// Só faz sentido com `exigeAssinatura`. Falso = assinatura eletrônica
+  /// simples com trilha de auditoria (nome, CPF, IP, data e hash do arquivo),
+  /// que a MP 2.200-2 admite quando as partes aceitam. Verdadeiro = o arquivo
+  /// tem que CHEGAR assinado de fora (gov.br, certificado A1/A3): ninguém
+  /// assina com ICP no servidor de outra pessoa, porque a chave privada é do
+  /// titular e é isso que dá valor à assinatura.
+  exigeIcpBrasil Boolean @default(false)
+
   criadoEm   DateTime @default(now())
   alteradoEm DateTime @updatedAt
 
   @@index([contaId, ativo])
   @@index([empresaId])
   @@map("documentos_exigidos")
+}
+
+/// Como o papel foi assinado.
+enum ModoAssinatura {
+  /// Aceite eletrônico com trilha: quem, quando, de onde, e o hash do arquivo.
+  SIMPLES
+  /// O arquivo chegou assinado digitalmente de fora (certificado do titular).
+  ICP_BRASIL
+}
+
+/// A assinatura de um documento do motorista.
+///
+/// ⚠️ O `hashArquivo` é o que faz isto valer alguma coisa. Sem ele, "fulano
+/// assinou a ordem de serviço" é uma frase solta: trocar o arquivo depois
+/// deixaria a assinatura apontando pro papel novo, que ninguém assinou. Com o
+/// hash, reenviar o documento faz a assinatura DEIXAR DE CONFERIR, e a tela
+/// diz isso em vez de mentir.
+///
+/// ⚠️ Em `ICP_BRASIL` o sistema NÃO valida a cadeia do certificado. Ele
+/// reconhece que o arquivo carrega uma assinatura digital embutida e guarda a
+/// evidência; a validação jurídica é feita no verificador oficial. Dizer
+/// "assinado com ICP-Brasil" sem validar a cadeia seria afirmar num documento
+/// legal uma coisa que não se checou.
+model AssinaturaDocumento {
+  contaId String @default("__SEM_CONTA__")
+  conta   Conta  @relation(fields: [contaId], references: [id])
+  id      String @id @default(uuid())
+
+  motoristaId String
+  motorista   Motorista @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+
+  /// A gaveta do documento assinado (mesma chave de `MotoristaDocumento.tipo`).
+  tipoDocumento String
+
+  modo ModoAssinatura @default(SIMPLES)
+
+  /// O que a pessoa declarou ser, na hora. Snapshot: não é FK, porque o valor
+  /// que importa é o que ela digitou, não o que o cadastro diz hoje.
+  ///
+  /// Nulo em `ICP_BRASIL`: lá ninguém digita nada — a identidade está dentro
+  /// do certificado, e preencher isto com o nome do cadastro seria inventar
+  /// uma declaração que não houve.
+  nomeDeclarado String?
+  cpfDeclarado  String?
+
+  /// A trilha de auditoria. É ela que sustenta a assinatura simples.
+  ip        String?
+  userAgent String?
+
+  /// SHA-256 do arquivo no momento da assinatura.
+  hashArquivo String
+
+  /// Por qual link ela assinou, quando veio pela coleta pública.
+  conviteColetaId String?
+
+  assinadoEm DateTime @default(now())
+
+  /// Um documento, uma assinatura. Reassinar substitui — é o caso de reenviar
+  /// o arquivo corrigido e assinar de novo.
+  @@unique([motoristaId, tipoDocumento])
+  @@index([contaId])
+  @@map("assinaturas_documento")
 }
 
 /// O convite de coleta: um link que abre sem login e só serve pra ENVIAR.

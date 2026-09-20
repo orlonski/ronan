@@ -26,6 +26,7 @@ import { Roles } from "../../auth/decorators/roles.decorator";
 import { RolesGuard } from "../../auth/guards/roles.guard";
 import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
+import { AVISO_ICP } from "../../admissao/assinatura-arquivo";
 import { PrismaService } from "../../prisma/prisma.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { MotoristasDocumentosService } from "./documentos.service";
@@ -85,7 +86,43 @@ export class MotoristasDocumentosController {
   @Get()
   async list(@Param("motoristaId") motoristaId: string) {
     const docs = await this.service.list(motoristaId);
-    return docs.map(publicShape);
+
+    // A assinatura vem junto porque é aqui que o escritório audita. E vem com
+    // `confere`: o hash foi tirado do arquivo NAQUELE momento, então um
+    // reenvio posterior faz a assinatura deixar de bater — e a tela tem que
+    // dizer isso em vez de mostrar um "assinado" que não vale mais.
+    const assinaturas = await this.prisma.assinaturaDocumento.findMany({
+      where: { motoristaId },
+      select: {
+        tipoDocumento: true,
+        modo: true,
+        nomeDeclarado: true,
+        cpfDeclarado: true,
+        ip: true,
+        hashArquivo: true,
+        assinadoEm: true,
+      },
+    });
+    const porTipo = new Map(assinaturas.map((a) => [a.tipoDocumento, a]));
+
+    return docs.map((d) => {
+      const a = porTipo.get(d.tipo);
+      return {
+        ...publicShape(d),
+        assinatura: a
+          ? {
+              modo: a.modo,
+              nome: a.nomeDeclarado,
+              cpf: a.cpfDeclarado,
+              ip: a.ip,
+              hash: a.hashArquivo,
+              assinadoEm: a.assinadoEm.toISOString(),
+              /** ICP não é validado aqui — ver `AVISO_ICP`. */
+              aviso: a.modo === "ICP_BRASIL" ? AVISO_ICP : null,
+            }
+          : null,
+      };
+    });
   }
 
   @RequerPermissao("motoristas.documentos")
