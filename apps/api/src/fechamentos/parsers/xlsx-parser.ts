@@ -9,8 +9,15 @@ export async function parseXlsx(buffer: Buffer, nomeArquivo: string): Promise<Pa
   const abas: ParsedSheet[] = [];
   for (const ws of wb.worksheets) {
     const linhas: ParsedCell[][] = [];
-    const maxRow = ws.actualRowCount || ws.rowCount;
-    const maxCol = ws.actualColumnCount || ws.columnCount;
+    // ⚠️ `actualRowCount` é a QUANTIDADE de linhas com conteúdo, não o índice
+    // da última — numa planilha com uma linha em branco no meio (cabeçalho
+    // separado do corpo, que é o normal), ele é menor que o índice final e o
+    // laço CORTA as últimas linhas. Numa medição isso significa o último
+    // motorista sumir do arquivo sem ninguém ver. `rowCount` é o índice da
+    // última linha definida, que é o que o laço precisa. Mesma história nas
+    // colunas.
+    const maxRow = Math.max(ws.rowCount, ws.actualRowCount);
+    const maxCol = Math.max(ws.columnCount, ws.actualColumnCount);
     for (let r = 1; r <= maxRow; r++) {
       const row: ParsedCell[] = [];
       const wsRow = ws.getRow(r);

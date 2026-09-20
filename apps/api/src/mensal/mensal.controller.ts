@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -9,9 +10,14 @@ import {
   Post,
   Put,
   Query,
+  Res,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import type { Response } from "express";
 import { z } from "zod";
 import {
   ConfigMensalInput,
@@ -112,6 +118,51 @@ export class MensalAdminController {
   @Get("medicao")
   conferir(@Query("empresaId") empresaId: string, @Query("competencia") competencia: string) {
     return this.service.conferirMedicao(empresaId, competencia);
+  }
+
+  /**
+   * O modelo em branco pra mandar pro contratante.
+   *
+   * Vem antes do importador na ordem de uso e na de importância: é ele que
+   * torna o formato previsível. Sem modelo, cada contratante manda um arquivo
+   * diferente e o parser vira adivinhação.
+   */
+  @RequerPermissao("espelhos.ver")
+  @Get("medicao/modelo")
+  async modelo(
+    @Query("empresaId") empresaId: string,
+    @Query("competencia") competencia: string,
+    @Res() res: Response,
+  ) {
+    const { buffer, nomeArquivo } = await this.service.modeloDeMedicao(empresaId, competencia);
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${nomeArquivo}"`);
+    res.send(buffer);
+  }
+
+  /**
+   * Lê a planilha que voltou. NÃO grava — devolve o que leu pra conferência.
+   *
+   * O que ele não reconheceu sai na resposta, nunca no lixo: importador que
+   * descarta linha em silêncio fecha o número na tela com gente faltando na
+   * conta, e ninguém procura o que não sabe que existe.
+   */
+  @RequerPermissao("espelhos.configurar")
+  @Post("medicao/importar")
+  @UseInterceptors(FileInterceptor("arquivo", { limits: { fileSize: 10 * 1024 * 1024 } }))
+  async importar(
+    @UploadedFile() arquivo: Express.Multer.File | undefined,
+    @Body("empresaId") empresaId: string,
+    @Body("competencia") competencia: string,
+  ) {
+    if (!arquivo) throw new BadRequestException("Anexe a planilha.");
+    if (!empresaId || !competencia) {
+      throw new BadRequestException("Diga o contratante e a competência.");
+    }
+    return this.service.importarMedicao(empresaId, competencia, arquivo.buffer, arquivo.originalname);
   }
 
   /** Lança o que a medição diz. Guardado como veio, sem correção nossa. */

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { HardHat, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EstadoVazio } from "@/components/estado-vazio";
 import { Combobox } from "@/components/ui/combobox";
-import { fetchApi, useAuthToken, useResourceOptions } from "@/lib/client-api";
+import { apiBaseUrl, fetchApi, useAuthToken, useResourceOptions } from "@/lib/client-api";
 import { hojeSP } from "@/lib/datetime-br";
 import { formatarBRL } from "@/lib/numero";
 import { usePermissoes } from "@/lib/permissoes";
@@ -745,6 +745,13 @@ type LinhaDivergencia = {
   valorDiferenca: string | null;
 };
 
+/** O que a planilha do contratante disse — antes de qualquer coisa ser salva. */
+type LeituraMedicao = {
+  linhas: { alocacaoId: string; dias?: string[]; totalDias?: number; casouPor: string }[];
+  semDono: { descricao: string; totalDias: number | null }[];
+  semLinha: { alocacaoId: string; motorista: string; obra: string }[];
+};
+
 type Conferencia = {
   competencia: string;
   lancada: boolean;
@@ -784,7 +791,72 @@ function ConferirMedicao({ mes }: { mes: string }) {
   const { temPermissao } = usePermissoes();
   const [empresaId, setEmpresaId] = useState<string>();
   const [totais, setTotais] = useState<Record<string, string>>({});
+  const [leitura, setLeitura] = useState<LeituraMedicao | null>(null);
+  const arquivo = useRef<HTMLInputElement>(null);
   const empresas = useResourceOptions<{ id: string; nome: string }>("/admin/empresas");
+
+  /**
+   * Baixa o modelo já preenchido com quem está alocado.
+   *
+   * É a peça que destrava o importador: enquanto a gente esperava "uma
+   * planilha real de contratante", o lançamento ficou manual. Mandando o
+   * modelo, o formato passa a ser nosso e o que volta é previsível.
+   */
+  const baixarModelo = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(
+        `${apiBaseUrl}${PATH}/medicao/modelo?empresaId=${empresaId}&competencia=${mes}`,
+        { headers: { authorization: `Bearer ${token}` } },
+      );
+      if (!r.ok) {
+        const corpo = (await r.json().catch(() => null)) as { message?: string } | null;
+        throw new Error(corpo?.message ?? "Não consegui gerar o modelo.");
+      }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `medicao-${mes}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+    onError: (e: Error) => toast.error("Não consegui gerar o modelo", { description: e.message }),
+  });
+
+  /**
+   * Lê a planilha que voltou e SÓ preenche os campos — não grava.
+   *
+   * Separar leitura de gravação não é cerimônia: importador que grava direto
+   * esconde a linha que não reconheceu, e o número fecha na tela com gente
+   * faltando na conta.
+   */
+  const importar = useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData();
+      fd.append("arquivo", file);
+      fd.append("empresaId", empresaId!);
+      fd.append("competencia", mes);
+      return fetchApi<LeituraMedicao>(`${PATH}/medicao/importar`, {
+        token,
+        method: "POST",
+        body: fd,
+      });
+    },
+    onSuccess: (r) => {
+      setLeitura(r);
+      setTotais((t) => {
+        const novo = { ...t };
+        for (const l of r.linhas) {
+          novo[l.alocacaoId] = String(l.dias ? l.dias.length : (l.totalDias ?? 0));
+        }
+        return novo;
+      });
+      toast.success(`${r.linhas.length} linha(s) lida(s)`, {
+        description: "Confira antes de lançar — nada foi salvo ainda.",
+      });
+    },
+    onError: (e: Error) => toast.error("Não consegui ler a planilha", { description: e.message }),
+  });
 
   const conferencia = useQuery({
     queryKey: [PATH, "medicao", empresaId, mes],
@@ -848,6 +920,82 @@ function ConferirMedicao({ mes }: { mes: string }) {
           options={(empresas.data ?? []).map((e) => ({ value: e.id, label: e.nome }))}
         />
       </div>
+
+      {empresaId && d && d.espelho.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded border p-3">
+          <Button
+            variant="outline"
+            disabled={baixarModelo.isPending}
+            onClick={() => baixarModelo.mutate()}
+          >
+            {baixarModelo.isPending ? "Gerando…" : "Baixar planilha modelo"}
+          </Button>
+          {temPermissao("espelhos.configurar") && (
+            <Button
+              variant="outline"
+              disabled={importar.isPending}
+              onClick={() => arquivo.current?.click()}
+            >
+              {importar.isPending ? "Lendo…" : "Importar planilha preenchida"}
+            </Button>
+          )}
+          <p className="text-xs text-muted-foreground">
+            O modelo já vem com os motoristas, as placas e os dias do período. Mande pro
+            contratante e importe o que voltar.
+          </p>
+          <input
+            ref={arquivo}
+            type="file"
+            accept=".xlsx"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) importar.mutate(f);
+              e.target.value = "";
+            }}
+          />
+        </div>
+      )}
+
+      {/* O que a planilha trouxe e a gente não soube usar. Vai pra tela SEMPRE:
+          importador que descarta linha em silêncio fecha o número com gente
+          faltando na conta, e ninguém procura o que não sabe que existe. */}
+      {leitura && (leitura.semDono.length > 0 || leitura.semLinha.length > 0) && (
+        <div className="space-y-2 rounded border border-amber-500/50 bg-amber-500/5 p-3 text-sm">
+          {leitura.semDono.length > 0 && (
+            <div>
+              <p className="font-medium">
+                {leitura.semDono.length} linha(s) da planilha não achei a quem pertencem:
+              </p>
+              <ul className="ml-4 list-disc text-muted-foreground">
+                {leitura.semDono.map((x, i) => (
+                  <li key={i}>
+                    {x.descricao}
+                    {x.totalDias !== null ? ` · ${x.totalDias} dia(s)` : ""}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {leitura.semLinha.length > 0 && (
+            <div>
+              <p className="font-medium">
+                {leitura.semLinha.length} alocado(s) que não apareceram na planilha:
+              </p>
+              <ul className="ml-4 list-disc text-muted-foreground">
+                {leitura.semLinha.map((x) => (
+                  <li key={x.alocacaoId}>
+                    {x.motorista} · {x.obra}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1 text-xs">
+                Ninguém vai pagar por eles se ficar assim — é o erro mais caro do mês.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {empresaId && d && d.espelho.length === 0 && (
         <p className="text-sm text-muted-foreground">

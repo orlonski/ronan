@@ -22,6 +22,9 @@ import {
 } from "../common/medicao-mensal";
 import { valorDaDiariaObra, type TabelaPrecoRow } from "../common/viagem-preco";
 import { resolverRemuneracao } from "../common/acerto-motorista";
+import { parseXlsx } from "../fechamentos/parsers/xlsx-parser";
+import { lerMedicaoDaPlanilha } from "./medicao-planilha";
+import { montarModeloMedicao } from "./medicao-modelo";
 import { Prisma } from "@prisma/client";
 
 /** "2026-09-19" → Date de meia-noite UTC, que é como coluna Date se compara. */
@@ -566,6 +569,8 @@ export class MensalService {
       alocacaoId: string;
       obra: string;
       motorista: string;
+      /** Vai pro modelo da planilha: é a chave de reserva quando o código some. */
+      cpf: string | null;
       placa: string;
       diaCorte: number;
       de: string;
@@ -605,6 +610,7 @@ export class MensalService {
         alocacaoId: a.id,
         obra: a.cliente.nome,
         motorista: a.motorista.nome,
+        cpf: a.motorista.cpf ?? null,
         placa: a.veiculo.placa,
         diaCorte,
         de: competencia.de,
@@ -661,6 +667,89 @@ export class MensalService {
    * o nosso lado antes de existir o lado deles, senão ela só serve depois que
    * alguém digitou, que é tarde demais pra ajudar.
    */
+  /**
+   * O período da competência DESTE contratante, e quem está alocado nele.
+   *
+   * Sai do mesmo lugar que o espelho de propósito: o modelo que a gente manda
+   * e a conferência que a gente faz têm que falar do mesmo período e das
+   * mesmas pessoas, ou a planilha volta com uma linha que não existe na tela.
+   */
+  private async alvosDaMedicao(empresaId: string, competencia: string) {
+    const cfg = await this.prisma.configMensalContratante.findFirst({ where: { empresaId } });
+    const periodo = competenciaDe(competencia, cfg?.diaCorte ?? 20);
+    const espelho = await this.espelho(competencia, { empresaId });
+    return {
+      periodo,
+      dias: this.diasEntre(dia(periodo.de), dia(periodo.ate)),
+      alvos: espelho.linhas.map((l) => ({
+        alocacaoId: l.alocacaoId,
+        motorista: l.motorista,
+        cpf: l.cpf,
+        obra: l.obra,
+        placa: l.placa,
+      })),
+    };
+  }
+
+  /** O modelo em branco pra mandar pro contratante, já com quem está alocado. */
+  async modeloDeMedicao(empresaId: string, competencia: string) {
+    const empresa = await this.prisma.empresa.findFirst({
+      where: { id: empresaId },
+      select: { nome: true },
+    });
+    if (!empresa) throw new NotFoundException("Contratante não encontrado.");
+
+    const { periodo, dias: diasDoPeriodo, alvos } = await this.alvosDaMedicao(empresaId, competencia);
+    if (alvos.length === 0) {
+      throw new BadRequestException(
+        "Nenhum motorista alocado nesse contratante na competência — não há o que medir.",
+      );
+    }
+
+    const buffer = await montarModeloMedicao({
+      contratante: empresa.nome,
+      competencia,
+      de: periodo.de,
+      ate: periodo.ate,
+      dias: diasDoPeriodo,
+      alvos,
+    });
+    const slug = empresa.nome.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase();
+    return { buffer, nomeArquivo: `medicao-${slug}-${competencia}.xlsx` };
+  }
+
+  /**
+   * Lê a planilha que voltou e devolve o que ela diz. NÃO salva.
+   *
+   * Separar leitura de gravação não é cerimônia: importador que grava direto
+   * esconde a linha que ele não reconheceu, e o número fecha na tela com
+   * gente faltando na conta. Aqui o escritório vê os três blocos — casou, veio
+   * sem dono, e está alocado mas não veio — e só então lança.
+   */
+  async importarMedicao(empresaId: string, competencia: string, arquivo: Buffer, nome: string) {
+    const { alvos, dias: diasDoPeriodo } = await this.alvosDaMedicao(empresaId, competencia);
+    if (alvos.length === 0) {
+      throw new BadRequestException("Nenhum motorista alocado nesse contratante na competência.");
+    }
+
+    let abas;
+    try {
+      abas = (await parseXlsx(arquivo, nome)).abas;
+    } catch {
+      throw new BadRequestException(
+        "Não consegui abrir essa planilha. Envie o arquivo .xlsx do modelo, sem senha.",
+      );
+    }
+
+    const leitura = lerMedicaoDaPlanilha(abas, alvos, diasDoPeriodo);
+    if (leitura.linhas.length === 0 && leitura.semDono.length === 0) {
+      throw new BadRequestException(
+        "Não achei nenhuma medição nessa planilha. Confira se a coluna 'Total de dias' (ou os dias) está preenchida.",
+      );
+    }
+    return leitura;
+  }
+
   async conferirMedicao(empresaId: string, competencia: string) {
     const espelho = await this.espelho(competencia, { empresaId });
 
