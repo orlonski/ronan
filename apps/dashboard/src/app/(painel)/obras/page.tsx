@@ -346,6 +346,8 @@ function Conteudo() {
         </Card>
       )}
 
+      {temPermissao("espelhos.ver") && <ConferirMedicao mes={mes} />}
+
       {temPermissao("espelhos.ver") && <ConfigContratante />}
 
       {criando && (
@@ -681,6 +683,230 @@ function ConfigContratante() {
               {salvar.isPending ? "Salvando…" : "Salvar combinado"}
             </Button>
           )}
+        </>
+      )}
+    </Card>
+  );
+}
+
+
+type LinhaDivergencia = {
+  chave: string;
+  motorista?: string;
+  obra?: string;
+  placa?: string;
+  modo: "POR_DIA" | "SO_TOTAL";
+  soNosso: string[];
+  soDeles: string[];
+  totalNosso: number;
+  totalDeles: number;
+  diferenca: number;
+  semContraparte: "NOSSO" | "DELES" | null;
+  bate: boolean;
+};
+
+type Conferencia = {
+  competencia: string;
+  lancada: boolean;
+  lancadaEm: string | null;
+  espelho: { alocacaoId: string; motorista: string; obra: string; placa: string }[];
+  divergencias: LinhaDivergencia[];
+  resumo: {
+    linhas: number;
+    batem: number;
+    diasAMenos: number;
+    diasAMais: number;
+    aContestar: number;
+    semContraparte: number;
+  };
+};
+
+/**
+ * A conferência do dia 20: o nosso registro contra o que o contratante mediu.
+ *
+ * Hoje isso é feito no olho, obra por obra, sem base própria — e quando acha
+ * um erro, a discussão é de memória. Aqui você digita o que a medição diz e a
+ * diferença sai na hora, com o dia na mão quando a planilha vem dia a dia.
+ *
+ * O lançamento é MANUAL de propósito, e não por falta de vontade de ler
+ * Excel: o formato da planilha varia por contratante e muda sem avisar, e um
+ * importador escrito contra um arquivo imaginado quebra no primeiro cliente
+ * diferente. Digitar um número por motorista, uma vez por mês, entrega a
+ * divergência hoje — e o importador entra depois sobre esta mesma base.
+ */
+function ConferirMedicao({ mes }: { mes: string }) {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  const { temPermissao } = usePermissoes();
+  const [empresaId, setEmpresaId] = useState<string>();
+  const [totais, setTotais] = useState<Record<string, string>>({});
+  const empresas = useResourceOptions<{ id: string; nome: string }>("/admin/empresas");
+
+  const conferencia = useQuery({
+    queryKey: [PATH, "medicao", empresaId, mes],
+    enabled: !!token && !!empresaId,
+    queryFn: async () => {
+      const r = await fetchApi<Conferencia>(
+        `${PATH}/medicao?empresaId=${empresaId}&competencia=${mes}`,
+        { token },
+      );
+      // Semeia os campos com o que já foi lançado, uma vez por carga.
+      const semente: Record<string, string> = {};
+      for (const d of r.divergencias) {
+        if (r.lancada) semente[d.chave] = String(d.totalDeles);
+      }
+      setTotais(semente);
+      return r;
+    },
+  });
+
+  const salvar = useMutation({
+    mutationFn: () =>
+      fetchApi(`${PATH}/medicao`, {
+        token,
+        method: "PUT",
+        body: JSON.stringify({
+          empresaId,
+          competencia: mes,
+          linhas: (conferencia.data?.espelho ?? [])
+            .filter((e) => totais[e.alocacaoId] !== undefined && totais[e.alocacaoId] !== "")
+            .map((e) => ({
+              alocacaoId: e.alocacaoId,
+              totalDias: Number(totais[e.alocacaoId]),
+            })),
+        }),
+      }),
+    onSuccess: () => {
+      toast.success("Medição lançada.", { description: "A diferença já está calculada abaixo." });
+      void qc.invalidateQueries({ queryKey: [PATH, "medicao"] });
+    },
+    onError: (e: Error) => toast.error("Não consegui lançar", { description: e.message }),
+  });
+
+  const d = conferencia.data;
+
+  return (
+    <Card className="space-y-3 p-4">
+      <div>
+        <p className="font-medium">Conferir a medição</p>
+        <p className="text-sm text-muted-foreground">
+          Digite quantos dias a medição do contratante diz, por motorista. A diferença contra o
+          nosso registro sai na hora.
+        </p>
+      </div>
+
+      <div className="w-72">
+        <Label>Contratante</Label>
+        <Combobox
+          value={empresaId}
+          onChange={setEmpresaId}
+          placeholder="Escolha o contratante…"
+          options={(empresas.data ?? []).map((e) => ({ value: e.id, label: e.nome }))}
+        />
+      </div>
+
+      {empresaId && d && d.espelho.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          Nenhuma alocação desse contratante neste mês.
+        </p>
+      )}
+
+      {empresaId && d && d.espelho.length > 0 && (
+        <>
+          {/* O resumo primeiro: quem abre isso quer saber se tem briga, não
+              ler uma tabela. */}
+          {d.lancada && (
+            <div className="flex flex-wrap gap-4 rounded border p-3 text-sm">
+              <span>
+                <strong>{d.resumo.batem}</strong> de {d.resumo.linhas} batem
+              </span>
+              {d.resumo.diasAMenos > 0 && (
+                <span className="text-amber-700 dark:text-amber-400">
+                  <strong>{d.resumo.diasAMenos}</strong> dia(s) que registramos e eles não
+                  contaram
+                </span>
+              )}
+              {d.resumo.diasAMais > 0 && (
+                <span className="text-sky-700 dark:text-sky-400">
+                  <strong>{d.resumo.diasAMais}</strong> dia(s) que eles contaram e não temos
+                </span>
+              )}
+              {d.resumo.semContraparte > 0 && (
+                <span className="text-destructive">
+                  <strong>{d.resumo.semContraparte}</strong> linha(s) só de um lado
+                </span>
+              )}
+            </div>
+          )}
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left">
+                  <th className="p-2">Motorista / obra</th>
+                  <th className="p-2 text-right">Nosso registro</th>
+                  <th className="p-2 text-right">A medição diz</th>
+                  <th className="p-2 text-right">Diferença</th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.espelho.map((e) => {
+                  const div = d.divergencias.find((x) => x.chave === e.alocacaoId);
+                  const dif = div?.diferenca ?? 0;
+                  return (
+                    <tr key={e.alocacaoId} className="border-b">
+                      <td className="p-2">
+                        <span className="font-medium">{e.motorista}</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {e.obra} · {e.placa}
+                        </span>
+                      </td>
+                      <td className="p-2 text-right font-semibold">{div?.totalNosso ?? 0}</td>
+                      <td className="p-2 text-right">
+                        <Input
+                          inputMode="numeric"
+                          className="ml-auto w-20 text-right"
+                          value={totais[e.alocacaoId] ?? ""}
+                          onChange={(ev) =>
+                            setTotais((t) => ({
+                              ...t,
+                              [e.alocacaoId]: ev.target.value.replace(/\D/g, "").slice(0, 2),
+                            }))
+                          }
+                        />
+                      </td>
+                      <td className="p-2 text-right">
+                        {!d.lancada || totais[e.alocacaoId] === undefined ? (
+                          "—"
+                        ) : dif === 0 ? (
+                          <span className="text-emerald-700 dark:text-emerald-400">bate</span>
+                        ) : dif > 0 ? (
+                          <span className="font-semibold text-amber-700 dark:text-amber-400">
+                            +{dif} nosso
+                          </span>
+                        ) : (
+                          <span className="font-semibold text-sky-700 dark:text-sky-400">
+                            {-dif} só deles
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {temPermissao("espelhos.configurar") && (
+            <Button disabled={salvar.isPending} onClick={() => salvar.mutate()}>
+              {salvar.isPending ? "Lançando…" : "Lançar medição e comparar"}
+            </Button>
+          )}
+
+          <p className="text-xs text-muted-foreground">
+            A medição é guardada como o contratante mandou, sem correção nossa — é ela que
+            sustenta o pedido de ajuste.
+          </p>
         </>
       )}
     </Card>
