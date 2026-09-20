@@ -60,9 +60,16 @@ type LinhaEspelho = {
 
 const PATH = "/admin/mensal";
 
-/** "2026-09-19" → "19/09". O ano some: a grade já é de um mês só. */
+/**
+ * "2026-09-19" → "19/09". O ano some: a grade já é de um mês só.
+ *
+ * Corta em 10 caracteres antes de partir porque a mesma função recebe as duas
+ * formas: as regras do espelho devolvem "AAAA-MM-DD", mas coluna Date do
+ * Prisma serializa em ISO completo. Sem o corte, `split("-")` deixava o resto
+ * grudado e a tela mostrava "desde 20T00:00:00.000Z/09".
+ */
 function diaMes(iso: string): string {
-  const [, m, d] = iso.split("-");
+  const [, m, d] = iso.slice(0, 10).split("-");
   return `${d}/${m}`;
 }
 
