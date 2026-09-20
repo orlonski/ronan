@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BASE_PRECO_LABEL, BASES_PRECO, type BasePrecoTipo } from "@ronan/shared-types";
+import {
+  BASE_PRECO_AJUDA,
+  BASE_PRECO_LABEL,
+  BASES_PRECO,
+  type BasePrecoTipo,
+} from "@ronan/shared-types";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -111,6 +116,19 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
     }
   }, [ehPeriodo, form.base]);
 
+  const ehDiariaObra = form.base === "DIARIA_OBRA";
+
+  // A diária de obra é resolvida por empresa + dia: material e modo NÃO entram
+  // na chave. Uma linha dessas com material preenchido não casaria com nada e
+  // ficaria cadastrada parecendo certa — o pior tipo de defeito de tabela de
+  // preço, porque só aparece quando alguém procura o dinheiro que sumiu.
+  useEffect(() => {
+    if (!ehDiariaObra) return;
+    if (form.materialId || form.tipoServicoId) {
+      setForm((f) => ({ ...f, materialId: "", tipoServicoId: "" }));
+    }
+  }, [ehDiariaObra, form.materialId, form.tipoServicoId]);
+
   const porFaixa = form.base === "TONELADA" || form.base === "KM" || form.base === "VIAGEM";
 
   async function onSubmit(ev: React.FormEvent) {
@@ -179,6 +197,7 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
             <Label htmlFor="precoform-material">Material</Label>
             <Select id="precoform-material"
               value={form.materialId}
+              disabled={ehDiariaObra}
               onChange={(e) => setForm({ ...form, materialId: e.target.value })}
             >
               <option value="">Qualquer material</option>
@@ -196,6 +215,7 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
             <Label htmlFor="precoform-modo-de-servico">Modo de serviço</Label>
             <Select id="precoform-modo-de-servico"
               value={form.tipoServicoId}
+              disabled={ehDiariaObra}
               onChange={(e) => setForm({ ...form, tipoServicoId: e.target.value })}
             >
               <option value="">Qualquer modo</option>
@@ -206,7 +226,9 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
               ))}
             </Select>
             <p className="text-xs text-muted-foreground">
-              Escolha só se a diária (ou outro modo) tiver preço próprio.
+              {ehDiariaObra
+                ? "A diária de obra não usa modo nem material: vale por empresa e dia."
+                : "Escolha só se a diária (ou outro modo) tiver preço próprio."}
             </p>
           </div>
           <div className="space-y-2">
@@ -223,6 +245,7 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
                 </option>
               ))}
             </Select>
+            <p className="text-xs text-muted-foreground">{BASE_PRECO_AJUDA[form.base]}</p>
             {ehPeriodo && (
               <p className="text-xs text-muted-foreground">
                 Esse modo é medido por período, então não dá pra cobrar por tonelada.

@@ -17,10 +17,13 @@ import { useMeusDiasObra } from "@/lib/queries";
  * branco. Nunca ponto, presença, falta ou atraso — ele é parceiro autônomo, e
  * a palavra errada muda a natureza do que está registrado aqui.
  *
- * NÃO mostra dinheiro, de propósito. Valor é conversa do acerto; misturar
- * aqui transformaria uma tela de conferência numa tela de cobrança, e o
- * primeiro número que ele veria de manhã seria quanto tem a receber. Existe a
- * flag `podeVerValorDiaria` pra quando o dono decidir ligar.
+ * O dinheiro só aparece se o dono ligar, por motorista
+ * (`Motorista.podeVerValorDiaria`, que nasce desligada). Ligado por padrão
+ * transformaria uma tela de conferência numa tela de cobrança, e o primeiro
+ * número que ele veria de manhã seria quanto tem a receber — quando o
+ * combinado é claro isso ajuda, quando não é, atrapalha, e quem sabe qual dos
+ * dois é o caso não é o código. O valor mostrado é o DELE (a régua do acerto),
+ * nunca o que a obra paga ao contratante.
  *
  * O desenho segue o do resto do mensal: número grande primeiro, cor antes de
  * texto, e nada que exija ler uma frase pra entender.
@@ -39,6 +42,11 @@ function mesAtual(): string {
 function rotuloMes(ym: string): string {
   const [a, m] = ym.split("-").map(Number);
   return `${NOMES_MES[(m ?? 1) - 1]} de ${a}`;
+}
+
+/** "1100.00" → "R$ 1.100,00". Sem centavos quebrados na tela do motorista. */
+function brl(v: string): string {
+  return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 function mesVizinho(ym: string, passos: number): string {
@@ -125,6 +133,22 @@ export default function MeusDiasObraScreen() {
             {data?.total === 1 ? "diária" : "diárias"}
           </Text>
         </View>
+
+        {/* O valor, quando o dono liberou. Fica ABAIXO do número de dias e
+            menor que ele: o assunto da tela continua sendo a contagem, e o
+            dinheiro é consequência dela. */}
+        {data?.valor ? (
+          <View className="items-center gap-0.5">
+            <Text className="text-3xl font-bold text-foreground">
+              {brl(data.valor.total)}
+            </Text>
+            <Text className="text-base text-muted-foreground">
+              {data.valor.unitario
+                ? `${brl(data.valor.unitario)} por diária`
+                : "as diárias do mês não têm todas o mesmo valor"}
+            </Text>
+          </View>
+        ) : null}
 
         {isLoading && !data ? (
           <Text className="text-center text-base text-muted-foreground">Carregando…</Text>

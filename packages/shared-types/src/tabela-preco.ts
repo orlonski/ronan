@@ -10,16 +10,37 @@ import { z } from "zod";
  * quando alguém reajusta a tabela.
  */
 
-export const BASES_PRECO = ["TONELADA", "KM", "VIAGEM", "PERIODO"] as const;
+export const BASES_PRECO = ["TONELADA", "KM", "VIAGEM", "PERIODO", "DIARIA_OBRA"] as const;
 export const BasePrecoSchema = z.enum(BASES_PRECO);
 export type BasePrecoTipo = z.infer<typeof BasePrecoSchema>;
 
-/** Rótulo e unidade de cada base, pro painel não escrever isso em três lugares. */
+/**
+ * Rótulo e unidade de cada base, pro painel não escrever isso em três lugares.
+ *
+ * ⚠️ `PERIODO` e `DIARIA_OBRA` são as duas "por dia" e NÃO são a mesma coisa.
+ * O rótulo tem que deixar isso na cara de quem cadastra, senão o preço da obra
+ * acaba cobrado da viagem à disposição (ou o contrário) e ninguém vê.
+ */
 export const BASE_PRECO_LABEL: Record<BasePrecoTipo, { nome: string; unidade: string }> = {
   TONELADA: { nome: "Por tonelada", unidade: "R$/t" },
   KM: { nome: "Por quilômetro", unidade: "R$/km" },
   VIAGEM: { nome: "Valor fechado por viagem", unidade: "R$/viagem" },
-  PERIODO: { nome: "Por diária", unidade: "R$/dia" },
+  PERIODO: { nome: "Por diária de viagem (à disposição)", unidade: "R$/dia" },
+  DIARIA_OBRA: { nome: "Por diária de obra (mensal)", unidade: "R$/dia" },
+};
+
+/**
+ * O que cada base precifica, em uma frase, pro formulário explicar a escolha.
+ * A confusão entre as duas diárias é o erro caro desta tela.
+ */
+export const BASE_PRECO_AJUDA: Record<BasePrecoTipo, string> = {
+  TONELADA: "Multiplica as toneladas efetivas da viagem.",
+  KM: "Multiplica o km efetivo da viagem.",
+  VIAGEM: "Valor fechado, não importa peso nem distância.",
+  PERIODO:
+    "Viagem cujo serviço é medido por período — tem viagem, com entrada e saída.",
+  DIARIA_OBRA:
+    "Dia de caminhão à disposição de uma obra (o mensal). Não tem viagem: conta o dia registrado pelo motorista.",
 };
 
 const DATA = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use uma data no formato AAAA-MM-DD.");

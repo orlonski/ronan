@@ -714,6 +714,14 @@ export type MeusDiasObra = {
   total: number;
   dias: { data: string; marcado: boolean; origem: string | null; futuro: boolean }[];
   obras: string[];
+  /**
+   * Quanto as diárias do mês valem PRA ELE.
+   *
+   * `null` é o normal: nasce desligado e é o dono quem liga, por motorista
+   * (`Motorista.podeVerValorDiaria`). Opcional no tipo porque cache gravado
+   * antes desta versão não tem o campo.
+   */
+  valor?: { total: string; unitario: string | null } | null;
 };
 
 /**

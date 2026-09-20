@@ -20,10 +20,55 @@ import {
   resumirDivergencias,
   type LadoDeles,
 } from "../common/medicao-mensal";
+import { valorDaDiariaObra, type TabelaPrecoRow } from "../common/viagem-preco";
+import { resolverRemuneracao } from "../common/acerto-motorista";
+import { Prisma } from "@prisma/client";
 
 /** "2026-09-19" → Date de meia-noite UTC, que é como coluna Date se compara. */
 function dia(ymd: string): Date {
   return new Date(`${ymd}T00:00:00.000Z`);
+}
+
+/**
+ * O que os dias registrados valem, dia a dia.
+ *
+ * Por dia, e não "dias × preço do mês", porque reajuste no meio da competência
+ * tem que valer do dia em que entrou — é assim que o preço da viagem já
+ * funciona, e divergir aqui faria a mesma tabela produzir dois resultados
+ * conforme quem pergunta.
+ *
+ * `unitario` só vem preenchido quando UM preço valeu o período inteiro. Com
+ * reajuste no meio não existe "o preço da diária", e inventar um faria a
+ * multiplicação da divergência mentir — melhor a tela não mostrar número do
+ * que mostrar um que não se sustenta na mesa.
+ */
+function valorDosDias(
+  tabelas: TabelaPrecoRow[],
+  empresaId: string,
+  dias: string[],
+): { total: string; unitario: string | null; motivo: string | null } {
+  if (dias.length === 0) return { total: "0.00", unitario: null, motivo: null };
+
+  let total = new Prisma.Decimal(0);
+  const precos = new Set<string>();
+  let motivo: string | null = null;
+
+  for (const d of dias) {
+    const r = valorDaDiariaObra({ tabelas, empresaId, data: d });
+    if (r.motivo) {
+      motivo = r.motivo;
+      continue;
+    }
+    const p = new Prisma.Decimal(r.linha.precoUnitario as Prisma.Decimal);
+    total = total.add(p);
+    precos.add(p.toFixed(2));
+  }
+
+  return {
+    total: total.toFixed(2),
+    unitario: precos.size === 1 ? [...precos][0]! : null,
+    motivo: total.isZero() ? motivo : null,
+  };
 }
 
 /** Date de coluna Date → "2026-09-19", sem passar pelo fuso do container. */
@@ -354,7 +399,7 @@ export class MensalService {
         alocacaoId: { in: alocacoes.map((a) => a.id) },
         data: { gte: primeiro, lte: ultimo },
       },
-      select: { data: true, origem: true },
+      select: { data: true, origem: true, alocacaoId: true },
       orderBy: { data: "asc" },
     });
     const marcados = new Map(registros.map((r) => [paraYmd(r.data), r.origem]));
@@ -381,7 +426,59 @@ export class MensalService {
       total: registros.length,
       dias,
       obras: [...new Set(alocacoes.map((a) => a.cliente.nome))],
+      valor: await this.valorDoMotoristaNoMes(motoristaId, alocacoes, registros),
     };
+  }
+
+  /**
+   * Quanto os dias do mês valem PRA ELE — ou `null`, que é o default.
+   *
+   * Sai desligado (`Motorista.podeVerValorDiaria` nasce false) e é o dono quem
+   * liga, por motorista. Não é pudor: misturar dinheiro na tela de conferência
+   * transforma um documento de contraprova numa tela de cobrança, e a primeira
+   * coisa que ele veria de manhã seria quanto tem a receber. Quando o combinado
+   * é claro, ligar ajuda; quando não é, atrapalha — e quem sabe qual dos dois é
+   * o caso não é o código.
+   *
+   * O valor é o DELE (a régua do acerto), nunca o que a obra paga ao
+   * contratante. São números diferentes e confundir os dois seria mostrar ao
+   * motorista a margem da transportadora.
+   */
+  private async valorDoMotoristaNoMes(
+    motoristaId: string,
+    alocacoes: { id: string; valorDiaria: Prisma.Decimal | null }[],
+    registros: { alocacaoId: string }[],
+  ): Promise<{ total: string; unitario: string | null } | null> {
+    const m = await this.prisma.motorista.findUnique({
+      where: { id: motoristaId },
+      select: {
+        podeVerValorDiaria: true,
+        tipoRemuneracao: true,
+        percentualFrete: true,
+        valorPorViagem: true,
+        valorPorTonelada: true,
+        valorPorKm: true,
+        valorDiaria: true,
+        modalidade: true,
+      },
+    });
+    if (!m?.podeVerValorDiaria) return null;
+
+    const regra = resolverRemuneracao(m, m.modalidade);
+    const porAlocacao = new Map(alocacoes.map((a) => [a.id, a.valorDiaria]));
+
+    let total = new Prisma.Decimal(0);
+    const precos = new Set<string>();
+    for (const r of registros) {
+      const v = porAlocacao.get(r.alocacaoId) ?? regra.valorDiaria;
+      if (v == null) continue;
+      const d = new Prisma.Decimal(v as Prisma.Decimal);
+      total = total.add(d);
+      precos.add(d.toFixed(2));
+    }
+    // Duas obras no mesmo mês com diárias diferentes não têm "o valor da
+    // diária" — o total continua certo, o unitário some.
+    return { total: total.toFixed(2), unitario: precos.size === 1 ? [...precos][0]! : null };
   }
 
   /** A grade do período, por alocação. É a base do espelho da Fase 2. */
@@ -446,7 +543,9 @@ export class MensalService {
       },
       orderBy: [{ ativa: "desc" }],
     });
-    if (alocacoes.length === 0) return { competencia: null, linhas: [] };
+    // `total` também no caminho vazio: sem ele a conferência devolveria
+    // `nosso: undefined` e a tela mostraria "R$ NaN" no mês sem alocação.
+    if (alocacoes.length === 0) return { competencia: null, linhas: [], total: "0.00" };
 
     // Uma consulta de config por contratante, não por alocação: 45 obras do
     // mesmo contratante não podem virar 45 idas ao banco.
@@ -455,6 +554,13 @@ export class MensalService {
       where: { empresaId: { in: empresaIds } },
     });
     const configPorEmpresa = new Map(configs.map((c) => [c.empresaId, c]));
+
+    // Os preços de diária de obra dos contratantes envolvidos, de uma vez. É
+    // o que transforma "eu conto 22 e vocês contam 20" em "faltam R$ 2.200" —
+    // a única frase que resolve a mesa do dia 20.
+    const tabelas = (await this.prisma.tabelaPreco.findMany({
+      where: { empresaId: { in: empresaIds }, base: "DIARIA_OBRA", ativo: true },
+    })) as unknown as TabelaPrecoRow[];
 
     const linhas: {
       alocacaoId: string;
@@ -465,6 +571,7 @@ export class MensalService {
       de: string;
       ate: string;
       espelho: Espelho;
+      valor: { total: string; unitario: string | null; motivo: string | null };
     }[] = [];
 
     for (const a of alocacoes) {
@@ -503,10 +610,15 @@ export class MensalService {
         de: competencia.de,
         ate: competencia.ate,
         espelho,
+        valor: valorDosDias(tabelas, a.cliente.empresaId, espelho.registrados),
       });
     }
 
-    return { competencia: competenciaRotulo, linhas };
+    const total = linhas
+      .reduce((acc, l) => acc.add(new Prisma.Decimal(l.valor.total)), new Prisma.Decimal(0))
+      .toFixed(2);
+
+    return { competencia: competenciaRotulo, linhas, total };
   }
 
   // ------------------------------------------------------------ medição ---
@@ -575,16 +687,50 @@ export class MensalService {
     // O nome de cada linha vem do espelho: a comparação é regra pura e não
     // conhece motorista nem obra, e ninguém confere uma tabela de uuid.
     const rotulos = new Map(
-      espelho.linhas.map((l) => [l.alocacaoId, { motorista: l.motorista, obra: l.obra, placa: l.placa }]),
+      espelho.linhas.map((l) => [
+        l.alocacaoId,
+        { motorista: l.motorista, obra: l.obra, placa: l.placa, valor: l.valor },
+      ]),
     );
+
+    /**
+     * Quanto vale a divergência da linha.
+     *
+     * É dias × preço, e não uma conta nova: o que se leva pra mesa é "faltam
+     * 2 diárias, R$ 2.200". `null` quando não dá pra sustentar o número — sem
+     * preço cadastrado, ou com reajuste no meio da competência (aí não existe
+     * "o preço da diária, e um valor inventado é pior que nenhum).
+     */
+    const valorDaDiferenca = (chave: string, diferencaDias: number): string | null => {
+      const u = rotulos.get(chave)?.valor.unitario;
+      if (!u || diferencaDias === 0) return null;
+      return new Prisma.Decimal(u).mul(diferencaDias).toFixed(2);
+    };
+
+    const comValor = divergencias.map((d) => ({
+      ...d,
+      ...rotulos.get(d.chave),
+      valorDiferenca: valorDaDiferenca(d.chave, d.diferenca),
+    }));
+
+    const aContestar = comValor
+      .filter((d) => d.diferenca > 0 && d.valorDiferenca)
+      .reduce((acc, d) => acc.add(new Prisma.Decimal(d.valorDiferenca!)), new Prisma.Decimal(0))
+      .toFixed(2);
 
     return {
       competencia,
       lancada: !!medicao,
       lancadaEm: medicao?.alteradoEm ?? null,
       espelho: espelho.linhas,
-      divergencias: divergencias.map((d) => ({ ...d, ...rotulos.get(d.chave) })),
-      resumo: resumirDivergencias(divergencias),
+      /** O que a transportadora registrou, em R$, no período. */
+      nosso: espelho.total,
+      divergencias: comValor,
+      resumo: {
+        ...resumirDivergencias(divergencias),
+        /** Soma do que está a menos na medição deles. É o pedido de ajuste. */
+        valorAContestar: aContestar,
+      },
     };
   }
 

@@ -15,6 +15,7 @@ import { STATUS_FORA_FECHAMENTO } from "../../common/viagem-status";
 import {
   calcularAcerto,
   resolverRemuneracao,
+  type DiariaObraParaAcerto,
   totalizarAcerto,
   type AbastecimentoParaAcerto,
   type ViagemParaAcerto,
@@ -134,7 +135,7 @@ export class AcertosService {
 
     const regra = resolverRemuneracao(motorista, motorista.modalidade);
 
-    const [viagens, abastecimentos, pedagiosAvulsos] = await Promise.all([
+    const [viagens, abastecimentos, pedagiosAvulsos, diasDeObra] = await Promise.all([
       this.prisma.viagem.findMany({
         where: {
           motoristaId: input.motoristaId,
@@ -175,6 +176,23 @@ export class AcertosService {
         select: { id: true, data: true, valor: true, pracaPedagio: true },
         orderBy: { data: "asc" },
       }),
+      // Os dias de obra (o mensal). O filtro é pela ALOCAÇÃO, não pelo
+      // registro: é a alocação que sabe de quem é o motorista e qual a obra —
+      // e é dela que sai o valor combinado quando ele difere da régua.
+      this.prisma.registroPresenca.findMany({
+        where: {
+          data: { gte: inicio, lte: fim },
+          alocacao: { motoristaId: input.motoristaId },
+        },
+        select: {
+          id: true,
+          data: true,
+          alocacao: {
+            select: { valorDiaria: true, cliente: { select: { nome: true } } },
+          },
+        },
+        orderBy: { data: "asc" },
+      }),
     ]);
 
     const viagensParaAcerto: ViagemParaAcerto[] = viagens
@@ -203,9 +221,17 @@ export class AcertosService {
       emComboio: a.emComboio,
     }));
 
+    const diariasObra: DiariaObraParaAcerto[] = diasDeObra.map((d) => ({
+      registroId: d.id,
+      data: d.data,
+      obraNome: d.alocacao.cliente.nome,
+      valorDiaria: d.alocacao.valorDiaria,
+    }));
+
     const calculado = calcularAcerto({
       viagens: viagensParaAcerto,
       abastecimentos: abastecimentosParaAcerto,
+      diariasObra,
       pedagiosAvulsos: pedagiosAvulsos.map((p) => ({
         id: p.id,
         data: p.data,
@@ -240,6 +266,7 @@ export class AcertosService {
             viagemId: i.viagemId ?? null,
             pedagioId: i.pedagioId ?? null,
             abastecimentoId: i.abastecimentoId ?? null,
+            registroPresencaId: i.registroPresencaId ?? null,
             descricao: i.descricao,
             valor: i.valor,
             automatico: true,

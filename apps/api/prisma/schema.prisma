@@ -2363,34 +2363,40 @@ model AcertoMotorista {
  * preenchida.
  */
 model ItemAcerto {
-  contaId         String          @default("__SEM_CONTA__")
-  conta           Conta           @relation(fields: [contaId], references: [id])
-  id              String          @id @default(uuid())
-  acerto          AcertoMotorista @relation(fields: [acertoId], references: [id], onDelete: Cascade)
-  acertoId        String
-  tipo            TipoItemAcerto
-  viagem          Viagem?         @relation(fields: [viagemId], references: [id], onDelete: SetNull)
-  viagemId        String?
-  pedagio         Pedagio?        @relation(fields: [pedagioId], references: [id], onDelete: SetNull)
-  pedagioId       String?
-  abastecimento   Abastecimento?  @relation(fields: [abastecimentoId], references: [id], onDelete: SetNull)
-  abastecimentoId String?
+  contaId            String            @default("__SEM_CONTA__")
+  conta              Conta             @relation(fields: [contaId], references: [id])
+  id                 String            @id @default(uuid())
+  acerto             AcertoMotorista   @relation(fields: [acertoId], references: [id], onDelete: Cascade)
+  acertoId           String
+  tipo               TipoItemAcerto
+  viagem             Viagem?           @relation(fields: [viagemId], references: [id], onDelete: SetNull)
+  viagemId           String?
+  pedagio            Pedagio?          @relation(fields: [pedagioId], references: [id], onDelete: SetNull)
+  pedagioId          String?
+  abastecimento      Abastecimento?    @relation(fields: [abastecimentoId], references: [id], onDelete: SetNull)
+  abastecimentoId    String?
+  /// O DIA de obra que gerou esta linha (o mensal). Aponta pro registro pelo
+  /// mesmo motivo do `viagemId`: sem o vínculo, regerar o acerto não sabe o
+  /// que já pagou, e o motorista não consegue dizer a que dia a linha se refere.
+  registroPresenca   RegistroPresenca? @relation(fields: [registroPresencaId], references: [id], onDelete: SetNull)
+  registroPresencaId String?
   /// O que o motorista lê na linha. Snapshot: sobrevive à viagem ser editada.
-  descricao       String
+  descricao          String
   /// Um sinal só, positivo credita e negativo desconta — assim a soma do extrato
   /// não depende de lembrar o sinal de cada tipo.
-  valor           Decimal         @db.Decimal(12, 2)
+  valor              Decimal           @db.Decimal(12, 2)
   /// Obrigatório em desconto lançado à mão. Tirar dinheiro de parceiro autônomo
   /// sem justificativa escrita é a mesma doutrina do km: não pode.
-  motivo          String?
+  motivo             String?
   /// True = a regra gerou. False = alguém digitou. O regerar só mexe no automático.
-  automatico      Boolean         @default(true)
-  criadoPor       User?           @relation("CriouItemAcerto", fields: [criadoPorId], references: [id], onDelete: SetNull)
-  criadoPorId     String?
-  criadoEm        DateTime        @default(now())
+  automatico         Boolean           @default(true)
+  criadoPor          User?             @relation("CriouItemAcerto", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  criadoPorId        String?
+  criadoEm           DateTime          @default(now())
 
   @@index([acertoId])
   @@index([viagemId])
+  @@index([registroPresencaId])
   @@index([contaId])
   @@map("itens_acerto")
 }
@@ -2464,6 +2470,18 @@ enum BasePreco {
   VIAGEM
   /// R$ por diária/período. Única base válida pra TipoServico.medicao = PERIODO.
   PERIODO
+  /// R$ por dia de caminhão à disposição de uma OBRA (o mensal).
+  ///
+  /// Parece `PERIODO` e NÃO é: aquela precifica uma VIAGEM cujo serviço é
+  /// medido por período (tem viagem, tem entrada e saída); esta precifica um
+  /// DIA de `RegistroPresenca`, onde não existe viagem nenhuma. Separar não é
+  /// preciosismo — uma empresa pode ter as duas coisas, com valores
+  /// diferentes, e uma base só faria o preço da diária de obra ser cobrado da
+  /// viagem à disposição (ou o contrário) sem ninguém ver.
+  ///
+  /// Nunca casa com viagem: `calcularValorViagem` recusa, e a resolução de
+  /// linha exclui esta base por padrão.
+  DIARIA_OBRA
 }
 
 /**
@@ -6219,6 +6237,9 @@ model RegistroPresenca {
   clientId String?
 
   criadoEm DateTime @default(now())
+
+  /// As linhas de acerto que este dia gerou (normalmente uma).
+  itensAcerto ItemAcerto[]
 
   /// Um dia, um registro. É esta linha que faz o segundo toque devolver a
   /// mesma tela verde em vez de criar duplicata.

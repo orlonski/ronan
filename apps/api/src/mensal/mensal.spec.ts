@@ -279,8 +279,15 @@ describe("o motorista desfaz o próprio toque", () => {
 
 describe("os dias do mês do motorista", () => {
   function comAlocacoes(
-    alocacoes: { id: string; inicio: string; fim: string | null; obra: string }[],
-    registros: { data: string; origem: string }[],
+    alocacoes: {
+      id: string;
+      inicio: string;
+      fim: string | null;
+      obra: string;
+      valorDiaria?: number;
+    }[],
+    registros: { data: string; origem: string; alocacaoId?: string }[],
+    motorista: { podeVerValorDiaria?: boolean; valorDiaria?: number } = {},
   ) {
     const prisma = {
       alocacaoObra: {
@@ -289,12 +296,29 @@ describe("os dias do mês do motorista", () => {
             id: a.id,
             inicio: new Date(`${a.inicio}T00:00:00.000Z`),
             fim: a.fim ? new Date(`${a.fim}T00:00:00.000Z`) : null,
+            valorDiaria: a.valorDiaria ?? null,
             cliente: { nome: a.obra },
           })),
       },
       registroPresenca: {
         findMany: async () =>
-          registros.map((r) => ({ data: new Date(`${r.data}T00:00:00.000Z`), origem: r.origem })),
+          registros.map((r) => ({
+            data: new Date(`${r.data}T00:00:00.000Z`),
+            origem: r.origem,
+            alocacaoId: r.alocacaoId ?? alocacoes[0]?.id,
+          })),
+      },
+      motorista: {
+        findUnique: async () => ({
+          podeVerValorDiaria: motorista.podeVerValorDiaria ?? false,
+          tipoRemuneracao: null,
+          percentualFrete: null,
+          valorPorViagem: null,
+          valorPorTonelada: null,
+          valorPorKm: null,
+          valorDiaria: motorista.valorDiaria ?? null,
+          modalidade: null,
+        }),
       },
     };
     return new MensalService(prisma as never);
@@ -332,15 +356,55 @@ describe("os dias do mês do motorista", () => {
     expect(r.dias.every((d) => d.futuro)).toBe(true);
   });
 
-  it("não devolve valor em dinheiro nenhum", async () => {
-    // Dinheiro é conversa do acerto. Misturar transformaria uma tela de
-    // conferência numa tela de cobrança.
+  it("não devolve dinheiro nenhum quando o dono não liberou", async () => {
+    // O default é não mostrar: ligado sem combinado claro, a tela de
+    // conferência vira tela de cobrança.
     const s = comAlocacoes(
       [{ id: "a1", inicio: "2026-09-01", fim: null, obra: "Obra" }],
       [{ data: "2026-09-02", origem: "APP" }],
+      { valorDiaria: 250 },
     );
     const r = await s.meusDias("mot1", "2026-09");
-    expect(JSON.stringify(r)).not.toMatch(/valor|diaria|reais|centavos/i);
+    expect(r.valor).toBeNull();
+  });
+
+  it("com a flag ligada, soma o que os dias valem PRA ELE", async () => {
+    const s = comAlocacoes(
+      [{ id: "a1", inicio: "2026-09-01", fim: null, obra: "Obra" }],
+      [
+        { data: "2026-09-02", origem: "APP" },
+        { data: "2026-09-03", origem: "APP" },
+      ],
+      { podeVerValorDiaria: true, valorDiaria: 250 },
+    );
+    const r = await s.meusDias("mot1", "2026-09");
+    expect(r.valor).toEqual({ total: "500.00", unitario: "250.00" });
+  });
+
+  it("a diária DA ALOCAÇÃO vence a régua do motorista", async () => {
+    const s = comAlocacoes(
+      [{ id: "a1", inicio: "2026-09-01", fim: null, obra: "Obra", valorDiaria: 300 }],
+      [{ data: "2026-09-02", origem: "APP", alocacaoId: "a1" }],
+      { podeVerValorDiaria: true, valorDiaria: 250 },
+    );
+    const r = await s.meusDias("mot1", "2026-09");
+    expect(r.valor?.total).toBe("300.00");
+  });
+
+  it("duas obras com diárias diferentes somam certo e não fingem um unitário", async () => {
+    const s = comAlocacoes(
+      [
+        { id: "a1", inicio: "2026-09-01", fim: "2026-09-10", obra: "Norte", valorDiaria: 300 },
+        { id: "a2", inicio: "2026-09-11", fim: null, obra: "Sul", valorDiaria: 400 },
+      ],
+      [
+        { data: "2026-09-02", origem: "APP", alocacaoId: "a1" },
+        { data: "2026-09-12", origem: "APP", alocacaoId: "a2" },
+      ],
+      { podeVerValorDiaria: true },
+    );
+    const r = await s.meusDias("mot1", "2026-09");
+    expect(r.valor).toEqual({ total: "700.00", unitario: null });
   });
 });
 

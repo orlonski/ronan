@@ -64,10 +64,19 @@ export function resolverRemuneracao(
     valorPorViagem: fonte?.valorPorViagem ?? null,
     valorPorTonelada: fonte?.valorPorTonelada ?? null,
     valorPorKm: fonte?.valorPorKm ?? null,
-    // A diária é independente do tipo: um agregado pago por percentual também
-    // faz diária. Por isso ela cai pra modalidade mesmo quando o motorista tem
-    // régua própria, se ele não declarou uma.
-    valorDiaria: fonte?.valorDiaria ?? modalidade?.valorDiaria ?? null,
+    // A diária é independente do tipo, e é a ÚNICA coisa aqui que é.
+    //
+    // Um agregado pago por percentual também fica à disposição de obra, então
+    // ela não segue o "tudo-ou-nada" das outras: vale a do motorista se ele
+    // tem uma, senão a da modalidade — mesmo que ele não tenha declarado
+    // `tipoRemuneracao` próprio.
+    //
+    // ⚠️ Antes ela só era lida através de `fonte`, e isso escondia um degrau
+    // inteiro da escada: motorista com `valorDiaria` combinado mas sem régua
+    // própria recebia a diária da MODALIDADE, ignorando o valor cadastrado
+    // nele. A escada documentada em `AlocacaoObra.valorDiaria` é
+    // modalidade → motorista → alocação, e agora é o que acontece.
+    valorDiaria: motorista?.valorDiaria ?? fonte?.valorDiaria ?? modalidade?.valorDiaria ?? null,
     // Reembolso é política da empresa, não do acordo individual: mora só na
     // modalidade. Ausente = devolve (o combinado em 99% dos casos).
     reembolsaPedagio: modalidade?.reembolsaPedagio ?? true,
@@ -91,6 +100,29 @@ export type ViagemParaAcerto = {
   pedagios: { id: string; valor: DecimalLike; praca?: string | null }[];
 };
 
+/**
+ * Um DIA de obra que o motorista registrou, indo pro acerto dele.
+ *
+ * Existia um buraco aqui que custava o mês inteiro: o mensal registrava os
+ * dias, conferia com o contratante — e o acerto do motorista não sabia que
+ * `RegistroPresenca` existia. Vinte e dois dias na obra e o extrato dele saía
+ * zerado; o dono pagava por fora, de cabeça, que é exatamente o que o produto
+ * foi feito pra acabar.
+ */
+export type DiariaObraParaAcerto = {
+  registroId: string;
+  data: Date;
+  obraNome: string;
+  /**
+   * O valor combinado NESTA alocação, quando difere da régua.
+   *
+   * Terceiro degrau da escada (modalidade → motorista → alocação): o mesmo
+   * motorista em duas obras no mesmo mês tem duas diárias diferentes, e sem
+   * isto uma das duas sai errada. Null = usa a régua.
+   */
+  valorDiaria: DecimalLike;
+};
+
 export type AbastecimentoParaAcerto = {
   id: string;
   data: Date;
@@ -109,6 +141,7 @@ export type ItemCalculado = {
   viagemId?: string;
   pedagioId?: string;
   abastecimentoId?: string;
+  registroPresencaId?: string;
   descricao: string;
   valor: string;
 };
@@ -138,6 +171,11 @@ export function pedagioDaViagem(v: ViagemParaAcerto): {
   if (naViagem.gt(0)) return { valor: naViagem, pedagioIds: [] };
   const soma = v.pedagios.reduce((acc, p) => acc.add(dec(p.valor)), new Prisma.Decimal(0));
   return { valor: soma, pedagioIds: v.pedagios.map((p) => p.id) };
+}
+
+/** O DIA de um instante, em UTC — as colunas envolvidas são `@db.Date`. */
+function diaChave(d: Date): string {
+  return d.toISOString().slice(0, 10);
 }
 
 function fmtData(d: Date): string {
@@ -203,16 +241,21 @@ export function calcularAcerto(args: {
   abastecimentos: AbastecimentoParaAcerto[];
   /** Pedágios do período SEM viagem vinculada (pagou e não amarrou a nada). */
   pedagiosAvulsos: { id: string; data: Date; valor: DecimalLike; praca?: string | null }[];
+  /** Dias de obra do período (o mensal). Ausente = conta sem mensal. */
+  diariasObra?: DiariaObraParaAcerto[];
   regra: RegraRemuneracao;
 }): AcertoCalculado {
   const itens: ItemCalculado[] = [];
   const semRemuneracao: { viagemId: string; motivo: string }[] = [];
+  /** Dias que já geraram diária por VIAGEM — ver o porquê lá embaixo. */
+  const diasComDiariaDeViagem = new Set<string>();
 
   for (const v of args.viagens) {
     const r = remuneracaoDaViagem(v, args.regra);
     if ("valor" in r) {
       if (r.valor.gt(0)) {
         const ref = v.ticket ? `ticket ${v.ticket}` : (v.clienteNome ?? "viagem");
+        if (v.ehDiaria) diasComDiariaDeViagem.add(diaChave(v.data));
         itens.push({
           tipo: v.ehDiaria ? "DIARIA" : "FRETE",
           viagemId: v.id,
@@ -239,6 +282,29 @@ export function calcularAcerto(args: {
         });
       }
     }
+  }
+
+  /**
+   * As diárias de obra.
+   *
+   * ⚠️ PULA O DIA QUE JÁ TEM DIÁRIA DE VIAGEM. As duas coisas medem o mesmo
+   * fato — o caminhão ficou o dia à disposição — por dois caminhos diferentes
+   * (uma viagem com serviço medido por período, e o registro do motorista na
+   * obra). Somar as duas paga o dia em dobro, e é a MESMA armadilha do pedágio
+   * em dobro logo acima: duas fontes independentes que ninguém escreve a
+   * partir da outra, e o erro só aparece no bolso de um motorista específico.
+   * Na dúvida vale a viagem, que é a que tem ticket e cliente pra apontar.
+   */
+  for (const d of args.diariasObra ?? []) {
+    if (diasComDiariaDeViagem.has(diaChave(d.data))) continue;
+    const valor = dec(d.valorDiaria ?? args.regra.valorDiaria);
+    if (valor.lte(0)) continue;
+    itens.push({
+      tipo: "DIARIA",
+      registroPresencaId: d.registroId,
+      descricao: `Diária de obra ${fmtData(d.data)} · ${d.obraNome}`,
+      valor: valor.toFixed(2),
+    });
   }
 
   if (args.regra.reembolsaPedagio) {

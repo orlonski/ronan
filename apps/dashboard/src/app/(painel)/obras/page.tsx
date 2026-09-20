@@ -22,6 +22,7 @@ import { EstadoVazio } from "@/components/estado-vazio";
 import { Combobox } from "@/components/ui/combobox";
 import { fetchApi, useAuthToken, useResourceOptions } from "@/lib/client-api";
 import { hojeSP } from "@/lib/datetime-br";
+import { formatarBRL } from "@/lib/numero";
 import { usePermissoes } from "@/lib/permissoes";
 
 type Alocacao = {
@@ -57,6 +58,8 @@ type LinhaEspelho = {
     diasNoContrato: number;
     diasMarcadosPeloMotorista: number;
   };
+  /** O que os dias registrados valem. `unitario` some se houve reajuste no meio. */
+  valor: { total: string; unitario: string | null; motivo: string | null };
 };
 
 const PATH = "/admin/mensal";
@@ -130,7 +133,7 @@ function Conteudo() {
     queryKey: [PATH, "espelho", mes],
     enabled: !!token && temPermissao("espelhos.ver"),
     queryFn: () =>
-      fetchApi<{ competencia: string | null; linhas: LinhaEspelho[] }>(
+      fetchApi<{ competencia: string | null; linhas: LinhaEspelho[]; total: string }>(
         `${PATH}/espelho?competencia=${mes}`,
         { token },
       ),
@@ -280,6 +283,7 @@ function Conteudo() {
                   <th className="p-2 text-right">No contrato</th>
                   <th className="p-2 text-right">Em branco</th>
                   <th className="p-2 text-right">Fora do calendário</th>
+                  <th className="p-2 text-right">Valor</th>
                 </tr>
               </thead>
               <tbody>
@@ -333,9 +337,43 @@ function Conteudo() {
                         "—"
                       )}
                     </td>
+                    {/* O dinheiro. Sem esta coluna a conversa do dia 20 é
+                        "eu tenho 22 e vocês têm 20" — contar sem valorar deixa
+                        a transportadora sem a única frase que resolve a mesa. */}
+                    <td className="p-2 text-right">
+                      {l.valor.motivo ? (
+                        <span
+                          className="text-xs text-muted-foreground"
+                          title="Cadastre um preço com base 'Por diária de obra' para esta empresa."
+                        >
+                          sem preço
+                        </span>
+                      ) : (
+                        <>
+                          <span className="font-semibold">{formatarBRL(Number(l.valor.total))}</span>
+                          <span className="block text-xs text-muted-foreground">
+                            {l.valor.unitario
+                              ? `${formatarBRL(Number(l.valor.unitario))} / dia`
+                              : "preço mudou no período"}
+                          </span>
+                        </>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
+              {espelho.data?.total && espelho.data.total !== "0.00" ? (
+                <tfoot>
+                  <tr className="border-t-2">
+                    <td className="p-2 font-medium" colSpan={6}>
+                      Total da competência
+                    </td>
+                    <td className="p-2 text-right font-semibold">
+                      {formatarBRL(Number(espelho.data.total))}
+                    </td>
+                  </tr>
+                </tfoot>
+              ) : null}
             </table>
           </div>
 
@@ -703,6 +741,8 @@ type LinhaDivergencia = {
   diferenca: number;
   semContraparte: "NOSSO" | "DELES" | null;
   bate: boolean;
+  /** Quanto a diferença vale. Null quando não há preço que sustente o número. */
+  valorDiferenca: string | null;
 };
 
 type Conferencia = {
@@ -710,6 +750,8 @@ type Conferencia = {
   lancada: boolean;
   lancadaEm: string | null;
   espelho: { alocacaoId: string; motorista: string; obra: string; placa: string }[];
+  /** O que registramos no período, em R$. */
+  nosso: string;
   divergencias: LinhaDivergencia[];
   resumo: {
     linhas: number;
@@ -718,6 +760,8 @@ type Conferencia = {
     diasAMais: number;
     aContestar: number;
     semContraparte: number;
+    /** Soma do que está a menos na medição deles. É o pedido de ajuste. */
+    valorAContestar: string;
   };
 };
 
@@ -824,6 +868,11 @@ function ConferirMedicao({ mes }: { mes: string }) {
                 <span className="text-amber-700 dark:text-amber-400">
                   <strong>{d.resumo.diasAMenos}</strong> dia(s) que registramos e eles não
                   contaram
+                  {/* O número que resolve a mesa. "Faltam 2 diárias" vira
+                      "faltam R$ 2.200", que é o que se pede por escrito. */}
+                  {Number(d.resumo.valorAContestar) > 0 && (
+                    <strong> · {formatarBRL(Number(d.resumo.valorAContestar))}</strong>
+                  )}
                 </span>
               )}
               {d.resumo.diasAMais > 0 && (
@@ -847,6 +896,7 @@ function ConferirMedicao({ mes }: { mes: string }) {
                   <th className="p-2 text-right">Nosso registro</th>
                   <th className="p-2 text-right">A medição diz</th>
                   <th className="p-2 text-right">Diferença</th>
+                  <th className="p-2 text-right">Em R$</th>
                 </tr>
               </thead>
               <tbody>
@@ -887,6 +937,21 @@ function ConferirMedicao({ mes }: { mes: string }) {
                         ) : (
                           <span className="font-semibold text-sky-700 dark:text-sky-400">
                             {-dif} só deles
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-2 text-right">
+                        {!d.lancada || !div?.valorDiferenca ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          <span
+                            className={
+                              dif > 0
+                                ? "font-semibold text-amber-700 dark:text-amber-400"
+                                : "font-semibold text-sky-700 dark:text-sky-400"
+                            }
+                          >
+                            {formatarBRL(Math.abs(Number(div.valorDiferenca)))}
                           </span>
                         )}
                       </td>

@@ -57,6 +57,7 @@ export type Motorista = {
   podeLancarAbastecimento: boolean;
   podeUsarOcrTicket: boolean;
   podeVerStories: boolean;
+  podeVerValorDiaria: boolean;
   podeVerTodosLocais: boolean;
   podeReferenciaKm: boolean;
   podeTelemetria: boolean;
@@ -137,6 +138,7 @@ type AcessosState = {
   podeLancarAbastecimento: boolean;
   podeUsarOcrTicket: boolean;
   podeVerStories: boolean;
+  podeVerValorDiaria: boolean;
   podeVerTodosLocais: boolean;
   podeReferenciaKm: boolean;
   podeTelemetria: boolean;
@@ -158,6 +160,8 @@ export function MotoristaForm({ initial }: Props) {
     podeLancarAbastecimento: initial?.podeLancarAbastecimento ?? true,
     podeUsarOcrTicket: initial?.podeUsarOcrTicket ?? true,
     podeVerStories: initial?.podeVerStories ?? true,
+    // Nasce desligada: é o dono que decide mostrar dinheiro pro motorista.
+    podeVerValorDiaria: initial?.podeVerValorDiaria ?? false,
     podeVerTodosLocais: initial?.podeVerTodosLocais ?? false,
     podeReferenciaKm: initial?.podeReferenciaKm ?? false,
     podeTelemetria: initial?.podeTelemetria ?? false,
@@ -749,6 +753,11 @@ export function MotoristaForm({ initial }: Props) {
                 label="Escolher o modo de serviço no lançamento (diária). Desligue só pra quem não pode lançar diária — quando a empresa tem um modo só, o campo nem aparece pro motorista."
                 active={acessos.podeDiaria}
                 onChange={(v) => alterarAcesso("podeDiaria", v)}
+              />
+              <AcessoRow
+                label="Ver em R$ quanto as diárias de obra do mês valem pra ele (tela Minhas diárias). Ligue só quando o combinado com ele for claro — o valor mostrado é o dele, nunca o que a obra paga."
+                active={acessos.podeVerValorDiaria}
+                onChange={(v) => alterarAcesso("podeVerValorDiaria", v)}
               />
             </div>
 
