@@ -1,21 +1,26 @@
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import { CalendarDays, Check, CloudOff, MapPin, TriangleAlert } from "lucide-react-native";
-import { SeletorEmpresa } from "@/components/seletor-empresa";
 import { usePendingPresencaObra } from "@/hooks/use-pending-presenca-obra";
-import { useMe, useObraDeHoje } from "@/lib/queries";
+import { useObraDeHoje } from "@/lib/queries";
 import { desfazerPresencaObra, enqueuePresencaObra } from "@/lib/sync";
 
 /**
- * A tela de quem está numa obra: um botão, e o que aconteceu com ele.
+ * O bloco de quem está numa obra: um botão, e o que aconteceu com ele.
  *
- * Quando há obra hoje, este componente OCUPA a home — a home da empresa
- * empilha catorze blocos e um botão a mais ali é um botão invisível. O público
- * deste fluxo tem pouquíssima familiaridade com tecnologia e, muitas vezes,
- * dificuldade de leitura.
+ * Vai no TOPO da home, antes de tudo. O público deste fluxo tem pouquíssima
+ * familiaridade com tecnologia e, muitas vezes, dificuldade de leitura — então
+ * a primeira coisa da tela tem que ser a única que ele precisa fazer hoje.
+ *
+ * ⚠️ ELE JÁ SUBSTITUIU A HOME INTEIRA, E ISSO ESTAVA ERRADO. O argumento era
+ * que um botão entre catorze blocos seria invisível — mas isso vale pra mais
+ * um item na pilha, não pro PRIMEIRO elemento da tela. Substituir cobrou caro:
+ * o motorista perdeu de uma vez o acesso a Pendentes (cujo único caminho no
+ * app é um botão daquela home), a viagens, ao resumo e ao resto, e o app
+ * mudava de forma conforme o dado — o que ninguém entende. Prominência se
+ * ganha com tamanho e posição, não amputando o resto.
  *
  * ⚠️ A PRIMEIRA VERSÃO ERROU, e o erro vale ficar escrito. Eu segui "zero
  * leitura" ao pé da letra e entreguei um nome de obra, um botão escrito
@@ -41,10 +46,9 @@ const ALTURA_BOTAO = 220;
 /** Janela pra desfazer. Curta porque arrependimento acontece em segundos. */
 const MINUTOS_PRA_DESFAZER = 10;
 
-export function HomeObra() {
+export function BlocoObra() {
   const router = useRouter();
   const { data } = useObraDeHoje();
-  const me = useMe();
   const [tocadoEm, setTocadoEm] = useState<number | null>(null);
   const [desfeito, setDesfeito] = useState(false);
   const [desfazendo, setDesfazendo] = useState(false);
@@ -126,23 +130,15 @@ export function HomeObra() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
-      {/* Mesmo cabeçalho das outras telas. Sem isto a tela parecia quebrada —
-          o app inteiro tem a faixa da marca no topo, e só esta não tinha. */}
-      <View className="bg-brand px-5 pb-6 pt-14">
-        <SeletorEmpresa />
-        {me.data && (
-          <Text className="mt-0.5 text-2xl font-bold text-white">{me.data.nome}</Text>
-        )}
-        <Text className="mt-1 text-lg font-semibold text-white/90" numberOfLines={1}>
+    <View className="gap-3 rounded-2xl border-2 border-[#DF7234]/40 bg-card p-4">
+      <View>
+        <Text className="text-xl font-bold text-foreground" numberOfLines={1}>
           {data.alocacao.obra}
         </Text>
-        <Text className="text-base text-white/70" style={{ fontVariant: ["tabular-nums"] }}>
-          Placa {data.alocacao.placa}
+        <Text className="text-base text-muted-foreground">
+          Você está nesta obra · {data.alocacao.placa}
         </Text>
       </View>
-
-      <ScrollView contentContainerClassName="p-4 gap-4">
         {registradoHoje ? (
           <>
             <View
@@ -274,10 +270,9 @@ export function HomeObra() {
           </View>
         )}
 
-        <Text className="pb-4 text-center text-base text-muted-foreground">
-          Funciona sem internet. O que você marcar sobe sozinho quando o sinal voltar.
-        </Text>
-      </ScrollView>
-    </SafeAreaView>
+      <Text className="text-center text-sm text-muted-foreground">
+        Funciona sem internet. O que você marcar sobe sozinho quando o sinal voltar.
+      </Text>
+    </View>
   );
 }

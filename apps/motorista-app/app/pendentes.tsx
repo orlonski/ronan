@@ -263,7 +263,13 @@ export default function Pendentes() {
             rows.length > 0 ||
             lifecycleTrips.length > 0 ||
             completarPeso.length > 0 ||
-            encerrarDiaria.length > 0 ? (
+            encerrarDiaria.length > 0 ||
+            // Faltava aqui, e só aqui: o tipo estava na lista e na condição de
+            // "tudo sincronizado", mas não na que decide MOSTRAR o bloco. Com
+            // só uma presença pendente a tela abria vazia, enquanto a home
+            // dizia "1 dia esperando enviar". É a armadilha que o CLAUDE.md
+            // descreve, e integrar um tipo novo pela metade é como se cai nela.
+            presencaObra.length > 0 ? (
               <View className="mb-2 gap-3">
                 <Text className="text-sm text-muted-foreground">
                   Lançamentos aguardando envio. Toque em &quot;Sincronizar&quot; pra tentar
