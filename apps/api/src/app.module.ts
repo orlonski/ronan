@@ -33,6 +33,7 @@ import { MarketingModule } from "./marketing/marketing.module";
 import { TermosModule } from "./termos/termos.module";
 import { AssinaturasModule } from "./assinaturas/assinaturas.module";
 import { MensalModule } from "./mensal/mensal.module";
+import { PontoModule } from "./ponto/ponto.module";
 import { AdmissaoModule } from "./admissao/admissao.module";
 import { AppVersionInterceptor } from "./common/app-version.interceptor";
 import { ContaMiddleware } from "./common/conta/conta.middleware";
@@ -72,6 +73,7 @@ import { PrismaExceptionFilter } from "./common/prisma-exception.filter";
     AssinaturasModule,
     TermosModule,
     MensalModule,
+    PontoModule,
     AdmissaoModule,
   ],
   providers: [

@@ -600,6 +600,23 @@ model Conta {
   medicoesContratante  MedicaoContratante[]
   assinaturaDocumentos AssinaturaDocumento[]
 
+  // --- Ponto eletrônico (funcionário CLT). Módulo à parte do mensal. ---
+  regimesVigentes  RegimeVigente[]
+  funcionarios     Funcionario[]
+  marcacoes        Marcacao[]
+  marcacaoLocais   MarcacaoLocalizacao[]
+  pontoSequencia   PontoSequencia?
+  correcoesPonto   CorrecaoPonto[]
+  motivosCorrecao  MotivoCorrecaoPonto[]
+  modelosJornada   ModeloJornada[]
+  jornadaDias      JornadaDiaModelo[]
+  vinculosJornada  VinculoJornada[]
+  feriadosPonto    FeriadoPonto[]
+  configPonto      ConfigPonto?
+  fechamentosPonto FechamentoPonto[]
+  apuracoesPonto   ApuracaoDiaPonto[]
+  cienciasEspelho  CienciaEspelho[]
+
   @@index([ativa])
   @@map("contas")
 }
@@ -1055,6 +1072,7 @@ model MotoristaIdentidade {
   comprovantes     ComprovantePessoal[]
   documentos       DocumentoPessoal[]
   redefinicaoSenha RedefinicaoSenhaPendente?
+  funcionarios     Funcionario[]
 
   @@index([ativo])
   @@map("motorista_identidades")
@@ -6517,4 +6535,578 @@ model MedicaoContratante {
   @@unique([empresaId, competencia])
   @@index([contaId, competencia])
   @@map("medicoes_contratante")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PONTO ELETRÔNICO — controle de jornada de FUNCIONÁRIO REGISTRADO.
+//
+// ⚠️ Módulo à parte do "mensal" (obra e diária) por decisão jurídica, não por
+// arrumação de pastas. Lá o motorista é PARCEIRO AUTÔNOMO pago por diária, e o
+// léxico de vínculo é proibido — tem teste varrendo `src/mensal/` atrás de
+// "ponto", "jornada", "falta" e "atraso". Aqui é EMPREGADO, e jornada é o
+// assunto. Somar as duas coisas na mesma pessoa desenharia os elementos de
+// vínculo dentro do produto, e a conta cairia na transportadora.
+//
+// A separação não é documental: `RegimeVigente` impede, no banco, a mesma
+// pessoa estar nos dois lados. E nenhuma tabela `ponto_*` tem FK pra
+// `Motorista`, `AlocacaoObra`, `RegistroPresenca` ou `ItemAcerto` — é a
+// ausência dessas arestas que impede o grafo de ligar os dois módulos.
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum RegimeTrabalho {
+  /// Parceiro autônomo: mensal, obra e diária. Não bate ponto.
+  PARCEIRO
+  /// Empregado registrado: bate ponto. Não entra em alocação de obra.
+  EMPREGADO
+}
+
+/// A mesma pessoa, na mesma empresa, não pode estar nos dois regimes.
+///
+/// Chaveada por CPF porque é o que o token do app carrega e é a chave que o
+/// perito usa. Unique não cruza tabelas, então a exclusão mútua precisa de uma
+/// linha só — e ela mora em `common/`, com vocabulário neutro, pra passar nos
+/// filtros de léxico dos dois módulos.
+model RegimeVigente {
+  id      String @id @default(uuid())
+  contaId String @default("__SEM_CONTA__")
+  conta   Conta  @relation(fields: [contaId], references: [id])
+
+  /// 11 dígitos, só números.
+  cpf    String
+  regime RegimeTrabalho
+
+  iniciouEm   DateTime  @db.Date
+  encerradoEm DateTime?
+  motivo      String?
+  criadoPorId String?
+
+  /// Vale o `cpf` enquanto vigente, NULL quando encerrado.
+  ///
+  /// Molde literal de `AlocacaoObra.vigenteDe`: no Postgres dois NULLs não
+  /// colidem, então o banco garante UM regime vivo por pessoa sem proibir
+  /// histórico. `@@unique([contaId, cpf])` proibiria o histórico junto.
+  chaveViva String?
+
+  criadoEm   DateTime @default(now())
+  alteradoEm DateTime @updatedAt
+
+  @@unique([contaId, chaveViva], map: "um_regime_vigente_por_cpf")
+  @@index([contaId, cpf])
+  @@map("regimes_vigentes")
+}
+
+/// Quem bate ponto. NUNCA referencia `Motorista` (que é o vínculo de parceiro).
+model Funcionario {
+  id      String @id @default(uuid())
+  contaId String @default("__SEM_CONTA__")
+  conta   Conta  @relation(fields: [contaId], references: [id])
+
+  /// A PESSOA na plataforma, quando ela usa o app. É `MotoristaIdentidade`
+  /// (a pessoa), nunca `Motorista` (o vínculo de parceiro). A resolução no
+  /// `/m/ponto/*` é por (contaId, cpf), não por esta FK.
+  identidadeId String?
+  identidade   MotoristaIdentidade? @relation(fields: [identidadeId], references: [id])
+
+  nome      String
+  /// 11 dígitos, só números.
+  cpf       String
+  pis       String?
+  matricula String?
+  cargo     String?
+
+  /// Onde ele trabalha, pra resolver feriado estadual e municipal sem precisar
+  /// de uma tabela de locais.
+  uf            String? @db.Char(2)
+  municipioIbge String? @db.Char(7)
+
+  admitidoEm         DateTime  @db.Date
+  desligadoEm        DateTime? @db.Date
+  desligamentoMotivo String?
+  ativo              Boolean   @default(true)
+
+  criadoEm    DateTime @default(now())
+  alteradoEm  DateTime @updatedAt
+  criadoPorId String?
+
+  jornadas  VinculoJornada[]
+  marcacoes Marcacao[]
+  correcoes CorrecaoPonto[]
+  ciencias  CienciaEspelho[]
+
+  @@unique([contaId, cpf])
+  @@index([contaId, ativo])
+  @@index([contaId, identidadeId])
+  @@map("ponto_funcionarios")
+}
+
+/// De onde veio o REGISTRO. Nunca de onde veio uma correção — correção é
+/// `CorrecaoPonto`, tabela separada.
+enum OrigemMarcacao {
+  APP
+  /// Acervo de sistema anterior, importado uma vez. Nasce no enum pra não
+  /// precisar de migration numa tabela protegida por trigger.
+  IMPORTACAO
+}
+
+/// O REGISTRO ORIGINAL. Não muda, não é apagado, por ninguém.
+///
+/// ⚠️ NÃO tem `alteradoEm`, não tem `excluidoEm`, não tem `tipo` e não tem
+/// coordenada — cada um desses campos, se existisse, seria um convite. Tipo de
+/// marcação é TRATAMENTO (art. 82, IV da Portaria 671): guardar o tipo aqui
+/// obrigaria a corrigir o original quando alguém errasse o botão, que é
+/// exatamente o que a lei proíbe.
+///
+/// ⚠️ Tem TRIGGER de append-only no banco. Consequência que não pode ser
+/// esquecida numa refatoração: NADA de `upsert`, `updateMany` ou `deleteMany`
+/// perto desta tabela. A idempotência do outbox é `create` → catch P2002 →
+/// `findUnique` → devolve a linha existente. `upsert` vira UPDATE no conflito
+/// e explode em runtime, não no typecheck.
+model Marcacao {
+  id            String      @id @default(uuid())
+  contaId       String      @default("__SEM_CONTA__")
+  conta         Conta       @relation(fields: [contaId], references: [id])
+  funcionarioId String
+  funcionario   Funcionario @relation(fields: [funcionarioId], references: [id])
+
+  /// Identificador único por conta, atribuído NO SERVIDOR dentro da mesma
+  /// transação do insert.
+  ///
+  /// ⚠️ Chama-se "número de registro" no comprovante, nunca NSR: com outbox a
+  /// atribuição é por ordem de RECEBIMENTO, então dois motoristas que bateram
+  /// 07:00 e 07:05 podem receber 4210 e 4182. É identificador, não sequência
+  /// cronológica — e o espelho ordena por `marcadoEm`, nunca por isto.
+  numeroRegistro Int
+
+  /// O instante do TOQUE, carimbado no aparelho. É este que vale.
+  marcadoEm  DateTime
+  /// Quando o servidor recebeu. Com outbox a diferença pode ser de horas.
+  /// Um nunca sobrescreve o outro.
+  recebidoEm DateTime @default(now())
+
+  /// Desvio REAL do relógio: o app manda que horas são nele no momento do
+  /// ENVIO, e isso é comparado com o servidor. Separado de `atrasoEnvioSeg`
+  /// porque num app offline-first `recebidoEm - marcadoEm` é tempo de FILA, e
+  /// um alerta de relógio que dispara em toda marcação é o mesmo que nenhum.
+  desvioRelogioSeg Int?
+  /// Quanto tempo o item ficou na fila do outbox. Diagnóstico, não alerta.
+  atrasoEnvioSeg   Int?
+
+  /// "AAAA-MM-DD" em America/Sao_Paulo, resolvido NO APARELHO no toque. O
+  /// outbox drena horas depois: 23h50 que sobe 00h10 continua sendo ontem.
+  dia String @db.Char(10)
+
+  origem   OrigemMarcacao @default(APP)
+  /// UUID do aparelho. Idempotência do outbox.
+  clientId String
+
+  appVersao   String?
+  dispositivo String?
+  /// Versão do programa congelada na linha: é o que sai no comprovante.
+  repVersao   String
+
+  localizacao MarcacaoLocalizacao?
+
+  @@unique([contaId, numeroRegistro])
+  @@unique([contaId, clientId])
+  @@index([contaId, funcionarioId, dia])
+  @@index([contaId, dia])
+  @@index([contaId, funcionarioId, marcadoEm])
+  @@map("ponto_marcacoes")
+}
+
+/// A coordenada, FORA da tabela imutável.
+///
+/// GPS é evidência, nunca porteiro — e não é dado de jornada, então não herda
+/// a guarda longa da marcação. Fica em tabela própria justamente pra poder ser
+/// expurgada sem tocar no registro, que é append-only.
+model MarcacaoLocalizacao {
+  marcacaoId String   @id
+  marcacao   Marcacao @relation(fields: [marcacaoId], references: [id], onDelete: Cascade)
+  contaId    String   @default("__SEM_CONTA__")
+  conta      Conta    @relation(fields: [contaId], references: [id])
+
+  latitude  Decimal @db.Decimal(10, 7)
+  longitude Decimal @db.Decimal(10, 7)
+  precisao  Int?
+
+  criadoEm DateTime @default(now())
+
+  @@index([contaId, criadoEm])
+  @@map("ponto_marcacoes_localizacao")
+}
+
+/// O contador do número de registro, por conta.
+///
+/// Não é SEQUENCE do Postgres de propósito: sequence deixa buraco em rollback,
+/// e número com buraco num documento legal é pergunta que ninguém quer
+/// responder. A linha nasce por `INSERT ... ON CONFLICT` dentro da própria
+/// transação da marcação — depender de seed faria a primeira marcação de uma
+/// conta sem semente virar 500, e 500 trava o outbox em loop.
+model PontoSequencia {
+  contaId String @id
+  conta   Conta  @relation(fields: [contaId], references: [id])
+  proximo Int    @default(1)
+
+  @@map("ponto_sequencia")
+}
+
+enum TipoCorrecaoPonto {
+  /// Faltou bater: inclui uma marcação que não existe.
+  INCLUSAO
+  /// Bateu errado: marca uma marcação pra não contar. NUNCA apaga.
+  DESCONSIDERACAO
+  /// Só explica o dia, sem mexer em marcação nenhuma.
+  ANOTACAO
+}
+
+enum AutorPonto {
+  FUNCIONARIO
+  GESTOR
+}
+
+enum StatusCorrecaoPonto {
+  PENDENTE
+  APROVADA
+  RECUSADA
+}
+
+/// Correção é SEMPRE linha nova. Nunca toca em `Marcacao`.
+///
+/// Assimetria deliberada, copiada do mensal: o gestor INCLUI e DESCONSIDERA,
+/// mas não apaga a marcação de quem bateu — e a pessoa é sempre notificada.
+model CorrecaoPonto {
+  id            String      @id @default(uuid())
+  contaId       String      @default("__SEM_CONTA__")
+  conta         Conta       @relation(fields: [contaId], references: [id])
+  funcionarioId String
+  funcionario   Funcionario @relation(fields: [funcionarioId], references: [id])
+
+  dia String @db.Char(10)
+
+  tipo               TipoCorrecaoPonto
+  /// Obrigatório em DESCONSIDERACAO.
+  marcacaoId         String?
+  /// Obrigatório em INCLUSAO.
+  instantePretendido DateTime?
+
+  motivoCodigo String
+  /// Texto livre OBRIGATÓRIO. Mexer no registro de jornada de alguém sem
+  /// justificativa escrita é a mesma doutrina da alteração de km: não pode.
+  motivo       String
+  anexoKey     String?
+
+  pedidoPor              AutorPonto
+  pedidoPorFuncionarioId String?
+  pedidoPorUserId        String?
+
+  status            StatusCorrecaoPonto @default(PENDENTE)
+  decididoPorUserId String?
+  decididoEm        DateTime?
+  /// Obrigatório na recusa.
+  decisaoMotivo     String?
+
+  /// Correção lançada pelo gestor nasce APROVADA e com ciência pendente.
+  /// Ajuste que a pessoa não sabe que existe é o que mais anula controle.
+  cienciaEm               DateTime?
+  /// Quando a ciência foi colhida no papel, presencialmente.
+  ///
+  /// Existe porque quem o escritório lança é justamente quem não tem app, ou
+  /// estava sem celular. Sem um segundo caminho, a fila de ciência pendente só
+  /// cresce — e ciência que nunca chega é pior que nenhuma: vira a prova de
+  /// que a empresa sabia que tinha que avisar e não avisou.
+  cienciaPresencial       Boolean   @default(false)
+  cienciaColhidaPorUserId String?
+  cienciaObservacao       String?
+
+  clientId   String?
+  criadoEm   DateTime @default(now())
+  alteradoEm DateTime @updatedAt
+
+  @@unique([contaId, clientId])
+  @@index([contaId, status])
+  @@index([contaId, funcionarioId, dia])
+  @@map("ponto_correcoes")
+}
+
+/// O catálogo de motivos, por conta. Semente no código, editável na tela.
+model MotivoCorrecaoPonto {
+  id         String  @id @default(uuid())
+  contaId    String  @default("__SEM_CONTA__")
+  conta      Conta   @relation(fields: [contaId], references: [id])
+  codigo     String
+  descricao  String
+  exigeAnexo Boolean @default(false)
+  ordem      Int     @default(0)
+  ativo      Boolean @default(true)
+
+  @@unique([contaId, codigo])
+  @@map("ponto_motivos_correcao")
+}
+
+enum TipoJornada {
+  SEMANAL
+  /// 12x36 e afins: o ciclo não casa com a semana.
+  CICLO
+}
+
+model ModeloJornada {
+  id      String @id @default(uuid())
+  contaId String @default("__SEM_CONTA__")
+  conta   Conta  @relation(fields: [contaId], references: [id])
+
+  nome        String
+  tipo        TipoJornada @default(SEMANAL)
+  /// Só em CICLO. 12x36 = 2.
+  cicloDias   Int?
+  ancoraCiclo DateTime?   @db.Date
+
+  /// Teto legal (art. 58 §1º da CLT / Súmula 366 do TST). O Zod recusa acima
+  /// disto: configura pra MENOS, nunca pra mais, e não existe override por
+  /// pessoa.
+  toleranciaPorMarcacaoMin Int @default(5)
+  toleranciaDiariaMin      Int @default(10)
+
+  intervaloMinimoMin      Int     @default(60)
+  /// O único pré-preenchimento que a lei permite (art. 74 §2º da CLT). Nasce
+  /// desligado e, quando ligado, aparece no espelho da pessoa como
+  /// pré-assinalado — nunca disfarçado de marcação.
+  preAssinalacaoIntervalo Boolean @default(false)
+  preAssinalacaoMinutos   Int?
+
+  /// Lei 13.103/2015, só pra modelo de motorista. Em minutos no banco, em
+  /// horas+minutos na tela. Geram ALERTA no espelho; nunca impedem marcação
+  /// nem viagem.
+  maxDirecaoContinuaMin Int?
+  descansoDirecaoMin    Int?
+  interjornadaMin       Int? @default(660)
+  descansoSemanalMin    Int? @default(2100)
+
+  ativo Boolean @default(true)
+
+  dias     JornadaDiaModelo[]
+  vinculos VinculoJornada[]
+
+  @@unique([contaId, nome])
+  @@map("ponto_modelos_jornada")
+}
+
+/// Uma linha por dia da semana (0=domingo) ou por posição do ciclo.
+///
+/// É o que faz 5x2, 6x1, 12x36 e jornada parcial caberem na mesma tabela — e é
+/// o que permite dizer "entra 07:00", sem o que não existe previsto nem saldo.
+model JornadaDiaModelo {
+  id       String        @id @default(uuid())
+  /// ⚠️ A trava multi-tenant injeta `contaId` no where de TODA leitura de model
+  /// que não está em MODELS_GLOBAIS. Sem esta coluna, o Prisma recusa
+  /// `Unknown argument contaId` no primeiro findMany — e o typecheck não pega.
+  contaId  String        @default("__SEM_CONTA__")
+  conta    Conta         @relation(fields: [contaId], references: [id])
+  modeloId String
+  modelo   ModeloJornada @relation(fields: [modeloId], references: [id], onDelete: Cascade)
+
+  posicao      Int
+  trabalha     Boolean @default(true)
+  entrada      String? @db.Char(5)
+  saida        String? @db.Char(5)
+  intervaloMin Int     @default(60)
+  /// Derivado de entrada/saída/intervalo ao salvar.
+  cargaMin     Int
+
+  @@unique([modeloId, posicao])
+  @@index([contaId])
+  @@map("ponto_modelos_jornada_dias")
+}
+
+/// A jornada DA PESSOA, versionada. Mudar a jornada hoje não reescreve o mês
+/// que já foi pra folha.
+model VinculoJornada {
+  id            String        @id @default(uuid())
+  contaId       String        @default("__SEM_CONTA__")
+  conta         Conta         @relation(fields: [contaId], references: [id])
+  funcionarioId String
+  funcionario   Funcionario   @relation(fields: [funcionarioId], references: [id])
+  modeloId      String
+  modelo        ModeloJornada @relation(fields: [modeloId], references: [id])
+
+  vigenteDe   DateTime  @db.Date
+  vigenteAte  DateTime? @db.Date
+  criadoPorId String?
+
+  /// Vale o `funcionarioId` enquanto `vigenteAte` é nulo, NULL depois.
+  ///
+  /// Mesmo molde do `RegimeVigente`, e pelo mesmo motivo: sem isto dá pra ter
+  /// dois vínculos abertos, o previsto do dia fica ambíguo e o saldo ambíguo é
+  /// congelado no fechamento.
+  chaveViva String?
+
+  criadoEm DateTime @default(now())
+
+  @@unique([funcionarioId, vigenteDe])
+  @@unique([contaId, chaveViva], map: "uma_jornada_viva_por_funcionario")
+  @@index([contaId, funcionarioId, vigenteDe])
+  @@map("ponto_vinculos_jornada")
+}
+
+enum AbrangenciaFeriado {
+  NACIONAL
+  ESTADUAL
+  MUNICIPAL
+}
+
+/// Feriado não é detalhe: sem ele o previsto conta 8h no dia 7 de setembro e o
+/// espelho do mês inteiro sai com saldo negativo pra empresa toda. Os
+/// nacionais são semeados (inclusive os móveis, que saem do cálculo da
+/// Páscoa); estadual e municipal são cadastro.
+model FeriadoPonto {
+  id      String @id @default(uuid())
+  contaId String @default("__SEM_CONTA__")
+  conta   Conta  @relation(fields: [contaId], references: [id])
+
+  data          DateTime           @db.Date
+  nome          String
+  abrangencia   AbrangenciaFeriado @default(NACIONAL)
+  uf            String?            @db.Char(2)
+  municipioIbge String?            @db.Char(7)
+
+  @@unique([contaId, data, abrangencia, uf, municipioIbge])
+  @@index([contaId, data])
+  @@map("ponto_feriados")
+}
+
+/// Por que o controle eletrônico desta empresa vale.
+///
+/// Hoje só existe ACORDO_COLETIVO: virar REP-P exigiria gerar AFD e AEJ e ter
+/// Atestado Técnico, e nada disso existe aqui. Oferecer a outra opção na tela
+/// seria vender o que não temos.
+enum FundamentoControlePonto {
+  ACORDO_COLETIVO
+}
+
+model ConfigPonto {
+  contaId String @id
+  conta   Conta  @relation(fields: [contaId], references: [id])
+
+  /// O empregador como ele aparece no comprovante. Semeado da Conta e
+  /// editável: o CNPJ do estabelecimento pode não ser o do cadastro comercial.
+  razaoSocial String
+  cnpj        String
+
+  fundamento                FundamentoControlePonto?
+  /// Número da convenção ou do acordo coletivo que prevê o controle.
+  fundamentoReferencia      String?
+  fundamentoRegistradoEm    DateTime?
+  fundamentoRegistradoPorId String?
+
+  /// ⚠️ Não muda com competência FECHADA: trocar de 30 pra 5 com setembro
+  /// fechado faria os dias 01 a 05 de outubro não caírem em competência
+  /// nenhuma — ou caírem em duas.
+  diaFechamento    Int    @default(30)
+  /// O que identifica o programa no comprovante.
+  identificacaoRep String
+
+  /// Coordenada some depois disto. 0 = não guarda coordenada nenhuma.
+  diasRetencaoLocalizacao Int    @default(90)
+  avisoLgpdTexto          String
+
+  /// Por quanto tempo quem foi desligado ainda abre o próprio espelho e baixa
+  /// os próprios comprovantes. Negar isso a quem saiu não protege ninguém e
+  /// cria conversa desnecessária logo na semana da rescisão.
+  mesesAcessoAposDesligamento Int @default(12)
+
+  criadoEm   DateTime @default(now())
+  alteradoEm DateTime @updatedAt
+
+  @@map("ponto_config")
+}
+
+enum StatusFechamentoPonto {
+  ABERTO
+  FECHADO
+}
+
+model FechamentoPonto {
+  id      String @id @default(uuid())
+  contaId String @default("__SEM_CONTA__")
+  conta   Conta  @relation(fields: [contaId], references: [id])
+
+  competencia String
+  inicio      DateTime @db.Date
+  fim         DateTime @db.Date
+
+  status       StatusFechamentoPonto @default(ABERTO)
+  fechadoEm    DateTime?
+  fechadoPorId String?
+
+  /// Reabrir APAGA as apurações daquele fechamento — elas são derivadas, e o
+  /// registro original segue intacto. Fechar de novo materializa tudo outra
+  /// vez. Sem essa regra escrita, reabrir vira estado sem saída: você reabre
+  /// pra corrigir e as linhas congeladas recusam a correção.
+  reabertoEm       DateTime?
+  reabertoPorId    String?
+  reaberturaMotivo String?
+
+  apuracoes ApuracaoDiaPonto[]
+
+  @@unique([contaId, competencia])
+  @@map("ponto_fechamentos")
+}
+
+/// Materializada e CONGELADA no fechamento, mesma doutrina do `ViagemValor`:
+/// horas se somam, e o mês fechado não pode mudar porque alguém editou a
+/// jornada depois. Guarda o NOME do modelo, não FK viva.
+model ApuracaoDiaPonto {
+  id           String          @id @default(uuid())
+  contaId      String          @default("__SEM_CONTA__")
+  conta        Conta           @relation(fields: [contaId], references: [id])
+  fechamentoId String
+  fechamento   FechamentoPonto @relation(fields: [fechamentoId], references: [id], onDelete: Cascade)
+
+  funcionarioId String
+  dia           String @db.Char(10)
+
+  minutosPrevistos    Int
+  /// Bruto, sem tolerância.
+  minutosTrabalhados  Int
+  /// Com a tolerância aplicada. É este que vai pra folha.
+  minutosConsiderados Int
+  saldoMin            Int
+
+  registrosNumero   Int[]
+  correcoesIds      String[]
+  jornadaModeloNome String
+  alertas           String[]
+
+  @@unique([contaId, fechamentoId, funcionarioId, dia])
+  @@index([contaId, funcionarioId, dia])
+  @@map("ponto_apuracoes_dia")
+}
+
+/// O trabalhador conferiu o espelho do mês.
+///
+/// É o artefato de maior valor probatório do módulo inteiro, e o mais barato
+/// de construir: sem ele o sistema produz dado que ninguém validou. O
+/// `hashEspelho` existe pelo mesmo motivo do `AssinaturaDocumento.hashArquivo`
+/// — sem ele, reapurar depois faz a ciência apontar pra um espelho que ninguém
+/// viu.
+model CienciaEspelho {
+  id            String      @id @default(uuid())
+  contaId       String      @default("__SEM_CONTA__")
+  conta         Conta       @relation(fields: [contaId], references: [id])
+  funcionarioId String
+  funcionario   Funcionario @relation(fields: [funcionarioId], references: [id])
+
+  competencia String
+  cienteEm    DateTime @default(now())
+  /// False = "não confere". Discordar TEM que ser possível, senão a ciência
+  /// não vale nada.
+  concorda    Boolean
+  observacao  String?
+  hashEspelho String
+
+  ip        String?
+  userAgent String?
+
+  @@unique([contaId, funcionarioId, competencia])
+  @@index([contaId, competencia])
+  @@map("ponto_ciencias_espelho")
 }

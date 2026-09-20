@@ -29,6 +29,8 @@ export const TIPOS_RESGATE = [
   "abastecimento",
   "local",
   "completar-peso",
+  /** Marcação de ponto que não achou cadastro de funcionário. */
+  "ponto",
 ] as const;
 export const TipoResgate = z.enum(TIPOS_RESGATE);
 export type TipoResgate = z.infer<typeof TipoResgate>;

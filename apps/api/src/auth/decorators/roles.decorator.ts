@@ -7,6 +7,6 @@ import { SetMetadata } from "@nestjs/common";
 // perfil, convites e os registros pessoais dele. Não é MOTORISTA — motorista é
 // o vínculo com uma transportadora, e sem vínculo não há dado de empresa pra
 // ler nem lançamento pra fazer. Ver docs/identidade-motorista.md.
-export type RoleName = "ADMIN_USER" | "MOTORISTA" | "IDENTIDADE";
+export type RoleName = "ADMIN_USER" | "MOTORISTA" | "IDENTIDADE" | "FUNCIONARIO";
 export const ROLES_KEY = "roles";
 export const Roles = (...roles: RoleName[]) => SetMetadata(ROLES_KEY, roles);

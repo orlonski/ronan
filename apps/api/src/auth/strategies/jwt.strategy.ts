@@ -127,6 +127,43 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         }),
       );
       if (!identidade || !identidade.ativo) throw new UnauthorizedException("Cadastro inativo");
+
+      // É FUNCIONÁRIO REGISTRADO de alguma empresa?
+      //
+      // A promoção acontece na leitura do token, não na emissão: contratar
+      // alguém liga o acesso no próximo request, e desligar corta na hora,
+      // sem esperar o access token (15min) expirar.
+      //
+      // ⚠️ Isto é o que permite MECÂNICO e GENTE DE ESCRITÓRIO baterem ponto
+      // sem virarem cadastro de `Motorista` — que é o vínculo de parceiro
+      // autônomo. Sem este ramo, a empresa teria que cadastrar o funcionário
+      // CLT como parceiro pra ele conseguir entrar no app, e a separação
+      // entre os módulos viraria decoração.
+      const funcionario = await comoSistema(() =>
+        this.prisma.funcionario.findFirst({
+          where: { cpf: identidade.cpf.replace(/\D/g, ""), ativo: true },
+          select: { id: true, contaId: true, conta: { select: SELECT_ESTADO } },
+        }),
+      );
+      if (funcionario) {
+        const estadoFunc = estadoDaConta(funcionario.conta);
+        if (estadoFunc.podeEntrar) {
+          definirConta(funcionario.contaId);
+          return {
+            kind: "FUNCIONARIO",
+            id: identidade.id,
+            nome: identidade.nome,
+            cpf: identidade.cpf,
+            funcionarioId: funcionario.id,
+            contaId: funcionario.contaId,
+            contaSomenteLeitura: !estadoFunc.podeEscrever,
+          };
+        }
+        // Conta suspensa não derruba a pessoa pra fora do app: ela continua
+        // como identidade e segue com o que é dela. O ponto é que some — e
+        // isso é conversa da empresa com a gente, não dela com o app.
+      }
+
       // NÃO chama definirConta: a pessoa não pertence a empresa nenhuma. O
       // contexto fica vazio e a trava recusa qualquer leitura de dado de
       // negócio — que é o certo, e sai de graça. Só as rotas `m/eu/*`

@@ -22,6 +22,7 @@ import {
 } from "../common/medicao-mensal";
 import { valorDaDiariaObra, type TabelaPrecoRow } from "../common/viagem-preco";
 import { resolverRemuneracao } from "../common/acerto-motorista";
+import { abrirRegime, encerrarRegime } from "../common/regime-vigente";
 import { parseXlsx } from "../fechamentos/parsers/xlsx-parser";
 import { lerMedicaoDaPlanilha } from "./medicao-planilha";
 import { montarModeloMedicao } from "./medicao-modelo";
@@ -122,7 +123,7 @@ export class MensalService {
       this.prisma.cliente.findFirst({ where: { id: dados.clienteId }, select: { id: true, nome: true } }),
       this.prisma.motorista.findFirst({
         where: { id: dados.motoristaId },
-        select: { id: true, nome: true, status: true },
+        select: { id: true, nome: true, status: true, cpf: true },
       }),
       this.prisma.veiculo.findFirst({ where: { id: dados.veiculoId }, select: { id: true, placa: true } }),
     ]);
@@ -146,20 +147,34 @@ export class MensalService {
       );
     }
 
-    return this.prisma.alocacaoObra.create({
-      data: {
-        clienteId: dados.clienteId,
-        motoristaId: dados.motoristaId,
-        veiculoId: dados.veiculoId,
+    // As duas escritas na MESMA transação: a alocação e o registro de que esta
+    // pessoa é parceira autônoma nesta empresa. Separadas, uma falha deixaria
+    // a outra de pé — e o furo seria exatamente o que a trava existe pra
+    // impedir. O `await` mora DENTRO, porque a promise do Prisma é preguiçosa
+    // e a trava de conta vive num AsyncLocalStorage.
+    return this.prisma.$transaction(async (tx) => {
+      await abrirRegime(tx, {
+        cpf: motorista.cpf ?? "",
+        regime: "PARCEIRO",
         inicio: dia(dados.inicio),
-        fim: dados.fim ? dia(dados.fim) : null,
-        valorDiaria:
-          dados.valorDiariaCentavos === undefined ? null : dados.valorDiariaCentavos / 100,
-        // Enquanto viva, a chave é o motorista: é isto que o índice único usa
-        // pra garantir uma obra por vez sem proibir histórico.
-        vigenteDe: dados.motoristaId,
         criadoPorId: usuarioId,
-      },
+      });
+
+      return tx.alocacaoObra.create({
+        data: {
+          clienteId: dados.clienteId,
+          motoristaId: dados.motoristaId,
+          veiculoId: dados.veiculoId,
+          inicio: dia(dados.inicio),
+          fim: dados.fim ? dia(dados.fim) : null,
+          valorDiaria:
+            dados.valorDiariaCentavos === undefined ? null : dados.valorDiariaCentavos / 100,
+          // Enquanto viva, a chave é o motorista: é isto que o índice único usa
+          // pra garantir uma obra por vez sem proibir histórico.
+          vigenteDe: dados.motoristaId,
+          criadoPorId: usuarioId,
+        },
+      });
     });
   }
 
@@ -211,9 +226,24 @@ export class MensalService {
   async encerrarAlocacao(id: string, motivo: string) {
     const a = await this.buscarAlocacao(id);
     if (!a.ativa) return a;
-    return this.prisma.alocacaoObra.update({
-      where: { id },
-      data: { ativa: false, vigenteDe: null, encerradaEm: new Date(), encerradaMotivo: motivo },
+
+    const motorista = await this.prisma.motorista.findFirst({
+      where: { id: a.motoristaId },
+      select: { cpf: true },
+    });
+
+    return this.prisma.$transaction(async (tx) => {
+      const atualizada = await tx.alocacaoObra.update({
+        where: { id },
+        data: { ativa: false, vigenteDe: null, encerradaEm: new Date(), encerradaMotivo: motivo },
+      });
+      // Libera a pessoa da trava junto: quem encerrou aqui pode ser contratado
+      // amanhã, e deixar a chave presa faria o cadastro dele ser recusado sem
+      // que ninguém entendesse por quê.
+      if (motorista?.cpf) {
+        await encerrarRegime(tx, { cpf: motorista.cpf, motivo });
+      }
+      return atualizada;
     });
   }
 

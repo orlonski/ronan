@@ -17,6 +17,11 @@ const PAPEIS_POR_KIND: Record<AuthUser["kind"], readonly RoleName[]> = {
   ADMIN_USER: ["ADMIN_USER"],
   MOTORISTA: ["MOTORISTA"],
   IDENTIDADE: ["IDENTIDADE"],
+  // Funcionário registrado é TAMBÉM a pessoa: as rotas `m/eu/*` (perfil,
+  // documentos, convites) continuam valendo pra ele. O que ele NÃO ganha é o
+  // papel de MOTORISTA — lançar viagem, pedágio e diária é do parceiro
+  // autônomo, e dar isso a empregado embaralharia os dois módulos de novo.
+  FUNCIONARIO: ["FUNCIONARIO", "IDENTIDADE"],
 };
 
 @Injectable()

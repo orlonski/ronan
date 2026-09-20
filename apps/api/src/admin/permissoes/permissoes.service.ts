@@ -78,23 +78,42 @@ export class PermissoesService implements OnModuleInit {
    * O teto padrão das empresas nasce igual a `PERMISSOES_ADMIN_EMPRESA` e, a
    * partir daí, é dado: quem manda é o painel.
    *
-   * Semeia UMA vez (a flag `semeado`). Sem ela, "lista vazia" seria ambíguo —
-   * nunca configurado, ou configurado como "nenhuma tela"? — e um deploy
-   * reescreveria por cima da decisão de quem configurou.
+   * ⚠️ UNE as chaves novas do catálogo em vez de dar early-return quando já
+   * semeou, e isso é conserto de um defeito silencioso: o teto de produção foi
+   * gravado uma vez, e módulo novo (com recursos novos) nascia com as chaves
+   * FORA dele. A cadeia era invisível — teto sem a chave → `seedPapeisSistema`
+   * não dava a permissão ao Administrador → `podarAcimaDoTeto` arrancava de
+   * qualquer papel criado à mão. Build verde, boot verde, tela que não existe
+   * pra ninguém.
+   *
+   * O que NÃO faz: tirar chave. Quem configurou "esta empresa não tem
+   * Financeiro" continua sem — só o que é novo no catálogo entra.
    */
   async seedTetoPadrao() {
     const existente = await this.prisma.configuracaoPermissoes.findUnique({
       where: { id: "singleton" },
-      select: { semeado: true },
+      select: { semeado: true, tetoPadrao: true },
     });
-    if (existente?.semeado) return;
 
-    await this.prisma.configuracaoPermissoes.upsert({
+    if (!existente?.semeado) {
+      await this.prisma.configuracaoPermissoes.upsert({
+        where: { id: "singleton" },
+        create: { id: "singleton", tetoPadrao: [...PERMISSOES_ADMIN_EMPRESA], semeado: true },
+        update: { tetoPadrao: [...PERMISSOES_ADMIN_EMPRESA], semeado: true },
+      });
+      this.log.log(`Teto padrão das empresas semeado com ${PERMISSOES_ADMIN_EMPRESA.length} chaves.`);
+      return;
+    }
+
+    const atual = new Set(existente.tetoPadrao);
+    const novas = PERMISSOES_ADMIN_EMPRESA.filter((c) => !atual.has(c));
+    if (novas.length === 0) return;
+
+    await this.prisma.configuracaoPermissoes.update({
       where: { id: "singleton" },
-      create: { id: "singleton", tetoPadrao: [...PERMISSOES_ADMIN_EMPRESA], semeado: true },
-      update: { tetoPadrao: [...PERMISSOES_ADMIN_EMPRESA], semeado: true },
+      data: { tetoPadrao: [...existente.tetoPadrao, ...novas] },
     });
-    this.log.log(`Teto padrão das empresas semeado com ${PERMISSOES_ADMIN_EMPRESA.length} chaves.`);
+    this.log.log(`Teto padrão ganhou ${novas.length} chave(s) nova(s): ${novas.join(", ")}`);
   }
 
   /** O teto padrão de hoje, pra tela mostrar e editar. */

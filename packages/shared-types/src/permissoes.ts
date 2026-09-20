@@ -53,6 +53,10 @@ const ACAO_TITULO: Record<string, string> = {
   fechar: "Fechar (vira combinado)",
   pagar: "Marcar como pago",
   expurgar: "Expurgar histórico",
+  desligar: "Registrar desligamento",
+  lancar: "Lançar correção (com motivo)",
+  decidir: "Aprovar ou recusar correção",
+  reabrir: "Reabrir competência fechada (com motivo)",
 };
 
 type ResourceDef = { recurso: string; label: string; modulo: string; acoes: string[] };
@@ -100,6 +104,25 @@ const RESOURCE_DEFS: ResourceDef[] = [
   // com consequência, não consulta.
   { recurso: "documentos-exigidos", label: "Documentos exigidos pela obra", modulo: "Cadastros", acoes: ["ver", "editar"] },
   { recurso: "coletas", label: "Link de coleta de documentos", modulo: "Operação", acoes: ["ver", "criar"] },
+
+  // ---- Pessoas: o ponto eletrônico (funcionário CLT) ----
+  //
+  // ⚠️ GRUPO PRÓPRIO, e isso não é organização visual: `PERMISSOES_OPERADOR`
+  // filtra literalmente por `modulo === "Operação" || "Cadastros"`. Pôr ponto
+  // em qualquer um dos dois entregaria o espelho e o fechamento de jornada pro
+  // papel Operador de TODA conta, de graça, no próximo seed.
+  //
+  // As separações de ação são deliberadas: `lancar` (o gestor incluir uma
+  // marcação em nome de alguém) é outro poder que `decidir` (aprovar o que a
+  // pessoa pediu), e `reabrir` uma competência fechada é outro poder que
+  // `fechar`.
+  { recurso: "ponto", label: "Ponto do dia", modulo: "Pessoas", acoes: ["ver"] },
+  { recurso: "funcionarios", label: "Funcionários (CLT)", modulo: "Pessoas", acoes: ["ver", "criar", "editar", "desligar", "importar"] },
+  { recurso: "jornadas", label: "Jornadas e escalas", modulo: "Pessoas", acoes: ["ver", "editar"] },
+  { recurso: "espelho-ponto", label: "Espelho de ponto", modulo: "Pessoas", acoes: ["ver", "exportar"] },
+  { recurso: "correcoes-ponto", label: "Correções de ponto", modulo: "Pessoas", acoes: ["ver", "lancar", "decidir"] },
+  { recurso: "fechamento-ponto", label: "Fechamento do ponto", modulo: "Pessoas", acoes: ["ver", "fechar", "reabrir"] },
+  { recurso: "config-ponto", label: "Regras de ponto", modulo: "Pessoas", acoes: ["ver", "editar"] },
   // Contas a receber e a pagar. `baixar` é separado de `faturar` porque emitir a
   // cobrança é trabalho de escritório e dizer que o dinheiro entrou é de quem
   // responde pelo caixa — e quase nunca é a mesma pessoa.

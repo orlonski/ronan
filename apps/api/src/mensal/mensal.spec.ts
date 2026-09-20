@@ -43,7 +43,22 @@ function servico(estado: {
       },
       delete: async () => ({}),
     },
-  };
+    // A trava parceiro × empregado. Vazia aqui: estes testes são sobre a obra.
+    regimeVigente: {
+      findFirst: async () => null,
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        escritas.push({ tabela: "regime", op: "create", data });
+        return data;
+      },
+      updateMany: async ({ data }: { data: Record<string, unknown> }) => {
+        escritas.push({ tabela: "regime", op: "update", data });
+        return { count: 1 };
+      },
+    },
+  } as Record<string, unknown>;
+  // A alocação e o regime são escritos na mesma transação; o mock roda o
+  // callback com o próprio client.
+  (prisma as Record<string, unknown>).$transaction = async (fn: (tx: unknown) => unknown) => fn(prisma);
   return { s: new MensalService(prisma as never), escritas };
 }
 

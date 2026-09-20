@@ -35,6 +35,7 @@ export const MODULOS_CHAVES = [
   "comunicacao",
   "mensal",
   "admissao",
+  "ponto",
   "plataforma",
 ] as const;
 export const ModuloChaveSchema = z.enum(MODULOS_CHAVES);
@@ -171,6 +172,29 @@ export const MODULOS: ModuloDef[] = [
     pitch:
       "Um link que o motorista ou o dono do caminhão abre pra mandar os documentos, e o painel dizendo quem falta.",
     recursos: ["documentos-exigidos", "coletas"],
+  },
+  {
+    // Controle de jornada de FUNCIONÁRIO REGISTRADO EM CARTEIRA.
+    //
+    // Módulo à parte do "mensal" por decisão jurídica, não por arrumação: lá o
+    // motorista é parceiro autônomo pago por diária e o léxico de vínculo é
+    // proibido; aqui é empregado e a jornada é o assunto. A mesma pessoa não
+    // pode estar nos dois, e quem garante isso é o banco (`RegimeVigente`),
+    // não a boa vontade de quem cadastra.
+    chave: "ponto",
+    nome: "Ponto eletrônico",
+    pitch:
+      "Quem é registrado em carteira bate o ponto num toque, mesmo sem sinal, e recebe o comprovante. Você fecha o mês com o espelho pronto e cada correção com autor e motivo.",
+    adicional: true,
+    recursos: [
+      "ponto",
+      "funcionarios",
+      "jornadas",
+      "espelho-ponto",
+      "correcoes-ponto",
+      "fechamento-ponto",
+      "config-ponto",
+    ],
   },
   {
     chave: "plataforma",

@@ -84,7 +84,36 @@ export type AuthIdentidade = {
   cpf: string;
 };
 
-export type AuthUser = AuthAdminUser | AuthMotorista | AuthIdentidade;
+/**
+ * A PESSOA que é FUNCIONÁRIA REGISTRADA de uma empresa (módulo de ponto).
+ *
+ * ⚠️ Não é `AuthMotorista`, e a diferença não é burocracia: `Motorista` é o
+ * vínculo de PARCEIRO AUTÔNOMO. Obrigar um funcionário CLT a ter cadastro de
+ * motorista pra conseguir bater ponto faria a pessoa existir nos dois mundos
+ * ao mesmo tempo — exatamente o que `RegimeVigente` existe pra impedir — e a
+ * separação entre os módulos viraria decoração.
+ *
+ * Também não é só `IDENTIDADE`: esse tipo não tem `contaId` de propósito, e
+ * sem conta a trava recusa toda leitura de dado de empresa. O funcionário
+ * precisa da conta pra ler a própria jornada.
+ *
+ * A promoção é feita na LEITURA do token, não na emissão: o token continua
+ * sendo o de identidade, e é o `Funcionario` ativo com aquele CPF que dá a
+ * conta. Desligar alguém tira o acesso na hora, sem esperar token expirar.
+ */
+export type AuthFuncionario = {
+  kind: "FUNCIONARIO";
+  /** O id da PESSOA (`MotoristaIdentidade`), que é quem autentica. */
+  id: string;
+  nome: string;
+  cpf: string;
+  /** O id do cadastro de funcionário nesta empresa. */
+  funcionarioId: string;
+  contaId: string;
+  contaSomenteLeitura: boolean;
+};
+
+export type AuthUser = AuthAdminUser | AuthMotorista | AuthIdentidade | AuthFuncionario;
 
 export type JwtPayload = {
   sub: string;
