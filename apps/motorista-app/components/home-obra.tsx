@@ -3,8 +3,9 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Location from "expo-location";
-import { CalendarDays, Check, MapPin } from "lucide-react-native";
+import { CalendarDays, Check, CloudOff, MapPin, TriangleAlert } from "lucide-react-native";
 import { SeletorEmpresa } from "@/components/seletor-empresa";
+import { usePendingPresencaObra } from "@/hooks/use-pending-presenca-obra";
 import { useMe, useObraDeHoje } from "@/lib/queries";
 import { desfazerPresencaObra, enqueuePresencaObra } from "@/lib/sync";
 
@@ -48,6 +49,13 @@ export function HomeObra() {
   const [desfeito, setDesfeito] = useState(false);
   const [desfazendo, setDesfazendo] = useState(false);
   const [avisoDesfazer, setAvisoDesfazer] = useState<string | null>(null);
+
+  // O item DESTE dia ainda no outbox. Sem isto o verde otimista mente: o
+  // motorista toca, a tela pinta, o envio falha e ninguém fica sabendo até a
+  // conferência do fim do mês — quando já não dá pra resolver.
+  const naFila = usePendingPresencaObra();
+  const pendenteDeHoje = naFila.find((i) => i.payload.data === data?.hoje?.data);
+  const falhou = pendenteDeHoje?.status === "error";
 
   const registradoHoje = (data?.hoje?.registrado === true || tocadoEm !== null) && !desfeito;
   const podeDesfazer =
@@ -145,12 +153,40 @@ export function HomeObra() {
               <Text className="mt-2 text-4xl font-bold text-white">HOJE OK</Text>
             </View>
 
-            {/* A frase que faltava. "Ficou verde e mais nada" é exatamente o
-                que a primeira versão entregou: o motorista não tinha como
-                saber se ainda precisava fazer alguma coisa. */}
-            <Text className="text-center text-xl font-medium text-foreground">
-              Seu dia na obra foi marcado.{"\n"}Não precisa fazer mais nada hoje.
-            </Text>
+            {/* O verde é otimista, então ele precisa dizer em que pé está.
+                Três estados, e a diferença importa: enviado é fim; esperando
+                é normal e some sozinho; falhou exige gente. */}
+            {falhou ? (
+              <View className="gap-2 rounded-2xl border-2 border-destructive/50 bg-destructive/5 p-4">
+                <View className="flex-row items-center gap-2">
+                  <TriangleAlert size={24} color="#dc2626" />
+                  <Text className="text-lg font-bold text-destructive">
+                    Não consegui enviar
+                  </Text>
+                </View>
+                <Text className="text-base text-foreground">
+                  Seu dia está guardado no celular, mas não subiu. Toque abaixo pra ver.
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => router.push("/pendentes")}
+                  className="mt-1 items-center rounded-xl border-2 border-destructive/50 py-3"
+                >
+                  <Text className="text-lg font-semibold text-destructive">Ver o que travou</Text>
+                </Pressable>
+              </View>
+            ) : pendenteDeHoje ? (
+              <View className="flex-row items-center justify-center gap-2">
+                <CloudOff size={22} color="#a16207" />
+                <Text className="text-center text-lg font-medium text-amber-700">
+                  Guardado. Sobe sozinho quando tiver sinal.
+                </Text>
+              </View>
+            ) : (
+              <Text className="text-center text-xl font-medium text-foreground">
+                Seu dia na obra foi marcado.{"\n"}Não precisa fazer mais nada hoje.
+              </Text>
+            )}
 
             {podeDesfazer && (
               <Pressable
@@ -188,6 +224,24 @@ export function HomeObra() {
               <Text className="mt-2 text-5xl font-bold text-white">CHEGUEI</Text>
             </Pressable>
           </>
+        )}
+
+        {/* A porta pros Pendentes. Precisa existir AQUI porque esta tela
+            SUBSTITUI a home — e o único caminho pra tela de Pendentes no app
+            inteiro era um botão da home da empresa. Ao trocar a home eu cortei
+            o acesso à única tela que mostra item travado, e o motorista ficou
+            sem como descobrir que o dia dele não subiu. */}
+        {naFila.length > 0 && !falhou && (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push("/pendentes")}
+            className="flex-row items-center justify-center gap-3 rounded-2xl border-2 border-amber-500/40 py-4"
+          >
+            <CloudOff size={24} color="#a16207" />
+            <Text className="text-lg font-semibold text-amber-700">
+              {naFila.length === 1 ? "1 dia esperando enviar" : `${naFila.length} dias esperando enviar`}
+            </Text>
+          </Pressable>
         )}
 
         {/* O caminho pro mês. Pra quem é pago por diária, "quantos dias eu já
