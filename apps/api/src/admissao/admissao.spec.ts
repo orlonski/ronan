@@ -116,10 +116,10 @@ describe("o token é a única credencial", () => {
   });
 });
 
-describe("a página pública não conta o que não deve", () => {
-  it("lista o que FALTA e nunca o que já foi enviado", async () => {
-    // Quem abre o link pode não ser o titular — o dono do caminhão é um caso
-    // previsto. Link que exibe documento de gente é como documento vaza.
+describe("a página pública mostra o estado, nunca o arquivo", () => {
+  it("diz o que falta E o que já chegou", async () => {
+    // A primeira versão escondia o recebido: a pessoa mandava sete arquivos
+    // sem saber qual entrou e não tinha como trocar uma foto tremida.
     const { s } = servico({
       exigidos: [
         { tipo: "CNH", titulo: "CNH", obrigatorio: true },
@@ -129,11 +129,22 @@ describe("a página pública não conta o que não deve", () => {
     });
     const r = await s.paginaPublica("tok");
 
-    expect(r.faltando.map((f) => f.tipo)).toEqual(["ASO"]);
-    expect(r.jaRecebidos).toBe(1);
-    // Nenhum caminho de arquivo, nenhuma chave de storage, nenhum nome de
-    // arquivo sai daqui.
-    expect(JSON.stringify(r)).not.toMatch(/storageKey|minio|\.jpg/i);
+    expect(r.documentos.find((d) => d.tipo === "CNH")?.recebido).toBe(true);
+    expect(r.documentos.find((d) => d.tipo === "ASO")?.recebido).toBe(false);
+    expect(r.recebidos).toBe(1);
+    expect(r.total).toBe(2);
+  });
+
+  it("nunca devolve arquivo, nome de arquivo nem chave de storage", async () => {
+    // O que caiu foi a contagem, não o sigilo do conteúdo. Quem abre o link
+    // pode não ser o titular: ele precisa saber o que falta mandar, nunca ver
+    // o que já está lá.
+    const { s } = servico({
+      exigidos: [{ tipo: "CNH", titulo: "CNH", obrigatorio: true }],
+      enviados: [{ tipo: "CNH" }],
+    });
+    const r = await s.paginaPublica("tok");
+    expect(JSON.stringify(r)).not.toMatch(/storageKey|minio|nomeArquivo|\.jpg|\.pdf/i);
   });
 });
 

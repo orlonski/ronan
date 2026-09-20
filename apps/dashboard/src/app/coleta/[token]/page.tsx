@@ -3,13 +3,18 @@
 import { use, useRef, useState } from "react";
 import { Camera, Check, FileWarning } from "lucide-react";
 
-type Faltando = { tipo: string; titulo: string; obrigatorio: boolean };
+type DocumentoPedido = {
+  tipo: string;
+  titulo: string;
+  obrigatorio: boolean;
+  recebido: boolean;
+};
 
 type Pagina = {
   motorista: string;
   expiraEm: string;
-  faltando: Faltando[];
-  jaRecebidos: number;
+  documentos: DocumentoPedido[];
+  recebidos: number;
   total: number;
 };
 
@@ -22,13 +27,18 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "";
  * É a porta de entrada da admissão, e hoje esse trabalho é alguém caçando foto
  * no WhatsApp, um documento de cada vez.
  *
- * Duas regras que não podem cair:
+ * ⚠️ A PRIMEIRA VERSÃO ERROU EM DOIS PONTOS, e os dois vieram de uso real.
  *
- * 1. A página NUNCA mostra o que já foi enviado — só o que falta e quantos
- *    chegaram. Quem abre pode não ser o titular dos documentos, e link que
- *    exibe documento de gente é como documento de gente vaza.
- * 2. Um assunto por vez, texto curto, botão grande. Pode ser um motorista com
- *    pouca familiaridade com celular abrindo isso no pátio.
+ * Escondia o que já tinha sido enviado, "por privacidade": a pessoa mandava
+ * sete arquivos sem saber qual entrou e não tinha como trocar uma foto
+ * tremida. O argumento nem se sustentava — a página já mostra o NOME do
+ * motorista. Agora mostra o ESTADO de cada item; o arquivo, nunca.
+ *
+ * E forçava a câmera (`capture`), o que no celular esconde a galeria e os
+ * arquivos — justamente onde mora o PDF que o contratante mandou por e-mail.
+ *
+ * O que continua valendo: um assunto por vez, texto curto, botão grande. Pode
+ * ser alguém com pouca familiaridade com celular abrindo isso no pátio.
  */
 export default function ColetaPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
@@ -71,33 +81,31 @@ export default function ColetaPage({ params }: { params: Promise<{ token: string
     );
   }
 
-  if (pagina.faltando.length === 0) {
-    return (
-      <Moldura>
-        <Check className="h-20 w-20 text-emerald-600" strokeWidth={3} />
-        <p className="mt-4 text-2xl font-bold">Tudo certo!</p>
-        <p className="mt-2 text-lg text-muted-foreground">
-          Recebemos os {pagina.jaRecebidos} documentos.
-        </p>
-      </Moldura>
-    );
-  }
+  const faltam = pagina.documentos.filter((d) => !d.recebido).length;
 
   return (
     <Moldura alinhar="start">
       <h1 className="text-2xl font-bold">Documentos de {pagina.motorista}</h1>
-      <p className="mt-1 text-lg text-muted-foreground">
-        Faltam {pagina.faltando.length} de {pagina.total}. Tire uma foto de cada um.
-      </p>
+      {faltam === 0 ? (
+        <p className="mt-1 flex items-center gap-2 text-lg font-medium text-emerald-700">
+          <Check className="h-6 w-6" strokeWidth={3} />
+          Recebemos todos os {pagina.total}.
+        </p>
+      ) : (
+        <p className="mt-1 text-lg text-muted-foreground">
+          Recebemos {pagina.recebidos} de {pagina.total}. Faltam {faltam}.
+        </p>
+      )}
 
       <div className="mt-6 w-full space-y-3">
-        {pagina.faltando.map((f) => (
-          <ItemDocumento key={f.tipo} token={token} item={f} onEnviado={() => void carregar()} />
+        {pagina.documentos.map((d) => (
+          <ItemDocumento key={d.tipo} token={token} item={d} onEnviado={() => void carregar()} />
         ))}
       </div>
 
       <p className="mt-8 text-sm text-muted-foreground">
-        Pode mandar foto ou PDF. Se a foto sair tremida, é só tirar de novo.
+        Pode mandar foto tirada na hora, imagem da galeria ou PDF. Se sair tremida, mande de novo
+        que a nova substitui.
       </p>
     </Moldura>
   );
@@ -129,7 +137,7 @@ function ItemDocumento({
   onEnviado,
 }: {
   token: string;
-  item: Faltando;
+  item: DocumentoPedido;
   onEnviado: () => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
@@ -156,29 +164,49 @@ function ItemDocumento({
   }
 
   return (
-    <div className="w-full rounded-2xl border-2 p-4">
-      <p className="text-lg font-semibold">{item.titulo}</p>
-      {!item.obrigatorio && <p className="text-sm text-muted-foreground">Opcional</p>}
+    <div
+      className={`w-full rounded-2xl border-2 p-4 ${
+        item.recebido ? "border-emerald-600/50 bg-emerald-500/5" : ""
+      }`}
+    >
+      <div className="flex items-start gap-2">
+        {item.recebido && <Check className="mt-1 h-6 w-6 shrink-0 text-emerald-600" strokeWidth={3} />}
+        <div className="min-w-0 flex-1">
+          <p className="text-lg font-semibold">{item.titulo}</p>
+          {item.recebido ? (
+            <p className="text-sm text-emerald-700">Recebido</p>
+          ) : (
+            !item.obrigatorio && <p className="text-sm text-muted-foreground">Opcional</p>
+          )}
+        </div>
+      </div>
 
+      {/* Recebido vira botão de contorno, não some: é o "refazer a foto". Some
+          faria a pessoa sem saída quando a primeira sai tremida. */}
       <button
         type="button"
         disabled={estado === "enviando"}
         onClick={() => input.current?.click()}
-        className="mt-3 flex h-20 w-full items-center justify-center gap-3 rounded-xl bg-[#DF7234] text-xl font-bold text-white disabled:opacity-60"
+        className={`mt-3 flex h-20 w-full items-center justify-center gap-3 rounded-xl text-xl font-bold disabled:opacity-60 ${
+          item.recebido
+            ? "border-2 border-border text-foreground"
+            : "bg-[#DF7234] text-white"
+        }`}
       >
         <Camera className="h-8 w-8" />
-        {estado === "enviando" ? "Enviando…" : "Tirar foto"}
+        {estado === "enviando" ? "Enviando…" : item.recebido ? "Trocar" : "Enviar"}
       </button>
 
       {msg && <p className="mt-2 text-sm text-destructive">{msg}</p>}
 
-      {/* `capture` abre a câmera direto no celular, que é onde isto vai ser
-          usado; no computador vira o seletor de arquivo normal. */}
+      {/* SEM `capture`: com ele o celular abre só a câmera e esconde galeria e
+          arquivos — e é na galeria e nos arquivos que mora o PDF que o
+          contratante mandou por e-mail. Sem ele, o próprio sistema oferece
+          câmera, fotos e arquivos, e quem escolhe é quem está usando. */}
       <input
         ref={input}
         type="file"
         accept="image/*,application/pdf"
-        capture="environment"
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];

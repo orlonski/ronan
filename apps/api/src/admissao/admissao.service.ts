@@ -187,10 +187,17 @@ export class AdmissaoService {
   /**
    * O que a página pública mostra.
    *
-   * NUNCA lista o que já foi enviado, nem devolve arquivo: só o que falta e
-   * quantos já chegaram. Quem abre o link pode não ser o titular dos
-   * documentos — o dono do caminhão é um caso previsto —, e link que exibe
-   * documento de gente é como documento de gente vaza.
+   * ⚠️ ISTO JÁ FOI MAIS FECHADO E ESTAVA ERRADO. A primeira versão devolvia só
+   * o que FALTAVA, escondendo o que já tinha chegado, com o argumento de que
+   * quem abre o link pode não ser o titular. Na prática: a pessoa mandava sete
+   * arquivos sem saber qual entrou, não tinha como trocar uma foto tremida, e
+   * o link virava um buraco. O argumento também não se sustentava — a página
+   * já mostra o NOME do motorista, então esconder "CNH recebida" protegia
+   * quase nada e custava o uso inteiro.
+   *
+   * O que continua valendo: NUNCA devolve o arquivo, nem o nome dele, nem a
+   * chave de storage, nem miniatura. Só o TIPO pedido e se chegou ou não —
+   * que é exatamente o que quem está enviando precisa saber.
    */
   async paginaPublica(token: string, ip?: string) {
     const c = await this.resolverToken(token);
@@ -215,15 +222,19 @@ export class AdmissaoService {
       });
       const jaTem = new Set<string>(enviados.map((e) => e.tipo));
 
+      const documentos = exigidos.map((e) => ({
+        tipo: e.tipo,
+        titulo: e.titulo,
+        obrigatorio: e.obrigatorio,
+        recebido: jaTem.has(e.tipo),
+      }));
+
       return {
         motorista: c.motorista.nome,
         expiraEm: c.expiraEm,
-        // Só os que faltam. O que já chegou vira contagem, não lista.
-        faltando: exigidos
-          .filter((e) => !jaTem.has(e.tipo))
-          .map((e) => ({ tipo: e.tipo, titulo: e.titulo, obrigatorio: e.obrigatorio })),
-        jaRecebidos: exigidos.filter((e) => jaTem.has(e.tipo)).length,
-        total: exigidos.length,
+        documentos,
+        recebidos: documentos.filter((d) => d.recebido).length,
+        total: documentos.length,
       };
     });
   }
@@ -262,6 +273,9 @@ export class AdmissaoService {
         throw new BadRequestException("Este documento não é pedido aqui.");
       }
 
+      // Reenviar o mesmo tipo SUBSTITUI. É o "refazer a foto": a primeira saiu
+      // tremida, a segunda vale. O upsert abaixo já fazia isso no banco; o que
+      // faltava era a página oferecer o caminho.
       const storageKey = await this.uploads.putMotoristaDocumento(
         arquivo.buffer,
         arquivo.mimetype,
