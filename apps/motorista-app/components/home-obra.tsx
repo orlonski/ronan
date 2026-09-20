@@ -1,62 +1,77 @@
 import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import { Check, MapPin } from "lucide-react-native";
-import { useObraDeHoje } from "@/lib/queries";
-import { enqueuePresencaObra } from "@/lib/sync";
+import { SeletorEmpresa } from "@/components/seletor-empresa";
+import { useMe, useObraDeHoje } from "@/lib/queries";
+import { desfazerPresencaObra, enqueuePresencaObra } from "@/lib/sync";
 
 /**
- * A tela de quem está numa obra: um nome e um botão. Mais nada.
+ * A tela de quem está numa obra: um botão, e o que aconteceu com ele.
  *
- * ISTO NÃO É UM BANNER NA HOME. Quando há obra hoje, este componente OCUPA a
- * tela — a home normal empilha catorze blocos e um botão a mais ali é um
- * botão invisível. O público deste fluxo tem pouquíssima familiaridade com
- * tecnologia e, muitas vezes, dificuldade de leitura: o contrato é que ele
- * abre o app e o que precisa fazer está debaixo do dedo, sem ler nada.
+ * Quando há obra hoje, este componente OCUPA a home — a home da empresa
+ * empilha catorze blocos e um botão a mais ali é um botão invisível. O público
+ * deste fluxo tem pouquíssima familiaridade com tecnologia e, muitas vezes,
+ * dificuldade de leitura.
+ *
+ * ⚠️ A PRIMEIRA VERSÃO ERROU, e o erro vale ficar escrito. Eu segui "zero
+ * leitura" ao pé da letra e entreguei um nome de obra, um botão escrito
+ * CHEGUEI e mais nada: quem abriu não entendeu o que a tela fazia, e depois de
+ * tocar não havia sinal de que estava resolvido. Zero leitura não é zero
+ * explicação — é UMA frase curta, não um parágrafo. E "sem confirmação antes,
+ * desfazer depois" só vale se o desfazer existir na tela; na primeira versão
+ * ele existia só no estado.
  *
  * Regras que não podem cair numa refatoração:
- * - UM toque. Sem diálogo de confirmação antes (dobra o toque, e este público
- *   lê diálogo como erro). O desfazer vem depois.
- * - Nenhuma escolha, nenhuma lista, nenhum campo. A obra e o caminhão vêm da
+ * - UM toque pra marcar. Sem diálogo antes; o desfazer fica visível depois.
+ * - Nenhuma escolha, nenhuma lista, nenhum campo: obra e caminhão vêm da
  *   alocação, que só permite uma por vez exatamente pra isso.
  * - Tocar de novo devolve a mesma tela verde. Nunca alerta, nunca duplicata.
  * - Sem GPS e sem rede funciona igual: entra no outbox e sobe depois.
- * - NÃO é ponto. Não existe horário esperado, não existe atraso, não existe
- *   falta. O que se registra é o caminhão presente na obra num dia.
+ * - NÃO é ponto. Não existe horário esperado, atraso nem falta: o que se
+ *   registra é o caminhão presente na obra num dia.
  */
 
 /** Alvo gigante de propósito: dedão grosso, dentro do caminhão, no sol. */
-const ALTURA_BOTAO = 260;
+const ALTURA_BOTAO = 220;
+
+/** Janela pra desfazer. Curta porque arrependimento acontece em segundos. */
+const MINUTOS_PRA_DESFAZER = 10;
 
 export function HomeObra() {
   const { data } = useObraDeHoje();
-  const [tocado, setTocado] = useState(false);
-  const [desfazerAte, setDesfazerAte] = useState<number | null>(null);
+  const me = useMe();
+  const [tocadoEm, setTocadoEm] = useState<number | null>(null);
+  const [desfeito, setDesfeito] = useState(false);
+  const [desfazendo, setDesfazendo] = useState(false);
+  const [avisoDesfazer, setAvisoDesfazer] = useState<string | null>(null);
 
-  const registradoHoje = data?.hoje?.registrado === true || tocado;
+  const registradoHoje = (data?.hoje?.registrado === true || tocadoEm !== null) && !desfeito;
+  const podeDesfazer =
+    tocadoEm !== null && !desfeito && Date.now() - tocadoEm < MINUTOS_PRA_DESFAZER * 60_000;
 
-  // A janela de desfazer fecha sozinha. Dez minutos porque o arrependimento
-  // acontece em segundos e o botão não pode ficar na tela o dia inteiro
-  // convidando a desmarcar um dia legítimo.
+  // Fecha a janela de desfazer sozinha, pra o botão não ficar o dia inteiro
+  // na tela convidando a desmarcar um dia legítimo.
+  const [, forcarRender] = useState(0);
   useEffect(() => {
-    if (!desfazerAte) return;
-    const t = setTimeout(() => setDesfazerAte(null), 10 * 60 * 1000);
+    if (!tocadoEm) return;
+    const t = setTimeout(() => forcarRender((n) => n + 1), MINUTOS_PRA_DESFAZER * 60_000);
     return () => clearTimeout(t);
-  }, [desfazerAte]);
+  }, [tocadoEm]);
 
   if (!data?.alocacao || !data.hoje) return null;
 
   async function marcar() {
     if (!data?.alocacao || !data.hoje) return;
-    // Otimista: o verde aparece no toque, não quando a rede responde. É o app
-    // inteiro funcionando offline-first — esperar confirmação do servidor
-    // deixaria o motorista olhando um spinner no pátio.
-    setTocado(true);
-    setDesfazerAte(Date.now() + 10 * 60 * 1000);
+    // Otimista: o verde aparece no toque, não quando a rede responde. Esperar
+    // o servidor deixaria o motorista olhando um spinner no pátio.
+    setTocadoEm(Date.now());
+    setDesfeito(false);
 
-    // GPS é EVIDÊNCIA, nunca porteiro: se não vier, registra igual. Nada de
-    // pedir permissão aqui se ele já negou — obra tem sinal ruim e a falta de
-    // coordenada não pode custar o dia dele.
+    // GPS é EVIDÊNCIA, nunca porteiro: lê a permissão que já existe, nunca
+    // pede na hora, e sem coordenada registra igual. Sinal de obra é ruim e
+    // isso não pode custar o dia dele.
     let coords: { latitude: number; longitude: number; precisao?: number } | undefined;
     try {
       const { status } = await Location.getForegroundPermissionsAsync();
@@ -81,52 +96,117 @@ export function HomeObra() {
     });
   }
 
+  async function desfazer() {
+    if (!data?.alocacao || !data.hoje) return;
+    setDesfazendo(true);
+    const r = await desfazerPresencaObra({
+      alocacaoId: data.alocacao.id,
+      data: data.hoje.data,
+    });
+    setDesfazendo(false);
+    if (r.confirmado) {
+      setDesfeito(true);
+      setTocadoEm(null);
+      setAvisoDesfazer(null);
+      return;
+    }
+    // Sem rede o servidor não foi avisado. Dizer isso é melhor do que mostrar
+    // o botão de novo e deixar ele achar que desfez — e pior, tocar outra vez.
+    setAvisoDesfazer("Sem internet agora. Tente desfazer quando o sinal voltar.");
+  }
+
   return (
-    <View className="flex-1 justify-between px-4 py-6">
-      <View>
-        <Text className="text-2xl font-bold text-foreground" numberOfLines={1}>
+    <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
+      {/* Mesmo cabeçalho das outras telas. Sem isto a tela parecia quebrada —
+          o app inteiro tem a faixa da marca no topo, e só esta não tinha. */}
+      <View className="bg-brand px-5 pb-6 pt-14">
+        <SeletorEmpresa />
+        {me.data && (
+          <Text className="mt-0.5 text-2xl font-bold text-white">{me.data.nome}</Text>
+        )}
+        <Text className="mt-1 text-lg font-semibold text-white/90" numberOfLines={1}>
           {data.alocacao.obra}
         </Text>
-        <Text className="mt-1 text-lg text-muted-foreground">{data.alocacao.placa}</Text>
+        <Text className="text-base text-white/70" style={{ fontVariant: ["tabular-nums"] }}>
+          Placa {data.alocacao.placa}
+        </Text>
       </View>
 
-      {registradoHoje ? (
-        <View
-          className="items-center justify-center rounded-3xl bg-emerald-600"
-          style={{ height: ALTURA_BOTAO }}
-        >
-          <Check size={96} color="#fff" strokeWidth={3} />
-          <Text className="mt-2 text-4xl font-bold text-white">HOJE OK</Text>
-        </View>
-      ) : (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Cheguei na obra"
-          onPress={() => void marcar()}
-          className="items-center justify-center rounded-3xl bg-[#DF7234] active:opacity-80"
-          style={{ height: ALTURA_BOTAO }}
-        >
-          <MapPin size={96} color="#fff" strokeWidth={2.5} />
-          <Text className="mt-2 text-5xl font-bold text-white">CHEGUEI</Text>
-        </Pressable>
-      )}
+      <ScrollView contentContainerClassName="p-4 gap-4">
+        {registradoHoje ? (
+          <>
+            <View
+              className="items-center justify-center rounded-3xl bg-emerald-600"
+              style={{ height: ALTURA_BOTAO }}
+            >
+              <Check size={80} color="#fff" strokeWidth={3} />
+              <Text className="mt-2 text-4xl font-bold text-white">HOJE OK</Text>
+            </View>
 
-      {/* Os dias em branco. Não se chamam falta e não acusam ninguém: são dias
-          que ninguém marcou, e só ele pode dizer se esteve lá. */}
-      {data.pendentes.length > 0 ? (
-        <View className="rounded-2xl border-2 border-amber-500/40 bg-card p-4">
-          <Text className="text-lg font-bold text-foreground">
-            {data.pendentes.length === 1
-              ? "1 dia sem marcar"
-              : `${data.pendentes.length} dias sem marcar`}
-          </Text>
-          <Text className="mt-1 text-base text-muted-foreground">
-            Se você esteve na obra nesses dias, toque pra marcar.
-          </Text>
-        </View>
-      ) : (
-        <View />
-      )}
-    </View>
+            {/* A frase que faltava. "Ficou verde e mais nada" é exatamente o
+                que a primeira versão entregou: o motorista não tinha como
+                saber se ainda precisava fazer alguma coisa. */}
+            <Text className="text-center text-xl font-medium text-foreground">
+              Seu dia na obra foi marcado.{"\n"}Não precisa fazer mais nada hoje.
+            </Text>
+
+            {podeDesfazer && (
+              <Pressable
+                accessibilityRole="button"
+                disabled={desfazendo}
+                onPress={() => void desfazer()}
+                className="items-center justify-center rounded-2xl border-2 border-border py-4"
+              >
+                <Text className="text-lg font-semibold text-muted-foreground">
+                  {desfazendo ? "Desfazendo…" : "Marquei sem querer"}
+                </Text>
+              </Pressable>
+            )}
+
+            {avisoDesfazer && (
+              <Text className="text-center text-base text-amber-700">{avisoDesfazer}</Text>
+            )}
+          </>
+        ) : (
+          <>
+            {/* UMA frase, antes do botão. O rótulo sozinho não diz o que a
+                tela faz pra quem nunca viu. */}
+            <Text className="text-center text-xl font-medium text-foreground">
+              Chegou na obra hoje? Toque no botão.
+            </Text>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Cheguei na obra"
+              onPress={() => void marcar()}
+              className="items-center justify-center rounded-3xl bg-[#DF7234] active:opacity-80"
+              style={{ height: ALTURA_BOTAO }}
+            >
+              <MapPin size={80} color="#fff" strokeWidth={2.5} />
+              <Text className="mt-2 text-5xl font-bold text-white">CHEGUEI</Text>
+            </Pressable>
+          </>
+        )}
+
+        {/* Os dias em branco. Não se chamam falta e não acusam ninguém: são
+            dias que ninguém marcou, e só ele pode dizer se esteve lá. */}
+        {data.pendentes.length > 0 && (
+          <View className="rounded-2xl border-2 border-amber-500/40 bg-card p-4">
+            <Text className="text-lg font-bold text-foreground">
+              {data.pendentes.length === 1
+                ? "1 dia sem marcar"
+                : `${data.pendentes.length} dias sem marcar`}
+            </Text>
+            <Text className="mt-1 text-base text-muted-foreground">
+              Se você esteve na obra nesses dias, avise o escritório.
+            </Text>
+          </View>
+        )}
+
+        <Text className="pb-4 text-center text-base text-muted-foreground">
+          Funciona sem internet. O que você marcar sobe sozinho quando o sinal voltar.
+        </Text>
+      </ScrollView>
+    </SafeAreaView>
   );
 }

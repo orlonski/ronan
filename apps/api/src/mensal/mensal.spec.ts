@@ -183,6 +183,51 @@ describe("o painel não apaga a prova do motorista", () => {
   });
 });
 
+describe("o motorista desfaz o próprio toque", () => {
+  it("apaga o dia que ELE marcou", async () => {
+    // É o que torna honesto não perguntar "tem certeza?" antes de marcar. Sem
+    // desfazer, um toque errado seria definitivo e a tela precisaria de um
+    // diálogo todo dia — que é justamente o toque a mais que não pode existir.
+    const apagados: string[] = [];
+    const prisma = {
+      alocacaoObra: { findFirst: async () => ({ id: "a1" }) },
+      registroPresenca: {
+        findFirst: async () => ({ id: "p1", origem: "APP" }),
+        delete: async ({ where }: { where: { id: string } }) => {
+          apagados.push(where.id);
+          return {};
+        },
+      },
+    };
+    const s = new MensalService(prisma as never);
+    await expect(s.desmarcarPresenca("mot1", ONTEM)).resolves.toEqual({ desmarcado: true });
+    expect(apagados).toEqual(["p1"]);
+  });
+
+  it("não apaga o que o ESCRITÓRIO lançou", async () => {
+    const prisma = {
+      alocacaoObra: { findFirst: async () => ({ id: "a1" }) },
+      registroPresenca: {
+        findFirst: async () => ({ id: "p1", origem: "PAINEL" }),
+        delete: async () => ({}),
+      },
+    };
+    const s = new MensalService(prisma as never);
+    await expect(s.desmarcarPresenca("mot1", ONTEM)).rejects.toThrow(/escritório/i);
+  });
+
+  it("desfazer o que nunca subiu é sucesso, não erro", async () => {
+    // O app pode estar desfazendo um item que ainda estava no outbox. Devolver
+    // 404 faria a tela mostrar falha num sucesso.
+    const prisma = {
+      alocacaoObra: { findFirst: async () => ({ id: "a1" }) },
+      registroPresenca: { findFirst: async () => null, delete: async () => ({}) },
+    };
+    const s = new MensalService(prisma as never);
+    await expect(s.desmarcarPresenca("mot1", ONTEM)).resolves.toEqual({ desmarcado: true });
+  });
+});
+
 /**
  * O léxico é regra, não estilo.
  *

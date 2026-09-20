@@ -188,6 +188,16 @@ export class ObraMotoristaController {
     return this.service.obraDeHoje(user.id);
   }
 
+  /**
+   * Desfazer o próprio toque. É o que torna honesto não perguntar "tem
+   * certeza?" antes de marcar.
+   */
+  @Delete("cheguei/:data")
+  async desmarcar(@CurrentUser() user: AuthMotorista, @Param("data") data: string) {
+    await this.exigirAprovado(user.id);
+    return this.service.desmarcarPresenca(user.id, data);
+  }
+
   /** O toque. Idempotente: tocar de novo devolve o mesmo dia, nunca erro. */
   @Post("cheguei")
   async cheguei(

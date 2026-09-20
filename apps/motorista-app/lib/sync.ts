@@ -713,6 +713,34 @@ export async function descartarPresencaObra(clientId: string): Promise<void> {
   notify();
 }
 
+/**
+ * Desfazer o dia: tira do outbox E avisa o servidor.
+ *
+ * Os dois passos, nessa ordem, porque o item pode estar em qualquer um dos
+ * dois lugares. Se ainda não subiu, o primeiro resolve e o segundo é um
+ * no-op; se já subiu, o primeiro não acha nada e o segundo é o que conta.
+ *
+ * O servidor devolve sucesso quando não há o que apagar, justamente pra este
+ * caso — desfazer algo que nunca chegou não é erro.
+ *
+ * Sem rede o DELETE falha: o dia que JÁ tinha subido continua lá, e a tela
+ * volta a mostrar verde na próxima carga. É honesto — melhor do que jurar
+ * que desfez.
+ */
+export async function desfazerPresencaObra(item: {
+  alocacaoId: string;
+  data: string;
+}): Promise<{ confirmado: boolean }> {
+  await deletePendingPresencaObra(`${item.alocacaoId}|${item.data}|CHEGADA`);
+  notify();
+  try {
+    await api.delete(`/m/obra/cheguei/${item.data}`);
+    return { confirmado: true };
+  } catch {
+    return { confirmado: false };
+  }
+}
+
 /** Reseta o erro e tenta encerrar a diária de novo (após 4xx permanente). */
 export async function tentarNovamenteEncerrarDiaria(viagemId: string): Promise<void> {
   const list = await listPendingEncerrarDiaria();

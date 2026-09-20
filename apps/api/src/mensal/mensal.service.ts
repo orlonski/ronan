@@ -244,6 +244,43 @@ export class MensalService {
     });
   }
 
+  /**
+   * O motorista desmarcando o próprio dia.
+   *
+   * Não contradiz a regra de que o PAINEL não apaga dia marcado no app: ali o
+   * escritório apagaria prova de outra pessoa sem ela saber. Aqui é ele
+   * mesmo, sobre o registro dele — e existir esse caminho é o que torna
+   * honesto não ter diálogo de confirmação antes do toque. Sem desfazer, um
+   * toque errado seria definitivo, e aí a tela precisaria perguntar "tem
+   * certeza?" a cada dia, todo dia.
+   *
+   * Só mexe no que veio do APP: dia lançado pelo escritório tem motivo escrito
+   * e história própria, e some só por lá.
+   */
+  async desmarcarPresenca(motoristaId: string, dataYmd: string) {
+    const a = await this.prisma.alocacaoObra.findFirst({
+      where: { motoristaId, ativa: true },
+      select: { id: true },
+    });
+    if (!a) throw new BadRequestException("Você não está alocado em nenhuma obra.");
+
+    const r = await this.prisma.registroPresenca.findFirst({
+      where: { alocacaoId: a.id, data: dia(dataYmd) },
+    });
+    // Nada a desfazer não é erro: o app pode estar desfazendo algo que nunca
+    // chegou a subir, e devolver 404 faria a tela mostrar falha num sucesso.
+    if (!r) return { desmarcado: true };
+
+    if (r.origem !== "APP") {
+      throw new ForbiddenException(
+        "Esse dia foi lançado pelo escritório. Fale com eles para corrigir.",
+      );
+    }
+
+    await this.prisma.registroPresenca.delete({ where: { id: r.id } });
+    return { desmarcado: true };
+  }
+
   /** A grade do período, por alocação. É a base do espelho da Fase 2. */
   async grade(clienteId: string | undefined, de: string, ate: string) {
     const registros = await this.prisma.registroPresenca.findMany({
