@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { LoadingCard } from "@/components/loading";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { useConfirm } from "@/components/confirm-dialog";
+import { hojeSP } from "@/lib/datetime-br";
 
 type Planejada = {
   id: string;
@@ -91,7 +92,7 @@ export default function ProgramacaoPage() {
 function Conteudo() {
   const token = useAuthToken();
   const queryClient = useQueryClient();
-  const [dia, setDia] = React.useState(() => new Date().toISOString().slice(0, 10));
+  const [dia, setDia] = React.useState(hojeSP);
   const [erro, setErro] = React.useState<string | null>(null);
   const [ocupado, setOcupado] = React.useState(false);
 

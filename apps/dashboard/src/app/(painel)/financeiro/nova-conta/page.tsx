@@ -15,6 +15,7 @@ import { MotoristaCombobox, VeiculoCombobox } from "@/components/fk-comboboxes";
 import { fetchApi, useAuthToken, useResourceOptions } from "@/lib/client-api";
 import { lerNumero } from "@/lib/numero";
 import { AvisoNumero } from "@/components/aviso-numero";
+import { hojeSP } from "@/lib/datetime-br";
 
 type Fornecedor = { id: string; nome: string; tipo: keyof typeof TIPO_FORNECEDOR_LABEL };
 
@@ -39,7 +40,7 @@ function Conteudo() {
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
 
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeSP();
   const [form, setForm] = useState({
     descricao: "",
     valor: "",

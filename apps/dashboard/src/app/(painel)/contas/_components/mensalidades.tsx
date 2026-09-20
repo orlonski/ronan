@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { hojeSP } from "@/lib/datetime-br";
 
 const PATH = "/admin/assinaturas";
 
@@ -895,7 +896,7 @@ function BaixaManual({
   onPronto: () => void;
 }) {
   const token = useAuthToken();
-  const [pagoEm, setPagoEm] = useState(new Date().toISOString().slice(0, 10));
+  const [pagoEm, setPagoEm] = useState(hojeSP);
   const [motivo, setMotivo] = useState("");
   const [salvando, setSalvando] = useState(false);
 

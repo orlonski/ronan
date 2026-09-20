@@ -35,6 +35,7 @@ import { PhotoCapture, type CapturedPhoto } from "@/components/photo-capture";
 import { ScreenHeader } from "@/components/screen-header";
 import { api } from "@/lib/api";
 import { API_URL } from "@/lib/api-url";
+import { hojeISO } from "@/lib/datetime";
 import { showAlert, showConfirm } from "@/lib/alert";
 import { cacheDocumentos, carregarDocumentos } from "@/lib/pessoal";
 
@@ -104,7 +105,7 @@ export default function MeusDocumentosScreen() {
       return;
     }
     try {
-      const hoje = new Date().toISOString().slice(0, 10);
+      const hoje = hojeISO();
       const c = await api.criarComprovantePessoal({ tipo: "CADASTRO", inicio: hoje, fim: hoje });
       await Share.share({
         message: `Meus documentos: ${API_URL}/publico/comprovante/${c.token}`,

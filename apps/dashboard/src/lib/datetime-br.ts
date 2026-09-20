@@ -19,6 +19,31 @@ export function ymdSaoPaulo(d: Date = new Date()): [number, number, number] {
   return [Number(parts[0]), Number(parts[1]), Number(parts[2])];
 }
 
+/**
+ * HOJE em "YYYY-MM-DD", pelo calendário de São Paulo.
+ *
+ * Use SEMPRE isto pra "hoje" — nunca `new Date().toISOString().slice(0, 10)`.
+ *
+ * Esse atalho já custou caro de verdade: o `toISOString` devolve o dia em UTC,
+ * e uma alocação de obra criada às 21h de São Paulo nasceu começando no DIA
+ * SEGUINTE. O motorista somou a diária no mesmo dia, o servidor recusou com
+ * "esse dia é anterior ao início na obra", o item travou no outbox dele — e a
+ * tela do app ficou verde mentindo, porque o verde é otimista.
+ *
+ * O container do painel roda em UTC (render no servidor) e o navegador roda no
+ * fuso de quem abriu (que pode ser qualquer um); nenhum dos dois é a resposta.
+ * A resposta é São Paulo, sempre — é onde o caminhão está.
+ *
+ * ⚠️ NÃO troque por isto a formatação de uma coluna `@db.Date` que veio do
+ * banco (viagem.data, pedágio, períodos de fechamento): essas chegam como
+ * meia-noite UTC e já estão no dia certo. Ancorar em SP faria voltar um dia.
+ * A regra é: `new Date()` (agora) → `hojeSP()`; Date vindo do banco → UTC.
+ */
+export function hojeSP(): string {
+  const [a, m, d] = ymdSaoPaulo();
+  return `${a}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
 /** Primeiro dia do mês civil de SP em "YYYY-MM-DD". */
 export function primeiroDiaDoMesSP(): string {
   const [y, m] = ymdSaoPaulo();

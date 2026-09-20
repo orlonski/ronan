@@ -23,6 +23,7 @@ import { fetchApi, useAuthToken } from "@/lib/client-api";
 import { ErroCard } from "@/components/erro-estado";
 import { AvisoNumero } from "@/components/aviso-numero";
 import { formatarBRL, lerNumero } from "@/lib/numero";
+import { hojeSP } from "@/lib/datetime-br";
 import { useConfirm } from "@/components/confirm-dialog";
 import { toast } from "sonner";
 
@@ -66,8 +67,10 @@ function dataBR(v: string): string {
   return `${d}/${m}/${a}`;
 }
 
+// "Hoje" em UTC marcaria como ATRASADA, depois das 21h de São Paulo, uma conta
+// que só vence amanhã.
 function atrasado(venc: string): boolean {
-  return venc.slice(0, 10) < new Date().toISOString().slice(0, 10);
+  return venc.slice(0, 10) < hojeSP();
 }
 
 export default function FinanceiroPage() {

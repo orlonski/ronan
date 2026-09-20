@@ -4,6 +4,17 @@ import { Client as MinioClient } from "minio";
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import { contaIdAtual } from "../common/conta/conta-context";
+import { inicioDoDiaData } from "../common/timezone";
+
+/**
+ * A pasta do dia dentro do bucket, no calendário de Brasília.
+ *
+ * `new Date().toISOString()` jogaria tudo que entra depois das 21h na pasta
+ * do dia seguinte — e quem for procurar o ticket de terça no MinIO não acha.
+ */
+function diaBR(): string {
+  return inicioDoDiaData().toISOString().slice(0, 10);
+}
 
 @Injectable()
 export class UploadsService implements OnModuleInit {
@@ -35,7 +46,7 @@ export class UploadsService implements OnModuleInit {
 
   async putTicketFoto(buffer: Buffer, mimetype: string, motoristaId: string): Promise<string> {
     const ext = mimetype.includes("png") ? "png" : "jpg";
-    const key = `${contaIdAtual()}/tickets/${new Date().toISOString().slice(0, 10)}/${motoristaId}/${randomUUID()}.${ext}`;
+    const key = `${contaIdAtual()}/tickets/${diaBR()}/${motoristaId}/${randomUUID()}.${ext}`;
     await this.client.putObject(this.bucket, key, buffer, buffer.length, {
       "Content-Type": mimetype,
     });
@@ -48,7 +59,7 @@ export class UploadsService implements OnModuleInit {
     motoristaId: string,
   ): Promise<string> {
     const ext = mimetype.includes("png") ? "png" : "jpg";
-    const key = `${contaIdAtual()}/abastecimentos/${new Date().toISOString().slice(0, 10)}/${motoristaId}/${randomUUID()}.${ext}`;
+    const key = `${contaIdAtual()}/abastecimentos/${diaBR()}/${motoristaId}/${randomUUID()}.${ext}`;
     await this.client.putObject(this.bucket, key, buffer, buffer.length, {
       "Content-Type": mimetype,
     });
@@ -82,7 +93,7 @@ export class UploadsService implements OnModuleInit {
 
   async putStoryFoto(buffer: Buffer, mimetype: string, motoristaId: string): Promise<string> {
     const ext = mimetype.includes("png") ? "png" : "jpg";
-    const key = `${contaIdAtual()}/stories/${new Date().toISOString().slice(0, 10)}/${motoristaId}/${randomUUID()}.${ext}`;
+    const key = `${contaIdAtual()}/stories/${diaBR()}/${motoristaId}/${randomUUID()}.${ext}`;
     await this.client.putObject(this.bucket, key, buffer, buffer.length, {
       "Content-Type": mimetype,
     });
@@ -96,7 +107,7 @@ export class UploadsService implements OnModuleInit {
    */
   async putAvisoFoto(buffer: Buffer, mimetype: string, usuarioId: string): Promise<string> {
     const ext = mimetype.includes("png") ? "png" : "jpg";
-    const key = `${contaIdAtual()}/avisos/${new Date().toISOString().slice(0, 10)}/${usuarioId}/${randomUUID()}.${ext}`;
+    const key = `${contaIdAtual()}/avisos/${diaBR()}/${usuarioId}/${randomUUID()}.${ext}`;
     await this.client.putObject(this.bucket, key, buffer, buffer.length, {
       "Content-Type": mimetype,
     });
@@ -119,7 +130,7 @@ export class UploadsService implements OnModuleInit {
         : mimetype.includes("webm")
           ? "webm"
           : "m4a";
-    const key = `${contaIdAtual()}/chat-audio/${new Date().toISOString().slice(0, 10)}/${motoristaId}/${randomUUID()}.${ext}`;
+    const key = `${contaIdAtual()}/chat-audio/${diaBR()}/${motoristaId}/${randomUUID()}.${ext}`;
     await this.client.putObject(this.bucket, key, buffer, buffer.length, {
       "Content-Type": mimetype,
     });
@@ -132,7 +143,7 @@ export class UploadsService implements OnModuleInit {
     mimetype: string,
   ): Promise<string> {
     const ext = nomeArquivo.split(".").pop()?.toLowerCase() ?? "bin";
-    const key = `fechamentos/originais/${new Date().toISOString().slice(0, 10)}/${randomUUID()}.${ext}`;
+    const key = `fechamentos/originais/${diaBR()}/${randomUUID()}.${ext}`;
     await this.client.putObject(this.bucket, key, buffer, buffer.length, {
       "Content-Type": mimetype,
     });
@@ -224,7 +235,7 @@ export class UploadsService implements OnModuleInit {
    * plataforma. JPEG porque a API de publicação da Meta não aceita PNG.
    */
   async putArteInstagram(buffer: Buffer): Promise<string> {
-    const key = `plataforma/instagram/${new Date().toISOString().slice(0, 10)}/${randomUUID()}.jpg`;
+    const key = `plataforma/instagram/${diaBR()}/${randomUUID()}.jpg`;
     await this.client.putObject(this.bucket, key, buffer, buffer.length, {
       "Content-Type": "image/jpeg",
     });

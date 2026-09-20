@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/empty-state";
 import { api } from "@/lib/api";
+import { hojeISO, somarDiasISO } from "@/lib/datetime";
 
 /**
  * A programação: o que o escritório combinou que ele vai levar.
@@ -83,8 +84,11 @@ function agruparPorDia(itens: ViagemProgramada[]): [string, ViagemProgramada[]][
 }
 
 function rotuloDia(iso: string): string {
-  const hoje = new Date().toISOString().slice(0, 10);
-  const amanha = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  // Em UTC, depois das 21h de Brasília a viagem de amanhã aparecia como
+  // "Hoje" e a de hoje perdia o rótulo — bem na hora em que ele confere a
+  // programação do dia seguinte.
+  const hoje = hojeISO();
+  const amanha = somarDiasISO(hoje, 1);
   if (iso === hoje) return "Hoje";
   if (iso === amanha) return "Amanhã";
   const d = new Date(`${iso}T12:00:00Z`);

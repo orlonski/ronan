@@ -6,6 +6,9 @@
  * "YYYY-MM-DD" como horário local pra evitar isso.
  */
 
+/** Brasília é UTC-3 fixo desde o fim do horário de verão, em 2019. */
+const OFFSET_BR_MS = 3 * 60 * 60 * 1000;
+
 /** Aceita "YYYY-MM-DD" ou ISO completo. Sempre devolve Date no fuso local. */
 export function parseDataLocal(iso: string): Date {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
@@ -21,6 +24,19 @@ export function parseDataLocal(iso: string): Date {
   }
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? new Date() : d;
+}
+
+/**
+ * Anda `n` dias sobre um "YYYY-MM-DD", sem passar perto de fuso nenhum.
+ *
+ * A aritmética é feita em UTC de propósito: a string não representa um
+ * instante, representa um dia do calendário, e somar 1 a "2026-10-31" tem que
+ * dar "2026-11-01" em qualquer aparelho.
+ */
+export function somarDiasISO(iso: string, n: number): string {
+  const [a, m, d] = iso.split("-").map(Number);
+  const r = new Date(Date.UTC(a!, (m ?? 1) - 1, (d ?? 1) + n));
+  return `${r.getUTCFullYear()}-${String(r.getUTCMonth() + 1).padStart(2, "0")}-${String(r.getUTCDate()).padStart(2, "0")}`;
 }
 
 /** "06/05" */
@@ -39,13 +55,25 @@ export function fmtDataBR(iso: string): string {
   return `${dia}/${mes}/${d.getFullYear()}`;
 }
 
-/** "YYYY-MM-DD" do dia atual em horário LOCAL (não UTC). */
+/**
+ * "YYYY-MM-DD" de HOJE, no calendário de BRASÍLIA.
+ *
+ * Nem UTC, nem o fuso do aparelho — os dois já erraram aqui.
+ *
+ * UTC erra a partir das 21h: pedágio pago às 22h de terça nasceria com a data
+ * de quarta. E o fuso do aparelho erra porque um motorista real estava com o
+ * celular em ~UTC-6 (relógio absoluto certo, timezone torto): pra ele,
+ * qualquer coisa lançada depois das 21h ia com a data de ontem.
+ *
+ * Brasília é UTC-3 fixo desde que o Brasil acabou com o horário de verão, em
+ * 2019, então o deslocamento constante resolve — e é independente do que o
+ * aparelho acha que é o fuso dele.
+ */
 export function hojeISO(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const dia = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${dia}`;
+  const br = new Date(Date.now() - OFFSET_BR_MS);
+  const m = String(br.getUTCMonth() + 1).padStart(2, "0");
+  const dia = String(br.getUTCDate()).padStart(2, "0");
+  return `${br.getUTCFullYear()}-${m}-${dia}`;
 }
 
 /** "06/05 14:30" — data curta + hora (horário do device). */
@@ -79,7 +107,6 @@ export function fmtDataHora(iso: string): string {
 //
 // O instante em si é sempre absoluto (Date.now()), então só a EXIBIÇÃO precisa
 // desse cuidado. -3h fixo: o Brasil não tem horário de verão desde 2019.
-const OFFSET_BR_MS = 3 * 60 * 60 * 1000;
 
 function partesBR(iso: string): { dia: string; mes: string; hh: string; mm: string } | null {
   const d = new Date(iso);

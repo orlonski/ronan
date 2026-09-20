@@ -13,6 +13,7 @@ import { Select } from "@/components/ui/select";
 import { useCreateResource, useResourceOptions, useUpdateResource } from "@/lib/client-api";
 import { useSujo } from "@/hooks/use-sujo";
 import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
+import { hojeSP } from "@/lib/datetime-br";
 
 type Nomeado = { id: string; nome: string };
 
@@ -76,7 +77,7 @@ export function PedidoForm({ initial }: { initial?: Pedido }) {
   const update = useUpdateResource<Partial<Body>, Pedido>(PATH, PATH);
   const [erro, setErro] = useState<string | null>(null);
 
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeSP();
   const [form, setForm] = useState({
     empresaId: initial?.empresaId ?? "",
     clienteId: initial?.clienteId ?? undefined,

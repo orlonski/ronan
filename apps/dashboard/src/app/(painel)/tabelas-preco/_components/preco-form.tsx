@@ -12,6 +12,7 @@ import { Select } from "@/components/ui/select";
 import { useCreateResource, useResourceOptions, useUpdateResource } from "@/lib/client-api";
 import { useSujo } from "@/hooks/use-sujo";
 import { BotaoCancelar, useAvisarSeSujo } from "@/components/sair-sem-salvar";
+import { hojeSP } from "@/lib/datetime-br";
 
 type Empresa = { id: string; nome: string };
 type Material = { id: string; nome: string };
@@ -82,7 +83,7 @@ export function PrecoForm({ initial }: { initial?: Preco }) {
     precoUnitario: initial?.precoUnitario ?? "",
     repassaPedagio: initial?.repassaPedagio ?? false,
     // Preço novo passa a valer hoje, que é o que quase sempre se quer.
-    vigenciaDe: soData(initial?.vigenciaDe) || new Date().toISOString().slice(0, 10),
+    vigenciaDe: soData(initial?.vigenciaDe) || hojeSP(),
     vigenciaAte: soData(initial?.vigenciaAte),
   });
 
