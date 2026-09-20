@@ -64,7 +64,14 @@ export class PontoAdminService {
     const existente = await this.prisma.configPonto.findFirst();
     if (existente) return existente;
 
-    const conta = await this.prisma.conta.findFirst({ select: { nome: true, cnpj: true } });
+    // ⚠️ `Conta` está em MODELS_GLOBAIS: a trava não injeta `contaId` nela, e
+    // `findFirst` SEM `where` lança de propósito (`exigirAlvo`) — senão a
+    // config do ponto de uma empresa nasceria com a razão social de outra.
+    // Foi exatamente o 500 que apareceu no primeiro acesso à tela.
+    const conta = await this.prisma.conta.findFirst({
+      where: { id: contaIdAtual() },
+      select: { nome: true, cnpj: true },
+    });
     const criada = await this.prisma.configPonto.create({
       data: {
         // `contaId` é a PK aqui, então o tipo do Prisma exige explícito — a
