@@ -677,6 +677,11 @@ export type ResumoMes = {
 export type ObraDeHoje = {
   alocacao: { id: string; obra: string; placa: string } | null;
   hoje: { data: string; registrado: boolean } | null;
+  /**
+   * Quantas diárias já entraram na conta do mês. Opcional porque cache gravado
+   * antes desta versão não tem o campo — e o app tem que abrir igual.
+   */
+  mes?: { rotulo: string; total: number };
   /** Dias do período que ninguém marcou. NÃO são faltas — são dias em branco. */
   pendentes: string[];
 };
@@ -728,6 +733,54 @@ export function useMeusDiasObra(mes: string, enabled = true) {
     staleTime: 60_000,
     queryFn: () => cacheFirst<MeusDiasObra>(["meus-dias-obra", mes], cacheKey, buscarRede),
   });
+}
+
+/**
+ * Soma ou tira a diária de HOJE direto no cache, sem rede.
+ *
+ * Existe porque o número é o herói da tela e o motorista está num pátio com
+ * 4G ruim: se o total só mudasse quando o servidor respondesse, ele tocaria em
+ * "somar", veria o mesmo número e tocaria de novo. Pior, fechar e reabrir o
+ * app perderia a conta — o estado ficaria só na memória da sessão.
+ *
+ * Mexe nos DOIS caches (o card e a tela do mês) de propósito: o número do card
+ * é a porta pra tela do mês, e divergir entre a porta e o que tem atrás dela é
+ * o pior defeito possível num produto que existe pra ser contraprova.
+ *
+ * O servidor continua sendo a verdade: a próxima carga com rede sobrescreve
+ * isto inteiro.
+ */
+export async function contarDiariaLocal(dia: string, soma: 1 | -1): Promise<ObraDeHoje | null> {
+  const mes = dia.slice(0, 7);
+
+  const atual = await cacheGet<ObraDeHoje>("q:obra-hoje");
+  let novo: ObraDeHoje | null = null;
+  if (atual?.hoje && atual.hoje.data === dia && atual.hoje.registrado !== (soma === 1)) {
+    novo = {
+      ...atual,
+      hoje: { ...atual.hoje, registrado: soma === 1 },
+      mes: atual.mes ? { ...atual.mes, total: Math.max(0, atual.mes.total + soma) } : atual.mes,
+    };
+    await cachePut("q:obra-hoje", novo).catch(() => {});
+  }
+
+  const doMes = await cacheGet<MeusDiasObra>(`q:meus-dias-obra:${mes}`);
+  if (doMes) {
+    const achou = doMes.dias.some((d) => d.data === dia);
+    const dias = achou
+      ? doMes.dias.map((d) => (d.data === dia ? { ...d, marcado: soma === 1 } : d))
+      : doMes.dias;
+    const mudou = achou && doMes.dias.some((d) => d.data === dia && d.marcado !== (soma === 1));
+    if (mudou) {
+      await cachePut(`q:meus-dias-obra:${mes}`, {
+        ...doMes,
+        dias,
+        total: Math.max(0, doMes.total + soma),
+      }).catch(() => {});
+    }
+  }
+
+  return novo;
 }
 
 export function useViagens() {

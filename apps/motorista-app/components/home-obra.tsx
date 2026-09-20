@@ -1,87 +1,131 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
 import * as Location from "expo-location";
-import { CalendarDays, Check, CloudOff, MapPin, TriangleAlert } from "lucide-react-native";
+import { Check, CloudOff, TriangleAlert } from "lucide-react-native";
 import { usePendingPresencaObra } from "@/hooks/use-pending-presenca-obra";
-import { useObraDeHoje } from "@/lib/queries";
+import { contarDiariaLocal, useObraDeHoje } from "@/lib/queries";
 import { desfazerPresencaObra, enqueuePresencaObra } from "@/lib/sync";
 
 /**
- * O bloco de quem está numa obra: um botão, e o que aconteceu com ele.
+ * O bloco de quem está numa obra: a CONTA do mês, e o que ela tem a ver com
+ * hoje.
  *
- * Vai no TOPO da home, antes de tudo. O público deste fluxo tem pouquíssima
- * familiaridade com tecnologia e, muitas vezes, dificuldade de leitura — então
- * a primeira coisa da tela tem que ser a única que ele precisa fazer hoje.
+ * ⚠️ Este bloco já foi reescrito três vezes, e cada versão morreu do mesmo
+ * jeito: o motorista olhava e não sabia o que aquilo era. Vale registrar por
+ * quê, porque a tentação de voltar atrás é grande.
  *
- * ⚠️ ELE JÁ SUBSTITUIU A HOME INTEIRA, E ISSO ESTAVA ERRADO. O argumento era
- * que um botão entre catorze blocos seria invisível — mas isso vale pra mais
- * um item na pilha, não pro PRIMEIRO elemento da tela. Substituir cobrou caro:
- * o motorista perdeu de uma vez o acesso a Pendentes (cujo único caminho no
- * app é um botão daquela home), a viagens, ao resumo e ao resto, e o app
- * mudava de forma conforme o dado — o que ninguém entende. Prominência se
- * ganha com tamanho e posição, não amputando o resto.
+ * 1. Substituiu a home inteira. Prominência se ganha com tamanho e posição,
+ *    não amputando o resto — e custou o acesso a Pendentes.
+ * 2. Virou um botão escrito CHEGUEI e nada mais. "Zero leitura" não é zero
+ *    explicação.
+ * 3. Ficou no TOPO da home, acima dos stories, com um alvo de 220px. O dono
+ *    olhou e disse que estava uma bosta — e estava: um bloco daquele tamanho
+ *    empurrava o app inteiro pra baixo todo dia, pra uma ação de um toque.
  *
- * ⚠️ A PRIMEIRA VERSÃO ERROU, e o erro vale ficar escrito. Eu segui "zero
- * leitura" ao pé da letra e entreguei um nome de obra, um botão escrito
- * CHEGUEI e mais nada: quem abriu não entendeu o que a tela fazia, e depois de
- * tocar não havia sinal de que estava resolvido. Zero leitura não é zero
- * explicação — é UMA frase curta, não um parágrafo. E "sem confirmação antes,
- * desfazer depois" só vale se o desfazer existir na tela; na primeira versão
- * ele existia só no estado.
+ * O que mudou de verdade nesta versão não é o layout, é O ASSUNTO. As três
+ * anteriores mostravam um BOTÃO (uma ação a fazer); esta mostra um NÚMERO
+ * (quantas diárias já entraram na conta do mês) e trata o dia de hoje como
+ * uma linha dessa conta. É o que o motorista já acompanha de cabeça e o que
+ * ele vai conferir no dia 20 — "somar o dia" ele entende sem ninguém
+ * explicar; "marcar presença" ele lê como ponto de firma, que ele não é.
+ *
+ * VOCABULÁRIO, e isto é regra: diária · conta · somar · dia · escritório ·
+ * contratante · em branco. NUNCA: ponto, bater, presença, chegada, jornada,
+ * hora, falta, atraso. Ele é parceiro autônomo, não funcionário — e a palavra
+ * errada aqui muda a natureza do que o app está registrando.
  *
  * Regras que não podem cair numa refatoração:
- * - UM toque pra marcar. Sem diálogo antes; o desfazer fica visível depois.
+ * - UM toque pra somar. Sem diálogo antes; o "tirar" fica visível depois.
  * - Nenhuma escolha, nenhuma lista, nenhum campo: obra e caminhão vêm da
  *   alocação, que só permite uma por vez exatamente pra isso.
- * - Tocar de novo devolve a mesma tela verde. Nunca alerta, nunca duplicata.
+ * - Tocar de novo devolve a mesma tela. Nunca alerta, nunca duplicata.
  * - Sem GPS e sem rede funciona igual: entra no outbox e sobe depois.
- * - NÃO é ponto. Não existe horário esperado, atraso nem falta: o que se
- *   registra é o caminhão presente na obra num dia.
+ * - O número sobe NO TOQUE e sobrevive a fechar o app (ver
+ *   `contarDiariaLocal`). Número que só mexe com rede faz ele tocar duas
+ *   vezes.
  */
 
-/** Alvo gigante de propósito: dedão grosso, dentro do caminhão, no sol. */
-const ALTURA_BOTAO = 220;
+/** Alvo do dedão grosso, dentro do caminhão, no sol — sem ocupar a home toda. */
+const ALTURA_BOTAO = 96;
 
-/** Janela pra desfazer. Curta porque arrependimento acontece em segundos. */
-const MINUTOS_PRA_DESFAZER = 10;
+const NOMES_MES = [
+  "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+  "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+];
+const NOMES_DIA = [
+  "domingo", "segunda-feira", "terça-feira", "quarta-feira",
+  "quinta-feira", "sexta-feira", "sábado",
+];
+
+/** hsl() não existe em prop `color` de React Native — os tokens viram hex aqui. */
+const COR_OK = "#1DA54F";
+const COR_AVISO = "#B4501A";
+const COR_ERRO = "#EB1414";
 
 export function BlocoObra() {
   const router = useRouter();
+  const qc = useQueryClient();
   const { data } = useObraDeHoje();
-  const [tocadoEm, setTocadoEm] = useState<number | null>(null);
-  const [desfeito, setDesfeito] = useState(false);
-  const [desfazendo, setDesfazendo] = useState(false);
-  const [avisoDesfazer, setAvisoDesfazer] = useState<string | null>(null);
 
-  // O item DESTE dia ainda no outbox. Sem isto o verde otimista mente: o
-  // motorista toca, a tela pinta, o envio falha e ninguém fica sabendo até a
+  /**
+   * Estado do ENVIO desta sessão. Só existe porque o outbox demora alguns
+   * milissegundos entre o toque e o item aparecer na fila — e nessa janela a
+   * tela diria "está na conta do escritório" sem nada ter saído do celular.
+   */
+  const [envioLocal, setEnvioLocal] = useState<"guardado" | "enviado" | null>(null);
+  const [tirado, setTirado] = useState(false);
+  const [confirmandoTirar, setConfirmandoTirar] = useState(false);
+  const [tirando, setTirando] = useState(false);
+  const [avisoTirar, setAvisoTirar] = useState<string | null>(null);
+
+  // O item DESTE dia ainda no outbox. Sem isto o número mente: o motorista
+  // soma, a tela conta, o envio falha e ninguém fica sabendo até a
   // conferência do fim do mês — quando já não dá pra resolver.
   const naFila = usePendingPresencaObra();
   const pendenteDeHoje = naFila.find((i) => i.payload.data === data?.hoje?.data);
   const falhou = pendenteDeHoje?.status === "error";
 
-  const registradoHoje = (data?.hoje?.registrado === true || tocadoEm !== null) && !desfeito;
-  const podeDesfazer =
-    tocadoEm !== null && !desfeito && Date.now() - tocadoEm < MINUTOS_PRA_DESFAZER * 60_000;
-
-  // Fecha a janela de desfazer sozinha, pra o botão não ficar o dia inteiro
-  // na tela convidando a desmarcar um dia legítimo.
-  const [, forcarRender] = useState(0);
+  // Promove "guardado" → "enviado" só depois de ter VISTO o item na fila.
+  // Sem essa memória, o intervalo entre o toque e a gravação no outbox seria
+  // lido como "já subiu".
+  const viNaFila = useRef(false);
   useEffect(() => {
-    if (!tocadoEm) return;
-    const t = setTimeout(() => forcarRender((n) => n + 1), MINUTOS_PRA_DESFAZER * 60_000);
-    return () => clearTimeout(t);
-  }, [tocadoEm]);
+    if (pendenteDeHoje) {
+      viNaFila.current = true;
+      return;
+    }
+    if (viNaFila.current && envioLocal === "guardado") {
+      viNaFila.current = false;
+      setEnvioLocal("enviado");
+    }
+  }, [pendenteDeHoje, envioLocal]);
 
   if (!data?.alocacao || !data.hoje) return null;
 
-  async function marcar() {
+  const dia = data.hoje.data;
+  const contado = !tirado && (envioLocal !== null || data.hoje.registrado === true);
+
+  // Falhou = não entrou na conta do escritório, então não pode entrar no
+  // número. O cache já somou no toque; aqui a soma é desfeita na exibição.
+  const total = Math.max(0, (data.mes?.total ?? 0) - (falhou && contado ? 1 : 0));
+  const temNumero = data.mes !== undefined;
+
+  const [ano, mes, numeroDoDia] = dia.split("-").map(Number);
+  const nomeDoMes = NOMES_MES[(mes ?? 1) - 1] ?? "";
+  const nomeDoDia = NOMES_DIA[new Date(Date.UTC(ano!, (mes ?? 1) - 1, numeroDoDia ?? 1)).getUTCDay()];
+
+  async function somar() {
     if (!data?.alocacao || !data.hoje) return;
-    // Otimista: o verde aparece no toque, não quando a rede responde. Esperar
-    // o servidor deixaria o motorista olhando um spinner no pátio.
-    setTocadoEm(Date.now());
-    setDesfeito(false);
+    // O número sobe NO TOQUE, não quando a rede responde. Esperar o servidor
+    // deixaria o motorista olhando o mesmo número no pátio — e tocando de novo.
+    setEnvioLocal("guardado");
+    setTirado(false);
+    setAvisoTirar(null);
+    const novo = await contarDiariaLocal(dia, 1);
+    if (novo) qc.setQueryData(["obra-hoje"], novo);
+    void qc.invalidateQueries({ queryKey: ["meus-dias-obra"] });
 
     // GPS é EVIDÊNCIA, nunca porteiro: lê a permissão que já existe, nunca
     // pede na hora, e sem coordenada registra igual. Sinal de obra é ruim e
@@ -103,176 +147,178 @@ export function BlocoObra() {
       /* sem GPS o registro vale do mesmo jeito */
     }
 
-    await enqueuePresencaObra({
-      alocacaoId: data.alocacao.id,
-      data: data.hoje.data,
-      ...coords,
-    });
+    await enqueuePresencaObra({ alocacaoId: data.alocacao.id, data: dia, ...coords });
   }
 
-  async function desfazer() {
+  async function tirar() {
     if (!data?.alocacao || !data.hoje) return;
-    setDesfazendo(true);
-    const r = await desfazerPresencaObra({
-      alocacaoId: data.alocacao.id,
-      data: data.hoje.data,
-    });
-    setDesfazendo(false);
+    setTirando(true);
+    const r = await desfazerPresencaObra({ alocacaoId: data.alocacao.id, data: dia });
+    setTirando(false);
+    setConfirmandoTirar(false);
     if (r.confirmado) {
-      setDesfeito(true);
-      setTocadoEm(null);
-      setAvisoDesfazer(null);
+      setTirado(true);
+      setEnvioLocal(null);
+      viNaFila.current = false;
+      setAvisoTirar(null);
+      const novo = await contarDiariaLocal(dia, -1);
+      if (novo) qc.setQueryData(["obra-hoje"], novo);
+      void qc.invalidateQueries({ queryKey: ["meus-dias-obra"] });
       return;
     }
-    // Sem rede o servidor não foi avisado. Dizer isso é melhor do que mostrar
-    // o botão de novo e deixar ele achar que desfez — e pior, tocar outra vez.
-    setAvisoDesfazer("Sem internet agora. Tente desfazer quando o sinal voltar.");
+    // Sem rede o servidor não foi avisado. Dizer isso é melhor do que tirar da
+    // tela e deixar ele achar que resolveu — e pior, somar outra vez depois.
+    setAvisoTirar("Sem internet agora. Tente tirar quando o sinal voltar.");
   }
 
   return (
-    <View className="gap-3 rounded-2xl border-2 border-[#DF7234]/40 bg-card p-4">
-      <View>
-        <Text className="text-xl font-bold text-foreground" numberOfLines={1}>
-          {data.alocacao.obra}
-        </Text>
-        <Text className="text-base text-muted-foreground">
-          Você está nesta obra · {data.alocacao.placa}
-        </Text>
-      </View>
-        {registradoHoje ? (
-          <>
-            <View
-              className="items-center justify-center rounded-3xl bg-emerald-600"
-              style={{ height: ALTURA_BOTAO }}
-            >
-              <Check size={80} color="#fff" strokeWidth={3} />
-              <Text className="mt-2 text-4xl font-bold text-white">HOJE OK</Text>
-            </View>
+    <View className="gap-4 rounded-2xl border-2 border-[#DF7234]/40 bg-card p-4">
+      <Text className="text-sm text-muted-foreground" numberOfLines={1}>
+        {data.alocacao.obra} · {data.alocacao.placa}
+      </Text>
 
-            {/* O verde é otimista, então ele precisa dizer em que pé está.
-                Três estados, e a diferença importa: enviado é fim; esperando
-                é normal e some sozinho; falhou exige gente. */}
-            {falhou ? (
-              <View className="gap-2 rounded-2xl border-2 border-destructive/50 bg-destructive/5 p-4">
-                <View className="flex-row items-center gap-2">
-                  <TriangleAlert size={24} color="#dc2626" />
-                  <Text className="text-lg font-bold text-destructive">
-                    Não consegui enviar
-                  </Text>
-                </View>
-                {/* O MOTIVO aqui, não numa tela adiante. Mandar procurar em
-                    outro lugar é pedir um passo a mais de quem já está
-                    travado — e o texto do servidor é escrito pra humano. */}
-                <Text className="text-base text-foreground">
-                  {pendenteDeHoje?.errorMsg ?? "Seu dia está guardado no celular, mas não subiu."}
-                </Text>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => router.push("/pendentes")}
-                  className="mt-1 items-center rounded-xl border-2 border-destructive/50 py-3"
-                >
-                  <Text className="text-lg font-semibold text-destructive">Ver o que travou</Text>
-                </Pressable>
-              </View>
-            ) : pendenteDeHoje ? (
-              <View className="flex-row items-center justify-center gap-2">
-                <CloudOff size={22} color="#a16207" />
-                <Text className="text-center text-lg font-medium text-amber-700">
-                  Guardado. Sobe sozinho quando tiver sinal.
-                </Text>
-              </View>
-            ) : (
-              <Text className="text-center text-xl font-medium text-foreground">
-                Seu dia na obra foi marcado.{"\n"}Não precisa fazer mais nada hoje.
-              </Text>
-            )}
+      {/* O NÚMERO é o bloco, e é a porta pra tela do mês. Antes essa porta era
+          um botão escrito "ver meus dias"; o número é maior, aparece sozinho e
+          responde a pergunta antes de ser tocado. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${temNumero ? total : "—"} ${total === 1 ? "diária" : "diárias"} em ${nomeDoMes}. Abrir a conta do mês.`}
+        onPress={() => router.push("/meus-dias-obra")}
+        className="active:opacity-70"
+      >
+        <View className="flex-row items-baseline gap-3">
+          <Text className="text-6xl font-bold text-foreground">{temNumero ? total : "—"}</Text>
+          <Text className="text-2xl font-bold text-foreground">
+            {total === 1 ? "diária" : "diárias"}
+          </Text>
+        </View>
+        <Text className="text-sm text-muted-foreground">em {nomeDoMes}</Text>
+      </Pressable>
 
-            {podeDesfazer && (
-              <Pressable
-                accessibilityRole="button"
-                disabled={desfazendo}
-                onPress={() => void desfazer()}
-                className="items-center justify-center rounded-2xl border-2 border-border py-4"
-              >
-                <Text className="text-lg font-semibold text-muted-foreground">
-                  {desfazendo ? "Desfazendo…" : "Marquei sem querer"}
-                </Text>
-              </Pressable>
-            )}
+      {/* Uma frase dizendo PRA QUE serve o número. Sem ela o motorista vê uma
+          contagem e não sabe se é lembrete, cobrança ou conta de dinheiro. */}
+      <Text className="text-base text-foreground">
+        É esta conta que o escritório confere com o contratante.
+      </Text>
 
-            {avisoDesfazer && (
-              <Text className="text-center text-base text-amber-700">{avisoDesfazer}</Text>
-            )}
-          </>
-        ) : (
-          <>
-            {/* UMA frase, antes do botão. O rótulo sozinho não diz o que a
-                tela faz pra quem nunca viu. */}
-            <Text className="text-center text-xl font-medium text-foreground">
-              Chegou na obra hoje? Toque no botão.
+      {/* Três caminhos, e o falhou vem ANTES do contado de propósito: na
+          versão anterior a condição de "contado" já incluía o item com erro,
+          e a tela de falha nunca aparecia — o dia sumia em silêncio. */}
+      {falhou ? (
+        <View className="gap-2 rounded-2xl border-2 border-destructive/50 bg-destructive/5 p-4">
+          <View className="flex-row items-center gap-2">
+            <TriangleAlert size={24} color={COR_ERRO} />
+            <Text className="text-lg font-bold text-destructive">
+              O dia de hoje não entrou na conta.
             </Text>
-
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Cheguei na obra"
-              onPress={() => void marcar()}
-              className="items-center justify-center rounded-3xl bg-[#DF7234] active:opacity-80"
-              style={{ height: ALTURA_BOTAO }}
-            >
-              <MapPin size={80} color="#fff" strokeWidth={2.5} />
-              <Text className="mt-2 text-5xl font-bold text-white">CHEGUEI</Text>
-            </Pressable>
-          </>
-        )}
-
-        {/* A porta pros Pendentes. Precisa existir AQUI porque esta tela
-            SUBSTITUI a home — e o único caminho pra tela de Pendentes no app
-            inteiro era um botão da home da empresa. Ao trocar a home eu cortei
-            o acesso à única tela que mostra item travado, e o motorista ficou
-            sem como descobrir que o dia dele não subiu. */}
-        {naFila.length > 0 && !falhou && (
+          </View>
+          {/* O MOTIVO aqui, não numa tela adiante: mandar procurar em outro
+              lugar é pedir um passo a mais de quem já está travado. */}
+          <Text className="text-base text-foreground">
+            {pendenteDeHoje?.errorMsg ?? "Está guardado no celular, mas não subiu."}
+          </Text>
           <Pressable
             accessibilityRole="button"
             onPress={() => router.push("/pendentes")}
-            className="flex-row items-center justify-center gap-3 rounded-2xl border-2 border-amber-500/40 py-4"
+            className="mt-1 items-center rounded-xl border-2 border-destructive/50 py-3"
           >
-            <CloudOff size={24} color="#a16207" />
-            <Text className="text-lg font-semibold text-amber-700">
-              {naFila.length === 1 ? "1 dia esperando enviar" : `${naFila.length} dias esperando enviar`}
-            </Text>
+            <Text className="text-lg font-semibold text-destructive">Resolver agora</Text>
           </Pressable>
-        )}
+        </View>
+      ) : contado ? (
+        <View className="gap-3">
+          {pendenteDeHoje || envioLocal === "guardado" ? (
+            <View className="flex-row items-center gap-3 rounded-2xl border-2 border-warning/60 bg-warning/10 p-4">
+              <CloudOff size={26} color={COR_AVISO} />
+              <Text className="flex-1 text-base font-medium text-foreground">
+                Contada aqui. Chega no escritório quando o sinal voltar.
+              </Text>
+            </View>
+          ) : (
+            <View className="flex-row items-center gap-3 rounded-2xl border-2 border-success/50 bg-success/10 p-4">
+              <Check size={26} color={COR_OK} strokeWidth={3} />
+              <Text className="flex-1 text-base font-medium text-foreground">
+                A diária de hoje está na conta.
+              </Text>
+            </View>
+          )}
 
-        {/* O caminho pro mês. Pra quem é pago por diária, "quantos dias eu já
-            fiz" é a pergunta que mais importa — e sem esta porta ele só
-            conseguia responder de cabeça. Alvo grande, uma linha, sem menu. */}
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.push("/meus-dias-obra")}
-          className="flex-row items-center justify-center gap-3 rounded-2xl border-2 border-border py-5"
-        >
-          <CalendarDays size={28} />
-          <Text className="text-xl font-semibold text-foreground">Ver meus dias do mês</Text>
-        </Pressable>
+          {/* Confirmação INLINE, nunca showConfirm: dentro de um Modal de tela
+              cheia o alerta abre atrás. E "Manter o dia" no lugar de "Deixar",
+              que pode ser lido como "deixar de contar". */}
+          {confirmandoTirar ? (
+            <View className="gap-2 rounded-2xl border-2 border-border p-4">
+              <Text className="text-base font-semibold text-foreground">
+                Tirar o dia de hoje da conta?
+              </Text>
+              <View className="flex-row gap-3">
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={tirando}
+                  onPress={() => setConfirmandoTirar(false)}
+                  className="h-14 flex-1 items-center justify-center rounded-xl border-2 border-border"
+                >
+                  <Text className="text-base font-semibold text-foreground">Manter o dia</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={tirando}
+                  onPress={() => void tirar()}
+                  className="h-14 flex-1 items-center justify-center rounded-xl bg-destructive"
+                >
+                  <Text className="text-base font-semibold text-destructive-foreground">
+                    {tirando ? "Tirando…" : "Tirar"}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setConfirmandoTirar(true)}
+              className="self-start py-2"
+            >
+              <Text className="text-base font-semibold text-muted-foreground underline">
+                Tirar hoje
+              </Text>
+            </Pressable>
+          )}
 
-        {/* Os dias em branco. Não se chamam falta e não acusam ninguém: são
-            dias que ninguém marcou, e só ele pode dizer se esteve lá. */}
-        {data.pendentes.length > 0 && (
-          <View className="rounded-2xl border-2 border-amber-500/40 bg-card p-4">
-            <Text className="text-lg font-bold text-foreground">
-              {data.pendentes.length === 1
-                ? "1 dia sem marcar"
-                : `${data.pendentes.length} dias sem marcar`}
-            </Text>
-            <Text className="mt-1 text-base text-muted-foreground">
-              Se você esteve na obra nesses dias, avise o escritório.
-            </Text>
-          </View>
-        )}
+          {avisoTirar && <Text className="text-base text-[#B4501A]">{avisoTirar}</Text>}
+        </View>
+      ) : (
+        <View className="gap-2">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Somar o dia de hoje na conta"
+            onPress={() => void somar()}
+            className="flex-row items-center justify-center gap-4 rounded-2xl bg-[#DF7234] active:opacity-80"
+            style={{ height: ALTURA_BOTAO }}
+          >
+            {/* O ícone é o próprio "+1". Mapa, relógio e calendário todos
+                puxam a leitura pra ponto e localização, que é o que este
+                registro NÃO é. */}
+            <View className="h-14 w-14 items-center justify-center rounded-full bg-white">
+              <Text className="text-2xl font-bold text-[#DF7234]">+1</Text>
+            </View>
+            <Text className="text-2xl font-bold text-white">Somar o dia de hoje</Text>
+          </Pressable>
+          <Text className="text-center text-sm text-muted-foreground">
+            Hoje, {nomeDoDia} {numeroDoDia}. Conta igual, cedo ou tarde.
+          </Text>
+        </View>
+      )}
 
-      <Text className="text-center text-sm text-muted-foreground">
-        Funciona sem internet. O que você marcar sobe sozinho quando o sinal voltar.
-      </Text>
+      {/* Os dias em branco. Não se chamam falta e não acusam ninguém: são dias
+          que ninguém somou, e só ele pode dizer se esteve lá. Cinza, não
+          âmbar — âmbar num bloco que ele vê todo dia vira alarme de fundo. */}
+      {data.pendentes.length > 0 && (
+        <Text className="text-sm text-muted-foreground">
+          {data.pendentes.length === 1
+            ? "1 dia deste mês ficou em branco."
+            : `${data.pendentes.length} dias deste mês ficaram em branco.`}
+        </Text>
+      )}
     </View>
   );
 }

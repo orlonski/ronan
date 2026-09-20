@@ -59,6 +59,12 @@ type ButtonProps = {
   loading?: boolean;
   disabled?: boolean;
   onPress?: () => void;
+  /**
+   * O que o leitor de tela anuncia. Declarado aqui porque sem estar no tipo
+   * o TypeScript recusa a prop, e quem precisava dela acabava trocando o
+   * Button por um Pressable cru — perdendo altura, cor e variante junto.
+   */
+  accessibilityLabel?: string;
   children: React.ReactNode;
 } & VariantProps<typeof buttonVariants>;
 
@@ -70,6 +76,7 @@ export const Button = forwardRef<View, ButtonProps>(
     return (
       <Pressable
         ref={ref}
+        accessibilityRole="button"
         disabled={disabled || loading}
         onPress={onPress}
         className={cn(buttonVariants({ variant, size }), className)}

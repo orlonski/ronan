@@ -101,7 +101,7 @@ export default function Home() {
   // vazia, porque tudo ali depende do `/m/me` que ele não alcança.
   if (useSemEmpresa()) return <HomePessoal />;
 
-  // Quem está numa obra vê o botão de presença no TOPO desta mesma home, não
+  // Quem está numa obra vê a conta de diárias DENTRO desta mesma home, não
   // uma tela no lugar dela: ver `BlocoObra`. Substituir a home custou o acesso
   // a Pendentes, a viagens e ao resto — prominência se ganha com tamanho e
   // posição, não amputando o que já existia.
@@ -354,12 +354,18 @@ function HomeDaEmpresa() {
         }
         ListHeaderComponent={
           <View className="mb-3 gap-3">
-            {/* PRIMEIRO de tudo quando ele está numa obra: é a única coisa que
-                ele precisa fazer hoje, e some sozinho quando não há alocação. */}
-            <BlocoObra />
-
             {/* Stories dos motoristas (estilo Instagram) */}
             <StoriesBar />
+
+            {/* A conta de diárias de quem está numa obra. Some sozinho quando
+                não há alocação.
+
+                Fica DEPOIS dos stories, não antes. No topo ele empurrava o app
+                inteiro pra baixo todo dia — e um bloco que muda a forma da
+                home conforme o dado é o tipo de coisa que ninguém entende. Os
+                stories são a linha de sempre; a conta vem logo abaixo, no
+                primeiro bloco de conteúdo. */}
+            <BlocoObra />
 
             {/* Banner viagem em andamento (ou capturada aguardando lançamento) */}
             {tracking.data && (
@@ -464,16 +470,12 @@ function HomeDaEmpresa() {
                 ninguém. */}
 
             {/* Banner: itens só aguardando sincronizar (sem erro). Amarelo — informativo.
-                Inclui abastecimentos (antes só contava viagens+pedágios, e o
-                abastecimento sumia dessa conta; depois foi a vez de foto/local/story,
-                que travavam a fila inteira sem aparecer em lugar nenhum). */}
-            {pending.viagens +
-              pending.pedagios +
-              pending.abastecimentos +
-              pending.lifecycle +
-              pending.completarPeso +
-              pending.outros >
-              0 && (
+                Usa `pending.total`, nunca a soma dos campos: somar aqui já
+                falhou três vezes (abastecimento, depois foto/local/story,
+                depois encerrar-diária e a diária de obra). Cada tipo novo
+                nascia fora da conta e travava a fila sem aparecer em lugar
+                nenhum. Com o total, o próximo tipo entra sozinho. */}
+            {pending.total > 0 && (
               <Pressable
                 onPress={() => router.push("/pendentes")}
                 className="flex-row items-center gap-3 rounded-2xl border-2 border-warning/30 bg-warning/15 p-4 active:opacity-75"
@@ -483,12 +485,7 @@ function HomeDaEmpresa() {
                 </View>
                 <View className="flex-1">
                   <Text className="text-base font-bold text-foreground">
-                    {pending.viagens +
-                      pending.pedagios +
-                      pending.abastecimentos +
-                      pending.lifecycle +
-                      pending.completarPeso +
-                      pending.outros}{" "}
+                    {pending.total}{" "}
                     aguardando sincronizar
                   </Text>
                   <Text className="text-sm text-muted-foreground">

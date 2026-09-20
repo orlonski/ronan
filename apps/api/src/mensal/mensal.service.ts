@@ -205,6 +205,15 @@ export class MensalService {
     });
     const marcados = new Set(registros.map((r) => paraYmd(r.data)));
 
+    // O total do MÊS, pelo mesmo critério de `meusDias`.
+    //
+    // Tem que ser o mesmo, e não "os dias desta alocação": o número do card é
+    // a PORTA da tela do mês, e o motorista pode ter tido duas obras em
+    // sequência no mesmo mês. Card mostrando 8 e a tela que ele abre mostrando
+    // 19 é o pior lugar possível pra uma divergência — o produto existe
+    // justamente pra ser contraprova.
+    const doMes = await this.meusDias(motoristaId, `${ano}-${String(mes).padStart(2, "0")}`);
+
     return {
       alocacao: {
         id: a.id,
@@ -212,6 +221,8 @@ export class MensalService {
         placa: a.veiculo.placa,
       },
       hoje: { data: hojeYmd, registrado: marcados.has(hojeYmd) },
+      /** Quantas diárias já entraram na conta deste mês. É o herói da tela. */
+      mes: { rotulo: `${ano}-${String(mes).padStart(2, "0")}`, total: doMes.total },
       pendentes: this.diasEntre(desde, dia(hojeYmd)).filter(
         (x) => x !== hojeYmd && !marcados.has(x),
       ),

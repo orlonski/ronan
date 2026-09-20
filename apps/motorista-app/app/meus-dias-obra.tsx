@@ -6,12 +6,16 @@ import { ChevronLeft, ChevronRight, X } from "lucide-react-native";
 import { useMeusDiasObra } from "@/lib/queries";
 
 /**
- * Quantos dias na obra eu já fiz neste mês.
+ * A conta de diárias do mês — a tela que o número da home abre.
  *
  * Pra quem é pago por diária essa é a pergunta do mês inteiro, e até agora só
  * o escritório tinha a resposta — ele contava de cabeça. Ter o número do lado
  * dele é o que torna a conferência do dia 20 uma conversa entre duas contas, e
  * não uma contra a memória.
+ *
+ * VOCABULÁRIO: diária · conta · somar · dia · escritório · contratante · em
+ * branco. Nunca ponto, presença, falta ou atraso — ele é parceiro autônomo, e
+ * a palavra errada muda a natureza do que está registrado aqui.
  *
  * NÃO mostra dinheiro, de propósito. Valor é conversa do acerto; misturar
  * aqui transformaria uma tela de conferência numa tela de cobrança, e o
@@ -53,7 +57,7 @@ export default function MeusDiasObraScreen() {
       <View className="bg-brand px-5 pb-6 pt-14">
         <View className="flex-row items-start justify-between">
           <View className="flex-1">
-            <Text className="text-2xl font-bold text-white">Meus dias na obra</Text>
+            <Text className="text-2xl font-bold text-white">Minhas diárias</Text>
             {data?.obras.length ? (
               <Text className="mt-0.5 text-base text-white/80" numberOfLines={1}>
                 {data.obras.join(" · ")}
@@ -97,11 +101,28 @@ export default function MeusDiasObraScreen() {
           </Pressable>
         </View>
 
-        {/* O número é a tela. Quem abre isso quer um número, não uma tabela. */}
-        <View className="items-center rounded-3xl bg-emerald-600 py-8">
-          <Text className="text-7xl font-bold text-white">{data?.total ?? 0}</Text>
-          <Text className="mt-1 text-2xl font-semibold text-white">
-            {data?.total === 1 ? "dia na obra" : "dias na obra"}
+        {/* Três linhas ANTES do número, e não é enfeite: sem elas a tela é
+            uma contagem sem dono, e quem abre não sabe se é lembrete, cobrança
+            ou dinheiro a receber. Curtas, uma ideia cada. */}
+        <View className="gap-1">
+          <Text className="text-base text-foreground">Cada dia na obra é uma diária.</Text>
+          <Text className="text-base text-foreground">
+            Você soma no app. O escritório confere com o contratante.
+          </Text>
+          <Text className="text-base text-foreground">
+            Este número é a sua parte da conferência.
+          </Text>
+        </View>
+
+        {/* O número é a tela. Quem abre isso quer um número, não uma tabela.
+
+            Fundo neutro, não verde: verde aqui diria "está tudo certo", e essa
+            é justamente a pergunta em aberto até o dia 20. O verde fica nos
+            dias, onde significa "você somou este". */}
+        <View className="items-center rounded-3xl bg-secondary py-8">
+          <Text className="text-7xl font-bold text-secondary-foreground">{data?.total ?? 0}</Text>
+          <Text className="mt-1 text-2xl font-semibold text-secondary-foreground">
+            {data?.total === 1 ? "diária" : "diárias"}
           </Text>
         </View>
 
@@ -125,18 +146,19 @@ export default function MeusDiasObraScreen() {
                   );
                 }
                 // Dia futuro é cinza claro: ainda não aconteceu, então não
-                // pode parecer cobrança. Dia passado sem marca fica com
-                // contorno âmbar — visível, sem acusar.
+                // pode parecer cobrança. Dia em branco no passado tem contorno
+                // mais forte — visível, e NEUTRO: âmbar acusava, e ninguém
+                // sabe ainda se o caminhão esteve lá ou não.
                 return (
                   <View
                     key={d.data}
                     className={`h-14 w-14 items-center justify-center rounded-xl border-2 ${
-                      d.futuro ? "border-border" : "border-amber-500/60"
+                      d.futuro ? "border-border" : "border-muted-foreground/40"
                     }`}
                   >
                     <Text
                       className={`text-xl font-semibold ${
-                        d.futuro ? "text-muted-foreground/50" : "text-amber-700"
+                        d.futuro ? "text-muted-foreground/50" : "text-foreground"
                       }`}
                     >
                       {numero}
@@ -149,18 +171,19 @@ export default function MeusDiasObraScreen() {
             <View className="gap-2 rounded-2xl border border-border p-4">
               <View className="flex-row items-center gap-3">
                 <View className="h-6 w-6 rounded-md bg-emerald-600" />
-                <Text className="text-base text-foreground">Você marcou</Text>
+                <Text className="text-base text-foreground">Você somou</Text>
               </View>
               <View className="flex-row items-center gap-3">
-                <View className="h-6 w-6 rounded-md border-2 border-amber-500/60" />
-                <Text className="text-base text-foreground">Sem marcar</Text>
+                <View className="h-6 w-6 rounded-md border-2 border-muted-foreground/40" />
+                <Text className="text-base text-foreground">Em branco</Text>
               </View>
             </View>
 
             {/* A saída pra quem viu um dia errado. Sem isto a tela mostra o
                 problema e não diz o que fazer com ele. */}
             <Text className="pb-4 text-center text-base text-muted-foreground">
-              Faltou algum dia que você trabalhou? Avise o escritório.
+              Ficou de fora algum dia em que o caminhão esteve na obra? Fale com o escritório
+              que eles somam.
             </Text>
           </>
         )}

@@ -892,12 +892,21 @@ export async function pendingCounts(): Promise<{
   completarPeso: number;
   /** "Encerrar diária" de viagens AGUARDANDO_SAIDA aguardando sync. */
   encerrarDiaria: number;
-  /** Foto avulsa, local criado offline e story aguardando sync. */
+  /** Foto avulsa, local criado offline, story e diária de obra aguardando sync. */
   outros: number;
+  /**
+   * TUDO que está esperando subir.
+   *
+   * Existe porque somar os campos na tela já falhou duas vezes: cada tipo novo
+   * de item nascia fora da conta do banner, e o motorista ficava com item
+   * parado sem nenhum aviso. Quem mostra badge usa ISTO, nunca a soma dos
+   * campos — assim o próximo tipo entra sozinho.
+   */
+  total: number;
   /** Itens com erro permanente (4xx) que precisam de ação do motorista. */
   comErro: number;
 }> {
-  const [v, p, a, li, ev, fi, cp, ed, fo, lo, st, po] = await Promise.all([
+  const [v, p, a2, li, ev, fi, cp, ed, fo, lo, st, po] = await Promise.all([
     listPendingViagens(),
     listPendingPedagios(),
     listPendingAbastecimentos(),
@@ -913,18 +922,19 @@ export async function pendingCounts(): Promise<{
   ]);
   // foto/local/story ficavam de fora da contagem: item travado desses não
   // aparecia em lugar nenhum, nem no badge da home nem na tela de Pendentes.
-  const comErro = [v, p, a, li, ev, fi, cp, ed, fo, lo, st, po].reduce(
+  const comErro = [v, p, a2, li, ev, fi, cp, ed, fo, lo, st, po].reduce(
     (acc, lista) => acc + lista.filter((i) => i.attempts >= MAX_ATTEMPTS).length,
     0,
   );
   return {
     viagens: v.length,
     pedagios: p.length,
-    abastecimentos: a.length,
+    abastecimentos: a2.length,
     lifecycle: li.length + ev.length + fi.length,
     completarPeso: cp.length,
     encerrarDiaria: ed.length,
-    outros: fo.length + lo.length + st.length,
+    outros: fo.length + lo.length + st.length + po.length,
+    total: [v, p, a2, li, ev, fi, cp, ed, fo, lo, st, po].reduce((acc, l) => acc + l.length, 0),
     comErro,
   };
 }
