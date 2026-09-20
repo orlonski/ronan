@@ -100,6 +100,15 @@ const ROTA_PERM: { prefixo: string; perm: string }[] = [
   { prefixo: "/configuracoes/campos-layout", perm: "config-campos-layout.ver" },
   { prefixo: "/configuracoes/forca-atualizacao", perm: "config-forca-atualizacao.ver" },
   { prefixo: "/configuracoes/km-atipico", perm: "config-km-atipico.ver" },
+  // Mais específico ANTES do genérico: `find` pega o primeiro que casa, e
+  // "/ponto" sozinho engoliria "/ponto/funcionarios".
+  { prefixo: "/ponto/competencia", perm: "fechamento-ponto.ver" },
+  { prefixo: "/ponto/espelho", perm: "espelho-ponto.ver" },
+  { prefixo: "/ponto/correcoes", perm: "correcoes-ponto.ver" },
+  { prefixo: "/ponto/funcionarios", perm: "funcionarios.ver" },
+  { prefixo: "/ponto/jornadas", perm: "jornadas.ver" },
+  { prefixo: "/ponto/configuracoes", perm: "config-ponto.ver" },
+  { prefixo: "/ponto", perm: "ponto.ver" },
   { prefixo: "/relatorios", perm: "relatorios.ver" },
   { prefixo: "/descargas-suspeitas", perm: "descargas-suspeitas.ver" },
   { prefixo: "/pedagios-rodovia", perm: "pedagios.ver" },
