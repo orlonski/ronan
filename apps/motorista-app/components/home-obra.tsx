@@ -164,8 +164,11 @@ export function HomeObra() {
                     Não consegui enviar
                   </Text>
                 </View>
+                {/* O MOTIVO aqui, não numa tela adiante. Mandar procurar em
+                    outro lugar é pedir um passo a mais de quem já está
+                    travado — e o texto do servidor é escrito pra humano. */}
                 <Text className="text-base text-foreground">
-                  Seu dia está guardado no celular, mas não subiu. Toque abaixo pra ver.
+                  {pendenteDeHoje?.errorMsg ?? "Seu dia está guardado no celular, mas não subiu."}
                 </Text>
                 <Pressable
                   accessibilityRole="button"

@@ -67,6 +67,16 @@ export const CriarAlocacaoInput = z.object({
 export type CriarAlocacaoInput = z.infer<typeof CriarAlocacaoInput>;
 
 export const EditarAlocacaoInput = z.object({
+  /**
+   * Corrigir a data de início.
+   *
+   * Existe porque erro de cadastro aqui é caro e silencioso: alocação que
+   * começa um dia depois do combinado faz o servidor recusar a presença com
+   * "dia anterior ao início", o item trava no celular do motorista e ninguém
+   * descobre até o fechamento. Sem este campo, o único conserto seria encerrar
+   * e recriar — perdendo o histórico da alocação.
+   */
+  inicio: Dia.optional(),
   fim: Dia.optional(),
   valorDiariaCentavos: z.number().int().min(0).optional(),
 });

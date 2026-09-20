@@ -118,12 +118,33 @@ export class MensalService {
   async editarAlocacao(id: string, dados: EditarAlocacaoInput) {
     const a = await this.buscarAlocacao(id);
     if (!a.ativa) throw new ConflictException("Alocação encerrada não se edita.");
-    if (dados.fim && dia(dados.fim) < a.inicio) {
+
+    const inicio = dados.inicio ? dia(dados.inicio) : a.inicio;
+    const fim = dados.fim ? dia(dados.fim) : a.fim;
+    if (fim && fim < inicio) {
       throw new BadRequestException("O fim não pode ser antes do início.");
     }
+
+    // Empurrar o início pra depois de um dia já registrado deixaria aquele dia
+    // fora da vigência — presente no banco e invisível no espelho, que é a
+    // pior combinação: some da conta sem ninguém apagar nada.
+    if (dados.inicio) {
+      const primeiro = await this.prisma.registroPresenca.findFirst({
+        where: { alocacaoId: id },
+        orderBy: { data: "asc" },
+        select: { data: true },
+      });
+      if (primeiro && inicio > primeiro.data) {
+        throw new BadRequestException(
+          `Já existe dia registrado em ${paraYmd(primeiro.data)}. O início não pode ser depois disso.`,
+        );
+      }
+    }
+
     return this.prisma.alocacaoObra.update({
       where: { id },
       data: {
+        ...(dados.inicio === undefined ? {} : { inicio }),
         ...(dados.fim === undefined ? {} : { fim: dia(dados.fim) }),
         ...(dados.valorDiariaCentavos === undefined
           ? {}

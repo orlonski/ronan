@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { EstadoVazio } from "@/components/estado-vazio";
 import { Combobox } from "@/components/ui/combobox";
 import { fetchApi, useAuthToken, useResourceOptions } from "@/lib/client-api";
+import { ymdSaoPaulo } from "@/lib/datetime-br";
 import { usePermissoes } from "@/lib/permissoes";
 
 type Alocacao = {
@@ -80,9 +81,25 @@ function limitesDoMes(ym: string): { de: string; ate: string } {
   return { de: `${ym}-01`, ate: `${ym}-${String(ultimo).padStart(2, "0")}` };
 }
 
+/**
+ * Hoje, em São Paulo. NUNCA `new Date().toISOString()` aqui.
+ *
+ * Custou um bug de verdade: o campo "Começa em" vinha preenchido com a data
+ * UTC, e uma alocação criada às 21h de São Paulo nascia começando no DIA
+ * SEGUINTE. O motorista marcou presença no mesmo dia, o servidor recusou com
+ * "esse dia é anterior ao início na obra", o item travou no outbox dele — e a
+ * tela ficou verde mentindo, porque o verde é otimista.
+ *
+ * O container roda em UTC e o navegador roda no fuso de quem abriu; nenhum dos
+ * dois é a resposta. A resposta é São Paulo, sempre.
+ */
+function hojeSP(): string {
+  const [a, m, d] = ymdSaoPaulo();
+  return `${a}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
 function mesAtual(): string {
-  const agora = new Date();
-  return `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}`;
+  return hojeSP().slice(0, 7);
 }
 
 /**
@@ -455,7 +472,7 @@ function DialogNovaAlocacao({
   const [clienteId, setClienteId] = useState<string>();
   const [motoristaId, setMotoristaId] = useState<string>();
   const [veiculoId, setVeiculoId] = useState<string>();
-  const [inicio, setInicio] = useState(new Date().toISOString().slice(0, 10));
+  const [inicio, setInicio] = useState(hojeSP());
   const [valor, setValor] = useState("");
 
   const criar = useMutation({

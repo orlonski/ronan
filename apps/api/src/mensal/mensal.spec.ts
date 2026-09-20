@@ -86,6 +86,55 @@ describe("uma obra por vez", () => {
   });
 });
 
+describe("corrigir o início da alocação", () => {
+  it("não deixa empurrar o início pra depois de um dia já registrado", async () => {
+    // Aquele dia sairia da vigência: continuaria no banco e sumiria do
+    // espelho. Some da conta sem ninguém apagar nada — a pior combinação.
+    const prisma = {
+      alocacaoObra: {
+        findFirst: async () => ({
+          id: "a1",
+          ativa: true,
+          inicio: new Date("2026-09-01T00:00:00.000Z"),
+          fim: null,
+        }),
+        update: async () => ({}),
+      },
+      registroPresenca: {
+        findFirst: async () => ({ data: new Date("2026-09-05T00:00:00.000Z") }),
+      },
+    };
+    const s = new MensalService(prisma as never);
+    await expect(s.editarAlocacao("a1", { inicio: "2026-09-10" })).rejects.toThrow(
+      /2026-09-05/,
+    );
+  });
+
+  it("deixa puxar o início pra trás, que é o conserto do erro de cadastro", async () => {
+    // Nasceu com a data do dia seguinte por causa de UTC no painel; o
+    // motorista não consegue marcar e o item trava no celular dele.
+    const escritas: Record<string, unknown>[] = [];
+    const prisma = {
+      alocacaoObra: {
+        findFirst: async () => ({
+          id: "a1",
+          ativa: true,
+          inicio: new Date("2026-09-20T00:00:00.000Z"),
+          fim: null,
+        }),
+        update: async ({ data }: { data: Record<string, unknown> }) => {
+          escritas.push(data);
+          return {};
+        },
+      },
+      registroPresenca: { findFirst: async () => null },
+    };
+    const s = new MensalService(prisma as never);
+    await s.editarAlocacao("a1", { inicio: "2026-09-19" });
+    expect((escritas[0]!.inicio as Date).toISOString().slice(0, 10)).toBe("2026-09-19");
+  });
+});
+
 describe("o toque", () => {
   const alocacaoViva = {
     id: "a1",
