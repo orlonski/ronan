@@ -9,6 +9,7 @@ import {
   deletePendingAbastecimento,
   deletePendingCompletarPeso,
   deletePendingEncerrarDiaria,
+  deletePendingPonto,
   deletePendingPresencaObra,
   deletePendingEventoViagem,
   deletePendingFoto,
@@ -23,6 +24,7 @@ import {
   listPendingAbastecimentos,
   listPendingCompletarPeso,
   listPendingEncerrarDiaria,
+  listPendingPonto,
   listPendingPresencaObra,
   listPendingEventosViagem,
   listPendingFotos,
@@ -37,6 +39,7 @@ import {
   upsertPendingAbastecimento,
   upsertPendingCompletarPeso,
   upsertPendingEncerrarDiaria,
+  upsertPendingPonto,
   upsertPendingPresencaObra,
   upsertPendingEventoViagem,
   upsertPendingFoto,
@@ -52,6 +55,7 @@ import {
   type FotoPendente,
   type PendingCompletarPeso,
   type PendingEncerrarDiaria,
+  type PendingPonto,
   type PendingPresencaObra,
   type PendingEventoViagem,
   type PendingFoto,
@@ -708,6 +712,78 @@ export async function tentarNovamentePresencaObra(clientId: string): Promise<voi
   void drain();
 }
 
+/** UUID v4 sem depender de crypto nativo, que o Hermes nem sempre expõe. */
+function uuidPonto(): string {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+/**
+ * Enfileira uma BATIDA DE PONTO.
+ *
+ * ⚠️ Nunca falha e nunca pergunta nada. O registro de jornada é do
+ * trabalhador: qualquer coisa que a gente coloque entre o dedo dele e o
+ * armazenamento local vira, numa reclamatória, a empresa impedindo o
+ * registro. Grava primeiro, resolve depois.
+ */
+export async function enqueuePonto(item: {
+  marcadoEm: string;
+  dia: string;
+  latitude?: number;
+  longitude?: number;
+  precisao?: number;
+}): Promise<string> {
+  // UUID do aparelho, nunca derivado do horário — ver `PendingPonto`.
+  const clientId = uuidPonto();
+  await upsertPendingPonto({
+    clientId,
+    payload: { clientId, ...item },
+    status: "pending",
+    attempts: 0,
+    createdAt: Date.now(),
+    lastTriedAt: undefined,
+    errorMsg: undefined,
+    errorStatus: undefined,
+    errorIssues: undefined,
+    errorPermanenteLocal: undefined,
+  });
+  notify();
+  void drain();
+  return clientId;
+}
+
+export async function tentarNovamentePonto(clientId: string): Promise<void> {
+  const list = await listPendingPonto();
+  const item = list.find((x) => x.clientId === clientId);
+  if (!item) return;
+  await upsertPendingPonto({
+    ...item,
+    status: "pending",
+    attempts: 0,
+    errorMsg: undefined,
+    errorStatus: undefined,
+    errorIssues: undefined,
+    errorPermanenteLocal: undefined,
+  });
+  notify();
+  void drain();
+}
+
+/**
+ * Descarta uma batida que não subiu.
+ *
+ * ⚠️ Existe, mas a tela avisa o que é: jogar fora registro de jornada é jogar
+ * fora prova. O caminho normal é "tentar de novo" ou pedir correção ao
+ * escritório — descartar é pra batida que a própria pessoa diz que foi erro.
+ */
+export async function descartarPonto(clientId: string): Promise<void> {
+  await deletePendingPonto(clientId);
+  notify();
+}
+
 export async function descartarPresencaObra(clientId: string): Promise<void> {
   await deletePendingPresencaObra(clientId);
   notify();
@@ -894,6 +970,8 @@ export async function pendingCounts(): Promise<{
   encerrarDiaria: number;
   /** Foto avulsa, local criado offline, story e diária de obra aguardando sync. */
   outros: number;
+  /** Batidas de ponto esperando subir. */
+  ponto: number;
   /**
    * TUDO que está esperando subir.
    *
@@ -906,7 +984,7 @@ export async function pendingCounts(): Promise<{
   /** Itens com erro permanente (4xx) que precisam de ação do motorista. */
   comErro: number;
 }> {
-  const [v, p, a2, li, ev, fi, cp, ed, fo, lo, st, po] = await Promise.all([
+  const [v, p, a2, li, ev, fi, cp, ed, fo, lo, st, po, pt] = await Promise.all([
     listPendingViagens(),
     listPendingPedagios(),
     listPendingAbastecimentos(),
@@ -919,10 +997,11 @@ export async function pendingCounts(): Promise<{
     listPendingLocais(),
     listPendingStories(),
     listPendingPresencaObra(),
+    listPendingPonto(),
   ]);
   // foto/local/story ficavam de fora da contagem: item travado desses não
   // aparecia em lugar nenhum, nem no badge da home nem na tela de Pendentes.
-  const comErro = [v, p, a2, li, ev, fi, cp, ed, fo, lo, st, po].reduce(
+  const comErro = [v, p, a2, li, ev, fi, cp, ed, fo, lo, st, po, pt].reduce(
     (acc, lista) => acc + lista.filter((i) => i.attempts >= MAX_ATTEMPTS).length,
     0,
   );
@@ -934,7 +1013,9 @@ export async function pendingCounts(): Promise<{
     completarPeso: cp.length,
     encerrarDiaria: ed.length,
     outros: fo.length + lo.length + st.length + po.length,
-    total: [v, p, a2, li, ev, fi, cp, ed, fo, lo, st, po].reduce((acc, l) => acc + l.length, 0),
+    /** Batidas de ponto esperando subir. Separado porque é prova de jornada. */
+    ponto: pt.length,
+    total: [v, p, a2, li, ev, fi, cp, ed, fo, lo, st, po, pt].reduce((acc, l) => acc + l.length, 0),
     comErro,
   };
 }
@@ -1161,6 +1242,7 @@ async function snapshotPendentes(): Promise<{ total: number; motivo?: string }> 
     listPendingViagemFinalizar(),
     listPendingViagemCancelar(),
     listPendingPresencaObra(),
+    listPendingPonto(),
   ]);
   const todos = listas.flat();
   const motivo = todos.map((i) => i.errorMsg).find(Boolean) ?? undefined;
@@ -1223,6 +1305,9 @@ export async function drain(opts?: { force?: boolean }): Promise<DrainResumo> {
       const pendentesDepois = await totalLifecyclePendente();
       if (pendentesDepois === 0 || pendentesDepois >= pendentesAntes) break;
     }
+    // O PONTO antes de tudo: é o único item da fila que é prova de jornada de
+    // empregado registrado. Ver `drainPonto`.
+    await drainPonto();
     await drainViagens();
     // Fotos DEPOIS de viagens: foto pode estar referenciando viagem que
     // acabou de ser sincronizada (raro mas possível).
@@ -1305,6 +1390,11 @@ async function rescueStaleItems(): Promise<void> {
   for (const po of await listPendingPresencaObra()) {
     if (po.status === "syncing" && isStale(po.lastTriedAt)) {
       await upsertPendingPresencaObra({ ...po, status: "pending" });
+    }
+  }
+  for (const pt of await listPendingPonto()) {
+    if (pt.status === "syncing" && isStale(pt.lastTriedAt)) {
+      await upsertPendingPonto({ ...pt, status: "pending" });
     }
   }
   for (const i of await listPendingViagemIniciar()) {
@@ -1499,6 +1589,41 @@ async function processEncerrarDiaria(item: PendingEncerrarDiaria): Promise<void>
     await upsertPendingEncerrarDiaria(
       proximoEstadoFalha(item, err, isErroPermanente(err), "encerrar-diaria"),
     );
+  }
+  notify();
+}
+
+/**
+ * O ponto vai PRIMEIRO na fila, antes de tudo.
+ *
+ * Não é preferência: é o único item do outbox que é prova de jornada de
+ * empregado. Deixar atrás de uma foto de 4 MB num 4G ruim seria priorizar o
+ * que ninguém cobra sobre o que um juiz cobra.
+ */
+async function drainPonto(): Promise<void> {
+  const list = await listPendingPonto();
+  for (const item of list) {
+    if (item.status === "syncing") continue;
+    if (item.attempts >= MAX_ATTEMPTS) continue;
+    if (!(await podeTentar("ponto"))) return;
+    await processPonto(item);
+  }
+}
+
+async function processPonto(item: PendingPonto): Promise<void> {
+  await upsertPendingPonto({ ...item, status: "syncing", lastTriedAt: Date.now() });
+  notify();
+  try {
+    // `agoraNoAparelho` vai no ENVIO, não no toque: é o que mede desvio real
+    // de relógio em vez de tempo de fila do outbox.
+    await api.post(
+      "/m/ponto/marcacoes",
+      { ...item.payload, agoraNoAparelho: new Date().toISOString() },
+      { outbox: true },
+    );
+    await deletePendingPonto(item.clientId);
+  } catch (err) {
+    await upsertPendingPonto(proximoEstadoFalha(item, err, isErroPermanente(err), "ponto"));
   }
   notify();
 }

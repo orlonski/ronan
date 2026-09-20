@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Users } from "lucide-react";
 import Link from "next/link";
@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { EstadoVazio } from "@/components/estado-vazio";
-import { fetchApi, useAuthToken } from "@/lib/client-api";
+import { apiBaseUrl, fetchApi, useAuthToken } from "@/lib/client-api";
 import { hojeSP } from "@/lib/datetime-br";
 import { usePermissoes } from "@/lib/permissoes";
 import { PATH, PrecisaFundamento, useConfigPonto } from "../_lib";
@@ -85,11 +85,14 @@ function Conteudo() {
             Motoristas — a mesma pessoa não pode estar nos dois.
           </p>
         </div>
-        {temPermissao("funcionarios.criar") && (
-          <Button onClick={() => setNovo(true)}>
-            <Plus className="mr-1 h-4 w-4" /> Registrar contratação
-          </Button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {temPermissao("funcionarios.importar") && <Importar />}
+          {temPermissao("funcionarios.criar") && (
+            <Button onClick={() => setNovo(true)}>
+              <Plus className="mr-1 h-4 w-4" /> Registrar contratação
+            </Button>
+          )}
+        </div>
       </div>
 
       <label className="flex items-center gap-2 text-sm">
@@ -135,6 +138,142 @@ function Conteudo() {
 
       {novo && <DialogContratar onFechar={() => setNovo(false)} />}
     </div>
+  );
+}
+
+type Previa = {
+  criar: { linha: number; nome: string; cpf: string; cargo?: string; matricula?: string; admitidoEm?: string; jornada?: string }[];
+  bloqueadas: { linha: number; descricao: string; motivo: string }[];
+};
+
+/**
+ * Importar por planilha: modelo, prévia e confirmação.
+ *
+ * ⚠️ A prévia NÃO grava. O que o parser não aceitou aparece com o motivo,
+ * linha a linha — inclusive o caso que não é erro de planilha: CPF que já tem
+ * contrato de parceiro autônomo. Esse é a trava fazendo o trabalho dela, e o
+ * texto diz o que encerrar.
+ */
+function Importar() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  const arquivo = useRef<HTMLInputElement>(null);
+  const [previa, setPrevia] = useState<Previa | null>(null);
+
+  async function baixarModelo() {
+    const r = await fetch(`${apiBaseUrl}${PATH}/funcionarios/modelo`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    if (!r.ok) return toast.error("Não consegui gerar o modelo.");
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "modelo-funcionarios.xlsx";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const ler = useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData();
+      fd.append("arquivo", file);
+      return fetchApi<Previa>(`${PATH}/funcionarios/importacao/previa`, {
+        token,
+        method: "POST",
+        body: fd,
+      });
+    },
+    onSuccess: (r) => setPrevia(r),
+    onError: (e: Error) => toast.error("Não consegui ler", { description: e.message }),
+  });
+
+  const confirmar = useMutation({
+    mutationFn: () =>
+      fetchApi<{ criados: number; falharam: { descricao: string; motivo: string }[] }>(
+        `${PATH}/funcionarios/importacao/confirmar`,
+        { token, method: "POST", body: JSON.stringify({ linhas: previa?.criar ?? [] }) },
+      ),
+    onSuccess: (r) => {
+      toast.success(`${r.criados} cadastrado(s).`, {
+        description: r.falharam.length ? `${r.falharam.length} não entraram.` : undefined,
+      });
+      void qc.invalidateQueries({ queryKey: [PATH, "funcionarios"] });
+      setPrevia(null);
+    },
+    onError: (e: Error) => toast.error("Não consegui cadastrar", { description: e.message }),
+  });
+
+  return (
+    <>
+      <Button variant="outline" onClick={() => void baixarModelo()}>
+        Baixar planilha modelo
+      </Button>
+      <Button variant="outline" disabled={ler.isPending} onClick={() => arquivo.current?.click()}>
+        {ler.isPending ? "Lendo…" : "Importar planilha"}
+      </Button>
+      <input
+        ref={arquivo}
+        type="file"
+        accept=".xlsx"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) ler.mutate(f);
+          e.target.value = "";
+        }}
+      />
+
+      {previa && (
+        <Dialog open onOpenChange={() => setPrevia(null)}>
+          <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Confira antes de cadastrar</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 text-sm">
+              <p>
+                <strong>{previa.criar.length}</strong> pronto(s) pra cadastrar.
+              </p>
+              {previa.criar.length > 0 && (
+                <div className="max-h-48 overflow-y-auto rounded border p-2">
+                  {previa.criar.map((l) => (
+                    <div key={l.linha} className="border-b py-1 last:border-0">
+                      {l.nome} · {l.cpf}
+                      {l.jornada ? ` · ${l.jornada}` : " · sem jornada"}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {previa.bloqueadas.length > 0 && (
+                <div className="rounded border border-amber-500/50 bg-amber-500/5 p-2">
+                  <p className="font-medium">
+                    {previa.bloqueadas.length} linha(s) não entram:
+                  </p>
+                  <ul className="ml-4 list-disc">
+                    {previa.bloqueadas.map((b) => (
+                      <li key={b.linha}>
+                        <strong>{b.descricao}</strong> — {b.motivo}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPrevia(null)}>
+                Cancelar
+              </Button>
+              <Button
+                disabled={previa.criar.length === 0 || confirmar.isPending}
+                onClick={() => confirmar.mutate()}
+              >
+                {confirmar.isPending ? "Cadastrando…" : `Cadastrar ${previa.criar.length}`}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </>
   );
 }
 

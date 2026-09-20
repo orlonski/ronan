@@ -604,12 +604,21 @@ export async function prefetchDadosBase(qc: QueryClient): Promise<void> {
     "/m/viagem/tipos-ocorrencia",
     { staleTime: 5 * 60_000 },
   );
+  // Catálogo do ponto: quem é registrado precisa dos motivos de correção no
+  // bolso. Sem isso, pedir correção sem sinal seria uma lista vazia — e é
+  // justamente sem sinal que a batida costuma falhar. `allSettled`, então
+  // quem não é funcionário leva 403 aqui e não derruba nada.
+  const ponto = offlineCacheQuery<CatalogoPonto>("ponto-catalogo", "/m/ponto/catalogo", {
+    staleTime: 6 * 60 * 60 * 1000,
+  });
+
   await Promise.allSettled([
     qc.prefetchQuery(cat),
     qc.prefetchQuery(me),
     qc.prefetchQuery(tipos),
     qc.prefetchQuery(ocorrencias),
     qc.prefetchQuery(buscaCfg),
+    qc.prefetchQuery(ponto),
     prefetchKmReferencia(qc),
   ]);
 }
@@ -740,6 +749,98 @@ export function useMeusDiasObra(mes: string, enabled = true) {
     enabled,
     staleTime: 60_000,
     queryFn: () => cacheFirst<MeusDiasObra>(["meus-dias-obra", mes], cacheKey, buscarRede),
+  });
+}
+
+// ═══════════════════════ PONTO ELETRÔNICO (funcionário CLT) ═══════════════
+//
+// ⚠️ Outro módulo, outra pessoa: aqui é FUNCIONÁRIO REGISTRADO, não parceiro
+// autônomo. O app mostra um ou outro, nunca os dois — o servidor garante que
+// a mesma pessoa não está nos dois regimes.
+
+export type PontoHoje = {
+  funcionario: { id: string; nome: string; cargo: string | null; empresa: string | null; desligado: boolean } | null;
+  dia: string;
+  marcacoes: { id: string; clientId: string; numeroRegistro: number; marcadoEm: string }[];
+};
+
+/**
+ * O que ele já bateu hoje. Cache-first como tudo: o bloco tem que estar na
+ * tela na hora, mesmo sem sinal.
+ */
+export function usePontoHoje(dia: string, enabled = true) {
+  const cacheKey = `q:ponto-hoje:${dia}`;
+  const buscarRede = async (): Promise<PontoHoje> => {
+    const fresh = await api.get<PontoHoje>(`/m/ponto/hoje?dia=${dia}`);
+    void cachePut(cacheKey, fresh).catch(() => {});
+    return fresh;
+  };
+  return useQuery({
+    queryKey: ["ponto-hoje", dia],
+    enabled,
+    staleTime: 30_000,
+    // `retry: false` porque quem NÃO é funcionário registrado leva 403 aqui, e
+    // isso é a resposta certa, não uma falha: repetir gastaria requisição em
+    // 4G ruim pra receber o mesmo não três vezes. O bloco some e pronto.
+    retry: false,
+    queryFn: () => cacheFirst<PontoHoje>(["ponto-hoje", dia], cacheKey, buscarRede),
+  });
+}
+
+export type EspelhoPontoApp = {
+  nome: string;
+  competencia: { rotulo: string; de: string; ate: string };
+  dias: {
+    dia: string;
+    pares: { entrada: string; saida: string | null; emAberto: boolean; minutos: number }[];
+    minutosPrevistos: number;
+    minutosConsiderados: number;
+    saldoMin: number;
+    alertas: { codigo: string }[];
+  }[];
+  totalPrevistoMin: number;
+  totalConsideradoMin: number;
+  saldoMin: number;
+  diasParaConferir: number;
+  fechado: boolean;
+  hash: string;
+  ciencia: { cienteEm: string; concorda: boolean; observacao: string | null } | null;
+  correcoes: { id: string; dia: string; tipo: string; motivo: string; status: string; cienciaEm: string | null }[];
+};
+
+export function useMeuEspelhoPonto(competencia: string, enabled = true) {
+  const cacheKey = `q:ponto-espelho:${competencia}`;
+  const buscarRede = async (): Promise<EspelhoPontoApp> => {
+    const fresh = await api.get<EspelhoPontoApp>(`/m/ponto/espelho?competencia=${competencia}`);
+    void cachePut(cacheKey, fresh).catch(() => {});
+    return fresh;
+  };
+  return useQuery({
+    queryKey: ["ponto-espelho", competencia],
+    enabled,
+    staleTime: 60_000,
+    queryFn: () => cacheFirst<EspelhoPontoApp>(["ponto-espelho", competencia], cacheKey, buscarRede),
+  });
+}
+
+export type CatalogoPonto = {
+  empresa: { razaoSocial: string; cnpj: string; identificacaoRep: string; avisoLgpdTexto: string } | null;
+  motivos: { codigo: string; descricao: string; exigeAnexo: boolean }[];
+};
+
+/** Pré-baixado no login: sem isto, pedir correção offline não teria motivos. */
+export function useCatalogoPonto(enabled = true) {
+  const cacheKey = "q:ponto-catalogo";
+  const buscarRede = async (): Promise<CatalogoPonto> => {
+    const fresh = await api.get<CatalogoPonto>("/m/ponto/catalogo");
+    void cachePut(cacheKey, fresh).catch(() => {});
+    return fresh;
+  };
+  return useQuery({
+    queryKey: ["ponto-catalogo"],
+    enabled,
+    staleTime: 6 * 60 * 60 * 1000,
+    queryFn: () => cacheFirst<CatalogoPonto>(["ponto-catalogo"], cacheKey, buscarRede),
   });
 }
 

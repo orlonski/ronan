@@ -10,6 +10,7 @@ export function usePending() {
     completarPeso: 0,
     encerrarDiaria: 0,
     outros: 0,
+    ponto: 0,
     total: 0,
     comErro: 0,
   });

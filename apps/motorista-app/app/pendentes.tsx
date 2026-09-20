@@ -23,6 +23,7 @@ import {
   type PendingAbastecimento,
   type PendingCompletarPeso,
   type PendingEncerrarDiaria,
+  type PendingPonto,
   type PendingPresencaObra,
   type PendingFoto,
   type PendingLocal,
@@ -36,6 +37,7 @@ import { usePendingLifecycle, type LifecycleTrip } from "@/hooks/use-pending-lif
 import { usePendingCompletarPeso } from "@/hooks/use-pending-completar-peso";
 import { fmtHoraBR } from "@/lib/datetime";
 import { usePendingEncerrarDiaria } from "@/hooks/use-pending-encerrar-diaria";
+import { usePendingPonto } from "@/hooks/use-pending-ponto";
 import { usePendingPresencaObra } from "@/hooks/use-pending-presenca-obra";
 import { usePendingOutros } from "@/hooks/use-pending-outros";
 import {
@@ -53,7 +55,9 @@ import {
   tentarNovamenteAbastecimentoPendente,
   tentarNovamenteCompletarPeso,
   tentarNovamenteEncerrarDiaria,
+  tentarNovamentePonto,
   tentarNovamentePresencaObra,
+  descartarPonto,
   descartarPresencaObra,
   tentarNovamenteTripLifecycle,
   tentarNovamenteFotoPendente,
@@ -94,6 +98,7 @@ export default function Pendentes() {
   const lifecycleTrips = usePendingLifecycle();
   const completarPeso = usePendingCompletarPeso();
   const encerrarDiaria = usePendingEncerrarDiaria();
+  const ponto = usePendingPonto();
   const presencaObra = usePendingPresencaObra();
   const outros = usePendingOutros();
   const cat = useCatalogos();
@@ -269,7 +274,8 @@ export default function Pendentes() {
             // só uma presença pendente a tela abria vazia, enquanto a home
             // dizia "1 dia esperando enviar". É a armadilha que o CLAUDE.md
             // descreve, e integrar um tipo novo pela metade é como se cai nela.
-            presencaObra.length > 0 ? (
+            presencaObra.length > 0 ||
+            ponto.length > 0 ? (
               <View className="mb-2 gap-3">
                 <Text className="text-sm text-muted-foreground">
                   Lançamentos aguardando envio. Toque em &quot;Sincronizar&quot; pra tentar
@@ -307,6 +313,16 @@ export default function Pendentes() {
                     onTentarNovamente={() => tentarNovamenteCompletarPeso(item.viagemId)}
                   />
                 ))}
+                {/* O ponto vem PRIMEIRO na lista: dos itens desta tela, é o
+                    único que é prova de jornada de empregado. */}
+                {ponto.map((item) => (
+                  <PontoCard
+                    key={`pt-${item.clientId}`}
+                    item={item}
+                    onDescartar={() => void descartarPonto(item.clientId)}
+                    onTentarNovamente={() => tentarNovamentePonto(item.clientId)}
+                  />
+                ))}
                 {presencaObra.map((item) => (
                   <PresencaObraCard
                     key={`po-${item.clientId}`}
@@ -333,7 +349,8 @@ export default function Pendentes() {
             lifecycleTrips.length === 0 &&
             completarPeso.length === 0 &&
             encerrarDiaria.length === 0 &&
-            presencaObra.length === 0 ? (
+            presencaObra.length === 0 &&
+            ponto.length === 0 ? (
               <EmptyState
                 icon={CloudOff}
                 title="Tudo sincronizado"
@@ -502,6 +519,67 @@ function CompletarPesoCard({
 }
 
 /** Espelho do CompletarPesoCard pro encerramento de diária. */
+/**
+ * A BATIDA DE PONTO esperando internet.
+ *
+ * ⚠️ O botão de descartar existe e avisa o que é: jogar fora registro de
+ * jornada é jogar fora prova. Descartar é pra batida que a própria pessoa diz
+ * que foi engano — o caminho normal é tentar de novo, ou pedir correção ao
+ * escritório, que deixa rastro dos dois lados.
+ */
+function PontoCard({
+  item,
+  onDescartar,
+  onTentarNovamente,
+}: {
+  item: PendingPonto;
+  onDescartar: () => void;
+  onTentarNovamente: () => void;
+}) {
+  const temErro = item.status === "error";
+  const [a, m, d] = item.payload.dia.split("-");
+  const inst = new Date(new Date(item.payload.marcadoEm).getTime() - 3 * 60 * 60 * 1000);
+  const hora = `${String(inst.getUTCHours()).padStart(2, "0")}:${String(inst.getUTCMinutes()).padStart(2, "0")}`;
+  return (
+    <View className="rounded-2xl border-2 border-brand/40 bg-card p-4">
+      <View className="flex-row items-start justify-between gap-3">
+        <View className="flex-1 flex-row items-start gap-2">
+          <Clock size={20} color="#1e3a8a" />
+          <View className="flex-1">
+            <Badge variant="outline">Ponto</Badge>
+            <Text className="mt-1.5 text-lg font-bold text-foreground">Batida das {hora}</Text>
+            <Text className="mt-0.5 text-base font-medium text-muted-foreground">
+              {d}/{m}/{a}
+            </Text>
+          </View>
+        </View>
+        <Badge variant={temErro ? "destructive" : "warning"}>
+          {temErro ? "Deu erro" : "Enviando"}
+        </Badge>
+      </View>
+      {temErro ? (
+        <>
+          {item.errorMsg ? (
+            <Text className="mt-2 text-sm text-destructive">{item.errorMsg}</Text>
+          ) : null}
+          <Text className="mt-2 text-xs text-muted-foreground">
+            A batida está guardada aqui e não se perde. Descartar apaga o registro — só faça se
+            foi engano seu.
+          </Text>
+          <View className="mt-3 flex-row gap-2">
+            <Button variant="outline" className="flex-1" onPress={onTentarNovamente}>
+              <Text>Tentar de novo</Text>
+            </Button>
+            <Button variant="outline" className="flex-1" onPress={onDescartar}>
+              <Text>Descartar</Text>
+            </Button>
+          </View>
+        </>
+      ) : null}
+    </View>
+  );
+}
+
 /**
  * O dia na obra esperando internet.
  *

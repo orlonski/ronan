@@ -1,4 +1,20 @@
-import { Body, Controller, Get, Param, Patch, Post, Put, Query, UseGuards } from "@nestjs/common";
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Res,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import type { Response } from "express";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
@@ -92,6 +108,22 @@ const LancarCorrecaoInput = z.object({
   motivo: z.string().trim().min(3, "Escreva o motivo da correção."),
 });
 
+const ConfirmarImportacaoInput = z.object({
+  linhas: z
+    .array(
+      z.object({
+        nome: z.string().trim().min(3),
+        cpf: z.string().trim().min(11),
+        cargo: z.string().trim().max(60).optional(),
+        matricula: z.string().trim().max(30).optional(),
+        admitidoEm: DIA.optional(),
+        jornada: z.string().trim().max(120).optional(),
+      }),
+    )
+    .min(1)
+    .max(500),
+});
+
 const DecidirInput = z.object({ motivo: z.string().trim().max(500).optional() });
 const ReabrirInput = z.object({ motivo: z.string().trim().min(3, "Escreva por que está reabrindo.") });
 
@@ -161,6 +193,36 @@ export class PontoAdminController {
     @Body(new ZodValidationPipe(DesligarInput)) body: z.infer<typeof DesligarInput>,
   ) {
     return this.service.desligar(id, body);
+  }
+
+  @RequerPermissao("funcionarios.importar")
+  @Get("funcionarios/modelo")
+  async modeloFuncionarios(@Res() res: Response) {
+    const buffer = await this.service.modeloFuncionarios();
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader("Content-Disposition", 'attachment; filename="modelo-funcionarios.xlsx"');
+    res.send(buffer);
+  }
+
+  /** Lê e devolve o que dá e o que não dá. NÃO grava — a confirmação é outra. */
+  @RequerPermissao("funcionarios.importar")
+  @Post("funcionarios/importacao/previa")
+  @UseInterceptors(FileInterceptor("arquivo", { limits: { fileSize: 10 * 1024 * 1024 } }))
+  previaFuncionarios(@UploadedFile() arquivo: Express.Multer.File | undefined) {
+    if (!arquivo) throw new BadRequestException("Anexe a planilha.");
+    return this.service.previaFuncionarios(arquivo.buffer, arquivo.originalname);
+  }
+
+  @RequerPermissao("funcionarios.importar")
+  @Post("funcionarios/importacao/confirmar")
+  confirmarFuncionarios(
+    @Body(new ZodValidationPipe(ConfirmarImportacaoInput)) body: z.infer<typeof ConfirmarImportacaoInput>,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.confirmarFuncionarios(body.linhas, user.id);
   }
 
   @RequerPermissao("jornadas.ver")

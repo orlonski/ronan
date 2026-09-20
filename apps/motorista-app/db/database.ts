@@ -275,6 +275,45 @@ export type PendingPresencaObra = {
   errorPermanenteLocal?: boolean;
 };
 
+/**
+ * Uma BATIDA DE PONTO esperando subir.
+ *
+ * ⚠️ O item mais sensível do outbox inteiro: é prova de jornada de gente
+ * registrada. Perder um destes é perder o registro que o trabalhador fez, e
+ * isso não se recupera de lugar nenhum.
+ *
+ * `clientId` é UUID do aparelho, como todo o resto — e NÃO derivado do horário.
+ * Derivar teria três defeitos de uma vez: bucket de 60s dá janela real de 0 a
+ * 60s; relógio que recua por NTP produz o mesmo id pra dois toques distintos e
+ * some com a segunda batida em silêncio; e amarrar ao id do funcionário deixa
+ * sem botão quem ainda não baixou o próprio cadastro. Quem deduplica é o
+ * servidor, comparando instantes.
+ *
+ * `marcadoEm` é carimbado no TOQUE, não no envio: o outbox pode drenar horas
+ * depois, e é a hora do toque que vale.
+ */
+export type PendingPonto = {
+  clientId: string;
+  payload: {
+    clientId: string;
+    /** ISO completo do instante do toque. */
+    marcadoEm: string;
+    /** "AAAA-MM-DD" em São Paulo, resolvido no toque. */
+    dia: string;
+    latitude?: number;
+    longitude?: number;
+    precisao?: number;
+  };
+  status: "pending" | "syncing" | "error";
+  attempts: number;
+  createdAt: number;
+  lastTriedAt?: number;
+  errorMsg?: string;
+  errorStatus?: number;
+  errorIssues?: ZodIssueSaved[];
+  errorPermanenteLocal?: boolean;
+};
+
 /** Local de descarga criado offline. clientId vira id real no servidor
  * (POST /m/locais/rapido aceita id pra idempotência). */
 export type PendingLocal = {
@@ -412,6 +451,7 @@ const VG_CANCELAR_KEY = "outbox.viagem-cancelar";
 const COMPLETAR_PESO_KEY = "outbox.viagem-completar-peso";
 const ENCERRAR_DIARIA_KEY = "outbox.viagem-encerrar-diaria";
 const PRESENCA_OBRA_KEY = "outbox.presenca-obra";
+const PONTO_KEY = "outbox.ponto";
 
 /** Todos os sufixos do outbox — usado pela adoção/limpeza do storage legado. */
 const SUFIXOS_OUTBOX = [
@@ -433,6 +473,7 @@ const SUFIXOS_OUTBOX = [
   // item podia não ser adotado numa migração de storage.
   ENCERRAR_DIARIA_KEY,
   PRESENCA_OBRA_KEY,
+  PONTO_KEY,
 ];
 
 async function readList<T>(key: string): Promise<T[]> {
@@ -654,6 +695,26 @@ export async function deletePendingPresencaObra(clientId: string): Promise<void>
   const list = await listPendingPresencaObra();
   await writeList(
     PRESENCA_OBRA_KEY,
+    list.filter((x) => x.clientId !== clientId),
+  );
+}
+
+export async function listPendingPonto(): Promise<PendingPonto[]> {
+  return readList<PendingPonto>(PONTO_KEY);
+}
+
+export async function upsertPendingPonto(item: PendingPonto): Promise<void> {
+  const list = await listPendingPonto();
+  const i = list.findIndex((x) => x.clientId === item.clientId);
+  if (i >= 0) list[i] = item;
+  else list.push(item);
+  await writeList(PONTO_KEY, list);
+}
+
+export async function deletePendingPonto(clientId: string): Promise<void> {
+  const list = await listPendingPonto();
+  await writeList(
+    PONTO_KEY,
     list.filter((x) => x.clientId !== clientId),
   );
 }

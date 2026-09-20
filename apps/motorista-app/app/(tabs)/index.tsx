@@ -26,6 +26,7 @@ import {
 import { fmtHoraBR } from "@/lib/datetime";
 import { HomePessoal } from "@/components/home-pessoal";
 import { BlocoObra } from "@/components/home-obra";
+import { BlocoPonto } from "@/components/bloco-ponto";
 import { useSemEmpresa } from "@/lib/visao";
 import {
   ActivityIndicator,
@@ -354,6 +355,10 @@ function HomeDaEmpresa() {
         }
         ListHeaderComponent={
           <View className="mb-3 gap-3">
+            {/* O ponto de quem é registrado em carteira. Some pra quem é
+                parceiro autônomo — e o banco garante que ninguém é os dois. */}
+            <BlocoPonto />
+
             {/* Stories dos motoristas (estilo Instagram) */}
             <StoriesBar />
 

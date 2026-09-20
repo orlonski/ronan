@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Check, CircleAlert, FileSpreadsheet, Upload } from "lucide-react";
+import { AlertTriangle, Check, CircleAlert, Download, FileSpreadsheet, Upload } from "lucide-react";
 import { RequerTela } from "@/components/requer-tela";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { LoadingCard } from "@/components/loading";
-import { fetchApi, useAuthToken, useResourceOptions } from "@/lib/client-api";
+import { toast } from "sonner";
+import { apiBaseUrl, fetchApi, useAuthToken, useResourceOptions } from "@/lib/client-api";
 
 type Campo = {
   chave: string;
@@ -84,6 +85,27 @@ function Conteudo() {
   const empresas = useResourceOptions<{ id: string; nome: string }>("/admin/empresas");
 
   const entidade = entidades?.find((e) => e.chave === entidadeChave) ?? null;
+
+  async function baixarModelo() {
+    if (!entidadeChave) return;
+    try {
+      const r = await fetch(`${apiBaseUrl}/admin/importacao/${entidadeChave}/modelo`, {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) throw new Error("Não consegui gerar o modelo.");
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `modelo-${entidadeChave}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error("Não consegui baixar o modelo", {
+        description: e instanceof Error ? e.message : undefined,
+      });
+    }
+  }
 
   async function analisar(file: File, mapa?: Record<string, number>) {
     if (!token || !entidadeChave) return;
@@ -212,6 +234,12 @@ function Conteudo() {
               Os nomes não precisam ser exatos: “Razão Social”, “Município”, “Placa do
               veículo” são reconhecidos. O que ficar errado você corrige na próxima tela.
             </p>
+            {/* Aceitar vários nomes de coluna resolve o arquivo que o cliente
+                JÁ tem. Não resolvia o caso mais comum: ele não ter arquivo
+                nenhum e não saber por onde começar. */}
+            <Button variant="outline" size="sm" onClick={() => void baixarModelo()}>
+              <Download className="mr-1 h-4 w-4" /> Baixar planilha modelo
+            </Button>
           </div>
         )}
 

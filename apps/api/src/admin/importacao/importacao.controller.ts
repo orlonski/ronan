@@ -4,13 +4,16 @@ import {
   Controller,
   Get,
   HttpCode,
+  Param,
   Post,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import type { Response } from "express";
 import { z } from "zod";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
@@ -19,6 +22,7 @@ import { RolesGuard } from "../../auth/guards/roles.guard";
 import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import type { AuthAdminUser } from "../../auth/types";
 import { ORDEM_IMPORTACAO } from "../../common/importacao/campos";
+import { montarModeloImportacao } from "../../common/importacao/modelo-planilha";
 import { ImportacaoService } from "./importacao.service";
 
 const LinhaSchema = z.object({
@@ -77,6 +81,27 @@ export class ImportacaoController {
         exemplos: c.sinonimos.slice(0, 4),
       })),
     }));
+  }
+
+  /**
+   * A planilha modelo da entidade.
+   *
+   * O importador já aceita vários nomes de coluna, e isso resolve o arquivo
+   * que o cliente JÁ tem. O que não resolvia é o caso mais comum: o cliente
+   * não tem arquivo nenhum e não sabe por onde começar.
+   */
+  @RequerPermissao("importacao.ver")
+  @Get(":entidade/modelo")
+  async modelo(@Param("entidade") entidade: string, @Res() res: Response) {
+    const def = ORDEM_IMPORTACAO.find((e) => e.chave === entidade);
+    if (!def) throw new BadRequestException("Não sei importar isso.");
+    const buffer = await montarModeloImportacao(def);
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="modelo-${def.chave}.xlsx"`);
+    res.send(buffer);
   }
 
   @RequerPermissao("importacao.executar")

@@ -28,6 +28,11 @@ import {
   type VinculoPuro,
 } from "../common/ponto-espelho";
 import { createHash } from "node:crypto";
+import { parseXlsx } from "../fechamentos/parsers/xlsx-parser";
+import {
+  lerFuncionariosDaPlanilha,
+  montarModeloFuncionarios,
+} from "./funcionarios-planilha";
 
 /**
  * O lado do ESCRITÓRIO no módulo de ponto: quem bate, qual jornada, o espelho,
@@ -322,6 +327,125 @@ export class PontoAdminService {
       await encerrarRegime(tx, { cpf: f.cpf, motivo: `desligamento: ${dados.motivo}` });
       return atualizado;
     });
+  }
+
+  // ─────────────────────────── importação ───────────────────────────
+
+  async modeloFuncionarios(): Promise<Buffer> {
+    const jornadas = await this.prisma.modeloJornada.findMany({
+      where: { ativo: true },
+      select: { nome: true },
+      orderBy: { nome: "asc" },
+    });
+    return montarModeloFuncionarios(jornadas.map((j) => j.nome));
+  }
+
+  /**
+   * Lê a planilha e devolve o que dá e o que não dá. NÃO grava.
+   *
+   * Separar leitura de gravação pelo mesmo motivo do importador de medição: o
+   * que o parser não reconheceu tem que aparecer na tela antes, não sumir.
+   * Aqui tem um caso a mais — CPF que já é parceiro autônomo. Esse não é erro
+   * de planilha, é a trava fazendo o trabalho dela, e o texto tem que dizer
+   * isso pra pessoa saber o que encerrar.
+   */
+  async previaFuncionarios(arquivo: Buffer, nome: string) {
+    let abas;
+    try {
+      abas = (await parseXlsx(arquivo, nome)).abas;
+    } catch {
+      throw new BadRequestException("Não consegui abrir essa planilha. Envie o .xlsx do modelo.");
+    }
+
+    const leitura = lerFuncionariosDaPlanilha(abas);
+    if (leitura.validas.length === 0 && leitura.invalidas.length === 0) {
+      throw new BadRequestException("Não achei nenhum funcionário nessa planilha.");
+    }
+
+    const [jaExistem, regimes, jornadas] = await Promise.all([
+      this.prisma.funcionario.findMany({
+        where: { cpf: { in: leitura.validas.map((v) => v.cpf) } },
+        select: { cpf: true },
+      }),
+      this.prisma.regimeVigente.findMany({
+        where: { chaveViva: { in: leitura.validas.map((v) => v.cpf) } },
+        select: { cpf: true, regime: true },
+      }),
+      this.prisma.modeloJornada.findMany({ where: { ativo: true }, select: { id: true, nome: true } }),
+    ]);
+
+    const existentes = new Set(jaExistem.map((f) => f.cpf));
+    const parceiros = new Set(regimes.filter((r) => r.regime === "PARCEIRO").map((r) => r.cpf));
+    const porNome = new Map(jornadas.map((j) => [j.nome.toLowerCase(), j.id]));
+
+    const criar: typeof leitura.validas = [];
+    const bloqueadas = [...leitura.invalidas];
+
+    for (const v of leitura.validas) {
+      if (existentes.has(v.cpf)) {
+        bloqueadas.push({
+          linha: v.linha,
+          descricao: `${v.nome} · ${v.cpf}`,
+          motivo: "Já está cadastrado como funcionário.",
+        });
+        continue;
+      }
+      if (parceiros.has(v.cpf)) {
+        bloqueadas.push({
+          linha: v.linha,
+          descricao: `${v.nome} · ${v.cpf}`,
+          motivo:
+            "Este CPF tem contrato de parceiro autônomo ativo. Encerre a alocação dele antes — a mesma pessoa não pode estar nas duas situações.",
+        });
+        continue;
+      }
+      if (v.jornada && !porNome.has(v.jornada.toLowerCase())) {
+        bloqueadas.push({
+          linha: v.linha,
+          descricao: `${v.nome} · ${v.cpf}`,
+          motivo: `Jornada "${v.jornada}" não existe. Crie antes, ou deixe a coluna em branco.`,
+        });
+        continue;
+      }
+      criar.push(v);
+    }
+
+    return { criar, bloqueadas };
+  }
+
+  /** Cria o que a prévia aprovou. Um por vez: uma falha não derruba as outras. */
+  async confirmarFuncionarios(
+    linhas: { nome: string; cpf: string; cargo?: string; matricula?: string; admitidoEm?: string; jornada?: string }[],
+    usuarioId: string,
+  ) {
+    const jornadas = await this.prisma.modeloJornada.findMany({
+      where: { ativo: true },
+      select: { id: true, nome: true },
+    });
+    const porNome = new Map(jornadas.map((j) => [j.nome.toLowerCase(), j.id]));
+    const [ano, mes, diaHoje] = ymdSaoPaulo();
+    const hoje = `${ano}-${String(mes).padStart(2, "0")}-${String(diaHoje).padStart(2, "0")}`;
+
+    const criados: string[] = [];
+    const falharam: { descricao: string; motivo: string }[] = [];
+
+    for (const l of linhas) {
+      try {
+        const f = await this.contratar({
+          nome: l.nome,
+          cpf: l.cpf,
+          cargo: l.cargo,
+          matricula: l.matricula,
+          admitidoEm: l.admitidoEm ?? hoje,
+          modeloJornadaId: l.jornada ? porNome.get(l.jornada.toLowerCase()) : undefined,
+          usuarioId,
+        });
+        criados.push(f.id);
+      } catch (e) {
+        falharam.push({ descricao: `${l.nome} · ${l.cpf}`, motivo: (e as Error).message });
+      }
+    }
+    return { criados: criados.length, falharam };
   }
 
   // ─────────────────────────── jornadas ───────────────────────────
