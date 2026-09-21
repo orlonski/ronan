@@ -100,6 +100,9 @@ const ROTA_PERM: { prefixo: string; perm: string }[] = [
   { prefixo: "/configuracoes/campos-layout", perm: "config-campos-layout.ver" },
   { prefixo: "/configuracoes/forca-atualizacao", perm: "config-forca-atualizacao.ver" },
   { prefixo: "/configuracoes/km-atipico", perm: "config-km-atipico.ver" },
+  // A régua da torre fica sob `programacao` — é a mesma pessoa que monta o dia e
+  // acompanha o dia, e criar chave própria só multiplicaria a matriz.
+  { prefixo: "/configuracoes/torre", perm: "programacao.ver" },
   // Mais específico ANTES do genérico: `find` pega o primeiro que casa, e
   // "/ponto" sozinho engoliria "/ponto/funcionarios".
   { prefixo: "/ponto/competencia", perm: "fechamento-ponto.ver" },

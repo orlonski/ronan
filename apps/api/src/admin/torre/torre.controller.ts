@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Put, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { z } from "zod";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
@@ -9,6 +9,24 @@ import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorato
 import { EscopoPor } from "../../common/escopo/escopo.decorator";
 import type { AuthAdminUser } from "../../auth/types";
 import { TorreService } from "./torre.service";
+
+/**
+ * A régua da torre.
+ *
+ * Os limites eram sete constantes chumbadas em `common/torre.ts` — e pedreira e
+ * obra não têm o mesmo relógio: 2h parado na fila de uma pedreira é terça-feira,
+ * e numa entrega urbana é problema.
+ */
+const AtualizarConfigTorreSchema = z.object({
+  paradaLongaMin: z.number().int().min(15).max(1440).optional(),
+  paradaLongaAltaMin: z.number().int().min(15).max(2880).optional(),
+  viagemEsquecidaMin: z.number().int().min(60).max(10080).optional(),
+  semSinalMin: z.number().int().min(15).max(1440).optional(),
+  horaInicio: z.number().int().min(0).max(23).optional(),
+  horaFim: z.number().int().min(0).max(23).optional(),
+  notificaDomingo: z.boolean().optional(),
+  fecharAbandonadaHoras: z.number().int().min(0).max(720).optional(),
+});
 
 const RegistrarOcorrenciaInput = z.object({
   viagemId: z.string().uuid(),
@@ -36,6 +54,22 @@ export class TorreController {
   @Get()
   alertas(@CurrentUser() user: AuthAdminUser) {
     return this.service.alertas(user.escopo);
+  }
+
+  @RequerPermissao("programacao.ver")
+  @Get("config")
+  config() {
+    return this.service.config();
+  }
+
+  @RequerPermissao("programacao.editar")
+  @Put("config")
+  atualizarConfig(
+    @Body(new ZodValidationPipe(AtualizarConfigTorreSchema))
+    body: z.infer<typeof AtualizarConfigTorreSchema>,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    return this.service.atualizarConfig(body, user.id);
   }
 
   @RequerPermissao("programacao.editar")

@@ -29,6 +29,7 @@ import {
   FileText,
   Fuel,
   Gauge,
+  SignalHigh,
   HandCoins,
   HardHat,
   IdCard,
@@ -244,6 +245,7 @@ const GRUPOS: Grupo[] = [
       { href: "/configuracoes/ia", label: "Inteligência Artificial", icon: Sparkles, perm: "config-ia.ver" },
       { href: "/configuracoes/agente-whatsapp", label: "Agente WhatsApp", icon: Bot, perm: "config-agente.ver" },
       { href: "/configuracoes/km-atipico", label: "Alerta de km fora do padrão", icon: Gauge, perm: "config-km-atipico.ver" },
+      { href: "/configuracoes/torre", label: "Alertas da torre", icon: SignalHigh, perm: "programacao.ver" },
     ],
   },
   {

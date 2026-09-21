@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AdminInboxService } from "../inbox/inbox.service";
-import { comoSistema } from "../../common/conta/conta-context";
+import { comoSistema, contaIdAtual } from "../../common/conta/conta-context";
 import { paraCadaConta } from "../../common/conta/para-cada-conta";
 import { modulosDaConta } from "../../common/conta/teto-da-conta";
 import { comLockDeCron } from "../../common/cron-exclusivo";
@@ -21,6 +21,17 @@ import {
   type LimiaresTorre,
   type ViagemEmCurso,
 } from "../../common/torre";
+
+export type AtualizarConfigTorreInput = {
+  paradaLongaMin?: number;
+  paradaLongaAltaMin?: number;
+  viagemEsquecidaMin?: number;
+  semSinalMin?: number;
+  horaInicio?: number;
+  horaFim?: number;
+  notificaDomingo?: boolean;
+  fecharAbandonadaHoras?: number;
+};
 
 @Injectable()
 export class TorreService {
@@ -241,6 +252,44 @@ export class TorreService {
     } catch (e) {
       this.log.error(`falha na varredura da torre: ${(e as Error).message}`);
     }
+  }
+
+  /**
+   * A régua desta conta, pra tela de configuração. Lazy-create no primeiro
+   * acesso, igual às outras configs — nasce com os números que estavam
+   * chumbados no código, então abrir a tela não muda nada por si só.
+   */
+  async config() {
+    return this.prisma.configuracaoTorre.upsert({
+      where: { contaId: contaIdAtual() },
+      update: {},
+      create: {},
+    });
+  }
+
+  async atualizarConfig(input: AtualizarConfigTorreInput, usuarioId: string) {
+    if (input.paradaLongaAltaMin != null && input.paradaLongaMin != null) {
+      if (input.paradaLongaAltaMin < input.paradaLongaMin) {
+        throw new BadRequestException(
+          "O tempo pra virar urgente não pode ser menor que o tempo do primeiro aviso.",
+        );
+      }
+    }
+    if (input.viagemEsquecidaMin != null && input.paradaLongaAltaMin != null) {
+      if (input.viagemEsquecidaMin <= input.paradaLongaAltaMin) {
+        throw new BadRequestException(
+          "O teto de idade tem que ser maior que o tempo pra virar urgente — senão nenhum alerta chega a ser urgente.",
+        );
+      }
+    }
+    if (input.horaInicio != null && input.horaFim != null && input.horaInicio === input.horaFim) {
+      throw new BadRequestException("A janela de aviso não pode começar e terminar na mesma hora.");
+    }
+    return this.prisma.configuracaoTorre.upsert({
+      where: { contaId: contaIdAtual() },
+      update: { ...input, alteradoPorId: usuarioId },
+      create: { ...input, alteradoPorId: usuarioId },
+    });
   }
 
   /** Os números desta conta. Sem linha na tabela, valem os defaults do código. */
