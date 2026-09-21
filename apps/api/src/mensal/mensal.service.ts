@@ -22,7 +22,7 @@ import {
 } from "../common/medicao-mensal";
 import { valorDaDiariaObra, type TabelaPrecoRow } from "../common/viagem-preco";
 import { resolverRemuneracao } from "../common/acerto-motorista";
-import { abrirRegime, encerrarRegime } from "../common/regime-vigente";
+import { abrirRegime, encerrarRegime, regimeVivo } from "../common/regime-vigente";
 import { parseXlsx } from "../fechamentos/parsers/xlsx-parser";
 import { lerMedicaoDaPlanilha } from "./medicao-planilha";
 import { montarModeloMedicao } from "./medicao-modelo";
@@ -240,8 +240,20 @@ export class MensalService {
       // Libera a pessoa da trava junto: quem encerrou aqui pode ser contratado
       // amanhã, e deixar a chave presa faria o cadastro dele ser recusado sem
       // que ninguém entendesse por quê.
+      //
+      // ⚠️ Mas SÓ se o regime vivo for o que esta alocação abriu. Encerrar uma
+      // obra não pode desfazer um vínculo de EMPREGO: a alocação e o contrato
+      // de trabalho são fatos independentes, e quem encerra obra no painel não
+      // está demitindo ninguém. Sem esta checagem, encerrar a obra de um
+      // motorista registrado soltaria a chave dele em silêncio — e o próximo
+      // `criarAlocacao` abriria um regime de PARCEIRO por cima de um contrato
+      // de trabalho vivo, que é exatamente o desenho que a trava existe pra
+      // impedir.
       if (motorista?.cpf) {
-        await encerrarRegime(tx, { cpf: motorista.cpf, motivo });
+        const vivo = await regimeVivo(tx, motorista.cpf);
+        if (vivo?.regime === "PARCEIRO") {
+          await encerrarRegime(tx, { cpf: motorista.cpf, motivo });
+        }
       }
       return atualizada;
     });

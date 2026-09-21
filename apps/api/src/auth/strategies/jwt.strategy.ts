@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common";
+import { Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { PassportStrategy } from "@nestjs/passport";
 import { ExtractJwt, Strategy } from "passport-jwt";
 import { ConfigService } from "@nestjs/config";
@@ -21,6 +21,8 @@ const SELECT_ESTADO = {
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
+  private readonly log = new Logger(JwtStrategy.name);
+
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
@@ -139,12 +141,36 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       // autônomo. Sem este ramo, a empresa teria que cadastrar o funcionário
       // CLT como parceiro pra ele conseguir entrar no app, e a separação
       // entre os módulos viraria decoração.
-      const funcionario = await comoSistema(() =>
-        this.prisma.funcionario.findFirst({
+      //
+      // ⚠️ A busca é por CPF em TODAS as contas (não há tenant no contexto de
+      // um token de identidade), então ela pode achar mais de um vínculo: a
+      // mesma pessoa registrada em duas empresas que usam a plataforma. Sem
+      // ordem explícita, quem ganhava era a ordem que o Postgres devolvesse —
+      // que muda depois de um UPDATE na linha. Isso carimbaria a batida de
+      // ponto no EMPREGADOR ERRADO, de forma intermitente e invisível.
+      //
+      // Desempate: o vínculo mais recente. Empregador não se descobre por
+      // sorteio, e admissão mais nova é o palpite certo quando a pessoa trocou
+      // de emprego e a empresa antiga esqueceu de desligar.
+      //
+      // E NÃO se recusa o acesso quando há dois: o registro de jornada nunca é
+      // bloqueado por dúvida nossa (ver `ponto.controller.ts`). Escolhe-se o
+      // mais recente e registra-se o aviso pra alguém desfazer o empate.
+      const funcionarios = await comoSistema(() =>
+        this.prisma.funcionario.findMany({
           where: { cpf: identidade.cpf.replace(/\D/g, ""), ativo: true },
           select: { id: true, contaId: true, conta: { select: SELECT_ESTADO } },
+          orderBy: [{ admitidoEm: "desc" }, { criadoEm: "desc" }, { id: "asc" }],
+          take: 2,
         }),
       );
+      if (funcionarios.length > 1) {
+        this.log.warn(
+          `CPF com vínculo de emprego ativo em mais de uma conta ` +
+            `(identidade ${identidade.id}). Usando o mais recente: conta ${funcionarios[0].contaId}.`,
+        );
+      }
+      const funcionario = funcionarios[0] ?? null;
       if (funcionario) {
         const estadoFunc = estadoDaConta(funcionario.conta);
         if (estadoFunc.podeEntrar) {

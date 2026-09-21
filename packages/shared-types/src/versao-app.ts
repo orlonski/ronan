@@ -17,8 +17,20 @@ import { z } from "zod";
 export const APP_PLATFORMS = ["ios", "android"] as const;
 export type AppPlatform = (typeof APP_PLATFORMS)[number];
 
-/** Identidade nas lojas — pro deep link que abre direto na página do app. */
-export const APP_STORE_IOS_ID = "6778807216";
+/**
+ * Identidade nas lojas — pro deep link que abre direto na página do app.
+ *
+ * ⚠️ O Apple ID é o do app record NOVO (`br.com.movatruck.app`), o único
+ * PÚBLICO. O antigo (6778807216) virou UNLISTED em 03/07/2026 e a Apple não
+ * desfaz isso: quem abre o link dele só chega lá com a URL na mão, então
+ * mandar "baixe o app" pra esse id é mandar pra uma página que não existe pra
+ * quem procura. Ver o comentário em `apps/motorista-app/app.config.ts`.
+ *
+ * Quem já tem o app antigo instalado não é afetado por esta constante — ela só
+ * serve pra INSTALAR. O OTA alcança os dois apps, porque update se resolve por
+ * projeto+canal+runtime, nunca por bundle.
+ */
+export const APP_STORE_IOS_ID = "6813093675";
 export const APP_ANDROID_PACKAGE = "br.com.schaba.motorista";
 
 /**
