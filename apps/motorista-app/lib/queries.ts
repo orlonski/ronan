@@ -792,6 +792,7 @@ export type EspelhoPontoApp = {
   competencia: { rotulo: string; de: string; ate: string };
   dias: {
     dia: string;
+    futuro: boolean;
     pares: { entrada: string; saida: string | null; emAberto: boolean; minutos: number }[];
     minutosPrevistos: number;
     minutosConsiderados: number;

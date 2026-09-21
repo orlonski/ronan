@@ -660,7 +660,12 @@ export class PontoAdminService {
       });
       linhas.push({
         ...espelho,
-        semJornada: apuracoes.some((d) => d.nomeModelo === ""),
+        // Dos dias DO CONTRATO (`espelho.dias`), nunca do período inteiro: o
+        // período da competência começa antes da admissão quando o corte não
+        // é dia 31, e aquele dia a mais não tem jornada nenhuma — contá-lo
+        // deixaria "sem jornada" aceso pra sempre, travando o fechamento sem
+        // nada pra consertar.
+        semJornada: espelho.dias.some((d) => !d.futuro && d.nomeModelo === ""),
         correcoesPendentes: pendentes,
       });
     }
@@ -784,7 +789,17 @@ export class PontoAdminService {
       marcacoes.filter((m) => m.desvioRelogioSeg != null).map((m) => [m.numeroRegistro, m.desvioRelogioSeg!]),
     );
 
-    return apurarPeriodo({ dias, marcacoes: apuradas, jornadaPorDia, feriados: doDia, desvioPorNumero });
+    const [ay, am, ad] = ymdSaoPaulo();
+    const hoje = `${ay}-${String(am).padStart(2, "0")}-${String(ad).padStart(2, "0")}`;
+
+    return apurarPeriodo({
+      dias,
+      marcacoes: apuradas,
+      jornadaPorDia,
+      feriados: doDia,
+      desvioPorNumero,
+      hoje,
+    });
   }
 
   // ─────────────────────────── correções ───────────────────────────

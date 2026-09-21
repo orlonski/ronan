@@ -177,10 +177,14 @@ export default function MeuEspelhoScreen() {
 
             {/* O calendário completo. Dia em branco fica, com o motivo. */}
             <View className="gap-1">
+              {/* Dia que ainda não chegou fica apagado e sem saldo: no dia 5
+                  do mês, mostrar o resto como dívida seria mentira. */}
               {data.dias.map((d) => (
                 <View
                   key={d.dia}
-                  className="flex-row items-center gap-3 rounded-xl border border-border px-3 py-2"
+                  className={`flex-row items-center gap-3 rounded-xl border border-border px-3 py-2 ${
+                    d.futuro ? "opacity-40" : ""
+                  }`}
                 >
                   <Text className="w-10 text-base font-semibold text-foreground">
                     {d.dia.slice(-2)}
@@ -205,7 +209,7 @@ export default function MeuEspelhoScreen() {
                   <Text
                     className={`text-sm ${d.saldoMin < 0 ? "text-[#B4501A]" : "text-muted-foreground"}`}
                   >
-                    {hm(d.saldoMin)}
+                    {d.futuro ? "" : hm(d.saldoMin)}
                   </Text>
                 </View>
               ))}

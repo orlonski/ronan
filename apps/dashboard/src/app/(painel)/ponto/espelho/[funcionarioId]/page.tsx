@@ -14,6 +14,7 @@ import { diaBr, duracao, hm, PATH } from "../../_lib";
 type Par = { entrada: string; saida: string | null; emAberto: boolean; minutos: number; numeros: number[] };
 type DiaEspelho = {
   dia: string;
+  futuro: boolean;
   pares: Par[];
   minutosTrabalhados: number;
   minutosConsiderados: number;
@@ -166,7 +167,10 @@ function Conteudo({ funcionarioId }: { funcionarioId: string }) {
               </thead>
               <tbody>
                 {e.dias.map((d) => (
-                  <tr key={d.dia} className="border-b align-top">
+                  <tr
+                    key={d.dia}
+                    className={`border-b align-top ${d.futuro ? "text-muted-foreground" : ""}`}
+                  >
                     <td className="p-2 whitespace-nowrap">{diaBr(d.dia)}</td>
                     <td className="p-2">
                       <div className="flex flex-wrap gap-1">
@@ -192,7 +196,9 @@ function Conteudo({ funcionarioId }: { funcionarioId: string }) {
                       {hm(d.saldoMin)}
                     </td>
                     <td className="p-2 text-xs text-muted-foreground">
-                      {d.alertas.map((a) => TEXTO_ALERTA[a.codigo] ?? a.codigo).join(" · ")}
+                      {d.futuro
+                        ? "ainda não aconteceu"
+                        : d.alertas.map((a) => TEXTO_ALERTA[a.codigo] ?? a.codigo).join(" · ")}
                     </td>
                   </tr>
                 ))}

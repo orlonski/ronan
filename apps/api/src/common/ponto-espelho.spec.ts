@@ -164,6 +164,7 @@ describe("feriados", () => {
 describe("o espelho", () => {
   const dia = (d: string, over: Partial<ApuracaoDia> = {}): ApuracaoDia => ({
     dia: d,
+    futuro: false,
     pares: [],
     minutosTrabalhados: 480,
     minutosConsiderados: 480,

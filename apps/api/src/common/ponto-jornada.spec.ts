@@ -217,3 +217,58 @@ describe("o dia é o de Brasília, não o do container", () => {
     expect(diaBR(new Date("2026-09-21T02:50:00Z"))).toBe("2026-09-20");
   });
 });
+
+/**
+ * O mês que ainda está correndo.
+ *
+ * Sem isto o espelho do dia 5 mostrava 168h de saldo negativo: o período
+ * inteiro contava como previsto, inclusive os dias que ainda não chegaram. É
+ * a mesma lição do espelho de diárias — dia futuro não pode parecer dívida.
+ */
+describe("dia que ainda não aconteceu", () => {
+  const jornadaPorDia = new Map([
+    ["2026-09-21", jornada()],
+    ["2026-09-22", jornada()],
+  ]);
+
+  it("não tem previsto, não gera alerta e não entra no saldo", () => {
+    const dias = apurarPeriodo({
+      dias: ["2026-09-21", "2026-09-22"],
+      marcacoes: [],
+      jornadaPorDia,
+      feriados: new Set(),
+      hoje: "2026-09-21",
+    });
+    const [ontem, amanha] = dias;
+    expect(ontem!.futuro).toBe(false);
+    expect(ontem!.saldoMin).toBe(-540);
+    expect(ontem!.alertas.map((a) => a.codigo)).toContain("SEM_REGISTRO");
+
+    expect(amanha!.futuro).toBe(true);
+    expect(amanha!.minutosPrevistos).toBe(0);
+    expect(amanha!.saldoMin).toBe(0);
+    expect(amanha!.alertas).toEqual([]);
+  });
+
+  it("bater adiantado num dia futuro não vira 'trabalhou em folga'", () => {
+    const [d] = apurarPeriodo({
+      dias: ["2026-09-22"],
+      marcacoes: [m("2026-09-22T11:00:00Z"), m("2026-09-22T20:00:00Z")],
+      jornadaPorDia,
+      feriados: new Set(),
+      hoje: "2026-09-21",
+    });
+    expect(d!.alertas.map((a) => a.codigo)).not.toContain("FORA_DA_JORNADA");
+  });
+
+  it("sem `hoje`, nada é futuro — a apuração de um mês fechado não muda", () => {
+    const [d] = apurarPeriodo({
+      dias: ["2026-09-22"],
+      marcacoes: [],
+      jornadaPorDia,
+      feriados: new Set(),
+    });
+    expect(d!.futuro).toBe(false);
+    expect(d!.minutosPrevistos).toBe(540);
+  });
+});

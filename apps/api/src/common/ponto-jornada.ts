@@ -65,6 +65,8 @@ export type AlertaPonto =
 
 export type ApuracaoDia = {
   dia: Ymd;
+  /** O dia ainda não aconteceu. Não é dívida, e não entra no saldo. */
+  futuro: boolean;
   pares: Par[];
   minutosTrabalhados: number;
   minutosConsiderados: number;
@@ -214,6 +216,13 @@ export function apurarPeriodo(e: {
   /** Limite acima do qual o desvio de relógio vira alerta. */
   desvioToleradoSeg?: number;
   maxJornadaMin?: number;
+  /**
+   * Hoje, em São Paulo. Dia POSTERIOR a isto não tem previsto e não gera
+   * alerta: o mês ainda está correndo, e contar o que não aconteceu faria o
+   * espelho do dia 5 mostrar 168h de saldo negativo. Mesma lição do espelho
+   * de diárias — dia futuro não pode parecer dívida.
+   */
+  hoje?: Ymd;
 }): ApuracaoDia[] {
   const pares = parearPeriodo(e.marcacoes, { maxJornadaMin: e.maxJornadaMin });
   const porDia = new Map<Ymd, Par[]>();
@@ -229,7 +238,10 @@ export function apurarPeriodo(e: {
     const doDia = porDia.get(dia) ?? [];
     const jornada = e.jornadaPorDia.get(dia) ?? null;
     const feriado = e.feriados.has(dia);
-    const previsto = previstoDoDia(jornada, feriado);
+    const futuro = e.hoje != null && dia > e.hoje;
+    // Dia que ainda não chegou: previsto zero. O contrato continua valendo,
+    // mas ele só vira cobrança depois que o dia passa.
+    const previsto = futuro ? 0 : previstoDoDia(jornada, feriado);
 
     let trabalhado = doDia.reduce((s, p) => s + p.minutos, 0);
 
@@ -250,7 +262,11 @@ export function apurarPeriodo(e: {
       alertas.push({ codigo: "CONFERIR", numeros: abertos.flatMap((p) => p.numeros) });
     }
     if (previsto > 0 && doDia.length === 0) alertas.push({ codigo: "SEM_REGISTRO" });
-    if (previsto === 0 && doDia.length > 0) alertas.push({ codigo: "FORA_DA_JORNADA" });
+    // Marcar em dia futuro é adiantar batida, não trabalhar em folga — e o
+    // alerta de "registrou em dia sem previsão" mentiria sobre isso.
+    if (!futuro && previsto === 0 && doDia.length > 0) {
+      alertas.push({ codigo: "FORA_DA_JORNADA" });
+    }
 
     // Intervalo: com dois pares, o buraco entre eles é o intervalo. Com um par
     // só e sem pré-assinalação, não houve intervalo registrado.
@@ -278,6 +294,7 @@ export function apurarPeriodo(e: {
 
     return {
       dia,
+      futuro,
       pares: doDia,
       minutosTrabalhados: trabalhado,
       minutosConsiderados,
