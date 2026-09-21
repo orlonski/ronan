@@ -1622,6 +1622,10 @@ async function processPonto(item: PendingPonto): Promise<void> {
       { outbox: true },
     );
     await deletePendingPonto(item.clientId);
+    // O `notify()` abaixo já acorda o invalidador global do `_layout`, que
+    // refaz `ponto-hoje`. A união por `clientId` na tela segura o item na
+    // lista na janela entre este delete e a resposta nova chegar — sem ela a
+    // lista pisca vazia bem na hora em que o sinal volta.
   } catch (err) {
     await upsertPendingPonto(proximoEstadoFalha(item, err, isErroPermanente(err), "ponto"));
   }
