@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   Param,
@@ -141,6 +142,16 @@ export class PontoMotoristaController {
     @Body(new ZodValidationPipe(CorrecaoPontoInput)) body: CorrecaoPontoInput,
   ) {
     return this.service.pedirCorrecao(funcionarioDe(user), body);
+  }
+
+  /** Cancelar o PRÓPRIO pedido, enquanto ninguém decidiu. */
+  @PermiteSomenteLeitura()
+  @Delete("correcoes/:id")
+  cancelarCorrecao(
+    @CurrentUser() user: AuthFuncionario | AuthMotorista,
+    @Param("id") id: string,
+  ) {
+    return this.service.cancelarCorrecao(funcionarioDe(user), id);
   }
 
   @PermiteSomenteLeitura()

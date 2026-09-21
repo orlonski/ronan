@@ -1,5 +1,13 @@
 import { useRef, useState } from "react";
-import { KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -63,6 +71,24 @@ export default function MeuEspelhoScreen() {
   const [naoConfere, setNaoConfere] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const scroll = useRef<ScrollView>(null);
+  /** O dia que ele tocou. Abre a folha com o que aconteceu nele. */
+  const [diaAberto, setDiaAberto] = useState<string | null>(null);
+  const [cancelando, setCancelando] = useState<string | null>(null);
+
+  async function cancelarPedido(id: string) {
+    setCancelando(id);
+    try {
+      await api.delete(`/m/ponto/correcoes/${id}`);
+      await qc.invalidateQueries({ queryKey: ["ponto-espelho", mes] });
+    } catch {
+      void showAlert({
+        title: "Não consegui cancelar",
+        message: "Precisa de internet. Se o escritório já decidiu, não dá mais pra cancelar.",
+      });
+    } finally {
+      setCancelando(null);
+    }
+  }
 
   async function conferir(concorda: boolean) {
     if (!data) return;
@@ -202,7 +228,7 @@ export default function MeuEspelhoScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={`Pedir correção do dia ${d.dia.slice(-2)}`}
                   disabled={d.futuro || data.fechado}
-                  onPress={() => router.push(`/corrigir-ponto?dia=${d.dia}`)}
+                  onPress={() => setDiaAberto(d.dia)}
                   className={`flex-row items-center gap-3 rounded-xl border px-3 py-2 active:opacity-70 ${
                     pedidos.length > 0 ? "border-warning/60 bg-warning/5" : "border-border"
                   } ${d.futuro ? "opacity-40" : ""}`}
@@ -271,7 +297,7 @@ export default function MeuEspelhoScreen() {
                   não aparece é ruído. */}
               <View className="mt-1 gap-0.5">
                 <Text className="text-xs text-muted-foreground">
-                  Toque num dia pra pedir correção dele.
+                  Toque num dia pra ver o que aconteceu nele.
                 </Text>
                 {data.correcoes.some((c) => c.status === "PENDENTE") && (
                   <Text className="text-xs">
@@ -423,6 +449,131 @@ export default function MeuEspelhoScreen() {
         )}
       </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* A FOLHA DO DIA.
+          
+          ⚠️ Tocar no dia levava direto pro formulário de correção, e isso
+          pulava a pergunta que ele faz primeiro: "o que eu fiz nesse dia
+          mesmo?". Agora mostra as batidas, os pedidos em aberto — com a
+          saída pra cancelar o que ele digitou errado — e só então o caminho
+          pra pedir. */}
+      <Modal
+        visible={diaAberto !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setDiaAberto(null)}
+      >
+        <Pressable className="flex-1 bg-black/40" onPress={() => setDiaAberto(null)} />
+        <View className="max-h-[75%] rounded-t-3xl bg-background px-5 pb-10 pt-4">
+          {(() => {
+            const d = data?.dias.find((x) => x.dia === diaAberto);
+            const pedidos = (data?.correcoes ?? []).filter((c) => c.dia === diaAberto);
+            if (!d) return null;
+            return (
+              <ScrollView>
+                <Text className="text-xl font-bold text-foreground">
+                  Dia {d.dia.slice(-2)} de {NOMES_MES[(mesNum ?? 1) - 1]}
+                </Text>
+                <Text className="mt-0.5 text-base text-muted-foreground">
+                  {duracao(d.minutosConsiderados)} trabalhadas · previsto{" "}
+                  {duracao(d.minutosPrevistos)} · saldo {hm(d.saldoMin)}
+                </Text>
+
+                <Text className="mt-4 text-base font-semibold text-foreground">
+                  O que foi registrado
+                </Text>
+                {d.pares.length === 0 ? (
+                  <Text className="mt-1 text-base text-muted-foreground">
+                    Nenhuma batida neste dia.
+                  </Text>
+                ) : (
+                  d.pares.map((p, i) => (
+                    <View key={i} className="mt-2 flex-row items-center gap-2">
+                      <Text
+                        className={`text-lg ${p.entradaIncluida ? "font-bold text-[#1D4ED8]" : "text-foreground"}`}
+                      >
+                        {hora(p.entrada)}
+                      </Text>
+                      <Text className="text-lg text-muted-foreground">até</Text>
+                      <Text
+                        className={`text-lg ${p.saidaIncluida ? "font-bold text-[#1D4ED8]" : "text-foreground"}`}
+                      >
+                        {p.saida ? hora(p.saida) : "?"}
+                      </Text>
+                      {(p.entradaIncluida || p.saidaIncluida) && (
+                        <Text className="text-xs text-[#1D4ED8]">incluído por correção</Text>
+                      )}
+                    </View>
+                  ))
+                )}
+
+                {pedidos.length > 0 && (
+                  <>
+                    <Text className="mt-5 text-base font-semibold text-foreground">
+                      Seus pedidos neste dia
+                    </Text>
+                    {pedidos.map((c) => (
+                      <View
+                        key={c.id}
+                        className="mt-2 gap-1 rounded-2xl border-2 border-border p-3"
+                      >
+                        <Text className="text-lg font-bold text-[#B4501A]">
+                          {c.instantePretendido ? hora(c.instantePretendido) : "—"}
+                        </Text>
+                        <Text className="text-sm text-foreground">{c.motivo}</Text>
+                        <Text className="text-sm font-medium text-foreground">
+                          {c.status === "PENDENTE"
+                            ? "Esperando o escritório decidir."
+                            : c.status === "APROVADA"
+                              ? "Aceito — já está contado."
+                              : "Não foi aceito."}
+                        </Text>
+                        {/* Só o PRÓPRIO pedido, e só enquanto ninguém decidiu:
+                            depois disso virou parte do documento. */}
+                        {c.status === "PENDENTE" && c.pedidoPor === "FUNCIONARIO" && (
+                          <Pressable
+                            accessibilityRole="button"
+                            disabled={cancelando === c.id}
+                            onPress={() => void cancelarPedido(c.id)}
+                            className="mt-1 h-12 items-center justify-center rounded-xl border-2 border-border"
+                          >
+                            <Text className="text-base font-semibold text-foreground">
+                              {cancelando === c.id ? "Cancelando…" : "Cancelar este pedido"}
+                            </Text>
+                          </Pressable>
+                        )}
+                      </View>
+                    ))}
+                  </>
+                )}
+
+                {!data?.fechado && !d.futuro && (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      const alvo = d.dia;
+                      setDiaAberto(null);
+                      router.push(`/corrigir-ponto?dia=${alvo}`);
+                    }}
+                    className="mt-5 h-14 items-center justify-center rounded-2xl bg-brand"
+                  >
+                    <Text className="text-lg font-bold text-brand-foreground">
+                      Pedir correção deste dia
+                    </Text>
+                  </Pressable>
+                )}
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setDiaAberto(null)}
+                  className="mt-2 h-14 items-center justify-center rounded-2xl border-2 border-border"
+                >
+                  <Text className="text-base font-semibold text-foreground">Fechar</Text>
+                </Pressable>
+              </ScrollView>
+            );
+          })()}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

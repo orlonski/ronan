@@ -322,6 +322,39 @@ export class PontoService {
     });
   }
 
+  /**
+   * Cancela um pedido DELE que ainda não foi decidido.
+   *
+   * ⚠️ Pedido pendente NÃO é registro: ninguém decidiu nada, e o registro
+   * original segue intocado. Digitar 07:30 quando queria 17:30 e não ter como
+   * desfazer obrigaria a mandar um segundo pedido — e aí os DOIS aparecem,
+   * pro escritório e pra ele, o que é pior do que o erro.
+   *
+   * O que ele NÃO pode cancelar, e o guard cobra:
+   * - pedido já decidido (aprovado ou recusado) — aí virou parte do documento;
+   * - pedido lançado pelo ESCRITÓRIO em nome dele — aquilo não é dele pra
+   *   desfazer; o caminho é dar ciência e, se discordar, pedir correção;
+   * - pedido de outra pessoa.
+   */
+  async cancelarCorrecao(user: AuthFuncionario, correcaoId: string) {
+    const c = await this.prisma.correcaoPonto.findFirst({
+      where: { id: correcaoId, funcionarioId: user.funcionarioId },
+    });
+    if (!c) throw new BadRequestException("Pedido não encontrado.");
+    if (c.status !== "PENDENTE") {
+      throw new BadRequestException(
+        "Esse pedido já foi decidido pelo escritório e não dá mais pra cancelar.",
+      );
+    }
+    if (c.pedidoPor !== "FUNCIONARIO") {
+      throw new BadRequestException(
+        "Esse lançamento foi feito pelo escritório. Se não concorda, peça uma correção.",
+      );
+    }
+    await this.prisma.correcaoPonto.delete({ where: { id: correcaoId } });
+    return { cancelado: true };
+  }
+
   /** Ele viu a correção que o escritório lançou em nome dele. */
   async darCiencia(user: AuthFuncionario, correcaoId: string) {
     const c = await this.prisma.correcaoPonto.findFirst({
