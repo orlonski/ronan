@@ -421,6 +421,7 @@ function ItemDocumento({
             exigenciaId={doc.id}
             mimetype={doc.mimetype ?? null}
             titulo={doc.titulo}
+            versao={doc.versao}
           />
         ) : (
           <Icone

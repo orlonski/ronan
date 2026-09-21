@@ -232,12 +232,39 @@ export class AdmissaoMotoristaController {
   async arquivo(
     @CurrentUser() user: AuthMotorista,
     @Param("exigenciaId") exigenciaId: string,
+    @Query("mini") mini: string | undefined,
     @Res() res: Response,
   ) {
     await this.exigirAprovado(user.id);
     const doc = await this.service.arquivoParaMotorista(user.id, exigenciaId);
+
+    /**
+     * ⚠️ `?mini=1` NÃO é otimização, é o pacote de dados do motorista.
+     *
+     * A lista desenha 64 pixels por documento. Servir o arquivo inteiro pra
+     * isso torrava 15–25 MB do 4G dele só pra abrir uma tela — e quem ganha
+     * por viagem paga esse pacote do próprio bolso. A miniatura tem ~15 KB.
+     *
+     * O cache é agressivo de propósito, e é seguro porque o app manda `?v=` com
+     * o hash do arquivo: trocar a foto muda a URL, então nunca se serve a
+     * miniatura de um arquivo que não existe mais.
+     */
+    if (mini) {
+      const thumb = await this.uploads.miniatura(doc.storageKey, doc.mimetype);
+      if (thumb) {
+        res.setHeader("Content-Type", "image/jpeg");
+        res.setHeader("Cache-Control", "private, max-age=2592000, immutable");
+        res.end(thumb);
+        return;
+      }
+      // Sem miniatura (PDF, ou `sharp` fora do build): cai no original, que
+      // continua funcionando. Miniatura que falta gasta dados; erro aqui
+      // deixaria a tela sem nada.
+    }
+
     const stream = await this.uploads.getObjectStream(doc.storageKey);
     res.setHeader("Content-Type", doc.mimetype);
+    res.setHeader("Cache-Control", "private, max-age=2592000, immutable");
     res.setHeader(
       "Content-Disposition",
       `inline; filename="${doc.nomeArquivo.replace(/"/g, "")}"`,

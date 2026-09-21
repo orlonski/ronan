@@ -25,10 +25,13 @@ export function MiniaturaDocumento({
   exigenciaId,
   mimetype,
   titulo,
+  versao,
 }: {
   exigenciaId: string;
   mimetype: string | null;
   titulo: string;
+  /** Hash curto do arquivo: entra na URL pra o cache não servir foto trocada. */
+  versao?: string | null;
 }) {
   const [token, setToken] = useState<string | null>(null);
   const [falhou, setFalhou] = useState(false);
@@ -46,7 +49,17 @@ export function MiniaturaDocumento({
     };
   }, []);
 
-  const uri = `${API_URL}/m/admissao/documentos/${exigenciaId}/arquivo`;
+  const v = versao ? `&v=${versao}` : "";
+  /**
+   * ⚠️ Duas URLs, e a diferença é o 4G do motorista.
+   *
+   * A lista usa a MINIATURA (~15 KB). Sem ela, abrir a tela com doze
+   * documentos baixava o arquivo inteiro de cada um — 15 a 25 MB do pacote
+   * dele — pra desenhar 64 pixels. O original só é baixado quando ele TOCA
+   * pra ver de perto, que é uma decisão dele.
+   */
+  const uriMini = `${API_URL}/m/admissao/documentos/${exigenciaId}/arquivo?mini=1${v}`;
+  const uriCheia = `${API_URL}/m/admissao/documentos/${exigenciaId}/arquivo?full=1${v}`;
   const ehImagem = (mimetype ?? "").startsWith("image/");
 
   // Arquivo de computador não vira miniatura, e inventar uma capa falsa seria
@@ -78,7 +91,7 @@ export function MiniaturaDocumento({
       >
         {token ? (
           <Image
-            source={{ uri, headers: { Authorization: `Bearer ${token}` } }}
+            source={{ uri: uriMini, headers: { Authorization: `Bearer ${token}` } }}
             style={{ width: "100%", height: "100%" }}
             resizeMode="cover"
             onError={() => setFalhou(true)}
@@ -110,7 +123,7 @@ export function MiniaturaDocumento({
             </View>
             {token ? (
               <Image
-                source={{ uri, headers: { Authorization: `Bearer ${token}` } }}
+                source={{ uri: uriCheia, headers: { Authorization: `Bearer ${token}` } }}
                 style={{ flex: 1 }}
                 resizeMode="contain"
                 onError={() => setFalhou(true)}

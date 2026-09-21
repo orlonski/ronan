@@ -449,6 +449,7 @@ export class AdmissaoService {
         tamanho: doc?.tamanho ?? null,
         origem: doc?.origem ?? null,
         validade: doc?.validade ?? null,
+        versaoArquivo: doc?.hashArquivo?.slice(0, 12) ?? null,
 
         assinado: ass !== null,
         assinadoEm: ass?.assinadoEm ?? null,
@@ -558,6 +559,15 @@ export class AdmissaoService {
          * sobrevive numa audiência.
          */
         mimetype: d.mimetype,
+        /**
+         * Pedaço do hash do arquivo, pro app pôr na URL da miniatura.
+         *
+         * É o que torna o cache seguro: a chave do objeto no storage é
+         * determinística (trocar a foto reusa o mesmo nome), então sem isto o
+         * aparelho continuaria mostrando a miniatura do arquivo antigo pra
+         * sempre.
+         */
+        versao: d.versaoArquivo,
         assinado: d.assinado,
         assinadoEm: d.assinadoEm,
         validade: d.validade,

@@ -782,6 +782,12 @@ export type DocumentoDaObra = {
   recusaMotivo?: string | null;
   /** Serve pra saber se o app consegue MOSTRAR o papel antes de assinar. */
   mimetype: string | null;
+  /**
+   * Pedaço do hash do arquivo. Vai na URL da miniatura pra o cache do aparelho
+   * ser seguro: a chave no storage é determinística, então sem isto trocar a
+   * foto continuaria mostrando a miniatura antiga pra sempre.
+   */
+  versao?: string | null;
   assinado: boolean;
   assinadoEm: string | null;
   validade: string | null;

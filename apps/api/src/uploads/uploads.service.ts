@@ -165,6 +165,54 @@ export class UploadsService implements OnModuleInit {
   }
 
   /**
+   * A MINIATURA de um documento, gerada uma vez e guardada no bucket.
+   *
+   * ⚠️ Isto existe por causa do 4G do motorista. Sem ela, a lista de
+   * documentos baixava o arquivo INTEIRO de cada item só pra desenhar 64
+   * pixels na tela — com doze documentos, 15 a 25 MB do pacote de dados dele
+   * pra ver uma tela. Gastar a internet de quem ganha por viagem não é
+   * detalhe de performance.
+   *
+   * 200px de largura e qualidade 60 dão ~15 KB: não dá pra LER o documento,
+   * dá pra RECONHECER qual é — que é o trabalho da miniatura. Quem precisa
+   * conferir toca e aí sim baixa o original.
+   *
+   * ⚠️ `sharp` é binário nativo e o runtime é alpine. O import é DINÂMICO e
+   * protegido: se o módulo não existir no build, a chamada devolve null e o
+   * controller serve o original. Uma miniatura que falta gasta dados; uma API
+   * que não sobe derruba o app inteiro.
+   */
+  async miniatura(storageKey: string, mimetype: string): Promise<Buffer | null> {
+    if (!mimetype.startsWith("image/")) return null;
+
+    const keyThumb = `${storageKey}.thumb.jpg`;
+    try {
+      // Já gerada antes? Serve a guardada — a geração é o caro, não o stream.
+      return await this.getObjectBuffer(keyThumb);
+    } catch {
+      /* primeira vez: gera abaixo */
+    }
+
+    try {
+      const sharp = (await import("sharp")).default;
+      const original = await this.getObjectBuffer(storageKey);
+      const thumb = await sharp(original)
+        .rotate() // respeita o EXIF: foto de celular deitada viraria de lado
+        .resize({ width: 200, withoutEnlargement: true })
+        .jpeg({ quality: 60 })
+        .toBuffer();
+
+      await this.client.putObject(this.bucket, keyThumb, thumb, thumb.length, {
+        "Content-Type": "image/jpeg",
+      });
+      return thumb;
+    } catch (e) {
+      this.log.warn(`Miniatura indisponível para ${storageKey}: ${String(e)}`);
+      return null;
+    }
+  }
+
+  /**
    * Arquivo de documento do motorista.
    *
    * ⚠️ A key é determinística pela CHAVE do documento (`exig:<id>` ou
