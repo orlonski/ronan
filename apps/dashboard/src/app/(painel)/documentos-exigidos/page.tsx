@@ -343,13 +343,14 @@ function DialogNovo({ onFechar, onCriado }: { onFechar: () => void; onCriado: ()
             value={publico}
             onChange={(e) => setPublico(e.target.value as "MENSAL" | "TODOS")}
           >
-            <option value="MENSAL">Só de quem está em obra mensal</option>
+            <option value="MENSAL">Só de quem é contratado</option>
             <option value="TODOS">De todo motorista da frota</option>
           </Select>
           <p className="mt-1 text-xs text-muted-foreground">
-            Papelada de admissão é cobrança de mensalista. Marcando &quot;toda a frota&quot;,
-            quem só roda frete comum passa a ver esse documento como pendência no app dele —
-            use só pro que a transportadora pede de todo mundo, como CNH.
+            Papelada de admissão é de quem tem vínculo com a empresa — registrado em carteira
+            ou parceiro. Marcando &quot;toda a frota&quot;, quem só roda frete comum passa a ver
+            esse documento como pendência no app dele; use só pro que a transportadora pede de
+            todo mundo, como CNH.
           </p>
         </div>
 

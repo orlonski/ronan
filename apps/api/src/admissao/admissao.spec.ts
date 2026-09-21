@@ -36,6 +36,8 @@ function servico(over: {
   assinaturas?: { tipoDocumento: string; modo: string; assinadoEm: Date; hashArquivo?: string }[];
   arquivoGuardado?: Buffer;
   alocacao?: Record<string, unknown> | null;
+  /** Vínculo vivo: contratado em carteira ou parceiro. */
+  regime?: { id: string; regime: "PARCEIRO" | "EMPREGADO" } | null;
 } = {}) {
   // As exigências ganham id aqui porque a IDENTIDADE do documento passou a ser
   // a exigência, não a gaveta. Os testes continuam falando em "CNH"/"ASO" (que
@@ -139,6 +141,8 @@ function servico(over: {
       },
     },
     motorista: { findFirst: async () => ({ id: "mot1", nome: "João", cpf: "11122233344" }) },
+    // A trava de vínculo: é ela que diz se esta pessoa é contratada aqui.
+    regimeVigente: { findFirst: async () => over.regime ?? null },
     assinaturaDocumento: {
       findMany: async () => assinaturas,
       deleteMany: async () => ({ count: 0 }),
@@ -952,5 +956,52 @@ describe("a conferência é de gente, não do sistema", () => {
     const up = escritas.find((e) => e.tabela === "documento")!.data;
     expect(up.conferidoEm).toBeNull();
     expect(up.recusadoEm).toBeNull();
+  });
+});
+
+/**
+ * DOCUMENTO SEGUE O VÍNCULO, NÃO A OBRA.
+ *
+ * ⚠️ Isto já foi "tem alocação de obra ativa", e estava errado: o motorista
+ * contratado em carteira que ainda não foi pra obra nenhuma — ou cuja empresa
+ * nem usa o controle de obra — não via documento nenhum. A empresa contrata,
+ * a pessoa manda os papéis e bate ponto; obra é detalhe de operação, não
+ * requisito de admissão.
+ */
+describe("quem tem vínculo manda documento, com ou sem obra", () => {
+  const SO_DO_MENSAL = [
+    {
+      tipo: "ESOCIAL",
+      titulo: "eSocial",
+      obrigatorio: true,
+      empresaId: null,
+      publico: "MENSAL" as const,
+    },
+  ];
+
+  it("contratado em carteira SEM obra nenhuma vê os documentos", async () => {
+    const { s } = servico({
+      exigidos: SO_DO_MENSAL,
+      alocacao: null,
+      regime: { id: "r1", regime: "EMPREGADO" },
+    });
+    const r = await s.paraOMotorista("mot1");
+    expect(r.total).toBe(1);
+  });
+
+  it("parceiro alocado numa obra também vê", async () => {
+    const { s } = servico({
+      exigidos: SO_DO_MENSAL,
+      alocacao: { cliente: { empresaId: "emp1", nome: "Obra Centro" } },
+      regime: { id: "r1", regime: "PARCEIRO" },
+    });
+    const r = await s.paraOMotorista("mot1");
+    expect(r.total).toBe(1);
+  });
+
+  it("motorista de frete comum, sem vínculo nenhum, continua sem ver nada", async () => {
+    const { s } = servico({ exigidos: SO_DO_MENSAL, alocacao: null, regime: null });
+    const r = await s.paraOMotorista("mot1");
+    expect(r.total).toBe(0);
   });
 });

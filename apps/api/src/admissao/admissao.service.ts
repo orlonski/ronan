@@ -9,6 +9,7 @@ import {
 import type { OrigemDocumento } from "@prisma/client";
 import { TIPOS_DOCUMENTO_MOTORISTA, type TipoDocumentoMotorista } from "@ronan/shared-types";
 import { chaveDaExigencia, chaveDocumento } from "../common/chave-documento";
+import { regimeVivo } from "../common/regime-vigente";
 import { comConta, comoSistema } from "../common/conta/conta-context";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
@@ -89,34 +90,51 @@ export class AdmissaoService {
    *
    * 1. **QUEM PEDE** — a exigência do contratante da obra em que ele está, mais
    *    as da transportadora (contratante nulo).
-   * 2. **DE QUEM SE PEDE** (`publico`) — e é aqui que mora a regra que o dono
-   *    deu em 21/09/2026: papelada de admissão se cobra de quem está no
-   *    MENSAL. ⚠️ Antes disso, exigência sem contratante valia pra frota
-   *    inteira, e o motorista de frete comum abria o app com "3 documentos
-   *    faltam" de uma obra em que nunca pôs o caminhão.
+   * 2. **DE QUEM SE PEDE** (`publico`) — papelada de admissão se cobra de quem
+   *    TEM VÍNCULO com a empresa, e não da frota inteira: o motorista de frete
+   *    comum não pode abrir o app com "3 documentos faltam" de uma papelada
+   *    que nunca foi dele.
    *
-   * ⚠️ O filtro de público só vale pra TELA DO MOTORISTA (`soDoPublicoDele`).
-   * O escritório e o link de coleta continuam vendo o catálogo inteiro, e isso
-   * não é inconsistência: a admissão acontece ANTES da obra. Filtrar o link
-   * deixaria a coleta vazia exatamente no momento em que ela serve — o
-   * escritório junta a papelada e só então aloca. Quem decide pedir é ele; o
-   * que a regra protege é o motorista de ver cobrança que não é dele.
+   * ⚠️ VÍNCULO, NÃO OBRA. Isto já foi "tem alocação de obra ativa", e estava
+   * errado: o motorista contratado em carteira que ainda não foi pra obra
+   * nenhuma — ou cuja empresa nem usa o controle de obra — não via documento
+   * nenhum. A pergunta certa é "esta pessoa tem vínculo vivo aqui?", que o
+   * `RegimeVigente` responde para os dois casos: contratado em carteira e
+   * parceiro alocado. Obra é detalhe de operação, não requisito de admissão.
+   *
+   * ⚠️ O filtro só vale pra TELA DO MOTORISTA (`soDoPublicoDele`). O escritório
+   * e o link de coleta continuam vendo o catálogo inteiro, e isso não é
+   * inconsistência: a admissão acontece ANTES de qualquer vínculo formal.
+   * Filtrar o link deixaria a coleta vazia exatamente no momento em que ela
+   * serve — o escritório junta a papelada e só então contrata.
    */
   async exigidosPara(motoristaId: string, opts?: { soDoPublicoDele?: boolean }) {
-    const alocacao = await this.prisma.alocacaoObra.findFirst({
-      where: { motoristaId, ativa: true },
-      include: { cliente: { select: { empresaId: true, nome: true } } },
-    });
+    const [alocacao, motorista] = await Promise.all([
+      this.prisma.alocacaoObra.findFirst({
+        where: { motoristaId, ativa: true },
+        include: { cliente: { select: { empresaId: true, nome: true } } },
+      }),
+      this.prisma.motorista.findFirst({
+        where: { id: motoristaId },
+        select: { cpf: true },
+      }),
+    ]);
     const empresaId = alocacao?.cliente.empresaId;
-    const ehMensalista = alocacao !== null;
+
+    // Contratado em carteira OU parceiro alocado: os dois têm vínculo vivo, e
+    // os dois mandam documento. Quem não tem nenhum é o motorista de frete
+    // comum, e dele só se pede o que vale pra frota inteira.
+    const temVinculo =
+      alocacao !== null ||
+      (await regimeVivo(this.prisma as never, motorista?.cpf ?? "")) !== null;
 
     return this.prisma.documentoExigido.findMany({
       where: {
         ativo: true,
         OR: [{ empresaId: null }, ...(empresaId ? [{ empresaId }] : [])],
-        // Sem alocação viva, só o que vale pra todo mundo — e só quando quem
+        // Sem vínculo, só o que vale pra todo mundo — e só quando quem
         // pergunta é o app dele.
-        ...(opts?.soDoPublicoDele && !ehMensalista ? { publico: "TODOS" as const } : {}),
+        ...(opts?.soDoPublicoDele && !temVinculo ? { publico: "TODOS" as const } : {}),
       },
       orderBy: [{ ordem: "asc" }, { titulo: "asc" }],
     });
