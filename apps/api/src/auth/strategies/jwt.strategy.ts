@@ -189,6 +189,21 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     definirConta(motorista.contaId);
+
+    // Ele também é funcionário registrado desta empresa?
+    //
+    // ⚠️ Motorista CLT da própria transportadora lança viagem E bate ponto: a
+    // exclusividade que `RegimeVigente` garante é entre OBRA E DIÁRIA e
+    // PONTO, não entre os dois cadastros. Sem esta busca, quem tem cadastro de
+    // motorista nunca alcançaria `/m/ponto/*` — e é justamente ele o caso mais
+    // comum de quem compra o módulo.
+    const comoFuncionario = await comoSistema(() =>
+      this.prisma.funcionario.findFirst({
+        where: { contaId: motorista.contaId, cpf: motorista.cpf.replace(/\D/g, ""), ativo: true },
+        select: { id: true },
+      }),
+    );
+
     return {
       kind: "MOTORISTA",
       id: motorista.id,
@@ -197,6 +212,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       status: motorista.status,
       contaId: motorista.contaId,
       contaSomenteLeitura: !estadoMotorista.podeEscrever,
+      funcionarioId: comoFuncionario?.id ?? null,
     };
   }
 }

@@ -66,6 +66,17 @@ export type AuthMotorista = {
   contaId: string;
   /** A empresa está em modo somente leitura: ele não lança nada novo. */
   contaSomenteLeitura: boolean;
+  /**
+   * O cadastro de FUNCIONÁRIO desta mesma pessoa, quando ela também é
+   * registrada em carteira nesta empresa.
+   *
+   * ⚠️ Não é contradição com `RegimeVigente`: a exclusividade é entre OBRA E
+   * DIÁRIA (o mensal, que é pagamento de parceiro autônomo) e PONTO. Motorista
+   * CLT da própria transportadora lança viagem E bate ponto — as duas coisas,
+   * o dia inteiro. Amarrar o ponto ao `kind` do token deixaria justamente esse
+   * caso de fora, que é o caso mais comum de quem compra o módulo.
+   */
+  funcionarioId?: string | null;
 };
 
 /**
