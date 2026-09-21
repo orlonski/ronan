@@ -754,7 +754,15 @@ export class AdmissaoService {
     const chave = chaveDaExigencia(exigenciaId);
     const doc = await this.prisma.motoristaDocumento.findFirst({
       where: { motoristaId, chave },
-      select: { id: true, storageKey: true, mimetype: true, nomeArquivo: true },
+      // `hashArquivo` vai junto porque a miniatura é guardada POR VERSÃO: sem
+      // ele, trocar a foto devolveria a miniatura antiga pra sempre.
+      select: {
+        id: true,
+        storageKey: true,
+        mimetype: true,
+        nomeArquivo: true,
+        hashArquivo: true,
+      },
     });
     if (!doc) throw new NotFoundException("Documento não encontrado.");
 

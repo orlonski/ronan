@@ -1,7 +1,7 @@
 import { Modal, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Camera, Check, Clock, CloudOff, FileText, Paperclip, PenLine, X } from "lucide-react-native";
 import { PhotoCapture } from "@/components/photo-capture";
 import { Button } from "@/components/ui/button";
@@ -89,7 +89,30 @@ export default function DocumentosDaObraScreen() {
   // esperando o escritório olhar não é tarefa dele: contar como falta manda
   // resolver o que não tem como resolver, e contar como pronto foi o defeito
   // que zerava a tela assim que o arquivo chegava.
-  const lista = [...(data?.documentos ?? [])].sort((a, b) => peso(a) - peso(b));
+  /**
+   * ⚠️ A ORDEM É CONGELADA ENQUANTO A TELA ESTÁ ABERTA.
+   *
+   * Ordenar por urgência ajuda a abrir a tela — o que ele resolve primeiro
+   * aparece primeiro. Mas REORDENAR com a tela aberta é horrível: ele manda a
+   * foto, o item deixa de ser urgência, e a lista inteira se reorganiza
+   * embaixo do dedo. O próximo toque cai no documento errado.
+   *
+   * Então a ordem é decidida UMA VEZ, na primeira vez que os dados chegam, e
+   * mantida. Documento que aparecer depois entra no fim. Fechar e abrir a tela
+   * reordena — aí ele está olhando de novo, não no meio de uma ação.
+   */
+  const ordemFixa = useRef<string[] | null>(null);
+  const lista = useMemo(() => {
+    const docs = data?.documentos ?? [];
+    if (docs.length === 0) return docs;
+    if (!ordemFixa.current) {
+      ordemFixa.current = [...docs].sort((a, b) => peso(a) - peso(b)).map((d) => d.id);
+    }
+    const posicao = new Map(ordemFixa.current.map((id, i) => [id, i]));
+    return [...docs].sort(
+      (a, b) => (posicao.get(a.id) ?? 999) - (posicao.get(b.id) ?? 999),
+    );
+  }, [data]);
 
   /**
    * O que está na fila do aparelho, por exigência.

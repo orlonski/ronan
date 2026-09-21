@@ -250,7 +250,11 @@ export class AdmissaoMotoristaController {
      * miniatura de um arquivo que não existe mais.
      */
     if (mini) {
-      const thumb = await this.uploads.miniatura(doc.storageKey, doc.mimetype);
+      const thumb = await this.uploads.miniatura(
+        doc.storageKey,
+        doc.mimetype,
+        doc.hashArquivo?.slice(0, 12) ?? null,
+      );
       if (thumb) {
         res.setHeader("Content-Type", "image/jpeg");
         res.setHeader("Cache-Control", "private, max-age=2592000, immutable");

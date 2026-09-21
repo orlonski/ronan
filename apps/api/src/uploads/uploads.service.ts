@@ -182,10 +182,25 @@ export class UploadsService implements OnModuleInit {
    * controller serve o original. Uma miniatura que falta gasta dados; uma API
    * que não sobe derruba o app inteiro.
    */
-  async miniatura(storageKey: string, mimetype: string): Promise<Buffer | null> {
+  async miniatura(
+    storageKey: string,
+    mimetype: string,
+    versao: string | null,
+  ): Promise<Buffer | null> {
     if (!mimetype.startsWith("image/")) return null;
 
-    const keyThumb = `${storageKey}.thumb.jpg`;
+    /**
+     * ⚠️ A VERSÃO ENTRA NA CHAVE DA MINIATURA.
+     *
+     * A chave do arquivo é determinística — trocar a foto reusa o MESMO nome
+     * no bucket. Sem o hash aqui, a miniatura guardada da foto antiga era
+     * encontrada e devolvida pra sempre: o motorista trocava a foto, a URL
+     * mudava, o app pedia de novo, e recebia a velha. Ele trocava outra vez,
+     * achando que não tinha ido.
+     */
+    const keyThumb = versao
+      ? `${storageKey}.${versao}.thumb.jpg`
+      : `${storageKey}.thumb.jpg`;
     try {
       // Já gerada antes? Serve a guardada — a geração é o caro, não o stream.
       return await this.getObjectBuffer(keyThumb);
