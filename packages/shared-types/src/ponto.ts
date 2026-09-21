@@ -89,7 +89,14 @@ export const MarcacaoPontoInput = z.object({
   agoraNoAparelho: ISO.optional(),
   latitude: z.number().min(-90).max(90).optional(),
   longitude: z.number().min(-180).max(180).optional(),
-  precisao: z.number().int().min(0).max(100000).optional(),
+  /**
+   * ⚠️ NÃO é inteiro. `Location.getCurrentPositionAsync` devolve `accuracy`
+   * como float (13.456), e um `.int()` aqui recusa TODA marcação com GPS —
+   * que é o caminho normal. Foi o primeiro erro real no app. Todos os outros
+   * `precisao` do projeto já aceitam float; este era o único fora do padrão.
+   * Quem arredonda é o servidor, na hora de gravar na coluna Int.
+   */
+  precisao: z.number().min(0).max(100000).optional(),
   appVersao: z.string().max(40).optional(),
   dispositivo: z.string().max(120).optional(),
 });

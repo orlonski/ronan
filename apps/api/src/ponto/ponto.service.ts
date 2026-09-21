@@ -164,7 +164,9 @@ export class PontoService {
                 marcacaoId: m.id,
                 latitude: new Prisma.Decimal(input.latitude),
                 longitude: new Prisma.Decimal(input.longitude),
-                precisao: input.precisao ?? null,
+                // A coluna é Int e o GPS manda float: arredondar aqui, e não
+                // recusar lá, é o que mantém o registro entrando.
+                precisao: input.precisao == null ? null : Math.round(input.precisao),
               },
             });
           }

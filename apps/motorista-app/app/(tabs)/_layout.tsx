@@ -1,9 +1,10 @@
 import { Tabs } from "expo-router";
-import { Calendar, House, MessageCircle, User } from "lucide-react-native";
+import { Calendar, Clock, House, MessageCircle, User } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBadgeChat } from "@/lib/chat";
 import { useMe } from "@/lib/queries";
 import { useSemEmpresa } from "@/lib/visao";
+import { useEhFuncionario } from "@/hooks/use-eh-funcionario";
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
@@ -17,6 +18,7 @@ export default function TabsLayout() {
   const me = useMe();
   const podeChat = !semEmpresa && (me.data?.podeChat ?? false);
   const naoLidas = useBadgeChat(podeChat).data ?? 0;
+  const ehFuncionario = useEhFuncionario();
 
   return (
     <Tabs
@@ -52,6 +54,19 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => (
             <Calendar color={color} size={size} />
           ),
+        }}
+      />
+      {/* PONTO: aba própria, e só pra quem é registrado em carteira.
+          Nasceu como card na home e estava no lugar errado — pra quem é CLT,
+          bater o ponto é o que ele abre o app pra fazer, três ou quatro
+          vezes por dia. `href: null` tira do tab bar E fecha a rota: esconder
+          o botão e deixar o caminho aberto não é esconder nada. */}
+      <Tabs.Screen
+        name="ponto"
+        options={{
+          title: "Ponto",
+          href: ehFuncionario ? undefined : null,
+          tabBarIcon: ({ color, size }) => <Clock color={color} size={size} />,
         }}
       />
       <Tabs.Screen

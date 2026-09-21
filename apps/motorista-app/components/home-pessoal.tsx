@@ -17,7 +17,6 @@ import {
 } from "lucide-react-native";
 import { ROTULO_DOCUMENTO_PESSOAL, type ResumoMesPessoal } from "@ronan/shared-types";
 import { Badge } from "@/components/ui/badge";
-import { BlocoPonto } from "@/components/bloco-ponto";
 import { api, type ConviteEmpresa } from "@/lib/api";
 import {
   cacheViagens,
@@ -149,11 +148,6 @@ export function HomePessoal() {
           />
         }
       >
-        {/* O PONTO vem antes de tudo pra quem é registrado em carteira.
-            Some sozinho (renderiza null) pra quem não é — que é a maioria
-            de quem cai nesta home, gente que trabalha por conta própria. */}
-        <BlocoPonto />
-
         {/* Convite de empresa: era a tela inteira, virou banner. */}
         {convites.map((c) => (
           <Pressable

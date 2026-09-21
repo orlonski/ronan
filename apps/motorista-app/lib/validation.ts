@@ -60,6 +60,18 @@ export function frasePorCodigo(code: string, message: string): string {
     case "invalid_format":
       return "formato inválido";
     case "invalid_type":
+      // ⚠️ "não foi enviado" só vale quando o campo REALMENTE não veio. O Zod
+      // usa `invalid_type` também pra tipo errado — float onde se esperava
+      // inteiro, texto onde se esperava número — e a mensagem antiga mandava
+      // o motorista (e quem fosse depurar) procurar um campo em branco que
+      // estava preenchido. Custou uma hora de caça ao erro errado.
+      //
+      // A distinção sai da MENSAGEM do Zod, que é o que o servidor manda:
+      // "Required" quando o campo não veio, e "Expected X, received Y" quando
+      // veio errado.
+      if (/expected/i.test(message) && !/received undefined/i.test(message)) {
+        return `valor em formato inválido (${message})`;
+      }
       return "obrigatório (não foi enviado)";
     case "invalid_enum_value":
       return "valor inválido";
