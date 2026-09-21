@@ -142,11 +142,26 @@ export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
                   RG e CTPS na mesma gaveta, "Registro do motorista" nas duas
                   linhas não diz qual é qual. */}
               {doc?.titulo ?? ROTULO_DOCUMENTO_MOTORISTA[tipo]}
-              {doc?.titulo && (
+
+              {/* ⚠️ A etiqueta diz DE ONDE o documento vem, e não repete o
+                  nome da gaveta.
+                  
+                  Com a separação por exigência, a mesma gaveta passou a poder
+                  ter duas linhas — uma pedida pelo contratante e outra anexada
+                  solta pelo escritório. Enquanto a etiqueta só ecoava a gaveta,
+                  a ficha mostrava "CNH" e "CNH CNH", e ninguém sabia qual era
+                  qual. */}
+              {doc && !doc.exigenciaId ? (
+                <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">
+                  anexo do escritório
+                </span>
+              ) : doc?.titulo &&
+                doc.titulo.trim().toLowerCase() !==
+                  ROTULO_DOCUMENTO_MOTORISTA[tipo].toLowerCase() ? (
                 <span className="ml-1.5 text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
                   {ROTULO_DOCUMENTO_MOTORISTA[tipo]}
                 </span>
-              )}
+              ) : null}
             </p>
             <StatusBadge status={status} validade={doc?.validade ?? null} />
           </div>
