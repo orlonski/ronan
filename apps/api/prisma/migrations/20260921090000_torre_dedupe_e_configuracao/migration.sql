@@ -28,6 +28,22 @@ UPDATE "alertas_operacionais"
    SET "notificadoEm" = "detectadoEm", "severidadeNotificada" = "severidade"
  WHERE "resolvidoEm" IS NULL;
 
+-- 2.5) O índice velho SAI ANTES de resolver as duplicatas.
+--
+-- ⚠️ É aqui que esta migration falhou em produção, e a ironia é que o
+-- comentário do passo 4 já descrevia o defeito sem perceber que ele se
+-- aplicava ao passo 3. O índice antigo é ("viagemId","tipo","resolvidoEm"),
+-- e `now()` é CONSTANTE dentro da transação: resolver N duplicatas da mesma
+-- (viagem, tipo) carimba o MESMO instante em todas, elas passam a colidir na
+-- chave de três colunas e a transação inteira aborta com 23505 —
+-- `duplicate key value violates unique constraint
+--  "alertas_operacionais_viagemId_tipo_resolvidoEm_key"`.
+--
+-- Derrubando o índice primeiro, não há o que colidir: o índice novo é parcial
+-- e só vê os alertas VIVOS, e depois do passo 3 sobra no máximo um por
+-- (viagem, tipo).
+DROP INDEX IF EXISTS "alertas_operacionais_viagemId_tipo_resolvidoEm_key";
+
 -- 3) Resolver as duplicatas já geradas, mantendo a mais ANTIGA de cada
 --    (viagem, tipo) — a que tem o `detectadoEm` verdadeiro do problema.
 --    Resolve em vez de apagar: saber que o caminhão ficou parado ontem é o dado
@@ -58,7 +74,7 @@ UPDATE "alertas_operacionais" a
 --    chave incluindo "resolvidoEm", dois alertas resolvidos no MESMO
 --    milissegundo passariam a colidir e virar 500 na cara do supervisor. A
 --    regra de negócio é sobre os VIVOS.
-DROP INDEX IF EXISTS "alertas_operacionais_viagemId_tipo_resolvidoEm_key";
+-- (o índice antigo já saiu no passo 2.5, antes dos UPDATEs)
 CREATE UNIQUE INDEX "alertas_operacionais_vivo_key"
   ON "alertas_operacionais" ("viagemId", "tipo")
   WHERE "resolvidoEm" IS NULL;
