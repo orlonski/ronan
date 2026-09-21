@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   Post,
@@ -21,7 +22,8 @@ import { Public } from "../auth/decorators/public.decorator";
 import { RequerPermissao } from "../auth/decorators/requer-permissao.decorator";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
-import type { AuthAdminUser } from "../auth/types";
+import type { AuthAdminUser, AuthMotorista } from "../auth/types";
+import { PrismaService } from "../prisma/prisma.service";
 import { ipDaRequisicao } from "../common/rate-limit/ip";
 import { criarRateLimitIpGuard } from "../common/rate-limit/rate-limit-ip.guard";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
@@ -157,5 +159,48 @@ export class ColetaPublicaController {
       ipDaRequisicao(req),
       req.headers["user-agent"],
     );
+  }
+}
+
+/**
+ * O que o MOTORISTA vê: o que ainda falta pra ficha dele fechar.
+ *
+ * SEM `@AcessoMotorista(...)`, pelo mesmo motivo do `m/obra`: isto não é
+ * feature em rollout, é o que decide se ele entra na obra. Gatear por flag
+ * deixaria alguém sem conseguir ver por que está parado. E como o guard de
+ * acesso não roda sem decorator, a checagem de cadastro aprovado é feita aqui
+ * na mão (ver CLAUDE.md).
+ *
+ * Não tem guard de módulo: `ModuloGuard` sai cedo pra quem não é ADMIN_USER.
+ * Quem não contratou a admissão simplesmente não tem exigência cadastrada, a
+ * lista volta vazia e o app não mostra tela nenhuma — que é o comportamento
+ * certo, sem precisar de porteiro.
+ */
+@ApiTags("motorista/admissao")
+@ApiBearerAuth()
+@UseGuards(RolesGuard)
+@Roles("MOTORISTA")
+@Controller("m/admissao")
+export class AdmissaoMotoristaController {
+  constructor(
+    private readonly service: AdmissaoService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  private async exigirAprovado(motoristaId: string) {
+    const m = await this.prisma.motorista.findUnique({
+      where: { id: motoristaId },
+      select: { status: true },
+    });
+    if (m?.status !== "APROVADO") {
+      throw new ForbiddenException("Seu cadastro ainda está em análise.");
+    }
+  }
+
+  /** O que a obra pede, e o que já chegou. */
+  @Get("documentos")
+  async documentos(@CurrentUser() user: AuthMotorista) {
+    await this.exigirAprovado(user.id);
+    return this.service.paraOMotorista(user.id);
   }
 }

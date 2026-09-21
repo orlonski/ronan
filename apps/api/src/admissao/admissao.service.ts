@@ -79,7 +79,7 @@ export class AdmissaoService {
   async exigidosPara(motoristaId: string) {
     const alocacao = await this.prisma.alocacaoObra.findFirst({
       where: { motoristaId, ativa: true },
-      include: { cliente: { select: { empresaId: true } } },
+      include: { cliente: { select: { empresaId: true, nome: true } } },
     });
     const empresaId = alocacao?.cliente.empresaId;
 
@@ -101,6 +101,7 @@ export class AdmissaoService {
 
   criarExigido(dados: {
     titulo: string;
+    ajuda?: string | null;
     tipo: string;
     empresaId?: string;
     obrigatorio?: boolean;
@@ -112,6 +113,7 @@ export class AdmissaoService {
     return this.prisma.documentoExigido.create({
       data: {
         titulo: dados.titulo,
+        ajuda: dados.ajuda?.trim() || null,
         tipo: dados.tipo,
         empresaId: dados.empresaId ?? null,
         obrigatorio: dados.obrigatorio ?? true,
@@ -309,6 +311,7 @@ export class AdmissaoService {
         chave,
         tipo: e.tipo,
         titulo: e.titulo,
+        ajuda: e.ajuda,
         obrigatorio: e.obrigatorio,
         exigeAssinatura: e.exigeAssinatura,
         exigeIcpBrasil: e.exigeIcpBrasil,
@@ -348,6 +351,56 @@ export class AdmissaoService {
       prontos: documentos.filter((d) => !pendente(d)).length,
       total: documentos.length,
       faltamObrigatorios: documentos.filter((d) => d.obrigatorio && pendente(d)).length,
+    };
+  }
+
+  /**
+   * O que o MOTORISTA vê no app.
+   *
+   * Mesmo cálculo das outras telas (`estadoDosDocumentos`), com dois recortes:
+   *
+   * 1. **Vem o nome da obra.** É o que responde "quem está pedindo isso?" antes
+   *    de ele decidir se vale o esforço — e o dono foi explícito em não querer
+   *    que ele perca tempo à toa.
+   * 2. **Não vem trilha de assinatura nem storageKey.** Nome, CPF, IP e hash
+   *    são evidência pro escritório; na tela dele isso não ajuda em nada e é
+   *    dado sensível viajando à toa. Ele vê que assinou e quando.
+   *
+   * Lista vazia é resposta legítima e comum: motorista que não está em obra
+   * nenhuma e cuja transportadora não exige nada. O app some com a tela.
+   */
+  async paraOMotorista(motoristaId: string) {
+    const [estado, alocacao] = await Promise.all([
+      this.estadoDosDocumentos(motoristaId),
+      this.prisma.alocacaoObra.findFirst({
+        where: { motoristaId, ativa: true },
+        select: { cliente: { select: { nome: true } } },
+      }),
+    ]);
+
+    return {
+      obra: alocacao?.cliente.nome ?? null,
+      documentos: estado.documentos.map((d) => ({
+        id: d.exigenciaId,
+        titulo: d.titulo,
+        ajuda: d.ajuda,
+        obrigatorio: d.obrigatorio,
+        precisaAssinar: d.exigeAssinatura,
+        /**
+         * Este não dá pra resolver pelo celular: assinatura com certificado
+         * digital é feita fora, porque a chave privada é do titular. A tela
+         * diz isso em vez de oferecer um botão que vai falhar.
+         */
+        soComCertificado: d.exigeIcpBrasil,
+        recebido: d.recebido,
+        recebidoEm: d.recebidoEm,
+        assinado: d.assinado,
+        assinadoEm: d.assinadoEm,
+        validade: d.validade,
+      })),
+      prontos: estado.prontos,
+      total: estado.total,
+      faltamObrigatorios: estado.faltamObrigatorios,
     };
   }
 

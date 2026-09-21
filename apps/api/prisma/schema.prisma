@@ -6472,6 +6472,18 @@ model DocumentoExigido {
   /// Como a operação chama o papel. Texto livre, de propósito.
   titulo String
 
+  /// Uma linha explicando QUE PAPEL É ESSE, na língua do motorista.
+  ///
+  /// ⚠️ Existe porque o sistema não nomeia documento — o `titulo` é o que o
+  /// contratante escreveu, e "comprovante de endereço" não diz nada pra quem
+  /// nunca precisou de um. O app não pode inventar a explicação (inventar é
+  /// exatamente o que o `titulo` livre existe pra evitar), então quem escreve
+  /// o título escreve a ajuda: "é a conta de luz ou de água, com seu nome".
+  ///
+  /// Nulo é caso normal. Sem ajuda, o app oferece falar com o escritório em
+  /// vez de chutar.
+  ajuda String?
+
   /// Em que gaveta o arquivo cai (`TipoDocumentoMotorista`). String e não enum
   /// porque a gaveta é detalhe de armazenamento, e exigência nova não pode
   /// esperar migration de enum.

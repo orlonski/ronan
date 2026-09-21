@@ -25,6 +25,7 @@ function servico(over: {
   enviados?: { tipo: string; storageKey?: string; hashArquivo?: string }[];
   assinaturas?: { tipoDocumento: string; modo: string; assinadoEm: Date; hashArquivo?: string }[];
   arquivoGuardado?: Buffer;
+  alocacao?: Record<string, unknown> | null;
 } = {}) {
   // As exigências ganham id aqui porque a IDENTIDADE do documento passou a ser
   // a exigência, não a gaveta. Os testes continuam falando em "CNH"/"ASO" (que
@@ -77,7 +78,7 @@ function servico(over: {
       },
       findMany: async () => [],
     },
-    alocacaoObra: { findFirst: async () => null },
+    alocacaoObra: { findFirst: async () => over.alocacao ?? null },
     documentoExigido: {
       findMany: async () => exigidos,
       findFirst: async () => null,
@@ -535,5 +536,68 @@ describe("a assinatura confere com o arquivo que está lá", () => {
     });
     const r = await s.estadoDosDocumentos("mot1");
     expect(r.documentos[0].assinaturaConfere).toBeNull();
+  });
+});
+
+/**
+ * O recorte do APP: o motorista vê o que falta, não a evidência do escritório.
+ */
+describe("o que o motorista vê no app", () => {
+  const EXIGE_ASSINATURA = [
+    {
+      tipo: "OS",
+      titulo: "Ordem de serviço",
+      obrigatorio: true,
+      empresaId: null,
+      exigeAssinatura: true,
+    },
+  ];
+
+  it("diz quantos faltam e quem está pedindo", async () => {
+    const { s } = servico({
+      exigidos: [
+        { tipo: "CNH", titulo: "CNH", obrigatorio: true, empresaId: null },
+        { tipo: "CRLV", titulo: "Documento do caminhão", obrigatorio: true, empresaId: null },
+      ],
+      enviados: [{ tipo: "CNH" }],
+      alocacao: { cliente: { empresaId: "emp1", nome: "Obra Centro" } },
+    });
+    const r = await s.paraOMotorista("mot1");
+
+    expect(r.obra).toBe("Obra Centro");
+    expect(r.total).toBe(2);
+    expect(r.prontos).toBe(1);
+    expect(r.faltamObrigatorios).toBe(1);
+  });
+
+  it("NÃO manda pro app a trilha da assinatura nem a chave do arquivo", async () => {
+    // Nome, CPF, IP e hash são evidência pro escritório. Na tela dele não
+    // ajudam em nada, e é dado sensível viajando à toa num 4G de beira de
+    // estrada. Ele vê que assinou e quando.
+    const { s } = servico({
+      exigidos: EXIGE_ASSINATURA,
+      enviados: [{ tipo: "OS", hashArquivo: "abc" }],
+      assinaturas: [
+        { tipoDocumento: "OS", modo: "SIMPLES", assinadoEm: new Date(), hashArquivo: "abc" },
+      ],
+    });
+    const r = await s.paraOMotorista("mot1");
+
+    const doc = r.documentos[0] as Record<string, unknown>;
+    expect(doc.assinado).toBe(true);
+    expect(doc.chave).toBeUndefined();
+    expect(doc.storageKey).toBeUndefined();
+    expect(doc.nomeArquivo).toBeUndefined();
+    expect(doc.assinaturaConfere).toBeUndefined();
+  });
+
+  it("sem exigência nenhuma devolve lista vazia — o app some com a tela", async () => {
+    // É o motorista de frete comum, de uma conta que nem contratou a admissão.
+    // Não é erro, é o caso mais comum do sistema.
+    const { s } = servico({ exigidos: [] });
+    const r = await s.paraOMotorista("mot1");
+    expect(r.total).toBe(0);
+    expect(r.documentos).toEqual([]);
+    expect(r.obra).toBeNull();
   });
 });

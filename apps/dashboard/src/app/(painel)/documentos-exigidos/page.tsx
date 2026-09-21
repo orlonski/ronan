@@ -224,6 +224,7 @@ function Grupo({
 function DialogNovo({ onFechar, onCriado }: { onFechar: () => void; onCriado: () => void }) {
   const token = useAuthToken();
   const [titulo, setTitulo] = useState("");
+  const [ajuda, setAjuda] = useState("");
   const [tipo, setTipo] = useState<string>("CNH");
   const [empresaId, setEmpresaId] = useState<string>();
   const [obrigatorio, setObrigatorio] = useState(true);
@@ -238,6 +239,7 @@ function DialogNovo({ onFechar, onCriado }: { onFechar: () => void; onCriado: ()
         method: "POST",
         body: JSON.stringify({
           titulo: titulo.trim(),
+          ajuda: ajuda.trim() || undefined,
           tipo,
           empresaId,
           obrigatorio,
@@ -273,6 +275,21 @@ function DialogNovo({ onFechar, onCriado }: { onFechar: () => void; onCriado: ()
             onChange={(e) => setTitulo(e.target.value)}
             placeholder="Ex.: Ordem de serviço assinada"
           />
+        </div>
+
+        <div>
+          <Label>Explica pro motorista o que é (opcional)</Label>
+          <Input
+            value={ajuda}
+            onChange={(e) => setAjuda(e.target.value)}
+            maxLength={200}
+            placeholder="Ex.: é a conta de luz ou de água, com seu nome e endereço"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Aparece embaixo do nome, no app dele. Escreva do jeito que você explicaria por
+            telefone — o app não inventa explicação, e sem esta linha muita gente trava em
+            documento que não sabe qual é.
+          </p>
         </div>
 
         <div>

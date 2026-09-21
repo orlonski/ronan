@@ -25,6 +25,7 @@ import {
 } from "lucide-react-native";
 import { fmtHoraBR } from "@/lib/datetime";
 import { HomePessoal } from "@/components/home-pessoal";
+import { BlocoDocumentos } from "@/components/bloco-documentos";
 import { BlocoObra } from "@/components/home-obra";
 import { useSemEmpresa } from "@/lib/visao";
 import {
@@ -356,6 +357,12 @@ function HomeDaEmpresa() {
           <View className="mb-3 gap-3">
             {/* Stories dos motoristas (estilo Instagram) */}
             <StoriesBar />
+
+            {/* O que falta na ficha dele. Some sozinho quando não falta nada —
+                diferente da conta de diárias, isto é uma coisa que ACABA, e é
+                por isso que pode vir antes dela sem cometer o erro da versão
+                que empurrava o app inteiro pra baixo todo dia. */}
+            <BlocoDocumentos />
 
             {/* A conta de diárias de quem está numa obra. Some sozinho quando
                 não há alocação.

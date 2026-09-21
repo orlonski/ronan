@@ -752,6 +752,57 @@ export function useMeusDiasObra(mes: string, enabled = true) {
   });
 }
 
+// ═══════════════════════ DOCUMENTOS DA OBRA ═══════════════════════════════
+
+export type DocumentoDaObra = {
+  id: string;
+  titulo: string;
+  /** A explicação escrita por quem pediu. Nulo é comum — o app não inventa. */
+  ajuda: string | null;
+  obrigatorio: boolean;
+  precisaAssinar: boolean;
+  /** Assinatura com certificado digital: não se resolve pelo celular. */
+  soComCertificado: boolean;
+  recebido: boolean;
+  recebidoEm: string | null;
+  assinado: boolean;
+  assinadoEm: string | null;
+  validade: string | null;
+};
+
+export type DocumentosDaObra = {
+  /** A obra que está pedindo. Nulo quando a exigência é da transportadora. */
+  obra: string | null;
+  documentos: DocumentoDaObra[];
+  prontos: number;
+  total: number;
+  faltamObrigatorios: number;
+};
+
+/**
+ * O que falta na ficha dele.
+ *
+ * Cache-first como todo o resto, e aqui o motivo é o pedido do dono em pessoa:
+ * ele tem que saber o que falta ANTES de perder a viagem até o escritório. Uma
+ * tela que só responde com 4G bom responde justamente na hora errada.
+ */
+export function useDocumentosDaObra(enabled = true) {
+  const cacheKey = "q:documentos-obra";
+  const buscarRede = async (): Promise<DocumentosDaObra> => {
+    const fresh = await api.get<DocumentosDaObra>("/m/admissao/documentos");
+    void cachePut(cacheKey, fresh).catch(() => {});
+    return fresh;
+  };
+  return useQuery({
+    queryKey: ["documentos-obra"],
+    // Sem empresa não há exigência nenhuma: seria gastar requisição em 4G ruim
+    // pra receber 403, igual à obra de hoje.
+    enabled,
+    staleTime: 60_000,
+    queryFn: () => cacheFirst<DocumentosDaObra>(["documentos-obra"], cacheKey, buscarRede),
+  });
+}
+
 // ═══════════════════════ PONTO ELETRÔNICO (funcionário CLT) ═══════════════
 //
 // ⚠️ Outro módulo, outra pessoa: aqui é FUNCIONÁRIO REGISTRADO, não parceiro

@@ -185,6 +185,15 @@ export type ConfigMensalInput = z.infer<typeof ConfigMensalInput>;
  */
 export const CriarDocumentoExigidoInput = z.object({
   titulo: z.string().trim().min(2, "Diga como o contratante chama esse papel."),
+  /**
+   * Uma linha explicando o papel na língua do motorista.
+   *
+   * O app mostra isso embaixo do título. Sem ela, "certidão de estado civil" é
+   * uma parede pra quem tem dificuldade de leitura — e o app NÃO pode inventar
+   * a explicação, porque inventar nome de documento é exatamente o que o
+   * título livre existe pra evitar.
+   */
+  ajuda: z.string().trim().max(200).optional(),
   /** Em que gaveta o arquivo cai (um `TipoDocumentoMotorista`). */
   tipo: z.string().trim().min(1, "Escolha a gaveta do arquivo."),
   /** Vazio = exigência da transportadora inteira, valendo pra qualquer obra. */
