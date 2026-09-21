@@ -12,6 +12,32 @@ import { Public } from "../auth/decorators/public.decorator";
  */
 const INICIADO_EM = new Date().toISOString();
 
+/**
+ * O redimensionador de imagem existe NESTE build?
+ *
+ * ⚠️ Pergunta que nenhuma tela responde. `sharp` é binário nativo e o runtime
+ * é alpine; o import é dinâmico e protegido, então quando ele falta a API sobe
+ * normalmente e o endpoint de miniatura serve o arquivo ORIGINAL. Visualmente
+ * fica idêntico — a miniatura aparece igual — e o único sintoma é o pacote de
+ * dados do motorista indo embora: 522 KB por documento em vez de 6 KB.
+ *
+ * Defeito que só aparece na conta de celular de outra pessoa precisa de sonda,
+ * senão ninguém descobre.
+ *
+ * Cache em memória: a resposta não muda enquanto o processo viver.
+ */
+let miniaturaOk: boolean | null = null;
+async function temRedimensionador(): Promise<boolean> {
+  if (miniaturaOk !== null) return miniaturaOk;
+  try {
+    await import("sharp");
+    miniaturaOk = true;
+  } catch {
+    miniaturaOk = false;
+  }
+  return miniaturaOk;
+}
+
 @ApiTags("health")
 @Controller("health")
 export class HealthController {
@@ -61,6 +87,11 @@ export class HealthController {
         osrm: !!process.env.OSRM_URL,
         navegacao: !!process.env.VALHALLA_URL,
       },
+      /**
+       * `false` = as miniaturas de documento estão saindo em tamanho real e o
+       * 4G do motorista está pagando por isso. Ver `temRedimensionador`.
+       */
+      miniatura: await temRedimensionador(),
       time: new Date().toISOString(),
     };
   }
