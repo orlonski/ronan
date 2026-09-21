@@ -61,6 +61,36 @@ export class MetaClient {
   }
 
   /**
+   * Um slide do carrossel.
+   *
+   * Sem legenda de propósito: quem carrega o texto é o container pai. Mandar
+   * `caption` aqui não dá erro — a Meta aceita e ignora, e a legenda some do
+   * post sem ninguém entender por quê.
+   */
+  async criarContainerSlide(imagemUrl: string): Promise<string> {
+    const corpo = await this.post<{ id: string }>(`/${this.config.igUserId}/media`, {
+      image_url: imagemUrl,
+      is_carousel_item: "true",
+    });
+    return corpo.id;
+  }
+
+  /**
+   * O container pai do carrossel: amarra os slides e carrega a legenda.
+   *
+   * A ORDEM de `children` é a ordem em que o leitor desliza. Não é ordenada
+   * pela Meta nem pelo id — é exatamente a lista que vai aqui.
+   */
+  async criarContainerCarrossel(filhos: string[], legenda: string): Promise<string> {
+    const corpo = await this.post<{ id: string }>(`/${this.config.igUserId}/media`, {
+      media_type: "CAROUSEL",
+      children: filhos.join(","),
+      caption: legenda,
+    });
+    return corpo.id;
+  }
+
+  /**
    * O container é processado de forma assíncrona. Para foto costuma ser
    * imediato, mas publicar antes de `FINISHED` falha — então se pergunta.
    */

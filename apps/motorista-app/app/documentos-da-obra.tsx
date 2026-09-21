@@ -157,6 +157,22 @@ export default function DocumentosDaObraScreen() {
   const [capturando, setCapturando] = useState<DocumentoDaObra | null>(null);
 
   /**
+   * A foto que ele acabou de mandar, e a versão que o servidor tinha ANTES.
+   *
+   * ⚠️ É o que mata a piscada. Quando o upload termina, o item sai da fila e a
+   * tela volta a usar a imagem do servidor — só que monta a URL com o hash que
+   * ainda tem em memória, o antigo. Por um instante o servidor devolve a
+   * miniatura velha: foto nova, pisca a antiga, foto nova.
+   *
+   * Guardando a versão de antes, a tela sabe exatamente quando parar de
+   * desenhar a foto local: quando o hash MUDAR, e não quando o item sair da
+   * fila. Até lá, a imagem na tela é a que ele escolheu.
+   */
+  const [recemEnviadas, setRecemEnviadas] = useState<
+    Record<string, { uri: string; versaoAntes: string | null }>
+  >({});
+
+  /**
    * Este build consegue abrir os ARQUIVOS do celular?
    *
    * `expo-document-picker` é módulo nativo: chega num build de loja, não por
@@ -239,6 +255,7 @@ export default function DocumentosDaObraScreen() {
                   key={d.id}
                   doc={d}
                   fila={filaPor.get(d.id)}
+                  recemEnviada={recemEnviadas[d.id]}
                   onMandar={() => setCapturando(d)}
                   onAssinar={() =>
                     router.push({
@@ -335,6 +352,10 @@ export default function DocumentosDaObraScreen() {
                     const arq = await escolherArquivo();
                     if (!arq || !alvo) return;
                     setCapturando(null);
+                    setRecemEnviadas((p) => ({
+                      ...p,
+                      [alvo.id]: { uri: arq.uri, versaoAntes: alvo.versao ?? null },
+                    }));
                     await enqueueDocumentoAdmissao({
                       exigenciaId: alvo.id,
                       titulo: alvo.titulo,
@@ -450,11 +471,14 @@ function Contagem({
 function ItemDocumento({
   doc,
   fila,
+  recemEnviada,
   onMandar,
   onAssinar,
 }: {
   doc: DocumentoDaObra;
   fila?: { status: string; attempts: number; errorMsg?: string; arquivoUri?: string };
+  /** A foto que ele acabou de mandar, e a versão que o servidor tinha antes. */
+  recemEnviada?: { uri: string; versaoAntes: string | null };
   onMandar: () => void;
   onAssinar: () => void;
 }) {
@@ -471,6 +495,19 @@ function ItemDocumento({
   // servidor recusou de verdade e só ele pode resolver.
   const deuErro = fila?.status === "error" || (fila?.attempts ?? 0) >= 8;
   const esperandoSinal = fila !== undefined && !deuErro;
+
+  /**
+   * Qual foto desenhar: a local vence até o servidor confirmar a TROCA.
+   *
+   * Não basta "está na fila": o item sai da fila no instante em que o upload
+   * termina, e a versão do servidor só chega na atualização seguinte. A janela
+   * entre os dois é a piscada da foto antiga.
+   */
+  const aguardandoServidor =
+    recemEnviada !== undefined && (doc.versao ?? null) === recemEnviada.versaoAntes;
+  const uriDaFoto = deuErro
+    ? undefined
+    : (fila?.arquivoUri ?? (aguardandoServidor ? recemEnviada?.uri : undefined));
 
   const borda = vencido || recusado
     ? "border-destructive"
@@ -492,13 +529,18 @@ function ItemDocumento({
             documento, precisa dar pra RECONHECER qual é. */}
         {/* A foto na fila vence a do servidor: ele acabou de escolher, e ver a
             antiga aqui faria ele mandar de novo achando que não foi. */}
-        {esperandoSinal && fila?.arquivoUri ? (
+        {uriDaFoto ? (
           <MiniaturaDocumento
             exigenciaId={doc.id}
             mimetype={doc.mimetype ?? null}
             titulo={doc.titulo}
-            uriLocal={fila.arquivoUri}
-            enviando={fila.status === "syncing"}
+            uriLocal={uriDaFoto}
+            // Spinner só enquanto está SUBINDO. Na janela entre o upload
+            // terminar e o servidor confirmar, a foto fica lá, parada e
+            // correta — sem selo, porque não há nada acontecendo que ele
+            // precise saber.
+            enviando={fila?.status === "syncing"}
+            semSelo={fila === undefined}
           />
         ) : doc.recebido && !esperandoSinal ? (
           <MiniaturaDocumento

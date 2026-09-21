@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
-import { StatusPostInstagram, type PostInstagram } from "@prisma/client";
+import { StatusPostInstagram, type ArtePostInstagram, type PostInstagram } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../prisma/prisma.service";
@@ -9,6 +9,19 @@ import { comoSistema } from "../common/conta/conta-context";
 import { InstagramConfig } from "./instagram.config";
 import { InstagramFilaService } from "./instagram-fila.service";
 import { ErroMeta, MetaClient } from "./meta-client";
+
+/**
+ * O container da Meta venceu antes de publicarmos.
+ *
+ * Separado de `ErroMeta` porque o conserto é outro: não adianta retentar com o
+ * mesmo container, tem que jogar fora e montar de novo.
+ */
+class ContainerExpirado extends Error {
+  constructor(mensagem: string) {
+    super(mensagem);
+    this.name = "ContainerExpirado";
+  }
+}
 
 /**
  * Publica no Instagram do @movatruck na hora marcada.
@@ -116,16 +129,27 @@ export class InstagramPublicadorService implements OnModuleInit {
         await this.fila.descartar(post.id, "O link público da arte expirou antes da publicação.");
         return;
       }
-      try {
-        await this.uploads.getObjectBuffer(post.storageKey);
-      } catch {
-        await this.fila.descartar(post.id, "A arte não está mais no storage.");
+
+      const artes = await this.fila.artesDoPost(post.id);
+      if (artes.length === 0) {
+        await this.fila.descartar(post.id, "O post não tem arte nenhuma.");
         return;
+      }
+      // TODOS os slides antes de criar container nenhum. Descobrir no slide 7
+      // que o 8 sumiu deixaria sete containers órfãos consumindo cota.
+      for (const arte of artes) {
+        try {
+          await this.uploads.getObjectBuffer(arte.storageKey);
+        } catch {
+          const qual = artes.length > 1 ? ` (slide ${arte.ordem + 1} de ${artes.length})` : "";
+          await this.fila.descartar(post.id, `A arte não está mais no storage${qual}.`);
+          return;
+        }
       }
 
       // Retomada: com container já criado, não cria outro. É a chave de
       // idempotência entre as duas fases da Meta.
-      const containerId = post.containerId ?? (await this.criarContainer(post));
+      const containerId = post.containerId ?? (await this.criarContainer(post, artes));
 
       if (this.config.modoSombra) {
         this.logger.log(
@@ -144,13 +168,46 @@ export class InstagramPublicadorService implements OnModuleInit {
     }
   }
 
-  private async criarContainer(post: PostInstagram): Promise<string> {
-    const url = this.urlPublicaDaArte(post.arteToken);
-    const containerId = await this.meta.criarContainer(url, post.legenda);
+  private async criarContainer(post: PostInstagram, artes: ArtePostInstagram[]): Promise<string> {
+    const containerId =
+      artes.length === 1
+        ? await this.meta.criarContainer(this.urlPublicaDaArte(artes[0].token), post.legenda)
+        : await this.criarContainerCarrossel(post, artes);
     // Grava ANTES de publicar: se o processo morrer agora, a retomada reaproveita.
     await this.fila.registrarContainer(post.id, containerId);
     await this.esperarContainer(containerId);
     return containerId;
+  }
+
+  /**
+   * Monta o carrossel: um container por slide, depois o pai que os amarra.
+   *
+   * Cada filho é gravado assim que a Meta o aceita, pelo mesmo motivo do
+   * container do post: um processo que morre no slide 6 de 8 não pode obrigar a
+   * refazer os cinco primeiros. Cada `criarContainerSlide` é uma chamada que
+   * conta na cota.
+   *
+   * A ordem de `filhos` é a ordem do feed, e vem de `artes`, que a fila entrega
+   * ordenada por `ordem`. Confiar na ordem de chegada do upload em vez disso
+   * seria deixar o slide 1 sair no meio do carrossel.
+   */
+  private async criarContainerCarrossel(
+    post: PostInstagram,
+    artes: ArtePostInstagram[],
+  ): Promise<string> {
+    const filhos: string[] = [];
+    for (const arte of artes) {
+      if (arte.containerId) {
+        filhos.push(arte.containerId);
+        continue;
+      }
+      const filho = await this.meta.criarContainerSlide(this.urlPublicaDaArte(arte.token));
+      await this.fila.registrarContainerSlide(arte.id, filho);
+      filhos.push(filho);
+    }
+    // Um filho ainda processando derruba o pai inteiro com erro genérico.
+    for (const filho of filhos) await this.esperarContainer(filho);
+    return this.meta.criarContainerCarrossel(filhos, post.legenda);
   }
 
   /** Foto costuma ficar pronta na hora, mas publicar antes de FINISHED falha. */
@@ -158,15 +215,38 @@ export class InstagramPublicadorService implements OnModuleInit {
     for (let tentativa = 0; tentativa < 10; tentativa++) {
       const { status, erro } = await this.meta.statusContainer(containerId);
       if (status === "FINISHED") return;
-      if (status === "ERROR" || status === "EXPIRED") {
-        throw new ErroMeta(null, null, false, `Container ${status}: ${erro ?? "sem detalhe"}`);
+      // EXPIRED não é a peça com defeito: é o container da Meta, que dura 24h.
+      // Um post preso em modo sombra passa desse prazo reusando o mesmo
+      // container e, antes disto, virava FALHOU definitivo — com a arte
+      // intacta e nada pra consertar. Recriar resolve, então é transitório, e
+      // quem trata limpa o container velho antes de tentar de novo.
+      if (status === "EXPIRED") {
+        throw new ContainerExpirado(`Container expirou antes de publicar: ${erro ?? "sem detalhe"}`);
+      }
+      if (status === "ERROR") {
+        throw new ErroMeta(null, null, false, `Container ERROR: ${erro ?? "sem detalhe"}`);
       }
       await new Promise((r) => setTimeout(r, 3000));
     }
     throw new ErroMeta(null, null, true, "Container não ficou pronto a tempo.");
   }
 
+  /**
+   * Esquece os containers deste post — o do post e o de cada slide.
+   *
+   * Sem isto a retomada reusaria exatamente o container que acabou de expirar,
+   * e o post ficaria batendo na mesma parede até esgotar as tentativas.
+   */
+  private async limparContainers(postId: string): Promise<void> {
+    await this.fila.esquecerContainers(postId);
+  }
+
   private async tratarFalha(post: PostInstagram, erro: unknown): Promise<void> {
+    if (erro instanceof ContainerExpirado) {
+      await this.limparContainers(post.id);
+      await this.fila.reagendar(post, null, `${erro.message} Vou montar outro na próxima tentativa.`);
+      return;
+    }
     const meta = erro instanceof ErroMeta ? erro : null;
     const motivo = meta
       ? `Meta code=${meta.codigo ?? "-"} subcode=${meta.subcodigo ?? "-"}: ${meta.message}`
@@ -221,9 +301,12 @@ export class InstagramPublicadorService implements OnModuleInit {
           this.logger.error(`Não consegui listar as mídias: "${post.peca}" segue INDETERMINADO.`);
           continue;
         }
+        // Esquece os containers junto: o pai some e os filhos de um carrossel
+        // não servem pra outro pai.
+        await this.fila.esquecerContainers(post.id);
         await this.prisma.postInstagram.update({
           where: { id: post.id },
-          data: { status: StatusPostInstagram.AGENDADO, containerId: null, proximaTentativaEm: null },
+          data: { status: StatusPostInstagram.AGENDADO, proximaTentativaEm: null },
         });
         this.logger.warn(`"${post.peca}" não saiu: devolvido pra fila.`);
       }

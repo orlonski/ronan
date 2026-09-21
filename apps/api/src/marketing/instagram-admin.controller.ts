@@ -7,14 +7,14 @@ import {
   Patch,
   Post,
   Query,
-  UploadedFile,
+  UploadedFiles,
   UseGuards,
   UseInterceptors,
   BadRequestException,
   NotFoundException,
   Res,
 } from "@nestjs/common";
-import { FileInterceptor } from "@nestjs/platform-express";
+import { AnyFilesInterceptor } from "@nestjs/platform-express";
 import type { Response } from "express";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { StatusPostInstagram } from "@prisma/client";
@@ -28,8 +28,9 @@ import { comoSistema } from "../common/conta/conta-context";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
+import { validarArtes } from "./artes-recebidas";
 import { InstagramConfig } from "./instagram.config";
-import { InstagramFilaService } from "./instagram-fila.service";
+import { InstagramFilaService, SLIDES_MAX } from "./instagram-fila.service";
 import { MetricasInstagramService } from "./metricas.service";
 import { InstagramPublicadorService } from "./instagram-publicador.service";
 import { PautaService } from "./pauta.service";
@@ -72,6 +73,32 @@ const ListarQuery = z.object({
 });
 type ListarQuery = z.infer<typeof ListarQuery>;
 
+/** Qual slide servir. Sem isto, a capa — que é o caso de todo post de imagem única. */
+const ArteQuery = z.object({
+  slide: z.coerce.number().int().min(0).max(SLIDES_MAX - 1).optional(),
+});
+type ArteQuery = z.infer<typeof ArteQuery>;
+
+/**
+ * O que pedir ao agente.
+ *
+ * Carrossel é escolha de quem clica, não do cron: a pauta diária continua
+ * pedindo peça única, e carrossel sai quando alguém pede — é mais caro de
+ * produzir e merece um olho humano antes.
+ */
+const PedirLevaInput = z.object({
+  formato: z.enum(["UNICO", "CARROSSEL"]).default("UNICO"),
+  /**
+   * Pede mesmo com a fila cheia.
+   *
+   * A pauta automática não força, pra não empilhar trabalho que ninguém
+   * consumiu. Um clique no botão é diferente: a pessoa está olhando a fila e
+   * pediu assim mesmo.
+   */
+  forcar: z.boolean().default(false),
+});
+type PedirLevaInput = z.infer<typeof PedirLevaInput>;
+
 @ApiTags("admin/marketing")
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
@@ -93,7 +120,7 @@ export class InstagramAdminController {
   @RequerPermissao("marketing.ver")
   @Get()
   async listar(@Query(new ZodValidationPipe(ListarQuery)) q: ListarQuery) {
-    return comoSistema(() =>
+    const posts = await comoSistema(() =>
       this.prisma.postInstagram.findMany({
         where: q.status ? { status: q.status } : {},
         orderBy: [{ publicarEm: "asc" }, { criadoEm: "desc" }],
@@ -113,6 +140,9 @@ export class InstagramAdminController {
           erroCodigo: true,
           criadoEm: true,
           criadoPor: { select: { nome: true } },
+          // Só a contagem: a tela precisa saber quantos slides desenhar, e a
+          // chave do storage nunca sai daqui.
+          _count: { select: { artes: true } },
           // O que a peça rendeu. `compartilhamentos` primeiro na leitura da tela:
           // é o sinal que mais alcança quem não segue, e por isso o que decide
           // qual formato repetir.
@@ -126,6 +156,8 @@ export class InstagramAdminController {
         },
       }),
     );
+    // `_count` é detalhe do Prisma; a tela recebe `slides`, que é o que ela usa.
+    return posts.map(({ _count, ...post }) => ({ ...post, slides: _count.artes }));
   }
 
   @RequerPermissao("marketing.ver")
@@ -154,28 +186,25 @@ export class InstagramAdminController {
    */
   @RequerPermissao("marketing.criar")
   @Post()
-  @UseInterceptors(FileInterceptor("arte"))
+  @UseInterceptors(AnyFilesInterceptor())
   async agendar(
-    @UploadedFile() arte: Express.Multer.File | undefined,
+    @UploadedFiles() arquivos: Express.Multer.File[] | undefined,
     @Body(new ZodValidationPipe(AgendarInput)) body: AgendarInput,
     @CurrentUser() user: AuthAdminUser,
   ) {
-    if (!arte) throw new BadRequestException("Mande a arte no campo `arte`");
-    // A Meta não aceita PNG e recusa acima de 8 MB. Barrar aqui evita um post
-    // que só falha na hora H.
-    if (!arte.mimetype.includes("jpeg") && !arte.mimetype.includes("jpg")) {
-      throw new BadRequestException("A arte precisa ser JPEG — a API do Instagram não aceita PNG");
-    }
-    if (arte.size > 8 * 1024 * 1024) {
-      throw new BadRequestException("A arte passa de 8 MB, que é o teto do Instagram");
-    }
+    // Mais de uma imagem = carrossel. Não há botão separado: o que decide é
+    // quantos arquivos vieram, e a ordem deles é a ordem do feed.
+    const artes = validarArtes(arquivos);
 
     return comoSistema(async () => {
-      const storageKey = await this.uploads.putArteInstagram(arte.buffer);
+      const storageKeys: string[] = [];
+      for (const arte of artes) {
+        storageKeys.push(await this.uploads.putArteInstagram(arte.buffer));
+      }
       return this.fila.enfileirar({
         peca: body.peca,
         legenda: body.legenda,
-        storageKey,
+        storageKeys,
         publicarEm: body.publicarEm ?? null,
         criadoPorId: user.id,
         validadeHoras: this.config.arteValidadeHoras,
@@ -270,12 +299,21 @@ export class InstagramAdminController {
    */
   @RequerPermissao("marketing.ver")
   @Get(":id/arte")
-  async arte(@Param("id") id: string, @Res() res: Response) {
-    const post = await comoSistema(() =>
-      this.prisma.postInstagram.findUnique({ where: { id }, select: { storageKey: true } }),
+  async arte(
+    @Param("id") id: string,
+    @Query(new ZodValidationPipe(ArteQuery)) q: ArteQuery,
+    @Res() res: Response,
+  ) {
+    // Pelo `ordem`, não pelo índice do array: é a posição que o leitor vai ver,
+    // e é ela que a tela pede.
+    const arte = await comoSistema(() =>
+      this.prisma.artePostInstagram.findUnique({
+        where: { postId_ordem: { postId: id, ordem: q.slide ?? 0 } },
+        select: { storageKey: true },
+      }),
     );
-    if (!post) throw new NotFoundException("Post não encontrado");
-    const buffer = await this.uploads.getObjectBuffer(post.storageKey);
+    if (!arte) throw new NotFoundException("Slide não encontrado");
+    const buffer = await this.uploads.getObjectBuffer(arte.storageKey);
     res.set("Content-Type", "image/jpeg");
     res.set("Cache-Control", "private, max-age=3600");
     res.send(buffer);
@@ -289,8 +327,11 @@ export class InstagramAdminController {
    */
   @RequerPermissao("marketing.criar")
   @Post("pedir-leva")
-  async pedirLeva() {
-    return this.pauta.pedirLeva(this.config.postsPorLeva);
+  async pedirLeva(@Body(new ZodValidationPipe(PedirLevaInput)) body: PedirLevaInput) {
+    return this.pauta.pedirLeva(this.config.postsPorLeva, {
+      formato: body.formato,
+      forcar: body.forcar,
+    });
   }
 
   /**

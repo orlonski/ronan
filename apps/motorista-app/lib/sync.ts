@@ -1689,8 +1689,23 @@ async function processDocumentoAdmissao(item: PendingDocumentoAdmissao): Promise
       timeoutMs: 120_000,
     });
     await deletePendingDocumentoAdmissao(item.clientId);
-    // A cópia local já cumpriu o papel. Falha ao apagar não é erro de tela.
-    void FileSystem.deleteAsync(item.arquivoUri, { idempotent: true }).catch(() => {});
+    /**
+     * ⚠️ A cópia local NÃO é apagada agora, e o atraso é proposital.
+     *
+     * Assim que o item sai da fila, a tela volta a usar a imagem do servidor —
+     * mas monta a URL com o hash que ela ainda tem em memória, o ANTIGO. Por
+     * uma fração de segundo o servidor devolve a miniatura velha, e o que o
+     * motorista vê é: foto nova, pisca a antiga, foto nova. Parece defeito
+     * porque é.
+     *
+     * Segurando o arquivo por meio minuto, a tela continua desenhando a foto
+     * local até o hash novo chegar. O próximo envio da mesma exigência apaga
+     * esta cópia de qualquer jeito (o enqueue limpa o destino antes de copiar),
+     * então o pior caso é um arquivo por documento até o app reiniciar.
+     */
+    setTimeout(() => {
+      void FileSystem.deleteAsync(item.arquivoUri, { idempotent: true }).catch(() => {});
+    }, 30_000);
   } catch (err) {
     const permanente = isErroPermanente(err);
     const base = proximoEstadoFalha(item, err, permanente, "documento-admissao");

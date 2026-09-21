@@ -5784,13 +5784,16 @@ model PostInstagram {
   peca    String
   legenda String @db.Text
 
-  /// A arte, em JPEG — a API da Meta não aceita PNG, e busca a imagem numa URL
-  /// pública em vez de receber upload. `storageKey` nunca sai daqui; o que a
-  /// URL carrega é o `arteToken`.
-  storageKey   String
-  arteToken    String   @unique
+  /// As artes, em JPEG — uma por slide, na ordem em que saem no feed.
+  ///
+  /// É lista e não coluna porque carrossel tem de 2 a 10 imagens, e cada uma
+  /// precisa do próprio link público pra Meta baixar. Post de imagem única é o
+  /// caso de UM elemento aqui, não um caminho separado: dois caminhos seria
+  /// duas chances de esquecer um deles.
+  artes        ArtePostInstagram[]
   /// Depois disto o endpoint público devolve 404. A Meta só precisa da URL
   /// durante a criação do container (minutos), então o link não fica de pé.
+  /// Vale pro post inteiro: os slides de um carrossel expiram juntos.
   arteExpiraEm DateTime
 
   status     StatusPostInstagram @default(RASCUNHO)
@@ -5805,6 +5808,11 @@ model PostInstagram {
   /// Container criado em POST /<ig-user-id>/media. Gravado ANTES do publish:
   /// numa retentativa, com isto preenchido, pula a fase 1 em vez de criar
   /// container novo. É a chave de idempotência entre as duas chamadas.
+  ///
+  /// Em carrossel é o container PAI (media_type=CAROUSEL). Os filhos ficam em
+  /// `ArtePostInstagram.containerId`, um por slide, gravados do mesmo jeito e
+  /// pelo mesmo motivo: o processo pode morrer entre o slide 3 e o 4, e refazer
+  /// os três primeiros gasta cota de publicação à toa.
   containerId String?
   /// Id do media publicado. Preenchido = acabou; nunca republicar.
   mediaId     String?
@@ -5854,6 +5862,35 @@ model PostInstagram {
   @@index([status, proximaTentativaEm])
   @@index([publicadoEm(sort: Desc)])
   @@map("posts_instagram")
+}
+
+/// Um slide do post. Post de imagem única tem exatamente um.
+///
+/// Existe como tabela, e não como array de chaves no PostInstagram, porque cada
+/// slide carrega estado próprio que muda em momentos diferentes: o token
+/// público que a Meta usa pra baixar a imagem, e o container que a Meta devolve
+/// ao aceitar aquele slide. Array de String não guarda o segundo, e é
+/// justamente ele que evita refazer trabalho numa retomada.
+model ArtePostInstagram {
+  id     String        @id @default(uuid())
+  postId String
+  post   PostInstagram @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  /// Posição no carrossel, base 0. É a ordem em que o leitor desliza.
+  ordem      Int
+  storageKey String
+  /// O que a URL pública carrega. Um por slide: a Meta faz um GET por imagem.
+  token      String @unique
+
+  /// Container filho (is_carousel_item=true). Null em post de imagem única —
+  /// lá o container é o do próprio post.
+  containerId String?
+
+  criadoEm DateTime @default(now())
+
+  /// Dois slides na mesma posição seria ordem indefinida no feed.
+  @@unique([postId, ordem])
+  @@map("artes_post_instagram")
 }
 
 /// Quantos seguidores o perfil tinha em cada dia.

@@ -40,18 +40,22 @@ export class ArtePublicaController {
   @Get(":token")
   async arte(@Param("token") token: string, @Res() res: Response) {
     // Model global: a trava por conta não tem o que injetar aqui.
-    const post = await comoSistema(() => this.fila.porToken(token));
+    //
+    // O token é do SLIDE, não do post: num carrossel a Meta busca uma URL por
+    // imagem. Quem decide se pode servir continua sendo o post — validade e
+    // cancelamento valem pro conjunto, não por slide.
+    const arte = await comoSistema(() => this.fila.arteporToken(token));
 
     // 404 seco em tudo que não serve. Não distinguir "não existe" de "expirou"
     // nem de "já publicou": quem chama é um robô da Meta, não uma pessoa que
     // precisa entender o motivo — e a diferença só ajudaria quem sonda.
     const vivo =
-      post !== null &&
-      post.arteExpiraEm.getTime() > Date.now() &&
-      post.status !== StatusPostInstagram.CANCELADO;
+      arte !== null &&
+      arte.post.arteExpiraEm.getTime() > Date.now() &&
+      arte.post.status !== StatusPostInstagram.CANCELADO;
     if (!vivo) throw new NotFoundException();
 
-    const buffer = await this.uploads.getObjectBuffer(post.storageKey);
+    const buffer = await this.uploads.getObjectBuffer(arte.storageKey);
     res.set("Content-Type", "image/jpeg");
     // Cache longo é seguro: a URL carrega um token único e de vida curta.
     res.set("Cache-Control", "public, max-age=3600");

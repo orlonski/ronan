@@ -8,6 +8,9 @@ import { FilaExecucoesService } from "../clickup-runner/fila.service";
 import { comoSistema } from "../common/conta/conta-context";
 import { InstagramConfig } from "./instagram.config";
 
+/** Peça única ou carrossel. O cron só pede a primeira; carrossel vem de clique. */
+export type FormatoPedido = "UNICO" | "CARROSSEL";
+
 /**
  * A pauta: manda o `ronan_agente` produzir a próxima leva de posts.
  *
@@ -54,18 +57,24 @@ export class PautaService {
    * esvaziou, pedir mais é empilhar trabalho que ninguém consumiu — e o custo
    * de cada leva é uma execução do agente, que gasta tokens de verdade.
    */
-  async pedirLeva(quantos: number): Promise<{ pedido: boolean; motivo: string }> {
+  async pedirLeva(
+    quantos: number,
+    opcoes: { formato?: FormatoPedido; forcar?: boolean } = {},
+  ): Promise<{ pedido: boolean; motivo: string }> {
+    const formato = opcoes.formato ?? "UNICO";
     return comoSistema(async () => {
       const naFila = await this.prisma.postInstagram.count({
         where: { status: { in: [StatusPostInstagram.AGENDADO, StatusPostInstagram.RASCUNHO] } },
       });
-      if (naFila >= quantos) {
+      // A fila cheia segura o cron, não quem clica: o botão é alguém olhando a
+      // fila e pedindo assim mesmo.
+      if (naFila >= quantos && !opcoes.forcar) {
         const motivo = `já há ${naFila} post(s) esperando; não vou pedir mais`;
         this.logger.log(motivo);
         return { pedido: false, motivo };
       }
 
-      const faltam = quantos - naFila;
+      const faltam = Math.max(1, quantos - naFila);
 
       // UMA demanda por vez, não `faltam` demandas de uma vez.
       //
@@ -78,26 +87,30 @@ export class PautaService {
       // Agora é uma de cada vez. Quando essa entregar, a próxima chamada da
       // pauta vê o post novo na fila e o agente seguinte escolhe outro assunto.
       // Mais lento, e é o preço de não repetir post no feed.
+      const carrossel = formato === "CARROSSEL";
       const taskId = `ig-${randomUUID().replace(/-/g, "").slice(0, 6)}`;
       const r = await this.fila.enfileirar({
         taskId,
         payload: {
-          titulo: "Instagram: produzir 1 post",
-          descricao: await this.briefing(),
+          titulo: carrossel ? "Instagram: produzir 1 carrossel" : "Instagram: produzir 1 post",
+          descricao: await this.briefing(formato),
           origem: "painel",
-          criadoPorNome: "Pauta automática",
+          criadoPorNome: opcoes.forcar ? "Pedido pelo painel" : "Pauta automática",
         },
       });
       if (!r.aceito) {
         return { pedido: false, motivo: "a fila do agente recusou a demanda" };
       }
-      this.logger.log(`Pauta pedida: 1 execução (${taskId}); faltam ${faltam} pra encher a fila`);
+      this.logger.log(
+        `Pauta pedida: 1 execução (${taskId}), formato ${formato}; faltam ${faltam} pra encher a fila`,
+      );
+      const oQue = carrossel ? "1 carrossel" : "1 post";
       return {
         pedido: true,
         motivo:
-          faltam > 1
-            ? `pedi 1 post ao agente (faltam ${faltam} pra fila encher — peço os outros depois deste entregar)`
-            : "pedi 1 post ao agente",
+          faltam > 1 && !carrossel
+            ? `pedi ${oQue} ao agente (faltam ${faltam} pra fila encher — peço os outros depois deste entregar)`
+            : `pedi ${oQue} ao agente`,
       };
     });
   }
@@ -109,7 +122,7 @@ export class PautaService {
    * repetir as regras, e leva junto a lista do que JÁ existe — sem isso o
    * agente reescreve um assunto que já está na fila, que foi o que aconteceu.
    */
-  private async briefing(): Promise<string> {
+  private async briefing(formato: FormatoPedido = "UNICO"): Promise<string> {
     const base = (this.appConfig.get<string>("MARKETING_API_URL") ?? "http://ronan-api:3000").trim();
 
     // O que já foi feito ou está esperando. É a única forma do agente não
@@ -140,10 +153,19 @@ export class PautaService {
     alvo.setDate(alvo.getDate() + 1);
     const dia = alvo.toISOString().slice(0, 10);
 
+    const carrossel = formato === "CARROSSEL";
+
     return [
-      "Produza UM post para o Instagram do @movatruck e entregue na fila.",
+      carrossel
+        ? "Produza UM CARROSSEL para o Instagram do @movatruck e entregue na fila."
+        : "Produza UM post para o Instagram do @movatruck e entregue na fila.",
       "",
-      "Você tem 15 minutos de execução. Vá direto ao ponto: um post só, bem feito.",
+      carrossel
+        ? [
+            "Você tem 40 minutos de execução. É mais que o post único porque são 5 a 7 telas,",
+            "e porque o QA aqui NÃO é opcional: carrossel erra em sete lugares em vez de um.",
+          ].join("\n")
+        : "Você tem 15 minutos de execução. Vá direto ao ponto: um post só, bem feito.",
       "",
       "Leia primeiro `.claude/skills/post-instagram/SKILL.md` — ela tem o fluxo, a voz e as",
       "armadilhas já pagas. A regra que manda em tudo: **nada vai pro ar sem existir no código**.",
@@ -157,26 +179,56 @@ export class PautaService {
       "1. Escolha um ângulo NOVO, alternando o público em relação aos últimos (dono de",
       "   transportadora x motorista). Vale muito um post de princípio ou bastidor.",
       "2. Confirme no código que o que você vai afirmar existe mesmo.",
-      "3. Escreva a peça em `marketing/instagram/posts/NN-slug.html`, copiando a estrutura de uma",
-      "   peça existente e usando as variáveis do `base.css`. Nunca hardcode cor.",
+      carrossel
+        ? [
+            "3. Escreva a peça em `marketing/instagram/posts/NN-slug.html` com 5 a 7 elementos",
+            "   `<div class=\"peca\">` no MESMO arquivo — um por tela, na ordem em que se desliza.",
+            "   Cada `.peca` vira um slide; o render cuida do resto. Use as variáveis do `base.css`",
+            "   e nunca hardcode cor.",
+            "",
+            "   Carrossel não é post único fatiado. A forma que funciona:",
+            "     • slide 1 — a promessa, e só ela. É a capa, é o que decide se alguém desliza.",
+            "     • slides do meio — UM passo do mecanismo por tela, na ordem em que acontece.",
+            "       Se dois passos cabem numa tela, eram um passo só.",
+            "     • último slide — o que fazer agora. Um CTA, não três.",
+            "   Cada slide tem que fazer sentido sozinho: muita gente entra pelo slide 4.",
+          ].join("\n")
+        : [
+            "3. Escreva a peça em `marketing/instagram/posts/NN-slug.html`, copiando a estrutura de uma",
+            "   peça existente e usando as variáveis do `base.css`. Nunca hardcode cor.",
+          ].join("\n"),
       "4. Escreva a legenda num arquivo `.txt` (gancho na primeira linha, 8 a 12 hashtags).",
-      "5. Entregue:",
+      carrossel
+        ? "5. Rode o agente `ig-qa` ANTES de entregar e conserte o que ele apontar. Não pule."
+        : "5. Entregue:",
+      carrossel ? "6. Entregue:" : "",
       "",
       "```bash",
       "cd marketing/instagram",
       `MARKETING_API_URL=${base} node enfileirar.mjs <peca> <arquivo-da-legenda> ${dia}T09:00:00-03:00`,
       "```",
+      carrossel
+        ? [
+            "",
+            "O `enfileirar.mjs` manda todos os slides sozinho — ele lê quantas `.peca` a peça tem.",
+            "Confira na resposta da API que `slides` bate com o número de telas que você escreveu:",
+            "se vier 1, você escreveu um post único achando que era carrossel.",
+          ].join("\n")
+        : "",
       "",
       "Se a API recusar dizendo que a peça já está na fila, escolha OUTRO assunto e refaça —",
       "não insista no mesmo.",
       "",
-      "6. Commite a peça e a legenda. Não mexa em `apps/`.",
+      carrossel ? "7. Commite a peça e a legenda. Não mexa em `apps/`." : "6. Commite a peça e a legenda. Não mexa em `apps/`.",
       "",
-      "Se sobrar tempo depois de entregar, rode o agente `ig-qa` sobre o que você fez e conserte",
-      "o que ele apontar.",
+      carrossel
+        ? ""
+        : "Se sobrar tempo depois de entregar, rode o agente `ig-qa` sobre o que você fez e conserte\no que ele apontar.",
       "",
       "`MARKETING_INGEST_TOKEN` já está no ambiente. Não imprima, não escreva em arquivo, não",
       "comite. E não tente publicar por conta própria nem mexer na configuração do publicador.",
-    ].join("\n");
+    ]
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n");
   }
 }

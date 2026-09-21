@@ -28,6 +28,7 @@ export function MiniaturaDocumento({
   versao,
   uriLocal,
   enviando,
+  semSelo,
 }: {
   exigenciaId: string;
   mimetype: string | null;
@@ -48,6 +49,12 @@ export function MiniaturaDocumento({
   uriLocal?: string | null;
   /** Está subindo agora (spinner) ou esperando sinal (nuvem). */
   enviando?: boolean;
+  /**
+   * Sem véu nem ícone: a foto já subiu e só falta o servidor confirmar. Nada
+   * está acontecendo que ele precise saber, e piscar um selo aqui seria
+   * inventar uma etapa.
+   */
+  semSelo?: boolean;
 }) {
   const [token, setToken] = useState<string | null>(null);
   const [falhou, setFalhou] = useState(false);
@@ -100,19 +107,25 @@ export function MiniaturaDocumento({
   // A foto que está na fila: mostra JÁ, com o selo de que ainda está indo.
   if (uriLocal) {
     return (
-      <View className="h-20 w-16 overflow-hidden rounded-lg border-2 border-warning bg-muted">
+      <View
+        className={`h-20 w-16 overflow-hidden rounded-lg border-2 bg-muted ${
+          semSelo ? "border-border" : "border-warning"
+        }`}
+      >
         <Image
           source={{ uri: uriLocal }}
           style={{ width: "100%", height: "100%" }}
           resizeMode="cover"
         />
-        <View className="absolute inset-0 items-center justify-center bg-black/35">
-          {enviando ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <CloudUpload size={20} color="#fff" />
-          )}
-        </View>
+        {semSelo ? null : (
+          <View className="absolute inset-0 items-center justify-center bg-black/35">
+            {enviando ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <CloudUpload size={20} color="#fff" />
+            )}
+          </View>
+        )}
       </View>
     );
   }

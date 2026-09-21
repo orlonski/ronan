@@ -1,20 +1,20 @@
 import {
-  BadRequestException,
   Body,
   ConflictException,
   Controller,
   Post,
-  UploadedFile,
+  UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from "@nestjs/common";
-import { FileInterceptor } from "@nestjs/platform-express";
+import { AnyFilesInterceptor } from "@nestjs/platform-express";
 import { ApiExcludeController } from "@nestjs/swagger";
 import { z } from "zod";
 import { Public } from "../auth/decorators/public.decorator";
 import { comoSistema } from "../common/conta/conta-context";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { UploadsService } from "../uploads/uploads.service";
+import { validarArtes } from "./artes-recebidas";
 import { IngestaoTokenGuard } from "./ingestao-token.guard";
 import { InstagramConfig } from "./instagram.config";
 import { InstagramFilaService } from "./instagram-fila.service";
@@ -56,18 +56,12 @@ export class IngestaoController {
   ) {}
 
   @Post()
-  @UseInterceptors(FileInterceptor("arte"))
+  @UseInterceptors(AnyFilesInterceptor())
   async receber(
-    @UploadedFile() arte: Express.Multer.File | undefined,
+    @UploadedFiles() arquivos: Express.Multer.File[] | undefined,
     @Body(new ZodValidationPipe(IngestaoInput)) body: IngestaoInput,
   ) {
-    if (!arte) throw new BadRequestException("Mande a arte no campo `arte`");
-    if (!arte.mimetype.includes("jpeg") && !arte.mimetype.includes("jpg")) {
-      throw new BadRequestException("A arte precisa ser JPEG — a API do Instagram não aceita PNG");
-    }
-    if (arte.size > 8 * 1024 * 1024) {
-      throw new BadRequestException("A arte passa de 8 MB, que é o teto do Instagram");
-    }
+    const artes = validarArtes(arquivos);
 
     return comoSistema(async () => {
       // Duas execuções do agente não se enxergam: sem isto, escolher o mesmo
@@ -82,12 +76,15 @@ export class IngestaoController {
       // Dois posts na mesma hora sairiam no mesmo ciclo, um atrás do outro.
       const quando = body.publicarEm ? await this.fila.horarioLivre(body.publicarEm) : null;
 
-      const storageKey = await this.uploads.putArteInstagram(arte.buffer);
+      const storageKeys: string[] = [];
+      for (const arte of artes) {
+        storageKeys.push(await this.uploads.putArteInstagram(arte.buffer));
+      }
       const post = await this.fila.enfileirar({
         peca: body.peca,
         legenda: body.legenda,
         publicarEm: quando,
-        storageKey,
+        storageKeys,
         // Null = veio de automação, não de gente. É o que a tela usa pra
         // mostrar quem agendou.
         criadoPorId: null,
@@ -95,7 +92,15 @@ export class IngestaoController {
       });
       // Devolve o mínimo: o agente não precisa do token da arte nem da chave do
       // storage pra saber que deu certo.
-      return { id: post.id, peca: post.peca, status: post.status, publicarEm: post.publicarEm };
+      return {
+        id: post.id,
+        peca: post.peca,
+        status: post.status,
+        publicarEm: post.publicarEm,
+        // O agente precisa saber quantos slides entraram: é como ele confere
+        // que mandou o carrossel inteiro, e não só a capa.
+        slides: post.artes.length,
+      };
     });
   }
 }

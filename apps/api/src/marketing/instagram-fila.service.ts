@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { StatusPostInstagram, type PostInstagram } from "@prisma/client";
+import { StatusPostInstagram, type ArtePostInstagram, type PostInstagram } from "@prisma/client";
 import { randomBytes } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { InstagramConfig } from "./instagram.config";
@@ -13,14 +13,28 @@ export function atrasoBackoffMs(tentativa: number): number {
 /** 24 bytes = 192 bits, como o token do comprovante de viagem. */
 const TOKEN_BYTES = 24;
 
+/**
+ * Quantas imagens cabem num post.
+ *
+ * O teto é da Meta: a Content Publishing API aceita de 2 a 10 filhos num
+ * carrossel. O app do Instagram já deixa passar de 10 na mão, a API não — e
+ * descobrir isso na hora da publicação custa uma peça pronta que não sai.
+ */
+export const SLIDES_MIN_CARROSSEL = 2;
+export const SLIDES_MAX = 10;
+
 type Enfileirar = {
   peca: string;
   legenda: string;
-  storageKey: string;
+  /** Chaves do storage, na ordem em que os slides saem no feed. */
+  storageKeys: string[];
   publicarEm: Date | null;
   criadoPorId: string | null;
   validadeHoras: number;
 };
+
+/** Post com os slides já carregados — é assim que o publicador precisa dele. */
+export type PostComArtes = PostInstagram & { artes: ArtePostInstagram[] };
 
 /**
  * A fila de posts do Instagram. Vive no Postgres pelo mesmo motivo da fila do
@@ -83,19 +97,49 @@ export class InstagramFilaService {
     return candidato;
   }
 
-  async enfileirar(dados: Enfileirar): Promise<PostInstagram> {
+  async enfileirar(dados: Enfileirar): Promise<PostComArtes> {
     const expiraEm = new Date(Date.now() + dados.validadeHoras * 3600_000);
+    // Post e slides nascem juntos: um post sem arte nenhuma não é rascunho, é
+    // linha quebrada — o publicador não teria o que mandar pra Meta e o painel
+    // mostraria um card vazio.
     return this.prisma.postInstagram.create({
       data: {
         peca: dados.peca,
         legenda: dados.legenda,
-        storageKey: dados.storageKey,
-        arteToken: randomBytes(TOKEN_BYTES).toString("base64url"),
         arteExpiraEm: expiraEm,
         publicarEm: dados.publicarEm,
         status: dados.publicarEm ? StatusPostInstagram.AGENDADO : StatusPostInstagram.RASCUNHO,
         criadoPorId: dados.criadoPorId,
+        artes: {
+          create: dados.storageKeys.map((storageKey, ordem) => ({
+            ordem,
+            storageKey,
+            token: randomBytes(TOKEN_BYTES).toString("base64url"),
+          })),
+        },
       },
+      include: { artes: { orderBy: { ordem: "asc" } } },
+    });
+  }
+
+  /** Os slides de um post, na ordem. O `reivindicar` é SQL cru e não traz relação. */
+  async artesDoPost(postId: string): Promise<ArtePostInstagram[]> {
+    return this.prisma.artePostInstagram.findMany({
+      where: { postId },
+      orderBy: { ordem: "asc" },
+    });
+  }
+
+  /**
+   * Guarda o container de UM slide, assim que a Meta aceita aquela imagem.
+   *
+   * Mesmo motivo do container do post: o processo pode morrer entre o slide 3 e
+   * o 4, e recriar os três primeiros gasta cota de publicação por nada.
+   */
+  async registrarContainerSlide(arteId: string, containerId: string): Promise<void> {
+    await this.prisma.artePostInstagram.update({
+      where: { id: arteId },
+      data: { containerId },
     });
   }
 
@@ -134,7 +178,12 @@ export class InstagramFilaService {
     `;
   }
 
-  /** Guarda o container assim que a Meta devolve, ANTES de tentar publicar. */
+  /**
+   * Guarda o container do POST assim que a Meta devolve, ANTES de publicar.
+   *
+   * Em carrossel este é o container PAI; os filhos vão em
+   * `registrarContainerSlide`.
+   */
   async registrarContainer(id: string, containerId: string): Promise<void> {
     await this.prisma.postInstagram.update({
       where: { id },
@@ -192,6 +241,19 @@ export class InstagramFilaService {
         erro: motivo.slice(0, 2000),
       },
     });
+  }
+
+  /**
+   * Joga fora os containers deste post: o do post e o de cada slide.
+   *
+   * Chamado quando o container da Meta expira (dura 24h). Reusar um container
+   * vencido falha sempre igual; esquecer faz a próxima tentativa montar outro.
+   */
+  async esquecerContainers(postId: string): Promise<void> {
+    await this.prisma.$transaction([
+      this.prisma.postInstagram.update({ where: { id: postId }, data: { containerId: null } }),
+      this.prisma.artePostInstagram.updateMany({ where: { postId }, data: { containerId: null } }),
+    ]);
   }
 
   /**
@@ -253,8 +315,12 @@ export class InstagramFilaService {
     });
   }
 
-  async porToken(token: string): Promise<PostInstagram | null> {
-    return this.prisma.postInstagram.findUnique({ where: { arteToken: token } });
+  /** O slide que aquele token abre, junto do post que manda no acesso. */
+  async arteporToken(token: string): Promise<(ArtePostInstagram & { post: PostInstagram }) | null> {
+    return this.prisma.artePostInstagram.findUnique({
+      where: { token },
+      include: { post: true },
+    });
   }
 
   /**
