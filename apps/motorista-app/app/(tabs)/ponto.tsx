@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Animated, Easing, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
+import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import { Check, ChevronRight, Clock, CloudOff, PenLine, TriangleAlert } from "lucide-react-native";
 import { usePendingPonto } from "@/hooks/use-pending-ponto";
@@ -26,6 +27,22 @@ import { EmptyState } from "@/components/empty-state";
  * art. 82, IV da Portaria 671 e é o que faz o dedão não ter o que errar.
  */
 
+/**
+ * Quanto tempo o dedo fica no botão.
+ *
+ * ⚠️ Por que SEGURAR e não um toque com confirmação: batida errada não se
+ * apaga. A tabela é append-only por exigência legal (art. 82, IV da Portaria
+ * 671), então um toque sem querer vira um registro falso que só sai com
+ * correção — pedido pelo motorista, decidido pelo escritório, com motivo
+ * escrito dos dois lados. A fricção tem que vir ANTES.
+ *
+ * E segurar ganha de "toque + confirme" pra este público: é um gesto só, sem
+ * ler nada, sem procurar um segundo botão e sem diálogo que some atrás de
+ * outra tela. 1,2s é longo o bastante pra não acontecer no bolso e curto o
+ * bastante pra não parecer travado.
+ */
+const SEGURAR_MS = 1200;
+
 const COR_OK = "#1DA54F";
 const COR_AVISO = "#B4501A";
 const COR_ERRO = "#EB1414";
@@ -36,8 +53,20 @@ export default function PontoTab() {
   const dia = hojeISO();
   const { data, refetch } = usePontoHoje(dia);
   const [batendo, setBatendo] = useState(false);
+  const [segurando, setSegurando] = useState(false);
   const [agora, setAgora] = useState(() => relogio());
   const [atualizando, setAtualizando] = useState(false);
+  const progresso = useRef(new Animated.Value(0)).current;
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Abrir a aba já busca o que mudou. `focusManager` do TanStack cobre o app
+  // voltando do background, mas trocar de aba DENTRO do app não é foco de
+  // janela — e era aí que só o pull-to-refresh salvava.
+  useFocusEffect(
+    useCallback(() => {
+      void refetch();
+    }, [refetch]),
+  );
 
   // O relógio anda na tela. Não é enfeite: ele mostra QUE HORAS vão ser
   // gravadas, antes do toque — e é o que evita a pergunta "bateu que horas?".
@@ -54,6 +83,36 @@ export default function PontoTab() {
     ...(data?.marcacoes ?? []).map((m) => ({ hora: horaBR(m.marcadoEm), enviada: true })),
     ...doDia.map((i) => ({ hora: horaBR(i.payload.marcadoEm), enviada: false })),
   ].sort((a, b) => a.hora.localeCompare(b.hora));
+
+  function iniciarHold() {
+    if (batendo) return;
+    setSegurando(true);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    progresso.setValue(0);
+    Animated.timing(progresso, {
+      toValue: 1,
+      duration: SEGURAR_MS,
+      easing: Easing.linear,
+      // `false` porque o que anima é a LARGURA: com o driver nativo a barra
+      // não mexe, e o motorista fica segurando um botão que não responde.
+      useNativeDriver: false,
+    }).start();
+    timer.current = setTimeout(() => {
+      setSegurando(false);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      void bater();
+    }, SEGURAR_MS);
+  }
+
+  function cancelarHold() {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    setSegurando(false);
+    Animated.timing(progresso, { toValue: 0, duration: 140, useNativeDriver: false }).start();
+  }
+
+  // Sair da tela com o dedo no botão não pode deixar um disparo agendado.
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
   async function bater() {
     setBatendo(true);
@@ -79,6 +138,7 @@ export default function PontoTab() {
     await enqueuePonto({ marcadoEm, dia, ...coords });
     void qc.invalidateQueries({ queryKey: ["ponto-hoje"] });
     setBatendo(false);
+    progresso.setValue(0);
   }
 
   return (
@@ -114,21 +174,43 @@ export default function PontoTab() {
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Registrar ponto agora"
+          accessibilityLabel="Segure para registrar o ponto"
+          accessibilityHint="Mantenha o dedo no botão por um segundo"
           disabled={batendo}
-          onPress={() => void bater()}
-          className="items-center justify-center rounded-3xl bg-brand active:opacity-80"
+          onPressIn={iniciarHold}
+          onPressOut={cancelarHold}
+          className="overflow-hidden rounded-3xl bg-brand"
           style={{ height: 140 }}
         >
-          <Text className="text-3xl font-bold text-brand-foreground">
-            {batendo ? "Registrando…" : "Registrar ponto"}
-          </Text>
-          <Text className="mt-1 text-base text-brand-foreground/80">
-            {batidas.length === 0
-              ? "primeira batida de hoje"
-              : `${batidas.length + 1}ª batida de hoje`}
-          </Text>
+          {/* A barra que enche enquanto o dedo está apoiado. É o que diz
+              "continue segurando" sem escrever isso — e o que mostra que
+              soltar cedo NÃO registrou. */}
+          <Animated.View
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              bottom: 0,
+              backgroundColor: "rgba(255,255,255,0.22)",
+              width: progresso.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }),
+            }}
+          />
+          <View className="flex-1 items-center justify-center">
+            <Text className="text-3xl font-bold text-brand-foreground">
+              {batendo ? "Registrando…" : segurando ? "Continue segurando…" : "Segure para registrar"}
+            </Text>
+            <Text className="mt-1 text-base text-brand-foreground/80">
+              {batidas.length === 0
+                ? "primeira batida de hoje"
+                : `${batidas.length + 1}ª batida de hoje`}
+            </Text>
+          </View>
         </Pressable>
+
+        <Text className="-mt-2 text-center text-sm text-muted-foreground">
+          Segurar evita bater sem querer. Uma batida registrada não se apaga —
+          se errar, dá pra pedir correção.
+        </Text>
 
         {falhou ? (
           <View className="gap-2 rounded-2xl border-2 border-destructive/50 bg-destructive/5 p-4">

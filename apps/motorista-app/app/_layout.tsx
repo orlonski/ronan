@@ -298,6 +298,12 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       // Story recém-enviado: assim que o upload sincroniza, refaz o feed pra a
       // bolinha real substituir o "Enviando…" na hora (senão parece que sumiu).
       void queryClient.invalidateQueries({ queryKey: ["stories-feed"] });
+      // Ponto: sem isto a batida fica "guardada aqui" na tela mesmo depois de
+      // subir, e só o pull-to-refresh corrigia. Pra quem bate quatro vezes
+      // por dia, puxar a tela toda vez é o app cobrando trabalho do usuário
+      // pra mostrar uma coisa que ele já sabe.
+      void queryClient.invalidateQueries({ queryKey: ["ponto-hoje"] });
+      void queryClient.invalidateQueries({ queryKey: ["ponto-espelho"] });
     });
   }, []);
 

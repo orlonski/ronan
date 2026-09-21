@@ -5,6 +5,8 @@ import { useRouter } from "expo-router";
 import { X } from "lucide-react-native";
 import { api } from "@/lib/api";
 import { showAlert } from "@/lib/alert";
+import { DateField } from "@/components/ui/date-field";
+import { HoraField } from "@/components/ui/hora-field";
 import { useCatalogoPonto } from "@/lib/queries";
 import { hojeISO } from "@/lib/datetime";
 
@@ -22,7 +24,8 @@ export default function CorrigirPontoScreen() {
   const router = useRouter();
   const { data: catalogo } = useCatalogoPonto();
   const [dia, setDia] = useState(hojeISO());
-  const [hora, setHora] = useState("");
+  /** ISO completo do instante escolhido — o `HoraField` devolve assim. */
+  const [instante, setInstante] = useState("");
   const [motivoCodigo, setMotivoCodigo] = useState("");
   const [motivo, setMotivo] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -30,7 +33,7 @@ export default function CorrigirPontoScreen() {
   const motivos = catalogo?.motivos ?? [];
   const podeEnviar =
     /^\d{4}-\d{2}-\d{2}$/.test(dia) &&
-    /^\d{2}:\d{2}$/.test(hora) &&
+    instante.length > 0 &&
     motivoCodigo.length > 0 &&
     motivo.trim().length >= 3;
 
@@ -40,7 +43,7 @@ export default function CorrigirPontoScreen() {
       await api.post("/m/ponto/correcoes", {
         dia,
         tipo: "INCLUSAO",
-        instantePretendido: new Date(`${dia}T${hora}:00-03:00`).toISOString(),
+        instantePretendido: instante,
         motivoCodigo,
         motivo: motivo.trim(),
       });
@@ -81,25 +84,19 @@ export default function CorrigirPontoScreen() {
           registrada. Quem decide é o escritório.
         </Text>
 
+        {/* ⚠️ Picker nativo, nunca campo de texto. Eu tinha deixado o motorista
+            DIGITAR "AAAA-MM-DD" e "07:30" — pedir formato de máquina a quem
+            tem dificuldade de leitura é garantir erro de digitação numa tela
+            que existe pra corrigir erro. Os dois componentes já existiam no
+            app; foi preguiça minha. */}
         <View className="gap-1">
           <Text className="text-base font-semibold text-foreground">Que dia</Text>
-          <TextInput
-            className="h-14 rounded-xl border-2 border-border px-4 text-lg text-foreground"
-            placeholder="AAAA-MM-DD"
-            value={dia}
-            onChangeText={setDia}
-          />
+          <DateField value={dia} onChange={setDia} />
         </View>
 
         <View className="gap-1">
           <Text className="text-base font-semibold text-foreground">Que horas</Text>
-          <TextInput
-            className="h-14 rounded-xl border-2 border-border px-4 text-lg text-foreground"
-            placeholder="07:30"
-            keyboardType="numbers-and-punctuation"
-            value={hora}
-            onChangeText={setHora}
-          />
+          <HoraField value={instante} data={dia} onChange={setInstante} />
         </View>
 
         <View className="gap-2">
