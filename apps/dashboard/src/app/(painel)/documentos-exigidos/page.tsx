@@ -23,6 +23,8 @@ import { usePermissoes } from "@/lib/permissoes";
 type Exigido = {
   id: string;
   titulo: string;
+  ajuda?: string | null;
+  publico?: "MENSAL" | "TODOS";
   tipo: TipoDocumentoMotorista;
   empresaId: string | null;
   obrigatorio: boolean;
@@ -191,6 +193,14 @@ function Grupo({
                       opcional
                     </span>
                   )}
+                  {/* De quem se cobra. Fica visível na lista porque é a
+                      diferença entre pedir papelada de obra só de quem está
+                      na obra e pedir dela da frota inteira. */}
+                  {e.publico === "TODOS" && (
+                    <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-normal text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                      toda a frota
+                    </span>
+                  )}
                 </p>
                 <p className="text-sm text-muted-foreground">
                   guardado em {ROTULO_DOCUMENTO_MOTORISTA[e.tipo] ?? e.tipo}
@@ -225,6 +235,7 @@ function DialogNovo({ onFechar, onCriado }: { onFechar: () => void; onCriado: ()
   const token = useAuthToken();
   const [titulo, setTitulo] = useState("");
   const [ajuda, setAjuda] = useState("");
+  const [publico, setPublico] = useState<"MENSAL" | "TODOS">("MENSAL");
   const [tipo, setTipo] = useState<string>("CNH");
   const [empresaId, setEmpresaId] = useState<string>();
   const [obrigatorio, setObrigatorio] = useState(true);
@@ -240,6 +251,7 @@ function DialogNovo({ onFechar, onCriado }: { onFechar: () => void; onCriado: ()
         body: JSON.stringify({
           titulo: titulo.trim(),
           ajuda: ajuda.trim() || undefined,
+          publico,
           tipo,
           empresaId,
           obrigatorio,
@@ -303,7 +315,8 @@ function DialogNovo({ onFechar, onCriado }: { onFechar: () => void; onCriado: ()
           </Select>
           <p className="mt-1 text-xs text-muted-foreground">
             É onde o arquivo fica no cadastro do motorista, e o que faz ele sair no pacote do
-            contratante. Uma gaveta guarda um arquivo por motorista.
+            contratante. Pode repetir a gaveta em mais de um documento — cada um guarda o
+            arquivo dele.
           </p>
         </div>
 
@@ -316,7 +329,23 @@ function DialogNovo({ onFechar, onCriado }: { onFechar: () => void; onCriado: ()
             options={(empresas.data ?? []).map((e) => ({ value: e.id, label: e.nome }))}
           />
           <p className="mt-1 text-xs text-muted-foreground">
-            Vazio = exigido de todo motorista, em qualquer obra.
+            Vazio = vale em qualquer obra. Com contratante, só na obra dele.
+          </p>
+        </div>
+
+        <div>
+          <Label>De quem se pede</Label>
+          <Select
+            value={publico}
+            onChange={(e) => setPublico(e.target.value as "MENSAL" | "TODOS")}
+          >
+            <option value="MENSAL">Só de quem está em obra mensal</option>
+            <option value="TODOS">De todo motorista da frota</option>
+          </Select>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Papelada de admissão é cobrança de mensalista. Marcando &quot;toda a frota&quot;,
+            quem só roda frete comum passa a ver esse documento como pendência no app dele —
+            use só pro que a transportadora pede de todo mundo, como CNH.
           </p>
         </div>
 

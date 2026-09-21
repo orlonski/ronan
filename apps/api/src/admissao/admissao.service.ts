@@ -72,21 +72,38 @@ export class AdmissaoService {
   /**
    * O que é exigido deste motorista.
    *
-   * Junta a exigência da transportadora (empresa nula) com a do contratante da
-   * obra em que ele está. Sem alocação, valem só as gerais — é o caso de quem
-   * está sendo admitido antes de ter obra.
+   * Duas perguntas, e as duas decidem:
+   *
+   * 1. **QUEM PEDE** — a exigência do contratante da obra em que ele está, mais
+   *    as da transportadora (contratante nulo).
+   * 2. **DE QUEM SE PEDE** (`publico`) — e é aqui que mora a regra que o dono
+   *    deu em 21/09/2026: papelada de admissão se cobra de quem está no
+   *    MENSAL. ⚠️ Antes disso, exigência sem contratante valia pra frota
+   *    inteira, e o motorista de frete comum abria o app com "3 documentos
+   *    faltam" de uma obra em que nunca pôs o caminhão.
+   *
+   * ⚠️ O filtro de público só vale pra TELA DO MOTORISTA (`soDoPublicoDele`).
+   * O escritório e o link de coleta continuam vendo o catálogo inteiro, e isso
+   * não é inconsistência: a admissão acontece ANTES da obra. Filtrar o link
+   * deixaria a coleta vazia exatamente no momento em que ela serve — o
+   * escritório junta a papelada e só então aloca. Quem decide pedir é ele; o
+   * que a regra protege é o motorista de ver cobrança que não é dele.
    */
-  async exigidosPara(motoristaId: string) {
+  async exigidosPara(motoristaId: string, opts?: { soDoPublicoDele?: boolean }) {
     const alocacao = await this.prisma.alocacaoObra.findFirst({
       where: { motoristaId, ativa: true },
       include: { cliente: { select: { empresaId: true, nome: true } } },
     });
     const empresaId = alocacao?.cliente.empresaId;
+    const ehMensalista = alocacao !== null;
 
     return this.prisma.documentoExigido.findMany({
       where: {
         ativo: true,
         OR: [{ empresaId: null }, ...(empresaId ? [{ empresaId }] : [])],
+        // Sem alocação viva, só o que vale pra todo mundo — e só quando quem
+        // pergunta é o app dele.
+        ...(opts?.soDoPublicoDele && !ehMensalista ? { publico: "TODOS" as const } : {}),
       },
       orderBy: [{ ordem: "asc" }, { titulo: "asc" }],
     });
@@ -104,6 +121,7 @@ export class AdmissaoService {
     ajuda?: string | null;
     tipo: string;
     empresaId?: string;
+    publico?: "MENSAL" | "TODOS";
     obrigatorio?: boolean;
     ordem?: number;
     exigeAssinatura?: boolean;
@@ -116,6 +134,9 @@ export class AdmissaoService {
         ajuda: dados.ajuda?.trim() || null,
         tipo: dados.tipo,
         empresaId: dados.empresaId ?? null,
+        // Default MENSAL: o silêncio é o padrão seguro. Exigência que nasce
+        // valendo pra frota inteira cobra gente que nunca foi chamada pra obra.
+        publico: dados.publico ?? "MENSAL",
         obrigatorio: dados.obrigatorio ?? true,
         ordem: dados.ordem ?? 0,
         exigeAssinatura: dados.exigeAssinatura ?? false,
@@ -276,8 +297,8 @@ export class AdmissaoService {
    *
    * Roda dentro da conta: quem chama é responsável pelo `comConta`.
    */
-  async estadoDosDocumentos(motoristaId: string) {
-    const exigidos = await this.exigidosPara(motoristaId);
+  async estadoDosDocumentos(motoristaId: string, opts?: { soDoPublicoDele?: boolean }) {
+    const exigidos = await this.exigidosPara(motoristaId, opts);
 
     const [enviados, assinaturas] = await Promise.all([
       this.prisma.motoristaDocumento.findMany({
@@ -371,7 +392,9 @@ export class AdmissaoService {
    */
   async paraOMotorista(motoristaId: string) {
     const [estado, alocacao] = await Promise.all([
-      this.estadoDosDocumentos(motoristaId),
+      // Na tela DELE, só o que é dele: quem não está em obra não é cobrado de
+      // papelada de obra.
+      this.estadoDosDocumentos(motoristaId, { soDoPublicoDele: true }),
       this.prisma.alocacaoObra.findFirst({
         where: { motoristaId, ativa: true },
         select: { cliente: { select: { nome: true } } },

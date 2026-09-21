@@ -198,6 +198,15 @@ export const CriarDocumentoExigidoInput = z.object({
   tipo: z.string().trim().min(1, "Escolha a gaveta do arquivo."),
   /** Vazio = exigência da transportadora inteira, valendo pra qualquer obra. */
   empresaId: z.string().uuid().optional(),
+  /**
+   * DE QUEM se cobra este papel.
+   *
+   * `MENSAL` (padrão) = só de quem está alocado numa obra. `TODOS` = de toda a
+   * frota. O padrão é o silêncio: exigência que nasce valendo pra todo mundo
+   * faz o motorista de frete comum abrir o app com uma papelada de obra em que
+   * ele nunca pôs o caminhão.
+   */
+  publico: z.enum(["MENSAL", "TODOS"]).default("MENSAL"),
   obrigatorio: z.boolean().default(true),
   ordem: z.number().int().min(0).default(0),
   /** Este papel precisa ser assinado, não só enviado? */

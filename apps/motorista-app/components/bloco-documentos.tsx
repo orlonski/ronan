@@ -60,8 +60,11 @@ export function BlocoDocumentos() {
         </View>
         <Text className="mt-1 text-base text-muted-foreground" numberOfLines={1}>
           {/* Quem pediu, quando dá pra dizer: é o que faz a lista deixar de ser
-              burocracia e virar "a obra está esperando isso". */}
-          {data.obra ? `Pedidos pela obra ${data.obra}` : "Pedidos pelo escritório"}
+              burocracia e virar "a obra está esperando isso".
+
+              Sem "pela obra" na frente: o nome do cliente quase sempre já
+              começa com "Obra", e saía "Pedidos pela obra Obra Contorno". */}
+          {data.obra ? `Pedidos por ${data.obra}` : "Pedidos pelo escritório"}
         </Text>
       </View>
 

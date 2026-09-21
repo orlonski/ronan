@@ -86,7 +86,7 @@ export default function DocumentosDaObraScreen() {
             <Text className="text-2xl font-bold text-white">Seus documentos</Text>
             <Text className="mt-0.5 text-base text-white/80" numberOfLines={1}>
               {/* Quem está pedindo. Nunca nome de empresa chumbado. */}
-              {data?.obra ? `Pedidos pela obra ${data.obra}` : "O que o escritório pediu"}
+              {data?.obra ? `Pedidos por ${data.obra}` : "O que o escritório pediu"}
             </Text>
           </View>
           <Pressable

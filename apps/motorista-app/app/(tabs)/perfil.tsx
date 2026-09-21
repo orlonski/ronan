@@ -5,6 +5,7 @@ import {
   BellOff,
   Building2,
   CalendarDays,
+  FileText,
   HandCoins,
   ChevronRight,
   HelpCircle,
@@ -274,6 +275,18 @@ function PerfilDaEmpresa() {
                 icon={<HandCoins size={20} color="#13316b" />}
                 title="Meus acertos"
                 onPress={() => router.push("/meus-acertos")}
+              />
+              <View className="h-px bg-border" />
+              {/* A porta fixa dos documentos, pelo MESMO motivo dos convites
+                  logo abaixo: o bloco da home some quando não falta nada, e
+                  aí a tela existiria sem porta — ele não teria como rever o
+                  que mandou nem o que assinou. Sem contador aqui: o número
+                  é assunto da home, e um selo vermelho permanente no perfil
+                  vira cobrança de fundo. */}
+              <ActionRow
+                icon={<FileText size={20} color="#13316b" />}
+                title="Meus documentos"
+                onPress={() => router.push("/documentos-da-obra")}
               />
               <View className="h-px bg-border" />
               {/* Convites só tinham entrada na home de quem NÃO tem empresa

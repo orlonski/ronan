@@ -21,6 +21,7 @@ function servico(over: {
     empresaId?: string | null;
     exigeAssinatura?: boolean;
     exigeIcpBrasil?: boolean;
+    publico?: "MENSAL" | "TODOS";
   }[];
   enviados?: { tipo: string; storageKey?: string; hashArquivo?: string }[];
   assinaturas?: { tipoDocumento: string; modo: string; assinadoEm: Date; hashArquivo?: string }[];
@@ -33,7 +34,13 @@ function servico(over: {
   // service faz no banco.
   const exigidos = (
     over.exigidos ?? [{ tipo: "CNH", titulo: "CNH", obrigatorio: true, empresaId: null }]
-  ).map((e, i) => ({ id: `e${i + 1}`, exigeAssinatura: false, exigeIcpBrasil: false, ...e }));
+  ).map((e, i) => ({
+    id: `e${i + 1}`,
+    exigeAssinatura: false,
+    exigeIcpBrasil: false,
+    publico: "MENSAL",
+    ...e,
+  }));
   const chaveDoTipo = (tipo: string) => {
     const e = exigidos.find((x) => x.tipo === tipo);
     return e ? `exig:${e.id}` : `gaveta:${tipo}`;
@@ -80,7 +87,10 @@ function servico(over: {
     },
     alocacaoObra: { findFirst: async () => over.alocacao ?? null },
     documentoExigido: {
-      findMany: async () => exigidos,
+      // Respeita o filtro de público como o banco faz: é o que separa a
+      // papelada de obra de quem só roda frete comum.
+      findMany: async ({ where }: { where?: { publico?: string } } = {}) =>
+        where?.publico ? exigidos.filter((e) => (e.publico ?? "MENSAL") === where.publico) : exigidos,
       findFirst: async () => null,
       create: async () => ({}),
       update: async () => ({}),
@@ -580,6 +590,9 @@ describe("o que o motorista vê no app", () => {
       assinaturas: [
         { tipoDocumento: "OS", modo: "SIMPLES", assinadoEm: new Date(), hashArquivo: "abc" },
       ],
+      // Em obra: senão o filtro de público esconde a papelada de obra, que é
+      // justamente o comportamento testado no describe de baixo.
+      alocacao: { cliente: { empresaId: "emp1", nome: "Obra Centro" } },
     });
     const r = await s.paraOMotorista("mot1");
 
@@ -599,5 +612,62 @@ describe("o que o motorista vê no app", () => {
     expect(r.total).toBe(0);
     expect(r.documentos).toEqual([]);
     expect(r.obra).toBeNull();
+  });
+});
+
+/**
+ * DE QUEM SE PEDE.
+ *
+ * ⚠️ Exigência sem contratante valia pra TODO motorista da conta. Quem só roda
+ * frete comum abria o app com "3 documentos faltam" de uma papelada de obra em
+ * que ele nunca pôs o caminhão — cobrança errada, na tela de quem não podia
+ * resolver. Decisão do dono (21/09/2026): documento de admissão é de
+ * mensalista; o resto se marca na tela, um por um.
+ */
+describe("quem não está em obra não é cobrado de papelada de obra", () => {
+  const CATALOGO = [
+    { tipo: "CNH", titulo: "CNH", obrigatorio: true, empresaId: null, publico: "TODOS" as const },
+    {
+      tipo: "ESOCIAL",
+      titulo: "eSocial",
+      obrigatorio: true,
+      empresaId: null,
+      publico: "MENSAL" as const,
+    },
+  ];
+
+  it("sem alocação, só o que vale pra frota inteira", async () => {
+    const { s } = servico({ exigidos: CATALOGO, alocacao: null });
+    const r = await s.paraOMotorista("mot1");
+    expect(r.documentos.map((d) => d.titulo)).toEqual(["CNH"]);
+  });
+
+  it("com alocação, vem tudo", async () => {
+    const { s } = servico({
+      exigidos: CATALOGO,
+      alocacao: { cliente: { empresaId: "emp1", nome: "Obra Centro" } },
+    });
+    const r = await s.paraOMotorista("mot1");
+    expect(r.documentos.map((d) => d.titulo)).toEqual(["CNH", "eSocial"]);
+  });
+
+  it("motorista de frete comum, catálogo só de obra: nenhuma pendência", async () => {
+    // O app some com o bloco e com a tela. É o caso mais comum da base — a
+    // maioria dos motoristas de uma transportadora não está em obra mensal.
+    const { s } = servico({
+      exigidos: [
+        {
+          tipo: "ESOCIAL",
+          titulo: "eSocial",
+          obrigatorio: true,
+          empresaId: null,
+          publico: "MENSAL" as const,
+        },
+      ],
+      alocacao: null,
+    });
+    const r = await s.paraOMotorista("mot1");
+    expect(r.total).toBe(0);
+    expect(r.faltamObrigatorios).toBe(0);
   });
 });

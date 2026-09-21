@@ -6447,6 +6447,14 @@ model ConfigMensalContratante {
 // O que o contratante exige antes do caminhão entrar na obra, e o link por
 // onde esses papéis chegam sem ninguém caçar foto no WhatsApp.
 
+/// De quem se cobra um documento exigido.
+enum PublicoDocumento {
+  /// Só de quem está no mensal (alocado numa obra). É o padrão.
+  MENSAL
+  /// De todo motorista da transportadora, esteja em obra ou não.
+  TODOS
+}
+
 /// Um papel que UM contratante exige. Catálogo, não constante.
 ///
 /// O enum `TipoDocumentoMotorista` continua sendo a GAVETA onde o arquivo é
@@ -6468,6 +6476,19 @@ model DocumentoExigido {
   /// Null = exigência da transportadora inteira, valendo pra qualquer obra.
   empresaId String?
   empresa   Empresa? @relation(fields: [empresaId], references: [id])
+
+  /// DE QUEM se cobra este papel.
+  ///
+  /// ⚠️ Sem isto, exigência sem contratante valia pra TODO motorista da conta —
+  /// e quem só roda frete comum abria o app com "3 documentos faltam" de uma
+  /// papelada de obra que não é dele. Decisão do dono (21/09/2026): documento
+  /// de admissão é cobrança de quem está no mensal; para o resto não aparece
+  /// pendência nenhuma.
+  ///
+  /// Default `MENSAL` de propósito: o silêncio é o padrão seguro. Uma
+  /// exigência nova que nasce valendo pra frota inteira cobra gente que nunca
+  /// foi chamada pra obra, e quem descobre é o motorista.
+  publico PublicoDocumento @default(MENSAL)
 
   /// Como a operação chama o papel. Texto livre, de propósito.
   titulo String
