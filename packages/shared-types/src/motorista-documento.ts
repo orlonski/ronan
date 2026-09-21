@@ -47,7 +47,7 @@ export const ROTULO_DOCUMENTO_MOTORISTA: Record<TipoDocumentoMotorista, string> 
  * consultar a API na mão.
  */
 export const AssinaturaDocumentoOutput = z.object({
-  modo: z.enum(["SIMPLES", "ICP_BRASIL"]),
+  modo: z.enum(["SIMPLES", "ICP_BRASIL", "NO_PAPEL"]),
   nome: z.string().nullable(),
   cpf: z.string().nullable(),
   ip: z.string().nullable(),

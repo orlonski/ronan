@@ -761,6 +761,16 @@ export type DocumentoDaObra = {
   ajuda: string | null;
   obrigatorio: boolean;
   precisaAssinar: boolean;
+  /**
+   * COMO este papel é assinado.
+   *
+   * `NO_APP` = ele lê e aceita aqui dentro. `JA_ASSINADO` = ele assina FORA
+   * (cartório ou gov.br) e manda o papel assinado — que é como a operação já
+   * faz hoje, lutando pra receber de volta pelo WhatsApp.
+   *
+   * Opcional porque cache gravado antes desta versão não tem o campo.
+   */
+  comoAssinar?: "NAO" | "NO_APP" | "JA_ASSINADO";
   /** Assinatura com certificado digital: não se resolve pelo celular. */
   soComCertificado: boolean;
   recebido: boolean;

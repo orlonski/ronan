@@ -418,7 +418,29 @@ function ItemDocumento({
               Todos laranja (rotina). Verde aparece UMA vez só, no botão final
               da tela de assinar — doze botões verdes numa lista destroem o
               significado de verde no app inteiro. */}
-          {faltaAssinar && !doc.soComCertificado ? (
+          {/* Quem assina FORA não tem botão de assinar aqui: o que ele faz é
+              mandar o papel já assinado. Oferecer "ler e assinar" seria
+              oferecer um aceite que o contratante não aceita. */}
+          {!doc.recebido && doc.comoAssinar === "JA_ASSINADO" ? (
+            <>
+              <Text className="mt-2 text-base text-muted-foreground">
+                {doc.soComCertificado
+                  ? "Assine pelo gov.br e mande o arquivo assinado. A foto do papel não serve pra este."
+                  : "Assine no papel (cartório) ou pelo gov.br, e mande aqui."}
+              </Text>
+              <Button
+                size="lg"
+                className="mt-3"
+                onPress={onMandar}
+                accessibilityLabel={`Mandar ${doc.titulo} assinado`}
+              >
+                <Camera size={20} color="#fff" />
+                <Text className="ml-2 text-base font-bold text-white">
+                  Mandar o papel assinado
+                </Text>
+              </Button>
+            </>
+          ) : faltaAssinar && !doc.soComCertificado ? (
             <Button size="lg" className="mt-3" onPress={onAssinar} accessibilityLabel={`Ler e assinar ${doc.titulo}`}>
               <PenLine size={20} color="#fff" />
               <Text className="ml-2 text-base font-bold text-white">Ler e assinar</Text>
@@ -488,6 +510,11 @@ function Situacao({
   const venc = dataBR(doc.validade);
   if (vencido) return <>Venceu dia {venc}. Precisa mandar o novo.</>;
   if (faltaAssinar) return <>Chegou. Agora falta você assinar.</>;
+  // Quem assina fora nem chega em "falta assinar": pra ele, mandar o papel
+  // assinado É a assinatura. O que falta é o arquivo.
+  if (!doc.recebido && doc.comoAssinar === "JA_ASSINADO") {
+    return <>Precisa estar assinado. Ainda não chegou.</>;
+  }
   if (vencendo) return <>Vence dia {venc}. Vai precisar mandar o novo.</>;
   if (pronto) {
     const quando = dataBR(doc.assinadoEm ?? doc.recebidoEm);

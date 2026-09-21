@@ -7,6 +7,7 @@ import {
   Get,
   Param,
   Post,
+  Put,
   Query,
   Req,
   Res,
@@ -21,6 +22,7 @@ import {
   AssinarDocumentoAppInput,
   AssinarDocumentoInput,
   CriarDocumentoExigidoInput,
+  EditarDocumentoExigidoInput,
 } from "@ronan/shared-types";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { Public } from "../auth/decorators/public.decorator";
@@ -56,6 +58,15 @@ export class AdmissaoAdminController {
     @Body(new ZodValidationPipe(CriarDocumentoExigidoInput)) body: CriarDocumentoExigidoInput,
   ) {
     return this.service.criarExigido(body);
+  }
+
+  @RequerPermissao("documentos-exigidos.editar")
+  @Put("documentos-exigidos/:id")
+  editarExigido(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(EditarDocumentoExigidoInput)) body: EditarDocumentoExigidoInput,
+  ) {
+    return this.service.editarExigido(id, body);
   }
 
   @RequerPermissao("documentos-exigidos.editar")

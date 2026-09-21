@@ -264,7 +264,9 @@ function TrilhaAssinatura({ assinatura }: { assinatura: AssinaturaDocumentoOutpu
             ? "A assinatura não confere com o arquivo que está aqui"
             : assinatura.modo === "ICP_BRASIL"
               ? "Assinado com certificado digital"
-              : "Assinado eletronicamente"}
+              : assinatura.modo === "NO_PAPEL"
+                ? "Chegou assinado no papel — confira a firma"
+                : "Assinado eletronicamente"}
         </span>
       </div>
       <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
@@ -285,6 +287,16 @@ function TrilhaAssinatura({ assinatura }: { assinatura: AssinaturaDocumentoOutpu
       {desconhecida && (
         <p className="mt-1 text-[11px] text-muted-foreground">
           Documento anterior ao registro do hash: não dá pra conferir se o arquivo é o mesmo.
+        </p>
+      )}
+      {/* ⚠️ Carimbo de cartório numa foto é tinta, não dado: o sistema não tem
+          como verificar. Dizer isso é o oposto de um defeito — tratar a foto
+          como assinatura conferida seria a única coisa pior do que não
+          registrar nada. */}
+      {assinatura.modo === "NO_PAPEL" && (
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          O arquivo chegou dizendo estar assinado no papel. O sistema guarda o arquivo, o
+          hash e quem mandou — a firma reconhecida quem confere é você, olhando.
         </p>
       )}
       {assinatura.aviso && (

@@ -6546,16 +6546,25 @@ model DocumentoExigido {
   /// Configurável porque os contratantes divergem e o sistema não pode
   /// decidir por eles: cópia de CNH ninguém assina, contrato de prestação
   /// todo mundo assina, e ordem de serviço depende da obra.
+  ///
+  /// ⚠️ Mantido como espelho de `comoAssinar` pra não reescrever as ~10
+  /// consultas que já perguntam por ele. `comoAssinar` é quem manda; este
+  /// campo é `comoAssinar != NAO` e o service mantém os dois em dia.
   exigeAssinatura Boolean @default(false)
 
-  /// E a assinatura precisa ser ICP-Brasil (certificado digital)?
+  /// COMO ele é assinado. Ver `ModoAssinaturaExigida`.
+  comoAssinar ModoAssinaturaExigida @default(NAO)
+
+  /// SÓ vale assinatura digital? (refinamento de `JA_ASSINADO`)
   ///
-  /// Só faz sentido com `exigeAssinatura`. Falso = assinatura eletrônica
-  /// simples com trilha de auditoria (nome, CPF, IP, data e hash do arquivo),
-  /// que a MP 2.200-2 admite quando as partes aceitam. Verdadeiro = o arquivo
-  /// tem que CHEGAR assinado de fora (gov.br, certificado A1/A3): ninguém
-  /// assina com ICP no servidor de outra pessoa, porque a chave privada é do
-  /// titular e é isso que dá valor à assinatura.
+  /// Falso é o normal: o contratante aceita o papel do cartório OU o PDF do
+  /// gov.br. Verdadeiro é o contratante rigoroso, que só aceita assinatura
+  /// digital — aí a foto do cartório é recusada na hora do envio, com a
+  /// explicação, em vez de ser descoberta na portaria da obra.
+  ///
+  /// Ninguém assina com certificado no servidor de outra pessoa: a chave
+  /// privada é do titular, e é isso que dá valor à assinatura. Por isso este
+  /// modo nunca oferece assinar aqui dentro.
   exigeIcpBrasil Boolean @default(false)
 
   criadoEm   DateTime @default(now())
@@ -6578,6 +6587,38 @@ enum ModoAssinatura {
   SIMPLES
   /// O arquivo chegou assinado digitalmente de fora (certificado do titular).
   ICP_BRASIL
+  /// O arquivo chegou dizendo estar assinado NO PAPEL — firma reconhecida em
+  /// cartório, fotografada ou escaneada.
+  ///
+  /// ⚠️ O sistema não tem como verificar isso: carimbo de cartório numa foto é
+  /// tinta, não dado. Quem confere é o escritório, olhando. Este modo existe
+  /// justamente pra dizer isso na cara em vez de fingir que a máquina validou
+  /// — a alternativa seria tratar a foto como assinatura conferida, que é a
+  /// única coisa pior do que não ter nada.
+  NO_PAPEL
+}
+
+/// Como um papel do catálogo precisa ser assinado.
+///
+/// ⚠️ Substituiu o par de booleanos `exigeAssinatura` + `exigeIcpBrasil`, que
+/// não tinha como expressar o caso mais comum da operação: o motorista assina
+/// NO PAPEL (cartório) e devolve uma foto. Com o par antigo, marcar "exige
+/// certificado" fazia o sistema RECUSAR essa foto — ele ia ao cartório, pagava,
+/// e o app dizia não. E não marcar aceitava qualquer coisa, inclusive o
+/// contrato em branco.
+enum ModoAssinaturaExigida {
+  /// Só mandar o arquivo.
+  NAO
+  /// Aceite eletrônico aqui dentro, com trilha (nome, CPF, IP, hora, hash).
+  NO_APP
+  /// Ele assina FORA e manda o papel assinado: cartório ou gov.br.
+  ///
+  /// Aceita os dois, porque os dois existem na operação e produzem arquivos
+  /// diferentes: o gov.br devolve um PDF com a assinatura DENTRO (o sistema
+  /// detecta e registra como ICP-Brasil sozinho); o cartório devolve tinta
+  /// sobre papel, que vira foto. Quando é só o digital que serve, a exigência
+  /// marca `exigeIcpBrasil` por cima deste modo.
+  JA_ASSINADO
 }
 
 /// A assinatura de um documento do motorista.

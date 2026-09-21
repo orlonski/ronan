@@ -25,6 +25,7 @@ type Exigido = {
   titulo: string;
   ajuda?: string | null;
   publico?: "MENSAL" | "TODOS";
+  comoAssinar?: "NAO" | "NO_APP" | "JA_ASSINADO";
   tipo: TipoDocumentoMotorista;
   empresaId: string | null;
   obrigatorio: boolean;
@@ -205,11 +206,13 @@ function Grupo({
                 <p className="text-sm text-muted-foreground">
                   guardado em {ROTULO_DOCUMENTO_MOTORISTA[e.tipo] ?? e.tipo}
                   {e.empresaId ? ` · ${nomeEmpresa(e.empresaId)}` : ""}
-                  {e.exigeAssinatura
+                  {e.comoAssinar === "JA_ASSINADO"
                     ? e.exigeIcpBrasil
-                      ? " · exige certificado digital"
-                      : " · exige assinatura"
-                    : ""}
+                      ? " · chega assinado (só digital)"
+                      : " · chega assinado (cartório ou gov.br)"
+                    : e.comoAssinar === "NO_APP" || e.exigeAssinatura
+                      ? " · assina no app"
+                      : ""}
                 </p>
               </div>
               {temPermissao("documentos-exigidos.editar") && (
@@ -239,7 +242,7 @@ function DialogNovo({ onFechar, onCriado }: { onFechar: () => void; onCriado: ()
   const [tipo, setTipo] = useState<string>("CNH");
   const [empresaId, setEmpresaId] = useState<string>();
   const [obrigatorio, setObrigatorio] = useState(true);
-  const [exigeAssinatura, setExigeAssinatura] = useState(false);
+  const [comoAssinar, setComoAssinar] = useState<"NAO" | "NO_APP" | "JA_ASSINADO">("NAO");
   const [exigeIcpBrasil, setExigeIcpBrasil] = useState(false);
   const empresas = useResourceOptions<{ id: string; nome: string }>("/admin/empresas");
 
@@ -255,8 +258,9 @@ function DialogNovo({ onFechar, onCriado }: { onFechar: () => void; onCriado: ()
           tipo,
           empresaId,
           obrigatorio,
-          exigeAssinatura,
-          exigeIcpBrasil: exigeAssinatura && exigeIcpBrasil,
+          comoAssinar,
+          exigeAssinatura: comoAssinar !== "NAO",
+          exigeIcpBrasil: comoAssinar === "JA_ASSINADO" && exigeIcpBrasil,
           ordem: 0,
         }),
       }),
@@ -360,20 +364,36 @@ function DialogNovo({ onFechar, onCriado }: { onFechar: () => void; onCriado: ()
 
         {/* Assinatura é decisão do contratante, não do sistema: cópia de CNH
             ninguém assina, contrato todo mundo assina, ordem de serviço
-            depende da obra. Por isso é interruptor por documento. */}
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={exigeAssinatura}
-            onChange={(e) => {
-              setExigeAssinatura(e.target.checked);
-              if (!e.target.checked) setExigeIcpBrasil(false);
-            }}
-          />
-          Precisa ser assinado
-        </label>
+            depende da obra. Por isso é escolha por documento.
 
-        {exigeAssinatura && (
+            ⚠️ Três opções, e não uma caixinha: o par de booleanos que existia
+            antes não conseguia dizer "ele assina no papel e manda a foto" —
+            marcar "exige certificado" fazia o sistema RECUSAR a foto do
+            cartório, e não marcar aceitava o contrato em branco. */}
+        <div>
+          <Label>Como esse papel é assinado</Label>
+          <Select
+            value={comoAssinar}
+            onChange={(e) => {
+              const v = e.target.value as "NAO" | "NO_APP" | "JA_ASSINADO";
+              setComoAssinar(v);
+              if (v !== "JA_ASSINADO") setExigeIcpBrasil(false);
+            }}
+          >
+            <option value="NAO">Não precisa assinar</option>
+            <option value="NO_APP">Assina aqui — no app ou na página</option>
+            <option value="JA_ASSINADO">Chega já assinado (cartório ou gov.br)</option>
+          </Select>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {comoAssinar === "NAO"
+              ? "Só mandar o arquivo. É o caso de cópia de documento."
+              : comoAssinar === "NO_APP"
+                ? "Aceite eletrônico: o motorista lê o papel na tela e confirma. Fica gravado quem, quando, de onde e o hash do arquivo. Não substitui firma reconhecida quando o contratante exige."
+                : "Ele assina fora e manda o papel assinado — foto do cartório ou PDF do gov.br. O sistema registra qual dos dois chegou."}
+          </p>
+        </div>
+
+        {comoAssinar === "JA_ASSINADO" && (
           <div className="ml-6 space-y-1">
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -381,12 +401,12 @@ function DialogNovo({ onFechar, onCriado }: { onFechar: () => void; onCriado: ()
                 checked={exigeIcpBrasil}
                 onChange={(e) => setExigeIcpBrasil(e.target.checked)}
               />
-              Exige certificado digital (ICP-Brasil)
+              Só vale assinatura digital
             </label>
             <p className="text-xs text-muted-foreground">
               {exigeIcpBrasil
-                ? "O arquivo tem que chegar já assinado (gov.br ou certificado A1/A3). Foto e PDF escaneado são recusados na hora do envio."
-                : "Aceite eletrônico na própria página: a pessoa digita nome e CPF, e fica gravado quem, quando, de onde e o hash do arquivo."}
+                ? "Só aceita arquivo com assinatura digital dentro (gov.br ou certificado A1/A3). A foto do papel com firma reconhecida é RECUSADA na hora do envio — marque só se o contratante exigir isso mesmo."
+                : "Aceita os dois: a foto do papel com firma reconhecida e o PDF assinado pelo gov.br. Quando vier digital, o sistema detecta sozinho; quando vier foto, ela fica marcada pra conferência de vocês."}
             </p>
           </div>
         )}

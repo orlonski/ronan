@@ -58,6 +58,19 @@ const DIAS_DE_VALIDADE = 14;
  * copiando o que o contratante pede — ver o comentário do model
  * `DocumentoExigido`. Nós transportamos o arquivo.
  */
+/** O que define uma exigência do catálogo, criando ou editando. */
+type DadosExigencia = {
+  titulo: string;
+  ajuda?: string | null;
+  tipo: string;
+  empresaId?: string;
+  publico?: "MENSAL" | "TODOS";
+  obrigatorio?: boolean;
+  ordem?: number;
+  comoAssinar?: "NAO" | "NO_APP" | "JA_ASSINADO";
+  exigeIcpBrasil?: boolean;
+};
+
 @Injectable()
 export class AdmissaoService {
   private readonly log = new Logger(AdmissaoService.name);
@@ -116,17 +129,7 @@ export class AdmissaoService {
     });
   }
 
-  criarExigido(dados: {
-    titulo: string;
-    ajuda?: string | null;
-    tipo: string;
-    empresaId?: string;
-    publico?: "MENSAL" | "TODOS";
-    obrigatorio?: boolean;
-    ordem?: number;
-    exigeAssinatura?: boolean;
-    exigeIcpBrasil?: boolean;
-  }) {
+  criarExigido(dados: DadosExigencia) {
     this.assertTipo(dados.tipo);
     return this.prisma.documentoExigido.create({
       data: {
@@ -139,12 +142,54 @@ export class AdmissaoService {
         publico: dados.publico ?? "MENSAL",
         obrigatorio: dados.obrigatorio ?? true,
         ordem: dados.ordem ?? 0,
-        exigeAssinatura: dados.exigeAssinatura ?? false,
-        // ICP sem assinatura não quer dizer nada: o contratante que exige
-        // certificado está exigindo uma assinatura, por definição.
-        exigeIcpBrasil: (dados.exigeAssinatura ?? false) && (dados.exigeIcpBrasil ?? false),
+        ...this.camposDeAssinatura(dados),
       },
     });
+  }
+
+  /**
+   * EDITAR uma exigência.
+   *
+   * ⚠️ Não existia, e a falta custava caro: pra mudar como um papel é assinado
+   * a operação tinha que "não exigir mais" e criar de novo — e aí os arquivos
+   * já enviados apontavam pra exigência velha, sumiam da lista do motorista e
+   * ele mandava tudo outra vez. A gaveta (`tipo`) fica de fora de propósito:
+   * mudá-la moveria o arquivo de lugar no storage, e isso é criar outro
+   * documento, não editar este.
+   */
+  async editarExigido(id: string, dados: Omit<DadosExigencia, "tipo">) {
+    const e = await this.prisma.documentoExigido.findFirst({ where: { id } });
+    if (!e) throw new NotFoundException("Exigência não encontrada.");
+
+    return this.prisma.documentoExigido.update({
+      where: { id },
+      data: {
+        titulo: dados.titulo,
+        ajuda: dados.ajuda?.trim() || null,
+        empresaId: dados.empresaId ?? null,
+        publico: dados.publico ?? e.publico,
+        obrigatorio: dados.obrigatorio ?? e.obrigatorio,
+        ordem: dados.ordem ?? e.ordem,
+        ...this.camposDeAssinatura({ ...dados, tipo: e.tipo }),
+      },
+    });
+  }
+
+  /**
+   * Os três campos de assinatura, derivados de UM.
+   *
+   * `comoAssinar` é quem manda; `exigeAssinatura` é espelho dele (existe pra
+   * não reescrever as consultas antigas) e `exigeIcpBrasil` só sobrevive
+   * dentro de `JA_ASSINADO` — "só vale digital" não quer dizer nada pra um
+   * papel que ninguém assina, nem pro aceite feito aqui dentro.
+   */
+  private camposDeAssinatura(dados: DadosExigencia) {
+    const comoAssinar = dados.comoAssinar ?? "NAO";
+    return {
+      comoAssinar,
+      exigeAssinatura: comoAssinar !== "NAO",
+      exigeIcpBrasil: comoAssinar === "JA_ASSINADO" && (dados.exigeIcpBrasil ?? false),
+    };
   }
 
   async removerExigido(id: string) {
@@ -335,6 +380,7 @@ export class AdmissaoService {
         ajuda: e.ajuda,
         obrigatorio: e.obrigatorio,
         exigeAssinatura: e.exigeAssinatura,
+        comoAssinar: e.comoAssinar,
         exigeIcpBrasil: e.exigeIcpBrasil,
 
         recebido: doc !== null,
@@ -409,6 +455,8 @@ export class AdmissaoService {
         ajuda: d.ajuda,
         obrigatorio: d.obrigatorio,
         precisaAssinar: d.exigeAssinatura,
+        /** `NAO` | `NO_APP` | `JA_ASSINADO` — decide o botão que ele vê. */
+        comoAssinar: d.comoAssinar,
         /**
          * Este não dá pra resolver pelo celular: assinatura com certificado
          * digital é feita fora, porque a chave privada é do titular. A tela
@@ -596,7 +644,13 @@ export class AdmissaoService {
    */
   async receberDocumento(e: {
     motoristaId: string;
-    exigencia: { id: string; tipo: string; exigeAssinatura: boolean; exigeIcpBrasil: boolean } | null;
+    exigencia: {
+      id: string;
+      tipo: string;
+      exigeAssinatura: boolean;
+      exigeIcpBrasil: boolean;
+      comoAssinar: "NAO" | "NO_APP" | "JA_ASSINADO";
+    } | null;
     tipo: string;
     arquivo: { buffer: Buffer; mimetype: string; size: number; originalname: string };
     origem: OrigemDocumento;
@@ -619,12 +673,20 @@ export class AdmissaoService {
         "Esse arquivo .p7s não tem assinatura digital dentro. Gere de novo no assinador.",
       );
     }
-    // Contratante que exige ICP não pode receber um escaneado em PDF: a pessoa
-    // salva, acha que assinou, e a transportadora só descobre na auditoria.
+    // Contratante que só aceita assinatura DIGITAL não pode receber um
+    // escaneado: a pessoa salva, acha que assinou, e a transportadora só
+    // descobre na auditoria.
+    //
+    // ⚠️ Isto vale só pro contratante rigoroso (`exigeIcpBrasil`). O caso
+    // comum é `JA_ASSINADO` sem essa marca, que aceita os DOIS caminhos reais
+    // da operação: o PDF do gov.br (assinatura dentro do arquivo) e a foto do
+    // papel com firma reconhecida em cartório. Recusar a segunda fazia o
+    // motorista ir ao cartório, pagar, e o app dizer não.
     if (exigencia?.exigeIcpBrasil && !deteccao.temAssinaturaEmbutida) {
       throw new BadRequestException(
-        "Este documento precisa vir assinado com certificado digital (ICP-Brasil). " +
-          "Assine em gov.br/assinatura-eletronica ou no seu assinador e mande o arquivo assinado (.p7s ou PDF assinado).",
+        "Este documento só vale assinado com certificado digital. " +
+          "Assine em gov.br/assinatura-eletronica e mande o arquivo assinado (PDF ou .p7s) — " +
+          "a foto do papel não serve pra este.",
       );
     }
 
@@ -686,13 +748,39 @@ export class AdmissaoService {
 
     // Arquivo que já chega assinado dispensa o aceite: a assinatura é o
     // próprio arquivo, e pedir pra digitar o nome depois seria teatro.
-    if (deteccao.temAssinaturaEmbutida && exigencia?.exigeAssinatura) {
+    //
+    // Dois jeitos de chegar assinado, e o registro diz QUAL foi:
+    //
+    // - **Digital** (gov.br, certificado): a assinatura está dentro do arquivo.
+    //   O sistema detecta e carimba `ICP_BRASIL` — sem validar a cadeia, e a
+    //   tela do escritório diz isso (`AVISO_ICP`).
+    // - **No papel** (cartório): é tinta numa foto. Não há nada pra detectar,
+    //   então o registro é `NO_PAPEL` — que significa "chegou dizendo estar
+    //   assinado, CONFIRA". Tratar isso como assinatura conferida seria a
+    //   única coisa pior do que não registrar nada.
+    if (exigencia?.comoAssinar === "JA_ASSINADO") {
+      await this.prisma.assinaturaDocumento.create({
+        data: {
+          motoristaId,
+          tipoDocumento: tipo,
+          chave,
+          modo: deteccao.temAssinaturaEmbutida ? "ICP_BRASIL" : "NO_PAPEL",
+          origem: e.origem,
+          hashArquivo: hash,
+          conviteColetaId: e.conviteColetaId ?? null,
+        },
+      });
+    } else if (deteccao.temAssinaturaEmbutida && exigencia?.exigeAssinatura) {
+      // Exigência de aceite no app que recebeu um arquivo já assinado por
+      // fora: a assinatura de dentro do arquivo vale mais que o aceite, e
+      // pedir o aceite por cima seria pedir duas vezes a mesma coisa.
       await this.prisma.assinaturaDocumento.create({
         data: {
           motoristaId,
           tipoDocumento: tipo,
           chave,
           modo: "ICP_BRASIL",
+          origem: e.origem,
           hashArquivo: hash,
           conviteColetaId: e.conviteColetaId ?? null,
         },

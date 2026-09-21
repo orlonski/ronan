@@ -22,6 +22,7 @@ function servico(over: {
     exigeAssinatura?: boolean;
     exigeIcpBrasil?: boolean;
     publico?: "MENSAL" | "TODOS";
+    comoAssinar?: "NAO" | "NO_APP" | "JA_ASSINADO";
   }[];
   enviados?: { tipo: string; storageKey?: string; hashArquivo?: string; vistoEm?: Date }[];
   assinaturas?: { tipoDocumento: string; modo: string; assinadoEm: Date; hashArquivo?: string }[];
@@ -39,6 +40,7 @@ function servico(over: {
     exigeAssinatura: false,
     exigeIcpBrasil: false,
     publico: "MENSAL",
+    comoAssinar: "NAO",
     ...e,
   }));
   const chaveDoTipo = (tipo: string) => {
@@ -92,9 +94,13 @@ function servico(over: {
       // papelada de obra de quem só roda frete comum.
       findMany: async ({ where }: { where?: { publico?: string } } = {}) =>
         where?.publico ? exigidos.filter((e) => (e.publico ?? "MENSAL") === where.publico) : exigidos,
-      findFirst: async () => null,
+      findFirst: async ({ where }: { where?: { id?: string } } = {}) =>
+        exigidos.find((e) => e.id === where?.id) ?? null,
       create: async () => ({}),
-      update: async () => ({}),
+      update: async ({ data }: { data: Record<string, unknown> }) => {
+        escritas.push({ tabela: "exigencia-update", data });
+        return data;
+      },
     },
     motoristaDocumento: {
       findMany: async () => enviados,
@@ -759,5 +765,82 @@ describe("a porta do app", () => {
     await expect(
       s.assinarPeloMotorista("mot1", "e1", { nome: "João da Silva", cpf: "11122233344" }),
     ).rejects.toThrow(/já assinado/i);
+  });
+});
+
+/**
+ * ASSINAR FORA: CARTÓRIO OU GOV.BR.
+ *
+ * ⚠️ É como a operação já trabalha — o documento vai por WhatsApp e volta
+ * assinado, "e ficamos lutando pra eles devolverem em foto assinado ou PDF".
+ * O par de booleanos antigo não expressava isso: marcar "exige certificado"
+ * RECUSAVA a foto do papel com firma reconhecida (o motorista ia ao cartório,
+ * pagava, e o app dizia não), e não marcar aceitava o contrato em branco.
+ */
+describe("o papel que chega assinado de fora", () => {
+  /** PKCS#7 mínimo: o OID de signedData, que é o que a detecção procura. */
+  const ASSINADO_DIGITAL = Buffer.concat([
+    Buffer.from([0x30, 0x82, 0x01, 0x00, 0x06, 0x09]),
+    Buffer.from([0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x07, 0x02]),
+  ]);
+  const FORA = [
+    {
+      tipo: "OS",
+      titulo: "Comodato assinado",
+      obrigatorio: true,
+      empresaId: null,
+      exigeAssinatura: true,
+      comoAssinar: "JA_ASSINADO" as const,
+      publico: "TODOS" as const,
+    },
+  ];
+
+  it("aceita a FOTO do papel do cartório e registra que precisa de conferência", async () => {
+    const { s, escritas } = servico({ exigidos: FORA });
+    await s.receberArquivo("tok", { exigenciaId: "e1" }, ARQUIVO);
+
+    const a = escritas.find((e) => e.tabela === "assinatura")!.data;
+    // NO_PAPEL, não ICP: não há nada digital nesse arquivo pra detectar, e
+    // carimbar "assinado digitalmente" numa foto seria inventar.
+    expect(a.modo).toBe("NO_PAPEL");
+  });
+
+  it("o mesmo documento vindo do gov.br é reconhecido como digital", async () => {
+    const { s, escritas } = servico({ exigidos: FORA });
+    await s.receberArquivo("tok", { exigenciaId: "e1" }, {
+      buffer: ASSINADO_DIGITAL,
+      mimetype: "application/pkcs7-signature",
+      size: ASSINADO_DIGITAL.length,
+      originalname: "comodato.pdf.p7s",
+    });
+    expect(escritas.find((e) => e.tabela === "assinatura")!.data.modo).toBe("ICP_BRASIL");
+  });
+
+  it("o contratante rigoroso continua recusando a foto — e explica por quê", async () => {
+    // `exigeIcpBrasil` sobrevive como refinamento: é o contratante que SÓ
+    // aceita digital. Aí a recusa tem que acontecer no envio, e não na
+    // portaria da obra.
+    const { s } = servico({
+      exigidos: [{ ...FORA[0], exigeIcpBrasil: true }],
+    });
+    await expect(s.receberArquivo("tok", { exigenciaId: "e1" }, ARQUIVO)).rejects.toThrow(
+      /foto do papel não serve/i,
+    );
+  });
+
+  it("editar a exigência não obriga a recriar — os arquivos enviados ficam", async () => {
+    // Sem edição, mudar como um papel é assinado exigia desativar e criar de
+    // novo, e aí o arquivo já enviado apontava pra exigência velha: sumia da
+    // lista do motorista e ele mandava tudo outra vez.
+    const { s, escritas } = servico({ exigidos: FORA });
+    await s.editarExigido("e1", {
+      titulo: "Comodato assinado",
+      comoAssinar: "NO_APP",
+    });
+    const dados = escritas.find((e) => e.tabela === "exigencia-update")!.data;
+    expect(dados.comoAssinar).toBe("NO_APP");
+    // "Só vale digital" não quer dizer nada pro aceite feito aqui dentro.
+    expect(dados.exigeIcpBrasil).toBe(false);
+    expect(dados.exigeAssinatura).toBe(true);
   });
 });

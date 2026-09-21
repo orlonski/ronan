@@ -209,7 +209,16 @@ export const CriarDocumentoExigidoInput = z.object({
   publico: z.enum(["MENSAL", "TODOS"]).default("MENSAL"),
   obrigatorio: z.boolean().default(true),
   ordem: z.number().int().min(0).default(0),
-  /** Este papel precisa ser assinado, não só enviado? */
+  /**
+   * COMO este papel é assinado.
+   *
+   * ⚠️ Três estados, não dois booleanos. O par antigo não conseguia expressar
+   * o caso mais comum da operação: o motorista assina NO PAPEL, reconhece
+   * firma em cartório e devolve uma foto. Marcar "exige certificado" fazia o
+   * sistema recusar essa foto; não marcar aceitava o contrato em branco.
+   */
+  comoAssinar: z.enum(["NAO", "NO_APP", "JA_ASSINADO"]).default("NAO"),
+  /** Mantido por compatibilidade: `comoAssinar` é quem manda. */
   exigeAssinatura: z.boolean().default(false),
   /**
    * E a assinatura precisa ser ICP-Brasil?
@@ -221,6 +230,15 @@ export const CriarDocumentoExigidoInput = z.object({
   exigeIcpBrasil: z.boolean().default(false),
 });
 export type CriarDocumentoExigidoInput = z.infer<typeof CriarDocumentoExigidoInput>;
+
+/**
+ * Editar uma exigência que já existe.
+ *
+ * A GAVETA (`tipo`) fica de fora: mudá-la moveria o arquivo de lugar no
+ * storage, e isso é criar outro documento, não editar este.
+ */
+export const EditarDocumentoExigidoInput = CriarDocumentoExigidoInput.omit({ tipo: true });
+export type EditarDocumentoExigidoInput = z.infer<typeof EditarDocumentoExigidoInput>;
 
 /**
  * O aceite eletrônico de um documento, na página pública de coleta.
