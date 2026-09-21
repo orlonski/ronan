@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Image, Modal, Pressable, Text, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import { FileText, X } from "lucide-react-native";
+import { CloudUpload, FileText, X } from "lucide-react-native";
 import { API_URL } from "@/lib/api-url";
 import { motoristaAtivoId, tokensDe } from "@/lib/sessoes";
 
@@ -26,12 +26,28 @@ export function MiniaturaDocumento({
   mimetype,
   titulo,
   versao,
+  uriLocal,
+  enviando,
 }: {
   exigenciaId: string;
   mimetype: string | null;
   titulo: string;
   /** Hash curto do arquivo: entra na URL pra o cache não servir foto trocada. */
   versao?: string | null;
+  /**
+   * A foto que ele ACABOU de escolher, ainda na fila do aparelho.
+   *
+   * ⚠️ Quando existe, ela vence a do servidor. Enquanto não existia, trocar a
+   * foto mostrava a ANTIGA até o envio terminar — e quem troca a foto troca
+   * porque a primeira saiu tremida. Ver a tremida ali é o app dizendo que não
+   * recebeu: ele manda de novo, e de novo.
+   *
+   * De quebra é instantânea e não gasta dado nenhum: o arquivo está no
+   * aparelho.
+   */
+  uriLocal?: string | null;
+  /** Está subindo agora (spinner) ou esperando sinal (nuvem). */
+  enviando?: boolean;
 }) {
   const [token, setToken] = useState<string | null>(null);
   const [falhou, setFalhou] = useState(false);
@@ -77,6 +93,26 @@ export function MiniaturaDocumento({
     return (
       <View className="h-20 w-16 items-center justify-center rounded-lg border-2 border-border bg-muted">
         <FileText size={22} color="#9ca3af" />
+      </View>
+    );
+  }
+
+  // A foto que está na fila: mostra JÁ, com o selo de que ainda está indo.
+  if (uriLocal) {
+    return (
+      <View className="h-20 w-16 overflow-hidden rounded-lg border-2 border-warning bg-muted">
+        <Image
+          source={{ uri: uriLocal }}
+          style={{ width: "100%", height: "100%" }}
+          resizeMode="cover"
+        />
+        <View className="absolute inset-0 items-center justify-center bg-black/35">
+          {enviando ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <CloudUpload size={20} color="#fff" />
+          )}
+        </View>
       </View>
     );
   }

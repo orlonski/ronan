@@ -304,6 +304,17 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       // pra mostrar uma coisa que ele já sabe.
       void queryClient.invalidateQueries({ queryKey: ["ponto-hoje"] });
       void queryClient.invalidateQueries({ queryKey: ["ponto-espelho"] });
+      // Documentos: MESMO defeito do ponto, e por isso está logo abaixo dele.
+      //
+      // A foto sobe, o servidor grava o arquivo novo — e a tela continuava com
+      // a miniatura antiga até alguém puxar pra baixo. Pra quem acabou de
+      // trocar a foto porque a primeira saiu tremida, ver a tremida ali é o
+      // app dizendo que não recebeu: ele manda de novo, e de novo.
+      //
+      // ⚠️ A miniatura só troca de verdade porque a URL carrega o hash do
+      // arquivo (`?v=`). Invalidar a query sem isso traria o mesmo endereço,
+      // e o cache de imagem do aparelho devolveria a foto velha por 30 dias.
+      void queryClient.invalidateQueries({ queryKey: ["documentos-obra"] });
     });
   }, []);
 

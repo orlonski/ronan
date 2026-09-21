@@ -2,7 +2,7 @@ import { Modal, Pressable, RefreshControl, ScrollView, Text, View } from "react-
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Camera, Check, CloudOff, FileText, Paperclip, PenLine, X } from "lucide-react-native";
+import { Camera, Check, Clock, CloudOff, FileText, Paperclip, PenLine, X } from "lucide-react-native";
 import { PhotoCapture } from "@/components/photo-capture";
 import { Button } from "@/components/ui/button";
 import { enqueueDocumentoAdmissao } from "@/lib/sync";
@@ -89,8 +89,6 @@ export default function DocumentosDaObraScreen() {
   // esperando o escritório olhar não é tarefa dele: contar como falta manda
   // resolver o que não tem como resolver, e contar como pronto foi o defeito
   // que zerava a tela assim que o arquivo chegava.
-  const faltam = data?.faltamDele ?? (data ? data.total - data.prontos : 0);
-  const comOEscritorio = data?.comOEscritorio ?? 0;
   const lista = [...(data?.documentos ?? [])].sort((a, b) => peso(a) - peso(b));
 
   /**
@@ -103,6 +101,34 @@ export default function DocumentosDaObraScreen() {
    */
   const naFila = usePendingDocumentos();
   const filaPor = new Map(naFila.map((i) => [i.clientId, i]));
+
+  /**
+   * ⚠️ A CONTAGEM SAI DAQUI, e não do servidor.
+   *
+   * `faltamDele` vem da API, e a API só sabe do arquivo depois que ele SUBIU.
+   * Enquanto o upload acontece — que num 4G ruim são minutos — o número do
+   * topo continuava idêntico, e pra quem acabou de mandar a foto isso lê como
+   * "não aconteceu nada". Ele manda de novo.
+   *
+   * Descontando a fila local, o número cai NO TOQUE e o que está subindo
+   * aparece separado, como o que é: em andamento, não pendência.
+   */
+  const naFilaSemErro = (id: string) => {
+    const f = filaPor.get(id);
+    return f !== undefined && f.status !== "error" && f.attempts < 8;
+  };
+  const faltaDele = (d: DocumentoDaObra) => {
+    if (naFilaSemErro(d.id)) return false;
+    if (filaPor.get(d.id)) return true; // na fila com erro: ele resolve
+    if (!d.recebido) return true;
+    if (d.recusado) return true;
+    return d.precisaAssinar && d.comoAssinar === "NO_APP" && d.assinado !== true;
+  };
+  const faltam = lista.filter(faltaDele).length;
+  const subindo = lista.filter((d) => naFilaSemErro(d.id)).length;
+  const comOEscritorio = lista.filter(
+    (d) => !naFilaSemErro(d.id) && d.recebido && !d.recusado && d.conferido !== true,
+  ).length;
 
   /** Qual documento está com a tela de envio aberta. */
   const [capturando, setCapturando] = useState<DocumentoDaObra | null>(null);
@@ -178,7 +204,12 @@ export default function DocumentosDaObraScreen() {
           </View>
         ) : (
           <>
-            <Contagem faltam={faltam} total={data.total} comOEscritorio={comOEscritorio} />
+            <Contagem
+              faltam={faltam}
+              total={data.total}
+              comOEscritorio={comOEscritorio}
+              subindo={subindo}
+            />
             <View className="mt-4 gap-3">
               {lista.map((d) => (
                 <ItemDocumento
@@ -317,16 +348,19 @@ function Contagem({
   faltam,
   total,
   comOEscritorio,
+  subindo,
 }: {
   faltam: number;
   total: number;
   comOEscritorio: number;
+  /** Fotos que ele já mandou e estão subindo agora. Não são pendência dele. */
+  subindo: number;
 }) {
   if (faltam === 0) {
     // ⚠️ "Está tudo lá" ≠ "está tudo certo". Enquanto houver papel esperando
     // alguém olhar, dizer que acabou é prometer em nome do escritório — e ele
     // ia pra obra achando que estava resolvido.
-    const esperando = comOEscritorio > 0;
+    const esperando = comOEscritorio > 0 || subindo > 0;
     return (
       <View
         className={
@@ -336,8 +370,11 @@ function Contagem({
         }
       >
         <View className="flex-row items-center gap-3">
+          {/* Relógio, não nuvem cortada: nuvem cortada é "sem internet", e a
+              mensagem aqui é "está conferindo". Ícone que contradiz o texto faz
+              o motorista procurar problema de sinal onde não tem. */}
           {esperando ? (
-            <CloudOff size={32} color="#d97706" />
+            <Clock size={32} color="#d97706" />
           ) : (
             <Check size={32} color="#16a34a" />
           )}
@@ -346,9 +383,11 @@ function Contagem({
               {esperando ? "Você já mandou tudo." : "Está tudo certo."}
             </Text>
             <Text className="mt-0.5 text-base text-muted-foreground">
-              {esperando
-                ? `O escritório está conferindo ${comOEscritorio === 1 ? "1 papel" : `${comOEscritorio} papéis`}. Se faltar alguma coisa, eles avisam por aqui.`
-                : `Os ${total} documentos foram conferidos.`}
+              {subindo > 0
+                ? `${subindo === 1 ? "1 foto está indo" : `${subindo} fotos estão indo`} pro escritório agora. Pode fechar o app.`
+                : esperando
+                  ? `O escritório está conferindo ${comOEscritorio === 1 ? "1 papel" : `${comOEscritorio} papéis`}. Se faltar alguma coisa, eles avisam por aqui.`
+                  : `Os ${total} documentos foram conferidos.`}
             </Text>
           </View>
         </View>
@@ -369,6 +408,18 @@ function Contagem({
       <Text className="mt-3 text-base text-foreground">
         Sem eles o escritório não consegue fechar seu cadastro.
       </Text>
+
+      {/* O que está subindo aparece AQUI, separado do que falta: some do
+          número de cima no toque, e ele vê que a foto foi. Sem esta linha, o
+          topo ficava igual durante o upload inteiro e quem acabou de mandar
+          lia isso como "não aconteceu nada". */}
+      {subindo > 0 ? (
+        <Text className="mt-2 text-base text-muted-foreground">
+          {subindo === 1
+            ? "1 foto está indo pro escritório agora."
+            : `${subindo} fotos estão indo pro escritório agora.`}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -380,7 +431,7 @@ function ItemDocumento({
   onAssinar,
 }: {
   doc: DocumentoDaObra;
-  fila?: { status: string; attempts: number; errorMsg?: string };
+  fila?: { status: string; attempts: number; errorMsg?: string; arquivoUri?: string };
   onMandar: () => void;
   onAssinar: () => void;
 }) {
@@ -416,7 +467,17 @@ function ItemDocumento({
             tentativas entrou — nem se mandou a CNH no lugar do comprovante.
             Miniatura ruim é melhor que nada; ela não precisa dar pra LER o
             documento, precisa dar pra RECONHECER qual é. */}
-        {doc.recebido && !esperandoSinal ? (
+        {/* A foto na fila vence a do servidor: ele acabou de escolher, e ver a
+            antiga aqui faria ele mandar de novo achando que não foi. */}
+        {esperandoSinal && fila?.arquivoUri ? (
+          <MiniaturaDocumento
+            exigenciaId={doc.id}
+            mimetype={doc.mimetype ?? null}
+            titulo={doc.titulo}
+            uriLocal={fila.arquivoUri}
+            enviando={fila.status === "syncing"}
+          />
+        ) : doc.recebido && !esperandoSinal ? (
           <MiniaturaDocumento
             exigenciaId={doc.id}
             mimetype={doc.mimetype ?? null}
@@ -456,7 +517,9 @@ function ItemDocumento({
                 tirar a foto, e dizer "ainda não chegou" faria ele tirar de
                 novo. */}
             {esperandoSinal ? (
-              "Guardado aqui. Chega no escritório quando o sinal voltar."
+              fila?.status === "syncing"
+                ? "Mandando agora…"
+                : "Guardado aqui. Chega no escritório quando o sinal voltar."
             ) : deuErro ? (
               fila?.errorMsg || "Essa não deu. Tire outra foto."
             ) : recusado ? (

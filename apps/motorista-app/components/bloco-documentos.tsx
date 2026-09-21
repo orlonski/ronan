@@ -2,6 +2,7 @@ import { Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ChevronRight, FileText } from "lucide-react-native";
 import { useDocumentosDaObra } from "@/lib/queries";
+import { usePendingDocumentos } from "@/hooks/use-pending-documentos";
 
 /**
  * A porta pros documentos, na home.
@@ -31,12 +32,27 @@ const ALTURA = 96;
 export function BlocoDocumentos() {
   const router = useRouter();
   const { data } = useDocumentosDaObra();
+  /**
+   * ⚠️ A fila do aparelho entra na conta, pelo mesmo motivo da tela de dentro:
+   * `faltamDele` vem da API, e a API só sabe do arquivo depois que ele SUBIU.
+   * Num 4G ruim isso são minutos com o número parado na home — e quem acabou
+   * de mandar a foto lê isso como "não foi".
+   */
+  const naFila = usePendingDocumentos();
+  const subindo = new Set(
+    naFila.filter((i) => i.status !== "error" && i.attempts < 8).map((i) => i.clientId),
+  );
 
   // Sem exigência nenhuma, ou tudo entregue: a home não fala do assunto.
   // `data` nulo (primeira abertura, ainda sem cache) também não mostra nada —
   // piscar um bloco e sumir é pior do que não mostrar.
   if (!data || data.total === 0) return null;
-  const faltam = data.total - data.prontos;
+  const faltam = data.documentos.filter((d) => {
+    if (subindo.has(d.id)) return false;
+    if (!d.recebido) return true;
+    if (d.recusado) return true;
+    return d.precisaAssinar && d.comoAssinar === "NO_APP" && d.assinado !== true;
+  }).length;
   if (faltam <= 0) return null;
 
   return (
