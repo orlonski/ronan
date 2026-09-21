@@ -31,8 +31,12 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* Altura MÍNIMA, não fixa: um carrossel empilha várias .peca no mesmo arquivo,
+   e `height: 1350px` com `overflow: hidden` cortava tudo a partir do slide 2 —
+   o render fotografaria um retângulo vazio. Cada .peca já tem o próprio
+   `overflow: hidden`, então nada sangra pra fora dela de qualquer jeito. */
 body {
-  width: 1080px; height: 1350px; overflow: hidden;
+  width: 1080px; min-height: 1350px;
   background: var(--grafite);
   font-family: "Public Sans", system-ui, sans-serif;
   color: var(--branco);
@@ -61,6 +65,11 @@ body {
   mask-image: radial-gradient(760px 560px at 50% 34%, #000 12%, transparent 78%);
 }
 .peca > * { position: relative; z-index: 1; }
+
+/* Respiro entre slides de um carrossel. É só pra quem abre o HTML no navegador
+   pra revisar: o render fotografa cada .peca pelo próprio retângulo, e margem
+   fica de fora. */
+.peca + .peca { margin-top: 48px; }
 
 /* ---------- Etiqueta (categoria) ---------- */
 .etiqueta {

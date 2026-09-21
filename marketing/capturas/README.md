@@ -54,9 +54,20 @@ print novo de tela do motorista, as opções são o Simulador iOS ou um aparelho
 verdade — em ambos os casos, à mão.
 
 Consequência pro Instagram: **peça que precise de tela do motorista exige print
-manual.** As 13 capturas que existem são todas do painel, então nenhum post atual
-depende disso. O `ig-qa` continua valendo — print tem que mostrar o que o produto
-faz de verdade, tirado à mão ou não.
+manual.** As capturas que existem aqui são todas do painel.
+
+**E há dívida.** Seis posts já escritos — a 01, 03, 04, 05, 11 e 13 — apontam pra
+`assets/telas/2N-app-*.webp`, que são capturas **do PWA**, tiradas pelo script que
+morreu junto com ele. São posts que promovem o app nativo mostrando um produto que
+não existe mais. Outros oito apontam pra `assets/telas/*.webp` do painel, que estão
+velhos e com a badge do Next devtools, quando existe equivalente limpo aqui. Nenhum
+deles foi publicado ainda, então dá tempo — mas nenhum deve ir pro ar como está.
+
+Os posts 08 e 15 mostram o jeito certo: print manual do nativo, em resolução de
+iPhone de verdade, guardado em `assets/`.
+
+O `ig-qa` bloqueia isso desde 21/09/2026 — print tem que mostrar o que o produto faz
+de verdade, tirado à mão ou não.
 
 Um detalhe que sobrevive à mudança, porque é da ARTE e não da captura:
 

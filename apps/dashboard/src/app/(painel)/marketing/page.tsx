@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Clock,
   Instagram,
+  Layers,
   PauseCircle,
   Sparkles,
   XCircle,
@@ -36,6 +37,8 @@ type Post = {
   erroCodigo: number | null;
   criadoEm: string;
   criadoPor: { nome: string } | null;
+  /** Quantas imagens o post tem. 1 = imagem única; mais que isso, carrossel. */
+  slides: number;
   alcance: number | null;
   visualizacoes: number | null;
   salvos: number | null;
@@ -132,14 +135,18 @@ function Conteudo() {
   const token = useAuthToken();
   const qc = useQueryClient();
 
+  // Um pedido só, com o formato dentro. `forcar` porque quem clica está olhando
+  // a fila: o freio de "já tem post esperando" é pro cron das 7h, não pra gente.
   const pedirLeva = useMutation({
-    mutationFn: () =>
+    mutationFn: (formato: "UNICO" | "CARROSSEL") =>
       fetchApi<{ pedido: boolean; motivo: string }>("/admin/marketing/instagram/pedir-leva", {
         method: "POST",
         token,
+        body: JSON.stringify({ formato, forcar: true }),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/admin/marketing/instagram"] }),
   });
+  const [formatoPedido, setFormatoPedido] = useState<"UNICO" | "CARROSSEL" | null>(null);
   const { data: estado } = useApiQuery<Estado>("/admin/marketing/instagram/estado", {
     refetchInterval: 30_000,
   });
@@ -170,16 +177,40 @@ function Conteudo() {
         <Card className="p-5">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h2 className="font-medium">Pedir a próxima leva ao agente</h2>
+              <h2 className="font-medium">Pedir conteúdo ao agente</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Abre uma demanda pro agente produzir os posts e entregar nesta fila. Ele só
-                entrega — quem publica é o publicador, e você revisa antes.
+                Abre uma demanda pro agente produzir e entregar nesta fila. Ele só entrega — nada
+                sai no feed antes de você olhar e mandar publicar.
               </p>
             </div>
-            <Button variant="outline" onClick={() => pedirLeva.mutate()} disabled={pedirLeva.isPending}>
-              <Sparkles className="mr-2 h-4 w-4" />
-              {pedirLeva.isPending ? "Pedindo…" : "Pedir leva"}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={() => {
+                  setFormatoPedido("UNICO");
+                  pedirLeva.mutate("UNICO");
+                }}
+                disabled={pedirLeva.isPending}
+              >
+                <Sparkles className="mr-2 h-4 w-4" />
+                {pedirLeva.isPending && formatoPedido === "UNICO" ? "Pedindo…" : "Gerar post"}
+              </Button>
+              {/* Também `default`: pelo padrão de botões, contorno é cancelar ou
+                  voltar. Gerar carrossel é ação de rotina como gerar post — o
+                  que muda entre os dois é o custo, e isso o title explica. */}
+              <Button
+                onClick={() => {
+                  setFormatoPedido("CARROSSEL");
+                  pedirLeva.mutate("CARROSSEL");
+                }}
+                disabled={pedirLeva.isPending}
+                title="5 a 7 telas. Custa mais tempo de agente que um post único."
+              >
+                <Layers className="mr-2 h-4 w-4" />
+                {pedirLeva.isPending && formatoPedido === "CARROSSEL"
+                  ? "Pedindo…"
+                  : "Gerar carrossel"}
+              </Button>
+            </div>
           </div>
 
           {pedirLeva.data ? (
@@ -385,19 +416,19 @@ function Linha({ post }: { post: Post }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/admin/marketing/instagram"] }),
   });
 
-  const adiantar = useMutation({
+  const publicar = useMutation({
     mutationFn: () =>
       fetchApi(`/admin/marketing/instagram/${post.id}/adiantar`, { method: "POST", token }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/admin/marketing/instagram"] }),
   });
 
-  const adiantavel = post.status === "AGENDADO" || post.status === "RASCUNHO";
+  const publicavel = post.status === "AGENDADO" || post.status === "RASCUNHO";
 
   return (
     <div className="flex flex-wrap items-start gap-4 p-4 sm:flex-nowrap">
       {/* A arte primeiro: é ela que vai pro feed, e é por ela que se decide
           cancelar. Legenda sem imagem é revisar no escuro. */}
-      <ArtePost postId={post.id} peca={post.peca} />
+      <ArtePost postId={post.id} peca={post.peca} slides={post.slides} />
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
@@ -455,30 +486,37 @@ function Linha({ post }: { post: Post }) {
 
         {temPermissao("marketing.publicar") ? (
           <div className="mt-2 flex flex-col items-end gap-1.5">
-            {adiantavel ? (
-              <button
-                onClick={() => adiantar.mutate()}
-                disabled={adiantar.isPending}
-                className="text-sm text-primary underline-offset-2 hover:underline disabled:opacity-50"
-                title="Entra no próximo ciclo do publicador (até 5 minutos)"
+            {/* "Publicar", não "Adiantar": o rótulo é o verbo do que acontece.
+                Continua entrando no próximo ciclo em vez de sair na hora — os
+                5 minutos são a janela de arrependimento, e do feed não volta.
+                `warning` e não `success` pelo mesmo motivo: é irreversível. */}
+            {publicavel ? (
+              <Button
+                variant="warning"
+                size="sm"
+                onClick={() => publicar.mutate()}
+                disabled={publicar.isPending}
+                title="Entra no próximo ciclo do publicador — sai em até 5 minutos"
               >
-                {adiantar.isPending ? "Adiantando…" : "Adiantar"}
-              </button>
+                {publicar.isPending ? "Publicando…" : "Publicar"}
+              </Button>
             ) : null}
             {cancelavel ? (
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => cancelar.mutate()}
                 disabled={cancelar.isPending}
-                className="text-sm text-red-700 underline-offset-2 hover:underline disabled:opacity-50"
+                title="Tira da fila. O post fica no histórico."
               >
                 {cancelar.isPending ? "Cancelando…" : "Cancelar"}
-              </button>
+              </Button>
             ) : null}
           </div>
         ) : null}
 
-        {adiantar.isError ? (
-          <p className="mt-1 text-xs text-red-700">{(adiantar.error as Error).message}</p>
+        {publicar.isError ? (
+          <p className="mt-1 text-xs text-red-700">{(publicar.error as Error).message}</p>
         ) : null}
 
         {cancelar.isError ? (

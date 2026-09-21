@@ -4,7 +4,9 @@ Artes e legendas dos posts. Tudo aqui é gerado a partir de HTML — nada de edi
 
 ```
 base.css        sistema visual (cores, tipografia, molduras). Não hardcode cor na peça.
-posts/          uma peça por arquivo, 1080×1350
+posts/          uma peça por arquivo, 1080×1350.
+                Várias `<div class="peca">` no mesmo arquivo = carrossel (2 a 10),
+                na ordem em que aparecem no HTML
 perfil/         foto de perfil e capas de destaque, 1080×1080
 assets/         arquivos de marca; `telas/` é link pros prints em apps/site/public/telas
 fontes/         Archivo + Public Sans em woff2 (render offline, sem depender de rede)
@@ -19,6 +21,10 @@ perfil.md       bio, nome, destaques e regras do perfil
 node render.mjs              # todos os posts
 node render.mjs 03           # só a peça 03
 PASTA=perfil node render.mjs # foto de perfil e destaques
+
+# imagem única  -> saida/NN-slug.png      + saida/jpeg/NN-slug.jpg
+# carrossel     -> saida/NN-slug-1.png…   + saida/jpeg/NN-slug-1.jpg…
+# É o JPEG que é publicado: a Meta recusa PNG e recusa acima de 8 MB.
 ```
 
 O script avisa se alguma peça transbordou a altura — isso é defeito, corrija o texto.

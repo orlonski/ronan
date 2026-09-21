@@ -13,21 +13,27 @@ import { useAuthToken } from "@/lib/client-api";
  * A arte chega pronta — quem renderiza é `marketing/instagram/render.mjs`, na
  * máquina de quem produz, porque nenhum container do projeto tem Chromium. Aqui
  * é só o upload.
+ *
+ * Mais de um arquivo = carrossel. Não há botão separado: o que decide é quantas
+ * imagens vieram, e a ORDEM delas é a ordem em que o leitor desliza — por isso
+ * a lista escolhida aparece numerada na tela antes de mandar.
  */
 export function NovoPost({ apiUrl }: { apiUrl: string }) {
   const token = useAuthToken();
   const qc = useQueryClient();
   const inputArte = useRef<HTMLInputElement>(null);
-  const [arte, setArte] = useState<File | null>(null);
+  const [artes, setArtes] = useState<File[]>([]);
   const [peca, setPeca] = useState("");
   const [legenda, setLegenda] = useState("");
   const [publicarEm, setPublicarEm] = useState("");
 
   const enviar = useMutation({
     mutationFn: async () => {
-      if (!arte) throw new Error("Escolha a arte em JPEG");
+      if (artes.length === 0) throw new Error("Escolha a arte em JPEG");
       const fd = new FormData();
-      fd.append("arte", arte);
+      // Mesmo campo repetido, na ordem escolhida: é a ordem de chegada que a
+      // API usa pra numerar os slides.
+      for (const arte of artes) fd.append("artes", arte);
       fd.append("peca", peca.trim());
       fd.append("legenda", legenda);
       if (publicarEm) fd.append("publicarEm", new Date(publicarEm).toISOString());
@@ -49,7 +55,7 @@ export function NovoPost({ apiUrl }: { apiUrl: string }) {
       return r.json();
     },
     onSuccess: () => {
-      setArte(null);
+      setArtes([]);
       setPeca("");
       setLegenda("");
       setPublicarEm("");
@@ -69,20 +75,40 @@ export function NovoPost({ apiUrl }: { apiUrl: string }) {
 
       <div className="mt-4 grid gap-4 md:grid-cols-[1fr_1fr]">
         <label className="text-sm">
-          <span className="text-muted-foreground">Arte (JPEG, até 8 MB)</span>
+          <span className="text-muted-foreground">Arte (JPEG, até 8 MB cada)</span>
           <input
             ref={inputArte}
             id="arte-instagram"
             type="file"
             accept="image/jpeg"
-            onChange={(e) => setArte(e.target.files?.[0] ?? null)}
+            multiple
+            onChange={(e) => setArtes([...(e.target.files ?? [])])}
             className="mt-1 block w-full rounded-md border bg-background p-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-muted file:px-3 file:py-1 file:text-sm"
           />
-          {arte ? (
+          {artes.length > 0 ? (
             <span className="mt-1 block text-xs text-muted-foreground">
-              {arte.name} · {(arte.size / 1024).toFixed(0)} KB
+              {artes.length > 1 ? (
+                <>
+                  <strong>Carrossel de {artes.length} slides</strong>, nesta ordem:
+                  <ol className="mt-1 list-decimal pl-4">
+                    {artes.map((a) => (
+                      <li key={a.name}>
+                        {a.name} · {(a.size / 1024).toFixed(0)} KB
+                      </li>
+                    ))}
+                  </ol>
+                </>
+              ) : (
+                <>
+                  {artes[0]?.name} · {((artes[0]?.size ?? 0) / 1024).toFixed(0)} KB
+                </>
+              )}
             </span>
-          ) : null}
+          ) : (
+            <span className="mt-1 block text-xs text-muted-foreground">
+              Escolha várias de uma vez pra montar um carrossel (2 a 10).
+            </span>
+          )}
         </label>
 
         <label className="text-sm">
@@ -131,7 +157,13 @@ export function NovoPost({ apiUrl }: { apiUrl: string }) {
 
         <Button
           onClick={() => enviar.mutate()}
-          disabled={enviar.isPending || !arte || !peca.trim() || !legenda.trim() || restantes < 0}
+          disabled={
+            enviar.isPending ||
+            artes.length === 0 ||
+            !peca.trim() ||
+            !legenda.trim() ||
+            restantes < 0
+          }
         >
           <Upload className="mr-2 h-4 w-4" />
           {enviar.isPending ? "Enviando…" : publicarEm ? "Agendar" : "Salvar como rascunho"}

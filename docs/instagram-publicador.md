@@ -71,6 +71,15 @@ PUBLIC_API_URL=https://ronan-api.2azr6q.easypanel.host
 a imagem, então precisa ser o host público, com HTTPS. Sem ela, o link sai apontando
 pra lugar nenhum e a publicação falha na primeira fase.
 
+Há outras quatro, todas opcionais e com padrão seguro, que o doc não citava:
+
+| Var | Padrão | O que faz |
+|---|---|---|
+| `INSTAGRAM_MODO_SOMBRA` | ligado | monta o container e **não** publica. Só `false` desliga. |
+| `MARKETING_INGEST_TOKEN` | vazio | segredo que o `ronan_agente` usa pra entregar post. Vazio = ingestão fechada. |
+| `MARKETING_PAUTA_AUTOMATICA` | `false` | liga o cron das 7h que pede post ao agente. Terceiro interruptor, independente dos outros. |
+| `MARKETING_POSTS_POR_LEVA` | 3 | quantos posts a pauta tenta manter esperando na fila. |
+
 Reinicie o serviço. No log do boot deve aparecer o modo em que ficou:
 
 ```
@@ -105,6 +114,31 @@ Reinicie. O próximo post agendado sai no feed.
 
 ---
 
+## Carrossel
+
+Post de imagem única e carrossel são o mesmo caminho: muda só quantas imagens entram.
+
+A Meta pede três passos em vez de um — um container por slide (`is_carousel_item`),
+um container pai (`media_type=CAROUSEL`) com a lista de filhos e a legenda, e o
+publish do pai. Isso é detalhe do `meta-client.ts`; quem entrega post não vê.
+
+O que importa de fora:
+
+- **De 2 a 10 imagens.** O app do Instagram aceita 20 na mão; a API, não.
+- **A ordem é a de chegada** do upload, e vira `ordem` no banco. Não é ordenada por
+  nome de arquivo — se fosse, `slide-10.jpg` viria antes de `slide-2.jpg`.
+- **Cada slide tem o próprio link público**, com token próprio. A Meta faz um GET por
+  imagem, e todos expiram junto com o post (`INSTAGRAM_ARTE_VALIDADE_HORAS`).
+- **Um carrossel conta como UM post** no teto diário e na cota de 24h da Meta.
+- O container de cada slide é gravado assim que a Meta o aceita. Se o processo morrer
+  no slide 6 de 8, a retomada reaproveita os cinco primeiros em vez de gastar cota
+  refazendo.
+
+Quem produz entrega igual — o `enfileirar.mjs` recolhe os slides que o render
+produziu. No painel, pedir carrossel ao agente é o botão **Gerar carrossel**; a pauta
+automática das 7h continua pedindo peça única, porque carrossel custa mais execução e
+merece um olho humano antes.
+
 ## Quando algo falhar
 
 O post não some: ele fica na fila com o motivo na tela.
@@ -114,6 +148,8 @@ O post não some: ele fica na fila com o motivo na tela.
 | `code=190` | token inválido ou revogado. Gere outro. |
 | `code=9` | teto de posts em 24h da Meta. Espera sozinho. |
 | `code=100` com "image_url" | a Meta não conseguiu baixar a arte: confira `PUBLIC_API_URL` e se a API está de pé. |
+| `code=100` com "children" | um slide do carrossel não ficou pronto, ou veio menos de 2 / mais de 10. |
+| "Container expirou antes de publicar" | o container da Meta dura 24h e este passou disso (típico de post preso muito tempo em modo sombra). **É transitório**: o publicador joga fora e monta outro sozinho. |
 | "A arte não está mais no storage" | o MinIO perdeu o objeto. Reenvie o post. |
 | Status `INDETERMINADO` | o processo caiu no meio da publicação e não dá pra saber se saiu. **Não** retenta sozinho — a reconciliação das 4h20 pergunta à Meta e decide. |
 

@@ -24,7 +24,8 @@ afirmação.
 ```
 marketing/instagram/
   base.css            sistema visual — nunca hardcode cor na peça, use as variáveis
-  posts/NN-slug.html  uma peça por arquivo (1080×1350)
+  posts/NN-slug.html  uma peça por arquivo (1080×1350). Várias `.peca` no mesmo
+                      arquivo = carrossel, na ordem em que aparecem no HTML
   perfil/             foto de perfil e capas de destaque (1080×1080)
   assets/             marca + `telas/` (symlink pros prints em apps/site/public/telas)
   fontes/             Archivo + Public Sans em woff2, pro render não depender de rede
@@ -41,11 +42,16 @@ node render.mjs 03           # só a peça 03
 PASTA=perfil node render.mjs # avatar e destaques
 ```
 
+Imagem única sai como `saida/NN-slug.png`; carrossel sai numerado,
+`saida/NN-slug-1.png`, `-2.png`… e o JPEG correspondente em `saida/jpeg/`. **É o JPEG
+que vai pro ar** — a Meta recusa PNG e recusa acima de 8 MB por imagem.
+
 **O render é porteiro, não conselheiro.** Ele mede cada peça e sai com código 1 se
-transbordar a altura ou se a moldura do celular estiver fora de 1:1,9–1:2,4. Como o
-`enfileirar.mjs` chama o render, peça reprovada **não chega na fila** — não existe
-caminho pra publicar uma arte fora do padrão sem alguém desligar a trava de
-propósito. Transbordo: corte texto, não diminua a fonte.
+transbordar a altura ou se a moldura do celular estiver fora de 1:1,9–1:2,4. Num
+carrossel ele mede **slide a slide** e diz qual reprovou. Como o `enfileirar.mjs` chama
+o render, peça reprovada **não chega na fila** — não existe caminho pra publicar uma
+arte fora do padrão sem alguém desligar a trava de propósito. Transbordo: corte texto,
+não diminua a fonte.
 
 ## O fluxo
 
@@ -69,6 +75,29 @@ feito em aplicativo próprio, fora daqui.
 Consequência prática: se a pauta pedir Reel, **não existe caminho no repositório** —
 não procure `marketing/reels/`, não tente reconstruir a esteira, e não gere vídeo
 por API. Escreva o post em imagem ou diga que a pauta não se aplica.
+
+## Carrossel
+
+Um arquivo, várias `<div class="peca">`. Cada uma vira um slide, na ordem em que
+aparecem no HTML. De 2 a 10 — é o teto da API, e o app aceitar 20 na mão não muda isso.
+
+Carrossel não é post único fatiado. A forma que funciona:
+
+- **Slide 1 — a promessa, e só ela.** É a capa e é o que decide se alguém desliza.
+- **Slides do meio — um passo do mecanismo por tela**, na ordem em que acontece. Se
+  dois passos cabem numa tela, eram um passo só.
+- **Último slide — o que fazer agora.** Um CTA, não três.
+
+Cada slide precisa fazer sentido sozinho: muita gente entra pelo slide 4 e nunca viu a
+capa.
+
+O que merece carrossel é o que não cabe numa frase — regra de negócio com etapas, o
+antes-e-depois de um fluxo, um mecanismo que ninguém acredita sem ver o passo a passo.
+Ângulo que cabe numa headline continua sendo post único: carrossel de 5 telas pra dizer
+uma coisa só é 4 telas de enchimento.
+
+Custa mais: mais copy, mais arte, mais QA. Aqui o QA **não é opcional** — carrossel erra
+em sete lugares em vez de um.
 
 ## Voz
 
@@ -108,18 +137,33 @@ O feed alterna os dois públicos: dono de transportadora (quem paga) e motorista
 
 ## Publicar
 
-Pelo Chrome, com a conta já logada (skill `claude-in-chrome`). O fluxo do Instagram web:
-Criar → Postar → upload pelo input file (nunca clique no botão, abre o seletor nativo) →
-**escolher 4:5 no botão de recorte**, senão a arte entra cortada e perde a assinatura →
-Avançar → Avançar → legenda → Compartilhar.
+**Nunca dirigindo o navegador.** Isso viola os Termos do Instagram e já custou uma
+verificação anti-bot na conta depois de dez posts seguidos — quem resolve captcha é o
+usuário, não você. A skill mandava fazer exatamente isso até 21/09/2026; se você leu
+essa instrução em algum lugar, ela está velha.
 
-**No máximo 2 ou 3 posts por sessão.** Dez em sequência derrubaram a conta numa
-verificação anti-bot ("Confirme que você é humano"), e resolver isso é sempre o usuário
-— completar verificação de robô não é coisa que eu faça.
+Quem publica é o **publicador da API** (`apps/api/src/marketing/`), e o caminho é a
+fila. Você entrega, alguém olha, alguém manda publicar:
 
-O campo "Site" da bio e o nome de exibição só se editam pelo app do celular.
+```bash
+cd marketing/instagram
+node enfileirar.mjs <peca> <arquivo-da-legenda> [quando-iso]
+```
 
-## Publicação em lote
+O `enfileirar.mjs` renderiza, recolhe os JPEGs, confere a legenda (2200 caracteres) e
+entrega. Sem `quando-iso` o post entra como **rascunho** e o cron não pega — é o modo
+certo pra deixar alguém revisar antes.
 
-Pra o feed andar sem ninguém, agende no Meta Business Suite em vez de publicar na hora.
-Uma sessão de agendamento cobre semanas.
+Confira na resposta o número de slides. Se você escreveu um carrossel e voltou
+`imagem única`, o HTML tem uma `.peca` só.
+
+Do outro lado, no painel (`/marketing`): a arte aparece com a legenda, **Publicar** põe
+o post no próximo ciclo (até 5 minutos) e **Cancelar** tira da fila. Os 5 minutos são a
+janela de arrependimento — do feed não volta.
+
+Três interruptores seguram tudo, e nenhum é seu: credencial da Meta em env,
+`instagramAtivo` no banco e `INSTAGRAM_MODO_SOMBRA`. Não mexa em nenhum, não tente
+publicar por conta própria, e não imprima o `MARKETING_INGEST_TOKEN`.
+
+O campo "Site" da bio e o nome de exibição continuam só editáveis pelo app do celular.
+

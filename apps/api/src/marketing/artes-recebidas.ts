@@ -1,5 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
-import { SLIDES_MAX, SLIDES_MIN_CARROSSEL } from "./instagram-fila.service";
+import { SLIDES_MAX } from "./instagram-fila.service";
 
 /** Teto da Meta por imagem. Acima disto a Content Publishing API recusa. */
 const TETO_BYTES = 8 * 1024 * 1024;
@@ -48,17 +48,4 @@ export function validarArtes(arquivos: Express.Multer.File[] | undefined): Expre
   });
 
   return artes;
-}
-
-/**
- * Carrossel de uma imagem só não existe: o Instagram publica isso como post
- * único e o leitor nunca vê o que foi prometido. Quem pediu carrossel e mandou
- * uma imagem errou em algum passo antes daqui, e é melhor saber agora.
- */
-export function exigirCarrossel(quantas: number): void {
-  if (quantas < SLIDES_MIN_CARROSSEL) {
-    throw new BadRequestException(
-      `Carrossel precisa de pelo menos ${SLIDES_MIN_CARROSSEL} imagens; veio ${quantas}.`,
-    );
-  }
 }

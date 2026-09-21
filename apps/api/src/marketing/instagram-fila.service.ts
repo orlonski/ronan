@@ -16,11 +16,10 @@ const TOKEN_BYTES = 24;
 /**
  * Quantas imagens cabem num post.
  *
- * O teto é da Meta: a Content Publishing API aceita de 2 a 10 filhos num
- * carrossel. O app do Instagram já deixa passar de 10 na mão, a API não — e
- * descobrir isso na hora da publicação custa uma peça pronta que não sai.
+ * O teto é da Meta: a Content Publishing API aceita até 10 filhos num carrossel.
+ * O app do Instagram já deixa passar de 10 na mão, a API não — e descobrir isso
+ * na hora da publicação custa uma peça pronta que não sai.
  */
-export const SLIDES_MIN_CARROSSEL = 2;
 export const SLIDES_MAX = 10;
 
 type Enfileirar = {
