@@ -4,6 +4,7 @@ import { Client as MinioClient } from "minio";
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import { contaIdAtual } from "../common/conta/conta-context";
+import { chaveParaStorage } from "../common/chave-documento";
 import { inicioDoDiaData } from "../common/timezone";
 
 /**
@@ -163,15 +164,25 @@ export class UploadsService implements OnModuleInit {
     return key;
   }
 
+  /**
+   * Arquivo de documento do motorista.
+   *
+   * ⚠️ A key é determinística pela CHAVE do documento (`exig:<id>` ou
+   * `gaveta:<TIPO>`), não pela gaveta. Enquanto foi pela gaveta, duas
+   * exigências que caem na mesma (RG e CTPS em `REGISTRO_MOTORISTA`)
+   * sobrescreviam o mesmo objeto — o banco passou a distingui-las e o storage
+   * continuaria juntando as duas. Determinística de propósito: reenviar o
+   * arquivo é "refazer a foto", e tem que substituir em vez de acumular.
+   */
   async putMotoristaDocumento(
     buffer: Buffer,
     mimetype: string,
     motoristaId: string,
-    tipo: string,
+    chave: string,
     nomeOriginal: string,
   ): Promise<string> {
     const ext = (nomeOriginal.split(".").pop() ?? "bin").toLowerCase().replace(/[^a-z0-9]/g, "");
-    const key = `${contaIdAtual()}/documentos/${motoristaId}/${tipo}.${ext || "bin"}`;
+    const key = `${contaIdAtual()}/documentos/${motoristaId}/${chaveParaStorage(chave)}.${ext || "bin"}`;
     await this.client.putObject(this.bucket, key, buffer, buffer.length, {
       "Content-Type": mimetype,
     });

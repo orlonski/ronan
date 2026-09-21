@@ -37,7 +37,7 @@ export function PreviewDocumentoModal({ open, onClose, motoristaId, tipo, doc }:
     let urlCriada: string | null = null;
     setCarregando(true);
     setErro(null);
-    carregarPreviewDocumento(motoristaId, tipo, token)
+    carregarPreviewDocumento(motoristaId, doc.chave || tipo, token)
       .then(({ url, mimetype: mt }) => {
         if (cancelado) {
           URL.revokeObjectURL(url);
@@ -63,7 +63,7 @@ export function PreviewDocumentoModal({ open, onClose, motoristaId, tipo, doc }:
   async function onBaixar() {
     if (!token) return;
     try {
-      await baixarDocumento(motoristaId, tipo, token, doc.nomeArquivo);
+      await baixarDocumento(motoristaId, doc.chave || tipo, token, doc.nomeArquivo);
     } catch (err) {
       toast.error("Não consegui baixar o arquivo", {
         description: err instanceof Error ? err.message : "Tente de novo em alguns instantes.",

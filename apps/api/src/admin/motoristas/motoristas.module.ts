@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { AdmissaoModule } from "../../admissao/admissao.module";
 import { AuthModule } from "../../auth/auth.module";
 import { UploadsModule } from "../../uploads/uploads.module";
 import { PushModule } from "../../push/push.module";
@@ -13,7 +14,7 @@ import { AppUpdateNotifierService } from "./app-update-notifier.service";
 import { AppDeployController } from "./app-deploy.controller";
 
 @Module({
-  imports: [AuthModule, UploadsModule, PushModule, EvolutionModule, ResumoMotoristaModule],
+  imports: [AdmissaoModule, AuthModule, UploadsModule, PushModule, EvolutionModule, ResumoMotoristaModule],
   controllers: [MotoristasController, MotoristasDocumentosController, AppDeployController],
   providers: [
     MotoristasService,

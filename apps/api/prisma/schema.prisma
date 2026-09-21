@@ -1754,27 +1754,80 @@ model MotoristaPosicao {
   @@map("motorista_posicoes")
 }
 
+/// Por onde o arquivo entrou. É o que responde "o app está trazendo
+/// documento?" sem ninguém ter que adivinhar olhando data de criação.
+enum OrigemDocumento {
+  /// Alguém do escritório subiu pelo painel.
+  PAINEL
+  /// Chegou pelo link público de coleta.
+  LINK
+  /// O próprio motorista mandou pelo app.
+  APP
+}
+
 /// Anexo de documento por motorista (CNH, CRLV, seguro, ASO, etc).
-/// 1 registro por (motoristaId, tipo) — substituição apaga o anterior.
 /// `validade` é opcional (alguns docs não têm); status (válido/vencendo/vencido)
 /// é derivado em runtime, não persistido. Arquivos ficam no MinIO sob a key.
+///
+/// ⚠️ A IDENTIDADE DO ARQUIVO É A `chave`, NÃO A GAVETA. Até 21/09/2026 o
+/// único era `(motoristaId, tipo)`, e isso tinha um defeito silencioso: o
+/// `tipo` é uma lista fechada de 12 gavetas, enquanto `DocumentoExigido` é
+/// catálogo livre — um contratante pede 18 papéis. Duas exigências caindo na
+/// mesma gaveta (RG e CTPS em `REGISTRO_MOTORISTA`) dividiam UMA linha e UM
+/// objeto no MinIO: o segundo envio apagava o primeiro, e as duas exigências
+/// apareciam como recebidas. Ninguém via erro nenhum.
+///
+/// A `chave` resolve sem obrigar toda conta a usar o módulo de admissão:
+/// - `exig:<id>` quando o arquivo atende uma exigência do catálogo;
+/// - `gaveta:<TIPO>` quando é anexo avulso do painel, que é como sempre foi.
+///
+/// É o mesmo truque de `AlocacaoObra.vigenteDe` e `RegimeVigente.chaveViva`:
+/// uma coluna que carrega a regra de unicidade em vez de espalhá-la por
+/// validações de service. Quem escreve usa `chaveDocumento()` em
+/// `common/chave-documento.ts` — nunca monta a string na mão.
 model MotoristaDocumento {
   contaId     String                 @default("__SEM_CONTA__")
   conta       Conta                  @relation(fields: [contaId], references: [id])
   id          String                 @id @default(uuid())
   motoristaId String
   motorista   Motorista              @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
+
+  /// A gaveta onde o arquivo mora. Continua existindo porque é ela que o
+  /// painel lista, o ZIP nomeia e a conta sem módulo de admissão usa. O que
+  /// ela deixou de ser é a IDENTIDADE do arquivo.
   tipo        TipoDocumentoMotorista
+
+  /// Qual exigência este arquivo atende. Nulo = anexo avulso do painel.
+  exigenciaId String?
+  exigencia   DocumentoExigido?      @relation(fields: [exigenciaId], references: [id], onDelete: SetNull)
+
+  /// `exig:<id>` ou `gaveta:<TIPO>`. Ver o comentário do model.
+  chave       String                 @default("")
+
   nomeArquivo String
   storageKey  String
   mimetype    String
   tamanho     Int
+
+  /// SHA-256 do arquivo, no momento em que ele foi guardado.
+  ///
+  /// Persistido pra que conferir uma assinatura não exija baixar o objeto do
+  /// MinIO: a tela do escritório lista dezenas de documentos e precisa dizer,
+  /// em cada um, se a assinatura ainda bate com o arquivo que está lá. Nulo
+  /// nas linhas anteriores a 21/09/2026 — e nulo significa "não dá pra
+  /// conferir", nunca "confere".
+  hashArquivo String?
+
+  origem      OrigemDocumento        @default(PAINEL)
+
   validade    DateTime?              @db.Date
   criadoEm    DateTime               @default(now())
   alteradoEm  DateTime               @updatedAt
 
-  @@unique([motoristaId, tipo])
+  @@unique([motoristaId, chave])
   @@index([motoristaId])
+  @@index([motoristaId, tipo])
+  @@index([exigenciaId])
   @@index([contaId])
   @@map("motorista_documento")
 }
@@ -6448,6 +6501,12 @@ model DocumentoExigido {
   criadoEm   DateTime @default(now())
   alteradoEm DateTime @updatedAt
 
+  /// Os arquivos que atendem esta exigência. `onDelete: SetNull` do outro
+  /// lado: exigência "removida" na verdade é desativada (`ativo: false`), e se
+  /// um dia a linha sumir de vez o arquivo não pode ir junto — ele é do
+  /// motorista, não do catálogo.
+  documentos MotoristaDocumento[]
+
   @@index([contaId, ativo])
   @@index([empresaId])
   @@map("documentos_exigidos")
@@ -6483,7 +6542,18 @@ model AssinaturaDocumento {
   motorista   Motorista @relation(fields: [motoristaId], references: [id], onDelete: Cascade)
 
   /// A gaveta do documento assinado (mesma chave de `MotoristaDocumento.tipo`).
+  /// Continua aqui porque é o que a auditoria lê; a identidade é a `chave`.
   tipoDocumento String
+
+  /// A mesma `chave` do `MotoristaDocumento` que foi assinado — `exig:<id>`
+  /// ou `gaveta:<TIPO>`.
+  ///
+  /// ⚠️ Acompanha o documento pelo mesmo motivo que ele: com o único por
+  /// gaveta, duas exigências na mesma gaveta dividiam UMA assinatura. Assinar
+  /// a ficha de registro carimbava a CTPS como assinada, e a trilha (nome,
+  /// CPF, hash) apontava pro papel errado — numa audiência, é a assinatura
+  /// inteira que cai.
+  chave String @default("")
 
   modo ModoAssinatura @default(SIMPLES)
 
@@ -6510,7 +6580,8 @@ model AssinaturaDocumento {
 
   /// Um documento, uma assinatura. Reassinar substitui — é o caso de reenviar
   /// o arquivo corrigido e assinar de novo.
-  @@unique([motoristaId, tipoDocumento])
+  @@unique([motoristaId, chave])
+  @@index([motoristaId, tipoDocumento])
   @@index([contaId])
   @@map("assinaturas_documento")
 }

@@ -212,7 +212,18 @@ export type CriarDocumentoExigidoInput = z.infer<typeof CriarDocumentoExigidoInp
  * motorista é o que impede o dono do caminhão assinar no lugar dele.
  */
 export const AssinarDocumentoInput = z.object({
-  tipo: z.string().trim().min(1),
+  /**
+   * QUAL papel está sendo assinado.
+   *
+   * ⚠️ `exigenciaId` é o caminho certo. O `tipo` (a gaveta) só identificava o
+   * documento enquanto cada gaveta tinha um dono; com duas exigências caindo
+   * na mesma (contrato de experiência e ficha de registro em
+   * `REGISTRO_MOTORISTA`), assinar uma carimbava a outra — e a trilha inteira,
+   * com nome, CPF e hash, passava a apontar pro papel errado. Segue aceito
+   * enquanto for inequívoco, pra não quebrar página já aberta.
+   */
+  exigenciaId: z.string().uuid().optional(),
+  tipo: z.string().trim().min(1).optional(),
   nome: z.string().trim().min(5, "Escreva seu nome completo."),
   cpf: z.string().trim().min(11, "Informe o CPF de quem está assinando."),
   /** O aceite tem que ser um ato: caixa desmarcada não assina nada. */

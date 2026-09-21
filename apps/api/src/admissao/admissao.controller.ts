@@ -121,12 +121,17 @@ export class ColetaPublicaController {
   @UseInterceptors(FileInterceptor("arquivo"))
   async enviar(
     @Param("token") token: string,
-    @Body("tipo") tipo: string,
+    // `exigenciaId` é o caminho normal: é ele que diz QUAL papel está sendo
+    // mandado quando dois deles caem na mesma gaveta. O `tipo` continua aceito
+    // pra não quebrar uma página aberta há dez minutos, e só vale enquanto for
+    // inequívoco — ver `acharExigencia`.
+    @Body("exigenciaId") exigenciaId: string | undefined,
+    @Body("tipo") tipo: string | undefined,
     @UploadedFile() arquivo: Express.Multer.File | undefined,
   ) {
     if (!arquivo) throw new BadRequestException("Escolha um arquivo.");
-    if (!tipo) throw new BadRequestException("Diga qual documento é.");
-    return this.service.receberArquivo(token, tipo, {
+    if (!exigenciaId && !tipo) throw new BadRequestException("Diga qual documento é.");
+    return this.service.receberArquivo(token, { exigenciaId, tipo }, {
       buffer: arquivo.buffer,
       mimetype: arquivo.mimetype,
       size: arquivo.size,
@@ -148,7 +153,7 @@ export class ColetaPublicaController {
   ) {
     return this.service.assinarDocumento(
       token,
-      { tipo: body.tipo, nome: body.nome, cpf: body.cpf },
+      { exigenciaId: body.exigenciaId, tipo: body.tipo, nome: body.nome, cpf: body.cpf },
       ipDaRequisicao(req),
       req.headers["user-agent"],
     );

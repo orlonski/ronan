@@ -6,7 +6,9 @@ import {
   Logger,
   NotFoundException,
 } from "@nestjs/common";
+import type { OrigemDocumento } from "@prisma/client";
 import { TIPOS_DOCUMENTO_MOTORISTA, type TipoDocumentoMotorista } from "@ronan/shared-types";
+import { chaveDaExigencia, chaveDocumento } from "../common/chave-documento";
 import { comConta, comoSistema } from "../common/conta/conta-context";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadsService } from "../uploads/uploads.service";
@@ -236,44 +238,237 @@ export class AdmissaoService {
     );
 
     return comConta(c.contaId, async () => {
-      const exigidos = await this.exigidosPara(c.motoristaId);
-      const enviados = await this.prisma.motoristaDocumento.findMany({
-        where: { motoristaId: c.motoristaId },
-        select: { tipo: true },
-      });
-      const jaTem = new Set<string>(enviados.map((e) => e.tipo));
-
-      const assinaturas = await this.prisma.assinaturaDocumento.findMany({
-        where: { motoristaId: c.motoristaId },
-        select: { tipoDocumento: true, modo: true, assinadoEm: true },
-      });
-      const assinado = new Map(assinaturas.map((a) => [a.tipoDocumento, a]));
-
-      const documentos = exigidos.map((e) => ({
-        tipo: e.tipo,
-        titulo: e.titulo,
-        obrigatorio: e.obrigatorio,
-        recebido: jaTem.has(e.tipo),
-        exigeAssinatura: e.exigeAssinatura,
-        exigeIcpBrasil: e.exigeIcpBrasil,
-        assinado: assinado.has(e.tipo),
-        /** Só a data. Nome, CPF e hash são evidência, não coisa de tela pública. */
-        assinadoEm: assinado.get(e.tipo)?.assinadoEm ?? null,
-      }));
-
-      // "Pronto" agora é receber E assinar o que precisa de assinatura. Sem
-      // isso a página diria "recebemos todos" com um contrato por assinar.
-      const pendente = (d: (typeof documentos)[number]) =>
-        !d.recebido || (d.exigeAssinatura && !d.assinado);
-
+      const estado = await this.estadoDosDocumentos(c.motoristaId);
       return {
         motorista: c.motorista.nome,
         expiraEm: c.expiraEm,
-        documentos,
-        recebidos: documentos.filter((d) => !pendente(d)).length,
-        total: documentos.length,
+        // A página pública mostra o ESTADO, nunca o arquivo: sem nome de
+        // arquivo, sem storageKey, sem miniatura e sem a trilha da assinatura.
+        // Quem abre o link pode não ser o titular.
+        documentos: estado.documentos.map((d) => ({
+          exigenciaId: d.exigenciaId,
+          tipo: d.tipo,
+          titulo: d.titulo,
+          obrigatorio: d.obrigatorio,
+          recebido: d.recebido,
+          exigeAssinatura: d.exigeAssinatura,
+          exigeIcpBrasil: d.exigeIcpBrasil,
+          assinado: d.assinado,
+          /** Só a data. Nome, CPF e hash são evidência, não coisa de tela pública. */
+          assinadoEm: d.assinadoEm,
+        })),
+        recebidos: estado.prontos,
+        total: estado.total,
       };
     });
+  }
+
+  /**
+   * O ESTADO da admissão deste motorista — a verdade única.
+   *
+   * ⚠️ Três telas fazem a mesma pergunta ("o que falta?"): o link público, a
+   * ficha do motorista no painel e, em breve, o app. Enquanto cada uma
+   * calculava por conta própria, "faltam 3" significava coisas diferentes em
+   * cada lugar — e a que estava certa era sempre a que ninguém tinha aberto.
+   * Quem quiser um recorte diferente, recorta DEPOIS: o cálculo é aqui.
+   *
+   * Roda dentro da conta: quem chama é responsável pelo `comConta`.
+   */
+  async estadoDosDocumentos(motoristaId: string) {
+    const exigidos = await this.exigidosPara(motoristaId);
+
+    const [enviados, assinaturas] = await Promise.all([
+      this.prisma.motoristaDocumento.findMany({
+        where: { motoristaId },
+        select: {
+          chave: true,
+          nomeArquivo: true,
+          mimetype: true,
+          tamanho: true,
+          hashArquivo: true,
+          origem: true,
+          validade: true,
+          criadoEm: true,
+        },
+      }),
+      this.prisma.assinaturaDocumento.findMany({
+        where: { motoristaId },
+        select: { chave: true, modo: true, assinadoEm: true, hashArquivo: true },
+      }),
+    ]);
+    const porChave = new Map(enviados.map((e) => [e.chave, e]));
+    const assinadoPorChave = new Map(assinaturas.map((a) => [a.chave, a]));
+
+    const documentos = exigidos.map((e) => {
+      const chave = chaveDaExigencia(e.id);
+      const doc = porChave.get(chave) ?? null;
+      const ass = assinadoPorChave.get(chave) ?? null;
+
+      return {
+        exigenciaId: e.id,
+        chave,
+        tipo: e.tipo,
+        titulo: e.titulo,
+        obrigatorio: e.obrigatorio,
+        exigeAssinatura: e.exigeAssinatura,
+        exigeIcpBrasil: e.exigeIcpBrasil,
+
+        recebido: doc !== null,
+        recebidoEm: doc?.criadoEm ?? null,
+        nomeArquivo: doc?.nomeArquivo ?? null,
+        mimetype: doc?.mimetype ?? null,
+        tamanho: doc?.tamanho ?? null,
+        origem: doc?.origem ?? null,
+        validade: doc?.validade ?? null,
+
+        assinado: ass !== null,
+        assinadoEm: ass?.assinadoEm ?? null,
+        modoAssinatura: ass?.modo ?? null,
+        /**
+         * A assinatura ainda bate com o arquivo que está guardado?
+         *
+         * `null` = não dá pra dizer (documento anterior a 21/09/2026, quando o
+         * hash passou a ser persistido no upload). Nulo NUNCA deve ser lido
+         * como "confere" — a tela tem que dizer que não sabe.
+         */
+        assinaturaConfere:
+          ass === null || doc === null || !doc.hashArquivo
+            ? null
+            : doc.hashArquivo === ass.hashArquivo,
+      };
+    });
+
+    // "Pronto" é receber E assinar o que precisa de assinatura. Sem isso a
+    // página diria "recebemos todos" com um contrato por assinar.
+    const pendente = (d: (typeof documentos)[number]) =>
+      !d.recebido || (d.exigeAssinatura && !d.assinado);
+
+    return {
+      documentos,
+      prontos: documentos.filter((d) => !pendente(d)).length,
+      total: documentos.length,
+      faltamObrigatorios: documentos.filter((d) => d.obrigatorio && pendente(d)).length,
+    };
+  }
+
+  /**
+   * GRAVA um documento. A regra de negócio, sem token e sem HTTP.
+   *
+   * ⚠️ Existem três portas pra este mesmo ato — link público, painel e app — e
+   * elas JÁ divergiram: o link derrubava a assinatura ao trocar o arquivo e o
+   * painel não. O resultado era uma assinatura órfã apontando, pelo hash, pra
+   * um arquivo que o próprio painel tinha acabado de apagar do MinIO: o
+   * sistema afirmando que o motorista assinou um papel que não existe mais.
+   * Porta nova que não passe por aqui volta a criar uma quarta regra.
+   *
+   * Quem chama é responsável pelo `comConta` — e pelo `await` DENTRO dele.
+   */
+  async receberDocumento(e: {
+    motoristaId: string;
+    exigencia: { id: string; tipo: string; exigeAssinatura: boolean; exigeIcpBrasil: boolean } | null;
+    tipo: string;
+    arquivo: { buffer: Buffer; mimetype: string; size: number; originalname: string };
+    origem: OrigemDocumento;
+    conviteColetaId?: string | null;
+    validade?: Date | null;
+  }) {
+    const { motoristaId, exigencia, tipo, arquivo, origem } = e;
+    const chave = chaveDocumento({ exigenciaId: exigencia?.id ?? null, tipo });
+
+    const deteccao = detectarAssinaturaEmbutida(
+      arquivo.buffer,
+      arquivo.mimetype,
+      arquivo.originalname,
+    );
+
+    // `.p7s` que não carrega PKCS#7 é lixo (ou um arquivo renomeado pra furar
+    // a exigência). Recusa antes de guardar.
+    if (ehExtensaoAssinada(arquivo.originalname) && !deteccao.temAssinaturaEmbutida) {
+      throw new BadRequestException(
+        "Esse arquivo .p7s não tem assinatura digital dentro. Gere de novo no assinador.",
+      );
+    }
+    // Contratante que exige ICP não pode receber um escaneado em PDF: a pessoa
+    // salva, acha que assinou, e a transportadora só descobre na auditoria.
+    if (exigencia?.exigeIcpBrasil && !deteccao.temAssinaturaEmbutida) {
+      throw new BadRequestException(
+        "Este documento precisa vir assinado com certificado digital (ICP-Brasil). " +
+          "Assine em gov.br/assinatura-eletronica ou no seu assinador e mande o arquivo assinado (.p7s ou PDF assinado).",
+      );
+    }
+
+    const hash = hashDoArquivo(arquivo.buffer);
+
+    // O objeto anterior sai do MinIO antes do novo entrar: a key muda quando a
+    // extensão muda, e sem remover ficava lixo no bucket.
+    const anterior = await this.prisma.motoristaDocumento.findFirst({
+      where: { motoristaId, chave },
+      select: { storageKey: true },
+    });
+
+    const storageKey = await this.uploads.putMotoristaDocumento(
+      arquivo.buffer,
+      arquivo.mimetype,
+      motoristaId,
+      chave,
+      arquivo.originalname,
+    );
+    if (anterior && anterior.storageKey !== storageKey) {
+      await this.uploads.removeObject(anterior.storageKey).catch(() => {
+        // Objeto órfão no bucket não pode derrubar o envio do motorista: o que
+        // importa é o arquivo novo ter entrado.
+      });
+    }
+
+    const doc = await this.prisma.motoristaDocumento.upsert({
+      where: { motoristaId_chave: { motoristaId, chave } },
+      create: {
+        motoristaId,
+        tipo: tipo as never,
+        exigenciaId: exigencia?.id ?? null,
+        chave,
+        storageKey,
+        nomeArquivo: arquivo.originalname,
+        mimetype: arquivo.mimetype,
+        tamanho: arquivo.size,
+        hashArquivo: hash,
+        origem,
+        validade: e.validade ?? null,
+      },
+      update: {
+        tipo: tipo as never,
+        exigenciaId: exigencia?.id ?? null,
+        storageKey,
+        nomeArquivo: arquivo.originalname,
+        mimetype: arquivo.mimetype,
+        tamanho: arquivo.size,
+        hashArquivo: hash,
+        origem,
+        ...(e.validade === undefined ? {} : { validade: e.validade }),
+      },
+    });
+
+    // Trocar o arquivo DERRUBA a assinatura antiga. Ela apontava, pelo hash,
+    // pro papel anterior — mantê-la faria a tela dizer que a pessoa assinou um
+    // documento que ela nunca viu.
+    await this.prisma.assinaturaDocumento.deleteMany({ where: { motoristaId, chave } });
+
+    // Arquivo que já chega assinado dispensa o aceite: a assinatura é o
+    // próprio arquivo, e pedir pra digitar o nome depois seria teatro.
+    if (deteccao.temAssinaturaEmbutida && exigencia?.exigeAssinatura) {
+      await this.prisma.assinaturaDocumento.create({
+        data: {
+          motoristaId,
+          tipoDocumento: tipo,
+          chave,
+          modo: "ICP_BRASIL",
+          hashArquivo: hash,
+          conviteColetaId: e.conviteColetaId ?? null,
+        },
+      });
+    }
+
+    return { doc, assinaturaEmbutida: deteccao.temAssinaturaEmbutida };
   }
 
   /**
@@ -286,7 +481,7 @@ export class AdmissaoService {
    */
   async receberArquivo(
     token: string,
-    tipo: string,
+    alvo: { exigenciaId?: string; tipo?: string },
     arquivo: { buffer: Buffer; mimetype: string; size: number; originalname: string },
   ) {
     const c = await this.resolverToken(token);
@@ -300,98 +495,70 @@ export class AdmissaoService {
     if (arquivo.size > MAX_BYTES) {
       throw new BadRequestException("O arquivo é grande demais. O limite é 25 MB.");
     }
-    this.assertTipo(tipo);
 
     return comConta(c.contaId, async () => {
       // Só aceita o que ESTE motorista precisa mandar. Sem isto, um link
       // válido viraria upload livre de qualquer gaveta.
       const exigidos = await this.exigidosPara(c.motoristaId);
-      if (!exigidos.some((e) => e.tipo === tipo)) {
-        throw new BadRequestException("Este documento não é pedido aqui.");
-      }
+      const exigencia = this.acharExigencia(exigidos, alvo);
 
-      // Reenviar o mesmo tipo SUBSTITUI. É o "refazer a foto": a primeira saiu
-      // tremida, a segunda vale. O upsert abaixo já fazia isso no banco; o que
-      // faltava era a página oferecer o caminho.
-      const storageKey = await this.uploads.putMotoristaDocumento(
-        arquivo.buffer,
-        arquivo.mimetype,
-        c.motoristaId,
-        tipo,
-        arquivo.originalname,
-      );
-
-      const exigencia = exigidos.find((e) => e.tipo === tipo)!;
-
-      // Contratante que exige ICP não pode receber um escaneado em PDF: a
-      // pessoa salva, acha que assinou, e a transportadora só descobre na
-      // auditoria. Recusar aqui é o único momento em que dá pra explicar.
-      const deteccao = detectarAssinaturaEmbutida(
-        arquivo.buffer,
-        arquivo.mimetype,
-        arquivo.originalname,
-      );
-      // `.p7s` que não carrega PKCS#7 é lixo (ou um arquivo renomeado pra
-      // furar a exigência). Recusa antes de guardar.
-      if (ehExtensaoAssinada(arquivo.originalname) && !deteccao.temAssinaturaEmbutida) {
-        throw new BadRequestException(
-          "Esse arquivo .p7s não tem assinatura digital dentro. Gere de novo no assinador.",
-        );
-      }
-      if (exigencia.exigeIcpBrasil && !deteccao.temAssinaturaEmbutida) {
-        throw new BadRequestException(
-          "Este documento precisa vir assinado com certificado digital (ICP-Brasil). " +
-            "Assine em gov.br/assinatura-eletronica ou no seu assinador e mande o arquivo assinado (.p7s ou PDF assinado).",
-        );
-      }
-
-      await this.prisma.motoristaDocumento.upsert({
-        where: { motoristaId_tipo: { motoristaId: c.motoristaId, tipo: tipo as never } },
-        create: {
-          motoristaId: c.motoristaId,
-          tipo: tipo as never,
-          storageKey,
-          nomeArquivo: arquivo.originalname,
-          mimetype: arquivo.mimetype,
-          tamanho: arquivo.size,
-        },
-        update: {
-          storageKey,
-          nomeArquivo: arquivo.originalname,
-          mimetype: arquivo.mimetype,
-          tamanho: arquivo.size,
-        },
+      // Reenviar SUBSTITUI. É o "refazer a foto": a primeira saiu tremida, a
+      // segunda vale. O upsert lá dentro já fazia isso no banco; o que faltava
+      // era a página oferecer o caminho.
+      const { assinaturaEmbutida } = await this.receberDocumento({
+        motoristaId: c.motoristaId,
+        exigencia,
+        tipo: exigencia.tipo,
+        arquivo,
+        origem: "LINK",
+        conviteColetaId: c.id,
       });
-
-      // Reenviar o arquivo DERRUBA a assinatura antiga. Ela apontava, pelo
-      // hash, pro papel anterior — mantê-la faria a tela dizer que a pessoa
-      // assinou um documento que ela nunca viu.
-      await this.prisma.assinaturaDocumento.deleteMany({
-        where: { motoristaId: c.motoristaId, tipoDocumento: tipo },
-      });
-
-      // Arquivo que já chega assinado dispensa o aceite: a assinatura é o
-      // próprio arquivo, e pedir pra digitar o nome depois seria teatro.
-      if (deteccao.temAssinaturaEmbutida && exigencia.exigeAssinatura) {
-        await this.prisma.assinaturaDocumento.create({
-          data: {
-            motoristaId: c.motoristaId,
-            tipoDocumento: tipo,
-            modo: "ICP_BRASIL",
-            hashArquivo: hashDoArquivo(arquivo.buffer),
-            conviteColetaId: c.id,
-          },
-        });
-      }
 
       await this.prisma.conviteColeta.update({
         where: { id: c.id },
         data: { enviosFeitos: { increment: 1 } },
       });
 
-      this.log.log(`Documento ${tipo} recebido pelo link de coleta.`);
-      return { recebido: true, tipo, assinaturaEmbutida: deteccao.temAssinaturaEmbutida };
+      this.log.log(`Documento "${exigencia.titulo}" recebido pelo link de coleta.`);
+      return { recebido: true, exigenciaId: exigencia.id, tipo: exigencia.tipo, assinaturaEmbutida };
     });
+  }
+
+  /**
+   * Qual exigência o envio está atendendo.
+   *
+   * ⚠️ O `tipo` sozinho NÃO identifica mais nada — é aqui que o defeito antigo
+   * morava. `exigidos.find(e => e.tipo === tipo)` devolvia a primeira da lista,
+   * sem critério, e as exigências gerais vêm junto com as do contratante: uma
+   * "OS" geral sem assinatura ganhava da "OS" do contratante que exige ICP, e
+   * a validação simplesmente não rodava. O caminhão era barrado na portaria.
+   *
+   * Por isso o `exigenciaId` é o caminho normal, e o `tipo` só é aceito quando
+   * ele é inequívoco. Ambíguo, recusa e explica — nunca escolhe por sorteio.
+   */
+  private acharExigencia<T extends { id: string; tipo: string; titulo: string }>(
+    exigidos: T[],
+    alvo: { exigenciaId?: string; tipo?: string },
+  ): T {
+    if (alvo.exigenciaId) {
+      const e = exigidos.find((x) => x.id === alvo.exigenciaId);
+      if (!e) throw new BadRequestException("Este documento não é pedido aqui.");
+      return e;
+    }
+    if (!alvo.tipo) throw new BadRequestException("Diga qual documento é.");
+
+    this.assertTipo(alvo.tipo);
+    const candidatos = exigidos.filter((x) => x.tipo === alvo.tipo);
+    if (candidatos.length === 0) {
+      throw new BadRequestException("Este documento não é pedido aqui.");
+    }
+    if (candidatos.length > 1) {
+      throw new BadRequestException(
+        `Mais de um documento usa essa gaveta (${candidatos.map((c) => c.titulo).join(", ")}). ` +
+          "Atualize a página e escolha qual deles você está mandando.",
+      );
+    }
+    return candidatos[0];
   }
 
   /**
@@ -413,17 +580,15 @@ export class AdmissaoService {
    */
   async assinarDocumento(
     token: string,
-    dados: { tipo: string; nome: string; cpf: string },
+    dados: { exigenciaId?: string; tipo?: string; nome: string; cpf: string },
     ip?: string,
     userAgent?: string,
   ) {
     const c = await this.resolverToken(token);
-    this.assertTipo(dados.tipo);
 
     return comConta(c.contaId, async () => {
       const exigidos = await this.exigidosPara(c.motoristaId);
-      const exigencia = exigidos.find((e) => e.tipo === dados.tipo);
-      if (!exigencia) throw new BadRequestException("Este documento não é pedido aqui.");
+      const exigencia = this.acharExigencia(exigidos, dados);
       if (!exigencia.exigeAssinatura) {
         throw new BadRequestException("Este documento não precisa de assinatura.");
       }
@@ -433,8 +598,9 @@ export class AdmissaoService {
         );
       }
 
+      const chave = chaveDaExigencia(exigencia.id);
       const doc = await this.prisma.motoristaDocumento.findFirst({
-        where: { motoristaId: c.motoristaId, tipo: dados.tipo as never },
+        where: { motoristaId: c.motoristaId, chave },
         select: { storageKey: true },
       });
       if (!doc) throw new BadRequestException("Mande o arquivo antes de assinar.");
@@ -455,12 +621,11 @@ export class AdmissaoService {
       const buffer = await this.uploads.getObjectBuffer(doc.storageKey);
 
       const assinatura = await this.prisma.assinaturaDocumento.upsert({
-        where: {
-          motoristaId_tipoDocumento: { motoristaId: c.motoristaId, tipoDocumento: dados.tipo },
-        },
+        where: { motoristaId_chave: { motoristaId: c.motoristaId, chave } },
         create: {
           motoristaId: c.motoristaId,
-          tipoDocumento: dados.tipo,
+          tipoDocumento: exigencia.tipo,
+          chave,
           modo: "SIMPLES",
           nomeDeclarado: dados.nome,
           cpfDeclarado: so(dados.cpf),
@@ -481,8 +646,13 @@ export class AdmissaoService {
         },
       });
 
-      this.log.log(`Documento ${dados.tipo} assinado pelo link de coleta.`);
-      return { assinado: true, tipo: dados.tipo, assinadoEm: assinatura.assinadoEm };
+      this.log.log(`Documento "${exigencia.titulo}" assinado pelo link de coleta.`);
+      return {
+        assinado: true,
+        exigenciaId: exigencia.id,
+        tipo: exigencia.tipo,
+        assinadoEm: assinatura.assinadoEm,
+      };
     });
   }
 }

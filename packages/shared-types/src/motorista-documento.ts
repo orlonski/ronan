@@ -37,15 +37,51 @@ export const ROTULO_DOCUMENTO_MOTORISTA: Record<TipoDocumentoMotorista, string> 
   SEGURO_VEICULO: "Seguro do veículo",
 };
 
+/**
+ * A trilha do aceite eletrônico, do jeito que o escritório precisa ver.
+ *
+ * ⚠️ Isto já vinha da API e o painel jogava fora — o tipo simplesmente não
+ * tinha o campo. A evidência que dá valor jurídico à assinatura simples
+ * (quem declarou ser, o CPF, o IP, a hora e o hash do arquivo) existia e não
+ * era exibível em lugar nenhum do produto: numa audiência, alguém teria que
+ * consultar a API na mão.
+ */
+export const AssinaturaDocumentoOutput = z.object({
+  modo: z.enum(["SIMPLES", "ICP_BRASIL"]),
+  nome: z.string().nullable(),
+  cpf: z.string().nullable(),
+  ip: z.string().nullable(),
+  hash: z.string(),
+  assinadoEm: z.string(),
+  /**
+   * A assinatura ainda bate com o arquivo guardado?
+   *
+   * `null` = não dá pra dizer (documento anterior a 21/09/2026, quando o hash
+   * passou a ser gravado no upload). Nulo NÃO é "confere": a tela tem que
+   * dizer que não sabe.
+   */
+  confere: z.boolean().nullable(),
+  aviso: z.string().nullable(),
+});
+export type AssinaturaDocumentoOutput = z.infer<typeof AssinaturaDocumentoOutput>;
+
 export const MotoristaDocumentoOutput = z.object({
   id: z.string(),
   tipo: TipoDocumentoMotoristaSchema,
+  /** Como apontar pra ESTE documento nas rotas (`exig:<id>` ou `gaveta:<TIPO>`). */
+  chave: z.string(),
+  /** A exigência que ele atende; nulo quando é anexo avulso do painel. */
+  exigenciaId: z.string().nullable(),
+  /** O nome que o contratante deu ao papel — o rótulo da gaveta não distingue. */
+  titulo: z.string().nullable(),
+  origem: z.enum(["PAINEL", "LINK", "APP"]),
   nomeArquivo: z.string(),
   mimetype: z.string(),
   tamanho: z.number().int(),
   validade: z.string().nullable(),
   criadoEm: z.string(),
   alteradoEm: z.string(),
+  assinatura: AssinaturaDocumentoOutput.nullable().optional(),
 });
 export type MotoristaDocumentoOutput = z.infer<typeof MotoristaDocumentoOutput>;
 

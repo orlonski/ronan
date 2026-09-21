@@ -4,6 +4,12 @@ import { use, useRef, useState } from "react";
 import { Camera, Check, FileWarning } from "lucide-react";
 
 type DocumentoPedido = {
+  /**
+   * QUAL papel é este. É o `exigenciaId` que identifica o documento, nunca a
+   * gaveta (`tipo`): duas exigências podem cair na mesma gaveta, e mandar pela
+   * gaveta fazia o segundo arquivo apagar o primeiro em silêncio.
+   */
+  exigenciaId: string;
   tipo: string;
   titulo: string;
   obrigatorio: boolean;
@@ -107,7 +113,7 @@ export default function ColetaPage({ params }: { params: Promise<{ token: string
 
       <div className="mt-6 w-full space-y-3">
         {pagina.documentos.map((d) => (
-          <ItemDocumento key={d.tipo} token={token} item={d} onEnviado={() => void carregar()} />
+          <ItemDocumento key={d.exigenciaId} token={token} item={d} onEnviado={() => void carregar()} />
         ))}
       </div>
 
@@ -166,7 +172,12 @@ function ItemDocumento({
       const r = await fetch(`${API}/p/coleta/${token}/assinar`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ tipo: item.tipo, nome: nome.trim(), cpf, aceito: true }),
+        body: JSON.stringify({
+          exigenciaId: item.exigenciaId,
+          nome: nome.trim(),
+          cpf,
+          aceito: true,
+        }),
       });
       if (!r.ok) {
         const corpo = (await r.json().catch(() => null)) as { message?: string } | null;
@@ -186,7 +197,7 @@ function ItemDocumento({
     try {
       const fd = new FormData();
       fd.append("arquivo", file);
-      fd.append("tipo", item.tipo);
+      fd.append("exigenciaId", item.exigenciaId);
       const r = await fetch(`${API}/p/coleta/${token}`, { method: "POST", body: fd });
       if (!r.ok) {
         const corpo = (await r.json().catch(() => null)) as { message?: string } | null;

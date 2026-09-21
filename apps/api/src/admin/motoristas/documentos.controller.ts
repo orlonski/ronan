@@ -47,20 +47,43 @@ function assertTipo(tipo: string): TipoDocumentoMotorista {
   return tipo as TipoDocumentoMotorista;
 }
 
+/**
+ * O que a URL está apontando.
+ *
+ * As rotas são `/documentos/:tipo` desde sempre, e continuam aceitando a
+ * gaveta. Mas gaveta deixou de ser identidade quando duas exigências passaram
+ * a poder cair na mesma, então a chave (`exig:<id>`) também vale aqui — é como
+ * a tela aponta pro documento certo.
+ */
+function assertAlvo(raw: string): string {
+  if (raw.startsWith("exig:") || raw.startsWith("gaveta:")) return raw;
+  return assertTipo(raw);
+}
+
 function publicShape(doc: {
   id: string;
   tipo: TipoDocumentoMotorista;
+  chave: string;
+  exigenciaId: string | null;
+  origem: string;
   nomeArquivo: string;
   mimetype: string;
   tamanho: number;
   validade: Date | null;
   criadoEm: Date;
   alteradoEm: Date;
+  exigencia?: { id: string; titulo: string; exigeAssinatura: boolean } | null;
 }) {
   // storageKey nunca sai da API — só o controller precisa dele pra servir o arquivo.
   return {
     id: doc.id,
     tipo: doc.tipo,
+    /** Como apontar pra ESTE documento nas outras rotas. */
+    chave: doc.chave,
+    exigenciaId: doc.exigenciaId,
+    /** O nome que o contratante deu, quando o arquivo atende uma exigência. */
+    titulo: doc.exigencia?.titulo ?? null,
+    origem: doc.origem,
     nomeArquivo: doc.nomeArquivo,
     mimetype: doc.mimetype,
     tamanho: doc.tamanho,
@@ -94,7 +117,7 @@ export class MotoristasDocumentosController {
     const assinaturas = await this.prisma.assinaturaDocumento.findMany({
       where: { motoristaId },
       select: {
-        tipoDocumento: true,
+        chave: true,
         modo: true,
         nomeDeclarado: true,
         cpfDeclarado: true,
@@ -103,10 +126,10 @@ export class MotoristasDocumentosController {
         assinadoEm: true,
       },
     });
-    const porTipo = new Map(assinaturas.map((a) => [a.tipoDocumento, a]));
+    const porChave = new Map(assinaturas.map((a) => [a.chave, a]));
 
     return docs.map((d) => {
-      const a = porTipo.get(d.tipo);
+      const a = porChave.get(d.chave);
       return {
         ...publicShape(d),
         assinatura: a
@@ -117,6 +140,17 @@ export class MotoristasDocumentosController {
               ip: a.ip,
               hash: a.hashArquivo,
               assinadoEm: a.assinadoEm.toISOString(),
+              /**
+               * A assinatura ainda bate com o arquivo guardado?
+               *
+               * Este campo era PROMETIDO neste comentário e não existia — o
+               * comentário dizia que a tela avisaria quando o hash deixasse de
+               * bater, e não havia nada pra avisar. `null` = não dá pra dizer
+               * (documento anterior a 21/09/2026, quando o hash passou a ser
+               * gravado no upload), e nulo nunca deve ser lido como "confere".
+               */
+              confere:
+                d.hashArquivo == null ? null : d.hashArquivo === a.hashArquivo,
               /** ICP não é validado aqui — ver `AVISO_ICP`. */
               aviso: a.modo === "ICP_BRASIL" ? AVISO_ICP : null,
             }
@@ -136,7 +170,8 @@ export class MotoristasDocumentosController {
 
     const docs = await this.prisma.motoristaDocumento.findMany({
       where: { motoristaId },
-      orderBy: { tipo: "asc" },
+      include: { exigencia: { select: { titulo: true } } },
+      orderBy: [{ tipo: "asc" }, { criadoEm: "asc" }],
     });
     if (docs.length === 0) {
       throw new BadRequestException("Nenhum documento anexado pra esse motorista");
@@ -157,7 +192,11 @@ export class MotoristasDocumentosController {
     for (const doc of docs) {
       try {
         const stream = await this.uploads.getObjectStream(doc.storageKey);
-        const nomeNoZip = `${doc.tipo}-${doc.nomeArquivo}`;
+        // O título do contratante entra no nome porque a gaveta deixou de
+        // identificar o papel: dois arquivos em `REGISTRO_MOTORISTA` sairiam
+        // com o mesmo prefixo, e quem abre o zip é quem vai conferir a lista.
+        const rotulo = doc.exigencia?.titulo ? slug(doc.exigencia.titulo) : doc.tipo;
+        const nomeNoZip = `${rotulo}-${doc.nomeArquivo}`;
         archive.append(stream, { name: nomeNoZip });
       } catch {
         // Arquivo faltando no MinIO — pula em vez de matar o zip todo.
@@ -174,8 +213,7 @@ export class MotoristasDocumentosController {
     @Param("tipo") tipoRaw: string,
     @Res() res: Response,
   ) {
-    const tipo = assertTipo(tipoRaw);
-    const doc = await this.service.findOne(motoristaId, tipo);
+    const doc = await this.service.findOne(motoristaId, assertAlvo(tipoRaw));
     const stream = await this.uploads.getObjectStream(doc.storageKey);
     res.setHeader("Content-Type", doc.mimetype);
     res.setHeader(
@@ -193,6 +231,11 @@ export class MotoristasDocumentosController {
     @Param("tipo") tipoRaw: string,
     @UploadedFile() file: Express.Multer.File | undefined,
     @Body("validade") validade: string | undefined,
+    // Quando o escritório sobe o contrato que ELE emitiu (OS, ficha de EPI,
+    // contrato de experiência), o arquivo atende uma exigência do catálogo —
+    // e é isso que faz o documento aparecer como "falta assinar" pro motorista
+    // em vez de virar anexo solto numa gaveta.
+    @Body("exigenciaId") exigenciaId: string | undefined,
   ) {
     const tipo = assertTipo(tipoRaw);
     if (!file) throw new BadRequestException("Arquivo não enviado");
@@ -204,7 +247,13 @@ export class MotoristasDocumentosController {
     if (file.size > MAX_BYTES) {
       throw new BadRequestException("Arquivo maior que 25MB");
     }
-    const doc = await this.service.upload(motoristaId, tipo, file, validade ?? null);
+    const doc = await this.service.upload(
+      motoristaId,
+      tipo,
+      file,
+      validade ?? null,
+      exigenciaId ?? null,
+    );
     return publicShape(doc);
   }
 
@@ -216,8 +265,11 @@ export class MotoristasDocumentosController {
     @Body(new ZodValidationPipe(AtualizarValidadeDocumentoInput))
     body: AtualizarValidadeDocumentoInput,
   ) {
-    const tipo = assertTipo(tipoRaw);
-    const doc = await this.service.atualizarValidade(motoristaId, tipo, body.validade);
+    const doc = await this.service.atualizarValidade(
+      motoristaId,
+      assertAlvo(tipoRaw),
+      body.validade,
+    );
     return publicShape(doc);
   }
 
@@ -227,8 +279,7 @@ export class MotoristasDocumentosController {
     @Param("motoristaId") motoristaId: string,
     @Param("tipo") tipoRaw: string,
   ) {
-    const tipo = assertTipo(tipoRaw);
-    await this.service.remove(motoristaId, tipo);
+    await this.service.remove(motoristaId, assertAlvo(tipoRaw));
     return { ok: true };
   }
 }

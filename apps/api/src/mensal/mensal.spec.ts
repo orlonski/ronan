@@ -13,12 +13,21 @@ function servico(estado: {
   alocacaoAtiva?: Record<string, unknown> | null;
   registroExistente?: Record<string, unknown> | null;
   alocacao?: Record<string, unknown> | null;
+  /** O CPF só entra quando o teste é sobre a trava — ver `regimeAtual`. */
+  cpfMotorista?: string;
+  /** O que a trava parceiro × empregado diz sobre esta pessoa agora. */
+  regimeAtual?: { id: string; regime: "PARCEIRO" | "EMPREGADO" } | null;
 }) {
   const escritas: { tabela: string; op: string; data: Record<string, unknown> }[] = [];
   const prisma = {
     cliente: { findFirst: async () => ({ id: "cli1", nome: "Obra Centro" }) },
     motorista: {
-      findFirst: async () => ({ id: "mot1", nome: "Joao", status: "APROVADO" }),
+      findFirst: async () => ({
+        id: "mot1",
+        nome: "Joao",
+        status: "APROVADO",
+        cpf: estado.cpfMotorista,
+      }),
       findUnique: async () => ({ status: "APROVADO" }),
     },
     veiculo: { findFirst: async () => ({ id: "vei1", placa: "ABC1D23" }) },
@@ -45,7 +54,7 @@ function servico(estado: {
     },
     // A trava parceiro × empregado. Vazia aqui: estes testes são sobre a obra.
     regimeVigente: {
-      findFirst: async () => null,
+      findFirst: async () => estado.regimeAtual ?? null,
       create: async ({ data }: { data: Record<string, unknown> }) => {
         escritas.push({ tabela: "regime", op: "create", data });
         return data;
@@ -451,5 +460,39 @@ describe("léxico", () => {
         .replace(/\/\/.*$/gm, "");
       expect(proibidas.test(codigo), `${arquivo} usa palavra de vínculo`).toBe(false);
     }
+  });
+});
+
+/**
+ * ENCERRAR OBRA NÃO DEMITE NINGUÉM.
+ *
+ * `encerrarAlocacao` liberava a pessoa da trava incondicionalmente. Enquanto
+ * toda alocação era de parceiro, dava no mesmo — a chave que ela soltava era a
+ * que ela mesma tinha aberto. Com motorista registrado em carteira na obra,
+ * encerrar a obra passaria a apagar o vínculo de EMPREGO em silêncio, e o
+ * próximo `criarAlocacao` abriria um regime de parceiro por cima de um
+ * contrato de trabalho vivo — exatamente o desenho que a trava impede.
+ */
+describe("encerrar a obra e o vínculo de emprego são fatos diferentes", () => {
+  it("obra de parceiro: encerrar solta a chave, como sempre", async () => {
+    const { s, escritas } = servico({
+      alocacao: { id: "a1", ativa: true },
+      cpfMotorista: "11122233344",
+      regimeAtual: { id: "r1", regime: "PARCEIRO" },
+    });
+    await s.encerrarAlocacao("a1", "obra terminou");
+    expect(escritas.some((e) => e.tabela === "regime" && e.op === "update")).toBe(true);
+  });
+
+  it("motorista registrado: encerrar a obra NÃO mexe no regime dele", async () => {
+    const { s, escritas } = servico({
+      alocacao: { id: "a1", ativa: true },
+      cpfMotorista: "11122233344",
+      regimeAtual: { id: "r1", regime: "EMPREGADO" },
+    });
+    await s.encerrarAlocacao("a1", "obra terminou");
+
+    expect(escritas.some((e) => e.tabela === "alocacao")).toBe(true);
+    expect(escritas.some((e) => e.tabela === "regime")).toBe(false);
   });
 });

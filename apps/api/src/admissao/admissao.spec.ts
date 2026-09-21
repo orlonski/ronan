@@ -22,10 +22,32 @@ function servico(over: {
     exigeAssinatura?: boolean;
     exigeIcpBrasil?: boolean;
   }[];
-  enviados?: { tipo: string; storageKey?: string }[];
-  assinaturas?: { tipoDocumento: string; modo: string; assinadoEm: Date }[];
+  enviados?: { tipo: string; storageKey?: string; hashArquivo?: string }[];
+  assinaturas?: { tipoDocumento: string; modo: string; assinadoEm: Date; hashArquivo?: string }[];
   arquivoGuardado?: Buffer;
 } = {}) {
+  // As exigências ganham id aqui porque a IDENTIDADE do documento passou a ser
+  // a exigência, não a gaveta. Os testes continuam falando em "CNH"/"ASO" (que
+  // é como a operação fala) e o fake traduz pra chave, do mesmo jeito que o
+  // service faz no banco.
+  const exigidos = (
+    over.exigidos ?? [{ tipo: "CNH", titulo: "CNH", obrigatorio: true, empresaId: null }]
+  ).map((e, i) => ({ id: `e${i + 1}`, exigeAssinatura: false, exigeIcpBrasil: false, ...e }));
+  const chaveDoTipo = (tipo: string) => {
+    const e = exigidos.find((x) => x.tipo === tipo);
+    return e ? `exig:${e.id}` : `gaveta:${tipo}`;
+  };
+  const enviados = (over.enviados ?? []).map((d) => ({
+    ...d,
+    chave: chaveDoTipo(d.tipo),
+    storageKey: d.storageKey ?? "chave/no/minio",
+    hashArquivo: d.hashArquivo ?? null,
+  }));
+  const assinaturas = (over.assinaturas ?? []).map((a) => ({
+    ...a,
+    chave: chaveDoTipo(a.tipoDocumento),
+    hashArquivo: a.hashArquivo ?? null,
+  }));
   const escritas: { tabela: string; data: Record<string, unknown> }[] = [];
   const convite =
     over.convite === undefined
@@ -57,15 +79,15 @@ function servico(over: {
     },
     alocacaoObra: { findFirst: async () => null },
     documentoExigido: {
-      findMany: async () =>
-        over.exigidos ?? [{ tipo: "CNH", titulo: "CNH", obrigatorio: true, empresaId: null }],
+      findMany: async () => exigidos,
       findFirst: async () => null,
       create: async () => ({}),
       update: async () => ({}),
     },
     motoristaDocumento: {
-      findMany: async () => over.enviados ?? [],
-      findFirst: async () => over.enviados?.[0] ?? null,
+      findMany: async () => enviados,
+      findFirst: async ({ where }: { where?: { chave?: string } } = {}) =>
+        where?.chave ? (enviados.find((d) => d.chave === where.chave) ?? null) : (enviados[0] ?? null),
       upsert: async ({ create }: { create: Record<string, unknown> }) => {
         escritas.push({ tabela: "documento", data: create });
         return create;
@@ -73,7 +95,7 @@ function servico(over: {
     },
     motorista: { findFirst: async () => ({ id: "mot1", nome: "João", cpf: "11122233344" }) },
     assinaturaDocumento: {
-      findMany: async () => over.assinaturas ?? [],
+      findMany: async () => assinaturas,
       deleteMany: async () => ({ count: 0 }),
       create: async ({ data }: { data: Record<string, unknown> }) => {
         escritas.push({ tabela: "assinatura", data });
@@ -87,6 +109,7 @@ function servico(over: {
   };
   const uploads = {
     putMotoristaDocumento: async () => "chave/no/minio",
+    removeObject: async () => undefined,
     getObjectBuffer: async () => over.arquivoGuardado ?? Buffer.from("conteudo do papel"),
   };
   return { s: new AdmissaoService(prisma as never, uploads as never), escritas };
@@ -135,7 +158,7 @@ describe("o token é a única credencial", () => {
     const { s } = servico({
       convite: { id: "c1", contaId: "cnt1", motoristaId: "mot1", expiraEm: MES_PASSADO, revogadoEm: null },
     });
-    await expect(s.receberArquivo("tok", "CNH", ARQUIVO)).rejects.toThrow(
+    await expect(s.receberArquivo("tok", { tipo: "CNH" }, ARQUIVO)).rejects.toThrow(
       /não está mais disponível/i,
     );
   });
@@ -179,21 +202,21 @@ describe("o que entra pela porta pública", () => {
     const { s, escritas } = servico({
       exigidos: [{ tipo: "CNH", titulo: "CNH", obrigatorio: true }],
     });
-    await expect(s.receberArquivo("tok", "ASO", ARQUIVO)).rejects.toThrow(/não é pedido aqui/i);
+    await expect(s.receberArquivo("tok", { tipo: "ASO" }, ARQUIVO)).rejects.toThrow(/não é pedido aqui/i);
     expect(escritas.filter((e) => e.tabela === "documento")).toHaveLength(0);
   });
 
   it("recusa tipo de arquivo que não é foto nem PDF", async () => {
     const { s } = servico();
     await expect(
-      s.receberArquivo("tok", "CNH", { ...ARQUIVO, mimetype: "application/x-msdownload" }),
+      s.receberArquivo("tok", { tipo: "CNH" }, { ...ARQUIVO, mimetype: "application/x-msdownload" }),
     ).rejects.toThrow(/foto, um PDF ou o arquivo assinado/i);
   });
 
   it("recusa arquivo grande demais", async () => {
     const { s } = servico();
     await expect(
-      s.receberArquivo("tok", "CNH", { ...ARQUIVO, size: 30 * 1024 * 1024 }),
+      s.receberArquivo("tok", { tipo: "CNH" }, { ...ARQUIVO, size: 30 * 1024 * 1024 }),
     ).rejects.toThrow(/grande demais/i);
   });
 
@@ -211,13 +234,18 @@ describe("o que entra pela porta pública", () => {
         motorista: { nome: "João" },
       },
     });
-    await expect(s.receberArquivo("tok", "CNH", ARQUIVO)).rejects.toThrow(/arquivos demais/i);
+    await expect(s.receberArquivo("tok", { tipo: "CNH" }, ARQUIVO)).rejects.toThrow(/arquivos demais/i);
   });
 
   it("aceita o documento pedido e grava na gaveta certa", async () => {
     const { s, escritas } = servico();
-    const r = await s.receberArquivo("tok", "CNH", ARQUIVO);
-    expect(r).toEqual({ recebido: true, tipo: "CNH", assinaturaEmbutida: false });
+    const r = await s.receberArquivo("tok", { tipo: "CNH" }, ARQUIVO);
+    expect(r).toEqual({
+      recebido: true,
+      exigenciaId: "e1",
+      tipo: "CNH",
+      assinaturaEmbutida: false,
+    });
     const doc = escritas.find((e) => e.tabela === "documento");
     expect(doc?.data.tipo).toBe("CNH");
     expect(doc?.data.motoristaId).toBe("mot1");
@@ -310,7 +338,7 @@ describe("assinatura de documento", () => {
   it("documento com ICP recusa PDF escaneado, que é o erro que a pessoa comete", async () => {
     const { s } = servico({ exigidos: EXIGE_ICP });
     await expect(
-      s.receberArquivo("tok", "CNH", {
+      s.receberArquivo("tok", { tipo: "CNH" }, {
         buffer: Buffer.from("%PDF-1.4 nada assinado aqui"),
         mimetype: "application/pdf",
         size: 100,
@@ -321,7 +349,7 @@ describe("assinatura de documento", () => {
 
   it("documento com ICP aceita .p7s e já registra a assinatura", async () => {
     const { s, escritas } = servico({ exigidos: EXIGE_ICP });
-    const r = await s.receberArquivo("tok", "CNH", {
+    const r = await s.receberArquivo("tok", { tipo: "CNH" }, {
       buffer: P7S,
       mimetype: "application/pkcs7-signature",
       size: P7S.length,
@@ -337,12 +365,175 @@ describe("assinatura de documento", () => {
   it("recusa .p7s que não tem PKCS#7 dentro", async () => {
     const { s } = servico({ exigidos: EXIGE_ICP });
     await expect(
-      s.receberArquivo("tok", "CNH", {
+      s.receberArquivo("tok", { tipo: "CNH" }, {
         buffer: Buffer.from([0xff, 0xd8, 0xff]),
         mimetype: "application/octet-stream",
         size: 3,
         originalname: "cnh.jpg.p7s",
       }),
     ).rejects.toThrow(/não tem assinatura digital dentro/i);
+  });
+});
+
+/**
+ * A GAVETA NÃO É A IDENTIDADE DO DOCUMENTO.
+ *
+ * Um contratante pede 18 papéis; existem 12 gavetas. RG, CPF, CTPS e ficha de
+ * registro caem todos em `REGISTRO_MOTORISTA`. Enquanto o único era
+ * `(motoristaId, tipo)`, os quatro dividiam uma linha e um objeto no MinIO: o
+ * segundo envio apagava o primeiro, e a tela marcava os quatro como recebidos.
+ * Ninguém via erro nenhum, e o pacote só era desmentido na portaria da obra.
+ */
+describe("duas exigências na mesma gaveta são dois documentos", () => {
+  const MESMA_GAVETA = [
+    { tipo: "REGISTRO_MOTORISTA", titulo: "RG", obrigatorio: true, empresaId: null },
+    { tipo: "REGISTRO_MOTORISTA", titulo: "CTPS", obrigatorio: true, empresaId: null },
+  ];
+
+  it("cada uma tem a sua chave, e mandar uma não marca a outra como recebida", async () => {
+    const { s } = servico({
+      exigidos: MESMA_GAVETA,
+      // Só o RG (primeira exigência) chegou.
+      enviados: [{ tipo: "REGISTRO_MOTORISTA" }],
+    });
+    const r = await s.paginaPublica("tok");
+
+    const rg = r.documentos.find((d) => d.titulo === "RG")!;
+    const ctps = r.documentos.find((d) => d.titulo === "CTPS")!;
+    expect(rg.exigenciaId).not.toBe(ctps.exigenciaId);
+    expect(rg.recebido).toBe(true);
+    expect(ctps.recebido).toBe(false);
+    expect(r.recebidos).toBe(1);
+    expect(r.total).toBe(2);
+  });
+
+  it("o arquivo é guardado sob a chave da exigência, não sob a gaveta", async () => {
+    const { s, escritas } = servico({ exigidos: MESMA_GAVETA });
+    await s.receberArquivo("tok", { exigenciaId: "e2" }, ARQUIVO);
+
+    const doc = escritas.find((e) => e.tabela === "documento")!;
+    expect(doc.data.chave).toBe("exig:e2");
+    expect(doc.data.exigenciaId).toBe("e2");
+    // A gaveta continua gravada: é ela que o painel lista e o ZIP nomeia.
+    expect(doc.data.tipo).toBe("REGISTRO_MOTORISTA");
+  });
+
+  it("mandar SÓ a gaveta, quando ela é ambígua, é recusado com os nomes", async () => {
+    // Escolher uma das duas por sorteio é exatamente como o arquivo sumia.
+    const { s } = servico({ exigidos: MESMA_GAVETA });
+    await expect(
+      s.receberArquivo("tok", { tipo: "REGISTRO_MOTORISTA" }, ARQUIVO),
+    ).rejects.toThrow(/RG, CTPS/);
+  });
+
+  it("a gaveta continua valendo quando ela é inequívoca", async () => {
+    // Página aberta há dez minutos não pode quebrar.
+    const { s, escritas } = servico();
+    await s.receberArquivo("tok", { tipo: "CNH" }, ARQUIVO);
+    expect(escritas.find((e) => e.tabela === "documento")!.data.chave).toBe("exig:e1");
+  });
+
+  it("a exigência do contratante não é atropelada pela geral da mesma gaveta", async () => {
+    // Uma "OS" geral sem assinatura vinha antes na lista e ganhava do `find`,
+    // então a exigência de ICP do contratante simplesmente não rodava: a
+    // pessoa mandava um escaneado, o sistema aceitava, e a obra recusava o
+    // caminhão na portaria.
+    const { s } = servico({
+      exigidos: [
+        { tipo: "OS", titulo: "OS geral", obrigatorio: true, empresaId: null },
+        {
+          tipo: "OS",
+          titulo: "OS da obra",
+          obrigatorio: true,
+          empresaId: "emp1",
+          exigeAssinatura: true,
+          exigeIcpBrasil: true,
+        },
+      ],
+    });
+    await expect(s.receberArquivo("tok", { exigenciaId: "e2" }, ARQUIVO)).rejects.toThrow(
+      /certificado digital/i,
+    );
+  });
+
+  it("assinar aponta pra UMA exigência — assinar o contrato não carimba a ficha", async () => {
+    const { s, escritas } = servico({
+      exigidos: [
+        {
+          tipo: "REGISTRO_MOTORISTA",
+          titulo: "Contrato de experiência",
+          obrigatorio: true,
+          empresaId: null,
+          exigeAssinatura: true,
+        },
+        {
+          tipo: "REGISTRO_MOTORISTA",
+          titulo: "Ficha de registro",
+          obrigatorio: true,
+          empresaId: null,
+          exigeAssinatura: true,
+        },
+      ],
+      enviados: [{ tipo: "REGISTRO_MOTORISTA" }],
+    });
+    await s.assinarDocumento("tok", {
+      exigenciaId: "e1",
+      nome: "João da Silva",
+      cpf: "11122233344",
+    });
+    expect(escritas.find((e) => e.tabela === "assinatura")!.data.chave).toBe("exig:e1");
+  });
+});
+
+/**
+ * O hash guardado é o que permite dizer "esta assinatura ainda vale".
+ */
+describe("a assinatura confere com o arquivo que está lá", () => {
+  const EXIGE_ASSINATURA = [
+    {
+      tipo: "OS",
+      titulo: "Ordem de serviço",
+      obrigatorio: true,
+      empresaId: null,
+      exigeAssinatura: true,
+    },
+  ];
+
+  it("hashes iguais conferem", async () => {
+    const { s } = servico({
+      exigidos: EXIGE_ASSINATURA,
+      enviados: [{ tipo: "OS", hashArquivo: "abc" }],
+      assinaturas: [
+        { tipoDocumento: "OS", modo: "SIMPLES", assinadoEm: new Date(), hashArquivo: "abc" },
+      ],
+    });
+    const r = await s.estadoDosDocumentos("mot1");
+    expect(r.documentos[0].assinaturaConfere).toBe(true);
+  });
+
+  it("arquivo trocado por fora faz a assinatura DEIXAR de conferir", async () => {
+    const { s } = servico({
+      exigidos: EXIGE_ASSINATURA,
+      enviados: [{ tipo: "OS", hashArquivo: "novo" }],
+      assinaturas: [
+        { tipoDocumento: "OS", modo: "SIMPLES", assinadoEm: new Date(), hashArquivo: "velho" },
+      ],
+    });
+    const r = await s.estadoDosDocumentos("mot1");
+    expect(r.documentos[0].assinaturaConfere).toBe(false);
+  });
+
+  it("documento sem hash guardado responde NULO, nunca 'confere'", async () => {
+    // São as linhas anteriores a 21/09/2026. Dizer "confere" sem ter como
+    // conferir é a mentira que este campo existe pra não contar.
+    const { s } = servico({
+      exigidos: EXIGE_ASSINATURA,
+      enviados: [{ tipo: "OS" }],
+      assinaturas: [
+        { tipoDocumento: "OS", modo: "SIMPLES", assinadoEm: new Date(), hashArquivo: "velho" },
+      ],
+    });
+    const r = await s.estadoDosDocumentos("mot1");
+    expect(r.documentos[0].assinaturaConfere).toBeNull();
   });
 });

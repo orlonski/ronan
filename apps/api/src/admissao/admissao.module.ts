@@ -7,5 +7,8 @@ import { AdmissaoService } from "./admissao.service";
   imports: [UploadsModule],
   controllers: [AdmissaoAdminController, ColetaPublicaController],
   providers: [AdmissaoService],
+  // Exportado pro upload do painel usar a MESMA regra de gravação: era ele que
+  // divergia, deixando assinatura órfã ao trocar o arquivo.
+  exports: [AdmissaoService],
 })
 export class AdmissaoModule {}

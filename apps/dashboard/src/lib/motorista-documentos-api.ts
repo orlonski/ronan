@@ -10,6 +10,21 @@ function basePath(motoristaId: string) {
   return `/admin/motoristas/${motoristaId}/documentos`;
 }
 
+/**
+ * Como apontar pra UM documento.
+ *
+ * A rota é `/documentos/:tipo` desde sempre, mas a gaveta parou de identificar
+ * o arquivo quando duas exigências passaram a poder cair na mesma. Então o
+ * alvo é a `chave` do documento (`exig:<id>`) quando ele existe, e a gaveta
+ * quando ainda não há arquivo nenhum. O `encodeURIComponent` é obrigatório: a
+ * chave tem `:`.
+ */
+export type AlvoDocumento = string;
+
+function alvoPath(motoristaId: string, alvo: AlvoDocumento) {
+  return `${basePath(motoristaId)}/${encodeURIComponent(alvo)}`;
+}
+
 export function useDocumentosMotorista(motoristaId: string | undefined) {
   const token = useAuthToken();
   return useQuery({
@@ -28,10 +43,13 @@ export function useUploadDocumento(motoristaId: string) {
       tipo: TipoDocumentoMotorista;
       arquivo: File;
       validade?: string | null;
+      /** Quando o escritório sobe o papel que ELE emite (OS, contrato, EPI). */
+      exigenciaId?: string | null;
     }) => {
       const fd = new FormData();
       fd.append("arquivo", input.arquivo);
       if (input.validade) fd.append("validade", input.validade);
+      if (input.exigenciaId) fd.append("exigenciaId", input.exigenciaId);
       return fetchApi<MotoristaDocumentoOutput>(`${basePath(motoristaId)}/${input.tipo}`, {
         method: "POST",
         body: fd,
@@ -49,9 +67,9 @@ export function useAtualizarValidadeDocumento(motoristaId: string) {
   const token = useAuthToken();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { tipo: TipoDocumentoMotorista; validade: string | null }) =>
+    mutationFn: (input: { alvo: AlvoDocumento; validade: string | null }) =>
       fetchApi<MotoristaDocumentoOutput>(
-        `${basePath(motoristaId)}/${input.tipo}/validade`,
+        `${alvoPath(motoristaId, input.alvo)}/validade`,
         {
           method: "PATCH",
           body: JSON.stringify({ validade: input.validade }),
@@ -69,8 +87,8 @@ export function useRemoverDocumento(motoristaId: string) {
   const token = useAuthToken();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (tipo: TipoDocumentoMotorista) =>
-      fetchApi<{ ok: true }>(`${basePath(motoristaId)}/${tipo}`, {
+    mutationFn: (alvo: AlvoDocumento) =>
+      fetchApi<{ ok: true }>(alvoPath(motoristaId, alvo), {
         method: "DELETE",
         token,
       }),
@@ -88,10 +106,10 @@ export function useRemoverDocumento(motoristaId: string) {
  */
 export async function carregarPreviewDocumento(
   motoristaId: string,
-  tipo: TipoDocumentoMotorista,
+  alvo: AlvoDocumento,
   token: string,
 ): Promise<{ url: string; mimetype: string }> {
-  const res = await fetch(`${API_URL}${basePath(motoristaId)}/${tipo}/download`, {
+  const res = await fetch(`${API_URL}${alvoPath(motoristaId, alvo)}/download`, {
     headers: { authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Falha ao carregar arquivo (${res.status})`);
@@ -105,11 +123,11 @@ export async function carregarPreviewDocumento(
  */
 export async function baixarDocumento(
   motoristaId: string,
-  tipo: TipoDocumentoMotorista,
+  alvo: AlvoDocumento,
   token: string,
   fallbackName = "documento",
 ) {
-  const res = await fetch(`${API_URL}${basePath(motoristaId)}/${tipo}/download`, {
+  const res = await fetch(`${API_URL}${alvoPath(motoristaId, alvo)}/download`, {
     headers: { authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Falha ao baixar (${res.status})`);

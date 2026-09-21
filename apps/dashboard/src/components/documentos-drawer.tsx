@@ -39,10 +39,30 @@ export function DocumentosDrawer({ open, onClose, motoristaId, motoristaNome }: 
   const token = useAuthToken();
   const [baixandoZip, setBaixandoZip] = useState(false);
 
-  const porTipo = useMemo(() => {
-    const map = new Map<TipoDocumentoMotorista, MotoristaDocumentoOutput>();
-    for (const d of docs ?? []) map.set(d.tipo, d);
-    return map;
+  /**
+   * O que a lista mostra, e por quê nesta ordem.
+   *
+   * ⚠️ A tela iterava as 12 gavetas e pegava `porTipo.get(tipo)`. Isso parou de
+   * funcionar quando duas exigências passaram a poder cair na mesma gaveta: a
+   * segunda ficava invisível no painel, embora o arquivo estivesse lá. Então:
+   * primeiro TODO arquivo que existe (cada um com o nome que o contratante
+   * deu), depois as gavetas que continuam vazias — que é como se anexa um
+   * documento avulso.
+   */
+  const linhas = useMemo(() => {
+    const existentes = docs ?? [];
+    const comArquivo = existentes.map((d) => ({
+      chave: d.chave || `gaveta:${d.tipo}`,
+      tipo: d.tipo,
+      doc: d as MotoristaDocumentoOutput,
+    }));
+    const gavetasOcupadas = new Set(existentes.map((d) => d.tipo));
+    const vazias = TIPOS_DOCUMENTO_MOTORISTA.filter((t) => !gavetasOcupadas.has(t)).map((t) => ({
+      chave: `gaveta:${t}`,
+      tipo: t as TipoDocumentoMotorista,
+      doc: undefined,
+    }));
+    return [...comArquivo, ...vazias];
   }, [docs]);
 
   const temAlgum = (docs?.length ?? 0) > 0;
@@ -97,12 +117,12 @@ export function DocumentosDrawer({ open, onClose, motoristaId, motoristaNome }: 
               </p>
             ) : (
               <div className="space-y-2">
-                {TIPOS_DOCUMENTO_MOTORISTA.map((tipo) => (
+                {linhas.map((l) => (
                   <DocumentoRow
-                    key={tipo}
+                    key={l.chave}
                     motoristaId={motoristaId}
-                    tipo={tipo}
-                    doc={porTipo.get(tipo)}
+                    tipo={l.tipo}
+                    doc={l.doc}
                   />
                 ))}
               </div>

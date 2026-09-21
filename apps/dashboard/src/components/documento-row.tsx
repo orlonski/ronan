@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, AlertTriangle, CheckCircle2, Circle, Download, Eye, Loader2, Trash2, Upload } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, Circle, Download, Eye, Loader2, PenLine, Trash2, Upload } from "lucide-react";
 import {
   ROTULO_DOCUMENTO_MOTORISTA,
+  type AssinaturaDocumentoOutput,
   type MotoristaDocumentoOutput,
   type TipoDocumentoMotorista,
 } from "@ronan/shared-types";
@@ -34,6 +35,14 @@ type Props = {
 };
 
 export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
+  /**
+   * Como esta linha aponta pro arquivo dela.
+   *
+   * Com arquivo, é a `chave` dele — duas exigências podem cair na mesma
+   * gaveta, e mandar pela gaveta pegaria o documento errado. Sem arquivo, é a
+   * própria gaveta: é assim que se anexa um avulso.
+   */
+  const alvo = doc?.chave ?? tipo;
   const { confirmar, ConfirmDialog } = useConfirm();
   // Anexar/remover documento do motorista (CNH, CRLV) segue
   // `motoristas.documentos` — é PII, não é leitura.
@@ -79,7 +88,7 @@ export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
     const atual = (doc.validade ?? "").slice(0, 10);
     if (validadeLocal === atual) return;
     try {
-      await atualizarValidade.mutateAsync({ tipo, validade: validadeLocal || null });
+      await atualizarValidade.mutateAsync({ alvo, validade: validadeLocal || null });
     } catch (err) {
       toast.error("Não consegui salvar a validade", {
         description: err instanceof Error ? err.message : "Tente de novo em alguns instantes.",
@@ -90,7 +99,7 @@ export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
   async function onBaixar() {
     if (!doc || !token) return;
     try {
-      await baixarDocumento(motoristaId, tipo, token, doc.nomeArquivo);
+      await baixarDocumento(motoristaId, alvo, token, doc.nomeArquivo);
     } catch (err) {
       toast.error("Não consegui baixar o arquivo", {
         description: err instanceof Error ? err.message : "Tente de novo em alguns instantes.",
@@ -102,14 +111,14 @@ export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
     if (!doc) return;
     const ok = await confirmar({
       variant: "destructive",
-      title: `Remover ${ROTULO_DOCUMENTO_MOTORISTA[tipo]}?`,
+      title: `Remover ${doc.titulo ?? ROTULO_DOCUMENTO_MOTORISTA[tipo]}?`,
       description: "O arquivo sai do cadastro do motorista. Dá pra enviar de novo depois.",
       confirmLabel: "Remover documento",
       cancelLabel: "Voltar",
     });
     if (!ok) return;
     try {
-      await remover.mutateAsync(tipo);
+      await remover.mutateAsync(alvo);
     } catch (err) {
       toast.error("Não consegui remover o documento", {
         description: err instanceof Error ? err.message : "Tente de novo em alguns instantes.",
@@ -124,7 +133,17 @@ export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
         <StatusIcon status={status} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
-            <p className="font-medium text-sm">{ROTULO_DOCUMENTO_MOTORISTA[tipo]}</p>
+            <p className="font-medium text-sm">
+              {/* O nome que o CONTRATANTE deu vence o rótulo da gaveta: com
+                  RG e CTPS na mesma gaveta, "Registro do motorista" nas duas
+                  linhas não diz qual é qual. */}
+              {doc?.titulo ?? ROTULO_DOCUMENTO_MOTORISTA[tipo]}
+              {doc?.titulo && (
+                <span className="ml-1.5 text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
+                  {ROTULO_DOCUMENTO_MOTORISTA[tipo]}
+                </span>
+              )}
+            </p>
             <StatusBadge status={status} validade={doc?.validade ?? null} />
           </div>
           {doc ? (
@@ -134,6 +153,7 @@ export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
           ) : (
             <p className="mt-0.5 text-xs text-muted-foreground">Nenhum arquivo anexado</p>
           )}
+          {doc?.assinatura && <TrilhaAssinatura assinatura={doc.assinatura} />}
           <div className="mt-2 flex flex-wrap items-end gap-2">
             {doc && (
               <label className="space-y-0.5">
@@ -207,6 +227,68 @@ export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
           tipo={tipo}
           doc={doc}
         />
+      )}
+    </div>
+  );
+}
+
+/**
+ * A prova do aceite eletrônico.
+ *
+ * ⚠️ Isto já vinha da API e o painel jogava fora: o tipo do documento não
+ * tinha o campo `assinatura`, então nome, CPF, IP, hora e hash — que é o que
+ * dá valor jurídico à assinatura simples — não eram exibíveis em lugar nenhum
+ * do produto. E `confere` era prometido num comentário do backend e não
+ * existia, então um arquivo trocado por fora deixava a tela dizendo "assinado"
+ * sobre um papel que ninguém assinou.
+ */
+function TrilhaAssinatura({ assinatura }: { assinatura: AssinaturaDocumentoOutput }) {
+  const quebrada = assinatura.confere === false;
+  const desconhecida = assinatura.confere === null;
+  return (
+    <div
+      className={
+        quebrada
+          ? "mt-2 rounded-md border border-red-300 bg-red-50 p-2 dark:border-red-900 dark:bg-red-950/40"
+          : "mt-2 rounded-md border bg-muted/40 p-2"
+      }
+    >
+      <div className="flex items-center gap-1.5">
+        {quebrada ? (
+          <AlertCircle className="h-3.5 w-3.5 shrink-0 text-red-600" />
+        ) : (
+          <PenLine className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        )}
+        <span className="text-xs font-medium">
+          {quebrada
+            ? "A assinatura não confere com o arquivo que está aqui"
+            : assinatura.modo === "ICP_BRASIL"
+              ? "Assinado com certificado digital"
+              : "Assinado eletronicamente"}
+        </span>
+      </div>
+      <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+        {assinatura.nome && <>{assinatura.nome} · </>}
+        {assinatura.cpf && <>CPF {assinatura.cpf} · </>}
+        {new Date(assinatura.assinadoEm).toLocaleString("pt-BR")}
+        {assinatura.ip && <> · IP {assinatura.ip}</>}
+      </p>
+      <p className="mt-0.5 break-all font-mono text-[10px] text-muted-foreground">
+        SHA-256 {assinatura.hash}
+      </p>
+      {quebrada && (
+        <p className="mt-1 text-[11px] text-red-700 dark:text-red-400">
+          O arquivo foi trocado depois da assinatura. Peça pra assinar de novo — o que está
+          guardado agora ninguém assinou.
+        </p>
+      )}
+      {desconhecida && (
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Documento anterior ao registro do hash: não dá pra conferir se o arquivo é o mesmo.
+        </p>
+      )}
+      {assinatura.aviso && (
+        <p className="mt-1 text-[11px] text-muted-foreground">{assinatura.aviso}</p>
       )}
     </div>
   );
