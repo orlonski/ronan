@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useRef, useState } from "react";
+import { KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { X } from "lucide-react-native";
@@ -29,13 +29,28 @@ export default function CorrigirPontoScreen() {
   const [motivoCodigo, setMotivoCodigo] = useState("");
   const [motivo, setMotivo] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const scroll = useRef<ScrollView>(null);
+  const yDoTexto = useRef(0);
 
   const motivos = catalogo?.motivos ?? [];
+  const escolhido = motivos.find((m) => m.codigo === motivoCodigo);
+
+  /**
+   * O texto livre só é OBRIGATÓRIO quando o motivo escolhido não diz nada
+   * sozinho ("Outro motivo").
+   *
+   * Quem escolheu "Esqueci de registrar" já escreveu o motivo — pedir que
+   * digite de novo é cobrar redação de quem tem dificuldade de leitura, e o
+   * resultado previsível é um "esqueci" digitado no braço pra destravar o
+   * botão, que não acrescenta nada ao documento. Nos outros casos o campo
+   * fica, como detalhe opcional.
+   */
+  const exigeTexto = motivoCodigo === "OUTRO";
   const podeEnviar =
     /^\d{4}-\d{2}-\d{2}$/.test(dia) &&
     instante.length > 0 &&
     motivoCodigo.length > 0 &&
-    motivo.trim().length >= 3;
+    (!exigeTexto || motivo.trim().length >= 3);
 
   async function enviar() {
     setEnviando(true);
@@ -45,7 +60,11 @@ export default function CorrigirPontoScreen() {
         tipo: "INCLUSAO",
         instantePretendido: instante,
         motivoCodigo,
-        motivo: motivo.trim(),
+        // O servidor exige motivo escrito (mesma doutrina da alteração de
+        // km). Quando ela não digitou nada, o que vai é a descrição que ela
+        // ESCOLHEU — continua sendo uma razão em português no documento, não
+        // um código que só o sistema entende.
+        motivo: motivo.trim() || escolhido?.descricao || "Sem detalhe",
       });
       void showAlert({
         title: "Pedido enviado",
@@ -78,7 +97,16 @@ export default function CorrigirPontoScreen() {
         </View>
       </View>
 
-      <ScrollView contentContainerClassName="p-4 gap-4">
+      {/* ⚠️ `behavior="padding"` nas DUAS plataformas: no Android com
+          edge-to-edge (SDK 54) a janela não redimensiona sozinha, e sem isto
+          o teclado cobre o campo — a pessoa digita sem ver o que escreveu.
+          Lição já paga em outras telas deste app. */}
+      <KeyboardAvoidingView behavior="padding" className="flex-1" keyboardVerticalOffset={8}>
+      <ScrollView
+        ref={scroll}
+        contentContainerClassName="p-4 gap-4"
+        keyboardShouldPersistTaps="handled"
+      >
         <Text className="text-base text-foreground">
           Esqueceu de bater, ou bateu na hora errada? Diga o dia e a hora que deveria ter sido
           registrada. Quem decide é o escritório.
@@ -115,14 +143,21 @@ export default function CorrigirPontoScreen() {
           ))}
         </View>
 
-        <View className="gap-1">
-          <Text className="text-base font-semibold text-foreground">Explique com suas palavras</Text>
+        <View className="gap-1" onLayout={(e) => (yDoTexto.current = e.nativeEvent.layout.y)}>
+          <Text className="text-base font-semibold text-foreground">
+            {exigeTexto ? "Explique o que aconteceu" : "Quer detalhar? (opcional)"}
+          </Text>
           <TextInput
             className="min-h-24 rounded-xl border-2 border-border p-3 text-base text-foreground"
             multiline
             placeholder="Ex: o celular ficou sem bateria e eu só vi depois"
             value={motivo}
             onChangeText={setMotivo}
+            // Rolar até o campo ao focar: o `padding` abre espaço, mas quem
+            // leva a pessoa até lá é isto.
+            onFocus={() =>
+              setTimeout(() => scroll.current?.scrollTo({ y: yDoTexto.current, animated: true }), 250)
+            }
           />
         </View>
 
@@ -148,6 +183,7 @@ export default function CorrigirPontoScreen() {
           pediu, quem decidiu e por quê.
         </Text>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

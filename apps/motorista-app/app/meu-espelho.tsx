@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useRef, useState } from "react";
+import { KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -62,6 +62,7 @@ export default function MeuEspelhoScreen() {
   const [observacao, setObservacao] = useState("");
   const [naoConfere, setNaoConfere] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const scroll = useRef<ScrollView>(null);
 
   async function conferir(concorda: boolean) {
     if (!data) return;
@@ -115,7 +116,15 @@ export default function MeuEspelhoScreen() {
         </View>
       </View>
 
-      <ScrollView contentContainerClassName="p-4 gap-4">
+      {/* Mesmo motivo do `corrigir-ponto`: sem isto o teclado cobre o campo de
+          observação do "não confere" — e é justamente o texto que sustenta a
+          discordância dele. */}
+      <KeyboardAvoidingView behavior="padding" className="flex-1" keyboardVerticalOffset={8}>
+      <ScrollView
+        ref={scroll}
+        contentContainerClassName="p-4 gap-4"
+        keyboardShouldPersistTaps="handled"
+      >
         <View className="flex-row items-center justify-between">
           <Pressable
             accessibilityRole="button"
@@ -245,6 +254,7 @@ export default function MeuEspelhoScreen() {
                   placeholder="Escreva com suas palavras"
                   value={observacao}
                   onChangeText={setObservacao}
+                  onFocus={() => setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 250)}
                 />
                 <View className="flex-row gap-3">
                   <Pressable
@@ -300,6 +310,7 @@ export default function MeuEspelhoScreen() {
           </>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
