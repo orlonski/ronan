@@ -1642,9 +1642,21 @@ async function processEncerrarDiaria(item: PendingEncerrarDiaria): Promise<void>
  * Fila própria porque o item é grande e lento: misturado com os outros, um
  * upload de 20 MB em 4G ruim seguraria a batida de ponto atrás dele.
  */
+/**
+ * Documentos subindo AGORA, por exigência.
+ *
+ * ⚠️ Não dá pra usar o `status: "syncing"` do banco pra isto: trocar a foto
+ * grava um item novo no MESMO `clientId`, com status "pending", e o carimbo do
+ * envio em voo some. Sem esta trava as duas fotos do mesmo documento subiam ao
+ * mesmo tempo e quem chegasse por último ficava — podia ser a ANTIGA. O
+ * escritório receberia a foto tremida que ele acabou de substituir.
+ */
+const documentosEmVoo = new Set<string>();
+
 async function drainDocumentosAdmissao(): Promise<void> {
   const list = await listPendingDocumentosAdmissao();
   for (const item of list) {
+    if (documentosEmVoo.has(item.clientId)) continue;
     if (item.status === "syncing") continue;
     if (item.attempts >= MAX_ATTEMPTS) continue;
     if (!(await podeTentar("documento-admissao"))) return;
@@ -1671,7 +1683,10 @@ async function processDocumentoAdmissao(item: PendingDocumentoAdmissao): Promise
   }
 
   await upsertPendingDocumentoAdmissao({ ...item, status: "syncing", lastTriedAt: Date.now() });
+  documentosEmVoo.add(item.clientId);
   notify();
+  /** Ele trocou a foto enquanto esta subia: o item da fila já é outro. */
+  let substituido = false;
   try {
     const fd = new FormData();
     fd.append("arquivo", {
@@ -1688,30 +1703,62 @@ async function processDocumentoAdmissao(item: PendingDocumentoAdmissao): Promise
       outbox: true,
       timeoutMs: 120_000,
     });
-    await deletePendingDocumentoAdmissao(item.clientId);
+    substituido = !(await aindaEOMesmoEnvio(item));
+    // Tirar da fila SÓ o envio que subiu. Se ele trocou a foto no meio, quem
+    // está na fila agora é a nova, e apagá-la aqui a faria sumir sem nunca
+    // subir: a tela mostrando a foto nova, o escritório com a velha.
+    if (!substituido) await deletePendingDocumentoAdmissao(item.clientId);
     /**
-     * ⚠️ A cópia local NÃO é apagada agora, e o atraso é proposital.
+     * ⚠️ A CÓPIA LOCAL NÃO É APAGADA. Ela é o espelho do que ele mandou.
      *
-     * Assim que o item sai da fila, a tela volta a usar a imagem do servidor —
-     * mas monta a URL com o hash que ela ainda tem em memória, o ANTIGO. Por
-     * uma fração de segundo o servidor devolve a miniatura velha, e o que o
-     * motorista vê é: foto nova, pisca a antiga, foto nova. Parece defeito
-     * porque é.
+     * Apagar aqui obriga a tela a voltar pra imagem do servidor no instante em
+     * que o upload termina — e nesse instante ela ainda tem o hash antigo na
+     * memória, então pede a miniatura velha e recebe a velha. Foto nova, pisca
+     * a antiga, foto nova.
      *
-     * Segurando o arquivo por meio minuto, a tela continua desenhando a foto
-     * local até o hash novo chegar. O próximo envio da mesma exigência apaga
-     * esta cópia de qualquer jeito (o enqueue limpa o destino antes de copiar),
-     * então o pior caso é um arquivo por documento até o app reiniciar.
+     * Já tentei resolver com atraso (apagar 30 s depois) e foi PIOR: o nome do
+     * arquivo era fixo por exigência, então quem trocava a foto duas vezes
+     * seguidas via o apagador do primeiro envio levar o arquivo do segundo —
+     * a miniatura sumia e o upload morria em "o arquivo não está mais no
+     * aparelho". Relógio não sabe o que aconteceu no meio do caminho.
+     *
+     * Sem apagador não sobra corrida: a cópia vale até o PRÓXIMO envio daquele
+     * documento, que a apaga depois de gravar a nova (`enqueueDocumentoAdmissao`).
+     * O custo é um arquivo por documento no aparelho — doze fotos de ~400 KB no
+     * pior caso, contra a tela mentindo sobre o que ele acabou de mandar.
      */
-    setTimeout(() => {
-      void FileSystem.deleteAsync(item.arquivoUri, { idempotent: true }).catch(() => {});
-    }, 30_000);
   } catch (err) {
     const permanente = isErroPermanente(err);
     const base = proximoEstadoFalha(item, err, permanente, "documento-admissao");
-    await upsertPendingDocumentoAdmissao({ ...item, ...base });
+    // Só marca a falha se ainda for ESTE envio: senão o erro da foto velha
+    // carimbaria o item da nova, que nem tentou ainda.
+    substituido = !(await aindaEOMesmoEnvio(item));
+    if (!substituido) await upsertPendingDocumentoAdmissao({ ...item, ...base });
+  } finally {
+    documentosEmVoo.delete(item.clientId);
   }
+  // Trocou a foto no meio do envio? A nova esperou a trava sair, e é agora que
+  // ela sobe — por último, que é o certo.
+  if (substituido) void drain();
   notify();
+}
+
+/**
+ * O item na fila ainda é o envio que acabou de terminar?
+ *
+ * ⚠️ `clientId` é a EXIGÊNCIA: trocar a foto substitui o item no lugar, sem
+ * empilhar. Ótimo pra fila, péssimo pra quem terminou depois — quem trocou a
+ * foto com a primeira ainda subindo perdia a segunda em silêncio: a primeira
+ * voltava e apagava (ou sobrescrevia) o item da segunda, que nunca subia. Na
+ * tela ficava a foto nova e no escritório a velha, sem ninguém saber.
+ *
+ * `createdAt` é o carimbo do envio, então comparar por ele basta.
+ */
+async function aindaEOMesmoEnvio(item: PendingDocumentoAdmissao): Promise<boolean> {
+  const atual = (await listPendingDocumentosAdmissao()).find((x) => x.clientId === item.clientId);
+  // Sumiu = ele descartou na tela de Pendentes. Escrever de volta ressuscitaria
+  // o que ele acabou de jogar fora.
+  return atual !== undefined && atual.createdAt === item.createdAt;
 }
 
 /**
@@ -1728,7 +1775,7 @@ export async function enqueueDocumentoAdmissao(e: {
   mime: string;
   /** Nome original, quando veio dos arquivos do celular (PDF). */
   nome?: string;
-}): Promise<void> {
+}): Promise<string> {
   // A extensão sai do MIME, não do palpite: PDF guardado como `.jpg` faria o
   // servidor recusar o arquivo depois de ele já ter esperado dias na fila.
   const ext = e.mime.includes("pdf")
@@ -1738,13 +1785,40 @@ export async function enqueueDocumentoAdmissao(e: {
       : e.mime.includes("webp")
         ? "webp"
         : "jpg";
-  const destino = `${FileSystem.documentDirectory}doc-${e.exigenciaId}.${ext}`;
-  try {
-    await FileSystem.deleteAsync(destino, { idempotent: true });
-  } catch {
-    /* não existir é o caso normal */
-  }
+  /**
+   * ⚠️ NOME NOVO A CADA ENVIO, e é isso que faz a foto trocada APARECER.
+   *
+   * O nome era fixo por documento (`doc-<id>.jpg`). Gravar bytes diferentes no
+   * mesmo caminho não adianta: o cache de imagem do aparelho guarda por
+   * ENDEREÇO — Fresco no Android, RCTImageCache no iOS —, então a tela pedia
+   * o mesmo arquivo de sempre e recebia a foto antiga já decodificada. O
+   * motorista trocava a foto e via a anterior.
+   *
+   * Nome fixo também fazia dois envios seguidos brigarem pelo mesmo arquivo: a
+   * limpeza de um levava o arquivo do outro, e o upload morria em "o arquivo
+   * não está mais no aparelho".
+   */
+  const prefixo = `doc-${e.exigenciaId}-`;
+  const destino = `${FileSystem.documentDirectory}${prefixo}${Date.now()}.${ext}`;
   await FileSystem.copyAsync({ from: e.uri, to: destino });
+
+  // Só DEPOIS de a nova existir, as cópias anteriores deste documento saem —
+  // inclusive as de nome antigo e as de outra extensão (trocar foto por PDF
+  // deixava órfão). Nesta ordem nunca existe um instante sem nenhuma das duas,
+  // e é o único lugar que apaga: apagar depois do upload, por relógio, foi o
+  // que fez o envio de ontem levar o arquivo do de hoje.
+  try {
+    const dir = FileSystem.documentDirectory;
+    const nomes = dir ? await FileSystem.readDirectoryAsync(dir) : [];
+    for (const nome of nomes) {
+      const desteDoc = nome.startsWith(prefixo) || nome.startsWith(`doc-${e.exigenciaId}.`);
+      if (desteDoc && `${dir}${nome}` !== destino) {
+        await FileSystem.deleteAsync(`${dir}${nome}`, { idempotent: true }).catch(() => {});
+      }
+    }
+  } catch {
+    /* pasta indisponível: sobra um arquivo, que é melhor que não enfileirar */
+  }
 
   await upsertPendingDocumentoAdmissao({
     // clientId = exigência: refazer a foto TROCA o item, nunca empilha dois.
@@ -1759,6 +1833,9 @@ export async function enqueueDocumentoAdmissao(e: {
   });
   notify();
   void drain();
+  // O caminho volta pra quem chamou: a tela desenha ESTE arquivo, e não o da
+  // câmera (que mora em `Caches/` e o iOS apaga quando quer).
+  return destino;
 }
 
 async function drainPonto(): Promise<void> {

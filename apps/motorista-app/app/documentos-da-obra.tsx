@@ -126,6 +126,24 @@ export default function DocumentosDaObraScreen() {
   const filaPor = new Map(naFila.map((i) => [i.clientId, i]));
 
   /**
+   * O QUE ELE MANDOU NESTA SESSÃO manda na tela. Sem prazo, sem hash.
+   *
+   * ⚠️ Esta é a terceira tentativa de matar a piscada, e as duas primeiras
+   * erraram pelo mesmo motivo: tentaram adivinhar QUANDO parar de desenhar a
+   * foto local. "Saiu da fila" é cedo demais — nesse instante a tela monta a
+   * URL do servidor com o hash antigo e recebe a foto antiga. "Quando o hash
+   * mudar" parece certo e não é: reenviar o MESMO arquivo dá o mesmo hash, e
+   * aí a tela fica esperando uma mudança que nunca vem.
+   *
+   * Então não se espera nada. Se ele mandou a foto nesta sessão, a foto dele é
+   * o que aparece — é o arquivo que o servidor recebeu, então não há o que
+   * corrigir. Some quando ele fecha a tela, aí sim a miniatura vem do servidor.
+   *
+   * De quebra: zero download. A tela dele fica instantânea e não gasta o 4G.
+   */
+  const [mandadasAgora, setMandadasAgora] = useState<Record<string, string>>({});
+
+  /**
    * ⚠️ A CONTAGEM SAI DAQUI, e não do servidor.
    *
    * `faltamDele` vem da API, e a API só sabe do arquivo depois que ele SUBIU.
@@ -136,41 +154,58 @@ export default function DocumentosDaObraScreen() {
    * Descontando a fila local, o número cai NO TOQUE e o que está subindo
    * aparece separado, como o que é: em andamento, não pendência.
    */
-  const naFilaSemErro = (id: string) => {
+  const comErro = (id: string) => {
     const f = filaPor.get(id);
-    return f !== undefined && f.status !== "error" && f.attempts < 8;
+    return f !== undefined && (f.status === "error" || f.attempts >= 8);
   };
+  const naFilaSemErro = (id: string) => filaPor.get(id) !== undefined && !comErro(id);
+  /**
+   * Já saiu do aparelho nesta sessão.
+   *
+   * ⚠️ Tapa o buraco entre o upload terminar e a resposta nova chegar. Nesse
+   * intervalo o item já não está na fila e o servidor ainda responde o que
+   * sabia antes — e o número do topo SUBIA de volta. Ele acabava de mandar a
+   * foto e via "faltam 5" virar 4 e voltar pra 5.
+   */
+  const mandouAgora = (id: string) =>
+    mandadasAgora[id] !== undefined && filaPor.get(id) === undefined && !comErro(id);
   const faltaDele = (d: DocumentoDaObra) => {
-    if (naFilaSemErro(d.id)) return false;
-    if (filaPor.get(d.id)) return true; // na fila com erro: ele resolve
+    if (comErro(d.id)) return true; // na fila com erro: só ele resolve
+    if (naFilaSemErro(d.id) || mandouAgora(d.id)) return false;
     if (!d.recebido) return true;
     if (d.recusado) return true;
     return d.precisaAssinar && d.comoAssinar === "NO_APP" && d.assinado !== true;
   };
   const faltam = lista.filter(faltaDele).length;
   const subindo = lista.filter((d) => naFilaSemErro(d.id)).length;
-  const comOEscritorio = lista.filter(
-    (d) => !naFilaSemErro(d.id) && d.recebido && !d.recusado && d.conferido !== true,
-  ).length;
+  const comOEscritorio = lista.filter((d) => {
+    if (naFilaSemErro(d.id) || comErro(d.id)) return false;
+    // Depois que o servidor sabe do arquivo, é ele quem diz. `mandouAgora` só
+    // cobre a janela em que ele ainda não sabe.
+    if (d.recebido) return !d.recusado && d.conferido !== true;
+    return mandouAgora(d.id);
+  }).length;
 
   /** Qual documento está com a tela de envio aberta. */
   const [capturando, setCapturando] = useState<DocumentoDaObra | null>(null);
 
   /**
-   * A foto que ele acabou de mandar, e a versão que o servidor tinha ANTES.
+   * A ÚNICA porta de envio, pras duas origens (câmera/galeria e arquivo).
    *
-   * ⚠️ É o que mata a piscada. Quando o upload termina, o item sai da fila e a
-   * tela volta a usar a imagem do servidor — só que monta a URL com o hash que
-   * ainda tem em memória, o antigo. Por um instante o servidor devolve a
-   * miniatura velha: foto nova, pisca a antiga, foto nova.
-   *
-   * Guardando a versão de antes, a tela sabe exatamente quando parar de
-   * desenhar a foto local: quando o hash MUDAR, e não quando o item sair da
-   * fila. Até lá, a imagem na tela é a que ele escolheu.
+   * ⚠️ Era isto o defeito: a tela tinha duas chamadas de envio e só uma delas
+   * lembrava da foto. O caminho da câmera — o que o motorista usa — não
+   * lembrava, e a correção da piscada simplesmente não valia pra ele.
    */
-  const [recemEnviadas, setRecemEnviadas] = useState<
-    Record<string, { uri: string; versaoAntes: string | null }>
-  >({});
+  const mandar = async (alvo: DocumentoDaObra, arq: { uri: string; mime: string; nome?: string }) => {
+    const local = await enqueueDocumentoAdmissao({
+      exigenciaId: alvo.id,
+      titulo: alvo.titulo,
+      uri: arq.uri,
+      mime: arq.mime,
+      nome: arq.nome,
+    });
+    setMandadasAgora((p) => ({ ...p, [alvo.id]: local }));
+  };
 
   /**
    * Este build consegue abrir os ARQUIVOS do celular?
@@ -255,7 +290,7 @@ export default function DocumentosDaObraScreen() {
                   key={d.id}
                   doc={d}
                   fila={filaPor.get(d.id)}
-                  recemEnviada={recemEnviadas[d.id]}
+                  mandadaAgora={mandadasAgora[d.id]}
                   onMandar={() => setCapturando(d)}
                   onAssinar={() =>
                     router.push({
@@ -325,12 +360,7 @@ export default function DocumentosDaObraScreen() {
                     const alvo = capturando;
                     setCapturando(null);
                     if (!foto || !alvo) return;
-                    await enqueueDocumentoAdmissao({
-                      exigenciaId: alvo.id,
-                      titulo: alvo.titulo,
-                      uri: foto.uri,
-                      mime: foto.mime,
-                    });
+                    await mandar(alvo, { uri: foto.uri, mime: foto.mime });
                   }}
                   onCancel={() => {
                     /* fechar a câmera volta pra esta tela, não pra lista */
@@ -352,17 +382,7 @@ export default function DocumentosDaObraScreen() {
                     const arq = await escolherArquivo();
                     if (!arq || !alvo) return;
                     setCapturando(null);
-                    setRecemEnviadas((p) => ({
-                      ...p,
-                      [alvo.id]: { uri: arq.uri, versaoAntes: alvo.versao ?? null },
-                    }));
-                    await enqueueDocumentoAdmissao({
-                      exigenciaId: alvo.id,
-                      titulo: alvo.titulo,
-                      uri: arq.uri,
-                      mime: arq.mime,
-                      nome: arq.nome,
-                    });
+                    await mandar(alvo, { uri: arq.uri, mime: arq.mime, nome: arq.nome });
                   }}
                   accessibilityLabel="Escolher um arquivo do celular"
                 >
@@ -471,14 +491,14 @@ function Contagem({
 function ItemDocumento({
   doc,
   fila,
-  recemEnviada,
+  mandadaAgora,
   onMandar,
   onAssinar,
 }: {
   doc: DocumentoDaObra;
   fila?: { status: string; attempts: number; errorMsg?: string; arquivoUri?: string };
-  /** A foto que ele acabou de mandar, e a versão que o servidor tinha antes. */
-  recemEnviada?: { uri: string; versaoAntes: string | null };
+  /** O arquivo que ele mandou nesta sessão. Vence a imagem do servidor. */
+  mandadaAgora?: string;
   onMandar: () => void;
   onAssinar: () => void;
 }) {
@@ -487,27 +507,33 @@ function ItemDocumento({
   const vencendo = doc.recebido && validade === "VENCENDO";
   const faltaAssinar = doc.recebido && doc.precisaAssinar && !doc.assinado;
   const recusado = doc.recusado === true;
-  // ⚠️ "Chegou" não é "está certo": enquanto ninguém do escritório olhar, o
-  // item fica em espera, não em verde. O sistema não vê o que tem na foto.
-  const esperandoConferencia = doc.recebido && !recusado && doc.conferido !== true;
-  const pronto = doc.recebido && doc.conferido === true && !faltaAssinar && !vencido;
   // Na fila do aparelho: "guardado" enquanto tenta, "deu erro" quando o
   // servidor recusou de verdade e só ele pode resolver.
   const deuErro = fila?.status === "error" || (fila?.attempts ?? 0) >= 8;
   const esperandoSinal = fila !== undefined && !deuErro;
+  /**
+   * Saiu do aparelho nesta sessão: o servidor respondeu 2xx, senão o item
+   * continuaria na fila.
+   *
+   * ⚠️ Sem isto o item dizia "Ainda não chegou" com a foto que ele mandou
+   * desenhada do lado — o texto contradizendo o pixel. É a mesma janela em que
+   * o servidor ainda responde o que sabia antes do envio.
+   */
+  const jaFoi = mandadaAgora !== undefined && fila === undefined && !deuErro;
+  const chegou = doc.recebido || jaFoi;
+  // ⚠️ "Chegou" não é "está certo": enquanto ninguém do escritório olhar, o
+  // item fica em espera, não em verde. O sistema não vê o que tem na foto.
+  const esperandoConferencia = chegou && !recusado && doc.conferido !== true;
+  const pronto = doc.recebido && doc.conferido === true && !faltaAssinar && !vencido;
 
   /**
-   * Qual foto desenhar: a local vence até o servidor confirmar a TROCA.
+   * Qual foto desenhar: a DELE, se ele mandou alguma nesta sessão.
    *
-   * Não basta "está na fila": o item sai da fila no instante em que o upload
-   * termina, e a versão do servidor só chega na atualização seguinte. A janela
-   * entre os dois é a piscada da foto antiga.
+   * Vale enquanto a tela estiver aberta, sem prazo e sem comparar hash — ver o
+   * comentário de `mandadasAgora`. O que está na fila vem primeiro só porque é
+   * o caminho já copiado pro aparelho; os dois apontam pro mesmo arquivo.
    */
-  const aguardandoServidor =
-    recemEnviada !== undefined && (doc.versao ?? null) === recemEnviada.versaoAntes;
-  const uriDaFoto = deuErro
-    ? undefined
-    : (fila?.arquivoUri ?? (aguardandoServidor ? recemEnviada?.uri : undefined));
+  const uriDaFoto = deuErro ? undefined : (fila?.arquivoUri ?? mandadaAgora);
 
   const borda = vencido || recusado
     ? "border-destructive"
@@ -532,7 +558,16 @@ function ItemDocumento({
         {uriDaFoto ? (
           <MiniaturaDocumento
             exigenciaId={doc.id}
-            mimetype={doc.mimetype ?? null}
+            /**
+             * ⚠️ O tipo sai do ARQUIVO LOCAL, não do que o servidor sabe.
+             *
+             * `doc.mimetype` é nulo enquanto nada chegou lá — ou seja, no
+             * PRIMEIRO envio de cada documento. Como "nulo não é imagem", a
+             * tela desenhava o quadradinho de PDF no lugar da foto que ele
+             * tinha acabado de tirar. Ele mandava a CNH e via um ícone de
+             * arquivo: parecia que o app tinha mandado outra coisa.
+             */
+            mimetype={uriDaFoto.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg"}
             titulo={doc.titulo}
             uriLocal={uriDaFoto}
             // Spinner só enquanto está SUBINDO. Na janela entre o upload
@@ -644,7 +679,7 @@ function ItemDocumento({
               <PenLine size={20} color="#fff" />
               <Text className="ml-2 text-base font-bold text-white">Ler e assinar</Text>
             </Button>
-          ) : esperandoSinal ? null : !doc.recebido || vencido || deuErro || recusado ? (
+          ) : esperandoSinal ? null : !chegou || vencido || deuErro || recusado ? (
             <Button
               size="lg"
               className="mt-3"
