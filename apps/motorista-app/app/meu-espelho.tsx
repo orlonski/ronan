@@ -189,7 +189,11 @@ export default function MeuEspelhoScreen() {
               {/* Dia que ainda não chegou fica apagado e sem saldo: no dia 5
                   do mês, mostrar o resto como dívida seria mentira. */}
               {data.dias.map((d) => {
-                const pedido = data.correcoes.find(
+                // `filter`, não `find`: pedir a entrada E a saída do mesmo
+                // dia é o caso mais comum de quem esqueceu o celular em casa,
+                // e com `find` a segunda sumia da tela — dando a impressão de
+                // que não tinha sido enviada.
+                const pedidos = data.correcoes.filter(
                   (c) => c.dia === d.dia && c.status === "PENDENTE",
                 );
                 return (
@@ -200,27 +204,26 @@ export default function MeuEspelhoScreen() {
                   disabled={d.futuro || data.fechado}
                   onPress={() => router.push(`/corrigir-ponto?dia=${d.dia}`)}
                   className={`flex-row items-center gap-3 rounded-xl border px-3 py-2 active:opacity-70 ${
-                    pedido ? "border-warning/60 bg-warning/5" : "border-border"
+                    pedidos.length > 0 ? "border-warning/60 bg-warning/5" : "border-border"
                   } ${d.futuro ? "opacity-40" : ""}`}
                 >
                   <Text className="w-10 text-base font-semibold text-foreground">
                     {d.dia.slice(-2)}
                   </Text>
                   <View className="flex-1 flex-row flex-wrap gap-1">
-                    {d.pares.length === 0 && !pedido ? (
+                    {d.pares.length === 0 && pedidos.length === 0 ? (
                       <Text className="text-sm text-muted-foreground">—</Text>
                     ) : (
                       d.pares.map((p, i) => (
                         <Text key={i} className="text-sm text-foreground">
                           {/* Lado a lado: o que ELE bateu e o que foi incluído
                               por correção não podem sair iguais. */}
-                          <Text className={p.entradaIncluida ? "text-[#1D4ED8] font-semibold" : ""}>
+                          <Text className={p.entradaIncluida ? "font-bold text-[#1D4ED8]" : ""}>
                             {hora(p.entrada)}
-                            {p.entradaIncluida ? "*" : ""}
                           </Text>
                           {p.saida ? (
-                            <Text className={p.saidaIncluida ? "text-[#1D4ED8] font-semibold" : ""}>
-                              {`–${hora(p.saida)}${p.saidaIncluida ? "*" : ""}`}
+                            <Text className={p.saidaIncluida ? "font-bold text-[#1D4ED8]" : ""}>
+                              {`–${hora(p.saida)}`}
                             </Text>
                           ) : (
                             <Text> – ?</Text>
@@ -228,12 +231,17 @@ export default function MeuEspelhoScreen() {
                         </Text>
                       ))
                     )}
-                    {/* O horário PEDIDO aparece junto dos outros, do jeito que
-                        ele imaginou o dia — com a cara de "ainda não vale". */}
-                    {pedido?.instantePretendido && (
-                      <Text className="text-sm font-semibold text-[#B4501A]">
-                        {hora(pedido.instantePretendido)} (pedido)
-                      </Text>
+                    {/* Os horários PEDIDOS aparecem junto dos outros, do jeito
+                        que ele imaginou o dia. Sem rótulo entre parênteses: a
+                        cor e o negrito já dizem que é outra coisa, e texto
+                        dentro da linha de horas rouba a leitura do que
+                        importa — que são as horas. Quem explica é a legenda. */}
+                    {pedidos.map((c) =>
+                      c.instantePretendido ? (
+                        <Text key={c.id} className="text-sm font-bold text-[#B4501A]">
+                          {hora(c.instantePretendido)}
+                        </Text>
+                      ) : null,
                     )}
                     {d.alertas.length > 0 && (
                       <Text className="w-full text-xs text-[#B4501A]">
@@ -243,9 +251,11 @@ export default function MeuEspelhoScreen() {
                     {/* O pedido dele aparece NO DIA. Sem isto ele pede a
                         correção e o dia continua idêntico — parece que não
                         foi, e o caminho natural é pedir de novo. */}
-                    {pedido && (
+                    {pedidos.length > 0 && (
                       <Text className="w-full text-xs font-medium text-foreground">
-                        você pediu correção · esperando o escritório
+                        {pedidos.length === 1
+                          ? "você pediu correção · esperando o escritório"
+                          : `você pediu ${pedidos.length} correções · esperando o escritório`}
                       </Text>
                     )}
                   </View>
@@ -257,12 +267,31 @@ export default function MeuEspelhoScreen() {
                 </Pressable>
                 );
               })}
-              <Text className="mt-1 text-xs text-muted-foreground">
-                Toque num dia pra pedir correção dele.
-                {data.dias.some((d) => d.pares.some((p) => p.entradaIncluida || p.saidaIncluida))
-                  ? " O horário com * foi incluído por correção, não foi você que bateu."
-                  : ""}
-              </Text>
+              {/* A legenda só cita a cor que está na tela: explicar marca que
+                  não aparece é ruído. */}
+              <View className="mt-1 gap-0.5">
+                <Text className="text-xs text-muted-foreground">
+                  Toque num dia pra pedir correção dele.
+                </Text>
+                {data.correcoes.some((c) => c.status === "PENDENTE") && (
+                  <Text className="text-xs">
+                    <Text className="font-bold text-[#B4501A]">Laranja</Text>
+                    <Text className="text-muted-foreground">
+                      {" "}
+                      = horário que você pediu, esperando o escritório.
+                    </Text>
+                  </Text>
+                )}
+                {data.dias.some((d) => d.pares.some((p) => p.entradaIncluida || p.saidaIncluida)) && (
+                  <Text className="text-xs">
+                    <Text className="font-bold text-[#1D4ED8]">Azul</Text>
+                    <Text className="text-muted-foreground">
+                      {" "}
+                      = horário incluído por correção, não foi você que bateu.
+                    </Text>
+                  </Text>
+                )}
+              </View>
             </View>
 
             {/* MEUS PEDIDOS.
