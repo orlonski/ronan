@@ -188,12 +188,16 @@ export default function MeuEspelhoScreen() {
             <View className="gap-1">
               {/* Dia que ainda não chegou fica apagado e sem saldo: no dia 5
                   do mês, mostrar o resto como dívida seria mentira. */}
-              {data.dias.map((d) => (
+              {data.dias.map((d) => {
+                const pedido = data.correcoes.find(
+                  (c) => c.dia === d.dia && c.status === "PENDENTE",
+                );
+                return (
                 <View
                   key={d.dia}
-                  className={`flex-row items-center gap-3 rounded-xl border border-border px-3 py-2 ${
-                    d.futuro ? "opacity-40" : ""
-                  }`}
+                  className={`flex-row items-center gap-3 rounded-xl border px-3 py-2 ${
+                    pedido ? "border-warning/60 bg-warning/5" : "border-border"
+                  } ${d.futuro ? "opacity-40" : ""}`}
                 >
                   <Text className="w-10 text-base font-semibold text-foreground">
                     {d.dia.slice(-2)}
@@ -214,6 +218,14 @@ export default function MeuEspelhoScreen() {
                         {d.alertas.map((a) => TEXTO_ALERTA[a.codigo] ?? a.codigo).join(" · ")}
                       </Text>
                     )}
+                    {/* O pedido dele aparece NO DIA. Sem isto ele pede a
+                        correção e o dia continua idêntico — parece que não
+                        foi, e o caminho natural é pedir de novo. */}
+                    {pedido && (
+                      <Text className="w-full text-xs font-medium text-foreground">
+                        você pediu correção · esperando o escritório
+                      </Text>
+                    )}
                   </View>
                   <Text
                     className={`text-sm ${d.saldoMin < 0 ? "text-[#B4501A]" : "text-muted-foreground"}`}
@@ -221,8 +233,51 @@ export default function MeuEspelhoScreen() {
                     {d.futuro ? "" : hm(d.saldoMin)}
                   </Text>
                 </View>
-              ))}
+                );
+              })}
             </View>
+
+            {/* MEUS PEDIDOS.
+
+                ⚠️ Existe porque o pedido sumia da vista: ele mandava, a tela
+                não mudava em lugar nenhum, e não havia como saber se tinha
+                chegado nem o que o escritório decidiu. Pedir e não ver mais
+                nada é o pior tipo de silêncio pra este público — e é o motivo
+                mais provável de ele pedir a mesma coisa de novo. */}
+            {data.correcoes.length > 0 && (
+              <View className="gap-2">
+                <Text className="text-base font-semibold text-foreground">Meus pedidos</Text>
+                {data.correcoes.map((c) => (
+                  <View
+                    key={c.id}
+                    className={`gap-1 rounded-2xl border-2 p-3 ${
+                      c.status === "APROVADA"
+                        ? "border-success/50 bg-success/5"
+                        : c.status === "RECUSADA"
+                          ? "border-destructive/40 bg-destructive/5"
+                          : "border-warning/60 bg-warning/10"
+                    }`}
+                  >
+                    <Text className="text-base font-semibold text-foreground">
+                      Dia {c.dia.slice(-2)}
+                      {c.instantePretendido ? ` · ${hora(c.instantePretendido)}` : ""}
+                      {c.pedidoPor === "GESTOR" ? " · lançado pelo escritório" : ""}
+                    </Text>
+                    <Text className="text-sm text-foreground">{c.motivo}</Text>
+                    <Text className="text-sm font-medium text-foreground">
+                      {c.status === "PENDENTE"
+                        ? "Esperando o escritório decidir."
+                        : c.status === "APROVADA"
+                          ? "Aceito — já está contado no seu mês."
+                          : "Não foi aceito."}
+                    </Text>
+                    {c.status === "RECUSADA" && c.decisaoMotivo ? (
+                      <Text className="text-sm text-foreground">Motivo: {c.decisaoMotivo}</Text>
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+            )}
 
             {/* A conferência. Os DOIS botões, sempre — e o "não confere" não é
                 um botão escondido: é o que dá valor ao "confere". */}

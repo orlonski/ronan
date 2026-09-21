@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react-native";
 import { api } from "@/lib/api";
 import { showAlert } from "@/lib/alert";
@@ -20,8 +21,19 @@ import { hojeISO } from "@/lib/datetime";
  * O motivo escrito é obrigatório dos dois lados, mesma doutrina da alteração
  * de km: mexer no registro de alguém sem justificativa escrita não pode.
  */
+const MESES = [
+  "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+  "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+];
+
+function nomeDoMes(ymd: string): string {
+  const m = Number(ymd.split("-")[1]);
+  return MESES[(m || 1) - 1] ?? "";
+}
+
 export default function CorrigirPontoScreen() {
   const router = useRouter();
+  const qc = useQueryClient();
   const { data: catalogo } = useCatalogoPonto();
   const [dia, setDia] = useState(hojeISO());
   /** ISO completo do instante escolhido — o `HoraField` devolve assim. */
@@ -66,9 +78,12 @@ export default function CorrigirPontoScreen() {
         // um código que só o sistema entende.
         motivo: motivo.trim() || escolhido?.descricao || "Sem detalhe",
       });
+      // O espelho do mês do DIA CORRIGIDO — que pode não ser o mês atual.
+      // Sem invalidar, ele volta pra tela anterior e não vê o próprio pedido.
+      await qc.invalidateQueries({ queryKey: ["ponto-espelho"] });
       void showAlert({
         title: "Pedido enviado",
-        message: "O escritório vai analisar. Você vê o resultado no seu espelho.",
+        message: `O escritório vai analisar. Você acompanha em "Meu espelho", no mês de ${nomeDoMes(dia)} — o dia ${dia.slice(-2)} já aparece marcado como pedido.`,
       });
       router.back();
     } catch {

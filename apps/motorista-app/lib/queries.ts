@@ -806,7 +806,17 @@ export type EspelhoPontoApp = {
   fechado: boolean;
   hash: string;
   ciencia: { cienteEm: string; concorda: boolean; observacao: string | null } | null;
-  correcoes: { id: string; dia: string; tipo: string; motivo: string; status: string; cienciaEm: string | null }[];
+  correcoes: {
+    id: string;
+    dia: string;
+    tipo: "INCLUSAO" | "DESCONSIDERACAO" | "ANOTACAO";
+    motivo: string;
+    status: "PENDENTE" | "APROVADA" | "RECUSADA";
+    instantePretendido: string | null;
+    decisaoMotivo: string | null;
+    pedidoPor: "FUNCIONARIO" | "GESTOR";
+    cienciaEm: string | null;
+  }[];
 };
 
 export function useMeuEspelhoPonto(competencia: string, enabled = true) {
