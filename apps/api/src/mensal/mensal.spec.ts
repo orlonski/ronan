@@ -496,3 +496,67 @@ describe("encerrar a obra e o vínculo de emprego são fatos diferentes", () => 
     expect(escritas.some((e) => e.tabela === "regime")).toBe(false);
   });
 });
+
+/**
+ * O REGIME DA ALOCAÇÃO DERIVA DO VÍNCULO, NÃO DO FORMULÁRIO.
+ *
+ * ⚠️ `criarAlocacao` abria PARCEIRO incondicionalmente. Quem já era registrado
+ * em carteira batia num 409 dizendo "encerre o anterior antes de continuar" —
+ * mas o anterior é o CONTRATO DE TRABALHO dele, que ninguém encerra pra entrar
+ * numa obra. O escritório ficava sem conseguir alocar o próprio empregado, e a
+ * mensagem mandava ele fazer a única coisa que não podia fazer.
+ */
+describe("alocar quem já é registrado em carteira", () => {
+  it("empregado entra na obra como EMPREGADO, sem abrir regime de parceiro", async () => {
+    const { s, escritas } = servico({
+      alocacaoAtiva: null,
+      cpfMotorista: "11122233344",
+      regimeAtual: { id: "r1", regime: "EMPREGADO" },
+    });
+    await s.criarAlocacao(
+      { clienteId: "cli1", motoristaId: "mot1", veiculoId: "vei1", inicio: "2026-09-01" },
+      "u1",
+    );
+
+    const alocacao = escritas.find((e) => e.tabela === "alocacao")!;
+    expect(alocacao.data.regime).toBe("EMPREGADO");
+    // Nada de regime novo: a contratação já existe e é ela que manda.
+    expect(escritas.some((e) => e.tabela === "regime")).toBe(false);
+  });
+
+  it("sem vínculo nenhum, continua abrindo PARCEIRO — o caso de sempre", async () => {
+    const { s, escritas } = servico({
+      alocacaoAtiva: null,
+      cpfMotorista: "11122233344",
+      regimeAtual: null,
+    });
+    await s.criarAlocacao(
+      { clienteId: "cli1", motoristaId: "mot1", veiculoId: "vei1", inicio: "2026-09-01" },
+      "u1",
+    );
+    expect(escritas.find((e) => e.tabela === "alocacao")!.data.regime).toBe("PARCEIRO");
+    expect(escritas.some((e) => e.tabela === "regime" && e.op === "create")).toBe(true);
+  });
+
+  it("empregado com valor de diária é RECUSADO — salário não se paga por fora", async () => {
+    // Art. 457 §1º da CLT. O banco tem CHECK, mas a recusa vem do service pra
+    // virar uma frase que a pessoa entende.
+    const { s } = servico({
+      alocacaoAtiva: null,
+      cpfMotorista: "11122233344",
+      regimeAtual: { id: "r1", regime: "EMPREGADO" },
+    });
+    await expect(
+      s.criarAlocacao(
+        {
+          clienteId: "cli1",
+          motoristaId: "mot1",
+          veiculoId: "vei1",
+          inicio: "2026-09-01",
+          valorDiariaCentavos: 15000,
+        },
+        "u1",
+      ),
+    ).rejects.toThrow(/folha/i);
+  });
+});

@@ -6304,12 +6304,32 @@ model AlocacaoObra {
   inicio DateTime  @db.Date
   fim    DateTime? @db.Date
 
+  /// O QUE a pessoa é nesta obra.
+  ///
+  /// ⚠️ NÃO se escolhe no formulário: deriva do vínculo que já existe pro CPF
+  /// (`RegimeVigente`). Quem decide é o contrato de trabalho, não a tela de
+  /// alocação — e é isso que impede a alocação de abrir um regime de PARCEIRO
+  /// por cima de um contrato de emprego vivo, que era o 409 que barrava o
+  /// escritório sem caminho de saída.
+  ///
+  /// `PARCEIRO` é o caso original e continua abrindo o regime. `EMPREGADO`
+  /// não abre nada: ele só REFLETE a contratação que o módulo de ponto já fez,
+  /// e a alocação passa a significar o caminhão-dia à disposição da obra —
+  /// fato comercial com o contratante, não pagamento ao motorista.
+  regime RegimeTrabalho @default(PARCEIRO)
+
   /// A régua de pagamento DESTA alocação, quando ela difere da modalidade.
   ///
   /// Terceiro degrau da escada que já existe (`ModalidadeMotorista.valorDiaria`
   /// → `Motorista.valorDiaria` → aqui), e pelo mesmo motivo dos outros dois: o
   /// mesmo motorista em duas obras no mesmo período tem duas diárias
   /// diferentes, e sem isto o acerto nasce errado. Override é tudo-ou-nada.
+  ///
+  /// ⚠️ SEMPRE NULO quando `regime` é EMPREGADO, e o banco garante (CHECK na
+  /// migration). Valor por dia pago a empregado seu, fora da folha, é salário
+  /// por fora (art. 457 §1º da CLT) — e ainda serviria de prova de que a
+  /// "parceria" nunca foi parceria. Quem é registrado recebe por folha; a obra
+  /// mede caminhão-dia.
   valorDiaria Decimal? @db.Decimal(10, 2)
 
   /// False = acabou. Não se apaga alocação: os dias registrados apontam pra

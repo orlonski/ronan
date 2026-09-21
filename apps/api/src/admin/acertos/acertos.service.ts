@@ -182,7 +182,12 @@ export class AcertosService {
       this.prisma.registroPresenca.findMany({
         where: {
           data: { gte: inicio, lte: fim },
-          alocacao: { motoristaId: input.motoristaId },
+          // ⚠️ `regime: PARCEIRO` não é filtro de conveniência: dia de obra de
+          // quem é REGISTRADO EM CARTEIRA não pode virar linha de acerto. Ele
+          // recebe por folha, e pagar por dia por fora é salário por fora
+          // (art. 457 §1º da CLT) — o dia dele mede o caminhão pro contratante,
+          // não o pagamento dele.
+          alocacao: { motoristaId: input.motoristaId, regime: "PARCEIRO" },
         },
         select: {
           id: true,

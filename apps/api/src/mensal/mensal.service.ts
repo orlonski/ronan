@@ -153,18 +153,49 @@ export class MensalService {
     // impedir. O `await` mora DENTRO, porque a promise do Prisma é preguiçosa
     // e a trava de conta vive num AsyncLocalStorage.
     return this.prisma.$transaction(async (tx) => {
-      await abrirRegime(tx, {
-        cpf: motorista.cpf ?? "",
-        regime: "PARCEIRO",
-        inicio: dia(dados.inicio),
-        criadoPorId: usuarioId,
-      });
+      /**
+       * ⚠️ O REGIME DERIVA DO VÍNCULO QUE JÁ EXISTE, e não do formulário.
+       *
+       * Até 21/09/2026 isto abria PARCEIRO incondicionalmente, e quem já era
+       * registrado em carteira batia num 409 sem caminho de saída: "encerre o
+       * anterior antes de continuar" — mas o anterior é o contrato de trabalho
+       * dele, que ninguém encerra pra entrar numa obra. O escritório ficava
+       * sem conseguir alocar o próprio empregado.
+       *
+       * Com regime derivado: empregado entra na obra como EMPREGADO, e a
+       * alocação passa a significar o CAMINHÃO-DIA à disposição do contratante
+       * — fato comercial —, não um contrato de parceria que contradiria a
+       * carteira assinada dele.
+       */
+      const vivo = await regimeVivo(tx, motorista.cpf ?? "");
+      const regime = vivo?.regime ?? "PARCEIRO";
+
+      if (regime === "PARCEIRO") {
+        await abrirRegime(tx, {
+          cpf: motorista.cpf ?? "",
+          regime: "PARCEIRO",
+          inicio: dia(dados.inicio),
+          criadoPorId: usuarioId,
+        });
+      }
+
+      // Dinheiro por dia pra empregado é salário por fora (art. 457 §1º da
+      // CLT). O banco tem CHECK, mas a recusa vem aqui pra virar uma frase que
+      // a pessoa entende em vez de violação de constraint.
+      if (regime === "EMPREGADO" && dados.valorDiariaCentavos !== undefined) {
+        throw new BadRequestException(
+          `${motorista.nome} é registrado em carteira nesta empresa. ` +
+            "A diária não se paga por fora da folha — deixe o valor em branco: " +
+            "a obra mede o caminhão-dia, e o pagamento dele sai pela folha.",
+        );
+      }
 
       return tx.alocacaoObra.create({
         data: {
           clienteId: dados.clienteId,
           motoristaId: dados.motoristaId,
           veiculoId: dados.veiculoId,
+          regime,
           inicio: dia(dados.inicio),
           fim: dados.fim ? dia(dados.fim) : null,
           valorDiaria:
