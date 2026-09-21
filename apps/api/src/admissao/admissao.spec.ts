@@ -24,7 +24,15 @@ function servico(over: {
     publico?: "MENSAL" | "TODOS";
     comoAssinar?: "NAO" | "NO_APP" | "JA_ASSINADO";
   }[];
-  enviados?: { tipo: string; storageKey?: string; hashArquivo?: string; vistoEm?: Date }[];
+  enviados?: {
+    tipo: string;
+    storageKey?: string;
+    hashArquivo?: string;
+    vistoEm?: Date;
+    conferidoEm?: Date;
+    recusadoEm?: Date;
+    recusaMotivo?: string;
+  }[];
   assinaturas?: { tipoDocumento: string; modo: string; assinadoEm: Date; hashArquivo?: string }[];
   arquivoGuardado?: Buffer;
   alocacao?: Record<string, unknown> | null;
@@ -53,6 +61,9 @@ function servico(over: {
     storageKey: d.storageKey ?? "chave/no/minio",
     hashArquivo: d.hashArquivo ?? null,
     vistoEm: d.vistoEm ?? null,
+    conferidoEm: d.conferidoEm ?? null,
+    recusadoEm: d.recusadoEm ?? null,
+    recusaMotivo: d.recusaMotivo ?? null,
   }));
   const assinaturas = (over.assinaturas ?? []).map((a) => ({
     ...a,
@@ -108,10 +119,22 @@ function servico(over: {
         escritas.push({ tabela: "documento-update", data });
         return data;
       },
-      findFirst: async ({ where }: { where?: { chave?: string } } = {}) =>
-        where?.chave ? (enviados.find((d) => d.chave === where.chave) ?? null) : (enviados[0] ?? null),
-      upsert: async ({ create }: { create: Record<string, unknown> }) => {
-        escritas.push({ tabela: "documento", data: create });
+      findFirst: async ({ where }: { where?: { chave?: string } } = {}) => {
+        const achado = where?.chave
+          ? enviados.find((d) => d.chave === where.chave)
+          : enviados[0];
+        return achado ? { id: `doc-${achado.chave}`, ...achado } : null;
+      },
+      upsert: async ({
+        create,
+        update,
+      }: {
+        create: Record<string, unknown>;
+        update: Record<string, unknown>;
+      }) => {
+        // O `update` é o que importa pros testes de substituição: é ele que
+        // zera conferência e recusa quando chega arquivo novo.
+        escritas.push({ tabela: "documento", data: { ...create, ...update } });
         return create;
       },
     },
@@ -425,6 +448,8 @@ describe("duas exigências na mesma gaveta são dois documentos", () => {
     expect(rg.exigenciaId).not.toBe(ctps.exigenciaId);
     expect(rg.recebido).toBe(true);
     expect(ctps.recebido).toBe(false);
+    // `recebidos` aqui é CHEGOU: esta página serve a quem está mandando, e
+    // ele precisa saber o que já entrou pra não mandar duas vezes.
     expect(r.recebidos).toBe(1);
     expect(r.total).toBe(2);
   });
@@ -587,8 +612,13 @@ describe("o que o motorista vê no app", () => {
 
     expect(r.obra).toBe("Obra Centro");
     expect(r.total).toBe(2);
-    expect(r.prontos).toBe(1);
-    expect(r.faltamObrigatorios).toBe(1);
+    // A CNH chegou mas ninguém conferiu: não é tarefa dele, e também não é
+    // "pronto". São duas contas diferentes, e é essa distinção que impede a
+    // tela de dizer que acabou quando não acabou.
+    expect(r.prontos).toBe(0);
+    expect(r.faltamDele).toBe(1);
+    expect(r.comOEscritorio).toBe(1);
+    expect(r.faltamObrigatorios).toBe(2);
   });
 
   it("NÃO manda pro app a trilha da assinatura nem a chave do arquivo", async () => {
@@ -842,5 +872,85 @@ describe("o papel que chega assinado de fora", () => {
     // "Só vale digital" não quer dizer nada pro aceite feito aqui dentro.
     expect(dados.exigeIcpBrasil).toBe(false);
     expect(dados.exigeAssinatura).toBe(true);
+  });
+});
+
+/**
+ * CHEGAR NÃO É ESTAR CERTO.
+ *
+ * ⚠️ O defeito que este bloco fecha: o sistema não vê o que está DENTRO de uma
+ * foto. Sem conferência humana, "chegou" virava "conferido" por omissão — a
+ * ficha mostrava visto verde, a contagem do app zerava sozinha, e o motorista
+ * ia pra obra achando que estava resolvido. Testado com uma foto qualquer, que
+ * é exatamente como o defeito apareceu.
+ */
+describe("a conferência é de gente, não do sistema", () => {
+  const UM = [
+    { tipo: "CNH", titulo: "CNH", obrigatorio: true, empresaId: null, publico: "TODOS" as const },
+  ];
+
+  it("documento que chegou e ninguém olhou NÃO conta como pronto", async () => {
+    const { s } = servico({ exigidos: UM, enviados: [{ tipo: "CNH" }] });
+    const r = await s.estadoDosDocumentos("mot1");
+
+    expect(r.documentos[0].recebido).toBe(true);
+    expect(r.documentos[0].conferido).toBe(false);
+    expect(r.prontos).toBe(0);
+  });
+
+  it("mas também NÃO conta como tarefa dele — quem tem que agir é o escritório", async () => {
+    // Contar como "falta" mandaria ele resolver o que não tem como resolver.
+    const { s } = servico({ exigidos: UM, enviados: [{ tipo: "CNH" }] });
+    const r = await s.estadoDosDocumentos("mot1");
+
+    expect(r.faltamDele).toBe(0);
+    expect(r.comOEscritorio).toBe(1);
+  });
+
+  it("depois de conferido, aí sim está pronto", async () => {
+    const { s } = servico({
+      exigidos: UM,
+      enviados: [{ tipo: "CNH", conferidoEm: new Date() }],
+    });
+    const r = await s.estadoDosDocumentos("mot1");
+    expect(r.prontos).toBe(1);
+    expect(r.comOEscritorio).toBe(0);
+  });
+
+  it("recusado volta a ser tarefa DELE, com o motivo junto", async () => {
+    const { s } = servico({
+      exigidos: UM,
+      enviados: [
+        { tipo: "CNH", recusadoEm: new Date(), recusaMotivo: "a foto está cortada" },
+      ],
+    });
+    const r = await s.estadoDosDocumentos("mot1");
+
+    expect(r.faltamDele).toBe(1);
+    expect(r.documentos[0].recusado).toBe(true);
+    // O motivo viaja junto: sem ele, "mande de novo" faz a pessoa repetir o
+    // mesmo erro.
+    expect(r.documentos[0].recusaMotivo).toBe("a foto está cortada");
+  });
+
+  it("recusar sem motivo é recusado", async () => {
+    const { s } = servico({ exigidos: UM, enviados: [{ tipo: "CNH" }] });
+    await expect(s.recusarDocumento("mot1", "e1", "  ", "u1")).rejects.toThrow(
+      /escreva o que houve/i,
+    );
+  });
+
+  it("arquivo novo apaga a conferência anterior", async () => {
+    // Quem conferiu olhou O ARQUIVO ANTERIOR. Manter o visto faria a ficha
+    // dizer que alguém aprovou um papel que ninguém viu.
+    const { s, escritas } = servico({
+      exigidos: UM,
+      enviados: [{ tipo: "CNH", conferidoEm: new Date() }],
+    });
+    await s.receberDoMotorista("mot1", "e1", ARQUIVO);
+
+    const up = escritas.find((e) => e.tabela === "documento")!.data;
+    expect(up.conferidoEm).toBeNull();
+    expect(up.recusadoEm).toBeNull();
   });
 });

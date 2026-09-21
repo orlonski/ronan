@@ -81,6 +81,16 @@ export const MotoristaDocumentoOutput = z.object({
   validade: z.string().nullable(),
   criadoEm: z.string(),
   alteradoEm: z.string(),
+  /**
+   * A CONFERÊNCIA HUMANA.
+   *
+   * Os dois nulos = chegou e ninguém olhou ainda, que é o estado normal de
+   * quem acabou de receber. O sistema não vê o que está dentro da foto, então
+   * "chegou" não pode virar "está certo" sozinho.
+   */
+  conferidoEm: z.string().nullable().optional(),
+  recusadoEm: z.string().nullable().optional(),
+  recusaMotivo: z.string().nullable().optional(),
   assinatura: AssinaturaDocumentoOutput.nullable().optional(),
 });
 export type MotoristaDocumentoOutput = z.infer<typeof MotoristaDocumentoOutput>;

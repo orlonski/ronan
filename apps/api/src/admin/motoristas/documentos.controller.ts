@@ -19,6 +19,7 @@ import archiver from "archiver";
 import type { Response } from "express";
 import {
   AtualizarValidadeDocumentoInput,
+  RecusarDocumentoInput,
   TIPOS_DOCUMENTO_MOTORISTA,
   type TipoDocumentoMotorista,
 } from "@ronan/shared-types";
@@ -27,6 +28,9 @@ import { RolesGuard } from "../../auth/guards/roles.guard";
 import { RequerPermissao } from "../../auth/decorators/requer-permissao.decorator";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { AVISO_ICP } from "../../admissao/assinatura-arquivo";
+import { AdmissaoService } from "../../admissao/admissao.service";
+import { CurrentUser } from "../../auth/decorators/current-user.decorator";
+import type { AuthAdminUser } from "../../auth/types";
 import { PrismaService } from "../../prisma/prisma.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { MotoristasDocumentosService } from "./documentos.service";
@@ -72,6 +76,9 @@ function publicShape(doc: {
   validade: Date | null;
   criadoEm: Date;
   alteradoEm: Date;
+  conferidoEm?: Date | null;
+  recusadoEm?: Date | null;
+  recusaMotivo?: string | null;
   exigencia?: { id: string; titulo: string; exigeAssinatura: boolean } | null;
 }) {
   // storageKey nunca sai da API — só o controller precisa dele pra servir o arquivo.
@@ -90,6 +97,10 @@ function publicShape(doc: {
     validade: doc.validade ? doc.validade.toISOString().slice(0, 10) : null,
     criadoEm: doc.criadoEm.toISOString(),
     alteradoEm: doc.alteradoEm.toISOString(),
+    /** Ninguém olhou ainda = os dois nulos. É o estado normal de quem chegou. */
+    conferidoEm: doc.conferidoEm?.toISOString() ?? null,
+    recusadoEm: doc.recusadoEm?.toISOString() ?? null,
+    recusaMotivo: doc.recusaMotivo ?? null,
   };
 }
 
@@ -103,6 +114,7 @@ export class MotoristasDocumentosController {
     private readonly service: MotoristasDocumentosService,
     private readonly prisma: PrismaService,
     private readonly uploads: UploadsService,
+    private readonly admissao: AdmissaoService,
   ) {}
 
   @RequerPermissao("motoristas.documentos")
@@ -271,6 +283,43 @@ export class MotoristasDocumentosController {
       body.validade,
     );
     return publicShape(doc);
+  }
+
+  /**
+   * "Eu olhei e está certo."
+   *
+   * ⚠️ Não é burocracia: o sistema não vê o que está dentro da foto. Sem este
+   * ato, "chegou" virava "conferido" por omissão — a ficha mostrava visto
+   * verde, a contagem do app zerava, e o motorista ia pra obra achando que
+   * estava resolvido. Fica escrito quem conferiu.
+   */
+  @RequerPermissao("motoristas.documentos")
+  @Post(":tipo/conferir")
+  async conferir(
+    @Param("motoristaId") motoristaId: string,
+    @Param("tipo") tipoRaw: string,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    const doc = await this.admissao.conferirDocumento(motoristaId, assertAlvo(tipoRaw), user.id);
+    return { ok: true, conferidoEm: doc.conferidoEm };
+  }
+
+  /** "Não serve, e por isto." O motivo aparece no app dele. */
+  @RequerPermissao("motoristas.documentos")
+  @Post(":tipo/recusar")
+  async recusar(
+    @Param("motoristaId") motoristaId: string,
+    @Param("tipo") tipoRaw: string,
+    @Body(new ZodValidationPipe(RecusarDocumentoInput)) body: RecusarDocumentoInput,
+    @CurrentUser() user: AuthAdminUser,
+  ) {
+    const doc = await this.admissao.recusarDocumento(
+      motoristaId,
+      assertAlvo(tipoRaw),
+      body.motivo,
+      user.id,
+    );
+    return { ok: true, recusadoEm: doc.recusadoEm };
   }
 
   @RequerPermissao("motoristas.documentos")

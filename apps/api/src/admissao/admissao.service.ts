@@ -324,9 +324,28 @@ export class AdmissaoService {
           assinado: d.assinado,
           /** Só a data. Nome, CPF e hash são evidência, não coisa de tela pública. */
           assinadoEm: d.assinadoEm,
+          /** Devolvido pelo escritório, com o motivo — quem abre o link precisa saber. */
+          recusado: d.recusado,
+          recusaMotivo: d.recusaMotivo,
         })),
-        recebidos: estado.prontos,
+        /**
+         * ⚠️ Aqui é CHEGOU, não "conferido" — e a diferença é de propósito.
+         *
+         * Esta página existe pra quem está MANDANDO: ele precisa saber o que
+         * já entrou, pra não mandar a mesma coisa sete vezes. Exigir a
+         * conferência do escritório aqui mostraria "0 de 7" pra alguém que
+         * acabou de mandar os sete, e a página voltaria a ser o buraco que
+         * ela já foi.
+         *
+         * O que não pode é a página dizer que acabou: por isso o número de
+         * conferências pendentes vai junto, e a tela avisa.
+         */
+        recebidos: estado.documentos.filter(
+          (d) => d.recebido && !d.recusado && (!d.exigeAssinatura || d.assinado),
+        ).length,
         total: estado.total,
+        /** Chegou e está esperando o escritório olhar. */
+        emConferencia: estado.comOEscritorio,
       };
     });
   }
@@ -357,6 +376,9 @@ export class AdmissaoService {
           origem: true,
           validade: true,
           criadoEm: true,
+          conferidoEm: true,
+          recusadoEm: true,
+          recusaMotivo: true,
         },
       }),
       this.prisma.assinaturaDocumento.findMany({
@@ -385,6 +407,23 @@ export class AdmissaoService {
 
         recebido: doc !== null,
         recebidoEm: doc?.criadoEm ?? null,
+
+        /**
+         * O QUE O ESCRITÓRIO JÁ DISSE SOBRE ESTE ARQUIVO.
+         *
+         * ⚠️ Três estados, e a diferença entre eles é o que impede o produto
+         * de mentir: `null` = chegou e ninguém olhou; conferido = alguém
+         * olhou e aceitou; recusado = alguém olhou e devolveu, com motivo.
+         *
+         * O sistema não consegue ver o que está dentro de uma foto. Enquanto
+         * não houver um humano dizendo que olhou, "chegou" não pode virar
+         * "está certo" — era exatamente isso que acontecia, e a contagem do
+         * app zerava sozinha.
+         */
+        conferido: doc?.conferidoEm != null,
+        conferidoEm: doc?.conferidoEm ?? null,
+        recusado: doc?.recusadoEm != null,
+        recusaMotivo: doc?.recusaMotivo ?? null,
         nomeArquivo: doc?.nomeArquivo ?? null,
         mimetype: doc?.mimetype ?? null,
         tamanho: doc?.tamanho ?? null,
@@ -408,16 +447,38 @@ export class AdmissaoService {
       };
     });
 
-    // "Pronto" é receber E assinar o que precisa de assinatura. Sem isso a
-    // página diria "recebemos todos" com um contrato por assinar.
-    const pendente = (d: (typeof documentos)[number]) =>
-      !d.recebido || (d.exigeAssinatura && !d.assinado);
+    /**
+     * ⚠️ DUAS PERGUNTAS DIFERENTES, e confundi-las é o defeito que este
+     * método já teve:
+     *
+     * - `faltaDele`: o que o MOTORISTA ainda tem que fazer — não mandou,
+     *   mandou e foi recusado, ou falta assinar. É o número que vai pro app.
+     * - `pendente`: o que ainda não está fechado pra ADMISSÃO, o que inclui o
+     *   que está esperando o escritório olhar.
+     *
+     * Enquanto os dois eram a mesma conta, o documento que chegava zerava a
+     * contagem do motorista mesmo sem ninguém ter conferido — ele ia pra obra
+     * achando que estava resolvido. E se fossem a MESMA conta pro outro lado,
+     * ele veria como "falta" algo que já está na mão do escritório e que ele
+     * não tem como resolver.
+     */
+    const faltaDele = (d: (typeof documentos)[number]) =>
+      !d.recebido || d.recusado || (d.exigeAssinatura && d.comoAssinar === "NO_APP" && !d.assinado);
+
+    const esperandoEscritorio = (d: (typeof documentos)[number]) =>
+      d.recebido && !d.recusado && !d.conferido;
+
+    const pendente = (d: (typeof documentos)[number]) => faltaDele(d) || esperandoEscritorio(d);
 
     return {
       documentos,
       prontos: documentos.filter((d) => !pendente(d)).length,
       total: documentos.length,
       faltamObrigatorios: documentos.filter((d) => d.obrigatorio && pendente(d)).length,
+      /** O que ELE resolve. É este número que o app mostra. */
+      faltamDele: documentos.filter((d) => faltaDele(d)).length,
+      /** Chegou e está esperando alguém olhar. Não é tarefa dele. */
+      comOEscritorio: documentos.filter((d) => esperandoEscritorio(d)).length,
     };
   }
 
@@ -465,6 +526,11 @@ export class AdmissaoService {
         soComCertificado: d.exigeIcpBrasil,
         recebido: d.recebido,
         recebidoEm: d.recebidoEm,
+        /** O escritório olhou e aceitou? Nulo/false = ainda não olharam. */
+        conferido: d.conferido,
+        /** Devolveram, e o motivo — que aparece no próprio item da lista. */
+        recusado: d.recusado,
+        recusaMotivo: d.recusaMotivo,
         /**
          * O app decide com isto se consegue MOSTRAR o papel antes de assinar.
          * Foto ele desenha; PDF não — não há visualizador de PDF no app, e
@@ -479,7 +545,89 @@ export class AdmissaoService {
       prontos: estado.prontos,
       total: estado.total,
       faltamObrigatorios: estado.faltamObrigatorios,
+      /**
+       * ⚠️ É ESTE o número que a tela dele mostra, não `total - prontos`.
+       *
+       * O que está esperando o escritório olhar não é tarefa dele: mostrar
+       * como "falta" mandaria ele resolver o que não tem como resolver. E o
+       * contrário — contar como pronto — foi o defeito que fez a contagem
+       * zerar sozinha assim que o arquivo chegava.
+       */
+      faltamDele: estado.faltamDele,
+      comOEscritorio: estado.comOEscritorio,
     };
+  }
+
+  // ------------------------------------------------- conferência humana ---
+
+  /**
+   * O escritório diz que olhou e ACEITOU.
+   *
+   * ⚠️ É a peça que faltava pro produto parar de mentir. O sistema não vê o
+   * que está dentro da foto: se a CNH está legível, se o comodato está mesmo
+   * assinado, se o carimbo do cartório existe. Enquanto isso não tinha lugar,
+   * "chegou" virava "conferido" por omissão — a ficha mostrava visto verde e a
+   * contagem do app zerava sozinha.
+   *
+   * Fica escrito QUEM conferiu, pelo mesmo princípio da alteração de km e do
+   * lançamento de presença pelo painel: quem decide por outra pessoa assina.
+   */
+  async conferirDocumento(motoristaId: string, chaveOuExigencia: string, usuarioId: string) {
+    const doc = await this.acharPorChave(motoristaId, chaveOuExigencia);
+    return this.prisma.motoristaDocumento.update({
+      where: { id: doc.id },
+      data: {
+        conferidoEm: new Date(),
+        conferidoPor: usuarioId,
+        recusadoEm: null,
+        recusadoPor: null,
+        recusaMotivo: null,
+      },
+    });
+  }
+
+  /**
+   * O escritório devolve o documento, com MOTIVO.
+   *
+   * O motivo é obrigatório e vai inteiro pro app dele, no próprio item da
+   * lista: "mande de novo" sem dizer o que houve faz a pessoa repetir o mesmo
+   * erro — e no caso dela, dirigir de novo até o escritório pra descobrir.
+   */
+  async recusarDocumento(
+    motoristaId: string,
+    chaveOuExigencia: string,
+    motivo: string,
+    usuarioId: string,
+  ) {
+    const texto = motivo.trim();
+    if (texto.length < 3) {
+      throw new BadRequestException("Escreva o que houve com o documento.");
+    }
+    const doc = await this.acharPorChave(motoristaId, chaveOuExigencia);
+    return this.prisma.motoristaDocumento.update({
+      where: { id: doc.id },
+      data: {
+        recusadoEm: new Date(),
+        recusadoPor: usuarioId,
+        recusaMotivo: texto,
+        conferidoEm: null,
+        conferidoPor: null,
+      },
+    });
+  }
+
+  /** Aceita a chave (`exig:<id>` / `gaveta:<TIPO>`) ou só o id da exigência. */
+  private async acharPorChave(motoristaId: string, chaveOuExigencia: string) {
+    const chave =
+      chaveOuExigencia.startsWith("exig:") || chaveOuExigencia.startsWith("gaveta:")
+        ? chaveOuExigencia
+        : chaveDaExigencia(chaveOuExigencia);
+    const doc = await this.prisma.motoristaDocumento.findFirst({
+      where: { motoristaId, chave },
+      select: { id: true },
+    });
+    if (!doc) throw new NotFoundException("Documento não encontrado.");
+    return doc;
   }
 
   /**
@@ -737,6 +885,15 @@ export class AdmissaoService {
         tamanho: arquivo.size,
         hashArquivo: hash,
         origem,
+        // ⚠️ Arquivo novo zera a conferência, pelo mesmo motivo que derruba a
+        // assinatura: quem conferiu olhou O ARQUIVO ANTERIOR. Manter o visto
+        // faria a ficha dizer que alguém aprovou um papel que ninguém viu.
+        // Vale também pra recusa: mandar de novo é a resposta a ela.
+        conferidoEm: null,
+        conferidoPor: null,
+        recusadoEm: null,
+        recusadoPor: null,
+        recusaMotivo: null,
         ...(e.validade === undefined ? {} : { validade: e.validade }),
       },
     });

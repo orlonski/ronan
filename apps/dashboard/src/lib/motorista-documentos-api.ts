@@ -83,6 +83,48 @@ export function useAtualizarValidadeDocumento(motoristaId: string) {
   });
 }
 
+/**
+ * "Eu olhei e está certo."
+ *
+ * ⚠️ É o ato que faltava pro produto parar de mentir: sem ele, "chegou"
+ * virava "conferido" por omissão — a ficha mostrava visto verde e a contagem
+ * do app zerava sozinha, sem ninguém ter aberto o arquivo.
+ */
+export function useConferirDocumento(motoristaId: string) {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (alvo: AlvoDocumento) =>
+      fetchApi<{ ok: true }>(`${alvoPath(motoristaId, alvo)}/conferir`, {
+        method: "POST",
+        body: JSON.stringify({}),
+        token,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["motorista-documentos", motoristaId] });
+      qc.invalidateQueries({ queryKey: ["/admin/motoristas"] });
+    },
+  });
+}
+
+/** "Não serve, e por isto." O motivo vai inteiro pro app dele. */
+export function useRecusarDocumento(motoristaId: string) {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { alvo: AlvoDocumento; motivo: string }) =>
+      fetchApi<{ ok: true }>(`${alvoPath(motoristaId, input.alvo)}/recusar`, {
+        method: "POST",
+        body: JSON.stringify({ motivo: input.motivo }),
+        token,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["motorista-documentos", motoristaId] });
+      qc.invalidateQueries({ queryKey: ["/admin/motoristas"] });
+    },
+  });
+}
+
 export function useRemoverDocumento(motoristaId: string) {
   const token = useAuthToken();
   const qc = useQueryClient();

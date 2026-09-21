@@ -775,6 +775,11 @@ export type DocumentoDaObra = {
   soComCertificado: boolean;
   recebido: boolean;
   recebidoEm: string | null;
+  /** O escritório olhou e aceitou. Até lá, chegou ≠ está certo. */
+  conferido?: boolean;
+  /** Devolveram. O motivo aparece no próprio item, nunca numa tela adiante. */
+  recusado?: boolean;
+  recusaMotivo?: string | null;
   /** Serve pra saber se o app consegue MOSTRAR o papel antes de assinar. */
   mimetype: string | null;
   assinado: boolean;
@@ -789,6 +794,10 @@ export type DocumentosDaObra = {
   prontos: number;
   total: number;
   faltamObrigatorios: number;
+  /** O que ELE resolve. É este o número da tela — ver `faltamDele` na API. */
+  faltamDele?: number;
+  /** Chegou e está esperando alguém olhar. Não é tarefa dele. */
+  comOEscritorio?: number;
 };
 
 /**

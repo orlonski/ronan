@@ -66,11 +66,16 @@ function estadoValidade(validade: string | null): "VENCIDO" | "VENCENDO" | null 
  * vistos verdes pra achar os dois que importam.
  */
 function peso(d: DocumentoDaObra): number {
-  if (d.recebido && estadoValidade(d.validade) === "VENCIDO") return 0;
-  if (!d.recebido && d.obrigatorio) return 1;
-  if (!d.recebido) return 2;
-  if (d.precisaAssinar && !d.assinado) return 3;
-  return 4;
+  // Recusado primeiro: é o único em que alguém já gastou tempo e o tempo foi
+  // perdido. Depois o que falta, depois o que espera o escritório, e por
+  // último o que está resolvido.
+  if (d.recusado) return 0;
+  if (d.recebido && estadoValidade(d.validade) === "VENCIDO") return 1;
+  if (!d.recebido && d.obrigatorio) return 2;
+  if (!d.recebido) return 3;
+  if (d.precisaAssinar && !d.assinado) return 4;
+  if (d.conferido !== true) return 5;
+  return 6;
 }
 
 export default function DocumentosDaObraScreen() {
@@ -79,7 +84,12 @@ export default function DocumentosDaObraScreen() {
   // RefreshControl só no gesto: recarga automática prende o spinner no iOS.
   const [puxando, setPuxando] = useState(false);
 
-  const faltam = data ? data.total - data.prontos : 0;
+  // ⚠️ O número é o que ELE resolve, não "total - prontos". O que está
+  // esperando o escritório olhar não é tarefa dele: contar como falta manda
+  // resolver o que não tem como resolver, e contar como pronto foi o defeito
+  // que zerava a tela assim que o arquivo chegava.
+  const faltam = data?.faltamDele ?? (data ? data.total - data.prontos : 0);
+  const comOEscritorio = data?.comOEscritorio ?? 0;
   const lista = [...(data?.documentos ?? [])].sort((a, b) => peso(a) - peso(b));
 
   /**
@@ -167,7 +177,7 @@ export default function DocumentosDaObraScreen() {
           </View>
         ) : (
           <>
-            <Contagem faltam={faltam} total={data.total} />
+            <Contagem faltam={faltam} total={data.total} comOEscritorio={comOEscritorio} />
             <View className="mt-4 gap-3">
               {lista.map((d) => (
                 <ItemDocumento
@@ -302,16 +312,42 @@ export default function DocumentosDaObraScreen() {
 }
 
 /** O número. É ele que responde a pergunta antes de qualquer leitura. */
-function Contagem({ faltam, total }: { faltam: number; total: number }) {
+function Contagem({
+  faltam,
+  total,
+  comOEscritorio,
+}: {
+  faltam: number;
+  total: number;
+  comOEscritorio: number;
+}) {
   if (faltam === 0) {
+    // ⚠️ "Está tudo lá" ≠ "está tudo certo". Enquanto houver papel esperando
+    // alguém olhar, dizer que acabou é prometer em nome do escritório — e ele
+    // ia pra obra achando que estava resolvido.
+    const esperando = comOEscritorio > 0;
     return (
-      <View className="rounded-2xl border-2 border-success bg-success/10 p-5">
+      <View
+        className={
+          esperando
+            ? "rounded-2xl border-2 border-warning bg-card p-5"
+            : "rounded-2xl border-2 border-success bg-success/10 p-5"
+        }
+      >
         <View className="flex-row items-center gap-3">
-          <Check size={32} color="#16a34a" />
+          {esperando ? (
+            <CloudOff size={32} color="#d97706" />
+          ) : (
+            <Check size={32} color="#16a34a" />
+          )}
           <View className="flex-1">
-            <Text className="text-xl font-bold text-foreground">Está tudo lá.</Text>
+            <Text className="text-xl font-bold text-foreground">
+              {esperando ? "Você já mandou tudo." : "Está tudo certo."}
+            </Text>
             <Text className="mt-0.5 text-base text-muted-foreground">
-              Os {total} documentos chegaram no escritório.
+              {esperando
+                ? `O escritório está conferindo ${comOEscritorio === 1 ? "1 papel" : `${comOEscritorio} papéis`}. Se faltar alguma coisa, eles avisam por aqui.`
+                : `Os ${total} documentos foram conferidos.`}
             </Text>
           </View>
         </View>
@@ -351,15 +387,19 @@ function ItemDocumento({
   const vencido = doc.recebido && validade === "VENCIDO";
   const vencendo = doc.recebido && validade === "VENCENDO";
   const faltaAssinar = doc.recebido && doc.precisaAssinar && !doc.assinado;
-  const pronto = doc.recebido && !faltaAssinar && !vencido;
+  const recusado = doc.recusado === true;
+  // ⚠️ "Chegou" não é "está certo": enquanto ninguém do escritório olhar, o
+  // item fica em espera, não em verde. O sistema não vê o que tem na foto.
+  const esperandoConferencia = doc.recebido && !recusado && doc.conferido !== true;
+  const pronto = doc.recebido && doc.conferido === true && !faltaAssinar && !vencido;
   // Na fila do aparelho: "guardado" enquanto tenta, "deu erro" quando o
   // servidor recusou de verdade e só ele pode resolver.
   const deuErro = fila?.status === "error" || (fila?.attempts ?? 0) >= 8;
   const esperandoSinal = fila !== undefined && !deuErro;
 
-  const borda = vencido
+  const borda = vencido || recusado
     ? "border-destructive"
-    : faltaAssinar || vencendo
+    : faltaAssinar || vencendo || esperandoConferencia
       ? "border-warning"
       : pronto
         ? "border-success/60"
@@ -368,7 +408,11 @@ function ItemDocumento({
   return (
     <View className={`rounded-2xl border-2 bg-card p-4 ${borda}`}>
       <View className="flex-row items-start gap-3">
-        <Icone pronto={pronto} vencido={vencido} faltaAssinar={faltaAssinar} />
+        <Icone
+          pronto={pronto}
+          vencido={vencido || recusado}
+          faltaAssinar={faltaAssinar || esperandoConferencia}
+        />
         <View className="flex-1">
           <Text className="text-lg font-semibold text-foreground">{doc.titulo}</Text>
 
@@ -386,7 +430,11 @@ function ItemDocumento({
             <Text className="mt-0.5 text-base text-muted-foreground">Só se você tiver.</Text>
           ) : null}
 
-          <Text className={`mt-2 text-base ${vencido ? "font-semibold text-destructive" : "text-muted-foreground"}`}>
+          <Text
+            className={`mt-2 text-base ${
+              vencido || recusado ? "font-semibold text-destructive" : "text-muted-foreground"
+            }`}
+          >
             {/* A fila do aparelho vence o que o servidor diz: ele acabou de
                 tirar a foto, e dizer "ainda não chegou" faria ele tirar de
                 novo. */}
@@ -394,6 +442,12 @@ function ItemDocumento({
               "Guardado aqui. Chega no escritório quando o sinal voltar."
             ) : deuErro ? (
               fila?.errorMsg || "Essa não deu. Tire outra foto."
+            ) : recusado ? (
+              // O MOTIVO aqui, não numa tela adiante: mandar procurar em outro
+              // lugar é pedir um passo a mais de quem já está travado.
+              <>Precisa mandar de novo. {doc.recusaMotivo || "O escritório pediu outra foto."}</>
+            ) : esperandoConferencia && !faltaAssinar ? (
+              "Chegou. O escritório vai conferir."
             ) : (
               <Situacao
                 doc={doc}
@@ -445,19 +499,30 @@ function ItemDocumento({
               <PenLine size={20} color="#fff" />
               <Text className="ml-2 text-base font-bold text-white">Ler e assinar</Text>
             </Button>
-          ) : esperandoSinal ? null : !doc.recebido || vencido || deuErro ? (
+          ) : esperandoSinal ? null : !doc.recebido || vencido || deuErro || recusado ? (
             <Button
               size="lg"
               className="mt-3"
-              variant={doc.obrigatorio || vencido || deuErro ? "default" : "outline"}
+              variant={doc.obrigatorio || vencido || deuErro || recusado ? "default" : "outline"}
               onPress={onMandar}
               accessibilityLabel={`Mandar foto de ${doc.titulo}`}
             >
-              <Camera size={20} color={doc.obrigatorio || vencido || deuErro ? "#fff" : "#13316b"} />
+              <Camera
+                size={20}
+                color={doc.obrigatorio || vencido || deuErro || recusado ? "#fff" : "#13316b"}
+              />
               <Text
-                className={`ml-2 text-base font-bold ${doc.obrigatorio || vencido || deuErro ? "text-white" : "text-foreground"}`}
+                className={`ml-2 text-base font-bold ${
+                  doc.obrigatorio || vencido || deuErro || recusado
+                    ? "text-white"
+                    : "text-foreground"
+                }`}
               >
-                {deuErro ? "Tirar outra foto" : vencido ? "Mandar o novo" : "Mandar foto"}
+                {deuErro || recusado
+                  ? "Tirar outra foto"
+                  : vencido
+                    ? "Mandar o novo"
+                    : "Mandar foto"}
               </Text>
             </Button>
           ) : doc.precisaAssinar ? (
@@ -518,8 +583,10 @@ function Situacao({
   if (vencendo) return <>Vence dia {venc}. Vai precisar mandar o novo.</>;
   if (pronto) {
     const quando = dataBR(doc.assinadoEm ?? doc.recebidoEm);
-    if (doc.assinado) return <>Assinado{quando ? ` em ${quando}` : ""}.</>;
-    return <>Chegou no escritório{quando ? ` em ${quando}` : ""}.</>;
+    if (doc.assinado) return <>Assinado{quando ? ` em ${quando}` : ""}. Conferido.</>;
+    // "Conferido" e não "chegou": chegar é o aparelho; conferir é uma pessoa
+    // do escritório dizendo que olhou. Confundir os dois foi o defeito.
+    return <>Conferido{quando ? `, mandado em ${quando}` : ""}.</>;
   }
   return <>Ainda não chegou.</>;
 }

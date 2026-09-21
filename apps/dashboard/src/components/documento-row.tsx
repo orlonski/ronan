@@ -16,6 +16,8 @@ import { useAuthToken } from "@/lib/client-api";
 import {
   baixarDocumento,
   useAtualizarValidadeDocumento,
+  useConferirDocumento,
+  useRecusarDocumento,
   useRemoverDocumento,
   useUploadDocumento,
 } from "@/lib/motorista-documentos-api";
@@ -52,6 +54,8 @@ export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState(false);
   const upload = useUploadDocumento(motoristaId);
+  const conferir = useConferirDocumento(motoristaId);
+  const recusar = useRecusarDocumento(motoristaId);
   const atualizarValidade = useAtualizarValidadeDocumento(motoristaId);
   const remover = useRemoverDocumento(motoristaId);
   const token = useAuthToken();
@@ -154,6 +158,34 @@ export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
             <p className="mt-0.5 text-xs text-muted-foreground">Nenhum arquivo anexado</p>
           )}
           {doc?.assinatura && <TrilhaAssinatura assinatura={doc.assinatura} />}
+          {doc && (
+            <Conferencia
+              doc={doc}
+              podeGerenciar={podeGerenciar}
+              onConferir={async () => {
+                try {
+                  await conferir.mutateAsync(alvo);
+                  toast.success("Conferido.");
+                } catch (err) {
+                  toast.error("Não consegui marcar como conferido", {
+                    description: err instanceof Error ? err.message : undefined,
+                  });
+                }
+              }}
+              onRecusar={async (motivo) => {
+                try {
+                  await recusar.mutateAsync({ alvo, motivo });
+                  toast.success("Devolvido ao motorista.", {
+                    description: "Ele vê o motivo no app e pode mandar outro.",
+                  });
+                } catch (err) {
+                  toast.error("Não consegui devolver", {
+                    description: err instanceof Error ? err.message : undefined,
+                  });
+                }
+              }}
+            />
+          )}
           <div className="mt-2 flex flex-wrap items-end gap-2">
             {doc && (
               <label className="space-y-0.5">
@@ -227,6 +259,118 @@ export function DocumentoRow({ motoristaId, tipo, doc }: Props) {
           tipo={tipo}
           doc={doc}
         />
+      )}
+    </div>
+  );
+}
+
+/**
+ * A CONFERÊNCIA HUMANA do arquivo.
+ *
+ * ⚠️ Existe porque o sistema não vê o que está dentro de uma foto: se a CNH
+ * está legível, se o comodato está mesmo assinado, se o carimbo do cartório é
+ * de verdade. Sem este bloco, "chegou" aparecia como visto verde e a contagem
+ * do app do motorista zerava sozinha — ele ia pra obra achando que estava
+ * resolvido e descobria na portaria que não estava.
+ *
+ * O botão de devolver EXIGE motivo, e o motivo vai inteiro pro app dele, no
+ * próprio item da lista: "mande de novo" sem dizer o que houve faz a pessoa
+ * repetir o mesmo erro.
+ */
+function Conferencia({
+  doc,
+  podeGerenciar,
+  onConferir,
+  onRecusar,
+}: {
+  doc: MotoristaDocumentoOutput;
+  podeGerenciar: boolean;
+  onConferir: () => Promise<void>;
+  onRecusar: (motivo: string) => Promise<void>;
+}) {
+  const [escrevendo, setEscrevendo] = useState(false);
+  const [motivo, setMotivo] = useState("");
+
+  if (doc.conferidoEm) {
+    return (
+      <p className="mt-2 flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400">
+        <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+        Conferido em {new Date(doc.conferidoEm).toLocaleString("pt-BR")}
+      </p>
+    );
+  }
+
+  if (doc.recusadoEm) {
+    return (
+      <div className="mt-2 rounded-md border border-red-300 bg-red-50 p-2 dark:border-red-900 dark:bg-red-950/40">
+        <p className="flex items-center gap-1.5 text-xs font-medium text-red-700 dark:text-red-400">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+          Devolvido em {new Date(doc.recusadoEm).toLocaleString("pt-BR")}
+        </p>
+        {doc.recusaMotivo && (
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Ele está vendo no app: &quot;{doc.recusaMotivo}&quot;
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 dark:border-amber-900 dark:bg-amber-950/40">
+      <p className="flex items-center gap-1.5 text-xs font-medium text-amber-900 dark:text-amber-200">
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+        Chegou — ninguém conferiu ainda
+      </p>
+      <p className="mt-1 text-[11px] text-muted-foreground">
+        O sistema não vê o que tem no arquivo. Abra, confira, e diga aqui o que achou.
+      </p>
+      {escrevendo ? (
+        <div className="mt-2 space-y-1.5">
+          <Input
+            autoFocus
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+            placeholder="O que houve? Ex.: a foto está cortada, falta a assinatura"
+            className="h-8 text-xs"
+          />
+          <div className="flex gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              disabled={motivo.trim().length < 3}
+              onClick={() => void onRecusar(motivo.trim())}
+            >
+              Devolver com esse motivo
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => setEscrevendo(false)}>
+              Voltar
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-2 flex gap-1.5">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={!podeGerenciar}
+            onClick={() => void onConferir()}
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            <span className="ml-1">Conferi, está certo</span>
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={!podeGerenciar}
+            onClick={() => setEscrevendo(true)}
+          >
+            Não serve
+          </Button>
+        </div>
       )}
     </div>
   );

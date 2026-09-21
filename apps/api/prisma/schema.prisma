@@ -1820,6 +1820,29 @@ model MotoristaDocumento {
 
   origem      OrigemDocumento        @default(PAINEL)
 
+  /// A CONFERÊNCIA HUMANA deste arquivo.
+  ///
+  /// ⚠️ Existe porque o sistema não consegue verificar o que está DENTRO de
+  /// uma foto. Ele sabe que um arquivo chegou, quando e de quem; não sabe se a
+  /// CNH está legível, se o comodato está mesmo assinado, se o carimbo do
+  /// cartório é de verdade. Sem estes campos, "chegou" virava "conferido" por
+  /// omissão — e o motorista ia pra obra com a contagem zerada no app achando
+  /// que estava tudo resolvido, pra descobrir na portaria que não estava.
+  ///
+  /// Nulo = ninguém olhou ainda. Não é erro, é o estado normal de quem acabou
+  /// de receber.
+  conferidoEm  DateTime?
+  conferidoPor String?
+
+  /// O escritório devolveu, e por quê.
+  ///
+  /// O motivo NÃO é opcional quando se recusa: "mande de novo" sem dizer o que
+  /// houve faz o motorista repetir o mesmo erro. O texto aparece no app dele,
+  /// no próprio item — nunca numa tela adiante.
+  recusadoEm   DateTime?
+  recusadoPor  String?
+  recusaMotivo String?
+
   /// Quando o MOTORISTA abriu este arquivo no app.
   ///
   /// É o que transforma "ele clicou em assinar" em "ele abriu o papel e depois

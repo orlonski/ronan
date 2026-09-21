@@ -290,6 +290,21 @@ export const AssinarDocumentoAppInput = z.object({
 export type AssinarDocumentoAppInput = z.infer<typeof AssinarDocumentoAppInput>;
 
 /**
+ * O escritório devolvendo um documento.
+ *
+ * O motivo é OBRIGATÓRIO e vai inteiro pro app do motorista, no próprio item:
+ * "mande de novo" sem dizer o que houve faz a pessoa repetir o mesmo erro — e,
+ * no caso dela, dirigir de novo até o escritório pra descobrir.
+ */
+export const RecusarDocumentoInput = z.object({
+  motivo: z
+    .string()
+    .trim()
+    .min(3, "Escreva o que houve com o documento — é isso que ele vai ler no app."),
+});
+export type RecusarDocumentoInput = z.infer<typeof RecusarDocumentoInput>;
+
+/**
  * O que o contratante mediu, como ele mandou.
  *
  * Duas formas porque existem duas planilhas no mundo, e a diferença decide o
